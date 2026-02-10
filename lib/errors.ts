@@ -26,7 +26,7 @@ export abstract class DiscError extends Error {
 
   formatError(): string {
     let output = `${this.name}: ${this.message}`;
-    
+
     if (this.context?.location) {
       const loc = this.context.location;
       output += `\n  at ${loc.file || "<input>"}:${loc.line}:${loc.column}`;
@@ -35,10 +35,12 @@ export abstract class DiscError extends Error {
     if (this.context?.source && this.context?.location) {
       const lines = this.context.source.split("\n");
       const lineNum = this.context.location.line - 1;
-      
+
       if (lines[lineNum]) {
         output += `\n\n${this.context.location.line} | ${lines[lineNum]}`;
-        output += `\n${" ".repeat(String(this.context.location.line).length)} | ${" ".repeat(this.context.location.column - 1)}^`;
+        output += `\n${
+          " ".repeat(String(this.context.location.line).length)
+        } | ${" ".repeat(this.context.location.column - 1)}^`;
       }
     }
 

@@ -11,8 +11,9 @@ A schema-first, TypeScript-native database built on Deno. Disc is a fork of [Gel
 ## Architecture
 
 Disc replaces Gel's Python/Rust core with TypeScript while maintaining:
+
 - EdgeQL query language
-- SDL schema definitions  
+- SDL schema definitions
 - PostgreSQL storage backend
 - Automatic migrations
 

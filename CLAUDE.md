@@ -56,7 +56,7 @@ Disc replaces Gel's Python/Rust server layer with a Deno/TypeScript implementati
 ### Core Modules
 
 | Module       | Responsibility                                         | Priority |
-|--------------|--------------------------------------------------------|----------|
+| ------------ | ------------------------------------------------------ | -------- |
 | `schema/`    | SDL parser, AST representation, validation             | P0       |
 | `edgeql/`    | EdgeQL parser, AST, semantic analysis                  | P0       |
 | `compiler/`  | EdgeQL AST → PostgreSQL SQL compilation                | P0       |

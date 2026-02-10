@@ -2,7 +2,7 @@
  * Result type for handling errors without exceptions
  */
 
-export type Result<T, E = Error> = 
+export type Result<T, E = Error> =
   | { ok: true; value: T }
   | { ok: false; error: E };
 
@@ -14,11 +14,15 @@ export function Err<E>(error: E): Result<never, E> {
   return { ok: false, error };
 }
 
-export function isOk<T, E>(result: Result<T, E>): result is { ok: true; value: T } {
+export function isOk<T, E>(
+  result: Result<T, E>,
+): result is { ok: true; value: T } {
   return result.ok === true;
 }
 
-export function isErr<T, E>(result: Result<T, E>): result is { ok: false; error: E } {
+export function isErr<T, E>(
+  result: Result<T, E>,
+): result is { ok: false; error: E } {
   return result.ok === false;
 }
 
@@ -35,21 +39,21 @@ export function unwrapOr<T, E>(result: Result<T, E>, defaultValue: T): T {
 
 export function map<T, U, E>(
   result: Result<T, E>,
-  fn: (value: T) => U
+  fn: (value: T) => U,
 ): Result<U, E> {
   return isOk(result) ? Ok(fn(result.value)) : result;
 }
 
 export function mapErr<T, E, F>(
   result: Result<T, E>,
-  fn: (error: E) => F
+  fn: (error: E) => F,
 ): Result<T, F> {
   return isErr(result) ? Err(fn(result.error)) : result;
 }
 
 export function flatMap<T, U, E>(
   result: Result<T, E>,
-  fn: (value: T) => Result<U, E>
+  fn: (value: T) => Result<U, E>,
 ): Result<U, E> {
   return isOk(result) ? fn(result.value) : result;
 }

@@ -1,8 +1,8 @@
 /**
  * Disc Database - A TypeScript-native database built on Deno
- * 
+ *
  * Schema-first database with EdgeQL query language,
- * reimplementing Gel (EdgeDB) in TypeScript while 
+ * reimplementing Gel (EdgeDB) in TypeScript while
  * preserving PostgreSQL as the storage engine.
  */
 

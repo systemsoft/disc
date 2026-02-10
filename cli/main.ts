@@ -63,10 +63,11 @@ async function main() {
     }
 
     case "migrate": {
-      if (args.create)
+      if (args.create) {
         console.log("Creating migration...");
-      else
+      } else {
         console.log("Applying migrations...");
+      }
 
       console.log("TODO: Implement migration engine");
       break;
