@@ -1,0 +1,419 @@
+diff --git a/edb/buildmeta.py b/edb/buildmeta.py
+index b6222e4a2..5f1b366fb 100644
+--- a/edb/buildmeta.py
++++ b/edb/buildmeta.py
+@@ -65,6 +65,12 @@ class MetadataError(Exception):
+     pass
+ 
+ 
++# HACK: Put this down here so it overrides the above version without
++# merge conflicting with them.
++EDGEDB_CATALOG_VERSION = 2030_01_01_00_00
++EDGEDB_MAJOR_VERSION = 1000
++
++
+ class BackendVersion(NamedTuple):
+     major: int
+     minor: int
+diff --git a/edb/edgeql/ast.py b/edb/edgeql/ast.py
+index 59973c0ec..003700c76 100644
+--- a/edb/edgeql/ast.py
++++ b/edb/edgeql/ast.py
+@@ -1183,6 +1183,23 @@ class DropPermission(DropObject, PermissionCommand):
+     pass
+ 
+ 
++class BlobalCommand(ObjectDDL):
++
++    __abstract_node__ = True
++
++
++class CreateBlobal(CreateObject, BlobalCommand):
++    pass
++
++
++class AlterBlobal(AlterObject, BlobalCommand):
++    pass
++
++
++class DropBlobal(DropObject, BlobalCommand):
++    pass
++
++
+ class LinkCommand(ObjectDDL):
+ 
+     __abstract_node__ = True
+diff --git a/edb/edgeql/codegen.py b/edb/edgeql/codegen.py
+index 2dffdd519..e05a4108d 100644
+--- a/edb/edgeql/codegen.py
++++ b/edb/edgeql/codegen.py
+@@ -2474,6 +2474,12 @@ class EdgeQLSourceGenerator(codegen.SourceGenerator):
+     def visit_DropPermission(self, node: qlast.DropPermission) -> None:
+         self._visit_DropObject(node, 'PERMISSION')
+ 
++    def visit_CreateBlobal(self, node: qlast.CreateGlobal) -> None:
++        self._visit_CreateObject(node, 'BLOBAL')
++
++    def visit_DropBlobal(self, node: qlast.DropGlobal) -> None:
++        self._visit_DropObject(node, 'BLOBAL')
++
+     def visit_ConfigSet(self, node: qlast.ConfigSet) -> None:
+         if node.scope == qltypes.ConfigScope.GLOBAL:
+             self._write_keywords('SET GLOBAL ')
+diff --git a/edb/edgeql/parser/grammar/ddl.py b/edb/edgeql/parser/grammar/ddl.py
+index bd55c93af..22fc58bf6 100644
+--- a/edb/edgeql/parser/grammar/ddl.py
++++ b/edb/edgeql/parser/grammar/ddl.py
+@@ -260,6 +260,14 @@ class InnerDDLStmt(Nonterm):
+     def reduce_DropPermissionStmt(self, *_):
+         pass
+ 
++    @parsing.inline(0)
++    def reduce_CreateBlobalStmt(self, *_):
++        pass
++
++    @parsing.inline(0)
++    def reduce_DropBlobalStmt(self, *_):
++        pass
++
+     @parsing.inline(0)
+     def reduce_DropCastStmt(self, *_):
+         pass
+@@ -3613,6 +3621,38 @@ class DropGlobalStmt(Nonterm):
+         )
+ 
+ 
++#
++# CREATE BLOBAL
++#
++
++
++commands_block(
++    'CreateBlobal',
++    SetFieldStmt,
++    CreateAnnotationValueStmt,
++)
++
++
++class CreateBlobalStmt(Nonterm):
++    def reduce_CreateBlobal(self, *kids):
++        """%reduce
++            CREATE BLOBAL NodeName
++            OptCreateBlobalCommandsBlock
++        """
++        self.val = qlast.CreateBlobal(
++            name=kids[2].val,
++            commands=kids[3].val,
++        )
++
++
++class DropBlobalStmt(Nonterm):
++    def reduce_DropBlobal(self, *kids):
++        r"""%reduce DROP BLOBAL NodeName"""
++        self.val = qlast.DropBlobal(
++            name=kids[2].val
++        )
++
++
+ #
+ # CREATE PERMISSION
+ #
+diff --git a/edb/lib/_testmode.edgeql b/edb/lib/_testmode.edgeql
+index 761a5dc53..d9a70f541 100644
+--- a/edb/lib/_testmode.edgeql
++++ b/edb/lib/_testmode.edgeql
+@@ -232,6 +232,15 @@ create extension package _conf VERSION '1.0' {
+ 
+ # std::_gen_series
+ 
++CREATE FUNCTION
++std::_upgrade_test(
++) -> std::str
++{
++    SET volatility := 'Immutable';
++    USING ('asdf');
++};
++
++
+ CREATE FUNCTION
+ std::_gen_series(
+     `start`: std::int64,
+diff --git a/edb/lib/schema.edgeql b/edb/lib/schema.edgeql
+index a41bbba6e..f8f1b1ccb 100644
+--- a/edb/lib/schema.edgeql
++++ b/edb/lib/schema.edgeql
+@@ -531,9 +531,17 @@ CREATE TYPE schema::Permission
+         schema::AnnotationSubject;
+ 
+ 
++CREATE TYPE schema::Blobal EXTENDING schema::AnnotationSubject {
++    CREATE PROPERTY required -> std::bool;
++};
++
++
+ CREATE TYPE schema::Function
+     EXTENDING schema::CallableObject, schema::VolatilitySubject
+ {
++    CREATE PROPERTY test_field_a -> std::str;
++    CREATE PROPERTY test_nativecode_size -> std::int64;
++
+     CREATE PROPERTY preserves_optionality -> std::bool {
+         SET default := false;
+     };
+diff --git a/edb/pgsql/delta.py b/edb/pgsql/delta.py
+index 3a9effaa5..145a472cd 100644
+--- a/edb/pgsql/delta.py
++++ b/edb/pgsql/delta.py
+@@ -777,6 +777,38 @@ class RenamePermission(
+     pass
+ 
+ 
++class BlobalCommand(MetaCommand):
++    pass
++
++
++class CreateBlobal(
++    BlobalCommand,
++    adapts=s_globals.CreateBlobal,
++):
++    pass
++
++
++class RenameBlobal(
++    BlobalCommand,
++    adapts=s_globals.RenameBlobal,
++):
++    pass
++
++
++class AlterBlobal(
++    BlobalCommand,
++    adapts=s_globals.AlterBlobal,
++):
++    pass
++
++
++class DeleteBlobal(
++    BlobalCommand,
++    adapts=s_globals.DeleteBlobal,
++):
++    pass
++
++
+ class AccessPolicyCommand(MetaCommand):
+     pass
+ 
+diff --git a/edb/schema/functions.py b/edb/schema/functions.py
+index 48baa30be..48fb55b89 100644
+--- a/edb/schema/functions.py
++++ b/edb/schema/functions.py
+@@ -1252,6 +1252,27 @@ class Function(
+     data_safe=True,
+ ):
+ 
++    ##
++    test_field_a = so.SchemaField(
++        str,
++        default=None,
++        compcoef=0.4,
++        allow_ddl_set=True,
++    )
++
++    test_field_b = so.SchemaField(
++        str,
++        default=None,
++        compcoef=0.4,
++        allow_ddl_set=True,
++    )
++
++    test_nativecode_size = so.SchemaField(
++        int,
++        default=None,
++    )
++    ##
++
+     used_globals = so.SchemaField(
+         so.ObjectSet[s_globals.Global],
+         coerce=True, default=so.DEFAULT_CONSTRUCTOR,
+@@ -1655,6 +1676,10 @@ class FunctionCommand(
+                 nativecode.not_compiled()
+             )
+ 
++        if self.has_attribute_value('nativecode'):
++            code = self.get_attribute_value('nativecode')
++            self.set_attribute_value('test_nativecode_size', len(code.text))
++
+         # Resolving 'nativecode' has side effects on has_dml and
+         # volatility, so force it to happen as part of
+         # canonicalization of attributes.
+diff --git a/edb/schema/globals.py b/edb/schema/globals.py
+index 0bac4f113..9754274cd 100644
+--- a/edb/schema/globals.py
++++ b/edb/schema/globals.py
+@@ -637,3 +637,60 @@ class DeleteGlobal(
+                 self.add_caused(op)
+ 
+         return schema
++
++
++class Blobal(
++    so.QualifiedObject,
++    s_anno.AnnotationSubject,
++    qlkind=qltypes.SchemaObjectClass.GLOBAL,
++    data_safe=True,
++):
++
++    required = so.SchemaField(
++        bool,
++        default=False,
++        compcoef=0.909,
++        allow_ddl_set=True,
++    )
++
++
++class BlobalCommandContext(
++    sd.ObjectCommandContext[so.Object],
++    s_anno.AnnotationSubjectCommandContext
++):
++    pass
++
++
++class BlobalCommand(
++    sd.QualifiedObjectCommand[Blobal],
++    context_class=BlobalCommandContext,
++):
++    pass
++
++
++class CreateBlobal(
++    sd.CreateObject[Blobal],
++    BlobalCommand,
++):
++    astnode = qlast.CreateBlobal
++
++
++class RenameBlobal(
++    sd.RenameObject[Blobal],
++    BlobalCommand,
++):
++    pass
++
++
++class AlterBlobal(
++    sd.AlterObject[Blobal],
++    BlobalCommand,
++):
++    astnode = qlast.AlterBlobal
++
++
++class DeleteBlobal(
++    sd.DeleteObject[Blobal],
++    BlobalCommand,
++):
++    astnode = qlast.DropBlobal
+diff --git a/edb/schema/operators.py b/edb/schema/operators.py
+index baba8c1dd..371d59240 100644
+--- a/edb/schema/operators.py
++++ b/edb/schema/operators.py
+@@ -68,12 +68,6 @@ class Operator(
+     code = so.SchemaField(
+         str, default=None, compcoef=0.4)
+ 
+-    # An unused dummy field. We have this here to make it easier to
+-    # test the *removal* of internal schema fields during in-place
+-    # upgrades.
+-    _dummy_field = so.SchemaField(
+-        str, default=None)
+-
+     # If this is a derivative operator, *derivative_of* would
+     # contain the name of the origin operator.
+     # For example, the `std::IN` operator has `std::=`
+diff --git a/edb/server/compiler/status.py b/edb/server/compiler/status.py
+index c66a6274e..10fddead8 100644
+--- a/edb/server/compiler/status.py
++++ b/edb/server/compiler/status.py
+@@ -68,6 +68,8 @@ def get_schema_class(ql: qlast.ObjectDDL) -> qltypes.SchemaObjectClass:
+             return osc.ALIAS
+         case qlast.GlobalCommand():
+             return osc.GLOBAL
++        case qlast.BlobalCommand():
++            return osc.GLOBAL
+         case qlast.PermissionCommand():
+             return osc.PERMISSION
+         case qlast.LinkCommand():
+diff --git a/tests/test_edgeql_select.py b/tests/test_edgeql_select.py
+index 17f302373..b812e04f6 100644
+--- a/tests/test_edgeql_select.py
++++ b/tests/test_edgeql_select.py
+@@ -2060,6 +2060,18 @@ class TestEdgeQLSelect(tb.QueryTestCase):
+             [],
+         )
+ 
++    async def test_edgeql_select_baseobject_function_01(self):
++        # HACK: special inplace-upgrade test
++        await self.con.execute('''
++            CREATE BLOBAL asdf { set required := true; };
++        ''')
++        await self.assert_query_result(
++            r'''
++            select all_objects()[is schema::Blobal] { name };
++            ''',
++            [{"name": "default::asdf"}],
++        )
++
+     async def test_edgeql_select_empty_intersection_property(self):
+         with self.assertRaisesRegex(
+             edgedb.InvalidReferenceError,
+diff --git a/tests/test_link_target_delete.py b/tests/test_link_target_delete.py
+index 8982b3113..f50b28c92 100644
+--- a/tests/test_link_target_delete.py
++++ b/tests/test_link_target_delete.py
+@@ -307,6 +307,48 @@ class TestLinkTargetDeleteDeclarative(stb.QueryTestCase):
+                     DELETE (SELECT Target1 FILTER .name = 'Target1.1');
+                 """)
+ 
++    async def test_link_on_target_delete_restrict_schema_01(self):
++        # HACK: special inplace-upgrade test
++        async with self._run_and_rollback():
++            await self.con.execute("""
++                CREATE BLOBAL asdf2 { set required := true; };
++
++                INSERT SchemaSource {
++                    name := 'Source1.1',
++                    schema_restrict := (
++                        SELECT schema::Blobal LIMIT 1
++                    )
++                };
++            """)
++
++            with self.assertRaisesRegex(
++                    edgedb.ConstraintViolationError,
++                    'prohibited by link'):
++                await self.con.execute("""
++                    DROP BLOBAL asdf2;
++                """)
++
++    async def test_link_on_target_delete_restrict_schema_02(self):
++        # HACK: special inplace-upgrade test
++        async with self._run_and_rollback():
++            await self.con.execute("""
++                CREATE BLOBAL asdf2 { set required := true; };
++
++                INSERT SchemaSource {
++                    name := 'Source1.1',
++                    schema_m_restrict := (
++                        SELECT schema::Blobal LIMIT 1
++                    )
++                };
++            """)
++
++            with self.assertRaisesRegex(
++                    edgedb.ConstraintViolationError,
++                    'prohibited by link'):
++                await self.con.execute("""
++                    DROP BLOBAL asdf2;
++                """)
++
+     async def test_link_on_target_delete_deferred_restrict_01(self):
+         exception_is_deferred = False
+ 

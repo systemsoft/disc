@@ -1,0 +1,43 @@
+[workspace]
+members = [
+    "edb/edgeql-parser",
+    "edb/edgeql-parser/edgeql-parser-derive",
+    "edb/edgeql-parser/edgeql-parser-python",
+    "edb/graphql-rewrite",
+    "edb/server/_rust_native",
+    "rust/conn_pool",
+    "rust/gel-http",
+    "rust/pgrust",
+    "rust/pyo3_util",
+]
+resolver = "2"
+
+[workspace.dependencies]
+pyo3 = { version = "0.26", features = ["extension-module", "serde", "macros"] }
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "time", "sync", "net", "io-util"] }
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.20", features = ["registry", "env-filter"] }
+
+gel-auth = { version = "=0.1.6" }
+gel-stream = { version = "=0.4.3" }
+gel-protocol = { version = "=0.8.5" }
+gel-jwt = { version = "=0.1.4" }
+gel-db-protocol = { version = "=0.1.2" }
+gel-pg-protocol = { version = "=0.1.1" }
+gel-pg-captive = { version = "=0.1.1" }
+gel-dsn = { version = "=0.2.14" }
+
+conn_pool = { path = "rust/conn_pool" }
+pgrust = { path = "rust/pgrust" }
+gel-http = { path = "rust/gel-http" }
+pyo3_util = { path = "rust/pyo3_util" }
+
+[profile.release]
+debug = true
+lto = true
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(never)'] }
+
+[patch.crates-io]
+openssl-probe = { git = "https://github.com/edgedb/openssl-probe/", rev = "e5ed593600d1f8128629565d349682f54b3a8b57" }

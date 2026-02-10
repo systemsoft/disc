@@ -1,0 +1,19 @@
+[package]
+name = "pyo3_util"
+version = "0.1.0"
+license = "MIT/Apache-2.0"
+authors = ["MagicStack Inc. <hello@magic.io>"]
+edition = "2021"
+
+[lints]
+workspace = true
+
+[dependencies]
+pyo3.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tokio.workspace = true
+
+scopeguard = "1"
+
+[lib]
