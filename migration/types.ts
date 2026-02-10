@@ -243,6 +243,24 @@ export interface MigrationConfig {
   rollback_on_error: boolean;
 }
 
+export interface MigrationCheckpoint {
+  id: string;
+  name: string;
+  created_at: Date;
+  schema_state: any;
+  migration_state: MigrationState;
+}
+
+export interface MigrationHistoryEntry {
+  id: string;
+  name: string;
+  description: string;
+  schema_hash: string;
+  applied_at: Date;
+  duration_ms: number;
+  created_at: Date;
+}
+
 // Helper functions for creating operations
 export function createTypeOperation(name: string, properties: PropertyDefinition[], links: LinkDefinition[]): CreateTypeOperation {
   return {

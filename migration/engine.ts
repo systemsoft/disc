@@ -3,6 +3,7 @@
  */
 
 import * as SchemaAST from "../schema/ast.ts";
+import { Module } from "../schema/converter.ts";
 import * as Types from "./types.ts";
 import { SchemaDiffer } from "./differ.ts";
 import { DDLGenerator } from "./ddl.ts";
@@ -20,8 +21,8 @@ export class MigrationEngine {
    * Generate a migration plan from schema changes
    */
   planMigration(
-    oldSchema: SchemaAST.Module[] | null,
-    newSchema: SchemaAST.Module[],
+    oldSchema: Module[] | null,
+    newSchema: Module[],
   ): Result<Types.MigrationPlan, MigrationError> {
     try {
       const operations = oldSchema 
@@ -130,6 +131,180 @@ export class MigrationEngine {
   }
 
   /**
+   * Generate rollback SQL for a migration
+   */
+  generateRollbackSQL(migration: Types.Migration): Result<string[], MigrationError> {
+    try {
+      const rollbackSQL = this.ddlGenerator.generateRollbackDDL(migration.operations);
+      return Ok(rollbackSQL);
+    } catch (error) {
+      return Err(new MigrationError(`Failed to generate rollback SQL: ${error.message}`));
+    }
+  }
+
+  /**
+   * Execute migration with automatic rollback on error
+   */
+  async executeMigrationWithRollback(plan: Types.MigrationPlan): Promise<Result<Types.MigrationResult[], MigrationError>> {
+    const results: Types.MigrationResult[] = [];
+
+    for (const migration of plan.migrations) {
+      const startTime = Date.now();
+      let rollbackSQL: string[] | null = null;
+
+      try {
+        // Generate rollback SQL before executing
+        const rollbackResult = this.generateRollbackSQL(migration);
+        if (rollbackResult.ok) {
+          rollbackSQL = rollbackResult.value;
+        }
+
+        // Execute the migration
+        const ddlStatements = this.ddlGenerator.generateDDL(migration.operations);
+        await this.simulateExecution(ddlStatements);
+
+        const endTime = Date.now();
+        
+        results.push({
+          success: true,
+          migration_id: migration.id,
+          applied_at: new Date(),
+          duration_ms: endTime - startTime,
+          rollback_sql: rollbackSQL || undefined,
+        });
+
+        this.appliedMigrations.add(migration.id);
+      } catch (error) {
+        if (this.config.rollback_on_error && rollbackSQL) {
+          try {
+            await this.simulateExecution(rollbackSQL);
+          } catch (rollbackError) {
+            return Err(new MigrationError(`Migration failed and rollback failed: ${error.message}. Rollback error: ${rollbackError.message}`));
+          }
+        }
+        return Err(new MigrationError(`Migration execution failed: ${error.message}`));
+      }
+    }
+
+    return Ok(results);
+  }
+
+  /**
+   * Rollback a specific migration
+   */
+  async rollbackMigration(migrationId: string): Promise<Result<boolean, MigrationError>> {
+    if (!this.appliedMigrations.has(migrationId)) {
+      return Err(new MigrationError(`Migration ${migrationId} is not applied`));
+    }
+
+    try {
+      // In a real implementation, we would load migration details from database
+      // For now, we simulate successful rollback
+      this.appliedMigrations.delete(migrationId);
+      return Ok(true);
+    } catch (error) {
+      return Err(new MigrationError(`Failed to rollback migration ${migrationId}: ${error.message}`));
+    }
+  }
+
+  /**
+   * Rollback to a specific migration (rollback all migrations applied after it)
+   */
+  async rollbackToMigration(migrationId: string): Promise<Result<boolean, MigrationError>> {
+    const appliedMigrations = Array.from(this.appliedMigrations);
+    const targetIndex = appliedMigrations.indexOf(migrationId);
+    
+    if (targetIndex === -1) {
+      return Err(new MigrationError(`Migration ${migrationId} not found in applied migrations`));
+    }
+
+    // Rollback all migrations after the target migration
+    const migrationsToRollback = appliedMigrations.slice(targetIndex + 1);
+    
+    for (const migId of migrationsToRollback.reverse()) {
+      const rollbackResult = await this.rollbackMigration(migId);
+      if (!rollbackResult.ok) {
+        return rollbackResult;
+      }
+    }
+
+    return Ok(true);
+  }
+
+  /**
+   * Validate rollback safety for a migration plan
+   */
+  validateRollbackSafety(plan: Types.MigrationPlan): Result<boolean, MigrationError> {
+    const issues: string[] = [];
+
+    for (const migration of plan.migrations) {
+      for (const operation of migration.operations) {
+        const rollbackIssues = this.validateRollbackOperation(operation);
+        issues.push(...rollbackIssues);
+      }
+    }
+
+    if (issues.length > 0) {
+      return Err(new MigrationError(`Rollback safety concerns: ${issues.join(", ")}`));
+    }
+
+    return Ok(true);
+  }
+
+  /**
+   * Create a checkpoint before migration
+   */
+  async createMigrationCheckpoint(name: string): Promise<Result<Types.MigrationCheckpoint, MigrationError>> {
+    try {
+      const checkpoint: Types.MigrationCheckpoint = {
+        id: this.generateCheckpointId(),
+        name,
+        created_at: new Date(),
+        schema_state: this.getCurrentSchemaSnapshot(),
+        migration_state: this.getMigrationState(),
+      };
+
+      // In a real implementation, this would save the checkpoint to storage
+      return Ok(checkpoint);
+    } catch (error) {
+      return Err(new MigrationError(`Failed to create checkpoint: ${error.message}`));
+    }
+  }
+
+  /**
+   * Restore from a migration checkpoint
+   */
+  async restoreFromCheckpoint(checkpointId: string): Promise<Result<boolean, MigrationError>> {
+    try {
+      // In a real implementation, this would restore database state from checkpoint
+      // For now, we simulate successful restore
+      this.appliedMigrations.clear();
+      return Ok(true);
+    } catch (error) {
+      return Err(new MigrationError(`Failed to restore from checkpoint ${checkpointId}: ${error.message}`));
+    }
+  }
+
+  /**
+   * Generate data migration hints for complex changes
+   */
+  generateDataMigrationHints(plan: Types.MigrationPlan): Result<string[], MigrationError> {
+    try {
+      const hints: string[] = [];
+
+      for (const migration of plan.migrations) {
+        for (const operation of migration.operations) {
+          hints.push(...this.generateOperationHints(operation));
+        }
+      }
+
+      return Ok(hints);
+    } catch (error) {
+      return Err(new MigrationError(`Failed to generate data migration hints: ${error.message}`));
+    }
+  }
+
+  /**
    * Validate a migration plan for safety
    */
   validateMigration(plan: Types.MigrationPlan): Result<boolean, MigrationError> {
@@ -149,16 +324,13 @@ export class MigrationEngine {
     return Ok(true);
   }
 
-  private generateInitialMigration(schema: SchemaAST.Module[]): Types.MigrationOperation[] {
+  private generateInitialMigration(schema: Module[]): Types.MigrationOperation[] {
     const operations: Types.MigrationOperation[] = [];
 
     for (const module of schema) {
       for (const item of module.items) {
-        if (item.kind === "TypeDef") {
-          const properties = this.extractProperties(item);
-          const links = this.extractLinks(item);
-          
-          operations.push(Types.createTypeOperation(item.name.name, properties, links));
+        if (item.kind === "TypeDeclaration") {
+          operations.push(this.differ.createTypeOperation(item));
         }
       }
     }
@@ -166,69 +338,6 @@ export class MigrationEngine {
     return operations;
   }
 
-  private extractProperties(typeDef: SchemaAST.TypeDef): Types.PropertyDefinition[] {
-    const properties: Types.PropertyDefinition[] = [];
-
-    for (const item of typeDef.items) {
-      if (item.kind === "Property") {
-        properties.push({
-          name: item.name.name,
-          type: this.typeToString(item.type),
-          required: item.required || false,
-          multi: item.multi || false,
-          default: item.default ? this.extractDefaultValue(item.default) : undefined,
-          constraints: item.constraints?.map(c => c.name.name) || [],
-          annotations: item.annotations?.reduce((acc, ann) => {
-            acc[ann.name.name] = ann.value ? this.extractDefaultValue(ann.value) : true;
-            return acc;
-          }, {} as Record<string, any>) || {},
-        });
-      }
-    }
-
-    return properties;
-  }
-
-  private extractLinks(typeDef: SchemaAST.TypeDef): Types.LinkDefinition[] {
-    const links: Types.LinkDefinition[] = [];
-
-    for (const item of typeDef.items) {
-      if (item.kind === "Link") {
-        links.push({
-          name: item.name.name,
-          target: this.typeToString(item.target),
-          required: item.required || false,
-          multi: item.multi || false,
-          cardinality: item.cardinality,
-          on_target_delete: item.on_target_delete,
-          annotations: item.annotations?.reduce((acc, ann) => {
-            acc[ann.name.name] = ann.value ? this.extractDefaultValue(ann.value) : true;
-            return acc;
-          }, {} as Record<string, any>) || {},
-        });
-      }
-    }
-
-    return links;
-  }
-
-  private typeToString(type: SchemaAST.TypeExpr): string {
-    switch (type.kind) {
-      case "NamedType":
-        return type.name.name;
-      case "GenericType":
-        return `${type.name.name}<${type.args.map(arg => this.typeToString(arg)).join(", ")}>`;
-      default:
-        return "unknown";
-    }
-  }
-
-  private extractDefaultValue(expr: SchemaAST.Expression): any {
-    if (expr.kind === "Literal") {
-      return expr.value;
-    }
-    return expr.kind; // Fallback for complex expressions
-  }
 
   private generateMigrationId(): string {
     const timestamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "");
@@ -392,5 +501,66 @@ export class MigrationEngine {
     }
 
     return issues;
+  }
+
+  private validateRollbackOperation(operation: Types.MigrationOperation): string[] {
+    const issues: string[] = [];
+
+    switch (operation.kind) {
+      case "DropType":
+        issues.push(`Rollback of DropType ${operation.type_name} requires manual intervention - original schema lost`);
+        break;
+      case "AlterType":
+        for (const typeOp of operation.operations) {
+          if (typeOp.kind === "DropProperty") {
+            issues.push(`Rollback of DropProperty ${typeOp.property_name} may result in data loss or require manual intervention`);
+          }
+        }
+        break;
+      case "DropTable":
+        issues.push(`Rollback of DropTable ${operation.table_name} requires manual intervention - original structure lost`);
+        break;
+    }
+
+    return issues;
+  }
+
+  private generateOperationHints(operation: Types.MigrationOperation): string[] {
+    const hints: string[] = [];
+
+    switch (operation.kind) {
+      case "AlterType":
+        const alterTypeOp = operation as Types.AlterTypeOperation;
+        for (const typeOp of alterTypeOp.operations) {
+          if (typeOp.kind === "DropProperty") {
+            hints.push(`Data migration hint: Consider backing up data from ${alterTypeOp.type_name}.${typeOp.property_name} before dropping`);
+          }
+          if (typeOp.kind === "AddProperty" && typeOp.property.required) {
+            hints.push(`Data migration hint: Consider setting a default value for required property ${alterTypeOp.type_name}.${typeOp.property.name}`);
+          }
+        }
+        break;
+      case "DropType":
+        const dropTypeOp = operation as Types.DropTypeOperation;
+        hints.push(`Data migration hint: Consider backing up all data from type ${dropTypeOp.type_name} before dropping`);
+        break;
+    }
+
+    return hints;
+  }
+
+  private generateCheckpointId(): string {
+    const timestamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "");
+    const randomSuffix = Math.random().toString(36).substring(2, 8);
+    return `cp${timestamp}_${randomSuffix}`;
+  }
+
+  private getCurrentSchemaSnapshot(): any {
+    // In a real implementation, this would capture the current schema state
+    // For now, return a placeholder
+    return {
+      timestamp: new Date().toISOString(),
+      schema_version: "current",
+    };
   }
 }

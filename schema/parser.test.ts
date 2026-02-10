@@ -350,10 +350,11 @@ Deno.test("SDL Validator - Duplicate Type Error", () => {
   const ast = parser.parse();
 
   const validator = new SchemaValidator();
-  const errors = validator.validate(ast);
+  const result = validator.validate(ast);
 
-  assertEquals(errors.length, 1);
-  assertEquals(errors[0].message, "Type 'User' is already defined");
+  assertEquals(result.ok, false);
+  assertEquals(result.errors?.length, 1);
+  assertEquals(result.errors?.[0].message, "Type 'User' is already defined");
 });
 
 Deno.test("SDL Validator - Undefined Type Error", () => {
@@ -368,10 +369,11 @@ Deno.test("SDL Validator - Undefined Type Error", () => {
   const ast = parser.parse();
 
   const validator = new SchemaValidator();
-  const errors = validator.validate(ast);
+  const result = validator.validate(ast);
 
-  assertEquals(errors.length, 1);
-  assertEquals(errors[0].message, "Type 'NonExistentType' is not defined");
+  assertEquals(result.ok, false);
+  assertEquals(result.errors?.length, 1);
+  assertEquals(result.errors?.[0].message, "Type 'NonExistentType' is not defined");
 });
 
 Deno.test("SDL Validator - Valid Schema", () => {
@@ -392,9 +394,10 @@ Deno.test("SDL Validator - Valid Schema", () => {
   const ast = parser.parse();
 
   const validator = new SchemaValidator();
-  const errors = validator.validate(ast);
+  const result = validator.validate(ast);
 
-  assertEquals(errors.length, 0);
+  assertEquals(result.ok, true);
+  assertEquals(result.errors, undefined);
 });
 
 Deno.test("SDL Parser - Syntax Error", () => {

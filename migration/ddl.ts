@@ -15,24 +15,62 @@ export class DDLGenerator {
     return statements;
   }
 
+  /**
+   * Generate rollback DDL statements for the given operations
+   * These are the operations that would undo the forward migration
+   */
+  generateRollbackDDL(operations: Types.MigrationOperation[]): string[] {
+    const statements: string[] = [];
+
+    // Process operations in reverse order for rollback
+    for (const operation of operations.reverse()) {
+      statements.push(...this.generateRollbackOperationDDL(operation));
+    }
+
+    return statements;
+  }
+
+  private generateRollbackOperationDDL(operation: Types.MigrationOperation): string[] {
+    switch (operation.kind) {
+      case "CreateType":
+        return this.generateRollbackCreateType(operation as Types.CreateTypeOperation);
+      case "DropType":
+        return this.generateRollbackDropType(operation as Types.DropTypeOperation);
+      case "AlterType":
+        return this.generateRollbackAlterType(operation as Types.AlterTypeOperation);
+      case "CreateTable":
+        return this.generateRollbackCreateTable(operation as Types.CreateTableOperation);
+      case "DropTable":
+        return this.generateRollbackDropTable(operation as Types.DropTableOperation);
+      case "AlterTable":
+        return this.generateRollbackAlterTable(operation as Types.AlterTableOperation);
+      case "CreateIndex":
+        return this.generateRollbackCreateIndex(operation as Types.CreateIndexOperation);
+      case "DropIndex":
+        return this.generateRollbackDropIndex(operation as Types.DropIndexOperation);
+      default:
+        throw new Error(`Unsupported rollback operation: ${operation.kind}`);
+    }
+  }
+
   private generateOperationDDL(operation: Types.MigrationOperation): string[] {
     switch (operation.kind) {
       case "CreateType":
-        return this.generateCreateType(operation);
+        return this.generateCreateType(operation as Types.CreateTypeOperation);
       case "DropType":
-        return this.generateDropType(operation);
+        return this.generateDropType(operation as Types.DropTypeOperation);
       case "AlterType":
-        return this.generateAlterType(operation);
+        return this.generateAlterType(operation as Types.AlterTypeOperation);
       case "CreateTable":
-        return this.generateCreateTable(operation);
+        return this.generateCreateTable(operation as Types.CreateTableOperation);
       case "DropTable":
-        return this.generateDropTable(operation);
+        return this.generateDropTable(operation as Types.DropTableOperation);
       case "AlterTable":
-        return this.generateAlterTable(operation);
+        return this.generateAlterTable(operation as Types.AlterTableOperation);
       case "CreateIndex":
-        return this.generateCreateIndex(operation);
+        return this.generateCreateIndex(operation as Types.CreateIndexOperation);
       case "DropIndex":
-        return this.generateDropIndex(operation);
+        return this.generateDropIndex(operation as Types.DropIndexOperation);
       default:
         throw new Error(`Unsupported operation: ${operation.kind}`);
     }
@@ -159,17 +197,17 @@ export class DDLGenerator {
   private generateTypeOperationDDL(tableName: string, operation: Types.TypeOperation): string[] {
     switch (operation.kind) {
       case "AddProperty":
-        return this.generateAddProperty(tableName, operation);
+        return this.generateAddProperty(tableName, operation as Types.AddPropertyOperation);
       case "DropProperty":
-        return this.generateDropProperty(tableName, operation);
+        return this.generateDropProperty(tableName, operation as Types.DropPropertyOperation);
       case "AlterProperty":
-        return this.generateAlterProperty(tableName, operation);
+        return this.generateAlterProperty(tableName, operation as Types.AlterPropertyOperation);
       case "AddLink":
-        return this.generateAddLink(tableName, operation);
+        return this.generateAddLink(tableName, operation as Types.AddLinkOperation);
       case "DropLink":
-        return this.generateDropLink(tableName, operation);
+        return this.generateDropLink(tableName, operation as Types.DropLinkOperation);
       case "AlterLink":
-        return this.generateAlterLink(tableName, operation);
+        return this.generateAlterLink(tableName, operation as Types.AlterLinkOperation);
       default:
         throw new Error(`Unsupported type operation: ${operation.kind}`);
     }
@@ -493,5 +531,230 @@ export class DDLGenerator {
     }
     
     return `"${identifier.replace(/"/g, '""')}"`;
+  }
+
+  // ========================================
+  // Rollback DDL Generation Methods
+  // ========================================
+
+  private generateRollbackCreateType(operation: Types.CreateTypeOperation): string[] {
+    // To rollback CreateType, we drop the table
+    const tableName = this.typeNameToTableName(operation.type_name);
+    return [`DROP TABLE IF EXISTS ${this.escapeIdentifier(tableName)} CASCADE;`];
+  }
+
+  private generateRollbackDropType(operation: Types.DropTypeOperation): string[] {
+    // To rollback DropType, we would need to recreate the table
+    // This requires the original schema information which we don't have
+    const tableName = this.typeNameToTableName(operation.type_name);
+    return [
+      `-- MANUAL ROLLBACK REQUIRED: Recreate table '${tableName}'`,
+      `-- The original table structure was lost when it was dropped.`,
+      `-- Please restore from backup or recreate the table manually.`,
+    ];
+  }
+
+  private generateRollbackAlterType(operation: Types.AlterTypeOperation): string[] {
+    const statements: string[] = [];
+    const tableName = this.typeNameToTableName(operation.type_name);
+
+    // Process type operations in reverse order
+    for (const typeOp of operation.operations.reverse()) {
+      statements.push(...this.generateRollbackTypeOperation(tableName, typeOp));
+    }
+
+    return statements;
+  }
+
+  private generateRollbackTypeOperation(tableName: string, operation: Types.TypeOperation): string[] {
+    switch (operation.kind) {
+      case "AddProperty":
+        return this.generateRollbackAddProperty(tableName, operation);
+      case "DropProperty":
+        return this.generateRollbackDropProperty(tableName, operation);
+      case "AlterProperty":
+        return this.generateRollbackAlterProperty(tableName, operation);
+      case "AddLink":
+        return this.generateRollbackAddLink(tableName, operation);
+      case "DropLink":
+        return this.generateRollbackDropLink(tableName, operation);
+      case "AlterLink":
+        return this.generateRollbackAlterLink(tableName, operation);
+      default:
+        throw new Error(`Unsupported rollback type operation: ${operation.kind}`);
+    }
+  }
+
+  private generateRollbackAddProperty(tableName: string, operation: Types.AddPropertyOperation): string[] {
+    // To rollback AddProperty, we drop the column
+    return [`ALTER TABLE ${this.escapeIdentifier(tableName)} DROP COLUMN IF EXISTS ${this.escapeIdentifier(operation.property.name)};`];
+  }
+
+  private generateRollbackDropProperty(tableName: string, operation: Types.DropPropertyOperation): string[] {
+    // To rollback DropProperty, we would need to add the column back
+    // This requires the original column definition which we don't have
+    return [
+      `-- MANUAL ROLLBACK REQUIRED: Add column '${operation.property_name}' back to table '${tableName}'`,
+      `-- ALTER TABLE ${this.escapeIdentifier(tableName)} ADD COLUMN ${this.escapeIdentifier(operation.property_name)} <TYPE> <CONSTRAINTS>;`,
+      `-- Please determine the correct type and constraints from backup or documentation.`,
+    ];
+  }
+
+  private generateRollbackAlterProperty(tableName: string, operation: Types.AlterPropertyOperation): string[] {
+    const statements: string[] = [];
+    const columnName = this.escapeIdentifier(operation.property_name);
+    const tableRef = this.escapeIdentifier(tableName);
+
+    // Process changes in reverse order
+    for (const change of operation.changes.reverse()) {
+      switch (change.kind) {
+        case "ChangeType":
+          statements.push(`ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} TYPE ${this.mapEdgeQLTypeToPostgreSQL(change.old_value)};`);
+          break;
+        case "ChangeRequired":
+          if (change.old_value) {
+            statements.push(`ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET NOT NULL;`);
+          } else {
+            statements.push(`ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} DROP NOT NULL;`);
+          }
+          break;
+        case "ChangeDefault":
+          if (change.old_value !== undefined) {
+            statements.push(`ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET DEFAULT ${this.formatDefaultValue(change.old_value, "unknown")};`);
+          } else {
+            statements.push(`ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} DROP DEFAULT;`);
+          }
+          break;
+      }
+    }
+
+    return statements;
+  }
+
+  private generateRollbackAddLink(tableName: string, operation: Types.AddLinkOperation): string[] {
+    const statements: string[] = [];
+    const linkName = operation.link.name;
+
+    // Drop junction table if it was a multi-link
+    if (operation.link.multi) {
+      const junctionTableName = `${tableName}_${linkName}`;
+      statements.push(`DROP TABLE IF EXISTS ${this.escapeIdentifier(junctionTableName)} CASCADE;`);
+    } else {
+      // Drop foreign key column if it was a single-link
+      const columnName = `${linkName}_id`;
+      statements.push(`ALTER TABLE ${this.escapeIdentifier(tableName)} DROP COLUMN IF EXISTS ${this.escapeIdentifier(columnName)};`);
+    }
+
+    return statements;
+  }
+
+  private generateRollbackDropLink(tableName: string, operation: Types.DropLinkOperation): string[] {
+    // To rollback DropLink, we would need to recreate the link
+    // This requires the original link definition which we don't have
+    return [
+      `-- MANUAL ROLLBACK REQUIRED: Recreate link '${operation.link_name}' on table '${tableName}'`,
+      `-- This may involve creating a junction table or adding a foreign key column.`,
+      `-- Please refer to backup or documentation for the original link structure.`,
+    ];
+  }
+
+  private generateRollbackAlterLink(tableName: string, operation: Types.AlterLinkOperation): string[] {
+    // Link alteration rollback is complex and requires the original link definition
+    return [
+      `-- MANUAL ROLLBACK REQUIRED: Revert changes to link '${operation.link_name}' on table '${tableName}'`,
+      `-- Link alterations may involve changing junction tables or foreign key constraints.`,
+      `-- Please refer to backup or documentation for the original link configuration.`,
+    ];
+  }
+
+  private generateRollbackCreateTable(operation: Types.CreateTableOperation): string[] {
+    return [`DROP TABLE IF EXISTS ${this.escapeIdentifier(operation.table_name)} CASCADE;`];
+  }
+
+  private generateRollbackDropTable(operation: Types.DropTableOperation): string[] {
+    return [
+      `-- MANUAL ROLLBACK REQUIRED: Recreate table '${operation.table_name}'`,
+      `-- The original table structure was lost when it was dropped.`,
+      `-- Please restore from backup or recreate the table manually.`,
+    ];
+  }
+
+  private generateRollbackAlterTable(operation: Types.AlterTableOperation): string[] {
+    const statements: string[] = [];
+
+    // Process table operations in reverse order
+    for (const tableOp of operation.operations.reverse()) {
+      statements.push(...this.generateRollbackTableOperation(operation.table_name, tableOp));
+    }
+
+    return statements;
+  }
+
+  private generateRollbackTableOperation(tableName: string, operation: Types.TableOperation): string[] {
+    switch (operation.kind) {
+      case "AddColumn":
+        return this.generateRollbackAddColumn(tableName, operation);
+      case "DropColumn":
+        return this.generateRollbackDropColumn(tableName, operation);
+      case "AlterColumn":
+        return this.generateRollbackAlterColumn(tableName, operation);
+      default:
+        throw new Error(`Unsupported rollback table operation: ${operation.kind}`);
+    }
+  }
+
+  private generateRollbackAddColumn(tableName: string, operation: Types.AddColumnOperation): string[] {
+    return [`ALTER TABLE ${this.escapeIdentifier(tableName)} DROP COLUMN IF EXISTS ${this.escapeIdentifier(operation.column.name)};`];
+  }
+
+  private generateRollbackDropColumn(tableName: string, operation: Types.DropColumnOperation): string[] {
+    return [
+      `-- MANUAL ROLLBACK REQUIRED: Add column '${operation.column_name}' back to table '${tableName}'`,
+      `-- ALTER TABLE ${this.escapeIdentifier(tableName)} ADD COLUMN ${this.escapeIdentifier(operation.column_name)} <TYPE> <CONSTRAINTS>;`,
+      `-- Please determine the correct type and constraints from backup or documentation.`,
+    ];
+  }
+
+  private generateRollbackAlterColumn(tableName: string, operation: Types.AlterColumnOperation): string[] {
+    const statements: string[] = [];
+    const columnName = this.escapeIdentifier(operation.column_name);
+    const tableRef = this.escapeIdentifier(tableName);
+
+    // Process changes in reverse order
+    for (const change of operation.changes.reverse()) {
+      switch (change.kind) {
+        case "ChangeType":
+          statements.push(`ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} TYPE ${change.old_value};`);
+          break;
+        case "ChangeNullable":
+          if (change.old_value) {
+            statements.push(`ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} DROP NOT NULL;`);
+          } else {
+            statements.push(`ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET NOT NULL;`);
+          }
+          break;
+        case "ChangeDefault":
+          if (change.old_value !== undefined) {
+            statements.push(`ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET DEFAULT ${change.old_value};`);
+          } else {
+            statements.push(`ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} DROP DEFAULT;`);
+          }
+          break;
+      }
+    }
+
+    return statements;
+  }
+
+  private generateRollbackCreateIndex(operation: Types.CreateIndexOperation): string[] {
+    return [`DROP INDEX IF EXISTS ${this.escapeIdentifier(operation.index.name)};`];
+  }
+
+  private generateRollbackDropIndex(operation: Types.DropIndexOperation): string[] {
+    return [
+      `-- MANUAL ROLLBACK REQUIRED: Recreate index '${operation.index_name}'`,
+      `-- The original index definition was lost when it was dropped.`,
+      `-- Please refer to backup or documentation for the original index structure.`,
+    ];
   }
 }

@@ -4,6 +4,7 @@
 
 import { ValidationError } from "../lib/errors.ts";
 import * as AST from "./ast.ts";
+import { SDLConverter, Module } from "./converter.ts";
 
 interface ValidationContext {
   types: Map<string, AST.TypeDeclaration | AST.ScalarTypeDeclaration>;
@@ -14,6 +15,7 @@ interface ValidationContext {
 
 export class SchemaValidator {
   private context: ValidationContext;
+  private converter: SDLConverter;
 
   constructor() {
     this.context = {
@@ -21,16 +23,32 @@ export class SchemaValidator {
       modules: new Map(),
       errors: [],
     };
+    this.converter = new SDLConverter();
   }
 
-  validate(document: AST.SDLDocument): ValidationError[] {
+  validate(document: AST.SDLDocument): { ok: boolean; errors?: ValidationError[] } {
+    const errors = this.validateDocument(document);
+    return {
+      ok: errors.length === 0,
+      errors: errors.length > 0 ? errors : undefined,
+    };
+  }
+
+  private validateDocument(document: AST.SDLDocument): ValidationError[] {
     // First pass: collect all type and module declarations
     this.collectDeclarations(document);
 
     // Second pass: validate references and constraints
-    this.validateDocument(document);
+    this.validateDocumentReferences(document);
 
     return this.context.errors;
+  }
+
+  /**
+   * Convert SDL document to modules for migration engine
+   */
+  convertToModules(document: AST.SDLDocument): Module[] {
+    return this.converter.convertToModules(document);
   }
 
   private collectDeclarations(document: AST.SDLDocument): void {
@@ -87,7 +105,7 @@ export class SchemaValidator {
     this.context.types.set(typeName, type);
   }
 
-  private validateDocument(document: AST.SDLDocument): void {
+  private validateDocumentReferences(document: AST.SDLDocument): void {
     for (const decl of document.declarations) {
       this.validateDeclaration(decl);
     }

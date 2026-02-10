@@ -2,11 +2,12 @@
  * Schema diff engine for generating migration operations
  */
 
-import * as SchemaAST from "../schema/ast.ts";
+import * as AST from "../schema/ast.ts";
+import { Module } from "../schema/converter.ts";
 import * as Types from "./types.ts";
 
 export class SchemaDiffer {
-  diff(oldSchema: SchemaAST.Module[], newSchema: SchemaAST.Module[]): Types.MigrationOperation[] {
+  diff(oldSchema: Module[], newSchema: Module[]): Types.MigrationOperation[] {
     const operations: Types.MigrationOperation[] = [];
 
     // Convert schemas to maps for easier comparison
@@ -45,13 +46,13 @@ export class SchemaDiffer {
     return operations;
   }
 
-  private extractTypes(modules: SchemaAST.Module[]): Map<string, SchemaAST.TypeDef> {
-    const types = new Map<string, SchemaAST.TypeDef>();
+  private extractTypes(modules: Module[]): Map<string, AST.TypeDeclaration> {
+    const types = new Map<string, AST.TypeDeclaration>();
 
     for (const module of modules) {
       for (const item of module.items) {
-        if (item.kind === "TypeDef") {
-          types.set(item.name.name, item);
+        if (item.kind === "TypeDeclaration") {
+          types.set(item.name.value, item);
         }
       }
     }
@@ -59,26 +60,33 @@ export class SchemaDiffer {
     return types;
   }
 
-  private createTypeOperation(typeDef: SchemaAST.TypeDef): Types.CreateTypeOperation {
+  createTypeOperation(typeDef: AST.TypeDeclaration): Types.CreateTypeOperation {
     const properties = this.extractProperties(typeDef);
     const links = this.extractLinks(typeDef);
 
-    return Types.createTypeOperation(typeDef.name.name, properties, links);
+    return {
+      kind: "CreateType",
+      type_name: typeDef.name.value,
+      properties,
+      links,
+      constraints: [],
+      indexes: [],
+    };
   }
 
-  private extractProperties(typeDef: SchemaAST.TypeDef): Types.PropertyDefinition[] {
+  private extractProperties(typeDef: AST.TypeDeclaration): Types.PropertyDefinition[] {
     const properties: Types.PropertyDefinition[] = [];
 
-    for (const item of typeDef.items) {
-      if (item.kind === "Property") {
+    for (const member of typeDef.members) {
+      if (member.kind === "PropertyDeclaration") {
         properties.push({
-          name: item.name.name,
-          type: this.typeToString(item.type),
-          required: item.required || false,
-          multi: item.multi || false,
-          default: item.default ? this.extractDefaultValue(item.default) : undefined,
-          constraints: this.extractConstraints(item.constraints || []),
-          annotations: this.extractAnnotations(item.annotations || []),
+          name: member.name.value,
+          type: this.typeToString(member.type),
+          required: member.required || false,
+          multi: member.multi || false,
+          default: member.default ? this.extractDefaultValue(member.default) : undefined,
+          constraints: this.extractConstraints(member.constraints || []),
+          annotations: this.extractAnnotations(member.annotations || []),
         });
       }
     }
@@ -86,19 +94,19 @@ export class SchemaDiffer {
     return properties;
   }
 
-  private extractLinks(typeDef: SchemaAST.TypeDef): Types.LinkDefinition[] {
+  private extractLinks(typeDef: AST.TypeDeclaration): Types.LinkDefinition[] {
     const links: Types.LinkDefinition[] = [];
 
-    for (const item of typeDef.items) {
-      if (item.kind === "Link") {
+    for (const member of typeDef.members) {
+      if (member.kind === "LinkDeclaration") {
         links.push({
-          name: item.name.name,
-          target: this.typeToString(item.target),
-          required: item.required || false,
-          multi: item.multi || false,
-          cardinality: item.cardinality,
-          on_target_delete: item.on_target_delete,
-          annotations: this.extractAnnotations(item.annotations || []),
+          name: member.name.value,
+          target: this.typeToString(member.target),
+          required: member.required || false,
+          multi: member.multi || false,
+          cardinality: member.multi ? "many" : "one",
+          on_target_delete: member.onTargetDelete,
+          annotations: this.extractAnnotations(member.annotations || []),
         });
       }
     }
@@ -106,7 +114,7 @@ export class SchemaDiffer {
     return links;
   }
 
-  private diffType(oldType: SchemaAST.TypeDef, newType: SchemaAST.TypeDef): Types.TypeOperation[] {
+  private diffType(oldType: AST.TypeDeclaration, newType: AST.TypeDeclaration): Types.TypeOperation[] {
     const operations: Types.TypeOperation[] = [];
 
     // Diff properties
@@ -293,22 +301,11 @@ export class SchemaDiffer {
     return changes;
   }
 
-  private typeToString(type: SchemaAST.TypeExpr): string {
-    switch (type.kind) {
-      case "NamedType":
-        return type.name.name;
-      case "GenericType":
-        return `${type.name.name}<${type.args.map(arg => this.typeToString(arg)).join(", ")}>`;
-      case "TupleType":
-        return `tuple<${type.elements.map(el => this.typeToString(el.type)).join(", ")}>`;
-      case "UnionType":
-        return type.types.map(t => this.typeToString(t)).join(" | ");
-      default:
-        return "unknown";
-    }
+  private typeToString(type: AST.TypeRef): string {
+    return type.name.parts.join("::");
   }
 
-  private extractDefaultValue(expr: SchemaAST.Expression): any {
+  private extractDefaultValue(expr: AST.Expression): any {
     if (expr.kind === "Literal") {
       return expr.value;
     }
@@ -316,14 +313,15 @@ export class SchemaDiffer {
     return expr.kind;
   }
 
-  private extractConstraints(constraints: SchemaAST.Constraint[]): string[] {
-    return constraints.map(constraint => constraint.name.name);
+  private extractConstraints(constraints: AST.Constraint[]): string[] {
+    return constraints.map(constraint => constraint.name?.value || "unnamed");
   }
 
-  private extractAnnotations(annotations: SchemaAST.Annotation[]): Record<string, any> {
+  private extractAnnotations(annotations: AST.Annotation[]): Record<string, any> {
     const result: Record<string, any> = {};
     for (const annotation of annotations) {
-      result[annotation.name.name] = annotation.value ? this.extractDefaultValue(annotation.value) : true;
+      const name = annotation.name.parts.join("::");
+      result[name] = annotation.value ? this.extractDefaultValue(annotation.value) : true;
     }
     return result;
   }
