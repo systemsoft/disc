@@ -863,7 +863,7 @@ export class EdgeQLParser {
       // Check if it's a named tuple
       const checkpoint = this.current;
       if (this.check(TokenType.IDENT)) {
-        const ident = this.advance();
+        this.advance();
         if (this.match(TokenType.ASSIGN)) {
           // Named tuple
           this.current = checkpoint;

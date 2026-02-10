@@ -803,10 +803,6 @@ export class EdgeQLLexer {
   }
 
   private scanTypeCast(): Token | null {
-    const startPos = this.pos;
-    const startLine = this.line;
-    const startColumn = this.column;
-
     // Save position in case this isn't a type cast
     const savedPos = this.pos;
     const savedLine = this.line;

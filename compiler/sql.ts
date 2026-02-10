@@ -6,11 +6,9 @@ export interface SQLNode {
   kind: string;
 }
 
-export interface SQLStatement extends SQLNode {
-  kind: "SQLStatement";
-}
+export type SQLStatement = SelectStatement | InsertStatement | UpdateStatement | DeleteStatement;
 
-export interface SelectStatement extends SQLStatement {
+export interface SelectStatement extends SQLNode {
   kind: "SelectStatement";
   select: SelectClause;
   from?: FromClause;
@@ -89,7 +87,7 @@ export interface OffsetClause extends SQLNode {
   count: SQLExpression;
 }
 
-export interface InsertStatement extends SQLStatement {
+export interface InsertStatement extends SQLNode {
   kind: "InsertStatement";
   table: string;
   columns: string[];
@@ -115,7 +113,7 @@ export interface SetClause extends SQLNode {
   value: SQLExpression;
 }
 
-export interface UpdateStatement extends SQLStatement {
+export interface UpdateStatement extends SQLNode {
   kind: "UpdateStatement";
   table: string;
   set: SetClause[];
@@ -123,7 +121,7 @@ export interface UpdateStatement extends SQLStatement {
   returning?: SelectItem[];
 }
 
-export interface DeleteStatement extends SQLStatement {
+export interface DeleteStatement extends SQLNode {
   kind: "DeleteStatement";
   table: string;
   where?: WhereClause;

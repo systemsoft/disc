@@ -441,7 +441,12 @@ export class EdgeQLAnalyzer {
 
     return {
       name: typeName,
-      cardinality: cast.cardinality || { required: true, multi: false },
+      cardinality: cast.cardinality 
+        ? { 
+            required: cast.cardinality.required ?? true, 
+            multi: cast.cardinality.multi ?? false 
+          }
+        : { required: true, multi: false },
     };
   }
 
@@ -616,7 +621,7 @@ export class EdgeQLAnalyzer {
 
     // Analyze branches
     const thenType = this.analyzeExpression(ifElse.then);
-    const elseType = this.analyzeExpression(ifElse.else);
+    this.analyzeExpression(ifElse.else);
 
     // Return the union type (simplified - just return then type)
     return thenType;
