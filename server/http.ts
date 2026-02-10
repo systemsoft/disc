@@ -4,6 +4,7 @@
 
 import * as Types from "./types.ts";
 import { ConnectionManager, SessionManager, TransactionManager } from "./connection.ts";
+import { SubscriptionHandler } from "./subscription-handler.ts";
 
 export interface HttpServerOptions {
   config: Types.ServerConfig;
@@ -16,6 +17,7 @@ export class HttpServer {
   private connection_manager: ConnectionManager;
   private session_manager: SessionManager;
   private transaction_manager: TransactionManager;
+  private subscription_handler: SubscriptionHandler;
   private server?: Deno.HttpServer<Deno.NetAddr>;
   private start_time: Date;
   private stats = {
@@ -31,6 +33,7 @@ export class HttpServer {
     this.connection_manager = new ConnectionManager();
     this.session_manager = new SessionManager();
     this.transaction_manager = new TransactionManager();
+    this.subscription_handler = new SubscriptionHandler();
     this.start_time = new Date();
   }
 
@@ -220,7 +223,9 @@ export class HttpServer {
   }
 
   private handle_stats(): Response {
-    const stats: Types.ServerStats = {
+    const subscription_stats = this.subscription_handler.get_subscription_stats();
+    
+    const stats: Types.ServerStats & { subscriptions: typeof subscription_stats } = {
       connections: this.connection_manager.get_stats(),
       queries: {
         total: this.stats.total_requests,
@@ -237,6 +242,7 @@ export class HttpServer {
       },
       memory_usage: this.get_memory_stats(),
       uptime_ms: Date.now() - this.start_time.getTime(),
+      subscriptions: subscription_stats,
     };
 
     return new Response(JSON.stringify(stats, null, 2), {
@@ -288,6 +294,7 @@ export class HttpServer {
 
     socket.onclose = () => {
       console.log(`WebSocket connection closed: ${connection.id}`);
+      this.subscription_handler.cleanup_connection(connection.session.session_id);
       this.connection_manager.close_connection(connection.id);
     };
 
@@ -331,11 +338,39 @@ export class HttpServer {
       }
 
       case "subscribe": {
-        // TODO: Implement subscription handling
-        socket.send(JSON.stringify({
-          type: "error",
-          payload: { message: "Subscriptions not yet implemented" },
-        }));
+        const context: Types.QueryContext = {
+          session: connection.session,
+          auth: { roles: [], permissions: [] },
+          request_id: this.generate_request_id(),
+          started_at: new Date(),
+        };
+
+        try {
+          await this.subscription_handler.handle_subscription(payload, context, socket);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : "Unknown subscription error";
+          socket.send(JSON.stringify({
+            type: "error",
+            payload: { message: errorMessage },
+          }));
+        }
+        break;
+      }
+
+      case "unsubscribe": {
+        const { subscription_id } = payload;
+        if (subscription_id) {
+          this.subscription_handler.stop_subscription(subscription_id);
+          socket.send(JSON.stringify({
+            type: "subscription_stopped",
+            payload: { subscription_id },
+          }));
+        } else {
+          socket.send(JSON.stringify({
+            type: "error",
+            payload: { message: "subscription_id is required for unsubscribe" },
+          }));
+        }
         break;
       }
 
