@@ -1,44 +1,48 @@
-*._*
-*.pyc
-*.pyo
-*.o
-*.so
-*.dylib
+# Deno / TypeScript
+deno.lock
+*.log
+coverage/
+
+# IDE
+.claude/
 .vscode/
 .zed/
 .helix/
+.idea/
+*.iml
+*.code-workspace
+
+# System files
+.DS_Store
 *~
 .#*
 .*.swp
-.DS_Store
 \#*#
-/test*.py
-/.local
-/perf.data*
-/build
-/target
-/tmp
-__pycache__/
-.d8_history
-/.venv
-/.eggs
-/*.egg
-/*.egg-info
+
+# Environment
+.env
+.env.local
+
+# Build outputs
 /dist
-/.cache
-docs/_build
-/AUTHORS
-/ChangeLog
-/tests/dumps/**/*_dev*.dump
-/edb/_buildmeta.py
+/build
+/out
+/target
 
-/.coverage*
-/htmlcov
+# Reference implementation (Python/Rust)
+/reference-gel
 
-*.code-workspace
-/.pytest_cache
-/.mypy_cache
-/.vagga
-/.dmypy.json
-/compile_commands.json
-/pyrightconfig.json
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Temporary files
+/tmp
+/temp
+/.tmp
+
+# Test artifacts
+/test*.ts
+/coverage
+/.nyc_output

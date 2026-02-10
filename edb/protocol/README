@@ -1,2 +1,0 @@
-Protocol documentation and testing utilities.
-The actual protocol implementation is in the edb.server package.

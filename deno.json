@@ -1,0 +1,65 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true
+  },
+  "exports": {
+    ".": "./mod.ts",
+    "./cli": "./cli/mod.ts",
+    "./schema": "./schema/mod.ts",
+    "./edgeql": "./edgeql/mod.ts",
+    "./compiler": "./compiler/mod.ts"
+  },
+  "fmt": {
+    "useTabs": false,
+    "lineWidth": 80,
+    "indentWidth": 2,
+    "semiColons": true,
+    "singleQuote": false,
+    "proseWrap": "preserve"
+  },
+  "imports": {
+    "@std/assert": "jsr:@std/assert@1.0.8",
+    "@std/testing": "jsr:@std/testing@1.0.8",
+    "@std/path": "jsr:@std/path@1.0.8",
+    "@std/fs": "jsr:@std/fs@1.0.8",
+    "@std/fmt": "jsr:@std/fmt@1.0.8",
+    "@std/cli": "jsr:@std/cli@1.0.8",
+    "@std/async": "jsr:@std/async@1.0.8",
+    "@std/http": "jsr:@std/http@1.0.8",
+    "@std/log": "jsr:@std/log@0.224.10"
+  },
+  "lint": {
+    "include": ["**/*.ts", "**/*.tsx"],
+    "exclude": ["reference-gel/**", "tests/fixtures/**"],
+    "rules": {
+      "tags": ["recommended"],
+      "include": ["no-console", "camelcase"],
+      "exclude": ["no-explicit-any"]
+    }
+  },
+  "lock": false,
+  "name": "@disc/db",
+  "tasks": {
+    "dev": "deno run --watch --allow-net --allow-read --allow-write --allow-env cli/main.ts",
+    "cli": "deno run --allow-net --allow-read --allow-write --allow-env cli/main.ts",
+    "test": "deno test --allow-read --allow-write --allow-env",
+    "fmt": "deno fmt",
+    "lint": "deno lint",
+    "check": "deno task lint && deno task fmt --check && deno task test",
+    "serve": "deno run --allow-net --allow-read --allow-env server/main.ts"
+  },
+  "test": {
+    "include": ["**/*.test.ts", "tests/**/*.ts"],
+    "exclude": ["reference-gel/**"]
+  },
+  "version": "0.1.0"
+}
