@@ -212,7 +212,8 @@ export type Expression =
   | UnaryOp
   | FunctionCall
   | TypeCast
-  | Parameter;
+  | Parameter
+  | ConditionalExpression;
 
 export interface Literal extends SDLNode {
   kind: "Literal";
@@ -253,6 +254,13 @@ export interface TypeCast extends SDLNode {
 export interface Parameter extends SDLNode {
   kind: "Parameter";
   name: string;
+}
+
+export interface ConditionalExpression extends SDLNode {
+  kind: "ConditionalExpression";
+  test: Expression;
+  consequent: Expression;
+  alternate: Expression;
 }
 
 // Helper functions for creating AST nodes

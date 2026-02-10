@@ -32,12 +32,12 @@ export class SDLParser {
   }
 
   private parseTopLevelDeclaration(): AST.Declaration | null {
-    // Skip semicolons at top level
-    while (this.match(TokenType.SEMICOLON)) {
+    // Skip semicolons and whitespace at top level
+    while (this.match(TokenType.SEMICOLON) || this.match(TokenType.WHITESPACE) || this.match(TokenType.NEWLINE)) {
       // Do nothing
     }
 
-    if (this.check(TokenType.EOF)) {
+    if (this.check(TokenType.EOF) || this.check(TokenType.RBRACE)) {
       return null;
     }
 
@@ -85,7 +85,8 @@ export class SDLParser {
       return this.parseAnnotationDeclaration(isAbstract);
     }
 
-    throw this.error(`Unexpected token: ${this.peek().value}`);
+    const token = this.peek();
+    throw this.error(`Unexpected token: '${token.value}' (type: ${token.type})`);
   }
 
   private parseModuleDeclaration(): AST.ModuleDeclaration {
@@ -236,6 +237,7 @@ export class SDLParser {
         }
       }
       this.consume(TokenType.RBRACE, "Expected '}' after global body");
+      this.consume(TokenType.SEMICOLON, "Expected ';' after global declaration");
     } else {
       this.consume(
         TokenType.SEMICOLON,
@@ -338,6 +340,9 @@ export class SDLParser {
         const target = this.parseTypeRef();
         const link = this.parseLinkBody(name, target, qualifiers);
         return link;
+      } else if (this.check(TokenType.IDENT) || this.check(TokenType.BACKTICK_IDENT)) {
+        // Looks like a property declaration but missing colon
+        throw this.error("Expected ':' after property name");
       }
 
       // Restore position if not a property/link
@@ -509,8 +514,7 @@ export class SDLParser {
     }
 
     let args: AST.Expression[] | undefined;
-    if (name && this.check(TokenType.LPAREN)) {
-      this.consume(TokenType.LPAREN, "Expected '('");
+    if (name && this.match(TokenType.LPAREN)) {
       args = this.parseExpressionList();
       this.consume(TokenType.RPAREN, "Expected ')' after constraint arguments");
     }
@@ -779,7 +783,26 @@ export class SDLParser {
   }
 
   private parseExpression(): AST.Expression {
-    return this.parseOrExpression();
+    return this.parseConditionalExpression();
+  }
+
+  private parseConditionalExpression(): AST.Expression {
+    let expr = this.parseOrExpression();
+
+    if (this.match(TokenType.IF)) {
+      const test = this.parseOrExpression();
+      this.consume(TokenType.ELSE, "Expected 'else' in conditional expression");
+      const alternate = this.parseConditionalExpression();
+      
+      expr = {
+        kind: "ConditionalExpression",
+        test,
+        consequent: expr,
+        alternate,
+      };
+    }
+
+    return expr;
   }
 
   private parseOrExpression(): AST.Expression {
@@ -973,6 +996,17 @@ export class SDLParser {
       return { kind: "PathExpression", path };
     }
 
+    // Handle keywords that can start expressions (like "select", "global")
+    if (this.check(TokenType.SELECT)) {
+      return this.parseEdgeQLExpression();
+    }
+
+    if (this.check(TokenType.GLOBAL)) {
+      this.advance();
+      const name = this.parseIdentifier();
+      return { kind: "PathExpression", path: ["global", name.value] };
+    }
+
     // Identifier or qualified name (could be function name)
     if (this.check(TokenType.IDENT) || this.check(TokenType.BACKTICK_IDENT)) {
       const name = this.parseQualifiedName();
@@ -1011,11 +1045,20 @@ export class SDLParser {
   private parseQualifiedName(): AST.QualifiedName {
     const parts: string[] = [];
 
-    if (this.check(TokenType.IDENT) || this.check(TokenType.BACKTICK_IDENT)) {
-      parts.push(this.parseIdentifier().value);
+    if (this.check(TokenType.IDENT) || this.check(TokenType.BACKTICK_IDENT) || this.check(TokenType.DEFAULT)) {
+      // Handle keywords that can be used as identifiers (like "default")
+      const token = this.peek();
+      if (token.type === TokenType.DEFAULT || token.type === TokenType.IDENT || token.type === TokenType.BACKTICK_IDENT) {
+        parts.push(token.value);
+        this.advance();
+      }
 
       while (this.match(TokenType.DOUBLECOLON)) {
-        parts.push(this.parseIdentifier().value);
+        if (this.check(TokenType.IDENT) || this.check(TokenType.BACKTICK_IDENT)) {
+          parts.push(this.parseIdentifier().value);
+        } else {
+          throw this.error(`Expected identifier after '::'`);
+        }
       }
     } else {
       throw this.error(`Expected qualified name, got ${this.peek().value}`);
@@ -1079,6 +1122,39 @@ export class SDLParser {
   private consume(type: TokenType, message: string): Token {
     if (this.check(type)) return this.advance();
     throw this.error(message);
+  }
+
+  private parseEdgeQLExpression(): AST.Expression {
+    // For now, parse EdgeQL expressions as simplified PathExpressions
+    // This is a temporary solution until full EdgeQL support is implemented
+    const tokens: string[] = [];
+    let parenDepth = 0;
+    
+    while (!this.isAtEnd()) {
+      const token = this.peek();
+      
+      if (token.type === TokenType.LPAREN) {
+        parenDepth++;
+        tokens.push(token.value);
+        this.advance();
+      } else if (token.type === TokenType.RPAREN) {
+        if (parenDepth === 0) {
+          // This is the closing paren of our parent expression
+          break;
+        }
+        parenDepth--;
+        tokens.push(token.value);
+        this.advance();
+      } else if (token.type === TokenType.SEMICOLON && parenDepth === 0) {
+        // End of statement
+        break;
+      } else {
+        tokens.push(token.value);
+        this.advance();
+      }
+    }
+    
+    return { kind: "PathExpression", path: tokens };
   }
 
   private error(message: string): SyntaxError {

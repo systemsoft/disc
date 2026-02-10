@@ -70,6 +70,12 @@ export class SDLLexer {
       return this.scanNumber();
     }
 
+    // Raw strings (r"..." or r'...')
+    if (ch === "r" && (this.peekAhead(1) === '"' || this.peekAhead(1) === "'")) {
+      this.advance(); // consume 'r'
+      return this.scanRawString();
+    }
+
     // Identifiers and keywords
     if (this.isIdentStart(ch)) {
       return this.scanIdentOrKeyword();
@@ -456,6 +462,51 @@ export class SDLLexer {
     }
 
     throw new SyntaxError(`Unterminated backtick identifier`, {
+      location: { line: startLine, column: startColumn, offset: startPos },
+    });
+  }
+
+  private scanRawString(): Token {
+    const startPos = this.pos - 1; // Account for already consumed 'r'
+    const startLine = this.line;
+    const startColumn = this.column - 1;
+
+    const quote = this.peek();
+    if (!quote || (quote !== '"' && quote !== "'")) {
+      throw new SyntaxError(`Expected quote after 'r'`, {
+        location: { line: startLine, column: startColumn, offset: startPos },
+      });
+    }
+
+    this.advance(); // Skip opening quote
+
+    let value = "";
+
+    while (this.pos < this.source.length) {
+      const ch = this.peek();
+
+      if (ch === null) {
+        throw new SyntaxError(`Unterminated raw string literal`, {
+          location: { line: startLine, column: startColumn, offset: startPos },
+        });
+      }
+
+      if (ch === quote) {
+        this.advance();
+        return createToken(
+          TokenType.STRING,
+          value,
+          startLine,
+          startColumn,
+          startPos,
+        );
+      }
+
+      value += ch;
+      this.advance();
+    }
+
+    throw new SyntaxError(`Unterminated raw string literal`, {
       location: { line: startLine, column: startColumn, offset: startPos },
     });
   }

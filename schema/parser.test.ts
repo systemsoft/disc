@@ -428,7 +428,7 @@ Deno.test("SDL Parser - Complex Expression", () => {
   if (typeDecl.kind === "TypeDeclaration") {
     const displayNameProp = typeDecl.members[0];
     if (displayNameProp.kind === "PropertyDeclaration") {
-      assertEquals(displayNameProp.computed?.kind, "BinaryOp");
+      assertEquals(displayNameProp.computed?.kind, "ConditionalExpression");
     }
   }
 });

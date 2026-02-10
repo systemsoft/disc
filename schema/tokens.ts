@@ -37,6 +37,8 @@ export enum TokenType {
   ON = "ON",
   TRUE = "TRUE",
   FALSE = "FALSE",
+  IF = "IF",
+  ELSE = "ELSE",
 
   // Access control
   ACCESS = "ACCESS",
@@ -114,6 +116,8 @@ export const KEYWORDS = new Map<string, TokenType>([
   ["on", TokenType.ON],
   ["true", TokenType.TRUE],
   ["false", TokenType.FALSE],
+  ["if", TokenType.IF],
+  ["else", TokenType.ELSE],
   ["access", TokenType.ACCESS],
   ["policy", TokenType.POLICY],
   ["allow", TokenType.ALLOW],

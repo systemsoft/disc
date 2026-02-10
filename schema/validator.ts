@@ -400,6 +400,11 @@ export class SchemaValidator {
       case "Parameter":
         // Parameters are valid in expressions
         break;
+      case "ConditionalExpression":
+        this.validateExpression(expr.test);
+        this.validateExpression(expr.consequent);
+        this.validateExpression(expr.alternate);
+        break;
     }
   }
 
