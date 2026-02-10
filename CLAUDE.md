@@ -23,8 +23,9 @@ Disc replaces Gel's Python/Rust server layer with a Deno/TypeScript implementati
 
 1. **Single-language stack** — TypeScript from schema to query to server
 2. **Deno-native** — leverage Deno's built-in TypeScript, permissions model, and standard library
-3. **Gel-compatible schemas** — existing `.esdl` schema files should work with minimal changes
-4. **Preserve EdgeQL semantics** — the query language is the best part of Gel, keep it
+3. **Bundled PostgreSQL** — `disc init` just works; users never install or manage Postgres directly
+4. **Gel-compatible schemas** — existing `.esdl` schema files should work with minimal changes
+5. **Preserve EdgeQL semantics** — the query language is the best part of Gel, keep it
 
 ### What Disc Is NOT
 
@@ -50,28 +51,37 @@ Disc replaces Gel's Python/Rust server layer with a Deno/TypeScript implementati
 ├─────────────────────────────────────┤
 │         Connection Manager          │
 │      (PostgreSQL via deno-pg)       │
+├─────────────────────────────────────┤
+│         PostgreSQL Manager          │
+│   (bundled binary lifecycle mgmt)   │
+└──────────────────┬──────────────────┘
+┌──────────────────▼──────────────────┐
+│       Bundled PostgreSQL 16+        │
+│     ~/.disc/postgres/<version>/     │
 └─────────────────────────────────────┘
 ```
 
 ### Core Modules
 
-| Module       | Responsibility                                         | Priority |
-| ------------ | ------------------------------------------------------ | -------- |
-| `schema/`    | SDL parser, AST representation, validation             | P0       |
-| `edgeql/`    | EdgeQL parser, AST, semantic analysis                  | P0       |
-| `compiler/`  | EdgeQL AST → PostgreSQL SQL compilation                | P0       |
-| `migration/` | Schema diffing, DDL generation, migration tracking     | P1       |
-| `server/`    | Protocol handler, connection management, session state | P1       |
-| `cli/`       | `disc` CLI — project init, migrate, shell, codegen     | P1       |
-| `codegen/`   | TypeScript type generation from schemas                | P2       |
-| `auth/`      | Built-in auth module (Gel `ext::auth` equivalent)      | P3       |
-| `access/`    | Object-level access policies                           | P3       |
+| Module       | Responsibility                                                             | Priority |
+| ------------ | -------------------------------------------------------------------------- | -------- |
+| `schema/`    | SDL parser, AST representation, validation                                 | P0       |
+| `edgeql/`    | EdgeQL parser, AST, semantic analysis                                      | P0       |
+| `compiler/`  | EdgeQL AST → PostgreSQL SQL compilation                                    | P0       |
+| `postgres/`  | Bundled PostgreSQL binary management, lifecycle, health checks             | P0       |
+| `migration/` | Schema diffing, DDL generation, migration tracking                         | P1       |
+| `server/`    | Protocol handler, connection management, session state                     | P1       |
+| `cli/`       | `disc` CLI — project init, migrate, shell, codegen                         | P1       |
+| `codegen/`   | TypeScript type generation from schemas                                    | P2       |
+| `ui/`        | SvelteKit-based admin UI (schema browser, query editor, data viewer, REPL) | P2       |
+| `auth/`      | Built-in auth module (Gel `ext::auth` equivalent)                          | P3       |
+| `access/`    | Object-level access policies                                               | P3       |
 
 ## Tech Stack
 
 - **Runtime**: Deno (latest stable)
 - **Language**: TypeScript (strict mode, no `any` unless absolutely necessary)
-- **Storage**: PostgreSQL 16+
+- **Storage**: PostgreSQL 16+ (bundled — downloaded and managed by Disc automatically)
 - **Testing**: `deno test`
 - **Linting/Formatting**: `deno lint` and `deno fmt` with project config
 - **Package registry**: JSR (jsr.io) preferred, npm via `npm:` specifiers when necessary
@@ -93,19 +103,21 @@ Disc replaces Gel's Python/Rust server layer with a Deno/TypeScript implementati
 
 ```
 disc/
+├── access/            # Access policy engine
+├── auth/              # Auth extension module
 ├── cli/               # CLI entry point and commands
+├── codegen/           # TypeScript client type generation
 ├── compiler/          # EdgeQL → SQL compilation
 ├── edgeql/            # EdgeQL lexer, parser, AST nodes
+├── lib/               # Shared utilities (errors, types, logging)
 ├── migration/         # Schema diff engine and DDL generation
+├── postgres/          # Bundled PostgreSQL binary management and lifecycle
 ├── schema/            # SDL lexer, parser, AST nodes, validation
 ├── server/            # Protocol, connections, sessions
-├── codegen/           # TypeScript client type generation
-├── auth/              # Auth extension module
-├── access/            # Access policy engine
-├── lib/               # Shared utilities (errors, types, logging)
 ├── tests/             # Integration and end-to-end tests
-├── deno.json          # Deno configuration
-└── CLAUDE.md          # This file
+├── ui/                # SvelteKit admin UI (bundled with server)
+├── CLAUDE.md          # This file
+└── deno.json          # Deno configuration
 ```
 
 ### Naming
@@ -122,6 +134,74 @@ disc/
 - All parser/compiler errors must include source location (line, column, context)
 - Never swallow errors silently
 - Use `Result<T, E>` patterns where recoverable errors are expected
+
+## Bundled PostgreSQL
+
+Disc ships with PostgreSQL — users never install, configure, or manage Postgres themselves. Running `disc init` downloads the correct PostgreSQL binary for the user's platform and creates a fully managed instance.
+
+### Directory Layout
+
+```
+~/.disc/
+├── instances/
+│   └── my-project/
+│       ├── data/                 # PostgreSQL data directory (PGDATA)
+│       ├── logs/                 # PostgreSQL and Disc server logs
+│       ├── socket/               # Unix domain socket
+│       └── disc.toml             # Instance configuration
+└── postgres/
+    └── 16.4/                     # PostgreSQL version
+        ├── bin/                  # pg binaries (postgres, initdb, pg_ctl, etc.)
+        ├── lib/                  # shared libraries
+        └── share/                # extensions, configs
+```
+
+### Lifecycle Management (`postgres/`)
+
+The `postgres/` module handles the full lifecycle of the bundled PostgreSQL instance:
+
+```typescript
+// postgres/instance.ts
+interface PostgresInstance {
+  dataDir: string;
+  dsn(): string;
+  port: number;
+  socketPath: string;
+  start(): Promise<void>;
+  stop(): Promise<void>;
+  status(): Promise<"running" | "stopped">;
+}
+```
+
+Key responsibilities:
+
+- **Binary acquisition**: On first run, download the correct pre-built PostgreSQL binary for the user's OS and architecture (`darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`). Cache in `~/.disc/postgres/<version>/`.
+- **Instance initialization**: Run `initdb` to create the data directory, configure `postgresql.conf` for Disc's needs (Unix socket only, no TCP by default, tuned memory settings).
+- **Process management**: Start/stop via `pg_ctl`. Monitor health with periodic connection checks. Auto-restart on crash.
+- **Version management**: Support multiple PostgreSQL versions side-by-side. Allow upgrading with `disc pg upgrade`.
+- **Socket-only by default**: Bind PostgreSQL to a Unix domain socket in the instance directory. No TCP port exposed unless explicitly configured. This keeps things secure and avoids port conflicts.
+
+### External PostgreSQL (Escape Hatch)
+
+For production deployments or users who prefer to manage their own Postgres:
+
+```bash
+disc init --backend-dsn "postgres://user:pass@host:5432/disc"
+```
+
+When `--backend-dsn` is provided, Disc skips binary download and instance creation entirely, connecting to the external PostgreSQL instead. The user is responsible for managing that server. Disc still manages its own internal schema and migration tables.
+
+### Platform Binary Strategy
+
+| Platform      | Source                                                 |
+| ------------- | ------------------------------------------------------ |
+| macOS (arm64) | Pre-built from PostgreSQL official or Homebrew bottles |
+| macOS (x64)   | Pre-built from PostgreSQL official or Homebrew bottles |
+| Linux (x64)   | Pre-built static/portable binaries                     |
+| Linux (arm64) | Pre-built static/portable binaries                     |
+| Windows       | Pre-built from EDB installers or Docker fallback       |
+
+Binaries are checksummed and verified on download. Disc should maintain a manifest of supported PostgreSQL versions and their download URLs.
 
 ## Conversion Strategy
 
@@ -140,24 +220,24 @@ Reference: Study Gel's grammar definitions in the original repo. The SDL grammar
 # Example Gel SDL that Disc must parse:
 module default {
   type User {
-    required name: str;
-    required email: str {
-      constraint exclusive;
-    };
-    multi posts: Post;
     created_at: datetime {
       default := datetime_current();
       readonly := true;
     };
+    required email: str {
+      constraint exclusive;
+    };
+    required name: str;
+    multi posts: Post;
   };
 
   type Post {
-    required title: str;
-    required body: str;
     required author: User;
+    required body: str;
     created_at: datetime {
       default := datetime_current();
     };
+    required title: str;
   };
 };
 ```
@@ -175,11 +255,11 @@ Reference: Gel's EdgeQL syntax — https://docs.geldata.com/reference/edgeql
 ```
 # Example EdgeQL that Disc must compile:
 select User {
-  name,
   email,
+  name,
   posts: {
-    title,
-    created_at
+    created_at,
+    title
   }
 } filter .email = "user@example.com";
 ```
@@ -189,12 +269,12 @@ Must compile to something like:
 ```sql
 SELECT
   jsonb_build_object(
-    'name', u.name,
     'email', u.email,
+    'name', u.name,
     'posts', (
       SELECT jsonb_agg(jsonb_build_object(
-        'title', p.title,
-        'created_at', p.created_at
+        'created_at', p.created_at,
+        'title', p.title
       ))
       FROM posts p
       WHERE p.author_id = u.id
@@ -223,13 +303,19 @@ Gel uses a custom binary protocol. For Disc v1, prioritize:
 ### Phase 5: CLI (P1)
 
 ```bash
-disc init                  # Initialize a new Disc project
+disc init                  # Initialize a new Disc project (downloads Postgres if needed)
+disc start                 # Start the Disc server and bundled PostgreSQL
+disc stop                  # Stop the Disc server and bundled PostgreSQL
+disc status                # Show instance status (server, Postgres, port, data dir)
 disc migrate               # Generate and apply migrations
 disc migrate --create      # Create migration without applying
 disc shell                 # Interactive EdgeQL REPL
 disc codegen               # Generate TypeScript types
 disc watch                 # Watch schema files and auto-migrate in dev
-disc serve                 # Start the Disc server
+disc serve                 # Start the Disc server (alias for disc start)
+disc ui                    # Open admin UI in default browser
+disc pg upgrade            # Upgrade bundled PostgreSQL version
+disc pg log                # Tail PostgreSQL logs
 ```
 
 ### Phase 6: Codegen & Client (P2)
@@ -239,20 +325,71 @@ Generate TypeScript types from the schema so queries are fully typed:
 ```typescript
 // Auto-generated by `disc codegen`
 export interface User {
+  created_at: Date;
+  email: string;
   id: string;
   name: string;
-  email: string;
   posts: Post[];
-  created_at: Date;
 }
 
 export interface Post {
+  author: User;
+  body: string;
+  created_at: Date;
   id: string;
   title: string;
-  body: string;
-  author: User;
-  created_at: Date;
 }
+```
+
+### Phase 7: Admin UI (P2)
+
+Disc ships with a built-in admin UI, served by the Disc server and opened via `disc ui`. Unlike Gel's UI (React/yarn monorepo at [geldata/gel-ui](https://github.com/geldata/gel-ui)), Disc's UI is built with SvelteKit and Sass to keep the entire stack TypeScript-native.
+
+#### Features
+
+- **Schema browser**: Visual representation of object types, links, properties, constraints, and indexes
+- **Data viewer/editor**: Browse, filter, insert, update, and delete objects with inline editing
+- **Query editor**: Write and execute EdgeQL with syntax highlighting, autocompletion, and parameter UI
+- **Visual query builder**: Point-and-click query construction for learning EdgeQL
+- **REPL**: Web-based interactive shell with history and result drilling
+- **Query analyzer**: Visual execution plan display (maps to PostgreSQL `EXPLAIN` under the hood)
+- **Migration history**: Browse applied migrations, view diffs, and schema evolution over time
+
+#### Design Direction
+
+TRON-inspired aesthetic consistent with EOL's theming: dark backgrounds, luminous accent lines, grid-based layouts, and monospaced type for data. The UI should feel like a program's identity disc — everything about your data, visualized.
+
+#### Architecture
+
+```
+ui/
+├── src/
+│   ├── lib/              # Shared components, stores, utilities
+│   │   ├── api/          # Client for Disc server API
+│   │   ├── components/   # Reusable Svelte components
+│   │   └── stores/       # Svelte stores for schema, connection state, etc.
+│   ├── routes/           # SvelteKit routes
+│   │   ├── data/         # Data viewer/editor
+│   │   ├── migrations/   # Migration history viewer
+│   │   ├── query/        # Query editor and visual builder
+│   │   ├── repl/         # Web REPL
+│   │   ├── schema/       # Schema browser
+│   │   └── +layout.svelte
+│   └── app.html
+├── static/
+├── package.json
+├── svelte.config.js
+└── vite.config.ts
+```
+
+The UI is built as a static SvelteKit app (`adapter-static`) and bundled into the Disc server binary/distribution. When `disc serve` starts, it serves the UI assets on a `/ui` route. `disc ui` opens the browser to that URL.
+
+#### CLI Integration
+
+```bash
+disc ui                    # Open admin UI in default browser
+disc ui --port 3001        # Serve UI on a custom port
+disc serve --no-ui         # Start server without bundling UI assets
 ```
 
 ## Key Decisions & Open Questions
@@ -260,6 +397,7 @@ export interface Post {
 ### Decided
 
 - **PostgreSQL remains the storage engine** — no need to reinvent storage
+- **PostgreSQL is bundled** — `disc init` downloads and manages Postgres automatically; users never touch it directly. External Postgres supported via `--backend-dsn` escape hatch.
 - **EdgeQL is preserved** — it's the primary differentiator
 - **Deno is the runtime** — aligns with the Neue Internet stack
 - **AGPL-3.0 or similar copyleft license** — consistent with Dap licensing philosophy
@@ -306,6 +444,7 @@ deno task cli --help
 ## Reference Material
 
 - Gel source: https://github.com/geldata/gel
+- Gel UI source: https://github.com/geldata/gel-ui
 - Gel docs: https://docs.geldata.com
 - EdgeQL spec: https://docs.geldata.com/reference/edgeql
 - SDL spec: https://docs.geldata.com/reference/sdl
