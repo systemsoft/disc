@@ -1,0 +1,576 @@
+/**
+ * EdgeQL Protocol Handler with Real Compiler Integration
+ */
+
+import * as Types from "./types.ts";
+import * as EdgeQL from "../edgeql/mod.ts";
+import * as Compiler from "../compiler/compiler.ts";
+import * as Context from "../compiler/context.ts";
+import * as SQL from "../compiler/sql.ts";
+import { Result } from "../lib/result.ts";
+
+export interface EdgeQLExecutionOptions {
+  schema?: Context.Schema;
+  enable_explain?: boolean;
+  dry_run?: boolean;
+}
+
+export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
+  private compiler: Compiler.EdgeQLCompiler;
+  private schema: Context.Schema;
+  private options: EdgeQLExecutionOptions;
+
+  constructor(options: EdgeQLExecutionOptions = {}) {
+    this.options = options;
+    this.schema = options.schema || Context.createTestSchema();
+    this.compiler = new Compiler.EdgeQLCompiler(this.schema);
+  }
+
+  async handle_request(
+    request: Types.QueryRequest,
+    context: Types.QueryContext
+  ): Promise<Types.QueryResponse> {
+    const start_time = Date.now();
+
+    try {
+      // Validate the request
+      const validation_errors = this.validate_request(request);
+      if (validation_errors.length > 0) {
+        return {
+          errors: validation_errors,
+        };
+      }
+
+      // Parse EdgeQL query
+      const parseResult = this.parseEdgeQLQuery(request.query);
+      if (!parseResult.success) {
+        return {
+          errors: [{
+            message: parseResult.error,
+            extensions: { 
+              code: "PARSE_ERROR",
+              phase: "parsing",
+            },
+          }],
+        };
+      }
+
+      // Compile EdgeQL to SQL
+      const compileResult = this.compiler.compile(parseResult.ast);
+      if (!compileResult.ok) {
+        return {
+          errors: [{
+            message: compileResult.error.message,
+            extensions: { 
+              code: "COMPILATION_ERROR",
+              phase: "compilation",
+            },
+          }],
+        };
+      }
+
+      const sqlStatement = compileResult.value;
+      const sqlString = this.generateSQLString(sqlStatement);
+
+      // Execute query (or simulate execution)
+      const result = await this.executeSQL(sqlString, request.variables || {}, context);
+      
+      const duration_ms = Date.now() - start_time;
+
+      // Return successful response
+      const response: Types.QueryResponse = {
+        data: result.data,
+        extensions: {
+          duration_ms,
+          query_hash: this.hash_query(request.query),
+          sql: this.options.enable_explain ? sqlString : undefined,
+          compilation_info: this.options.enable_explain ? {
+            ast: parseResult.ast,
+            sql_ast: sqlStatement,
+          } : undefined,
+        },
+      };
+
+      if (result.warnings && result.warnings.length > 0) {
+        response.errors = result.warnings.map(warning => ({
+          message: warning,
+          extensions: { code: "WARNING" },
+        }));
+      }
+
+      return response;
+
+    } catch (error) {
+      console.error("Query execution error:", error);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      
+      return {
+        errors: [{
+          message: errorMessage,
+          extensions: {
+            code: "EXECUTION_ERROR",
+            duration_ms: Date.now() - start_time,
+          },
+        }],
+      };
+    }
+  }
+
+  validate_request(request: Types.QueryRequest): Types.QueryError[] {
+    const errors: Types.QueryError[] = [];
+
+    // Check if query is provided
+    if (!request.query || typeof request.query !== "string") {
+      errors.push({
+        message: "Query is required and must be a string",
+        extensions: { code: "VALIDATION_ERROR" },
+      });
+    }
+
+    // Check query length
+    if (request.query && request.query.length > 100_000) {
+      errors.push({
+        message: "Query too large (max 100KB)",
+        extensions: { code: "QUERY_TOO_LARGE" },
+      });
+    }
+
+    // Validate variables if provided
+    if (request.variables && typeof request.variables !== "object") {
+      errors.push({
+        message: "Variables must be an object",
+        extensions: { code: "VALIDATION_ERROR" },
+      });
+    }
+
+    // Basic EdgeQL syntax validation
+    if (request.query) {
+      const syntax_errors = this.validate_edgeql_syntax(request.query);
+      errors.push(...syntax_errors);
+    }
+
+    return errors;
+  }
+
+  private parseEdgeQLQuery(query: string): { success: true; ast: EdgeQL.Query } | { success: false; error: string } {
+    try {
+      // Use the EdgeQL lexer and parser
+      const lexer = new EdgeQL.Lexer(query);
+      const tokens = lexer.tokenize();
+
+      if (!tokens.ok) {
+        return { 
+          success: false, 
+          error: `Lexing failed: ${tokens.error.message}` 
+        };
+      }
+
+      const parser = new EdgeQL.Parser(tokens.value);
+      const ast = parser.parseQuery();
+
+      if (!ast.ok) {
+        return { 
+          success: false, 
+          error: `Parsing failed: ${ast.error.message}` 
+        };
+      }
+
+      return { success: true, ast: ast.value };
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown parsing error";
+      return { 
+        success: false, 
+        error: errorMessage 
+      };
+    }
+  }
+
+  private generateSQLString(sqlAST: SQL.SQLStatement): string {
+    // Convert the SQL AST to a string
+    // This is a simplified implementation - a full version would handle proper formatting
+    
+    switch (sqlAST.kind) {
+      case "SelectStatement":
+        return this.generateSelectSQL(sqlAST);
+      case "InsertStatement":
+        return this.generateInsertSQL(sqlAST);
+      case "UpdateStatement":
+        return this.generateUpdateSQL(sqlAST);
+      case "DeleteStatement":
+        return this.generateDeleteSQL(sqlAST);
+      default:
+        throw new Error(`Unsupported SQL statement type: ${sqlAST.kind}`);
+    }
+  }
+
+  private generateSelectSQL(stmt: SQL.SelectStatement): string {
+    let sql = "SELECT ";
+
+    // SELECT clause
+    if (stmt.select.distinct) {
+      sql += "DISTINCT ";
+    }
+
+    const selectItems = stmt.select.items.map(item => 
+      this.generateSelectItem(item)
+    ).join(", ");
+    sql += selectItems;
+
+    // FROM clause
+    if (stmt.from && stmt.from.tables.length > 0) {
+      sql += " FROM ";
+      const tables = stmt.from.tables.map(table => 
+        this.generateTableReference(table)
+      ).join(", ");
+      sql += tables;
+    }
+
+    // WHERE clause
+    if (stmt.where) {
+      sql += " WHERE " + this.generateExpression(stmt.where.condition);
+    }
+
+    // ORDER BY clause
+    if (stmt.orderBy) {
+      sql += " ORDER BY ";
+      const orderItems = stmt.orderBy.items.map(item => 
+        `${this.generateExpression(item.expression)} ${item.direction || "ASC"}`
+      ).join(", ");
+      sql += orderItems;
+    }
+
+    // LIMIT clause
+    if (stmt.limit) {
+      sql += " LIMIT " + this.generateExpression(stmt.limit.count);
+    }
+
+    // OFFSET clause
+    if (stmt.offset) {
+      sql += " OFFSET " + this.generateExpression(stmt.offset.count);
+    }
+
+    return sql;
+  }
+
+  private generateInsertSQL(stmt: SQL.InsertStatement): string {
+    let sql = `INSERT INTO ${stmt.table}`;
+
+    if (stmt.columns.length > 0) {
+      sql += ` (${stmt.columns.join(", ")})`;
+    }
+
+    if (stmt.values.length > 0) {
+      sql += " VALUES ";
+      const valueRows = stmt.values.map(row => 
+        `(${row.map(expr => this.generateExpression(expr)).join(", ")})`
+      ).join(", ");
+      sql += valueRows;
+    }
+
+    if (stmt.onConflict) {
+      sql += " ON CONFLICT";
+      if (stmt.onConflict.target) {
+        sql += ` (${stmt.onConflict.target.join(", ")})`;
+      }
+      sql += ` ${stmt.onConflict.action}`;
+    }
+
+    if (stmt.returning) {
+      sql += " RETURNING ";
+      const returningItems = stmt.returning.map(item => 
+        this.generateSelectItem(item)
+      ).join(", ");
+      sql += returningItems;
+    }
+
+    return sql;
+  }
+
+  private generateUpdateSQL(stmt: SQL.UpdateStatement): string {
+    let sql = `UPDATE ${stmt.table} SET `;
+
+    const setClauses = stmt.set.map(setClause => 
+      `${setClause.column} = ${this.generateExpression(setClause.value)}`
+    ).join(", ");
+    sql += setClauses;
+
+    if (stmt.where) {
+      sql += " WHERE " + this.generateExpression(stmt.where.condition);
+    }
+
+    if (stmt.returning) {
+      sql += " RETURNING ";
+      const returningItems = stmt.returning.map(item => 
+        this.generateSelectItem(item)
+      ).join(", ");
+      sql += returningItems;
+    }
+
+    return sql;
+  }
+
+  private generateDeleteSQL(stmt: SQL.DeleteStatement): string {
+    let sql = `DELETE FROM ${stmt.table}`;
+
+    if (stmt.where) {
+      sql += " WHERE " + this.generateExpression(stmt.where.condition);
+    }
+
+    if (stmt.returning) {
+      sql += " RETURNING ";
+      const returningItems = stmt.returning.map(item => 
+        this.generateSelectItem(item)
+      ).join(", ");
+      sql += returningItems;
+    }
+
+    return sql;
+  }
+
+  private generateSelectItem(item: SQL.SelectItem): string {
+    let sql = this.generateExpression(item.expression);
+    
+    if (item.alias) {
+      sql += ` AS ${item.alias}`;
+    }
+
+    return sql;
+  }
+
+  private generateTableReference(table: SQL.TableReference): string {
+    let sql = table.name;
+    
+    if (table.alias) {
+      sql += ` AS ${table.alias}`;
+    }
+
+    return sql;
+  }
+
+  private generateExpression(expr: SQL.SQLExpression): string {
+    switch (expr.kind) {
+      case "LiteralExpression":
+        return this.generateLiteral(expr);
+      case "ColumnReference":
+        return expr.table ? `${expr.table}.${expr.column}` : expr.column;
+      case "BinaryExpression":
+        return `(${this.generateExpression(expr.left)} ${expr.operator} ${this.generateExpression(expr.right)})`;
+      case "UnaryExpression":
+        return `${expr.operator} ${this.generateExpression(expr.operand)}`;
+      case "FunctionCall":
+        const args = expr.args.map(arg => this.generateExpression(arg)).join(", ");
+        return `${expr.name}(${args})`;
+      case "JsonBuildObject":
+        const fields = expr.fields.map(field => 
+          `'${field.key}', ${this.generateExpression(field.value)}`
+        ).join(", ");
+        return `jsonb_build_object(${fields})`;
+      case "ParameterReference":
+        return `$${expr.name}`;
+      default:
+        return "NULL";
+    }
+  }
+
+  private generateLiteral(literal: SQL.LiteralExpression): string {
+    switch (literal.type) {
+      case "string":
+        return `'${String(literal.value).replace(/'/g, "''")}'`;
+      case "number":
+        return String(literal.value);
+      case "boolean":
+        return literal.value ? "TRUE" : "FALSE";
+      case "null":
+        return "NULL";
+      default:
+        return "NULL";
+    }
+  }
+
+  private async executeSQL(
+    sql: string, 
+    variables: Record<string, any>, 
+    context: Types.QueryContext
+  ): Promise<{ data: any; warnings?: string[] }> {
+    // For now, simulate SQL execution
+    // In a real implementation, this would execute against PostgreSQL
+    
+    console.log(`[${context.session.session_id}] Executing SQL:`, sql);
+    console.log(`[${context.session.session_id}] Variables:`, variables);
+
+    if (this.options.dry_run) {
+      return {
+        data: {
+          sql,
+          variables,
+          dry_run: true,
+        },
+        warnings: ["Query executed in dry-run mode"],
+      };
+    }
+
+    // Simulate different query results based on SQL pattern
+    const normalizedSQL = sql.toLowerCase().trim();
+
+    if (normalizedSQL.includes("select") && normalizedSQL.includes("users")) {
+      return { data: this.mockUserResults() };
+    } else if (normalizedSQL.includes("insert")) {
+      return { data: this.mockInsertResults() };
+    } else if (normalizedSQL.includes("update")) {
+      return { data: this.mockUpdateResults() };
+    } else if (normalizedSQL.includes("delete")) {
+      return { data: this.mockDeleteResults() };
+    } else if (normalizedSQL.includes("count")) {
+      return { data: { count: 42 } };
+    } else {
+      return {
+        data: {
+          executed: true,
+          sql: sql.substring(0, 100),
+          session_id: context.session.session_id,
+          timestamp: new Date().toISOString(),
+        },
+      };
+    }
+  }
+
+  private validate_edgeql_syntax(query: string): Types.QueryError[] {
+    const errors: Types.QueryError[] = [];
+
+    // Basic syntax checks
+    const balanced_braces = this.check_balanced_braces(query);
+    if (!balanced_braces.valid) {
+      errors.push({
+        message: `Unbalanced braces at position ${balanced_braces.position}`,
+        locations: [{ line: 1, column: balanced_braces.position }],
+        extensions: { code: "SYNTAX_ERROR" },
+      });
+    }
+
+    // Check for valid EdgeQL query start
+    const normalized = query.trim().toLowerCase();
+    const valid_start_keywords = [
+      "select", "insert", "update", "delete", "with", "for", "describe", "configure"
+    ];
+
+    const starts_with_valid = valid_start_keywords.some(keyword => 
+      normalized.startsWith(keyword)
+    );
+
+    if (!starts_with_valid && normalized.length > 0) {
+      errors.push({
+        message: "Query must start with a valid EdgeQL statement",
+        extensions: { code: "SYNTAX_ERROR" },
+      });
+    }
+
+    return errors;
+  }
+
+  private check_balanced_braces(query: string): { valid: boolean; position: number } {
+    let depth = 0;
+    let position = 0;
+
+    for (let i = 0; i < query.length; i++) {
+      const char = query[i];
+      if (char === "{") {
+        depth++;
+      } else if (char === "}") {
+        depth--;
+        if (depth < 0) {
+          return { valid: false, position: i };
+        }
+      }
+      position++;
+    }
+
+    return { valid: depth === 0, position: depth > 0 ? position : 0 };
+  }
+
+  private mockUserResults(): any {
+    return [
+      {
+        id: "01234567-89ab-cdef-0123-456789abcdef",
+        name: "Alice Johnson",
+        email: "alice@example.com",
+        created_at: "2024-01-15T10:30:00Z",
+        active: true,
+        age: 29,
+      },
+      {
+        id: "11234567-89ab-cdef-0123-456789abcdef",
+        name: "Bob Smith",
+        email: "bob@example.com",
+        created_at: "2024-01-20T09:15:00Z",
+        active: true,
+        age: 35,
+      },
+    ];
+  }
+
+  private mockInsertResults(): any {
+    return {
+      id: `${Date.now()}-89ab-cdef-0123-456789abcdef`,
+      name: "New User",
+      email: "newuser@example.com",
+      created_at: new Date().toISOString(),
+      active: true,
+      age: null,
+    };
+  }
+
+  private mockUpdateResults(): any {
+    return {
+      id: "01234567-89ab-cdef-0123-456789abcdef",
+      name: "Alice Johnson Updated",
+      email: "alice.updated@example.com",
+      created_at: "2024-01-15T10:30:00Z",
+      active: true,
+      age: 30,
+      updated_at: new Date().toISOString(),
+    };
+  }
+
+  private mockDeleteResults(): any {
+    return {
+      id: "01234567-89ab-cdef-0123-456789abcdef",
+      deleted: true,
+      deleted_at: new Date().toISOString(),
+    };
+  }
+
+  private hash_query(query: string): string {
+    // Simple hash for query identification
+    let hash = 0;
+    for (let i = 0; i < query.length; i++) {
+      const char = query.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    return Math.abs(hash).toString(16);
+  }
+
+  // Schema management methods
+  updateSchema(schema: Context.Schema): void {
+    this.schema = schema;
+    this.compiler = new Compiler.EdgeQLCompiler(schema);
+  }
+
+  getSchema(): Context.Schema {
+    return this.schema;
+  }
+
+  getCompilerInfo(): { version: string; features: string[] } {
+    return {
+      version: "0.1.0",
+      features: [
+        "EdgeQL SELECT queries",
+        "EdgeQL INSERT/UPDATE/DELETE operations", 
+        "JSON object generation",
+        "Basic expression compilation",
+        "Query validation and error reporting",
+      ],
+    };
+  }
+}

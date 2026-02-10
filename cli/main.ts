@@ -8,6 +8,7 @@ import { parseArgs } from "@std/cli/parse-args";
 import { VERSION } from "../mod.ts";
 import { MigrationEngine } from "../migration/engine.ts";
 import * as Types from "../migration/types.ts";
+import { DiscServer, create_server_from_env } from "../server/server.ts";
 
 const HELP_TEXT = `
 Disc Database CLI v${VERSION}
@@ -97,9 +98,12 @@ async function main() {
     }
 
     case "serve": {
-      const port = args.port || "5656";
-      console.log(`Starting Disc server on port ${port}...`);
-      console.log("TODO: Implement server");
+      try {
+        await handleServeCommand(args);
+      } catch (error) {
+        console.error(`Server failed: ${error.message}`);
+        Deno.exit(1);
+      }
       break;
     }
 
@@ -281,6 +285,39 @@ async function handleMigrateCommand(args: any): Promise<void> {
     } catch (error) {
       console.error(`❌ Failed to apply migration: ${error.message}`);
     }
+  }
+}
+
+async function handleServeCommand(args: any): Promise<void> {
+  console.log("🚀 Starting Disc Database Server...");
+  
+  // Create server from environment variables and CLI args
+  const server = create_server_from_env();
+  
+  // Override with CLI arguments if provided
+  const config = server.get_config();
+  if (args.port) {
+    config.port = parseInt(args.port);
+  }
+  server.update_config(config);
+
+  // Set up signal handlers for graceful shutdown
+  const signals: Deno.Signal[] = ["SIGINT", "SIGTERM"];
+  
+  for (const signal of signals) {
+    Deno.addSignalListener(signal, async () => {
+      console.log(`\n📡 Received ${signal}, shutting down gracefully...`);
+      await server.stop();
+      Deno.exit(0);
+    });
+  }
+
+  try {
+    // Start the server
+    await server.start();
+  } catch (error) {
+    console.error(`❌ Failed to start server: ${error.message}`);
+    throw error;
   }
 }
 
