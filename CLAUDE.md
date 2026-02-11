@@ -74,7 +74,7 @@ Disc replaces Gel's Python/Rust server layer with a Deno/TypeScript implementati
 | `cli/`       | `disc` CLI — project init, migrate, shell, codegen                         | P1       |
 | `codegen/`   | TypeScript type generation from schemas                                    | P2       |
 | `ui/`        | SvelteKit-based admin UI (schema browser, query editor, data viewer, REPL) | P2       |
-| `auth/`      | Built-in auth module (Gel `ext::auth` equivalent)                          | P3       |
+| `auth/`      | Built-in auth module (Gel Let`ext::auth` equivalent)                       | P3       |
 | `access/`    | Object-level access policies                                               | P3       |
 
 ## Tech Stack

@@ -31,6 +31,7 @@ export class DiscServer {
     this.protocol_handler = new SimpleEdgeQLProtocolHandler({
       enable_explain: config.enable_explain || false,
       dry_run: config.dry_run || false,
+      database_url: config.database_url,
     });
   }
 
@@ -66,6 +67,11 @@ export class DiscServer {
 
     if (this.http_server) {
       await this.http_server.stop();
+    }
+
+    // Close database connections in protocol handler
+    if (this.protocol_handler && 'close' in this.protocol_handler) {
+      await (this.protocol_handler as any).close();
     }
 
     console.log("✅ Server stopped successfully");

@@ -2,6 +2,15 @@
  * CLI Watch Command Implementation - File watching for development
  */
 
+import { MigrationEngine } from "../migration/engine.ts";
+import { MigrationTracker } from "../migration/tracker.ts";
+import { TypescriptGenerator } from "../codegen/typescript-generator.ts";
+import { parseSchema } from "../schema/parser.ts";
+import { convertToModules } from "../schema/converter.ts";
+import { join, dirname } from "@std/path";
+import { ensureDir } from "@std/fs";
+import { logger } from "../postgres/logger.ts";
+
 export interface WatchOptions {
   schema_file?: string;
   output_dir?: string;
@@ -18,6 +27,7 @@ export class WatchCommand {
   private isWatching = false;
   private abortController?: AbortController;
   private debounceTimer?: number;
+  private lastSchemaHash?: string;
 
   /**
    * Watch schema files for changes and trigger migrations/codegen
@@ -141,21 +151,34 @@ export class WatchCommand {
     console.log("🔄 Processing schema changes...");
 
     try {
+      // Parse current schema
+      const schemaContent = await Deno.readTextFile(schemaFile);
+      const ast = parseSchema(schemaContent);
+      const modules = convertToModules(ast);
+      const currentHash = this.hashSchema(modules);
+
       // Check for migration changes
-      const migrationNeeded = await this.checkMigrationNeeded(schemaFile);
+      const migrationNeeded = currentHash !== this.lastSchemaHash && this.lastSchemaHash !== undefined;
 
       if (migrationNeeded) {
         console.log("📋 Schema changes detected, creating migration...");
-        await this.runMigration(schemaFile, true); // dry run first
+        await this.runMigration(schemaFile, modules, true); // dry run first
 
         console.log("💡 Review migration and run 'disc migrate' to apply");
+      } else if (this.lastSchemaHash === undefined) {
+        console.log("📋 Initial schema detected");
+        // For initial schema, we might want to create the initial migration
+        await this.runMigration(schemaFile, modules, true);
       } else {
         console.log("✅ No migration needed");
       }
 
       // Always regenerate types for development
       console.log("🔧 Regenerating TypeScript types...");
-      await this.runCodegen(schemaFile, outputDir);
+      await this.runCodegen(modules, outputDir);
+
+      // Update last hash
+      this.lastSchemaHash = currentHash;
 
       console.log("✅ Schema processing complete");
       console.log("");
@@ -165,68 +188,133 @@ export class WatchCommand {
     }
   }
 
-  private async checkMigrationNeeded(schemaFile: string): Promise<boolean> {
-    // TODO: Implement actual migration checking
-    // This would:
-    // 1. Parse current schema
-    // 2. Compare with last applied migration
-    // 3. Return true if differences found
-
-    // For now, simulate check
-    const random = Math.random();
-    return random > 0.7; // 30% chance of migration needed for demo
+  private hashSchema(modules: any[]): string {
+    const content = JSON.stringify(modules);
+    let hash = 0;
+    for (let i = 0; i < content.length; i++) {
+      const char = content.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
+    }
+    return Math.abs(hash).toString(36);
   }
 
   private async runMigration(
     schemaFile: string,
+    newModules: any[],
     dryRun = false,
   ): Promise<void> {
-    // TODO: Integrate with actual migration engine
-    // For now, simulate migration command
+    try {
+      // Get database URL
+      const databaseUrl = Deno.env.get("DATABASE_URL") || "postgresql://localhost:5432/disc";
+      
+      // Initialize tracker
+      const tracker = new MigrationTracker(databaseUrl);
+      const initResult = await tracker.initialize();
+      if (!initResult.ok) {
+        console.log("   ⚠️  Migration tracker not initialized, skipping migration");
+        return;
+      }
+      
+      // Get migration history to determine old schema
+      const historyResult = await tracker.getMigrationHistory();
+      const hasHistory = historyResult.ok && historyResult.value.length > 0;
+      
+      // For now, we'll need to reconstruct old modules from history
+      // In a real implementation, we'd store the full schema state
+      const oldModules = hasHistory ? [] : null;
+      
+      // Create migration engine
+      const engine = new MigrationEngine({
+        database_url: databaseUrl,
+        dry_run: dryRun,
+        auto_apply: false,
+      });
+      
+      // Plan migration
+      const planResult = engine.planMigration(oldModules, newModules);
+      if (!planResult.ok) {
+        console.error(`   ❌ Migration planning failed: ${planResult.error.message}`);
+        return;
+      }
+      
+      const plan = planResult.value;
+      if (plan.migration.operations.length === 0) {
+        console.log("   ℹ️  No operations in migration");
+        await tracker.close();
+        await engine.close();
+        return;
+      }
+      
+      if (dryRun) {
+        console.log("   📋 Migration plan (dry run):");
+        for (const op of plan.migration.operations) {
+          console.log(`      - ${this.formatOperation(op)}`);
+        }
+        console.log("   💡 Run 'disc migrate' to apply");
+      } else {
+        // Execute migration
+        const execResult = await engine.executeMigration(plan);
+        if (execResult.ok) {
+          console.log(`   ✅ Migration applied successfully (${execResult.value[0].duration_ms}ms)`);
+          
+          // Record migration
+          await tracker.recordMigration(plan.migration, execResult.value[0]);
+        } else {
+          console.error(`   ❌ Migration failed: ${execResult.error.message}`);
+        }
+      }
+      
+      await tracker.close();
+      await engine.close();
+    } catch (error) {
+      console.error(`   ❌ Migration error: ${error.message}`);
+    }
+  }
 
-    const command = dryRun ? "disc migrate --create --dry-run" : "disc migrate";
-    console.log(`   Running: ${command}`);
-
-    if (dryRun) {
-      console.log("   📋 Migration plan created (dry run)");
-    } else {
-      console.log("   ✅ Migration applied successfully");
+  private formatOperation(op: any): string {
+    switch (op.kind) {
+      case "CreateType":
+        return `Create type '${op.type_name}'`;
+      case "DropType":
+        return `Drop type '${op.type_name}'`;
+      case "AlterType":
+        return `Alter type '${op.type_name}'`;
+      case "AddProperty":
+        return `Add property '${op.property_name}' to '${op.type_name}'`;
+      case "DropProperty":
+        return `Drop property '${op.property_name}' from '${op.type_name}'`;
+      case "AlterProperty":
+        return `Alter property '${op.property_name}' in '${op.type_name}'`;
+      default:
+        return `${op.kind}: ${JSON.stringify(op)}`;
     }
   }
 
   private async runCodegen(
-    schemaFile: string,
+    modules: any[],
     outputDir: string,
   ): Promise<void> {
-    // TODO: Integrate with actual codegen engine
-    // For now, simulate codegen command
-
-    console.log(`   Generating types to ${outputDir}...`);
-
-    // Create output directory if it doesn't exist
-    await Deno.mkdir(outputDir, { recursive: true }).catch(() => {});
-
-    // Simulate type file generation
-    const typesContent = `// Generated types from ${schemaFile}
-// Generated at ${new Date().toISOString()}
-
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  created_at: Date;
-}
-
-export interface DiscClient {
-  user: {
-    select(): Promise<User[]>;
-    insert(data: Omit<User, 'id' | 'created_at'>): Promise<User>;
-  };
-}
-`;
-
-    await Deno.writeTextFile(`${outputDir}/types.ts`, typesContent);
-    console.log("   ✅ Types generated successfully");
+    try {
+      // Create output directory
+      await ensureDir(outputDir);
+      
+      // Generate TypeScript types
+      const generator = new TypescriptGenerator();
+      const generated = generator.generate(modules);
+      
+      // Write generated files
+      for (const file of generated.files) {
+        const outputPath = join(outputDir, file.path);
+        await ensureDir(dirname(outputPath));
+        await Deno.writeTextFile(outputPath, file.content);
+        console.log(`   📝 Generated ${outputPath}`);
+      }
+      
+      console.log(`   ✅ Generated ${generated.files.length} TypeScript file(s)`);
+    } catch (error) {
+      console.error(`   ❌ Codegen failed: ${error.message}`);
+    }
   }
 
   private async createDefaultSchema(schemaFile: string): Promise<void> {
@@ -243,21 +331,20 @@ export interface DiscClient {
 };`;
 
     // Create directory if needed
-    const dir = schemaFile.substring(0, schemaFile.lastIndexOf("/"));
-    if (dir && dir !== schemaFile) {
-      await Deno.mkdir(dir, { recursive: true }).catch(() => {});
+    const dir = dirname(schemaFile);
+    if (dir && dir !== ".") {
+      await ensureDir(dir);
     }
 
     await Deno.writeTextFile(schemaFile, defaultSchema);
-    console.log(`✅ Created default schema: ${schemaFile}`);
+    console.log(`✅ Created default schema at ${schemaFile}`);
+    console.log("");
   }
 
-  private getChangeType(kind: Deno.FsEvent["kind"]): FileChangeEvent["type"] {
+  private getChangeType(kind: string): "create" | "modify" | "remove" {
     switch (kind) {
       case "create":
         return "create";
-      case "modify":
-        return "modify";
       case "remove":
         return "remove";
       default:
@@ -266,54 +353,30 @@ export interface DiscClient {
   }
 
   private setupSignalHandlers(): void {
-    const signals: Deno.Signal[] = ["SIGINT", "SIGTERM"];
+    const handler = () => {
+      console.log("\n⏹️  Stopping file watcher...");
+      this.stop();
+    };
 
-    for (const signal of signals) {
-      Deno.addSignalListener(signal, () => {
-        this.stop();
-      });
-    }
+    Deno.addSignalListener("SIGINT", handler);
+    Deno.addSignalListener("SIGTERM", handler);
   }
 
-  /**
-   * Stop the file watcher
-   */
   stop(): void {
-    if (!this.isWatching) return;
-
-    console.log("\n🛑 Stopping file watcher...");
-
     this.isWatching = false;
-
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-    }
-
     if (this.abortController) {
       this.abortController.abort();
     }
-
-    console.log("✅ File watcher stopped");
-    Deno.exit(0);
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+    }
   }
 
-  /**
-   * Check if watcher is currently running
-   */
-  isRunning(): boolean {
-    return this.isWatching;
-  }
-
-  /**
-   * Get current watch status
-   */
   getStatus(): { watching: boolean; files: string[]; uptime: number } {
     return {
       watching: this.isWatching,
-      files: [], // TODO: Track watched files
-      uptime: 0, // TODO: Track uptime
+      files: [], // Would track watched files in real implementation
+      uptime: 0, // Would track uptime in real implementation
     };
   }
 }
-
-export const watchCommand = new WatchCommand();

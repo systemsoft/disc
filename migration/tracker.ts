@@ -5,14 +5,11 @@
 import { Result, Ok, Err } from "../lib/result.ts";
 import { MigrationError } from "../lib/errors.ts";
 import * as Types from "./types.ts";
-
-export interface DatabaseConnection {
-  query(sql: string, params?: any[]): Promise<any>;
-  close(): Promise<void>;
-}
+import { DatabaseConnection as DBConnection, QueryResult } from "../lib/database.ts";
+import { logger } from "../postgres/logger.ts";
 
 export class MigrationTracker {
-  private db: DatabaseConnection | null = null;
+  private db: DBConnection | null = null;
   private initialized = false;
 
   constructor(private databaseUrl: string) {}
@@ -22,12 +19,13 @@ export class MigrationTracker {
    */
   async initialize(): Promise<Result<void, MigrationError>> {
     try {
-      // In a real implementation, this would create a connection
-      // For now, we simulate connection initialization
-      this.db = new MockDatabaseConnection();
+      // Create real database connection
+      this.db = new DBConnection(this.databaseUrl);
+      await this.db.connect();
+      logger.info("Connected to migration tracking database");
       
       // Create migrations tracking table
-      await this.db.query(`
+      await this.db.execute(`
         CREATE TABLE IF NOT EXISTS disc_migrations (
           id TEXT PRIMARY KEY,
           name TEXT NOT NULL,
@@ -42,7 +40,7 @@ export class MigrationTracker {
       `);
 
       // Create checkpoints table
-      await this.db.query(`
+      await this.db.execute(`
         CREATE TABLE IF NOT EXISTS disc_migration_checkpoints (
           id TEXT PRIMARY KEY,
           name TEXT NOT NULL,
@@ -71,7 +69,7 @@ export class MigrationTracker {
     }
 
     try {
-      await this.db!.query(`
+      await this.db!.execute(`
         INSERT INTO disc_migrations (
           id, name, description, schema_hash, applied_at, 
           duration_ms, rollback_sql, checksum, created_at
@@ -105,14 +103,20 @@ export class MigrationTracker {
     }
 
     try {
-      const result = await this.db!.query(
-        `DELETE FROM disc_migrations WHERE id = $1`,
+      // First check if migration exists
+      const exists = await this.db!.query(
+        `SELECT 1 FROM disc_migrations WHERE id = $1`,
         [migrationId]
       );
 
-      if (result.rowCount === 0) {
+      if (exists.rowCount === 0) {
         return Err(new MigrationError(`Migration ${migrationId} not found`));
       }
+
+      await this.db!.execute(
+        `DELETE FROM disc_migrations WHERE id = $1`,
+        [migrationId]
+      );
 
       return Ok(void 0);
     } catch (error) {
@@ -236,7 +240,7 @@ export class MigrationTracker {
     }
 
     try {
-      await this.db!.query(`
+      await this.db!.execute(`
         INSERT INTO disc_migration_checkpoints (
           id, name, created_at, schema_state, migration_state
         ) VALUES (
@@ -407,130 +411,5 @@ export class MigrationTracker {
       hash = hash & hash;
     }
     return Math.abs(hash).toString(36);
-  }
-}
-
-// Mock database connection for testing
-class MockDatabaseConnection implements DatabaseConnection {
-  private data: Record<string, any[]> = {
-    disc_migrations: [],
-    disc_migration_checkpoints: [],
-  };
-
-  async query(sql: string, params?: any[]): Promise<any> {
-    // Simple mock implementation
-    if (sql.includes("CREATE TABLE")) {
-      return { rowCount: 0, rows: [] };
-    }
-    
-    if (sql.includes("INSERT INTO disc_migrations")) {
-      this.data.disc_migrations.push({
-        id: params?.[0],
-        name: params?.[1],
-        description: params?.[2],
-        schema_hash: params?.[3],
-        applied_at: params?.[4],
-        duration_ms: params?.[5],
-        rollback_sql: params?.[6],
-        checksum: params?.[7],
-        created_at: params?.[8],
-      });
-      return { rowCount: 1, rows: [] };
-    }
-
-    if (sql.includes("INSERT INTO disc_migration_checkpoints")) {
-      this.data.disc_migration_checkpoints.push({
-        id: params?.[0],
-        name: params?.[1],
-        created_at: params?.[2],
-        schema_state: params?.[3],
-        migration_state: params?.[4],
-      });
-      return { rowCount: 1, rows: [] };
-    }
-
-    if (sql.includes("SELECT id FROM disc_migrations") && sql.includes("ORDER BY applied_at")) {
-      return {
-        rowCount: this.data.disc_migrations.length,
-        rows: this.data.disc_migrations
-          .sort((a, b) => new Date(a.applied_at).getTime() - new Date(b.applied_at).getTime())
-          .map(row => ({ id: row.id })),
-      };
-    }
-
-    if (sql.includes("SELECT 1 FROM disc_migrations WHERE id")) {
-      const id = params?.[0];
-      const found = this.data.disc_migrations.some(row => row.id === id);
-      return { rowCount: found ? 1 : 0, rows: found ? [{ "?column?": 1 }] : [] };
-    }
-
-    if (sql.includes("SELECT id, applied_at, schema_hash FROM disc_migrations") && sql.includes("ORDER BY applied_at DESC")) {
-      const sorted = this.data.disc_migrations
-        .sort((a, b) => new Date(b.applied_at).getTime() - new Date(a.applied_at).getTime());
-      return {
-        rowCount: sorted.length,
-        rows: sorted.slice(0, 1).map(row => ({
-          id: row.id,
-          applied_at: row.applied_at,
-          schema_hash: row.schema_hash,
-        })),
-      };
-    }
-
-    if (sql.includes("SELECT id, name, description, schema_hash, applied_at, duration_ms, created_at FROM disc_migrations")) {
-      return {
-        rowCount: this.data.disc_migrations.length,
-        rows: this.data.disc_migrations
-          .sort((a, b) => new Date(b.applied_at).getTime() - new Date(a.applied_at).getTime())
-          .map(row => ({
-            id: row.id,
-            name: row.name,
-            description: row.description,
-            schema_hash: row.schema_hash,
-            applied_at: row.applied_at,
-            duration_ms: row.duration_ms,
-            created_at: row.created_at,
-          })),
-      };
-    }
-
-    if (sql.includes("SELECT rollback_sql FROM disc_migrations WHERE id")) {
-      const id = params?.[0];
-      const migration = this.data.disc_migrations.find(row => row.id === id);
-      return {
-        rowCount: migration ? 1 : 0,
-        rows: migration ? [{ rollback_sql: migration.rollback_sql }] : [],
-      };
-    }
-
-    if (sql.includes("SELECT id, name, created_at, schema_state, migration_state FROM disc_migration_checkpoints WHERE id")) {
-      const id = params?.[0];
-      const checkpoint = this.data.disc_migration_checkpoints.find(row => row.id === id);
-      return {
-        rowCount: checkpoint ? 1 : 0,
-        rows: checkpoint ? [checkpoint] : [],
-      };
-    }
-
-    if (sql.includes("SELECT id, name, created_at, schema_state, migration_state FROM disc_migration_checkpoints") && sql.includes("ORDER BY created_at DESC")) {
-      return {
-        rowCount: this.data.disc_migration_checkpoints.length,
-        rows: this.data.disc_migration_checkpoints
-          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
-      };
-    }
-
-    if (sql.includes("DELETE FROM disc_migrations")) {
-      const id = params?.[0];
-      const initialLength = this.data.disc_migrations.length;
-      this.data.disc_migrations = this.data.disc_migrations.filter(row => row.id !== id);
-      return { rowCount: initialLength - this.data.disc_migrations.length, rows: [] };
-    }
-
-    return { rowCount: 0, rows: [] };
-  }
-
-  async close(): Promise<void> {
-    // Mock implementation
   }
 }

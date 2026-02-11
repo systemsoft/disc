@@ -1,0 +1,232 @@
+import { assertEquals, assertExists, assertRejects } from "@std/assert";
+import { join } from "@std/path";
+import { PostgresManager } from "./manager.ts";
+
+const TEST_BASE_DIR = join(Deno.makeTempDirSync(), "disc-postgres-manager-test");
+
+Deno.test("PostgresManager - create instance", async () => {
+  const manager = new PostgresManager(TEST_BASE_DIR);
+  const instanceName = "test-create";
+  
+  const instance = await manager.createInstance(instanceName, {
+    port: 0, // Unix socket only
+    postgresVersion: "16.4",
+  });
+  
+  assertExists(instance);
+  assertEquals(instance.getPort(), 0);
+  
+  // Verify instance is tracked
+  const tracked = manager.getInstance(instanceName);
+  assertEquals(tracked, instance);
+  
+  // Cleanup
+  await manager.destroyInstance(instanceName, true);
+});
+
+Deno.test("PostgresManager - prevent duplicate instances", async () => {
+  const manager = new PostgresManager(TEST_BASE_DIR);
+  const instanceName = "test-duplicate";
+  
+  await manager.createInstance(instanceName);
+  
+  // Attempt to create duplicate should throw
+  await assertRejects(
+    async () => await manager.createInstance(instanceName),
+    Error,
+    "already exists"
+  );
+  
+  // Cleanup
+  await manager.destroyInstance(instanceName, true);
+});
+
+Deno.test("PostgresManager - start and stop instance", async () => {
+  const manager = new PostgresManager(TEST_BASE_DIR);
+  const instanceName = "test-lifecycle";
+  
+  await manager.createInstance(instanceName);
+  
+  // Start instance
+  await manager.startInstance(instanceName, false); // No monitor for testing
+  
+  const status = await manager.getInstanceStatus(instanceName);
+  assertExists(status);
+  assertEquals(status.running, true);
+  
+  // Stop instance
+  await manager.stopInstance(instanceName);
+  
+  const stoppedStatus = await manager.getInstanceStatus(instanceName);
+  assertExists(stoppedStatus);
+  assertEquals(stoppedStatus.running, false);
+  
+  // Cleanup
+  await manager.destroyInstance(instanceName, true);
+});
+
+Deno.test("PostgresManager - list instances", async () => {
+  const manager = new PostgresManager(TEST_BASE_DIR);
+  
+  // Create multiple instances
+  await manager.createInstance("instance1");
+  await manager.createInstance("instance2");
+  await manager.createInstance("instance3");
+  
+  const instances = manager.listInstances();
+  assertEquals(instances.length, 3);
+  assertEquals(instances.includes("instance1"), true);
+  assertEquals(instances.includes("instance2"), true);
+  assertEquals(instances.includes("instance3"), true);
+  
+  // Cleanup
+  await manager.destroyInstance("instance1", true);
+  await manager.destroyInstance("instance2", true);
+  await manager.destroyInstance("instance3", true);
+});
+
+Deno.test("PostgresManager - destroy instance with data removal", async () => {
+  const manager = new PostgresManager(TEST_BASE_DIR);
+  const instanceName = "test-destroy";
+  
+  await manager.createInstance(instanceName);
+  
+  const instanceDir = join(TEST_BASE_DIR, instanceName);
+  const dataDirExists = async () => {
+    try {
+      await Deno.stat(instanceDir);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  
+  // Verify directory exists
+  assertEquals(await dataDirExists(), true);
+  
+  // Destroy with data removal
+  await manager.destroyInstance(instanceName, true);
+  
+  // Verify directory is gone
+  assertEquals(await dataDirExists(), false);
+  
+  // Instance should not be tracked
+  assertEquals(manager.getInstance(instanceName), undefined);
+});
+
+Deno.test("PostgresManager - recover existing instance", async () => {
+  const manager1 = new PostgresManager(TEST_BASE_DIR);
+  const instanceName = "test-recover";
+  
+  // Create instance with first manager
+  await manager1.createInstance(instanceName);
+  await manager1.startInstance(instanceName, false);
+  
+  // Create new manager and recover
+  const manager2 = new PostgresManager(TEST_BASE_DIR);
+  await manager2.discoverInstances();
+  
+  const recovered = manager2.getInstance(instanceName);
+  assertExists(recovered);
+  
+  // Should be able to manage recovered instance
+  const status = await manager2.getInstanceStatus(instanceName);
+  assertExists(status);
+  
+  // Cleanup
+  await manager1.stopInstance(instanceName);
+  await manager1.destroyInstance(instanceName, true);
+});
+
+Deno.test("PostgresManager - instance with monitor", async () => {
+  const manager = new PostgresManager(TEST_BASE_DIR);
+  const instanceName = "test-monitor";
+  
+  await manager.createInstance(instanceName);
+  await manager.startInstance(instanceName, true); // With monitor
+  
+  const status = await manager.getInstanceStatus(instanceName);
+  assertExists(status);
+  assertEquals(status.running, true);
+  
+  // Health status should be available when monitor is running
+  // Note: Initial health check might not be complete immediately
+  await new Promise(resolve => setTimeout(resolve, 1000));
+  
+  const statusWithHealth = await manager.getInstanceStatus(instanceName);
+  assertExists(statusWithHealth);
+  // Health might be undefined if check hasn't completed yet
+  
+  await manager.stopInstance(instanceName);
+  await manager.destroyInstance(instanceName, true);
+});
+
+Deno.test("PostgresManager - backup and restore", async () => {
+  const manager = new PostgresManager(TEST_BASE_DIR);
+  const originalName = "test-backup-original";
+  const restoredName = "test-backup-restored";
+  const backupPath = join(TEST_BASE_DIR, "backup.tar.gz");
+  
+  // Create and start original instance
+  await manager.createInstance(originalName);
+  await manager.startInstance(originalName, false);
+  
+  // Create a backup
+  await manager.backupInstance(originalName, backupPath);
+  
+  // Verify backup file exists
+  const backupStat = await Deno.stat(backupPath);
+  assertEquals(backupStat.isFile, true);
+  
+  // Restore to new instance
+  await manager.restoreInstance(restoredName, backupPath);
+  
+  // Verify restored instance exists
+  const restored = manager.getInstance(restoredName);
+  assertExists(restored);
+  
+  // Cleanup
+  await manager.stopInstance(originalName);
+  await manager.destroyInstance(originalName, true);
+  await manager.destroyInstance(restoredName, true);
+  await Deno.remove(backupPath);
+});
+
+Deno.test("PostgresManager - upgrade instance throws not implemented", async () => {
+  const manager = new PostgresManager(TEST_BASE_DIR);
+  const instanceName = "test-upgrade";
+  
+  await manager.createInstance(instanceName);
+  
+  await assertRejects(
+    async () => await manager.upgradeInstance(instanceName, "17.0"),
+    Error,
+    "not yet implemented"
+  );
+  
+  // Cleanup
+  await manager.destroyInstance(instanceName, true);
+});
+
+Deno.test("PostgresManager - handles non-existent instance gracefully", async () => {
+  const manager = new PostgresManager(TEST_BASE_DIR);
+  
+  // Operations on non-existent instance should throw or return null/undefined
+  await assertRejects(
+    async () => await manager.startInstance("non-existent"),
+    Error,
+    "not found"
+  );
+  
+  await assertRejects(
+    async () => await manager.stopInstance("non-existent"),
+    Error,
+    "not found"
+  );
+  
+  const status = await manager.getInstanceStatus("non-existent");
+  assertEquals(status, null);
+  
+  const instance = manager.getInstance("non-existent");
+  assertEquals(instance, undefined);
+});

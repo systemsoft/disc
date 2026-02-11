@@ -9,11 +9,14 @@ import { SchemaDiffer } from "./differ.ts";
 import { DDLGenerator } from "./ddl.ts";
 import { Result, Ok, Err } from "../lib/result.ts";
 import { MigrationError } from "../lib/errors.ts";
+import { DatabaseConnection } from "../lib/database.ts";
+import { logger } from "../postgres/logger.ts";
 
 export class MigrationEngine {
   private differ = new SchemaDiffer();
   private ddlGenerator = new DDLGenerator();
   private appliedMigrations = new Set<string>();
+  private db?: DatabaseConnection;
 
   constructor(private config: Types.MigrationConfig) {}
 
@@ -88,8 +91,8 @@ export class MigrationEngine {
         // In a real implementation, this would execute against a database
         const ddlStatements = this.ddlGenerator.generateDDL(migration.operations);
         
-        // Simulate execution
-        await this.simulateExecution(ddlStatements);
+        // Execute DDL statements
+        await this.executeStatements(ddlStatements);
         
         const endTime = Date.now();
         
@@ -161,7 +164,7 @@ export class MigrationEngine {
 
         // Execute the migration
         const ddlStatements = this.ddlGenerator.generateDDL(migration.operations);
-        await this.simulateExecution(ddlStatements);
+        await this.executeStatements(ddlStatements);
 
         const endTime = Date.now();
         
@@ -177,7 +180,7 @@ export class MigrationEngine {
       } catch (error) {
         if (this.config.rollback_on_error && rollbackSQL) {
           try {
-            await this.simulateExecution(rollbackSQL);
+            await this.executeStatements(rollbackSQL);
           } catch (rollbackError) {
             return Err(new MigrationError(`Migration failed and rollback failed: ${error.message}. Rollback error: ${rollbackError.message}`));
           }
@@ -443,14 +446,31 @@ export class MigrationEngine {
     return duration;
   }
 
-  private async simulateExecution(statements: string[]): Promise<void> {
-    // Simulate execution time
-    await new Promise(resolve => setTimeout(resolve, 10));
-    
+  private async executeStatements(statements: string[]): Promise<void> {
     if (this.config.dry_run) {
-      console.log("DRY RUN - Would execute:");
-      statements.forEach(stmt => console.log(stmt));
+      logger.info("DRY RUN - Would execute:");
+      statements.forEach(stmt => logger.info(`  ${stmt}`));
+      return;
     }
+
+    // Ensure database connection
+    if (!this.db) {
+      if (!this.config.database_url) {
+        throw new Error("Database URL not configured");
+      }
+      this.db = new DatabaseConnection(this.config.database_url);
+      await this.db.connect();
+    }
+
+    // Execute statements in a transaction
+    await this.db.transaction(async () => {
+      for (const statement of statements) {
+        if (statement.trim()) {
+          logger.info(`Executing: ${statement.substring(0, 100)}...`);
+          await this.db!.execute(statement);
+        }
+      }
+    });
   }
 
   private validateOperation(operation: Types.MigrationOperation): string[] {
@@ -562,5 +582,15 @@ export class MigrationEngine {
       timestamp: new Date().toISOString(),
       schema_version: "current",
     };
+  }
+
+  /**
+   * Close database connection
+   */
+  async close(): Promise<void> {
+    if (this.db) {
+      await this.db.close();
+      this.db = undefined;
+    }
   }
 }
