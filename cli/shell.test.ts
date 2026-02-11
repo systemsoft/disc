@@ -2,14 +2,19 @@
  * CLI Shell Command Tests - Test interactive EdgeQL REPL functionality
  */
 
-import { assertEquals, assertExists, assert, assertStringIncludes } from "@std/assert";
 import {
+  assert,
+  assertEquals,
+  assertExists,
+  assertStringIncludes,
+} from "@std/assert";
+import {
+  assertLogContains,
+  cleanupTempDir,
   ConsoleCapture,
   createTempDir,
-  cleanupTempDir,
   createTestSchema,
   SIMPLE_SCHEMA,
-  assertLogContains
 } from "../tests/test-utils.ts";
 
 // Mock shell command implementation
@@ -38,13 +43,13 @@ function createMockShellSession(options: ShellOptions = {}): ShellSession {
     host: options.host || "localhost",
     port: options.port || 5656,
     query_count: 0,
-    history: []
+    history: [],
   };
 }
 
 async function mockShellCommand(options: ShellOptions = {}): Promise<string[]> {
   const output: string[] = [];
-  
+
   if (options.non_interactive) {
     output.push("🚀 Starting Disc shell in non-interactive mode...");
   } else {
@@ -52,7 +57,7 @@ async function mockShellCommand(options: ShellOptions = {}): Promise<string[]> {
   }
 
   const session = createMockShellSession(options);
-  
+
   output.push(`📡 Connected to Disc server at ${session.host}:${session.port}`);
   output.push(`📊 Database: ${session.database}`);
   output.push("");
@@ -60,7 +65,7 @@ async function mockShellCommand(options: ShellOptions = {}): Promise<string[]> {
   if (options.execute) {
     // Execute single query and exit
     output.push(`disc> ${options.execute}`);
-    
+
     // Mock query execution
     if (options.execute.toLowerCase().includes("select")) {
       output.push(`[{"id": "123", "name": "Test User"}]`);
@@ -71,12 +76,14 @@ async function mockShellCommand(options: ShellOptions = {}): Promise<string[]> {
     } else {
       output.push(`Query executed successfully`);
     }
-    
+
     session.query_count++;
     output.push("");
     output.push("✅ Query executed, exiting...");
   } else if (options.non_interactive) {
-    output.push("💡 Use --execute to run a query, or omit --non-interactive for REPL mode");
+    output.push(
+      "💡 Use --execute to run a query, or omit --non-interactive for REPL mode",
+    );
   } else {
     // Interactive mode simulation
     output.push("💡 Interactive EdgeQL shell. Type \\? for help, \\q to quit.");
@@ -101,9 +108,9 @@ Deno.test("CLI Shell - basic shell startup", async () => {
 
   try {
     const output = await mockShellCommand();
-    
+
     // Simulate shell output
-    output.forEach(line => console.log(line));
+    output.forEach((line) => console.log(line));
 
     const logs = console.getLogs();
     assertLogContains(logs, "Starting Disc EdgeQL shell");
@@ -123,11 +130,11 @@ Deno.test("CLI Shell - custom connection parameters", async () => {
     const options: ShellOptions = {
       host: "192.168.1.100",
       port: 8080,
-      database: "custom_db"
+      database: "custom_db",
     };
 
     const output = await mockShellCommand(options);
-    output.forEach(line => console.log(line));
+    output.forEach((line) => console.log(line));
 
     const logs = console.getLogs();
     assertLogContains(logs, "Connected to Disc server at 192.168.1.100:8080");
@@ -142,11 +149,11 @@ Deno.test("CLI Shell - execute single query", async () => {
 
   try {
     const options: ShellOptions = {
-      execute: "select User { name, email }"
+      execute: "select User { name, email }",
     };
 
     const output = await mockShellCommand(options);
-    output.forEach(line => console.log(line));
+    output.forEach((line) => console.log(line));
 
     const logs = console.getLogs();
     assertLogContains(logs, "disc> select User { name, email }");
@@ -163,11 +170,11 @@ Deno.test("CLI Shell - non-interactive mode", async () => {
 
   try {
     const options: ShellOptions = {
-      non_interactive: true
+      non_interactive: true,
     };
 
     const output = await mockShellCommand(options);
-    output.forEach(line => console.log(line));
+    output.forEach((line) => console.log(line));
 
     const logs = console.getLogs();
     assertLogContains(logs, "non-interactive mode");
@@ -303,9 +310,13 @@ Deno.test("CLI Shell - connection error handling", async () => {
     console.error("💡 Check connection parameters: --host, --port, --database");
 
     const errorLogs = console.getErrorLogs();
-    assert(errorLogs.some(log => log.includes("Failed to connect")));
-    assert(errorLogs.some(log => log.includes("Could not reach")));
-    assert(errorLogs.some(log => log.includes("Make sure the Disc server is running")));
+    assert(errorLogs.some((log) => log.includes("Failed to connect")));
+    assert(errorLogs.some((log) => log.includes("Could not reach")));
+    assert(
+      errorLogs.some((log) =>
+        log.includes("Make sure the Disc server is running")
+      ),
+    );
   } finally {
     console.restore();
   }
@@ -365,7 +376,9 @@ Deno.test("CLI Shell - command history", async () => {
     console.log("  2  \\d");
     console.log("  3  select Post { title, author: { name } };");
     console.log("  4  \\timing");
-    console.log("  5  insert User { name := \"Test\", email := \"test@example.com\" };");
+    console.log(
+      '  5  insert User { name := "Test", email := "test@example.com" };',
+    );
     console.log("");
     console.log("5 commands in history");
 
@@ -416,7 +429,9 @@ Deno.test("CLI Shell - multi-line query", async () => {
     console.log("...>   posts: { title }");
     console.log("...> };");
     console.log("");
-    console.log('[{"name": "Alice", "email": "alice@example.com", "posts": [{"title": "Hello World"}]}]');
+    console.log(
+      '[{"name": "Alice", "email": "alice@example.com", "posts": [{"title": "Hello World"}]}]',
+    );
     console.log("(1 row)");
 
     const logs = console.getLogs();
@@ -434,9 +449,9 @@ Deno.test("CLI Shell - schema from file option", async () => {
 
   try {
     const schemaFile = await createTestSchema(tempDir, SIMPLE_SCHEMA);
-    
+
     const options: ShellOptions = {
-      schema_file: schemaFile
+      schema_file: schemaFile,
     };
 
     // Mock shell with schema file

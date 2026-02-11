@@ -5,27 +5,43 @@
 import { assertEquals, assertExists, assertRejects } from "@std/assert";
 import { parseArgs } from "@std/cli/parse-args";
 import {
-  ConsoleCapture,
-  EnvMock,
-  createTempDir,
-  cleanupTempDir,
-  createTestSchema,
-  TEST_SCHEMA,
-  SIMPLE_SCHEMA,
+  assertErrorContains,
   assertLogContains,
-  assertErrorContains
+  cleanupTempDir,
+  ConsoleCapture,
+  createTempDir,
+  createTestSchema,
+  EnvMock,
+  SIMPLE_SCHEMA,
+  TEST_SCHEMA,
 } from "../tests/test-utils.ts";
 
 // Import functions to test (we'll need to export them from main.ts)
 // For now, we'll test the CLI by importing and calling functions directly
 
 Deno.test("CLI - parseArgs configuration", () => {
-  const args = parseArgs(["codegen", "--output", "./test", "--target", "client"], {
-    boolean: ["help", "version", "create", "dry-run", "auto-approve", "no-queries", "no-mutations", "no-client", "no-format"],
+  const args = parseArgs([
+    "codegen",
+    "--output",
+    "./test",
+    "--target",
+    "client",
+  ], {
+    boolean: [
+      "help",
+      "version",
+      "create",
+      "dry-run",
+      "auto-approve",
+      "no-queries",
+      "no-mutations",
+      "no-client",
+      "no-format",
+    ],
     string: ["port", "config", "schema", "output", "target"],
     alias: {
       h: "help",
-      v: "version", 
+      v: "version",
       p: "port",
       c: "config",
       s: "schema",
@@ -59,12 +75,15 @@ Deno.test("CLI - version flag parsing", () => {
 
 Deno.test("CLI - codegen command arguments", () => {
   const args = parseArgs([
-    "codegen", 
-    "--schema", "custom.esdl", 
-    "--output", "./generated",
-    "--target", "both",
+    "codegen",
+    "--schema",
+    "custom.esdl",
+    "--output",
+    "./generated",
+    "--target",
+    "both",
     "--no-queries",
-    "--no-client"
+    "--no-client",
   ], {
     boolean: ["no-queries", "no-mutations", "no-client", "no-format"],
     string: ["schema", "output", "target"],
@@ -83,9 +102,10 @@ Deno.test("CLI - migrate command arguments", () => {
   const args = parseArgs([
     "migrate",
     "--create",
-    "--dry-run", 
+    "--dry-run",
     "--auto-approve",
-    "--schema", "test.esdl"
+    "--schema",
+    "test.esdl",
   ], {
     boolean: ["create", "dry-run", "auto-approve"],
     string: ["schema"],
@@ -101,8 +121,10 @@ Deno.test("CLI - migrate command arguments", () => {
 Deno.test("CLI - serve command arguments", () => {
   const args = parseArgs([
     "serve",
-    "--port", "8080",
-    "--config", "custom.json"
+    "--port",
+    "8080",
+    "--config",
+    "custom.json",
   ], {
     string: ["port", "config"],
   });
@@ -115,16 +137,16 @@ Deno.test("CLI - serve command arguments", () => {
 // Test schema file reading utility
 Deno.test("readSchemaFile - existing file", async () => {
   const tempDir = await createTempDir();
-  
+
   try {
     const schemaPath = await createTestSchema(tempDir, SIMPLE_SCHEMA);
-    
+
     // Import the readSchemaFile function - we'll need to make it exportable
     // For now, test that a file can be read
     const stat = await Deno.stat(schemaPath);
     assertExists(stat);
     assertEquals(stat.isFile, true);
-    
+
     const content = await Deno.readTextFile(schemaPath);
     assertEquals(content, SIMPLE_SCHEMA);
   } finally {
@@ -134,21 +156,21 @@ Deno.test("readSchemaFile - existing file", async () => {
 
 Deno.test("readSchemaFile - nonexistent file", async () => {
   const nonExistentPath = "/does/not/exist/schema.esdl";
-  
+
   // Test that attempting to read a nonexistent file handles errors gracefully
   await assertRejects(
     () => Deno.stat(nonExistentPath),
-    Deno.errors.NotFound
+    Deno.errors.NotFound,
   );
 });
 
 // Test environment variable handling
 Deno.test("CLI - environment variable handling", () => {
   const env = new EnvMock();
-  
+
   try {
     env.set("DATABASE_URL", "postgresql://test:test@localhost:5432/test_db");
-    
+
     const dbUrl = Deno.env.get("DATABASE_URL");
     assertEquals(dbUrl, "postgresql://test:test@localhost:5432/test_db");
   } finally {
@@ -164,7 +186,7 @@ Deno.test("CLI - default configuration values", () => {
 
   // Test that defaults are applied correctly
   const outputDir = args.output || "./generated";
-  const target = args.target || "client"; 
+  const target = args.target || "client";
   const schemaFile = args.schema || "./schema.esdl";
 
   assertEquals(outputDir, "./generated");
@@ -177,9 +199,9 @@ Deno.test("CLI - boolean flag combinations", () => {
   const args = parseArgs([
     "codegen",
     "--no-queries",
-    "--no-mutations", 
+    "--no-mutations",
     "--no-client",
-    "--no-format"
+    "--no-format",
   ], {
     boolean: ["no-queries", "no-mutations", "no-client", "no-format"],
   });
@@ -193,21 +215,22 @@ Deno.test("CLI - boolean flag combinations", () => {
 // Test migration config construction
 Deno.test("CLI - migration config construction", () => {
   const env = new EnvMock();
-  
+
   try {
     env.set("DATABASE_URL", "postgresql://localhost:5432/test_disc");
-    
+
     const args = {
       schema: "./test.esdl",
       "dry-run": true,
-      "auto-approve": false
+      "auto-approve": false,
     };
 
     // Simulate migration config construction
     const config = {
       migrations_dir: "./migrations",
       schema_file: args.schema || "./schema.esdl",
-      database_url: Deno.env.get("DATABASE_URL") || "postgresql://localhost:5432/disc_dev",
+      database_url: Deno.env.get("DATABASE_URL") ||
+        "postgresql://localhost:5432/disc_dev",
       dry_run: args["dry-run"] || false,
       auto_approve: args["auto-approve"] || false,
       backup_before_migration: true,
@@ -225,7 +248,7 @@ Deno.test("CLI - migration config construction", () => {
   }
 });
 
-// Test codegen config construction  
+// Test codegen config construction
 Deno.test("CLI - codegen config construction", () => {
   const args = {
     output: "./custom/types",
@@ -233,7 +256,7 @@ Deno.test("CLI - codegen config construction", () => {
     "no-queries": true,
     "no-mutations": false,
     "no-client": true,
-    "no-format": false
+    "no-format": false,
   };
 
   // Simulate codegen config construction
@@ -241,7 +264,7 @@ Deno.test("CLI - codegen config construction", () => {
     output_dir: args.output || "./generated",
     target: args.target || "client",
     include_query_builders: args["no-queries"] !== true,
-    include_mutations: args["no-mutations"] !== true, 
+    include_mutations: args["no-mutations"] !== true,
     include_client: args["no-client"] !== true,
     format_output: args["no-format"] !== true,
   };
@@ -258,16 +281,19 @@ Deno.test("CLI - codegen config construction", () => {
 Deno.test("CLI - alias flag handling", () => {
   const args = parseArgs([
     "codegen",
-    "-o", "./out",
-    "-t", "both", 
-    "-s", "custom.esdl"
+    "-o",
+    "./out",
+    "-t",
+    "both",
+    "-s",
+    "custom.esdl",
   ], {
     string: ["output", "target", "schema"],
     alias: {
       o: "output",
       t: "target",
-      s: "schema"
-    }
+      s: "schema",
+    },
   });
 
   assertEquals(args.output, "./out");

@@ -2,12 +2,17 @@
  * CLI Init Command Tests - Test project initialization functionality
  */
 
-import { assertEquals, assertExists, assert, assertStringIncludes } from "@std/assert";
 import {
+  assert,
+  assertEquals,
+  assertExists,
+  assertStringIncludes,
+} from "@std/assert";
+import {
+  assertLogContains,
+  cleanupTempDir,
   ConsoleCapture,
   createTempDir,
-  cleanupTempDir,
-  assertLogContains
 } from "../tests/test-utils.ts";
 
 // Mock init command implementation
@@ -18,10 +23,14 @@ interface InitOptions {
   force?: boolean;
 }
 
-async function mockInitCommand(targetDir: string, options: InitOptions = {}): Promise<void> {
+async function mockInitCommand(
+  targetDir: string,
+  options: InitOptions = {},
+): Promise<void> {
   const projectName = options.name || "disc-project";
   const template = options.template || "basic";
-  const databaseUrl = options.database_url || "postgresql://localhost:5432/disc_dev";
+  const databaseUrl = options.database_url ||
+    "postgresql://localhost:5432/disc_dev";
 
   // Create project directory
   const projectDir = `${targetDir}/${projectName}`;
@@ -86,21 +95,24 @@ async function mockInitCommand(targetDir: string, options: InitOptions = {}): Pr
     name: projectName,
     version: "0.1.0",
     exports: {
-      ".": "./mod.ts"
+      ".": "./mod.ts",
     },
     imports: {
-      "@disc/db": "jsr:@disc/db@*"
+      "@disc/db": "jsr:@disc/db@*",
     },
     tasks: {
       "serve": "disc serve",
       "migrate": "disc migrate",
       "codegen": "disc codegen",
       "dev": "disc watch",
-      "shell": "disc shell"
-    }
+      "shell": "disc shell",
+    },
   };
 
-  await Deno.writeTextFile(`${projectDir}/deno.json`, JSON.stringify(denoConfig, null, 2));
+  await Deno.writeTextFile(
+    `${projectDir}/deno.json`,
+    JSON.stringify(denoConfig, null, 2),
+  );
 
   // Create .env file
   const envContent = `# Disc Database Configuration
@@ -155,7 +167,7 @@ A Disc database project.
 
 1. **Setup database**:
    \`\`\`bash
-   createdb ${projectName.replace(/-/g, '_')}_dev
+   createdb ${projectName.replace(/-/g, "_")}_dev
    \`\`\`
 
 2. **Apply schema**:
@@ -210,22 +222,34 @@ Deno.test("CLI Init - basic project initialization", async () => {
 
   try {
     const projectName = "test-basic-project";
-    
+
     console.log("🚀 Initializing new Disc project...");
     console.log(`📁 Creating project: ${projectName}`);
-    
+
     await mockInitCommand(tempDir, { name: projectName });
 
     const projectDir = `${tempDir}/${projectName}`;
 
     // Verify all expected files were created
-    const schemaExists = await Deno.stat(`${projectDir}/schema.esdl`).then(() => true).catch(() => false);
-    const configExists = await Deno.stat(`${projectDir}/deno.json`).then(() => true).catch(() => false);
-    const envExists = await Deno.stat(`${projectDir}/.env`).then(() => true).catch(() => false);
-    const gitignoreExists = await Deno.stat(`${projectDir}/.gitignore`).then(() => true).catch(() => false);
-    const readmeExists = await Deno.stat(`${projectDir}/README.md`).then(() => true).catch(() => false);
-    const modExists = await Deno.stat(`${projectDir}/mod.ts`).then(() => true).catch(() => false);
-    const migrationsExists = await Deno.stat(`${projectDir}/migrations`).then(() => true).catch(() => false);
+    const schemaExists = await Deno.stat(`${projectDir}/schema.esdl`).then(() =>
+      true
+    ).catch(() => false);
+    const configExists = await Deno.stat(`${projectDir}/deno.json`).then(() =>
+      true
+    ).catch(() => false);
+    const envExists = await Deno.stat(`${projectDir}/.env`).then(() => true)
+      .catch(() => false);
+    const gitignoreExists = await Deno.stat(`${projectDir}/.gitignore`).then(
+      () => true,
+    ).catch(() => false);
+    const readmeExists = await Deno.stat(`${projectDir}/README.md`).then(() =>
+      true
+    ).catch(() => false);
+    const modExists = await Deno.stat(`${projectDir}/mod.ts`).then(() => true)
+      .catch(() => false);
+    const migrationsExists = await Deno.stat(`${projectDir}/migrations`).then(
+      () => true,
+    ).catch(() => false);
 
     assert(schemaExists, "Schema file should be created");
     assert(configExists, "Deno config should be created");
@@ -241,14 +265,19 @@ Deno.test("CLI Init - basic project initialization", async () => {
     assertStringIncludes(schemaContent, "required email: str");
 
     // Verify deno.json content
-    const configContent = JSON.parse(await Deno.readTextFile(`${projectDir}/deno.json`));
+    const configContent = JSON.parse(
+      await Deno.readTextFile(`${projectDir}/deno.json`),
+    );
     assertEquals(configContent.name, projectName);
     assertEquals(configContent.tasks.serve, "disc serve");
     assertEquals(configContent.tasks.migrate, "disc migrate");
 
     // Verify .env content
     const envContent = await Deno.readTextFile(`${projectDir}/.env`);
-    assertStringIncludes(envContent, "DATABASE_URL=postgresql://localhost:5432/disc_dev");
+    assertStringIncludes(
+      envContent,
+      "DATABASE_URL=postgresql://localhost:5432/disc_dev",
+    );
     assertStringIncludes(envContent, "DISC_PORT=5656");
 
     console.log("✅ Project initialized successfully!");
@@ -271,19 +300,22 @@ Deno.test("CLI Init - minimal template", async () => {
 
   try {
     const projectName = "minimal-project";
-    
-    await mockInitCommand(tempDir, { 
-      name: projectName, 
-      template: "minimal"
+
+    await mockInitCommand(tempDir, {
+      name: projectName,
+      template: "minimal",
     });
 
     const projectDir = `${tempDir}/${projectName}`;
     const schemaContent = await Deno.readTextFile(`${projectDir}/schema.esdl`);
-    
+
     // Minimal template should have empty module
     assertStringIncludes(schemaContent, "module default");
     assertStringIncludes(schemaContent, "Add your schema definitions here");
-    assert(!schemaContent.includes("type User"), "Should not include default types");
+    assert(
+      !schemaContent.includes("type User"),
+      "Should not include default types",
+    );
   } finally {
     await cleanupTempDir(tempDir);
   }
@@ -294,15 +326,15 @@ Deno.test("CLI Init - full template", async () => {
 
   try {
     const projectName = "full-project";
-    
-    await mockInitCommand(tempDir, { 
-      name: projectName, 
-      template: "full"
+
+    await mockInitCommand(tempDir, {
+      name: projectName,
+      template: "full",
     });
 
     const projectDir = `${tempDir}/${projectName}`;
     const schemaContent = await Deno.readTextFile(`${projectDir}/schema.esdl`);
-    
+
     // Full template should have multiple types
     assertStringIncludes(schemaContent, "type User");
     assertStringIncludes(schemaContent, "type Post");
@@ -319,15 +351,15 @@ Deno.test("CLI Init - custom database URL", async () => {
   try {
     const projectName = "custom-db-project";
     const customDbUrl = "postgresql://custom:5432/custom_db";
-    
-    await mockInitCommand(tempDir, { 
-      name: projectName, 
-      database_url: customDbUrl
+
+    await mockInitCommand(tempDir, {
+      name: projectName,
+      database_url: customDbUrl,
     });
 
     const projectDir = `${tempDir}/${projectName}`;
     const envContent = await Deno.readTextFile(`${projectDir}/.env`);
-    
+
     assertStringIncludes(envContent, `DATABASE_URL=${customDbUrl}`);
   } finally {
     await cleanupTempDir(tempDir);
@@ -341,13 +373,15 @@ Deno.test("CLI Init - directory already exists error", async () => {
   try {
     const projectName = "existing-project";
     const projectDir = `${tempDir}/${projectName}`;
-    
+
     // Create directory first
     await Deno.mkdir(projectDir, { recursive: true });
     await Deno.writeTextFile(`${projectDir}/existing-file.txt`, "exists");
 
     // Check if directory exists
-    const exists = await Deno.stat(projectDir).then(() => true).catch(() => false);
+    const exists = await Deno.stat(projectDir).then(() => true).catch(() =>
+      false
+    );
     assert(exists, "Directory should exist");
 
     // Simulate error handling
@@ -355,8 +389,14 @@ Deno.test("CLI Init - directory already exists error", async () => {
     console.error("💡 Use --force to overwrite or choose a different name");
 
     const errorLogs = console.getErrorLogs();
-    assert(errorLogs.some(log => log.includes("already exists")), "Should show exists error");
-    assert(errorLogs.some(log => log.includes("--force")), "Should show force option");
+    assert(
+      errorLogs.some((log) => log.includes("already exists")),
+      "Should show exists error",
+    );
+    assert(
+      errorLogs.some((log) => log.includes("--force")),
+      "Should show force option",
+    );
   } finally {
     console.restore();
     await cleanupTempDir(tempDir);
@@ -369,23 +409,27 @@ Deno.test("CLI Init - force overwrite existing directory", async () => {
   try {
     const projectName = "force-project";
     const projectDir = `${tempDir}/${projectName}`;
-    
+
     // Create directory with existing content
     await Deno.mkdir(projectDir, { recursive: true });
     await Deno.writeTextFile(`${projectDir}/old-file.txt`, "old content");
 
     // Verify old file exists
-    const oldExists = await Deno.stat(`${projectDir}/old-file.txt`).then(() => true).catch(() => false);
+    const oldExists = await Deno.stat(`${projectDir}/old-file.txt`).then(() =>
+      true
+    ).catch(() => false);
     assert(oldExists, "Old file should exist");
 
     // Mock force initialization (would overwrite)
-    await mockInitCommand(tempDir, { 
-      name: projectName, 
-      force: true
+    await mockInitCommand(tempDir, {
+      name: projectName,
+      force: true,
     });
 
     // Verify new files were created
-    const schemaExists = await Deno.stat(`${projectDir}/schema.esdl`).then(() => true).catch(() => false);
+    const schemaExists = await Deno.stat(`${projectDir}/schema.esdl`).then(() =>
+      true
+    ).catch(() => false);
     assert(schemaExists, "New schema should be created");
   } finally {
     await cleanupTempDir(tempDir);
@@ -395,19 +439,27 @@ Deno.test("CLI Init - force overwrite existing directory", async () => {
 Deno.test("CLI Init - validates project name", () => {
   // Test valid project names
   const validNames = ["my-project", "disc-app", "user-management", "blog-api"];
-  
+
   for (const name of validNames) {
     // Simulate validation - should pass
-    const isValid = /^[a-z0-9-]+$/.test(name) && !name.startsWith('-') && !name.endsWith('-');
+    const isValid = /^[a-z0-9-]+$/.test(name) && !name.startsWith("-") &&
+      !name.endsWith("-");
     assert(isValid, `${name} should be valid`);
   }
 
   // Test invalid project names
-  const invalidNames = ["My-Project", "disc_app", "-invalid", "invalid-", "has spaces"];
-  
+  const invalidNames = [
+    "My-Project",
+    "disc_app",
+    "-invalid",
+    "invalid-",
+    "has spaces",
+  ];
+
   for (const name of invalidNames) {
     // Simulate validation - should fail
-    const isValid = /^[a-z0-9-]+$/.test(name) && !name.startsWith('-') && !name.endsWith('-');
+    const isValid = /^[a-z0-9-]+$/.test(name) && !name.startsWith("-") &&
+      !name.endsWith("-");
     assert(!isValid, `${name} should be invalid`);
   }
 });
@@ -417,12 +469,12 @@ Deno.test("CLI Init - creates proper README content", async () => {
 
   try {
     const projectName = "readme-test-project";
-    
+
     await mockInitCommand(tempDir, { name: projectName });
 
     const projectDir = `${tempDir}/${projectName}`;
     const readmeContent = await Deno.readTextFile(`${projectDir}/README.md`);
-    
+
     // Verify README includes project-specific content
     assertStringIncludes(readmeContent, `# ${projectName}`);
     assertStringIncludes(readmeContent, "A Disc database project");
@@ -431,9 +483,9 @@ Deno.test("CLI Init - creates proper README content", async () => {
     assertStringIncludes(readmeContent, "disc migrate");
     assertStringIncludes(readmeContent, "Available Commands");
     assertStringIncludes(readmeContent, "deno task serve");
-    
+
     // Should include the database name derived from project name
-    const dbName = projectName.replace(/-/g, '_') + '_dev';
+    const dbName = projectName.replace(/-/g, "_") + "_dev";
     assertStringIncludes(readmeContent, dbName);
   } finally {
     await cleanupTempDir(tempDir);
@@ -445,12 +497,14 @@ Deno.test("CLI Init - creates proper gitignore", async () => {
 
   try {
     const projectName = "gitignore-test";
-    
+
     await mockInitCommand(tempDir, { name: projectName });
 
     const projectDir = `${tempDir}/${projectName}`;
-    const gitignoreContent = await Deno.readTextFile(`${projectDir}/.gitignore`);
-    
+    const gitignoreContent = await Deno.readTextFile(
+      `${projectDir}/.gitignore`,
+    );
+
     // Verify common entries are present
     assertStringIncludes(gitignoreContent, "node_modules/");
     assertStringIncludes(gitignoreContent, ".env.local");

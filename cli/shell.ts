@@ -47,7 +47,7 @@ export class ShellCommand {
         port,
         query_count: 0,
         history: [],
-        timing_enabled: false
+        timing_enabled: false,
       };
 
       // TODO: Implement actual connection to Disc server
@@ -69,7 +69,9 @@ export class ShellCommand {
       }
 
       if (options.non_interactive) {
-        console.log("💡 Use --execute to run a query, or omit --non-interactive for REPL mode");
+        console.log(
+          "💡 Use --execute to run a query, or omit --non-interactive for REPL mode",
+        );
         return;
       }
 
@@ -78,17 +80,23 @@ export class ShellCommand {
     } catch (error) {
       console.error("❌ Failed to connect to Disc server");
       console.error(`📡 Could not reach ${host}:${port}`);
-      console.error("💡 Make sure the Disc server is running with 'disc serve'");
-      console.error("💡 Check connection parameters: --host, --port, --database");
+      console.error(
+        "💡 Make sure the Disc server is running with 'disc serve'",
+      );
+      console.error(
+        "💡 Check connection parameters: --host, --port, --database",
+      );
       throw error;
     }
   }
 
   private async loadSchema(schemaFile: string): Promise<void> {
     console.log(`📖 Loading schema from ${schemaFile}`);
-    
+
     try {
-      const exists = await Deno.stat(schemaFile).then(() => true).catch(() => false);
+      const exists = await Deno.stat(schemaFile).then(() => true).catch(() =>
+        false
+      );
       if (!exists) {
         console.log(`⚠️  Schema file not found: ${schemaFile}`);
         return;
@@ -120,11 +128,11 @@ export class ShellCommand {
 
       // Display result
       console.log(result.output);
-      
+
       if (this.session.timing_enabled) {
         console.log(`⏱️  Time: ${duration}ms`);
       }
-      
+
       console.log(result.summary);
     } catch (error) {
       console.error(`❌ Query failed: ${error.message}`);
@@ -164,34 +172,37 @@ export class ShellCommand {
     console.log("  \\clear    Clear screen");
   }
 
-  private async executeQuery(query: string): Promise<{ output: string; summary: string }> {
+  private async executeQuery(
+    query: string,
+  ): Promise<{ output: string; summary: string }> {
     // Mock query execution based on query type
     const lowerQuery = query.toLowerCase().trim();
-    
+
     if (lowerQuery.includes("select")) {
       return {
-        output: `[{"id": "123", "name": "Test User", "email": "test@example.com"}]`,
-        summary: "(1 row)"
+        output:
+          `[{"id": "123", "name": "Test User", "email": "test@example.com"}]`,
+        summary: "(1 row)",
       };
     } else if (lowerQuery.includes("insert")) {
       return {
         output: `{"id": "456"}`,
-        summary: "(1 row inserted)"
+        summary: "(1 row inserted)",
       };
     } else if (lowerQuery.includes("update")) {
       return {
         output: `{"id": "789"}`,
-        summary: "(1 row updated)"
+        summary: "(1 row updated)",
       };
     } else if (lowerQuery.includes("delete")) {
       return {
         output: `{"deleted": 1}`,
-        summary: "(1 row deleted)"
+        summary: "(1 row deleted)",
       };
     } else {
       return {
         output: "Query executed successfully",
-        summary: ""
+        summary: "",
       };
     }
   }
@@ -276,13 +287,13 @@ export class ShellCommand {
   private async listTypes(): Promise<void> {
     console.log("📋 Types in module 'default':");
     console.log("");
-    
+
     // Mock type listing
     const types = ["User", "Post", "Comment"];
     for (const type of types) {
       console.log(`  ${type}`);
     }
-    
+
     console.log("");
     console.log(`${types.length} types found`);
   }
@@ -290,7 +301,7 @@ export class ShellCommand {
   private async listTypesDetailed(): Promise<void> {
     console.log("📊 Detailed type information:");
     console.log("");
-    
+
     // Mock detailed type info
     console.log("Type: User");
     console.log("  Properties:");
@@ -301,7 +312,7 @@ export class ShellCommand {
     console.log("  Links:");
     console.log("    posts: Post (multi)");
     console.log("");
-    
+
     console.log("Type: Post");
     console.log("  Properties:");
     console.log("    id: uuid (required)");
@@ -314,17 +325,19 @@ export class ShellCommand {
 
   private toggleTiming(): void {
     if (!this.session) return;
-    
+
     this.session.timing_enabled = !this.session.timing_enabled;
-    console.log(`⏱️  Query timing is now ${this.session.timing_enabled ? "ON" : "OFF"}`);
+    console.log(
+      `⏱️  Query timing is now ${this.session.timing_enabled ? "ON" : "OFF"}`,
+    );
   }
 
   private showHistory(): void {
     if (!this.session) return;
-    
+
     console.log("📚 Command History:");
     console.log("");
-    
+
     if (this.session.history.length === 0) {
       console.log("  No commands in history");
     } else {
@@ -332,43 +345,43 @@ export class ShellCommand {
         console.log(`  ${i + 1}  ${cmd}`);
       });
     }
-    
+
     console.log("");
     console.log(`${this.session.history.length} commands in history`);
   }
 
   private async connectToDatabase(dbName: string): Promise<void> {
     if (!this.session) return;
-    
+
     console.log(`📡 Connecting to database '${dbName}'...`);
-    
+
     // TODO: Implement actual database connection
     // For now, just update session
     this.session.database = dbName;
-    
+
     console.log(`✅ Connected to database '${dbName}'`);
   }
 
   private async executeFile(filename: string): Promise<void> {
     if (!this.session) return;
-    
+
     try {
       console.log(`📖 Executing queries from ${filename}...`);
-      
+
       const content = await Deno.readTextFile(filename);
-      
+
       // Split into individual queries (rough implementation)
       const queries = content
-        .split(';')
-        .map(q => q.trim())
-        .filter(q => q.length > 0 && !q.startsWith('--'));
-      
+        .split(";")
+        .map((q) => q.trim())
+        .filter((q) => q.length > 0 && !q.startsWith("--"));
+
       console.log("");
-      
+
       for (let i = 0; i < queries.length; i++) {
         const query = queries[i];
         console.log(`Query ${i + 1}: ${query};`);
-        
+
         try {
           const result = await this.executeQuery(query);
           console.log(result.output);
@@ -376,11 +389,13 @@ export class ShellCommand {
         } catch (error) {
           console.error(`❌ Query ${i + 1} failed: ${error.message}`);
         }
-        
+
         console.log("");
       }
-      
-      console.log(`✅ File execution completed. ${queries.length} queries executed.`);
+
+      console.log(
+        `✅ File execution completed. ${queries.length} queries executed.`,
+      );
     } catch (error) {
       console.error(`❌ Failed to execute file: ${error.message}`);
     }

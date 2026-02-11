@@ -18,13 +18,13 @@ export class WatchCommand {
   private isWatching = false;
   private abortController?: AbortController;
   private debounceTimer?: number;
-  
+
   /**
    * Watch schema files for changes and trigger migrations/codegen
    */
   async execute(options: WatchOptions): Promise<void> {
     console.log("🔍 Watching schema files for changes...");
-    
+
     const schemaFile = options.schema_file || "./schema.esdl";
     const outputDir = options.output_dir || "./generated";
     const delayMs = options.delay_ms || 1000;
@@ -36,7 +36,9 @@ export class WatchCommand {
 
     try {
       // Verify schema file exists
-      const schemaExists = await Deno.stat(schemaFile).then(() => true).catch(() => false);
+      const schemaExists = await Deno.stat(schemaFile).then(() => true).catch(
+        () => false,
+      );
       if (!schemaExists) {
         console.log(`⚠️  Schema file not found: ${schemaFile}`);
         console.log("💡 Creating a basic schema file...");
@@ -69,36 +71,40 @@ export class WatchCommand {
     }
   }
 
-  private async startFileWatcher(schemaFile: string, outputDir: string, delayMs: number): Promise<void> {
+  private async startFileWatcher(
+    schemaFile: string,
+    outputDir: string,
+    delayMs: number,
+  ): Promise<void> {
     if (!this.abortController) {
       throw new Error("AbortController not initialized");
     }
 
     try {
       // Watch the directory containing the schema file
-      const schemaDir = schemaFile.includes('/') 
-        ? schemaFile.substring(0, schemaFile.lastIndexOf('/')) 
-        : '.';
+      const schemaDir = schemaFile.includes("/")
+        ? schemaFile.substring(0, schemaFile.lastIndexOf("/"))
+        : ".";
 
       const watcher = Deno.watchFs([schemaDir], {
-        recursive: false
+        recursive: false,
       });
 
       for await (const event of watcher) {
         if (!this.isWatching) break;
 
         // Check if this is our schema file
-        const changedFile = event.paths.find(path => path.endsWith('.esdl'));
+        const changedFile = event.paths.find((path) => path.endsWith(".esdl"));
         if (!changedFile) continue;
 
         const changeEvent: FileChangeEvent = {
           path: changedFile,
           type: this.getChangeType(event.kind),
-          timestamp: new Date()
+          timestamp: new Date(),
         };
 
         console.log(`📝 Detected ${changeEvent.type} in ${changeEvent.path}`);
-        
+
         // Debounce changes to avoid rapid rebuilds
         this.debounceSchemaChange(schemaFile, outputDir, delayMs);
       }
@@ -110,7 +116,11 @@ export class WatchCommand {
     }
   }
 
-  private debounceSchemaChange(schemaFile: string, outputDir: string, delayMs: number): void {
+  private debounceSchemaChange(
+    schemaFile: string,
+    outputDir: string,
+    delayMs: number,
+  ): void {
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
     }
@@ -124,17 +134,20 @@ export class WatchCommand {
     }, delayMs);
   }
 
-  private async processSchemaChanges(schemaFile: string, outputDir: string): Promise<void> {
+  private async processSchemaChanges(
+    schemaFile: string,
+    outputDir: string,
+  ): Promise<void> {
     console.log("🔄 Processing schema changes...");
-    
+
     try {
       // Check for migration changes
       const migrationNeeded = await this.checkMigrationNeeded(schemaFile);
-      
+
       if (migrationNeeded) {
         console.log("📋 Schema changes detected, creating migration...");
         await this.runMigration(schemaFile, true); // dry run first
-        
+
         console.log("💡 Review migration and run 'disc migrate' to apply");
       } else {
         console.log("✅ No migration needed");
@@ -143,7 +156,7 @@ export class WatchCommand {
       // Always regenerate types for development
       console.log("🔧 Regenerating TypeScript types...");
       await this.runCodegen(schemaFile, outputDir);
-      
+
       console.log("✅ Schema processing complete");
       console.log("");
     } catch (error) {
@@ -158,19 +171,22 @@ export class WatchCommand {
     // 1. Parse current schema
     // 2. Compare with last applied migration
     // 3. Return true if differences found
-    
+
     // For now, simulate check
     const random = Math.random();
     return random > 0.7; // 30% chance of migration needed for demo
   }
 
-  private async runMigration(schemaFile: string, dryRun = false): Promise<void> {
+  private async runMigration(
+    schemaFile: string,
+    dryRun = false,
+  ): Promise<void> {
     // TODO: Integrate with actual migration engine
     // For now, simulate migration command
-    
+
     const command = dryRun ? "disc migrate --create --dry-run" : "disc migrate";
     console.log(`   Running: ${command}`);
-    
+
     if (dryRun) {
       console.log("   📋 Migration plan created (dry run)");
     } else {
@@ -178,15 +194,18 @@ export class WatchCommand {
     }
   }
 
-  private async runCodegen(schemaFile: string, outputDir: string): Promise<void> {
+  private async runCodegen(
+    schemaFile: string,
+    outputDir: string,
+  ): Promise<void> {
     // TODO: Integrate with actual codegen engine
     // For now, simulate codegen command
-    
+
     console.log(`   Generating types to ${outputDir}...`);
-    
+
     // Create output directory if it doesn't exist
     await Deno.mkdir(outputDir, { recursive: true }).catch(() => {});
-    
+
     // Simulate type file generation
     const typesContent = `// Generated types from ${schemaFile}
 // Generated at ${new Date().toISOString()}
@@ -224,7 +243,7 @@ export interface DiscClient {
 };`;
 
     // Create directory if needed
-    const dir = schemaFile.substring(0, schemaFile.lastIndexOf('/'));
+    const dir = schemaFile.substring(0, schemaFile.lastIndexOf("/"));
     if (dir && dir !== schemaFile) {
       await Deno.mkdir(dir, { recursive: true }).catch(() => {});
     }
@@ -263,17 +282,17 @@ export interface DiscClient {
     if (!this.isWatching) return;
 
     console.log("\n🛑 Stopping file watcher...");
-    
+
     this.isWatching = false;
-    
+
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
     }
-    
+
     if (this.abortController) {
       this.abortController.abort();
     }
-    
+
     console.log("✅ File watcher stopped");
     Deno.exit(0);
   }
@@ -292,7 +311,7 @@ export interface DiscClient {
     return {
       watching: this.isWatching,
       files: [], // TODO: Track watched files
-      uptime: 0  // TODO: Track uptime
+      uptime: 0, // TODO: Track uptime
     };
   }
 }

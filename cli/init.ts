@@ -2,15 +2,24 @@
  * CLI Init Command Implementation - Project initialization functionality
  */
 
+import { PostgresManager } from "../postgres/mod.ts";
+
 export interface InitOptions {
   name: string;
   template?: "basic" | "minimal" | "full";
   database_url?: string;
   force?: boolean;
   directory?: string;
+  backend_dsn?: string; // External PostgreSQL DSN
+  skip_postgres?: boolean; // Skip PostgreSQL setup
 }
 
 export class InitCommand {
+  private postgresManager: PostgresManager;
+
+  constructor() {
+    this.postgresManager = new PostgresManager();
+  }
   /**
    * Initialize a new Disc project
    */
@@ -18,12 +27,14 @@ export class InitCommand {
     console.log("🚀 Initializing new Disc project...");
     console.log(`📁 Creating project: ${options.name}`);
 
-    const projectDir = options.directory 
+    const projectDir = options.directory
       ? `${options.directory}/${options.name}`
       : `./${options.name}`;
 
     // Check if directory exists
-    const exists = await Deno.stat(projectDir).then(() => true).catch(() => false);
+    const exists = await Deno.stat(projectDir).then(() => true).catch(() =>
+      false
+    );
     if (exists && !options.force) {
       console.error(`❌ Directory '${options.name}' already exists`);
       console.error("💡 Use --force to overwrite or choose a different name");
@@ -33,7 +44,9 @@ export class InitCommand {
     // Validate project name
     if (!this.isValidProjectName(options.name)) {
       console.error(`❌ Invalid project name: ${options.name}`);
-      console.error("💡 Project name must be lowercase letters, numbers, and hyphens only");
+      console.error(
+        "💡 Project name must be lowercase letters, numbers, and hyphens only",
+      );
       throw new Error(`Invalid project name: ${options.name}`);
     }
 
@@ -44,24 +57,40 @@ export class InitCommand {
       // Create files based on template
       await this.createProjectFiles(projectDir, options);
 
-      console.log("✅ Project initialized successfully!");
+      // Initialize PostgreSQL unless skipped or external DSN provided
+      if (!options.skip_postgres && !options.backend_dsn) {
+        console.log("\n📦 Setting up bundled PostgreSQL...");
+        await this.initializePostgres(options.name);
+      } else if (options.backend_dsn) {
+        console.log(`\n🔗 Using external PostgreSQL: ${options.backend_dsn}`);
+      }
+
+      console.log("\n✅ Project initialized successfully!");
       console.log(`💡 Next steps:`);
       console.log(`   cd ${options.name}`);
+      if (!options.skip_postgres && !options.backend_dsn) {
+        console.log(`   disc start  # Start PostgreSQL`);
+      }
       console.log(`   disc migrate`);
       console.log(`   disc serve`);
     } catch (error) {
-      console.error(`❌ Failed to initialize project: ${error.message}`);
+      console.error(`❌ Failed to initialize project: ${(error as Error).message}`);
       throw error;
     }
   }
 
   private isValidProjectName(name: string): boolean {
-    return /^[a-z0-9-]+$/.test(name) && !name.startsWith('-') && !name.endsWith('-');
+    return /^[a-z0-9-]+$/.test(name) && !name.startsWith("-") &&
+      !name.endsWith("-");
   }
 
-  private async createProjectFiles(projectDir: string, options: InitOptions): Promise<void> {
+  private async createProjectFiles(
+    projectDir: string,
+    options: InitOptions,
+  ): Promise<void> {
     const template = options.template || "basic";
-    const databaseUrl = options.database_url || "postgresql://localhost:5432/disc_dev";
+    const databaseUrl = options.database_url ||
+      "postgresql://localhost:5432/disc_dev";
 
     // Create schema.esdl
     await this.createSchemaFile(projectDir, template);
@@ -86,7 +115,10 @@ export class InitCommand {
     await Deno.writeTextFile(`${projectDir}/migrations/.gitkeep`, "");
   }
 
-  private async createSchemaFile(projectDir: string, template: string): Promise<void> {
+  private async createSchemaFile(
+    projectDir: string,
+    template: string,
+  ): Promise<void> {
     let schemaContent = "";
 
     switch (template) {
@@ -142,32 +174,38 @@ export class InitCommand {
     await Deno.writeTextFile(`${projectDir}/schema.esdl`, schemaContent);
   }
 
-  private async createDenoConfig(projectDir: string, projectName: string): Promise<void> {
+  private async createDenoConfig(
+    projectDir: string,
+    projectName: string,
+  ): Promise<void> {
     const denoConfig = {
       name: projectName,
       version: "0.1.0",
       exports: {
-        ".": "./mod.ts"
+        ".": "./mod.ts",
       },
       imports: {
-        "@disc/db": "jsr:@disc/db@*"
+        "@disc/db": "jsr:@disc/db@*",
       },
       tasks: {
         "serve": "disc serve",
         "migrate": "disc migrate",
         "codegen": "disc codegen",
         "dev": "disc watch",
-        "shell": "disc shell"
-      }
+        "shell": "disc shell",
+      },
     };
 
     await Deno.writeTextFile(
-      `${projectDir}/deno.json`, 
-      JSON.stringify(denoConfig, null, 2)
+      `${projectDir}/deno.json`,
+      JSON.stringify(denoConfig, null, 2),
     );
   }
 
-  private async createEnvFile(projectDir: string, databaseUrl: string): Promise<void> {
+  private async createEnvFile(
+    projectDir: string,
+    databaseUrl: string,
+  ): Promise<void> {
     const envContent = `# Disc Database Configuration
 DATABASE_URL=${databaseUrl}
 DISC_PORT=5656
@@ -213,9 +251,50 @@ Thumbs.db
     await Deno.writeTextFile(`${projectDir}/.gitignore`, gitignoreContent);
   }
 
-  private async createReadme(projectDir: string, projectName: string): Promise<void> {
-    const dbName = projectName.replace(/-/g, '_') + '_dev';
-    
+  private async initializePostgres(projectName: string): Promise<void> {
+    try {
+      console.log("📋 Creating PostgreSQL instance...");
+
+      // Create the PostgreSQL instance
+      const instance = await this.postgresManager.createInstance(projectName, {
+        port: 5432, // Default PostgreSQL port
+      });
+
+      console.log("✅ PostgreSQL instance created");
+      console.log(`📁 Data directory: ${instance.getDataDir()}`);
+      console.log(`🔗 Connection: ${instance.dsn()}`);
+
+      // Create disc.toml with project configuration
+      const configContent = `# Disc Project Configuration
+name = "${projectName}"
+version = "0.1.0"
+
+[database]
+# Managed PostgreSQL instance
+managed = true
+instance_name = "${projectName}"
+
+[server]
+port = 5656
+host = "localhost"
+`;
+
+      await Deno.writeTextFile("disc.toml", configContent);
+      console.log("📄 Created disc.toml configuration");
+    } catch (error) {
+      console.error(`⚠️  PostgreSQL setup failed: ${(error as Error).message}`);
+      console.log(
+        "💡 You can set up PostgreSQL manually later with 'disc start'",
+      );
+    }
+  }
+
+  private async createReadme(
+    projectDir: string,
+    projectName: string,
+  ): Promise<void> {
+    const dbName = projectName.replace(/-/g, "_") + "_dev";
+
     const readmeContent = `# ${projectName}
 
 A Disc database project.
@@ -262,7 +341,10 @@ Copy \`.env\` to \`.env.local\` and adjust settings for your environment.
     await Deno.writeTextFile(`${projectDir}/README.md`, readmeContent);
   }
 
-  private async createModuleFile(projectDir: string, projectName: string): Promise<void> {
+  private async createModuleFile(
+    projectDir: string,
+    projectName: string,
+  ): Promise<void> {
     const modContent = `// Main module for ${projectName}
 export * from "@disc/db";
 `;
