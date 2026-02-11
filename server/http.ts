@@ -235,11 +235,7 @@ export class HttpServer {
           ? this.stats.total_duration_ms / this.stats.total_requests 
           : 0,
       },
-      transactions: {
-        active: this.transaction_manager.get_active_transactions().length,
-        committed: 0, // TODO: Track from real implementation
-        rolled_back: 0, // TODO: Track from real implementation
-      },
+      transactions: this.transaction_manager.get_stats(),
       memory_usage: this.get_memory_stats(),
       uptime_ms: Date.now() - this.start_time.getTime(),
       subscriptions: subscription_stats,

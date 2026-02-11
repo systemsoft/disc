@@ -156,6 +156,10 @@ export class ConnectionManager implements Types.ConnectionManager {
 export class TransactionManager implements Types.TransactionManager {
   private transactions = new Map<string, Types.Transaction>();
   private transaction_timeout_ms: number;
+  private stats = {
+    committed: 0,
+    rolled_back: 0,
+  };
 
   constructor(transaction_timeout_ms = 10 * 60 * 1000) { // 10 minutes default
     this.transaction_timeout_ms = transaction_timeout_ms;
@@ -193,6 +197,7 @@ export class TransactionManager implements Types.TransactionManager {
     // In a real implementation, this would execute COMMIT on PostgreSQL
     // For now, we'll simulate successful commit
     this.transactions.delete(id);
+    this.stats.committed++;
   }
 
   async rollback_transaction(id: string): Promise<void> {
@@ -204,6 +209,7 @@ export class TransactionManager implements Types.TransactionManager {
     // In a real implementation, this would execute ROLLBACK on PostgreSQL
     // For now, we'll simulate successful rollback
     this.transactions.delete(id);
+    this.stats.rolled_back++;
   }
 
   cleanup_abandoned_transactions(): number {
@@ -226,6 +232,14 @@ export class TransactionManager implements Types.TransactionManager {
 
   get_active_transactions(): Types.Transaction[] {
     return Array.from(this.transactions.values());
+  }
+
+  get_stats() {
+    return {
+      active: this.transactions.size,
+      committed: this.stats.committed,
+      rolled_back: this.stats.rolled_back,
+    };
   }
 
   private generate_transaction_id(): string {

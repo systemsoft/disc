@@ -309,7 +309,7 @@ export class TypeScriptGenerator {
     content += `\n`;
 
     // Constructor
-    content += `  constructor(config: DiscClientConfig = {}) {\n`;
+    content += `  constructor(config: DiscClientConfig = {}, options?: { transactionId?: string }) {\n`;
     content += `    const host = config.host || "localhost";\n`;
     content += `    const port = config.port || 5656;\n`;
     content += `    const protocol = config.protocol || "http";\n`;
@@ -318,7 +318,12 @@ export class TypeScriptGenerator {
     content += `    this.headers = {\n`;
     content += `      "Content-Type": "application/json",\n`;
     content += `      ...config.headers,\n`;
-    content += `    };\n\n`;
+    content += `    };\n`;
+    content += `    \n`;
+    content += `    // Add transaction ID to headers if provided\n`;
+    content += `    if (options?.transactionId) {\n`;
+    content += `      this.headers['X-Transaction-ID'] = options.transactionId;\n`;
+    content += `    }\n\n`;
 
     // Initialize query builders
     for (const [typeName] of this.schema.types) {
@@ -350,10 +355,76 @@ export class TypeScriptGenerator {
 
     // Transaction support
     content += `  /** Execute queries in transaction */\n`;
-    content += `  async transaction<T>(queries: (client: DiscClient) => Promise<T>): Promise<T> {\n`;
-    content += `    // TODO: Implement transaction support\n`;
-    content += `    // For now, just execute the queries directly\n`;
-    content += `    return await queries(this);\n`;
+    content += `  async transaction<T>(fn: (client: DiscClient) => Promise<T>): Promise<T> {\n`;
+    content += `    // Start transaction\n`;
+    content += `    const txId = await this.beginTransaction();\n`;
+    content += `    \n`;
+    content += `    try {\n`;
+    content += `      // Create a new client instance with transaction context\n`;
+    content += `      const txClient = new DiscClient(this.baseUrl, { transactionId: txId });\n`;
+    content += `      \n`;
+    content += `      // Execute the function with transaction client\n`;
+    content += `      const result = await fn(txClient);\n`;
+    content += `      \n`;
+    content += `      // Commit transaction\n`;
+    content += `      await this.commitTransaction(txId);\n`;
+    content += `      \n`;
+    content += `      return result;\n`;
+    content += `    } catch (error) {\n`;
+    content += `      // Rollback transaction on error\n`;
+    content += `      await this.rollbackTransaction(txId);\n`;
+    content += `      throw error;\n`;
+    content += `    }\n`;
+    content += `  }\n\n`;
+    
+    // Add transaction management methods
+    content += `  /** Begin a new transaction */\n`;
+    content += `  private async beginTransaction(): Promise<string> {\n`;
+    content += `    const response = await fetch(\`\${this.baseUrl}/transaction/begin\`, {\n`;
+    content += `      method: 'POST',\n`;
+    content += `      headers: {\n`;
+    content += `        'Content-Type': 'application/json',\n`;
+    content += `      },\n`;
+    content += `    });\n`;
+    content += `    \n`;
+    content += `    if (!response.ok) {\n`;
+    content += `      throw new Error(\`Failed to begin transaction: \${response.statusText}\`);\n`;
+    content += `    }\n`;
+    content += `    \n`;
+    content += `    const result = await response.json();\n`;
+    content += `    return result.transactionId;\n`;
+    content += `  }\n\n`;
+    
+    content += `  /** Commit a transaction */\n`;
+    content += `  private async commitTransaction(txId: string): Promise<void> {\n`;
+    content += `    const response = await fetch(\`\${this.baseUrl}/transaction/\${txId}/commit\`, {\n`;
+    content += `      method: 'POST',\n`;
+    content += `      headers: {\n`;
+    content += `        'Content-Type': 'application/json',\n`;
+    content += `      },\n`;
+    content += `    });\n`;
+    content += `    \n`;
+    content += `    if (!response.ok) {\n`;
+    content += `      throw new Error(\`Failed to commit transaction: \${response.statusText}\`);\n`;
+    content += `    }\n`;
+    content += `  }\n\n`;
+    
+    content += `  /** Rollback a transaction */\n`;
+    content += `  private async rollbackTransaction(txId: string): Promise<void> {\n`;
+    content += `    try {\n`;
+    content += `      const response = await fetch(\`\${this.baseUrl}/transaction/\${txId}/rollback\`, {\n`;
+    content += `        method: 'POST',\n`;
+    content += `        headers: {\n`;
+    content += `          'Content-Type': 'application/json',\n`;
+    content += `        },\n`;
+    content += `      });\n`;
+    content += `      \n`;
+    content += `      if (!response.ok) {\n`;
+    content += `        console.error(\`Failed to rollback transaction: \${response.statusText}\`);\n`;
+    content += `      }\n`;
+    content += `    } catch (error) {\n`;
+    content += `      console.error('Error during transaction rollback:', error);\n`;
+    content += `    }\n`;
     content += `  }\n\n`;
 
     // Health check
