@@ -24,6 +24,7 @@ COMMANDS:
   shell         Open interactive EdgeQL REPL
   codegen       Generate TypeScript types from schema
   serve         Start the Disc server (includes PostgreSQL)
+  ui            Open admin UI in browser
   watch         Watch schema files and auto-migrate in dev
 
 OPTIONS:
@@ -185,6 +186,11 @@ async function main() {
 
       case "status": {
         await commands.status(args);
+        break;
+      }
+
+      case "ui": {
+        await commands.ui(args);
         break;
       }
 

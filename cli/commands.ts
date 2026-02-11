@@ -320,6 +320,32 @@ export class CLICommands {
   }
 
   /**
+   * Open the admin UI in browser
+   */
+  async ui(args: CLIArgs): Promise<void> {
+    const port = args.port || 5656;
+    console.log(`🌐 Opening Disc Admin UI...`);
+    
+    try {
+      // Import the UI server module
+      const { uiServer } = await import("../ui/server-integration.ts");
+      
+      // Check if UI is built
+      const isBuilt = await uiServer.isBuilt();
+      if (!isBuilt) {
+        console.error("❌ UI not built. Please run:");
+        console.error("   cd ui && npm install && npm run build");
+        return;
+      }
+      
+      // Open in browser
+      await uiServer.openInBrowser(port);
+    } catch (error) {
+      console.error(`❌ Failed to open UI: ${(error as Error).message}`);
+    }
+  }
+
+  /**
    * Restart PostgreSQL instance
    */
   async restart(args: CLIArgs): Promise<void> {

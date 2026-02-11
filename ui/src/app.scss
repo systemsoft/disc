@@ -1,0 +1,209 @@
+@import './styles/variables.scss';
+
+// Reset and base styles
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  height: 100%;
+  font-size: 16px;
+}
+
+body {
+  height: 100%;
+  font-family: $font-base;
+  background: $color-background;
+  color: $color-text;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+
+  // Subtle grid pattern background
+  &::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    @include grid-lines();
+    pointer-events: none;
+    opacity: 0.3;
+    z-index: -1;
+  }
+}
+
+// Typography
+h1, h2, h3, h4, h5, h6 {
+  font-family: $font-display;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  @include neon-text($color-primary);
+}
+
+h1 { font-size: 2rem; }
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.25rem; }
+h4 { font-size: 1rem; }
+h5 { font-size: 0.875rem; }
+h6 { font-size: 0.75rem; }
+
+code, pre {
+  font-family: $font-mono;
+  font-size: 0.875rem;
+}
+
+// Links
+a {
+  color: $color-primary;
+  text-decoration: none;
+  transition: color $transition-fast;
+
+  &:hover {
+    color: lighten($color-primary, 10%);
+    text-shadow: 0 0 10px rgba($color-primary, 0.8);
+  }
+}
+
+// Buttons
+button, .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: $grid-unit * 1.5 $grid-unit * 3;
+  font-family: $font-mono;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: transparent;
+  color: $color-primary;
+  border: 1px solid $color-primary;
+  border-radius: $border-radius;
+  cursor: pointer;
+  transition: all $transition-fast;
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    background: rgba($color-primary, 0.2);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    transition: width $transition-base, height $transition-base;
+  }
+
+  &:hover {
+    @include glow($color-primary, 0.5);
+
+    &::before {
+      width: 100%;
+      height: 100%;
+      border-radius: $border-radius;
+    }
+  }
+
+  &:active {
+    transform: translateY(1px);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &.primary {
+    background: $color-primary;
+    color: $color-background;
+
+    &:hover {
+      background: lighten($color-primary, 10%);
+    }
+  }
+
+  &.danger {
+    color: $color-danger;
+    border-color: $color-danger;
+
+    &:hover {
+      @include glow($color-danger, 0.5);
+    }
+  }
+}
+
+// Forms
+input, textarea, select {
+  padding: $grid-unit * 1.5;
+  font-family: $font-mono;
+  font-size: 0.875rem;
+  background: $color-surface;
+  color: $color-text;
+  border: 1px solid $color-border;
+  border-radius: $border-radius;
+  transition: all $transition-fast;
+
+  &:focus {
+    outline: none;
+    border-color: $color-primary;
+    @include glow($color-primary, 0.3);
+  }
+
+  &::placeholder {
+    color: $color-text-dim;
+  }
+}
+
+// Scrollbars
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: $color-background-dark;
+}
+
+::-webkit-scrollbar-thumb {
+  background: $color-border;
+  border-radius: $border-radius;
+
+  &:hover {
+    background: $color-primary;
+  }
+}
+
+// Utilities
+.container {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 $grid-unit * 2;
+}
+
+.grid {
+  display: grid;
+  gap: $grid-unit * 2;
+}
+
+.flex {
+  display: flex;
+  gap: $grid-unit * 2;
+}
+
+.text-dim {
+  color: $color-text-dim;
+}
+
+.text-mono {
+  font-family: $font-mono;
+}
