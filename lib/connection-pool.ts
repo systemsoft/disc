@@ -399,7 +399,7 @@ export class ConnectionPool {
   }
 
   private generateConnectionId(): string {
-    return `pool_conn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `pool_conn_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   }
 }
 

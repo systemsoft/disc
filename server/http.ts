@@ -39,7 +39,7 @@ export class HttpServer {
 
   async start(): Promise<void> {
     console.log(`🚀 Starting Disc HTTP server on ${this.config.host}:${this.config.port}`);
-    
+
     const handler = (request: Request, info: Deno.ServeHandlerInfo): Response | Promise<Response> => {
       return this.handle_request(request, info);
     };
@@ -71,7 +71,7 @@ export class HttpServer {
   private async handle_request(request: Request, info: Deno.ServeHandlerInfo): Promise<Response> {
     const start_time = Date.now();
     const request_id = this.generate_request_id();
-    
+
     try {
       this.stats.total_requests++;
 
@@ -87,7 +87,7 @@ export class HttpServer {
 
       // Handle regular HTTP requests
       const url = new URL(request.url);
-      
+
       // Route handling
       switch (url.pathname) {
         case "/":
@@ -131,8 +131,8 @@ export class HttpServer {
   }
 
   private async handle_query(
-    request: Request, 
-    info: Deno.ServeHandlerInfo, 
+    request: Request,
+    info: Deno.ServeHandlerInfo,
     request_id: string
   ): Promise<Response> {
     if (request.method !== "POST") {
@@ -181,10 +181,10 @@ export class HttpServer {
 
       // Execute query
       const response = await this.protocol_handler.handle_request(query_request, context);
-      
+
       // Update session activity
       this.session_manager.update_activity(connection.session.session_id);
-      
+
       this.stats.successful_requests++;
 
       return new Response(JSON.stringify(response), {
@@ -193,7 +193,7 @@ export class HttpServer {
 
     } catch (error) {
       console.error(`Query execution failed for request ${request_id}:`, error);
-      
+
       const error_response: Types.QueryResponse = {
         errors: [{
           message: "Internal server error",
@@ -224,15 +224,15 @@ export class HttpServer {
 
   private handle_stats(): Response {
     const subscription_stats = this.subscription_handler.get_subscription_stats();
-    
+
     const stats: Types.ServerStats & { subscriptions: typeof subscription_stats } = {
       connections: this.connection_manager.get_stats(),
       queries: {
         total: this.stats.total_requests,
         successful: this.stats.successful_requests,
         failed: this.stats.failed_requests,
-        avg_duration_ms: this.stats.total_requests > 0 
-          ? this.stats.total_duration_ms / this.stats.total_requests 
+        avg_duration_ms: this.stats.total_requests > 0
+          ? this.stats.total_duration_ms / this.stats.total_requests
           : 0,
       },
       transactions: this.transaction_manager.get_stats(),
@@ -262,7 +262,7 @@ export class HttpServer {
 
   private handle_websocket_upgrade(request: Request, info: Deno.ServeHandlerInfo): Response {
     const { socket, response } = Deno.upgradeWebSocket(request);
-    
+
     const remote_addr = "hostname" in info.remoteAddr ? info.remoteAddr.hostname : "unknown";
     const connection = this.connection_manager.create_connection(
       "websocket",
@@ -302,8 +302,8 @@ export class HttpServer {
   }
 
   private async handle_websocket_message(
-    socket: WebSocket, 
-    connection: Types.Connection, 
+    socket: WebSocket,
+    connection: Types.Connection,
     message: any
   ): Promise<void> {
     const { type, payload } = message;
@@ -381,7 +381,7 @@ export class HttpServer {
   private get_default_headers(content_type: string): Headers {
     const headers = new Headers();
     headers.set("Content-Type", content_type);
-    
+
     if (this.config.enable_cors) {
       headers.set("Access-Control-Allow-Origin", "*"); // TODO: Use config origins
       headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -424,7 +424,7 @@ export class HttpServer {
 
     return {
       name: "unknown",
-      version: "unknown", 
+      version: "unknown",
       library: "http",
     };
   }
@@ -465,6 +465,6 @@ export class HttpServer {
   }
 
   private generate_request_id(): string {
-    return `req_${Date.now()}_${Math.random().toString(36).substr(2, 8)}`;
+    return `req_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
   }
 }

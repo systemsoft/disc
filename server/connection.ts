@@ -15,7 +15,7 @@ export class SessionManager implements Types.SessionManager {
   create_session(database: string): Types.SessionContext {
     const session_id = this.generate_session_id();
     const now = new Date();
-    
+
     const session: Types.SessionContext = {
       session_id,
       database,
@@ -66,7 +66,7 @@ export class SessionManager implements Types.SessionManager {
   }
 
   private generate_session_id(): string {
-    return `sess_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `sess_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   }
 }
 
@@ -79,13 +79,13 @@ export class ConnectionManager implements Types.ConnectionManager {
   }
 
   create_connection(
-    type: Types.Connection["type"], 
+    type: Types.Connection["type"],
     remote_addr: string,
     session?: Types.SessionContext,
     user_agent?: string
   ): Types.Connection {
     const connection_id = this.generate_connection_id();
-    
+
     // Create a default session if none provided
     const conn_session = session || {
       session_id: this.generate_connection_id(),
@@ -149,7 +149,7 @@ export class ConnectionManager implements Types.ConnectionManager {
   }
 
   private generate_connection_id(): string {
-    return `conn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `conn_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   }
 }
 
@@ -166,11 +166,11 @@ export class TransactionManager implements Types.TransactionManager {
   }
 
   begin_transaction(
-    session_id: string, 
+    session_id: string,
     options: Partial<Types.Transaction> = {}
   ): Types.Transaction {
     const transaction_id = this.generate_transaction_id();
-    
+
     const transaction: Types.Transaction = {
       id: transaction_id,
       session_id,
@@ -243,6 +243,6 @@ export class TransactionManager implements Types.TransactionManager {
   }
 
   private generate_transaction_id(): string {
-    return `txn_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return `txn_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   }
 }
