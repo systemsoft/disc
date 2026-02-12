@@ -418,7 +418,7 @@ disc serve --no-ui         # Start server without bundling UI assets
 curl -fsSL https://deno.land/install.sh | sh
 
 # Clone and setup
-git clone https://github.com/nickel/disc.git
+git clone https://github.com/systemsoft/disc.git
 cd disc
 
 # Run tests
