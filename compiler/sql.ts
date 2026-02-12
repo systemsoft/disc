@@ -139,6 +139,12 @@ export interface ParameterReference extends SQLExpressionBase {
   index: number;
 }
 
+// Raw SQL expression for complex access control conditions
+export interface RawSQLExpression extends SQLExpressionBase {
+  kind: "RawSQLExpression";
+  sql: string;
+}
+
 // Discriminated union of all SQL expression types
 export type SQLExpression = 
   | ColumnReference
@@ -150,7 +156,8 @@ export type SQLExpression =
   | CaseExpression
   | JsonBuildObject
   | JsonAgg
-  | ParameterReference;
+  | ParameterReference
+  | RawSQLExpression;
 
 export interface ColumnReference extends SQLExpressionBase {
   kind: "ColumnReference";

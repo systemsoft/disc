@@ -222,6 +222,8 @@ export class SQLCodeGenerator {
         return this.generateJsonAgg(expr);
       case "ParameterReference":
         return this.generateParameterReference(expr);
+      case "RawSQLExpression":
+        return this.generateRawSQLExpression(expr);
       default: {
         const _exhaustive: never = expr;
         throw new Error(`Unsupported expression type: ${(expr as any).kind}`);
@@ -317,6 +319,11 @@ export class SQLCodeGenerator {
 
   private generateParameterReference(expr: SQL.ParameterReference): string {
     return `$${expr.index}`;
+  }
+  
+  private generateRawSQLExpression(expr: SQL.RawSQLExpression): string {
+    // Raw SQL is injected as-is (be careful with this!)
+    return expr.sql;
   }
 
   private needsParentheses(expr: SQL.SQLExpression): boolean {

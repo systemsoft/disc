@@ -8,17 +8,73 @@ import * as SQL from "./sql.ts";
 import * as Context from "./context.ts";
 import { Result, Ok, Err } from "../lib/result.ts";
 import { CompilationError } from "../lib/errors.ts";
+import { 
+  AccessEvaluator, 
+  AccessSQLInjector,
+  AccessContext,
+  AccessConfig,
+  AccessPolicy
+} from "../access/mod.ts";
+
+export interface CompilerOptions {
+  enableAccessControl?: boolean;
+  accessConfig?: AccessConfig;
+  accessContext?: AccessContext;
+}
 
 export class EdgeQLCompiler {
   private ctx: Context.CompilationContext;
+  private accessEvaluator?: AccessEvaluator;
+  private accessInjector?: AccessSQLInjector;
+  private accessContext: AccessContext;
+  private enableAccessControl: boolean;
 
-  constructor(schema: Context.Schema) {
+  constructor(schema: Context.Schema, options?: CompilerOptions) {
     this.ctx = Context.createContext(schema);
+    
+    // Access control is enabled by default
+    this.enableAccessControl = options?.enableAccessControl !== false;
+    this.accessContext = options?.accessContext || {};
+    
+    if (this.enableAccessControl) {
+      // Initialize access control with default permissive config
+      const config = options?.accessConfig || {
+        mode: "permissive",
+        defaultAllow: true,
+        enableRLS: true,
+        enableAudit: false,
+      };
+      
+      this.accessEvaluator = new AccessEvaluator(config);
+      this.accessInjector = new AccessSQLInjector(this.accessEvaluator);
+    }
+  }
+  
+  /**
+   * Register an access policy (only works if access control is enabled)
+   */
+  registerAccessPolicy(policy: AccessPolicy): void {
+    if (this.accessEvaluator) {
+      this.accessEvaluator.registerPolicy(policy);
+    }
+  }
+  
+  /**
+   * Set the access context for the current compilation
+   */
+  setAccessContext(context: AccessContext): void {
+    this.accessContext = context;
   }
 
   compile(query: EdgeQLAST.Query): Result<SQL.SQLStatement, CompilationError> {
     try {
-      const statement = this.compileQuery(query);
+      let statement = this.compileQuery(query);
+      
+      // Apply access control if enabled
+      if (this.enableAccessControl && this.accessEvaluator && this.accessInjector) {
+        statement = this.applyAccessControl(statement, query);
+      }
+      
       return Ok(statement);
     } catch (error) {
       if (error instanceof CompilationError) {
@@ -26,6 +82,248 @@ export class EdgeQLCompiler {
       }
       return Err(new CompilationError(`Compilation failed: ${error instanceof Error ? error.message : String(error)}`));
     }
+  }
+  
+  private applyAccessControl(
+    statement: SQL.SQLStatement,
+    query: EdgeQLAST.Query
+  ): SQL.SQLStatement {
+    if (!this.accessEvaluator || !this.accessInjector) {
+      return statement;
+    }
+    
+    // Determine the object type being accessed
+    const objectType = this.extractObjectType(query);
+    if (!objectType) {
+      return statement; // No type identified, return as-is
+    }
+
+    // Get the table name for the type
+    const typeDef = this.ctx.schema.types.get(objectType);
+    if (!typeDef) {
+      return statement; // Type not found in schema
+    }
+
+    const tableName = typeDef.tableName;
+
+    // Apply access control based on statement type
+    switch (statement.kind) {
+      case "SelectStatement": {
+        // Check if access is allowed and inject conditions
+        const decision = this.accessEvaluator.evaluate(objectType, "select", this.accessContext);
+        
+        if (!decision.allowed) {
+          // Block access entirely with WHERE FALSE
+          const falseCondition: SQL.SQLExpression = {
+            kind: "LiteralExpression",
+            type: "boolean",
+            value: false,
+          };
+          
+          return {
+            ...statement,
+            where: {
+              kind: "WhereClause",
+              condition: falseCondition,
+            },
+          };
+        }
+        
+        if (decision.sqlConditions && decision.sqlConditions.length > 0) {
+          // Inject access conditions
+          const accessConditions = this.parseAccessConditions(decision.sqlConditions);
+          if (accessConditions) {
+            if (statement.where) {
+              // Combine with existing WHERE clause
+              const combinedCondition: SQL.BinaryExpression = {
+                kind: "BinaryExpression",
+                operator: "AND",
+                left: accessConditions,
+                right: statement.where.condition,
+              };
+              
+              return {
+                ...statement,
+                where: {
+                  kind: "WhereClause",
+                  condition: combinedCondition,
+                },
+              };
+            } else {
+              // Add new WHERE clause
+              return {
+                ...statement,
+                where: {
+                  kind: "WhereClause",
+                  condition: accessConditions,
+                },
+              };
+            }
+          }
+        }
+        
+        return statement;
+      }
+      
+      case "InsertStatement": {
+        // Check if INSERT is allowed
+        const decision = this.accessEvaluator.evaluate(objectType, "insert", this.accessContext);
+        if (!decision.allowed) {
+          throw new CompilationError(`INSERT not allowed on ${objectType}: ${decision.reason}`);
+        }
+        return statement;
+      }
+      
+      case "UpdateStatement": {
+        // Check if UPDATE is allowed and inject conditions
+        const decision = this.accessEvaluator.evaluate(objectType, "update", this.accessContext);
+        if (!decision.allowed) {
+          throw new CompilationError(`UPDATE not allowed on ${objectType}: ${decision.reason}`);
+        }
+        
+        if (decision.sqlConditions && decision.sqlConditions.length > 0) {
+          const accessConditions = this.parseAccessConditions(decision.sqlConditions);
+          if (accessConditions) {
+            if (statement.where) {
+              // Combine with existing WHERE clause
+              const combinedCondition: SQL.BinaryExpression = {
+                kind: "BinaryExpression",
+                operator: "AND",
+                left: accessConditions,
+                right: statement.where.condition,
+              };
+              
+              return {
+                ...statement,
+                where: {
+                  kind: "WhereClause",
+                  condition: combinedCondition,
+                },
+              };
+            } else {
+              // Add new WHERE clause
+              return {
+                ...statement,
+                where: {
+                  kind: "WhereClause",
+                  condition: accessConditions,
+                },
+              };
+            }
+          }
+        }
+        
+        return statement;
+      }
+      
+      case "DeleteStatement": {
+        // Check if DELETE is allowed and inject conditions
+        const decision = this.accessEvaluator.evaluate(objectType, "delete", this.accessContext);
+        if (!decision.allowed) {
+          throw new CompilationError(`DELETE not allowed on ${objectType}: ${decision.reason}`);
+        }
+        
+        if (decision.sqlConditions && decision.sqlConditions.length > 0) {
+          const accessConditions = this.parseAccessConditions(decision.sqlConditions);
+          if (accessConditions) {
+            if (statement.where) {
+              // Combine with existing WHERE clause
+              const combinedCondition: SQL.BinaryExpression = {
+                kind: "BinaryExpression",
+                operator: "AND",
+                left: accessConditions,
+                right: statement.where.condition,
+              };
+              
+              return {
+                ...statement,
+                where: {
+                  kind: "WhereClause",
+                  condition: combinedCondition,
+                },
+              };
+            } else {
+              // Add new WHERE clause
+              return {
+                ...statement,
+                where: {
+                  kind: "WhereClause",
+                  condition: accessConditions,
+                },
+              };
+            }
+          }
+        }
+        
+        return statement;
+      }
+      
+      default:
+        return statement;
+    }
+  }
+  
+  private extractObjectType(query: EdgeQLAST.Query): string | undefined {
+    switch (query.kind) {
+      case "SelectQuery":
+        // Extract type from the expression
+        if (query.expr?.kind === "TypeReference") {
+          return query.expr.name;
+        } else if (query.expr?.kind === "TypeName") {
+          // Handle TypeName expressions
+          return query.expr.name.parts.join(".");
+        } else if (query.expr?.kind === "Path") {
+          // Handle path expressions that start with a type
+          const firstStep = query.expr.steps[0];
+          if (typeof firstStep === "string") {
+            return firstStep;
+          }
+        }
+        break;
+      case "InsertQuery":
+        return query.type;
+      case "UpdateQuery":
+        // UpdateQuery has expr field
+        if (query.expr?.kind === "TypeReference") {
+          return query.expr.name;
+        } else if (query.expr?.kind === "TypeName") {
+          return query.expr.name.parts.join(".");
+        }
+        break;
+      case "DeleteQuery":
+        // DeleteQuery has expr field  
+        if (query.expr?.kind === "TypeReference") {
+          return query.expr.name;
+        } else if (query.expr?.kind === "TypeName") {
+          return query.expr.name.parts.join(".");
+        }
+        break;
+    }
+    return undefined;
+  }
+  
+  private parseAccessConditions(sqlConditions: string[]): SQL.SQLExpression | null {
+    if (sqlConditions.length === 0) return null;
+    
+    // For now, create raw SQL expressions
+    // In a production system, we'd parse these properly
+    const conditions = sqlConditions.map(sql => ({
+      kind: "RawSQLExpression" as const,
+      sql: sql,
+    }));
+    
+    if (conditions.length === 1) {
+      return conditions[0];
+    }
+    
+    // Combine multiple conditions with OR (permissive mode)
+    // In restrictive mode we'd use AND, but that's handled by the evaluator
+    return conditions.reduce<SQL.SQLExpression>((acc, cond) => ({
+      kind: "BinaryExpression",
+      operator: "OR",
+      left: acc,
+      right: cond,
+    }));
   }
 
   private compileQuery(query: EdgeQLAST.Query): SQL.SQLStatement {
