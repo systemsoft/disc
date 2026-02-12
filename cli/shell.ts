@@ -2,7 +2,7 @@
  * CLI Shell Command Implementation - Interactive EdgeQL REPL
  */
 
-import { readLines } from "@std/io/read-lines.ts";
+import { TextLineStream } from "jsr:@std/streams/text-line-stream";
 import { DatabaseConnection } from "../lib/database.ts";
 import { PostgresManager } from "../postgres/manager.ts";
 import { join } from "@std/path";
@@ -179,8 +179,12 @@ export class DiscShell {
     // Show initial prompt
     await Deno.stdout.write(new TextEncoder().encode("disc> "));
 
-    // Start REPL loop
-    for await (const line of readLines(Deno.stdin)) {
+    // Start REPL loop - using modern Deno streams
+    const reader = Deno.stdin.readable
+      .pipeThrough(new TextDecoderStream())
+      .pipeThrough(new TextLineStream());
+
+    for await (const line of reader) {
       try {
         const result = await this.processInput(line);
         if (result === "quit") {

@@ -128,47 +128,67 @@ export interface DeleteStatement extends SQLNode {
   returning?: SelectItem[];
 }
 
-export interface SQLExpression extends SQLNode {
+// Base interface for SQL expressions
+export interface SQLExpressionBase extends SQLNode {
   kind: string;
 }
 
-export interface ColumnReference extends SQLExpression {
+// Parameter reference for prepared statements
+export interface ParameterReference extends SQLExpressionBase {
+  kind: "ParameterReference";
+  index: number;
+}
+
+// Discriminated union of all SQL expression types
+export type SQLExpression = 
+  | ColumnReference
+  | LiteralExpression
+  | BinaryExpression
+  | UnaryExpression
+  | FunctionCall
+  | SubqueryExpression
+  | CaseExpression
+  | JsonBuildObject
+  | JsonAgg
+  | ParameterReference;
+
+export interface ColumnReference extends SQLExpressionBase {
   kind: "ColumnReference";
   table?: string;
   column: string;
 }
 
-export interface LiteralExpression extends SQLExpression {
+export interface LiteralExpression extends SQLExpressionBase {
   kind: "LiteralExpression";
   type: "string" | "number" | "boolean" | "null";
   value: any;
 }
 
-export interface BinaryExpression extends SQLExpression {
+export interface BinaryExpression extends SQLExpressionBase {
   kind: "BinaryExpression";
   operator: string;
   left: SQLExpression;
   right: SQLExpression;
 }
 
-export interface UnaryExpression extends SQLExpression {
+export interface UnaryExpression extends SQLExpressionBase {
   kind: "UnaryExpression";
   operator: string;
   operand: SQLExpression;
 }
 
-export interface FunctionCall extends SQLExpression {
+export interface FunctionCall extends SQLExpressionBase {
   kind: "FunctionCall";
   name: string;
   args: SQLExpression[];
 }
 
-export interface SubqueryExpression extends SQLExpression {
+export interface SubqueryExpression extends SQLExpressionBase {
   kind: "SubqueryExpression";
   query: SelectStatement;
 }
 
-export interface CaseExpression extends SQLExpression {
+export interface CaseExpression extends SQLExpressionBase {
   kind: "CaseExpression";
   when: WhenClause[];
   else?: SQLExpression;
@@ -180,7 +200,7 @@ export interface WhenClause extends SQLNode {
   then: SQLExpression;
 }
 
-export interface JsonBuildObject extends SQLExpression {
+export interface JsonBuildObject extends SQLExpressionBase {
   kind: "JsonBuildObject";
   fields: JsonField[];
 }
@@ -191,7 +211,7 @@ export interface JsonField extends SQLNode {
   value: SQLExpression;
 }
 
-export interface JsonAgg extends SQLExpression {
+export interface JsonAgg extends SQLExpressionBase {
   kind: "JsonAgg";
   expression: SQLExpression;
 }
@@ -296,5 +316,42 @@ export function createJsonField(key: string, value: SQLExpression): JsonField {
     kind: "JsonField",
     key,
     value,
+  };
+}
+
+export function createJsonAgg(expression: SQLExpression): JsonAgg {
+  return {
+    kind: "JsonAgg",
+    expression,
+  };
+}
+
+export function createParameterReference(index: number): ParameterReference {
+  return {
+    kind: "ParameterReference",
+    index,
+  };
+}
+
+export function createSubqueryExpression(query: SelectStatement): SubqueryExpression {
+  return {
+    kind: "SubqueryExpression",
+    query,
+  };
+}
+
+export function createCaseExpression(when: WhenClause[], elseExpr?: SQLExpression): CaseExpression {
+  return {
+    kind: "CaseExpression",
+    when,
+    else: elseExpr,
+  };
+}
+
+export function createWhenClause(condition: SQLExpression, then: SQLExpression): WhenClause {
+  return {
+    kind: "WhenClause",
+    condition,
+    then,
   };
 }

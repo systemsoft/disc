@@ -24,7 +24,7 @@ export class EdgeQLCompiler {
       if (error instanceof CompilationError) {
         return Err(error);
       }
-      return Err(new CompilationError(`Compilation failed: ${error.message}`));
+      return Err(new CompilationError(`Compilation failed: ${error instanceof Error ? error.message : String(error)}`));
     }
   }
 
@@ -67,7 +67,7 @@ export class EdgeQLCompiler {
         const items = query.orderBy.map((item) => ({
           kind: "OrderByItem" as const,
           expression: this.compileExpression(item.expr),
-          direction: item.direction,
+          direction: item.direction || "ASC" as "ASC" | "DESC",
         }));
         orderByClause = { kind: "OrderByClause", items };
       }
@@ -297,7 +297,7 @@ export class EdgeQLCompiler {
     const right = this.compileExpression(binOp.right);
 
     // Map EdgeQL operators to SQL operators
-    let sqlOp = binOp.op;
+    let sqlOp: string = binOp.op;
     switch (binOp.op) {
       case "++":
         sqlOp = "||"; // String concatenation in PostgreSQL
@@ -335,10 +335,8 @@ export class EdgeQLCompiler {
 
   private compileParameter(param: EdgeQLAST.Parameter): SQL.SQLExpression {
     // Parameters are placeholders that will be filled in at execution time
-    return {
-      kind: "ParameterReference",
-      name: param.name,
-    } as SQL.SQLExpression;
+    // Use parameter name as index for now (could be improved with proper parameter indexing)
+    return SQL.createParameterReference(parseInt(param.name) || 1);
   }
 
   private compileTypeCast(cast: EdgeQLAST.TypeCast): SQL.SQLExpression {

@@ -23,8 +23,10 @@ export class SQLCodeGenerator {
         return this.generateUpdateStatement(stmt);
       case "DeleteStatement":
         return this.generateDeleteStatement(stmt);
-      default:
-        throw new Error(`Unsupported statement type: ${stmt.kind}`);
+      default: {
+        const _exhaustive: never = stmt;
+        throw new Error(`Unsupported statement type: ${(stmt as any).kind}`);
+      }
     }
   }
 
@@ -219,9 +221,11 @@ export class SQLCodeGenerator {
       case "JsonAgg":
         return this.generateJsonAgg(expr);
       case "ParameterReference":
-        return this.generateParameterReference(expr as any);
-      default:
-        throw new Error(`Unsupported expression type: ${expr.kind}`);
+        return this.generateParameterReference(expr);
+      default: {
+        const _exhaustive: never = expr;
+        throw new Error(`Unsupported expression type: ${(expr as any).kind}`);
+      }
     }
   }
 
@@ -311,8 +315,8 @@ export class SQLCodeGenerator {
     return `jsonb_agg(${this.generateExpression(expr.expression)})`;
   }
 
-  private generateParameterReference(expr: { name: string }): string {
-    return `$${expr.name}`;
+  private generateParameterReference(expr: SQL.ParameterReference): string {
+    return `$${expr.index}`;
   }
 
   private needsParentheses(expr: SQL.SQLExpression): boolean {

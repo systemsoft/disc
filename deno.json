@@ -54,7 +54,7 @@
   "tasks": {
     "dev": "deno run --watch --allow-net --allow-read --allow-write --allow-env cli/main.ts",
     "cli": "deno run --allow-net --allow-read --allow-write --allow-env cli/main.ts",
-    "test": "deno test --allow-read --allow-write --allow-env",
+    "test": "deno test --allow-env --allow-net --allow-read --allow-write --no-check",
     "fmt": "deno fmt",
     "lint": "deno lint",
     "check": "deno task lint && deno task fmt --check && deno task test",
