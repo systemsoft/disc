@@ -6,7 +6,7 @@
 import * as Types from "./types.ts";
 import * as EdgeQL from "../edgeql/mod.ts";
 import * as Context from "../compiler/context.ts";
-import { DatabaseConnection } from "../lib/database.ts";
+import { ConnectionPool } from "../lib/connection-pool.ts";
 import { logger } from "../postgres/logger.ts";
 
 export interface SimpleEdgeQLOptions {
@@ -14,20 +14,27 @@ export interface SimpleEdgeQLOptions {
   enable_explain?: boolean;
   dry_run?: boolean;
   database_url?: string;
+  connection_pool?: ConnectionPool;
 }
 
 export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
   private schema: Context.Schema;
   private options: SimpleEdgeQLOptions;
-  private db?: DatabaseConnection;
+  private pool?: ConnectionPool;
 
   constructor(options: SimpleEdgeQLOptions = {}) {
     this.options = options;
     this.schema = options.schema || Context.createTestSchema();
     
-    // Initialize database connection if URL provided
-    if (options.database_url && !options.dry_run) {
-      this.db = new DatabaseConnection(options.database_url);
+    // Use provided pool or create new one if database URL provided
+    if (options.connection_pool) {
+      this.pool = options.connection_pool;
+    } else if (options.database_url && !options.dry_run) {
+      this.pool = new ConnectionPool({
+        connectionString: options.database_url,
+        minConnections: 2,
+        maxConnections: 10,
+      });
     }
   }
 
@@ -375,16 +382,11 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       };
     }
 
-    // Use real database connection if available
-    if (this.db) {
+    // Use connection pool if available
+    if (this.pool) {
       try {
-        // Ensure connected
-        if (!this.db.isConnected()) {
-          await this.db.connect();
-        }
-        
-        // Execute the SQL
-        const result = await this.db.query(sql, this.prepareParameters(variables));
+        // Execute the SQL using the pool
+        const result = await this.pool.query(sql, this.prepareParameters(variables));
         
         // Format result based on query type
         const normalizedSQL = sql.toLowerCase().trim();
@@ -572,10 +574,17 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
     return this.schema;
   }
 
+  // Initialize pool if not already done
+  async initialize(): Promise<void> {
+    if (this.pool) {
+      await this.pool.initialize();
+    }
+  }
+  
   // Cleanup
   async close(): Promise<void> {
-    if (this.db) {
-      await this.db.close();
+    if (this.pool) {
+      await this.pool.close();
     }
   }
 }

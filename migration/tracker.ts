@@ -5,27 +5,37 @@
 import { Result, Ok, Err } from "../lib/result.ts";
 import { MigrationError } from "../lib/errors.ts";
 import * as Types from "./types.ts";
-import { DatabaseConnection as DBConnection, QueryResult } from "../lib/database.ts";
+import { ConnectionPool } from "../lib/connection-pool.ts";
+import { QueryResult } from "../lib/database.ts";
 import { logger } from "../postgres/logger.ts";
 
 export class MigrationTracker {
-  private db: DBConnection | null = null;
+  private pool: ConnectionPool;
   private initialized = false;
 
-  constructor(private databaseUrl: string) {}
+  constructor(databaseUrlOrPool: string | ConnectionPool) {
+    if (typeof databaseUrlOrPool === "string") {
+      this.pool = new ConnectionPool({
+        connectionString: databaseUrlOrPool,
+        minConnections: 1,
+        maxConnections: 5,
+      });
+    } else {
+      this.pool = databaseUrlOrPool;
+    }
+  }
 
   /**
    * Initialize the migration tracker (create migrations table if needed)
    */
   async initialize(): Promise<Result<void, MigrationError>> {
     try {
-      // Create real database connection
-      this.db = new DBConnection(this.databaseUrl);
-      await this.db.connect();
-      logger.info("Connected to migration tracking database");
+      // Initialize connection pool
+      await this.pool.initialize();
+      logger.info("Initialized migration tracker connection pool");
       
       // Create migrations tracking table
-      await this.db.execute(`
+      await this.pool.execute(`
         CREATE TABLE IF NOT EXISTS disc_migrations (
           id TEXT PRIMARY KEY,
           name TEXT NOT NULL,
@@ -40,7 +50,7 @@ export class MigrationTracker {
       `);
 
       // Create checkpoints table
-      await this.db.execute(`
+      await this.pool.execute(`
         CREATE TABLE IF NOT EXISTS disc_migration_checkpoints (
           id TEXT PRIMARY KEY,
           name TEXT NOT NULL,
@@ -69,7 +79,7 @@ export class MigrationTracker {
     }
 
     try {
-      await this.db!.execute(`
+      await this.pool.execute(`
         INSERT INTO disc_migrations (
           id, name, description, schema_hash, applied_at, 
           duration_ms, rollback_sql, checksum, created_at
@@ -104,7 +114,7 @@ export class MigrationTracker {
 
     try {
       // First check if migration exists
-      const exists = await this.db!.query(
+      const exists = await this.pool.query(
         `SELECT 1 FROM disc_migrations WHERE id = $1`,
         [migrationId]
       );
@@ -113,7 +123,7 @@ export class MigrationTracker {
         return Err(new MigrationError(`Migration ${migrationId} not found`));
       }
 
-      await this.db!.execute(
+      await this.pool.execute(
         `DELETE FROM disc_migrations WHERE id = $1`,
         [migrationId]
       );
@@ -133,7 +143,7 @@ export class MigrationTracker {
     }
 
     try {
-      const result = await this.db!.query(`
+      const result = await this.pool.query(`
         SELECT id FROM disc_migrations 
         ORDER BY applied_at ASC
       `);
@@ -154,7 +164,7 @@ export class MigrationTracker {
     }
 
     try {
-      const result = await this.db!.query(`
+      const result = await this.pool.query(`
         SELECT id, name, description, schema_hash, applied_at, duration_ms, created_at
         FROM disc_migrations 
         ORDER BY applied_at DESC
@@ -185,7 +195,7 @@ export class MigrationTracker {
     }
 
     try {
-      const result = await this.db!.query(`
+      const result = await this.pool.query(`
         SELECT 1 FROM disc_migrations WHERE id = $1 LIMIT 1
       `, [migrationId]);
 
@@ -209,7 +219,7 @@ export class MigrationTracker {
         return appliedResult;
       }
 
-      const lastMigrationResult = await this.db!.query(`
+      const lastMigrationResult = await this.pool.query(`
         SELECT id, applied_at, schema_hash 
         FROM disc_migrations 
         ORDER BY applied_at DESC 
@@ -240,7 +250,7 @@ export class MigrationTracker {
     }
 
     try {
-      await this.db!.execute(`
+      await this.pool.execute(`
         INSERT INTO disc_migration_checkpoints (
           id, name, created_at, schema_state, migration_state
         ) VALUES (
@@ -269,7 +279,7 @@ export class MigrationTracker {
     }
 
     try {
-      const result = await this.db!.query(`
+      const result = await this.pool.query(`
         SELECT id, name, created_at, schema_state, migration_state
         FROM disc_migration_checkpoints 
         WHERE id = $1
@@ -303,7 +313,7 @@ export class MigrationTracker {
     }
 
     try {
-      const result = await this.db!.query(`
+      const result = await this.pool.query(`
         SELECT id, name, created_at, schema_state, migration_state
         FROM disc_migration_checkpoints 
         ORDER BY created_at DESC
@@ -332,7 +342,7 @@ export class MigrationTracker {
     }
 
     try {
-      const result = await this.db!.query(`
+      const result = await this.pool.query(`
         SELECT rollback_sql FROM disc_migrations WHERE id = $1
       `, [migrationId]);
 
@@ -355,7 +365,7 @@ export class MigrationTracker {
     }
 
     try {
-      const result = await this.db!.query(`
+      const result = await this.pool.query(`
         SELECT id, name, description, schema_hash, created_at
         FROM disc_migrations 
         ORDER BY applied_at ASC
@@ -385,14 +395,11 @@ export class MigrationTracker {
   }
 
   /**
-   * Close database connection
+   * Close connection pool
    */
   async close(): Promise<void> {
-    if (this.db) {
-      await this.db.close();
-      this.db = null;
-      this.initialized = false;
-    }
+    await this.pool.close();
+    this.initialized = false;
   }
 
   private calculateMigrationChecksum(migration: Types.Migration): string {
