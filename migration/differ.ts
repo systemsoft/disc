@@ -38,7 +38,7 @@ export class SchemaDiffer {
             kind: "AlterType",
             type_name: typeName,
             operations: alterOps,
-          });
+          } as Types.AlterTypeOperation);
         }
       }
     }
@@ -60,18 +60,74 @@ export class SchemaDiffer {
     return types;
   }
 
-  createTypeOperation(typeDef: AST.TypeDeclaration): Types.CreateTypeOperation {
-    const properties = this.extractProperties(typeDef);
-    const links = this.extractLinks(typeDef);
+  createTypeOperation(typeDef: AST.TypeDeclaration, allTypes?: Map<string, AST.TypeDeclaration>): Types.CreateTypeOperation {
+    const properties = this.extractPropertiesWithInheritance(typeDef, allTypes);
+    const links = this.extractLinksWithInheritance(typeDef, allTypes);
 
     return {
       kind: "CreateType",
       type_name: typeDef.name.value,
       properties,
       links,
-      constraints: [],
-      indexes: [],
     };
+  }
+
+  /**
+   * Extract properties including inherited ones from parent types
+   */
+  private extractPropertiesWithInheritance(
+    typeDef: AST.TypeDeclaration,
+    allTypes?: Map<string, AST.TypeDeclaration>
+  ): Types.PropertyDefinition[] {
+    const properties = this.extractProperties(typeDef);
+    const seenNames = new Set(properties.map(p => p.name));
+
+    if (allTypes && typeDef.extending) {
+      for (const baseRef of typeDef.extending) {
+        const baseName = baseRef.name.parts.join("::");
+        const baseType = allTypes.get(baseName);
+        if (baseType) {
+          const inheritedProps = this.extractPropertiesWithInheritance(baseType, allTypes);
+          for (const prop of inheritedProps) {
+            if (!seenNames.has(prop.name)) {
+              properties.push(prop);
+              seenNames.add(prop.name);
+            }
+          }
+        }
+      }
+    }
+
+    return properties;
+  }
+
+  /**
+   * Extract links including inherited ones from parent types
+   */
+  private extractLinksWithInheritance(
+    typeDef: AST.TypeDeclaration,
+    allTypes?: Map<string, AST.TypeDeclaration>
+  ): Types.LinkDefinition[] {
+    const links = this.extractLinks(typeDef);
+    const seenNames = new Set(links.map(l => l.name));
+
+    if (allTypes && typeDef.extending) {
+      for (const baseRef of typeDef.extending) {
+        const baseName = baseRef.name.parts.join("::");
+        const baseType = allTypes.get(baseName);
+        if (baseType) {
+          const inheritedLinks = this.extractLinksWithInheritance(baseType, allTypes);
+          for (const link of inheritedLinks) {
+            if (!seenNames.has(link.name)) {
+              links.push(link);
+              seenNames.add(link.name);
+            }
+          }
+        }
+      }
+    }
+
+    return links;
   }
 
   private extractProperties(typeDef: AST.TypeDeclaration): Types.PropertyDefinition[] {
@@ -105,13 +161,30 @@ export class SchemaDiffer {
           required: member.required || false,
           multi: member.multi || false,
           cardinality: member.multi ? "many" : "one",
-          on_target_delete: member.onTargetDelete,
+          on_target_delete: this.mapOnTargetDelete(member.onTargetDelete),
           annotations: this.extractAnnotations(member.annotations || []),
         });
       }
     }
 
     return links;
+  }
+
+  private mapOnTargetDelete(
+    value?: "restrict" | "cascade" | "allow" | "deferred restrict",
+  ): Types.LinkDefinition["on_target_delete"] {
+    if (!value) return undefined;
+    switch (value) {
+      case "restrict":
+      case "deferred restrict":
+        return "RESTRICT";
+      case "cascade":
+        return "CASCADE";
+      case "allow":
+        return "SET NULL";
+      default:
+        return undefined;
+    }
   }
 
   private diffType(oldType: AST.TypeDeclaration, newType: AST.TypeDeclaration): Types.TypeOperation[] {
@@ -165,7 +238,7 @@ export class SchemaDiffer {
             kind: "AlterProperty",
             property_name: propName,
             changes,
-          });
+          } as Types.AlterPropertyOperation);
         }
       }
     }
@@ -223,7 +296,7 @@ export class SchemaDiffer {
         operations.push({
           kind: "AddLink",
           link: linkDef,
-        });
+        } as Types.AddLinkOperation);
       }
     }
 
@@ -233,7 +306,7 @@ export class SchemaDiffer {
         operations.push({
           kind: "DropLink",
           link_name: linkName,
-        });
+        } as Types.DropLinkOperation);
       }
     }
 
@@ -247,7 +320,7 @@ export class SchemaDiffer {
             kind: "AlterLink",
             link_name: linkName,
             changes,
-          });
+          } as Types.AlterLinkOperation);
         }
       }
     }

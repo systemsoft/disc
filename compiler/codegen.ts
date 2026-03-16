@@ -378,6 +378,10 @@ export class SQLCodeGenerator {
   }
 
   private escapeIdentifier(identifier: string): string {
+    // Wildcard should not be escaped
+    if (identifier === "*") {
+      return "*";
+    }
     // Simple identifier escaping - in production, this should be more robust
     if (/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(identifier) && !this.isReservedKeyword(identifier)) {
       return identifier;

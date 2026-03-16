@@ -1,5 +1,6 @@
 /**
  * Test Database Implementation for Auth Tests
+ * In-memory SQL simulation for unit testing without PostgreSQL.
  */
 
 import { DatabaseInterface, QueryResult } from "./database-interface.ts";
@@ -26,9 +27,8 @@ export class TestDatabase implements DatabaseInterface {
   }
 
   async query(sql: string, params: any[] = []): Promise<QueryResult> {
-    // Simple SQL parser for testing
-    const normalizedSQL = sql.toLowerCase().trim();
-    
+    const normalizedSQL = sql.replace(/\s+/g, " ").trim().toLowerCase();
+
     if (normalizedSQL.includes("create table")) {
       this.handleCreateTable(sql);
       return { rows: [], rowCount: 0 };
@@ -39,7 +39,7 @@ export class TestDatabase implements DatabaseInterface {
     } else if (normalizedSQL.startsWith("select")) {
       return this.handleSelect(sql, params);
     } else if (normalizedSQL.startsWith("update")) {
-      return this.handleUpdate(sql, params);
+      return this.handleUpdate(sql, [...params]);
     } else if (normalizedSQL.startsWith("delete")) {
       return this.handleDelete(sql, params);
     }
@@ -48,7 +48,6 @@ export class TestDatabase implements DatabaseInterface {
   }
 
   async transaction<T>(fn: (db: TestDatabase) => Promise<T>): Promise<T> {
-    // Simple transaction simulation - just run the function
     return await fn(this);
   }
 
@@ -70,66 +69,122 @@ export class TestDatabase implements DatabaseInterface {
 
     const tableName = tableNameMatch[1];
     const table = this.tables.get(tableName) || [];
-    
-    // Simple parameter replacement
+
     let paramIndex = 0;
     const row: any = {};
-    
-    // Extract column names and values
+
+    // Extract column names and values from INSERT ... (...) VALUES (...)
     const columnsMatch = sql.match(/\(([^)]+)\)\s*values\s*\(([^)]+)\)/i);
     if (columnsMatch) {
       const columns = columnsMatch[1].split(",").map(c => c.trim());
-      const values = columnsMatch[2].split(",");
-      
+      const values = columnsMatch[2].split(",").map(v => v.trim());
+
       columns.forEach((col, index) => {
-        if (values[index] && values[index].trim() === "?") {
+        const val = values[index] ? values[index].trim() : "null";
+        if (val === "?") {
           row[col] = params[paramIndex++];
-        } else if (values[index] && values[index].toLowerCase().includes("current_timestamp")) {
+        } else if (val.toLowerCase().includes("current_timestamp")) {
           row[col] = new Date().toISOString();
-        } else if (values[index] && values[index] !== "null") {
-          row[col] = values[index].replace(/'/g, "");
-        } else {
+        } else if (val.toLowerCase() === "null") {
           row[col] = null;
+        } else {
+          row[col] = val.replace(/'/g, "");
         }
       });
     }
 
+    // Apply default values for columns not in INSERT
+    if (tableName === "users") {
+      if (!("active" in row)) row.active = true;
+      if (!("email_verified" in row)) row.email_verified = false;
+      if (!("created_at" in row)) row.created_at = new Date().toISOString();
+      if (!("updated_at" in row)) row.updated_at = new Date().toISOString();
+    }
+    if (tableName === "sessions") {
+      if (!("revoked" in row)) row.revoked = false;
+      if (!("created_at" in row)) row.created_at = new Date().toISOString();
+    }
+
     table.push(row);
     this.tables.set(tableName, table);
-    
+
     return { rows: [row], rowCount: 1 };
   }
 
   private handleSelect(sql: string, params: any[]): QueryResult {
+    const normalized = sql.replace(/\s+/g, " ").trim().toLowerCase();
+
+    // Detect JOIN queries
+    if (normalized.includes(" join ")) {
+      return this.handleSelectWithJoin(sql, params);
+    }
+
     const tableNameMatch = sql.match(/from (\w+)/i);
     if (!tableNameMatch) {
       return { rows: [], rowCount: 0 };
     }
 
     const tableName = tableNameMatch[1];
-    let table = this.tables.get(tableName) || [];
-    
+    let table = [...(this.tables.get(tableName) || [])];
+
     // Handle WHERE clauses
-    if (sql.toLowerCase().includes("where")) {
+    if (normalized.includes("where")) {
       table = this.applyWhereClause(table, sql, params);
     }
 
-    // Handle JOINs (simplified)
-    if (sql.toLowerCase().includes("join")) {
-      const joinMatch = sql.match(/join (\w+) \w+ on [^=]*=\s*[^.]*\.(\w+)/i);
-      if (joinMatch) {
-        const joinTable = joinMatch[1];
-        const joinColumn = joinMatch[2];
-        const joinData = this.tables.get(joinTable) || [];
-        
-        table = table.map(row => {
-          const joinRow = joinData.find(jr => jr[joinColumn] === row[joinColumn]);
-          return joinRow ? { ...row, ...joinRow } : row;
-        });
+    return { rows: table, rowCount: table.length };
+  }
+
+  private handleSelectWithJoin(sql: string, params: any[]): QueryResult {
+    // Parse: SELECT ... FROM sessions s JOIN users u ON s.user_id = u.id WHERE ...
+    const fromMatch = sql.match(/from\s+(\w+)\s+(\w+)\s+join\s+(\w+)\s+(\w+)\s+on\s+(\w+)\.(\w+)\s*=\s*(\w+)\.(\w+)/i);
+    if (!fromMatch) {
+      return { rows: [], rowCount: 0 };
+    }
+
+    const leftTable = fromMatch[1];
+    const leftAlias = fromMatch[2];
+    const rightTable = fromMatch[3];
+    const rightAlias = fromMatch[4];
+    const joinLeftAlias = fromMatch[5];
+    const joinLeftCol = fromMatch[6];
+    const joinRightAlias = fromMatch[7];
+    const joinRightCol = fromMatch[8];
+
+    const leftRows = this.tables.get(leftTable) || [];
+    const rightRows = this.tables.get(rightTable) || [];
+
+    // Determine which alias maps to which column
+    let joinedRows: any[] = [];
+    for (const leftRow of leftRows) {
+      for (const rightRow of rightRows) {
+        let leftVal: any;
+        let rightVal: any;
+
+        if (joinLeftAlias === leftAlias) {
+          leftVal = leftRow[joinLeftCol];
+          rightVal = rightRow[joinRightCol];
+        } else {
+          leftVal = rightRow[joinLeftCol];
+          rightVal = leftRow[joinRightCol];
+        }
+
+        if (leftVal === rightVal) {
+          joinedRows.push({ ...rightRow, ...leftRow });
+        }
       }
     }
 
-    return { rows: table, rowCount: table.length };
+    // Apply WHERE clause to joined rows
+    const normalized = sql.replace(/\s+/g, " ").trim().toLowerCase();
+    if (normalized.includes("where")) {
+      // Strip alias prefixes from WHERE clause for matching against row keys
+      let whereSQL = sql.replace(new RegExp(`\\b${leftAlias}\\.`, "gi"), "");
+      whereSQL = whereSQL.replace(new RegExp(`\\b${rightAlias}\\.`, "gi"), "");
+      joinedRows = this.applyWhereClause(joinedRows, whereSQL, params);
+    }
+
+    return { rows: joinedRows, rowCount: joinedRows.length };
   }
 
   private handleUpdate(sql: string, params: any[]): QueryResult {
@@ -139,26 +194,45 @@ export class TestDatabase implements DatabaseInterface {
     }
 
     const tableName = tableNameMatch[1];
-    let table = this.tables.get(tableName) || [];
-    
-    // Apply WHERE clause to find rows to update
-    const rowsToUpdate = this.applyWhereClause(table, sql, params);
-    
-    // Extract SET clause
-    const setMatch = sql.match(/set (.+?) where/i) || sql.match(/set (.+)$/i);
+    const table = this.tables.get(tableName) || [];
+
+    // Separate SET params from WHERE params
+    // Count ? placeholders in SET clause to know which params go where
+    const normalized = sql.replace(/\s+/g, " ").trim();
+    const setMatch = normalized.match(/set (.+?) where/i) || normalized.match(/set (.+)$/i);
+
+    let setParamCount = 0;
     if (setMatch) {
       const setClause = setMatch[1];
-      const assignments = setClause.split(",");
-      
+      setParamCount = (setClause.match(/\?/g) || []).length;
+    }
+
+    const setParams = params.slice(0, setParamCount);
+    const whereParams = params.slice(setParamCount);
+
+    // Apply WHERE clause to find rows to update
+    const rowsToUpdate = this.applyWhereClause(table, sql, whereParams);
+
+    // Apply SET clause
+    if (setMatch) {
+      const setClause = setMatch[1];
+      // Split on comma but not inside parentheses
+      const assignments = this.splitSetClause(setClause);
+      let setIdx = 0;
+
       rowsToUpdate.forEach(row => {
+        let localSetIdx = setIdx;
         assignments.forEach(assignment => {
-          const [column, value] = assignment.split("=").map(s => s.trim());
+          const eqPos = assignment.indexOf("=");
+          if (eqPos === -1) return;
+          const column = assignment.substring(0, eqPos).trim().toLowerCase();
+          const value = assignment.substring(eqPos + 1).trim();
+
           if (value === "?") {
-            // Use next parameter
-            row[column] = params.shift();
+            row[column] = setParams[localSetIdx++];
           } else if (value.toLowerCase().includes("current_timestamp")) {
             row[column] = new Date().toISOString();
-          } else if (value === "null") {
+          } else if (value.toLowerCase() === "null") {
             row[column] = null;
           } else if (value.toLowerCase() === "true") {
             row[column] = true;
@@ -172,8 +246,28 @@ export class TestDatabase implements DatabaseInterface {
     }
 
     this.tables.set(tableName, table);
-    
+
     return { rows: rowsToUpdate, rowCount: rowsToUpdate.length };
+  }
+
+  private splitSetClause(setClause: string): string[] {
+    // Split SET clause by commas, but handle nested expressions
+    const parts: string[] = [];
+    let current = "";
+    let depth = 0;
+
+    for (const char of setClause) {
+      if (char === "(" || char === "{") depth++;
+      else if (char === ")" || char === "}") depth--;
+      else if (char === "," && depth === 0) {
+        parts.push(current.trim());
+        current = "";
+        continue;
+      }
+      current += char;
+    }
+    if (current.trim()) parts.push(current.trim());
+    return parts;
   }
 
   private handleDelete(sql: string, params: any[]): QueryResult {
@@ -184,56 +278,178 @@ export class TestDatabase implements DatabaseInterface {
 
     const tableName = tableNameMatch[1];
     const table = this.tables.get(tableName) || [];
-    
-    // Apply WHERE clause to find rows to delete
+
     const rowsToDelete = this.applyWhereClause(table, sql, params);
     const remainingRows = table.filter(row => !rowsToDelete.includes(row));
-    
+
     this.tables.set(tableName, remainingRows);
-    
+
     return { rows: rowsToDelete, rowCount: rowsToDelete.length };
   }
 
   private applyWhereClause(table: any[], sql: string, params: any[]): any[] {
-    const whereMatch = sql.match(/where (.+?)(?:group by|order by|limit|$)/i);
+    const whereMatch = sql.match(/where\s+(.+?)(?:\s+group by|\s+order by|\s+limit|$)/is);
     if (!whereMatch) {
       return table;
     }
 
     const whereClause = whereMatch[1].trim();
-    let paramIndex = 0;
-    
+
+    // Track parameter index as a mutable reference
+    const paramRef = { index: 0 };
+
     return table.filter(row => {
-      // Simple WHERE clause parser
-      if (whereClause.includes(" and ")) {
-        return whereClause.split(" and ").every(condition => 
-          this.evaluateCondition(row, condition.trim(), params, paramIndex)
-        );
-      } else if (whereClause.includes(" or ")) {
-        return whereClause.split(" or ").some(condition => 
-          this.evaluateCondition(row, condition.trim(), params, paramIndex)
-        );
-      } else {
-        return this.evaluateCondition(row, whereClause, params, paramIndex);
+      // Reset param index for each row evaluation
+      const savedIndex = paramRef.index;
+      paramRef.index = 0;
+      const result = this.evaluateWhereExpression(row, whereClause, params, paramRef);
+      // After first row, keep the param count we discovered
+      if (savedIndex === 0) {
+        // First row establishes param count
       }
+      paramRef.index = 0; // Reset for next row
+      return result;
     });
   }
 
-  private evaluateCondition(row: any, condition: string, params: any[], paramIndex: number): boolean {
-    if (condition.includes("=")) {
-      const [column, value] = condition.split("=").map(s => s.trim());
-      const actualValue = value === "?" ? params[paramIndex++] : value.replace(/'/g, "");
-      return row[column] == actualValue;
-    } else if (condition.includes(">")) {
-      const [column, value] = condition.split(">").map(s => s.trim());
-      const actualValue = value === "?" ? params[paramIndex++] : value.replace(/'/g, "");
-      return new Date(row[column]) > new Date(actualValue);
-    } else if (condition.includes("<")) {
-      const [column, value] = condition.split("<").map(s => s.trim());
-      const actualValue = value === "?" ? params[paramIndex++] : value.replace(/'/g, "");
-      return new Date(row[column]) < new Date(actualValue);
+  private evaluateWhereExpression(row: any, expr: string, params: any[], paramRef: { index: number }): boolean {
+    const trimmed = expr.trim();
+
+    // Handle parenthesized sub-expressions like (...) AND/OR (...)
+    // But first try splitting by AND/OR at the top level (not inside parens)
+    const andParts = this.splitByKeyword(trimmed, " and ");
+    if (andParts.length > 1) {
+      return andParts.every(part => this.evaluateWhereExpression(row, part, params, paramRef));
     }
-    
-    return false;
+
+    const orParts = this.splitByKeyword(trimmed, " or ");
+    if (orParts.length > 1) {
+      return orParts.some(part => this.evaluateWhereExpression(row, part, params, paramRef));
+    }
+
+    // Strip outer parens
+    if (trimmed.startsWith("(") && trimmed.endsWith(")")) {
+      return this.evaluateWhereExpression(row, trimmed.slice(1, -1), params, paramRef);
+    }
+
+    // Handle individual conditions
+    return this.evaluateSingleCondition(row, trimmed, params, paramRef);
+  }
+
+  private splitByKeyword(expr: string, keyword: string): string[] {
+    // Split expression by keyword at the top level (not inside parentheses)
+    const parts: string[] = [];
+    let current = "";
+    let depth = 0;
+    const lowerExpr = expr.toLowerCase();
+    const lowerKeyword = keyword.toLowerCase();
+
+    let i = 0;
+    while (i < expr.length) {
+      if (expr[i] === "(") depth++;
+      else if (expr[i] === ")") depth--;
+
+      if (depth === 0 && lowerExpr.substring(i, i + lowerKeyword.length) === lowerKeyword) {
+        parts.push(current.trim());
+        current = "";
+        i += lowerKeyword.length;
+        continue;
+      }
+
+      current += expr[i];
+      i++;
+    }
+    if (current.trim()) parts.push(current.trim());
+
+    return parts;
+  }
+
+  private evaluateSingleCondition(row: any, condition: string, params: any[], paramRef: { index: number }): boolean {
+    const trimmed = condition.trim();
+    const lower = trimmed.toLowerCase();
+
+    // Handle "column IS NOT NULL"
+    if (lower.includes(" is not null")) {
+      const col = lower.split(" is not null")[0].trim();
+      return row[col] !== null && row[col] !== undefined;
+    }
+
+    // Handle "column IS NULL"
+    if (lower.includes(" is null")) {
+      const col = lower.split(" is null")[0].trim();
+      return row[col] === null || row[col] === undefined;
+    }
+
+    // Handle "column > CURRENT_TIMESTAMP" or "column > value"
+    if (trimmed.includes(">")) {
+      const parts = trimmed.split(">").map(s => s.trim());
+      if (parts.length === 2) {
+        const col = parts[0].toLowerCase();
+        const valuePart = parts[1].trim();
+        let compareValue: string;
+        if (valuePart.toLowerCase().includes("current_timestamp")) {
+          compareValue = new Date().toISOString();
+        } else if (valuePart === "?") {
+          compareValue = String(params[paramRef.index++]);
+        } else {
+          compareValue = valuePart.replace(/'/g, "");
+        }
+        const rowVal = row[col];
+        if (rowVal === null || rowVal === undefined) return false;
+        return new Date(rowVal) > new Date(compareValue);
+      }
+    }
+
+    // Handle "column < value"
+    if (trimmed.includes("<") && !trimmed.includes("<=") && !trimmed.includes("<>")) {
+      const parts = trimmed.split("<").map(s => s.trim());
+      if (parts.length === 2) {
+        const col = parts[0].toLowerCase();
+        const valuePart = parts[1].trim();
+        let compareValue: string;
+        if (valuePart.toLowerCase().includes("current_timestamp")) {
+          compareValue = new Date().toISOString();
+        } else if (valuePart === "?") {
+          compareValue = String(params[paramRef.index++]);
+        } else {
+          compareValue = valuePart.replace(/'/g, "");
+        }
+        const rowVal = row[col];
+        if (rowVal === null || rowVal === undefined) return false;
+        return new Date(rowVal) < new Date(compareValue);
+      }
+    }
+
+    // Handle equality: "column = value"
+    if (trimmed.includes("=")) {
+      const eqPos = trimmed.indexOf("=");
+      const col = trimmed.substring(0, eqPos).trim().toLowerCase();
+      const valuePart = trimmed.substring(eqPos + 1).trim();
+
+      let expectedValue: any;
+      if (valuePart === "?") {
+        expectedValue = params[paramRef.index++];
+      } else if (valuePart.toLowerCase() === "true" || valuePart.toLowerCase() === "false") {
+        expectedValue = valuePart.toLowerCase() === "true";
+      } else if (valuePart.toLowerCase() === "null") {
+        return row[col] === null || row[col] === undefined;
+      } else {
+        expectedValue = valuePart.replace(/'/g, "").trim();
+      }
+
+      const rowVal = row[col];
+
+      // Boolean comparison
+      if (typeof expectedValue === "boolean") {
+        return Boolean(rowVal) === expectedValue;
+      }
+
+      // Loose equality for string/number coercion
+      // deno-lint-ignore eqeqeq
+      return rowVal == expectedValue;
+    }
+
+    // Unknown condition - return true (permissive)
+    return true;
   }
 }

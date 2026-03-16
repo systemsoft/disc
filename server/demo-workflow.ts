@@ -23,7 +23,7 @@ async function runDemo() {
 
   try {
     console.log("\n📡 Starting Disc server...");
-    const serverPromise = server.start();
+    void server.start();
 
     // Give server time to start
     await new Promise(resolve => setTimeout(resolve, 200));

@@ -39,20 +39,28 @@ export async function writeGeneratedFiles(
   result: Types.CodegenResult,
   basePath: string = "."
 ): Promise<void> {
-  // Ensure output directory exists
-  const outputDir = `${basePath}/${result.files[0]?.path?.split("/")[0] || "generated"}`;
-  
-  try {
-    await Deno.mkdir(outputDir, { recursive: true });
-  } catch (error) {
-    if (!(error instanceof Deno.errors.AlreadyExists)) {
-      throw error;
+  // Collect unique directories from file paths
+  const dirs = new Set<string>();
+  for (const file of result.files) {
+    const fullPath = file.path.startsWith("/") ? file.path : `${basePath}/${file.path}`;
+    const dir = fullPath.substring(0, fullPath.lastIndexOf("/"));
+    if (dir) dirs.add(dir);
+  }
+
+  // Ensure all output directories exist
+  for (const dir of dirs) {
+    try {
+      await Deno.mkdir(dir, { recursive: true });
+    } catch (error) {
+      if (!(error instanceof Deno.errors.AlreadyExists)) {
+        throw error;
+      }
     }
   }
 
   // Write each file
   for (const file of result.files) {
-    const fullPath = `${basePath}/${file.path}`;
+    const fullPath = file.path.startsWith("/") ? file.path : `${basePath}/${file.path}`;
     await Deno.writeTextFile(fullPath, file.content);
     console.log(`✅ Generated: ${fullPath}`);
   }

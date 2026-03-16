@@ -48,7 +48,6 @@ export class ProtocolConnection {
   
   // Connection metadata
   private clientVersion = { major: 0, minor: 0 };
-  private negotiatedExtensions: string[] = [];
   private connectionParameters = new Map<string, string>();
   
   constructor(
@@ -127,7 +126,7 @@ export class ProtocolConnection {
     // Unexpected message for current state
     return this.sendError(
       Types.ErrorSeverity.Error,
-      0x08P01, // protocol_violation
+      0x0801, // protocol_violation
       `Unexpected message type ${message.type} in state ${ConnectionState[this.state]}`
     );
   }
@@ -177,15 +176,15 @@ export class ProtocolConnection {
     if (message.mechanism !== "SCRAM-SHA-256") {
       return this.sendError(
         Types.ErrorSeverity.Fatal,
-        0x28P01, // invalid_password
+        0x2801, // invalid_password
         `Unsupported SASL mechanism: ${message.mechanism}`
       );
     }
-    
+
     if (!this.credentials) {
       return this.sendError(
         Types.ErrorSeverity.Fatal,
-        0x28P01,
+        0x2801,
         "No authentication credentials configured"
       );
     }
@@ -216,7 +215,7 @@ export class ProtocolConnection {
     if (!this.scramServer) {
       return this.sendError(
         Types.ErrorSeverity.Fatal,
-        0x28P01,
+        0x2801,
         "SASL authentication not initialized"
       );
     }
@@ -266,10 +265,11 @@ export class ProtocolConnection {
       
       return combined;
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       return this.sendError(
         Types.ErrorSeverity.Fatal,
-        0x28P01,
-        `Authentication failed: ${error.message}`
+        0x2801,
+        `Authentication failed: ${message}`
       );
     }
   }
@@ -296,7 +296,7 @@ export class ProtocolConnection {
       default:
         return this.sendError(
           Types.ErrorSeverity.Error,
-          0x08P01,
+          0x0801,
           `Unsupported command: ${message.type}`
         );
     }

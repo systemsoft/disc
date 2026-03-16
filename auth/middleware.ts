@@ -17,7 +17,7 @@ export interface CORSOptions {
   maxAge?: number;
 }
 
-type RequestHandler = (request: Request, context?: AuthContext) => Response | Promise<Response>;
+export type RequestHandler = (request: Request, context?: AuthContext) => Response | Promise<Response>;
 
 export class AuthMiddleware {
   constructor(private provider: AuthProvider) {}
@@ -70,7 +70,7 @@ export class AuthMiddleware {
   optionalAuth(handler: RequestHandler): RequestHandler {
     return async (request: Request) => {
       const context = await this.authenticate(request);
-      return handler(request, context || null);
+      return handler(request, context ?? null);
     };
   }
 

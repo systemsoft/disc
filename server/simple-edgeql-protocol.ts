@@ -226,7 +226,6 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       // Replace variables in SQL (simplified)
       let finalSQL = sql;
       for (const [name, value] of Object.entries(variables)) {
-        const placeholder = `$${name}`;
         const sqlValue = typeof value === "string" ? `'${value}'` : String(value);
         finalSQL = finalSQL.replace(new RegExp(`\\$${name}`, "g"), sqlValue);
       }
@@ -368,7 +367,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
     context: Types.QueryContext
   ): Promise<{ data: any; warnings?: string[] }> {
     logger.info(`[Execution] SQL: ${sql}`);
-    logger.info(`[Execution] Variables:`, variables);
+    logger.info(`[Execution] Variables: ${JSON.stringify(variables)}`);
     logger.info(`[Execution] Session: ${context.session.session_id}`);
 
     if (this.options.dry_run) {
@@ -421,7 +420,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
 
   private async executeMockQuery(
     sql: string,
-    variables: Record<string, any>,
+    _variables: Record<string, any>,
     context: Types.QueryContext
   ): Promise<{ data: any; warnings?: string[] }> {
     // Original mock implementation for fallback

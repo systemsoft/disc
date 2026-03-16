@@ -11,7 +11,7 @@ export interface ServerOptions {
   port?: number;
   maxConnections?: number;
   connectionTimeout?: number;
-  tls?: Deno.ListenTlsOptions;
+  tls?: Deno.ListenTlsOptions & Deno.TlsCertifiedKeyPem;
 }
 
 export interface User {
@@ -23,14 +23,22 @@ export interface User {
   iterations?: number;
 }
 
+interface ResolvedServerOptions {
+  hostname: string;
+  port: number;
+  maxConnections: number;
+  connectionTimeout: number;
+  tls?: Deno.ListenTlsOptions & Deno.TlsCertifiedKeyPem;
+}
+
 export class ProtocolServer {
   private listener: Deno.Listener | null = null;
   private connections = new Map<number, Connection>();
   private users = new Map<string, AuthenticationCredentials>();
-  private options: Required<ServerOptions>;
+  private options: ResolvedServerOptions;
   private nextConnectionId = 1;
   private running = false;
-  
+
   constructor(options: ServerOptions = {}) {
     this.options = {
       hostname: options.hostname ?? "127.0.0.1",
@@ -81,9 +89,9 @@ export class ProtocolServer {
     // Create listener based on TLS configuration
     if (this.options.tls) {
       this.listener = Deno.listenTls({
+        ...this.options.tls,
         hostname: this.options.hostname,
         port: this.options.port,
-        ...this.options.tls,
       });
     } else {
       this.listener = Deno.listen({

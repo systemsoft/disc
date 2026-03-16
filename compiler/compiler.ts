@@ -418,6 +418,25 @@ export class EdgeQLCompiler {
       return { selectItems, fromClause };
     }
 
+    if (expr.kind === "FunctionCall") {
+      // Check if function has a TypeName argument (e.g., count(User))
+      // This means we need a FROM clause for that type
+      let fromClause = SQL.createFromClause([]);
+      for (const arg of expr.args) {
+        if (arg.value.kind === "TypeName") {
+          const argTypeName = arg.value.name.parts[0];
+          const argTypeDef = Context.getTypeDef(this.ctx, argTypeName);
+          if (argTypeDef) {
+            const tableAlias = Context.addTableAlias(this.ctx, argTypeName.toLowerCase(), argTypeDef.tableName, argTypeName);
+            fromClause = SQL.createFromClause([SQL.createTableReference(argTypeDef.tableName, tableAlias)]);
+          }
+        }
+      }
+      const compiledExpr = this.compileExpression(expr);
+      const selectItems = [SQL.createSelectItem(compiledExpr)];
+      return { selectItems, fromClause };
+    }
+
     // For other expressions, compile directly
     const compiledExpr = this.compileExpression(expr);
     const selectItems = [SQL.createSelectItem(compiledExpr)];
@@ -450,9 +469,31 @@ export class EdgeQLCompiler {
       if (element.computable) {
         // Computed property: name := expression
         value = this.compileExpression(element.expr);
+      } else if (element.shape) {
+        // Link with nested shape: posts: { title, created_at }
+        const linkName = element.name.name;
+        const link = Context.getLink(this.ctx, typeName, linkName);
+        if (link) {
+          value = this.compileLinkWithShape(link, element.shape, tableAlias);
+        } else {
+          // Try as a property reference
+          const property = Context.getProperty(this.ctx, typeName, linkName);
+          if (property) {
+            value = SQL.createColumnReference(property.columnName, tableAlias);
+          } else {
+            throw new CompilationError(`Property or link '${linkName}' not found on type '${typeName}'`);
+          }
+        }
       } else {
-        // Aliased property: alias: expression
-        value = this.compileExpression(element.expr);
+        // Aliased property: look up in schema
+        const propName = element.name.name;
+        const property = Context.getProperty(this.ctx, typeName, propName);
+        if (property) {
+          value = SQL.createColumnReference(property.columnName, tableAlias);
+        } else {
+          // Fall back to compiling the expression
+          value = this.compileExpression(element.expr);
+        }
       }
     } else if (element.expr.kind === "Identifier") {
       // Simple property reference
@@ -505,12 +546,84 @@ export class EdgeQLCompiler {
     }
   }
 
-  private compilePathExpression(_path: EdgeQLAST.Path, _shape?: EdgeQLAST.Shape): {
+  private compileLinkWithShape(link: Context.LinkDef, shape: EdgeQLAST.Shape, parentAlias: string): SQL.SQLExpression {
+    // Generate a subquery for the linked type with the given shape
+    const targetTypeDef = Context.getTypeDef(this.ctx, link.target);
+    if (!targetTypeDef) {
+      throw new CompilationError(`Target type '${link.target}' not found for link '${link.name}'`);
+    }
+
+    // Build the JSON fields for the subquery's shape
+    const jsonFields: SQL.JsonField[] = [];
+    for (const element of shape.elements) {
+      if (element.expr.kind === "Identifier") {
+        const propName = element.expr.name;
+        const property = Context.getProperty(this.ctx, link.target, propName);
+        if (property) {
+          jsonFields.push(SQL.createJsonField(propName, SQL.createColumnReference(property.columnName, targetTypeDef.tableName)));
+        }
+      }
+    }
+
+    const jsonObject = SQL.createJsonBuildObject(jsonFields);
+    const jsonAgg = SQL.createJsonAgg(jsonObject);
+
+    // Determine the join condition
+    // If the link has a columnName, it's a forward link (the target has the FK)
+    // If the link has a backlink, the target table has a FK pointing to the parent
+    let joinCondition: SQL.SQLExpression;
+    if (link.columnName) {
+      // Forward link: parent.link_column = target.id
+      joinCondition = SQL.createBinaryExpression(
+        "=",
+        SQL.createColumnReference("id", targetTypeDef.tableName),
+        SQL.createColumnReference(link.columnName, parentAlias),
+      );
+    } else {
+      // Reverse link (multi): target.fk_column = parent.id
+      // Find the reverse link's column name from the target type
+      const reverseLink = targetTypeDef.links.get(link.backlink || "");
+      const fkColumn = reverseLink?.columnName || `${link.name.toLowerCase()}_id`;
+      joinCondition = SQL.createBinaryExpression(
+        "=",
+        SQL.createColumnReference(fkColumn, targetTypeDef.tableName),
+        SQL.createColumnReference("id", parentAlias),
+      );
+    }
+
+    // Build the subquery
+    const subquery: SQL.SelectStatement = SQL.createSelectStatement({
+      select: SQL.createSelectClause([SQL.createSelectItem(jsonAgg)]),
+      from: SQL.createFromClause([SQL.createTableReference(targetTypeDef.tableName)]),
+      where: SQL.createWhereClause(joinCondition),
+    });
+
+    return SQL.createSubqueryExpression(subquery);
+  }
+
+  private compilePathExpression(path: EdgeQLAST.Path, _shape?: EdgeQLAST.Shape): {
     selectItems: SQL.SelectItem[];
     fromClause: SQL.FromClause;
   } {
-    // Simplified path compilation
-    // In a full implementation, this would handle complex path traversal with joins
+    // Handle simple Type.property paths (e.g., User.email)
+    if (path.steps.length === 2) {
+      const typeStep = path.steps[0];
+      const propStep = path.steps[1];
+      if (typeStep.type === "property" && propStep.type === "property") {
+        const typeName = typeStep.name;
+        const typeDef = Context.getTypeDef(this.ctx, typeName);
+        if (typeDef) {
+          const tableAlias = Context.addTableAlias(this.ctx, typeName.toLowerCase(), typeDef.tableName, typeName);
+          const fromClause = SQL.createFromClause([SQL.createTableReference(typeDef.tableName, tableAlias)]);
+          const property = Context.getProperty(this.ctx, typeName, propStep.name);
+          if (property) {
+            const selectItems = [SQL.createSelectItem(SQL.createColumnReference(property.columnName, tableAlias))];
+            return { selectItems, fromClause };
+          }
+        }
+      }
+    }
+
     throw new CompilationError("Path expression compilation not yet fully implemented");
   }
 
@@ -534,6 +647,8 @@ export class EdgeQLCompiler {
         return this.compilePathInExpression(expr);
       case "TypeName":
         return this.compileTypeName(expr);
+      case "SetExpr":
+        return this.compileSetExpr(expr);
       default:
         throw new CompilationError(`Unsupported expression: ${expr.kind}`);
     }
@@ -806,12 +921,62 @@ export class EdgeQLCompiler {
     };
   }
 
-  private compileWithBlock(_query: EdgeQLAST.WithBlock): SQL.SQLStatement {
-    throw new CompilationError("WITH block compilation not yet implemented");
+  private compileWithBlock(query: EdgeQLAST.WithBlock): SQL.SQLStatement {
+    // Compile each WITH binding into a CTE
+    const ctes: SQL.CTE[] = [];
+    for (const binding of query.bindings) {
+      let bindingQuery: SQL.SQLStatement;
+      if (binding.value.kind === "Subquery") {
+        bindingQuery = this.compileQuery(binding.value.query);
+      } else {
+        // Direct expression - wrap in a SELECT
+        const expr = this.compileExpression(binding.value);
+        bindingQuery = SQL.createSelectStatement({
+          select: SQL.createSelectClause([SQL.createSelectItem(expr)]),
+        });
+      }
+
+      ctes.push({
+        kind: "CTE",
+        name: binding.name.name,
+        recursive: false,
+        columns: [],
+        query: bindingQuery,
+      });
+    }
+
+    // Compile the body query
+    const mainQuery = this.compileQuery(query.body);
+
+    // Combine CTEs with the main query
+    return SQL.withCTEs(ctes, mainQuery);
   }
 
   private compileForQuery(_query: EdgeQLAST.ForQuery): SQL.SQLStatement {
     throw new CompilationError("FOR query compilation not yet implemented");
+  }
+
+  private compileSetExpr(setExpr: EdgeQLAST.SetExpr): SQL.SQLExpression {
+    // Compile set expression {val1, val2, ...} into a SQL tuple (val1, val2, ...)
+    // This is used in expressions like FILTER .role IN {"admin", "moderator"}
+    const elements = setExpr.elements.map(elem => this.compileExpression(elem));
+
+    // Build a raw SQL expression for the tuple representation
+    const parts = elements.map(elem => {
+      if (elem.kind === "LiteralExpression") {
+        if (elem.type === "string") return "'" + String(elem.value).replace(/'/g, "''") + "'";
+        if (elem.type === "number") return String(elem.value);
+        if (elem.type === "boolean") return elem.value ? "TRUE" : "FALSE";
+        if (elem.type === "null") return "NULL";
+      }
+      // For non-literal expressions, fall back to a placeholder
+      return "?";
+    });
+
+    return {
+      kind: "RawSQLExpression" as const,
+      sql: "(" + parts.join(", ") + ")",
+    };
   }
 
   private compileTypeName(typeName: EdgeQLAST.TypeName): SQL.SQLExpression {

@@ -4,8 +4,6 @@
 
 import * as Types from "./types.ts";
 import { HttpServer } from "./http.ts";
-import { EdgeQLProtocolHandler as MockEdgeQLProtocolHandler } from "./protocol.ts";
-import { EdgeQLProtocolHandler } from "./edgeql-protocol.ts";
 import { SimpleEdgeQLProtocolHandler } from "./simple-edgeql-protocol.ts";
 
 export class DiscServer {

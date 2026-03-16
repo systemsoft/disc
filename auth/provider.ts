@@ -29,10 +29,10 @@ export class AuthProvider implements IAuthProvider {
       jwt_secret: config.jwt_secret,
       jwt_issuer: config.jwt_issuer || "disc",
       jwt_audience: config.jwt_audience || "disc-api",
-      token_expiry: config.token_expiry || 3600, // 1 hour
-      refresh_token_expiry: config.refresh_token_expiry || 604800, // 7 days
-      bcrypt_rounds: config.bcrypt_rounds || 12,
-      session_timeout: config.session_timeout || 3600,
+      token_expiry: config.token_expiry ?? 3600, // 1 hour
+      refresh_token_expiry: config.refresh_token_expiry ?? 604800, // 7 days
+      bcrypt_rounds: config.bcrypt_rounds ?? 12,
+      session_timeout: config.session_timeout ?? 3600,
       allow_registration: config.allow_registration ?? true,
       require_email_verification: config.require_email_verification ?? false,
       password_min_length: config.password_min_length || 8,
@@ -136,7 +136,8 @@ export class AuthProvider implements IAuthProvider {
     }
 
     // Hash password
-    const passwordHash = await bcrypt.hash(data.password, this.config.bcrypt_rounds);
+    const salt = await bcrypt.genSalt(this.config.bcrypt_rounds);
+    const passwordHash = await bcrypt.hash(data.password, salt);
 
     // Create user
     const userId = this.generateId();
@@ -343,7 +344,7 @@ export class AuthProvider implements IAuthProvider {
       }
 
       // Check expiration
-      if (payload.exp && payload.exp < Date.now() / 1000) {
+      if (payload.exp && payload.exp <= Math.floor(Date.now() / 1000)) {
         throw new AuthError(
           "Token expired",
           AuthErrorCode.TOKEN_EXPIRED,
@@ -355,6 +356,15 @@ export class AuthProvider implements IAuthProvider {
     } catch (error) {
       if (error instanceof AuthError) {
         throw error;
+      }
+      // Check if the djwt library threw an expiration error
+      const errorMsg = error instanceof Error ? error.message.toLowerCase() : "";
+      if (errorMsg.includes("expired") || errorMsg.includes("exp")) {
+        throw new AuthError(
+          "Token expired",
+          AuthErrorCode.TOKEN_EXPIRED,
+          401
+        );
       }
       throw new AuthError(
         "Invalid token",
@@ -412,7 +422,8 @@ export class AuthProvider implements IAuthProvider {
     }
 
     // Hash new password
-    const newPasswordHash = await bcrypt.hash(newPassword, this.config.bcrypt_rounds);
+    const newSalt = await bcrypt.genSalt(this.config.bcrypt_rounds);
+    const newPasswordHash = await bcrypt.hash(newPassword, newSalt);
 
     // Update password
     await this.db.execute(
@@ -477,7 +488,8 @@ export class AuthProvider implements IAuthProvider {
     }
 
     // Hash new password
-    const passwordHash = await bcrypt.hash(newPassword, this.config.bcrypt_rounds);
+    const resetSalt = await bcrypt.genSalt(this.config.bcrypt_rounds);
+    const passwordHash = await bcrypt.hash(newPassword, resetSalt);
 
     // Update password and clear reset token
     await this.db.execute(

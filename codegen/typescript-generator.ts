@@ -30,11 +30,9 @@ export class TypeScriptGenerator {
     };
 
     try {
-      // Generate type definitions
-      if (this.config.target === "client" || this.config.target === "both") {
-        const typesFile = this.generateTypeDefinitions();
-        result.files.push(typesFile);
-      }
+      // Generate type definitions (always needed for all targets)
+      const typesFile = this.generateTypeDefinitions();
+      result.files.push(typesFile);
 
       // Generate query builders
       if (this.config.include_query_builders) {
@@ -70,7 +68,7 @@ export class TypeScriptGenerator {
     content += "\n";
 
     // Generate interfaces for each type
-    for (const [typeName, typeDef] of this.schema.types) {
+    for (const [_typeName, typeDef] of this.schema.types) {
       if (typeDef.kind === "object") {
         content += this.generateInterface(typeDef);
         content += "\n";
@@ -171,7 +169,7 @@ export class TypeScriptGenerator {
     content += `import { DiscClient } from "./client.ts";\n\n`;
 
     // Generate builder for each type
-    for (const [typeName, typeDef] of this.schema.types) {
+    for (const [_typeName, typeDef] of this.schema.types) {
       if (typeDef.kind === "object") {
         content += this.generateQueryBuilder(typeDef);
         content += "\n";

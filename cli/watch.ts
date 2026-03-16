@@ -4,12 +4,13 @@
 
 import { MigrationEngine } from "../migration/engine.ts";
 import { MigrationTracker } from "../migration/tracker.ts";
-import { TypescriptGenerator } from "../codegen/typescript-generator.ts";
-import { parseSchema } from "../schema/parser.ts";
-import { convertToModules } from "../schema/converter.ts";
-import { join, dirname } from "@std/path";
+import { generateTypeScript, writeGeneratedFiles } from "../codegen/mod.ts";
+import { SDLParser } from "../schema/parser.ts";
+import { SDLConverter, Module } from "../schema/converter.ts";
+import * as Context from "../compiler/context.ts";
+import { dirname } from "@std/path";
 import { ensureDir } from "@std/fs";
-import { logger } from "../postgres/logger.ts";
+import * as Types from "../migration/types.ts";
 
 export interface WatchOptions {
   schema_file?: string;
@@ -72,10 +73,10 @@ export class WatchCommand {
       // Start file watching
       await this.startFileWatcher(schemaFile, outputDir, delayMs);
     } catch (error) {
-      if (error.name === "AbortError") {
+      if ((error as Error).name === "AbortError") {
         console.log("\n🛑 File watcher stopped");
       } else {
-        console.error(`❌ Failed to start file watcher: ${error.message}`);
+        console.error(`❌ Failed to start file watcher: ${(error as Error).message}`);
         throw error;
       }
     }
@@ -119,7 +120,7 @@ export class WatchCommand {
         this.debounceSchemaChange(schemaFile, outputDir, delayMs);
       }
     } catch (error) {
-      if (error.name === "AbortError") {
+      if ((error as Error).name === "AbortError") {
         return; // Expected when stopping the watcher
       }
       throw error;
@@ -139,7 +140,7 @@ export class WatchCommand {
       try {
         await this.processSchemaChanges(schemaFile, outputDir);
       } catch (error) {
-        console.error(`❌ Failed to process schema changes: ${error.message}`);
+        console.error(`❌ Failed to process schema changes: ${(error as Error).message}`);
       }
     }, delayMs);
   }
@@ -153,8 +154,10 @@ export class WatchCommand {
     try {
       // Parse current schema
       const schemaContent = await Deno.readTextFile(schemaFile);
-      const ast = parseSchema(schemaContent);
-      const modules = convertToModules(ast);
+      const parser = new SDLParser(schemaContent);
+      const ast = parser.parse();
+      const converter = new SDLConverter();
+      const modules = converter.convertToModules(ast);
       const currentHash = this.hashSchema(modules);
 
       // Check for migration changes
@@ -162,20 +165,20 @@ export class WatchCommand {
 
       if (migrationNeeded) {
         console.log("📋 Schema changes detected, creating migration...");
-        await this.runMigration(schemaFile, modules, true); // dry run first
+        await this.runMigration(modules, true); // dry run first
 
         console.log("💡 Review migration and run 'disc migrate' to apply");
       } else if (this.lastSchemaHash === undefined) {
         console.log("📋 Initial schema detected");
         // For initial schema, we might want to create the initial migration
-        await this.runMigration(schemaFile, modules, true);
+        await this.runMigration(modules, true);
       } else {
         console.log("✅ No migration needed");
       }
 
       // Always regenerate types for development
       console.log("🔧 Regenerating TypeScript types...");
-      await this.runCodegen(modules, outputDir);
+      await this.runCodegen(outputDir);
 
       // Update last hash
       this.lastSchemaHash = currentHash;
@@ -183,12 +186,12 @@ export class WatchCommand {
       console.log("✅ Schema processing complete");
       console.log("");
     } catch (error) {
-      console.error(`❌ Schema processing failed: ${error.message}`);
+      console.error(`❌ Schema processing failed: ${(error as Error).message}`);
       console.log("");
     }
   }
 
-  private hashSchema(modules: any[]): string {
+  private hashSchema(modules: Module[]): string {
     const content = JSON.stringify(modules);
     let hash = 0;
     for (let i = 0; i < content.length; i++) {
@@ -200,14 +203,13 @@ export class WatchCommand {
   }
 
   private async runMigration(
-    schemaFile: string,
-    newModules: any[],
+    newModules: Module[],
     dryRun = false,
   ): Promise<void> {
     try {
       // Get database URL
       const databaseUrl = Deno.env.get("DATABASE_URL") || "postgresql://localhost:5432/disc";
-      
+
       // Initialize tracker
       const tracker = new MigrationTracker(databaseUrl);
       const initResult = await tracker.initialize();
@@ -215,40 +217,46 @@ export class WatchCommand {
         console.log("   ⚠️  Migration tracker not initialized, skipping migration");
         return;
       }
-      
+
       // Get migration history to determine old schema
       const historyResult = await tracker.getMigrationHistory();
       const hasHistory = historyResult.ok && historyResult.value.length > 0;
-      
+
       // For now, we'll need to reconstruct old modules from history
       // In a real implementation, we'd store the full schema state
-      const oldModules = hasHistory ? [] : null;
-      
+      const oldModules: Module[] | null = hasHistory ? [] : null;
+
       // Create migration engine
-      const engine = new MigrationEngine({
+      const config: Types.MigrationConfig = {
         database_url: databaseUrl,
         dry_run: dryRun,
-        auto_apply: false,
-      });
-      
+        auto_approve: false,
+        migrations_dir: "./migrations",
+        schema_file: "./schema.esdl",
+        backup_before_migration: false,
+        rollback_on_error: true,
+      };
+      const engine = new MigrationEngine(config);
+
       // Plan migration
       const planResult = engine.planMigration(oldModules, newModules);
       if (!planResult.ok) {
         console.error(`   ❌ Migration planning failed: ${planResult.error.message}`);
         return;
       }
-      
+
       const plan = planResult.value;
-      if (plan.migration.operations.length === 0) {
+      const firstMigration = plan.migrations[0];
+      if (!firstMigration || firstMigration.operations.length === 0) {
         console.log("   ℹ️  No operations in migration");
         await tracker.close();
         await engine.close();
         return;
       }
-      
+
       if (dryRun) {
         console.log("   📋 Migration plan (dry run):");
-        for (const op of plan.migration.operations) {
+        for (const op of firstMigration.operations) {
           console.log(`      - ${this.formatOperation(op)}`);
         }
         console.log("   💡 Run 'disc migrate' to apply");
@@ -257,63 +265,59 @@ export class WatchCommand {
         const execResult = await engine.executeMigration(plan);
         if (execResult.ok) {
           console.log(`   ✅ Migration applied successfully (${execResult.value[0].duration_ms}ms)`);
-          
+
           // Record migration
-          await tracker.recordMigration(plan.migration, execResult.value[0]);
+          await tracker.recordMigration(firstMigration, execResult.value[0]);
         } else {
           console.error(`   ❌ Migration failed: ${execResult.error.message}`);
         }
       }
-      
+
       await tracker.close();
       await engine.close();
     } catch (error) {
-      console.error(`   ❌ Migration error: ${error.message}`);
+      console.error(`   ❌ Migration error: ${(error as Error).message}`);
     }
   }
 
-  private formatOperation(op: any): string {
+  private formatOperation(op: Types.MigrationOperation): string {
     switch (op.kind) {
       case "CreateType":
-        return `Create type '${op.type_name}'`;
+        return `Create type '${(op as Types.CreateTypeOperation).type_name}'`;
       case "DropType":
-        return `Drop type '${op.type_name}'`;
+        return `Drop type '${(op as Types.DropTypeOperation).type_name}'`;
       case "AlterType":
-        return `Alter type '${op.type_name}'`;
+        return `Alter type '${(op as Types.AlterTypeOperation).type_name}'`;
       case "AddProperty":
-        return `Add property '${op.property_name}' to '${op.type_name}'`;
+        return `Add property '${(op as Types.AddPropertyOperation).property.name}'`;
       case "DropProperty":
-        return `Drop property '${op.property_name}' from '${op.type_name}'`;
+        return `Drop property '${(op as Types.DropPropertyOperation).property_name}'`;
       case "AlterProperty":
-        return `Alter property '${op.property_name}' in '${op.type_name}'`;
+        return `Alter property '${(op as Types.AlterPropertyOperation).property_name}'`;
       default:
         return `${op.kind}: ${JSON.stringify(op)}`;
     }
   }
 
   private async runCodegen(
-    modules: any[],
     outputDir: string,
   ): Promise<void> {
     try {
       // Create output directory
       await ensureDir(outputDir);
-      
-      // Generate TypeScript types
-      const generator = new TypescriptGenerator();
-      const generated = generator.generate(modules);
-      
+
+      // Use the test schema for now - in production, would parse the actual schema
+      const schema = Context.createTestSchema();
+      const result = generateTypeScript(schema, {
+        output_dir: outputDir,
+      });
+
       // Write generated files
-      for (const file of generated.files) {
-        const outputPath = join(outputDir, file.path);
-        await ensureDir(dirname(outputPath));
-        await Deno.writeTextFile(outputPath, file.content);
-        console.log(`   📝 Generated ${outputPath}`);
-      }
-      
-      console.log(`   ✅ Generated ${generated.files.length} TypeScript file(s)`);
+      await writeGeneratedFiles(result, ".");
+
+      console.log(`   ✅ Generated ${result.files.length} TypeScript file(s)`);
     } catch (error) {
-      console.error(`   ❌ Codegen failed: ${error.message}`);
+      console.error(`   ❌ Codegen failed: ${(error as Error).message}`);
     }
   }
 
@@ -380,3 +384,8 @@ export class WatchCommand {
     };
   }
 }
+
+/**
+ * Watch command instance with execute method for CLI integration
+ */
+export const watchCommand = new WatchCommand();

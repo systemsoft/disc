@@ -7,7 +7,7 @@ import * as EdgeQL from "../edgeql/mod.ts";
 import * as Compiler from "../compiler/compiler.ts";
 import * as Context from "../compiler/context.ts";
 import * as SQL from "../compiler/sql.ts";
-import { Result } from "../lib/result.ts";
+
 
 export interface EdgeQLExecutionOptions {
   schema?: Context.Schema;
@@ -154,34 +154,17 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
 
   private parseEdgeQLQuery(query: string): { success: true; ast: EdgeQL.Query } | { success: false; error: string } {
     try {
-      // Use the EdgeQL lexer and parser
-      const lexer = new EdgeQL.Lexer(query);
-      const tokens = lexer.tokenize();
+      // Use the EdgeQL parser (which internally lexes the source)
+      const parser = new EdgeQL.EdgeQLParser(query);
+      const ast = parser.parse();
 
-      if (!tokens.ok) {
-        return { 
-          success: false, 
-          error: `Lexing failed: ${tokens.error.message}` 
-        };
-      }
-
-      const parser = new EdgeQL.Parser(tokens.value);
-      const ast = parser.parseQuery();
-
-      if (!ast.ok) {
-        return { 
-          success: false, 
-          error: `Parsing failed: ${ast.error.message}` 
-        };
-      }
-
-      return { success: true, ast: ast.value };
+      return { success: true, ast };
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown parsing error";
-      return { 
-        success: false, 
-        error: errorMessage 
+      return {
+        success: false,
+        error: errorMessage
       };
     }
   }
@@ -212,7 +195,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       sql += "DISTINCT ";
     }
 
-    const selectItems = stmt.select.items.map(item => 
+    const selectItems = stmt.select.columns.map(item =>
       this.generateSelectItem(item)
     ).join(", ");
     sql += selectItems;
@@ -367,7 +350,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         ).join(", ");
         return `jsonb_build_object(${fields})`;
       case "ParameterReference":
-        return `$${expr.name}`;
+        return `$${expr.index}`;
       default:
         return "NULL";
     }

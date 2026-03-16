@@ -148,7 +148,7 @@ export class PostgresBinaryDownloader {
   }
 
   private async computeChecksum(data: Uint8Array): Promise<string> {
-    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", data as BufferSource);
     return encodeHex(new Uint8Array(hashBuffer));
   }
 

@@ -217,8 +217,8 @@ export class AccessPolicyParser {
 
   private parseComparison(): AccessExpressionNode {
     const compOps = ["=", "!=", "<", ">", "<=", ">=", "in", "like", "ilike"];
-    const op = this.peek().value;
     let left = this.parsePrimary();
+    const op = this.peek().value;
 
     if (compOps.includes(op)) {
       this.advance();

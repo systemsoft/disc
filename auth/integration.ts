@@ -3,8 +3,8 @@
  */
 
 import { AuthProvider } from "./provider.ts";
-import { AuthMiddleware, AuthContext } from "./middleware.ts";
-import { AuthConfig, AuthResponse, LoginCredentials, RegisterData } from "./types.ts";
+import { AuthMiddleware, AuthContext, RequestHandler } from "./middleware.ts";
+import { AuthConfig, LoginCredentials, RegisterData } from "./types.ts";
 import { DatabaseConnection } from "../lib/database.ts";
 
 export interface AuthIntegration {
@@ -73,8 +73,8 @@ export class AuthRoutes {
   /**
    * Handle logout
    */
-  logout(): (request: Request) => Promise<Response> {
-    return this.middleware.requireAuth(async (request: Request, context?: AuthContext) => {
+  logout(): RequestHandler {
+    return this.middleware.requireAuth(async (request: Request, _context?: AuthContext) => {
       try {
         // Get session ID from request body or extract from token
         const url = new URL(request.url);
@@ -131,8 +131,8 @@ export class AuthRoutes {
   /**
    * Get current user profile
    */
-  profile(): (request: Request) => Promise<Response> {
-    return this.middleware.requireAuth(async (request: Request, context?: AuthContext) => {
+  profile(): RequestHandler {
+    return this.middleware.requireAuth(async (_request: Request, context?: AuthContext) => {
       try {
         const user = await this.provider.get_user(context!.user_id);
 
@@ -162,7 +162,7 @@ export class AuthRoutes {
   /**
    * Update password
    */
-  updatePassword(): (request: Request) => Promise<Response> {
+  updatePassword(): RequestHandler {
     return this.middleware.requireAuth(async (request: Request, context?: AuthContext) => {
       try {
         const body = await request.json();
@@ -213,7 +213,7 @@ export class AuthRoutes {
           );
         }
 
-        const resetToken = await this.provider.reset_password_request(email);
+        await this.provider.reset_password_request(email);
 
         // In a real implementation, you'd send this token via email
         // For now, just return success (don't expose token in production!)

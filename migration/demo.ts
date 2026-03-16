@@ -4,7 +4,7 @@
  */
 
 import { MigrationEngine } from "./engine.ts";
-import * as SchemaAST from "../schema/ast.ts";
+import { Module } from "../schema/converter.ts";
 import * as Types from "./types.ts";
 
 const config: Types.MigrationConfig = {
@@ -18,32 +18,30 @@ const config: Types.MigrationConfig = {
 };
 
 // Helper to create schema modules
-function createSchemaV1(): SchemaAST.Module[] {
+function createSchemaV1(): Module[] {
   return [
     {
-      kind: "Module",
-      name: { kind: "Identifier", name: "default", quoted: false },
+      name: "default",
       items: [
         {
-          kind: "TypeDef",
-          name: { kind: "Identifier", name: "User", quoted: false },
-          extending: [],
-          items: [
+          kind: "TypeDeclaration",
+          name: { kind: "Identifier", value: "User" },
+          members: [
             {
-              kind: "Property",
-              name: { kind: "Identifier", name: "name", quoted: false },
-              type: { kind: "NamedType", name: { kind: "Identifier", name: "str", quoted: false } },
+              kind: "PropertyDeclaration",
+              name: { kind: "Identifier", value: "name" },
+              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
               required: true,
               multi: false,
             },
             {
-              kind: "Property",
-              name: { kind: "Identifier", name: "email", quoted: false },
-              type: { kind: "NamedType", name: { kind: "Identifier", name: "str", quoted: false } },
+              kind: "PropertyDeclaration",
+              name: { kind: "Identifier", value: "email" },
+              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
               required: true,
               multi: false,
               constraints: [
-                { kind: "Constraint", name: { kind: "Identifier", name: "exclusive", quoted: false } },
+                { kind: "Constraint", name: { kind: "Identifier", value: "exclusive" }, on: { kind: "PathExpression", path: [".email"] } },
               ],
             },
           ],
@@ -53,115 +51,111 @@ function createSchemaV1(): SchemaAST.Module[] {
   ];
 }
 
-function createSchemaV2(): SchemaAST.Module[] {
+function createSchemaV2(): Module[] {
   return [
     {
-      kind: "Module",
-      name: { kind: "Identifier", name: "default", quoted: false },
+      name: "default",
       items: [
         {
-          kind: "TypeDef",
-          name: { kind: "Identifier", name: "User", quoted: false },
-          extending: [],
-          items: [
+          kind: "TypeDeclaration",
+          name: { kind: "Identifier", value: "User" },
+          members: [
             {
-              kind: "Property",
-              name: { kind: "Identifier", name: "name", quoted: false },
-              type: { kind: "NamedType", name: { kind: "Identifier", name: "str", quoted: false } },
+              kind: "PropertyDeclaration",
+              name: { kind: "Identifier", value: "name" },
+              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
               required: true,
               multi: false,
             },
             {
-              kind: "Property",
-              name: { kind: "Identifier", name: "email", quoted: false },
-              type: { kind: "NamedType", name: { kind: "Identifier", name: "str", quoted: false } },
+              kind: "PropertyDeclaration",
+              name: { kind: "Identifier", value: "email" },
+              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
               required: true,
               multi: false,
               constraints: [
-                { kind: "Constraint", name: { kind: "Identifier", name: "exclusive", quoted: false } },
+                { kind: "Constraint", name: { kind: "Identifier", value: "exclusive" }, on: { kind: "PathExpression", path: [".email"] } },
               ],
             },
             {
-              kind: "Property",
-              name: { kind: "Identifier", name: "active", quoted: false },
-              type: { kind: "NamedType", name: { kind: "Identifier", name: "bool", quoted: false } },
+              kind: "PropertyDeclaration",
+              name: { kind: "Identifier", value: "active" },
+              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["bool"] } },
               required: false,
               multi: false,
               default: { kind: "Literal", type: "boolean", value: true },
             },
             {
-              kind: "Property",
-              name: { kind: "Identifier", name: "created_at", quoted: false },
-              type: { kind: "NamedType", name: { kind: "Identifier", name: "datetime", quoted: false } },
+              kind: "PropertyDeclaration",
+              name: { kind: "Identifier", value: "created_at" },
+              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["datetime"] } },
               required: true,
               multi: false,
-              default: { kind: "FunctionCall", name: { kind: "Identifier", name: "datetime_current", quoted: false } },
+              default: { kind: "FunctionCall", name: { kind: "QualifiedName", parts: ["datetime_current"] }, args: [] },
             },
           ],
         },
         {
-          kind: "TypeDef",
-          name: { kind: "Identifier", name: "Post", quoted: false },
-          extending: [],
-          items: [
+          kind: "TypeDeclaration",
+          name: { kind: "Identifier", value: "Post" },
+          members: [
             {
-              kind: "Property",
-              name: { kind: "Identifier", name: "title", quoted: false },
-              type: { kind: "NamedType", name: { kind: "Identifier", name: "str", quoted: false } },
+              kind: "PropertyDeclaration",
+              name: { kind: "Identifier", value: "title" },
+              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
               required: true,
               multi: false,
             },
             {
-              kind: "Property",
-              name: { kind: "Identifier", name: "content", quoted: false },
-              type: { kind: "NamedType", name: { kind: "Identifier", name: "str", quoted: false } },
+              kind: "PropertyDeclaration",
+              name: { kind: "Identifier", value: "content" },
+              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
               required: true,
               multi: false,
             },
             {
-              kind: "Property",
-              name: { kind: "Identifier", name: "published", quoted: false },
-              type: { kind: "NamedType", name: { kind: "Identifier", name: "bool", quoted: false } },
+              kind: "PropertyDeclaration",
+              name: { kind: "Identifier", value: "published" },
+              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["bool"] } },
               required: false,
               multi: false,
               default: { kind: "Literal", type: "boolean", value: false },
             },
             {
-              kind: "Link",
-              name: { kind: "Identifier", name: "author", quoted: false },
-              target: { kind: "NamedType", name: { kind: "Identifier", name: "User", quoted: false } },
+              kind: "LinkDeclaration",
+              name: { kind: "Identifier", value: "author" },
+              target: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["User"] } },
               required: true,
               multi: false,
-              on_target_delete: "RESTRICT",
+              onTargetDelete: "restrict",
             },
             {
-              kind: "Link",
-              name: { kind: "Identifier", name: "tags", quoted: false },
-              target: { kind: "NamedType", name: { kind: "Identifier", name: "Tag", quoted: false } },
+              kind: "LinkDeclaration",
+              name: { kind: "Identifier", value: "tags" },
+              target: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["Tag"] } },
               required: false,
               multi: true,
             },
           ],
         },
         {
-          kind: "TypeDef",
-          name: { kind: "Identifier", name: "Tag", quoted: false },
-          extending: [],
-          items: [
+          kind: "TypeDeclaration",
+          name: { kind: "Identifier", value: "Tag" },
+          members: [
             {
-              kind: "Property",
-              name: { kind: "Identifier", name: "name", quoted: false },
-              type: { kind: "NamedType", name: { kind: "Identifier", name: "str", quoted: false } },
+              kind: "PropertyDeclaration",
+              name: { kind: "Identifier", value: "name" },
+              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
               required: true,
               multi: false,
               constraints: [
-                { kind: "Constraint", name: { kind: "Identifier", name: "exclusive", quoted: false } },
+                { kind: "Constraint", name: { kind: "Identifier", value: "exclusive" }, on: { kind: "PathExpression", path: [".name"] } },
               ],
             },
             {
-              kind: "Property",
-              name: { kind: "Identifier", name: "color", quoted: false },
-              type: { kind: "NamedType", name: { kind: "Identifier", name: "str", quoted: false } },
+              kind: "PropertyDeclaration",
+              name: { kind: "Identifier", value: "color" },
+              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
               required: false,
               multi: false,
               default: { kind: "Literal", type: "string", value: "#000000" },
@@ -181,7 +175,7 @@ function demoSection(title: string, content: () => void): void {
 }
 
 function printMigrationPlan(plan: Types.MigrationPlan): void {
-  console.log(`\n📋 Migration Plan:`);
+  console.log(`\n Migration Plan:`);
   console.log(`   Migrations: ${plan.migrations.length}`);
   console.log(`   Operations: ${plan.operations_count}`);
   console.log(`   Estimated Duration: ${plan.estimated_duration}ms\n`);
@@ -198,7 +192,7 @@ function printMigrationPlan(plan: Types.MigrationPlan): void {
 }
 
 function printDDL(statements: string[]): void {
-  console.log(`\n💾 Generated DDL (${statements.length} statements):\n`);
+  console.log(`\n Generated DDL (${statements.length} statements):\n`);
   statements.forEach((stmt, i) => {
     if (stmt.trim() && !stmt.startsWith("--")) {
       console.log(`${i + 1}. ${stmt}`);
@@ -211,22 +205,22 @@ function printDDL(statements: string[]): void {
 async function runDemo(): Promise<void> {
   const engine = new MigrationEngine(config);
 
-  demoSection("🚀 Disc Migration Engine Demo", () => {
+  demoSection("Disc Migration Engine Demo", () => {
     console.log("This demo showcases the complete migration pipeline:");
-    console.log("• Schema diffing and change detection");
-    console.log("• Migration planning and validation");
-    console.log("• DDL generation for PostgreSQL");
-    console.log("• Safe migration execution with rollback");
-    console.log("• Migration state tracking and history");
+    console.log("  Schema diffing and change detection");
+    console.log("  Migration planning and validation");
+    console.log("  DDL generation for PostgreSQL");
+    console.log("  Safe migration execution with rollback");
+    console.log("  Migration state tracking and history");
   });
 
-  demoSection("🆕 Initial Schema Migration (V1)", () => {
+  demoSection("Initial Schema Migration (V1)", () => {
     console.log("Creating initial schema with User type...");
     const schemaV1 = createSchemaV1();
-    
+
     const planResult = engine.planMigration(null, schemaV1);
     if (!planResult.ok) {
-      console.error("❌ Planning failed:", planResult.error.message);
+      console.error("Planning failed:", planResult.error.message);
       return;
     }
 
@@ -234,66 +228,66 @@ async function runDemo(): Promise<void> {
 
     const ddlResult = engine.generateDDL(planResult.value);
     if (!ddlResult.ok) {
-      console.error("❌ DDL generation failed:", ddlResult.error.message);
+      console.error("DDL generation failed:", ddlResult.error.message);
       return;
     }
 
     printDDL(ddlResult.value);
   });
 
-  demoSection("🔄 Schema Evolution (V1 → V2)", () => {
+  demoSection("Schema Evolution (V1 -> V2)", () => {
     console.log("Evolving schema: adding Posts, Tags, and User properties...");
     const schemaV1 = createSchemaV1();
     const schemaV2 = createSchemaV2();
-    
+
     const planResult = engine.planMigration(schemaV1, schemaV2);
     if (!planResult.ok) {
-      console.error("❌ Planning failed:", planResult.error.message);
+      console.error("Planning failed:", planResult.error.message);
       return;
     }
 
     printMigrationPlan(planResult.value);
 
-    console.log("🔍 Migration Validation:");
+    console.log("Migration Validation:");
     const validationResult = engine.validateMigration(planResult.value);
     if (validationResult.ok) {
-      console.log("✅ Migration plan is valid and safe to execute");
+      console.log("Migration plan is valid and safe to execute");
     } else {
-      console.log(`⚠️  Validation warnings: ${validationResult.error.message}`);
+      console.log(`Validation warnings: ${validationResult.error.message}`);
     }
 
     const ddlResult = engine.generateDDL(planResult.value);
     if (!ddlResult.ok) {
-      console.error("❌ DDL generation failed:", ddlResult.error.message);
+      console.error("DDL generation failed:", ddlResult.error.message);
       return;
     }
 
     printDDL(ddlResult.value);
   });
 
-  demoSection("⚡ Migration Execution & State Tracking", async () => {
+  demoSection("Migration Execution & State Tracking", async () => {
     console.log("Executing migration (dry run)...");
     const schemaV1 = createSchemaV1();
-    
+
     // Plan initial migration
     const planResult = engine.planMigration(null, schemaV1);
     if (!planResult.ok) {
-      console.error("❌ Planning failed:", planResult.error.message);
+      console.error("Planning failed:", planResult.error.message);
       return;
     }
 
     // Execute migration
     const executeResult = await engine.executeMigration(planResult.value);
     if (!executeResult.ok) {
-      console.error("❌ Execution failed:", executeResult.error.message);
+      console.error("Execution failed:", executeResult.error.message);
       return;
     }
 
     const results = executeResult.value;
-    console.log("\n📊 Execution Results:");
+    console.log("\nExecution Results:");
     results.forEach((result, i) => {
       console.log(`${i + 1}. Migration ${result.migration_id}:`);
-      console.log(`   Status: ${result.success ? "✅ Success" : "❌ Failed"}`);
+      console.log(`   Status: ${result.success ? "Success" : "Failed"}`);
       console.log(`   Duration: ${result.duration_ms}ms`);
       console.log(`   Applied: ${result.applied_at.toISOString()}`);
       if (result.error) {
@@ -302,7 +296,7 @@ async function runDemo(): Promise<void> {
     });
 
     // Check migration state
-    console.log("\n📈 Migration State:");
+    console.log("\nMigration State:");
     const state = engine.getMigrationState();
     console.log(`   Applied Migrations: ${state.applied_migrations.length}`);
     console.log(`   Current Schema Hash: ${state.current_schema_hash}`);
@@ -310,41 +304,41 @@ async function runDemo(): Promise<void> {
     console.log(`   Last Applied: ${state.last_applied_at?.toISOString() || "Never"}`);
   });
 
-  demoSection("🔧 Advanced Features", () => {
+  demoSection("Advanced Features", () => {
     console.log("The migration engine supports:");
-    console.log("\n🎯 Schema Operations:");
-    console.log("  • CREATE/DROP/ALTER types");
-    console.log("  • ADD/DROP/ALTER properties");
-    console.log("  • ADD/DROP/ALTER links (relationships)");
-    console.log("  • Constraint management");
-    
-    console.log("\n🗃️ DDL Generation:");
-    console.log("  • PostgreSQL table creation");
-    console.log("  • Foreign key relationships");
-    console.log("  • Junction tables for many-to-many links");
-    console.log("  • Index creation for performance");
-    console.log("  • Proper identifier escaping");
-    
-    console.log("\n🛡️ Safety Features:");
-    console.log("  • Migration validation for destructive operations");
-    console.log("  • Dry run mode for testing");
-    console.log("  • Rollback SQL generation");
-    console.log("  • Schema hash verification");
-    
-    console.log("\n📋 Migration Management:");
-    console.log("  • Migration history tracking");
-    console.log("  • Automatic migration naming");
-    console.log("  • Duration estimation");
-    console.log("  • State persistence");
+    console.log("\nSchema Operations:");
+    console.log("  CREATE/DROP/ALTER types");
+    console.log("  ADD/DROP/ALTER properties");
+    console.log("  ADD/DROP/ALTER links (relationships)");
+    console.log("  Constraint management");
+
+    console.log("\nDDL Generation:");
+    console.log("  PostgreSQL table creation");
+    console.log("  Foreign key relationships");
+    console.log("  Junction tables for many-to-many links");
+    console.log("  Index creation for performance");
+    console.log("  Proper identifier escaping");
+
+    console.log("\nSafety Features:");
+    console.log("  Migration validation for destructive operations");
+    console.log("  Dry run mode for testing");
+    console.log("  Rollback SQL generation");
+    console.log("  Schema hash verification");
+
+    console.log("\nMigration Management:");
+    console.log("  Migration history tracking");
+    console.log("  Automatic migration naming");
+    console.log("  Duration estimation");
+    console.log("  State persistence");
   });
 
-  demoSection("🎉 Demo Complete", () => {
+  demoSection("Demo Complete", () => {
     console.log("The Migration Engine successfully demonstrates:");
-    console.log("✅ Schema change detection and diffing");
-    console.log("✅ Safe migration planning and validation");
-    console.log("✅ PostgreSQL DDL generation");
-    console.log("✅ Migration execution with state tracking");
-    console.log("✅ Comprehensive error handling and rollback");
+    console.log("  Schema change detection and diffing");
+    console.log("  Safe migration planning and validation");
+    console.log("  PostgreSQL DDL generation");
+    console.log("  Migration execution with state tracking");
+    console.log("  Comprehensive error handling and rollback");
     console.log("\nPhase 4 (Migration Engine) is complete and ready for production use!");
   });
 }

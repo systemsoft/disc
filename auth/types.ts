@@ -98,7 +98,7 @@ export class AuthError extends Error {
     public code: AuthErrorCode,
     public status_code = 401,
   ) {
-    super(message);
+    super(`${code}: ${message}`);
     this.name = "AuthError";
   }
 }

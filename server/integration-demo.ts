@@ -36,16 +36,12 @@ async function demonstrateIntegration(): Promise<void> {
       console.log(`  ✅ Lexing successful (${tokens.length} tokens)`);
 
       // Parse the query
-      const parser = new EdgeQL.Parser(tokens);
-      const parseResult = parser.parseQuery();
-      
-      if (parseResult.ok) {
-        console.log(`  ✅ Parsing successful (${parseResult.value.kind})`);
-      } else {
-        console.log(`  ❌ Parsing failed: ${parseResult.error.message}`);
-      }
+      const parser = new EdgeQL.EdgeQLParser(query);
+      const parseResult = parser.parse();
+      console.log(`  ✅ Parsing successful (${parseResult.kind})`);
     } catch (error) {
-      console.log(`  ❌ Error: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      console.log(`  ❌ Error: ${errorMessage}`);
     }
   }
 
@@ -130,7 +126,8 @@ async function demonstrateIntegration(): Promise<void> {
         console.log(`    ⏱️  Duration: ${result.extensions?.duration_ms}ms`);
       }
     } catch (error) {
-      console.log(`    ❌ Request Failed: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      console.log(`    ❌ Request Failed: ${errorMessage}`);
     }
   }
 
@@ -176,7 +173,8 @@ async function demonstrateIntegration(): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 2000));
     
   } catch (error) {
-    console.log(`  ❌ WebSocket Demo Failed: ${error.message}`);
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    console.log(`  ❌ WebSocket Demo Failed: ${errorMessage}`);
   }
 
   console.log("\n📊 Integration Summary:");

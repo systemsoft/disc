@@ -6,7 +6,6 @@ import { TextLineStream } from "jsr:@std/streams/text-line-stream";
 import { DatabaseConnection } from "../lib/database.ts";
 import { PostgresManager } from "../postgres/manager.ts";
 import { join } from "@std/path";
-import { logger } from "../postgres/logger.ts";
 
 export interface ShellOptions {
   host?: string;
@@ -30,7 +29,6 @@ export class DiscShell {
   private db?: DatabaseConnection;
   private postgresManager?: PostgresManager;
   private commandHistory: string[] = [];
-  private historyIndex = 0;
   private multilineBuffer = "";
   private isMultiline = false;
   private session: ShellSession | null = null;
@@ -80,7 +78,7 @@ export class DiscShell {
       // Start interactive mode
       await this.startInteractiveMode();
     } catch (error) {
-      console.error("❌ Failed to start shell:", error.message);
+      console.error("❌ Failed to start shell:", (error as Error).message);
       throw error;
     } finally {
       await this.cleanup();
@@ -162,7 +160,7 @@ export class DiscShell {
       console.log(`✅ Schema loaded (${schemaContent.length} bytes)`);
       console.log("");
     } catch (error) {
-      console.error(`❌ Failed to load schema: ${error.message}`);
+      console.error(`❌ Failed to load schema: ${(error as Error).message}`);
       throw error;
     }
   }
@@ -192,7 +190,7 @@ export class DiscShell {
           break;
         }
       } catch (error) {
-        console.error(`❌ Error: ${error.message}`);
+        console.error(`❌ Error: ${(error as Error).message}`);
         await Deno.stdout.write(new TextEncoder().encode("\ndisc> "));
       }
     }
@@ -224,7 +222,6 @@ export class DiscShell {
         
         await this.executeRealQuery(query);
         this.commandHistory.push(query);
-        this.historyIndex = this.commandHistory.length;
       } else {
         // Continue multiline
         this.isMultiline = true;
@@ -235,7 +232,6 @@ export class DiscShell {
       // Single line query
       await this.executeRealQuery(trimmed);
       this.commandHistory.push(trimmed);
-      this.historyIndex = this.commandHistory.length;
     }
 
     // Show prompt
@@ -328,7 +324,7 @@ export class DiscShell {
         console.log(`⏱️  Time: ${duration}ms`);
       }
     } catch (error) {
-      console.error(`❌ Query failed: ${error.message}`);
+      console.error(`❌ Query failed: ${(error as Error).message}`);
     }
   }
 
@@ -370,7 +366,7 @@ export class DiscShell {
         console.log("No tables found");
       }
     } catch (error) {
-      console.error(`❌ Failed to list tables: ${error.message}`);
+      console.error(`❌ Failed to list tables: ${(error as Error).message}`);
     }
   }
 
@@ -396,7 +392,7 @@ export class DiscShell {
       
       console.log(`✅ Connected to ${database}`);
     } catch (error) {
-      console.error(`❌ Failed to connect: ${error.message}`);
+      console.error(`❌ Failed to connect: ${(error as Error).message}`);
     }
   }
 
@@ -413,7 +409,7 @@ export class DiscShell {
         }
       }
     } catch (error) {
-      console.error(`❌ Failed to execute file: ${error.message}`);
+      console.error(`❌ Failed to execute file: ${(error as Error).message}`);
     }
   }
 
@@ -448,3 +444,13 @@ export class DiscShell {
     }
   }
 }
+
+/**
+ * Shell command instance with execute method for CLI integration
+ */
+export const shellCommand = {
+  async execute(options: ShellOptions): Promise<void> {
+    const shell = new DiscShell();
+    await shell.run(options);
+  },
+};

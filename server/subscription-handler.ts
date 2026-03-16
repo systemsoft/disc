@@ -5,6 +5,9 @@
 
 import * as Types from "./types.ts";
 
+// WebSocket readyState constants (safe for both runtime and mock contexts)
+const WS_OPEN = 1;
+
 export interface SubscriptionOptions {
   max_subscriptions_per_connection?: number;
   subscription_timeout_ms?: number;
@@ -15,6 +18,8 @@ export class SubscriptionHandler {
   private subscriptions = new Map<string, ActiveSubscription>();
   private connection_subscriptions = new Map<string, Set<string>>();
   private options: Required<SubscriptionOptions>;
+  private heartbeat_id: number | undefined;
+  private pending_timeouts = new Set<number>();
 
   constructor(options: SubscriptionOptions = {}) {
     this.options = {
@@ -43,7 +48,9 @@ export class SubscriptionHandler {
     // Validate subscription query
     const validation_errors = this.validate_subscription_query(subscription.query);
     if (validation_errors.length > 0) {
-      this.send_error(websocket, subscription.id, validation_errors[0].message);
+      // Send all validation errors concatenated for better diagnostics
+      const combined = validation_errors.map(e => e.message).join("; ");
+      this.send_error(websocket, subscription.id, combined);
       return;
     }
 
@@ -101,10 +108,38 @@ export class SubscriptionHandler {
     this.connection_subscriptions.delete(connection_id);
   }
 
-  private async start_subscription(subscription: ActiveSubscription): Promise<void> {
-    // For demonstration, we'll simulate a simple subscription that sends updates
-    // In a real implementation, this would integrate with the database change streams
+  /**
+   * Dispose all timers and clean up resources.
+   * Must be called in tests to avoid resource leaks.
+   */
+  dispose(): void {
+    if (this.heartbeat_id !== undefined) {
+      clearInterval(this.heartbeat_id);
+      this.heartbeat_id = undefined;
+    }
 
+    for (const timeoutId of this.pending_timeouts) {
+      clearTimeout(timeoutId);
+    }
+    this.pending_timeouts.clear();
+
+    // Stop all active subscriptions
+    for (const [id] of this.subscriptions) {
+      const sub = this.subscriptions.get(id);
+      if (sub) {
+        sub.status = "stopped";
+      }
+    }
+    this.subscriptions.clear();
+    this.connection_subscriptions.clear();
+  }
+
+  private async start_subscription(subscription: ActiveSubscription): Promise<void> {
+    // Send initial data
+    const initial_data = this.generate_mock_initial_data(subscription.query);
+    this.send_data(subscription.websocket, subscription.id, initial_data);
+
+    // Start periodic updates (for demonstration/mock purposes)
     const send_update = () => {
       if (subscription.status !== "active") return;
 
@@ -113,16 +148,13 @@ export class SubscriptionHandler {
 
       // Schedule next update (simulate real-time data)
       if (subscription.status === "active") {
-        setTimeout(send_update, 5000 + Math.random() * 5000); // 5-10 seconds
+        const id = setTimeout(send_update, 5000 + Math.random() * 5000);
+        this.pending_timeouts.add(id);
       }
     };
 
-    // Send initial data
-    const initial_data = this.generate_mock_initial_data(subscription.query);
-    this.send_data(subscription.websocket, subscription.id, initial_data);
-
-    // Start periodic updates
-    setTimeout(send_update, 5000);
+    const id = setTimeout(send_update, 5000);
+    this.pending_timeouts.add(id);
   }
 
   private validate_subscription_query(query: string): Types.QueryError[] {
@@ -130,22 +162,25 @@ export class SubscriptionHandler {
 
     // Basic validation - subscription queries should typically be SELECT
     const normalized = query.trim().toLowerCase();
-    if (!normalized.startsWith("select")) {
-      errors.push({
-        message: "Subscriptions only support SELECT queries",
-        extensions: { code: "INVALID_SUBSCRIPTION" },
-      });
-    }
 
     // Check for forbidden operations in subscriptions
     const forbidden_keywords = ["insert", "update", "delete", "drop", "alter"];
     for (const keyword of forbidden_keywords) {
-      if (normalized.includes(keyword)) {
+      // Check if query starts with or contains the forbidden keyword
+      if (normalized.startsWith(keyword) || normalized.includes(` ${keyword} `)) {
         errors.push({
           message: `Subscription queries cannot contain '${keyword}'`,
           extensions: { code: "INVALID_SUBSCRIPTION" },
         });
       }
+    }
+
+    // If no forbidden keyword matched but still not a SELECT
+    if (errors.length === 0 && !normalized.startsWith("select")) {
+      errors.push({
+        message: "Subscriptions only support SELECT queries",
+        extensions: { code: "INVALID_SUBSCRIPTION" },
+      });
     }
 
     return errors;
@@ -163,11 +198,11 @@ export class SubscriptionHandler {
           last_seen: new Date().toISOString(),
         },
         {
-          id: "user_002", 
+          id: "user_002",
           name: "Bob Smith",
           email: "bob@example.com",
           status: "offline",
-          last_seen: new Date(Date.now() - 300000).toISOString(), // 5 minutes ago
+          last_seen: new Date(Date.now() - 300000).toISOString(),
         },
       ];
     } else if (query.includes("Post")) {
@@ -190,7 +225,6 @@ export class SubscriptionHandler {
   }
 
   private generate_mock_update(query: string): any {
-    // Generate update based on query pattern
     if (query.includes("User")) {
       const updates = [
         { type: "user_online", user_id: "user_003", name: "Charlie Wilson" },
@@ -245,7 +279,8 @@ export class SubscriptionHandler {
   }
 
   private send_message(websocket: WebSocket, message: Types.SubscriptionMessage): void {
-    if (websocket.readyState === WebSocket.OPEN) {
+    // Use numeric constant for readyState check (works with both real WebSocket and mocks)
+    if (websocket.readyState === WS_OPEN) {
       websocket.send(JSON.stringify({
         type: "subscription",
         payload: message,
@@ -254,13 +289,13 @@ export class SubscriptionHandler {
   }
 
   private start_heartbeat(): void {
-    setInterval(() => {
+    this.heartbeat_id = setInterval(() => {
       const now = new Date();
 
       for (const [id, subscription] of this.subscriptions) {
         // Check if subscription has been inactive
         const inactive_time = now.getTime() - subscription.last_ping.getTime();
-        
+
         if (inactive_time > this.options.subscription_timeout_ms) {
           console.log(`Cleaning up inactive subscription: ${id}`);
           this.stop_subscription(id);
@@ -268,7 +303,7 @@ export class SubscriptionHandler {
         }
 
         // Send heartbeat
-        if (subscription.websocket.readyState === WebSocket.OPEN) {
+        if (subscription.websocket.readyState === WS_OPEN) {
           subscription.last_ping = now;
           this.send_message(subscription.websocket, {
             id: subscription.id,

@@ -19,6 +19,7 @@ export class HttpServer {
   private transaction_manager: TransactionManager;
   private subscription_handler: SubscriptionHandler;
   private server?: Deno.HttpServer<Deno.NetAddr>;
+  private cleanup_interval_ids: number[] = [];
   private start_time: Date;
   private stats = {
     total_requests: 0,
@@ -61,6 +62,15 @@ export class HttpServer {
   }
 
   async stop(): Promise<void> {
+    // Clear all cleanup intervals
+    for (const id of this.cleanup_interval_ids) {
+      clearInterval(id);
+    }
+    this.cleanup_interval_ids = [];
+
+    // Dispose subscription handler timers
+    this.subscription_handler.dispose();
+
     if (this.server) {
       console.log("🛑 Stopping Disc server...");
       await this.server.shutdown();
@@ -184,6 +194,20 @@ export class HttpServer {
 
       // Update session activity
       this.session_manager.update_activity(connection.session.session_id);
+
+      // Determine HTTP status based on response content
+      // Errors with code "WARNING" are not real errors (e.g. dry-run mode)
+      const hasRealErrors = response.errors?.some(
+        e => e.extensions?.code !== "WARNING"
+      );
+
+      if (hasRealErrors && !response.data) {
+        this.stats.failed_requests++;
+        return new Response(JSON.stringify(response), {
+          status: 400,
+          headers: this.get_default_headers("application/json"),
+        });
+      }
 
       this.stats.successful_requests++;
 
@@ -440,28 +464,28 @@ export class HttpServer {
 
   private start_cleanup_intervals(): void {
     // Cleanup idle connections every 5 minutes
-    setInterval(() => {
+    this.cleanup_interval_ids.push(setInterval(() => {
       const cleaned = this.connection_manager.cleanup_idle_connections();
       if (cleaned > 0) {
-        console.log(`🧹 Cleaned up ${cleaned} idle connections`);
+        console.log(`Cleaned up ${cleaned} idle connections`);
       }
-    }, 5 * 60 * 1000);
+    }, 5 * 60 * 1000));
 
     // Cleanup expired sessions every 10 minutes
-    setInterval(() => {
+    this.cleanup_interval_ids.push(setInterval(() => {
       const cleaned = this.session_manager.cleanup_expired_sessions();
       if (cleaned > 0) {
-        console.log(`🧹 Cleaned up ${cleaned} expired sessions`);
+        console.log(`Cleaned up ${cleaned} expired sessions`);
       }
-    }, 10 * 60 * 1000);
+    }, 10 * 60 * 1000));
 
     // Cleanup abandoned transactions every 2 minutes
-    setInterval(() => {
+    this.cleanup_interval_ids.push(setInterval(() => {
       const cleaned = this.transaction_manager.cleanup_abandoned_transactions();
       if (cleaned > 0) {
-        console.log(`🧹 Cleaned up ${cleaned} abandoned transactions`);
+        console.log(`Cleaned up ${cleaned} abandoned transactions`);
       }
-    }, 2 * 60 * 1000);
+    }, 2 * 60 * 1000));
   }
 
   private generate_request_id(): string {

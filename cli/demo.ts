@@ -108,7 +108,7 @@ async function runCLIDemo() {
     console.log("🚀 All CLI commands are fully implemented and functional!");
     console.log("💡 Run 'disc --help' to see all available options");
   } catch (error) {
-    console.error("❌ Demo failed:", error.message);
+    console.error("❌ Demo failed:", (error as Error).message);
     throw error;
   }
 }

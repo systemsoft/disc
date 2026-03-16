@@ -2,7 +2,6 @@
  * Migration Engine - orchestrates schema diffing, DDL generation, and migration execution
  */
 
-import * as SchemaAST from "../schema/ast.ts";
 import { Module } from "../schema/converter.ts";
 import * as Types from "./types.ts";
 import { SchemaDiffer } from "./differ.ts";
@@ -50,7 +49,7 @@ export class MigrationEngine {
 
       return Ok(plan);
     } catch (error) {
-      return Err(new MigrationError(`Failed to plan migration: ${error.message}`));
+      return Err(new MigrationError(`Failed to plan migration: ${error instanceof Error ? error.message : String(error)}`));
     }
   }
 
@@ -74,7 +73,7 @@ export class MigrationEngine {
 
       return Ok(statements);
     } catch (error) {
-      return Err(new MigrationError(`Failed to generate DDL: ${error.message}`));
+      return Err(new MigrationError(`Failed to generate DDL: ${error instanceof Error ? error.message : String(error)}`));
     }
   }
 
@@ -108,7 +107,7 @@ export class MigrationEngine {
 
       return Ok(results);
     } catch (error) {
-      return Err(new MigrationError(`Failed to execute migration: ${error.message}`));
+      return Err(new MigrationError(`Failed to execute migration: ${error instanceof Error ? error.message : String(error)}`));
     }
   }
 
@@ -141,7 +140,7 @@ export class MigrationEngine {
       const rollbackSQL = this.ddlGenerator.generateRollbackDDL(migration.operations);
       return Ok(rollbackSQL);
     } catch (error) {
-      return Err(new MigrationError(`Failed to generate rollback SQL: ${error.message}`));
+      return Err(new MigrationError(`Failed to generate rollback SQL: ${error instanceof Error ? error.message : String(error)}`));
     }
   }
 
@@ -182,10 +181,10 @@ export class MigrationEngine {
           try {
             await this.executeStatements(rollbackSQL);
           } catch (rollbackError) {
-            return Err(new MigrationError(`Migration failed and rollback failed: ${error.message}. Rollback error: ${rollbackError.message}`));
+            return Err(new MigrationError(`Migration failed and rollback failed: ${error instanceof Error ? error.message : String(error)}. Rollback error: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`));
           }
         }
-        return Err(new MigrationError(`Migration execution failed: ${error.message}`));
+        return Err(new MigrationError(`Migration execution failed: ${error instanceof Error ? error.message : String(error)}`));
       }
     }
 
@@ -206,7 +205,7 @@ export class MigrationEngine {
       this.appliedMigrations.delete(migrationId);
       return Ok(true);
     } catch (error) {
-      return Err(new MigrationError(`Failed to rollback migration ${migrationId}: ${error.message}`));
+      return Err(new MigrationError(`Failed to rollback migration ${migrationId}: ${error instanceof Error ? error.message : String(error)}`));
     }
   }
 
@@ -270,7 +269,7 @@ export class MigrationEngine {
       // In a real implementation, this would save the checkpoint to storage
       return Ok(checkpoint);
     } catch (error) {
-      return Err(new MigrationError(`Failed to create checkpoint: ${error.message}`));
+      return Err(new MigrationError(`Failed to create checkpoint: ${error instanceof Error ? error.message : String(error)}`));
     }
   }
 
@@ -284,7 +283,7 @@ export class MigrationEngine {
       this.appliedMigrations.clear();
       return Ok(true);
     } catch (error) {
-      return Err(new MigrationError(`Failed to restore from checkpoint ${checkpointId}: ${error.message}`));
+      return Err(new MigrationError(`Failed to restore from checkpoint ${checkpointId}: ${error instanceof Error ? error.message : String(error)}`));
     }
   }
 
@@ -303,7 +302,7 @@ export class MigrationEngine {
 
       return Ok(hints);
     } catch (error) {
-      return Err(new MigrationError(`Failed to generate data migration hints: ${error.message}`));
+      return Err(new MigrationError(`Failed to generate data migration hints: ${error instanceof Error ? error.message : String(error)}`));
     }
   }
 
@@ -330,10 +329,21 @@ export class MigrationEngine {
   private generateInitialMigration(schema: Module[]): Types.MigrationOperation[] {
     const operations: Types.MigrationOperation[] = [];
 
+    // Build a map of all types for inheritance resolution
+    const allTypes = new Map<string, import("../schema/ast.ts").TypeDeclaration>();
     for (const module of schema) {
       for (const item of module.items) {
         if (item.kind === "TypeDeclaration") {
-          operations.push(this.differ.createTypeOperation(item));
+          allTypes.set(item.name.value, item);
+        }
+      }
+    }
+
+    // Only create operations for non-abstract types
+    for (const module of schema) {
+      for (const item of module.items) {
+        if (item.kind === "TypeDeclaration" && !item.abstract) {
+          operations.push(this.differ.createTypeOperation(item, allTypes));
         }
       }
     }
@@ -382,11 +392,11 @@ export class MigrationEngine {
   private getOperationName(operation: Types.MigrationOperation): string {
     switch (operation.kind) {
       case "CreateType":
-        return `create_${operation.type_name.toLowerCase()}`;
+        return `create_${(operation as Types.CreateTypeOperation).type_name.toLowerCase()}`;
       case "DropType":
-        return `drop_${operation.type_name.toLowerCase()}`;
+        return `drop_${(operation as Types.DropTypeOperation).type_name.toLowerCase()}`;
       case "AlterType":
-        return `alter_${operation.type_name.toLowerCase()}`;
+        return `alter_${(operation as Types.AlterTypeOperation).type_name.toLowerCase()}`;
       default:
         return operation.kind.toLowerCase();
     }
@@ -395,17 +405,17 @@ export class MigrationEngine {
   private getOperationDescription(operation: Types.MigrationOperation): string {
     switch (operation.kind) {
       case "CreateType":
-        return `Create type ${operation.type_name}`;
+        return `Create type ${(operation as Types.CreateTypeOperation).type_name}`;
       case "DropType":
-        return `Drop type ${operation.type_name}`;
+        return `Drop type ${(operation as Types.DropTypeOperation).type_name}`;
       case "AlterType":
-        return `Alter type ${operation.type_name}`;
+        return `Alter type ${(operation as Types.AlterTypeOperation).type_name}`;
       default:
         return operation.kind;
     }
   }
 
-  private hashSchema(schema: SchemaAST.Module[]): string {
+  private hashSchema(schema: Module[]): string {
     // Simple hash based on JSON stringification
     // In production, would use a more robust hashing algorithm
     const schemaString = JSON.stringify(schema, Object.keys(schema).sort());
@@ -479,11 +489,11 @@ export class MigrationEngine {
     switch (operation.kind) {
       case "DropType":
         // Check if type has dependencies
-        issues.push(...this.validateDropType(operation));
+        issues.push(...this.validateDropType(operation as Types.DropTypeOperation));
         break;
       case "AlterType":
         // Check for breaking changes
-        issues.push(...this.validateAlterType(operation));
+        issues.push(...this.validateAlterType(operation as Types.AlterTypeOperation));
         break;
     }
 
@@ -492,11 +502,11 @@ export class MigrationEngine {
 
   private validateDropType(operation: Types.DropTypeOperation): string[] {
     const issues: string[] = [];
-    
+
     // In a real implementation, would check database for foreign key references
     // For now, just warn about potential data loss
     issues.push(`Dropping type ${operation.type_name} may result in data loss`);
-    
+
     return issues;
   }
 
@@ -505,16 +515,18 @@ export class MigrationEngine {
 
     for (const typeOp of operation.operations) {
       if (typeOp.kind === "DropProperty") {
-        issues.push(`Dropping property ${typeOp.property_name} from ${operation.type_name} may result in data loss`);
+        const dropOp = typeOp as Types.DropPropertyOperation;
+        issues.push(`Dropping property ${dropOp.property_name} from ${operation.type_name} may result in data loss`);
       }
-      
+
       if (typeOp.kind === "AlterProperty") {
-        for (const change of typeOp.changes) {
+        const alterOp = typeOp as Types.AlterPropertyOperation;
+        for (const change of alterOp.changes) {
           if (change.kind === "ChangeType") {
-            issues.push(`Changing type of ${typeOp.property_name} may require data migration`);
+            issues.push(`Changing type of ${alterOp.property_name} may require data migration`);
           }
           if (change.kind === "ChangeRequired" && change.new_value) {
-            issues.push(`Making ${typeOp.property_name} required may fail if existing NULL values exist`);
+            issues.push(`Making ${alterOp.property_name} required may fail if existing NULL values exist`);
           }
         }
       }
@@ -527,19 +539,26 @@ export class MigrationEngine {
     const issues: string[] = [];
 
     switch (operation.kind) {
-      case "DropType":
-        issues.push(`Rollback of DropType ${operation.type_name} requires manual intervention - original schema lost`);
+      case "DropType": {
+        const dropOp = operation as Types.DropTypeOperation;
+        issues.push(`Rollback of DropType ${dropOp.type_name} requires manual intervention - original schema lost`);
         break;
-      case "AlterType":
-        for (const typeOp of operation.operations) {
+      }
+      case "AlterType": {
+        const alterOp = operation as Types.AlterTypeOperation;
+        for (const typeOp of alterOp.operations) {
           if (typeOp.kind === "DropProperty") {
-            issues.push(`Rollback of DropProperty ${typeOp.property_name} may result in data loss or require manual intervention`);
+            const dropPropOp = typeOp as Types.DropPropertyOperation;
+            issues.push(`Rollback of DropProperty ${dropPropOp.property_name} may result in data loss or require manual intervention`);
           }
         }
         break;
-      case "DropTable":
-        issues.push(`Rollback of DropTable ${operation.table_name} requires manual intervention - original structure lost`);
+      }
+      case "DropTable": {
+        const dropTableOp = operation as Types.DropTableOperation;
+        issues.push(`Rollback of DropTable ${dropTableOp.table_name} requires manual intervention - original structure lost`);
         break;
+      }
     }
 
     return issues;
@@ -549,21 +568,43 @@ export class MigrationEngine {
     const hints: string[] = [];
 
     switch (operation.kind) {
-      case "AlterType":
-        const alterTypeOp = operation as Types.AlterTypeOperation;
-        for (const typeOp of alterTypeOp.operations) {
-          if (typeOp.kind === "DropProperty") {
-            hints.push(`Data migration hint: Consider backing up data from ${alterTypeOp.type_name}.${typeOp.property_name} before dropping`);
+      case "CreateType": {
+        const createTypeOp = operation as Types.CreateTypeOperation;
+        // Hint for new types with required properties that need default values
+        for (const prop of createTypeOp.properties) {
+          if (prop.required && !prop.default) {
+            hints.push(`Data migration hint: New required property ${createTypeOp.type_name}.${prop.name} has no default value`);
           }
-          if (typeOp.kind === "AddProperty" && typeOp.property.required) {
-            hints.push(`Data migration hint: Consider setting a default value for required property ${alterTypeOp.type_name}.${typeOp.property.name}`);
+        }
+        // Hint for new types with required links
+        for (const link of createTypeOp.links) {
+          if (link.required) {
+            hints.push(`Data migration hint: New required link ${createTypeOp.type_name}.${link.name} must reference existing ${link.target} objects`);
           }
         }
         break;
-      case "DropType":
+      }
+      case "AlterType": {
+        const alterTypeOp = operation as Types.AlterTypeOperation;
+        for (const typeOp of alterTypeOp.operations) {
+          if (typeOp.kind === "DropProperty") {
+            const dropPropOp = typeOp as Types.DropPropertyOperation;
+            hints.push(`Data migration hint: Consider backing up data from ${alterTypeOp.type_name}.${dropPropOp.property_name} before dropping`);
+          }
+          if (typeOp.kind === "AddProperty") {
+            const addPropOp = typeOp as Types.AddPropertyOperation;
+            if (addPropOp.property.required) {
+              hints.push(`Data migration hint: Consider setting a default value for required property ${alterTypeOp.type_name}.${addPropOp.property.name}`);
+            }
+          }
+        }
+        break;
+      }
+      case "DropType": {
         const dropTypeOp = operation as Types.DropTypeOperation;
         hints.push(`Data migration hint: Consider backing up all data from type ${dropTypeOp.type_name} before dropping`);
         break;
+      }
     }
 
     return hints;

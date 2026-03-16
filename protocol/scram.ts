@@ -132,7 +132,7 @@ export class ScramClient {
     
     const key = await crypto.subtle.importKey(
       "raw",
-      passwordBytes,
+      passwordBytes as BufferSource,
       { name: "PBKDF2" },
       false,
       ["deriveBits"]
@@ -141,7 +141,7 @@ export class ScramClient {
     const bits = await crypto.subtle.deriveBits(
       {
         name: "PBKDF2",
-        salt,
+        salt: salt as BufferSource,
         iterations,
         hash: "SHA-256",
       },
@@ -162,7 +162,7 @@ export class ScramClient {
 
     const cryptoKey = await crypto.subtle.importKey(
       "raw",
-      keyBytes,
+      keyBytes as BufferSource,
       { name: "HMAC", hash: "SHA-256" },
       false,
       ["sign"]
@@ -181,7 +181,7 @@ export class ScramClient {
    * SHA-256 hash
    */
   private async sha256(data: Uint8Array): Promise<Uint8Array> {
-    const hash = await crypto.subtle.digest("SHA-256", data);
+    const hash = await crypto.subtle.digest("SHA-256", data as BufferSource);
     return new Uint8Array(hash);
   }
 
@@ -317,7 +317,7 @@ export class ScramServer {
 
     const cryptoKey = await crypto.subtle.importKey(
       "raw",
-      key,
+      key as BufferSource,
       { name: "HMAC", hash: "SHA-256" },
       false,
       ["sign"]
@@ -333,7 +333,7 @@ export class ScramServer {
   }
 
   private async sha256(data: Uint8Array): Promise<Uint8Array> {
-    const hash = await crypto.subtle.digest("SHA-256", data);
+    const hash = await crypto.subtle.digest("SHA-256", data as BufferSource);
     return new Uint8Array(hash);
   }
 
@@ -364,7 +364,7 @@ export class ScramServer {
  * Generate stored keys for a user (for server-side storage)
  */
 export async function generateStoredKeys(
-  username: string,
+  _username: string,
   password: string,
   iterations = 4096
 ): Promise<{
@@ -381,7 +381,7 @@ export async function generateStoredKeys(
   
   const key = await crypto.subtle.importKey(
     "raw",
-    passwordBytes,
+    passwordBytes as BufferSource,
     { name: "PBKDF2" },
     false,
     ["deriveBits"]
@@ -390,7 +390,7 @@ export async function generateStoredKeys(
   const bits = await crypto.subtle.deriveBits(
     {
       name: "PBKDF2",
-      salt,
+      salt: salt as BufferSource,
       iterations,
       hash: "SHA-256",
     },
@@ -399,12 +399,12 @@ export async function generateStoredKeys(
   );
 
   const saltedPassword = new Uint8Array(bits);
-  
+
   // Generate client key and stored key
   const clientKeyBytes = encoder.encode("Client Key");
   const clientKeyCrypto = await crypto.subtle.importKey(
     "raw",
-    saltedPassword,
+    saltedPassword as BufferSource,
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]
@@ -413,14 +413,14 @@ export async function generateStoredKeys(
     await crypto.subtle.sign("HMAC", clientKeyCrypto, clientKeyBytes)
   );
   const storedKey = new Uint8Array(
-    await crypto.subtle.digest("SHA-256", clientKey)
+    await crypto.subtle.digest("SHA-256", clientKey as BufferSource)
   );
 
   // Generate server key
   const serverKeyBytes = encoder.encode("Server Key");
   const serverKeyCrypto = await crypto.subtle.importKey(
     "raw",
-    saltedPassword,
+    saltedPassword as BufferSource,
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"]

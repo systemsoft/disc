@@ -85,16 +85,33 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
   }
 
   /**
-   * Compile a single CTE
+   * Compile a single CTE from a WithBinding
    */
-  private compileCTE(cte: any): SQL.CTE {
-    const query = this.compileQuery(cte.query);
+  private compileCTE(binding: any): SQL.CTE {
+    // A WithBinding has: name (Identifier), value (Expression, usually Subquery)
+    let query: SQL.SQLStatement;
+    if (binding.value && binding.value.kind === "Subquery") {
+      query = this.compileQuery(binding.value.query);
+    } else if (binding.value) {
+      // Direct expression - wrap in a SELECT
+      const expr = this.compileExpression(binding.value);
+      query = SQL.createSelectStatement({
+        select: SQL.createSelectClause([SQL.createSelectItem(expr)]),
+      });
+    } else if (binding.query) {
+      // Fallback: direct query property
+      query = this.compileQuery(binding.query);
+    } else {
+      throw new CompilationError("CTE binding has no value or query");
+    }
+
+    const name = typeof binding.name === "string" ? binding.name : binding.name?.name || "cte";
 
     return {
       kind: "CTE",
-      name: cte.name,
-      recursive: cte.recursive || false,
-      columns: cte.columns || [],
+      name: name,
+      recursive: binding.recursive || false,
+      columns: binding.columns || [],
       query: query,
     };
   }

@@ -321,7 +321,7 @@ export class DDLGenerator {
     return statements;
   }
 
-  private generateAlterLink(tableName: string, operation: Types.AlterLinkOperation): string[] {
+  private generateAlterLink(_tableName: string, operation: Types.AlterLinkOperation): string[] {
     // Link alteration is complex and often requires recreating the link
     // For now, return a comment indicating this needs manual handling
     return [`-- ALTER LINK ${operation.link_name}: Complex operation requiring manual handling`];
@@ -348,11 +348,11 @@ export class DDLGenerator {
   private generateTableOperationDDL(tableName: string, operation: Types.TableOperation): string[] {
     switch (operation.kind) {
       case "AddColumn":
-        return this.generateAddColumn(tableName, operation);
+        return this.generateAddColumn(tableName, operation as Types.AddColumnOperation);
       case "DropColumn":
-        return this.generateDropColumn(tableName, operation);
+        return this.generateDropColumn(tableName, operation as Types.DropColumnOperation);
       case "AlterColumn":
-        return this.generateAlterColumn(tableName, operation);
+        return this.generateAlterColumn(tableName, operation as Types.AlterColumnOperation);
       default:
         throw new Error(`Unsupported table operation: ${operation.kind}`);
     }
@@ -487,7 +487,7 @@ export class DDLGenerator {
     return typeMap[edgeqlType] || "TEXT";
   }
 
-  private formatDefaultValue(value: any, type: string): string {
+  private formatDefaultValue(value: any, _type: string): string {
     if (value === null || value === undefined) {
       return "NULL";
     }
@@ -500,7 +500,13 @@ export class DDLGenerator {
     }
 
     if (typeof value === "number") {
-      return String(value);
+      // Always include decimal point for numeric defaults to preserve float semantics
+      // e.g., 0.0 should render as "0.0" not "0" in SQL
+      const str = String(value);
+      if (Number.isFinite(value) && !str.includes(".") && !str.includes("e") && !str.includes("E")) {
+        return str + ".0";
+      }
+      return str;
     }
 
     if (typeof value === "boolean") {
@@ -569,17 +575,17 @@ export class DDLGenerator {
   private generateRollbackTypeOperation(tableName: string, operation: Types.TypeOperation): string[] {
     switch (operation.kind) {
       case "AddProperty":
-        return this.generateRollbackAddProperty(tableName, operation);
+        return this.generateRollbackAddProperty(tableName, operation as Types.AddPropertyOperation);
       case "DropProperty":
-        return this.generateRollbackDropProperty(tableName, operation);
+        return this.generateRollbackDropProperty(tableName, operation as Types.DropPropertyOperation);
       case "AlterProperty":
-        return this.generateRollbackAlterProperty(tableName, operation);
+        return this.generateRollbackAlterProperty(tableName, operation as Types.AlterPropertyOperation);
       case "AddLink":
-        return this.generateRollbackAddLink(tableName, operation);
+        return this.generateRollbackAddLink(tableName, operation as Types.AddLinkOperation);
       case "DropLink":
-        return this.generateRollbackDropLink(tableName, operation);
+        return this.generateRollbackDropLink(tableName, operation as Types.DropLinkOperation);
       case "AlterLink":
-        return this.generateRollbackAlterLink(tableName, operation);
+        return this.generateRollbackAlterLink(tableName, operation as Types.AlterLinkOperation);
       default:
         throw new Error(`Unsupported rollback type operation: ${operation.kind}`);
     }
@@ -693,11 +699,11 @@ export class DDLGenerator {
   private generateRollbackTableOperation(tableName: string, operation: Types.TableOperation): string[] {
     switch (operation.kind) {
       case "AddColumn":
-        return this.generateRollbackAddColumn(tableName, operation);
+        return this.generateRollbackAddColumn(tableName, operation as Types.AddColumnOperation);
       case "DropColumn":
-        return this.generateRollbackDropColumn(tableName, operation);
+        return this.generateRollbackDropColumn(tableName, operation as Types.DropColumnOperation);
       case "AlterColumn":
-        return this.generateRollbackAlterColumn(tableName, operation);
+        return this.generateRollbackAlterColumn(tableName, operation as Types.AlterColumnOperation);
       default:
         throw new Error(`Unsupported rollback table operation: ${operation.kind}`);
     }

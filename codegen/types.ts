@@ -2,7 +2,6 @@
  * TypeScript Codegen Types and Interfaces
  */
 
-import * as Context from "../compiler/context.ts";
 
 export interface CodegenConfig {
   output_dir: string;
