@@ -4,7 +4,7 @@
  * Injects access control conditions into SQL queries
  */
 
-import { AccessContext, AccessDecision } from "./types.ts";
+import { AccessContext } from "./types.ts";
 import { AccessEvaluator } from "./evaluator.ts";
 
 export interface SQLQuery {
@@ -34,7 +34,7 @@ export class AccessSQLInjector {
       // Return a query that returns no results
       return {
         params: [],
-        text: `SELECT * FROM ${tableName} WHERE FALSE`
+        text: `SELECT * FROM ${tableName} WHERE FALSE`,
       };
     }
 
@@ -52,7 +52,7 @@ export class AccessSQLInjector {
    */
   injectInsert(
     query: SQLQuery,
-    tableName: string,
+    _tableName: string,
     objectType: string,
     context: AccessContext
   ): SQLQuery {
@@ -71,10 +71,10 @@ export class AccessSQLInjector {
    */
   injectUpdate(
     query: SQLQuery,
-    tableName: string,
+    _tableName: string,
     objectType: string,
     context: AccessContext,
-    columns?: string[]
+    _columns?: string[]
   ): SQLQuery {
     const decision = this.evaluator.evaluate(objectType, "update", context);
 
@@ -93,7 +93,7 @@ export class AccessSQLInjector {
    */
   injectDelete(
     query: SQLQuery,
-    tableName: string,
+    _tableName: string,
     objectType: string,
     context: AccessContext
   ): SQLQuery {
@@ -228,7 +228,7 @@ export class AccessSQLInjector {
    * Check if a query needs access control injection
    */
   needsInjection(
-    operation: "select" | "insert" | "update" | "delete",
+    _operation: "select" | "insert" | "update" | "delete",
     objectType: string
   ): boolean {
     const policies = this.evaluator.getPolicies(objectType);

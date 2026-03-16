@@ -6,7 +6,7 @@ export interface SQLNode {
   kind: string;
 }
 
-export type SQLStatement = SelectStatement | InsertStatement | UpdateStatement | DeleteStatement;
+export type SQLStatement = SelectStatement | InsertStatement | UpdateStatement | DeleteStatement | CTEStatement;
 
 export interface SelectStatement extends SQLNode {
   kind: "SelectStatement";
@@ -146,7 +146,7 @@ export interface RawSQLExpression extends SQLExpressionBase {
 }
 
 // Discriminated union of all SQL expression types
-export type SQLExpression = 
+export type SQLExpression =
   | ColumnReference
   | LiteralExpression
   | BinaryExpression
@@ -157,7 +157,9 @@ export type SQLExpression =
   | JsonBuildObject
   | JsonAgg
   | ParameterReference
-  | RawSQLExpression;
+  | RawSQLExpression
+  | AggregateExpression
+  | WindowFunctionExpression;
 
 export interface ColumnReference extends SQLExpressionBase {
   kind: "ColumnReference";
@@ -361,4 +363,179 @@ export function createWhenClause(condition: SQLExpression, then: SQLExpression):
     condition,
     then,
   };
+}
+
+// CTE (Common Table Expression) support
+
+export interface CTE extends SQLNode {
+  kind: "CTE";
+  name: string;
+  recursive: boolean;
+  columns: string[];
+  query: SQLStatement;
+}
+
+export interface CTEStatement extends SQLNode {
+  kind: "CTEStatement";
+  ctes: CTE[];
+  query: SQLStatement;
+}
+
+export function withCTEs(ctes: CTE[], query: SQLStatement): CTEStatement {
+  return {
+    kind: "CTEStatement",
+    ctes,
+    query,
+  };
+}
+
+// Lateral join support
+
+export interface LateralSubquery extends SQLNode {
+  kind: "LateralSubquery";
+  query: SQLStatement;
+}
+
+export function lateral(query: SQLStatement): LateralSubquery {
+  return {
+    kind: "LateralSubquery",
+    query,
+  };
+}
+
+// JOIN helpers
+
+export function innerJoin(options: {
+  left: SQLStatement;
+  right: SQLStatement;
+  on: SQLExpression;
+}): SelectStatement {
+  return createSelectStatement({
+    select: createSelectClause([createSelectItem(createColumnReference("*"))]),
+    from: createFromClause([{
+      kind: "TableReference",
+      name: "(subquery)",
+      joins: [{
+        kind: "JoinClause",
+        type: "INNER",
+        table: { kind: "TableReference", name: "(subquery)" },
+        condition: options.on,
+      }],
+    }]),
+  });
+}
+
+export function leftJoin(options: {
+  left: SQLStatement;
+  right: SQLStatement;
+  on: SQLExpression;
+  where?: SQLExpression;
+}): SelectStatement {
+  return createSelectStatement({
+    select: createSelectClause([createSelectItem(createColumnReference("*"))]),
+    from: createFromClause([{
+      kind: "TableReference",
+      name: "(subquery)",
+      joins: [{
+        kind: "JoinClause",
+        type: "LEFT",
+        table: { kind: "TableReference", name: "(subquery)" },
+        condition: options.on,
+      }],
+    }]),
+    where: options.where ? createWhereClause(options.where) : undefined,
+  });
+}
+
+// Expression helpers
+
+export function eq(left: string, right: string): BinaryExpression {
+  return createBinaryExpression("=", createColumnReference(left), createColumnReference(right));
+}
+
+export function isNotNull(column: string): UnaryExpression {
+  return {
+    kind: "UnaryExpression",
+    operator: "IS NOT NULL",
+    operand: createColumnReference(column),
+  };
+}
+
+export function star(): ColumnReference {
+  return createColumnReference("*");
+}
+
+// Aggregate and window function support
+
+export interface AggregateExpression extends SQLExpressionBase {
+  kind: "AggregateExpression";
+  function: string;
+  expression: SQLExpression;
+  filter?: SQLExpression;
+  distinct?: boolean;
+}
+
+export interface WindowFunctionExpression extends SQLExpressionBase {
+  kind: "WindowFunctionExpression";
+  function: string;
+  args: SQLExpression[];
+  over: WindowClause;
+}
+
+export interface WindowClause extends SQLNode {
+  kind: "WindowClause";
+  partitionBy?: SQLExpression[];
+  orderBy?: OrderByItem[];
+  frame?: WindowFrame;
+}
+
+export interface WindowFrame extends SQLNode {
+  kind: "WindowFrame";
+  mode: "RANGE" | "ROWS" | "GROUPS";
+  start: string;
+  end: string;
+  exclude?: string;
+}
+
+export function aggregate(func: string, expr: SQLExpression): AggregateExpression {
+  return {
+    kind: "AggregateExpression",
+    function: func,
+    expression: expr,
+  };
+}
+
+export function aggregateWithFilter(agg: AggregateExpression, filter: SQLExpression): AggregateExpression {
+  return {
+    ...agg,
+    filter,
+  };
+}
+
+export function distinct(agg: AggregateExpression): AggregateExpression {
+  return {
+    ...agg,
+    distinct: true,
+  };
+}
+
+export function windowFunction(func: string, args: SQLExpression[], over: WindowClause): WindowFunctionExpression {
+  return {
+    kind: "WindowFunctionExpression",
+    function: func,
+    args,
+    over,
+  };
+}
+
+export function select(options: {
+  from: SQLNode;
+  selections: string[];
+}): SelectStatement {
+  const items = options.selections.map(s =>
+    createSelectItem(createColumnReference(s))
+  );
+  return createSelectStatement({
+    select: createSelectClause(items),
+  });
 }

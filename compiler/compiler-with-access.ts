@@ -20,6 +20,7 @@ export class EdgeQLCompilerWithAccess {
   private accessEvaluator: AccessEvaluator;
   private accessInjector: AccessSQLInjector;
   private accessContext: AccessContext;
+  private accessMode: "permissive" | "restrictive";
 
   constructor(
     schema: Context.Schema,
@@ -27,7 +28,7 @@ export class EdgeQLCompilerWithAccess {
     accessContext?: AccessContext
   ) {
     this.ctx = Context.createContext(schema);
-    
+
     // Initialize access control
     const config = accessConfig || {
       mode: "permissive",
@@ -35,10 +36,9 @@ export class EdgeQLCompilerWithAccess {
       enableRLS: true,
       enableAudit: false,
     };
-    
+
+    this.accessMode = config.mode === "restrictive" ? "restrictive" : "permissive";
     this.accessEvaluator = new AccessEvaluator(config);
-    // Make config accessible for mode checking
-    (this.accessEvaluator as any).config = config;
     this.accessInjector = new AccessSQLInjector(this.accessEvaluator);
     this.accessContext = accessContext || {};
   }
@@ -165,45 +165,34 @@ export class EdgeQLCompilerWithAccess {
     switch (query.kind) {
       case "SelectQuery":
         // Extract type from the expression
-        if (query.expr?.kind === "TypeReference") {
-          return query.expr.name;
-        } else if (query.expr?.kind === "TypeName") {
-          // Handle TypeName expressions
+        if (query.expr?.kind === "TypeName") {
           return query.expr.name.parts.join(".");
         } else if (query.expr?.kind === "Path") {
           // Handle path expressions that start with a type
           const firstStep = query.expr.steps[0];
-          if (typeof firstStep === "string") {
-            return firstStep;
+          if (firstStep.type === "property") {
+            return firstStep.name;
           }
         }
         break;
       case "InsertQuery":
-        return query.type;
+        return query.type.name.parts.join(".");
       case "UpdateQuery":
-        // UpdateQuery has expr field
-        if (query.expr?.kind === "TypeReference") {
-          return query.expr.name;
-        }
-        break;
+        return query.type.name.parts.join(".");
       case "DeleteQuery":
-        // DeleteQuery has expr field  
-        if (query.expr?.kind === "TypeReference") {
-          return query.expr.name;
-        }
-        break;
+        return query.type.name.parts.join(".");
     }
     return undefined;
   }
 
-  private statementToSQL(statement: SQL.SQLStatement): string {
+  private statementToSQL(_statement: SQL.SQLStatement): string {
     // Simplified - would use SQLCodeGenerator
     return "SELECT * FROM table";
   }
 
   private injectWhereConditions(
     statement: SQL.SelectStatement | SQL.UpdateStatement | SQL.DeleteStatement,
-    modifiedSQL: string
+    _modifiedSQL: string
   ): SQL.SQLStatement {
     // Get access policies and evaluate them
     const objectType = this.extractObjectTypeFromStatement(statement);
@@ -312,14 +301,14 @@ export class EdgeQLCompilerWithAccess {
     
     // Combine multiple conditions with OR (permissive mode)
     // or AND (restrictive mode)
-    const operator = this.accessEvaluator.config.mode === "restrictive" ? "AND" : "OR";
-    
-    return conditions.reduce<SQL.SQLExpression>((acc, cond) => ({
+    const operator = this.accessMode === "restrictive" ? "AND" : "OR";
+
+    return conditions.slice(1).reduce<SQL.SQLExpression>((acc, cond) => ({
       kind: "BinaryExpression",
       operator,
       left: acc,
       right: cond,
-    }));
+    }), conditions[0]);
   }
 
   // ... rest of the compilation methods from original compiler ...
@@ -342,16 +331,14 @@ export class EdgeQLCompilerWithAccess {
   private compileSelectQuery(query: EdgeQLAST.SelectQuery): SQL.SelectStatement {
     // Extract type name and get table name
     let typeName = "Unknown";
-    if (query.expr?.kind === "TypeReference") {
-      typeName = query.expr.name;
-    } else if (query.expr?.kind === "TypeName") {
+    if (query.expr?.kind === "TypeName") {
       typeName = query.expr.name.parts.join(".");
     }
-    
+
     const typeDef = this.ctx.schema.types.get(typeName);
     const tableName = typeDef?.tableName || typeName.toLowerCase() + "s";
     const alias = this.generateAlias();
-    
+
     // Build FROM clause
     const fromClause: SQL.FromClause = {
       kind: "FromClause",
@@ -369,12 +356,12 @@ export class EdgeQLCompilerWithAccess {
     const whereClause = query.filter ? this.compileFilter(query.filter) : undefined;
 
     // Build ORDER BY
-    const orderByClause = query.orderBy && query.orderBy.length > 0 ? 
+    const orderByClause = query.orderBy && query.orderBy.length > 0 ?
       this.compileOrderBy(query.orderBy) : undefined;
 
     // Build LIMIT
-    const limitClause = query.limit ? 
-      { kind: "LimitClause" as const, count: this.compileLiteral(query.limit) } : undefined;
+    const limitClause = query.limit ?
+      { kind: "LimitClause" as const, count: this.compileExpression(query.limit) } : undefined;
 
     return SQL.createSelectStatement({
       select: selectClause,
@@ -385,25 +372,19 @@ export class EdgeQLCompilerWithAccess {
     });
   }
 
-  private compileInsertQuery(query: EdgeQLAST.InsertQuery): SQL.InsertStatement {
+  private compileInsertQuery(_query: EdgeQLAST.InsertQuery): SQL.InsertStatement {
     throw new CompilationError("INSERT queries not yet implemented with access control");
   }
 
-  private compileUpdateQuery(query: EdgeQLAST.UpdateQuery): SQL.UpdateStatement {
+  private compileUpdateQuery(_query: EdgeQLAST.UpdateQuery): SQL.UpdateStatement {
     throw new CompilationError("UPDATE queries not yet implemented with access control");
   }
 
-  private compileDeleteQuery(query: EdgeQLAST.DeleteQuery): SQL.DeleteStatement {
+  private compileDeleteQuery(_query: EdgeQLAST.DeleteQuery): SQL.DeleteStatement {
     throw new CompilationError("DELETE queries not yet implemented with access control");
   }
 
-  private getTableName(query: EdgeQLAST.SelectQuery): string {
-    if (query.expr?.kind === "TypeReference") {
-      const typeDef = this.ctx.schema.types.get(query.expr.name);
-      return typeDef?.tableName || query.expr.name.toLowerCase() + "s";
-    }
-    return "unknown_table";
-  }
+
 
   private generateAlias(): string {
     return `t${++this.ctx.aliasCounter}`;
@@ -417,7 +398,7 @@ export class EdgeQLCompilerWithAccess {
           // ShapeElement has an expr field
           if (elem.expr.kind === "Path") {
             const path = elem.expr as EdgeQLAST.Path;
-            const fieldName = typeof path.steps[0] === "string" ? path.steps[0] : "unknown";
+            const fieldName = path.steps[0].name;
             return SQL.createJsonField(
               fieldName,
               SQL.createColumnReference(fieldName, alias)
@@ -432,9 +413,7 @@ export class EdgeQLCompilerWithAccess {
     } else {
       // Select all fields as JSON
       let typeName = "Unknown";
-      if (query.expr?.kind === "TypeReference") {
-        typeName = query.expr.name;
-      } else if (query.expr?.kind === "TypeName") {
+      if (query.expr?.kind === "TypeName") {
         typeName = query.expr.name.parts.join(".");
       }
       const typeDef = this.ctx.schema.types.get(typeName);
@@ -476,9 +455,10 @@ export class EdgeQLCompilerWithAccess {
     switch (expr.kind) {
       case "Literal":
         return this.compileLiteral(expr);
-      case "Path":
+      case "Path": {
         const lastStep = expr.steps[expr.steps.length - 1];
-      return SQL.createColumnReference(typeof lastStep === "string" ? lastStep : "unknown");
+        return SQL.createColumnReference(lastStep.name);
+      }
       case "BinaryOp":
         return this.compileBinaryOp(expr);
       default:

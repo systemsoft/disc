@@ -104,8 +104,6 @@ export class EdgeQLCompiler {
       return statement; // Type not found in schema
     }
 
-    const tableName = typeDef.tableName;
-
     // Apply access control based on statement type
     switch (statement.kind) {
       case "SelectStatement": {
@@ -267,37 +265,22 @@ export class EdgeQLCompiler {
     switch (query.kind) {
       case "SelectQuery":
         // Extract type from the expression
-        if (query.expr?.kind === "TypeReference") {
-          return query.expr.name;
-        } else if (query.expr?.kind === "TypeName") {
-          // Handle TypeName expressions
+        if (query.expr?.kind === "TypeName") {
           return query.expr.name.parts.join(".");
         } else if (query.expr?.kind === "Path") {
           // Handle path expressions that start with a type
           const firstStep = query.expr.steps[0];
-          if (typeof firstStep === "string") {
-            return firstStep;
+          if (firstStep.type === "property") {
+            return firstStep.name;
           }
         }
         break;
       case "InsertQuery":
-        return query.type;
+        return query.type.name.parts.join(".");
       case "UpdateQuery":
-        // UpdateQuery has expr field
-        if (query.expr?.kind === "TypeReference") {
-          return query.expr.name;
-        } else if (query.expr?.kind === "TypeName") {
-          return query.expr.name.parts.join(".");
-        }
-        break;
+        return query.type.name.parts.join(".");
       case "DeleteQuery":
-        // DeleteQuery has expr field  
-        if (query.expr?.kind === "TypeReference") {
-          return query.expr.name;
-        } else if (query.expr?.kind === "TypeName") {
-          return query.expr.name.parts.join(".");
-        }
-        break;
+        return query.type.name.parts.join(".");
     }
     return undefined;
   }
@@ -312,21 +295,17 @@ export class EdgeQLCompiler {
       sql: sql,
     }));
     
-    if (conditions.length === 1) {
-      return conditions[0];
-    }
-    
     // Combine multiple conditions with OR (permissive mode)
     // In restrictive mode we'd use AND, but that's handled by the evaluator
-    return conditions.reduce<SQL.SQLExpression>((acc, cond) => ({
+    return conditions.slice(1).reduce<SQL.SQLExpression>((acc, cond) => ({
       kind: "BinaryExpression",
       operator: "OR",
       left: acc,
       right: cond,
-    }));
+    }), conditions[0]);
   }
 
-  private compileQuery(query: EdgeQLAST.Query): SQL.SQLStatement {
+  protected compileQuery(query: EdgeQLAST.Query): SQL.SQLStatement {
     switch (query.kind) {
       case "SelectQuery":
         return this.compileSelectQuery(query);
@@ -526,7 +505,7 @@ export class EdgeQLCompiler {
     }
   }
 
-  private compilePathExpression(path: EdgeQLAST.Path, shape?: EdgeQLAST.Shape): {
+  private compilePathExpression(_path: EdgeQLAST.Path, _shape?: EdgeQLAST.Shape): {
     selectItems: SQL.SelectItem[];
     fromClause: SQL.FromClause;
   } {
@@ -535,7 +514,7 @@ export class EdgeQLCompiler {
     throw new CompilationError("Path expression compilation not yet fully implemented");
   }
 
-  private compileExpression(expr: EdgeQLAST.Expression): SQL.SQLExpression {
+  protected compileExpression(expr: EdgeQLAST.Expression): SQL.SQLExpression {
     switch (expr.kind) {
       case "Literal":
         return this.compileLiteral(expr);
@@ -584,7 +563,7 @@ export class EdgeQLCompiler {
     return SQL.createLiteral(sqlType, literal.value);
   }
 
-  private compileIdentifier(identifier: EdgeQLAST.Identifier): SQL.SQLExpression {
+  private compileIdentifier(_identifier: EdgeQLAST.Identifier): SQL.SQLExpression {
     // This is context-dependent - could be a column reference or variable
     // For now, assume it's a column in the current table context
     throw new CompilationError("Standalone identifier compilation not yet implemented");
@@ -827,11 +806,11 @@ export class EdgeQLCompiler {
     };
   }
 
-  private compileWithBlock(query: EdgeQLAST.WithBlock): SQL.SQLStatement {
+  private compileWithBlock(_query: EdgeQLAST.WithBlock): SQL.SQLStatement {
     throw new CompilationError("WITH block compilation not yet implemented");
   }
 
-  private compileForQuery(query: EdgeQLAST.ForQuery): SQL.SQLStatement {
+  private compileForQuery(_query: EdgeQLAST.ForQuery): SQL.SQLStatement {
     throw new CompilationError("FOR query compilation not yet implemented");
   }
 

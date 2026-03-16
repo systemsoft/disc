@@ -49,7 +49,7 @@ function createTestSchema(): Context.Schema {
   // Add count function
   functions.set("count", {
     name: "count",
-    args: [{ name: "set", type: "any", optional: true }],
+    args: [{ name: "set", type: "any", required: false }],
     returnType: "int64",
     sqlName: "count",
   });

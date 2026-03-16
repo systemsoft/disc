@@ -20,11 +20,9 @@ import {
 
 export class AccessPolicyParser {
   private current = 0;
-  private source: string;
   private tokens: Token[];
 
-  constructor(tokens: Token[], source: string) {
-    this.source = source;
+  constructor(tokens: Token[], _source: string) {
     this.tokens = tokens;
   }
 
@@ -80,8 +78,8 @@ export class AccessPolicyParser {
     const end = this.previous();
 
     const span: Span = {
-      end: end.end,
-      start: start.start
+      end: { line: end.line, column: end.column, offset: end.offset },
+      start: { line: start.line, column: start.column, offset: start.offset },
     };
 
     return createAccessPolicy(name, rules, {
@@ -116,8 +114,8 @@ export class AccessPolicyParser {
     const end = this.previous();
 
     const span: Span = {
-      end: end.end,
-      start: start.start
+      end: { line: end.line, column: end.column, offset: end.offset },
+      start: { line: start.line, column: start.column, offset: start.offset },
     };
 
     return createAccessRule(action, operations, condition, span);
@@ -155,8 +153,8 @@ export class AccessPolicyParser {
     const end = this.previous();
 
     const span: Span = {
-      end: end.end,
-      start: start.start
+      end: { line: end.line, column: end.column, offset: end.offset },
+      start: { line: start.line, column: start.column, offset: start.offset },
     };
 
     return createAccessOperation(operation, columns, span);
@@ -474,7 +472,7 @@ export class AccessPolicyParser {
       column: token.column,
       file: undefined,
       line: token.line,
-      offset: token.start
+      offset: token.offset
     };
   }
 }

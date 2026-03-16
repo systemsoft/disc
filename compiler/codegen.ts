@@ -23,10 +23,10 @@ export class SQLCodeGenerator {
         return this.generateUpdateStatement(stmt);
       case "DeleteStatement":
         return this.generateDeleteStatement(stmt);
-      default: {
-        const _exhaustive: never = stmt;
-        throw new Error(`Unsupported statement type: ${(stmt as any).kind}`);
-      }
+      case "CTEStatement":
+        return this.generateCTEStatement(stmt);
+      default:
+        throw new Error(`Unsupported statement type: ${(stmt as never as { kind: string }).kind}`);
     }
   }
 
@@ -224,10 +224,12 @@ export class SQLCodeGenerator {
         return this.generateParameterReference(expr);
       case "RawSQLExpression":
         return this.generateRawSQLExpression(expr);
-      default: {
-        const _exhaustive: never = expr;
-        throw new Error(`Unsupported expression type: ${(expr as any).kind}`);
-      }
+      case "AggregateExpression":
+        return this.generateAggregateExpression(expr);
+      case "WindowFunctionExpression":
+        return this.generateWindowFunctionExpression(expr);
+      default:
+        throw new Error(`Unsupported expression type: ${(expr as never as { kind: string }).kind}`);
     }
   }
 
@@ -324,6 +326,51 @@ export class SQLCodeGenerator {
   private generateRawSQLExpression(expr: SQL.RawSQLExpression): string {
     // Raw SQL is injected as-is (be careful with this!)
     return expr.sql;
+  }
+
+  private generateCTEStatement(stmt: SQL.CTEStatement): string {
+    const ctes = stmt.ctes.map(cte => {
+      const recursive = cte.recursive ? "RECURSIVE " : "";
+      const cols = cte.columns.length > 0 ? ` (${cte.columns.join(", ")})` : "";
+      const query = this.generateStatement(cte.query);
+      return `${recursive}${this.escapeIdentifier(cte.name)}${cols} AS (\n${this.indent()}  ${query}\n${this.indent()})`;
+    }).join(",\n" + this.indent());
+
+    const main = this.generateStatement(stmt.query);
+    return `WITH ${ctes}\n${main}`;
+  }
+
+  private generateAggregateExpression(expr: SQL.AggregateExpression): string {
+    const distinct = expr.distinct ? "DISTINCT " : "";
+    const inner = this.generateExpression(expr.expression);
+    let sql = `${expr.function}(${distinct}${inner})`;
+    if (expr.filter) {
+      sql += ` FILTER (WHERE ${this.generateExpression(expr.filter)})`;
+    }
+    return sql;
+  }
+
+  private generateWindowFunctionExpression(expr: SQL.WindowFunctionExpression): string {
+    const args = expr.args.map(a => this.generateExpression(a)).join(", ");
+    let over = "";
+
+    if (expr.over.partitionBy && expr.over.partitionBy.length > 0) {
+      over += "PARTITION BY " + expr.over.partitionBy.map(e => this.generateExpression(e)).join(", ");
+    }
+
+    if (expr.over.orderBy && expr.over.orderBy.length > 0) {
+      if (over) over += " ";
+      over += "ORDER BY " + expr.over.orderBy.map(item =>
+        `${this.generateExpression(item.expression)} ${item.direction}`
+      ).join(", ");
+    }
+
+    if (expr.over.frame) {
+      if (over) over += " ";
+      over += `${expr.over.frame.mode} BETWEEN ${expr.over.frame.start} AND ${expr.over.frame.end}`;
+    }
+
+    return `${expr.function}(${args}) OVER (${over})`;
   }
 
   private needsParentheses(expr: SQL.SQLExpression): boolean {

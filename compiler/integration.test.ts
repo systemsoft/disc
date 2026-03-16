@@ -6,6 +6,51 @@ import { assertEquals } from "@std/assert";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { EdgeQLCompiler } from "./compiler.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
+import * as Context from "./context.ts";
+
+function createTestSchema(): Context.Schema {
+  const types = new Map<string, Context.TypeDef>();
+  types.set("User", {
+    name: "User",
+    kind: "object",
+    tableName: "users",
+    properties: new Map([
+      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id" }],
+      ["name", { name: "name", type: "str", required: true, multi: false, columnName: "name" }],
+      ["email", { name: "email", type: "str", required: true, multi: false, columnName: "email" }],
+      ["first_name", { name: "first_name", type: "str", required: false, multi: false, columnName: "first_name" }],
+      ["last_name", { name: "last_name", type: "str", required: false, multi: false, columnName: "last_name" }],
+      ["active", { name: "active", type: "bool", required: false, multi: false, columnName: "active" }],
+      ["role", { name: "role", type: "str", required: false, multi: false, columnName: "role" }],
+    ]),
+    links: new Map([
+      ["posts", { name: "posts", target: "Post", multi: true, required: false }],
+    ]),
+  });
+  types.set("Post", {
+    name: "Post",
+    kind: "object",
+    tableName: "posts",
+    properties: new Map([
+      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id" }],
+      ["title", { name: "title", type: "str", required: true, multi: false, columnName: "title" }],
+      ["created_at", { name: "created_at", type: "datetime", required: false, multi: false, columnName: "created_at" }],
+    ]),
+    links: new Map([
+      ["author", { name: "author", target: "User", multi: false, columnName: "author_id", required: true }],
+    ]),
+  });
+
+  const functions = new Map<string, Context.FunctionDef>();
+  functions.set("count", {
+    name: "count",
+    args: [{ name: "set", type: "any", required: false }],
+    returnType: "int64",
+    sqlName: "count",
+  });
+
+  return { types, functions };
+}
 
 /**
  * Helper function to compile EdgeQL to SQL
@@ -15,9 +60,9 @@ function compileToSQL(edgeql: string): string {
     // Parse EdgeQL
     const parser = new EdgeQLParser(edgeql);
     const ast = parser.parse();
-    
+
     // Compile to SQL AST
-    const compiler = new EdgeQLCompiler();
+    const compiler = new EdgeQLCompiler(createTestSchema());
     const compileResult = compiler.compile(ast);
     
     if (!compileResult.ok) {

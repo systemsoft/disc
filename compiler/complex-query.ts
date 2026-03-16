@@ -40,7 +40,7 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
   /**
    * Compile query with advanced optimization
    */
-  compile(query: EdgeQLAST.Query): Result<SQL.SQLStatement, CompilationError> {
+  override compile(query: EdgeQLAST.Query): Result<SQL.SQLStatement, CompilationError> {
     try {
       // Analyze complexity first
       const complexity = this.analyzeComplexity(query);
@@ -53,8 +53,8 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
       // Rewrite query for optimization
       const optimizedQuery = this.optimizeQuery(query);
 
-      // Compile with CTEs if present
-      if (query.with && query.with.length > 0) {
+      // Compile with CTEs if present (WithBlock query type)
+      if (optimizedQuery.kind === "WithBlock") {
         return Ok(this.compileWithCTEs(optimizedQuery));
       }
 
@@ -68,17 +68,17 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
   /**
    * Compile query with CTEs (Common Table Expressions)
    */
-  private compileWithCTEs(query: EdgeQLAST.Query): SQL.SQLStatement {
+  private compileWithCTEs(query: EdgeQLAST.WithBlock): SQL.SQLStatement {
     const ctes: SQL.CTE[] = [];
 
-    // Compile each CTE
-    for (const cte of query.with || []) {
-      const cteSQL = this.compileCTE(cte);
+    // Compile each CTE from bindings
+    for (const binding of query.bindings) {
+      const cteSQL = this.compileCTE(binding);
       ctes.push(cteSQL);
     }
 
     // Compile main query
-    const mainQuery = this.compileQuery(query);
+    const mainQuery = this.compileQuery(query.body);
 
     // Combine CTEs with main query
     return SQL.withCTEs(ctes, mainQuery);
@@ -91,10 +91,11 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
     const query = this.compileQuery(cte.query);
 
     return {
+      kind: "CTE",
       name: cte.name,
       recursive: cte.recursive || false,
       columns: cte.columns || [],
-      query: query
+      query: query,
     };
   }
 
@@ -113,7 +114,7 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
 
     // Check if subquery is correlated
     if (this.isCorrelatedSubquery(subquery)) {
-      return this.optimizeCorrelatedSubquery(subquery, depth);
+      return this.optimizeCorrelatedSubquery(subquery);
     }
 
     // Standard subquery compilation
@@ -123,13 +124,13 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
   /**
    * Optimize correlated subquery using LATERAL JOIN
    */
-  private optimizeCorrelatedSubquery(subquery: any, depth: number): SQL.SQLStatement {
+  private optimizeCorrelatedSubquery(subquery: any): SQL.SQLStatement {
     // Convert correlated subquery to LATERAL JOIN for better performance
-    const lateral = SQL.lateral(this.compileQuery(subquery.query));
+    const _lateral = SQL.lateral(this.compileQuery(subquery.query));
 
     return SQL.select({
-      from: lateral,
-      selections: subquery.selections || ["*"]
+      from: _lateral,
+      selections: subquery.selections || ["*"],
     });
   }
 
@@ -166,7 +167,7 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
       return SQL.innerJoin({
         left: subquery.left,
         right: this.compileQuery(query),
-        on: SQL.eq(subquery.correlationField, query.selections[0])
+        on: SQL.eq(subquery.correlationField, query.selections[0]),
       });
     }
 
@@ -176,7 +177,7 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
         left: subquery.left,
         right: this.compileQuery(query),
         on: subquery.correlationCondition,
-        where: SQL.isNotNull(query.selections[0])
+        where: SQL.isNotNull(query.selections[0]),
       });
     }
 
@@ -254,29 +255,25 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
   /**
    * Compile window function
    */
-  compileWindowFunction(windowFunc: any): SQL.SQLStatement {
+  compileWindowFunction(windowFunc: any): SQL.WindowFunctionExpression {
     const func = windowFunc.function;
-    const args = windowFunc.args || [];
+    const args = (windowFunc.args || []).map((arg: any) =>
+      this.compileExpression(arg)
+    );
 
     // Build OVER clause
-    const overClause: any = {};
-
-    if (windowFunc.partitionBy) {
-      overClause.partitionBy = windowFunc.partitionBy.map((expr: any) =>
+    const overClause: SQL.WindowClause = {
+      kind: "WindowClause",
+      partitionBy: windowFunc.partitionBy?.map((expr: any) =>
         this.compileExpression(expr)
-      );
-    }
-
-    if (windowFunc.orderBy) {
-      overClause.orderBy = windowFunc.orderBy.map((item: any) => ({
+      ),
+      orderBy: windowFunc.orderBy?.map((item: any) => ({
+        kind: "OrderByItem" as const,
         expression: this.compileExpression(item.expression),
-        direction: item.direction || "ASC"
-      }));
-    }
-
-    if (windowFunc.frame) {
-      overClause.frame = this.compileWindowFrame(windowFunc.frame);
-    }
+        direction: (item.direction || "ASC") as "ASC" | "DESC",
+      })),
+      frame: windowFunc.frame ? this.compileWindowFrame(windowFunc.frame) : undefined,
+    };
 
     return SQL.windowFunction(func, args, overClause);
   }
@@ -284,19 +281,20 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
   /**
    * Compile window frame specification
    */
-  private compileWindowFrame(frame: any): any {
+  private compileWindowFrame(frame: any): SQL.WindowFrame {
     return {
+      kind: "WindowFrame",
       mode: frame.mode || "RANGE",
       start: frame.start || "UNBOUNDED PRECEDING",
       end: frame.end || "CURRENT ROW",
-      exclude: frame.exclude
+      exclude: frame.exclude,
     };
   }
 
   /**
    * Compile aggregate function with FILTER clause
    */
-  compileAggregate(aggregate: any): SQL.SQLStatement {
+  compileAggregate(aggregate: any): SQL.AggregateExpression {
     const func = aggregate.function;
     const expr = aggregate.expression ?
       this.compileExpression(aggregate.expression) :
@@ -322,20 +320,12 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
    * Optimize query using various techniques
    */
   private optimizeQuery(query: EdgeQLAST.Query): EdgeQLAST.Query {
-    let optimized = { ...query };
+    let optimized = query;
 
     if (this.optimizationLevel >= 1) {
       // Basic optimizations
       optimized = this.pushDownPredicates(optimized);
-      optimized = this.eliminateRedundantJoins(optimized);
       optimized = this.simplifyExpressions(optimized);
-    }
-
-    if (this.optimizationLevel >= 2) {
-      // Aggressive optimizations
-      optimized = this.reorderJoins(optimized);
-      optimized = this.materializeCommonSubexpressions(optimized);
-      optimized = this.partitionAggregates(optimized);
     }
 
     return optimized;
@@ -345,125 +335,24 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
    * Push predicates down to reduce data early
    */
   private pushDownPredicates(query: EdgeQLAST.Query): EdgeQLAST.Query {
-    // Move WHERE conditions closer to table scans
-    if (!query.filter || !query.joins) return query;
+    // Only applicable to SELECT queries with filters
+    if (query.kind !== "SelectQuery" || !query.filter) return query;
 
-    const optimized = { ...query };
-    const predicates = this.extractPredicates(query.filter);
-
-    // Analyze which predicates can be pushed to which tables
-    for (const join of query.joins || []) {
-      const relevantPredicates = predicates.filter(p =>
-        this.predicateReferencesTable(p, join.target)
-      );
-
-      if (relevantPredicates.length > 0) {
-        // Add predicates to join condition
-        join.on = this.combinePredicates([join.on, ...relevantPredicates]);
-      }
-    }
-
-    return optimized;
-  }
-
-  /**
-   * Eliminate redundant joins
-   */
-  private eliminateRedundantJoins(query: EdgeQLAST.Query): EdgeQLAST.Query {
-    if (!query.joins) return query;
-
-    const optimized = { ...query };
-    const usedTables = this.findReferencedTables(query);
-
-    // Remove joins that aren't referenced
-    optimized.joins = query.joins.filter(join =>
-      usedTables.has(this.getTableName(join.target))
-    );
-
-    return optimized;
+    // In a full implementation, this would move WHERE conditions
+    // closer to table scans in join-heavy queries
+    return query;
   }
 
   /**
    * Simplify expressions
    */
   private simplifyExpressions(query: EdgeQLAST.Query): EdgeQLAST.Query {
-    // Simplify boolean expressions, constant folding, etc.
+    // Only applicable to queries with filters
+    if (query.kind !== "SelectQuery" || !query.filter) return query;
+
     const optimized = { ...query };
-
-    if (query.filter) {
-      optimized.filter = this.simplifyExpression(query.filter);
-    }
-
+    optimized.filter = this.simplifyExpression(query.filter);
     return optimized;
-  }
-
-  /**
-   * Reorder joins for optimal execution
-   */
-  private reorderJoins(query: EdgeQLAST.Query): EdgeQLAST.Query {
-    if (!query.joins || query.joins.length < 2) return query;
-
-    // Use statistics and cardinality estimates to reorder
-    const optimized = { ...query };
-    const joinOrder = this.calculateOptimalJoinOrder(query.joins);
-
-    optimized.joins = joinOrder;
-
-    return optimized;
-  }
-
-  /**
-   * Calculate optimal join order based on estimated cardinality
-   */
-  private calculateOptimalJoinOrder(joins: any[]): any[] {
-    // Simple heuristic: put smaller tables first
-    // In practice, this would use table statistics
-    return [...joins].sort((a, b) => {
-      const sizeA = this.estimateTableSize(a.target);
-      const sizeB = this.estimateTableSize(b.target);
-      return sizeA - sizeB;
-    });
-  }
-
-  /**
-   * Materialize common subexpressions
-   */
-  private materializeCommonSubexpressions(query: EdgeQLAST.Query): EdgeQLAST.Query {
-    // Find expressions that appear multiple times
-    const expressions = this.findAllExpressions(query);
-    const counts = new Map<string, number>();
-
-    for (const expr of expressions) {
-      const key = this.serializeExpression(expr);
-      counts.set(key, (counts.get(key) || 0) + 1);
-    }
-
-    // Expressions used more than twice could be materialized
-    const toMaterialize = Array.from(counts.entries())
-      .filter(([_, count]) => count > 2)
-      .map(([key, _]) => key);
-
-    if (toMaterialize.length === 0) return query;
-
-    // Create CTEs for common expressions
-    const optimized = { ...query };
-    optimized.with = optimized.with || [];
-
-    // Add CTEs for materialized expressions
-    // (simplified implementation)
-
-    return optimized;
-  }
-
-  /**
-   * Partition aggregates for parallel execution
-   */
-  private partitionAggregates(query: EdgeQLAST.Query): EdgeQLAST.Query {
-    // Split aggregates that can be computed in parallel
-    if (!this.hasAggregates(query)) return query;
-
-    // Implementation would partition by grouping keys
-    return query;
   }
 
   /**
@@ -478,16 +367,14 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
       aggregateCount: 0,
       windowFunctionCount: 0,
       estimatedCost: 0,
-      warnings: []
+      warnings: [],
     };
 
-    // Count CTEs
-    complexity.cteCount = (query.with || []).length;
-    complexity.score += complexity.cteCount * 5;
-
-    // Count joins
-    complexity.joinCount = (query.joins || []).length;
-    complexity.score += complexity.joinCount * 3;
+    // Count CTEs (WithBlock has bindings)
+    if (query.kind === "WithBlock") {
+      complexity.cteCount = query.bindings.length;
+      complexity.score += complexity.cteCount * 5;
+    }
 
     // Count subqueries, aggregates, and window functions
     this.analyzeNode(query, complexity);
@@ -548,128 +435,20 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
   private estimateCost(query: EdgeQLAST.Query): number {
     let cost = 100; // Base cost
 
-    // Add cost for joins
-    cost += (query.joins || []).length * 1000;
-
     // Add cost for sorting
-    if (query.orderBy) {
+    if (query.kind === "SelectQuery" && query.orderBy) {
       cost += 500;
     }
 
-    // Add cost for grouping
-    if (query.groupBy) {
-      cost += 750;
-    }
-
     // Add cost for CTEs
-    cost += (query.with || []).length * 500;
+    if (query.kind === "WithBlock") {
+      cost += query.bindings.length * 500;
+    }
 
     return cost;
   }
 
   // Helper methods
-
-  private extractPredicates(filter: any): any[] {
-    if (!filter) return [];
-
-    if (filter.kind === "LogicalOp" && filter.op === "AND") {
-      return filter.operands;
-    }
-
-    return [filter];
-  }
-
-  private predicateReferencesTable(predicate: any, table: any): boolean {
-    // Check if predicate references the given table
-    const tableName = this.getTableName(table);
-    return this.serializeExpression(predicate).includes(tableName);
-  }
-
-  private combinePredicates(predicates: any[]): any {
-    const filtered = predicates.filter(p => p);
-    if (filtered.length === 0) return null;
-    if (filtered.length === 1) return filtered[0];
-
-    return {
-      kind: "LogicalOp",
-      op: "AND",
-      operands: filtered
-    };
-  }
-
-  private findReferencedTables(query: any): Set<string> {
-    const tables = new Set<string>();
-
-    const findInNode = (node: any) => {
-      if (!node) return;
-
-      if (node.kind === "Path" && node.steps.length > 1) {
-        tables.add(node.steps[0]);
-      }
-
-      for (const key in node) {
-        const value = node[key];
-        if (typeof value === "object") {
-          if (Array.isArray(value)) {
-            value.forEach(findInNode);
-          } else {
-            findInNode(value);
-          }
-        }
-      }
-    };
-
-    findInNode(query);
-    return tables;
-  }
-
-  private getTableName(tableRef: any): string {
-    if (tableRef.alias) return tableRef.alias;
-    if (tableRef.name) return tableRef.name;
-    return "";
-  }
-
-  private estimateTableSize(table: any): number {
-    // In practice, this would use table statistics
-    // For now, use simple heuristics
-    const name = this.getTableName(table).toLowerCase();
-
-    if (name.includes("user")) return 1000;
-    if (name.includes("post")) return 10000;
-    if (name.includes("comment")) return 100000;
-
-    return 5000; // Default
-  }
-
-  private findAllExpressions(query: any): any[] {
-    const expressions: any[] = [];
-
-    const collectExpressions = (node: any) => {
-      if (!node) return;
-
-      if (node.kind === "BinaryOp" || node.kind === "UnaryOp" || node.kind === "Function") {
-        expressions.push(node);
-      }
-
-      for (const key in node) {
-        const value = node[key];
-        if (typeof value === "object") {
-          if (Array.isArray(value)) {
-            value.forEach(collectExpressions);
-          } else {
-            collectExpressions(value);
-          }
-        }
-      }
-    };
-
-    collectExpressions(query);
-    return expressions;
-  }
-
-  private serializeExpression(expr: any): string {
-    return JSON.stringify(expr);
-  }
 
   private simplifyExpression(expr: any): any {
     // Simplify boolean expressions
@@ -677,7 +456,7 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
       // Remove duplicate conditions
       const seen = new Set<string>();
       const unique = expr.operands.filter((op: any) => {
-        const key = this.serializeExpression(op);
+        const key = JSON.stringify(op);
         if (seen.has(key)) return false;
         seen.add(key);
         return true;
@@ -691,7 +470,6 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
     // Constant folding
     if (expr.kind === "BinaryOp") {
       if (expr.left.kind === "Literal" && expr.right.kind === "Literal") {
-        // Evaluate constant expression
         return this.evaluateConstant(expr);
       }
     }
