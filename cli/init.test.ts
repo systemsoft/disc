@@ -5,7 +5,6 @@
 import {
   assert,
   assertEquals,
-  assertExists,
   assertStringIncludes,
 } from "@std/assert";
 import {

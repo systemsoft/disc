@@ -2,15 +2,7 @@
  * HTTP server module tests
  */
 
-import { assertEquals, assertExists, assertStringIncludes } from "@std/assert";
-import {
-  ConsoleCapture,
-  EnvMock,
-  createTempDir,
-  cleanupTempDir,
-  assertLogContains,
-  waitFor
-} from "../tests/test-utils.ts";
+import { assertEquals, assertExists } from "@std/assert";
 
 // Mock HTTP server components for testing
 interface MockRequest {
@@ -70,11 +62,12 @@ class MockHTTPHandler {
           }),
         };
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
         return {
           status: 400,
           headers: new Headers({ "Content-Type": "application/json" }),
           body: JSON.stringify({
-            errors: [{ message: error.message, code: "PARSE_ERROR" }]
+            errors: [{ message: errorMessage, code: "PARSE_ERROR" }]
           }),
         };
       }

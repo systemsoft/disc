@@ -4,9 +4,6 @@
 
 import {
   assert,
-  assertEquals,
-  assertExists,
-  assertStringIncludes,
 } from "@std/assert";
 import {
   assertLogContains,
@@ -450,11 +447,7 @@ Deno.test("CLI Shell - schema from file option", async () => {
   try {
     const schemaFile = await createTestSchema(tempDir, SIMPLE_SCHEMA);
 
-    const options: ShellOptions = {
-      schema_file: schemaFile,
-    };
-
-    // Mock shell with schema file
+    // Mock shell with schema file (using schemaFile from above)
     console.log(`🚀 Starting Disc EdgeQL shell...`);
     console.log(`📖 Loading schema from ${schemaFile}`);
     console.log(`📡 Connected to Disc server at localhost:5656`);

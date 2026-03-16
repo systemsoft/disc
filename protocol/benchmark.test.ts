@@ -168,7 +168,7 @@ Deno.test("Benchmark - Message pooling", () => {
   
   // Compare with creating new objects
   benchmark("Create new message objects (no pool)", () => {
-    const _msg = { id: Math.random(), data: "test data", timestamp: Date.now() };
+    void { id: Math.random(), data: "test data", timestamp: Date.now() };
   });
   
   console.log("Pool size after benchmark:", pool.size);
@@ -261,19 +261,19 @@ Deno.test("Benchmark - End-to-end message roundtrip", () => {
   benchmark("Complete message roundtrip", () => {
     const binary = builder.buildMessage(executeMessage);
     parser.append(binary);
-    const _parsed = parser.parseMessage();
+    parser.parseMessage();
   });
-  
+
   // Test with smaller messages
   const syncMessage = {
     type: Types.MessageType.Sync,
     length: 4,
   };
-  
+
   benchmark("Simple message roundtrip (Sync)", () => {
     const binary = builder.buildMessage(syncMessage);
     parser.append(binary);
-    const _parsed = parser.parseMessage();
+    parser.parseMessage();
   });
 });
 

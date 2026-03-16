@@ -4,6 +4,7 @@
 
 import { assertEquals, assertExists } from "@std/assert";
 import * as Types from "./types.ts";
+import { Result } from "../lib/result.ts";
 
 Deno.test("MigrationConfig - default values", () => {
   const config: Types.MigrationConfig = {
@@ -25,13 +26,7 @@ Deno.test("MigrationConfig - default values", () => {
 
 Deno.test("MigrationState - structure", () => {
   const state: Types.MigrationState = {
-    applied_migrations: [
-      {
-        id: "migration-001",
-        applied_at: new Date(),
-        schema_hash: "abc123",
-      },
-    ],
+    applied_migrations: ["migration-001"],
     current_schema_hash: "abc123",
     last_migration_id: "migration-001",
   };
@@ -39,7 +34,6 @@ Deno.test("MigrationState - structure", () => {
   assertEquals(state.applied_migrations.length, 1);
   assertEquals(state.current_schema_hash, "abc123");
   assertEquals(state.last_migration_id, "migration-001");
-  assertExists(state.applied_migrations[0].applied_at);
 });
 
 Deno.test("MigrationPlan - structure", () => {
@@ -57,7 +51,7 @@ Deno.test("MigrationPlan - structure", () => {
             type_name: "User",
             properties: [],
             links: [],
-          },
+          } as Types.CreateTypeOperation,
         ],
       },
     ],
@@ -119,11 +113,11 @@ Deno.test("AlterTypeOperation - structure", () => {
           constraints: ["exclusive"],
           annotations: {},
         },
-      },
+      } as Types.AddPropertyOperation,
       {
         kind: "DropProperty",
         property_name: "old_field",
-      },
+      } as Types.DropPropertyOperation,
     ],
   };
 
@@ -191,7 +185,7 @@ Deno.test("LinkDefinition - single and multi links", () => {
 
   assertEquals(singleLink.multi, false);
   assertEquals(singleLink.required, true);
-  
+
   assertEquals(multiLink.multi, true);
   assertEquals(multiLink.required, false);
   assertEquals(multiLink.annotations.on_delete, "restrict");
@@ -203,12 +197,10 @@ Deno.test("MigrationResult - success case", () => {
     success: true,
     duration_ms: 250,
     applied_at: new Date(),
-    statements_executed: 3,
   };
 
   assertEquals(result.success, true);
   assertEquals(result.duration_ms, 250);
-  assertEquals(result.statements_executed, 3);
   assertExists(result.applied_at);
 });
 
@@ -219,12 +211,10 @@ Deno.test("MigrationResult - failure case", () => {
     duration_ms: 100,
     applied_at: new Date(),
     error: "Constraint violation: duplicate key",
-    statements_executed: 1,
   };
 
   assertEquals(result.success, false);
   assertEquals(result.error, "Constraint violation: duplicate key");
-  assertEquals(result.statements_executed, 1);
 });
 
 Deno.test("AddPropertyOperation - structure", () => {
@@ -260,61 +250,72 @@ Deno.test("AlterPropertyOperation - structure", () => {
   const operation: Types.AlterPropertyOperation = {
     kind: "AlterProperty",
     property_name: "email",
-    changes: {
-      type: "str",
-      required: true,
-      add_constraints: ["exclusive"],
-      drop_constraints: ["min_length(3)"],
-    },
+    changes: [
+      {
+        kind: "ChangeRequired",
+        old_value: false,
+        new_value: true,
+      },
+      {
+        kind: "AddConstraint",
+        new_value: "exclusive",
+      },
+      {
+        kind: "DropConstraint",
+        old_value: "min_length(3)",
+      },
+    ],
   };
 
   assertEquals(operation.kind, "AlterProperty");
   assertEquals(operation.property_name, "email");
-  assertEquals(operation.changes.required, true);
-  assertEquals(operation.changes.add_constraints?.length, 1);
-  assertEquals(operation.changes.drop_constraints?.length, 1);
+  assertEquals(operation.changes.length, 3);
+  assertEquals(operation.changes[0].kind, "ChangeRequired");
+  assertEquals(operation.changes[1].kind, "AddConstraint");
+  assertEquals(operation.changes[2].kind, "DropConstraint");
 });
 
 Deno.test("MigrationOperation - discriminated union", () => {
   const operations: Types.MigrationOperation[] = [
-    { kind: "CreateType", type_name: "User", properties: [], links: [] },
-    { kind: "DropType", type_name: "OldType" },
-    { kind: "AlterType", type_name: "User", operations: [] },
+    { kind: "CreateType", type_name: "User", properties: [], links: [] } as Types.CreateTypeOperation,
+    { kind: "DropType", type_name: "OldType" } as Types.DropTypeOperation,
+    { kind: "AlterType", type_name: "User", operations: [] } as Types.AlterTypeOperation,
   ];
 
   assertEquals(operations[0].kind, "CreateType");
   assertEquals(operations[1].kind, "DropType");
   assertEquals(operations[2].kind, "AlterType");
-  
+
   // TypeScript should properly discriminate the union
-  if (operations[0].kind === "CreateType") {
-    assertExists(operations[0].properties);
-    assertExists(operations[0].links);
-  }
-  
-  if (operations[1].kind === "DropType") {
-    assertExists(operations[1].type_name);
-  }
-  
-  if (operations[2].kind === "AlterType") {
-    assertExists(operations[2].operations);
-  }
+  const op0 = operations[0] as Types.CreateTypeOperation;
+  assertExists(op0.properties);
+  assertExists(op0.links);
+
+  const op1 = operations[1] as Types.DropTypeOperation;
+  assertExists(op1.type_name);
+
+  const op2 = operations[2] as Types.AlterTypeOperation;
+  assertExists(op2.operations);
 });
 
 Deno.test("Result type - success and error cases", () => {
-  const successResult: Types.Result<string, Error> = {
+  const successResult: Result<string, Error> = {
     ok: true,
     value: "success",
   };
 
-  const errorResult: Types.Result<string, Error> = {
+  const errorResult: Result<string, Error> = {
     ok: false,
     error: new Error("Something went wrong"),
   };
 
   assertEquals(successResult.ok, true);
-  assertEquals(successResult.value, "success");
-  
+  if (successResult.ok) {
+    assertEquals(successResult.value, "success");
+  }
+
   assertEquals(errorResult.ok, false);
-  assertEquals(errorResult.error.message, "Something went wrong");
+  if (!errorResult.ok) {
+    assertEquals(errorResult.error.message, "Something went wrong");
+  }
 });

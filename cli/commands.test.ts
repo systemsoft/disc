@@ -49,7 +49,6 @@ Deno.test("CLI Commands - init command behavior", async () => {
   try {
     // Mock init command - would create project structure
     const projectName = "test-project";
-    const projectDir = `${tempDir}/${projectName}`;
 
     // Simulate init command output
     console.capture();
@@ -101,7 +100,6 @@ Deno.test("CLI Commands - migrate create workflow", async () => {
     );
     console.log("✅ Migration created successfully");
 
-    const logs = console.getLogs();
     assertLogContains(console, "Creating new migration");
     assertLogContains(console, "Migration Plan");
     assertLogContains(console, "Generated DDL");
@@ -138,7 +136,6 @@ Deno.test("CLI Commands - migrate apply workflow", async () => {
     console.log("💾 DDL that would be executed:");
     console.log("   1. CREATE TABLE users (id UUID PRIMARY KEY);");
 
-    const logs = console.getLogs();
     assertLogContains(console, "Applying migrations");
     assertLogContains(console, "DRY RUN");
     assertLogContains(console, "DDL that would be executed");
@@ -186,7 +183,6 @@ Deno.test("CLI Commands - serve command configuration", async () => {
     console.log("🚀 Starting Disc Database Server...");
     console.log(`✅ Server started on ${finalConfig.host}:${finalConfig.port}`);
 
-    const logs = console.getLogs();
     assertLogContains(console, "Starting Disc Database Server");
     assertLogContains(console, "Server started on 0.0.0.0:9000");
   } finally {
@@ -204,7 +200,6 @@ Deno.test("CLI Commands - shell command placeholder", async () => {
     console.log("Opening EdgeQL REPL...");
     console.log("TODO: Implement interactive shell");
 
-    const logs = console.getLogs();
     assertLogContains(console, "Opening EdgeQL REPL");
     assertLogContains(console, "TODO: Implement interactive shell");
   } finally {
@@ -253,7 +248,6 @@ Deno.test("CLI Commands - codegen workflow", async () => {
     console.log(`   Types generated: 2`);
     console.log(`✅ TypeScript generation complete!`);
 
-    const logs = console.getLogs();
     assertLogContains(console, "Generating TypeScript types");
     assertLogContains(console, "Configuration");
     assertLogContains(console, "Generation Summary");
@@ -273,7 +267,6 @@ Deno.test("CLI Commands - watch command placeholder", async () => {
     console.log("Watching schema files...");
     console.log("TODO: Implement file watcher");
 
-    const logs = console.getLogs();
     assertLogContains(console, "Watching schema files");
     assertLogContains(console, "TODO: Implement file watcher");
   } finally {
@@ -297,7 +290,6 @@ Deno.test("CLI Commands - error handling for invalid schema", async () => {
     console.capture();
     console.error(`❌ Schema file not found: ${invalidSchemaPath}`);
 
-    const logs = console.getErrorLogs();
     assertErrorContains(console, "Schema file not found");
     assertErrorContains(console, invalidSchemaPath);
   } finally {
@@ -311,10 +303,6 @@ Deno.test("CLI Commands - migration validation warnings", async () => {
 
   try {
     // Mock migration with validation warnings
-    const config = {
-      auto_approve: false,
-    };
-
     // Simulate validation warning output
     console.capture();
     console.log(
@@ -327,7 +315,6 @@ Deno.test("CLI Commands - migration validation warnings", async () => {
     // Simulate user declining
     console.log("Migration cancelled");
 
-    const logs = console.getLogs();
     assertLogContains(console, "Migration validation warnings");
     assertLogContains(console, "potentially dangerous operations");
     assertLogContains(console, "Migration cancelled");

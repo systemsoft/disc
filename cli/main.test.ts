@@ -5,15 +5,11 @@
 import { assertEquals, assertExists, assertRejects } from "@std/assert";
 import { parseArgs } from "@std/cli/parse-args";
 import {
-  assertErrorContains,
-  assertLogContains,
   cleanupTempDir,
-  ConsoleCapture,
   createTempDir,
   createTestSchema,
   EnvMock,
   SIMPLE_SCHEMA,
-  TEST_SCHEMA,
 } from "../tests/test-utils.ts";
 
 // Import functions to test (we'll need to export them from main.ts)
@@ -95,7 +91,7 @@ Deno.test("CLI - codegen command arguments", () => {
   assertEquals(args.target, "both");
   assertEquals(args["no-queries"], true);
   assertEquals(args["no-client"], true);
-  assertEquals(args["no-mutations"], undefined);
+  assertEquals(args["no-mutations"], false);
 });
 
 Deno.test("CLI - migrate command arguments", () => {

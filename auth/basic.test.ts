@@ -1,7 +1,7 @@
 import { assertEquals, assertExists } from "@std/assert";
 import { describe, it, beforeEach, afterEach } from "@std/testing/bdd";
 import { AuthProvider } from "./provider.ts";
-import { AuthConfig } from "./types.ts";
+import { AuthConfig, AuthError } from "./types.ts";
 import { TestDatabase } from "./test-database.ts";
 
 describe("Auth Module Smoke Test", () => {
@@ -37,7 +37,7 @@ describe("Auth Module Smoke Test", () => {
         password: "short", // Should fail
       });
     } catch (error) {
-      assertEquals(error.code, "PASSWORD_TOO_WEAK");
+      assertEquals((error as AuthError).code, "PASSWORD_TOO_WEAK");
     }
   });
 

@@ -3,6 +3,9 @@ import { join } from "@std/path";
 import { PostgresBinaryDownloader } from "./downloader.ts";
 import { ensureDir } from "@std/fs";
 
+// Skip guard: tests that require real PG binaries or archive extraction
+const HAS_PG_BINARY = !!Deno.env.get("DISC_PG_BINARY_PATH");
+
 const TEST_BASE_DIR = join(Deno.makeTempDirSync(), "disc-postgres-download-test");
 
 Deno.test("PostgresBinaryDownloader - platform detection", () => {
@@ -150,11 +153,14 @@ Deno.test("PostgresBinaryDownloader - makeExecutable sets correct permissions", 
 });
 
 Deno.test("PostgresBinaryDownloader - extractArchive handles different formats", async () => {
-  
+
+  // Ensure test directory exists (may have been cleaned up by prior test)
+  await ensureDir(TEST_BASE_DIR);
+
   // Test zip format detection
   const zipPath = join(TEST_BASE_DIR, "test.zip");
   const tarPath = join(TEST_BASE_DIR, "test.tar.xz");
-  
+
   // Create mock archives
   await Deno.writeTextFile(zipPath, "mock zip content");
   await Deno.writeTextFile(tarPath, "mock tar content");

@@ -1,16 +1,19 @@
 /**
  * CLI Workflow Tests - Test complete CLI command workflows
+ *
+ * Tests that require database connections need DISC_PG_TEST_URL.
  */
 
 import { assert, assertEquals } from "@std/assert";
 import {
-  assertLogContains,
   cleanupTempDir,
   ConsoleCapture,
   createTempDir,
   EnvMock,
 } from "../tests/test-utils.ts";
 import { commands } from "./commands.ts";
+
+const HAS_PG = !!Deno.env.get("DISC_PG_TEST_URL");
 
 Deno.test("CLI Workflow - Complete project initialization", async () => {
   const console = new ConsoleCapture();
@@ -166,7 +169,7 @@ Deno.test("CLI Workflow - Server configuration", async () => {
   }
 });
 
-Deno.test("CLI Workflow - Shell connection options", async () => {
+Deno.test({ name: "CLI Workflow - Shell connection options", ignore: !HAS_PG, fn: async () => {
   const console = new ConsoleCapture();
 
   try {
@@ -187,7 +190,7 @@ Deno.test("CLI Workflow - Shell connection options", async () => {
   } finally {
     console.restore();
   }
-});
+}});
 
 Deno.test("CLI Workflow - Watch command setup", async () => {
   const console = new ConsoleCapture();
@@ -276,7 +279,7 @@ Deno.test("CLI Workflow - Command argument validation", async () => {
       });
       assert(false, "Should reject invalid project name");
     } catch (error) {
-      assert(error.message.includes("Invalid project name"));
+      assert((error as Error).message.includes("Invalid project name"));
     }
 
     try {
@@ -286,7 +289,7 @@ Deno.test("CLI Workflow - Command argument validation", async () => {
       });
       assert(false, "Should reject project name starting with dash");
     } catch (error) {
-      assert(error.message.includes("Invalid project name"));
+      assert((error as Error).message.includes("Invalid project name"));
     }
 
     // Test valid project names

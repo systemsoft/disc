@@ -2,7 +2,6 @@
  * Test utilities for Disc database tests
  */
 
-import { assertEquals } from "@std/assert";
 import { join } from "@std/path";
 
 /**
@@ -72,7 +71,11 @@ module default {
 }`;
 
 /**
- * Capture console output for testing
+ * Capture console output for testing.
+ *
+ * Supports two usage patterns:
+ *   1. Call start()/stop() to intercept global console
+ *   2. Shadow global console with an instance and call log()/error() directly
  */
 export class ConsoleCapture {
   private originalLog: typeof console.log;
@@ -85,22 +88,42 @@ export class ConsoleCapture {
     this.originalError = console.error;
   }
 
+  /** Alias for start() - begin capturing */
+  capture(): void {
+    this.start();
+  }
+
   start(): void {
     this.logs = [];
     this.errors = [];
-    
+
     console.log = (...args: unknown[]) => {
       this.logs.push(args.join(" "));
     };
-    
+
     console.error = (...args: unknown[]) => {
       this.errors.push(args.join(" "));
     };
   }
 
+  /** Alias for stop() - restore original console */
+  restore(): void {
+    this.stop();
+  }
+
   stop(): void {
     console.log = this.originalLog;
     console.error = this.originalError;
+  }
+
+  /** Record a log message directly (when shadowing console) */
+  log(...args: unknown[]): void {
+    this.logs.push(args.join(" "));
+  }
+
+  /** Record an error message directly (when shadowing console) */
+  error(...args: unknown[]): void {
+    this.errors.push(args.join(" "));
   }
 
   getLogs(): string[] {
@@ -111,17 +134,22 @@ export class ConsoleCapture {
     return [...this.errors];
   }
 
+  /** Alias for getErrors() */
+  getErrorLogs(): string[] {
+    return this.getErrors();
+  }
+
   hasLog(pattern: string | RegExp): boolean {
-    return this.logs.some(log => 
-      typeof pattern === "string" 
+    return this.logs.some(log =>
+      typeof pattern === "string"
         ? log.includes(pattern)
         : pattern.test(log)
     );
   }
 
   hasError(pattern: string | RegExp): boolean {
-    return this.errors.some(error => 
-      typeof pattern === "string" 
+    return this.errors.some(error =>
+      typeof pattern === "string"
         ? error.includes(pattern)
         : pattern.test(error)
     );
@@ -141,6 +169,14 @@ export class EnvMock {
     Deno.env.set(key, value);
   }
 
+  /** Delete an environment variable (saves original for restore) */
+  clear(key: string): void {
+    if (!(key in this.original)) {
+      this.original[key] = Deno.env.get(key);
+    }
+    Deno.env.delete(key);
+  }
+
   restore(): void {
     for (const [key, value] of Object.entries(this.original)) {
       if (value === undefined) {
@@ -154,19 +190,42 @@ export class EnvMock {
 }
 
 /**
- * Test assertions helpers
+ * Test assertions helpers.
+ * Accepts either a ConsoleCapture instance or a string[] of logs.
  */
-export function assertLogContains(console: ConsoleCapture, pattern: string | RegExp): void {
-  if (!console.hasLog(pattern)) {
-    const logs = console.getLogs().join("\n");
-    throw new Error(`Expected log to contain ${pattern}, but got:\n${logs}`);
+export function assertLogContains(source: ConsoleCapture | string[], pattern: string | RegExp): void {
+  if (source instanceof ConsoleCapture) {
+    if (!source.hasLog(pattern)) {
+      const logs = source.getLogs().join("\n");
+      throw new Error(`Expected log to contain ${pattern}, but got:\n${logs}`);
+    }
+  } else {
+    const found = source.some(log =>
+      typeof pattern === "string"
+        ? log.includes(pattern)
+        : pattern.test(log)
+    );
+    if (!found) {
+      throw new Error(`Expected logs to contain ${pattern}, but got:\n${source.join("\n")}`);
+    }
   }
 }
 
-export function assertErrorContains(console: ConsoleCapture, pattern: string | RegExp): void {
-  if (!console.hasError(pattern)) {
-    const errors = console.getErrors().join("\n");
-    throw new Error(`Expected error to contain ${pattern}, but got:\n${errors}`);
+export function assertErrorContains(source: ConsoleCapture | string[], pattern: string | RegExp): void {
+  if (source instanceof ConsoleCapture) {
+    if (!source.hasError(pattern)) {
+      const errors = source.getErrors().join("\n");
+      throw new Error(`Expected error to contain ${pattern}, but got:\n${errors}`);
+    }
+  } else {
+    const found = source.some(err =>
+      typeof pattern === "string"
+        ? err.includes(pattern)
+        : pattern.test(err)
+    );
+    if (!found) {
+      throw new Error(`Expected errors to contain ${pattern}, but got:\n${source.join("\n")}`);
+    }
   }
 }
 
@@ -176,11 +235,11 @@ export function assertErrorContains(console: ConsoleCapture, pattern: string | R
 export function mockCliArgs(args: string[]): () => void {
   // Store original args
   const originalArgs = [...Deno.args];
-  
+
   // Replace args
   Deno.args.length = 0;
   Deno.args.push(...args);
-  
+
   // Return cleanup function
   return () => {
     Deno.args.length = 0;
@@ -196,13 +255,13 @@ export async function waitFor(
   timeout = 1000
 ): Promise<void> {
   const start = Date.now();
-  
+
   while (Date.now() - start < timeout) {
     if (await condition()) {
       return;
     }
     await new Promise(resolve => setTimeout(resolve, 10));
   }
-  
+
   throw new Error(`Timeout waiting for condition after ${timeout}ms`);
 }

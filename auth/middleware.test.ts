@@ -1,29 +1,30 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { describe, it, beforeEach } from "@std/testing/bdd";
+import { describe, it, beforeEach, afterEach } from "@std/testing/bdd";
 import { AuthMiddleware } from "./middleware.ts";
 import { AuthProvider } from "./provider.ts";
 import { AuthConfig } from "./types.ts";
-import { DatabaseConnection } from "../lib/database.ts";
+import { TestDatabase } from "./test-database.ts";
 
 describe("AuthMiddleware", () => {
   let middleware: AuthMiddleware;
   let provider: AuthProvider;
-  let db: DatabaseConnection;
+  let db: TestDatabase;
   let testToken: string;
   let testUserId: string;
 
   const testConfig: AuthConfig = {
-    jwt_secret: "test-secret-key",
-    bcrypt_rounds: 10,
+    jwt_secret: "test-secret-key-at-least-32-characters-long",
+    bcrypt_rounds: 4,
     token_expiry: 3600,
+    password_min_length: 6,
   };
 
   beforeEach(async () => {
-    db = new DatabaseConnection(":memory:");
+    db = new TestDatabase();
     await db.connect();
     provider = new AuthProvider(testConfig, db);
     await provider.initialize();
-    
+
     middleware = new AuthMiddleware(provider);
 
     // Create a test user and token
@@ -33,6 +34,10 @@ describe("AuthMiddleware", () => {
     });
     testToken = response.token;
     testUserId = response.user.id;
+  });
+
+  afterEach(async () => {
+    await db.close();
   });
 
   describe("Request Authentication", () => {
@@ -101,9 +106,9 @@ describe("AuthMiddleware", () => {
         },
       });
 
-      const handler = (req: Request) => new Response("Success");
+      const handler = (_req: Request) => new Response("Success");
       const protectedHandler = middleware.requireAuth(handler);
-      
+
       const response = await protectedHandler(request);
       assertEquals(response.status, 200);
       const text = await response.text();
@@ -113,9 +118,9 @@ describe("AuthMiddleware", () => {
     it("should reject unauthenticated requests to protected routes", async () => {
       const request = new Request("http://localhost/api/protected");
 
-      const handler = (req: Request) => new Response("Success");
+      const handler = (_req: Request) => new Response("Success");
       const protectedHandler = middleware.requireAuth(handler);
-      
+
       const response = await protectedHandler(request);
       assertEquals(response.status, 401);
       const json = await response.json();
@@ -130,7 +135,7 @@ describe("AuthMiddleware", () => {
       });
 
       let capturedContext: any;
-      const handler = (req: Request, context?: any) => {
+      const handler = (_req: Request, context?: any) => {
         capturedContext = context;
         return new Response("Success");
       };
@@ -153,14 +158,14 @@ describe("AuthMiddleware", () => {
       });
 
       let capturedContext: any;
-      const handler = (req: Request, context?: any) => {
+      const handler = (_req: Request, context?: any) => {
         capturedContext = context;
         return new Response("Success");
       };
       const optionalHandler = middleware.optionalAuth(handler);
-      
+
       await optionalHandler(request);
-      
+
       assertExists(capturedContext);
       assertEquals(capturedContext.user_id, testUserId);
     });
@@ -169,7 +174,7 @@ describe("AuthMiddleware", () => {
       const request = new Request("http://localhost/api/public");
 
       let capturedContext: any;
-      const handler = (req: Request, context?: any) => {
+      const handler = (_req: Request, context?: any) => {
         capturedContext = context;
         return new Response("Success");
       };
@@ -190,7 +195,7 @@ describe("AuthMiddleware", () => {
         },
       });
 
-      const handler = (req: Request) => new Response("Success");
+      const handler = (_req: Request) => new Response("Success");
       const secureHandler = middleware.withSecurityHeaders(handler);
       
       const response = await secureHandler(request);
@@ -209,7 +214,7 @@ describe("AuthMiddleware", () => {
         },
       });
 
-      const handler = (req: Request) => new Response("Success");
+      const handler = (_req: Request) => new Response("Success");
       const corsHandler = middleware.withCORS(handler, {
         origins: ["http://example.com"],
         methods: ["GET", "POST"],
@@ -229,7 +234,7 @@ describe("AuthMiddleware", () => {
         },
       });
 
-      const handler = (req: Request) => new Response("Success");
+      const handler = (_req: Request) => new Response("Success");
       const corsHandler = middleware.withCORS(handler, {
         origins: ["http://example.com"],
       });
