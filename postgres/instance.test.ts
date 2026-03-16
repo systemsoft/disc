@@ -1,14 +1,17 @@
 import { assertEquals, assertExists } from "@std/assert";
 import { join } from "@std/path";
 import { PostgresInstance } from "./instance.ts";
+import { canRunPgTests, findPgBinDir } from "../tests/pg-test-harness.ts";
 
-const TEST_BASE_DIR = join(Deno.makeTempDirSync(), "disc-postgres-test");
+// Use /tmp directly to keep Unix socket paths under the 108-char limit.
+// Default Deno temp dirs on macOS (/var/folders/...) are too long.
+const TEST_BASE_DIR = Deno.makeTempDirSync({ dir: "/tmp", prefix: "disc-pg-" });
 
 // Skip guard: tests that require real PostgreSQL binaries
-// Set DISC_PG_BINARY_PATH to enable these tests
-const HAS_PG_BINARY = !!Deno.env.get("DISC_PG_BINARY_PATH");
+const RUN_PG = canRunPgTests();
+const PG_BIN_DIR = findPgBinDir();
 
-Deno.test({ name: "PostgresInstance - initialization creates required directories", ignore: !HAS_PG_BINARY, fn: async () => {
+Deno.test({ name: "PostgresInstance - initialization creates required directories", ignore: !RUN_PG, fn: async () => {
   const instanceName = "test-init";
   const dataDir = join(TEST_BASE_DIR, instanceName, "data");
   const socketDir = join(TEST_BASE_DIR, instanceName, "socket");
@@ -16,6 +19,7 @@ Deno.test({ name: "PostgresInstance - initialization creates required directorie
   const instance = new PostgresInstance({
     dataDir,
     instanceName,
+    pgBinDir: PG_BIN_DIR!,
     socketDir,
     postgresVersion: "16.4",
   });
@@ -42,7 +46,7 @@ Deno.test({ name: "PostgresInstance - initialization creates required directorie
   await Deno.remove(TEST_BASE_DIR, { recursive: true });
 }});
 
-Deno.test({ name: "PostgresInstance - start and stop lifecycle", ignore: !HAS_PG_BINARY, fn: async () => {
+Deno.test({ name: "PostgresInstance - start and stop lifecycle", ignore: !RUN_PG, fn: async () => {
   const instanceName = "test-lifecycle";
   const dataDir = join(TEST_BASE_DIR, instanceName, "data");
   const socketDir = join(TEST_BASE_DIR, instanceName, "socket");
@@ -50,6 +54,7 @@ Deno.test({ name: "PostgresInstance - start and stop lifecycle", ignore: !HAS_PG
   const instance = new PostgresInstance({
     dataDir,
     instanceName,
+    pgBinDir: PG_BIN_DIR!,
     socketDir,
     port: 0, // Unix socket only
   });
@@ -77,7 +82,7 @@ Deno.test({ name: "PostgresInstance - start and stop lifecycle", ignore: !HAS_PG
   await Deno.remove(TEST_BASE_DIR, { recursive: true });
 }});
 
-Deno.test({ name: "PostgresInstance - restart functionality", ignore: !HAS_PG_BINARY, fn: async () => {
+Deno.test({ name: "PostgresInstance - restart functionality", ignore: !RUN_PG, fn: async () => {
   const instanceName = "test-restart";
   const dataDir = join(TEST_BASE_DIR, instanceName, "data");
   const socketDir = join(TEST_BASE_DIR, instanceName, "socket");
@@ -85,6 +90,7 @@ Deno.test({ name: "PostgresInstance - restart functionality", ignore: !HAS_PG_BI
   const instance = new PostgresInstance({
     dataDir,
     instanceName,
+    pgBinDir: PG_BIN_DIR!,
     socketDir,
   });
 
@@ -133,7 +139,7 @@ Deno.test("PostgresInstance - DSN generation", () => {
   assertEquals(dsn2, "postgresql://disc@localhost:5432/test-db");
 });
 
-Deno.test({ name: "PostgresInstance - handles already initialized data directory", ignore: !HAS_PG_BINARY, fn: async () => {
+Deno.test({ name: "PostgresInstance - handles already initialized data directory", ignore: !RUN_PG, fn: async () => {
   const instanceName = "test-reinit";
   const dataDir = join(TEST_BASE_DIR, instanceName, "data");
   const socketDir = join(TEST_BASE_DIR, instanceName, "socket");
@@ -142,6 +148,7 @@ Deno.test({ name: "PostgresInstance - handles already initialized data directory
   const instance1 = new PostgresInstance({
     dataDir,
     instanceName,
+    pgBinDir: PG_BIN_DIR!,
     socketDir,
   });
   await instance1.init();
@@ -150,6 +157,7 @@ Deno.test({ name: "PostgresInstance - handles already initialized data directory
   const instance2 = new PostgresInstance({
     dataDir,
     instanceName,
+    pgBinDir: PG_BIN_DIR!,
     socketDir,
   });
 
@@ -165,7 +173,7 @@ Deno.test({ name: "PostgresInstance - handles already initialized data directory
   await Deno.remove(TEST_BASE_DIR, { recursive: true });
 }});
 
-Deno.test({ name: "PostgresInstance - force stop handles stuck processes", ignore: !HAS_PG_BINARY, fn: async () => {
+Deno.test({ name: "PostgresInstance - force stop handles stuck processes", ignore: !RUN_PG, fn: async () => {
   const instanceName = "test-force-stop";
   const dataDir = join(TEST_BASE_DIR, instanceName, "data");
   const socketDir = join(TEST_BASE_DIR, instanceName, "socket");
@@ -173,6 +181,7 @@ Deno.test({ name: "PostgresInstance - force stop handles stuck processes", ignor
   const instance = new PostgresInstance({
     dataDir,
     instanceName,
+    pgBinDir: PG_BIN_DIR!,
     socketDir,
   });
 

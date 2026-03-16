@@ -7,6 +7,9 @@ import { logger } from "./logger.ts";
 export interface PostgresInstanceOptions {
   dataDir: string;
   instanceName: string;
+  /** Path to a directory containing PostgreSQL binaries (e.g. pg_ctl, initdb).
+   *  When provided, Disc skips downloading PostgreSQL and uses these binaries instead. */
+  pgBinDir?: string;
   port?: number;
   postgresVersion?: string;
   socketDir?: string;
@@ -42,14 +45,25 @@ export class PostgresInstance {
     this.postgresVersion = options.postgresVersion || "16.4";
     this.downloader = new PostgresBinaryDownloader();
     this.config = new PostgresConfig();
+
+    // When a pre-existing PG binary directory is provided, use it directly
+    // and skip the download step during init().
+    if (options.pgBinDir) {
+      this.pgBinDir = options.pgBinDir;
+    }
   }
 
   async init(): Promise<void> {
     logger.info(`Initializing PostgreSQL instance: ${this.instanceName}`);
 
-    // Ensure PostgreSQL binary is downloaded
-    const pgDir = await this.downloader.ensurePostgres(this.postgresVersion);
-    this.pgBinDir = join(pgDir, "bin");
+    // When pgBinDir was provided via options, skip the download entirely.
+    // Otherwise, download/verify the PostgreSQL binary as usual.
+    if (!this.pgBinDir) {
+      const pgDir = await this.downloader.ensurePostgres(this.postgresVersion);
+      this.pgBinDir = join(pgDir, "bin");
+    } else {
+      logger.info(`Using pre-existing PostgreSQL binaries at ${this.pgBinDir}`);
+    }
 
     // Create necessary directories
     await ensureDir(this.dataDir);
@@ -92,9 +106,8 @@ export class PostgresInstance {
         "--encoding=UTF8",
         "--locale=en_US.UTF-8",
         "--username=disc",
-        "--pwfile=/dev/null",
         "--auth-local=trust",
-        "--auth-host=scram-sha-256",
+        "--auth-host=trust",
       ],
       env: {
         ...Deno.env.toObject(),
@@ -122,7 +135,9 @@ export class PostgresInstance {
     logger.info(`Starting PostgreSQL instance: ${this.instanceName}`);
 
     const pgCtlPath = join(this.pgBinDir!, "pg_ctl");
-    const logFile = join(this.dataDir, "..", "logs", "postgresql.log");
+    const logsDir = join(this.dataDir, "..", "logs");
+    await ensureDir(logsDir);
+    const logFile = join(logsDir, "postgresql.log");
 
     const cmd = new Deno.Command(pgCtlPath, {
       args: [
@@ -275,8 +290,10 @@ export class PostgresInstance {
     const args: string[] = [];
 
     if (this.port === 0) {
-      // Unix socket only
-      args.push("-p 0");
+      // Unix socket only — use default port for socket file name,
+      // but disable TCP by setting listen_addresses to empty.
+      args.push("-p 5432");
+      args.push("-c listen_addresses=");
     } else {
       args.push(`-p ${this.port}`);
     }

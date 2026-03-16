@@ -2,7 +2,7 @@
  * Integration tests for Migration Engine with SDL Parser
  *
  * Tests that use MigrationTracker require a running PostgreSQL instance.
- * Set DISC_PG_TEST_URL to enable them.
+ * Set DISC_PG_TEST_URL or DISC_PG_AUTO=1 to enable them.
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
@@ -11,8 +11,9 @@ import { SchemaValidator } from "../schema/validator.ts";
 import { MigrationEngine } from "./engine.ts";
 import { MigrationTracker } from "./tracker.ts";
 import * as Types from "./types.ts";
+import { canRunPgTests, cleanupTestTables, getTestDsn } from "../tests/pg-test-harness.ts";
 
-const HAS_PG = !!Deno.env.get("DISC_PG_TEST_URL");
+const RUN_PG = canRunPgTests();
 
 // Helper function to create test config
 function createIntegrationTestConfig(): Types.MigrationConfig {
@@ -228,10 +229,12 @@ Deno.test("Integration - Complex Schema with Inheritance", () => {
   }
 });
 
-Deno.test({ name: "Integration - Full Migration Workflow with Tracker", ignore: !HAS_PG, fn: async () => {
-  const config = createIntegrationTestConfig();
+Deno.test({ name: "Integration - Full Migration Workflow with Tracker", ignore: !RUN_PG, fn: async () => {
+  const dsn = await getTestDsn();
+  await cleanupTestTables(dsn);
+  const config = { ...createIntegrationTestConfig(), database_url: dsn };
   const engine = new MigrationEngine(config);
-  const tracker = new MigrationTracker(config.database_url);
+  const tracker = new MigrationTracker(dsn);
   const validator = new SchemaValidator();
 
   await tracker.initialize();
@@ -267,10 +270,12 @@ Deno.test({ name: "Integration - Full Migration Workflow with Tracker", ignore: 
   await tracker.close();
 }});
 
-Deno.test({ name: "Integration - Migration Rollback with Tracker", ignore: !HAS_PG, fn: async () => {
-  const config = createIntegrationTestConfig();
+Deno.test({ name: "Integration - Migration Rollback with Tracker", ignore: !RUN_PG, fn: async () => {
+  const dsn = await getTestDsn();
+  await cleanupTestTables(dsn);
+  const config = { ...createIntegrationTestConfig(), database_url: dsn };
   const engine = new MigrationEngine(config);
-  const tracker = new MigrationTracker(config.database_url);
+  const tracker = new MigrationTracker(dsn);
   const validator = new SchemaValidator();
 
   await tracker.initialize();

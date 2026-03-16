@@ -1,18 +1,21 @@
 import { assertEquals, assertExists, assertRejects } from "@std/assert";
 import { join } from "@std/path";
 import { PostgresManager } from "./manager.ts";
+import { canRunPgTests, findPgBinDir } from "../tests/pg-test-harness.ts";
 
-const TEST_BASE_DIR = join(Deno.makeTempDirSync(), "disc-postgres-manager-test");
+// Use /tmp directly to keep Unix socket paths under the 108-char limit.
+const TEST_BASE_DIR = Deno.makeTempDirSync({ dir: "/tmp", prefix: "disc-mgr-" });
 
 // Skip guard: tests that require real PostgreSQL binaries
-// Set DISC_PG_BINARY_PATH to enable these tests
-const HAS_PG_BINARY = !!Deno.env.get("DISC_PG_BINARY_PATH");
+const RUN_PG = canRunPgTests();
+const PG_BIN_DIR = findPgBinDir();
 
-Deno.test({ name: "PostgresManager - create instance", ignore: !HAS_PG_BINARY, fn: async () => {
+Deno.test({ name: "PostgresManager - create instance", ignore: !RUN_PG, fn: async () => {
   const manager = new PostgresManager(TEST_BASE_DIR);
   const instanceName = "test-create";
 
   const instance = await manager.createInstance(instanceName, {
+    pgBinDir: PG_BIN_DIR!,
     port: 0, // Unix socket only
     postgresVersion: "16.4",
   });
@@ -28,15 +31,15 @@ Deno.test({ name: "PostgresManager - create instance", ignore: !HAS_PG_BINARY, f
   await manager.destroyInstance(instanceName, true);
 }});
 
-Deno.test({ name: "PostgresManager - prevent duplicate instances", ignore: !HAS_PG_BINARY, fn: async () => {
+Deno.test({ name: "PostgresManager - prevent duplicate instances", ignore: !RUN_PG, fn: async () => {
   const manager = new PostgresManager(TEST_BASE_DIR);
   const instanceName = "test-duplicate";
 
-  await manager.createInstance(instanceName);
+  await manager.createInstance(instanceName, { pgBinDir: PG_BIN_DIR! });
 
   // Attempt to create duplicate should throw
   await assertRejects(
-    async () => await manager.createInstance(instanceName),
+    async () => await manager.createInstance(instanceName, { pgBinDir: PG_BIN_DIR! }),
     Error,
     "already exists"
   );
@@ -45,11 +48,11 @@ Deno.test({ name: "PostgresManager - prevent duplicate instances", ignore: !HAS_
   await manager.destroyInstance(instanceName, true);
 }});
 
-Deno.test({ name: "PostgresManager - start and stop instance", ignore: !HAS_PG_BINARY, fn: async () => {
+Deno.test({ name: "PostgresManager - start and stop instance", ignore: !RUN_PG, fn: async () => {
   const manager = new PostgresManager(TEST_BASE_DIR);
   const instanceName = "test-lifecycle";
 
-  await manager.createInstance(instanceName);
+  await manager.createInstance(instanceName, { pgBinDir: PG_BIN_DIR! });
 
   // Start instance
   await manager.startInstance(instanceName, false); // No monitor for testing
@@ -69,13 +72,13 @@ Deno.test({ name: "PostgresManager - start and stop instance", ignore: !HAS_PG_B
   await manager.destroyInstance(instanceName, true);
 }});
 
-Deno.test({ name: "PostgresManager - list instances", ignore: !HAS_PG_BINARY, fn: async () => {
+Deno.test({ name: "PostgresManager - list instances", ignore: !RUN_PG, fn: async () => {
   const manager = new PostgresManager(TEST_BASE_DIR);
 
   // Create multiple instances
-  await manager.createInstance("instance1");
-  await manager.createInstance("instance2");
-  await manager.createInstance("instance3");
+  await manager.createInstance("instance1", { pgBinDir: PG_BIN_DIR! });
+  await manager.createInstance("instance2", { pgBinDir: PG_BIN_DIR! });
+  await manager.createInstance("instance3", { pgBinDir: PG_BIN_DIR! });
 
   const instances = manager.listInstances();
   assertEquals(instances.length, 3);
@@ -89,11 +92,11 @@ Deno.test({ name: "PostgresManager - list instances", ignore: !HAS_PG_BINARY, fn
   await manager.destroyInstance("instance3", true);
 }});
 
-Deno.test({ name: "PostgresManager - destroy instance with data removal", ignore: !HAS_PG_BINARY, fn: async () => {
+Deno.test({ name: "PostgresManager - destroy instance with data removal", ignore: !RUN_PG, fn: async () => {
   const manager = new PostgresManager(TEST_BASE_DIR);
   const instanceName = "test-destroy";
 
-  await manager.createInstance(instanceName);
+  await manager.createInstance(instanceName, { pgBinDir: PG_BIN_DIR! });
 
   const instanceDir = join(TEST_BASE_DIR, instanceName);
   const dataDirExists = async () => {
@@ -118,12 +121,12 @@ Deno.test({ name: "PostgresManager - destroy instance with data removal", ignore
   assertEquals(manager.getInstance(instanceName), undefined);
 }});
 
-Deno.test({ name: "PostgresManager - recover existing instance", ignore: !HAS_PG_BINARY, fn: async () => {
+Deno.test({ name: "PostgresManager - recover existing instance", ignore: !RUN_PG, fn: async () => {
   const manager1 = new PostgresManager(TEST_BASE_DIR);
   const instanceName = "test-recover";
 
   // Create instance with first manager
-  await manager1.createInstance(instanceName);
+  await manager1.createInstance(instanceName, { pgBinDir: PG_BIN_DIR! });
   await manager1.startInstance(instanceName, false);
 
   // Create new manager and recover
@@ -142,11 +145,11 @@ Deno.test({ name: "PostgresManager - recover existing instance", ignore: !HAS_PG
   await manager1.destroyInstance(instanceName, true);
 }});
 
-Deno.test({ name: "PostgresManager - instance with monitor", ignore: !HAS_PG_BINARY, fn: async () => {
+Deno.test({ name: "PostgresManager - instance with monitor", ignore: !RUN_PG, fn: async () => {
   const manager = new PostgresManager(TEST_BASE_DIR);
   const instanceName = "test-monitor";
 
-  await manager.createInstance(instanceName);
+  await manager.createInstance(instanceName, { pgBinDir: PG_BIN_DIR! });
   await manager.startInstance(instanceName, true); // With monitor
 
   const status = await manager.getInstanceStatus(instanceName);
@@ -165,14 +168,14 @@ Deno.test({ name: "PostgresManager - instance with monitor", ignore: !HAS_PG_BIN
   await manager.destroyInstance(instanceName, true);
 }});
 
-Deno.test({ name: "PostgresManager - backup and restore", ignore: !HAS_PG_BINARY, fn: async () => {
+Deno.test({ name: "PostgresManager - backup and restore", ignore: !RUN_PG, fn: async () => {
   const manager = new PostgresManager(TEST_BASE_DIR);
   const originalName = "test-backup-original";
   const restoredName = "test-backup-restored";
   const backupPath = join(TEST_BASE_DIR, "backup.tar.gz");
 
   // Create and start original instance
-  await manager.createInstance(originalName);
+  await manager.createInstance(originalName, { pgBinDir: PG_BIN_DIR! });
   await manager.startInstance(originalName, false);
 
   // Create a backup
@@ -196,11 +199,11 @@ Deno.test({ name: "PostgresManager - backup and restore", ignore: !HAS_PG_BINARY
   await Deno.remove(backupPath);
 }});
 
-Deno.test({ name: "PostgresManager - upgrade instance throws not implemented", ignore: !HAS_PG_BINARY, fn: async () => {
+Deno.test({ name: "PostgresManager - upgrade instance throws not implemented", ignore: !RUN_PG, fn: async () => {
   const manager = new PostgresManager(TEST_BASE_DIR);
   const instanceName = "test-upgrade";
 
-  await manager.createInstance(instanceName);
+  await manager.createInstance(instanceName, { pgBinDir: PG_BIN_DIR! });
 
   await assertRejects(
     async () => await manager.upgradeInstance(instanceName, "17.0"),

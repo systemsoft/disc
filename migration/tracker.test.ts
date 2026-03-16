@@ -2,15 +2,15 @@
  * Tests for Migration Tracker - database persistence functionality
  *
  * These tests require a running PostgreSQL instance.
- * Set DISC_PG_TEST_URL to enable them, e.g.:
- *   DISC_PG_TEST_URL=postgresql://localhost:5432/test deno test migration/tracker.test.ts
+ * Set DISC_PG_TEST_URL or DISC_PG_AUTO=1 to enable them.
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { MigrationTracker } from "./tracker.ts";
 import * as Types from "./types.ts";
+import { canRunPgTests, cleanupTestTables, getTestDsn } from "../tests/pg-test-harness.ts";
 
-const HAS_PG = !!Deno.env.get("DISC_PG_TEST_URL");
+const RUN_PG = canRunPgTests();
 
 // Helper function to create test migration
 function createTestMigration(): Types.Migration {
@@ -51,8 +51,10 @@ function createTestMigrationResult(): Types.MigrationResult {
   };
 }
 
-Deno.test({ name: "Migration Tracker - Initialize", ignore: !HAS_PG, fn: async () => {
-  const tracker = new MigrationTracker("postgresql://localhost:5432/test");
+Deno.test({ name: "Migration Tracker - Initialize", ignore: !RUN_PG, fn: async () => {
+  const dsn = await getTestDsn();
+  await cleanupTestTables(dsn);
+  const tracker = new MigrationTracker(dsn);
 
   const result = await tracker.initialize();
   assertEquals(result.ok, true);
@@ -60,8 +62,10 @@ Deno.test({ name: "Migration Tracker - Initialize", ignore: !HAS_PG, fn: async (
   await tracker.close();
 }});
 
-Deno.test({ name: "Migration Tracker - Record Migration", ignore: !HAS_PG, fn: async () => {
-  const tracker = new MigrationTracker("postgresql://localhost:5432/test");
+Deno.test({ name: "Migration Tracker - Record Migration", ignore: !RUN_PG, fn: async () => {
+  const dsn = await getTestDsn();
+  await cleanupTestTables(dsn);
+  const tracker = new MigrationTracker(dsn);
   await tracker.initialize();
 
   const migration = createTestMigration();
@@ -73,8 +77,10 @@ Deno.test({ name: "Migration Tracker - Record Migration", ignore: !HAS_PG, fn: a
   await tracker.close();
 }});
 
-Deno.test({ name: "Migration Tracker - Get Applied Migrations", ignore: !HAS_PG, fn: async () => {
-  const tracker = new MigrationTracker("postgresql://localhost:5432/test");
+Deno.test({ name: "Migration Tracker - Get Applied Migrations", ignore: !RUN_PG, fn: async () => {
+  const dsn = await getTestDsn();
+  await cleanupTestTables(dsn);
+  const tracker = new MigrationTracker(dsn);
   await tracker.initialize();
 
   // Record a migration
@@ -93,8 +99,10 @@ Deno.test({ name: "Migration Tracker - Get Applied Migrations", ignore: !HAS_PG,
   await tracker.close();
 }});
 
-Deno.test({ name: "Migration Tracker - Check Migration Applied Status", ignore: !HAS_PG, fn: async () => {
-  const tracker = new MigrationTracker("postgresql://localhost:5432/test");
+Deno.test({ name: "Migration Tracker - Check Migration Applied Status", ignore: !RUN_PG, fn: async () => {
+  const dsn = await getTestDsn();
+  await cleanupTestTables(dsn);
+  const tracker = new MigrationTracker(dsn);
   await tracker.initialize();
 
   const migration = createTestMigration();
@@ -120,8 +128,10 @@ Deno.test({ name: "Migration Tracker - Check Migration Applied Status", ignore: 
   await tracker.close();
 }});
 
-Deno.test({ name: "Migration Tracker - Remove Migration", ignore: !HAS_PG, fn: async () => {
-  const tracker = new MigrationTracker("postgresql://localhost:5432/test");
+Deno.test({ name: "Migration Tracker - Remove Migration", ignore: !RUN_PG, fn: async () => {
+  const dsn = await getTestDsn();
+  await cleanupTestTables(dsn);
+  const tracker = new MigrationTracker(dsn);
   await tracker.initialize();
 
   const migration = createTestMigration();
@@ -149,8 +159,10 @@ Deno.test({ name: "Migration Tracker - Remove Migration", ignore: !HAS_PG, fn: a
   await tracker.close();
 }});
 
-Deno.test({ name: "Migration Tracker - Get Migration State", ignore: !HAS_PG, fn: async () => {
-  const tracker = new MigrationTracker("postgresql://localhost:5432/test");
+Deno.test({ name: "Migration Tracker - Get Migration State", ignore: !RUN_PG, fn: async () => {
+  const dsn = await getTestDsn();
+  await cleanupTestTables(dsn);
+  const tracker = new MigrationTracker(dsn);
   await tracker.initialize();
 
   // Initial state should be empty
@@ -177,8 +189,10 @@ Deno.test({ name: "Migration Tracker - Get Migration State", ignore: !HAS_PG, fn
   await tracker.close();
 }});
 
-Deno.test({ name: "Migration Tracker - Save and Load Checkpoint", ignore: !HAS_PG, fn: async () => {
-  const tracker = new MigrationTracker("postgresql://localhost:5432/test");
+Deno.test({ name: "Migration Tracker - Save and Load Checkpoint", ignore: !RUN_PG, fn: async () => {
+  const dsn = await getTestDsn();
+  await cleanupTestTables(dsn);
+  const tracker = new MigrationTracker(dsn);
   await tracker.initialize();
 
   const checkpoint: Types.MigrationCheckpoint = {
@@ -210,8 +224,10 @@ Deno.test({ name: "Migration Tracker - Save and Load Checkpoint", ignore: !HAS_P
   await tracker.close();
 }});
 
-Deno.test({ name: "Migration Tracker - List Checkpoints", ignore: !HAS_PG, fn: async () => {
-  const tracker = new MigrationTracker("postgresql://localhost:5432/test");
+Deno.test({ name: "Migration Tracker - List Checkpoints", ignore: !RUN_PG, fn: async () => {
+  const dsn = await getTestDsn();
+  await cleanupTestTables(dsn);
+  const tracker = new MigrationTracker(dsn);
   await tracker.initialize();
 
   // Create multiple checkpoints
@@ -251,8 +267,10 @@ Deno.test({ name: "Migration Tracker - List Checkpoints", ignore: !HAS_PG, fn: a
   await tracker.close();
 }});
 
-Deno.test({ name: "Migration Tracker - Get Migration History", ignore: !HAS_PG, fn: async () => {
-  const tracker = new MigrationTracker("postgresql://localhost:5432/test");
+Deno.test({ name: "Migration Tracker - Get Migration History", ignore: !RUN_PG, fn: async () => {
+  const dsn = await getTestDsn();
+  await cleanupTestTables(dsn);
+  const tracker = new MigrationTracker(dsn);
   await tracker.initialize();
 
   // Apply multiple migrations
@@ -270,10 +288,12 @@ Deno.test({ name: "Migration Tracker - Get Migration History", ignore: !HAS_PG, 
     },
   ];
 
-  for (const migration of migrations) {
+  for (let i = 0; i < migrations.length; i++) {
+    const migration = migrations[i];
     const result = {
       ...createTestMigrationResult(),
       migration_id: migration.id,
+      applied_at: new Date(`2024-01-01T${10 + i}:01:00Z`),
     };
     await tracker.recordMigration(migration, result);
   }
@@ -292,8 +312,10 @@ Deno.test({ name: "Migration Tracker - Get Migration History", ignore: !HAS_PG, 
   await tracker.close();
 }});
 
-Deno.test({ name: "Migration Tracker - Get Rollback SQL", ignore: !HAS_PG, fn: async () => {
-  const tracker = new MigrationTracker("postgresql://localhost:5432/test");
+Deno.test({ name: "Migration Tracker - Get Rollback SQL", ignore: !RUN_PG, fn: async () => {
+  const dsn = await getTestDsn();
+  await cleanupTestTables(dsn);
+  const tracker = new MigrationTracker(dsn);
   await tracker.initialize();
 
   const migration = createTestMigration();
@@ -313,8 +335,10 @@ Deno.test({ name: "Migration Tracker - Get Rollback SQL", ignore: !HAS_PG, fn: a
   await tracker.close();
 }});
 
-Deno.test({ name: "Migration Tracker - Verify Integrity", ignore: !HAS_PG, fn: async () => {
-  const tracker = new MigrationTracker("postgresql://localhost:5432/test");
+Deno.test({ name: "Migration Tracker - Verify Integrity", ignore: !RUN_PG, fn: async () => {
+  const dsn = await getTestDsn();
+  await cleanupTestTables(dsn);
+  const tracker = new MigrationTracker(dsn);
   await tracker.initialize();
 
   // Apply some migrations
@@ -333,7 +357,8 @@ Deno.test({ name: "Migration Tracker - Verify Integrity", ignore: !HAS_PG, fn: a
 }});
 
 Deno.test("Migration Tracker - Error Handling - Not Initialized", async () => {
-  const tracker = new MigrationTracker("postgresql://localhost:5432/test");
+  // DSN doesn't matter here - we're testing that operations fail before init
+  const tracker = new MigrationTracker("postgresql://localhost:5432/dummy");
 
   const migration = createTestMigration();
   const migrationResult = createTestMigrationResult();
@@ -346,8 +371,10 @@ Deno.test("Migration Tracker - Error Handling - Not Initialized", async () => {
   }
 });
 
-Deno.test({ name: "Migration Tracker - Error Handling - Migration Not Found", ignore: !HAS_PG, fn: async () => {
-  const tracker = new MigrationTracker("postgresql://localhost:5432/test");
+Deno.test({ name: "Migration Tracker - Error Handling - Migration Not Found", ignore: !RUN_PG, fn: async () => {
+  const dsn = await getTestDsn();
+  await cleanupTestTables(dsn);
+  const tracker = new MigrationTracker(dsn);
   await tracker.initialize();
 
   // Try to remove non-existent migration
@@ -374,8 +401,10 @@ Deno.test({ name: "Migration Tracker - Error Handling - Migration Not Found", ig
   await tracker.close();
 }});
 
-Deno.test({ name: "Migration Tracker - Multiple Migrations", ignore: !HAS_PG, fn: async () => {
-  const tracker = new MigrationTracker("postgresql://localhost:5432/test");
+Deno.test({ name: "Migration Tracker - Multiple Migrations", ignore: !RUN_PG, fn: async () => {
+  const dsn = await getTestDsn();
+  await cleanupTestTables(dsn);
+  const tracker = new MigrationTracker(dsn);
   await tracker.initialize();
 
   // Apply multiple migrations in sequence
@@ -420,8 +449,10 @@ Deno.test({ name: "Migration Tracker - Multiple Migrations", ignore: !HAS_PG, fn
   await tracker.close();
 }});
 
-Deno.test({ name: "Migration Tracker - Concurrent Operations", ignore: !HAS_PG, fn: async () => {
-  const tracker = new MigrationTracker("postgresql://localhost:5432/test");
+Deno.test({ name: "Migration Tracker - Concurrent Operations", ignore: !RUN_PG, fn: async () => {
+  const dsn = await getTestDsn();
+  await cleanupTestTables(dsn);
+  const tracker = new MigrationTracker(dsn);
   await tracker.initialize();
 
   // Simulate concurrent migration operations

@@ -293,8 +293,8 @@ export class MigrationTracker {
         id: row.id,
         name: row.name,
         created_at: row.created_at,
-        schema_state: JSON.parse(row.schema_state),
-        migration_state: JSON.parse(row.migration_state),
+        schema_state: typeof row.schema_state === "string" ? JSON.parse(row.schema_state) : row.schema_state,
+        migration_state: typeof row.migration_state === "string" ? JSON.parse(row.migration_state) : row.migration_state,
       };
 
       return Ok(checkpoint);
@@ -322,8 +322,8 @@ export class MigrationTracker {
         id: row.id,
         name: row.name,
         created_at: row.created_at,
-        schema_state: JSON.parse(row.schema_state),
-        migration_state: JSON.parse(row.migration_state),
+        schema_state: typeof row.schema_state === "string" ? JSON.parse(row.schema_state) : row.schema_state,
+        migration_state: typeof row.migration_state === "string" ? JSON.parse(row.migration_state) : row.migration_state,
       }));
 
       return Ok(checkpoints);

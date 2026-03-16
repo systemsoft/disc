@@ -2,7 +2,7 @@
  * Performance tests for Migration Engine with large schema changes
  *
  * Tests that use MigrationTracker require a running PostgreSQL instance.
- * Set DISC_PG_TEST_URL to enable them.
+ * Set DISC_PG_TEST_URL or DISC_PG_AUTO=1 to enable them.
  */
 
 import { assertEquals, assertLessOrEqual } from "@std/assert";
@@ -12,8 +12,9 @@ import { MigrationTracker } from "./tracker.ts";
 import { Module } from "../schema/converter.ts";
 import * as AST from "../schema/ast.ts";
 import * as Types from "./types.ts";
+import { canRunPgTests, cleanupTestTables, getTestDsn } from "../tests/pg-test-harness.ts";
 
-const HAS_PG = !!Deno.env.get("DISC_PG_TEST_URL");
+const RUN_PG = canRunPgTests();
 
 // Helper function to create test config
 function createPerformanceTestConfig(): Types.MigrationConfig {
@@ -275,8 +276,10 @@ Deno.test("Performance - Rollback DDL Generation", () => {
   }
 });
 
-Deno.test({ name: "Performance - Migration Tracking with Many Migrations", ignore: !HAS_PG, fn: async () => {
-  const tracker = new MigrationTracker("postgresql://localhost:5432/test_performance");
+Deno.test({ name: "Performance - Migration Tracking with Many Migrations", ignore: !RUN_PG, fn: async () => {
+  const dsn = await getTestDsn();
+  await cleanupTestTables(dsn);
+  const tracker = new MigrationTracker(dsn);
   await tracker.initialize();
 
   const numMigrations = 500;
@@ -344,8 +347,10 @@ Deno.test({ name: "Performance - Migration Tracking with Many Migrations", ignor
   await tracker.close();
 }});
 
-Deno.test({ name: "Performance - Migration History Retrieval", ignore: !HAS_PG, fn: async () => {
-  const tracker = new MigrationTracker("postgresql://localhost:5432/test_performance");
+Deno.test({ name: "Performance - Migration History Retrieval", ignore: !RUN_PG, fn: async () => {
+  const dsn = await getTestDsn();
+  await cleanupTestTables(dsn);
+  const tracker = new MigrationTracker(dsn);
   await tracker.initialize();
 
   const numMigrations = 100;
