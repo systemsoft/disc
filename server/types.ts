@@ -31,6 +31,7 @@ export interface ServerConfig {
   enable_explain?: boolean;
   dry_run?: boolean;
   cache_max_size?: number;
+  shutdown_drain_timeout?: number;
   slow_query_threshold_ms?: number;
   tls?: {
     cert_file: string;
@@ -178,6 +179,20 @@ export interface ExecutionResult {
   query_hash?: string;
 }
 
+export interface HealthStatus {
+  status: "healthy" | "degraded" | "unhealthy";
+  database?: {
+    connected: boolean;
+    latency_ms?: number;
+  };
+  pool?: {
+    total: number;
+    idle: number;
+    active: number;
+    waiters: number;
+  };
+}
+
 export interface ProtocolHandler {
   handle_request(
     request: QueryRequest,
@@ -195,7 +210,19 @@ export interface ProtocolHandler {
   /** Update the handler's schema at runtime (e.g. after a migration). */
   updateSchema?(schema: Schema): void;
   /** Return cache and query metrics stats if available. */
-  getStats?(): { cache?: ServerStats["cache"]; query_metrics?: ServerStats["query_metrics"] };
+  getStats?(): {
+    cache?: ServerStats["cache"];
+    query_metrics?: ServerStats["query_metrics"];
+  };
+  /** Check database and pool health, returning overall status. */
+  checkHealth?(): Promise<HealthStatus>;
+  /** Return connection pool statistics, or null if no pool configured. */
+  getPoolStats?(): {
+    total: number;
+    idle: number;
+    active: number;
+    waiters: number;
+  } | null;
 }
 
 export interface ConnectionManager {

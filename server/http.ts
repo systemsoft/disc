@@ -3,7 +3,11 @@
  */
 
 import * as Types from "./types.ts";
-import { ConnectionManager, SessionManager, TransactionManager } from "./connection.ts";
+import {
+  ConnectionManager,
+  SessionManager,
+  TransactionManager,
+} from "./connection.ts";
 import { SubscriptionHandler } from "./subscription-handler.ts";
 import type { AuthProvider } from "../auth/provider.ts";
 import type { AuthMiddleware } from "../auth/middleware.ts";
@@ -30,6 +34,8 @@ export class HttpServer {
   private server?: Deno.HttpServer<Deno.NetAddr>;
   private cleanup_interval_ids: number[] = [];
   private start_time: Date;
+  private in_flight_requests = 0;
+  private shutting_down = false;
   private stats = {
     total_requests: 0,
     successful_requests: 0,
@@ -51,9 +57,14 @@ export class HttpServer {
   }
 
   async start(): Promise<void> {
-    console.log(`🚀 Starting Disc HTTP server on ${this.config.host}:${this.config.port}`);
+    console.log(
+      `🚀 Starting Disc HTTP server on ${this.config.host}:${this.config.port}`,
+    );
 
-    const handler = (request: Request, info: Deno.ServeHandlerInfo): Response | Promise<Response> => {
+    const handler = (
+      request: Request,
+      info: Deno.ServeHandlerInfo,
+    ): Response | Promise<Response> => {
       return this.handle_request(request, info);
     };
 
@@ -66,7 +77,9 @@ export class HttpServer {
     // Start cleanup intervals
     this.start_cleanup_intervals();
 
-    console.log(`✅ Disc server is running on http://${this.config.host}:${this.config.port}`);
+    console.log(
+      `✅ Disc server is running on http://${this.config.host}:${this.config.port}`,
+    );
     console.log(`📊 CORS enabled: ${this.config.enable_cors}`);
     console.log(`🔌 WebSockets enabled: ${this.config.enable_websockets}`);
 
@@ -84,13 +97,48 @@ export class HttpServer {
     this.subscription_handler.dispose();
 
     if (this.server) {
-      console.log("🛑 Stopping Disc server...");
+      console.log("Stopping Disc server...");
       await this.server.shutdown();
-      console.log("✅ Server stopped");
+      console.log("Server stopped");
     }
   }
 
-  private async handle_request(request: Request, info: Deno.ServeHandlerInfo): Promise<Response> {
+  /**
+   * Drain in-flight requests by setting the shutting_down flag and polling
+   * until all requests complete or the timeout expires.
+   */
+  async drain(timeout_ms: number): Promise<void> {
+    this.shutting_down = true;
+
+    const deadline = Date.now() + timeout_ms;
+    while (this.in_flight_requests > 0 && Date.now() < deadline) {
+      await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    }
+  }
+
+  /**
+   * Returns the current number of in-flight requests being processed.
+   */
+  getInFlightCount(): number {
+    return this.in_flight_requests;
+  }
+
+  private async handle_request(
+    request: Request,
+    info: Deno.ServeHandlerInfo,
+  ): Promise<Response> {
+    // Reject new requests during shutdown
+    if (this.shutting_down) {
+      return new Response(
+        JSON.stringify({ error: "Server is shutting down" }),
+        {
+          status: 503,
+          headers: this.get_default_headers("application/json"),
+        },
+      );
+    }
+
+    this.in_flight_requests++;
     const start_time = Date.now();
     const request_id = this.generate_request_id();
 
@@ -103,7 +151,10 @@ export class HttpServer {
       }
 
       // Handle WebSocket upgrade
-      if (this.config.enable_websockets && request.headers.get("upgrade") === "websocket") {
+      if (
+        this.config.enable_websockets &&
+        request.headers.get("upgrade") === "websocket"
+      ) {
         return this.handle_websocket_upgrade(request, info);
       }
 
@@ -122,13 +173,16 @@ export class HttpServer {
         case "/query":
           return await this.handle_query(request, info, request_id);
         case "/health":
-          return this.handle_health();
+          return await this.handle_health();
+        case "/health/live":
+          return this.handle_health_live();
+        case "/health/ready":
+          return await this.handle_health_ready();
         case "/stats":
           return this.handle_stats();
         default:
           return this.create_error_response("Not Found", 404);
       }
-
     } catch (error) {
       this.stats.failed_requests++;
       console.error(`Request ${request_id} failed:`, error);
@@ -136,6 +190,7 @@ export class HttpServer {
     } finally {
       const duration = Date.now() - start_time;
       this.stats.total_duration_ms += duration;
+      this.in_flight_requests--;
     }
   }
 
@@ -143,6 +198,8 @@ export class HttpServer {
     const endpoints: Record<string, any> = {
       query: "/query",
       health: "/health",
+      health_live: "/health/live",
+      health_ready: "/health/ready",
       stats: "/stats",
       websocket: this.config.enable_websockets ? "ws://upgrade" : null,
     };
@@ -176,7 +233,7 @@ export class HttpServer {
   private async handle_query(
     request: Request,
     info: Deno.ServeHandlerInfo,
-    request_id: string
+    request_id: string,
   ): Promise<Response> {
     if (request.method !== "POST") {
       return this.create_error_response("Method Not Allowed", 405);
@@ -194,23 +251,30 @@ export class HttpServer {
       }
 
       // Validate request
-      const validation_errors = this.protocol_handler.validate_request(query_request);
+      const validation_errors = this.protocol_handler.validate_request(
+        query_request,
+      );
       if (validation_errors.length > 0) {
-        return new Response(JSON.stringify({
-          errors: validation_errors,
-        }), {
-          status: 400,
-          headers: this.get_default_headers("application/json"),
-        });
+        return new Response(
+          JSON.stringify({
+            errors: validation_errors,
+          }),
+          {
+            status: 400,
+            headers: this.get_default_headers("application/json"),
+          },
+        );
       }
 
       // Create connection and session
-      const remote_addr = "hostname" in info.remoteAddr ? info.remoteAddr.hostname : "unknown";
+      const remote_addr = "hostname" in info.remoteAddr
+        ? info.remoteAddr.hostname
+        : "unknown";
       const connection = this.connection_manager.create_connection(
         "http",
         remote_addr,
         undefined,
-        request.headers.get("user-agent") || undefined
+        request.headers.get("user-agent") || undefined,
       );
 
       // Build auth context from JWT if auth middleware is configured
@@ -238,8 +302,57 @@ export class HttpServer {
         client_info: this.parse_client_info(request),
       };
 
-      // Execute query
-      const response = await this.protocol_handler.handle_request(query_request, context);
+      // Execute query with optional HTTP-level timeout safety net
+      let response: Types.QueryResponse;
+      const timeoutMs = this.config.request_timeout;
+
+      if (timeoutMs && timeoutMs > 0) {
+        let timerId: number | undefined;
+
+        const timeoutPromise = new Promise<Types.QueryResponse>(
+          (_resolve, reject) => {
+            timerId = setTimeout(() => {
+              reject(new Error("__HTTP_TIMEOUT__"));
+            }, timeoutMs);
+          },
+        );
+
+        try {
+          response = await Promise.race([
+            this.protocol_handler.handle_request(query_request, context),
+            timeoutPromise,
+          ]);
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            error.message === "__HTTP_TIMEOUT__"
+          ) {
+            this.stats.failed_requests++;
+            return new Response(
+              JSON.stringify({
+                errors: [{
+                  message: `Request timed out after ${timeoutMs}ms`,
+                  extensions: { code: "TIMEOUT" },
+                }],
+              }),
+              {
+                status: 408,
+                headers: this.get_default_headers("application/json"),
+              },
+            );
+          }
+          throw error;
+        } finally {
+          if (timerId !== undefined) {
+            clearTimeout(timerId);
+          }
+        }
+      } else {
+        response = await this.protocol_handler.handle_request(
+          query_request,
+          context,
+        );
+      }
 
       // Update session activity
       this.session_manager.update_activity(connection.session.session_id);
@@ -247,7 +360,7 @@ export class HttpServer {
       // Determine HTTP status based on response content
       // Errors with code "WARNING" are not real errors (e.g. dry-run mode)
       const hasRealErrors = response.errors?.some(
-        e => e.extensions?.code !== "WARNING"
+        (e) => e.extensions?.code !== "WARNING",
       );
 
       if (hasRealErrors && !response.data) {
@@ -263,7 +376,6 @@ export class HttpServer {
       return new Response(JSON.stringify(response), {
         headers: this.get_default_headers("application/json"),
       });
-
     } catch (error) {
       console.error(`Query execution failed for request ${request_id}:`, error);
 
@@ -281,8 +393,59 @@ export class HttpServer {
     }
   }
 
-  private handle_health(): Response {
-    const health = {
+  private handle_health_live(): Response {
+    return new Response(
+      JSON.stringify({ status: "alive" }),
+      {
+        status: 200,
+        headers: this.get_default_headers("application/json"),
+      },
+    );
+  }
+
+  private async handle_health_ready(): Promise<Response> {
+    if (this.protocol_handler.checkHealth) {
+      const health = await this.protocol_handler.checkHealth();
+      const httpStatus = health.status === "unhealthy" ? 503 : 200;
+
+      return new Response(
+        JSON.stringify({ status: health.status }),
+        {
+          status: httpStatus,
+          headers: this.get_default_headers("application/json"),
+        },
+      );
+    }
+
+    // No checkHealth on handler — assume healthy
+    return new Response(
+      JSON.stringify({ status: "healthy" }),
+      {
+        status: 200,
+        headers: this.get_default_headers("application/json"),
+      },
+    );
+  }
+
+  private async handle_health(): Promise<Response> {
+    if (this.protocol_handler.checkHealth) {
+      const health = await this.protocol_handler.checkHealth();
+      const httpStatus = health.status === "unhealthy" ? 503 : 200;
+
+      const body = {
+        ...health,
+        timestamp: new Date().toISOString(),
+        uptime_ms: Date.now() - this.start_time.getTime(),
+      };
+
+      return new Response(JSON.stringify(body, null, 2), {
+        status: httpStatus,
+        headers: this.get_default_headers("application/json"),
+      });
+    }
+
+    // Fallback when handler does not support checkHealth
+    const body = {
       status: "healthy",
       timestamp: new Date().toISOString(),
       uptime_ms: Date.now() - this.start_time.getTime(),
@@ -290,18 +453,21 @@ export class HttpServer {
       memory: this.get_memory_stats(),
     };
 
-    return new Response(JSON.stringify(health, null, 2), {
+    return new Response(JSON.stringify(body, null, 2), {
       headers: this.get_default_headers("application/json"),
     });
   }
 
   private handle_stats(): Response {
-    const subscription_stats = this.subscription_handler.get_subscription_stats();
+    const subscription_stats = this.subscription_handler
+      .get_subscription_stats();
 
     // Gather handler-level cache/metrics stats if available
     const handlerStats = this.protocol_handler.getStats?.();
 
-    const stats: Types.ServerStats & { subscriptions: typeof subscription_stats } = {
+    const stats: Types.ServerStats & {
+      subscriptions: typeof subscription_stats;
+    } = {
       connections: this.connection_manager.get_stats(),
       queries: {
         total: this.stats.total_requests,
@@ -338,15 +504,20 @@ export class HttpServer {
     return new Response(null, { status: 204, headers });
   }
 
-  private handle_websocket_upgrade(request: Request, info: Deno.ServeHandlerInfo): Response {
+  private handle_websocket_upgrade(
+    request: Request,
+    info: Deno.ServeHandlerInfo,
+  ): Response {
     const { socket, response } = Deno.upgradeWebSocket(request);
 
-    const remote_addr = "hostname" in info.remoteAddr ? info.remoteAddr.hostname : "unknown";
+    const remote_addr = "hostname" in info.remoteAddr
+      ? info.remoteAddr.hostname
+      : "unknown";
     const connection = this.connection_manager.create_connection(
       "websocket",
       remote_addr,
       undefined,
-      request.headers.get("user-agent") || undefined
+      request.headers.get("user-agent") || undefined,
     );
 
     socket.onopen = () => {
@@ -368,7 +539,9 @@ export class HttpServer {
 
     socket.onclose = () => {
       console.log(`WebSocket connection closed: ${connection.id}`);
-      this.subscription_handler.cleanup_connection(connection.session.session_id);
+      this.subscription_handler.cleanup_connection(
+        connection.session.session_id,
+      );
       this.connection_manager.close_connection(connection.id);
     };
 
@@ -382,7 +555,7 @@ export class HttpServer {
   private async handle_websocket_message(
     socket: WebSocket,
     connection: Types.Connection,
-    message: any
+    message: any,
   ): Promise<void> {
     const { type, payload } = message;
 
@@ -390,19 +563,28 @@ export class HttpServer {
       case "query": {
         const context: Types.QueryContext = {
           session: connection.session,
-          auth: { roles: [], permissions: [], ...connection.session.variables?._auth_context },
+          auth: {
+            roles: [],
+            permissions: [],
+            ...connection.session.variables?._auth_context,
+          },
           request_id: this.generate_request_id(),
           started_at: new Date(),
         };
 
         try {
-          const response = await this.protocol_handler.handle_request(payload, context);
+          const response = await this.protocol_handler.handle_request(
+            payload,
+            context,
+          );
           socket.send(JSON.stringify({
             type: "query_result",
             payload: response,
           }));
         } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : "Unknown error";
+          const errorMessage = error instanceof Error
+            ? error.message
+            : "Unknown error";
           socket.send(JSON.stringify({
             type: "error",
             payload: { message: errorMessage },
@@ -420,9 +602,15 @@ export class HttpServer {
         };
 
         try {
-          await this.subscription_handler.handle_subscription(payload, context, socket);
+          await this.subscription_handler.handle_subscription(
+            payload,
+            context,
+            socket,
+          );
         } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : "Unknown subscription error";
+          const errorMessage = error instanceof Error
+            ? error.message
+            : "Unknown subscription error";
           socket.send(JSON.stringify({
             type: "error",
             payload: { message: errorMessage },
@@ -456,7 +644,10 @@ export class HttpServer {
     }
   }
 
-  private async handle_auth_route(request: Request, url: URL): Promise<Response> {
+  private async handle_auth_route(
+    request: Request,
+    url: URL,
+  ): Promise<Response> {
     if (!this.auth_routes) {
       return this.create_error_response("Authentication not configured", 404);
     }
@@ -495,7 +686,10 @@ export class HttpServer {
     if (this.config.enable_cors) {
       headers.set("Access-Control-Allow-Origin", "*"); // TODO: Use config origins
       headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-      headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+      headers.set(
+        "Access-Control-Allow-Headers",
+        "Content-Type, Authorization",
+      );
     }
 
     return headers;
@@ -519,7 +713,9 @@ export class HttpServer {
     });
   }
 
-  private parse_client_info(request: Request): Types.QueryContext["client_info"] {
+  private parse_client_info(
+    request: Request,
+  ): Types.QueryContext["client_info"] {
     const user_agent = request.headers.get("user-agent");
     if (!user_agent) return undefined;
 

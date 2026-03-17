@@ -4,9 +4,11 @@
  */
 
 import * as Types from "./types.ts";
+import type { HealthStatus } from "./types.ts";
 import * as EdgeQL from "../edgeql/mod.ts";
 import * as Context from "../compiler/context.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
+import { DatabaseExecutionError } from "../lib/errors.ts";
 import { logger } from "../postgres/logger.ts";
 
 export interface SimpleEdgeQLOptions {
@@ -28,7 +30,9 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
     this.schema = options.schema || Context.createTestSchema();
 
     if (options.enable_access_policies) {
-      logger.warn("Access policies are not supported by SimpleEdgeQLProtocolHandler. Use protocol: \"full\" for access policy enforcement.");
+      logger.warn(
+        'Access policies are not supported by SimpleEdgeQLProtocolHandler. Use protocol: "full" for access policy enforcement.',
+      );
     }
 
     // Use provided pool or create new one if database URL provided
@@ -45,7 +49,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
 
   async handle_request(
     request: Types.QueryRequest,
-    context: Types.QueryContext
+    context: Types.QueryContext,
   ): Promise<Types.QueryResponse> {
     const start_time = Date.now();
 
@@ -73,7 +77,10 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       }
 
       // Simulate SQL compilation (without the full compiler for now)
-      const compilationResult = this.simulateCompilation(parseResult.ast, request.variables || {});
+      const compilationResult = this.simulateCompilation(
+        parseResult.ast,
+        request.variables || {},
+      );
 
       if (!compilationResult.success) {
         return {
@@ -91,7 +98,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       const executionResult = await this.executeQuery(
         compilationResult.sql,
         request.variables || {},
-        context
+        context,
       );
 
       const duration_ms = Date.now() - start_time;
@@ -103,15 +110,17 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
           duration_ms,
           query_hash: this.hash_query(request.query),
           sql: this.options.enable_explain ? compilationResult.sql : undefined,
-          parse_info: this.options.enable_explain ? {
-            ast_kind: parseResult.ast.kind,
-            token_count: parseResult.token_count,
-          } : undefined,
+          parse_info: this.options.enable_explain
+            ? {
+              ast_kind: parseResult.ast.kind,
+              token_count: parseResult.token_count,
+            }
+            : undefined,
         },
       };
 
       if (executionResult.warnings && executionResult.warnings.length > 0) {
-        response.errors = executionResult.warnings.map(warning => ({
+        response.errors = executionResult.warnings.map((warning) => ({
           message: warning,
           extensions: { code: "WARNING" },
         }));
@@ -120,7 +129,9 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       return response;
     } catch (error) {
       console.error("Query execution error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      const errorMessage = error instanceof Error
+        ? error.message
+        : "Unknown error";
 
       return {
         errors: [{
@@ -178,7 +189,11 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       const lexer = new EdgeQL.EdgeQLLexer(query);
       const tokens = lexer.tokenize();
 
-      console.log(`[EdgeQL] Lexed ${tokens.length} tokens for query: ${query.substring(0, 50)}...`);
+      console.log(
+        `[EdgeQL] Lexed ${tokens.length} tokens for query: ${
+          query.substring(0, 50)
+        }...`,
+      );
 
       // Use the real EdgeQL parser (it takes source string, not tokens)
       const parser = new EdgeQL.EdgeQLParser(query);
@@ -188,22 +203,26 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       return {
         success: true,
         ast: ast,
-        token_count: tokens.length
+        token_count: tokens.length,
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown parsing error";
+      const errorMessage = error instanceof Error
+        ? error.message
+        : "Unknown parsing error";
       console.log(`[EdgeQL] Exception during parsing: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage
+        error: errorMessage,
       };
     }
   }
 
-  private simulateCompilation(ast: EdgeQL.Query, variables: Record<string, any>):
+  private simulateCompilation(
+    ast: EdgeQL.Query,
+    variables: Record<string, any>,
+  ):
     | { success: true; sql: string }
     | { success: false; error: string } {
-
     try {
       // Simulate compilation based on AST structure
       let sql = "";
@@ -224,25 +243,29 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
         default:
           return {
             success: false,
-            error: `Unsupported query type: ${ast.kind}`
+            error: `Unsupported query type: ${ast.kind}`,
           };
       }
 
       // Replace variables in SQL (simplified)
       let finalSQL = sql;
       for (const [name, value] of Object.entries(variables)) {
-        const sqlValue = typeof value === "string" ? `'${value}'` : String(value);
+        const sqlValue = typeof value === "string"
+          ? `'${value}'`
+          : String(value);
         finalSQL = finalSQL.replace(new RegExp(`\\$${name}`, "g"), sqlValue);
       }
 
       console.log(`[Compiler] Generated SQL: ${finalSQL}`);
       return { success: true, sql: finalSQL };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown compilation error";
+      const errorMessage = error instanceof Error
+        ? error.message
+        : "Unknown compilation error";
       console.log(`[Compiler] Compilation error: ${errorMessage}`);
       return {
         success: false,
-        error: errorMessage
+        error: errorMessage,
       };
     }
   }
@@ -253,14 +276,16 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
     // Handle shapes (simplified)
     if (ast.shape) {
       const fields = ast.shape.elements
-        .map(element => {
+        .map((element) => {
           if (element.expr.kind === "Identifier") {
             return element.expr.name;
           }
           return "*";
         })
         .join(", ");
-      sql += `jsonb_build_object(${fields.split(", ").map(f => `'${f}', ${f}`).join(", ")})`;
+      sql += `jsonb_build_object(${
+        fields.split(", ").map((f) => `'${f}', ${f}`).join(", ")
+      })`;
     } else {
       sql += "*";
     }
@@ -369,7 +394,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
   private async executeQuery(
     sql: string,
     variables: Record<string, any>,
-    context: Types.QueryContext
+    context: Types.QueryContext,
   ): Promise<{ data: any; warnings?: string[] }> {
     logger.info(`[Execution] SQL: ${sql}`);
     logger.info(`[Execution] Variables: ${JSON.stringify(variables)}`);
@@ -390,16 +415,25 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
     if (this.pool) {
       try {
         // Execute the SQL using the pool
-        const result = await this.pool.query(sql, this.prepareParameters(variables));
-        
+        const result = await this.pool.query(
+          sql,
+          this.prepareParameters(variables),
+        );
+
         // Format result based on query type
         const normalizedSQL = sql.toLowerCase().trim();
-        
+
         if (normalizedSQL.includes("select")) {
           return { data: result.rows };
-        } else if (normalizedSQL.includes("insert") && normalizedSQL.includes("returning")) {
+        } else if (
+          normalizedSQL.includes("insert") &&
+          normalizedSQL.includes("returning")
+        ) {
           return { data: result.rows[0] || { success: true } };
-        } else if (normalizedSQL.includes("update") && normalizedSQL.includes("returning")) {
+        } else if (
+          normalizedSQL.includes("update") &&
+          normalizedSQL.includes("returning")
+        ) {
           return { data: result.rows[0] || { updated: result.rowCount } };
         } else if (normalizedSQL.includes("delete")) {
           return { data: { deleted: result.rowCount } };
@@ -407,12 +441,18 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
           return { data: { rowCount: result.rowCount, success: true } };
         }
       } catch (error) {
-        logger.error(`Database execution error: ${error}`);
-        // Fall back to mock data on error
-        return this.executeMockQuery(sql, variables, context);
+        const dbError = error instanceof Error
+          ? error
+          : new Error(String(error));
+        logger.error(`Database execution error: ${dbError.message}`);
+        throw new DatabaseExecutionError(
+          `Database query failed: ${dbError.message}`,
+          sql,
+          dbError,
+        );
       }
     }
-    
+
     // Fall back to mock implementation if no database
     return this.executeMockQuery(sql, variables, context);
   }
@@ -426,7 +466,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
   private async executeMockQuery(
     sql: string,
     _variables: Record<string, any>,
-    context: Types.QueryContext
+    context: Types.QueryContext,
   ): Promise<{ data: any; warnings?: string[] }> {
     // Original mock implementation for fallback
     const normalizedSQL = sql.toLowerCase().trim();
@@ -469,10 +509,17 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
     // Check for valid EdgeQL query start
     const normalized = query.trim().toLowerCase();
     const valid_start_keywords = [
-      "select", "insert", "update", "delete", "with", "for", "describe", "configure"
+      "select",
+      "insert",
+      "update",
+      "delete",
+      "with",
+      "for",
+      "describe",
+      "configure",
     ];
 
-    const starts_with_valid = valid_start_keywords.some(keyword =>
+    const starts_with_valid = valid_start_keywords.some((keyword) =>
       normalized.startsWith(keyword)
     );
 
@@ -486,7 +533,9 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
     return errors;
   }
 
-  private check_balanced_braces(query: string): { valid: boolean; position: number } {
+  private check_balanced_braces(
+    query: string,
+  ): { valid: boolean; position: number } {
     let depth = 0;
     let position = 0;
 
@@ -569,6 +618,71 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
     return Math.abs(hash).toString(16);
   }
 
+  async checkHealth(): Promise<HealthStatus> {
+    if (!this.pool) {
+      // No pool configured (dev/dry-run mode) — report healthy with no DB info
+      return { status: "healthy" };
+    }
+
+    if (this.pool.isClosed()) {
+      return {
+        status: "unhealthy",
+        database: { connected: false },
+        pool: this.buildPoolStats(),
+      };
+    }
+
+    try {
+      const start = Date.now();
+      await this.pool.query("SELECT 1");
+      const latency_ms = Date.now() - start;
+
+      const poolStats = this.buildPoolStats();
+      const status: HealthStatus["status"] = poolStats.waiters > 0
+        ? "degraded"
+        : "healthy";
+
+      return {
+        status,
+        database: { connected: true, latency_ms },
+        pool: poolStats,
+      };
+    } catch (_error) {
+      return {
+        status: "unhealthy",
+        database: { connected: false },
+        pool: this.buildPoolStats(),
+      };
+    }
+  }
+
+  getPoolStats(): {
+    total: number;
+    idle: number;
+    active: number;
+    waiters: number;
+  } | null {
+    if (!this.pool) {
+      return null;
+    }
+    return this.buildPoolStats();
+  }
+
+  private buildPoolStats(): {
+    total: number;
+    idle: number;
+    active: number;
+    waiters: number;
+  } {
+    const stats = this.pool!.getStatistics();
+    return {
+      total: stats.totalConnections,
+      idle: stats.idleConnections,
+      active: stats.activeConnections,
+      waiters: stats.waitQueueSize,
+    };
+  }
+
   // Schema management
   updateSchema(schema: Context.Schema): void {
     this.schema = schema;
@@ -584,7 +698,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       await this.pool.initialize();
     }
   }
-  
+
   // Cleanup
   async close(): Promise<void> {
     if (this.pool) {

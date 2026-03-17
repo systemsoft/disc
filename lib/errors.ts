@@ -99,3 +99,51 @@ export class MigrationError extends DiscError {
     super(message, context);
   }
 }
+
+export class DatabaseExecutionError extends DiscError {
+  readonly sql: string;
+  readonly cause: Error;
+
+  constructor(
+    message: string,
+    sql: string,
+    cause: Error,
+    context?: ErrorContext,
+  ) {
+    super(message, context);
+    this.sql = sql;
+    this.cause = cause;
+  }
+
+  formatError(): string {
+    let output = super.formatError();
+    output += `\n\nSQL: ${this.sql}`;
+    output += `\nCaused by: ${this.cause.message}`;
+    return output;
+  }
+}
+
+export class QueryTimeoutError extends DiscError {
+  readonly sql: string;
+  readonly timeoutMs: number;
+
+  constructor(
+    sql: string,
+    timeoutMs: number,
+    context?: ErrorContext,
+  ) {
+    super(
+      `Query timed out after ${timeoutMs}ms`,
+      context,
+    );
+    this.sql = sql;
+    this.timeoutMs = timeoutMs;
+  }
+
+  formatError(): string {
+    let output = super.formatError();
+    output += `\n\nSQL: ${this.sql}`;
+    output += `\nTimeout: ${this.timeoutMs}ms`;
+    return output;
+  }
+}

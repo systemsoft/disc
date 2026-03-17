@@ -8,6 +8,7 @@ import * as Compiler from "../compiler/compiler.ts";
 import * as Context from "../compiler/context.ts";
 import * as SQL from "../compiler/sql.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
+import { DatabaseExecutionError, QueryTimeoutError } from "../lib/errors.ts";
 import { logger } from "../postgres/logger.ts";
 import { authContextToAccessContext } from "./access-bridge.ts";
 import {
@@ -27,6 +28,7 @@ export interface EdgeQLExecutionOptions {
   enable_access_policies?: boolean;
   cache_max_size?: number;
   slow_query_threshold_ms?: number;
+  request_timeout?: number;
 }
 
 interface CachedCompilation {
@@ -71,8 +73,9 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
   }
 
   private createCompiler(schema: Context.Schema): Compiler.EdgeQLCompiler {
-    const compilerOptions: Compiler.CompilerOptions = this.options.enable_access_policies
-      ? {
+    const compilerOptions: Compiler.CompilerOptions =
+      this.options.enable_access_policies
+        ? {
           enableAccessControl: true,
           accessConfig: {
             mode: "permissive",
@@ -81,7 +84,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
             enableAudit: false,
           },
         }
-      : { enableAccessControl: false };
+        : { enableAccessControl: false };
 
     const compiler = new Compiler.EdgeQLCompiler(schema, compilerOptions);
 
@@ -272,6 +275,20 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       return response;
     } catch (error) {
       console.error("Query execution error:", error);
+
+      if (error instanceof QueryTimeoutError) {
+        return {
+          errors: [{
+            message: error.message,
+            extensions: {
+              code: "TIMEOUT",
+              duration_ms: Date.now() - start_time,
+              timeout_ms: error.timeoutMs,
+            },
+          }],
+        };
+      }
+
       const errorMessage = error instanceof Error
         ? error.message
         : "Unknown error";
@@ -574,10 +591,12 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     // Use connection pool if available
     if (this.pool) {
       try {
-        const result = await this.pool.query(
-          sql,
-          this.prepareParameters(variables),
-        );
+        const params = this.prepareParameters(variables);
+        const timeoutMs = this.options.request_timeout ?? 0;
+
+        const result = timeoutMs > 0
+          ? await this.pool.queryWithTimeout(sql, params, timeoutMs)
+          : await this.pool.query(sql, params);
 
         // Format result based on query type
         const normalizedSQL = sql.toLowerCase().trim();
@@ -600,9 +619,20 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
           return { data: { rowCount: result.rowCount, success: true } };
         }
       } catch (error) {
-        logger.error(`Database execution error: ${error}`);
-        // Fall back to mock data on error
-        return this.executeMockSQL(sql, variables, context);
+        // Let QueryTimeoutError propagate directly
+        if (error instanceof QueryTimeoutError) {
+          throw error;
+        }
+
+        const dbError = error instanceof Error
+          ? error
+          : new Error(String(error));
+        logger.error(`Database execution error: ${dbError.message}`);
+        throw new DatabaseExecutionError(
+          `Database query failed: ${dbError.message}`,
+          sql,
+          dbError,
+        );
       }
     }
 
@@ -810,7 +840,10 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     };
   }
 
-  getStats(): { cache?: Types.ServerStats["cache"]; query_metrics?: Types.ServerStats["query_metrics"] } {
+  getStats(): {
+    cache?: Types.ServerStats["cache"];
+    query_metrics?: Types.ServerStats["query_metrics"];
+  } {
     const compilationStats = this.compilationCache.stats();
     const parseStats = this.parseCache.stats();
     const metrics = this.getMetrics();
@@ -838,6 +871,71 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         },
       },
       query_metrics: metrics,
+    };
+  }
+
+  async checkHealth(): Promise<Types.HealthStatus> {
+    if (!this.pool) {
+      // No pool configured (dev/dry-run mode) — report healthy with no DB info
+      return { status: "healthy" };
+    }
+
+    if (this.pool.isClosed()) {
+      return {
+        status: "unhealthy",
+        database: { connected: false },
+        pool: this.buildPoolStats(),
+      };
+    }
+
+    try {
+      const start = Date.now();
+      await this.pool.query("SELECT 1");
+      const latency_ms = Date.now() - start;
+
+      const poolStats = this.buildPoolStats();
+      const status: Types.HealthStatus["status"] = poolStats.waiters > 0
+        ? "degraded"
+        : "healthy";
+
+      return {
+        status,
+        database: { connected: true, latency_ms },
+        pool: poolStats,
+      };
+    } catch (_error) {
+      return {
+        status: "unhealthy",
+        database: { connected: false },
+        pool: this.buildPoolStats(),
+      };
+    }
+  }
+
+  getPoolStats(): {
+    total: number;
+    idle: number;
+    active: number;
+    waiters: number;
+  } | null {
+    if (!this.pool) {
+      return null;
+    }
+    return this.buildPoolStats();
+  }
+
+  private buildPoolStats(): {
+    total: number;
+    idle: number;
+    active: number;
+    waiters: number;
+  } {
+    const stats = this.pool!.getStatistics();
+    return {
+      total: stats.totalConnections,
+      idle: stats.idleConnections,
+      active: stats.activeConnections,
+      waiters: stats.waitQueueSize,
     };
   }
 

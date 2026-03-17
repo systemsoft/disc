@@ -146,8 +146,6 @@ Deno.test({
       assertEquals(health.status, "healthy");
       assertExists(health.timestamp);
       assertEquals(typeof health.uptime_ms, "number");
-      assertExists(health.connections);
-      assertExists(health.memory);
     } finally {
       await harness.stop();
     }

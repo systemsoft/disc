@@ -10,6 +10,7 @@
  */
 
 import { DatabaseConfig, DatabaseConnection, QueryResult } from "./database.ts";
+import { QueryTimeoutError } from "./errors.ts";
 import { logger } from "../postgres/logger.ts";
 
 export interface PoolConfig extends DatabaseConfig {
@@ -20,6 +21,7 @@ export interface PoolConfig extends DatabaseConfig {
   validateOnAcquire?: boolean;
   maxWaitQueueSize?: number;
   cleanupInterval?: number;
+  leakWarningTimeout?: number;
 }
 
 interface PooledConnection {
@@ -28,6 +30,8 @@ interface PooledConnection {
   createdAt: Date;
   lastUsedAt: Date;
   inUse: boolean;
+  acquiredAt?: Date;
+  acquireStackTrace?: string;
 }
 
 interface WaitQueueEntry {
@@ -54,6 +58,8 @@ export class ConnectionPool {
   private idleConnections: PooledConnection[] = [];
   private waitQueue: WaitQueueEntry[] = [];
   private cleanupIntervalId?: number;
+  private closed = false;
+  private leakTimers: Map<string, number> = new Map();
   private stats: PoolStatistics = {
     totalConnections: 0,
     activeConnections: 0,
@@ -69,13 +75,14 @@ export class ConnectionPool {
   constructor(config: PoolConfig) {
     this.config = {
       ...config,
-      minConnections: config.minConnections ?? 0,
+      minConnections: config.minConnections ?? 2,
       maxConnections: config.maxConnections ?? 10,
       connectionTimeout: config.connectionTimeout ?? 30000,
       idleTimeout: config.idleTimeout ?? 600000, // 10 minutes
-      validateOnAcquire: config.validateOnAcquire ?? false,
+      validateOnAcquire: config.validateOnAcquire ?? true,
       maxWaitQueueSize: config.maxWaitQueueSize ?? 50,
       cleanupInterval: config.cleanupInterval ?? 60000, // 1 minute
+      leakWarningTimeout: config.leakWarningTimeout ?? 30000, // 30 seconds
     };
   }
 
@@ -112,6 +119,8 @@ export class ConnectionPool {
   }
 
   async acquire(): Promise<DatabaseConnection> {
+    const acquireStack = new Error().stack;
+
     // Check if we have idle connections
     while (this.idleConnections.length > 0) {
       const pooled = this.idleConnections.shift()!;
@@ -127,6 +136,9 @@ export class ConnectionPool {
         }
       }
 
+      pooled.acquiredAt = new Date();
+      pooled.acquireStackTrace = acquireStack;
+      this.startLeakTimer(pooled);
       this.stats.totalAcquired++;
       this.updateStats();
       return pooled.connection;
@@ -137,6 +149,9 @@ export class ConnectionPool {
       const pooled = await this.createConnection();
       if (pooled) {
         pooled.inUse = true;
+        pooled.acquiredAt = new Date();
+        pooled.acquireStackTrace = acquireStack;
+        this.startLeakTimer(pooled);
         this.stats.totalAcquired++;
         this.updateStats();
         return pooled.connection;
@@ -181,7 +196,10 @@ export class ConnectionPool {
       return;
     }
 
+    this.clearLeakTimer(pooled);
     pooled.inUse = false;
+    pooled.acquiredAt = undefined;
+    pooled.acquireStackTrace = undefined;
     pooled.lastUsedAt = new Date();
     this.stats.totalReleased++;
 
@@ -190,7 +208,9 @@ export class ConnectionPool {
       const entry = this.waitQueue.shift()!;
       clearTimeout(entry.timeoutId);
       pooled.inUse = true;
+      pooled.acquiredAt = new Date();
       pooled.lastUsedAt = new Date();
+      this.startLeakTimer(pooled);
       this.stats.totalAcquired++;
       this.updateStats();
       entry.resolve(connection);
@@ -208,6 +228,36 @@ export class ConnectionPool {
       return await connection.query(sql, params);
     } finally {
       this.release(connection);
+    }
+  }
+
+  async queryWithTimeout(
+    sql: string,
+    params: unknown[],
+    timeoutMs: number,
+  ): Promise<QueryResult> {
+    if (timeoutMs <= 0) {
+      return this.query(sql, params as any[]);
+    }
+
+    let timerId: number | undefined;
+
+    const timeoutPromise = new Promise<never>((_resolve, reject) => {
+      timerId = setTimeout(() => {
+        reject(new QueryTimeoutError(sql, timeoutMs));
+      }, timeoutMs);
+    });
+
+    try {
+      const result = await Promise.race([
+        this.query(sql, params as any[]),
+        timeoutPromise,
+      ]);
+      return result;
+    } finally {
+      if (timerId !== undefined) {
+        clearTimeout(timerId);
+      }
     }
   }
 
@@ -234,10 +284,18 @@ export class ConnectionPool {
   async close(): Promise<void> {
     logger.info("Closing connection pool");
 
+    this.closed = true;
+
     // Clear cleanup interval
     if (this.cleanupIntervalId) {
       clearInterval(this.cleanupIntervalId);
     }
+
+    // Clear all leak timers
+    for (const timerId of this.leakTimers.values()) {
+      clearTimeout(timerId);
+    }
+    this.leakTimers.clear();
 
     // Reject all waiting requests
     for (const entry of this.waitQueue) {
@@ -320,7 +378,8 @@ export class ConnectionPool {
 
   private async createConnection(): Promise<PooledConnection | null> {
     const maxRetries = this.config.maxRetries ?? 3;
-    const retryDelay = this.config.retryDelay ?? 1000;
+    const baseDelay = this.config.retryDelay ?? 1000;
+    const maxDelay = 30000; // Cap at 30 seconds
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
@@ -345,12 +404,16 @@ export class ConnectionPool {
         return pooled;
       } catch (error) {
         this.stats.totalErrors++;
+        const delay = Math.min(
+          baseDelay * Math.pow(2, attempt - 1),
+          maxDelay,
+        );
         logger.warn(
-          `Failed to create connection (attempt ${attempt}/${maxRetries}): ${error}`,
+          `Failed to create connection (attempt ${attempt}/${maxRetries}, next retry in ${delay}ms): ${error}`,
         );
 
         if (attempt < maxRetries) {
-          await new Promise((resolve) => setTimeout(resolve, retryDelay));
+          await new Promise((resolve) => setTimeout(resolve, delay));
         } else {
           throw new Error(
             `Failed to create connection after ${maxRetries} attempts: ${error}`,
@@ -398,8 +461,60 @@ export class ConnectionPool {
     this.stats.waitQueueSize = this.waitQueue.length;
   }
 
+  isHealthy(): boolean {
+    // Not healthy if pool is closed
+    if (this.closed) {
+      return false;
+    }
+
+    // Not healthy if all connections in use and wait queue has waiters
+    const allInUse = this.connections.size >= this.config.maxConnections! &&
+      this.idleConnections.length === 0;
+    if (allInUse && this.waitQueue.length > 0) {
+      return false;
+    }
+
+    // Healthy if we have idle connections or can create new ones
+    return true;
+  }
+
+  isClosed(): boolean {
+    return this.closed;
+  }
+
+  private startLeakTimer(pooled: PooledConnection): void {
+    const timeout = this.config.leakWarningTimeout!;
+    if (timeout <= 0) {
+      return;
+    }
+
+    const timerId = setTimeout(() => {
+      const heldMs = pooled.acquiredAt
+        ? Date.now() - pooled.acquiredAt.getTime()
+        : timeout;
+      logger.warn(
+        `Potential connection leak detected: connection ${pooled.id} has been held for ${heldMs}ms without being released.\nAcquire stack trace:\n${
+          pooled.acquireStackTrace || "unavailable"
+        }`,
+      );
+      this.leakTimers.delete(pooled.id);
+    }, timeout);
+
+    this.leakTimers.set(pooled.id, timerId);
+  }
+
+  private clearLeakTimer(pooled: PooledConnection): void {
+    const timerId = this.leakTimers.get(pooled.id);
+    if (timerId !== undefined) {
+      clearTimeout(timerId);
+      this.leakTimers.delete(pooled.id);
+    }
+  }
+
   private generateConnectionId(): string {
-    return `pool_conn_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    return `pool_conn_${Date.now()}_${
+      Math.random().toString(36).substring(2, 9)
+    }`;
   }
 }
 

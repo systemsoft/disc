@@ -64,6 +64,8 @@ export class DiscServer {
   private auth_middleware?: AuthMiddleware;
   private auth_routes?: AuthRoutes;
   private auth_db?: DatabaseConnection;
+  private stopping = false;
+  private signal_handler?: () => void;
 
   constructor(config: DiscServerOptions = {}) {
     // If a PostgresInstance is provided, derive database_url from its DSN
@@ -89,6 +91,7 @@ export class DiscServer {
       enable_access_policies: config.enable_access_policies,
       auth_config: config.auth_config,
       cache_max_size: config.cache_max_size,
+      shutdown_drain_timeout: config.shutdown_drain_timeout,
       slow_query_threshold_ms: config.slow_query_threshold_ms,
       tls: config.tls,
     };
@@ -146,7 +149,14 @@ export class DiscServer {
         auth_routes: this.auth_routes,
       });
 
-      // Start the server
+      // Register signal handlers for graceful shutdown
+      this.signal_handler = () => {
+        this.stop();
+      };
+      Deno.addSignalListener("SIGINT", this.signal_handler);
+      Deno.addSignalListener("SIGTERM", this.signal_handler);
+
+      // Start the server (blocks until server.finished)
       await this.http_server.start();
     } catch (error) {
       logger.error(`Failed to start server: ${error}`);
@@ -155,9 +165,33 @@ export class DiscServer {
   }
 
   async stop(): Promise<void> {
+    // Make stop() idempotent -- safe to call multiple times
+    if (this.stopping) {
+      return;
+    }
+    this.stopping = true;
+
     logger.info("Stopping Disc Database Server");
 
+    // Remove signal handlers
+    if (this.signal_handler) {
+      try {
+        Deno.removeSignalListener("SIGINT", this.signal_handler);
+        Deno.removeSignalListener("SIGTERM", this.signal_handler);
+      } catch {
+        // Ignore errors from removing listeners (e.g. in test environments)
+      }
+      this.signal_handler = undefined;
+    }
+
     if (this.http_server) {
+      // Drain in-flight requests before shutting down
+      const drain_timeout = this.config.shutdown_drain_timeout ?? 30000;
+      logger.info(
+        `Draining in-flight requests (timeout: ${drain_timeout}ms)`,
+      );
+      await this.http_server.drain(drain_timeout);
+
       await this.http_server.stop();
     }
 
@@ -197,7 +231,8 @@ export class DiscServer {
       bcrypt_rounds: this.config.auth_config?.bcrypt_rounds,
       session_timeout: this.config.auth_config?.session_timeout,
       allow_registration: this.config.auth_config?.allow_registration,
-      require_email_verification: this.config.auth_config?.require_email_verification,
+      require_email_verification: this.config.auth_config
+        ?.require_email_verification,
       password_min_length: this.config.auth_config?.password_min_length,
     };
 
@@ -266,9 +301,13 @@ export function create_server_from_env(
     enable_websockets: Deno.env.get("DISC_ENABLE_WEBSOCKETS") !== "false",
     jwt_secret: Deno.env.get("DISC_JWT_SECRET"),
     enable_auth: enableAuth !== undefined ? enableAuth !== "false" : undefined,
-    enable_access_policies: enableAccessPolicies !== undefined ? enableAccessPolicies !== "false" : undefined,
+    enable_access_policies: enableAccessPolicies !== undefined
+      ? enableAccessPolicies !== "false"
+      : undefined,
     cache_max_size: parseInt(Deno.env.get("DISC_CACHE_MAX_SIZE") || "1000"),
-    slow_query_threshold_ms: parseInt(Deno.env.get("DISC_SLOW_QUERY_MS") || "1000"),
+    slow_query_threshold_ms: parseInt(
+      Deno.env.get("DISC_SLOW_QUERY_MS") || "1000",
+    ),
     postgres_instance,
     protocol: Deno.env.get("DISC_PROTOCOL") === "full" ? "full" : "simple",
     schema,
