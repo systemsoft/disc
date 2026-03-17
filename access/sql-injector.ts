@@ -208,14 +208,18 @@ export class AccessSQLInjector {
       policySQL += `  TO PUBLIC\n`; // Or specific roles
 
       if (policy.using) {
-        // This would need to convert the expression to SQL
-        policySQL += `  USING (/* TODO: Convert policy.using to SQL */)`;
+        // Use the evaluator to convert the expression AST to SQL.
+        // Pass an empty context — RLS policies use session variables at runtime.
+        const usingSQL = this.evaluator.expressionToSQL(policy.using, {});
+        policySQL += `  USING (${usingSQL})`;
       } else {
         policySQL += `  USING (TRUE)`; // Allow all rows by default
       }
 
-      if (policy.withCheck)
-        policySQL += `\n  WITH CHECK (/* TODO: Convert policy.withCheck to SQL */)`;
+      if (policy.withCheck) {
+        const checkSQL = this.evaluator.expressionToSQL(policy.withCheck, {});
+        policySQL += `\n  WITH CHECK (${checkSQL})`;
+      }
 
       policySQL += ";";
       statements.push(policySQL);

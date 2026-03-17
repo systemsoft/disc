@@ -366,9 +366,9 @@ export class AccessEvaluator {
   }
 
   /**
-   * Convert an expression to SQL WHERE clause
+   * Convert an access expression AST node to a SQL WHERE clause fragment.
    */
-  private expressionToSQL(
+  expressionToSQL(
     expr: AccessExpressionNode,
     context: AccessContext
   ): string {

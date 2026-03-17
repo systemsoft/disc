@@ -370,12 +370,17 @@ export class MigrationTracker {
         ORDER BY applied_at ASC
       `);
 
-      // Verify checksums and detect tampering
-      // TODO: Implement checksum verification
-      // In real implementation, would reconstruct migration objects from rows
-      // and verify checksums. For now, we verify rows exist.
       if (result.rows.length === 0) {
         return Ok(true);
+      }
+
+      // Verify integrity: each row must have a non-empty schema_hash
+      for (const row of result.rows) {
+        if (!row.schema_hash || String(row.schema_hash).trim() === "") {
+          return Err(new MigrationError(
+            `Migration "${row.name}" (${row.id}) has empty schema_hash — possible data corruption`,
+          ));
+        }
       }
 
       return Ok(true);

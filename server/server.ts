@@ -88,6 +88,8 @@ export class DiscServer {
       enable_auth: config.enable_auth,
       enable_access_policies: config.enable_access_policies,
       auth_config: config.auth_config,
+      cache_max_size: config.cache_max_size,
+      slow_query_threshold_ms: config.slow_query_threshold_ms,
       tls: config.tls,
     };
 
@@ -100,6 +102,8 @@ export class DiscServer {
       database_url: this.config.database_url,
       schema: config.schema,
       enable_access_policies: config.enable_access_policies,
+      cache_max_size: config.cache_max_size,
+      slow_query_threshold_ms: config.slow_query_threshold_ms,
     };
 
     if (config.protocol === "full") {
@@ -263,6 +267,8 @@ export function create_server_from_env(
     jwt_secret: Deno.env.get("DISC_JWT_SECRET"),
     enable_auth: enableAuth !== undefined ? enableAuth !== "false" : undefined,
     enable_access_policies: enableAccessPolicies !== undefined ? enableAccessPolicies !== "false" : undefined,
+    cache_max_size: parseInt(Deno.env.get("DISC_CACHE_MAX_SIZE") || "1000"),
+    slow_query_threshold_ms: parseInt(Deno.env.get("DISC_SLOW_QUERY_MS") || "1000"),
     postgres_instance,
     protocol: Deno.env.get("DISC_PROTOCOL") === "full" ? "full" : "simple",
     schema,

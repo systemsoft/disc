@@ -298,6 +298,9 @@ export class HttpServer {
   private handle_stats(): Response {
     const subscription_stats = this.subscription_handler.get_subscription_stats();
 
+    // Gather handler-level cache/metrics stats if available
+    const handlerStats = this.protocol_handler.getStats?.();
+
     const stats: Types.ServerStats & { subscriptions: typeof subscription_stats } = {
       connections: this.connection_manager.get_stats(),
       queries: {
@@ -312,6 +315,8 @@ export class HttpServer {
       memory_usage: this.get_memory_stats(),
       uptime_ms: Date.now() - this.start_time.getTime(),
       subscriptions: subscription_stats,
+      cache: handlerStats?.cache,
+      query_metrics: handlerStats?.query_metrics,
     };
 
     return new Response(JSON.stringify(stats, null, 2), {

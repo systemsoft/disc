@@ -6,7 +6,7 @@ import * as Types from "./types.ts";
 
 export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
   constructor() {
-    // TODO: Initialize query compiler when available
+    // Legacy mock handler — real compiler integration is in EdgeQLProtocolHandler (edgeql-protocol.ts)
   }
 
   async handle_request(
@@ -24,8 +24,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         };
       }
 
-      // For now, simulate query execution
-      // TODO: Integrate with actual EdgeQL compiler from previous phases
+      // Mock execution — real compiler integration is in EdgeQLProtocolHandler (edgeql-protocol.ts)
       const result = await this.execute_edgeql_query(request.query, request.variables || {}, context);
 
       const duration_ms = Date.now() - start_time;

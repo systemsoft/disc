@@ -30,6 +30,8 @@ export interface ServerConfig {
   auth_config?: AuthServerConfig;
   enable_explain?: boolean;
   dry_run?: boolean;
+  cache_max_size?: number;
+  slow_query_threshold_ms?: number;
   tls?: {
     cert_file: string;
     key_file: string;
@@ -123,6 +125,29 @@ export interface ServerStats {
     external: number;
   };
   uptime_ms: number;
+  cache?: {
+    compilation: {
+      evictions: number;
+      hitRate: number;
+      hits: number;
+      misses: number;
+      size: number;
+    };
+    parse: {
+      evictions: number;
+      hitRate: number;
+      hits: number;
+      misses: number;
+      size: number;
+    };
+  };
+  query_metrics?: {
+    avgCompileMs: number;
+    avgExecuteMs: number;
+    avgParseMs: number;
+    cacheHitRate: number;
+    totalQueries: number;
+  };
 }
 
 export interface AuthContext {
@@ -169,6 +194,8 @@ export interface ProtocolHandler {
   close?(): Promise<void>;
   /** Update the handler's schema at runtime (e.g. after a migration). */
   updateSchema?(schema: Schema): void;
+  /** Return cache and query metrics stats if available. */
+  getStats?(): { cache?: ServerStats["cache"]; query_metrics?: ServerStats["query_metrics"] };
 }
 
 export interface ConnectionManager {

@@ -10,6 +10,13 @@ import * as SQL from "../compiler/sql.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { logger } from "../postgres/logger.ts";
 import { authContextToAccessContext } from "./access-bridge.ts";
+import {
+  hashAccessContext,
+  hashString,
+  makeCompilationCacheKey,
+  QueryCache,
+} from "../lib/query-cache.ts";
+import type { CacheStats } from "../lib/query-cache.ts";
 
 export interface EdgeQLExecutionOptions {
   schema?: Context.Schema;
@@ -18,6 +25,13 @@ export interface EdgeQLExecutionOptions {
   database_url?: string;
   connection_pool?: ConnectionPool;
   enable_access_policies?: boolean;
+  cache_max_size?: number;
+  slow_query_threshold_ms?: number;
+}
+
+interface CachedCompilation {
+  sqlAST: SQL.SQLStatement;
+  sqlString: string;
 }
 
 export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
@@ -25,11 +39,24 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
   private schema: Context.Schema;
   private options: EdgeQLExecutionOptions;
   private pool?: ConnectionPool;
+  private compilationCache: QueryCache<CachedCompilation>;
+  private parseCache: QueryCache<EdgeQL.Query>;
+  private metrics = {
+    totalQueries: 0,
+    totalParseMs: 0,
+    totalCompileMs: 0,
+    totalExecuteMs: 0,
+    cacheHits: 0,
+  };
 
   constructor(options: EdgeQLExecutionOptions = {}) {
     this.options = options;
     this.schema = options.schema || Context.createTestSchema();
     this.compiler = this.createCompiler(this.schema);
+
+    const cacheSize = options.cache_max_size ?? 1000;
+    this.compilationCache = new QueryCache<CachedCompilation>(cacheSize);
+    this.parseCache = new QueryCache<EdgeQL.Query>(cacheSize);
 
     // Use provided pool or create new one if database URL provided
     if (options.connection_pool) {
@@ -87,61 +114,148 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         };
       }
 
-      // Set access context from auth context before compilation
+      const queryHash = hashString(request.query);
+      let cache_hit = false;
+      let sqlString: string;
+      let sqlStatement: SQL.SQLStatement;
+      let parsedAST: EdgeQL.Query | undefined;
+      let parse_ms = 0;
+      let compile_ms = 0;
+
+      // Build compilation cache key (includes access context when policies enabled)
+      let compilationKey = queryHash;
+
       if (this.options.enable_access_policies && context.auth) {
-        this.compiler.setAccessContext(authContextToAccessContext(context.auth));
+        const ctxHash = hashAccessContext(
+          context.auth.user_id,
+          context.auth.roles?.[0],
+        );
+        compilationKey = makeCompilationCacheKey(queryHash, ctxHash);
       }
 
-      // Parse EdgeQL query
-      const parseResult = this.parseEdgeQLQuery(request.query);
-      if (!parseResult.success) {
-        return {
-          errors: [{
-            message: parseResult.error,
-            extensions: {
-              code: "PARSE_ERROR",
-              phase: "parsing",
-            },
-          }],
-        };
-      }
+      // Check compilation cache first
+      const cached = this.compilationCache.get(compilationKey);
 
-      // Compile EdgeQL to SQL
-      const compileResult = this.compiler.compile(parseResult.ast);
-      if (!compileResult.ok) {
-        return {
-          errors: [{
-            message: compileResult.error.message,
-            extensions: {
-              code: "COMPILATION_ERROR",
-              phase: "compilation",
-            },
-          }],
-        };
-      }
+      if (cached) {
+        cache_hit = true;
+        sqlString = cached.sqlString;
+        sqlStatement = cached.sqlAST;
+      } else {
+        // Cache miss — parse and compile
 
-      const sqlStatement = compileResult.value;
-      const sqlString = this.generateSQLString(sqlStatement);
+        // Check parse cache
+        const parseStart = Date.now();
+        let ast = this.parseCache.get(queryHash);
+
+        if (ast) {
+          parse_ms = Date.now() - parseStart;
+        } else {
+          const parseResult = this.parseEdgeQLQuery(request.query);
+          parse_ms = Date.now() - parseStart;
+
+          if (!parseResult.success) {
+            return {
+              errors: [{
+                message: parseResult.error,
+                extensions: {
+                  code: "PARSE_ERROR",
+                  phase: "parsing",
+                },
+              }],
+            };
+          }
+
+          ast = parseResult.ast;
+          this.parseCache.set(queryHash, ast);
+        }
+
+        parsedAST = ast;
+
+        // Set access context before compilation (affects generated SQL)
+        if (this.options.enable_access_policies && context.auth) {
+          this.compiler.setAccessContext(
+            authContextToAccessContext(context.auth),
+          );
+        }
+
+        // Compile EdgeQL to SQL
+        const compileStart = Date.now();
+        const compileResult = this.compiler.compile(ast);
+        compile_ms = Date.now() - compileStart;
+
+        if (!compileResult.ok) {
+          return {
+            errors: [{
+              message: compileResult.error.message,
+              extensions: {
+                code: "COMPILATION_ERROR",
+                phase: "compilation",
+              },
+            }],
+          };
+        }
+
+        sqlStatement = compileResult.value;
+        sqlString = this.generateSQLString(sqlStatement);
+
+        // Store in compilation cache
+        this.compilationCache.set(compilationKey, {
+          sqlAST: sqlStatement,
+          sqlString,
+        });
+      }
 
       // Execute query (or simulate execution)
+      const executeStart = Date.now();
       const result = await this.executeSQL(
         sqlString,
         request.variables || {},
         context,
       );
+      const execute_ms = Date.now() - executeStart;
 
       const duration_ms = Date.now() - start_time;
+
+      // Accumulate metrics
+      this.metrics.totalQueries++;
+      this.metrics.totalParseMs += parse_ms;
+      this.metrics.totalCompileMs += compile_ms;
+      this.metrics.totalExecuteMs += execute_ms;
+
+      if (cache_hit) {
+        this.metrics.cacheHits++;
+      }
+
+      // Slow query logging
+      const threshold = this.options.slow_query_threshold_ms ?? 1000;
+
+      if (duration_ms >= threshold) {
+        const truncatedQuery = request.query.length > 200
+          ? request.query.substring(0, 200) + "..."
+          : request.query;
+        const truncatedSQL = sqlString.length > 200
+          ? sqlString.substring(0, 200) + "..."
+          : sqlString;
+
+        logger.warn(
+          `Slow query (${duration_ms}ms): parse=${parse_ms}ms compile=${compile_ms}ms execute=${execute_ms}ms cache_hit=${cache_hit} query="${truncatedQuery}" sql="${truncatedSQL}"`,
+        );
+      }
 
       // Return successful response
       const response: Types.QueryResponse = {
         data: result.data,
         extensions: {
           duration_ms,
-          query_hash: this.hash_query(request.query),
+          parse_ms,
+          compile_ms,
+          execute_ms,
+          cache_hit,
+          query_hash: queryHash,
           sql: this.options.enable_explain ? sqlString : undefined,
           compilation_info: this.options.enable_explain
             ? {
-              ast: parseResult.ast,
+              ast: parsedAST,
               sql_ast: sqlStatement,
             }
             : undefined,
@@ -646,17 +760,6 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     };
   }
 
-  private hash_query(query: string): string {
-    // Simple hash for query identification
-    let hash = 0;
-    for (let i = 0; i < query.length; i++) {
-      const char = query.charCodeAt(i);
-      hash = ((hash << 5) - hash) + char;
-      hash = hash & hash; // Convert to 32-bit integer
-    }
-    return Math.abs(hash).toString(16);
-  }
-
   // Initialize pool if not already done
   async initialize(): Promise<void> {
     if (this.pool) {
@@ -675,10 +778,67 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
   updateSchema(schema: Context.Schema): void {
     this.schema = schema;
     this.compiler = this.createCompiler(schema);
+    this.compilationCache.clear();
+    this.parseCache.clear();
   }
 
   getSchema(): Context.Schema {
     return this.schema;
+  }
+
+  getCacheStats(): { compilation: CacheStats; parse: CacheStats } {
+    return {
+      compilation: this.compilationCache.stats(),
+      parse: this.parseCache.stats(),
+    };
+  }
+
+  getMetrics(): {
+    avgCompileMs: number;
+    avgExecuteMs: number;
+    avgParseMs: number;
+    cacheHitRate: number;
+    totalQueries: number;
+  } {
+    const q = this.metrics.totalQueries || 1; // avoid divide-by-zero
+    return {
+      avgCompileMs: this.metrics.totalCompileMs / q,
+      avgExecuteMs: this.metrics.totalExecuteMs / q,
+      avgParseMs: this.metrics.totalParseMs / q,
+      cacheHitRate: this.metrics.cacheHits / q,
+      totalQueries: this.metrics.totalQueries,
+    };
+  }
+
+  getStats(): { cache?: Types.ServerStats["cache"]; query_metrics?: Types.ServerStats["query_metrics"] } {
+    const compilationStats = this.compilationCache.stats();
+    const parseStats = this.parseCache.stats();
+    const metrics = this.getMetrics();
+
+    const cacheHitRate = (s: CacheStats) => {
+      const total = s.hits + s.misses;
+      return total > 0 ? s.hits / total : 0;
+    };
+
+    return {
+      cache: {
+        compilation: {
+          evictions: compilationStats.evictions,
+          hitRate: cacheHitRate(compilationStats),
+          hits: compilationStats.hits,
+          misses: compilationStats.misses,
+          size: compilationStats.size,
+        },
+        parse: {
+          evictions: parseStats.evictions,
+          hitRate: cacheHitRate(parseStats),
+          hits: parseStats.hits,
+          misses: parseStats.misses,
+          size: parseStats.size,
+        },
+      },
+      query_metrics: metrics,
+    };
   }
 
   getCompilerInfo(): { version: string; features: string[] } {
