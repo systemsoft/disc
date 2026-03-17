@@ -18,15 +18,25 @@ export class ProtocolBuilder {
       case Types.MessageType.AuthenticationOK:
         return this.buildAuthenticationOK(message as Types.AuthenticationOK);
       case Types.MessageType.AuthenticationSASL:
-        return this.buildAuthenticationSASL(message as Types.AuthenticationSASL);
+        return this.buildAuthenticationSASL(
+          message as Types.AuthenticationSASL,
+        );
       case Types.MessageType.AuthenticationSASLContinue:
-        return this.buildAuthenticationSASLContinue(message as Types.AuthenticationSASLContinue);
+        return this.buildAuthenticationSASLContinue(
+          message as Types.AuthenticationSASLContinue,
+        );
       case Types.MessageType.AuthenticationSASLFinal:
-        return this.buildAuthenticationSASLFinal(message as Types.AuthenticationSASLFinal);
+        return this.buildAuthenticationSASLFinal(
+          message as Types.AuthenticationSASLFinal,
+        );
       case Types.MessageType.AuthenticationSASLInitialResponse:
-        return this.buildAuthenticationSASLInitialResponse(message as Types.AuthenticationSASLInitialResponse);
+        return this.buildAuthenticationSASLInitialResponse(
+          message as Types.AuthenticationSASLInitialResponse,
+        );
       case Types.MessageType.AuthenticationSASLResponse:
-        return this.buildAuthenticationSASLResponse(message as Types.AuthenticationSASLResponse);
+        return this.buildAuthenticationSASLResponse(
+          message as Types.AuthenticationSASLResponse,
+        );
       case Types.MessageType.Parse:
         return this.buildParseMessage(message as Types.ParseMessage);
       case Types.MessageType.Execute:
@@ -58,104 +68,138 @@ export class ProtocolBuilder {
 
   private buildClientHandshake(message: Types.ClientHandshake): Uint8Array {
     const writer = new MessageWriter();
-    
+
     writer.writeUInt16(message.majorVersion);
     writer.writeUInt16(message.minorVersion);
     writer.writeUInt16(message.extensions.length);
-    
+
     for (const ext of message.extensions) {
       writer.writeString(ext.name);
       writer.writeUInt16(ext.headers.size);
-      
+
       for (const [key, value] of ext.headers) {
         writer.writeString(key);
         writer.writeBytes(value);
       }
     }
-    
+
     writer.writeUInt16(message.parameters.length);
     for (const param of message.parameters) {
       writer.writeString(param.name);
       writer.writeString(param.value);
     }
 
-    return this.wrapMessage(Types.MessageType.ClientHandshake, writer.getBuffer());
+    return this.wrapMessage(
+      Types.MessageType.ClientHandshake,
+      writer.getBuffer(),
+    );
   }
 
   private buildServerHandshake(message: Types.ServerHandshake): Uint8Array {
     const writer = new MessageWriter();
-    
+
     writer.writeUInt16(message.majorVersion);
     writer.writeUInt16(message.minorVersion);
     writer.writeUInt16(message.extensions.length);
-    
+
     for (const ext of message.extensions) {
       writer.writeString(ext.name);
       writer.writeUInt16(ext.headers.size);
-      
+
       for (const [key, value] of ext.headers) {
         writer.writeString(key);
         writer.writeBytes(value);
       }
     }
 
-    return this.wrapMessage(Types.MessageType.ServerHandshake, writer.getBuffer());
+    return this.wrapMessage(
+      Types.MessageType.ServerHandshake,
+      writer.getBuffer(),
+    );
   }
 
   private buildAuthenticationOK(message: Types.AuthenticationOK): Uint8Array {
     const writer = new MessageWriter();
     writer.writeUInt32(message.authStatus);
-    return this.wrapMessage(Types.MessageType.AuthenticationOK, writer.getBuffer());
+    return this.wrapMessage(
+      Types.MessageType.AuthenticationOK,
+      writer.getBuffer(),
+    );
   }
 
-  private buildAuthenticationSASL(message: Types.AuthenticationSASL): Uint8Array {
+  private buildAuthenticationSASL(
+    message: Types.AuthenticationSASL,
+  ): Uint8Array {
     const writer = new MessageWriter();
     writer.writeUInt32(message.authStatus);
     writer.writeUInt32(message.mechanisms.length);
-    
+
     for (const mechanism of message.mechanisms) {
       writer.writeString(mechanism);
     }
 
-    return this.wrapMessage(Types.MessageType.AuthenticationSASL, writer.getBuffer());
+    return this.wrapMessage(
+      Types.MessageType.AuthenticationSASL,
+      writer.getBuffer(),
+    );
   }
 
-  private buildAuthenticationSASLContinue(message: Types.AuthenticationSASLContinue): Uint8Array {
+  private buildAuthenticationSASLContinue(
+    message: Types.AuthenticationSASLContinue,
+  ): Uint8Array {
     const writer = new MessageWriter();
     writer.writeUInt32(message.authStatus);
     writer.writeBytes(message.saslData);
-    return this.wrapMessage(Types.MessageType.AuthenticationSASLContinue, writer.getBuffer());
+    return this.wrapMessage(
+      Types.MessageType.AuthenticationSASLContinue,
+      writer.getBuffer(),
+    );
   }
 
-  private buildAuthenticationSASLFinal(message: Types.AuthenticationSASLFinal): Uint8Array {
+  private buildAuthenticationSASLFinal(
+    message: Types.AuthenticationSASLFinal,
+  ): Uint8Array {
     const writer = new MessageWriter();
     writer.writeUInt32(message.authStatus);
     writer.writeBytes(message.saslData);
-    return this.wrapMessage(Types.MessageType.AuthenticationSASLFinal, writer.getBuffer());
+    return this.wrapMessage(
+      Types.MessageType.AuthenticationSASLFinal,
+      writer.getBuffer(),
+    );
   }
 
-  private buildAuthenticationSASLInitialResponse(message: Types.AuthenticationSASLInitialResponse): Uint8Array {
+  private buildAuthenticationSASLInitialResponse(
+    message: Types.AuthenticationSASLInitialResponse,
+  ): Uint8Array {
     const writer = new MessageWriter();
     writer.writeString(message.mechanism);
     writer.writeBytes(message.initialResponse);
-    return this.wrapMessage(Types.MessageType.AuthenticationSASLInitialResponse, writer.getBuffer());
+    return this.wrapMessage(
+      Types.MessageType.AuthenticationSASLInitialResponse,
+      writer.getBuffer(),
+    );
   }
 
-  private buildAuthenticationSASLResponse(message: Types.AuthenticationSASLResponse): Uint8Array {
+  private buildAuthenticationSASLResponse(
+    message: Types.AuthenticationSASLResponse,
+  ): Uint8Array {
     const writer = new MessageWriter();
     writer.writeBytes(message.response);
-    return this.wrapMessage(Types.MessageType.AuthenticationSASLResponse, writer.getBuffer());
+    return this.wrapMessage(
+      Types.MessageType.AuthenticationSASLResponse,
+      writer.getBuffer(),
+    );
   }
 
   private buildParseMessage(message: Types.ParseMessage): Uint8Array {
     const writer = new MessageWriter();
-    
+
     writer.writeUInt16(message.annotations.length);
     for (const annotation of message.annotations) {
       writer.writeString(annotation.name);
       writer.writeString(annotation.value);
     }
-    
+
     writer.writeUInt64(message.allowedCapabilities);
     writer.writeUInt64(message.compilationFlags);
     writer.writeUInt64(message.implicitLimit);
@@ -169,13 +213,13 @@ export class ProtocolBuilder {
 
   private buildExecuteMessage(message: Types.ExecuteMessage): Uint8Array {
     const writer = new MessageWriter();
-    
+
     writer.writeUInt16(message.annotations.length);
     for (const annotation of message.annotations) {
       writer.writeString(annotation.name);
       writer.writeString(annotation.value);
     }
-    
+
     writer.writeUInt64(message.allowedCapabilities);
     writer.writeUInt64(message.compilationFlags);
     writer.writeUInt64(message.implicitLimit);
@@ -194,24 +238,27 @@ export class ProtocolBuilder {
 
   private buildCommandComplete(message: Types.CommandComplete): Uint8Array {
     const writer = new MessageWriter();
-    
+
     writer.writeUInt16(message.annotations.length);
     for (const annotation of message.annotations) {
       writer.writeString(annotation.name);
       writer.writeString(annotation.value);
     }
-    
+
     writer.writeUInt64(message.capabilities);
     writer.writeString(message.commandStatus);
     writer.writeFixedBytes(message.stateTypeDescriptorId);
     writer.writeBytes(message.encodedStateData);
 
-    return this.wrapMessage(Types.MessageType.CommandComplete, writer.getBuffer());
+    return this.wrapMessage(
+      Types.MessageType.CommandComplete,
+      writer.getBuffer(),
+    );
   }
 
   private buildDataMessage(message: Types.DataMessage): Uint8Array {
     const writer = new MessageWriter();
-    
+
     writer.writeUInt16(message.dataElements.length);
     for (const element of message.dataElements) {
       writer.writeBytes(element.data);
@@ -222,23 +269,26 @@ export class ProtocolBuilder {
 
   private buildErrorResponse(message: Types.ErrorResponse): Uint8Array {
     const writer = new MessageWriter();
-    
+
     writer.writeUInt8(message.severity);
     writer.writeUInt32(message.errorCode);
     writer.writeString(message.message);
     writer.writeUInt16(message.attributes.size);
-    
+
     for (const [code, value] of message.attributes) {
       writer.writeUInt16(code);
       writer.writeString(value);
     }
 
-    return this.wrapMessage(Types.MessageType.ErrorResponse, writer.getBuffer());
+    return this.wrapMessage(
+      Types.MessageType.ErrorResponse,
+      writer.getBuffer(),
+    );
   }
 
   private buildReadyForCommand(message: Types.ReadyForCommand): Uint8Array {
     const writer = new MessageWriter();
-    
+
     writer.writeUInt8(message.transactionState);
     writer.writeUInt16(message.annotations.length);
     for (const annotation of message.annotations) {
@@ -246,16 +296,19 @@ export class ProtocolBuilder {
       writer.writeString(annotation.value);
     }
 
-    return this.wrapMessage(Types.MessageType.ReadyForCommand, writer.getBuffer());
+    return this.wrapMessage(
+      Types.MessageType.ReadyForCommand,
+      writer.getBuffer(),
+    );
   }
 
   private wrapMessage(type: Types.MessageType, body: Uint8Array): Uint8Array {
     const buffer = new Uint8Array(5 + body.length);
     buffer[0] = type;
-    
+
     const view = new DataView(buffer.buffer);
     view.setUint32(1, 4 + body.length, false); // Big-endian
-    
+
     buffer.set(body, 5);
     return buffer;
   }
@@ -322,12 +375,12 @@ class MessageWriter {
   getBuffer(): Uint8Array {
     const result = new Uint8Array(this.totalLength);
     let offset = 0;
-    
+
     for (const buffer of this.buffers) {
       result.set(buffer, offset);
       offset += buffer.length;
     }
-    
+
     return result;
   }
 }

@@ -9,7 +9,11 @@ import { FunctionDef } from "./context.ts";
 Deno.test("getBuiltinFunctions returns a Map with at least 12 entries", () => {
   const fns = getBuiltinFunctions();
   assertEquals(fns instanceof Map, true);
-  assertEquals(fns.size >= 12, true, `Expected at least 12 functions, got ${fns.size}`);
+  assertEquals(
+    fns.size >= 12,
+    true,
+    `Expected at least 12 functions, got ${fns.size}`,
+  );
 });
 
 Deno.test("every entry has a valid FunctionDef shape", () => {
@@ -18,13 +22,33 @@ Deno.test("every entry has a valid FunctionDef shape", () => {
   for (const [key, def] of fns) {
     assertEquals(typeof def.name, "string", `${key}: name should be a string`);
     assertEquals(def.name, key, `${key}: name should match the map key`);
-    assertEquals(Array.isArray(def.args), true, `${key}: args should be an array`);
-    assertEquals(typeof def.returnType, "string", `${key}: returnType should be a string`);
+    assertEquals(
+      Array.isArray(def.args),
+      true,
+      `${key}: args should be an array`,
+    );
+    assertEquals(
+      typeof def.returnType,
+      "string",
+      `${key}: returnType should be a string`,
+    );
 
     for (const arg of def.args) {
-      assertEquals(typeof arg.name, "string", `${key}: arg name should be a string`);
-      assertEquals(typeof arg.type, "string", `${key}: arg type should be a string`);
-      assertEquals(typeof arg.required, "boolean", `${key}: arg required should be a boolean`);
+      assertEquals(
+        typeof arg.name,
+        "string",
+        `${key}: arg name should be a string`,
+      );
+      assertEquals(
+        typeof arg.type,
+        "string",
+        `${key}: arg type should be a string`,
+      );
+      assertEquals(
+        typeof arg.required,
+        "boolean",
+        `${key}: arg required should be a boolean`,
+      );
     }
   }
 });
@@ -134,5 +158,9 @@ Deno.test("each call returns a fresh Map instance", () => {
   const fns1 = getBuiltinFunctions();
   const fns2 = getBuiltinFunctions();
   assertEquals(fns1 !== fns2, true, "should return distinct Map instances");
-  assertEquals(fns1.size, fns2.size, "both should have the same number of entries");
+  assertEquals(
+    fns1.size,
+    fns2.size,
+    "both should have the same number of entries",
+  );
 });

@@ -85,7 +85,7 @@ export class ConnectionManager implements Types.ConnectionManager {
     type: Types.Connection["type"],
     remote_addr: string,
     session?: Types.SessionContext,
-    user_agent?: string
+    user_agent?: string,
   ): Types.Connection {
     const connection_id = this.generate_connection_id();
 
@@ -128,7 +128,8 @@ export class ConnectionManager implements Types.ConnectionManager {
     const idle_connections: string[] = [];
 
     for (const [id, connection] of this.connections) {
-      const idle_time = now.getTime() - connection.session.last_activity.getTime();
+      const idle_time = now.getTime() -
+        connection.session.last_activity.getTime();
       if (idle_time > this.connection_timeout_ms) {
         idle_connections.push(id);
       }
@@ -146,8 +147,8 @@ export class ConnectionManager implements Types.ConnectionManager {
     return {
       active: connections.length,
       total: connections.length,
-      http: connections.filter(c => c.type === "http").length,
-      websocket: connections.filter(c => c.type === "websocket").length,
+      http: connections.filter((c) => c.type === "http").length,
+      websocket: connections.filter((c) => c.type === "websocket").length,
     };
   }
 
@@ -190,7 +191,7 @@ export class TransactionManager implements Types.TransactionManager {
 
   begin_transaction(
     session_id: string,
-    options: Partial<Types.Transaction> = {}
+    options: Partial<Types.Transaction> = {},
   ): Types.Transaction {
     const transaction_id = this.generate_transaction_id();
 
@@ -312,7 +313,9 @@ export class TransactionManager implements Types.TransactionManager {
           conn.execute("ROLLBACK").then(() => {
             this.pool!.release(conn);
           }).catch((error) => {
-            logger.error(`Failed to rollback abandoned transaction ${id}: ${error}`);
+            logger.error(
+              `Failed to rollback abandoned transaction ${id}: ${error}`,
+            );
             this.pool!.release(conn);
           });
         } catch (_) {
@@ -342,7 +345,7 @@ export class TransactionManager implements Types.TransactionManager {
 
   private async execute_begin(
     transaction_id: string,
-    transaction: Types.Transaction
+    transaction: Types.Transaction,
   ): Promise<void> {
     if (!this.pool) return;
 
@@ -365,7 +368,9 @@ export class TransactionManager implements Types.TransactionManager {
       }
 
       await conn.execute(beginSQL);
-      logger.info(`Transaction ${transaction_id}: ${beginSQL} executed on PostgreSQL`);
+      logger.info(
+        `Transaction ${transaction_id}: ${beginSQL} executed on PostgreSQL`,
+      );
     } catch (error) {
       logger.error(`Transaction ${transaction_id}: BEGIN failed: ${error}`);
       // Clean up on failure

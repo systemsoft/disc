@@ -155,13 +155,24 @@ export interface LinkDefinition {
 }
 
 export interface PropertyChange {
-  kind: "ChangeType" | "ChangeRequired" | "ChangeMulti" | "ChangeDefault" | "AddConstraint" | "DropConstraint";
+  kind:
+    | "ChangeType"
+    | "ChangeRequired"
+    | "ChangeMulti"
+    | "ChangeDefault"
+    | "AddConstraint"
+    | "DropConstraint";
   old_value?: any;
   new_value?: any;
 }
 
 export interface LinkChange {
-  kind: "ChangeTarget" | "ChangeRequired" | "ChangeMulti" | "ChangeCardinality" | "ChangeOnDelete";
+  kind:
+    | "ChangeTarget"
+    | "ChangeRequired"
+    | "ChangeMulti"
+    | "ChangeCardinality"
+    | "ChangeOnDelete";
   old_value?: any;
   new_value?: any;
 }
@@ -205,7 +216,12 @@ export interface IndexDefinition {
 }
 
 export interface ColumnChange {
-  kind: "ChangeType" | "ChangeNullable" | "ChangeDefault" | "AddConstraint" | "DropConstraint";
+  kind:
+    | "ChangeType"
+    | "ChangeNullable"
+    | "ChangeDefault"
+    | "AddConstraint"
+    | "DropConstraint";
   old_value?: any;
   new_value?: any;
 }
@@ -265,7 +281,11 @@ export interface MigrationHistoryEntry {
 }
 
 // Helper functions for creating operations
-export function createTypeOperation(name: string, properties: PropertyDefinition[], links: LinkDefinition[]): CreateTypeOperation {
+export function createTypeOperation(
+  name: string,
+  properties: PropertyDefinition[],
+  links: LinkDefinition[],
+): CreateTypeOperation {
   return {
     kind: "CreateType",
     type_name: name,
@@ -281,7 +301,9 @@ export function dropTypeOperation(name: string): DropTypeOperation {
   };
 }
 
-export function addPropertyOperation(property: PropertyDefinition): AddPropertyOperation {
+export function addPropertyOperation(
+  property: PropertyDefinition,
+): AddPropertyOperation {
   return {
     kind: "AddProperty",
     property,
@@ -317,7 +339,9 @@ export function dropTableOperation(name: string): DropTableOperation {
   };
 }
 
-export function addColumnOperation(column: ColumnDefinition): AddColumnOperation {
+export function addColumnOperation(
+  column: ColumnDefinition,
+): AddColumnOperation {
   return {
     kind: "AddColumn",
     column,

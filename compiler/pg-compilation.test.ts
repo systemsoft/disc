@@ -9,10 +9,7 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
-import {
-  canRunPgTests,
-  getTestDsn,
-} from "../tests/pg-test-harness.ts";
+import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
@@ -55,7 +52,11 @@ async function applyTestSchema(pool: ConnectionPool) {
   await manager.initialize();
 
   const result = await manager.applySchema(TEST_SDL);
-  assertEquals(result.ok, true, `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`);
+  assertEquals(
+    result.ok,
+    true,
+    `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`,
+  );
 
   const schema = manager.getSchema();
   assertExists(schema, "Schema should exist after applySchema");
@@ -112,7 +113,11 @@ Deno.test({
       const result = await pool.query(sql);
 
       // Verify the result contains the inserted data
-      assertEquals(result.rowCount >= 1, true, "Should return at least one row");
+      assertEquals(
+        result.rowCount >= 1,
+        true,
+        "Should return at least one row",
+      );
 
       // The result rows contain jsonb_build_object output. Each row has a
       // single key whose value is the JSON object.
@@ -122,14 +127,17 @@ Deno.test({
       // Find the row data - it could be the row itself or nested in a
       // jsonb_build_object column
       const rowData = firstRow.jsonb_build_object ?? firstRow;
-      const name = rowData.name ?? (typeof rowData === "object" ? Object.values(rowData)[0] : undefined);
+      const name = rowData.name ??
+        (typeof rowData === "object" ? Object.values(rowData)[0] : undefined);
       assertExists(name, "Row should contain name data");
 
       await manager.close();
     } finally {
       await pool.query(`DROP TABLE IF EXISTS ${TEST_TABLE} CASCADE`);
       await pool.query("DROP TABLE IF EXISTS disc_migrations CASCADE");
-      await pool.query("DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE");
+      await pool.query(
+        "DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE",
+      );
       await pool.close();
     }
   },
@@ -159,7 +167,11 @@ Deno.test({
         `SELECT name, value FROM ${TEST_TABLE} WHERE name = 'beta'`,
       );
 
-      assertEquals(verifyResult.rowCount, 1, "Should have exactly one row named 'beta'");
+      assertEquals(
+        verifyResult.rowCount,
+        1,
+        "Should have exactly one row named 'beta'",
+      );
       assertEquals(verifyResult.rows[0].name, "beta");
       assertEquals(
         Number(verifyResult.rows[0].value),
@@ -171,14 +183,17 @@ Deno.test({
     } finally {
       await pool.query(`DROP TABLE IF EXISTS ${TEST_TABLE} CASCADE`);
       await pool.query("DROP TABLE IF EXISTS disc_migrations CASCADE");
-      await pool.query("DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE");
+      await pool.query(
+        "DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE",
+      );
       await pool.close();
     }
   },
 });
 
 Deno.test({
-  name: "PG Compilation: SDL migrate + multi-row INSERT + SELECT with FILTER returns correct subset",
+  name:
+    "PG Compilation: SDL migrate + multi-row INSERT + SELECT with FILTER returns correct subset",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -207,13 +222,19 @@ Deno.test({
       const result = await pool.query(sql);
 
       // Should return only the rows where value > 15 (two and three)
-      assertEquals(result.rowCount, 2, "Should return exactly 2 rows with value > 15");
+      assertEquals(
+        result.rowCount,
+        2,
+        "Should return exactly 2 rows with value > 15",
+      );
 
       await manager.close();
     } finally {
       await pool.query(`DROP TABLE IF EXISTS ${TEST_TABLE} CASCADE`);
       await pool.query("DROP TABLE IF EXISTS disc_migrations CASCADE");
-      await pool.query("DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE");
+      await pool.query(
+        "DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE",
+      );
       await pool.close();
     }
   },
@@ -248,7 +269,11 @@ Deno.test({
         `SELECT name, value FROM ${TEST_TABLE} WHERE name = 'gamma'`,
       );
 
-      assertEquals(verifyResult.rowCount, 1, "Should still have one 'gamma' row");
+      assertEquals(
+        verifyResult.rowCount,
+        1,
+        "Should still have one 'gamma' row",
+      );
       assertEquals(
         Number(verifyResult.rows[0].value),
         99,
@@ -259,7 +284,9 @@ Deno.test({
     } finally {
       await pool.query(`DROP TABLE IF EXISTS ${TEST_TABLE} CASCADE`);
       await pool.query("DROP TABLE IF EXISTS disc_migrations CASCADE");
-      await pool.query("DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE");
+      await pool.query(
+        "DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE",
+      );
       await pool.close();
     }
   },
@@ -286,7 +313,11 @@ Deno.test({
       const beforeResult = await pool.query(
         `SELECT count(*)::int AS cnt FROM ${TEST_TABLE} WHERE name = 'delta'`,
       );
-      assertEquals(Number(beforeResult.rows[0].cnt), 1, "Row should exist before delete");
+      assertEquals(
+        Number(beforeResult.rows[0].cnt),
+        1,
+        "Row should exist before delete",
+      );
 
       // Compile and execute an EdgeQL DELETE
       const deleteSql = compileEdgeQL(
@@ -299,13 +330,19 @@ Deno.test({
       const afterResult = await pool.query(
         `SELECT count(*)::int AS cnt FROM ${TEST_TABLE} WHERE name = 'delta'`,
       );
-      assertEquals(Number(afterResult.rows[0].cnt), 0, "Row should be gone after delete");
+      assertEquals(
+        Number(afterResult.rows[0].cnt),
+        0,
+        "Row should be gone after delete",
+      );
 
       await manager.close();
     } finally {
       await pool.query(`DROP TABLE IF EXISTS ${TEST_TABLE} CASCADE`);
       await pool.query("DROP TABLE IF EXISTS disc_migrations CASCADE");
-      await pool.query("DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE");
+      await pool.query(
+        "DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE",
+      );
       await pool.close();
     }
   },

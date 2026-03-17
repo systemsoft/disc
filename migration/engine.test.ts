@@ -22,18 +22,28 @@ function createTestSchema(): Module[] {
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "name" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
               required: true,
               multi: false,
             },
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "email" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
               required: true,
               multi: false,
               constraints: [
-                { kind: "Constraint", name: { kind: "Identifier", value: "exclusive" }, on: { kind: "PathExpression", path: [".email"] } },
+                {
+                  kind: "Constraint",
+                  name: { kind: "Identifier", value: "exclusive" },
+                  on: { kind: "PathExpression", path: [".email"] },
+                },
               ],
             },
           ],
@@ -55,24 +65,37 @@ function createExtendedTestSchema(): Module[] {
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "name" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
               required: true,
               multi: false,
             },
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "email" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
               required: true,
               multi: false,
               constraints: [
-                { kind: "Constraint", name: { kind: "Identifier", value: "exclusive" }, on: { kind: "PathExpression", path: [".email"] } },
+                {
+                  kind: "Constraint",
+                  name: { kind: "Identifier", value: "exclusive" },
+                  on: { kind: "PathExpression", path: [".email"] },
+                },
               ],
             },
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "active" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["bool"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["bool"] },
+              },
               required: false,
               multi: false,
               default: { kind: "Literal", type: "boolean", value: true },
@@ -86,14 +109,20 @@ function createExtendedTestSchema(): Module[] {
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "title" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
               required: true,
               multi: false,
             },
             {
               kind: "LinkDeclaration",
               name: { kind: "Identifier", value: "author" },
-              target: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["User"] } },
+              target: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["User"] },
+              },
               required: true,
               multi: false,
             },
@@ -155,7 +184,9 @@ Deno.test("Schema Differ - Add Property", () => {
   // Should find: alter User (add active property) and create Post type
   assertEquals(operations.length, 2);
 
-  const alterOp = operations.find(op => op.kind === "AlterType") as Types.AlterTypeOperation;
+  const alterOp = operations.find((op) =>
+    op.kind === "AlterType"
+  ) as Types.AlterTypeOperation;
   assertEquals(alterOp.type_name, "User");
   assertEquals(alterOp.operations.length, 1);
   assertEquals(alterOp.operations[0].kind, "AddProperty");
@@ -276,7 +307,7 @@ Deno.test("DDL Generator - Create Link", () => {
   assertStringIncludes(mainTable, "author_id UUID");
 
   // Check for junction table creation
-  const junctionTable = statements.find(stmt => stmt.includes("post_tags"));
+  const junctionTable = statements.find((stmt) => stmt.includes("post_tags"));
   assertEquals(junctionTable !== undefined, true);
 });
 
@@ -313,11 +344,13 @@ Deno.test("Migration Engine - Plan Schema Evolution", () => {
 
     // Should include alter User and create Post
     const operations = plan.migrations[0].operations;
-    const hasAlterUser = operations.some(op =>
-      op.kind === "AlterType" && (op as Types.AlterTypeOperation).type_name === "User"
+    const hasAlterUser = operations.some((op) =>
+      op.kind === "AlterType" &&
+      (op as Types.AlterTypeOperation).type_name === "User"
     );
-    const hasCreatePost = operations.some(op =>
-      op.kind === "CreateType" && (op as Types.CreateTypeOperation).type_name === "Post"
+    const hasCreatePost = operations.some((op) =>
+      op.kind === "CreateType" &&
+      (op as Types.CreateTypeOperation).type_name === "Post"
     );
 
     assertEquals(hasAlterUser, true);
@@ -340,7 +373,9 @@ Deno.test("Migration Engine - Generate DDL", () => {
       const statements = ddlResult.value;
       assertEquals(statements.length > 0, true);
 
-      const hasCreateTable = statements.some(stmt => stmt.includes("CREATE TABLE"));
+      const hasCreateTable = statements.some((stmt) =>
+        stmt.includes("CREATE TABLE")
+      );
       assertEquals(hasCreateTable, true);
     }
   }
@@ -416,7 +451,10 @@ Deno.test("Migration Engine - Track Migration State", async () => {
     // Check that migration is now tracked
     state = engine.getMigrationState();
     assertEquals(state.applied_migrations.length, 1);
-    assertEquals(engine.isMigrationApplied(planResult.value.migrations[0].id), true);
+    assertEquals(
+      engine.isMigrationApplied(planResult.value.migrations[0].id),
+      true,
+    );
   }
 });
 
@@ -426,12 +464,54 @@ Deno.test("DDL Generator - Type Mapping", () => {
     kind: "CreateType",
     type_name: "TestTypes",
     properties: [
-      { name: "str_field", type: "str", required: true, multi: false, constraints: [], annotations: {} },
-      { name: "int_field", type: "int32", required: true, multi: false, constraints: [], annotations: {} },
-      { name: "float_field", type: "float64", required: true, multi: false, constraints: [], annotations: {} },
-      { name: "bool_field", type: "bool", required: true, multi: false, constraints: [], annotations: {} },
-      { name: "uuid_field", type: "uuid", required: true, multi: false, constraints: [], annotations: {} },
-      { name: "datetime_field", type: "datetime", required: true, multi: false, constraints: [], annotations: {} },
+      {
+        name: "str_field",
+        type: "str",
+        required: true,
+        multi: false,
+        constraints: [],
+        annotations: {},
+      },
+      {
+        name: "int_field",
+        type: "int32",
+        required: true,
+        multi: false,
+        constraints: [],
+        annotations: {},
+      },
+      {
+        name: "float_field",
+        type: "float64",
+        required: true,
+        multi: false,
+        constraints: [],
+        annotations: {},
+      },
+      {
+        name: "bool_field",
+        type: "bool",
+        required: true,
+        multi: false,
+        constraints: [],
+        annotations: {},
+      },
+      {
+        name: "uuid_field",
+        type: "uuid",
+        required: true,
+        multi: false,
+        constraints: [],
+        annotations: {},
+      },
+      {
+        name: "datetime_field",
+        type: "datetime",
+        required: true,
+        multi: false,
+        constraints: [],
+        annotations: {},
+      },
     ],
     links: [],
   };
@@ -453,8 +533,22 @@ Deno.test("DDL Generator - Identifier Escaping", () => {
     kind: "CreateType",
     type_name: "TestEscaping",
     properties: [
-      { name: "order", type: "str", required: true, multi: false, constraints: [], annotations: {} },
-      { name: "select", type: "str", required: true, multi: false, constraints: [], annotations: {} },
+      {
+        name: "order",
+        type: "str",
+        required: true,
+        multi: false,
+        constraints: [],
+        annotations: {},
+      },
+      {
+        name: "select",
+        type: "str",
+        required: true,
+        multi: false,
+        constraints: [],
+        annotations: {},
+      },
     ],
     links: [],
   };

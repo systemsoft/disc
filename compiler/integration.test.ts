@@ -20,16 +20,64 @@ function createTestSchema(): Context.Schema {
     kind: "object",
     tableName: "users",
     properties: new Map([
-      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id" }],
-      ["name", { name: "name", type: "str", required: true, multi: false, columnName: "name" }],
-      ["email", { name: "email", type: "str", required: true, multi: false, columnName: "email" }],
-      ["first_name", { name: "first_name", type: "str", required: false, multi: false, columnName: "first_name" }],
-      ["last_name", { name: "last_name", type: "str", required: false, multi: false, columnName: "last_name" }],
-      ["active", { name: "active", type: "bool", required: false, multi: false, columnName: "active" }],
-      ["role", { name: "role", type: "str", required: false, multi: false, columnName: "role" }],
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+      }],
+      ["name", {
+        name: "name",
+        type: "str",
+        required: true,
+        multi: false,
+        columnName: "name",
+      }],
+      ["email", {
+        name: "email",
+        type: "str",
+        required: true,
+        multi: false,
+        columnName: "email",
+      }],
+      ["first_name", {
+        name: "first_name",
+        type: "str",
+        required: false,
+        multi: false,
+        columnName: "first_name",
+      }],
+      ["last_name", {
+        name: "last_name",
+        type: "str",
+        required: false,
+        multi: false,
+        columnName: "last_name",
+      }],
+      ["active", {
+        name: "active",
+        type: "bool",
+        required: false,
+        multi: false,
+        columnName: "active",
+      }],
+      ["role", {
+        name: "role",
+        type: "str",
+        required: false,
+        multi: false,
+        columnName: "role",
+      }],
     ]),
     links: new Map([
-      ["posts", { name: "posts", target: "Post", multi: true, required: false, backlink: "author" }],
+      ["posts", {
+        name: "posts",
+        target: "Post",
+        multi: true,
+        required: false,
+        backlink: "author",
+      }],
     ]),
   });
   types.set("Post", {
@@ -37,12 +85,36 @@ function createTestSchema(): Context.Schema {
     kind: "object",
     tableName: "posts",
     properties: new Map([
-      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id" }],
-      ["title", { name: "title", type: "str", required: true, multi: false, columnName: "title" }],
-      ["created_at", { name: "created_at", type: "datetime", required: false, multi: false, columnName: "created_at" }],
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+      }],
+      ["title", {
+        name: "title",
+        type: "str",
+        required: true,
+        multi: false,
+        columnName: "title",
+      }],
+      ["created_at", {
+        name: "created_at",
+        type: "datetime",
+        required: false,
+        multi: false,
+        columnName: "created_at",
+      }],
     ]),
     links: new Map([
-      ["author", { name: "author", target: "User", multi: false, columnName: "author_id", required: true }],
+      ["author", {
+        name: "author",
+        target: "User",
+        multi: false,
+        columnName: "author_id",
+        required: true,
+      }],
     ]),
   });
 
@@ -69,16 +141,20 @@ function compileToSQL(edgeql: string): string {
     // Compile to SQL AST
     const compiler = new EdgeQLCompiler(createTestSchema());
     const compileResult = compiler.compile(ast);
-    
+
     if (!compileResult.ok) {
       throw new Error(`Compile error: ${compileResult.error.message}`);
     }
-    
+
     // Generate SQL string
     const generator = new SQLCodeGenerator();
     return generator.generate(compileResult.value);
   } catch (error) {
-    throw new Error(`Compilation failed: ${error instanceof Error ? error.message : String(error)}`);
+    throw new Error(
+      `Compilation failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
   }
 }
 
@@ -145,7 +221,10 @@ Deno.test("EdgeQL to SQL - SELECT with nested shape", () => {
   assertStringIncludes(normalized, "jsonb_build_object(");
   assertStringIncludes(normalized, "'name'");
   assertStringIncludes(normalized, "'posts'");
-  assertStringIncludes(normalized, "jsonb_agg(jsonb_build_object('title', posts.title, 'created_at', posts.created_at))");
+  assertStringIncludes(
+    normalized,
+    "jsonb_agg(jsonb_build_object('title', posts.title, 'created_at', posts.created_at))",
+  );
   assertStringIncludes(normalized, "FROM posts");
   assertStringIncludes(normalized, "posts.author_id =");
   assertStringIncludes(normalized, "FROM users AS");

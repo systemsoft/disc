@@ -85,7 +85,11 @@ export interface AuthProvider {
   refresh(refresh_token: string): Promise<AuthResponse>;
   verify_token(token: string): Promise<TokenPayload>;
   get_user(user_id: string): Promise<User | null>;
-  update_password(user_id: string, old_password: string, new_password: string): Promise<void>;
+  update_password(
+    user_id: string,
+    old_password: string,
+    new_password: string,
+  ): Promise<void>;
   reset_password_request(email: string): Promise<string>; // returns reset token
   reset_password(reset_token: string, new_password: string): Promise<void>;
   verify_email(verification_token: string): Promise<void>;

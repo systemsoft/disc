@@ -11,6 +11,7 @@ Disc currently has strong foundations (parsers, PostgreSQL management, UI) but c
 ## Current State Assessment
 
 ### ✅ Complete (No Work Needed)
+
 - SDL Parser (schema/): 100% with 15+ test files
 - EdgeQL Parser (edgeql/): 100% with comprehensive AST
 - PostgreSQL Management (postgres/): Binary lifecycle fully working
@@ -19,10 +20,12 @@ Disc currently has strong foundations (parsers, PostgreSQL management, UI) but c
 - Binary Protocol Core (protocol/): Message parsing, SASL auth, pooling
 
 ### ⚠️ Broken/Blocked
+
 - **EdgeQL Compiler** (compiler/): 30+ TypeScript errors, cannot execute any queries
 - **Database Integration**: All operations are mocked, no real PostgreSQL execution
 
 ### ❌ Missing Entirely
+
 - Extensions system (auth, AI, vector, GraphQL)
 - Client libraries (JavaScript, Python, etc.)
 - Connection pooling for database
@@ -33,10 +36,12 @@ Disc currently has strong foundations (parsers, PostgreSQL management, UI) but c
 ---
 
 ## Phase 1: Fix Core Execution Path (Week 1-2)
+
 **Goal**: Execute basic SELECT queries against real PostgreSQL
 **Success Criteria**: `SELECT User { name, email }` returns real data
 
 ### Stage 1.1: Fix EdgeQL Compiler TypeScript Errors
+
 **Priority**: CRITICAL BLOCKER
 **Location**: `compiler/`
 **Tests**: `compiler/*.test.ts`
@@ -44,12 +49,13 @@ Disc currently has strong foundations (parsers, PostgreSQL management, UI) but c
 ```typescript
 // Current errors in compiler/:
 // - Missing Result type imports
-// - Incorrect AST node references  
+// - Incorrect AST node references
 // - Type mismatches in SQL generation
 // - Missing error handling types
 ```
 
 **Tasks**:
+
 1. Run `deno test compiler/ --no-check` to identify all type errors
 2. Fix imports and type definitions in:
    - `compiler/compiler.ts`
@@ -60,11 +66,13 @@ Disc currently has strong foundations (parsers, PostgreSQL management, UI) but c
 4. Add integration test for basic query compilation
 
 ### Stage 1.2: Replace Mocked Database Operations
+
 **Priority**: CRITICAL
 **Location**: `server/`, `migration/`, `lib/`
 **Dependencies**: `npm:postgres` or native Deno PostgreSQL driver
 
 **Tasks**:
+
 1. Install PostgreSQL driver:
    ```typescript
    import postgres from "npm:postgres@3.4.3";
@@ -91,15 +99,18 @@ Disc currently has strong foundations (parsers, PostgreSQL management, UI) but c
 4. Test with bundled PostgreSQL instance
 
 ### Stage 1.3: Basic Query Execution Pipeline
+
 **Priority**: HIGH
 **Success Metric**: End-to-end query execution
 
 **Pipeline**:
+
 ```
 EdgeQL Query → Parser → Compiler → SQL → PostgreSQL → Result Encoding → Response
 ```
 
 **Tasks**:
+
 1. Connect compiler output to database executor
 2. Implement result set mapping (SQL rows → EdgeQL shapes)
 3. Handle basic types (string, int, bool, datetime)
@@ -108,29 +119,33 @@ EdgeQL Query → Parser → Compiler → SQL → PostgreSQL → Result Encoding 
 ---
 
 ## Phase 2: Connection Management & Transactions (Week 3-4)
+
 **Goal**: Production-grade connection handling
 **Success Criteria**: 1000+ concurrent connections, ACID transactions
 
 ### Stage 2.1: Connection Pooling
+
 **Location**: `lib/connection-pool.ts` (enhance existing)
 **Reference**: Already implemented for protocol, adapt for database
 
 ```typescript
 interface PoolConfig {
-  min: number;          // 10
-  max: number;          // 100
-  idleTimeout: number;  // 30000ms
+  min: number; // 10
+  max: number; // 100
+  idleTimeout: number; // 30000ms
   acquireTimeout: number; // 5000ms
 }
 ```
 
 **Tasks**:
+
 1. Adapt existing ConnectionPool for PostgreSQL connections
 2. Implement health checks and automatic reconnection
 3. Add metrics (active, idle, waiting connections)
 4. Test under load (1000+ operations)
 
 ### Stage 2.2: Transaction Management
+
 **Location**: New file `lib/transaction.ts`
 
 ```typescript
@@ -144,6 +159,7 @@ interface Transaction {
 ```
 
 **Tasks**:
+
 1. Implement transaction lifecycle
 2. Add savepoint support
 3. Handle nested transactions
@@ -153,10 +169,12 @@ interface Transaction {
 ---
 
 ## Phase 3: Type System & Data Encoding (Week 5-6)
+
 **Goal**: Full EdgeDB type support
 **Success Criteria**: All scalar and collection types working
 
 ### Stage 3.1: Type Descriptors
+
 **Location**: `protocol/type-descriptors.ts`
 **Reference**: Research doc shows UUID mappings
 
@@ -171,6 +189,7 @@ const TYPE_IDS = {
 ```
 
 **Tasks**:
+
 1. Implement type descriptor registry
 2. Create encoders/decoders for each type
 3. Handle arrays, tuples, objects
@@ -178,9 +197,11 @@ const TYPE_IDS = {
 5. Test with complex nested structures
 
 ### Stage 3.2: Result Encoding
+
 **Location**: `protocol/encoder.ts`
 
 **Tasks**:
+
 1. Binary format encoding (EdgeDB protocol)
 2. JSON encoding with proper type preservation
 3. Handle NULL values correctly
@@ -189,10 +210,12 @@ const TYPE_IDS = {
 ---
 
 ## Phase 4: Advanced Query Features (Week 7-9)
+
 **Goal**: Full EdgeQL language support
 **Success Criteria**: Complex queries with CTEs, aggregates, window functions
 
 ### Stage 4.1: Aggregations & GROUP BY
+
 **Location**: `compiler/aggregates.ts`
 
 ```edgeql
@@ -204,12 +227,14 @@ GROUP BY .department
 ```
 
 **Tasks**:
+
 1. Extend compiler for aggregate functions
 2. Implement GROUP BY clause compilation
 3. Add HAVING support
 4. Test with complex aggregations
 
 ### Stage 4.2: Common Table Expressions (CTEs)
+
 **Location**: `compiler/cte.ts`
 
 ```edgeql
@@ -220,12 +245,14 @@ SELECT active_users { posts := recent_posts }
 ```
 
 **Tasks**:
+
 1. Parse WITH clauses
 2. Generate SQL CTEs
 3. Handle recursive CTEs
 4. Optimize CTE execution
 
 ### Stage 4.3: Window Functions
+
 **Location**: `compiler/window.ts`
 
 ```edgeql
@@ -238,10 +265,12 @@ SELECT User {
 ---
 
 ## Phase 5: Extensions System (Week 10-12)
+
 **Goal**: Core extensions for Gel compatibility
 **Success Criteria**: auth and GraphQL extensions working
 
 ### Stage 5.1: Extension Framework
+
 **Location**: `extensions/core.ts`
 
 ```typescript
@@ -256,10 +285,12 @@ interface Extension {
 ```
 
 ### Stage 5.2: Auth Extension
+
 **Location**: `extensions/auth/`
 **Priority**: HIGH (most used extension)
 
 **Features**:
+
 - JWT token generation/validation
 - OAuth 2.0 providers (Google, GitHub, etc.)
 - Password hashing (Argon2, bcrypt)
@@ -267,10 +298,12 @@ interface Extension {
 - Role-based access control
 
 ### Stage 5.3: GraphQL Extension
+
 **Location**: `extensions/graphql/`
 **Priority**: HIGH (API compatibility)
 
 **Features**:
+
 - Auto-generate GraphQL schema from EdgeDB schema
 - Query/mutation resolvers
 - Subscription support
@@ -279,17 +312,19 @@ interface Extension {
 ---
 
 ## Phase 6: Client Libraries (Week 13-15)
+
 **Goal**: Official TypeScript/JavaScript client
 **Success Criteria**: npm package with full query builder
 
 ### Stage 6.1: TypeScript Client
+
 **Location**: `clients/typescript/`
 
 ```typescript
-import { createClient } from '@disc/client';
+import { createClient } from "@disc/client";
 
 const client = createClient({
-  dsn: 'disc://localhost:5656/mydb'
+  dsn: "disc://localhost:5656/mydb",
 });
 
 const users = await client.query(`
@@ -298,6 +333,7 @@ const users = await client.query(`
 ```
 
 **Features**:
+
 - Query builder with TypeScript types
 - Connection pooling
 - Automatic retries
@@ -307,10 +343,12 @@ const users = await client.query(`
 ---
 
 ## Phase 7: Production Features (Week 16-18)
+
 **Goal**: Enterprise-ready features
 **Success Criteria**: Production deployment capable
 
 ### Stage 7.1: Monitoring & Metrics
+
 **Location**: `monitoring/`
 
 - Query performance tracking
@@ -320,6 +358,7 @@ const users = await client.query(`
 - Prometheus/OpenTelemetry export
 
 ### Stage 7.2: Backup & Restore
+
 **Location**: `cli/commands/backup.ts`
 
 ```bash
@@ -328,6 +367,7 @@ disc backup restore --from=backup-2024-01-01.dump
 ```
 
 ### Stage 7.3: Replication
+
 **Location**: `replication/`
 
 - Read replicas
@@ -339,11 +379,13 @@ disc backup restore --from=backup-2024-01-01.dump
 ## Testing Strategy
 
 ### Unit Tests (Per Module)
+
 - Minimum 80% code coverage
 - Mock external dependencies
 - Test error conditions
 
 ### Integration Tests
+
 ```typescript
 // tests/integration/query-execution.test.ts
 Deno.test("Execute complex query end-to-end", async () => {
@@ -359,12 +401,14 @@ Deno.test("Execute complex query end-to-end", async () => {
 ```
 
 ### Performance Tests
+
 - Query throughput (queries/second)
 - Connection pool stress test
 - Large result set handling
 - Memory leak detection
 
 ### Compatibility Tests
+
 - Test with official EdgeDB clients
 - Verify protocol compliance
 - Schema migration compatibility
@@ -374,6 +418,7 @@ Deno.test("Execute complex query end-to-end", async () => {
 ## Development Guidelines
 
 ### Code Organization
+
 ```
 disc/
 ├── compiler/        # Fixed and enhanced
@@ -392,6 +437,7 @@ disc/
 ```
 
 ### Commit Strategy
+
 - One feature per PR
 - All tests must pass
 - Type checking must pass (`deno check`)
@@ -399,6 +445,7 @@ disc/
 - Update CHANGELOG.md
 
 ### Error Handling
+
 ```typescript
 // Always use Result type for fallible operations
 function compile(query: string): Result<SQLStatement, CompileError> {
@@ -406,19 +453,20 @@ function compile(query: string): Result<SQLStatement, CompileError> {
     // ...
     return { ok: true, value: statement };
   } catch (error) {
-    return { 
-      ok: false, 
-      error: new CompileError(error.message, { 
+    return {
+      ok: false,
+      error: new CompileError(error.message, {
         line: error.line,
         column: error.column,
-        suggestion: getSuggestion(error)
-      })
+        suggestion: getSuggestion(error),
+      }),
     };
   }
 }
 ```
 
 ### Performance Targets
+
 - Query parsing: < 1ms for typical queries
 - Query compilation: < 5ms
 - Simple query execution: < 10ms
@@ -430,12 +478,14 @@ function compile(query: string): Result<SQLStatement, CompileError> {
 ## Risk Mitigation
 
 ### Technical Risks
+
 1. **Compiler complexity**: Start with simple queries, incrementally add features
 2. **PostgreSQL version compatibility**: Test with PG 14, 15, 16
 3. **Performance bottlenecks**: Profile early, optimize critical paths
 4. **Memory leaks**: Use pooling, implement proper cleanup
 
 ### Project Risks
+
 1. **Scope creep**: Focus on core features first
 2. **Breaking changes**: Version appropriately (0.x during development)
 3. **Documentation debt**: Document as you build
@@ -445,36 +495,43 @@ function compile(query: string): Result<SQLStatement, CompileError> {
 ## Success Metrics
 
 ### Phase 1 Complete
+
 - [ ] Basic SELECT queries work
 - [ ] Real data returned from PostgreSQL
 - [ ] All compiler tests pass
 
-### Phase 2 Complete  
+### Phase 2 Complete
+
 - [ ] 1000+ concurrent connections handled
 - [ ] Transactions with rollback working
 - [ ] Connection pool metrics available
 
 ### Phase 3 Complete
+
 - [ ] All EdgeDB scalar types supported
 - [ ] Arrays and objects properly encoded
 - [ ] Binary protocol fully compatible
 
 ### Phase 4 Complete
+
 - [ ] Aggregations and GROUP BY working
 - [ ] CTEs and window functions supported
 - [ ] Complex queries execute correctly
 
 ### Phase 5 Complete
+
 - [ ] Auth extension with JWT support
 - [ ] GraphQL endpoint auto-generated
 - [ ] Extension installation/removal working
 
 ### Phase 6 Complete
+
 - [ ] TypeScript client published to npm
 - [ ] Query builder with full type safety
 - [ ] Client connection pooling
 
 ### Phase 7 Complete
+
 - [ ] Monitoring dashboard available
 - [ ] Backup/restore tested
 - [ ] Production deployment guide written
@@ -532,4 +589,4 @@ deno test tests/integration/ --allow-all
 
 ---
 
-*This plan is a living document. Update status and checkboxes as work progresses. Remove completed phases to keep focus on current work.*
+_This plan is a living document. Update status and checkboxes as work progresses. Remove completed phases to keep focus on current work._

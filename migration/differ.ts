@@ -60,7 +60,10 @@ export class SchemaDiffer {
     return types;
   }
 
-  createTypeOperation(typeDef: AST.TypeDeclaration, allTypes?: Map<string, AST.TypeDeclaration>): Types.CreateTypeOperation {
+  createTypeOperation(
+    typeDef: AST.TypeDeclaration,
+    allTypes?: Map<string, AST.TypeDeclaration>,
+  ): Types.CreateTypeOperation {
     const properties = this.extractPropertiesWithInheritance(typeDef, allTypes);
     const links = this.extractLinksWithInheritance(typeDef, allTypes);
 
@@ -77,17 +80,20 @@ export class SchemaDiffer {
    */
   private extractPropertiesWithInheritance(
     typeDef: AST.TypeDeclaration,
-    allTypes?: Map<string, AST.TypeDeclaration>
+    allTypes?: Map<string, AST.TypeDeclaration>,
   ): Types.PropertyDefinition[] {
     const properties = this.extractProperties(typeDef);
-    const seenNames = new Set(properties.map(p => p.name));
+    const seenNames = new Set(properties.map((p) => p.name));
 
     if (allTypes && typeDef.extending) {
       for (const baseRef of typeDef.extending) {
         const baseName = baseRef.name.parts.join("::");
         const baseType = allTypes.get(baseName);
         if (baseType) {
-          const inheritedProps = this.extractPropertiesWithInheritance(baseType, allTypes);
+          const inheritedProps = this.extractPropertiesWithInheritance(
+            baseType,
+            allTypes,
+          );
           for (const prop of inheritedProps) {
             if (!seenNames.has(prop.name)) {
               properties.push(prop);
@@ -106,17 +112,20 @@ export class SchemaDiffer {
    */
   private extractLinksWithInheritance(
     typeDef: AST.TypeDeclaration,
-    allTypes?: Map<string, AST.TypeDeclaration>
+    allTypes?: Map<string, AST.TypeDeclaration>,
   ): Types.LinkDefinition[] {
     const links = this.extractLinks(typeDef);
-    const seenNames = new Set(links.map(l => l.name));
+    const seenNames = new Set(links.map((l) => l.name));
 
     if (allTypes && typeDef.extending) {
       for (const baseRef of typeDef.extending) {
         const baseName = baseRef.name.parts.join("::");
         const baseType = allTypes.get(baseName);
         if (baseType) {
-          const inheritedLinks = this.extractLinksWithInheritance(baseType, allTypes);
+          const inheritedLinks = this.extractLinksWithInheritance(
+            baseType,
+            allTypes,
+          );
           for (const link of inheritedLinks) {
             if (!seenNames.has(link.name)) {
               links.push(link);
@@ -130,7 +139,9 @@ export class SchemaDiffer {
     return links;
   }
 
-  private extractProperties(typeDef: AST.TypeDeclaration): Types.PropertyDefinition[] {
+  private extractProperties(
+    typeDef: AST.TypeDeclaration,
+  ): Types.PropertyDefinition[] {
     const properties: Types.PropertyDefinition[] = [];
 
     for (const member of typeDef.members) {
@@ -140,7 +151,9 @@ export class SchemaDiffer {
           type: this.typeToString(member.type),
           required: member.required || false,
           multi: member.multi || false,
-          default: member.default ? this.extractDefaultValue(member.default) : undefined,
+          default: member.default
+            ? this.extractDefaultValue(member.default)
+            : undefined,
           constraints: this.extractConstraints(member.constraints || []),
           annotations: this.extractAnnotations(member.annotations || []),
         });
@@ -187,7 +200,10 @@ export class SchemaDiffer {
     }
   }
 
-  private diffType(oldType: AST.TypeDeclaration, newType: AST.TypeDeclaration): Types.TypeOperation[] {
+  private diffType(
+    oldType: AST.TypeDeclaration,
+    newType: AST.TypeDeclaration,
+  ): Types.TypeOperation[] {
     const operations: Types.TypeOperation[] = [];
 
     // Diff properties
@@ -211,8 +227,8 @@ export class SchemaDiffer {
   ): Types.TypeOperation[] {
     const operations: Types.TypeOperation[] = [];
 
-    const oldPropsMap = new Map(oldProps.map(p => [p.name, p]));
-    const newPropsMap = new Map(newProps.map(p => [p.name, p]));
+    const oldPropsMap = new Map(oldProps.map((p) => [p.name, p]));
+    const newPropsMap = new Map(newProps.map((p) => [p.name, p]));
 
     // Added properties
     for (const [propName, propDef] of newPropsMap) {
@@ -246,7 +262,10 @@ export class SchemaDiffer {
     return operations;
   }
 
-  private diffProperty(oldProp: Types.PropertyDefinition, newProp: Types.PropertyDefinition): Types.PropertyChange[] {
+  private diffProperty(
+    oldProp: Types.PropertyDefinition,
+    newProp: Types.PropertyDefinition,
+  ): Types.PropertyChange[] {
     const changes: Types.PropertyChange[] = [];
 
     if (oldProp.type !== newProp.type) {
@@ -284,11 +303,14 @@ export class SchemaDiffer {
     return changes;
   }
 
-  private diffLinks(oldLinks: Types.LinkDefinition[], newLinks: Types.LinkDefinition[]): Types.TypeOperation[] {
+  private diffLinks(
+    oldLinks: Types.LinkDefinition[],
+    newLinks: Types.LinkDefinition[],
+  ): Types.TypeOperation[] {
     const operations: Types.TypeOperation[] = [];
 
-    const oldLinksMap = new Map(oldLinks.map(l => [l.name, l]));
-    const newLinksMap = new Map(newLinks.map(l => [l.name, l]));
+    const oldLinksMap = new Map(oldLinks.map((l) => [l.name, l]));
+    const newLinksMap = new Map(newLinks.map((l) => [l.name, l]));
 
     // Added links
     for (const [linkName, linkDef] of newLinksMap) {
@@ -328,7 +350,10 @@ export class SchemaDiffer {
     return operations;
   }
 
-  private diffLink(oldLink: Types.LinkDefinition, newLink: Types.LinkDefinition): Types.LinkChange[] {
+  private diffLink(
+    oldLink: Types.LinkDefinition,
+    newLink: Types.LinkDefinition,
+  ): Types.LinkChange[] {
     const changes: Types.LinkChange[] = [];
 
     if (oldLink.target !== newLink.target) {
@@ -387,14 +412,18 @@ export class SchemaDiffer {
   }
 
   private extractConstraints(constraints: AST.Constraint[]): string[] {
-    return constraints.map(constraint => constraint.name?.value || "unnamed");
+    return constraints.map((constraint) => constraint.name?.value || "unnamed");
   }
 
-  private extractAnnotations(annotations: AST.Annotation[]): Record<string, any> {
+  private extractAnnotations(
+    annotations: AST.Annotation[],
+  ): Record<string, any> {
     const result: Record<string, any> = {};
     for (const annotation of annotations) {
       const name = annotation.name.parts.join("::");
-      result[name] = annotation.value ? this.extractDefaultValue(annotation.value) : true;
+      result[name] = annotation.value
+        ? this.extractDefaultValue(annotation.value)
+        : true;
     }
     return result;
   }

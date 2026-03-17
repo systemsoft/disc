@@ -51,20 +51,23 @@ export class DiscAPIClient {
   private baseUrl: string;
   private headers: HeadersInit;
 
-  constructor(baseUrl = '') {
-    this.baseUrl = baseUrl || '';
+  constructor(baseUrl = "") {
+    this.baseUrl = baseUrl || "";
     this.headers = {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
     };
   }
 
   /**
    * Execute an EdgeQL query
    */
-  async executeQuery(query: string, variables?: Record<string, any>): Promise<QueryResult> {
+  async executeQuery(
+    query: string,
+    variables?: Record<string, any>,
+  ): Promise<QueryResult> {
     try {
       const response = await fetch(`${this.baseUrl}/api/query`, {
-        method: 'POST',
+        method: "POST",
         headers: this.headers,
         body: JSON.stringify({ query, variables }),
       });
@@ -78,7 +81,7 @@ export class DiscAPIClient {
       return {
         data: [],
         executionTime: 0,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
       };
     }
   }
@@ -98,7 +101,7 @@ export class DiscAPIClient {
 
       return await response.json();
     } catch (error) {
-      console.error('Failed to fetch schema:', error);
+      console.error("Failed to fetch schema:", error);
       return [];
     }
   }
@@ -134,14 +137,14 @@ export class DiscAPIClient {
   }): Promise<QueryResult> {
     try {
       const params = new URLSearchParams();
-      if (options?.limit) params.set('limit', options.limit.toString());
-      if (options?.offset) params.set('offset', options.offset.toString());
-      if (options?.filter) params.set('filter', JSON.stringify(options.filter));
-      if (options?.orderBy) params.set('orderBy', options.orderBy);
+      if (options?.limit) params.set("limit", options.limit.toString());
+      if (options?.offset) params.set("offset", options.offset.toString());
+      if (options?.filter) params.set("filter", JSON.stringify(options.filter));
+      if (options?.orderBy) params.set("orderBy", options.orderBy);
 
       const response = await fetch(
         `${this.baseUrl}/api/data/${typeName}?${params}`,
-        { headers: this.headers }
+        { headers: this.headers },
       );
 
       if (!response.ok) {
@@ -153,7 +156,7 @@ export class DiscAPIClient {
       return {
         data: [],
         executionTime: 0,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
       };
     }
   }
@@ -161,10 +164,13 @@ export class DiscAPIClient {
   /**
    * Insert new object
    */
-  async insertObject(typeName: string, data: Record<string, any>): Promise<QueryResult> {
+  async insertObject(
+    typeName: string,
+    data: Record<string, any>,
+  ): Promise<QueryResult> {
     try {
       const response = await fetch(`${this.baseUrl}/api/data/${typeName}`, {
-        method: 'POST',
+        method: "POST",
         headers: this.headers,
         body: JSON.stringify(data),
       });
@@ -178,7 +184,7 @@ export class DiscAPIClient {
       return {
         data: [],
         executionTime: 0,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
       };
     }
   }
@@ -189,14 +195,17 @@ export class DiscAPIClient {
   async updateObject(
     typeName: string,
     id: string,
-    data: Record<string, any>
+    data: Record<string, any>,
   ): Promise<QueryResult> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/data/${typeName}/${id}`, {
-        method: 'PATCH',
-        headers: this.headers,
-        body: JSON.stringify(data),
-      });
+      const response = await fetch(
+        `${this.baseUrl}/api/data/${typeName}/${id}`,
+        {
+          method: "PATCH",
+          headers: this.headers,
+          body: JSON.stringify(data),
+        },
+      );
 
       if (!response.ok) {
         throw new Error(`Failed to update object: ${response.statusText}`);
@@ -207,7 +216,7 @@ export class DiscAPIClient {
       return {
         data: [],
         executionTime: 0,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
       };
     }
   }
@@ -217,10 +226,13 @@ export class DiscAPIClient {
    */
   async deleteObject(typeName: string, id: string): Promise<QueryResult> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/data/${typeName}/${id}`, {
-        method: 'DELETE',
-        headers: this.headers,
-      });
+      const response = await fetch(
+        `${this.baseUrl}/api/data/${typeName}/${id}`,
+        {
+          method: "DELETE",
+          headers: this.headers,
+        },
+      );
 
       if (!response.ok) {
         throw new Error(`Failed to delete object: ${response.statusText}`);
@@ -231,7 +243,7 @@ export class DiscAPIClient {
       return {
         data: [],
         executionTime: 0,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
       };
     }
   }
@@ -251,7 +263,7 @@ export class DiscAPIClient {
 
       return await response.json();
     } catch (error) {
-      console.error('Failed to fetch migrations:', error);
+      console.error("Failed to fetch migrations:", error);
       return [];
     }
   }
@@ -266,15 +278,17 @@ export class DiscAPIClient {
       });
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch connection info: ${response.statusText}`);
+        throw new Error(
+          `Failed to fetch connection info: ${response.statusText}`,
+        );
       }
 
       return await response.json();
     } catch (error) {
       return {
-        version: 'unknown',
+        version: "unknown",
         connected: false,
-        database: 'unknown',
+        database: "unknown",
         activeConnections: 0,
       };
     }
@@ -290,7 +304,7 @@ export class DiscAPIClient {
   }> {
     try {
       const response = await fetch(`${this.baseUrl}/api/repl`, {
-        method: 'POST',
+        method: "POST",
         headers: this.headers,
         body: JSON.stringify({ command }),
       });
@@ -303,7 +317,7 @@ export class DiscAPIClient {
     } catch (error) {
       return {
         result: null,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
         executionTime: 0,
       };
     }

@@ -76,8 +76,8 @@ export class TestDatabase implements DatabaseInterface {
     // Extract column names and values from INSERT ... (...) VALUES (...)
     const columnsMatch = sql.match(/\(([^)]+)\)\s*values\s*\(([^)]+)\)/i);
     if (columnsMatch) {
-      const columns = columnsMatch[1].split(",").map(c => c.trim());
-      const values = columnsMatch[2].split(",").map(v => v.trim());
+      const columns = columnsMatch[1].split(",").map((c) => c.trim());
+      const values = columnsMatch[2].split(",").map((v) => v.trim());
 
       columns.forEach((col, index) => {
         const val = values[index] ? values[index].trim() : "null";
@@ -137,7 +137,9 @@ export class TestDatabase implements DatabaseInterface {
 
   private handleSelectWithJoin(sql: string, params: any[]): QueryResult {
     // Parse: SELECT ... FROM sessions s JOIN users u ON s.user_id = u.id WHERE ...
-    const fromMatch = sql.match(/from\s+(\w+)\s+(\w+)\s+join\s+(\w+)\s+(\w+)\s+on\s+(\w+)\.(\w+)\s*=\s*(\w+)\.(\w+)/i);
+    const fromMatch = sql.match(
+      /from\s+(\w+)\s+(\w+)\s+join\s+(\w+)\s+(\w+)\s+on\s+(\w+)\.(\w+)\s*=\s*(\w+)\.(\w+)/i,
+    );
     if (!fromMatch) {
       return { rows: [], rowCount: 0 };
     }
@@ -199,7 +201,8 @@ export class TestDatabase implements DatabaseInterface {
     // Separate SET params from WHERE params
     // Count ? placeholders in SET clause to know which params go where
     const normalized = sql.replace(/\s+/g, " ").trim();
-    const setMatch = normalized.match(/set (.+?) where/i) || normalized.match(/set (.+)$/i);
+    const setMatch = normalized.match(/set (.+?) where/i) ||
+      normalized.match(/set (.+)$/i);
 
     let setParamCount = 0;
     if (setMatch) {
@@ -220,9 +223,9 @@ export class TestDatabase implements DatabaseInterface {
       const assignments = this.splitSetClause(setClause);
       let setIdx = 0;
 
-      rowsToUpdate.forEach(row => {
+      rowsToUpdate.forEach((row) => {
         let localSetIdx = setIdx;
-        assignments.forEach(assignment => {
+        assignments.forEach((assignment) => {
           const eqPos = assignment.indexOf("=");
           if (eqPos === -1) return;
           const column = assignment.substring(0, eqPos).trim().toLowerCase();
@@ -280,7 +283,7 @@ export class TestDatabase implements DatabaseInterface {
     const table = this.tables.get(tableName) || [];
 
     const rowsToDelete = this.applyWhereClause(table, sql, params);
-    const remainingRows = table.filter(row => !rowsToDelete.includes(row));
+    const remainingRows = table.filter((row) => !rowsToDelete.includes(row));
 
     this.tables.set(tableName, remainingRows);
 
@@ -288,7 +291,9 @@ export class TestDatabase implements DatabaseInterface {
   }
 
   private applyWhereClause(table: any[], sql: string, params: any[]): any[] {
-    const whereMatch = sql.match(/where\s+(.+?)(?:\s+group by|\s+order by|\s+limit|$)/is);
+    const whereMatch = sql.match(
+      /where\s+(.+?)(?:\s+group by|\s+order by|\s+limit|$)/is,
+    );
     if (!whereMatch) {
       return table;
     }
@@ -298,11 +303,16 @@ export class TestDatabase implements DatabaseInterface {
     // Track parameter index as a mutable reference
     const paramRef = { index: 0 };
 
-    return table.filter(row => {
+    return table.filter((row) => {
       // Reset param index for each row evaluation
       const savedIndex = paramRef.index;
       paramRef.index = 0;
-      const result = this.evaluateWhereExpression(row, whereClause, params, paramRef);
+      const result = this.evaluateWhereExpression(
+        row,
+        whereClause,
+        params,
+        paramRef,
+      );
       // After first row, keep the param count we discovered
       if (savedIndex === 0) {
         // First row establishes param count
@@ -312,24 +322,38 @@ export class TestDatabase implements DatabaseInterface {
     });
   }
 
-  private evaluateWhereExpression(row: any, expr: string, params: any[], paramRef: { index: number }): boolean {
+  private evaluateWhereExpression(
+    row: any,
+    expr: string,
+    params: any[],
+    paramRef: { index: number },
+  ): boolean {
     const trimmed = expr.trim();
 
     // Handle parenthesized sub-expressions like (...) AND/OR (...)
     // But first try splitting by AND/OR at the top level (not inside parens)
     const andParts = this.splitByKeyword(trimmed, " and ");
     if (andParts.length > 1) {
-      return andParts.every(part => this.evaluateWhereExpression(row, part, params, paramRef));
+      return andParts.every((part) =>
+        this.evaluateWhereExpression(row, part, params, paramRef)
+      );
     }
 
     const orParts = this.splitByKeyword(trimmed, " or ");
     if (orParts.length > 1) {
-      return orParts.some(part => this.evaluateWhereExpression(row, part, params, paramRef));
+      return orParts.some((part) =>
+        this.evaluateWhereExpression(row, part, params, paramRef)
+      );
     }
 
     // Strip outer parens
     if (trimmed.startsWith("(") && trimmed.endsWith(")")) {
-      return this.evaluateWhereExpression(row, trimmed.slice(1, -1), params, paramRef);
+      return this.evaluateWhereExpression(
+        row,
+        trimmed.slice(1, -1),
+        params,
+        paramRef,
+      );
     }
 
     // Handle individual conditions
@@ -349,7 +373,10 @@ export class TestDatabase implements DatabaseInterface {
       if (expr[i] === "(") depth++;
       else if (expr[i] === ")") depth--;
 
-      if (depth === 0 && lowerExpr.substring(i, i + lowerKeyword.length) === lowerKeyword) {
+      if (
+        depth === 0 &&
+        lowerExpr.substring(i, i + lowerKeyword.length) === lowerKeyword
+      ) {
         parts.push(current.trim());
         current = "";
         i += lowerKeyword.length;
@@ -364,7 +391,12 @@ export class TestDatabase implements DatabaseInterface {
     return parts;
   }
 
-  private evaluateSingleCondition(row: any, condition: string, params: any[], paramRef: { index: number }): boolean {
+  private evaluateSingleCondition(
+    row: any,
+    condition: string,
+    params: any[],
+    paramRef: { index: number },
+  ): boolean {
     const trimmed = condition.trim();
     const lower = trimmed.toLowerCase();
 
@@ -382,7 +414,7 @@ export class TestDatabase implements DatabaseInterface {
 
     // Handle "column > CURRENT_TIMESTAMP" or "column > value"
     if (trimmed.includes(">")) {
-      const parts = trimmed.split(">").map(s => s.trim());
+      const parts = trimmed.split(">").map((s) => s.trim());
       if (parts.length === 2) {
         const col = parts[0].toLowerCase();
         const valuePart = parts[1].trim();
@@ -401,8 +433,11 @@ export class TestDatabase implements DatabaseInterface {
     }
 
     // Handle "column < value"
-    if (trimmed.includes("<") && !trimmed.includes("<=") && !trimmed.includes("<>")) {
-      const parts = trimmed.split("<").map(s => s.trim());
+    if (
+      trimmed.includes("<") && !trimmed.includes("<=") &&
+      !trimmed.includes("<>")
+    ) {
+      const parts = trimmed.split("<").map((s) => s.trim());
       if (parts.length === 2) {
         const col = parts[0].toLowerCase();
         const valuePart = parts[1].trim();
@@ -429,7 +464,10 @@ export class TestDatabase implements DatabaseInterface {
       let expectedValue: any;
       if (valuePart === "?") {
         expectedValue = params[paramRef.index++];
-      } else if (valuePart.toLowerCase() === "true" || valuePart.toLowerCase() === "false") {
+      } else if (
+        valuePart.toLowerCase() === "true" ||
+        valuePart.toLowerCase() === "false"
+      ) {
         expectedValue = valuePart.toLowerCase() === "true";
       } else if (valuePart.toLowerCase() === "null") {
         return row[col] === null || row[col] === undefined;

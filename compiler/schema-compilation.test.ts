@@ -103,12 +103,15 @@ Deno.test("Schema Compilation - SELECT User without shape", () => {
 });
 
 Deno.test("Schema Compilation - SELECT User with shape", () => {
-  const sql = compileWithSchema(schema, `
+  const sql = compileWithSchema(
+    schema,
+    `
     SELECT User {
       name,
       email
     }
-  `);
+  `,
+  );
   assertStringIncludes(sql, "jsonb_build_object");
   assertStringIncludes(sql, "'name'");
   assertStringIncludes(sql, "'email'");
@@ -116,24 +119,30 @@ Deno.test("Schema Compilation - SELECT User with shape", () => {
 });
 
 Deno.test("Schema Compilation - SELECT with FILTER", () => {
-  const sql = compileWithSchema(schema, `
+  const sql = compileWithSchema(
+    schema,
+    `
     SELECT User
     FILTER .name = "Alice"
-  `);
+  `,
+  );
   assertStringIncludes(sql, "where");
   assertStringIncludes(sql, "name");
   assertStringIncludes(sql, "'alice'");
 });
 
 Deno.test("Schema Compilation - SELECT with ORDER BY, LIMIT, OFFSET", () => {
-  const sql = compileWithSchema(schema, `
+  const sql = compileWithSchema(
+    schema,
+    `
     SELECT User {
       name
     }
     ORDER BY .name ASC
     OFFSET 5
     LIMIT 10
-  `);
+  `,
+  );
   assertStringIncludes(sql, "order by");
   assertStringIncludes(sql, "limit 10");
   assertStringIncludes(sql, "offset 5");
@@ -152,12 +161,15 @@ Deno.test("Schema Compilation - select str_lower function", () => {
 });
 
 Deno.test("Schema Compilation - INSERT User", () => {
-  const sql = compileWithSchema(schema, `
+  const sql = compileWithSchema(
+    schema,
+    `
     INSERT User {
       name := "Bob",
       email := "bob@test.com"
     }
-  `);
+  `,
+  );
   assertStringIncludes(sql, "insert into");
   assertStringIncludes(sql, "user");
   assertStringIncludes(sql, "'bob'");
@@ -166,13 +178,16 @@ Deno.test("Schema Compilation - INSERT User", () => {
 });
 
 Deno.test("Schema Compilation - UPDATE User", () => {
-  const sql = compileWithSchema(schema, `
+  const sql = compileWithSchema(
+    schema,
+    `
     UPDATE User
     FILTER .name = "Alice"
     SET {
       name := "Alicia"
     }
-  `);
+  `,
+  );
   assertStringIncludes(sql, "update");
   assertStringIncludes(sql, "user");
   assertStringIncludes(sql, "set");
@@ -183,10 +198,13 @@ Deno.test("Schema Compilation - UPDATE User", () => {
 });
 
 Deno.test("Schema Compilation - DELETE User", () => {
-  const sql = compileWithSchema(schema, `
+  const sql = compileWithSchema(
+    schema,
+    `
     DELETE User
     FILTER .name = "Alice"
-  `);
+  `,
+  );
   assertStringIncludes(sql, "delete from");
   assertStringIncludes(sql, "user");
   assertStringIncludes(sql, "where");
@@ -195,14 +213,17 @@ Deno.test("Schema Compilation - DELETE User", () => {
 });
 
 Deno.test("Schema Compilation - SELECT with nested shape uses backlink", () => {
-  const sql = compileWithSchema(schema, `
+  const sql = compileWithSchema(
+    schema,
+    `
     SELECT User {
       name,
       posts: {
         title
       }
     }
-  `);
+  `,
+  );
   assertStringIncludes(sql, "jsonb_build_object");
   assertStringIncludes(sql, "'name'");
   assertStringIncludes(sql, "'posts'");

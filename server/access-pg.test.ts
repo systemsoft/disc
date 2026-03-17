@@ -10,10 +10,7 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
-import {
-  canRunPgTests,
-  getTestDsn,
-} from "../tests/pg-test-harness.ts";
+import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
@@ -287,12 +284,20 @@ Deno.test({
         {}, // empty context
       );
 
-      assertEquals(compiled.ok, true, "Compilation should succeed (WHERE FALSE injected)");
+      assertEquals(
+        compiled.ok,
+        true,
+        "Compilation should succeed (WHERE FALSE injected)",
+      );
       if (!compiled.ok) return;
 
       // The compiler should inject WHERE FALSE since no allow policy fires
       const result = await pool.query(compiled.sql);
-      assertEquals(result.rowCount, 0, "Should return 0 rows when no auth context");
+      assertEquals(
+        result.rowCount,
+        0,
+        "Should return 0 rows when no auth context",
+      );
 
       await manager.close();
     } finally {
@@ -415,12 +420,20 @@ Deno.test({
       const aliceResult = await pool.query(
         `SELECT status FROM ${TABLE} WHERE id = '${uuid1}'`,
       );
-      assertEquals(aliceResult.rows[0].status, "inactive", "Alice should be inactive");
+      assertEquals(
+        aliceResult.rows[0].status,
+        "inactive",
+        "Alice should be inactive",
+      );
 
       const bobResult = await pool.query(
         `SELECT status FROM ${TABLE} WHERE id = '${uuid2}'`,
       );
-      assertEquals(bobResult.rows[0].status, "active", "Bob should remain active");
+      assertEquals(
+        bobResult.rows[0].status,
+        "active",
+        "Bob should remain active",
+      );
 
       await manager.close();
     } finally {
@@ -490,7 +503,11 @@ Deno.test({
       const remaining = await pool.query(
         `SELECT name FROM ${TABLE} ORDER BY name`,
       );
-      assertEquals(remaining.rowCount, 1, "Should have exactly 1 row remaining");
+      assertEquals(
+        remaining.rowCount,
+        1,
+        "Should have exactly 1 row remaining",
+      );
       assertEquals(remaining.rows[0].name, "Bob", "Bob should remain");
 
       await manager.close();
@@ -569,7 +586,11 @@ Deno.test({
         { userId: uuid1 },
       );
 
-      assertEquals(compiledAlice.ok, true, "Compilation for Alice should succeed");
+      assertEquals(
+        compiledAlice.ok,
+        true,
+        "Compilation for Alice should succeed",
+      );
       if (!compiledAlice.ok) return;
 
       const aliceResult = await pool.query(compiledAlice.sql);
@@ -584,7 +605,11 @@ Deno.test({
         { userId: uuid2 },
       );
 
-      assertEquals(compiledEmpty.ok, true, "Compilation for empty-name user should succeed");
+      assertEquals(
+        compiledEmpty.ok,
+        true,
+        "Compilation for empty-name user should succeed",
+      );
       if (!compiledEmpty.ok) return;
 
       const emptyResult = await pool.query(compiledEmpty.sql);
@@ -674,7 +699,11 @@ Deno.test({
       if (!compiledBob.ok) return;
 
       const bobResult = await pool.query(compiledBob.sql);
-      assertEquals(bobResult.rowCount, 1, "Bob should see exactly 1 row (himself)");
+      assertEquals(
+        bobResult.rowCount,
+        1,
+        "Bob should see exactly 1 row (himself)",
+      );
 
       // Query as Bob (uuid2) with role='admin'
       // Bob should see: Alice (admin), Charlie (admin), and himself (id match)
@@ -686,11 +715,19 @@ Deno.test({
         { userId: uuid2, userRole: "admin" },
       );
 
-      assertEquals(compiledAdmin.ok, true, "Compilation for admin role should succeed");
+      assertEquals(
+        compiledAdmin.ok,
+        true,
+        "Compilation for admin role should succeed",
+      );
       if (!compiledAdmin.ok) return;
 
       const adminResult = await pool.query(compiledAdmin.sql);
-      assertEquals(adminResult.rowCount, 3, "Admin role + Bob's id should see all 3 rows");
+      assertEquals(
+        adminResult.rowCount,
+        3,
+        "Admin role + Bob's id should see all 3 rows",
+      );
 
       await manager.close();
     } finally {
@@ -783,7 +820,9 @@ Deno.test({
       // Extract names and verify
       const names = result.rows
         .map((r: Record<string, unknown>) => {
-          const data = (r as Record<string, Record<string, unknown>>).jsonb_build_object ?? r;
+          const data =
+            (r as Record<string, Record<string, unknown>>).jsonb_build_object ??
+              r;
           return data.name;
         })
         .sort();
@@ -846,12 +885,20 @@ Deno.test({
         { userId: "some-user" },
       );
 
-      assertEquals(compiled.ok, true, "Compilation should succeed (WHERE FALSE injected)");
+      assertEquals(
+        compiled.ok,
+        true,
+        "Compilation should succeed (WHERE FALSE injected)",
+      );
       if (!compiled.ok) return;
 
       // The evaluator sees hasDeny=true -> allowed=false -> compiler injects WHERE FALSE
       const result = await pool.query(compiled.sql);
-      assertEquals(result.rowCount, 0, "Deny should override allow, returning 0 rows");
+      assertEquals(
+        result.rowCount,
+        0,
+        "Deny should override allow, returning 0 rows",
+      );
 
       await manager.close();
     } finally {
@@ -945,11 +992,19 @@ Deno.test({
         context,
       );
 
-      assertEquals(compiledMembers.ok, true, "TeamMember compilation should succeed");
+      assertEquals(
+        compiledMembers.ok,
+        true,
+        "TeamMember compilation should succeed",
+      );
       if (!compiledMembers.ok) return;
 
       const memberResult = await pool.query(compiledMembers.sql);
-      assertEquals(memberResult.rowCount, 1, "Should see only 1 TeamMember (Alice)");
+      assertEquals(
+        memberResult.rowCount,
+        1,
+        "Should see only 1 TeamMember (Alice)",
+      );
 
       // Query TeamDoc — should return 2 engineering docs
       const compiledDocs = compileWithAccess(
@@ -964,12 +1019,18 @@ Deno.test({
       if (!compiledDocs.ok) return;
 
       const docResult = await pool.query(compiledDocs.sql);
-      assertEquals(docResult.rowCount, 2, "Should see 2 TeamDocs (engineering team)");
+      assertEquals(
+        docResult.rowCount,
+        2,
+        "Should see 2 TeamDocs (engineering team)",
+      );
 
       // Extract titles and verify
       const titles = docResult.rows
         .map((r: Record<string, unknown>) => {
-          const data = (r as Record<string, Record<string, unknown>>).jsonb_build_object ?? r;
+          const data =
+            (r as Record<string, Record<string, unknown>>).jsonb_build_object ??
+              r;
           return data.title;
         })
         .sort();

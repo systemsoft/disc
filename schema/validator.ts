@@ -4,7 +4,7 @@
 
 import { ValidationError } from "../lib/errors.ts";
 import * as AST from "./ast.ts";
-import { SDLConverter, Module } from "./converter.ts";
+import { Module, SDLConverter } from "./converter.ts";
 
 interface ValidationContext {
   types: Map<string, AST.TypeDeclaration | AST.ScalarTypeDeclaration>;
@@ -26,7 +26,9 @@ export class SchemaValidator {
     this.converter = new SDLConverter();
   }
 
-  validate(document: AST.SDLDocument): { ok: boolean; errors?: ValidationError[] } {
+  validate(
+    document: AST.SDLDocument,
+  ): { ok: boolean; errors?: ValidationError[] } {
     const errors = this.validateDocument(document);
     return {
       ok: errors.length === 0,

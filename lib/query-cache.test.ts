@@ -2,7 +2,10 @@
  * Tests for QueryCache, hash utilities, and cache key composition
  */
 
-import { assertEquals, assertNotEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
+import {
+  assertEquals,
+  assertNotEquals,
+} from "https://deno.land/std@0.208.0/assert/mod.ts";
 import {
   hashAccessContext,
   hashString,

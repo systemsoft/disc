@@ -18,7 +18,9 @@ export class ProtocolParser {
    * Append data to the internal buffer
    */
   append(data: Uint8Array): void {
-    const newBuffer = new Uint8Array(this.buffer.length - this.offset + data.length);
+    const newBuffer = new Uint8Array(
+      this.buffer.length - this.offset + data.length,
+    );
     newBuffer.set(this.buffer.subarray(this.offset));
     newBuffer.set(data, this.buffer.length - this.offset);
     this.buffer = newBuffer;
@@ -33,7 +35,10 @@ export class ProtocolParser {
       return false; // Need at least type (1) + length (4)
     }
 
-    const view = new DataView(this.buffer.buffer, this.buffer.byteOffset + this.offset);
+    const view = new DataView(
+      this.buffer.buffer,
+      this.buffer.byteOffset + this.offset,
+    );
     const messageLength = view.getUint32(1, false); // Big-endian
     return this.buffer.length - this.offset >= messageLength + 1;
   }
@@ -47,10 +52,16 @@ export class ProtocolParser {
     }
 
     const messageType = this.buffer[this.offset];
-    const view = new DataView(this.buffer.buffer, this.buffer.byteOffset + this.offset);
+    const view = new DataView(
+      this.buffer.buffer,
+      this.buffer.byteOffset + this.offset,
+    );
     const messageLength = view.getUint32(1, false);
-    
-    const messageData = this.buffer.subarray(this.offset + 5, this.offset + messageLength + 1);
+
+    const messageData = this.buffer.subarray(
+      this.offset + 5,
+      this.offset + messageLength + 1,
+    );
     const reader = new MessageReader(messageData);
 
     let message: Types.Message | null = null;
@@ -75,7 +86,10 @@ export class ProtocolParser {
         message = this.parseAuthenticationSASLFinal(reader, messageLength);
         break;
       case Types.MessageType.AuthenticationSASLInitialResponse:
-        message = this.parseAuthenticationSASLInitialResponse(reader, messageLength);
+        message = this.parseAuthenticationSASLInitialResponse(
+          reader,
+          messageLength,
+        );
         break;
       case Types.MessageType.AuthenticationSASLResponse:
         message = this.parseAuthenticationSASLResponse(reader, messageLength);
@@ -112,23 +126,26 @@ export class ProtocolParser {
     return message;
   }
 
-  private parseClientHandshake(reader: MessageReader, length: number): Types.ClientHandshake {
+  private parseClientHandshake(
+    reader: MessageReader,
+    length: number,
+  ): Types.ClientHandshake {
     const majorVersion = reader.readUInt16();
     const minorVersion = reader.readUInt16();
     const numExtensions = reader.readUInt16();
-    
+
     const extensions: Types.ProtocolExtension[] = [];
     for (let i = 0; i < numExtensions; i++) {
       const name = reader.readString();
       const numHeaders = reader.readUInt16();
       const headers = new Map<string, Uint8Array>();
-      
+
       for (let j = 0; j < numHeaders; j++) {
         const headerName = reader.readString();
         const headerValue = reader.readBytes();
         headers.set(headerName, headerValue);
       }
-      
+
       extensions.push({ name, headers });
     }
 
@@ -150,23 +167,26 @@ export class ProtocolParser {
     };
   }
 
-  private parseServerHandshake(reader: MessageReader, length: number): Types.ServerHandshake {
+  private parseServerHandshake(
+    reader: MessageReader,
+    length: number,
+  ): Types.ServerHandshake {
     const majorVersion = reader.readUInt16();
     const minorVersion = reader.readUInt16();
     const numExtensions = reader.readUInt16();
-    
+
     const extensions: Types.ProtocolExtension[] = [];
     for (let i = 0; i < numExtensions; i++) {
       const name = reader.readString();
       const numHeaders = reader.readUInt16();
       const headers = new Map<string, Uint8Array>();
-      
+
       for (let j = 0; j < numHeaders; j++) {
         const headerName = reader.readString();
         const headerValue = reader.readBytes();
         headers.set(headerName, headerValue);
       }
-      
+
       extensions.push({ name, headers });
     }
 
@@ -179,7 +199,10 @@ export class ProtocolParser {
     };
   }
 
-  private parseAuthenticationOK(reader: MessageReader, length: number): Types.AuthenticationOK {
+  private parseAuthenticationOK(
+    reader: MessageReader,
+    length: number,
+  ): Types.AuthenticationOK {
     const authStatus = reader.readUInt32();
     return {
       type: Types.MessageType.AuthenticationOK,
@@ -188,11 +211,14 @@ export class ProtocolParser {
     };
   }
 
-  private parseAuthenticationSASL(reader: MessageReader, length: number): Types.AuthenticationSASL {
+  private parseAuthenticationSASL(
+    reader: MessageReader,
+    length: number,
+  ): Types.AuthenticationSASL {
     const authStatus = reader.readUInt32();
     const numMechanisms = reader.readUInt32();
     const mechanisms: string[] = [];
-    
+
     for (let i = 0; i < numMechanisms; i++) {
       mechanisms.push(reader.readString());
     }
@@ -205,10 +231,13 @@ export class ProtocolParser {
     };
   }
 
-  private parseAuthenticationSASLContinue(reader: MessageReader, length: number): Types.AuthenticationSASLContinue {
+  private parseAuthenticationSASLContinue(
+    reader: MessageReader,
+    length: number,
+  ): Types.AuthenticationSASLContinue {
     const authStatus = reader.readUInt32();
     const saslData = reader.readBytes();
-    
+
     return {
       type: Types.MessageType.AuthenticationSASLContinue,
       length,
@@ -217,10 +246,13 @@ export class ProtocolParser {
     };
   }
 
-  private parseAuthenticationSASLFinal(reader: MessageReader, length: number): Types.AuthenticationSASLFinal {
+  private parseAuthenticationSASLFinal(
+    reader: MessageReader,
+    length: number,
+  ): Types.AuthenticationSASLFinal {
     const authStatus = reader.readUInt32();
     const saslData = reader.readBytes();
-    
+
     return {
       type: Types.MessageType.AuthenticationSASLFinal,
       length,
@@ -229,10 +261,13 @@ export class ProtocolParser {
     };
   }
 
-  private parseAuthenticationSASLInitialResponse(reader: MessageReader, length: number): Types.AuthenticationSASLInitialResponse {
+  private parseAuthenticationSASLInitialResponse(
+    reader: MessageReader,
+    length: number,
+  ): Types.AuthenticationSASLInitialResponse {
     const mechanism = reader.readString();
     const initialResponse = reader.readBytes();
-    
+
     return {
       type: Types.MessageType.AuthenticationSASLInitialResponse,
       length,
@@ -241,9 +276,12 @@ export class ProtocolParser {
     };
   }
 
-  private parseAuthenticationSASLResponse(reader: MessageReader, length: number): Types.AuthenticationSASLResponse {
+  private parseAuthenticationSASLResponse(
+    reader: MessageReader,
+    length: number,
+  ): Types.AuthenticationSASLResponse {
     const response = reader.readBytes();
-    
+
     return {
       type: Types.MessageType.AuthenticationSASLResponse,
       length,
@@ -251,10 +289,13 @@ export class ProtocolParser {
     };
   }
 
-  private parseParseMessage(reader: MessageReader, length: number): Types.ParseMessage {
+  private parseParseMessage(
+    reader: MessageReader,
+    length: number,
+  ): Types.ParseMessage {
     const numAnnotations = reader.readUInt16();
     const annotations: Types.Annotation[] = [];
-    
+
     for (let i = 0; i < numAnnotations; i++) {
       const name = reader.readString();
       const value = reader.readString();
@@ -283,10 +324,13 @@ export class ProtocolParser {
     };
   }
 
-  private parseExecuteMessage(reader: MessageReader, length: number): Types.ExecuteMessage {
+  private parseExecuteMessage(
+    reader: MessageReader,
+    length: number,
+  ): Types.ExecuteMessage {
     const numAnnotations = reader.readUInt16();
     const annotations: Types.Annotation[] = [];
-    
+
     for (let i = 0; i < numAnnotations; i++) {
       const name = reader.readString();
       const value = reader.readString();
@@ -325,10 +369,13 @@ export class ProtocolParser {
     };
   }
 
-  private parseCommandComplete(reader: MessageReader, length: number): Types.CommandComplete {
+  private parseCommandComplete(
+    reader: MessageReader,
+    length: number,
+  ): Types.CommandComplete {
     const numAnnotations = reader.readUInt16();
     const annotations: Types.Annotation[] = [];
-    
+
     for (let i = 0; i < numAnnotations; i++) {
       const name = reader.readString();
       const value = reader.readString();
@@ -351,10 +398,13 @@ export class ProtocolParser {
     };
   }
 
-  private parseDataMessage(reader: MessageReader, length: number): Types.DataMessage {
+  private parseDataMessage(
+    reader: MessageReader,
+    length: number,
+  ): Types.DataMessage {
     const numElements = reader.readUInt16();
     const dataElements: Types.DataElement[] = [];
-    
+
     for (let i = 0; i < numElements; i++) {
       const data = reader.readBytes();
       dataElements.push({ data });
@@ -367,12 +417,15 @@ export class ProtocolParser {
     };
   }
 
-  private parseErrorResponse(reader: MessageReader, length: number): Types.ErrorResponse {
+  private parseErrorResponse(
+    reader: MessageReader,
+    length: number,
+  ): Types.ErrorResponse {
     const severity = reader.readUInt8() as Types.ErrorSeverity;
     const errorCode = reader.readUInt32();
     const message = reader.readString();
     const numAttributes = reader.readUInt16();
-    
+
     const attributes = new Map<Types.ErrorAttribute, string>();
     for (let i = 0; i < numAttributes; i++) {
       const code = reader.readUInt16() as Types.ErrorAttribute;
@@ -390,11 +443,14 @@ export class ProtocolParser {
     };
   }
 
-  private parseReadyForCommand(reader: MessageReader, length: number): Types.ReadyForCommand {
+  private parseReadyForCommand(
+    reader: MessageReader,
+    length: number,
+  ): Types.ReadyForCommand {
     const transactionState = reader.readUInt8() as Types.TransactionState;
     const numAnnotations = reader.readUInt16();
     const annotations: Types.Annotation[] = [];
-    
+
     for (let i = 0; i < numAnnotations; i++) {
       const name = reader.readString();
       const value = reader.readString();

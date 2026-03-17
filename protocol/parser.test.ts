@@ -16,10 +16,10 @@ Deno.test("ProtocolParser - parse simple messages", () => {
     type: Types.MessageType.Sync,
     length: 4,
   });
-  
+
   parser.append(syncMessage);
   assertEquals(parser.hasCompleteMessage(), true);
-  
+
   const parsed = parser.parseMessage();
   assertEquals(parsed?.type, Types.MessageType.Sync);
 });
@@ -47,7 +47,7 @@ Deno.test("ProtocolParser - parse ClientHandshake", () => {
 
   const message = builder.buildMessage(handshake);
   parser.append(message);
-  
+
   const parsed = parser.parseMessage() as Types.ClientHandshake;
   assertEquals(parsed?.type, Types.MessageType.ClientHandshake);
   assertEquals(parsed?.majorVersion, 1);
@@ -72,7 +72,7 @@ Deno.test("ProtocolParser - parse AuthenticationSASL", () => {
 
   const message = builder.buildMessage(authSasl);
   parser.append(message);
-  
+
   const parsed = parser.parseMessage() as Types.AuthenticationSASL;
   assertEquals(parsed?.type, Types.MessageType.AuthenticationSASL);
   assertEquals(parsed?.authStatus, 10);
@@ -101,7 +101,7 @@ Deno.test("ProtocolParser - parse Parse message", () => {
 
   const message = builder.buildMessage(parseMsg);
   parser.append(message);
-  
+
   const parsed = parser.parseMessage() as Types.ParseMessage;
   assertEquals(parsed?.type, Types.MessageType.Parse);
   assertEquals(parsed?.annotations.length, 1);
@@ -132,13 +132,16 @@ Deno.test("ProtocolParser - parse ErrorResponse", () => {
 
   const message = builder.buildMessage(error);
   parser.append(message);
-  
+
   const parsed = parser.parseMessage() as Types.ErrorResponse;
   assertEquals(parsed?.type, Types.MessageType.ErrorResponse);
   assertEquals(parsed?.severity, Types.ErrorSeverity.Error);
   assertEquals(parsed?.errorCode, 42000);
   assertEquals(parsed?.message, "Syntax error in query");
-  assertEquals(parsed?.attributes.get(Types.ErrorAttribute.Hint), "Check your query syntax");
+  assertEquals(
+    parsed?.attributes.get(Types.ErrorAttribute.Hint),
+    "Check your query syntax",
+  );
   assertEquals(parsed?.attributes.get(Types.ErrorAttribute.LineStart), "1");
 });
 
@@ -158,14 +161,20 @@ Deno.test("ProtocolParser - parse Data message", () => {
 
   const message = builder.buildMessage(dataMsg);
   parser.append(message);
-  
+
   const parsed = parser.parseMessage() as Types.DataMessage;
   assertEquals(parsed?.type, Types.MessageType.Data);
   assertEquals(parsed?.dataElements.length, 2);
-  
+
   const decoder = new TextDecoder();
-  assertEquals(decoder.decode(parsed?.dataElements[0].data), '{"id": 1, "name": "Alice"}');
-  assertEquals(decoder.decode(parsed?.dataElements[1].data), '{"id": 2, "name": "Bob"}');
+  assertEquals(
+    decoder.decode(parsed?.dataElements[0].data),
+    '{"id": 1, "name": "Alice"}',
+  );
+  assertEquals(
+    decoder.decode(parsed?.dataElements[1].data),
+    '{"id": 2, "name": "Bob"}',
+  );
 });
 
 Deno.test("ProtocolParser - handle fragmented messages", () => {
@@ -182,20 +191,20 @@ Deno.test("ProtocolParser - handle fragmented messages", () => {
   };
 
   const message = builder.buildMessage(handshake);
-  
+
   // Split message into fragments
   const part1 = message.subarray(0, 10);
   const part2 = message.subarray(10);
-  
+
   // Append first part - should not have complete message
   parser.append(part1);
   assertEquals(parser.hasCompleteMessage(), false);
   assertEquals(parser.parseMessage(), null);
-  
+
   // Append second part - should now have complete message
   parser.append(part2);
   assertEquals(parser.hasCompleteMessage(), true);
-  
+
   const parsed = parser.parseMessage() as Types.ClientHandshake;
   assertEquals(parsed?.type, Types.MessageType.ClientHandshake);
   assertEquals(parsed?.parameters[0].value, "testdb");
@@ -209,12 +218,12 @@ Deno.test("ProtocolParser - handle multiple messages", () => {
     type: Types.MessageType.Sync,
     length: 4,
   });
-  
+
   const flush = builder.buildMessage({
     type: Types.MessageType.Flush,
     length: 4,
   });
-  
+
   const sync2 = builder.buildMessage({
     type: Types.MessageType.Sync,
     length: 4,
@@ -225,19 +234,19 @@ Deno.test("ProtocolParser - handle multiple messages", () => {
   combined.set(sync1, 0);
   combined.set(flush, sync1.length);
   combined.set(sync2, sync1.length + flush.length);
-  
+
   parser.append(combined);
-  
+
   // Should be able to parse all three messages
   assertEquals(parser.hasCompleteMessage(), true);
   assertEquals(parser.parseMessage()?.type, Types.MessageType.Sync);
-  
+
   assertEquals(parser.hasCompleteMessage(), true);
   assertEquals(parser.parseMessage()?.type, Types.MessageType.Flush);
-  
+
   assertEquals(parser.hasCompleteMessage(), true);
   assertEquals(parser.parseMessage()?.type, Types.MessageType.Sync);
-  
+
   // No more messages
   assertEquals(parser.hasCompleteMessage(), false);
   assertEquals(parser.parseMessage(), null);
@@ -246,11 +255,11 @@ Deno.test("ProtocolParser - handle multiple messages", () => {
 Deno.test("ProtocolParser - UUID conversion", () => {
   const uuid = "00000000-0000-0000-0000-000000000100";
   const bytes = Types.uuidToBytes(uuid);
-  
+
   assertEquals(bytes.length, 16);
   assertEquals(bytes[15], 0x00);
   assertEquals(bytes[14], 0x01);
-  
+
   const converted = Types.bytesToUuid(bytes);
   assertEquals(converted, uuid);
 });
@@ -283,10 +292,19 @@ Deno.test("ProtocolParser - Execute message with UUIDs", () => {
 
   const message = builder.buildMessage(executeMsg);
   parser.append(message);
-  
+
   const parsed = parser.parseMessage() as Types.ExecuteMessage;
   assertEquals(parsed?.type, Types.MessageType.Execute);
-  assertEquals(Types.bytesToUuid(parsed.stateDataDescriptorId), "11111111-2222-3333-4444-555555555555");
-  assertEquals(Types.bytesToUuid(parsed.argumentDataDescriptorId), "66666666-7777-8888-9999-aaaaaaaaaaaa");
-  assertEquals(Types.bytesToUuid(parsed.outputDataDescriptorId), "bbbbbbbb-cccc-dddd-eeee-ffffffffffff");
+  assertEquals(
+    Types.bytesToUuid(parsed.stateDataDescriptorId),
+    "11111111-2222-3333-4444-555555555555",
+  );
+  assertEquals(
+    Types.bytesToUuid(parsed.argumentDataDescriptorId),
+    "66666666-7777-8888-9999-aaaaaaaaaaaa",
+  );
+  assertEquals(
+    Types.bytesToUuid(parsed.outputDataDescriptorId),
+    "bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
+  );
 });

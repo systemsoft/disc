@@ -87,6 +87,7 @@ disc serve --no-ui
 ### Components
 
 All components follow the TRON aesthetic with:
+
 - Glowing borders on hover/focus
 - Grid-based layouts
 - Monospace typography for data

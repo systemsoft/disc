@@ -99,13 +99,21 @@ export function generateAlias(ctx: CompilationContext, base: string): string {
   return `${base}_${++ctx.aliasCounter}`;
 }
 
-export function addTableAlias(ctx: CompilationContext, name: string, table: string, type: string): string {
+export function addTableAlias(
+  ctx: CompilationContext,
+  name: string,
+  table: string,
+  type: string,
+): string {
   const alias = generateAlias(ctx, name);
   ctx.currentScope.aliases.set(name, { table, alias, type });
   return alias;
 }
 
-export function getTableAlias(ctx: CompilationContext, name: string): TableAlias | undefined {
+export function getTableAlias(
+  ctx: CompilationContext,
+  name: string,
+): TableAlias | undefined {
   // Check current scope first
   let alias = ctx.currentScope.aliases.get(name);
   if (alias) return alias;
@@ -119,16 +127,27 @@ export function getTableAlias(ctx: CompilationContext, name: string): TableAlias
   return undefined;
 }
 
-export function getTypeDef(ctx: CompilationContext, name: string): TypeDef | undefined {
+export function getTypeDef(
+  ctx: CompilationContext,
+  name: string,
+): TypeDef | undefined {
   return ctx.schema.types.get(name);
 }
 
-export function getProperty(ctx: CompilationContext, typeName: string, propName: string): PropertyDef | undefined {
+export function getProperty(
+  ctx: CompilationContext,
+  typeName: string,
+  propName: string,
+): PropertyDef | undefined {
   const type = getTypeDef(ctx, typeName);
   return type?.properties.get(propName);
 }
 
-export function getLink(ctx: CompilationContext, typeName: string, linkName: string): LinkDef | undefined {
+export function getLink(
+  ctx: CompilationContext,
+  typeName: string,
+  linkName: string,
+): LinkDef | undefined {
   const type = getTypeDef(ctx, typeName);
   return type?.links.get(linkName);
 }
@@ -140,15 +159,57 @@ export function createTestSchema(): Schema {
     kind: "object",
     tableName: "users",
     properties: new Map([
-      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id" }],
-      ["name", { name: "name", type: "str", required: true, multi: false, columnName: "name" }],
-      ["email", { name: "email", type: "str", required: true, multi: false, columnName: "email" }],
-      ["created_at", { name: "created_at", type: "datetime", required: true, multi: false, columnName: "created_at" }],
-      ["active", { name: "active", type: "bool", required: false, multi: false, columnName: "active" }],
-      ["age", { name: "age", type: "int32", required: false, multi: false, columnName: "age" }],
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+      }],
+      ["name", {
+        name: "name",
+        type: "str",
+        required: true,
+        multi: false,
+        columnName: "name",
+      }],
+      ["email", {
+        name: "email",
+        type: "str",
+        required: true,
+        multi: false,
+        columnName: "email",
+      }],
+      ["created_at", {
+        name: "created_at",
+        type: "datetime",
+        required: true,
+        multi: false,
+        columnName: "created_at",
+      }],
+      ["active", {
+        name: "active",
+        type: "bool",
+        required: false,
+        multi: false,
+        columnName: "active",
+      }],
+      ["age", {
+        name: "age",
+        type: "int32",
+        required: false,
+        multi: false,
+        columnName: "age",
+      }],
     ]),
     links: new Map([
-      ["posts", { name: "posts", target: "Post", required: false, multi: true, backlink: "author" }],
+      ["posts", {
+        name: "posts",
+        target: "Post",
+        required: false,
+        multi: true,
+        backlink: "author",
+      }],
     ]),
   };
 
@@ -157,13 +218,43 @@ export function createTestSchema(): Schema {
     kind: "object",
     tableName: "posts",
     properties: new Map([
-      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id" }],
-      ["title", { name: "title", type: "str", required: true, multi: false, columnName: "title" }],
-      ["body", { name: "body", type: "str", required: true, multi: false, columnName: "body" }],
-      ["created_at", { name: "created_at", type: "datetime", required: true, multi: false, columnName: "created_at" }],
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+      }],
+      ["title", {
+        name: "title",
+        type: "str",
+        required: true,
+        multi: false,
+        columnName: "title",
+      }],
+      ["body", {
+        name: "body",
+        type: "str",
+        required: true,
+        multi: false,
+        columnName: "body",
+      }],
+      ["created_at", {
+        name: "created_at",
+        type: "datetime",
+        required: true,
+        multi: false,
+        columnName: "created_at",
+      }],
     ]),
     links: new Map([
-      ["author", { name: "author", target: "User", required: true, multi: false, columnName: "author_id" }],
+      ["author", {
+        name: "author",
+        target: "User",
+        required: true,
+        multi: false,
+        columnName: "author_id",
+      }],
     ]),
   };
 

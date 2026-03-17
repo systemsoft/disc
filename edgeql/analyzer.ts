@@ -441,11 +441,11 @@ export class EdgeQLAnalyzer {
 
     return {
       name: typeName,
-      cardinality: cast.cardinality 
-        ? { 
-            required: cast.cardinality.required ?? true, 
-            multi: cast.cardinality.multi ?? false 
-          }
+      cardinality: cast.cardinality
+        ? {
+          required: cast.cardinality.required ?? true,
+          multi: cast.cardinality.multi ?? false,
+        }
         : { required: true, multi: false },
     };
   }

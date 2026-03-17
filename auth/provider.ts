@@ -96,10 +96,18 @@ export class AuthProvider implements IAuthProvider {
     `);
 
     // Indexes
-    await this.db.execute(`CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)`);
-    await this.db.execute(`CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)`);
-    await this.db.execute(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
-    await this.db.execute(`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`);
+    await this.db.execute(
+      `CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)`,
+    );
+    await this.db.execute(
+      `CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)`,
+    );
+    await this.db.execute(
+      `CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`,
+    );
+    await this.db.execute(
+      `CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`,
+    );
   }
 
   async register(data: RegisterData): Promise<AuthResponse> {
@@ -107,7 +115,7 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "Registration is disabled",
         AuthErrorCode.REGISTRATION_DISABLED,
-        403
+        403,
       );
     }
 
@@ -117,21 +125,21 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         passwordValidation.errors.join(", "),
         AuthErrorCode.PASSWORD_TOO_WEAK,
-        400
+        400,
       );
     }
 
     // Check if user exists
     const existing = await this.db.query(
       "SELECT id FROM users WHERE email = ? OR (username = ? AND username IS NOT NULL)",
-      [data.email, data.username || null]
+      [data.email, data.username || null],
     );
 
     if (existing.rows.length > 0) {
       throw new AuthError(
         "User already exists",
         AuthErrorCode.USER_ALREADY_EXISTS,
-        409
+        409,
       );
     }
 
@@ -145,20 +153,23 @@ export class AuthProvider implements IAuthProvider {
       ? this.generateToken()
       : null;
 
-    await this.db.execute(`
+    await this.db.execute(
+      `
       INSERT INTO users (
         id, email, username, password_hash, email_verified, 
         metadata, verification_token
       ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, [
-      userId,
-      data.email,
-      data.username || null,
-      passwordHash,
-      !this.config.require_email_verification,
-      data.metadata ? JSON.stringify(data.metadata) : null,
-      verificationToken,
-    ]);
+    `,
+      [
+        userId,
+        data.email,
+        data.username || null,
+        passwordHash,
+        !this.config.require_email_verification,
+        data.metadata ? JSON.stringify(data.metadata) : null,
+        verificationToken,
+      ],
+    );
 
     // Get created user
     const user = await this.get_user(userId);
@@ -176,7 +187,7 @@ export class AuthProvider implements IAuthProvider {
     // Update session with tokens
     await this.db.execute(
       "UPDATE sessions SET token = ?, refresh_token = ? WHERE id = ?",
-      [token, refreshToken, session.id]
+      [token, refreshToken, session.id],
     );
 
     session.token = token;
@@ -198,12 +209,12 @@ export class AuthProvider implements IAuthProvider {
     const param = credentials.email || credentials.username;
 
     const result = await this.db.query(query, [param]);
-    
+
     if (result.rows.length === 0) {
       throw new AuthError(
         "User not found",
         AuthErrorCode.USER_NOT_FOUND,
-        404
+        404,
       );
     }
 
@@ -214,7 +225,7 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "User account is inactive",
         AuthErrorCode.USER_INACTIVE,
-        403
+        403,
       );
     }
 
@@ -223,17 +234,20 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "Email not verified",
         AuthErrorCode.EMAIL_NOT_VERIFIED,
-        403
+        403,
       );
     }
 
     // Verify password
-    const passwordMatch = await bcrypt.compare(credentials.password, user.password_hash);
+    const passwordMatch = await bcrypt.compare(
+      credentials.password,
+      user.password_hash,
+    );
     if (!passwordMatch) {
       throw new AuthError(
         "Invalid credentials",
         AuthErrorCode.INVALID_CREDENTIALS,
-        401
+        401,
       );
     }
 
@@ -247,7 +261,7 @@ export class AuthProvider implements IAuthProvider {
     // Update session with tokens
     await this.db.execute(
       "UPDATE sessions SET token = ?, refresh_token = ? WHERE id = ?",
-      [token, refreshToken, session.id]
+      [token, refreshToken, session.id],
     );
 
     session.token = token;
@@ -264,7 +278,7 @@ export class AuthProvider implements IAuthProvider {
   async logout(sessionId: string): Promise<void> {
     await this.db.execute(
       "UPDATE sessions SET revoked = TRUE WHERE id = ?",
-      [sessionId]
+      [sessionId],
     );
   }
 
@@ -274,14 +288,14 @@ export class AuthProvider implements IAuthProvider {
       `SELECT s.*, u.* FROM sessions s 
        JOIN users u ON s.user_id = u.id 
        WHERE s.refresh_token = ? AND s.revoked = FALSE`,
-      [refreshToken]
+      [refreshToken],
     );
 
     if (result.rows.length === 0) {
       throw new AuthError(
         "Invalid refresh token",
         AuthErrorCode.INVALID_REFRESH_TOKEN,
-        401
+        401,
       );
     }
 
@@ -292,7 +306,7 @@ export class AuthProvider implements IAuthProvider {
     // Revoke old session
     await this.db.execute(
       "UPDATE sessions SET revoked = TRUE WHERE id = ?",
-      [oldSessionId]
+      [oldSessionId],
     );
 
     // Create new session
@@ -305,7 +319,7 @@ export class AuthProvider implements IAuthProvider {
     // Update session with tokens
     await this.db.execute(
       "UPDATE sessions SET token = ?, refresh_token = ? WHERE id = ?",
-      [token, newRefreshToken, session.id]
+      [token, newRefreshToken, session.id],
     );
 
     session.token = token;
@@ -332,14 +346,14 @@ export class AuthProvider implements IAuthProvider {
       // Check if session exists and is not revoked
       const result = await this.db.query(
         "SELECT id FROM sessions WHERE token = ? AND revoked = FALSE",
-        [token]
+        [token],
       );
 
       if (result.rows.length === 0) {
         throw new AuthError(
           "Session expired or revoked",
           AuthErrorCode.SESSION_EXPIRED,
-          401
+          401,
         );
       }
 
@@ -348,7 +362,7 @@ export class AuthProvider implements IAuthProvider {
         throw new AuthError(
           "Token expired",
           AuthErrorCode.TOKEN_EXPIRED,
-          401
+          401,
         );
       }
 
@@ -358,18 +372,20 @@ export class AuthProvider implements IAuthProvider {
         throw error;
       }
       // Check if the djwt library threw an expiration error
-      const errorMsg = error instanceof Error ? error.message.toLowerCase() : "";
+      const errorMsg = error instanceof Error
+        ? error.message.toLowerCase()
+        : "";
       if (errorMsg.includes("expired") || errorMsg.includes("exp")) {
         throw new AuthError(
           "Token expired",
           AuthErrorCode.TOKEN_EXPIRED,
-          401
+          401,
         );
       }
       throw new AuthError(
         "Invalid token",
         AuthErrorCode.INVALID_TOKEN,
-        401
+        401,
       );
     }
   }
@@ -377,7 +393,7 @@ export class AuthProvider implements IAuthProvider {
   async get_user(userId: string): Promise<User | null> {
     const result = await this.db.query(
       "SELECT * FROM users WHERE id = ?",
-      [userId]
+      [userId],
     );
 
     if (result.rows.length === 0) {
@@ -390,14 +406,14 @@ export class AuthProvider implements IAuthProvider {
   async update_password(
     userId: string,
     oldPassword: string,
-    newPassword: string
+    newPassword: string,
   ): Promise<void> {
     const user = await this.get_user(userId);
     if (!user) {
       throw new AuthError(
         "User not found",
         AuthErrorCode.USER_NOT_FOUND,
-        404
+        404,
       );
     }
 
@@ -407,7 +423,7 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "Invalid credentials",
         AuthErrorCode.INVALID_CREDENTIALS,
-        401
+        401,
       );
     }
 
@@ -417,7 +433,7 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         passwordValidation.errors.join(", "),
         AuthErrorCode.PASSWORD_TOO_WEAK,
-        400
+        400,
       );
     }
 
@@ -428,7 +444,7 @@ export class AuthProvider implements IAuthProvider {
     // Update password
     await this.db.execute(
       "UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-      [newPasswordHash, userId]
+      [newPasswordHash, userId],
     );
 
     // Revoke all sessions
@@ -438,14 +454,14 @@ export class AuthProvider implements IAuthProvider {
   async reset_password_request(email: string): Promise<string> {
     const result = await this.db.query(
       "SELECT id FROM users WHERE email = ?",
-      [email]
+      [email],
     );
 
     if (result.rows.length === 0) {
       throw new AuthError(
         "User not found",
         AuthErrorCode.USER_NOT_FOUND,
-        404
+        404,
       );
     }
 
@@ -455,7 +471,7 @@ export class AuthProvider implements IAuthProvider {
 
     await this.db.execute(
       "UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE id = ?",
-      [resetToken, expires.toISOString(), userId]
+      [resetToken, expires.toISOString(), userId],
     );
 
     return resetToken;
@@ -464,14 +480,14 @@ export class AuthProvider implements IAuthProvider {
   async reset_password(resetToken: string, newPassword: string): Promise<void> {
     const result = await this.db.query(
       "SELECT id FROM users WHERE reset_token = ? AND reset_token_expires > CURRENT_TIMESTAMP",
-      [resetToken]
+      [resetToken],
     );
 
     if (result.rows.length === 0) {
       throw new AuthError(
         "Invalid or expired reset token",
         AuthErrorCode.INVALID_TOKEN,
-        400
+        400,
       );
     }
 
@@ -483,7 +499,7 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         passwordValidation.errors.join(", "),
         AuthErrorCode.PASSWORD_TOO_WEAK,
-        400
+        400,
       );
     }
 
@@ -495,7 +511,7 @@ export class AuthProvider implements IAuthProvider {
     await this.db.execute(
       `UPDATE users SET password_hash = ?, reset_token = NULL, 
        reset_token_expires = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      [passwordHash, userId]
+      [passwordHash, userId],
     );
 
     // Revoke all sessions
@@ -505,28 +521,28 @@ export class AuthProvider implements IAuthProvider {
   async verify_email(verificationToken: string): Promise<void> {
     const result = await this.db.query(
       "SELECT id FROM users WHERE verification_token = ?",
-      [verificationToken]
+      [verificationToken],
     );
 
     if (result.rows.length === 0) {
       throw new AuthError(
         "Invalid verification token",
         AuthErrorCode.INVALID_TOKEN,
-        400
+        400,
       );
     }
 
     await this.db.execute(
       `UPDATE users SET email_verified = TRUE, verification_token = NULL, 
        updated_at = CURRENT_TIMESTAMP WHERE verification_token = ?`,
-      [verificationToken]
+      [verificationToken],
     );
   }
 
   async revoke_all_sessions(userId: string): Promise<void> {
     await this.db.execute(
       "UPDATE sessions SET revoked = TRUE WHERE user_id = ?",
-      [userId]
+      [userId],
     );
   }
 
@@ -534,11 +550,14 @@ export class AuthProvider implements IAuthProvider {
     const sessionId = this.generateId();
     const expiresAt = new Date(Date.now() + this.config.session_timeout * 1000);
 
-    await this.db.execute(`
+    await this.db.execute(
+      `
       INSERT INTO sessions (
         id, user_id, token, expires_at
       ) VALUES (?, ?, ?, ?)
-    `, [sessionId, userId, "", expiresAt.toISOString()]);
+    `,
+      [sessionId, userId, "", expiresAt.toISOString()],
+    );
 
     return {
       id: sessionId,
@@ -566,14 +585,20 @@ export class AuthProvider implements IAuthProvider {
       jti: this.generateId(),
     };
 
-    return await create({ alg: "HS256", typ: "JWT" }, payload as any, this.cryptoKey);
+    return await create(
+      { alg: "HS256", typ: "JWT" },
+      payload as any,
+      this.cryptoKey,
+    );
   }
 
   private validatePassword(password: string): PasswordValidationResult {
     const errors: string[] = [];
 
     if (password.length < this.config.password_min_length) {
-      errors.push(`Password must be at least ${this.config.password_min_length} characters`);
+      errors.push(
+        `Password must be at least ${this.config.password_min_length} characters`,
+      );
     }
 
     if (this.config.password_require_uppercase && !/[A-Z]/.test(password)) {
@@ -584,7 +609,10 @@ export class AuthProvider implements IAuthProvider {
       errors.push("Password must contain at least one number");
     }
 
-    if (this.config.password_require_special && !/[!@#$%^&*(),.?":{}|<>]/.test(password)) {
+    if (
+      this.config.password_require_special &&
+      !/[!@#$%^&*(),.?":{}|<>]/.test(password)
+    ) {
       errors.push("Password must contain at least one special character");
     }
 
@@ -621,7 +649,7 @@ export class AuthProvider implements IAuthProvider {
     const bytes = new Uint8Array(32);
     crypto.getRandomValues(bytes);
     return Array.from(bytes)
-      .map(b => b.toString(16).padStart(2, "0"))
+      .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
   }
 }

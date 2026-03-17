@@ -118,7 +118,9 @@ Deno.test("E2E Access - SDL with allow policy produces valid response", async ()
   assertEquals(
     fatalErrors.length,
     0,
-    `Expected no EXECUTION_ERROR for authenticated request with allow policy: ${JSON.stringify(fatalErrors)}`,
+    `Expected no EXECUTION_ERROR for authenticated request with allow policy: ${
+      JSON.stringify(fatalErrors)
+    }`,
   );
 });
 
@@ -151,7 +153,9 @@ Deno.test("E2E Access - SDL without policy returns normal response", async () =>
   assertEquals(
     realErrors.length,
     0,
-    `Expected no real errors for schema without policies, got: ${JSON.stringify(realErrors)}`,
+    `Expected no real errors for schema without policies, got: ${
+      JSON.stringify(realErrors)
+    }`,
   );
 
   // Dry-run response includes the SQL string in data
@@ -231,7 +235,9 @@ Deno.test("E2E Access - auth context flows through to policy evaluation", async 
   assertEquals(
     executionErrors.length,
     0,
-    `Expected no EXECUTION_ERROR when auth context is provided: ${JSON.stringify(executionErrors)}`,
+    `Expected no EXECUTION_ERROR when auth context is provided: ${
+      JSON.stringify(executionErrors)
+    }`,
   );
 
   // Dry-run data should carry the user_id through the access context bridge
@@ -267,7 +273,8 @@ Deno.test("E2E Access - schema reload updates active policies", async () => {
   // With schema A (no policies), INSERT should succeed in dry-run mode
   const responseA = await handler.handle_request(insertRequest, context);
   assertExists(responseA, "Expected response from schema A");
-  const hasErrorA = responseA.errors !== undefined && responseA.errors.length > 0;
+  const hasErrorA = responseA.errors !== undefined &&
+    responseA.errors.length > 0;
 
   // Schema B: deny insert policy
   const schemaB = await schemaFromSDL(SDL_WITH_DENY_INSERT);

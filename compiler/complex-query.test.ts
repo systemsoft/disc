@@ -2,7 +2,10 @@
  * Tests for Complex Query Compilation
  */
 
-import { assertEquals, assertExists } from "https://deno.land/std@0.208.0/assert/mod.ts";
+import {
+  assertEquals,
+  assertExists,
+} from "https://deno.land/std@0.208.0/assert/mod.ts";
 import { ComplexQueryCompiler } from "./complex-query.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import * as EdgeQLAST from "../edgeql/ast.ts";

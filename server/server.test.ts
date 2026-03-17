@@ -5,7 +5,11 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { DiscServer } from "./server.ts";
 import { EdgeQLProtocolHandler } from "./protocol.ts";
-import { ConnectionManager, SessionManager, TransactionManager } from "./connection.ts";
+import {
+  ConnectionManager,
+  SessionManager,
+  TransactionManager,
+} from "./connection.ts";
 
 Deno.test("Server Config - Default Values", () => {
   const server = new DiscServer();
@@ -104,7 +108,7 @@ Deno.test("Session Manager - Update Activity", async () => {
   const original_time = session.last_activity;
 
   // Wait a bit and update activity
-  await new Promise(resolve => setTimeout(resolve, 10));
+  await new Promise((resolve) => setTimeout(resolve, 10));
   manager.update_activity(session.session_id);
 
   const updated = manager.get_session(session.session_id);

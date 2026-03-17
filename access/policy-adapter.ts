@@ -39,7 +39,8 @@ export function containsColumnReference(expr: AccessExpressionNode): boolean {
     case "AccessGlobal":
       return false;
     case "AccessComparison":
-      return containsColumnReference(expr.left) || containsColumnReference(expr.right);
+      return containsColumnReference(expr.left) ||
+        containsColumnReference(expr.right);
     case "AccessLogical":
       return expr.operands.some(containsColumnReference);
     case "AccessFunction":
@@ -56,7 +57,9 @@ export function containsColumnReference(expr: AccessExpressionNode): boolean {
  *
  * Returns undefined if no globals are referenced (pure column expression).
  */
-export function extractGlobalGuard(expr: AccessExpressionNode): AccessExpressionNode | undefined {
+export function extractGlobalGuard(
+  expr: AccessExpressionNode,
+): AccessExpressionNode | undefined {
   const globals: AccessExpressionNode[] = [];
   collectGlobals(expr, globals);
 
@@ -75,7 +78,10 @@ export function extractGlobalGuard(expr: AccessExpressionNode): AccessExpression
   };
 }
 
-function collectGlobals(expr: AccessExpressionNode, out: AccessExpressionNode[]): void {
+function collectGlobals(
+  expr: AccessExpressionNode,
+  out: AccessExpressionNode[],
+): void {
   switch (expr.kind) {
     case "AccessGlobal": {
       // Avoid duplicates

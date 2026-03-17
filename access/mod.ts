@@ -1,6 +1,6 @@
 /**
  * Access Control Module
- * 
+ *
  * Provides object-level access policies and row-level security for Disc
  */
 
@@ -17,21 +17,25 @@ export { AccessSQLInjector } from "./sql-injector.ts";
 
 // Re-export key types
 export type {
-  AccessPolicy,
-  AccessOperation,
   AccessAction,
+  AccessConfig,
   AccessContext,
   AccessDecision,
-  AccessConfig,
+  AccessOperation,
+  AccessPolicy,
   PolicyMode,
 } from "./types.ts";
 
 export type {
+  AccessExpressionNode,
+  AccessOperationNode,
   AccessPolicyNode,
   AccessRuleNode,
-  AccessOperationNode,
-  AccessExpressionNode,
 } from "./ast.ts";
 
-export { adaptAccessPolicies, containsColumnReference, extractGlobalGuard } from "./policy-adapter.ts";
+export {
+  adaptAccessPolicies,
+  containsColumnReference,
+  extractGlobalGuard,
+} from "./policy-adapter.ts";
 export { convertExpression } from "./expression-converter.ts";

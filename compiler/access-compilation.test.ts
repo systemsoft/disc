@@ -4,7 +4,7 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
-import { EdgeQLCompiler, CompilerOptions } from "./compiler.ts";
+import { CompilerOptions, EdgeQLCompiler } from "./compiler.ts";
 import { createTestSchema, Schema, TypeDef } from "./context.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
@@ -66,7 +66,11 @@ Deno.test("Access Compilation - no policies does not inject WHERE FALSE", () => 
     false,
     "Expected no WHERE FALSE when no policies are registered and defaultAllow is true",
   );
-  assertEquals(sql.includes("SELECT"), true, "Expected SELECT in generated SQL");
+  assertEquals(
+    sql.includes("SELECT"),
+    true,
+    "Expected SELECT in generated SQL",
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -109,7 +113,10 @@ Deno.test("Access Compilation - deny SELECT policy injects WHERE FALSE", () => {
     );
   } else {
     // A CompilationError is also an acceptable response to a deny policy
-    assertExists(result.error.message, "Expected error message when access is denied");
+    assertExists(
+      result.error.message,
+      "Expected error message when access is denied",
+    );
   }
 });
 
@@ -187,7 +194,9 @@ Deno.test("Access Compilation - deny INSERT policy returns Err", () => {
   const compiler = new EdgeQLCompiler(schema, options);
   compiler.registerAccessPolicy(denyInsertPolicy);
 
-  const parser = new EdgeQLParser(`INSERT User { name := "test", email := "test@example.com" }`);
+  const parser = new EdgeQLParser(
+    `INSERT User { name := "test", email := "test@example.com" }`,
+  );
   const ast = parser.parse();
   const result = compiler.compile(ast);
 
@@ -196,7 +205,10 @@ Deno.test("Access Compilation - deny INSERT policy returns Err", () => {
     false,
     "Expected compilation to fail when INSERT is denied by policy",
   );
-  assertExists(result.ok === false && result.error, "Expected an error on denied INSERT");
+  assertExists(
+    result.ok === false && result.error,
+    "Expected an error on denied INSERT",
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -248,7 +260,10 @@ Deno.test("Access Compilation - access context changes evaluation outcome", () =
     );
   } else {
     // A compilation error is also acceptable for denied access
-    assertExists(anonResult.error.message, "Expected error for unauthenticated access");
+    assertExists(
+      anonResult.error.message,
+      "Expected error for unauthenticated access",
+    );
   }
 
   // With a userId: the condition evaluates to true, allow fires.

@@ -22,25 +22,38 @@ function createBaseSchema(): Module[] {
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "name" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
               required: true,
               multi: false,
             },
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "age" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["int32"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["int32"] },
+              },
               required: false,
               multi: false,
             },
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "email" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
               required: true,
               multi: false,
               constraints: [
-                { kind: "Constraint", name: { kind: "Identifier", value: "exclusive" }, on: { kind: "PathExpression", path: [".email"] } },
+                {
+                  kind: "Constraint",
+                  name: { kind: "Identifier", value: "exclusive" },
+                  on: { kind: "PathExpression", path: [".email"] },
+                },
               ],
             },
           ],
@@ -52,14 +65,20 @@ function createBaseSchema(): Module[] {
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "title" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
               required: true,
               multi: false,
             },
             {
               kind: "LinkDeclaration",
               name: { kind: "Identifier", value: "author" },
-              target: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["User"] } },
+              target: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["User"] },
+              },
               required: true,
               multi: false,
             },
@@ -82,25 +101,38 @@ function createRenamedPropertySchema(): Module[] {
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "full_name" }, // renamed from "name"
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
               required: true,
               multi: false,
             },
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "birth_year" }, // renamed from "age", type changed
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["int32"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["int32"] },
+              },
               required: false,
               multi: false,
             },
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "email" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
               required: true,
               multi: false,
               constraints: [
-                { kind: "Constraint", name: { kind: "Identifier", value: "exclusive" }, on: { kind: "PathExpression", path: [".email"] } },
+                {
+                  kind: "Constraint",
+                  name: { kind: "Identifier", value: "exclusive" },
+                  on: { kind: "PathExpression", path: [".email"] },
+                },
               ],
             },
           ],
@@ -112,14 +144,20 @@ function createRenamedPropertySchema(): Module[] {
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "title" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
               required: true,
               multi: false,
             },
             {
               kind: "LinkDeclaration",
               name: { kind: "Identifier", value: "author" },
-              target: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["User"] } },
+              target: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["User"] },
+              },
               required: true,
               multi: false,
             },
@@ -142,14 +180,20 @@ function createTypeChangeSchema(): Module[] {
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "name" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
               required: true,
               multi: false,
             },
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "age" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["float64"] } }, // changed from int32
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["float64"] },
+              }, // changed from int32
               required: true, // changed from optional
               multi: false,
               default: { kind: "Literal", type: "float", value: 0.0 }, // added default
@@ -157,7 +201,10 @@ function createTypeChangeSchema(): Module[] {
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "email" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
               required: false, // changed from required
               multi: true, // changed from single
               constraints: [], // removed exclusive constraint
@@ -171,14 +218,20 @@ function createTypeChangeSchema(): Module[] {
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "title" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
               required: true,
               multi: false,
             },
             {
               kind: "LinkDeclaration",
               name: { kind: "Identifier", value: "author" },
-              target: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["User"] } },
+              target: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["User"] },
+              },
               required: false, // changed from required
               multi: true, // changed to multi
             },
@@ -201,25 +254,38 @@ function createRenamedTypeSchema(): Module[] {
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "name" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
               required: true,
               multi: false,
             },
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "age" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["int32"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["int32"] },
+              },
               required: false,
               multi: false,
             },
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "email" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
               required: true,
               multi: false,
               constraints: [
-                { kind: "Constraint", name: { kind: "Identifier", value: "exclusive" }, on: { kind: "PathExpression", path: [".email"] } },
+                {
+                  kind: "Constraint",
+                  name: { kind: "Identifier", value: "exclusive" },
+                  on: { kind: "PathExpression", path: [".email"] },
+                },
               ],
             },
           ],
@@ -231,14 +297,20 @@ function createRenamedTypeSchema(): Module[] {
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "title" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
               required: true,
               multi: false,
             },
             {
               kind: "LinkDeclaration",
               name: { kind: "Identifier", value: "author" },
-              target: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["Account"] } }, // updated reference
+              target: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["Account"] },
+              }, // updated reference
               required: true,
               multi: false,
             },
@@ -267,29 +339,34 @@ Deno.test("Schema Differ - Detect Property Rename (appears as drop + add)", () =
   const operations = differ.diff(oldSchema, newSchema);
 
   // Should detect changes to User type
-  const userAlterOp = operations.find(op =>
-    op.kind === "AlterType" && (op as Types.AlterTypeOperation).type_name === "User"
+  const userAlterOp = operations.find((op) =>
+    op.kind === "AlterType" &&
+    (op as Types.AlterTypeOperation).type_name === "User"
   ) as Types.AlterTypeOperation;
 
   assertEquals(userAlterOp !== undefined, true);
 
   // Should have drop "name" and add "full_name"
-  const dropNameOp = userAlterOp.operations.find(op =>
-    op.kind === "DropProperty" && (op as Types.DropPropertyOperation).property_name === "name"
+  const dropNameOp = userAlterOp.operations.find((op) =>
+    op.kind === "DropProperty" &&
+    (op as Types.DropPropertyOperation).property_name === "name"
   );
-  const addFullNameOp = userAlterOp.operations.find(op =>
-    op.kind === "AddProperty" && (op as Types.AddPropertyOperation).property.name === "full_name"
+  const addFullNameOp = userAlterOp.operations.find((op) =>
+    op.kind === "AddProperty" &&
+    (op as Types.AddPropertyOperation).property.name === "full_name"
   );
 
   assertEquals(dropNameOp !== undefined, true);
   assertEquals(addFullNameOp !== undefined, true);
 
   // Should also have drop "age" and add "birth_year"
-  const dropAgeOp = userAlterOp.operations.find(op =>
-    op.kind === "DropProperty" && (op as Types.DropPropertyOperation).property_name === "age"
+  const dropAgeOp = userAlterOp.operations.find((op) =>
+    op.kind === "DropProperty" &&
+    (op as Types.DropPropertyOperation).property_name === "age"
   );
-  const addBirthYearOp = userAlterOp.operations.find(op =>
-    op.kind === "AddProperty" && (op as Types.AddPropertyOperation).property.name === "birth_year"
+  const addBirthYearOp = userAlterOp.operations.find((op) =>
+    op.kind === "AddProperty" &&
+    (op as Types.AddPropertyOperation).property.name === "birth_year"
   );
 
   assertEquals(dropAgeOp !== undefined, true);
@@ -303,15 +380,17 @@ Deno.test("Schema Differ - Detect Type Changes in Properties", () => {
 
   const operations = differ.diff(oldSchema, newSchema);
 
-  const userAlterOp = operations.find(op =>
-    op.kind === "AlterType" && (op as Types.AlterTypeOperation).type_name === "User"
+  const userAlterOp = operations.find((op) =>
+    op.kind === "AlterType" &&
+    (op as Types.AlterTypeOperation).type_name === "User"
   ) as Types.AlterTypeOperation;
 
   assertEquals(userAlterOp !== undefined, true);
 
   // Should detect type change for age property
-  const ageAlterOp = userAlterOp.operations.find(op =>
-    op.kind === "AlterProperty" && (op as Types.AlterPropertyOperation).property_name === "age"
+  const ageAlterOp = userAlterOp.operations.find((op) =>
+    op.kind === "AlterProperty" &&
+    (op as Types.AlterPropertyOperation).property_name === "age"
   ) as Types.AlterPropertyOperation;
 
   assertEquals(ageAlterOp !== undefined, true);
@@ -320,19 +399,25 @@ Deno.test("Schema Differ - Detect Type Changes in Properties", () => {
   assertEquals(ageAlterOp.changes.length >= 3, true);
 
   // Should include type change
-  const typeChange = ageAlterOp.changes.find(change => change.kind === "ChangeType");
+  const typeChange = ageAlterOp.changes.find((change) =>
+    change.kind === "ChangeType"
+  );
   assertEquals(typeChange !== undefined, true);
   assertEquals(typeChange!.old_value, "int32");
   assertEquals(typeChange!.new_value, "float64");
 
   // Should include required change
-  const requiredChange = ageAlterOp.changes.find(change => change.kind === "ChangeRequired");
+  const requiredChange = ageAlterOp.changes.find((change) =>
+    change.kind === "ChangeRequired"
+  );
   assertEquals(requiredChange !== undefined, true);
   assertEquals(requiredChange!.old_value, false);
   assertEquals(requiredChange!.new_value, true);
 
   // Should include default change
-  const defaultChange = ageAlterOp.changes.find(change => change.kind === "ChangeDefault");
+  const defaultChange = ageAlterOp.changes.find((change) =>
+    change.kind === "ChangeDefault"
+  );
   assertEquals(defaultChange !== undefined, true);
 });
 
@@ -343,28 +428,34 @@ Deno.test("Schema Differ - Detect Link Changes", () => {
 
   const operations = differ.diff(oldSchema, newSchema);
 
-  const postAlterOp = operations.find(op =>
-    op.kind === "AlterType" && (op as Types.AlterTypeOperation).type_name === "Post"
+  const postAlterOp = operations.find((op) =>
+    op.kind === "AlterType" &&
+    (op as Types.AlterTypeOperation).type_name === "Post"
   ) as Types.AlterTypeOperation;
 
   assertEquals(postAlterOp !== undefined, true);
 
   // Should detect changes to author link
-  const authorAlterOp = postAlterOp.operations.find(op =>
-    op.kind === "AlterLink" && (op as Types.AlterLinkOperation).link_name === "author"
+  const authorAlterOp = postAlterOp.operations.find((op) =>
+    op.kind === "AlterLink" &&
+    (op as Types.AlterLinkOperation).link_name === "author"
   ) as Types.AlterLinkOperation;
 
   assertEquals(authorAlterOp !== undefined, true);
   assertEquals(authorAlterOp.changes.length >= 2, true);
 
   // Should include required change
-  const requiredChange = authorAlterOp.changes.find(change => change.kind === "ChangeRequired");
+  const requiredChange = authorAlterOp.changes.find((change) =>
+    change.kind === "ChangeRequired"
+  );
   assertEquals(requiredChange !== undefined, true);
   assertEquals(requiredChange!.old_value, true);
   assertEquals(requiredChange!.new_value, false);
 
   // Should include multi change
-  const multiChange = authorAlterOp.changes.find(change => change.kind === "ChangeMulti");
+  const multiChange = authorAlterOp.changes.find((change) =>
+    change.kind === "ChangeMulti"
+  );
   assertEquals(multiChange !== undefined, true);
   assertEquals(multiChange!.old_value, false);
   assertEquals(multiChange!.new_value, true);
@@ -378,31 +469,37 @@ Deno.test("Schema Differ - Detect Type Rename (appears as drop + add)", () => {
   const operations = differ.diff(oldSchema, newSchema);
 
   // Should detect User type being dropped and Account type being added
-  const dropUserOp = operations.find(op =>
-    op.kind === "DropType" && (op as Types.DropTypeOperation).type_name === "User"
+  const dropUserOp = operations.find((op) =>
+    op.kind === "DropType" &&
+    (op as Types.DropTypeOperation).type_name === "User"
   );
-  const createAccountOp = operations.find(op =>
-    op.kind === "CreateType" && (op as Types.CreateTypeOperation).type_name === "Account"
+  const createAccountOp = operations.find((op) =>
+    op.kind === "CreateType" &&
+    (op as Types.CreateTypeOperation).type_name === "Account"
   );
 
   assertEquals(dropUserOp !== undefined, true);
   assertEquals(createAccountOp !== undefined, true);
 
   // Should also update Post type to change link target
-  const postAlterOp = operations.find(op =>
-    op.kind === "AlterType" && (op as Types.AlterTypeOperation).type_name === "Post"
+  const postAlterOp = operations.find((op) =>
+    op.kind === "AlterType" &&
+    (op as Types.AlterTypeOperation).type_name === "Post"
   ) as Types.AlterTypeOperation;
 
   assertEquals(postAlterOp !== undefined, true);
 
   // Should have alter link operation
-  const authorAlterOp = postAlterOp.operations.find(op =>
-    op.kind === "AlterLink" && (op as Types.AlterLinkOperation).link_name === "author"
+  const authorAlterOp = postAlterOp.operations.find((op) =>
+    op.kind === "AlterLink" &&
+    (op as Types.AlterLinkOperation).link_name === "author"
   ) as Types.AlterLinkOperation;
 
   assertEquals(authorAlterOp !== undefined, true);
 
-  const targetChange = authorAlterOp.changes.find(change => change.kind === "ChangeTarget");
+  const targetChange = authorAlterOp.changes.find((change) =>
+    change.kind === "ChangeTarget"
+  );
   assertEquals(targetChange !== undefined, true);
   assertEquals(targetChange!.old_value, "User");
   assertEquals(targetChange!.new_value, "Account");
@@ -443,16 +540,20 @@ Deno.test("DDL Generator - Handle Complex Type Changes", () => {
   assertEquals(statements.length >= 3, true);
 
   // Should have type change
-  const typeChangeStmt = statements.find(stmt => stmt.includes("ALTER COLUMN age TYPE"));
+  const typeChangeStmt = statements.find((stmt) =>
+    stmt.includes("ALTER COLUMN age TYPE")
+  );
   assertEquals(typeChangeStmt !== undefined, true);
   assertStringIncludes(typeChangeStmt!, "DOUBLE PRECISION");
 
   // Should have nullability change
-  const nullabilityStmt = statements.find(stmt => stmt.includes("SET NOT NULL"));
+  const nullabilityStmt = statements.find((stmt) =>
+    stmt.includes("SET NOT NULL")
+  );
   assertEquals(nullabilityStmt !== undefined, true);
 
   // Should have default change
-  const defaultStmt = statements.find(stmt => stmt.includes("SET DEFAULT"));
+  const defaultStmt = statements.find((stmt) => stmt.includes("SET DEFAULT"));
   assertEquals(defaultStmt !== undefined, true);
   assertStringIncludes(defaultStmt!, "0.0");
 });
@@ -502,7 +603,10 @@ Deno.test("Migration Engine - Validate Complex Changes for Safety", () => {
     // Should warn about potentially destructive changes
     assertEquals(validationResult.ok, false);
     if (!validationResult.ok) {
-      assertStringIncludes(validationResult.error.message.toLowerCase(), "data loss");
+      assertStringIncludes(
+        validationResult.error.message.toLowerCase(),
+        "data loss",
+      );
     }
   }
 });
@@ -537,20 +641,25 @@ Deno.test("Migration Engine - Handle Constraint Changes", () => {
   // Create schema with removed constraint
   const schemaWithoutConstraint = createTypeChangeSchema(); // email constraint removed
 
-  const planResult = engine.planMigration(createBaseSchema(), schemaWithoutConstraint);
+  const planResult = engine.planMigration(
+    createBaseSchema(),
+    schemaWithoutConstraint,
+  );
   assertEquals(planResult.ok, true);
 
   if (planResult.ok) {
     const operations = planResult.value.migrations[0].operations;
-    const userAlterOp = operations.find(op =>
-      op.kind === "AlterType" && (op as Types.AlterTypeOperation).type_name === "User"
+    const userAlterOp = operations.find((op) =>
+      op.kind === "AlterType" &&
+      (op as Types.AlterTypeOperation).type_name === "User"
     ) as Types.AlterTypeOperation;
 
     assertEquals(userAlterOp !== undefined, true);
 
     // Should have operation to change email property (removing exclusive constraint)
-    const emailAlterOp = userAlterOp.operations.find(op =>
-      op.kind === "AlterProperty" && (op as Types.AlterPropertyOperation).property_name === "email"
+    const emailAlterOp = userAlterOp.operations.find((op) =>
+      op.kind === "AlterProperty" &&
+      (op as Types.AlterPropertyOperation).property_name === "email"
     );
 
     assertEquals(emailAlterOp !== undefined, true);
@@ -576,11 +685,13 @@ Deno.test("Migration Engine - Complex Changes Integration Test", () => {
       assertEquals(statements.length > 5, true);
 
       // Should include table alterations
-      const hasAlterTable = statements.some(stmt => stmt.includes("ALTER TABLE"));
+      const hasAlterTable = statements.some((stmt) =>
+        stmt.includes("ALTER TABLE")
+      );
       assertEquals(hasAlterTable, true);
 
       // Should include type changes
-      const hasTypeChange = statements.some(stmt => stmt.includes("TYPE"));
+      const hasTypeChange = statements.some((stmt) => stmt.includes("TYPE"));
       assertEquals(hasTypeChange, true);
     }
   }

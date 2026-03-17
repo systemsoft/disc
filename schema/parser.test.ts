@@ -373,7 +373,10 @@ Deno.test("SDL Validator - Undefined Type Error", () => {
 
   assertEquals(result.ok, false);
   assertEquals(result.errors?.length, 1);
-  assertEquals(result.errors?.[0].message, "Type 'NonExistentType' is not defined");
+  assertEquals(
+    result.errors?.[0].message,
+    "Type 'NonExistentType' is not defined",
+  );
 });
 
 Deno.test("SDL Validator - Valid Schema", () => {

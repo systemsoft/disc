@@ -40,7 +40,7 @@ export interface WindowFrame {
   exclude?: "CURRENT ROW" | "GROUP" | "TIES" | "NO OTHERS";
 }
 
-export type FrameBound = 
+export type FrameBound =
   | "UNBOUNDED PRECEDING"
   | "UNBOUNDED FOLLOWING"
   | "CURRENT ROW"
@@ -78,35 +78,41 @@ export interface UnionStatement extends SQL.SQLNode {
 
 // Helper functions
 
-export function withCTEs(ctes: CTE[], statement: SQL.SQLStatement): SQL.SQLStatement {
+export function withCTEs(
+  ctes: CTE[],
+  statement: SQL.SQLStatement,
+): SQL.SQLStatement {
   return {
     ...statement,
     with: {
       kind: "WithClause",
-      recursive: ctes.some(cte => cte.recursive),
-      ctes
-    }
+      recursive: ctes.some((cte) => cte.recursive),
+      ctes,
+    },
   } as any;
 }
 
 export function windowFunction(
-  func: string, 
-  args: SQL.SQLExpression[], 
-  spec: WindowSpec
+  func: string,
+  args: SQL.SQLExpression[],
+  spec: WindowSpec,
 ): WindowFunction {
   return {
     kind: "WindowFunction",
     function: func,
     args,
-    over: spec
+    over: spec,
   };
 }
 
-export function lateral(subquery: SQL.SQLStatement, alias?: string): LateralJoin {
+export function lateral(
+  subquery: SQL.SQLStatement,
+  alias?: string,
+): LateralJoin {
   return {
     kind: "LateralJoin",
     subquery,
-    alias
+    alias,
   };
 }
 
@@ -114,22 +120,25 @@ export function aggregateWithFilter(
   func: string,
   args: SQL.SQLExpression[],
   filter?: SQL.SQLExpression,
-  distinct?: boolean
+  distinct?: boolean,
 ): AggregateWithFilter {
   return {
     kind: "AggregateWithFilter",
     function: func,
     args,
     filter,
-    distinct
+    distinct,
   };
 }
 
-export function union(queries: SQL.SQLStatement[], all = false): UnionStatement {
+export function union(
+  queries: SQL.SQLStatement[],
+  all = false,
+): UnionStatement {
   return {
     kind: "UnionStatement",
     queries,
-    all
+    all,
   };
 }
 
@@ -137,71 +146,73 @@ export function union(queries: SQL.SQLStatement[], all = false): UnionStatement 
 
 export function generateCTE(cte: CTE): string {
   let sql = cte.name;
-  
+
   if (cte.columns && cte.columns.length > 0) {
     sql += ` (${cte.columns.join(", ")})`;
   }
-  
+
   sql += " AS (" + generateSQL(cte.query) + ")";
-  
+
   return sql;
 }
 
 export function generateWithClause(withClause: WithClause): string {
   let sql = "WITH ";
-  
+
   if (withClause.recursive) {
     sql += "RECURSIVE ";
   }
-  
+
   sql += withClause.ctes.map(generateCTE).join(", ");
-  
+
   return sql;
 }
 
 export function generateWindowFunction(window: WindowFunction): string {
   let sql = window.function + "(";
-  
+
   if (window.args.length > 0) {
     sql += window.args.map(generateExpression).join(", ");
   }
-  
+
   sql += ") OVER (";
-  
+
   const spec = window.over;
   const parts: string[] = [];
-  
+
   if (spec.partitionBy && spec.partitionBy.length > 0) {
-    parts.push("PARTITION BY " + spec.partitionBy.map(generateExpression).join(", "));
+    parts.push(
+      "PARTITION BY " + spec.partitionBy.map(generateExpression).join(", "),
+    );
   }
-  
+
   if (spec.orderBy && spec.orderBy.length > 0) {
     parts.push("ORDER BY " + spec.orderBy.map(generateOrderItem).join(", "));
   }
-  
+
   if (spec.frame) {
     parts.push(generateWindowFrame(spec.frame));
   }
-  
+
   sql += parts.join(" ");
   sql += ")";
-  
+
   return sql;
 }
 
 export function generateWindowFrame(frame: WindowFrame): string {
   let sql = frame.mode + " ";
-  
+
   sql += generateFrameBound(frame.start);
-  
+
   if (frame.end) {
     sql += " AND " + generateFrameBound(frame.end);
   }
-  
+
   if (frame.exclude) {
     sql += " EXCLUDE " + frame.exclude;
   }
-  
+
   return sql;
 }
 
@@ -209,41 +220,41 @@ export function generateFrameBound(bound: FrameBound): string {
   if (typeof bound === "string") {
     return bound;
   }
-  
+
   return `${bound.offset} ${bound.direction}`;
 }
 
 export function generateLateralJoin(lateral: LateralJoin): string {
   let sql = "LATERAL (" + generateSQL(lateral.subquery) + ")";
-  
+
   if (lateral.alias) {
     sql += " AS " + lateral.alias;
   }
-  
+
   return sql;
 }
 
 export function generateAggregateWithFilter(agg: AggregateWithFilter): string {
   let sql = agg.function + "(";
-  
+
   if (agg.distinct) {
     sql += "DISTINCT ";
   }
-  
+
   if (agg.args.length > 0) {
     sql += agg.args.map(generateExpression).join(", ");
   }
-  
+
   if (agg.orderBy && agg.orderBy.length > 0) {
     sql += " ORDER BY " + agg.orderBy.map(generateOrderItem).join(", ");
   }
-  
+
   sql += ")";
-  
+
   if (agg.filter) {
     sql += " FILTER (WHERE " + generateExpression(agg.filter) + ")";
   }
-  
+
   return sql;
 }
 
@@ -254,13 +265,13 @@ export function generateUnion(union: UnionStatement): string {
 
 export function generateOrderItem(item: OrderItem): string {
   let sql = generateExpression(item.expression);
-  
+
   sql += " " + item.direction;
-  
+
   if (item.nulls) {
     sql += " NULLS " + item.nulls;
   }
-  
+
   return sql;
 }
 
@@ -282,7 +293,7 @@ export function select(options: any): SQL.SQLStatement {
     kind: "SelectStatement",
     select: {
       kind: "SelectClause",
-      columns: options.selections || []
+      columns: options.selections || [],
     },
     from: options.from,
     where: options.where,
@@ -290,7 +301,7 @@ export function select(options: any): SQL.SQLStatement {
     having: options.having,
     orderBy: options.orderBy,
     limit: options.limit,
-    offset: options.offset
+    offset: options.offset,
   };
 }
 
@@ -299,7 +310,7 @@ export function innerJoin(options: any): SQL.SQLStatement {
     kind: "JoinClause",
     type: "INNER",
     table: options.right,
-    on: options.on
+    on: options.on,
   } as any;
 }
 
@@ -309,7 +320,7 @@ export function leftJoin(options: any): SQL.SQLStatement {
     type: "LEFT",
     table: options.right,
     on: options.on,
-    where: options.where
+    where: options.where,
   } as any;
 }
 
@@ -318,7 +329,7 @@ export function eq(left: any, right: any): SQL.SQLExpression {
     kind: "BinaryExpression",
     operator: "=",
     left,
-    right
+    right,
   } as any;
 }
 
@@ -326,27 +337,30 @@ export function isNotNull(expr: any): SQL.SQLExpression {
   return {
     kind: "UnaryExpression",
     operator: "IS NOT NULL",
-    operand: expr
+    operand: expr,
   } as any;
 }
 
 export function star(): SQL.SQLExpression {
   return {
-    kind: "Star"
+    kind: "Star",
   } as any;
 }
 
-export function aggregate(func: string, expr: SQL.SQLExpression): SQL.SQLStatement {
+export function aggregate(
+  func: string,
+  expr: SQL.SQLExpression,
+): SQL.SQLStatement {
   return {
     kind: "FunctionCall",
     name: func,
-    args: [expr]
+    args: [expr],
   } as any;
 }
 
 export function distinct(expr: SQL.SQLStatement): SQL.SQLStatement {
   return {
     ...expr,
-    distinct: true
+    distinct: true,
   } as any;
 }

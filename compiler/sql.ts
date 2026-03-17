@@ -6,7 +6,12 @@ export interface SQLNode {
   kind: string;
 }
 
-export type SQLStatement = SelectStatement | InsertStatement | UpdateStatement | DeleteStatement | CTEStatement;
+export type SQLStatement =
+  | SelectStatement
+  | InsertStatement
+  | UpdateStatement
+  | DeleteStatement
+  | CTEStatement;
 
 export interface SelectStatement extends SQLNode {
   kind: "SelectStatement";
@@ -242,7 +247,10 @@ export function createSelectStatement(options: {
   };
 }
 
-export function createSelectClause(columns: SelectItem[], distinct?: boolean): SelectClause {
+export function createSelectClause(
+  columns: SelectItem[],
+  distinct?: boolean,
+): SelectClause {
   return {
     kind: "SelectClause",
     columns,
@@ -250,7 +258,10 @@ export function createSelectClause(columns: SelectItem[], distinct?: boolean): S
   };
 }
 
-export function createSelectItem(expression: SQLExpression, alias?: string): SelectItem {
+export function createSelectItem(
+  expression: SQLExpression,
+  alias?: string,
+): SelectItem {
   return {
     kind: "SelectItem",
     expression,
@@ -265,7 +276,10 @@ export function createFromClause(tables: TableReference[]): FromClause {
   };
 }
 
-export function createTableReference(name: string, alias?: string): TableReference {
+export function createTableReference(
+  name: string,
+  alias?: string,
+): TableReference {
   return {
     kind: "TableReference",
     name,
@@ -280,7 +294,10 @@ export function createWhereClause(condition: SQLExpression): WhereClause {
   };
 }
 
-export function createColumnReference(column: string, table?: string): ColumnReference {
+export function createColumnReference(
+  column: string,
+  table?: string,
+): ColumnReference {
   return {
     kind: "ColumnReference",
     column,
@@ -288,7 +305,10 @@ export function createColumnReference(column: string, table?: string): ColumnRef
   };
 }
 
-export function createLiteral(type: "string" | "number" | "boolean" | "null", value: any): LiteralExpression {
+export function createLiteral(
+  type: "string" | "number" | "boolean" | "null",
+  value: any,
+): LiteralExpression {
   return {
     kind: "LiteralExpression",
     type,
@@ -296,7 +316,11 @@ export function createLiteral(type: "string" | "number" | "boolean" | "null", va
   };
 }
 
-export function createBinaryExpression(operator: string, left: SQLExpression, right: SQLExpression): BinaryExpression {
+export function createBinaryExpression(
+  operator: string,
+  left: SQLExpression,
+  right: SQLExpression,
+): BinaryExpression {
   return {
     kind: "BinaryExpression",
     operator,
@@ -305,7 +329,10 @@ export function createBinaryExpression(operator: string, left: SQLExpression, ri
   };
 }
 
-export function createFunctionCall(name: string, args: SQLExpression[]): FunctionCall {
+export function createFunctionCall(
+  name: string,
+  args: SQLExpression[],
+): FunctionCall {
   return {
     kind: "FunctionCall",
     name,
@@ -342,14 +369,19 @@ export function createParameterReference(index: number): ParameterReference {
   };
 }
 
-export function createSubqueryExpression(query: SelectStatement): SubqueryExpression {
+export function createSubqueryExpression(
+  query: SelectStatement,
+): SubqueryExpression {
   return {
     kind: "SubqueryExpression",
     query,
   };
 }
 
-export function createCaseExpression(when: WhenClause[], elseExpr?: SQLExpression): CaseExpression {
+export function createCaseExpression(
+  when: WhenClause[],
+  elseExpr?: SQLExpression,
+): CaseExpression {
   return {
     kind: "CaseExpression",
     when,
@@ -357,7 +389,10 @@ export function createCaseExpression(when: WhenClause[], elseExpr?: SQLExpressio
   };
 }
 
-export function createWhenClause(condition: SQLExpression, then: SQLExpression): WhenClause {
+export function createWhenClause(
+  condition: SQLExpression,
+  then: SQLExpression,
+): WhenClause {
   return {
     kind: "WhenClause",
     condition,
@@ -450,7 +485,11 @@ export function leftJoin(options: {
 // Expression helpers
 
 export function eq(left: string, right: string): BinaryExpression {
-  return createBinaryExpression("=", createColumnReference(left), createColumnReference(right));
+  return createBinaryExpression(
+    "=",
+    createColumnReference(left),
+    createColumnReference(right),
+  );
 }
 
 export function isNotNull(column: string): UnaryExpression {
@@ -497,7 +536,10 @@ export interface WindowFrame extends SQLNode {
   exclude?: string;
 }
 
-export function aggregate(func: string, expr: SQLExpression): AggregateExpression {
+export function aggregate(
+  func: string,
+  expr: SQLExpression,
+): AggregateExpression {
   return {
     kind: "AggregateExpression",
     function: func,
@@ -505,7 +547,10 @@ export function aggregate(func: string, expr: SQLExpression): AggregateExpressio
   };
 }
 
-export function aggregateWithFilter(agg: AggregateExpression, filter: SQLExpression): AggregateExpression {
+export function aggregateWithFilter(
+  agg: AggregateExpression,
+  filter: SQLExpression,
+): AggregateExpression {
   return {
     ...agg,
     filter,
@@ -519,7 +564,11 @@ export function distinct(agg: AggregateExpression): AggregateExpression {
   };
 }
 
-export function windowFunction(func: string, args: SQLExpression[], over: WindowClause): WindowFunctionExpression {
+export function windowFunction(
+  func: string,
+  args: SQLExpression[],
+  over: WindowClause,
+): WindowFunctionExpression {
   return {
     kind: "WindowFunctionExpression",
     function: func,
@@ -532,7 +581,7 @@ export function select(options: {
   from: SQLNode;
   selections: string[];
 }): SelectStatement {
-  const items = options.selections.map(s =>
+  const items = options.selections.map((s) =>
     createSelectItem(createColumnReference(s))
   );
   return createSelectStatement({

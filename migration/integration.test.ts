@@ -11,7 +11,11 @@ import { SchemaValidator } from "../schema/validator.ts";
 import { MigrationEngine } from "./engine.ts";
 import { MigrationTracker } from "./tracker.ts";
 import * as Types from "./types.ts";
-import { canRunPgTests, cleanupTestTables, getTestDsn } from "../tests/pg-test-harness.ts";
+import {
+  canRunPgTests,
+  cleanupTestTables,
+  getTestDsn,
+} from "../tests/pg-test-harness.ts";
 
 const RUN_PG = canRunPgTests();
 
@@ -145,7 +149,8 @@ Deno.test("Integration - Parse and Generate Initial Migration", () => {
     assertEquals(plan.migrations[0].operations.length, 1);
     assertEquals(plan.migrations[0].operations[0].kind, "CreateType");
 
-    const createTypeOp = plan.migrations[0].operations[0] as Types.CreateTypeOperation;
+    const createTypeOp = plan.migrations[0]
+      .operations[0] as Types.CreateTypeOperation;
     assertEquals(createTypeOp.type_name, "User");
     assertEquals(createTypeOp.properties.length, 3); // name, email, created_at
   }
@@ -180,10 +185,12 @@ Deno.test("Integration - Schema Evolution Migration", () => {
     assertEquals(operations.length >= 2, true);
 
     const alterUserOp = operations.find((op: Types.MigrationOperation) =>
-      op.kind === "AlterType" && (op as Types.AlterTypeOperation).type_name === "User"
+      op.kind === "AlterType" &&
+      (op as Types.AlterTypeOperation).type_name === "User"
     );
     const createPostOp = operations.find((op: Types.MigrationOperation) =>
-      op.kind === "CreateType" && (op as Types.CreateTypeOperation).type_name === "Post"
+      op.kind === "CreateType" &&
+      (op as Types.CreateTypeOperation).type_name === "Post"
     );
 
     assertEquals(alterUserOp !== undefined, true);
@@ -213,7 +220,9 @@ Deno.test("Integration - Complex Schema with Inheritance", () => {
     const operations = plan.migrations[0].operations;
 
     // Should create tables for concrete types
-    const createOps = operations.filter((op: Types.MigrationOperation) => op.kind === "CreateType");
+    const createOps = operations.filter((op: Types.MigrationOperation) =>
+      op.kind === "CreateType"
+    );
     assertEquals(createOps.length >= 3, true); // User, Post, Tag (Timestamped is abstract)
 
     const userCreateOp = createOps.find((op: Types.MigrationOperation) =>
@@ -222,101 +231,116 @@ Deno.test("Integration - Complex Schema with Inheritance", () => {
 
     assertEquals(userCreateOp !== undefined, true);
     // Should inherit properties from Timestamped
-    const hasCreatedAt = userCreateOp.properties.some(prop => prop.name === "created_at");
-    const hasUpdatedAt = userCreateOp.properties.some(prop => prop.name === "updated_at");
+    const hasCreatedAt = userCreateOp.properties.some((prop) =>
+      prop.name === "created_at"
+    );
+    const hasUpdatedAt = userCreateOp.properties.some((prop) =>
+      prop.name === "updated_at"
+    );
     assertEquals(hasCreatedAt, true);
     assertEquals(hasUpdatedAt, true);
   }
 });
 
-Deno.test({ name: "Integration - Full Migration Workflow with Tracker", ignore: !RUN_PG, fn: async () => {
-  const dsn = await getTestDsn();
-  await cleanupTestTables(dsn);
-  const config = { ...createIntegrationTestConfig(), database_url: dsn };
-  const engine = new MigrationEngine(config);
-  const tracker = new MigrationTracker(dsn);
-  const validator = new SchemaValidator();
+Deno.test({
+  name: "Integration - Full Migration Workflow with Tracker",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    await cleanupTestTables(dsn);
+    const config = { ...createIntegrationTestConfig(), database_url: dsn };
+    const engine = new MigrationEngine(config);
+    const tracker = new MigrationTracker(dsn);
+    const validator = new SchemaValidator();
 
-  await tracker.initialize();
+    await tracker.initialize();
 
-  // Parse and apply initial schema
-  const parser = new SDLParser(initialSchema);
-  const sdlDocument = parser.parse();
-  const modules = validator.convertToModules(sdlDocument);
+    // Parse and apply initial schema
+    const parser = new SDLParser(initialSchema);
+    const sdlDocument = parser.parse();
+    const modules = validator.convertToModules(sdlDocument);
 
-  const planResult = engine.planMigration(null, modules);
-  assertEquals(planResult.ok, true);
+    const planResult = engine.planMigration(null, modules);
+    assertEquals(planResult.ok, true);
 
-  if (planResult.ok) {
-    const executeResult = await engine.executeMigration(planResult.value);
-    assertEquals(executeResult.ok, true);
+    if (planResult.ok) {
+      const executeResult = await engine.executeMigration(planResult.value);
+      assertEquals(executeResult.ok, true);
 
-    if (executeResult.ok) {
-      // Record migration in tracker
-      const migration = planResult.value.migrations[0];
-      const migrationResult = executeResult.value[0];
-      const recordResult = await tracker.recordMigration(migration, migrationResult);
-      assertEquals(recordResult.ok, true);
+      if (executeResult.ok) {
+        // Record migration in tracker
+        const migration = planResult.value.migrations[0];
+        const migrationResult = executeResult.value[0];
+        const recordResult = await tracker.recordMigration(
+          migration,
+          migrationResult,
+        );
+        assertEquals(recordResult.ok, true);
 
-      // Verify migration is tracked
-      const isAppliedResult = await tracker.isMigrationApplied(migration.id);
-      assertEquals(isAppliedResult.ok, true);
-      if (isAppliedResult.ok) {
-        assertEquals(isAppliedResult.value, true);
+        // Verify migration is tracked
+        const isAppliedResult = await tracker.isMigrationApplied(migration.id);
+        assertEquals(isAppliedResult.ok, true);
+        if (isAppliedResult.ok) {
+          assertEquals(isAppliedResult.value, true);
+        }
       }
     }
-  }
 
-  await tracker.close();
-}});
+    await tracker.close();
+  },
+});
 
-Deno.test({ name: "Integration - Migration Rollback with Tracker", ignore: !RUN_PG, fn: async () => {
-  const dsn = await getTestDsn();
-  await cleanupTestTables(dsn);
-  const config = { ...createIntegrationTestConfig(), database_url: dsn };
-  const engine = new MigrationEngine(config);
-  const tracker = new MigrationTracker(dsn);
-  const validator = new SchemaValidator();
+Deno.test({
+  name: "Integration - Migration Rollback with Tracker",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    await cleanupTestTables(dsn);
+    const config = { ...createIntegrationTestConfig(), database_url: dsn };
+    const engine = new MigrationEngine(config);
+    const tracker = new MigrationTracker(dsn);
+    const validator = new SchemaValidator();
 
-  await tracker.initialize();
+    await tracker.initialize();
 
-  // Apply initial migration
-  const parser = new SDLParser(initialSchema);
-  const sdlDocument = parser.parse();
-  const modules = validator.convertToModules(sdlDocument);
+    // Apply initial migration
+    const parser = new SDLParser(initialSchema);
+    const sdlDocument = parser.parse();
+    const modules = validator.convertToModules(sdlDocument);
 
-  const planResult = engine.planMigration(null, modules);
-  assertEquals(planResult.ok, true);
+    const planResult = engine.planMigration(null, modules);
+    assertEquals(planResult.ok, true);
 
-  if (planResult.ok) {
-    const executeResult = await engine.executeMigration(planResult.value);
-    assertEquals(executeResult.ok, true);
+    if (planResult.ok) {
+      const executeResult = await engine.executeMigration(planResult.value);
+      assertEquals(executeResult.ok, true);
 
-    if (executeResult.ok) {
-      const migration = planResult.value.migrations[0];
+      if (executeResult.ok) {
+        const migration = planResult.value.migrations[0];
 
-      await tracker.recordMigration(migration, executeResult.value[0]);
+        await tracker.recordMigration(migration, executeResult.value[0]);
 
-      // Verify migration is applied
-      let isAppliedResult = await tracker.isMigrationApplied(migration.id);
-      if (isAppliedResult.ok) {
-        assertEquals(isAppliedResult.value, true);
-      }
+        // Verify migration is applied
+        let isAppliedResult = await tracker.isMigrationApplied(migration.id);
+        if (isAppliedResult.ok) {
+          assertEquals(isAppliedResult.value, true);
+        }
 
-      // Rollback migration
-      const rollbackResult = await tracker.removeMigration(migration.id);
-      assertEquals(rollbackResult.ok, true);
+        // Rollback migration
+        const rollbackResult = await tracker.removeMigration(migration.id);
+        assertEquals(rollbackResult.ok, true);
 
-      // Verify migration is no longer applied
-      isAppliedResult = await tracker.isMigrationApplied(migration.id);
-      if (isAppliedResult.ok) {
-        assertEquals(isAppliedResult.value, false);
+        // Verify migration is no longer applied
+        isAppliedResult = await tracker.isMigrationApplied(migration.id);
+        if (isAppliedResult.ok) {
+          assertEquals(isAppliedResult.value, false);
+        }
       }
     }
-  }
 
-  await tracker.close();
-}});
+    await tracker.close();
+  },
+});
 
 Deno.test("Integration - Generate DDL from SDL Schema", () => {
   const config = createIntegrationTestConfig();
@@ -341,7 +365,9 @@ Deno.test("Integration - Generate DDL from SDL Schema", () => {
       assertEquals(statements.length > 0, true);
 
       // Should contain CREATE TABLE statement
-      const createTableStmt = statements.find(stmt => stmt.includes("CREATE TABLE"));
+      const createTableStmt = statements.find((stmt) =>
+        stmt.includes("CREATE TABLE")
+      );
       assertEquals(createTableStmt !== undefined, true);
 
       // Should contain proper columns
@@ -349,7 +375,7 @@ Deno.test("Integration - Generate DDL from SDL Schema", () => {
       assertStringIncludes(createTableStmt!, "email TEXT NOT NULL");
 
       // Should contain unique constraint for email
-      const uniqueConstraintStmt = statements.find(stmt =>
+      const uniqueConstraintStmt = statements.find((stmt) =>
         stmt.includes("UNIQUE") && stmt.includes("email")
       );
       assertEquals(uniqueConstraintStmt !== undefined, true);
@@ -382,7 +408,9 @@ Deno.test("Integration - Rollback DDL Generation", () => {
       assertEquals(rollbackSQL.length > 0, true);
 
       // Should contain DROP TABLE statement
-      const dropTableStmt = rollbackSQL.find(stmt => stmt.includes("DROP TABLE"));
+      const dropTableStmt = rollbackSQL.find((stmt) =>
+        stmt.includes("DROP TABLE")
+      );
       assertEquals(dropTableStmt !== undefined, true);
       assertStringIncludes(dropTableStmt!, "user");
     }
@@ -410,7 +438,9 @@ module default {
   const initialModules = validator.convertToModules(initialParser.parse());
 
   const destructiveParser = new SDLParser(destructiveSchema);
-  const destructiveModules = validator.convertToModules(destructiveParser.parse());
+  const destructiveModules = validator.convertToModules(
+    destructiveParser.parse(),
+  );
 
   // Generate migration plan
   const planResult = engine.planMigration(initialModules, destructiveModules);
@@ -421,14 +451,22 @@ module default {
     const validationResult = engine.validateMigration(planResult.value);
     assertEquals(validationResult.ok, false);
     if (!validationResult.ok) {
-      assertStringIncludes(validationResult.error.message.toLowerCase(), "data loss");
+      assertStringIncludes(
+        validationResult.error.message.toLowerCase(),
+        "data loss",
+      );
     }
 
     // Validate rollback safety
-    const rollbackValidationResult = engine.validateRollbackSafety(planResult.value);
+    const rollbackValidationResult = engine.validateRollbackSafety(
+      planResult.value,
+    );
     assertEquals(rollbackValidationResult.ok, false);
     if (!rollbackValidationResult.ok) {
-      assertStringIncludes(rollbackValidationResult.error.message.toLowerCase(), "rollback");
+      assertStringIncludes(
+        rollbackValidationResult.error.message.toLowerCase(),
+        "rollback",
+      );
     }
   }
 });
@@ -510,7 +548,9 @@ Deno.test("Integration - Performance with Large Schema", () => {
   if (planResult.ok) {
     // Should create all types
     const operations = planResult.value.migrations[0].operations;
-    const createOps = operations.filter((op: Types.MigrationOperation) => op.kind === "CreateType");
+    const createOps = operations.filter((op: Types.MigrationOperation) =>
+      op.kind === "CreateType"
+    );
     assertEquals(createOps.length, 50);
   }
 });

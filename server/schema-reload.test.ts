@@ -7,7 +7,12 @@
 
 import { assert, assertEquals } from "@std/assert";
 import type { Schema } from "../compiler/context.ts";
-import type { ProtocolHandler, QueryContext, QueryRequest, QueryResponse } from "./types.ts";
+import type {
+  ProtocolHandler,
+  QueryContext,
+  QueryRequest,
+  QueryResponse,
+} from "./types.ts";
 import { DiscServer } from "./server.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
 
@@ -57,8 +62,20 @@ Deno.test("Schema Reload - handler receives schema update", () => {
         kind: "object",
         tableName: "user",
         properties: new Map([
-          ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id" }],
-          ["name", { name: "name", type: "text", required: true, multi: false, columnName: "name" }],
+          ["id", {
+            name: "id",
+            type: "uuid",
+            required: true,
+            multi: false,
+            columnName: "id",
+          }],
+          ["name", {
+            name: "name",
+            type: "text",
+            required: true,
+            multi: false,
+            columnName: "name",
+          }],
         ]),
         links: new Map(),
       }],
@@ -94,8 +111,20 @@ Deno.test("Schema Reload - DiscServer delegates updateSchema to handler", () => 
         kind: "object",
         tableName: "post",
         properties: new Map([
-          ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id" }],
-          ["title", { name: "title", type: "text", required: true, multi: false, columnName: "title" }],
+          ["id", {
+            name: "id",
+            type: "uuid",
+            required: true,
+            multi: false,
+            columnName: "id",
+          }],
+          ["title", {
+            name: "title",
+            type: "text",
+            required: true,
+            multi: false,
+            columnName: "title",
+          }],
         ]),
         links: new Map(),
       }],
@@ -105,7 +134,10 @@ Deno.test("Schema Reload - DiscServer delegates updateSchema to handler", () => 
 
   // Verify getProtocolHandler returns the internal handler
   const handler = server.getProtocolHandler();
-  assert(handler !== undefined, "Expected getProtocolHandler to return a handler");
+  assert(
+    handler !== undefined,
+    "Expected getProtocolHandler to return a handler",
+  );
 
   // Monkey-patch updateSchema on the handler to verify delegation
   (handler as Record<string, unknown>).updateSchema = (schema: Schema) => {
@@ -114,7 +146,10 @@ Deno.test("Schema Reload - DiscServer delegates updateSchema to handler", () => 
 
   server.updateSchema(testSchema);
 
-  assert(delegatedSchema !== null, "Expected updateSchema to be delegated to handler");
+  assert(
+    delegatedSchema !== null,
+    "Expected updateSchema to be delegated to handler",
+  );
   assertEquals(delegatedSchema!.types.has("Post"), true);
 });
 
@@ -144,13 +179,25 @@ Deno.test("Schema Reload - SchemaManager callback fires after applySchema (dry-r
 
   assert(result.ok, "Expected applySchema to succeed");
   assert(callbackSchema !== null, "Expected onSchemaChange callback to fire");
-  assert(callbackSchema!.types.has("User"), "Expected schema to contain User type");
+  assert(
+    callbackSchema!.types.has("User"),
+    "Expected schema to contain User type",
+  );
 
   const userType = callbackSchema!.types.get("User")!;
   assertEquals(userType.tableName, "user");
-  assert(userType.properties.has("name"), "Expected User to have 'name' property");
-  assert(userType.properties.has("email"), "Expected User to have 'email' property");
-  assert(userType.properties.has("id"), "Expected User to have implicit 'id' property");
+  assert(
+    userType.properties.has("name"),
+    "Expected User to have 'name' property",
+  );
+  assert(
+    userType.properties.has("email"),
+    "Expected User to have 'email' property",
+  );
+  assert(
+    userType.properties.has("id"),
+    "Expected User to have implicit 'id' property",
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -178,11 +225,19 @@ Deno.test("Schema Reload - stale schema recovery with evolving types", async () 
 
   const result1 = await manager.applySchema(sdl1);
   assert(result1.ok, "Expected first applySchema to succeed");
-  assertEquals(schemas.length, 1, "Expected callback to fire once after first apply");
+  assertEquals(
+    schemas.length,
+    1,
+    "Expected callback to fire once after first apply",
+  );
 
   const firstSchema = schemas[0];
   assert(firstSchema.types.has("User"), "First schema should have User");
-  assertEquals(firstSchema.types.has("Post"), false, "First schema should not have Post");
+  assertEquals(
+    firstSchema.types.has("Post"),
+    false,
+    "First schema should not have Post",
+  );
 
   // Second schema: User + Post with link
   const sdl2 = `
@@ -199,14 +254,25 @@ Deno.test("Schema Reload - stale schema recovery with evolving types", async () 
 
   const result2 = await manager.applySchema(sdl2);
   assert(result2.ok, "Expected second applySchema to succeed");
-  assertEquals(schemas.length, 2, "Expected callback to fire again after second apply");
+  assertEquals(
+    schemas.length,
+    2,
+    "Expected callback to fire again after second apply",
+  );
 
   const secondSchema = schemas[1];
-  assert(secondSchema.types.has("User"), "Second schema should still have User");
+  assert(
+    secondSchema.types.has("User"),
+    "Second schema should still have User",
+  );
   assert(secondSchema.types.has("Post"), "Second schema should have Post");
 
   const postType = secondSchema.types.get("Post")!;
   assert(postType.properties.has("title"), "Post should have 'title' property");
   assert(postType.links.has("author"), "Post should have 'author' link");
-  assertEquals(postType.links.get("author")!.target, "User", "Author link should target User");
+  assertEquals(
+    postType.links.get("author")!.target,
+    "User",
+    "Author link should target User",
+  );
 });

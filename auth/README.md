@@ -5,6 +5,7 @@ The auth module provides comprehensive authentication and authorization capabili
 ## Features
 
 ### Core Authentication
+
 - User registration and login
 - Password hashing with bcrypt
 - JWT token generation and verification
@@ -13,6 +14,7 @@ The auth module provides comprehensive authentication and authorization capabili
 - Password reset functionality
 
 ### Security
+
 - Configurable password complexity requirements
 - Session timeout and revocation
 - Token expiration and refresh
@@ -20,6 +22,7 @@ The auth module provides comprehensive authentication and authorization capabili
 - Security headers middleware
 
 ### Integration
+
 - HTTP middleware for route protection
 - Database abstraction for flexible storage
 - Type-safe interfaces throughout
@@ -55,7 +58,7 @@ const config = {
   bcrypt_rounds: 12,
   jwt_secret: "your-secret-key",
   password_min_length: 8,
-  token_expiry: 3600 // 1 hour
+  token_expiry: 3600, // 1 hour
 };
 
 const auth = await initializeAuth(config, db);
@@ -72,8 +75,9 @@ const protectedRoute = auth.middleware.requireAuth(async (req, context) => {
 
 // Optional authentication
 const publicRoute = auth.middleware.optionalAuth(async (req, context) => {
-  if (context)
+  if (context) {
     return new Response(`Hello ${context.email}`);
+  }
 
   return new Response("Hello anonymous user");
 });
@@ -102,28 +106,30 @@ const routes = {
 
 ```typescript
 interface AuthConfig {
-  allow_registration?: boolean;          // Optional: Allow new registrations (default: true)
-  bcrypt_rounds?: number;                // Optional: bcrypt rounds (default: 12)
-  jwt_audience?: string;                 // Optional: JWT audience
-  jwt_issuer?: string;                   // Optional: JWT issuer
-  jwt_secret: string;                    // Required: JWT signing secret
-  password_min_length?: number;          // Optional: Min password length (default: 8)
-  password_require_numbers?: boolean;    // Optional: Require numbers
-  password_require_special?: boolean;    // Optional: Require special characters
-  password_require_uppercase?: boolean;  // Optional: Require uppercase letters
-  refresh_token_expiry?: number;         // Optional: Refresh token expiry (default: 604800)
-  require_email_verification?: boolean;  // Optional: Require email verification (default: false)
-  session_timeout?: number;              // Optional: Session timeout (default: 3600)
-  token_expiry?: number;                 // Optional: Token expiry in seconds (default: 3600)
+  allow_registration?: boolean; // Optional: Allow new registrations (default: true)
+  bcrypt_rounds?: number; // Optional: bcrypt rounds (default: 12)
+  jwt_audience?: string; // Optional: JWT audience
+  jwt_issuer?: string; // Optional: JWT issuer
+  jwt_secret: string; // Required: JWT signing secret
+  password_min_length?: number; // Optional: Min password length (default: 8)
+  password_require_numbers?: boolean; // Optional: Require numbers
+  password_require_special?: boolean; // Optional: Require special characters
+  password_require_uppercase?: boolean; // Optional: Require uppercase letters
+  refresh_token_expiry?: number; // Optional: Refresh token expiry (default: 604800)
+  require_email_verification?: boolean; // Optional: Require email verification (default: false)
+  session_timeout?: number; // Optional: Session timeout (default: 3600)
+  token_expiry?: number; // Optional: Token expiry in seconds (default: 3600)
 }
 ```
 
 ## API Endpoints
 
 ### POST /auth/register
+
 Register a new user account.
 
 **Request:**
+
 ```json
 {
   "email": "user@example.com",
@@ -134,6 +140,7 @@ Register a new user account.
 ```
 
 **Response:**
+
 ```json
 {
   "refresh_token": "refresh_token",
@@ -144,9 +151,11 @@ Register a new user account.
 ```
 
 ### POST /auth/login
+
 Authenticate user with email/username and password.
 
 **Request:**
+
 ```json
 {
   "email": "user@example.com",
@@ -157,12 +166,15 @@ Authenticate user with email/username and password.
 **Response:** Same as register
 
 ### POST /auth/logout
+
 Logout and invalidate session (requires authentication).
 
 ### POST /auth/refresh
+
 Refresh expired token using refresh token.
 
 **Request:**
+
 ```json
 {
   "refresh_token": "refresh_token_here"
@@ -170,12 +182,15 @@ Refresh expired token using refresh token.
 ```
 
 ### GET /auth/profile
+
 Get current user profile (requires authentication).
 
 ### PUT /auth/password
+
 Update user password (requires authentication).
 
 **Request:**
+
 ```json
 {
   "new_password": "new_secure_password",
@@ -184,9 +199,11 @@ Update user password (requires authentication).
 ```
 
 ### POST /auth/reset
+
 Request password reset (sends reset token).
 
 **Request:**
+
 ```json
 {
   "email": "user@example.com"
@@ -194,9 +211,11 @@ Request password reset (sends reset token).
 ```
 
 ### POST /auth/reset/confirm
+
 Complete password reset with token.
 
 **Request:**
+
 ```json
 {
   "new_password": "new_secure_password",
@@ -205,6 +224,7 @@ Complete password reset with token.
 ```
 
 ### GET /auth/verify?token=...
+
 Verify email address with verification token.
 
 ## Error Handling
@@ -223,11 +243,12 @@ enum AuthErrorCode {
   TOKEN_EXPIRED = "TOKEN_EXPIRED",
   USER_ALREADY_EXISTS = "USER_ALREADY_EXISTS",
   USER_INACTIVE = "USER_INACTIVE",
-  USER_NOT_FOUND = "USER_NOT_FOUND"
+  USER_NOT_FOUND = "USER_NOT_FOUND",
 }
 ```
 
 Errors are returned as JSON:
+
 ```json
 {
   "code": "ERROR_CODE_CONSTANT",
@@ -250,6 +271,7 @@ Errors are returned as JSON:
 The auth module creates two tables:
 
 ### users
+
 - `active` (BOOLEAN)
 - `created_at`, `updated_at` (TIMESTAMP)
 - `email` (TEXT UNIQUE NOT NULL)
@@ -261,8 +283,8 @@ The auth module creates two tables:
 - `username` (TEXT UNIQUE)
 - `verification_token`, `reset_token` (TEXT)
 
-
 ### sessions
+
 - `created_at`, `expires_at` (TIMESTAMP)
 - `id` (TEXT PRIMARY KEY)
 - `ip_address`, `user_agent` (TEXT)

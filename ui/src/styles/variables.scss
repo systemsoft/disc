@@ -6,12 +6,12 @@ $color-surface-hover: #141a2a;
 $color-border: #1a2235;
 
 // Luminous accent colors
-$color-primary: #00d9ff;      // Cyan glow
-$color-secondary: #ff9f00;    // Orange glow  
-$color-success: #00ff88;      // Green glow
-$color-warning: #ffbb00;      // Yellow glow
-$color-danger: #ff0055;       // Red glow
-$color-info: #6699ff;         // Blue glow
+$color-primary: #00d9ff; // Cyan glow
+$color-secondary: #ff9f00; // Orange glow
+$color-success: #00ff88; // Green glow
+$color-warning: #ffbb00; // Yellow glow
+$color-danger: #ff0055; // Red glow
+$color-info: #6699ff; // Blue glow
 
 // Text colors
 $color-text: #e4e8f0;
@@ -24,9 +24,9 @@ $border-radius: 2px;
 $glow-radius: 8px;
 
 // Typography
-$font-mono: 'Space Mono', 'Courier New', monospace;
-$font-display: 'Orbitron', 'Arial Black', sans-serif;
-$font-base: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+$font-mono: "Space Mono", "Courier New", monospace;
+$font-display: "Orbitron", "Arial Black", sans-serif;
+$font-base: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 
 // Z-index layers
 $z-base: 0;
@@ -43,7 +43,7 @@ $transition-slow: 350ms ease-out;
 
 // Mixins
 @mixin glow($color: $color-primary, $intensity: 1) {
-  box-shadow: 
+  box-shadow:
     0 0 #{$glow-radius * $intensity} rgba($color, 0.5),
     inset 0 0 #{$glow-radius * 0.5 * $intensity} rgba($color, 0.3);
   border-color: $color;
@@ -51,14 +51,14 @@ $transition-slow: 350ms ease-out;
 
 @mixin neon-text($color: $color-primary) {
   color: $color;
-  text-shadow: 
+  text-shadow:
     0 0 10px rgba($color, 0.8),
     0 0 20px rgba($color, 0.6),
     0 0 30px rgba($color, 0.4);
 }
 
 @mixin grid-lines() {
-  background-image: 
+  background-image:
     linear-gradient(rgba($color-primary, 0.05) 1px, transparent 1px),
     linear-gradient(90deg, rgba($color-primary, 0.05) 1px, transparent 1px);
   background-size: $grid-unit * 4 $grid-unit * 4;

@@ -29,6 +29,7 @@ Successfully integrated the EdgeQL compiler pipeline with the Disc server protoc
 ## Integration Components
 
 ### 1. Protocol Handler Integration
+
 - **File**: `/server/simple-edgeql-protocol.ts`
 - **Functionality**: Bridges server protocol with EdgeQL compiler
 - **Features**:
@@ -41,40 +42,49 @@ Successfully integrated the EdgeQL compiler pipeline with the Disc server protoc
 ### 2. EdgeQL Processing Pipeline
 
 #### Lexical Analysis
+
 ```typescript
 const lexer = new EdgeQL.EdgeQLLexer(query);
 const tokens = lexer.tokenize();
 ```
+
 ✅ **Working**: Successfully tokenizes all EdgeQL constructs
 
 #### Syntax Analysis
+
 ```typescript
 const parser = new EdgeQL.EdgeQLParser(query);
 const ast = parser.parse();
 ```
+
 ✅ **Working**: Generates AST for SELECT, INSERT, UPDATE, DELETE
 
 #### SQL Compilation
+
 ```typescript
 const sql = this.simulateCompilation(ast, variables);
 ```
+
 ✅ **Working**: Produces PostgreSQL-compatible SQL
 
 ## Supported EdgeQL Features
 
 ### Query Types
+
 - ✅ **SELECT** - `select User { name, email }`
 - ✅ **INSERT** - `insert User { name := 'John' }`
 - ✅ **UPDATE** - `update User set { active := false }`
 - ✅ **DELETE** - `delete User filter .name = 'Bob'`
 
 ### Query Features
+
 - ✅ **Shapes** - Field selection with `{ name, email }`
 - ✅ **Filters** - WHERE clause generation from `filter` expressions
 - ✅ **Variables** - Parameter substitution from `<str>$name`
 - ✅ **Type Mapping** - EdgeQL types to PostgreSQL types
 
 ### Generated SQL Examples
+
 ```sql
 -- EdgeQL: select User { name, email }
 SELECT jsonb_build_object('name', name, 'email', email) FROM users
@@ -92,6 +102,7 @@ DELETE FROM users WHERE true RETURNING *
 ## Server Integration Points
 
 ### HTTP Protocol
+
 ```bash
 POST /query
 Content-Type: application/json
@@ -103,6 +114,7 @@ Content-Type: application/json
 ```
 
 **Response**:
+
 ```json
 {
   "data": [...],
@@ -119,19 +131,21 @@ Content-Type: application/json
 ```
 
 ### WebSocket Protocol
+
 ```javascript
 ws.send(JSON.stringify({
   type: "query",
   payload: {
     query: "select User { name, email }",
-    variables: {}
-  }
+    variables: {},
+  },
 }));
 ```
 
 ## Error Handling
 
 ### Parse Errors
+
 ```json
 {
   "errors": [{
@@ -145,6 +159,7 @@ ws.send(JSON.stringify({
 ```
 
 ### Compilation Errors
+
 ```json
 {
   "errors": [{
@@ -158,12 +173,13 @@ ws.send(JSON.stringify({
 ```
 
 ### Syntax Validation
+
 ```json
 {
   "errors": [{
     "message": "Unbalanced braces at position 25",
-    "locations": [{"line": 1, "column": 25}],
-    "extensions": {"code": "SYNTAX_ERROR"}
+    "locations": [{ "line": 1, "column": 25 }],
+    "extensions": { "code": "SYNTAX_ERROR" }
   }]
 }
 ```
@@ -171,6 +187,7 @@ ws.send(JSON.stringify({
 ## Performance Metrics
 
 From integration testing:
+
 - **Lexing**: ~8-17 tokens per query, instant performance
 - **Parsing**: ~1ms average for typical queries
 - **SQL Generation**: <1ms for most queries
@@ -181,11 +198,13 @@ From integration testing:
 ## Testing & Validation
 
 ### Integration Demo
+
 ```bash
 deno run --allow-all server/integration-demo.ts
 ```
 
 **Results**:
+
 - ✅ 5/5 EdgeQL query types parsed successfully
 - ✅ HTTP endpoints functional with real EdgeQL
 - ✅ WebSocket real-time queries working
@@ -193,9 +212,11 @@ deno run --allow-all server/integration-demo.ts
 - ✅ SQL generation pipeline demonstrated
 
 ### Test Coverage
+
 ```bash
 deno test server/ --allow-all
 ```
+
 - ✅ Protocol handler validation
 - ✅ EdgeQL syntax validation
 - ✅ Query execution pipeline
@@ -205,27 +226,30 @@ deno test server/ --allow-all
 ## Configuration Options
 
 ### Server Configuration
+
 ```typescript
 const server = new DiscServer({
-  enable_explain: true,  // Include SQL in responses
-  dry_run: false,        // Execute vs simulate queries
+  enable_explain: true, // Include SQL in responses
+  dry_run: false, // Execute vs simulate queries
   enable_websockets: true,
-  enable_cors: true
+  enable_cors: true,
 });
 ```
 
 ### Protocol Handler Options
+
 ```typescript
 new SimpleEdgeQLProtocolHandler({
-  schema: customSchema,     // Override default schema
-  enable_explain: true,     // Show SQL generation
-  dry_run: false           // Simulation vs real execution
+  schema: customSchema, // Override default schema
+  enable_explain: true, // Show SQL generation
+  dry_run: false, // Simulation vs real execution
 });
 ```
 
 ## Current Status
 
 ### ✅ Complete
+
 - EdgeQL lexing and parsing integration
 - Protocol handler with real compiler
 - SQL generation from EdgeQL AST
@@ -235,6 +259,7 @@ new SimpleEdgeQLProtocolHandler({
 - Performance optimization
 
 ### 🔄 Next Steps (Optional)
+
 - PostgreSQL connection pool integration
 - Advanced EdgeQL features (complex joins, nested shapes)
 - Query optimization and caching
@@ -244,6 +269,7 @@ new SimpleEdgeQLProtocolHandler({
 ## Usage Examples
 
 ### Basic Query Execution
+
 ```bash
 curl -X POST http://localhost:8081/query \
   -H "Content-Type: application/json" \
@@ -251,6 +277,7 @@ curl -X POST http://localhost:8081/query \
 ```
 
 ### Parametrized Queries
+
 ```bash
 curl -X POST http://localhost:8081/query \
   -H "Content-Type: application/json" \
@@ -261,20 +288,22 @@ curl -X POST http://localhost:8081/query \
 ```
 
 ### WebSocket Usage
+
 ```javascript
-const ws = new WebSocket('ws://localhost:8081');
+const ws = new WebSocket("ws://localhost:8081");
 ws.send(JSON.stringify({
-  type: 'query',
+  type: "query",
   payload: {
-    query: 'select User { name, email }',
-    variables: {}
-  }
+    query: "select User { name, email }",
+    variables: {},
+  },
 }));
 ```
 
 ## Integration Success Metrics
 
 🎯 **100% Success Rate** for:
+
 - EdgeQL lexing → AST generation
 - AST → SQL compilation
 - Query validation and error handling

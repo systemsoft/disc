@@ -1,7 +1,12 @@
-import { assertEquals, assertRejects, assertExists } from "@std/assert";
-import { describe, it, beforeEach, afterEach } from "@std/testing/bdd";
+import { assertEquals, assertExists, assertRejects } from "@std/assert";
+import { afterEach, beforeEach, describe, it } from "@std/testing/bdd";
 import { AuthProvider } from "./provider.ts";
-import { AuthConfig, AuthErrorCode, RegisterData, LoginCredentials } from "./types.ts";
+import {
+  AuthConfig,
+  AuthErrorCode,
+  LoginCredentials,
+  RegisterData,
+} from "./types.ts";
 import { TestDatabase } from "./test-database.ts";
 
 describe("AuthProvider", () => {
@@ -53,7 +58,7 @@ describe("AuthProvider", () => {
 
       const response = await provider.register(registerData);
       const user = await provider.get_user(response.user.id);
-      
+
       // Password should be hashed, not plain text
       assertExists(user);
       assertNotEquals(user.password_hash, "PlainTextPassword123!");
@@ -72,7 +77,7 @@ describe("AuthProvider", () => {
       await assertRejects(
         () => provider.register(registerData),
         Error,
-        AuthErrorCode.USER_ALREADY_EXISTS
+        AuthErrorCode.USER_ALREADY_EXISTS,
       );
     });
 
@@ -85,14 +90,14 @@ describe("AuthProvider", () => {
       await assertRejects(
         () => provider.register(weakPassword),
         Error,
-        AuthErrorCode.PASSWORD_TOO_WEAK
+        AuthErrorCode.PASSWORD_TOO_WEAK,
       );
     });
 
     it("should reject registration when disabled", async () => {
       const noRegProvider = new AuthProvider(
         { ...testConfig, allow_registration: false },
-        db
+        db,
       );
       await noRegProvider.initialize();
 
@@ -104,7 +109,7 @@ describe("AuthProvider", () => {
       await assertRejects(
         () => noRegProvider.register(registerData),
         Error,
-        AuthErrorCode.REGISTRATION_DISABLED
+        AuthErrorCode.REGISTRATION_DISABLED,
       );
     });
   });
@@ -155,7 +160,7 @@ describe("AuthProvider", () => {
       await assertRejects(
         () => provider.login(credentials),
         Error,
-        AuthErrorCode.INVALID_CREDENTIALS
+        AuthErrorCode.INVALID_CREDENTIALS,
       );
     });
 
@@ -168,7 +173,7 @@ describe("AuthProvider", () => {
       await assertRejects(
         () => provider.login(credentials),
         Error,
-        AuthErrorCode.USER_NOT_FOUND
+        AuthErrorCode.USER_NOT_FOUND,
       );
     });
 
@@ -176,7 +181,7 @@ describe("AuthProvider", () => {
       // Deactivate user
       await db.execute(
         "UPDATE users SET active = false WHERE email = ?",
-        ["login@example.com"]
+        ["login@example.com"],
       );
 
       const credentials: LoginCredentials = {
@@ -187,7 +192,7 @@ describe("AuthProvider", () => {
       await assertRejects(
         () => provider.login(credentials),
         Error,
-        AuthErrorCode.USER_INACTIVE
+        AuthErrorCode.USER_INACTIVE,
       );
     });
   });
@@ -212,7 +217,7 @@ describe("AuthProvider", () => {
       // Create provider with very short expiry
       const shortExpiryProvider = new AuthProvider(
         { ...testConfig, token_expiry: 0 },
-        db
+        db,
       );
       await shortExpiryProvider.initialize();
 
@@ -222,14 +227,14 @@ describe("AuthProvider", () => {
       };
 
       const response = await shortExpiryProvider.register(registerData);
-      
+
       // Wait a moment for token to expire
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       await assertRejects(
         () => shortExpiryProvider.verify_token(response.token),
         Error,
-        AuthErrorCode.TOKEN_EXPIRED
+        AuthErrorCode.TOKEN_EXPIRED,
       );
     });
 
@@ -243,7 +248,7 @@ describe("AuthProvider", () => {
       assertExists(response.refresh_token);
 
       const newResponse = await provider.refresh(response.refresh_token!);
-      
+
       assertExists(newResponse.token);
       assertNotEquals(newResponse.token, response.token);
       assertEquals(newResponse.user.email, "refresh@example.com");
@@ -253,7 +258,7 @@ describe("AuthProvider", () => {
       await assertRejects(
         () => provider.refresh("invalid-refresh-token"),
         Error,
-        AuthErrorCode.INVALID_REFRESH_TOKEN
+        AuthErrorCode.INVALID_REFRESH_TOKEN,
       );
     });
   });
@@ -266,7 +271,7 @@ describe("AuthProvider", () => {
       };
 
       const response = await provider.register(registerData);
-      
+
       assertExists(response.session);
       assertExists(response.session.id);
       assertExists(response.session.token);
@@ -286,7 +291,7 @@ describe("AuthProvider", () => {
       await assertRejects(
         () => provider.verify_token(response.token),
         Error,
-        AuthErrorCode.SESSION_EXPIRED
+        AuthErrorCode.SESSION_EXPIRED,
       );
     });
 
@@ -297,7 +302,7 @@ describe("AuthProvider", () => {
       };
 
       const response1 = await provider.register(registerData);
-      
+
       // Create another session
       const credentials: LoginCredentials = {
         email: "revoke@example.com",
@@ -312,12 +317,12 @@ describe("AuthProvider", () => {
       await assertRejects(
         () => provider.verify_token(response1.token),
         Error,
-        AuthErrorCode.SESSION_EXPIRED
+        AuthErrorCode.SESSION_EXPIRED,
       );
       await assertRejects(
         () => provider.verify_token(response2.token),
         Error,
-        AuthErrorCode.SESSION_EXPIRED
+        AuthErrorCode.SESSION_EXPIRED,
       );
     });
   });
@@ -341,17 +346,18 @@ describe("AuthProvider", () => {
       await provider.update_password(
         response.user.id,
         "OldPassword123!",
-        "NewPassword456!"
+        "NewPassword456!",
       );
 
       // Old password should fail
       await assertRejects(
-        () => provider.login({
-          email: "password@example.com",
-          password: "OldPassword123!",
-        }),
+        () =>
+          provider.login({
+            email: "password@example.com",
+            password: "OldPassword123!",
+          }),
         Error,
-        AuthErrorCode.INVALID_CREDENTIALS
+        AuthErrorCode.INVALID_CREDENTIALS,
       );
 
       // New password should work
@@ -369,19 +375,22 @@ describe("AuthProvider", () => {
       });
 
       await assertRejects(
-        () => provider.update_password(
-          response.user.id,
-          "WrongOldPassword",
-          "NewPassword456!"
-        ),
+        () =>
+          provider.update_password(
+            response.user.id,
+            "WrongOldPassword",
+            "NewPassword456!",
+          ),
         Error,
-        AuthErrorCode.INVALID_CREDENTIALS
+        AuthErrorCode.INVALID_CREDENTIALS,
       );
     });
 
     it("should handle password reset flow", async () => {
       // Request password reset
-      const resetToken = await provider.reset_password_request("password@example.com");
+      const resetToken = await provider.reset_password_request(
+        "password@example.com",
+      );
       assertExists(resetToken);
 
       // Reset password with token
@@ -399,7 +408,7 @@ describe("AuthProvider", () => {
       await assertRejects(
         () => provider.reset_password("invalid-token", "NewPassword123!"),
         Error,
-        AuthErrorCode.INVALID_TOKEN
+        AuthErrorCode.INVALID_TOKEN,
       );
     });
   });
@@ -408,7 +417,7 @@ describe("AuthProvider", () => {
     it("should handle email verification flow", async () => {
       const verifyProvider = new AuthProvider(
         { ...testConfig, require_email_verification: true },
-        db
+        db,
       );
       await verifyProvider.initialize();
 
@@ -418,7 +427,7 @@ describe("AuthProvider", () => {
       };
 
       const response = await verifyProvider.register(registerData);
-      
+
       // User should be unverified initially
       const user = await verifyProvider.get_user(response.user.id);
       assertExists(user);
@@ -427,7 +436,7 @@ describe("AuthProvider", () => {
       // Get verification token (normally sent via email)
       const result = await db.query(
         "SELECT verification_token FROM users WHERE id = ?",
-        [response.user.id]
+        [response.user.id],
       );
       const verificationToken = result.rows[0].verification_token;
 
@@ -443,7 +452,7 @@ describe("AuthProvider", () => {
     it("should reject login for unverified emails when required", async () => {
       const verifyProvider = new AuthProvider(
         { ...testConfig, require_email_verification: true },
-        db
+        db,
       );
       await verifyProvider.initialize();
 
@@ -455,12 +464,13 @@ describe("AuthProvider", () => {
       await verifyProvider.register(registerData);
 
       await assertRejects(
-        () => verifyProvider.login({
-          email: "unverified@example.com",
-          password: "UnverifiedPass123!",
-        }),
+        () =>
+          verifyProvider.login({
+            email: "unverified@example.com",
+            password: "UnverifiedPass123!",
+          }),
         Error,
-        AuthErrorCode.EMAIL_NOT_VERIFIED
+        AuthErrorCode.EMAIL_NOT_VERIFIED,
       );
     });
   });

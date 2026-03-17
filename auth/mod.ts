@@ -1,6 +1,6 @@
 /**
  * Authentication Module
- * 
+ *
  * This module provides comprehensive authentication and authorization
  * capabilities for Disc, including user management, session handling,
  * JWT token management, and HTTP middleware.

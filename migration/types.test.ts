@@ -277,9 +277,18 @@ Deno.test("AlterPropertyOperation - structure", () => {
 
 Deno.test("MigrationOperation - discriminated union", () => {
   const operations: Types.MigrationOperation[] = [
-    { kind: "CreateType", type_name: "User", properties: [], links: [] } as Types.CreateTypeOperation,
+    {
+      kind: "CreateType",
+      type_name: "User",
+      properties: [],
+      links: [],
+    } as Types.CreateTypeOperation,
     { kind: "DropType", type_name: "OldType" } as Types.DropTypeOperation,
-    { kind: "AlterType", type_name: "User", operations: [] } as Types.AlterTypeOperation,
+    {
+      kind: "AlterType",
+      type_name: "User",
+      operations: [],
+    } as Types.AlterTypeOperation,
   ];
 
   assertEquals(operations[0].kind, "CreateType");

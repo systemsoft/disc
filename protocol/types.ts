@@ -6,30 +6,30 @@
 // Message type identifiers (single byte)
 export enum MessageType {
   // Client messages
-  ClientHandshake = 0x56,         // 'V'
+  ClientHandshake = 0x56, // 'V'
   AuthenticationSASLInitialResponse = 0x70, // 'p'
-  AuthenticationSASLResponse = 0x72,        // 'r'
-  Parse = 0x50,                    // 'P'
-  Execute = 0x4f,                  // 'O'
-  Sync = 0x53,                     // 'S'
-  Flush = 0x48,                    // 'H'
-  Terminate = 0x58,                // 'X'
+  AuthenticationSASLResponse = 0x72, // 'r'
+  Parse = 0x50, // 'P'
+  Execute = 0x4f, // 'O'
+  Sync = 0x53, // 'S'
+  Flush = 0x48, // 'H'
+  Terminate = 0x58, // 'X'
 
   // Server messages
-  ServerHandshake = 0x76,          // 'v'
-  AuthenticationOK = 0x52,         // 'R'
+  ServerHandshake = 0x76, // 'v'
+  AuthenticationOK = 0x52, // 'R'
   AuthenticationSASL = 0x0a,
   AuthenticationSASLContinue = 0x0b,
   AuthenticationSASLFinal = 0x0c,
-  CommandComplete = 0x43,          // 'C'
-  Data = 0x44,                     // 'D'
-  ErrorResponse = 0x45,            // 'E'
-  ReadyForCommand = 0x5a,          // 'Z'
-  StateDataDescription = 0x73,     // 's'
-  CommandDataDescription = 0x54,   // 'T'
-  LogMessage = 0x4c,               // 'L'
-  ParameterStatus = 0x53,          // 'S'
-  ServerKeyData = 0x4b,            // 'K'
+  CommandComplete = 0x43, // 'C'
+  Data = 0x44, // 'D'
+  ErrorResponse = 0x45, // 'E'
+  ReadyForCommand = 0x5a, // 'Z'
+  StateDataDescription = 0x73, // 's'
+  CommandDataDescription = 0x54, // 'T'
+  LogMessage = 0x4c, // 'L'
+  ParameterStatus = 0x53, // 'S'
+  ServerKeyData = 0x4b, // 'K'
 }
 
 // Protocol version
@@ -40,19 +40,19 @@ export const PROTOCOL_VERSION = {
 
 // Cardinality values
 export enum Cardinality {
-  NoResult = 0x6e,      // 'n'
-  AtMostOne = 0x6f,     // 'o'
-  One = 0x41,           // 'A'
-  Many = 0x6d,          // 'm'
-  AtLeastOne = 0x4d,    // 'M'
+  NoResult = 0x6e, // 'n'
+  AtMostOne = 0x6f, // 'o'
+  One = 0x41, // 'A'
+  Many = 0x6d, // 'm'
+  AtLeastOne = 0x4d, // 'M'
 }
 
 // Output format
 export enum OutputFormat {
-  Binary = 0x62,        // 'b'
-  JSON = 0x6a,          // 'j'
-  JSONElements = 0x4a,  // 'J'
-  None = 0x6e,          // 'n'
+  Binary = 0x62, // 'b'
+  JSON = 0x6a, // 'j'
+  JSONElements = 0x4a, // 'J'
+  None = 0x6e, // 'n'
 }
 
 // Input language
@@ -63,9 +63,9 @@ export enum InputLanguage {
 
 // Error severity
 export enum ErrorSeverity {
-  Error = 0x78,         // 'x'
-  Fatal = 0xc8,         // 'È'
-  Panic = 0xff,         // 'ÿ'
+  Error = 0x78, // 'x'
+  Fatal = 0xc8, // 'È'
+  Panic = 0xff, // 'ÿ'
 }
 
 // Error attribute codes
@@ -214,9 +214,9 @@ export interface ReadyForCommand extends Message {
 }
 
 export enum TransactionState {
-  Idle = 0x49,           // 'I'
-  InTransaction = 0x54,  // 'T'
-  Error = 0x45,          // 'E'
+  Idle = 0x49, // 'I'
+  InTransaction = 0x54, // 'T'
+  Error = 0x45, // 'E'
 }
 
 // Fundamental type UUIDs as strings (will be converted to bytes)
@@ -298,7 +298,8 @@ export function uuidToBytes(uuid: string): Uint8Array {
 
 // Utility function to convert bytes to UUID string
 export function bytesToUuid(bytes: Uint8Array): string {
-  const hex = Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+  const hex = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
   return [
     hex.substring(0, 8),
     hex.substring(8, 12),

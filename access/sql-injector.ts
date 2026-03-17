@@ -26,7 +26,7 @@ export class AccessSQLInjector {
     query: SQLQuery,
     tableName: string,
     objectType: string,
-    context: AccessContext
+    context: AccessContext,
   ): SQLQuery {
     const decision = this.evaluator.evaluate(objectType, "select", context);
 
@@ -54,12 +54,15 @@ export class AccessSQLInjector {
     query: SQLQuery,
     _tableName: string,
     objectType: string,
-    context: AccessContext
+    context: AccessContext,
   ): SQLQuery {
     const decision = this.evaluator.evaluate(objectType, "insert", context);
 
-    if (!decision.allowed)
-      throw new Error(`INSERT not allowed on ${objectType}: ${decision.reason}`);
+    if (!decision.allowed) {
+      throw new Error(
+        `INSERT not allowed on ${objectType}: ${decision.reason}`,
+      );
+    }
 
     // For INSERT, we might add WITH CHECK conditions
     // This would be implemented as a CHECK constraint or trigger
@@ -74,15 +77,19 @@ export class AccessSQLInjector {
     _tableName: string,
     objectType: string,
     context: AccessContext,
-    _columns?: string[]
+    _columns?: string[],
   ): SQLQuery {
     const decision = this.evaluator.evaluate(objectType, "update", context);
 
-    if (!decision.allowed)
-      throw new Error(`UPDATE not allowed on ${objectType}: ${decision.reason}`);
+    if (!decision.allowed) {
+      throw new Error(
+        `UPDATE not allowed on ${objectType}: ${decision.reason}`,
+      );
+    }
 
-    if (!decision.sqlConditions || decision.sqlConditions.length === 0)
+    if (!decision.sqlConditions || decision.sqlConditions.length === 0) {
       return query;
+    }
 
     // Inject WHERE conditions to restrict which rows can be updated
     return this.injectWhereConditions(query, decision.sqlConditions);
@@ -95,15 +102,19 @@ export class AccessSQLInjector {
     query: SQLQuery,
     _tableName: string,
     objectType: string,
-    context: AccessContext
+    context: AccessContext,
   ): SQLQuery {
     const decision = this.evaluator.evaluate(objectType, "delete", context);
 
-    if (!decision.allowed)
-      throw new Error(`DELETE not allowed on ${objectType}: ${decision.reason}`);
+    if (!decision.allowed) {
+      throw new Error(
+        `DELETE not allowed on ${objectType}: ${decision.reason}`,
+      );
+    }
 
-    if (!decision.sqlConditions || decision.sqlConditions.length === 0)
+    if (!decision.sqlConditions || decision.sqlConditions.length === 0) {
       return query;
+    }
 
     // Inject WHERE conditions to restrict which rows can be deleted
     return this.injectWhereConditions(query, decision.sqlConditions);
@@ -114,12 +125,12 @@ export class AccessSQLInjector {
    */
   private injectWhereConditions(
     query: SQLQuery,
-    conditions: string[]
+    conditions: string[],
   ): SQLQuery {
     const { text, params } = query;
 
     // Combine all conditions with AND
-    const conditionSQL = conditions.map(c => `(${c})`).join(" AND ");
+    const conditionSQL = conditions.map((c) => `(${c})`).join(" AND ");
 
     // Check if query already has WHERE clause
     const whereMatch = text.match(/\bWHERE\b/i);
@@ -140,11 +151,15 @@ export class AccessSQLInjector {
         const beforeFrom = text.substring(0, afterFrom);
         const afterFromText = text.substring(afterFrom);
         // Check for JOIN, GROUP BY, ORDER BY, etc.
-        const clauseMatch = afterFromText.match(/\b(JOIN|GROUP\s+BY|ORDER\s+BY|LIMIT|OFFSET)\b/i);
+        const clauseMatch = afterFromText.match(
+          /\b(JOIN|GROUP\s+BY|ORDER\s+BY|LIMIT|OFFSET)\b/i,
+        );
 
         if (clauseMatch) {
           const clauseIndex = clauseMatch.index!;
-          newText = `${beforeFrom}${afterFromText.substring(0, clauseIndex)} WHERE ${conditionSQL} ${afterFromText.substring(clauseIndex)}`;
+          newText = `${beforeFrom}${
+            afterFromText.substring(0, clauseIndex)
+          } WHERE ${conditionSQL} ${afterFromText.substring(clauseIndex)}`;
         } else {
           newText = `${text} WHERE ${conditionSQL}`;
         }
@@ -156,7 +171,7 @@ export class AccessSQLInjector {
 
     return {
       params,
-      text: newText
+      text: newText,
     };
   }
 
@@ -198,8 +213,9 @@ export class AccessSQLInjector {
         }
       }
 
-      if (operations.length === 0)
+      if (operations.length === 0) {
         continue;
+      }
 
       // Create policy statement
       let policySQL = `CREATE POLICY ${policyName} ON ${tableName}\n`;
@@ -233,7 +249,7 @@ export class AccessSQLInjector {
    */
   needsInjection(
     _operation: "select" | "insert" | "update" | "delete",
-    objectType: string
+    objectType: string,
   ): boolean {
     const policies = this.evaluator.getPolicies(objectType);
     const globalPolicies = this.evaluator.getPolicies();

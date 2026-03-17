@@ -2,7 +2,10 @@
  * Tests for Access Policy Parser
  */
 
-import { assertEquals, assertThrows } from "https://deno.land/std@0.208.0/assert/mod.ts";
+import {
+  assertEquals,
+  assertThrows,
+} from "https://deno.land/std@0.208.0/assert/mod.ts";
 import { SDLLexer } from "../schema/lexer.ts";
 import { AccessPolicyParser } from "./parser.ts";
 import { SyntaxError } from "../lib/errors.ts";
@@ -13,12 +16,12 @@ Deno.test("AccessPolicyParser - parse simple allow policy", () => {
       allow select;
     }
   `;
-  
+
   const lexer = new SDLLexer(source);
   const tokens = lexer.tokenize();
   const parser = new AccessPolicyParser(tokens, source);
   const policy = parser.parseAccessPolicy();
-  
+
   assertEquals(policy.kind, "AccessPolicy");
   assertEquals(policy.name, "public_read");
   assertEquals(policy.objectType, "User");
@@ -34,12 +37,12 @@ Deno.test("AccessPolicyParser - parse policy with multiple operations", () => {
       allow select, insert, update, delete;
     }
   `;
-  
+
   const lexer = new SDLLexer(source);
   const tokens = lexer.tokenize();
   const parser = new AccessPolicyParser(tokens, source);
   const policy = parser.parseAccessPolicy();
-  
+
   assertEquals(policy.rules[0].operations.length, 4);
   assertEquals(policy.rules[0].operations[0].operation, "select");
   assertEquals(policy.rules[0].operations[1].operation, "insert");
@@ -53,12 +56,12 @@ Deno.test("AccessPolicyParser - parse policy with condition", () => {
       allow all when .author = current_user;
     }
   `;
-  
+
   const lexer = new SDLLexer(source);
   const tokens = lexer.tokenize();
   const parser = new AccessPolicyParser(tokens, source);
   const policy = parser.parseAccessPolicy();
-  
+
   assertEquals(policy.rules[0].operations[0].operation, "all");
   assertEquals(policy.rules[0].condition?.kind, "AccessComparison");
 });
@@ -70,12 +73,12 @@ Deno.test("AccessPolicyParser - parse policy with using clause", () => {
       using (.tenant_id = current_session.tenant_id);
     }
   `;
-  
+
   const lexer = new SDLLexer(source);
   const tokens = lexer.tokenize();
   const parser = new AccessPolicyParser(tokens, source);
   const policy = parser.parseAccessPolicy();
-  
+
   assertEquals(policy.using?.kind, "AccessComparison");
 });
 
@@ -86,12 +89,12 @@ Deno.test("AccessPolicyParser - parse policy with with check clause", () => {
       with check (.status in ["pending", "approved"]);
     }
   `;
-  
+
   const lexer = new SDLLexer(source);
   const tokens = lexer.tokenize();
   const parser = new AccessPolicyParser(tokens, source);
   const policy = parser.parseAccessPolicy();
-  
+
   assertEquals(policy.withCheck?.kind, "AccessComparison");
 });
 
@@ -102,12 +105,12 @@ Deno.test("AccessPolicyParser - parse policy with deny rule", () => {
       allow select;
     }
   `;
-  
+
   const lexer = new SDLLexer(source);
   const tokens = lexer.tokenize();
   const parser = new AccessPolicyParser(tokens, source);
   const policy = parser.parseAccessPolicy();
-  
+
   assertEquals(policy.rules.length, 2);
   assertEquals(policy.rules[0].action, "deny");
   assertEquals(policy.rules[0].operations[0].operation, "delete");
@@ -122,12 +125,12 @@ Deno.test("AccessPolicyParser - parse policy with column restrictions", () => {
       deny update(email, role);
     }
   `;
-  
+
   const lexer = new SDLLexer(source);
   const tokens = lexer.tokenize();
   const parser = new AccessPolicyParser(tokens, source);
   const policy = parser.parseAccessPolicy();
-  
+
   assertEquals(policy.rules[0].operations[0].columns, ["name", "bio"]);
   assertEquals(policy.rules[1].operations[0].columns, ["email", "role"]);
 });
@@ -141,12 +144,12 @@ Deno.test("AccessPolicyParser - parse complex condition", () => {
         has_role("admin");
     }
   `;
-  
+
   const lexer = new SDLLexer(source);
   const tokens = lexer.tokenize();
   const parser = new AccessPolicyParser(tokens, source);
   const policy = parser.parseAccessPolicy();
-  
+
   assertEquals(policy.rules[0].condition?.kind, "AccessLogical");
 });
 
@@ -156,12 +159,12 @@ Deno.test("AccessPolicyParser - parse global policy", () => {
       deny all when current_user = null;
     }
   `;
-  
+
   const lexer = new SDLLexer(source);
   const tokens = lexer.tokenize();
   const parser = new AccessPolicyParser(tokens, source);
   const policy = parser.parseAccessPolicy();
-  
+
   assertEquals(policy.name, "require_auth");
   assertEquals(policy.objectType, undefined);
   assertEquals(policy.rules[0].action, "deny");
@@ -173,15 +176,15 @@ Deno.test("AccessPolicyParser - error on invalid operation", () => {
       allow invalid_operation;
     }
   `;
-  
+
   const lexer = new SDLLexer(source);
   const tokens = lexer.tokenize();
   const parser = new AccessPolicyParser(tokens, source);
-  
+
   assertThrows(
     () => parser.parseAccessPolicy(),
     SyntaxError,
-    "Invalid access operation"
+    "Invalid access operation",
   );
 });
 
@@ -192,16 +195,16 @@ Deno.test("AccessPolicyParser - parse function calls in conditions", () => {
       deny all when is_banned(current_user);
     }
   `;
-  
+
   const lexer = new SDLLexer(source);
   const tokens = lexer.tokenize();
   const parser = new AccessPolicyParser(tokens, source);
   const policy = parser.parseAccessPolicy();
-  
+
   const firstCondition = policy.rules[0].condition as any;
   assertEquals(firstCondition.kind, "AccessFunction");
   assertEquals(firstCondition.name, "has_role");
-  
+
   const secondCondition = policy.rules[1].condition as any;
   assertEquals(secondCondition.kind, "AccessFunction");
   assertEquals(secondCondition.name, "is_banned");

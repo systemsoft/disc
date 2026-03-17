@@ -5,19 +5,19 @@
  */
 
 import {
-  AccessPolicy,
+  AccessConfig,
   AccessContext,
   AccessDecision,
   AccessOperation,
-  AccessConfig,
+  AccessPolicy,
 } from "./types.ts";
 import type {
-  AccessExpressionNode,
   AccessComparisonNode,
-  AccessLogicalNode,
-  AccessGlobalNode,
-  AccessPathNode,
+  AccessExpressionNode,
   AccessFunctionNode,
+  AccessGlobalNode,
+  AccessLogicalNode,
+  AccessPathNode,
 } from "./ast.ts";
 import { ValidationError } from "../lib/errors.ts";
 
@@ -46,7 +46,7 @@ export class AccessEvaluator {
   evaluate(
     objectType: string,
     operation: AccessOperation,
-    context: AccessContext
+    context: AccessContext,
   ): AccessDecision {
     const appliedPolicies: string[] = [];
     const sqlConditions: string[] = [];
@@ -61,9 +61,9 @@ export class AccessEvaluator {
       return {
         allowed: this.config.defaultAllow,
         appliedPolicies: [],
-        reason: this.config.defaultAllow ?
-          "No policies defined, default allow" :
-          "No policies defined, default deny"
+        reason: this.config.defaultAllow
+          ? "No policies defined, default allow"
+          : "No policies defined, default deny",
       };
     }
 
@@ -80,8 +80,9 @@ export class AccessEvaluator {
       if (decision.allowed) {
         hasAllow = true;
 
-        if (decision.sqlCondition)
+        if (decision.sqlCondition) {
           sqlConditions.push(decision.sqlCondition);
+        }
       } else if (decision.denied) {
         hasDeny = true;
 
@@ -90,7 +91,7 @@ export class AccessEvaluator {
           return {
             allowed: false,
             appliedPolicies,
-            reason: `Denied by policy: ${policy.name}`
+            reason: `Denied by policy: ${policy.name}`,
           };
         }
       }
@@ -103,25 +104,25 @@ export class AccessEvaluator {
     if (this.config.mode === "permissive") {
       // Permissive: allow if any policy allows and no explicit deny
       allowed = hasAllow && !hasDeny;
-      reason = allowed ?
-          "Allowed by permissive policy" :
-          hasDeny ?
-            "Explicitly denied" :
-            "No allowing policy found";
+      reason = allowed
+        ? "Allowed by permissive policy"
+        : hasDeny
+        ? "Explicitly denied"
+        : "No allowing policy found";
     } else {
       // Restrictive: require explicit allow and no deny
       allowed = hasAllow && !hasDeny;
 
-      reason = allowed ?
-        "Allowed by restrictive policy" :
-        "Not explicitly allowed or denied";
+      reason = allowed
+        ? "Allowed by restrictive policy"
+        : "Not explicitly allowed or denied";
     }
 
     return {
       allowed,
       appliedPolicies,
       reason,
-      sqlConditions: sqlConditions.length > 0 ? sqlConditions : undefined
+      sqlConditions: sqlConditions.length > 0 ? sqlConditions : undefined,
     };
   }
 
@@ -131,7 +132,7 @@ export class AccessEvaluator {
   private evaluatePolicy(
     policy: AccessPolicy,
     operation: AccessOperation,
-    context: AccessContext
+    context: AccessContext,
   ): { allowed: boolean; denied: boolean; sqlCondition?: string } {
     let allowed = false;
     let denied = false;
@@ -139,18 +140,20 @@ export class AccessEvaluator {
 
     for (const action of policy.actions) {
       // Check if this action applies to the operation
-      if (!this.operationMatches(operation, action.operations))
+      if (!this.operationMatches(operation, action.operations)) {
         continue;
+      }
 
       // Evaluate condition if present
       if (policy.condition) {
         const conditionMet = this.evaluateExpression(
           policy.condition,
-          context
+          context,
         );
 
-        if (!conditionMet)
+        if (!conditionMet) {
           continue;
+        }
       }
 
       // Apply the action
@@ -158,8 +161,9 @@ export class AccessEvaluator {
         allowed = true;
 
         // Generate SQL condition for row-level security
-        if (policy.using && this.config.enableRLS)
+        if (policy.using && this.config.enableRLS) {
           sqlCondition = this.expressionToSQL(policy.using, context);
+        }
       } else {
         denied = true;
       }
@@ -173,7 +177,7 @@ export class AccessEvaluator {
    */
   private operationMatches(
     operation: AccessOperation,
-    operations: AccessOperation[]
+    operations: AccessOperation[],
   ): boolean {
     return operations.includes(operation) || operations.includes("all");
   }
@@ -183,7 +187,7 @@ export class AccessEvaluator {
    */
   private evaluateExpression(
     expr: AccessExpressionNode,
-    context: AccessContext
+    context: AccessContext,
   ): boolean {
     switch (expr.kind) {
       case "AccessLiteral": {
@@ -211,7 +215,9 @@ export class AccessEvaluator {
       }
 
       default: {
-        throw new ValidationError(`Unknown expression kind: ${(expr as any).kind}`);
+        throw new ValidationError(
+          `Unknown expression kind: ${(expr as any).kind}`,
+        );
       }
     }
   }
@@ -246,10 +252,11 @@ export class AccessEvaluator {
     let current: any = context;
 
     for (const segment of path) {
-      if (current && typeof current === "object")
+      if (current && typeof current === "object") {
         current = current[segment];
-      else
+      } else {
         return undefined;
+      }
     }
 
     return current;
@@ -260,7 +267,7 @@ export class AccessEvaluator {
    */
   private evaluateComparison(
     comp: AccessComparisonNode,
-    context: AccessContext
+    context: AccessContext,
   ): boolean {
     const left = this.evaluateExpression(comp.left, context);
     const right = this.evaluateExpression(comp.right, context);
@@ -315,17 +322,17 @@ export class AccessEvaluator {
    */
   private evaluateLogical(
     logical: AccessLogicalNode,
-    context: AccessContext
+    context: AccessContext,
   ): boolean {
     switch (logical.operator) {
       case "and": {
-        return logical.operands.every(op =>
+        return logical.operands.every((op) =>
           this.evaluateExpression(op, context)
         );
       }
 
       case "or": {
-        return logical.operands.some(op =>
+        return logical.operands.some((op) =>
           this.evaluateExpression(op, context)
         );
       }
@@ -345,12 +352,14 @@ export class AccessEvaluator {
    */
   private evaluateFunction(
     func: AccessFunctionNode,
-    context: AccessContext
+    context: AccessContext,
   ): boolean {
     // Built-in functions
     switch (func.name) {
       case "has_role": {
-        const requiredRole = String(this.evaluateExpression(func.args[0], context));
+        const requiredRole = String(
+          this.evaluateExpression(func.args[0], context),
+        );
         return context.userRole === requiredRole;
       }
 
@@ -370,12 +379,13 @@ export class AccessEvaluator {
    */
   expressionToSQL(
     expr: AccessExpressionNode,
-    context: AccessContext
+    context: AccessContext,
   ): string {
     switch (expr.kind) {
       case "AccessLiteral": {
-        if (expr.type === "string")
+        if (expr.type === "string") {
           return `'${String(expr.value).replace(/'/g, "''")}'`;
+        }
 
         return String(expr.value);
       }
@@ -408,21 +418,27 @@ export class AccessEvaluator {
       }
 
       case "AccessLogical": {
-        if (expr.operator === "not")
+        if (expr.operator === "not") {
           return `NOT (${this.expressionToSQL(expr.operands[0], context)})`;
+        }
 
-        const parts = expr.operands.map(op => this.expressionToSQL(op, context));
+        const parts = expr.operands.map((op) =>
+          this.expressionToSQL(op, context)
+        );
         return `(${parts.join(` ${expr.operator.toUpperCase()} `)})`;
       }
 
       case "AccessFunction": {
-        const args = expr.args.map(arg => this.expressionToSQL(arg, context)).join(", ");
+        const args = expr.args.map((arg) => this.expressionToSQL(arg, context))
+          .join(", ");
 
         return `${expr.name}(${args})`;
       }
 
       default: {
-        throw new ValidationError(`Cannot convert ${(expr as any).kind} to SQL`);
+        throw new ValidationError(
+          `Cannot convert ${(expr as any).kind} to SQL`,
+        );
       }
     }
   }
@@ -438,8 +454,9 @@ export class AccessEvaluator {
    * Get all policies for a type
    */
   getPolicies(objectType?: string): AccessPolicy[] {
-    if (objectType)
+    if (objectType) {
       return this.policies.get(objectType) || [];
+    }
 
     // Return all policies
     const all: AccessPolicy[] = [];

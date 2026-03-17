@@ -173,28 +173,32 @@ Deno.test("CLI Workflow - Server configuration", async () => {
 // This test calls commands.shell() which tries to connect to a remote host
 // (192.168.1.100:8080). It requires a full server stack, not just local PG.
 // Keep ignored until the shell command supports proper mocking.
-Deno.test({ name: "CLI Workflow - Shell connection options", ignore: true, fn: async () => {
-  const console = new ConsoleCapture();
+Deno.test({
+  name: "CLI Workflow - Shell connection options",
+  ignore: true,
+  fn: async () => {
+    const console = new ConsoleCapture();
 
-  try {
-    // Test shell options parsing
-    const shellOptions = {
-      host: "192.168.1.100",
-      port: 8080,
-      database: "custom_db",
-      non_interactive: true,
-      execute: "select User { name }",
-    };
+    try {
+      // Test shell options parsing
+      const shellOptions = {
+        host: "192.168.1.100",
+        port: 8080,
+        database: "custom_db",
+        non_interactive: true,
+        execute: "select User { name }",
+      };
 
-    // Should be able to execute shell with these options
-    // (Mock execution since we can't connect to real server)
-    await commands.shell(shellOptions);
+      // Should be able to execute shell with these options
+      // (Mock execution since we can't connect to real server)
+      await commands.shell(shellOptions);
 
-    assert(true, "Shell configuration should be valid");
-  } finally {
-    console.restore();
-  }
-}});
+      assert(true, "Shell configuration should be valid");
+    } finally {
+      console.restore();
+    }
+  },
+});
 
 Deno.test("CLI Workflow - Watch command setup", async () => {
   const console = new ConsoleCapture();

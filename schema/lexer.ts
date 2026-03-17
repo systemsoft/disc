@@ -71,7 +71,9 @@ export class SDLLexer {
     }
 
     // Raw strings (r"..." or r'...')
-    if (ch === "r" && (this.peekAhead(1) === '"' || this.peekAhead(1) === "'")) {
+    if (
+      ch === "r" && (this.peekAhead(1) === '"' || this.peekAhead(1) === "'")
+    ) {
       this.advance(); // consume 'r'
       return this.scanRawString();
     }

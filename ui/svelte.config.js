@@ -1,5 +1,5 @@
-import adapter from '@sveltejs/adapter-static';
-import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+import adapter from "@sveltejs/adapter-static";
+import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
@@ -10,18 +10,18 @@ const config = {
   kit: {
     // Build as static site to be bundled with Disc server
     adapter: adapter({
-      pages: 'build',
-      assets: 'build',
-      fallback: 'index.html',
+      pages: "build",
+      assets: "build",
+      fallback: "index.html",
       precompress: false,
-      strict: true
+      strict: true,
     }),
-    
+
     // Set base path for serving from /ui route
     paths: {
-      base: '/ui'
-    }
-  }
+      base: "/ui",
+    },
+  },
 };
 
 export default config;

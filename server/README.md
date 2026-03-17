@@ -45,15 +45,15 @@ HTTP/WebSocket server implementation for the Disc database system.
 Upgrade to WebSocket for real-time queries:
 
 ```javascript
-const ws = new WebSocket('ws://localhost:5656');
+const ws = new WebSocket("ws://localhost:5656");
 
 // Send query
 ws.send(JSON.stringify({
-  type: 'query',
+  type: "query",
   payload: {
-    query: 'select User { name, email }',
-    variables: {}
-  }
+    query: "select User { name, email }",
+    variables: {},
+  },
 }));
 
 // Receive response
@@ -156,8 +156,8 @@ Errors are returned in standard format:
   "errors": [
     {
       "message": "Query syntax error",
-      "locations": [{"line": 1, "column": 10}],
-      "extensions": {"code": "SYNTAX_ERROR"}
+      "locations": [{ "line": 1, "column": 10 }],
+      "extensions": { "code": "SYNTAX_ERROR" }
     }
   ]
 }

@@ -9,7 +9,9 @@ import { Module } from "../schema/converter.ts";
 import * as Types from "./types.ts";
 
 // Helper function to create test config
-function createTestConfig(overrides: Partial<Types.MigrationConfig> = {}): Types.MigrationConfig {
+function createTestConfig(
+  overrides: Partial<Types.MigrationConfig> = {},
+): Types.MigrationConfig {
   return {
     migrations_dir: "./migrations",
     schema_file: "./schema.esdl",
@@ -35,14 +37,20 @@ function createSimpleSchema(): Module[] {
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "name" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
               required: true,
               multi: false,
             },
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "email" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
               required: true,
               multi: false,
             },
@@ -172,12 +180,16 @@ Deno.test("DDL Generator - Generate Rollback SQL for AlterProperty", () => {
   assertEquals(rollbackSQL.length >= 2, true);
 
   // Should reverse the type change
-  const typeChangeRollback = rollbackSQL.find(sql => sql.includes("ALTER COLUMN age TYPE"));
+  const typeChangeRollback = rollbackSQL.find((sql) =>
+    sql.includes("ALTER COLUMN age TYPE")
+  );
   assertEquals(typeChangeRollback !== undefined, true);
   assertStringIncludes(typeChangeRollback!, "INTEGER");
 
   // Should reverse the required change
-  const requiredChangeRollback = rollbackSQL.find(sql => sql.includes("DROP NOT NULL"));
+  const requiredChangeRollback = rollbackSQL.find((sql) =>
+    sql.includes("DROP NOT NULL")
+  );
   assertEquals(requiredChangeRollback !== undefined, true);
 });
 
@@ -237,9 +249,10 @@ Deno.test("Migration Engine - Execute Migration with Rollback on Error", async (
   };
 
   // Mock the private executeStatements method to simulate a failure
-  (engine as unknown as Record<string, unknown>).executeStatements = async () => {
-    throw new Error("Simulated database error");
-  };
+  (engine as unknown as Record<string, unknown>).executeStatements =
+    async () => {
+      throw new Error("Simulated database error");
+    };
 
   // Should attempt rollback when migration fails
   const result = await engine.executeMigrationWithRollback(plan);
@@ -360,8 +373,14 @@ Deno.test("Migration Engine - Validate Rollback Safety", () => {
   // Should identify rollback risks
   assertEquals(validationResult.ok, false);
   if (!validationResult.ok) {
-    assertStringIncludes(validationResult.error.message.toLowerCase(), "rollback");
-    assertStringIncludes(validationResult.error.message.toLowerCase(), "data loss");
+    assertStringIncludes(
+      validationResult.error.message.toLowerCase(),
+      "rollback",
+    );
+    assertStringIncludes(
+      validationResult.error.message.toLowerCase(),
+      "data loss",
+    );
   }
 });
 
@@ -370,7 +389,9 @@ Deno.test("Migration Engine - Create Migration Checkpoint", async () => {
   const engine = new MigrationEngine(config);
 
   // Create checkpoint before migration
-  const checkpointResult = await engine.createMigrationCheckpoint("test-checkpoint");
+  const checkpointResult = await engine.createMigrationCheckpoint(
+    "test-checkpoint",
+  );
   assertEquals(checkpointResult.ok, true);
 
   if (checkpointResult.ok) {
@@ -386,7 +407,9 @@ Deno.test("Migration Engine - Restore From Checkpoint", async () => {
   const engine = new MigrationEngine(config);
 
   // Create a checkpoint
-  const checkpointResult = await engine.createMigrationCheckpoint("restore-test");
+  const checkpointResult = await engine.createMigrationCheckpoint(
+    "restore-test",
+  );
   assertEquals(checkpointResult.ok, true);
 
   if (checkpointResult.ok) {

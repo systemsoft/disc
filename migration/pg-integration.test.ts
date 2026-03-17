@@ -11,10 +11,7 @@
 
 import { assertEquals, assertExists } from "@std/assert";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
-import {
-  canRunPgTests,
-  getTestDsn,
-} from "../tests/pg-test-harness.ts";
+import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { MigrationEngine } from "./engine.ts";
 import { SchemaManager } from "./schema-manager.ts";
@@ -191,8 +188,16 @@ Deno.test({
       const columns = await getColumns(dsn, tableName);
       const columnNames = columns.map((c) => c.column_name);
       assertEquals(columnNames.includes("id"), true, "Should have id column");
-      assertEquals(columnNames.includes("name"), true, "Should have name column");
-      assertEquals(columnNames.includes("email"), true, "Should have email column");
+      assertEquals(
+        columnNames.includes("name"),
+        true,
+        "Should have name column",
+      );
+      assertEquals(
+        columnNames.includes("email"),
+        true,
+        "Should have email column",
+      );
 
       await engine.close();
     } finally {
@@ -203,7 +208,8 @@ Deno.test({
 });
 
 Deno.test({
-  name: "PG Migration: executeMigration records to disc_migrations tracker table",
+  name:
+    "PG Migration: executeMigration records to disc_migrations tracker table",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -263,7 +269,12 @@ Deno.test({
 
       await engine.close();
     } finally {
-      await dropTables(dsn, tableName, "disc_migrations", "disc_migration_checkpoints");
+      await dropTables(
+        dsn,
+        tableName,
+        "disc_migrations",
+        "disc_migration_checkpoints",
+      );
       await pool.close();
     }
   },
@@ -320,12 +331,21 @@ Deno.test({
 
       // Verify the table does NOT exist in PG
       const exists = await tableExists(dsn, tableName);
-      assertEquals(exists, false, "Table should NOT exist after dry-run migration");
+      assertEquals(
+        exists,
+        false,
+        "Table should NOT exist after dry-run migration",
+      );
 
       await engine.close();
     } finally {
       // Best-effort cleanup in case dry_run somehow failed and table was created
-      await dropTables(dsn, tableName, "disc_migrations", "disc_migration_checkpoints");
+      await dropTables(
+        dsn,
+        tableName,
+        "disc_migrations",
+        "disc_migration_checkpoints",
+      );
       await pool.close();
     }
   },
@@ -415,7 +435,12 @@ Deno.test({
 
       await engine.close();
     } finally {
-      await dropTables(dsn, tableName, "disc_migrations", "disc_migration_checkpoints");
+      await dropTables(
+        dsn,
+        tableName,
+        "disc_migrations",
+        "disc_migration_checkpoints",
+      );
       await pool.close();
     }
   },
@@ -449,29 +474,51 @@ Deno.test({
       `;
 
       const result = await manager.applySchema(sdl);
-      assertEquals(result.ok, true, `applySchema should succeed: ${result.ok ? "" : (result as any).error}`);
+      assertEquals(
+        result.ok,
+        true,
+        `applySchema should succeed: ${result.ok ? "" : (result as any).error}`,
+      );
 
       // Verify the table was created
       const exists = await tableExists(dsn, expectedTable);
-      assertEquals(exists, true, `Table '${expectedTable}' should exist after applySchema`);
+      assertEquals(
+        exists,
+        true,
+        `Table '${expectedTable}' should exist after applySchema`,
+      );
 
       // Verify columns
       const columns = await getColumns(dsn, expectedTable);
       const columnNames = columns.map((c) => c.column_name);
       assertEquals(columnNames.includes("id"), true, "Should have id column");
-      assertEquals(columnNames.includes("name"), true, "Should have name column");
-      assertEquals(columnNames.includes("email"), true, "Should have email column");
+      assertEquals(
+        columnNames.includes("name"),
+        true,
+        "Should have name column",
+      );
+      assertEquals(
+        columnNames.includes("email"),
+        true,
+        "Should have email column",
+      );
 
       await manager.close();
     } finally {
-      await dropTables(dsn, expectedTable, "disc_migrations", "disc_migration_checkpoints");
+      await dropTables(
+        dsn,
+        expectedTable,
+        "disc_migrations",
+        "disc_migration_checkpoints",
+      );
       await pool.close();
     }
   },
 });
 
 Deno.test({
-  name: "PG Migration: SchemaManager applySchema handles schema evolution (ALTER TABLE)",
+  name:
+    "PG Migration: SchemaManager applySchema handles schema evolution (ALTER TABLE)",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -497,8 +544,16 @@ Deno.test({
       // Verify initial columns
       let columns = await getColumns(dsn, expectedTable);
       let columnNames = columns.map((c) => c.column_name);
-      assertEquals(columnNames.includes("name"), true, "Should have name column");
-      assertEquals(columnNames.includes("age"), false, "Should NOT have age column yet");
+      assertEquals(
+        columnNames.includes("name"),
+        true,
+        "Should have name column",
+      );
+      assertEquals(
+        columnNames.includes("age"),
+        false,
+        "Should NOT have age column yet",
+      );
 
       // Step 2: Apply evolved schema (add age column)
       const sdlV2 = `
@@ -514,19 +569,33 @@ Deno.test({
       // Verify the new column was added
       columns = await getColumns(dsn, expectedTable);
       columnNames = columns.map((c) => c.column_name);
-      assertEquals(columnNames.includes("name"), true, "Should still have name column");
-      assertEquals(columnNames.includes("age"), true, "Should now have age column");
+      assertEquals(
+        columnNames.includes("name"),
+        true,
+        "Should still have name column",
+      );
+      assertEquals(
+        columnNames.includes("age"),
+        true,
+        "Should now have age column",
+      );
 
       await manager.close();
     } finally {
-      await dropTables(dsn, expectedTable, "disc_migrations", "disc_migration_checkpoints");
+      await dropTables(
+        dsn,
+        expectedTable,
+        "disc_migrations",
+        "disc_migration_checkpoints",
+      );
       await pool.close();
     }
   },
 });
 
 Deno.test({
-  name: "PG Migration: SchemaManager getSchema returns valid Schema after apply",
+  name:
+    "PG Migration: SchemaManager getSchema returns valid Schema after apply",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -551,7 +620,10 @@ Deno.test({
 
       // Retrieve the Schema object
       const schema = manager.getSchema();
-      assertExists(schema, "getSchema() should return a Schema after applySchema");
+      assertExists(
+        schema,
+        "getSchema() should return a Schema after applySchema",
+      );
       assertExists(schema!.types, "Schema should have types");
 
       const typeDef = schema!.types.get("TestSchemaType");
@@ -575,7 +647,12 @@ Deno.test({
 
       await manager.close();
     } finally {
-      await dropTables(dsn, expectedTable, "disc_migrations", "disc_migration_checkpoints");
+      await dropTables(
+        dsn,
+        expectedTable,
+        "disc_migrations",
+        "disc_migration_checkpoints",
+      );
       await pool.close();
     }
   },

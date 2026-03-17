@@ -69,7 +69,8 @@ async function createE2EServer(port: number): Promise<{
 }
 
 Deno.test({
-  name: "E2E: full auth lifecycle - register -> login -> profile -> query -> logout",
+  name:
+    "E2E: full auth lifecycle - register -> login -> profile -> query -> logout",
   sanitizeResources: false,
   sanitizeOps: false,
   fn: async () => {

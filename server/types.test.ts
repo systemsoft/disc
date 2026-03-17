@@ -89,7 +89,10 @@ Deno.test("QueryRequest - structure validation", () => {
 
   assertEquals(typeof request.query, "string");
   assertEquals(typeof request.variables, "object");
-  assertEquals(request.variables!.user_id, "550e8400-e29b-41d4-a716-446655440000");
+  assertEquals(
+    request.variables!.user_id,
+    "550e8400-e29b-41d4-a716-446655440000",
+  );
 });
 
 Deno.test("QueryResponse - success case", () => {
@@ -243,7 +246,10 @@ Deno.test("ServerStats - metrics structure", () => {
 
   assertEquals(stats.connections.active, 15);
   assertEquals(stats.connections.total, 150);
-  assertEquals(stats.connections.http + stats.connections.websocket, stats.connections.active);
+  assertEquals(
+    stats.connections.http + stats.connections.websocket,
+    stats.connections.active,
+  );
   assertEquals(stats.queries.avg_duration_ms, 25.5);
   assertEquals(stats.uptime_ms, 3600000);
 });
@@ -272,7 +278,8 @@ Deno.test("QueryRequest - empty variables", () => {
 
 Deno.test("QueryRequest - complex variables", () => {
   const request: Types.QueryRequest = {
-    query: "insert User { name := <str>$name, age := <int32>$age, tags := <array<str>>$tags }",
+    query:
+      "insert User { name := <str>$name, age := <int32>$age, tags := <array<str>>$tags }",
     variables: {
       name: "John Doe",
       age: 30,

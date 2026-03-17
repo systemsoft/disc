@@ -2,7 +2,6 @@
  * TypeScript Codegen Types and Interfaces
  */
 
-
 export interface CodegenConfig {
   output_dir: string;
   schema_source: string;
@@ -102,7 +101,7 @@ export const DEFAULT_TYPE_MAPPINGS: TypeMapping[] = [
   },
   {
     edgeql_type: "bool",
-    typescript_type: "boolean", 
+    typescript_type: "boolean",
     nullable_type: "boolean | null",
     array_type: "boolean[]",
   },
@@ -115,7 +114,7 @@ export const DEFAULT_TYPE_MAPPINGS: TypeMapping[] = [
   {
     edgeql_type: "int32",
     typescript_type: "number",
-    nullable_type: "number | null", 
+    nullable_type: "number | null",
     array_type: "number[]",
   },
   {
@@ -131,7 +130,7 @@ export const DEFAULT_TYPE_MAPPINGS: TypeMapping[] = [
     array_type: "number[]",
   },
   {
-    edgeql_type: "float64", 
+    edgeql_type: "float64",
     typescript_type: "number",
     nullable_type: "number | null",
     array_type: "number[]",
@@ -157,7 +156,7 @@ export const DEFAULT_TYPE_MAPPINGS: TypeMapping[] = [
   {
     edgeql_type: "duration",
     typescript_type: "string",
-    nullable_type: "string | null", 
+    nullable_type: "string | null",
     array_type: "string[]",
   },
   {
@@ -186,7 +185,7 @@ export const DEFAULT_TYPE_MAPPINGS: TypeMapping[] = [
     array_type: "string[]",
   },
   {
-    edgeql_type: "cal::local_time", 
+    edgeql_type: "cal::local_time",
     typescript_type: "string",
     nullable_type: "string | null",
     array_type: "string[]",
@@ -194,34 +193,36 @@ export const DEFAULT_TYPE_MAPPINGS: TypeMapping[] = [
 ];
 
 export function getTypeMapping(edgeqlType: string): TypeMapping | null {
-  return DEFAULT_TYPE_MAPPINGS.find(mapping => mapping.edgeql_type === edgeqlType) || null;
+  return DEFAULT_TYPE_MAPPINGS.find((mapping) =>
+    mapping.edgeql_type === edgeqlType
+  ) || null;
 }
 
 export function mapEdgeQLTypeToTypeScript(
   edgeqlType: string,
   required: boolean = true,
-  multi: boolean = false
+  multi: boolean = false,
 ): string {
   const mapping = getTypeMapping(edgeqlType);
-  
+
   if (!mapping) {
     // For object types, use the type name directly
     let tsType = edgeqlType;
-    
+
     if (multi) {
       tsType += "[]";
     }
-    
+
     if (!required) {
       tsType += " | null";
     }
-    
+
     return tsType;
   }
-  
+
   if (multi) {
     return required ? mapping.array_type : `${mapping.array_type} | null`;
   }
-  
+
   return required ? mapping.typescript_type : mapping.nullable_type;
 }

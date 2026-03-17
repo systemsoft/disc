@@ -66,7 +66,10 @@ Deno.test("expression-converter: boolean literal", () => {
 // ---------------------------------------------------------------------------
 
 Deno.test("expression-converter: global path becomes AccessGlobal", () => {
-  const expr: Expression = { kind: "PathExpression", path: ["global", "current_user"] };
+  const expr: Expression = {
+    kind: "PathExpression",
+    path: ["global", "current_user"],
+  };
   const result = convertExpression(expr);
 
   assertEquals(result.kind, "AccessGlobal");
@@ -78,7 +81,10 @@ Deno.test("expression-converter: global path becomes AccessGlobal", () => {
 // ---------------------------------------------------------------------------
 
 Deno.test("expression-converter: dot-prefixed path strips leading dot", () => {
-  const expr: Expression = { kind: "PathExpression", path: [".", "author", "id"] };
+  const expr: Expression = {
+    kind: "PathExpression",
+    path: [".", "author", "id"],
+  };
   const result = convertExpression(expr);
 
   assertEquals(result.kind, "AccessPath");
@@ -177,7 +183,12 @@ Deno.test("expression-converter: type cast strips cast and recurses", () => {
   const expr: Expression = {
     kind: "TypeCast",
     expr: { kind: "Literal", type: "string", value: "42" },
-    type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["int64"] }, optional: false, array: false },
+    type: {
+      kind: "TypeRef",
+      name: { kind: "QualifiedName", parts: ["int64"] },
+      optional: false,
+      array: false,
+    },
   };
   const result = convertExpression(expr);
 

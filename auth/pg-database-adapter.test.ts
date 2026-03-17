@@ -2,8 +2,14 @@
  * Tests for PgDatabaseAdapter
  */
 
-import { assertEquals, assertStrictEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { convertPlaceholders, PgDatabaseAdapter } from "./pg-database-adapter.ts";
+import {
+  assertEquals,
+  assertStrictEquals,
+} from "https://deno.land/std@0.224.0/assert/mod.ts";
+import {
+  convertPlaceholders,
+  PgDatabaseAdapter,
+} from "./pg-database-adapter.ts";
 import { DatabaseInterface, QueryResult } from "./database-interface.ts";
 
 // --- convertPlaceholders tests ---
@@ -43,7 +49,9 @@ Deno.test("convertPlaceholders - handles escaped single quotes", () => {
 
 Deno.test("convertPlaceholders - mixed string and param placeholders", () => {
   assertEquals(
-    convertPlaceholders("UPDATE users SET name = ? WHERE email = '?' AND id = ?"),
+    convertPlaceholders(
+      "UPDATE users SET name = ? WHERE email = '?' AND id = ?",
+    ),
     "UPDATE users SET name = $1 WHERE email = '?' AND id = $2",
   );
 });
@@ -135,10 +143,16 @@ Deno.test("PgDatabaseAdapter - execute converts placeholders", async () => {
   const fake = new FakeDatabaseConnection();
   const adapter = new PgDatabaseAdapter(fake as any);
 
-  await adapter.execute("UPDATE users SET name = ? WHERE id = ?", ["Alice", "123"]);
+  await adapter.execute("UPDATE users SET name = ? WHERE id = ?", [
+    "Alice",
+    "123",
+  ]);
 
   const executeCall = fake.calls.find((c) => c.method === "execute");
-  assertEquals(executeCall?.args[0], "UPDATE users SET name = $1 WHERE id = $2");
+  assertEquals(
+    executeCall?.args[0],
+    "UPDATE users SET name = $1 WHERE id = $2",
+  );
   assertEquals(executeCall?.args[1], ["Alice", "123"]);
 });
 
@@ -147,7 +161,9 @@ Deno.test("PgDatabaseAdapter - query converts placeholders", async () => {
   fake.queryResult = { rows: [{ id: "1" }], rowCount: 1 };
   const adapter = new PgDatabaseAdapter(fake as any);
 
-  const result = await adapter.query("SELECT * FROM users WHERE email = ?", ["test@test.com"]);
+  const result = await adapter.query("SELECT * FROM users WHERE email = ?", [
+    "test@test.com",
+  ]);
 
   const queryCall = fake.calls.find((c) => c.method === "query");
   assertEquals(queryCall?.args[0], "SELECT * FROM users WHERE email = $1");

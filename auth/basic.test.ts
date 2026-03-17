@@ -1,5 +1,5 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { describe, it, beforeEach, afterEach } from "@std/testing/bdd";
+import { afterEach, beforeEach, describe, it } from "@std/testing/bdd";
 import { AuthProvider } from "./provider.ts";
 import { AuthConfig, AuthError } from "./types.ts";
 import { TestDatabase } from "./test-database.ts";
@@ -7,7 +7,7 @@ import { TestDatabase } from "./test-database.ts";
 describe("Auth Module Smoke Test", () => {
   let provider: AuthProvider;
   let db: TestDatabase;
-  
+
   const testConfig: AuthConfig = {
     jwt_secret: "test-secret-key-at-least-32-characters-long",
     bcrypt_rounds: 4, // Faster for testing
@@ -47,7 +47,7 @@ describe("Auth Module Smoke Test", () => {
       email: "test@example.com",
       password: "longenoughpassword",
     });
-    
+
     assertExists(response.token);
     assertExists(response.user);
     assertEquals(response.user.email, "test@example.com");

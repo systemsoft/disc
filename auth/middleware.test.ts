@@ -1,5 +1,5 @@
 import { assertEquals, assertExists } from "@std/assert";
-import { describe, it, beforeEach, afterEach } from "@std/testing/bdd";
+import { afterEach, beforeEach, describe, it } from "@std/testing/bdd";
 import { AuthMiddleware } from "./middleware.ts";
 import { AuthProvider } from "./provider.ts";
 import { AuthConfig } from "./types.ts";
@@ -49,7 +49,7 @@ describe("AuthMiddleware", () => {
       });
 
       const context = await middleware.authenticate(request);
-      
+
       assertExists(context);
       assertEquals(context.user_id, testUserId);
       assertEquals(context.email, "test@example.com");
@@ -63,7 +63,7 @@ describe("AuthMiddleware", () => {
       });
 
       const context = await middleware.authenticate(request);
-      
+
       assertExists(context);
       assertEquals(context.user_id, testUserId);
     });
@@ -72,7 +72,7 @@ describe("AuthMiddleware", () => {
       const request = new Request(`http://localhost/test?token=${testToken}`);
 
       const context = await middleware.authenticate(request);
-      
+
       assertExists(context);
       assertEquals(context.user_id, testUserId);
     });
@@ -81,7 +81,7 @@ describe("AuthMiddleware", () => {
       const request = new Request("http://localhost/test");
 
       const context = await middleware.authenticate(request);
-      
+
       assertEquals(context, null);
     });
 
@@ -93,7 +93,7 @@ describe("AuthMiddleware", () => {
       });
 
       const context = await middleware.authenticate(request);
-      
+
       assertEquals(context, null);
     });
   });
@@ -140,9 +140,9 @@ describe("AuthMiddleware", () => {
         return new Response("Success");
       };
       const protectedHandler = middleware.requireAuth(handler);
-      
+
       await protectedHandler(request);
-      
+
       assertExists(capturedContext);
       assertEquals(capturedContext.user_id, testUserId);
       assertEquals(capturedContext.email, "test@example.com");
@@ -179,9 +179,9 @@ describe("AuthMiddleware", () => {
         return new Response("Success");
       };
       const optionalHandler = middleware.optionalAuth(handler);
-      
+
       const response = await optionalHandler(request);
-      
+
       assertEquals(response.status, 200);
       assertEquals(capturedContext, null);
     });
@@ -197,9 +197,9 @@ describe("AuthMiddleware", () => {
 
       const handler = (_req: Request) => new Response("Success");
       const secureHandler = middleware.withSecurityHeaders(handler);
-      
+
       const response = await secureHandler(request);
-      
+
       assertEquals(response.headers.get("X-Content-Type-Options"), "nosniff");
       assertEquals(response.headers.get("X-Frame-Options"), "DENY");
       assertEquals(response.headers.get("X-XSS-Protection"), "1; mode=block");
@@ -219,12 +219,18 @@ describe("AuthMiddleware", () => {
         origins: ["http://example.com"],
         methods: ["GET", "POST"],
       });
-      
+
       const response = await corsHandler(request);
-      
+
       assertEquals(response.status, 204);
-      assertEquals(response.headers.get("Access-Control-Allow-Origin"), "http://example.com");
-      assertEquals(response.headers.get("Access-Control-Allow-Methods"), "GET, POST");
+      assertEquals(
+        response.headers.get("Access-Control-Allow-Origin"),
+        "http://example.com",
+      );
+      assertEquals(
+        response.headers.get("Access-Control-Allow-Methods"),
+        "GET, POST",
+      );
     });
 
     it("should reject CORS requests from disallowed origins", async () => {
@@ -238,9 +244,9 @@ describe("AuthMiddleware", () => {
       const corsHandler = middleware.withCORS(handler, {
         origins: ["http://example.com"],
       });
-      
+
       const response = await corsHandler(request);
-      
+
       assertEquals(response.headers.get("Access-Control-Allow-Origin"), null);
     });
   });

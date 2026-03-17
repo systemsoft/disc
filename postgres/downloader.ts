@@ -16,39 +16,55 @@ const POSTGRES_VERSIONS = {
   "16.4": {
     "darwin-arm64": {
       // EDB macOS universal binary (works on both arm64 and x64)
-      checksums: "sha256:8a9e2e8d7f9b5a5c6d5e5f5a5b5c5d5e5f5a5b5c5d5e5f5a5b5c5d5e5f5a5b5c5",
-      url: "https://get.enterprisedb.com/postgresql/postgresql-16.4-1-osx-binaries.zip",
+      checksums:
+        "sha256:8a9e2e8d7f9b5a5c6d5e5f5a5b5c5d5e5f5a5b5c5d5e5f5a5b5c5d5e5f5a5b5c5",
+      url:
+        "https://get.enterprisedb.com/postgresql/postgresql-16.4-1-osx-binaries.zip",
     },
     "darwin-x64": {
-      checksums: "sha256:8a9e2e8d7f9b5a5c6d5e5f5a5b5c5d5e5f5a5b5c5d5e5f5a5b5c5d5e5f5a5b5c5",
-      url: "https://get.enterprisedb.com/postgresql/postgresql-16.4-1-osx-binaries.zip",
+      checksums:
+        "sha256:8a9e2e8d7f9b5a5c6d5e5f5a5b5c5d5e5f5a5b5c5d5e5f5a5b5c5d5e5f5a5b5c5",
+      url:
+        "https://get.enterprisedb.com/postgresql/postgresql-16.4-1-osx-binaries.zip",
     },
     "linux-arm64": {
       // Zonky's embedded postgres binaries
-      checksums: "sha256:7b9c8e9d8f8b7a7c6d6e6f6a6b6c6d6e6f6a6b6c6d6e6f6a6b6c6d6e6f6a6b6c6",
-      url: "https://github.com/zonkyio/embedded-postgres-binaries/releases/download/v16.4.0/postgres-linux-arm_64.txz",
+      checksums:
+        "sha256:7b9c8e9d8f8b7a7c6d6e6f6a6b6c6d6e6f6a6b6c6d6e6f6a6b6c6d6e6f6a6b6c6",
+      url:
+        "https://github.com/zonkyio/embedded-postgres-binaries/releases/download/v16.4.0/postgres-linux-arm_64.txz",
     },
     "linux-x64": {
-      checksums: "sha256:9d9e9e9d9f9b9a9c9d9e9f9a9b9c9d9e9f9a9b9c9d9e9f9a9b9c9d9e9f9a9b9c9",
-      url: "https://github.com/zonkyio/embedded-postgres-binaries/releases/download/v16.4.0/postgres-linux-x86_64.txz",
+      checksums:
+        "sha256:9d9e9e9d9f9b9a9c9d9e9f9a9b9c9d9e9f9a9b9c9d9e9f9a9b9c9d9e9f9a9b9c9",
+      url:
+        "https://github.com/zonkyio/embedded-postgres-binaries/releases/download/v16.4.0/postgres-linux-x86_64.txz",
     },
   },
   "17.0": {
     "darwin-arm64": {
-      checksums: "sha256:1a1e1e1d1f1b1a1c1d1e1f1a1b1c1d1e1f1a1b1c1d1e1f1a1b1c1d1e1f1a1b1c1",
-      url: "https://get.enterprisedb.com/postgresql/postgresql-17.0-1-osx-binaries.zip",
+      checksums:
+        "sha256:1a1e1e1d1f1b1a1c1d1e1f1a1b1c1d1e1f1a1b1c1d1e1f1a1b1c1d1e1f1a1b1c1",
+      url:
+        "https://get.enterprisedb.com/postgresql/postgresql-17.0-1-osx-binaries.zip",
     },
     "darwin-x64": {
-      checksums: "sha256:1a1e1e1d1f1b1a1c1d1e1f1a1b1c1d1e1f1a1b1c1d1e1f1a1b1c1d1e1f1a1b1c1",
-      url: "https://get.enterprisedb.com/postgresql/postgresql-17.0-1-osx-binaries.zip",
+      checksums:
+        "sha256:1a1e1e1d1f1b1a1c1d1e1f1a1b1c1d1e1f1a1b1c1d1e1f1a1b1c1d1e1f1a1b1c1",
+      url:
+        "https://get.enterprisedb.com/postgresql/postgresql-17.0-1-osx-binaries.zip",
     },
     "linux-arm64": {
-      checksums: "sha256:2b2c2e2d2f2b2a2c2d2e2f2a2b2c2d2e2f2a2b2c2d2e2f2a2b2c2d2e2f2a2b2c2",
-      url: "https://github.com/zonkyio/embedded-postgres-binaries/releases/download/v17.0.0/postgres-linux-arm_64.txz",
+      checksums:
+        "sha256:2b2c2e2d2f2b2a2c2d2e2f2a2b2c2d2e2f2a2b2c2d2e2f2a2b2c2d2e2f2a2b2c2",
+      url:
+        "https://github.com/zonkyio/embedded-postgres-binaries/releases/download/v17.0.0/postgres-linux-arm_64.txz",
     },
     "linux-x64": {
-      checksums: "sha256:3d3e3e3d3f3b3a3c3d3e3f3a3b3c3d3e3f3a3b3c3d3e3f3a3b3c3d3e3f3a3b3c3",
-      url: "https://github.com/zonkyio/embedded-postgres-binaries/releases/download/v17.0.0/postgres-linux-x86_64.txz",
+      checksums:
+        "sha256:3d3e3e3d3f3b3a3c3d3e3f3a3b3c3d3e3f3a3b3c3d3e3f3a3b3c3d3e3f3a3b3c3",
+      url:
+        "https://github.com/zonkyio/embedded-postgres-binaries/releases/download/v17.0.0/postgres-linux-x86_64.txz",
     },
   },
 };
@@ -117,11 +133,11 @@ export class PostgresBinaryDownloader {
     // Verify checksum
     const computedHash = await this.computeChecksum(data);
     const expectedHash = manifest.checksums.replace("sha256:", "");
-    
+
     if (computedHash !== expectedHash) {
       await Deno.remove(archivePath);
       logger.warn(
-        `Checksum verification failed. Expected: ${expectedHash}, Got: ${computedHash}`
+        `Checksum verification failed. Expected: ${expectedHash}, Got: ${computedHash}`,
       );
       // For development, continue anyway since we have placeholder checksums
       logger.warn("Continuing despite checksum mismatch (development mode)");
@@ -148,7 +164,10 @@ export class PostgresBinaryDownloader {
   }
 
   private async computeChecksum(data: Uint8Array): Promise<string> {
-    const hashBuffer = await crypto.subtle.digest("SHA-256", data as BufferSource);
+    const hashBuffer = await crypto.subtle.digest(
+      "SHA-256",
+      data as BufferSource,
+    );
     return encodeHex(new Uint8Array(hashBuffer));
   }
 
@@ -165,18 +184,20 @@ export class PostgresBinaryDownloader {
       if (entries.length === 1 && entries[0].isDirectory) {
         const nestedDir = join(versionDir, entries[0].name);
         const nestedBinPath = join(nestedDir, "bin", "postgres");
-        
+
         try {
           await Deno.stat(nestedBinPath);
           // Found postgres binary in nested directory, move everything up
-          logger.info(`Normalizing directory structure from ${entries[0].name}`);
-          
+          logger.info(
+            `Normalizing directory structure from ${entries[0].name}`,
+          );
+
           for await (const entry of Deno.readDir(nestedDir)) {
             const src = join(nestedDir, entry.name);
             const dest = join(versionDir, entry.name);
             await Deno.rename(src, dest);
           }
-          
+
           // Remove the now-empty nested directory
           await Deno.remove(nestedDir);
         } catch {
@@ -209,10 +230,10 @@ export class PostgresBinaryDownloader {
     targetDir: string,
   ): Promise<void> {
     const filename = archivePath.toLowerCase();
-    
+
     // Determine archive type and appropriate extraction command
     let extractCmd: Deno.Command;
-    
+
     if (filename.endsWith(".zip")) {
       extractCmd = new Deno.Command("unzip", {
         args: ["-q", "-o", archivePath, "-d", targetDir],
@@ -243,12 +264,12 @@ export class PostgresBinaryDownloader {
 
     logger.info(`Extracting archive...`);
     const output = await extractCmd.output();
-    
+
     if (!output.success) {
       const stderr = new TextDecoder().decode(output.stderr);
       throw new Error(`Failed to extract PostgreSQL archive: ${stderr}`);
     }
-    
+
     logger.info("Archive extracted successfully");
   }
 

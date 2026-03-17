@@ -87,6 +87,7 @@ deny <operations> [when <condition>];
 ```
 
 Operations can be:
+
 - `all` - All operations
 - `delete` - Remove records
 - `insert` - Create new records
@@ -124,15 +125,15 @@ with check (.status in ["draft", "published"]);
 import {
   AccessConfig,
   AccessEvaluator,
-  AccessSQLInjector
+  AccessSQLInjector,
 } from "./access/mod.ts";
 
 // Configure access control
 const config: AccessConfig = {
-  defaultAllow: false,       // Default when no policies match
-  enableAudit: false,        // Enable audit logging
-  enableRLS: true,           // Enable row-level security
-  mode: "permissive"         // or "restrictive"
+  defaultAllow: false, // Default when no policies match
+  enableAudit: false, // Enable audit logging
+  enableRLS: true, // Enable row-level security
+  mode: "permissive", // or "restrictive"
 };
 
 // Create evaluator
@@ -142,14 +143,14 @@ const evaluator = new AccessEvaluator(config);
 evaluator.registerPolicy({
   actions: [{ allow: true, operations: ["select"] }],
   name: "user_read",
-  objectType: "User"
+  objectType: "User",
 });
 
 // Evaluate access
 const context = {
   sessionData: { tenant_id: "tenant1" },
   userId: "user123",
-  userRole: "member"
+  userRole: "member",
 };
 
 const decision = evaluator.evaluate("User", "select", context);
@@ -157,8 +158,9 @@ const decision = evaluator.evaluate("User", "select", context);
 if (decision.allowed) {
   console.log("Access granted");
 
-  if (decision.sqlConditions)
+  if (decision.sqlConditions) {
     console.log("Apply conditions:", decision.sqlConditions);
+  }
 } else {
   console.log("Access denied:", decision.reason);
 }
@@ -168,14 +170,14 @@ const injector = new AccessSQLInjector(evaluator);
 
 const query = {
   params: [],
-  text: "SELECT * FROM users"
+  text: "SELECT * FROM users",
 };
 
 const securedQuery = injector.injectSelect(
   query,
   "users",
   "User",
-  context
+  context,
 );
 ```
 
@@ -197,6 +199,7 @@ These variables are available in policy expressions:
 ### Permissive Mode
 
 In permissive mode:
+
 - Any `allow` rule grants access
 - Explicit `deny` rules override allows
 - If no rules match, use `defaultAllow` setting
@@ -204,6 +207,7 @@ In permissive mode:
 ### Restrictive Mode
 
 In restrictive mode:
+
 - Requires explicit `allow` to grant access
 - Any `deny` rule immediately denies access
 - More secure but requires comprehensive policies

@@ -32,7 +32,7 @@ export class DatabaseConnection {
     } else {
       this.config = config;
     }
-    
+
     this.client = new Client(this.getClientConfig());
   }
 
@@ -71,11 +71,15 @@ export class DatabaseConnection {
         logger.info(`Connected to PostgreSQL database`);
         return;
       } catch (error) {
-        logger.warn(`Connection attempt ${attempt}/${maxRetries} failed: ${error}`);
+        logger.warn(
+          `Connection attempt ${attempt}/${maxRetries} failed: ${error}`,
+        );
         if (attempt < maxRetries) {
-          await new Promise(resolve => setTimeout(resolve, retryDelay));
+          await new Promise((resolve) => setTimeout(resolve, retryDelay));
         } else {
-          throw new Error(`Failed to connect to database after ${maxRetries} attempts: ${error}`);
+          throw new Error(
+            `Failed to connect to database after ${maxRetries} attempts: ${error}`,
+          );
         }
       }
     }
@@ -111,7 +115,9 @@ export class DatabaseConnection {
     }
   }
 
-  async transaction<T>(fn: (conn: DatabaseConnection) => Promise<T>): Promise<T> {
+  async transaction<T>(
+    fn: (conn: DatabaseConnection) => Promise<T>,
+  ): Promise<T> {
     if (!this.connected) {
       await this.connect();
     }
@@ -151,11 +157,11 @@ export class DatabaseConnection {
 
     try {
       await adminClient.connect();
-      
+
       // Check if database exists
       const result = await adminClient.queryObject(
         `SELECT 1 FROM pg_database WHERE datname = $1`,
-        [dbName]
+        [dbName],
       );
 
       if (result.rowCount === 0) {
@@ -178,7 +184,7 @@ export class DatabaseConnection {
       `SELECT 1 FROM information_schema.tables 
        WHERE table_schema = 'public' 
        AND table_name = $1`,
-      [tableName]
+      [tableName],
     );
     return result.rowCount > 0;
   }
@@ -216,7 +222,10 @@ export function createConnectionFromEnv(): DatabaseConnection {
 /**
  * Create a connection to a Disc-managed PostgreSQL instance
  */
-export function createDiscConnection(instanceName: string, socketDir?: string): DatabaseConnection {
+export function createDiscConnection(
+  instanceName: string,
+  socketDir?: string,
+): DatabaseConnection {
   if (socketDir) {
     // Unix socket connection
     return new DatabaseConnection({

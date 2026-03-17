@@ -162,14 +162,17 @@ Deno.test("register and login flow via HTTP", async () => {
 
   try {
     // Register
-    const registerRes = await fetch(`http://${TEST_HOST}:${port}/auth/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email: "newuser@test.com",
-        password: "password123",
-      }),
-    });
+    const registerRes = await fetch(
+      `http://${TEST_HOST}:${port}/auth/register`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: "newuser@test.com",
+          password: "password123",
+        }),
+      },
+    );
 
     assertEquals(registerRes.status, 201);
     const registerBody = await registerRes.json();
@@ -214,23 +217,29 @@ Deno.test({
       await noAuthRes.text(); // consume body
 
       // Register to get a token
-      const registerRes = await fetch(`http://${TEST_HOST}:${port}/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: "authuser@test.com",
-          password: "password123",
-        }),
-      });
+      const registerRes = await fetch(
+        `http://${TEST_HOST}:${port}/auth/register`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: "authuser@test.com",
+            password: "password123",
+          }),
+        },
+      );
 
       const registerBody = await registerRes.json();
       const token = registerBody.token;
       assertExists(token);
 
       // Profile with token should work
-      const profileRes = await fetch(`http://${TEST_HOST}:${port}/auth/profile`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const profileRes = await fetch(
+        `http://${TEST_HOST}:${port}/auth/profile`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
 
       assertEquals(profileRes.status, 200);
       const profile = await profileRes.json();
@@ -292,14 +301,17 @@ Deno.test({
 
     try {
       // Register to get a token
-      const registerRes = await fetch(`http://${TEST_HOST}:${port}/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: "queryuser@test.com",
-          password: "password123",
-        }),
-      });
+      const registerRes = await fetch(
+        `http://${TEST_HOST}:${port}/auth/register`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: "queryuser@test.com",
+            password: "password123",
+          }),
+        },
+      );
 
       const registerBody = await registerRes.json();
       const token = registerBody.token;

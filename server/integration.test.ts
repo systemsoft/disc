@@ -2,7 +2,12 @@
  * Integration tests for the complete Disc server protocol implementation
  */
 
-import { assertEquals, assertExists, assertStringIncludes, assert } from "@std/assert";
+import {
+  assert,
+  assertEquals,
+  assertExists,
+  assertStringIncludes,
+} from "@std/assert";
 import { DiscServer } from "./server.ts";
 import * as Types from "./types.ts";
 
@@ -14,9 +19,10 @@ const BASE_URL = `http://${TEST_HOST}:${TEST_PORT}`;
 const SAMPLE_QUERIES = {
   valid_select: "select User { name, email }",
   valid_insert: "insert User { name := 'Alice', email := 'alice@example.com' }",
-  valid_update: "update User filter .id = <uuid>$id set { name := 'Alice Updated' }",
+  valid_update:
+    "update User filter .id = <uuid>$id set { name := 'Alice Updated' }",
   valid_delete: "delete User filter .id = <uuid>$id",
-  invalid_syntax: "select User { name email }",  // Missing comma
+  invalid_syntax: "select User { name email }", // Missing comma
   empty_query: "",
 };
 
@@ -27,7 +33,7 @@ async function makeRequest(
     method?: string;
     headers?: Record<string, string>;
     body?: string;
-  } = {}
+  } = {},
 ): Promise<Response> {
   const { method = "GET", headers = {}, body } = options;
 
@@ -47,7 +53,7 @@ async function makeRequest(
 async function queryEdgeQL(
   query: string,
   variables: Record<string, any> = {},
-  headers: Record<string, string> = {}
+  headers: Record<string, string> = {},
 ): Promise<{
   ok: boolean;
   status: number;
@@ -87,7 +93,7 @@ class ServerTestHarness {
     this.server_promise = this.server.start();
 
     // Wait for server to be ready
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
   }
 
   async stop(): Promise<void> {
@@ -102,7 +108,7 @@ class ServerTestHarness {
       }
     }
     // Extra delay to ensure port is freed
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
 }
 
@@ -198,8 +204,14 @@ Deno.test({
       assertEquals(preflight.ok, true);
       assertEquals(preflight.status, 204);
       assertEquals(preflight.headers.get("Access-Control-Allow-Origin"), "*");
-      assertEquals(preflight.headers.get("Access-Control-Allow-Methods"), "GET, POST, OPTIONS");
-      assertEquals(preflight.headers.get("Access-Control-Allow-Headers"), "Content-Type, Authorization");
+      assertEquals(
+        preflight.headers.get("Access-Control-Allow-Methods"),
+        "GET, POST, OPTIONS",
+      );
+      assertEquals(
+        preflight.headers.get("Access-Control-Allow-Headers"),
+        "Content-Type, Authorization",
+      );
     } finally {
       await harness.stop();
     }
@@ -266,7 +278,7 @@ Deno.test({
 
     try {
       const variables = {
-        id: "01234567-89ab-cdef-0123-456789abcdef"
+        id: "01234567-89ab-cdef-0123-456789abcdef",
       };
 
       const result = await queryEdgeQL(SAMPLE_QUERIES.valid_update, variables);

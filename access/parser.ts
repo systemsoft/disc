@@ -8,14 +8,14 @@ import { Token, TokenType } from "../schema/tokens.ts";
 import { SyntaxError } from "../lib/errors.ts";
 import { Span } from "../lib/types.ts";
 import {
+  AccessComparisonNode,
+  AccessExpressionNode,
+  AccessOperationNode,
   AccessPolicyNode,
   AccessRuleNode,
-  AccessOperationNode,
-  AccessExpressionNode,
-  AccessComparisonNode,
+  createAccessOperation,
   createAccessPolicy,
   createAccessRule,
-  createAccessOperation,
 } from "./ast.ts";
 
 export class AccessPolicyParser {
@@ -41,8 +41,9 @@ export class AccessPolicyParser {
     // Optional: for <type>
     let objectType: string | undefined;
 
-    if (this.match("for"))
+    if (this.match("for")) {
       objectType = this.expectIdentifier();
+    }
 
     this.expect("{");
 
@@ -52,7 +53,9 @@ export class AccessPolicyParser {
 
     while (!this.check("}") && !this.isAtEnd()) {
       if (this.match("allow") || this.match("deny")) {
-        const rule = this.parseAccessRule(this.previous().value === "allow" ? "allow" : "deny");
+        const rule = this.parseAccessRule(
+          this.previous().value === "allow" ? "allow" : "deny",
+        );
         rules.push(rule);
       } else if (this.match("using")) {
         this.expect("(");
@@ -68,7 +71,7 @@ export class AccessPolicyParser {
       } else {
         throw new SyntaxError(
           `Unexpected token in access policy: ${this.peek().value}`,
-          { location: this.getLocation(this.peek()) }
+          { location: this.getLocation(this.peek()) },
         );
       }
     }
@@ -86,7 +89,7 @@ export class AccessPolicyParser {
       objectType,
       span,
       using,
-      withCheck
+      withCheck,
     });
   }
 
@@ -106,8 +109,9 @@ export class AccessPolicyParser {
     // Optional condition
     let condition: AccessExpressionNode | undefined;
 
-    if (this.match("when"))
+    if (this.match("when")) {
       condition = this.parseExpression();
+    }
 
     this.expect(";");
 
@@ -131,8 +135,10 @@ export class AccessPolicyParser {
 
     if (!validOps.includes(opToken.value)) {
       throw new SyntaxError(
-        `Invalid access operation: ${opToken.value}. Must be one of: ${validOps.join(", ")}`,
-        { location: this.getLocation(opToken) }
+        `Invalid access operation: ${opToken.value}. Must be one of: ${
+          validOps.join(", ")
+        }`,
+        { location: this.getLocation(opToken) },
       );
     }
 
@@ -177,7 +183,7 @@ export class AccessPolicyParser {
       left = {
         kind: "AccessLogical",
         operands: [left, right],
-        operator
+        operator,
       };
     }
 
@@ -194,7 +200,7 @@ export class AccessPolicyParser {
       left = {
         kind: "AccessLogical",
         operands: [left, right],
-        operator
+        operator,
       };
     }
 
@@ -208,7 +214,7 @@ export class AccessPolicyParser {
       return {
         kind: "AccessLogical",
         operands: [operand],
-        operator: "not"
+        operator: "not",
       };
     }
 
@@ -228,7 +234,7 @@ export class AccessPolicyParser {
         kind: "AccessComparison",
         left,
         operator: op as AccessComparisonNode["operator"],
-        right
+        right,
       };
     }
 
@@ -240,7 +246,7 @@ export class AccessPolicyParser {
         kind: "AccessComparison",
         left,
         operator: "not in",
-        right
+        right,
       };
     }
 
@@ -253,7 +259,7 @@ export class AccessPolicyParser {
       return {
         kind: "AccessLiteral",
         type: "boolean",
-        value: this.previous().value === "true"
+        value: this.previous().value === "true",
       };
     }
 
@@ -261,7 +267,7 @@ export class AccessPolicyParser {
       return {
         kind: "AccessLiteral",
         type: "null",
-        value: null
+        value: null,
       };
     }
 
@@ -274,7 +280,7 @@ export class AccessPolicyParser {
       return {
         kind: "AccessLiteral",
         type: "string",
-        value: token.value
+        value: token.value,
       };
     }
 
@@ -285,7 +291,7 @@ export class AccessPolicyParser {
       return {
         kind: "AccessLiteral",
         type: "number",
-        value: parseFloat(token.value)
+        value: parseFloat(token.value),
       };
     }
 
@@ -305,7 +311,7 @@ export class AccessPolicyParser {
       return {
         kind: "AccessLiteral",
         type: "array" as any,
-        value: elements
+        value: elements,
       };
     }
 
@@ -317,7 +323,10 @@ export class AccessPolicyParser {
     }
 
     // Global variables (current_user, current_role, etc.)
-    if (this.match("current_user") || this.match("current_role") || this.match("current_session")) {
+    if (
+      this.match("current_user") || this.match("current_role") ||
+      this.match("current_session")
+    ) {
       const globalName = this.previous().value;
 
       // Check if accessing properties of the global
@@ -330,23 +339,24 @@ export class AccessPolicyParser {
 
         return {
           kind: "AccessPath",
-          path
+          path,
         };
       }
 
       return {
         kind: "AccessGlobal",
-        name: globalName
+        name: globalName,
       };
     }
 
     // Path or function call (can start with . or identifier)
-    if (token.type === TokenType.IDENT || token.value === ".")
+    if (token.type === TokenType.IDENT || token.value === ".") {
       return this.parsePathOrFunction();
+    }
 
     throw new SyntaxError(
       `Unexpected token in expression: ${token.value}`,
-      { location: this.getLocation(token) }
+      { location: this.getLocation(token) },
     );
   }
 
@@ -358,17 +368,19 @@ export class AccessPolicyParser {
     // Parse dotted path
     if (!isRelative || this.peek().type === TokenType.IDENT) {
       do {
-        if (this.peek().type === TokenType.IDENT)
+        if (this.peek().type === TokenType.IDENT) {
           path.push(this.expectIdentifier());
-        else
+        } else {
           break;
+        }
       } while (this.match("."));
     }
 
     // If we have a relative path with no identifiers after the dot,
     // treat it as current object
-    if (isRelative && path.length === 0)
+    if (isRelative && path.length === 0) {
       path.push("__self__");
+    }
 
     // Check for function call
     if (this.match("(")) {
@@ -386,17 +398,18 @@ export class AccessPolicyParser {
       return {
         args,
         kind: "AccessFunction",
-        name
+        name,
       };
     }
 
     // Just a path
-    if (isRelative)
+    if (isRelative) {
       path.unshift(".");
+    }
 
     return {
       kind: "AccessPath",
-      path
+      path,
     };
   }
 
@@ -413,22 +426,24 @@ export class AccessPolicyParser {
   }
 
   private check(type: string): boolean {
-    if (this.isAtEnd())
+    if (this.isAtEnd()) {
       return false;
+    }
 
     return this.peek().value === type || this.peek().type === type;
   }
 
   private advance(): Token {
-    if (!this.isAtEnd())
+    if (!this.isAtEnd()) {
       this.current++;
+    }
 
     return this.previous();
   }
 
   private isAtEnd(): boolean {
     return this.current >= this.tokens.length ||
-           this.peek().type === TokenType.EOF;
+      this.peek().type === TokenType.EOF;
   }
 
   private peek(): Token {
@@ -444,12 +459,13 @@ export class AccessPolicyParser {
   }
 
   private expect(type: string): Token {
-    if (this.check(type))
+    if (this.check(type)) {
       return this.advance();
+    }
 
     throw new SyntaxError(
       `Expected '${type}' but got '${this.peek().value}'`,
-      { location: this.getLocation(this.peek()) }
+      { location: this.getLocation(this.peek()) },
     );
   }
 
@@ -459,7 +475,7 @@ export class AccessPolicyParser {
     if (token.type !== TokenType.IDENT) {
       throw new SyntaxError(
         `Expected identifier but got '${token.value}'`,
-        { location: this.getLocation(token) }
+        { location: this.getLocation(token) },
       );
     }
 
@@ -472,7 +488,7 @@ export class AccessPolicyParser {
       column: token.column,
       file: undefined,
       line: token.line,
-      offset: token.offset
+      offset: token.offset,
     };
   }
 }

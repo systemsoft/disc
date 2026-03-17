@@ -2,7 +2,7 @@
  * Subscription handler tests
  */
 
-import { assertEquals, assertExists, assert } from "@std/assert";
+import { assert, assertEquals, assertExists } from "@std/assert";
 import { SubscriptionHandler } from "./subscription-handler.ts";
 import * as Types from "./types.ts";
 
@@ -21,7 +21,7 @@ class MockWebSocket {
   }
 
   getAllMessages(): any[] {
-    return this.messages.map(msg => JSON.parse(msg));
+    return this.messages.map((msg) => JSON.parse(msg));
   }
 
   close(): void {
@@ -94,8 +94,12 @@ Deno.test("Subscription Handler - Validation Errors", async () => {
     const errorMessage = messages[0];
     assertEquals(errorMessage.type, "subscription");
     assertEquals(errorMessage.payload.type, "error");
-    assert(errorMessage.payload.payload.message.includes("cannot contain 'insert'") ||
-           errorMessage.payload.payload.message.includes("only support SELECT"));
+    assert(
+      errorMessage.payload.payload.message.includes(
+        "cannot contain 'insert'",
+      ) ||
+        errorMessage.payload.payload.message.includes("only support SELECT"),
+    );
   } finally {
     handler.dispose();
   }
@@ -122,7 +126,11 @@ Deno.test("Subscription Handler - Forbidden Operations", async () => {
       const lastMessage = messages[messages.length - 1];
 
       assertEquals(lastMessage.payload.type, "error");
-      assert(lastMessage.payload.payload.message.includes(`cannot contain '${operation}'`));
+      assert(
+        lastMessage.payload.payload.message.includes(
+          `cannot contain '${operation}'`,
+        ),
+      );
     }
   } finally {
     handler.dispose();
@@ -148,7 +156,9 @@ Deno.test("Subscription Handler - Stop Subscription", async () => {
 
     // Should send complete message
     const messages = (websocket as unknown as MockWebSocket).getAllMessages();
-    const completeMessage = messages.find(m => m.payload?.type === "complete");
+    const completeMessage = messages.find((m) =>
+      m.payload?.type === "complete"
+    );
 
     assertExists(completeMessage);
     assertEquals(completeMessage.payload.id, "sub_003");
@@ -174,7 +184,7 @@ Deno.test("Subscription Handler - Connection Cleanup", async () => {
       await handler.handle_subscription(
         { ...sub, variables: {} },
         context,
-        websocket
+        websocket,
       );
     }
 
@@ -203,24 +213,24 @@ Deno.test("Subscription Handler - Subscription Limits", async () => {
     await handler.handle_subscription(
       { id: "sub_007", query: "select User { name }", variables: {} },
       context,
-      websocket
+      websocket,
     );
 
     await handler.handle_subscription(
       { id: "sub_008", query: "select Post { title }", variables: {} },
       context,
-      websocket
+      websocket,
     );
 
     // This should fail due to limit
     await handler.handle_subscription(
       { id: "sub_009", query: "select User { email }", variables: {} },
       context,
-      websocket
+      websocket,
     );
 
     const messages = (websocket as unknown as MockWebSocket).getAllMessages();
-    const errorMessage = messages.find(m =>
+    const errorMessage = messages.find((m) =>
       m.payload?.type === "error" &&
       m.payload?.payload?.message?.includes("Too many subscriptions")
     );
@@ -239,20 +249,23 @@ Deno.test("Subscription Handler - Statistics", async () => {
     // Create contexts for different connections
     const contexts = [
       createTestContext(),
-      { ...createTestContext(), session: { ...createTestContext().session, session_id: "session_456" } },
+      {
+        ...createTestContext(),
+        session: { ...createTestContext().session, session_id: "session_456" },
+      },
     ];
 
     // Create subscriptions across multiple connections
     await handler.handle_subscription(
       { id: "sub_010", query: "select User { name }", variables: {} },
       contexts[0],
-      websocket
+      websocket,
     );
 
     await handler.handle_subscription(
       { id: "sub_011", query: "select Post { title }", variables: {} },
       contexts[1],
-      websocket
+      websocket,
     );
 
     const stats = handler.get_subscription_stats();
@@ -286,7 +299,7 @@ Deno.test("Subscription Handler - Mock Data Generation", async () => {
     await handler.handle_subscription(user_subscription, context, websocket);
 
     let messages = (websocket as unknown as MockWebSocket).getAllMessages();
-    let data_message = messages.find(m => m.payload?.type === "data");
+    let data_message = messages.find((m) => m.payload?.type === "data");
 
     assertExists(data_message);
     const user_data = data_message.payload.payload;
@@ -308,7 +321,7 @@ Deno.test("Subscription Handler - Mock Data Generation", async () => {
     await handler.handle_subscription(post_subscription, context, websocket);
 
     messages = (websocket as unknown as MockWebSocket).getAllMessages();
-    data_message = messages.find(m => m.payload?.type === "data");
+    data_message = messages.find((m) => m.payload?.type === "data");
 
     assertExists(data_message);
     const post_data = data_message.payload.payload;
@@ -332,13 +345,17 @@ Deno.test("Subscription Handler - WebSocket State Handling", async () => {
       variables: {},
     };
 
-    await handler.handle_subscription(subscription, context, websocket as unknown as WebSocket);
+    await handler.handle_subscription(
+      subscription,
+      context,
+      websocket as unknown as WebSocket,
+    );
 
     // Simulate WebSocket close
     websocket.close();
 
     // Wait a moment for potential cleanup
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     const stats = handler.get_subscription_stats();
     // Note: In real implementation, heartbeat would clean up closed connections

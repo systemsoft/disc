@@ -6,7 +6,7 @@ import { Module } from "../schema/converter.ts";
 import * as Types from "./types.ts";
 import { SchemaDiffer } from "./differ.ts";
 import { DDLGenerator } from "./ddl.ts";
-import { Result, Ok, Err } from "../lib/result.ts";
+import { Err, Ok, Result } from "../lib/result.ts";
 import { MigrationError } from "../lib/errors.ts";
 import { DatabaseConnection } from "../lib/database.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
@@ -52,7 +52,7 @@ export class MigrationEngine {
     newSchema: Module[],
   ): Result<Types.MigrationPlan, MigrationError> {
     try {
-      const operations = oldSchema 
+      const operations = oldSchema
         ? this.differ.diff(oldSchema, newSchema)
         : this.generateInitialMigration(newSchema);
 
@@ -74,7 +74,13 @@ export class MigrationEngine {
 
       return Ok(plan);
     } catch (error) {
-      return Err(new MigrationError(`Failed to plan migration: ${error instanceof Error ? error.message : String(error)}`));
+      return Err(
+        new MigrationError(
+          `Failed to plan migration: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        ),
+      );
     }
   }
 
@@ -91,35 +97,47 @@ export class MigrationEngine {
         statements.push(`-- Created: ${migration.created_at.toISOString()}`);
         statements.push("");
 
-        const ddlStatements = this.ddlGenerator.generateDDL(migration.operations);
+        const ddlStatements = this.ddlGenerator.generateDDL(
+          migration.operations,
+        );
         statements.push(...ddlStatements);
         statements.push("");
       }
 
       return Ok(statements);
     } catch (error) {
-      return Err(new MigrationError(`Failed to generate DDL: ${error instanceof Error ? error.message : String(error)}`));
+      return Err(
+        new MigrationError(
+          `Failed to generate DDL: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        ),
+      );
     }
   }
 
   /**
    * Execute a migration plan (placeholder - would need database connection)
    */
-  async executeMigration(plan: Types.MigrationPlan): Promise<Result<Types.MigrationResult[], MigrationError>> {
+  async executeMigration(
+    plan: Types.MigrationPlan,
+  ): Promise<Result<Types.MigrationResult[], MigrationError>> {
     try {
       const results: Types.MigrationResult[] = [];
 
       for (const migration of plan.migrations) {
         const startTime = Date.now();
-        
+
         // In a real implementation, this would execute against a database
-        const ddlStatements = this.ddlGenerator.generateDDL(migration.operations);
-        
+        const ddlStatements = this.ddlGenerator.generateDDL(
+          migration.operations,
+        );
+
         // Execute DDL statements
         await this.executeStatements(ddlStatements);
-        
+
         const endTime = Date.now();
-        
+
         results.push({
           success: true,
           migration_id: migration.id,
@@ -130,13 +148,22 @@ export class MigrationEngine {
         this.appliedMigrations.add(migration.id);
 
         if (this.tracker) {
-          await this.tracker.recordMigration(migration, results[results.length - 1]);
+          await this.tracker.recordMigration(
+            migration,
+            results[results.length - 1],
+          );
         }
       }
 
       return Ok(results);
     } catch (error) {
-      return Err(new MigrationError(`Failed to execute migration: ${error instanceof Error ? error.message : String(error)}`));
+      return Err(
+        new MigrationError(
+          `Failed to execute migration: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        ),
+      );
     }
   }
 
@@ -152,7 +179,7 @@ export class MigrationEngine {
    */
   getMigrationState(): Types.MigrationState {
     const appliedMigrations = Array.from(this.appliedMigrations);
-    
+
     return {
       applied_migrations: appliedMigrations,
       current_schema_hash: this.getCurrentSchemaHash(),
@@ -164,19 +191,31 @@ export class MigrationEngine {
   /**
    * Generate rollback SQL for a migration
    */
-  generateRollbackSQL(migration: Types.Migration): Result<string[], MigrationError> {
+  generateRollbackSQL(
+    migration: Types.Migration,
+  ): Result<string[], MigrationError> {
     try {
-      const rollbackSQL = this.ddlGenerator.generateRollbackDDL(migration.operations);
+      const rollbackSQL = this.ddlGenerator.generateRollbackDDL(
+        migration.operations,
+      );
       return Ok(rollbackSQL);
     } catch (error) {
-      return Err(new MigrationError(`Failed to generate rollback SQL: ${error instanceof Error ? error.message : String(error)}`));
+      return Err(
+        new MigrationError(
+          `Failed to generate rollback SQL: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        ),
+      );
     }
   }
 
   /**
    * Execute migration with automatic rollback on error
    */
-  async executeMigrationWithRollback(plan: Types.MigrationPlan): Promise<Result<Types.MigrationResult[], MigrationError>> {
+  async executeMigrationWithRollback(
+    plan: Types.MigrationPlan,
+  ): Promise<Result<Types.MigrationResult[], MigrationError>> {
     const results: Types.MigrationResult[] = [];
 
     for (const migration of plan.migrations) {
@@ -191,11 +230,13 @@ export class MigrationEngine {
         }
 
         // Execute the migration
-        const ddlStatements = this.ddlGenerator.generateDDL(migration.operations);
+        const ddlStatements = this.ddlGenerator.generateDDL(
+          migration.operations,
+        );
         await this.executeStatements(ddlStatements);
 
         const endTime = Date.now();
-        
+
         results.push({
           success: true,
           migration_id: migration.id,
@@ -207,17 +248,36 @@ export class MigrationEngine {
         this.appliedMigrations.add(migration.id);
 
         if (this.tracker) {
-          await this.tracker.recordMigration(migration, results[results.length - 1]);
+          await this.tracker.recordMigration(
+            migration,
+            results[results.length - 1],
+          );
         }
       } catch (error) {
         if (this.config.rollback_on_error && rollbackSQL) {
           try {
             await this.executeStatements(rollbackSQL);
           } catch (rollbackError) {
-            return Err(new MigrationError(`Migration failed and rollback failed: ${error instanceof Error ? error.message : String(error)}. Rollback error: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`));
+            return Err(
+              new MigrationError(
+                `Migration failed and rollback failed: ${
+                  error instanceof Error ? error.message : String(error)
+                }. Rollback error: ${
+                  rollbackError instanceof Error
+                    ? rollbackError.message
+                    : String(rollbackError)
+                }`,
+              ),
+            );
           }
         }
-        return Err(new MigrationError(`Migration execution failed: ${error instanceof Error ? error.message : String(error)}`));
+        return Err(
+          new MigrationError(
+            `Migration execution failed: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          ),
+        );
       }
     }
 
@@ -227,7 +287,9 @@ export class MigrationEngine {
   /**
    * Rollback a specific migration
    */
-  async rollbackMigration(migrationId: string): Promise<Result<boolean, MigrationError>> {
+  async rollbackMigration(
+    migrationId: string,
+  ): Promise<Result<boolean, MigrationError>> {
     if (!this.appliedMigrations.has(migrationId)) {
       return Err(new MigrationError(`Migration ${migrationId} is not applied`));
     }
@@ -238,24 +300,36 @@ export class MigrationEngine {
       this.appliedMigrations.delete(migrationId);
       return Ok(true);
     } catch (error) {
-      return Err(new MigrationError(`Failed to rollback migration ${migrationId}: ${error instanceof Error ? error.message : String(error)}`));
+      return Err(
+        new MigrationError(
+          `Failed to rollback migration ${migrationId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        ),
+      );
     }
   }
 
   /**
    * Rollback to a specific migration (rollback all migrations applied after it)
    */
-  async rollbackToMigration(migrationId: string): Promise<Result<boolean, MigrationError>> {
+  async rollbackToMigration(
+    migrationId: string,
+  ): Promise<Result<boolean, MigrationError>> {
     const appliedMigrations = Array.from(this.appliedMigrations);
     const targetIndex = appliedMigrations.indexOf(migrationId);
-    
+
     if (targetIndex === -1) {
-      return Err(new MigrationError(`Migration ${migrationId} not found in applied migrations`));
+      return Err(
+        new MigrationError(
+          `Migration ${migrationId} not found in applied migrations`,
+        ),
+      );
     }
 
     // Rollback all migrations after the target migration
     const migrationsToRollback = appliedMigrations.slice(targetIndex + 1);
-    
+
     for (const migId of migrationsToRollback.reverse()) {
       const rollbackResult = await this.rollbackMigration(migId);
       if (!rollbackResult.ok) {
@@ -269,7 +343,9 @@ export class MigrationEngine {
   /**
    * Validate rollback safety for a migration plan
    */
-  validateRollbackSafety(plan: Types.MigrationPlan): Result<boolean, MigrationError> {
+  validateRollbackSafety(
+    plan: Types.MigrationPlan,
+  ): Result<boolean, MigrationError> {
     const issues: string[] = [];
 
     for (const migration of plan.migrations) {
@@ -280,7 +356,9 @@ export class MigrationEngine {
     }
 
     if (issues.length > 0) {
-      return Err(new MigrationError(`Rollback safety concerns: ${issues.join(", ")}`));
+      return Err(
+        new MigrationError(`Rollback safety concerns: ${issues.join(", ")}`),
+      );
     }
 
     return Ok(true);
@@ -289,7 +367,9 @@ export class MigrationEngine {
   /**
    * Create a checkpoint before migration
    */
-  async createMigrationCheckpoint(name: string): Promise<Result<Types.MigrationCheckpoint, MigrationError>> {
+  async createMigrationCheckpoint(
+    name: string,
+  ): Promise<Result<Types.MigrationCheckpoint, MigrationError>> {
     try {
       const checkpoint: Types.MigrationCheckpoint = {
         id: this.generateCheckpointId(),
@@ -302,28 +382,44 @@ export class MigrationEngine {
       // In a real implementation, this would save the checkpoint to storage
       return Ok(checkpoint);
     } catch (error) {
-      return Err(new MigrationError(`Failed to create checkpoint: ${error instanceof Error ? error.message : String(error)}`));
+      return Err(
+        new MigrationError(
+          `Failed to create checkpoint: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        ),
+      );
     }
   }
 
   /**
    * Restore from a migration checkpoint
    */
-  async restoreFromCheckpoint(checkpointId: string): Promise<Result<boolean, MigrationError>> {
+  async restoreFromCheckpoint(
+    checkpointId: string,
+  ): Promise<Result<boolean, MigrationError>> {
     try {
       // In a real implementation, this would restore database state from checkpoint
       // For now, we simulate successful restore
       this.appliedMigrations.clear();
       return Ok(true);
     } catch (error) {
-      return Err(new MigrationError(`Failed to restore from checkpoint ${checkpointId}: ${error instanceof Error ? error.message : String(error)}`));
+      return Err(
+        new MigrationError(
+          `Failed to restore from checkpoint ${checkpointId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        ),
+      );
     }
   }
 
   /**
    * Generate data migration hints for complex changes
    */
-  generateDataMigrationHints(plan: Types.MigrationPlan): Result<string[], MigrationError> {
+  generateDataMigrationHints(
+    plan: Types.MigrationPlan,
+  ): Result<string[], MigrationError> {
     try {
       const hints: string[] = [];
 
@@ -335,14 +431,22 @@ export class MigrationEngine {
 
       return Ok(hints);
     } catch (error) {
-      return Err(new MigrationError(`Failed to generate data migration hints: ${error instanceof Error ? error.message : String(error)}`));
+      return Err(
+        new MigrationError(
+          `Failed to generate data migration hints: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        ),
+      );
     }
   }
 
   /**
    * Validate a migration plan for safety
    */
-  validateMigration(plan: Types.MigrationPlan): Result<boolean, MigrationError> {
+  validateMigration(
+    plan: Types.MigrationPlan,
+  ): Result<boolean, MigrationError> {
     const issues: string[] = [];
 
     for (const migration of plan.migrations) {
@@ -353,17 +457,24 @@ export class MigrationEngine {
     }
 
     if (issues.length > 0) {
-      return Err(new MigrationError(`Migration validation failed: ${issues.join(", ")}`));
+      return Err(
+        new MigrationError(`Migration validation failed: ${issues.join(", ")}`),
+      );
     }
 
     return Ok(true);
   }
 
-  private generateInitialMigration(schema: Module[]): Types.MigrationOperation[] {
+  private generateInitialMigration(
+    schema: Module[],
+  ): Types.MigrationOperation[] {
     const operations: Types.MigrationOperation[] = [];
 
     // Build a map of all types for inheritance resolution
-    const allTypes = new Map<string, import("../schema/ast.ts").TypeDeclaration>();
+    const allTypes = new Map<
+      string,
+      import("../schema/ast.ts").TypeDeclaration
+    >();
     for (const module of schema) {
       for (const item of module.items) {
         if (item.kind === "TypeDeclaration") {
@@ -384,14 +495,18 @@ export class MigrationEngine {
     return operations;
   }
 
-
   private generateMigrationId(): string {
-    const timestamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "");
+    const timestamp = new Date().toISOString().replace(/[-:]/g, "").replace(
+      /\.\d+Z$/,
+      "",
+    );
     const randomSuffix = Math.random().toString(36).substring(2, 8);
     return `m${timestamp}_${randomSuffix}`;
   }
 
-  private generateMigrationName(operations: Types.MigrationOperation[]): string {
+  private generateMigrationName(
+    operations: Types.MigrationOperation[],
+  ): string {
     if (operations.length === 0) {
       return "empty_migration";
     }
@@ -400,8 +515,10 @@ export class MigrationEngine {
       return this.getOperationName(operations[0]);
     }
 
-    const typeCount = operations.filter(op => op.kind.includes("Type")).length;
-    const tableCount = operations.filter(op => op.kind.includes("Table")).length;
+    const typeCount =
+      operations.filter((op) => op.kind.includes("Type")).length;
+    const tableCount =
+      operations.filter((op) => op.kind.includes("Table")).length;
 
     if (typeCount > 0) {
       return `schema_changes_${typeCount}_types`;
@@ -412,9 +529,13 @@ export class MigrationEngine {
     return `migration_${operations.length}_operations`;
   }
 
-  private generateMigrationDescription(operations: Types.MigrationOperation[]): string {
-    const descriptions = operations.slice(0, 3).map(op => this.getOperationDescription(op));
-    
+  private generateMigrationDescription(
+    operations: Types.MigrationOperation[],
+  ): string {
+    const descriptions = operations.slice(0, 3).map((op) =>
+      this.getOperationDescription(op)
+    );
+
     if (operations.length > 3) {
       descriptions.push(`... and ${operations.length - 3} more operations`);
     }
@@ -425,11 +546,17 @@ export class MigrationEngine {
   private getOperationName(operation: Types.MigrationOperation): string {
     switch (operation.kind) {
       case "CreateType":
-        return `create_${(operation as Types.CreateTypeOperation).type_name.toLowerCase()}`;
+        return `create_${
+          (operation as Types.CreateTypeOperation).type_name.toLowerCase()
+        }`;
       case "DropType":
-        return `drop_${(operation as Types.DropTypeOperation).type_name.toLowerCase()}`;
+        return `drop_${
+          (operation as Types.DropTypeOperation).type_name.toLowerCase()
+        }`;
       case "AlterType":
-        return `alter_${(operation as Types.AlterTypeOperation).type_name.toLowerCase()}`;
+        return `alter_${
+          (operation as Types.AlterTypeOperation).type_name.toLowerCase()
+        }`;
       default:
         return operation.kind.toLowerCase();
     }
@@ -438,11 +565,15 @@ export class MigrationEngine {
   private getOperationDescription(operation: Types.MigrationOperation): string {
     switch (operation.kind) {
       case "CreateType":
-        return `Create type ${(operation as Types.CreateTypeOperation).type_name}`;
+        return `Create type ${
+          (operation as Types.CreateTypeOperation).type_name
+        }`;
       case "DropType":
         return `Drop type ${(operation as Types.DropTypeOperation).type_name}`;
       case "AlterType":
-        return `Alter type ${(operation as Types.AlterTypeOperation).type_name}`;
+        return `Alter type ${
+          (operation as Types.AlterTypeOperation).type_name
+        }`;
       default:
         return operation.kind;
     }
@@ -536,11 +667,15 @@ export class MigrationEngine {
     switch (operation.kind) {
       case "DropType":
         // Check if type has dependencies
-        issues.push(...this.validateDropType(operation as Types.DropTypeOperation));
+        issues.push(
+          ...this.validateDropType(operation as Types.DropTypeOperation),
+        );
         break;
       case "AlterType":
         // Check for breaking changes
-        issues.push(...this.validateAlterType(operation as Types.AlterTypeOperation));
+        issues.push(
+          ...this.validateAlterType(operation as Types.AlterTypeOperation),
+        );
         break;
     }
 
@@ -563,17 +698,23 @@ export class MigrationEngine {
     for (const typeOp of operation.operations) {
       if (typeOp.kind === "DropProperty") {
         const dropOp = typeOp as Types.DropPropertyOperation;
-        issues.push(`Dropping property ${dropOp.property_name} from ${operation.type_name} may result in data loss`);
+        issues.push(
+          `Dropping property ${dropOp.property_name} from ${operation.type_name} may result in data loss`,
+        );
       }
 
       if (typeOp.kind === "AlterProperty") {
         const alterOp = typeOp as Types.AlterPropertyOperation;
         for (const change of alterOp.changes) {
           if (change.kind === "ChangeType") {
-            issues.push(`Changing type of ${alterOp.property_name} may require data migration`);
+            issues.push(
+              `Changing type of ${alterOp.property_name} may require data migration`,
+            );
           }
           if (change.kind === "ChangeRequired" && change.new_value) {
-            issues.push(`Making ${alterOp.property_name} required may fail if existing NULL values exist`);
+            issues.push(
+              `Making ${alterOp.property_name} required may fail if existing NULL values exist`,
+            );
           }
         }
       }
@@ -582,13 +723,17 @@ export class MigrationEngine {
     return issues;
   }
 
-  private validateRollbackOperation(operation: Types.MigrationOperation): string[] {
+  private validateRollbackOperation(
+    operation: Types.MigrationOperation,
+  ): string[] {
     const issues: string[] = [];
 
     switch (operation.kind) {
       case "DropType": {
         const dropOp = operation as Types.DropTypeOperation;
-        issues.push(`Rollback of DropType ${dropOp.type_name} requires manual intervention - original schema lost`);
+        issues.push(
+          `Rollback of DropType ${dropOp.type_name} requires manual intervention - original schema lost`,
+        );
         break;
       }
       case "AlterType": {
@@ -596,14 +741,18 @@ export class MigrationEngine {
         for (const typeOp of alterOp.operations) {
           if (typeOp.kind === "DropProperty") {
             const dropPropOp = typeOp as Types.DropPropertyOperation;
-            issues.push(`Rollback of DropProperty ${dropPropOp.property_name} may result in data loss or require manual intervention`);
+            issues.push(
+              `Rollback of DropProperty ${dropPropOp.property_name} may result in data loss or require manual intervention`,
+            );
           }
         }
         break;
       }
       case "DropTable": {
         const dropTableOp = operation as Types.DropTableOperation;
-        issues.push(`Rollback of DropTable ${dropTableOp.table_name} requires manual intervention - original structure lost`);
+        issues.push(
+          `Rollback of DropTable ${dropTableOp.table_name} requires manual intervention - original structure lost`,
+        );
         break;
       }
     }
@@ -611,7 +760,9 @@ export class MigrationEngine {
     return issues;
   }
 
-  private generateOperationHints(operation: Types.MigrationOperation): string[] {
+  private generateOperationHints(
+    operation: Types.MigrationOperation,
+  ): string[] {
     const hints: string[] = [];
 
     switch (operation.kind) {
@@ -620,13 +771,17 @@ export class MigrationEngine {
         // Hint for new types with required properties that need default values
         for (const prop of createTypeOp.properties) {
           if (prop.required && !prop.default) {
-            hints.push(`Data migration hint: New required property ${createTypeOp.type_name}.${prop.name} has no default value`);
+            hints.push(
+              `Data migration hint: New required property ${createTypeOp.type_name}.${prop.name} has no default value`,
+            );
           }
         }
         // Hint for new types with required links
         for (const link of createTypeOp.links) {
           if (link.required) {
-            hints.push(`Data migration hint: New required link ${createTypeOp.type_name}.${link.name} must reference existing ${link.target} objects`);
+            hints.push(
+              `Data migration hint: New required link ${createTypeOp.type_name}.${link.name} must reference existing ${link.target} objects`,
+            );
           }
         }
         break;
@@ -636,12 +791,16 @@ export class MigrationEngine {
         for (const typeOp of alterTypeOp.operations) {
           if (typeOp.kind === "DropProperty") {
             const dropPropOp = typeOp as Types.DropPropertyOperation;
-            hints.push(`Data migration hint: Consider backing up data from ${alterTypeOp.type_name}.${dropPropOp.property_name} before dropping`);
+            hints.push(
+              `Data migration hint: Consider backing up data from ${alterTypeOp.type_name}.${dropPropOp.property_name} before dropping`,
+            );
           }
           if (typeOp.kind === "AddProperty") {
             const addPropOp = typeOp as Types.AddPropertyOperation;
             if (addPropOp.property.required) {
-              hints.push(`Data migration hint: Consider setting a default value for required property ${alterTypeOp.type_name}.${addPropOp.property.name}`);
+              hints.push(
+                `Data migration hint: Consider setting a default value for required property ${alterTypeOp.type_name}.${addPropOp.property.name}`,
+              );
             }
           }
         }
@@ -649,7 +808,9 @@ export class MigrationEngine {
       }
       case "DropType": {
         const dropTypeOp = operation as Types.DropTypeOperation;
-        hints.push(`Data migration hint: Consider backing up all data from type ${dropTypeOp.type_name} before dropping`);
+        hints.push(
+          `Data migration hint: Consider backing up all data from type ${dropTypeOp.type_name} before dropping`,
+        );
         break;
       }
     }
@@ -658,7 +819,10 @@ export class MigrationEngine {
   }
 
   private generateCheckpointId(): string {
-    const timestamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "");
+    const timestamp = new Date().toISOString().replace(/[-:]/g, "").replace(
+      /\.\d+Z$/,
+      "",
+    );
     const randomSuffix = Math.random().toString(36).substring(2, 8);
     return `cp${timestamp}_${randomSuffix}`;
   }

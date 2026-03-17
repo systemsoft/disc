@@ -2,7 +2,7 @@
  * WebSocket protocol tests for Disc server
  */
 
-import { assertEquals, assertExists, assert } from "@std/assert";
+import { assert, assertEquals, assertExists } from "@std/assert";
 import { DiscServer } from "./server.ts";
 
 const TEST_PORT = 5658;
@@ -136,7 +136,7 @@ class WebSocketServerHarness {
     this.server_promise = this.server.start();
 
     // Wait for server to be ready
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
   }
 
   async stop(): Promise<void> {
@@ -319,7 +319,9 @@ Deno.test({
       assertEquals(response.type, "subscription");
       assertExists(response.payload);
       // The subscription handler sends data or error
-      assert(response.payload.type === "data" || response.payload.type === "error");
+      assert(
+        response.payload.type === "data" || response.payload.type === "error",
+      );
     } finally {
       await client.closeAndWait();
       await harness.stop();

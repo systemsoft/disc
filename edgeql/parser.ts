@@ -33,48 +33,47 @@ export class EdgeQLParser {
     // WITH block
     if (this.check(TokenType.WITH)) {
       query = this.parseWithBlock();
-    }
-    // FOR query
+    } // FOR query
     else if (this.check(TokenType.FOR)) {
       query = this.parseForQuery();
-    }
-    // SELECT query
+    } // SELECT query
     else if (this.check(TokenType.SELECT)) {
       query = this.parseSelectQuery();
-    }
-    // INSERT query
+    } // INSERT query
     else if (this.check(TokenType.INSERT)) {
       query = this.parseInsertQuery();
-    }
-    // UPDATE query
+    } // UPDATE query
     else if (this.check(TokenType.UPDATE)) {
       query = this.parseUpdateQuery();
-    }
-    // DELETE query
+    } // DELETE query
     else if (this.check(TokenType.DELETE)) {
       query = this.parseDeleteQuery();
-    }
-    // GROUP query
+    } // GROUP query
     else if (this.check(TokenType.GROUP)) {
       query = this.parseGroupQuery();
-    }
-    else {
+    } else {
       throw this.error(`Expected query statement, got ${this.peek().value}`);
     }
 
     // Check for set operations at the query level (UNION, EXCEPT, INTERSECT)
-    while (this.check(TokenType.UNION) || this.check(TokenType.EXCEPT) || this.check(TokenType.INTERSECT)) {
+    while (
+      this.check(TokenType.UNION) || this.check(TokenType.EXCEPT) ||
+      this.check(TokenType.INTERSECT)
+    ) {
       const opToken = this.advance();
-      const op = opToken.type === TokenType.UNION ? "UNION" : 
-                 opToken.type === TokenType.EXCEPT ? "EXCEPT" : "INTERSECT";
-      
+      const op = opToken.type === TokenType.UNION
+        ? "UNION"
+        : opToken.type === TokenType.EXCEPT
+        ? "EXCEPT"
+        : "INTERSECT";
+
       const right = this.parseQuery();
-      
+
       // Convert queries to expressions
       const leftExpr: AST.Expression = { kind: "Subquery", query };
       const rightExpr: AST.Expression = { kind: "Subquery", query: right };
       const unionExpr = AST.createBinaryOp(op, leftExpr, rightExpr);
-      
+
       // Wrap in a SELECT query
       query = {
         kind: "SelectQuery",
@@ -109,7 +108,7 @@ export class EdgeQLParser {
 
     const variable = this.parseIdentifier();
     this.consume(TokenType.IN, "Expected 'IN' after variable");
-    
+
     // Parse iterator without consuming UNION at the top level
     const iterator = this.parseIfElseExpression();
 
@@ -127,7 +126,7 @@ export class EdgeQLParser {
     this.consume(TokenType.SELECT, "Expected 'SELECT'");
 
     const distinct = this.match(TokenType.DISTINCT);
-    
+
     // Save state to prevent shape consumption
     this.skipShapeInPostfix = true;
     const expr = this.parseExpression();
@@ -374,11 +373,11 @@ export class EdgeQLParser {
       } else if (this.match(TokenType.COLON)) {
         // Aliased property
         name = ident;
-        
+
         // Check if the next token is a brace (nested shape)
         let expr: AST.Expression;
         let shape: AST.Shape | undefined;
-        
+
         if (this.check(TokenType.LBRACE)) {
           // It's a nested shape, not an expression
           shape = this.parseShape();
@@ -387,7 +386,7 @@ export class EdgeQLParser {
         } else {
           // It's an expression
           expr = this.parseExpression();
-          
+
           // Check for nested shape after the expression
           if (this.check(TokenType.LBRACE)) {
             shape = this.parseShape();
@@ -693,7 +692,9 @@ export class EdgeQLParser {
           const firstStep: AST.PathStep = {
             kind: "PathStep",
             type: "property",
-            name: expr.kind === "Identifier" ? expr.name : expr.name.parts.join("::"),
+            name: expr.kind === "Identifier"
+              ? expr.name
+              : expr.name.parts.join("::"),
             optional: false,
           };
           expr = AST.createPath([firstStep, step]);

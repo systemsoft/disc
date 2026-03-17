@@ -4,7 +4,10 @@
  */
 
 import { crypto } from "https://deno.land/std@0.208.0/crypto/mod.ts";
-import { encodeBase64, decodeBase64 } from "https://deno.land/std@0.208.0/encoding/base64.ts";
+import {
+  decodeBase64,
+  encodeBase64,
+} from "https://deno.land/std@0.208.0/encoding/base64.ts";
 
 export class ScramClient {
   private clientNonce: string;
@@ -23,7 +26,9 @@ export class ScramClient {
    */
   async getInitialMessage(): Promise<string> {
     const gs2Header = "n,,"; // No channel binding
-    const clientFirstBare = `n=${this.saslPrep(this.username)},r=${this.clientNonce}`;
+    const clientFirstBare = `n=${
+      this.saslPrep(this.username)
+    },r=${this.clientNonce}`;
     this.authMessage = clientFirstBare;
     return gs2Header + clientFirstBare;
   }
@@ -33,7 +38,7 @@ export class ScramClient {
    */
   async processServerFirst(serverFirst: string): Promise<string> {
     const params = this.parseServerMessage(serverFirst);
-    
+
     if (!params.r || !params.s || !params.i) {
       throw new Error("Invalid server-first message");
     }
@@ -50,25 +55,28 @@ export class ScramClient {
     // Build client-final message
     const channelBinding = "c=" + encodeBase64("n,,");
     const clientFinalWithoutProof = `${channelBinding},r=${this.serverNonce}`;
-    
+
     // Build auth message
-    this.authMessage = `${this.authMessage},${serverFirst},${clientFinalWithoutProof}`;
+    this.authMessage =
+      `${this.authMessage},${serverFirst},${clientFinalWithoutProof}`;
 
     // Compute proof
     const saltedPassword = await this.pbkdf2(
       this.password,
       this.salt,
-      this.iterations
+      this.iterations,
     );
-    
+
     const clientKey = await this.hmac(saltedPassword, "Client Key");
     const storedKey = await this.sha256(clientKey);
     const clientSignature = await this.hmac(storedKey, this.authMessage);
     const clientProof = this.xor(clientKey, clientSignature);
-    
+
     // Compute and store server signature for verification
     const serverKey = await this.hmac(saltedPassword, "Server Key");
-    this.serverSignature = encodeBase64(await this.hmac(serverKey, this.authMessage));
+    this.serverSignature = encodeBase64(
+      await this.hmac(serverKey, this.authMessage),
+    );
 
     const proof = encodeBase64(clientProof);
     return `${clientFinalWithoutProof},p=${proof}`;
@@ -79,7 +87,7 @@ export class ScramClient {
    */
   verifyServerFinal(serverFinal: string): boolean {
     const params = this.parseServerMessage(serverFinal);
-    
+
     if (params.e) {
       throw new Error(`Server error: ${params.e}`);
     }
@@ -106,7 +114,7 @@ export class ScramClient {
   private parseServerMessage(message: string): Record<string, string> {
     const params: Record<string, string> = {};
     const parts = message.split(",");
-    
+
     for (const part of parts) {
       const eq = part.indexOf("=");
       if (eq !== -1) {
@@ -115,7 +123,7 @@ export class ScramClient {
         params[key] = value;
       }
     }
-    
+
     return params;
   }
 
@@ -125,17 +133,17 @@ export class ScramClient {
   private async pbkdf2(
     password: string,
     salt: Uint8Array,
-    iterations: number
+    iterations: number,
   ): Promise<Uint8Array> {
     const encoder = new TextEncoder();
     const passwordBytes = encoder.encode(password);
-    
+
     const key = await crypto.subtle.importKey(
       "raw",
       passwordBytes as BufferSource,
       { name: "PBKDF2" },
       false,
-      ["deriveBits"]
+      ["deriveBits"],
     );
 
     const bits = await crypto.subtle.deriveBits(
@@ -146,7 +154,7 @@ export class ScramClient {
         hash: "SHA-256",
       },
       key,
-      256
+      256,
     );
 
     return new Uint8Array(bits);
@@ -155,7 +163,10 @@ export class ScramClient {
   /**
    * HMAC-SHA-256
    */
-  private async hmac(key: Uint8Array | string, message: string): Promise<Uint8Array> {
+  private async hmac(
+    key: Uint8Array | string,
+    message: string,
+  ): Promise<Uint8Array> {
     const encoder = new TextEncoder();
     const keyBytes = typeof key === "string" ? encoder.encode(key) : key;
     const messageBytes = encoder.encode(message);
@@ -165,13 +176,13 @@ export class ScramClient {
       keyBytes as BufferSource,
       { name: "HMAC", hash: "SHA-256" },
       false,
-      ["sign"]
+      ["sign"],
     );
 
     const signature = await crypto.subtle.sign(
       "HMAC",
       cryptoKey,
-      messageBytes
+      messageBytes,
     );
 
     return new Uint8Array(signature);
@@ -192,7 +203,7 @@ export class ScramClient {
     if (a.length !== b.length) {
       throw new Error("XOR operands must have same length");
     }
-    
+
     const result = new Uint8Array(a.length);
     for (let i = 0; i < a.length; i++) {
       result[i] = a[i] ^ b[i];
@@ -223,7 +234,7 @@ export class ScramServer {
     storedKey: Uint8Array,
     serverKey: Uint8Array,
     salt: Uint8Array,
-    iterations = 4096
+    iterations = 4096,
   ) {
     this.storedKey = storedKey;
     this.serverKey = serverKey;
@@ -239,9 +250,9 @@ export class ScramServer {
     // Parse client-first message
     const gs2Pos = clientFirst.indexOf(",", 3);
     const clientFirstBare = clientFirst.substring(gs2Pos + 1);
-    
+
     const params = this.parseClientMessage(clientFirstBare);
-    
+
     if (!params.n || !params.r) {
       throw new Error("Invalid client-first message");
     }
@@ -251,10 +262,12 @@ export class ScramServer {
 
     // Generate server-first message
     const serverNonce = this.clientNonce + this.serverNonce;
-    const serverFirst = `r=${serverNonce},s=${encodeBase64(this.salt)},i=${this.iterations}`;
-    
+    const serverFirst = `r=${serverNonce},s=${
+      encodeBase64(this.salt)
+    },i=${this.iterations}`;
+
     this.authMessage += "," + serverFirst;
-    
+
     return serverFirst;
   }
 
@@ -263,7 +276,7 @@ export class ScramServer {
    */
   async processClientFinal(clientFinal: string): Promise<string> {
     const params = this.parseClientMessage(clientFinal);
-    
+
     if (!params.c || !params.r || !params.p) {
       throw new Error("Invalid client-final message");
     }
@@ -285,7 +298,7 @@ export class ScramServer {
 
     // Generate server signature
     const serverSignature = await this.hmac(this.serverKey, this.authMessage);
-    
+
     return `v=${encodeBase64(serverSignature)}`;
   }
 
@@ -298,7 +311,7 @@ export class ScramServer {
   private parseClientMessage(message: string): Record<string, string> {
     const params: Record<string, string> = {};
     const parts = message.split(",");
-    
+
     for (const part of parts) {
       const eq = part.indexOf("=");
       if (eq !== -1) {
@@ -307,7 +320,7 @@ export class ScramServer {
         params[key] = value;
       }
     }
-    
+
     return params;
   }
 
@@ -320,13 +333,13 @@ export class ScramServer {
       key as BufferSource,
       { name: "HMAC", hash: "SHA-256" },
       false,
-      ["sign"]
+      ["sign"],
     );
 
     const signature = await crypto.subtle.sign(
       "HMAC",
       cryptoKey,
-      messageBytes
+      messageBytes,
     );
 
     return new Uint8Array(signature);
@@ -341,7 +354,7 @@ export class ScramServer {
     if (a.length !== b.length) {
       throw new Error("XOR operands must have same length");
     }
-    
+
     const result = new Uint8Array(a.length);
     for (let i = 0; i < a.length; i++) {
       result[i] = a[i] ^ b[i];
@@ -351,7 +364,7 @@ export class ScramServer {
 
   private compareBytes(a: Uint8Array, b: Uint8Array): boolean {
     if (a.length !== b.length) return false;
-    
+
     let result = 0;
     for (let i = 0; i < a.length; i++) {
       result |= a[i] ^ b[i];
@@ -366,7 +379,7 @@ export class ScramServer {
 export async function generateStoredKeys(
   _username: string,
   password: string,
-  iterations = 4096
+  iterations = 4096,
 ): Promise<{
   storedKey: Uint8Array;
   serverKey: Uint8Array;
@@ -378,13 +391,13 @@ export async function generateStoredKeys(
   crypto.getRandomValues(salt);
 
   const passwordBytes = encoder.encode(password);
-  
+
   const key = await crypto.subtle.importKey(
     "raw",
     passwordBytes as BufferSource,
     { name: "PBKDF2" },
     false,
-    ["deriveBits"]
+    ["deriveBits"],
   );
 
   const bits = await crypto.subtle.deriveBits(
@@ -395,7 +408,7 @@ export async function generateStoredKeys(
       hash: "SHA-256",
     },
     key,
-    256
+    256,
   );
 
   const saltedPassword = new Uint8Array(bits);
@@ -407,13 +420,13 @@ export async function generateStoredKeys(
     saltedPassword as BufferSource,
     { name: "HMAC", hash: "SHA-256" },
     false,
-    ["sign"]
+    ["sign"],
   );
   const clientKey = new Uint8Array(
-    await crypto.subtle.sign("HMAC", clientKeyCrypto, clientKeyBytes)
+    await crypto.subtle.sign("HMAC", clientKeyCrypto, clientKeyBytes),
   );
   const storedKey = new Uint8Array(
-    await crypto.subtle.digest("SHA-256", clientKey as BufferSource)
+    await crypto.subtle.digest("SHA-256", clientKey as BufferSource),
   );
 
   // Generate server key
@@ -423,10 +436,10 @@ export async function generateStoredKeys(
     saltedPassword as BufferSource,
     { name: "HMAC", hash: "SHA-256" },
     false,
-    ["sign"]
+    ["sign"],
   );
   const serverKey = new Uint8Array(
-    await crypto.subtle.sign("HMAC", serverKeyCrypto, serverKeyBytes)
+    await crypto.subtle.sign("HMAC", serverKeyCrypto, serverKeyBytes),
   );
 
   return { storedKey, serverKey, salt, iterations };
