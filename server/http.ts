@@ -5,10 +5,16 @@
 import * as Types from "./types.ts";
 import { ConnectionManager, SessionManager, TransactionManager } from "./connection.ts";
 import { SubscriptionHandler } from "./subscription-handler.ts";
+import type { AuthProvider } from "../auth/provider.ts";
+import type { AuthMiddleware } from "../auth/middleware.ts";
+import type { AuthRoutes } from "../auth/integration.ts";
 
 export interface HttpServerOptions {
   config: Types.ServerConfig;
   protocol_handler: Types.ProtocolHandler;
+  auth_provider?: AuthProvider;
+  auth_middleware?: AuthMiddleware;
+  auth_routes?: AuthRoutes;
 }
 
 export class HttpServer {
@@ -18,6 +24,9 @@ export class HttpServer {
   private session_manager: SessionManager;
   private transaction_manager: TransactionManager;
   private subscription_handler: SubscriptionHandler;
+  private auth_provider?: AuthProvider;
+  private auth_middleware?: AuthMiddleware;
+  private auth_routes?: AuthRoutes;
   private server?: Deno.HttpServer<Deno.NetAddr>;
   private cleanup_interval_ids: number[] = [];
   private start_time: Date;
@@ -31,6 +40,9 @@ export class HttpServer {
   constructor(options: HttpServerOptions) {
     this.config = options.config;
     this.protocol_handler = options.protocol_handler;
+    this.auth_provider = options.auth_provider;
+    this.auth_middleware = options.auth_middleware;
+    this.auth_routes = options.auth_routes;
     this.connection_manager = new ConnectionManager();
     this.session_manager = new SessionManager();
     this.transaction_manager = new TransactionManager();
@@ -98,6 +110,11 @@ export class HttpServer {
       // Handle regular HTTP requests
       const url = new URL(request.url);
 
+      // Auth route handling
+      if (url.pathname.startsWith("/auth/")) {
+        return await this.handle_auth_route(request, url);
+      }
+
       // Route handling
       switch (url.pathname) {
         case "/":
@@ -123,16 +140,32 @@ export class HttpServer {
   }
 
   private handle_root(): Response {
+    const endpoints: Record<string, any> = {
+      query: "/query",
+      health: "/health",
+      stats: "/stats",
+      websocket: this.config.enable_websockets ? "ws://upgrade" : null,
+    };
+
+    if (this.auth_routes) {
+      endpoints.auth = {
+        register: "/auth/register",
+        login: "/auth/login",
+        logout: "/auth/logout",
+        refresh: "/auth/refresh",
+        profile: "/auth/profile",
+        password: "/auth/password",
+        reset: "/auth/reset",
+        reset_confirm: "/auth/reset/confirm",
+        verify: "/auth/verify",
+      };
+    }
+
     const info = {
       name: "Disc Database",
       version: "0.1.0",
       protocol: "HTTP/JSON",
-      endpoints: {
-        query: "/query",
-        health: "/health",
-        stats: "/stats",
-        websocket: this.config.enable_websockets ? "ws://upgrade" : null,
-      },
+      endpoints,
     };
 
     return new Response(JSON.stringify(info, null, 2), {
@@ -180,10 +213,26 @@ export class HttpServer {
         request.headers.get("user-agent") || undefined
       );
 
+      // Build auth context from JWT if auth middleware is configured
+      const auth_context: Types.AuthContext = { roles: [], permissions: [] };
+      if (this.auth_middleware) {
+        const auth_result = await this.auth_middleware.authenticate(request);
+        if (auth_result) {
+          auth_context.user_id = auth_result.user_id;
+          auth_context.jwt_claims = {
+            sub: auth_result.sub,
+            email: auth_result.email,
+            username: auth_result.username,
+            iss: auth_result.iss,
+            aud: auth_result.aud,
+          };
+        }
+      }
+
       // Create query context
       const context: Types.QueryContext = {
         session: connection.session,
-        auth: { roles: [], permissions: [] }, // TODO: Implement real auth
+        auth: auth_context,
         request_id,
         started_at: new Date(),
         client_info: this.parse_client_info(request),
@@ -336,7 +385,7 @@ export class HttpServer {
       case "query": {
         const context: Types.QueryContext = {
           session: connection.session,
-          auth: { roles: [], permissions: [] },
+          auth: { roles: [], permissions: [], ...connection.session.variables?._auth_context },
           request_id: this.generate_request_id(),
           started_at: new Date(),
         };
@@ -399,6 +448,38 @@ export class HttpServer {
           type: "error",
           payload: { message: `Unknown message type: ${type}` },
         }));
+    }
+  }
+
+  private async handle_auth_route(request: Request, url: URL): Promise<Response> {
+    if (!this.auth_routes) {
+      return this.create_error_response("Authentication not configured", 404);
+    }
+
+    // Strip /auth/ prefix to get the route
+    const route = url.pathname.slice(6); // "/auth/".length === 6
+
+    switch (route) {
+      case "register":
+        return await this.auth_routes.register()(request);
+      case "login":
+        return await this.auth_routes.login()(request);
+      case "logout":
+        return await this.auth_routes.logout()(request);
+      case "refresh":
+        return await this.auth_routes.refresh()(request);
+      case "profile":
+        return await this.auth_routes.profile()(request);
+      case "password":
+        return await this.auth_routes.updatePassword()(request);
+      case "reset":
+        return await this.auth_routes.resetPasswordRequest()(request);
+      case "reset/confirm":
+        return await this.auth_routes.resetPassword()(request);
+      case "verify":
+        return await this.auth_routes.verifyEmail()(request);
+      default:
+        return this.create_error_response("Unknown auth endpoint", 404);
     }
   }
 

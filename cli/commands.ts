@@ -25,6 +25,8 @@ export interface ServeOptions {
   port?: number;
   host?: string;
   config?: string;
+  jwt_secret?: string;
+  enable_auth?: boolean;
 }
 
 export class CLICommands {
@@ -113,6 +115,14 @@ export class CLICommands {
       // Set DATABASE_URL for the server
       Deno.env.set("DATABASE_URL", instance.dsn());
 
+      // Set auth env vars from CLI flags
+      if (options.jwt_secret) {
+        Deno.env.set("DISC_JWT_SECRET", options.jwt_secret);
+      }
+      if (options.enable_auth) {
+        Deno.env.set("DISC_ENABLE_AUTH", "true");
+      }
+
       // Try to load the project schema from SDL
       const schema = await this.readSchemaAsCompilerSchema(
         "./dbschema/default.esdl",
@@ -127,6 +137,11 @@ export class CLICommands {
         );
       } else {
         console.log("  No schema file found, using default test schema");
+      }
+
+      // Log auth status
+      if (options.jwt_secret || Deno.env.get("DISC_JWT_SECRET")) {
+        console.log("🔐 Authentication enabled");
       }
 
       // Create server from environment variables, passing schema if available

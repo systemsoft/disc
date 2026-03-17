@@ -4,6 +4,17 @@
 
 import type { Schema } from "../compiler/context.ts";
 
+export interface AuthServerConfig {
+  jwt_issuer?: string;
+  jwt_audience?: string;
+  token_expiry?: number;
+  bcrypt_rounds?: number;
+  session_timeout?: number;
+  allow_registration?: boolean;
+  require_email_verification?: boolean;
+  password_min_length?: number;
+}
+
 export interface ServerConfig {
   host: string;
   port: number;
@@ -14,6 +25,8 @@ export interface ServerConfig {
   cors_origins?: string[];
   enable_websockets: boolean;
   jwt_secret?: string;
+  enable_auth?: boolean;
+  auth_config?: AuthServerConfig;
   enable_explain?: boolean;
   dry_run?: boolean;
   tls?: {

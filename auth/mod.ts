@@ -9,8 +9,12 @@
 export * from "./types.ts";
 export * from "./provider.ts";
 export * from "./middleware.ts";
+export * from "./integration.ts";
+export * from "./pg-database-adapter.ts";
 
 // Re-export for convenience
 export { AuthProvider } from "./provider.ts";
 export { AuthMiddleware, createAuthMiddleware } from "./middleware.ts";
+export { AuthRoutes } from "./integration.ts";
+export { PgDatabaseAdapter } from "./pg-database-adapter.ts";
 export type { AuthContext, CORSOptions } from "./middleware.ts";

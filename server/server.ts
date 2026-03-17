@@ -9,6 +9,11 @@ import { EdgeQLProtocolHandler } from "./edgeql-protocol.ts";
 import { PostgresInstance } from "../postgres/instance.ts";
 import { logger } from "../postgres/logger.ts";
 import type { Schema } from "../compiler/context.ts";
+import { AuthProvider } from "../auth/provider.ts";
+import { AuthMiddleware } from "../auth/middleware.ts";
+import { AuthRoutes } from "../auth/integration.ts";
+import { PgDatabaseAdapter } from "../auth/pg-database-adapter.ts";
+import { DatabaseConnection } from "../lib/database.ts";
 
 /**
  * Options for constructing a DiscServer.
@@ -34,6 +39,13 @@ export interface DiscServerOptions extends Partial<Types.ServerConfig> {
    * When provided, the handler uses this schema instead of the default test schema.
    */
   schema?: Schema;
+
+  /**
+   * Enable authentication system. Requires jwt_secret to be set.
+   * When true (and jwt_secret is present), initializes AuthProvider,
+   * registers /auth/* routes, and populates AuthContext from JWT tokens.
+   */
+  enable_auth?: boolean;
 }
 
 export class DiscServer {
@@ -41,6 +53,10 @@ export class DiscServer {
   private http_server?: HttpServer;
   private postgres_instance?: PostgresInstance;
   private protocol_handler: Types.ProtocolHandler;
+  private auth_provider?: AuthProvider;
+  private auth_middleware?: AuthMiddleware;
+  private auth_routes?: AuthRoutes;
+  private auth_db?: DatabaseConnection;
 
   constructor(config: DiscServerOptions = {}) {
     // If a PostgresInstance is provided, derive database_url from its DSN
@@ -62,6 +78,8 @@ export class DiscServer {
         ? config.enable_websockets
         : true,
       jwt_secret: config.jwt_secret,
+      enable_auth: config.enable_auth,
+      auth_config: config.auth_config,
       tls: config.tls,
     };
 
@@ -101,10 +119,18 @@ export class DiscServer {
         logger.info("Protocol handler initialized (connection pool ready)");
       }
 
+      // Initialize auth if jwt_secret is set and enable_auth is not explicitly false
+      if (this.config.jwt_secret && this.config.enable_auth !== false) {
+        await this.initializeAuth();
+      }
+
       // Initialize HTTP server
       this.http_server = new HttpServer({
         config: this.config,
         protocol_handler: this.protocol_handler,
+        auth_provider: this.auth_provider,
+        auth_middleware: this.auth_middleware,
+        auth_routes: this.auth_routes,
       });
 
       // Start the server
@@ -128,7 +154,49 @@ export class DiscServer {
       logger.info("Protocol handler closed (connection pool drained)");
     }
 
+    // Close auth database connection
+    if (this.auth_db) {
+      await this.auth_db.close();
+      logger.info("Auth database connection closed");
+    }
+
     logger.info("Server stopped successfully");
+  }
+
+  private async initializeAuth(): Promise<void> {
+    if (!this.config.jwt_secret) return;
+
+    logger.info("Initializing authentication system");
+
+    // Create a dedicated database connection for auth
+    this.auth_db = new DatabaseConnection(this.config.database_url);
+    await this.auth_db.connect();
+
+    // Wrap in PgDatabaseAdapter for ? -> $N placeholder conversion
+    const adapter = new PgDatabaseAdapter(this.auth_db);
+
+    // Build auth config
+    const authConfig = {
+      jwt_secret: this.config.jwt_secret,
+      jwt_issuer: this.config.auth_config?.jwt_issuer,
+      jwt_audience: this.config.auth_config?.jwt_audience,
+      token_expiry: this.config.auth_config?.token_expiry,
+      bcrypt_rounds: this.config.auth_config?.bcrypt_rounds,
+      session_timeout: this.config.auth_config?.session_timeout,
+      allow_registration: this.config.auth_config?.allow_registration,
+      require_email_verification: this.config.auth_config?.require_email_verification,
+      password_min_length: this.config.auth_config?.password_min_length,
+    };
+
+    // Initialize provider (creates tables + crypto key)
+    this.auth_provider = new AuthProvider(authConfig, adapter);
+    await this.auth_provider.initialize();
+
+    // Create middleware and routes
+    this.auth_middleware = new AuthMiddleware(this.auth_provider);
+    this.auth_routes = new AuthRoutes(this.auth_provider, this.auth_middleware);
+
+    logger.info("Authentication system initialized");
   }
 
   get_config(): Types.ServerConfig {
@@ -173,6 +241,7 @@ export function create_server_from_env(
   postgres_instance?: PostgresInstance,
   schema?: Schema,
 ): DiscServer {
+  const enableAuth = Deno.env.get("DISC_ENABLE_AUTH");
   const config: DiscServerOptions = {
     host: Deno.env.get("DISC_HOST") || "localhost",
     port: parseInt(Deno.env.get("DISC_PORT") || "5656"),
@@ -182,6 +251,7 @@ export function create_server_from_env(
     enable_cors: Deno.env.get("DISC_ENABLE_CORS") !== "false",
     enable_websockets: Deno.env.get("DISC_ENABLE_WEBSOCKETS") !== "false",
     jwt_secret: Deno.env.get("DISC_JWT_SECRET"),
+    enable_auth: enableAuth !== undefined ? enableAuth !== "false" : undefined,
     postgres_instance,
     protocol: Deno.env.get("DISC_PROTOCOL") === "full" ? "full" : "simple",
     schema,

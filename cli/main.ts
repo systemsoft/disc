@@ -44,6 +44,8 @@ OPTIONS:
   --backend-dsn <url>  Use external PostgreSQL (skip bundled)
   --skip-postgres      Skip PostgreSQL setup in init
   --no-monitor         Disable PostgreSQL health monitoring
+  --jwt-secret <key>   JWT signing secret for authentication
+  --enable-auth        Enable authentication system (requires --jwt-secret)
 
 EXAMPLES:
   disc init my-project                # Initialize new project with PostgreSQL
@@ -75,6 +77,7 @@ async function main() {
       "non-interactive",
       "skip-postgres",
       "no-monitor",
+      "enable-auth",
     ],
     string: [
       "port",
@@ -89,6 +92,7 @@ async function main() {
       "name",
       "directory",
       "backend-dsn",
+      "jwt-secret",
     ],
     alias: {
       h: "help",
@@ -156,6 +160,8 @@ async function main() {
           port: args.port ? parseInt(args.port) : undefined,
           host: args.host,
           config: args.config,
+          jwt_secret: args["jwt-secret"],
+          enable_auth: args["enable-auth"],
         });
         break;
       }
