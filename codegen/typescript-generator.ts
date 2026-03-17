@@ -4,7 +4,10 @@
  */
 
 import * as Context from "../compiler/context.ts";
+import { getLogger } from "../lib/logger.ts";
 import * as Types from "./types.ts";
+
+const log = getLogger("codegen");
 
 export class TypeScriptGenerator {
   private config: Types.CodegenConfig;
@@ -15,9 +18,9 @@ export class TypeScriptGenerator {
     this.schema = schema;
     this.config = config;
     this.type_mappings = new Map();
-    
+
     // Initialize built-in type mappings
-    Types.DEFAULT_TYPE_MAPPINGS.forEach(mapping => {
+    Types.DEFAULT_TYPE_MAPPINGS.forEach((mapping) => {
       this.type_mappings.set(mapping.edgeql_type, mapping);
     });
   }
@@ -50,10 +53,11 @@ export class TypeScriptGenerator {
       const indexFile = this.generateIndexFile();
       result.files.push(indexFile);
 
-      console.log(`✅ Generated ${result.files.length} TypeScript files`);
-
+      log.info("TypeScript files generated", { count: result.files.length });
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      const errorMessage = error instanceof Error
+        ? error.message
+        : "Unknown error";
       result.errors.push(errorMessage);
     }
 
@@ -62,7 +66,7 @@ export class TypeScriptGenerator {
 
   private generateTypeDefinitions(): Types.GeneratedFile {
     let content = "";
-    
+
     // File header
     content += this.generateFileHeader("Type Definitions");
     content += "\n";
@@ -117,49 +121,58 @@ export class TypeScriptGenerator {
     return content;
   }
 
-  private generatePropertyDefinition(name: string, prop: Context.PropertyDef): string {
+  private generatePropertyDefinition(
+    name: string,
+    prop: Context.PropertyDef,
+  ): string {
     let content = "";
-    
+
     // Property documentation
     content += `  /** ${prop.type}${prop.required ? " (required)" : ""} */\n`;
-    
+
     // Property declaration
-    const tsType = Types.mapEdgeQLTypeToTypeScript(prop.type, prop.required, prop.multi);
+    const tsType = Types.mapEdgeQLTypeToTypeScript(
+      prop.type,
+      prop.required,
+      prop.multi,
+    );
     const optional = prop.required ? "" : "?";
-    
+
     content += `  ${name}${optional}: ${tsType};\n`;
-    
+
     return content;
   }
 
   private generateLinkDefinition(name: string, link: Context.LinkDef): string {
     let content = "";
-    
-    // Link documentation  
+
+    // Link documentation
     const relationshipType = link.multi ? "many" : "one";
-    content += `  /** Link to ${link.target} (${relationshipType}${link.required ? ", required" : ""}) */\n`;
-    
+    content += `  /** Link to ${link.target} (${relationshipType}${
+      link.required ? ", required" : ""
+    }) */\n`;
+
     // Link declaration
     const targetType = this.getTypeScriptTypeName(link.target);
     let tsType = targetType;
-    
+
     if (link.multi) {
       tsType = `${targetType}[]`;
     }
-    
+
     if (!link.required) {
       tsType += " | null";
     }
-    
+
     const optional = link.required ? "" : "?";
     content += `  ${name}${optional}: ${tsType};\n`;
-    
+
     return content;
   }
 
   private generateQueryBuilders(): Types.GeneratedFile {
     let content = "";
-    
+
     // File header
     content += this.generateFileHeader("Query Builders");
     content += "\n";
@@ -186,7 +199,7 @@ export class TypeScriptGenerator {
   private generateQueryBuilder(typeDef: Context.TypeDef): string {
     const typeName = this.getTypeScriptTypeName(typeDef.name);
     const builderName = `${typeName}QueryBuilder`;
-    
+
     let content = "";
 
     // Builder class
@@ -198,66 +211,87 @@ export class TypeScriptGenerator {
 
     // Select methods
     content += `  /** Select all ${typeName} objects */\n`;
-    content += `  async select(shape?: string): Promise<Types.${typeName}[]> {\n`;
+    content +=
+      `  async select(shape?: string): Promise<Types.${typeName}[]> {\n`;
     content += `    const query = shape \n`;
     content += `      ? \`select ${typeDef.name} \${shape}\`\n`;
     content += `      : \`select ${typeDef.name} { * }\`;\n`;
-    content += `    return await this.client.query<Types.${typeName}[]>(query);\n`;
+    content +=
+      `    return await this.client.query<Types.${typeName}[]>(query);\n`;
     content += `  }\n\n`;
 
     // Select by ID
     content += `  /** Select ${typeName} by ID */\n`;
-    content += `  async selectById(id: string, shape?: string): Promise<Types.${typeName} | null> {\n`;
+    content +=
+      `  async selectById(id: string, shape?: string): Promise<Types.${typeName} | null> {\n`;
     content += `    const query = shape\n`;
-    content += `      ? \`select ${typeDef.name} \${shape} filter .id = <uuid>$id\`\n`;
-    content += `      : \`select ${typeDef.name} { * } filter .id = <uuid>$id\`;\n`;
-    content += `    const results = await this.client.query<Types.${typeName}[]>(query, { id });\n`;
+    content +=
+      `      ? \`select ${typeDef.name} \${shape} filter .id = <uuid>$id\`\n`;
+    content +=
+      `      : \`select ${typeDef.name} { * } filter .id = <uuid>$id\`;\n`;
+    content +=
+      `    const results = await this.client.query<Types.${typeName}[]>(query, { id });\n`;
     content += `    return results[0] || null;\n`;
     content += `  }\n\n`;
 
     // Filter method
     content += `  /** Filter ${typeName} objects */\n`;
-    content += `  async filter(condition: string, variables?: Record<string, any>, shape?: string): Promise<Types.${typeName}[]> {\n`;
+    content +=
+      `  async filter(condition: string, variables?: Record<string, any>, shape?: string): Promise<Types.${typeName}[]> {\n`;
     content += `    const query = shape\n`;
-    content += `      ? \`select ${typeDef.name} \${shape} filter \${condition}\`\n`;
-    content += `      : \`select ${typeDef.name} { * } filter \${condition}\`;\n`;
-    content += `    return await this.client.query<Types.${typeName}[]>(query, variables);\n`;
+    content +=
+      `      ? \`select ${typeDef.name} \${shape} filter \${condition}\`\n`;
+    content +=
+      `      : \`select ${typeDef.name} { * } filter \${condition}\`;\n`;
+    content +=
+      `    return await this.client.query<Types.${typeName}[]>(query, variables);\n`;
     content += `  }\n\n`;
 
     // Insert method
     content += `  /** Insert new ${typeName} */\n`;
-    content += `  async insert(data: Partial<Omit<Types.${typeName}, 'id'>>): Promise<Types.${typeName}> {\n`;
+    content +=
+      `  async insert(data: Partial<Omit<Types.${typeName}, 'id'>>): Promise<Types.${typeName}> {\n`;
     content += `    const assignments = Object.entries(data)\n`;
     content += `      .map(([key, value]) => \`\${key} := <str>$\${key}\`)\n`;
     content += `      .join(', ');\n`;
-    content += `    const query = \`insert ${typeDef.name} { \${assignments} }\`;\n`;
-    content += `    return await this.client.query<Types.${typeName}>(query, data);\n`;
+    content +=
+      `    const query = \`insert ${typeDef.name} { \${assignments} }\`;\n`;
+    content +=
+      `    return await this.client.query<Types.${typeName}>(query, data);\n`;
     content += `  }\n\n`;
 
-    // Update method  
+    // Update method
     content += `  /** Update ${typeName} by ID */\n`;
-    content += `  async update(id: string, data: Partial<Omit<Types.${typeName}, 'id'>>): Promise<Types.${typeName}> {\n`;
+    content +=
+      `  async update(id: string, data: Partial<Omit<Types.${typeName}, 'id'>>): Promise<Types.${typeName}> {\n`;
     content += `    const assignments = Object.entries(data)\n`;
     content += `      .map(([key, value]) => \`\${key} := <str>$\${key}\`)\n`;
     content += `      .join(', ');\n`;
-    content += `    const query = \`update ${typeDef.name} filter .id = <uuid>$id set { \${assignments} }\`;\n`;
-    content += `    return await this.client.query<Types.${typeName}>(query, { id, ...data });\n`;
+    content +=
+      `    const query = \`update ${typeDef.name} filter .id = <uuid>$id set { \${assignments} }\`;\n`;
+    content +=
+      `    return await this.client.query<Types.${typeName}>(query, { id, ...data });\n`;
     content += `  }\n\n`;
 
     // Delete method
     content += `  /** Delete ${typeName} by ID */\n`;
     content += `  async delete(id: string): Promise<Types.${typeName}> {\n`;
-    content += `    const query = \`delete ${typeDef.name} filter .id = <uuid>$id\`;\n`;
-    content += `    return await this.client.query<Types.${typeName}>(query, { id });\n`;
+    content +=
+      `    const query = \`delete ${typeDef.name} filter .id = <uuid>$id\`;\n`;
+    content +=
+      `    return await this.client.query<Types.${typeName}>(query, { id });\n`;
     content += `  }\n\n`;
 
     // Count method
     content += `  /** Count ${typeName} objects */\n`;
-    content += `  async count(condition?: string, variables?: Record<string, any>): Promise<number> {\n`;
+    content +=
+      `  async count(condition?: string, variables?: Record<string, any>): Promise<number> {\n`;
     content += `    const query = condition\n`;
-    content += `      ? \`select count(${typeDef.name} filter \${condition})\`\n`;
+    content +=
+      `      ? \`select count(${typeDef.name} filter \${condition})\`\n`;
     content += `      : \`select count(${typeDef.name})\`;\n`;
-    content += `    return await this.client.query<number>(query, variables);\n`;
+    content +=
+      `    return await this.client.query<number>(query, variables);\n`;
     content += `  }\n`;
 
     content += `}\n`;
@@ -267,7 +301,7 @@ export class TypeScriptGenerator {
 
   private generateClient(): Types.GeneratedFile {
     let content = "";
-    
+
     // File header
     content += this.generateFileHeader("Disc Client");
     content += "\n";
@@ -297,7 +331,9 @@ export class TypeScriptGenerator {
     // Query builders
     for (const [typeName, typeDef] of this.schema.types) {
       if (typeDef.kind === "object") {
-        const builderName = `${this.getTypeScriptTypeName(typeName)}QueryBuilder`;
+        const builderName = `${
+          this.getTypeScriptTypeName(typeName)
+        }QueryBuilder`;
         const propertyName = typeName.toLowerCase();
         content += `  /** Query builder for ${typeName} */\n`;
         content += `  readonly ${propertyName}: Queries.${builderName};\n`;
@@ -307,7 +343,8 @@ export class TypeScriptGenerator {
     content += `\n`;
 
     // Constructor
-    content += `  constructor(config: DiscClientConfig = {}, options?: { transactionId?: string }) {\n`;
+    content +=
+      `  constructor(config: DiscClientConfig = {}, options?: { transactionId?: string }) {\n`;
     content += `    const host = config.host || "localhost";\n`;
     content += `    const port = config.port || 5656;\n`;
     content += `    const protocol = config.protocol || "http";\n`;
@@ -320,46 +357,55 @@ export class TypeScriptGenerator {
     content += `    \n`;
     content += `    // Add transaction ID to headers if provided\n`;
     content += `    if (options?.transactionId) {\n`;
-    content += `      this.headers['X-Transaction-ID'] = options.transactionId;\n`;
+    content +=
+      `      this.headers['X-Transaction-ID'] = options.transactionId;\n`;
     content += `    }\n\n`;
 
     // Initialize query builders
     for (const [typeName] of this.schema.types) {
       const builderName = `${this.getTypeScriptTypeName(typeName)}QueryBuilder`;
       const propertyName = typeName.toLowerCase();
-      content += `    this.${propertyName} = new Queries.${builderName}(this);\n`;
+      content +=
+        `    this.${propertyName} = new Queries.${builderName}(this);\n`;
     }
 
     content += `  }\n\n`;
 
     // Raw query method
     content += `  /** Execute raw EdgeQL query */\n`;
-    content += `  async query<T = any>(query: string, variables?: Record<string, any>): Promise<T> {\n`;
-    content += `    const response = await fetch(\`\${this.baseUrl}/query\`, {\n`;
+    content +=
+      `  async query<T = any>(query: string, variables?: Record<string, any>): Promise<T> {\n`;
+    content +=
+      `    const response = await fetch(\`\${this.baseUrl}/query\`, {\n`;
     content += `      method: "POST",\n`;
     content += `      headers: this.headers,\n`;
     content += `      body: JSON.stringify({ query, variables }),\n`;
     content += `      signal: AbortSignal.timeout(this.timeout),\n`;
     content += `    });\n\n`;
     content += `    if (!response.ok) {\n`;
-    content += `      throw new Error(\`HTTP \${response.status}: \${response.statusText}\`);\n`;
+    content +=
+      `      throw new Error(\`HTTP \${response.status}: \${response.statusText}\`);\n`;
     content += `    }\n\n`;
     content += `    const result = await response.json();\n\n`;
     content += `    if (result.errors && result.errors.length > 0) {\n`;
-    content += `      throw new Error(\`EdgeQL Error: \${result.errors[0].message}\`);\n`;
+    content +=
+      `      throw new Error(\`EdgeQL Error: \${result.errors[0].message}\`);\n`;
     content += `    }\n\n`;
     content += `    return result.data;\n`;
     content += `  }\n\n`;
 
     // Transaction support
     content += `  /** Execute queries in transaction */\n`;
-    content += `  async transaction<T>(fn: (client: DiscClient) => Promise<T>): Promise<T> {\n`;
+    content +=
+      `  async transaction<T>(fn: (client: DiscClient) => Promise<T>): Promise<T> {\n`;
     content += `    // Start transaction\n`;
     content += `    const txId = await this.beginTransaction();\n`;
     content += `    \n`;
     content += `    try {\n`;
-    content += `      // Create a new client instance with transaction context\n`;
-    content += `      const txClient = new DiscClient(this.baseUrl, { transactionId: txId });\n`;
+    content +=
+      `      // Create a new client instance with transaction context\n`;
+    content +=
+      `      const txClient = new DiscClient(this.baseUrl, { transactionId: txId });\n`;
     content += `      \n`;
     content += `      // Execute the function with transaction client\n`;
     content += `      const result = await fn(txClient);\n`;
@@ -374,11 +420,12 @@ export class TypeScriptGenerator {
     content += `      throw error;\n`;
     content += `    }\n`;
     content += `  }\n\n`;
-    
+
     // Add transaction management methods
     content += `  /** Begin a new transaction */\n`;
     content += `  private async beginTransaction(): Promise<string> {\n`;
-    content += `    const response = await fetch(\`\${this.baseUrl}/transaction/begin\`, {\n`;
+    content +=
+      `    const response = await fetch(\`\${this.baseUrl}/transaction/begin\`, {\n`;
     content += `      method: 'POST',\n`;
     content += `      headers: {\n`;
     content += `        'Content-Type': 'application/json',\n`;
@@ -386,16 +433,19 @@ export class TypeScriptGenerator {
     content += `    });\n`;
     content += `    \n`;
     content += `    if (!response.ok) {\n`;
-    content += `      throw new Error(\`Failed to begin transaction: \${response.statusText}\`);\n`;
+    content +=
+      `      throw new Error(\`Failed to begin transaction: \${response.statusText}\`);\n`;
     content += `    }\n`;
     content += `    \n`;
     content += `    const result = await response.json();\n`;
     content += `    return result.transactionId;\n`;
     content += `  }\n\n`;
-    
+
     content += `  /** Commit a transaction */\n`;
-    content += `  private async commitTransaction(txId: string): Promise<void> {\n`;
-    content += `    const response = await fetch(\`\${this.baseUrl}/transaction/\${txId}/commit\`, {\n`;
+    content +=
+      `  private async commitTransaction(txId: string): Promise<void> {\n`;
+    content +=
+      `    const response = await fetch(\`\${this.baseUrl}/transaction/\${txId}/commit\`, {\n`;
     content += `      method: 'POST',\n`;
     content += `      headers: {\n`;
     content += `        'Content-Type': 'application/json',\n`;
@@ -403,14 +453,17 @@ export class TypeScriptGenerator {
     content += `    });\n`;
     content += `    \n`;
     content += `    if (!response.ok) {\n`;
-    content += `      throw new Error(\`Failed to commit transaction: \${response.statusText}\`);\n`;
+    content +=
+      `      throw new Error(\`Failed to commit transaction: \${response.statusText}\`);\n`;
     content += `    }\n`;
     content += `  }\n\n`;
-    
+
     content += `  /** Rollback a transaction */\n`;
-    content += `  private async rollbackTransaction(txId: string): Promise<void> {\n`;
+    content +=
+      `  private async rollbackTransaction(txId: string): Promise<void> {\n`;
     content += `    try {\n`;
-    content += `      const response = await fetch(\`\${this.baseUrl}/transaction/\${txId}/rollback\`, {\n`;
+    content +=
+      `      const response = await fetch(\`\${this.baseUrl}/transaction/\${txId}/rollback\`, {\n`;
     content += `        method: 'POST',\n`;
     content += `        headers: {\n`;
     content += `          'Content-Type': 'application/json',\n`;
@@ -418,24 +471,29 @@ export class TypeScriptGenerator {
     content += `      });\n`;
     content += `      \n`;
     content += `      if (!response.ok) {\n`;
-    content += `        console.error(\`Failed to rollback transaction: \${response.statusText}\`);\n`;
+    content +=
+      `        console.error(\`Failed to rollback transaction: \${response.statusText}\`);\n`;
     content += `      }\n`;
     content += `    } catch (error) {\n`;
-    content += `      console.error('Error during transaction rollback:', error);\n`;
+    content +=
+      `      console.error('Error during transaction rollback:', error);\n`;
     content += `    }\n`;
     content += `  }\n\n`;
 
     // Health check
     content += `  /** Check server health */\n`;
-    content += `  async health(): Promise<{ status: string; uptime_ms: number }> {\n`;
-    content += `    const response = await fetch(\`\${this.baseUrl}/health\`);\n`;
+    content +=
+      `  async health(): Promise<{ status: string; uptime_ms: number }> {\n`;
+    content +=
+      `    const response = await fetch(\`\${this.baseUrl}/health\`);\n`;
     content += `    return await response.json();\n`;
     content += `  }\n\n`;
 
     // Server stats
     content += `  /** Get server statistics */\n`;
     content += `  async stats(): Promise<Record<string, any>> {\n`;
-    content += `    const response = await fetch(\`\${this.baseUrl}/stats\`);\n`;
+    content +=
+      `    const response = await fetch(\`\${this.baseUrl}/stats\`);\n`;
     content += `    return await response.json();\n`;
     content += `  }\n`;
 
@@ -450,7 +508,7 @@ export class TypeScriptGenerator {
 
   private generateIndexFile(): Types.GeneratedFile {
     let content = "";
-    
+
     // File header
     content += this.generateFileHeader("Generated API");
     content += "\n";
@@ -458,10 +516,10 @@ export class TypeScriptGenerator {
     // Re-exports
     content += `// Type definitions\n`;
     content += `export * from "./types.ts";\n\n`;
-    
+
     content += `// Query builders\n`;
     content += `export * from "./queries.ts";\n\n`;
-    
+
     content += `// Client\n`;
     content += `export * from "./client.ts";\n\n`;
 
@@ -505,8 +563,10 @@ export class TypeScriptGenerator {
     content += `/** Insert/Update data types */\n`;
     for (const [typeName] of this.schema.types) {
       const tsTypeName = this.getTypeScriptTypeName(typeName);
-      content += `export type ${tsTypeName}Insert = Omit<${tsTypeName}, 'id'>;\n`;
-      content += `export type ${tsTypeName}Update = Partial<${tsTypeName}Insert>;\n`;
+      content +=
+        `export type ${tsTypeName}Insert = Omit<${tsTypeName}, 'id'>;\n`;
+      content +=
+        `export type ${tsTypeName}Update = Partial<${tsTypeName}Insert>;\n`;
     }
 
     return content;
@@ -515,12 +575,12 @@ export class TypeScriptGenerator {
   private generateFileHeader(description: string): string {
     const timestamp = new Date().toISOString();
     return `/**\n` +
-           ` * ${description}\n` +
-           ` * Generated by Disc TypeScript Codegen\n` +
-           ` * Generated at: ${timestamp}\n` +
-           ` * \n` +
-           ` * DO NOT EDIT THIS FILE MANUALLY\n` +
-           ` */\n`;
+      ` * ${description}\n` +
+      ` * Generated by Disc TypeScript Codegen\n` +
+      ` * Generated at: ${timestamp}\n` +
+      ` * \n` +
+      ` * DO NOT EDIT THIS FILE MANUALLY\n` +
+      ` */\n`;
   }
 
   private getTypeScriptTypeName(edgeqlTypeName: string): string {

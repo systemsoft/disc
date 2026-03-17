@@ -33,9 +33,14 @@ export interface ServerConfig {
   cache_max_size?: number;
   shutdown_drain_timeout?: number;
   slow_query_threshold_ms?: number;
+  enable_metrics?: boolean;
+  rate_limit_rpm?: number;
+  rate_limit_burst?: number;
   tls?: {
     cert_file: string;
     key_file: string;
+    redirect?: boolean;
+    redirect_port?: number;
   };
 }
 
@@ -148,6 +153,10 @@ export interface ServerStats {
     avgParseMs: number;
     cacheHitRate: number;
     totalQueries: number;
+  };
+  rate_limit?: {
+    rejected_count: number;
+    active_clients: number;
   };
 }
 

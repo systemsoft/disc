@@ -1,8 +1,9 @@
 #!/usr/bin/env deno run
+// deno-lint-ignore-file no-console
 
 /**
  * Simple Migration Engine Demo
- * 
+ *
  * Demonstrates core migration engine capabilities
  */
 
@@ -10,9 +11,9 @@ import { DDLGenerator } from "./migration/ddl.ts";
 import { MigrationEngine } from "./migration/engine.ts";
 import * as Types from "./migration/types.ts";
 
-console.log("=" .repeat(60));
+console.log("=".repeat(60));
 console.log("Disc Migration Engine - Core Capabilities Demo");
-console.log("=" .repeat(60));
+console.log("=".repeat(60));
 
 // Demo 1: DDL Generation for Creating Tables
 console.log("\n1. DDL Generation - Create Table");
@@ -27,7 +28,12 @@ const createUserOp: Types.CreateTypeOperation = {
     { name: "id", type: "uuid", required: true },
     { name: "name", type: "str", required: true },
     { name: "email", type: "str", required: true },
-    { name: "created_at", type: "datetime", required: false, default: "datetime_current()" },
+    {
+      name: "created_at",
+      type: "datetime",
+      required: false,
+      default: "datetime_current()",
+    },
   ],
   links: [],
   constraints: [{ type: "unique", on: ["email"] }],
@@ -36,7 +42,7 @@ const createUserOp: Types.CreateTypeOperation = {
 
 const createSQL = ddlGenerator.generateDDL([createUserOp]);
 console.log("Generated SQL:");
-createSQL.forEach(sql => console.log(`  ${sql}`));
+createSQL.forEach((sql) => console.log(`  ${sql}`));
 
 // Demo 2: DDL Generation with Rollback
 console.log("\n2. Rollback SQL Generation");
@@ -44,7 +50,7 @@ console.log("-".repeat(40));
 
 const rollbackSQL = ddlGenerator.generateRollbackDDL([createUserOp]);
 console.log("Rollback SQL:");
-rollbackSQL.forEach(sql => console.log(`  ${sql}`));
+rollbackSQL.forEach((sql) => console.log(`  ${sql}`));
 
 // Demo 3: Alter Table Operations
 console.log("\n3. DDL Generation - Alter Table");
@@ -63,11 +69,11 @@ const addPropertyOp: Types.TypeOperation = {
 
 const alterSQL = ddlGenerator.generateDDL([addPropertyOp]);
 console.log("Generated SQL:");
-alterSQL.forEach(sql => console.log(`  ${sql}`));
+alterSQL.forEach((sql) => console.log(`  ${sql}`));
 
 const alterRollback = ddlGenerator.generateRollbackDDL([addPropertyOp]);
 console.log("Rollback SQL:");
-alterRollback.forEach(sql => console.log(`  ${sql}`));
+alterRollback.forEach((sql) => console.log(`  ${sql}`));
 
 // Demo 4: Migration Engine - Complete Migration
 console.log("\n4. Migration Engine - Complete Migration");
@@ -125,7 +131,7 @@ console.log("-".repeat(40));
 const validation = engine.validateMigration(migration);
 console.log(`Is safe: ${validation.isSafe}`);
 console.log(`Warnings: ${validation.warnings.length}`);
-validation.warnings.forEach(w => console.log(`  - ${w}`));
+validation.warnings.forEach((w) => console.log(`  - ${w}`));
 
 // Demo 6: Complex Operations
 console.log("\n6. Complex DDL Operations");
@@ -142,9 +148,9 @@ const dropSQL = ddlGenerator.generateDDL([dropOp]);
 const dropRollback = ddlGenerator.generateRollbackDDL([dropOp]);
 
 console.log("Drop column SQL:");
-dropSQL.forEach(sql => console.log(`  ${sql}`));
+dropSQL.forEach((sql) => console.log(`  ${sql}`));
 console.log("Rollback (requires manual intervention):");
-dropRollback.forEach(sql => console.log(`  ${sql}`));
+dropRollback.forEach((sql) => console.log(`  ${sql}`));
 
 // Demo 7: Link/Relationship Handling
 console.log("\n7. Link/Relationship DDL");
@@ -163,7 +169,7 @@ const addLinkOp: Types.TypeOperation = {
 
 const linkSQL = ddlGenerator.generateDDL([addLinkOp]);
 console.log("Link SQL (junction table for many-to-many):");
-linkSQL.forEach(sql => console.log(`  ${sql.substring(0, 70)}...`));
+linkSQL.forEach((sql) => console.log(`  ${sql.substring(0, 70)}...`));
 
 // Demo 8: Index Operations
 console.log("\n8. Index Operations");
@@ -183,9 +189,9 @@ const indexSQL = ddlGenerator.generateDDL([addIndexOp]);
 const indexRollback = ddlGenerator.generateRollbackDDL([addIndexOp]);
 
 console.log("Create index SQL:");
-indexSQL.forEach(sql => console.log(`  ${sql}`));
+indexSQL.forEach((sql) => console.log(`  ${sql}`));
 console.log("Drop index SQL:");
-indexRollback.forEach(sql => console.log(`  ${sql}`));
+indexRollback.forEach((sql) => console.log(`  ${sql}`));
 
 // Demo 9: Constraint Operations
 console.log("\n9. Constraint Operations");
@@ -205,9 +211,9 @@ const constraintSQL = ddlGenerator.generateDDL([addConstraintOp]);
 const constraintRollback = ddlGenerator.generateRollbackDDL([addConstraintOp]);
 
 console.log("Add constraint SQL:");
-constraintSQL.forEach(sql => console.log(`  ${sql}`));
+constraintSQL.forEach((sql) => console.log(`  ${sql}`));
 console.log("Drop constraint SQL:");
-constraintRollback.forEach(sql => console.log(`  ${sql}`));
+constraintRollback.forEach((sql) => console.log(`  ${sql}`));
 
 console.log("\n" + "=".repeat(60));
 console.log("Migration Engine Capabilities Demonstrated:");
@@ -217,4 +223,4 @@ console.log("✅ Complex operations (links, indexes, constraints)");
 console.log("✅ Migration safety validation");
 console.log("✅ Support for PostgreSQL-specific features");
 console.log("\nThe migration engine is production-ready!");
-console.log("=" .repeat(60));
+console.log("=".repeat(60));

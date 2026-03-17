@@ -1,3 +1,4 @@
+// deno-lint-ignore-file no-console
 /**
  * CLI Commands Tests - Test core command functionality
  */

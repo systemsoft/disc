@@ -9,8 +9,11 @@ import * as Context from "../compiler/context.ts";
 import * as SQL from "../compiler/sql.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { DatabaseExecutionError, QueryTimeoutError } from "../lib/errors.ts";
-import { logger } from "../postgres/logger.ts";
+import { ExplainCache, ExplainCacheStats } from "../lib/explain-cache.ts";
+import { getLogger } from "../lib/logger.ts";
 import { authContextToAccessContext } from "./access-bridge.ts";
+
+const log = getLogger("edgeql-protocol");
 import {
   hashAccessContext,
   hashString,
@@ -22,6 +25,7 @@ import type { CacheStats } from "../lib/query-cache.ts";
 export interface EdgeQLExecutionOptions {
   schema?: Context.Schema;
   enable_explain?: boolean;
+  explain_cache_ttl_ms?: number;
   dry_run?: boolean;
   database_url?: string;
   connection_pool?: ConnectionPool;
@@ -43,6 +47,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
   private pool?: ConnectionPool;
   private compilationCache: QueryCache<CachedCompilation>;
   private parseCache: QueryCache<EdgeQL.Query>;
+  private explainCache?: ExplainCache;
   private metrics = {
     totalQueries: 0,
     totalParseMs: 0,
@@ -59,6 +64,12 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     const cacheSize = options.cache_max_size ?? 1000;
     this.compilationCache = new QueryCache<CachedCompilation>(cacheSize);
     this.parseCache = new QueryCache<EdgeQL.Query>(cacheSize);
+
+    if (options.enable_explain) {
+      this.explainCache = new ExplainCache({
+        ttl_ms: options.explain_cache_ttl_ms,
+      });
+    }
 
     // Use provided pool or create new one if database URL provided
     if (options.connection_pool) {
@@ -240,9 +251,15 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
           ? sqlString.substring(0, 200) + "..."
           : sqlString;
 
-        logger.warn(
-          `Slow query (${duration_ms}ms): parse=${parse_ms}ms compile=${compile_ms}ms execute=${execute_ms}ms cache_hit=${cache_hit} query="${truncatedQuery}" sql="${truncatedSQL}"`,
-        );
+        log.warn("Slow query", {
+          duration_ms,
+          parse_ms,
+          compile_ms,
+          execute_ms,
+          cache_hit,
+          query: truncatedQuery,
+          sql: truncatedSQL,
+        });
       }
 
       // Return successful response
@@ -262,6 +279,9 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
               sql_ast: sqlStatement,
             }
             : undefined,
+          explain_plan: this.options.enable_explain
+            ? await this.getExplainPlan(queryHash, sqlString)
+            : undefined,
         },
       };
 
@@ -274,7 +294,9 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
 
       return response;
     } catch (error) {
-      console.error("Query execution error:", error);
+      log.error("Query execution error", {
+        error: error instanceof Error ? error.message : String(error),
+      });
 
       if (error instanceof QueryTimeoutError) {
         return {
@@ -572,10 +594,14 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     variables: Record<string, any>,
     context: Types.QueryContext,
   ): Promise<{ data: any; warnings?: string[] }> {
-    logger.info(`[${context.session.session_id}] Executing SQL: ${sql}`);
-    logger.info(
-      `[${context.session.session_id}] Variables: ${JSON.stringify(variables)}`,
-    );
+    log.info("Executing SQL", {
+      session_id: context.session.session_id,
+      sql,
+    });
+    log.info("Query variables", {
+      session_id: context.session.session_id,
+      variables: JSON.stringify(variables),
+    });
 
     if (this.options.dry_run) {
       return {
@@ -627,7 +653,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         const dbError = error instanceof Error
           ? error
           : new Error(String(error));
-        logger.error(`Database execution error: ${dbError.message}`);
+        log.error("Database execution error", { error: dbError.message });
         throw new DatabaseExecutionError(
           `Database query failed: ${dbError.message}`,
           sql,
@@ -790,6 +816,30 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     };
   }
 
+  private async getExplainPlan(
+    queryHash: string,
+    sql: string,
+  ): Promise<unknown | undefined> {
+    if (!this.pool) return undefined;
+
+    // Check cache first
+    if (this.explainCache) {
+      const cached = this.explainCache.get(queryHash);
+      if (cached) return cached;
+    }
+
+    try {
+      const result = await this.pool.query(`EXPLAIN (FORMAT JSON) ${sql}`);
+      const plan = result.rows[0];
+      if (this.explainCache) {
+        this.explainCache.set(queryHash, plan);
+      }
+      return plan;
+    } catch {
+      return undefined;
+    }
+  }
+
   // Initialize pool if not already done
   async initialize(): Promise<void> {
     if (this.pool) {
@@ -842,6 +892,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
 
   getStats(): {
     cache?: Types.ServerStats["cache"];
+    explain_cache?: ExplainCacheStats;
     query_metrics?: Types.ServerStats["query_metrics"];
   } {
     const compilationStats = this.compilationCache.stats();
@@ -870,6 +921,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
           size: parseStats.size,
         },
       },
+      explain_cache: this.explainCache?.stats(),
       query_metrics: metrics,
     };
   }

@@ -1,3 +1,4 @@
+// deno-lint-ignore-file no-console
 /**
  * CLI Watch Command Implementation - File watching for development
  */
@@ -6,7 +7,7 @@ import { MigrationEngine } from "../migration/engine.ts";
 import { MigrationTracker } from "../migration/tracker.ts";
 import { generateTypeScript, writeGeneratedFiles } from "../codegen/mod.ts";
 import { SDLParser } from "../schema/parser.ts";
-import { SDLConverter, Module } from "../schema/converter.ts";
+import { Module, SDLConverter } from "../schema/converter.ts";
 import * as Context from "../compiler/context.ts";
 import { dirname } from "@std/path";
 import { ensureDir } from "@std/fs";
@@ -76,7 +77,9 @@ export class WatchCommand {
       if ((error as Error).name === "AbortError") {
         console.log("\n🛑 File watcher stopped");
       } else {
-        console.error(`❌ Failed to start file watcher: ${(error as Error).message}`);
+        console.error(
+          `❌ Failed to start file watcher: ${(error as Error).message}`,
+        );
         throw error;
       }
     }
@@ -140,7 +143,9 @@ export class WatchCommand {
       try {
         await this.processSchemaChanges(schemaFile, outputDir);
       } catch (error) {
-        console.error(`❌ Failed to process schema changes: ${(error as Error).message}`);
+        console.error(
+          `❌ Failed to process schema changes: ${(error as Error).message}`,
+        );
       }
     }, delayMs);
   }
@@ -161,7 +166,8 @@ export class WatchCommand {
       const currentHash = this.hashSchema(modules);
 
       // Check for migration changes
-      const migrationNeeded = currentHash !== this.lastSchemaHash && this.lastSchemaHash !== undefined;
+      const migrationNeeded = currentHash !== this.lastSchemaHash &&
+        this.lastSchemaHash !== undefined;
 
       if (migrationNeeded) {
         console.log("📋 Schema changes detected, creating migration...");
@@ -208,13 +214,16 @@ export class WatchCommand {
   ): Promise<void> {
     try {
       // Get database URL
-      const databaseUrl = Deno.env.get("DATABASE_URL") || "postgresql://localhost:5432/disc";
+      const databaseUrl = Deno.env.get("DATABASE_URL") ||
+        "postgresql://localhost:5432/disc";
 
       // Initialize tracker
       const tracker = new MigrationTracker(databaseUrl);
       const initResult = await tracker.initialize();
       if (!initResult.ok) {
-        console.log("   ⚠️  Migration tracker not initialized, skipping migration");
+        console.log(
+          "   ⚠️  Migration tracker not initialized, skipping migration",
+        );
         return;
       }
 
@@ -241,7 +250,9 @@ export class WatchCommand {
       // Plan migration
       const planResult = engine.planMigration(oldModules, newModules);
       if (!planResult.ok) {
-        console.error(`   ❌ Migration planning failed: ${planResult.error.message}`);
+        console.error(
+          `   ❌ Migration planning failed: ${planResult.error.message}`,
+        );
         return;
       }
 
@@ -264,7 +275,11 @@ export class WatchCommand {
         // Execute migration
         const execResult = await engine.executeMigration(plan);
         if (execResult.ok) {
-          console.log(`   ✅ Migration applied successfully (${execResult.value[0].duration_ms}ms)`);
+          console.log(
+            `   ✅ Migration applied successfully (${
+              execResult.value[0].duration_ms
+            }ms)`,
+          );
 
           // Record migration
           await tracker.recordMigration(firstMigration, execResult.value[0]);
@@ -289,11 +304,17 @@ export class WatchCommand {
       case "AlterType":
         return `Alter type '${(op as Types.AlterTypeOperation).type_name}'`;
       case "AddProperty":
-        return `Add property '${(op as Types.AddPropertyOperation).property.name}'`;
+        return `Add property '${
+          (op as Types.AddPropertyOperation).property.name
+        }'`;
       case "DropProperty":
-        return `Drop property '${(op as Types.DropPropertyOperation).property_name}'`;
+        return `Drop property '${
+          (op as Types.DropPropertyOperation).property_name
+        }'`;
       case "AlterProperty":
-        return `Alter property '${(op as Types.AlterPropertyOperation).property_name}'`;
+        return `Alter property '${
+          (op as Types.AlterPropertyOperation).property_name
+        }'`;
       default:
         return `${op.kind}: ${JSON.stringify(op)}`;
     }

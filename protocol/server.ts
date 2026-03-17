@@ -1,9 +1,14 @@
+// deno-lint-ignore-file no-console
 /**
  * Binary protocol TCP server for Gel/EdgeDB compatibility
  * Handles incoming connections and protocol negotiation
  */
 
-import { ProtocolConnection, ConnectionState, AuthenticationCredentials } from "./connection.ts";
+import {
+  AuthenticationCredentials,
+  ConnectionState,
+  ProtocolConnection,
+} from "./connection.ts";
 import { generateStoredKeys } from "./scram.ts";
 
 export interface ServerOptions {
@@ -48,13 +53,13 @@ export class ProtocolServer {
       tls: options.tls,
     };
   }
-  
+
   /**
    * Add a user for authentication
    */
   async addUser(user: User): Promise<void> {
     let credentials: AuthenticationCredentials;
-    
+
     if (user.storedKey && user.serverKey && user.salt) {
       // Use pre-computed keys
       credentials = {
@@ -74,10 +79,10 @@ export class ProtocolServer {
     } else {
       throw new Error("User must have either password or stored keys");
     }
-    
+
     this.users.set(user.username, credentials);
   }
-  
+
   /**
    * Start the server
    */
@@ -85,7 +90,7 @@ export class ProtocolServer {
     if (this.running) {
       throw new Error("Server is already running");
     }
-    
+
     // Create listener based on TLS configuration
     if (this.options.tls) {
       this.listener = Deno.listenTls({
@@ -99,17 +104,19 @@ export class ProtocolServer {
         port: this.options.port,
       });
     }
-    
+
     this.running = true;
-    console.log(`Protocol server listening on ${this.options.hostname}:${this.options.port}`);
-    
+    console.log(
+      `Protocol server listening on ${this.options.hostname}:${this.options.port}`,
+    );
+
     // Accept connections
     this.acceptConnections();
-    
+
     // Start cleanup timer
     this.startCleanupTimer();
   }
-  
+
   /**
    * Stop the server
    */
@@ -117,40 +124,40 @@ export class ProtocolServer {
     if (!this.running) {
       return;
     }
-    
+
     this.running = false;
-    
+
     // Close listener
     if (this.listener) {
       this.listener.close();
       this.listener = null;
     }
-    
+
     // Close all connections
     for (const connection of this.connections.values()) {
       await connection.close();
     }
     this.connections.clear();
-    
+
     console.log("Protocol server stopped");
   }
-  
+
   /**
    * Accept incoming connections
    */
   private async acceptConnections(): Promise<void> {
     if (!this.listener) return;
-    
+
     try {
       for await (const conn of this.listener) {
         if (!this.running) break;
-        
+
         if (this.connections.size >= this.options.maxConnections) {
           console.warn("Max connections reached, rejecting new connection");
           conn.close();
           continue;
         }
-        
+
         this.handleConnection(conn);
       }
     } catch (error) {
@@ -159,16 +166,18 @@ export class ProtocolServer {
       }
     }
   }
-  
+
   /**
    * Handle a new connection
    */
   private async handleConnection(conn: Deno.Conn): Promise<void> {
     const connectionId = this.nextConnectionId++;
     const remoteAddr = conn.remoteAddr as Deno.NetAddr;
-    
-    console.log(`New connection ${connectionId} from ${remoteAddr.hostname}:${remoteAddr.port}`);
-    
+
+    console.log(
+      `New connection ${connectionId} from ${remoteAddr.hostname}:${remoteAddr.port}`,
+    );
+
     // For now, use a default user - in production, this would be determined
     // during authentication based on the username in the SASL exchange
     const defaultCredentials = this.users.values().next().value;
@@ -177,7 +186,7 @@ export class ProtocolServer {
       conn.close();
       return;
     }
-    
+
     const connection = new Connection(
       connectionId,
       conn,
@@ -187,20 +196,20 @@ export class ProtocolServer {
           this.connections.delete(connectionId);
           console.log(`Connection ${connectionId} closed`);
         },
-      }
+      },
     );
-    
+
     this.connections.set(connectionId, connection);
     await connection.start();
   }
-  
+
   /**
    * Cleanup timed out connections
    */
   private startCleanupTimer(): void {
     const cleanup = async () => {
       if (!this.running) return;
-      
+
       for (const [id, connection] of this.connections) {
         if (connection.isTimedOut()) {
           console.log(`Connection ${id} timed out, closing`);
@@ -208,15 +217,15 @@ export class ProtocolServer {
           this.connections.delete(id);
         }
       }
-      
+
       if (this.running) {
         setTimeout(cleanup, 10000); // Check every 10 seconds
       }
     };
-    
+
     setTimeout(cleanup, 10000);
   }
-  
+
   /**
    * Get server statistics
    */
@@ -245,44 +254,44 @@ class Connection {
   private buffer = new Uint8Array(65536); // 64KB read buffer
   private running = false;
   private onClose?: () => void;
-  
+
   constructor(
     connectionId: number,
     conn: Deno.Conn,
     credentials: AuthenticationCredentials,
     options?: {
       onClose?: () => void;
-    }
+    },
   ) {
     this.connectionId = connectionId;
     this.conn = conn;
     this.protocol = new ProtocolConnection(credentials);
     this.onClose = options?.onClose;
   }
-  
+
   async start(): Promise<void> {
     if (this.running) return;
     this.running = true;
-    
+
     try {
       while (this.running) {
         // Read data from connection
         const n = await this.conn.read(this.buffer);
-        
+
         if (n === null) {
           // Connection closed by client
           break;
         }
-        
+
         // Process the data
         const data = this.buffer.subarray(0, n);
         const responses = await this.protocol.processData(data);
-        
+
         // Send responses
         for (const response of responses) {
           await this.conn.write(response);
         }
-        
+
         // Check if connection should be closed
         if (this.protocol.getState() === ConnectionState.Terminated) {
           break;
@@ -298,25 +307,25 @@ class Connection {
       await this.close();
     }
   }
-  
+
   async close(): Promise<void> {
     if (!this.running) return;
     this.running = false;
-    
+
     try {
       this.protocol.close();
       this.conn.close();
     } catch {
       // Ignore errors during close
     }
-    
+
     this.onClose?.();
   }
-  
+
   isTimedOut(): boolean {
     return this.protocol.isTimedOut();
   }
-  
+
   getStats(): any {
     return this.protocol.getStats();
   }
@@ -325,14 +334,16 @@ class Connection {
 /**
  * Create and start a protocol server with default configuration
  */
-export async function createServer(options?: ServerOptions): Promise<ProtocolServer> {
+export async function createServer(
+  options?: ServerOptions,
+): Promise<ProtocolServer> {
   const server = new ProtocolServer(options);
-  
+
   // Add a default test user
   await server.addUser({
     username: "edgedb",
     password: "edgedb",
   });
-  
+
   return server;
 }

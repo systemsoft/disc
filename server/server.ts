@@ -6,6 +6,7 @@ import * as Types from "./types.ts";
 import { HttpServer } from "./http.ts";
 import { SimpleEdgeQLProtocolHandler } from "./simple-edgeql-protocol.ts";
 import { EdgeQLProtocolHandler } from "./edgeql-protocol.ts";
+import { configureLogging } from "../lib/logger.ts";
 import { PostgresInstance } from "../postgres/instance.ts";
 import { logger } from "../postgres/logger.ts";
 import type { Schema } from "../compiler/context.ts";
@@ -53,6 +54,12 @@ export interface DiscServerOptions extends Partial<Types.ServerConfig> {
    * Requires protocol: "full" for actual enforcement.
    */
   enable_access_policies?: boolean;
+
+  /**
+   * TTL in milliseconds for cached EXPLAIN plan results.
+   * Only relevant when enable_explain is true. Default: 300_000 (5 minutes).
+   */
+  explain_cache_ttl_ms?: number;
 }
 
 export class DiscServer {
@@ -93,6 +100,9 @@ export class DiscServer {
       cache_max_size: config.cache_max_size,
       shutdown_drain_timeout: config.shutdown_drain_timeout,
       slow_query_threshold_ms: config.slow_query_threshold_ms,
+      enable_metrics: config.enable_metrics,
+      rate_limit_rpm: config.rate_limit_rpm,
+      rate_limit_burst: config.rate_limit_burst,
       tls: config.tls,
     };
 
@@ -101,6 +111,7 @@ export class DiscServer {
     // Initialize the selected protocol handler
     const handler_options = {
       enable_explain: config.enable_explain || false,
+      explain_cache_ttl_ms: config.explain_cache_ttl_ms,
       dry_run: config.dry_run || false,
       database_url: this.config.database_url,
       schema: config.schema,
@@ -289,6 +300,14 @@ export function create_server_from_env(
   postgres_instance?: PostgresInstance,
   schema?: Schema,
 ): DiscServer {
+  // Configure structured logging from env vars
+  const logLevel = (Deno.env.get("DISC_LOG_LEVEL") || "INFO").toUpperCase();
+  const logFormat = Deno.env.get("DISC_LOG_FORMAT") || "json";
+  configureLogging({
+    level: logLevel as "DEBUG" | "INFO" | "WARN" | "ERROR",
+    format: logFormat as "json" | "text",
+  });
+
   const enableAuth = Deno.env.get("DISC_ENABLE_AUTH");
   const enableAccessPolicies = Deno.env.get("DISC_ENABLE_ACCESS_POLICIES");
   const config: DiscServerOptions = {
@@ -305,9 +324,17 @@ export function create_server_from_env(
       ? enableAccessPolicies !== "false"
       : undefined,
     cache_max_size: parseInt(Deno.env.get("DISC_CACHE_MAX_SIZE") || "1000"),
+    explain_cache_ttl_ms: parseInt(
+      Deno.env.get("DISC_EXPLAIN_CACHE_TTL") || "300000",
+    ),
     slow_query_threshold_ms: parseInt(
       Deno.env.get("DISC_SLOW_QUERY_MS") || "1000",
     ),
+    enable_metrics: Deno.env.get("DISC_ENABLE_METRICS") === "true",
+    rate_limit_rpm: parseInt(Deno.env.get("DISC_RATE_LIMIT_RPM") || "0") ||
+      undefined,
+    rate_limit_burst: parseInt(Deno.env.get("DISC_RATE_LIMIT_BURST") || "0") ||
+      undefined,
     postgres_instance,
     protocol: Deno.env.get("DISC_PROTOCOL") === "full" ? "full" : "simple",
     schema,
@@ -328,6 +355,8 @@ export function create_server_from_env(
     config.tls = {
       cert_file: tls_cert,
       key_file: tls_key,
+      redirect: Deno.env.get("DISC_TLS_REDIRECT") === "true",
+      redirect_port: parseInt(Deno.env.get("DISC_TLS_REDIRECT_PORT") || "80"),
     };
   }
 

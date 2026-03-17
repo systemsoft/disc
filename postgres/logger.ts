@@ -1,4 +1,4 @@
-// deno-lint-ignore-file no-console
+import { getLogger } from "../lib/logger.ts";
 
 export enum LogLevel {
   DEBUG = 0,
@@ -7,55 +7,32 @@ export enum LogLevel {
   ERROR = 3,
 }
 
+/**
+ * Backward-compatible PostgresLogger that delegates to the structured logger.
+ * Kept for the 11+ importers that reference `PostgresLogger` or `logger`.
+ */
 export class PostgresLogger {
-  private level: LogLevel;
-  private prefix: string;
+  private inner;
 
-  constructor(prefix = "[postgres]", level = LogLevel.INFO) {
-    this.prefix = prefix;
-    this.level = level;
+  constructor(_prefix = "[postgres]", _level = LogLevel.INFO) {
+    this.inner = getLogger("postgres");
   }
 
   debug(message: string): void {
-    if (this.level <= LogLevel.DEBUG) {
-      this.output("DEBUG", message);
-    }
+    this.inner.debug(message);
   }
 
   info(message: string): void {
-    if (this.level <= LogLevel.INFO) {
-      this.output("INFO", message);
-    }
+    this.inner.info(message);
   }
 
   warn(message: string): void {
-    if (this.level <= LogLevel.WARN) {
-      this.output("WARN", message);
-    }
+    this.inner.warn(message);
   }
 
   error(message: string): void {
-    if (this.level <= LogLevel.ERROR) {
-      this.output("ERROR", message);
-    }
-  }
-
-  private output(level: string, message: string): void {
-    const timestamp = new Date().toISOString();
-    const formattedMessage =
-      `${timestamp} ${this.prefix} [${level}] ${message}`;
-
-    // In production, this would write to a file or send to a logging service
-    // For now, we use console but it's centralized here
-    if (level === "ERROR") {
-      console.error(formattedMessage);
-    } else if (level === "WARN") {
-      console.warn(formattedMessage);
-    } else {
-      console.log(formattedMessage);
-    }
+    this.inner.error(message);
   }
 }
 
-// Default logger instance
 export const logger = new PostgresLogger();

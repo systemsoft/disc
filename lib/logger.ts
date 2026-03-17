@@ -1,45 +1,110 @@
-/**
- * Logging utilities for Disc
- */
+// deno-lint-ignore-file camelcase
 
-import * as log from "@std/log";
+export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR";
+export type LogFormat = "json" | "text";
 
-export enum LogLevel {
-  DEBUG = 0,
-  INFO = 1,
-  WARN = 2,
-  ERROR = 3,
-  CRITICAL = 4,
+export interface LogConfig {
+  level: LogLevel;
+  format: LogFormat;
+  output?: (line: string) => void; // defaults to console.error (stderr)
+}
+
+export interface LogEntry {
+  timestamp: string;
+  level: LogLevel;
+  module: string;
+  message: string;
+  request_id?: string;
+  [key: string]: unknown;
+}
+
+const LEVEL_ORDER: Record<LogLevel, number> = {
+  DEBUG: 0,
+  INFO: 1,
+  WARN: 2,
+  ERROR: 3,
+};
+
+// Global config - defaults
+let globalConfig: LogConfig = {
+  level: "INFO",
+  format: "json",
+};
+
+export function configureLogging(config: Partial<LogConfig>): void {
+  globalConfig = { ...globalConfig, ...config };
 }
 
 export class Logger {
-  private name: string;
+  private module: string;
+  private extra: Record<string, unknown>;
 
-  constructor(name: string) {
-    this.name = name;
+  constructor(module: string, extra: Record<string, unknown> = {}) {
+    this.module = module;
+    this.extra = extra;
   }
 
-  debug(message: string, ...args: unknown[]): void {
-    log.debug(`[${this.name}] ${message}`, ...args);
+  debug(message: string, extra?: Record<string, unknown>): void {
+    this.log("DEBUG", message, extra);
   }
 
-  info(message: string, ...args: unknown[]): void {
-    log.info(`[${this.name}] ${message}`, ...args);
+  info(message: string, extra?: Record<string, unknown>): void {
+    this.log("INFO", message, extra);
   }
 
-  warn(message: string, ...args: unknown[]): void {
-    log.warn(`[${this.name}] ${message}`, ...args);
+  warn(message: string, extra?: Record<string, unknown>): void {
+    this.log("WARN", message, extra);
   }
 
-  error(message: string, ...args: unknown[]): void {
-    log.error(`[${this.name}] ${message}`, ...args);
+  error(message: string, extra?: Record<string, unknown>): void {
+    this.log("ERROR", message, extra);
   }
 
-  critical(message: string, ...args: unknown[]): void {
-    log.critical(`[${this.name}] ${message}`, ...args);
+  child(extra: Record<string, unknown>): Logger {
+    return new Logger(this.module, { ...this.extra, ...extra });
+  }
+
+  withRequest(request_id: string, client_ip?: string): Logger {
+    return this.child({ request_id, ...(client_ip ? { client_ip } : {}) });
+  }
+
+  private log(
+    level: LogLevel,
+    message: string,
+    extra?: Record<string, unknown>,
+  ): void {
+    if (LEVEL_ORDER[level] < LEVEL_ORDER[globalConfig.level]) return;
+
+    const entry: LogEntry = {
+      timestamp: new Date().toISOString(),
+      level,
+      module: this.module,
+      message,
+      ...this.extra,
+      ...extra,
+    };
+
+    // deno-lint-ignore no-console
+    const output = globalConfig.output || console.error;
+
+    if (globalConfig.format === "json") {
+      output(JSON.stringify(entry));
+    } else {
+      // Text format: TIMESTAMP [LEVEL] [module] message key=value
+      const kvPairs = Object.entries(entry)
+        .filter(
+          ([k]) => !["timestamp", "level", "module", "message"].includes(k),
+        )
+        .map(([k, v]) => `${k}=${v}`)
+        .join(" ");
+      const line = `${entry.timestamp} [${level}] [${this.module}] ${message}${
+        kvPairs ? " " + kvPairs : ""
+      }`;
+      output(line);
+    }
   }
 }
 
-export function getLogger(name: string): Logger {
-  return new Logger(name);
+export function getLogger(module: string): Logger {
+  return new Logger(module);
 }

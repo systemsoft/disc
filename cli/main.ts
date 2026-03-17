@@ -1,4 +1,5 @@
 #!/usr/bin/env -S deno run --allow-net --allow-read --allow-write --allow-env --allow-run
+// deno-lint-ignore-file no-console
 
 /**
  * Disc CLI - Command-line interface for Disc database
@@ -47,6 +48,8 @@ OPTIONS:
   --jwt-secret <key>   JWT signing secret for authentication
   --enable-auth        Enable authentication system (requires --jwt-secret)
   --enable-access-policies  Enable access policy enforcement (requires --enable-auth)
+  --tls-cert <path>    Path to TLS certificate file
+  --tls-key <path>     Path to TLS private key file
 
 EXAMPLES:
   disc init my-project                # Initialize new project with PostgreSQL
@@ -95,6 +98,8 @@ async function main() {
       "directory",
       "backend-dsn",
       "jwt-secret",
+      "tls-cert",
+      "tls-key",
     ],
     alias: {
       h: "help",
@@ -165,6 +170,8 @@ async function main() {
           jwt_secret: args["jwt-secret"],
           enable_auth: args["enable-auth"],
           enable_access_policies: args["enable-access-policies"],
+          tls_cert: args["tls-cert"],
+          tls_key: args["tls-key"],
         });
         break;
       }

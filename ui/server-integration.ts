@@ -1,3 +1,4 @@
+// deno-lint-ignore-file no-console
 /**
  * Server Integration Module - Serves the built UI from Disc server
  */
@@ -25,7 +26,7 @@ export class UIServer {
     // Default build directory relative to this file
     this.buildPath = this.options.buildDir || join(
       new URL(".", import.meta.url).pathname,
-      "build"
+      "build",
     );
   }
 
@@ -46,13 +47,15 @@ export class UIServer {
 
     const uiBuilt = await this.isBuilt();
     if (!uiBuilt) {
-      console.warn("UI build not found. Run 'npm run build' in the ui/ directory.");
+      console.warn(
+        "UI build not found. Run 'npm run build' in the ui/ directory.",
+      );
       return null;
     }
 
     return async (request: Request): Promise<Response | null> => {
       const url = new URL(request.url);
-      
+
       // Check if this is a UI route
       if (!url.pathname.startsWith(this.options.basePath)) {
         return null;
@@ -70,7 +73,7 @@ export class UIServer {
       try {
         // Check if file exists
         const fileInfo = await Deno.stat(fullPath);
-        
+
         if (fileInfo.isDirectory) {
           // Try to serve index.html from directory
           const indexPath = join(fullPath, "index.html");
@@ -85,13 +88,13 @@ export class UIServer {
         // Read and serve the file
         const file = await Deno.readFile(fullPath);
         const contentType = this.getContentType(filePath);
-        
+
         return new Response(file, {
           headers: {
             "content-type": contentType,
-            "cache-control": filePath.includes("_app") 
-              ? "public, max-age=31536000, immutable"  // Cache versioned assets
-              : "public, max-age=3600",  // Cache other assets for 1 hour
+            "cache-control": filePath.includes("_app")
+              ? "public, max-age=31536000, immutable" // Cache versioned assets
+              : "public, max-age=3600", // Cache other assets for 1 hour
           },
         });
       } catch (error) {
@@ -120,7 +123,7 @@ export class UIServer {
    */
   private getContentType(filePath: string): string {
     const ext = filePath.split(".").pop()?.toLowerCase();
-    
+
     const contentTypes: Record<string, string> = {
       html: "text/html; charset=utf-8",
       js: "application/javascript",
@@ -147,7 +150,7 @@ export class UIServer {
    */
   async openInBrowser(port: number) {
     const url = `http://localhost:${port}${this.options.basePath}`;
-    
+
     const commands: Record<string, string[]> = {
       darwin: ["open", url],
       linux: ["xdg-open", url],

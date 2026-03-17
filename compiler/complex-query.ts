@@ -1,3 +1,4 @@
+// deno-lint-ignore-file no-console
 /**
  * Complex Query Compiler
  * Advanced EdgeQL to SQL compilation with optimization
@@ -6,7 +7,7 @@
 import * as EdgeQLAST from "../edgeql/ast.ts";
 import * as SQL from "./sql.ts";
 import * as Context from "./context.ts";
-import { Result, Ok, Err } from "../lib/result.ts";
+import { Err, Ok, Result } from "../lib/result.ts";
 import { CompilationError } from "../lib/errors.ts";
 import { EdgeQLCompiler } from "./compiler.ts";
 
@@ -40,14 +41,16 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
   /**
    * Compile query with advanced optimization
    */
-  override compile(query: EdgeQLAST.Query): Result<SQL.SQLStatement, CompilationError> {
+  override compile(
+    query: EdgeQLAST.Query,
+  ): Result<SQL.SQLStatement, CompilationError> {
     try {
       // Analyze complexity first
       const complexity = this.analyzeComplexity(query);
 
       if (complexity.score > 100) {
         console.warn("Query complexity score:", complexity.score);
-        complexity.warnings.forEach(w => console.warn(w));
+        complexity.warnings.forEach((w) => console.warn(w));
       }
 
       // Rewrite query for optimization
@@ -61,7 +64,9 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
       // Standard compilation
       return super.compile(optimizedQuery);
     } catch (error) {
-      return Err(new CompilationError(`Complex query compilation failed: ${error}`));
+      return Err(
+        new CompilationError(`Complex query compilation failed: ${error}`),
+      );
     }
   }
 
@@ -105,7 +110,9 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
       throw new CompilationError("CTE binding has no value or query");
     }
 
-    const name = typeof binding.name === "string" ? binding.name : binding.name?.name || "cte";
+    const name = typeof binding.name === "string"
+      ? binding.name
+      : binding.name?.name || "cte";
 
     return {
       kind: "CTE",
@@ -121,7 +128,9 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
    */
   compileSubquery(subquery: any, depth: number = 0): SQL.SQLStatement {
     if (depth > this.maxSubqueryDepth) {
-      throw new CompilationError(`Subquery depth exceeds maximum of ${this.maxSubqueryDepth}`);
+      throw new CompilationError(
+        `Subquery depth exceeds maximum of ${this.maxSubqueryDepth}`,
+      );
     }
 
     // Check if subquery can be converted to JOIN
@@ -289,7 +298,9 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
         expression: this.compileExpression(item.expression),
         direction: (item.direction || "ASC") as "ASC" | "DESC",
       })),
-      frame: windowFunc.frame ? this.compileWindowFrame(windowFunc.frame) : undefined,
+      frame: windowFunc.frame
+        ? this.compileWindowFrame(windowFunc.frame)
+        : undefined,
     };
 
     return SQL.windowFunction(func, args, overClause);
@@ -313,9 +324,9 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
    */
   compileAggregate(aggregate: any): SQL.AggregateExpression {
     const func = aggregate.function;
-    const expr = aggregate.expression ?
-      this.compileExpression(aggregate.expression) :
-      SQL.star();
+    const expr = aggregate.expression
+      ? this.compileExpression(aggregate.expression)
+      : SQL.star();
 
     let result = SQL.aggregate(func, expr);
 
@@ -401,15 +412,21 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
 
     // Add warnings
     if (complexity.cteCount > this.maxCTECount) {
-      complexity.warnings.push(`CTE count (${complexity.cteCount}) exceeds recommended maximum (${this.maxCTECount})`);
+      complexity.warnings.push(
+        `CTE count (${complexity.cteCount}) exceeds recommended maximum (${this.maxCTECount})`,
+      );
     }
 
     if (complexity.subqueryCount > 10) {
-      complexity.warnings.push(`High subquery count (${complexity.subqueryCount}) may impact performance`);
+      complexity.warnings.push(
+        `High subquery count (${complexity.subqueryCount}) may impact performance`,
+      );
     }
 
     if (complexity.score > 50) {
-      complexity.warnings.push("Query complexity is high, consider breaking into smaller queries");
+      complexity.warnings.push(
+        "Query complexity is high, consider breaking into smaller queries",
+      );
     }
 
     return complexity;
@@ -438,7 +455,7 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
       const value = node[key];
       if (typeof value === "object") {
         if (Array.isArray(value)) {
-          value.forEach(item => this.analyzeNode(item, complexity));
+          value.forEach((item) => this.analyzeNode(item, complexity));
         } else {
           this.analyzeNode(value, complexity);
         }
@@ -499,17 +516,28 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
     const right = expr.right.value;
 
     switch (expr.op) {
-      case "+": return { kind: "Literal", value: left + right };
-      case "-": return { kind: "Literal", value: left - right };
-      case "*": return { kind: "Literal", value: left * right };
-      case "/": return { kind: "Literal", value: left / right };
-      case "=": return { kind: "Literal", value: left === right };
-      case "!=": return { kind: "Literal", value: left !== right };
-      case "<": return { kind: "Literal", value: left < right };
-      case ">": return { kind: "Literal", value: left > right };
-      case "<=": return { kind: "Literal", value: left <= right };
-      case ">=": return { kind: "Literal", value: left >= right };
-      default: return expr;
+      case "+":
+        return { kind: "Literal", value: left + right };
+      case "-":
+        return { kind: "Literal", value: left - right };
+      case "*":
+        return { kind: "Literal", value: left * right };
+      case "/":
+        return { kind: "Literal", value: left / right };
+      case "=":
+        return { kind: "Literal", value: left === right };
+      case "!=":
+        return { kind: "Literal", value: left !== right };
+      case "<":
+        return { kind: "Literal", value: left < right };
+      case ">":
+        return { kind: "Literal", value: left > right };
+      case "<=":
+        return { kind: "Literal", value: left <= right };
+      case ">=":
+        return { kind: "Literal", value: left >= right };
+      default:
+        return expr;
     }
   }
 }

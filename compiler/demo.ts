@@ -1,3 +1,4 @@
+// deno-lint-ignore-file no-console
 /**
  * EdgeQL to SQL Compiler Demo
  * Demonstrates the complete compilation pipeline from EdgeQL to PostgreSQL
@@ -36,32 +37,43 @@ function demo(title: string, edgeql: string): void {
 // SELECT Queries
 demo("Simple Type Selection", "SELECT User");
 
-demo("Shaped Selection", `
+demo(
+  "Shaped Selection",
+  `
   SELECT User {
     name,
     email,
     created_at
   }
-`);
+`,
+);
 
-demo("Filtered Selection", `
+demo(
+  "Filtered Selection",
+  `
   SELECT User {
     name,
     email
   }
   FILTER .active = true
-`);
+`,
+);
 
-demo("Ordered and Limited Selection", `
+demo(
+  "Ordered and Limited Selection",
+  `
   SELECT User {
     name,
     email
   }
   ORDER BY .name ASC
   LIMIT 10
-`);
+`,
+);
 
-demo("Complex Query with Filter", `
+demo(
+  "Complex Query with Filter",
+  `
   SELECT User {
     name,
     email,
@@ -70,58 +82,79 @@ demo("Complex Query with Filter", `
   FILTER .age >= 18 AND .active = true
   ORDER BY .created_at DESC
   LIMIT 5
-`);
+`,
+);
 
 // INSERT Queries
-demo("Basic Insert", `
+demo(
+  "Basic Insert",
+  `
   INSERT User {
     name := "Alice Johnson",
     email := "alice@example.com",
     active := true,
     age := 28
   }
-`);
+`,
+);
 
-demo("Insert with Conflict Handling", `
+demo(
+  "Insert with Conflict Handling",
+  `
   INSERT User {
     name := "Bob Smith",
     email := "bob@example.com"
   }
   UNLESS CONFLICT ON .email
-`);
+`,
+);
 
 // UPDATE Queries
-demo("Basic Update", `
+demo(
+  "Basic Update",
+  `
   UPDATE User
   FILTER .email = "alice@example.com"
   SET {
     name := "Alice Smith",
     age := 29
   }
-`);
+`,
+);
 
 // DELETE Queries
-demo("Basic Delete", `
+demo(
+  "Basic Delete",
+  `
   DELETE User
   FILTER .email = "old@example.com"
-`);
+`,
+);
 
 // Function Calls
-demo("Aggregate Function", `
+demo(
+  "Aggregate Function",
+  `
   SELECT count(User)
-`);
+`,
+);
 
-demo("Computed Property", `
+demo(
+  "Computed Property",
+  `
   SELECT User {
     name,
     email,
     display_name := .name ++ " <" ++ .email ++ ">"
   }
   FILTER .active = true
-`);
+`,
+);
 
 console.log(`\n${"=".repeat(60)}`);
 console.log("Demo completed! The compiler successfully transforms EdgeQL");
-console.log("queries into PostgreSQL-compatible SQL with proper schema mapping,");
+console.log(
+  "queries into PostgreSQL-compatible SQL with proper schema mapping,",
+);
 console.log("JSON object construction, and query optimization.");
 console.log(`${"=".repeat(60)}\n`);

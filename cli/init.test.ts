@@ -1,12 +1,9 @@
+// deno-lint-ignore-file no-console
 /**
  * CLI Init Command Tests - Test project initialization functionality
  */
 
-import {
-  assert,
-  assertEquals,
-  assertStringIncludes,
-} from "@std/assert";
+import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import {
   assertLogContains,
   cleanupTempDir,

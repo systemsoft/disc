@@ -1,11 +1,12 @@
 #!/usr/bin/env -S deno run --allow-read
+// deno-lint-ignore-file no-console
 
 /**
  * Demo: EdgeQL SELECT to SQL Compilation
- * 
+ *
  * This demonstrates the complete pipeline:
  * 1. Parse EdgeQL query
- * 2. Compile to SQL AST  
+ * 2. Compile to SQL AST
  * 3. Generate executable SQL
  */
 
@@ -18,43 +19,115 @@ import { AccessPolicy } from "../access/mod.ts";
 // Create a sample schema
 function createDemoSchema(): Context.Schema {
   const types = new Map<string, Context.TypeDef>();
-  
+
   // User type
   types.set("User", {
     name: "User",
     kind: "object",
     tableName: "users",
     properties: new Map([
-      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id" }],
-      ["name", { name: "name", type: "str", required: true, multi: false, columnName: "name" }],
-      ["email", { name: "email", type: "str", required: true, multi: false, columnName: "email" }],
-      ["created_at", { name: "created_at", type: "datetime", required: true, multi: false, columnName: "created_at" }],
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+      }],
+      ["name", {
+        name: "name",
+        type: "str",
+        required: true,
+        multi: false,
+        columnName: "name",
+      }],
+      ["email", {
+        name: "email",
+        type: "str",
+        required: true,
+        multi: false,
+        columnName: "email",
+      }],
+      ["created_at", {
+        name: "created_at",
+        type: "datetime",
+        required: true,
+        multi: false,
+        columnName: "created_at",
+      }],
     ]),
     links: new Map([
-      ["posts", { name: "posts", target: "Post", required: false, multi: true, backlink: "author" }],
-      ["friends", { name: "friends", target: "User", required: false, multi: true }],
+      ["posts", {
+        name: "posts",
+        target: "Post",
+        required: false,
+        multi: true,
+        backlink: "author",
+      }],
+      ["friends", {
+        name: "friends",
+        target: "User",
+        required: false,
+        multi: true,
+      }],
     ]),
   });
-  
+
   // Post type
   types.set("Post", {
     name: "Post",
     kind: "object",
     tableName: "posts",
     properties: new Map([
-      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id" }],
-      ["title", { name: "title", type: "str", required: true, multi: false, columnName: "title" }],
-      ["body", { name: "body", type: "str", required: true, multi: false, columnName: "body" }],
-      ["published", { name: "published", type: "bool", required: false, multi: false, columnName: "published" }],
-      ["created_at", { name: "created_at", type: "datetime", required: true, multi: false, columnName: "created_at" }],
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+      }],
+      ["title", {
+        name: "title",
+        type: "str",
+        required: true,
+        multi: false,
+        columnName: "title",
+      }],
+      ["body", {
+        name: "body",
+        type: "str",
+        required: true,
+        multi: false,
+        columnName: "body",
+      }],
+      ["published", {
+        name: "published",
+        type: "bool",
+        required: false,
+        multi: false,
+        columnName: "published",
+      }],
+      ["created_at", {
+        name: "created_at",
+        type: "datetime",
+        required: true,
+        multi: false,
+        columnName: "created_at",
+      }],
     ]),
     links: new Map([
-      ["author", { name: "author", target: "User", required: true, multi: false, columnName: "author_id", backlink: "posts" }],
+      ["author", {
+        name: "author",
+        target: "User",
+        required: true,
+        multi: false,
+        columnName: "author_id",
+        backlink: "posts",
+      }],
     ]),
   });
-  
+
   const functions = new Map<string, Context.FunctionDef>();
-  
+
   // Standard functions
   functions.set("count", {
     name: "count",
@@ -62,14 +135,14 @@ function createDemoSchema(): Context.Schema {
     returnType: "int64",
     sqlName: "count",
   });
-  
+
   functions.set("str_lower", {
     name: "str_lower",
     args: [{ name: "string", type: "str", optional: false }],
     returnType: "str",
     sqlName: "lower",
   });
-  
+
   return { types, functions };
 }
 
@@ -79,33 +152,32 @@ function compileQuery(edgeql: string): void {
   console.log("─────────────");
   console.log(edgeql);
   console.log();
-  
+
   try {
     // Step 1: Parse EdgeQL
     const parser = new EdgeQLParser(edgeql);
     const ast = parser.parse();
     console.log("✅ Parsed successfully");
-    
+
     // Step 2: Compile to SQL AST
     const schema = createDemoSchema();
     const compiler = new EdgeQLCompiler(schema);
     const result = compiler.compile(ast);
-    
+
     if (!result.ok) {
       console.error("❌ Compilation failed:", result.error.message);
       return;
     }
     console.log("✅ Compiled to SQL AST");
-    
+
     // Step 3: Generate SQL
     const generator = new SQLCodeGenerator();
     const sql = generator.generate(result.value);
-    
+
     console.log("\nGenerated SQL:");
     console.log("──────────────");
     console.log(sql);
     console.log();
-    
   } catch (error) {
     console.error("❌ Error:", error instanceof Error ? error.message : error);
   }
@@ -182,13 +254,13 @@ function compileWithAccessControl(edgeql: string, description: string): void {
   console.log("EdgeQL Query:");
   console.log(edgeql);
   console.log();
-  
+
   try {
     // Parse EdgeQL
     const parser = new EdgeQLParser(edgeql);
     const ast = parser.parse();
     console.log("✅ Parsed successfully");
-    
+
     // Create compiler with access control
     const schema = createDemoSchema();
     const compiler = new EdgeQLCompiler(schema, {
@@ -196,9 +268,9 @@ function compileWithAccessControl(edgeql: string, description: string): void {
         userId: "user456",
         userRole: "viewer",
         sessionData: { tenant_id: 42 },
-      }
+      },
     });
-    
+
     // Register some access policies
     const publicPostsPolicy: AccessPolicy = {
       name: "public_posts",
@@ -211,7 +283,7 @@ function compileWithAccessControl(edgeql: string, description: string): void {
         right: { kind: "AccessLiteral", value: true, type: "boolean" },
       } as any,
     };
-    
+
     const ownUserPolicy: AccessPolicy = {
       name: "own_user_data",
       objectType: "User",
@@ -223,27 +295,26 @@ function compileWithAccessControl(edgeql: string, description: string): void {
         right: { kind: "AccessGlobal", name: "current_user" },
       } as any,
     };
-    
+
     compiler.registerAccessPolicy(publicPostsPolicy);
     compiler.registerAccessPolicy(ownUserPolicy);
-    
+
     const result = compiler.compile(ast);
-    
+
     if (!result.ok) {
       console.error("❌ Compilation failed:", result.error.message);
       return;
     }
     console.log("✅ Compiled to SQL AST with access control");
-    
+
     // Generate SQL
     const generator = new SQLCodeGenerator();
     const sql = generator.generate(result.value);
-    
+
     console.log("\nGenerated SQL:");
     console.log("──────────────");
     console.log(sql);
     console.log();
-    
   } catch (error) {
     console.error("❌ Error:", error instanceof Error ? error.message : error);
   }
@@ -252,7 +323,7 @@ function compileWithAccessControl(edgeql: string, description: string): void {
 // Example 7: SELECT with access control - public posts only
 compileWithAccessControl(
   "SELECT Post",
-  "Example 7: SELECT with access control (public posts only)"
+  "Example 7: SELECT with access control (public posts only)",
 );
 
 // Example 8: SELECT with access control - user can only see their own data
@@ -261,7 +332,7 @@ compileWithAccessControl(
     name,
     email
   }`,
-  "Example 8: SELECT with access control (own user data only)"
+  "Example 8: SELECT with access control (own user data only)",
 );
 
 // Example 9: Admin context - no restrictions
@@ -273,19 +344,19 @@ function compileAsAdmin(edgeql: string): void {
   console.log("──────────────────────────");
   console.log(edgeql);
   console.log();
-  
+
   try {
     const parser = new EdgeQLParser(edgeql);
     const ast = parser.parse();
-    
+
     const schema = createDemoSchema();
     const compiler = new EdgeQLCompiler(schema, {
       accessContext: {
         userId: "admin123",
         userRole: "admin",
-      }
+      },
     });
-    
+
     // Admin bypass policy
     const adminPolicy: AccessPolicy = {
       name: "admin_bypass",
@@ -297,24 +368,23 @@ function compileAsAdmin(edgeql: string): void {
         right: { kind: "AccessLiteral", value: "admin", type: "string" },
       } as any,
     };
-    
+
     compiler.registerAccessPolicy(adminPolicy);
-    
+
     const result = compiler.compile(ast);
-    
+
     if (!result.ok) {
       console.error("❌ Compilation failed:", result.error.message);
       return;
     }
-    
+
     const generator = new SQLCodeGenerator();
     const sql = generator.generate(result.value);
-    
+
     console.log("Generated SQL (admin has full access):");
     console.log("───────────────────────────────────────");
     console.log(sql);
     console.log();
-    
   } catch (error) {
     console.error("❌ Error:", error instanceof Error ? error.message : error);
   }

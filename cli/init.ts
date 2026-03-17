@@ -1,3 +1,4 @@
+// deno-lint-ignore-file no-console
 /**
  * CLI Init Command Implementation - Project initialization functionality
  */
@@ -74,7 +75,9 @@ export class InitCommand {
       console.log(`   disc migrate`);
       console.log(`   disc serve`);
     } catch (error) {
-      console.error(`❌ Failed to initialize project: ${(error as Error).message}`);
+      console.error(
+        `❌ Failed to initialize project: ${(error as Error).message}`,
+      );
       throw error;
     }
   }

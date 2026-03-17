@@ -3,7 +3,10 @@
  * Handles real-time subscriptions over WebSocket connections
  */
 
+import { getLogger } from "../lib/logger.ts";
 import * as Types from "./types.ts";
+
+const log = getLogger("subscription");
 
 // WebSocket readyState constants (safe for both runtime and mock contexts)
 const WS_OPEN = 1;
@@ -23,8 +26,10 @@ export class SubscriptionHandler {
 
   constructor(options: SubscriptionOptions = {}) {
     this.options = {
-      max_subscriptions_per_connection: options.max_subscriptions_per_connection || 10,
-      subscription_timeout_ms: options.subscription_timeout_ms || 30 * 60 * 1000, // 30 minutes
+      max_subscriptions_per_connection:
+        options.max_subscriptions_per_connection || 10,
+      subscription_timeout_ms: options.subscription_timeout_ms ||
+        30 * 60 * 1000, // 30 minutes
       heartbeat_interval_ms: options.heartbeat_interval_ms || 30 * 1000, // 30 seconds
     };
 
@@ -34,22 +39,25 @@ export class SubscriptionHandler {
   async handle_subscription(
     subscription: Types.SubscriptionRequest,
     context: Types.QueryContext,
-    websocket: WebSocket
+    websocket: WebSocket,
   ): Promise<void> {
     const connection_id = context.session.session_id;
 
     // Check subscription limits
-    const existing_subs = this.connection_subscriptions.get(connection_id) || new Set();
+    const existing_subs = this.connection_subscriptions.get(connection_id) ||
+      new Set();
     if (existing_subs.size >= this.options.max_subscriptions_per_connection) {
       this.send_error(websocket, subscription.id, "Too many subscriptions");
       return;
     }
 
     // Validate subscription query
-    const validation_errors = this.validate_subscription_query(subscription.query);
+    const validation_errors = this.validate_subscription_query(
+      subscription.query,
+    );
     if (validation_errors.length > 0) {
       // Send all validation errors concatenated for better diagnostics
-      const combined = validation_errors.map(e => e.message).join("; ");
+      const combined = validation_errors.map((e) => e.message).join("; ");
       this.send_error(websocket, subscription.id, combined);
       return;
     }
@@ -75,9 +83,10 @@ export class SubscriptionHandler {
 
       // Start the subscription (for now, we'll send periodic updates)
       await this.start_subscription(active_subscription);
-
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown subscription error";
+      const errorMessage = error instanceof Error
+        ? error.message
+        : "Unknown subscription error";
       this.send_error(websocket, subscription.id, errorMessage);
     }
   }
@@ -89,7 +98,9 @@ export class SubscriptionHandler {
     subscription.status = "stopped";
     this.subscriptions.delete(subscription_id);
 
-    const connection_subs = this.connection_subscriptions.get(subscription.connection_id);
+    const connection_subs = this.connection_subscriptions.get(
+      subscription.connection_id,
+    );
     if (connection_subs) {
       connection_subs.delete(subscription_id);
     }
@@ -134,7 +145,9 @@ export class SubscriptionHandler {
     this.connection_subscriptions.clear();
   }
 
-  private async start_subscription(subscription: ActiveSubscription): Promise<void> {
+  private async start_subscription(
+    subscription: ActiveSubscription,
+  ): Promise<void> {
     // Send initial data
     const initial_data = this.generate_mock_initial_data(subscription.query);
     this.send_data(subscription.websocket, subscription.id, initial_data);
@@ -167,7 +180,9 @@ export class SubscriptionHandler {
     const forbidden_keywords = ["insert", "update", "delete", "drop", "alter"];
     for (const keyword of forbidden_keywords) {
       // Check if query starts with or contains the forbidden keyword
-      if (normalized.startsWith(keyword) || normalized.includes(` ${keyword} `)) {
+      if (
+        normalized.startsWith(keyword) || normalized.includes(` ${keyword} `)
+      ) {
         errors.push({
           message: `Subscription queries cannot contain '${keyword}'`,
           extensions: { code: "INVALID_SUBSCRIPTION" },
@@ -229,7 +244,12 @@ export class SubscriptionHandler {
       const updates = [
         { type: "user_online", user_id: "user_003", name: "Charlie Wilson" },
         { type: "user_offline", user_id: "user_002" },
-        { type: "user_updated", user_id: "user_001", field: "status", value: "busy" },
+        {
+          type: "user_updated",
+          user_id: "user_001",
+          field: "status",
+          value: "busy",
+        },
       ];
       return updates[Math.floor(Math.random() * updates.length)];
     } else if (query.includes("Post")) {
@@ -249,7 +269,11 @@ export class SubscriptionHandler {
     };
   }
 
-  private send_data(websocket: WebSocket, subscription_id: string, data: any): void {
+  private send_data(
+    websocket: WebSocket,
+    subscription_id: string,
+    data: any,
+  ): void {
     const message: Types.SubscriptionMessage = {
       id: subscription_id,
       type: "data",
@@ -259,7 +283,11 @@ export class SubscriptionHandler {
     this.send_message(websocket, message);
   }
 
-  private send_error(websocket: WebSocket, subscription_id: string, error_message: string): void {
+  private send_error(
+    websocket: WebSocket,
+    subscription_id: string,
+    error_message: string,
+  ): void {
     const message: Types.SubscriptionMessage = {
       id: subscription_id,
       type: "error",
@@ -278,7 +306,10 @@ export class SubscriptionHandler {
     this.send_message(websocket, message);
   }
 
-  private send_message(websocket: WebSocket, message: Types.SubscriptionMessage): void {
+  private send_message(
+    websocket: WebSocket,
+    message: Types.SubscriptionMessage,
+  ): void {
     // Use numeric constant for readyState check (works with both real WebSocket and mocks)
     if (websocket.readyState === WS_OPEN) {
       websocket.send(JSON.stringify({
@@ -297,7 +328,9 @@ export class SubscriptionHandler {
         const inactive_time = now.getTime() - subscription.last_ping.getTime();
 
         if (inactive_time > this.options.subscription_timeout_ms) {
-          console.log(`Cleaning up inactive subscription: ${id}`);
+          log.debug("Cleaning up inactive subscription", {
+            subscription_id: id,
+          });
           this.stop_subscription(id);
           continue;
         }
@@ -321,9 +354,13 @@ export class SubscriptionHandler {
   get_subscription_stats(): {
     active_subscriptions: number;
     total_connections_with_subscriptions: number;
-    subscriptions_by_connection: Array<{ connection_id: string; count: number }>;
+    subscriptions_by_connection: Array<
+      { connection_id: string; count: number }
+    >;
   } {
-    const connections_with_subs = Array.from(this.connection_subscriptions.entries())
+    const connections_with_subs = Array.from(
+      this.connection_subscriptions.entries(),
+    )
       .map(([connection_id, subs]) => ({
         connection_id,
         count: subs.size,

@@ -1,4 +1,5 @@
 #!/usr/bin/env -S deno run --allow-net --allow-read --allow-write --allow-env
+// deno-lint-ignore-file no-console
 
 /**
  * CLI Demo Script - Demonstrates the complete Disc CLI functionality

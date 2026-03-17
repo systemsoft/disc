@@ -1,3 +1,4 @@
+// deno-lint-ignore-file no-console
 import { EdgeQLParser } from "./edgeql/parser.ts";
 import { EdgeQLCompiler } from "./compiler/compiler.ts";
 import { SQLCodeGenerator } from "./compiler/codegen.ts";

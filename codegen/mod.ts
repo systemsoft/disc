@@ -6,15 +6,18 @@ export * from "./types.ts";
 export * from "./typescript-generator.ts";
 
 import * as Context from "../compiler/context.ts";
+import { getLogger } from "../lib/logger.ts";
 import { TypeScriptGenerator } from "./typescript-generator.ts";
 import * as Types from "./types.ts";
+
+const log = getLogger("codegen");
 
 /**
  * Generate TypeScript types and client from EdgeQL schema
  */
 export function generateTypeScript(
   schema: Context.Schema,
-  config: Partial<Types.CodegenConfig> = {}
+  config: Partial<Types.CodegenConfig> = {},
 ): Types.CodegenResult {
   const fullConfig: Types.CodegenConfig = {
     output_dir: config.output_dir || "./generated",
@@ -37,12 +40,14 @@ export function generateTypeScript(
  */
 export async function writeGeneratedFiles(
   result: Types.CodegenResult,
-  basePath: string = "."
+  basePath: string = ".",
 ): Promise<void> {
   // Collect unique directories from file paths
   const dirs = new Set<string>();
   for (const file of result.files) {
-    const fullPath = file.path.startsWith("/") ? file.path : `${basePath}/${file.path}`;
+    const fullPath = file.path.startsWith("/")
+      ? file.path
+      : `${basePath}/${file.path}`;
     const dir = fullPath.substring(0, fullPath.lastIndexOf("/"));
     if (dir) dirs.add(dir);
   }
@@ -60,20 +65,22 @@ export async function writeGeneratedFiles(
 
   // Write each file
   for (const file of result.files) {
-    const fullPath = file.path.startsWith("/") ? file.path : `${basePath}/${file.path}`;
+    const fullPath = file.path.startsWith("/")
+      ? file.path
+      : `${basePath}/${file.path}`;
     await Deno.writeTextFile(fullPath, file.content);
-    console.log(`✅ Generated: ${fullPath}`);
+    log.info("Generated file", { path: fullPath });
   }
 
   // Report warnings and errors
   if (result.warnings.length > 0) {
-    console.log(`⚠️  Warnings:`);
-    result.warnings.forEach(warning => console.log(`   ${warning}`));
+    result.warnings.forEach((warning) =>
+      log.warn("Codegen warning", { warning })
+    );
   }
 
   if (result.errors.length > 0) {
-    console.log(`❌ Errors:`);
-    result.errors.forEach(error => console.log(`   ${error}`));
+    result.errors.forEach((error) => log.error("Codegen error", { error }));
   }
 }
 

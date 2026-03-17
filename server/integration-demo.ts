@@ -1,4 +1,5 @@
 #!/usr/bin/env -S deno run --allow-net --allow-env
+// deno-lint-ignore-file no-console
 
 /**
  * EdgeQL Compiler Integration Demo
@@ -15,7 +16,10 @@ async function demonstrateIntegration(): Promise<void> {
 
   // Create test schema
   const schema = Context.createTestSchema();
-  console.log("📋 Created test schema with types:", Array.from(schema.types.keys()));
+  console.log(
+    "📋 Created test schema with types:",
+    Array.from(schema.types.keys()),
+  );
 
   // Demonstrate EdgeQL parsing
   console.log("\n🔍 EdgeQL Parsing:");
@@ -40,14 +44,16 @@ async function demonstrateIntegration(): Promise<void> {
       const parseResult = parser.parse();
       console.log(`  ✅ Parsing successful (${parseResult.kind})`);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      const errorMessage = error instanceof Error
+        ? error.message
+        : "Unknown error";
       console.log(`  ❌ Error: ${errorMessage}`);
     }
   }
 
   // Start integrated server for live demo
   console.log("\n🌐 Starting integrated server with EdgeQL support...");
-  
+
   const server = new DiscServer({
     host: "localhost",
     port: 8081,
@@ -62,7 +68,7 @@ async function demonstrateIntegration(): Promise<void> {
   });
 
   // Give server time to start
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  await new Promise((resolve) => setTimeout(resolve, 1000));
 
   console.log("\n📡 Testing integrated EdgeQL execution:");
 
@@ -89,7 +95,8 @@ async function demonstrateIntegration(): Promise<void> {
     },
     {
       name: "Insert New User",
-      query: "insert User { name := 'Test User', email := 'test@example.com', active := true }",
+      query:
+        "insert User { name := 'Test User', email := 'test@example.com', active := true }",
       variables: {},
     },
   ];
@@ -112,34 +119,42 @@ async function demonstrateIntegration(): Promise<void> {
       }
 
       const result = await response.json();
-      
+
       if (result.errors && result.errors.length > 0) {
         console.log(`    ❌ Query Error: ${result.errors[0].message}`);
         console.log(`    📍 Phase: ${result.errors[0].extensions?.phase}`);
       } else {
-        console.log(`    ✅ Success: ${JSON.stringify(result.data).substring(0, 100)}...`);
-        
+        console.log(
+          `    ✅ Success: ${JSON.stringify(result.data).substring(0, 100)}...`,
+        );
+
         if (result.extensions?.sql) {
-          console.log(`    🔧 Generated SQL: ${result.extensions.sql.substring(0, 80)}...`);
+          console.log(
+            `    🔧 Generated SQL: ${
+              result.extensions.sql.substring(0, 80)
+            }...`,
+          );
         }
-        
+
         console.log(`    ⏱️  Duration: ${result.extensions?.duration_ms}ms`);
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      const errorMessage = error instanceof Error
+        ? error.message
+        : "Unknown error";
       console.log(`    ❌ Request Failed: ${errorMessage}`);
     }
   }
 
   // Test WebSocket integration
   console.log("\n🔌 Testing WebSocket EdgeQL execution:");
-  
+
   try {
     const ws = new WebSocket("ws://localhost:8081");
-    
+
     ws.onopen = () => {
       console.log("  ✅ WebSocket connected");
-      
+
       // Send a query over WebSocket
       ws.send(JSON.stringify({
         type: "query",
@@ -153,15 +168,19 @@ async function demonstrateIntegration(): Promise<void> {
     ws.onmessage = (event) => {
       const response = JSON.parse(event.data);
       console.log(`  📨 WebSocket Response: ${response.type}`);
-      
+
       if (response.type === "query_result") {
         if (response.payload.errors) {
           console.log(`    ❌ Error: ${response.payload.errors[0].message}`);
         } else {
-          console.log(`    ✅ Data: ${JSON.stringify(response.payload.data).substring(0, 80)}...`);
+          console.log(
+            `    ✅ Data: ${
+              JSON.stringify(response.payload.data).substring(0, 80)
+            }...`,
+          );
         }
       }
-      
+
       ws.close();
     };
 
@@ -170,10 +189,11 @@ async function demonstrateIntegration(): Promise<void> {
     };
 
     // Wait for WebSocket demo
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
+    await new Promise((resolve) => setTimeout(resolve, 2000));
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorMessage = error instanceof Error
+      ? error.message
+      : "Unknown error";
     console.log(`  ❌ WebSocket Demo Failed: ${errorMessage}`);
   }
 
@@ -183,7 +203,9 @@ async function demonstrateIntegration(): Promise<void> {
   console.log("✅ HTTP and WebSocket endpoints functional");
   console.log("✅ Query validation and error handling");
   console.log("✅ SQL generation pipeline demonstrated");
-  console.log("🔄 SQL execution simulation (would connect to PostgreSQL in production)");
+  console.log(
+    "🔄 SQL execution simulation (would connect to PostgreSQL in production)",
+  );
 
   console.log("\n🎉 Integration Demo Complete!");
   console.log("💡 Server is running at http://localhost:8081");

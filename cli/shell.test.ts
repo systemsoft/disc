@@ -1,10 +1,9 @@
+// deno-lint-ignore-file no-console
 /**
  * CLI Shell Command Tests - Test interactive EdgeQL REPL functionality
  */
 
-import {
-  assert,
-} from "@std/assert";
+import { assert } from "@std/assert";
 import {
   assertLogContains,
   cleanupTempDir,

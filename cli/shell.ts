@@ -1,3 +1,4 @@
+// deno-lint-ignore-file no-console
 /**
  * CLI Shell Command Implementation - Interactive EdgeQL REPL
  */
@@ -85,7 +86,11 @@ export class DiscShell {
     }
   }
 
-  private async connectToDatabase(host: string, port: number, database: string): Promise<void> {
+  private async connectToDatabase(
+    host: string,
+    port: number,
+    database: string,
+  ): Promise<void> {
     // First try to connect directly
     try {
       this.db = new DatabaseConnection({
@@ -100,8 +105,10 @@ export class DiscShell {
         this.session.connected = true;
       }
     } catch (error) {
-      console.log("⚠️  Direct connection failed, checking for Disc-managed instance...");
-      
+      console.log(
+        "⚠️  Direct connection failed, checking for Disc-managed instance...",
+      );
+
       // Try to use Disc-managed PostgreSQL
       const instancesDir = join(Deno.env.get("HOME")!, ".disc", "instances");
       this.postgresManager = new PostgresManager(instancesDir);
@@ -132,7 +139,7 @@ export class DiscShell {
           port: port === 5656 ? 0 : port, // Use socket if default Disc port
         });
         await this.postgresManager.startInstance(database, false);
-        
+
         const instance = this.postgresManager.getInstance(database)!;
         this.db = new DatabaseConnection(instance.dsn());
         await this.db.connect();
@@ -173,7 +180,7 @@ export class DiscShell {
 
     this.showHelp();
     console.log("");
-    
+
     // Show initial prompt
     await Deno.stdout.write(new TextEncoder().encode("disc> "));
 
@@ -213,13 +220,13 @@ export class DiscShell {
     // Handle multiline input
     if (this.isMultiline || !trimmed.endsWith(";")) {
       this.multilineBuffer += (this.multilineBuffer ? "\n" : "") + input;
-      
+
       if (trimmed.endsWith(";")) {
         // Execute complete query
         const query = this.multilineBuffer;
         this.multilineBuffer = "";
         this.isMultiline = false;
-        
+
         await this.executeRealQuery(query);
         this.commandHistory.push(query);
       } else {
@@ -247,7 +254,7 @@ export class DiscShell {
       case "\\q":
       case "\\quit":
         return "quit";
-      
+
       case "\\?":
       case "\\help":
         this.showHelp();
@@ -264,7 +271,11 @@ export class DiscShell {
       case "\\timing":
         if (this.session) {
           this.session.timing_enabled = !this.session.timing_enabled;
-          console.log(`⏱️  Timing ${this.session.timing_enabled ? "enabled" : "disabled"}`);
+          console.log(
+            `⏱️  Timing ${
+              this.session.timing_enabled ? "enabled" : "disabled"
+            }`,
+          );
         }
         break;
 
@@ -310,11 +321,13 @@ export class DiscShell {
 
     try {
       const result = await this.db.query(query);
-      
+
       // Display results
       if (result.rows.length > 0) {
         console.table(result.rows);
-        console.log(`(${result.rows.length} row${result.rows.length === 1 ? "" : "s"})`);
+        console.log(
+          `(${result.rows.length} row${result.rows.length === 1 ? "" : "s"})`,
+        );
       } else {
         console.log("✅ Query executed successfully");
       }
@@ -347,7 +360,7 @@ export class DiscShell {
       return;
     }
 
-    const query = detailed 
+    const query = detailed
       ? `SELECT 
            tablename as name,
            pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) as size,
@@ -359,7 +372,7 @@ export class DiscShell {
 
     try {
       const result = await this.db.query(query);
-      
+
       if (result.rows.length > 0) {
         console.table(result.rows);
       } else {
@@ -372,7 +385,7 @@ export class DiscShell {
 
   private async changeDatabase(database: string): Promise<void> {
     console.log(`Connecting to database: ${database}...`);
-    
+
     // Close current connection
     if (this.db) {
       await this.db.close();
@@ -383,13 +396,13 @@ export class DiscShell {
       await this.connectToDatabase(
         this.session?.host || "localhost",
         this.session?.port || 5656,
-        database
+        database,
       );
-      
+
       if (this.session) {
         this.session.database = database;
       }
-      
+
       console.log(`✅ Connected to ${database}`);
     } catch (error) {
       console.error(`❌ Failed to connect: ${(error as Error).message}`);
@@ -399,10 +412,10 @@ export class DiscShell {
   private async executeFile(filename: string): Promise<void> {
     try {
       const content = await Deno.readTextFile(filename);
-      const queries = content.split(";").filter(q => q.trim());
-      
+      const queries = content.split(";").filter((q) => q.trim());
+
       console.log(`Executing ${queries.length} queries from ${filename}...`);
-      
+
       for (const query of queries) {
         if (query.trim()) {
           await this.executeRealQuery(query.trim() + ";");

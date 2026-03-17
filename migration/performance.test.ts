@@ -1,3 +1,4 @@
+// deno-lint-ignore-file no-console
 /**
  * Performance tests for Migration Engine with large schema changes
  *
@@ -12,7 +13,11 @@ import { MigrationTracker } from "./tracker.ts";
 import { Module } from "../schema/converter.ts";
 import * as AST from "../schema/ast.ts";
 import * as Types from "./types.ts";
-import { canRunPgTests, cleanupTestTables, getTestDsn } from "../tests/pg-test-harness.ts";
+import {
+  canRunPgTests,
+  cleanupTestTables,
+  getTestDsn,
+} from "../tests/pg-test-harness.ts";
 
 const RUN_PG = canRunPgTests();
 
@@ -38,31 +43,47 @@ function createLargeSchema(numTypes: number): Module[] {
       {
         kind: "PropertyDeclaration",
         name: { kind: "Identifier", value: "id" },
-        type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["uuid"] } },
+        type: {
+          kind: "TypeRef",
+          name: { kind: "QualifiedName", parts: ["uuid"] },
+        },
         required: true,
         multi: false,
       },
       {
         kind: "PropertyDeclaration",
         name: { kind: "Identifier", value: "name" },
-        type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+        type: {
+          kind: "TypeRef",
+          name: { kind: "QualifiedName", parts: ["str"] },
+        },
         required: true,
         multi: false,
       },
       {
         kind: "PropertyDeclaration",
         name: { kind: "Identifier", value: "value" },
-        type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["int32"] } },
+        type: {
+          kind: "TypeRef",
+          name: { kind: "QualifiedName", parts: ["int32"] },
+        },
         required: false,
         multi: false,
       },
       {
         kind: "PropertyDeclaration",
         name: { kind: "Identifier", value: "created_at" },
-        type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["datetime"] } },
+        type: {
+          kind: "TypeRef",
+          name: { kind: "QualifiedName", parts: ["datetime"] },
+        },
         required: true,
         multi: false,
-        default: { kind: "FunctionCall", name: { kind: "QualifiedName", parts: ["datetime_current"] }, args: [] },
+        default: {
+          kind: "FunctionCall",
+          name: { kind: "QualifiedName", parts: ["datetime_current"] },
+          args: [],
+        },
       },
     ];
 
@@ -71,7 +92,10 @@ function createLargeSchema(numTypes: number): Module[] {
       members.push({
         kind: "PropertyDeclaration",
         name: { kind: "Identifier", value: "tags" },
-        type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+        type: {
+          kind: "TypeRef",
+          name: { kind: "QualifiedName", parts: ["str"] },
+        },
         required: false,
         multi: true,
       });
@@ -82,7 +106,13 @@ function createLargeSchema(numTypes: number): Module[] {
       members.push({
         kind: "LinkDeclaration",
         name: { kind: "Identifier", value: "parent" },
-        target: { kind: "TypeRef", name: { kind: "QualifiedName", parts: [`Entity${Math.floor(i / 2)}`] } },
+        target: {
+          kind: "TypeRef",
+          name: {
+            kind: "QualifiedName",
+            parts: [`Entity${Math.floor(i / 2)}`],
+          },
+        },
         required: false,
         multi: false,
       });
@@ -93,7 +123,10 @@ function createLargeSchema(numTypes: number): Module[] {
       members.push({
         kind: "LinkDeclaration",
         name: { kind: "Identifier", value: "related" },
-        target: { kind: "TypeRef", name: { kind: "QualifiedName", parts: [`Entity${i - 1}`] } },
+        target: {
+          kind: "TypeRef",
+          name: { kind: "QualifiedName", parts: [`Entity${i - 1}`] },
+        },
         required: false,
         multi: true,
       });
@@ -127,14 +160,18 @@ function createModifiedLargeSchema(numTypes: number): Module[] {
     typeDef.members.push({
       kind: "PropertyDeclaration",
       name: { kind: "Identifier", value: "modified_at" },
-      type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["datetime"] } },
+      type: {
+        kind: "TypeRef",
+        name: { kind: "QualifiedName", parts: ["datetime"] },
+      },
       required: false,
       multi: false,
     });
 
     // Modify an existing property (make value required)
     const valueProperty = typeDef.members.find(
-      (item): item is AST.PropertyDeclaration => item.kind === "PropertyDeclaration" && item.name.value === "value"
+      (item): item is AST.PropertyDeclaration =>
+        item.kind === "PropertyDeclaration" && item.name.value === "value",
     );
     if (valueProperty) {
       valueProperty.required = true;
@@ -150,7 +187,10 @@ function createModifiedLargeSchema(numTypes: number): Module[] {
         {
           kind: "PropertyDeclaration",
           name: { kind: "Identifier", value: "name" },
-          type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+          type: {
+            kind: "TypeRef",
+            name: { kind: "QualifiedName", parts: ["str"] },
+          },
           required: true,
           multi: false,
         },
@@ -176,7 +216,11 @@ Deno.test("Performance - Large Schema Initial Migration", () => {
   assertEquals(planResult.ok, true);
 
   const duration = endTime - startTime;
-  console.log(`Initial migration planning for ${numTypes} types took ${duration.toFixed(2)}ms`);
+  console.log(
+    `Initial migration planning for ${numTypes} types took ${
+      duration.toFixed(2)
+    }ms`,
+  );
 
   // Should complete within reasonable time
   assertLessOrEqual(duration, 5000); // 5 seconds
@@ -184,7 +228,7 @@ Deno.test("Performance - Large Schema Initial Migration", () => {
   // Verify correct number of operations
   if (planResult.ok) {
     const operations = planResult.value.migrations[0].operations;
-    const createOps = operations.filter(op => op.kind === "CreateType");
+    const createOps = operations.filter((op) => op.kind === "CreateType");
     assertEquals(createOps.length, numTypes);
   }
 });
@@ -201,7 +245,9 @@ Deno.test("Performance - Large Schema Diff", () => {
   const endTime = performance.now();
 
   const duration = endTime - startTime;
-  console.log(`Schema diff for ${numTypes} types took ${duration.toFixed(2)}ms`);
+  console.log(
+    `Schema diff for ${numTypes} types took ${duration.toFixed(2)}ms`,
+  );
 
   // Should complete within reasonable time
   assertLessOrEqual(duration, 3000); // 3 seconds
@@ -210,8 +256,8 @@ Deno.test("Performance - Large Schema Diff", () => {
   assertEquals(operations.length > 0, true);
 
   // Should have alter operations and new type creations
-  const alterOps = operations.filter(op => op.kind === "AlterType");
-  const createOps = operations.filter(op => op.kind === "CreateType");
+  const alterOps = operations.filter((op) => op.kind === "AlterType");
+  const createOps = operations.filter((op) => op.kind === "CreateType");
 
   assertEquals(alterOps.length > 0, true); // Should have alterations
   assertEquals(createOps.length, 10); // Should have 10 new types
@@ -235,7 +281,9 @@ Deno.test("Performance - DDL Generation for Large Schema", () => {
     assertEquals(ddlResult.ok, true);
 
     const duration = endTime - startTime;
-    console.log(`DDL generation for ${numTypes} types took ${duration.toFixed(2)}ms`);
+    console.log(
+      `DDL generation for ${numTypes} types took ${duration.toFixed(2)}ms`,
+    );
 
     // Should complete within reasonable time
     assertLessOrEqual(duration, 4000); // 4 seconds
@@ -269,131 +317,151 @@ Deno.test("Performance - Rollback DDL Generation", () => {
     assertEquals(rollbackResult.ok, true);
 
     const duration = endTime - startTime;
-    console.log(`Rollback DDL generation for ${migration.operations.length} operations took ${duration.toFixed(2)}ms`);
+    console.log(
+      `Rollback DDL generation for ${migration.operations.length} operations took ${
+        duration.toFixed(2)
+      }ms`,
+    );
 
     // Should complete within reasonable time
     assertLessOrEqual(duration, 2000); // 2 seconds
   }
 });
 
-Deno.test({ name: "Performance - Migration Tracking with Many Migrations", ignore: !RUN_PG, fn: async () => {
-  const dsn = await getTestDsn();
-  await cleanupTestTables(dsn);
-  const tracker = new MigrationTracker(dsn);
-  await tracker.initialize();
+Deno.test({
+  name: "Performance - Migration Tracking with Many Migrations",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    await cleanupTestTables(dsn);
+    const tracker = new MigrationTracker(dsn);
+    await tracker.initialize();
 
-  const numMigrations = 500;
-  const migrations: Types.Migration[] = [];
+    const numMigrations = 500;
+    const migrations: Types.Migration[] = [];
 
-  // Create many test migrations
-  for (let i = 1; i <= numMigrations; i++) {
-    migrations.push({
-      id: `perf-migration-${i.toString().padStart(3, "0")}`,
-      name: `migration_${i}`,
-      description: `Performance test migration ${i}`,
-      created_at: new Date(Date.now() + i * 1000),
-      schema_hash: `hash_${i}`,
-      operations: [
-        {
-          kind: "CreateType",
-          type_name: `PerfType${i}`,
-          properties: [
-            {
-              name: "name",
-              type: "str",
-              required: true,
-              multi: false,
-              constraints: [],
-              annotations: {},
-            },
-          ],
-          links: [],
-        } as Types.CreateTypeOperation,
-      ],
-    });
-  }
+    // Create many test migrations
+    for (let i = 1; i <= numMigrations; i++) {
+      migrations.push({
+        id: `perf-migration-${i.toString().padStart(3, "0")}`,
+        name: `migration_${i}`,
+        description: `Performance test migration ${i}`,
+        created_at: new Date(Date.now() + i * 1000),
+        schema_hash: `hash_${i}`,
+        operations: [
+          {
+            kind: "CreateType",
+            type_name: `PerfType${i}`,
+            properties: [
+              {
+                name: "name",
+                type: "str",
+                required: true,
+                multi: false,
+                constraints: [],
+                annotations: {},
+              },
+            ],
+            links: [],
+          } as Types.CreateTypeOperation,
+        ],
+      });
+    }
 
-  // Record all migrations
-  const startTime = performance.now();
+    // Record all migrations
+    const startTime = performance.now();
 
-  for (const migration of migrations) {
-    const result: Types.MigrationResult = {
-      success: true,
-      migration_id: migration.id,
-      applied_at: new Date(),
-      duration_ms: 100,
-    };
+    for (const migration of migrations) {
+      const result: Types.MigrationResult = {
+        success: true,
+        migration_id: migration.id,
+        applied_at: new Date(),
+        duration_ms: 100,
+      };
 
-    const recordResult = await tracker.recordMigration(migration, result);
-    assertEquals(recordResult.ok, true);
-  }
+      const recordResult = await tracker.recordMigration(migration, result);
+      assertEquals(recordResult.ok, true);
+    }
 
-  const endTime = performance.now();
-  const duration = endTime - startTime;
+    const endTime = performance.now();
+    const duration = endTime - startTime;
 
-  console.log(`Recording ${numMigrations} migrations took ${duration.toFixed(2)}ms`);
-  console.log(`Average per migration: ${(duration / numMigrations).toFixed(2)}ms`);
+    console.log(
+      `Recording ${numMigrations} migrations took ${duration.toFixed(2)}ms`,
+    );
+    console.log(
+      `Average per migration: ${(duration / numMigrations).toFixed(2)}ms`,
+    );
 
-  // Should complete within reasonable time
-  assertLessOrEqual(duration, 30000); // 30 seconds
+    // Should complete within reasonable time
+    assertLessOrEqual(duration, 30000); // 30 seconds
 
-  // Verify all migrations are recorded
-  const appliedResult = await tracker.getAppliedMigrations();
-  assertEquals(appliedResult.ok, true);
-  if (appliedResult.ok) {
-    assertEquals(appliedResult.value.length, numMigrations);
-  }
+    // Verify all migrations are recorded
+    const appliedResult = await tracker.getAppliedMigrations();
+    assertEquals(appliedResult.ok, true);
+    if (appliedResult.ok) {
+      assertEquals(appliedResult.value.length, numMigrations);
+    }
 
-  await tracker.close();
-}});
+    await tracker.close();
+  },
+});
 
-Deno.test({ name: "Performance - Migration History Retrieval", ignore: !RUN_PG, fn: async () => {
-  const dsn = await getTestDsn();
-  await cleanupTestTables(dsn);
-  const tracker = new MigrationTracker(dsn);
-  await tracker.initialize();
+Deno.test({
+  name: "Performance - Migration History Retrieval",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    await cleanupTestTables(dsn);
+    const tracker = new MigrationTracker(dsn);
+    await tracker.initialize();
 
-  const numMigrations = 100;
+    const numMigrations = 100;
 
-  // Record migrations
-  for (let i = 1; i <= numMigrations; i++) {
-    const migration: Types.Migration = {
-      id: `history-test-${i}`,
-      name: `migration_${i}`,
-      description: `History test migration ${i}`,
-      created_at: new Date(Date.now() + i * 1000),
-      schema_hash: `hash_${i}`,
-      operations: [],
-    };
+    // Record migrations
+    for (let i = 1; i <= numMigrations; i++) {
+      const migration: Types.Migration = {
+        id: `history-test-${i}`,
+        name: `migration_${i}`,
+        description: `History test migration ${i}`,
+        created_at: new Date(Date.now() + i * 1000),
+        schema_hash: `hash_${i}`,
+        operations: [],
+      };
 
-    const result: Types.MigrationResult = {
-      success: true,
-      migration_id: migration.id,
-      applied_at: new Date(),
-      duration_ms: 100,
-    };
+      const result: Types.MigrationResult = {
+        success: true,
+        migration_id: migration.id,
+        applied_at: new Date(),
+        duration_ms: 100,
+      };
 
-    await tracker.recordMigration(migration, result);
-  }
+      await tracker.recordMigration(migration, result);
+    }
 
-  // Test retrieval performance
-  const startTime = performance.now();
-  const historyResult = await tracker.getMigrationHistory();
-  const endTime = performance.now();
+    // Test retrieval performance
+    const startTime = performance.now();
+    const historyResult = await tracker.getMigrationHistory();
+    const endTime = performance.now();
 
-  assertEquals(historyResult.ok, true);
-  if (historyResult.ok) {
-    assertEquals(historyResult.value.length, numMigrations);
-  }
+    assertEquals(historyResult.ok, true);
+    if (historyResult.ok) {
+      assertEquals(historyResult.value.length, numMigrations);
+    }
 
-  const duration = endTime - startTime;
-  console.log(`Retrieving history for ${numMigrations} migrations took ${duration.toFixed(2)}ms`);
+    const duration = endTime - startTime;
+    console.log(
+      `Retrieving history for ${numMigrations} migrations took ${
+        duration.toFixed(2)
+      }ms`,
+    );
 
-  // Should complete quickly
-  assertLessOrEqual(duration, 1000); // 1 second
+    // Should complete quickly
+    assertLessOrEqual(duration, 1000); // 1 second
 
-  await tracker.close();
-}});
+    await tracker.close();
+  },
+});
 
 Deno.test("Performance - Complex Schema with Deep Inheritance", () => {
   const config = createPerformanceTestConfig();
@@ -416,7 +484,10 @@ Deno.test("Performance - Complex Schema with Deep Inheritance", () => {
     for (let i = 1; i <= numTypesPerLevel; i++) {
       const typeName = `Level${level}Type${i}`;
       const extending: AST.TypeRef[] = level > 0
-        ? [{ kind: "TypeRef", name: { kind: "QualifiedName", parts: [`Level${level - 1}Type${i}`] } }]
+        ? [{
+          kind: "TypeRef",
+          name: { kind: "QualifiedName", parts: [`Level${level - 1}Type${i}`] },
+        }]
         : [];
 
       const type: AST.TypeDeclaration = {
@@ -427,7 +498,10 @@ Deno.test("Performance - Complex Schema with Deep Inheritance", () => {
           {
             kind: "PropertyDeclaration",
             name: { kind: "Identifier", value: `level_${level}_prop` },
-            type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+            type: {
+              kind: "TypeRef",
+              name: { kind: "QualifiedName", parts: ["str"] },
+            },
             required: false,
             multi: false,
           },
@@ -445,7 +519,11 @@ Deno.test("Performance - Complex Schema with Deep Inheritance", () => {
   assertEquals(planResult.ok, true);
 
   const duration = endTime - startTime;
-  console.log(`Deep inheritance schema (${numLevels} levels, ${numTypesPerLevel} types/level) took ${duration.toFixed(2)}ms`);
+  console.log(
+    `Deep inheritance schema (${numLevels} levels, ${numTypesPerLevel} types/level) took ${
+      duration.toFixed(2)
+    }ms`,
+  );
 
   // Should handle complex inheritance within reasonable time
   assertLessOrEqual(duration, 8000); // 8 seconds
@@ -475,7 +553,11 @@ Deno.test("Performance - Concurrent Migration Operations", async () => {
   }
 
   const duration = endTime - startTime;
-  console.log(`${numConcurrentOps} concurrent migration planning operations took ${duration.toFixed(2)}ms`);
+  console.log(
+    `${numConcurrentOps} concurrent migration planning operations took ${
+      duration.toFixed(2)
+    }ms`,
+  );
 
   // Should complete within reasonable time
   assertLessOrEqual(duration, 10000); // 10 seconds
@@ -543,7 +625,9 @@ Deno.test("Performance - Stress Test with Very Large Schema", () => {
     console.log(`Stress test results for ${numTypes} types:`);
     console.log(`  Planning: ${(planningTime - startTime).toFixed(2)}ms`);
     console.log(`  DDL Generation: ${(ddlTime - planningTime).toFixed(2)}ms`);
-    console.log(`  Rollback Generation: ${(rollbackTime - ddlTime).toFixed(2)}ms`);
+    console.log(
+      `  Rollback Generation: ${(rollbackTime - ddlTime).toFixed(2)}ms`,
+    );
     console.log(`  Total: ${(endTime - startTime).toFixed(2)}ms`);
 
     // Should complete within reasonable time even for large schemas

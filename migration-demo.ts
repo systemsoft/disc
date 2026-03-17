@@ -1,8 +1,9 @@
 #!/usr/bin/env deno run
+// deno-lint-ignore-file no-console
 
 /**
  * Migration Engine Demo
- * 
+ *
  * Demonstrates the Disc migration engine capabilities
  */
 
@@ -32,12 +33,12 @@ function createUserSchema(version: number): Types.Schema {
             constraints: [],
             indexes: [],
             accessPolicies: [],
-          }]
+          }],
         ]),
       };
     case 2:
       return {
-        version: "2.0.0", 
+        version: "2.0.0",
         modules: [],
         types: new Map([
           ["User", {
@@ -47,22 +48,31 @@ function createUserSchema(version: number): Types.Schema {
               ["id", { name: "id", type: "uuid", required: true }],
               ["name", { name: "name", type: "str", required: true }],
               ["email", { name: "email", type: "str", required: true }],
-              ["created_at", { name: "created_at", type: "datetime", required: false }],
-              ["active", { name: "active", type: "bool", required: false, default: "true" }],
+              ["created_at", {
+                name: "created_at",
+                type: "datetime",
+                required: false,
+              }],
+              ["active", {
+                name: "active",
+                type: "bool",
+                required: false,
+                default: "true",
+              }],
             ]),
             links: new Map([
-              ["posts", { 
-                name: "posts", 
-                target: "Post", 
-                required: false, 
-                multi: true 
-              }]
+              ["posts", {
+                name: "posts",
+                target: "Post",
+                required: false,
+                multi: true,
+              }],
             ]),
             constraints: [
-              { type: "unique", on: ["email"] }
+              { type: "unique", on: ["email"] },
             ],
             indexes: [
-              { name: "idx_user_email", on: ["email"] }
+              { name: "idx_user_email", on: ["email"] },
             ],
             accessPolicies: [],
           }],
@@ -73,20 +83,24 @@ function createUserSchema(version: number): Types.Schema {
               ["id", { name: "id", type: "uuid", required: true }],
               ["title", { name: "title", type: "str", required: true }],
               ["body", { name: "body", type: "str", required: true }],
-              ["created_at", { name: "created_at", type: "datetime", required: false }],
+              ["created_at", {
+                name: "created_at",
+                type: "datetime",
+                required: false,
+              }],
             ]),
             links: new Map([
-              ["author", { 
-                name: "author", 
-                target: "User", 
-                required: true, 
-                multi: false 
-              }]
+              ["author", {
+                name: "author",
+                target: "User",
+                required: true,
+                multi: false,
+              }],
             ]),
             constraints: [],
             indexes: [],
             accessPolicies: [],
-          }]
+          }],
         ]),
       };
     default:
@@ -94,9 +108,9 @@ function createUserSchema(version: number): Types.Schema {
   }
 }
 
-console.log("=" .repeat(60));
+console.log("=".repeat(60));
 console.log("Disc Migration Engine Demo");
-console.log("=" .repeat(60));
+console.log("=".repeat(60));
 
 // Demo 1: Schema Diffing
 console.log("\n1. Schema Diffing");
@@ -108,7 +122,7 @@ const differ = new SchemaDiffer();
 const changes = differ.diff(oldSchema, newSchema);
 
 console.log(`Found ${changes.length} changes:`);
-changes.forEach(change => {
+changes.forEach((change) => {
   console.log(`  - ${change.type}: ${change.description || change.type}`);
 });
 
@@ -126,8 +140,8 @@ for (const change of changes) {
 }
 
 console.log("Generated SQL:");
-statements.forEach(sql => {
-  console.log(`  ${sql.substring(0, 60)}${sql.length > 60 ? '...' : ''}`);
+statements.forEach((sql) => {
+  console.log(`  ${sql.substring(0, 60)}${sql.length > 60 ? "..." : ""}`);
 });
 
 // Demo 3: Migration Generation with Rollback
@@ -136,7 +150,7 @@ console.log("-".repeat(40));
 const engine = new MigrationEngine();
 const migration = engine.generateMigration(oldSchema, newSchema, {
   name: "add_posts_and_metadata",
-  generateRollback: true
+  generateRollback: true,
 });
 
 console.log(`Migration: ${migration.name}`);
@@ -146,8 +160,8 @@ console.log(`Down statements: ${migration.down?.length || 0}`);
 
 if (migration.down && migration.down.length > 0) {
   console.log("\nRollback SQL (first 3):");
-  migration.down.slice(0, 3).forEach(sql => {
-    console.log(`  ${sql.substring(0, 60)}${sql.length > 60 ? '...' : ''}`);
+  migration.down.slice(0, 3).forEach((sql) => {
+    console.log(`  ${sql.substring(0, 60)}${sql.length > 60 ? "..." : ""}`);
   });
 }
 
@@ -158,7 +172,7 @@ const validation = engine.validateMigration(migration);
 console.log(`Is safe: ${validation.isSafe}`);
 if (validation.warnings.length > 0) {
   console.log("Warnings:");
-  validation.warnings.forEach(warning => {
+  validation.warnings.forEach((warning) => {
     console.log(`  - ${warning}`);
   });
 }
@@ -169,7 +183,7 @@ console.log("-".repeat(40));
 const hints = engine.generateDataMigrationHints(changes);
 if (hints.length > 0) {
   console.log("Suggested data migrations:");
-  hints.forEach(hint => {
+  hints.forEach((hint) => {
     console.log(`  - ${hint}`);
   });
 } else {
@@ -197,13 +211,13 @@ const renamedSchema: Types.Schema = {
       constraints: [],
       indexes: [],
       accessPolicies: [],
-    }]
+    }],
   ]),
 };
 
 const renameChanges = differ.diff(oldSchema, renamedSchema);
 console.log("Detected potential property rename:");
-renameChanges.forEach(change => {
+renameChanges.forEach((change) => {
   if (change.type === "DropProperty" || change.type === "AddProperty") {
     console.log(`  - ${change.type}: ${change.description}`);
   }
@@ -226,7 +240,7 @@ try {
   const ast = parser.parse();
   console.log("✅ Successfully parsed SDL schema");
   console.log(`  Found ${ast.declarations.length} type declaration(s)`);
-  
+
   // Note: Full SDL to Schema conversion would be implemented here
   console.log("  (Full SDL to Schema conversion would process the AST)");
 } catch (error) {
@@ -243,4 +257,4 @@ console.log("✅ Data migration hint generation");
 console.log("✅ Complex change detection");
 console.log("✅ SDL parser integration ready");
 console.log("\nThe migration engine is production-ready!");
-console.log("=" .repeat(60));
+console.log("=".repeat(60));

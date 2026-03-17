@@ -2,7 +2,10 @@
  * Protocol handler for EdgeQL queries
  */
 
+import { getLogger } from "../lib/logger.ts";
 import * as Types from "./types.ts";
+
+const log = getLogger("protocol");
 
 export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
   constructor() {
@@ -11,7 +14,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
 
   async handle_request(
     request: Types.QueryRequest,
-    context: Types.QueryContext
+    context: Types.QueryContext,
   ): Promise<Types.QueryResponse> {
     const start_time = Date.now();
 
@@ -25,7 +28,11 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       }
 
       // Mock execution — real compiler integration is in EdgeQLProtocolHandler (edgeql-protocol.ts)
-      const result = await this.execute_edgeql_query(request.query, request.variables || {}, context);
+      const result = await this.execute_edgeql_query(
+        request.query,
+        request.variables || {},
+        context,
+      );
 
       const duration_ms = Date.now() - start_time;
 
@@ -36,10 +43,13 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
           query_hash: this.hash_query(request.query),
         },
       };
-
     } catch (error) {
-      console.error("Query execution error:", error);
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      log.error("Query execution error", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      const errorMessage = error instanceof Error
+        ? error.message
+        : "Unknown error";
 
       return {
         errors: [{
@@ -92,7 +102,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
   private async execute_edgeql_query(
     query: string,
     variables: Record<string, any>,
-    context: Types.QueryContext
+    context: Types.QueryContext,
   ): Promise<any> {
     // Mock implementation - would integrate with real EdgeQL compiler
 
@@ -161,7 +171,9 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     return errors;
   }
 
-  private check_balanced_braces(query: string): { valid: boolean; position: number } {
+  private check_balanced_braces(
+    query: string,
+  ): { valid: boolean; position: number } {
     let depth = 0;
     let position = 0;
 
@@ -188,10 +200,17 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     const normalized = query.trim().toLowerCase();
 
     const valid_start_keywords = [
-      "select", "insert", "update", "delete", "with", "for", "describe", "configure"
+      "select",
+      "insert",
+      "update",
+      "delete",
+      "with",
+      "for",
+      "describe",
+      "configure",
     ];
 
-    const starts_with_valid = valid_start_keywords.some(keyword =>
+    const starts_with_valid = valid_start_keywords.some((keyword) =>
       normalized.startsWith(keyword)
     );
 
@@ -276,7 +295,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
 export class GraphQLProtocolHandler implements Types.ProtocolHandler {
   async handle_request(
     _request: Types.QueryRequest,
-    _context: Types.QueryContext
+    _context: Types.QueryContext,
   ): Promise<Types.QueryResponse> {
     // GraphQL implementation would go here
     // For now, return not implemented

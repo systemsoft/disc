@@ -2,12 +2,18 @@
  * HTTP Server implementation for Disc Database
  */
 
+import { getLogger } from "../lib/logger.ts";
 import * as Types from "./types.ts";
+import { renderMetrics } from "./metrics.ts";
+import type { MetricsSource } from "./metrics.ts";
+
+const log = getLogger("http");
 import {
   ConnectionManager,
   SessionManager,
   TransactionManager,
 } from "./connection.ts";
+import { RateLimiter } from "./rate-limiter.ts";
 import { SubscriptionHandler } from "./subscription-handler.ts";
 import type { AuthProvider } from "../auth/provider.ts";
 import type { AuthMiddleware } from "../auth/middleware.ts";
@@ -31,7 +37,9 @@ export class HttpServer {
   private auth_provider?: AuthProvider;
   private auth_middleware?: AuthMiddleware;
   private auth_routes?: AuthRoutes;
+  private rate_limiter?: RateLimiter;
   private server?: Deno.HttpServer<Deno.NetAddr>;
+  private redirect_server?: Deno.HttpServer<Deno.NetAddr>;
   private cleanup_interval_ids: number[] = [];
   private start_time: Date;
   private in_flight_requests = 0;
@@ -54,12 +62,23 @@ export class HttpServer {
     this.transaction_manager = new TransactionManager();
     this.subscription_handler = new SubscriptionHandler();
     this.start_time = new Date();
+
+    if (
+      options.config.rate_limit_rpm && options.config.rate_limit_rpm > 0
+    ) {
+      this.rate_limiter = new RateLimiter({
+        requests_per_minute: options.config.rate_limit_rpm,
+        burst_size: options.config.rate_limit_burst ||
+          options.config.rate_limit_rpm,
+      });
+    }
   }
 
   async start(): Promise<void> {
-    console.log(
-      `🚀 Starting Disc HTTP server on ${this.config.host}:${this.config.port}`,
-    );
+    log.info("Starting Disc HTTP server", {
+      host: this.config.host,
+      port: this.config.port,
+    });
 
     const handler = (
       request: Request,
@@ -68,25 +87,67 @@ export class HttpServer {
       return this.handle_request(request, info);
     };
 
-    this.server = Deno.serve({
+    const serveOptions: Deno.ServeOptions & {
+      cert?: string;
+      key?: string;
+    } = {
       hostname: this.config.host,
       port: this.config.port,
       handler,
-    });
+    };
+
+    if (this.config.tls) {
+      const cert = await Deno.readTextFile(this.config.tls.cert_file);
+      const key = await Deno.readTextFile(this.config.tls.key_file);
+      serveOptions.cert = cert;
+      serveOptions.key = key;
+    }
+
+    this.server = Deno.serve(serveOptions);
+
+    // Start redirect server if TLS redirect is enabled
+    if (this.config.tls?.redirect) {
+      const redirectPort = this.config.tls.redirect_port || 80;
+      const httpsPort = this.config.port;
+      const host = this.config.host;
+
+      this.redirect_server = Deno.serve({
+        hostname: host,
+        port: redirectPort,
+        handler: (request: Request) => {
+          const url = new URL(request.url);
+          url.protocol = "https:";
+          url.port = String(httpsPort);
+          return new Response(null, {
+            status: 301,
+            headers: { "Location": url.toString() },
+          });
+        },
+      });
+    }
 
     // Start cleanup intervals
     this.start_cleanup_intervals();
 
-    console.log(
-      `✅ Disc server is running on http://${this.config.host}:${this.config.port}`,
-    );
-    console.log(`📊 CORS enabled: ${this.config.enable_cors}`);
-    console.log(`🔌 WebSockets enabled: ${this.config.enable_websockets}`);
+    const protocol = this.config.tls ? "https" : "http";
+    log.info("Disc server is running", {
+      url: `${protocol}://${this.config.host}:${this.config.port}`,
+    });
+    log.info("Server configuration", {
+      cors: this.config.enable_cors,
+      websockets: this.config.enable_websockets,
+    });
 
-    await this.server.finished;
+    await Promise.all([
+      this.server.finished,
+      ...(this.redirect_server ? [this.redirect_server.finished] : []),
+    ]);
   }
 
   async stop(): Promise<void> {
+    // Dispose rate limiter cleanup interval
+    this.rate_limiter?.dispose();
+
     // Clear all cleanup intervals
     for (const id of this.cleanup_interval_ids) {
       clearInterval(id);
@@ -96,10 +157,14 @@ export class HttpServer {
     // Dispose subscription handler timers
     this.subscription_handler.dispose();
 
+    if (this.redirect_server) {
+      await this.redirect_server.shutdown();
+    }
+
     if (this.server) {
-      console.log("Stopping Disc server...");
+      log.info("Stopping Disc server");
       await this.server.shutdown();
-      console.log("Server stopped");
+      log.info("Server stopped");
     }
   }
 
@@ -136,6 +201,21 @@ export class HttpServer {
           headers: this.get_default_headers("application/json"),
         },
       );
+    }
+
+    // Enforce rate limit before touching in-flight counter or stats
+    if (this.rate_limiter) {
+      const client_ip = "hostname" in info.remoteAddr
+        ? info.remoteAddr.hostname
+        : "unknown";
+      if (!this.rate_limiter.allow(client_ip)) {
+        const headers = this.get_default_headers("application/json");
+        headers.set("Retry-After", "60");
+        return new Response(
+          JSON.stringify({ error: "Rate limit exceeded" }),
+          { status: 429, headers },
+        );
+      }
     }
 
     this.in_flight_requests++;
@@ -180,12 +260,17 @@ export class HttpServer {
           return await this.handle_health_ready();
         case "/stats":
           return this.handle_stats();
+        case "/metrics":
+          return this.handle_metrics();
         default:
           return this.create_error_response("Not Found", 404);
       }
     } catch (error) {
       this.stats.failed_requests++;
-      console.error(`Request ${request_id} failed:`, error);
+      log.error("Request failed", {
+        request_id,
+        error: error instanceof Error ? error.message : String(error),
+      });
       return this.create_error_response("Internal Server Error", 500);
     } finally {
       const duration = Date.now() - start_time;
@@ -203,6 +288,10 @@ export class HttpServer {
       stats: "/stats",
       websocket: this.config.enable_websockets ? "ws://upgrade" : null,
     };
+
+    if (this.config.enable_metrics) {
+      endpoints.metrics = "/metrics";
+    }
 
     if (this.auth_routes) {
       endpoints.auth = {
@@ -377,7 +466,10 @@ export class HttpServer {
         headers: this.get_default_headers("application/json"),
       });
     } catch (error) {
-      console.error(`Query execution failed for request ${request_id}:`, error);
+      log.error("Query execution failed", {
+        request_id,
+        error: error instanceof Error ? error.message : String(error),
+      });
 
       const error_response: Types.QueryResponse = {
         errors: [{
@@ -483,10 +575,42 @@ export class HttpServer {
       subscriptions: subscription_stats,
       cache: handlerStats?.cache,
       query_metrics: handlerStats?.query_metrics,
+      rate_limit: this.rate_limiter?.stats(),
     };
 
     return new Response(JSON.stringify(stats, null, 2), {
       headers: this.get_default_headers("application/json"),
+    });
+  }
+
+  private handle_metrics(): Response {
+    if (!this.config.enable_metrics) {
+      return this.create_error_response("Not Found", 404);
+    }
+
+    const handlerStats = this.protocol_handler.getStats?.();
+    const poolStats = this.protocol_handler.getPoolStats?.() ?? null;
+
+    const source: MetricsSource = {
+      http: {
+        total_requests: this.stats.total_requests,
+        successful_requests: this.stats.successful_requests,
+        failed_requests: this.stats.failed_requests,
+        total_duration_ms: this.stats.total_duration_ms,
+      },
+      cache: handlerStats?.cache,
+      query_metrics: handlerStats?.query_metrics,
+      pool: poolStats,
+      rate_limit: this.rate_limiter?.stats(),
+      uptime_ms: Date.now() - this.start_time.getTime(),
+      memory: this.get_memory_stats(),
+    };
+
+    const body = renderMetrics(source);
+    return new Response(body, {
+      headers: new Headers({
+        "Content-Type": "text/plain; version=0.0.4; charset=utf-8",
+      }),
     });
   }
 
@@ -521,7 +645,7 @@ export class HttpServer {
     );
 
     socket.onopen = () => {
-      console.log(`WebSocket connection opened: ${connection.id}`);
+      log.info("WebSocket connection opened", { connection_id: connection.id });
     };
 
     socket.onmessage = async (event) => {
@@ -529,7 +653,9 @@ export class HttpServer {
         const message = JSON.parse(event.data);
         await this.handle_websocket_message(socket, connection, message);
       } catch (error) {
-        console.error("WebSocket message error:", error);
+        log.error("WebSocket message error", {
+          error: error instanceof Error ? error.message : String(error),
+        });
         socket.send(JSON.stringify({
           type: "error",
           payload: { message: "Invalid message format" },
@@ -538,15 +664,15 @@ export class HttpServer {
     };
 
     socket.onclose = () => {
-      console.log(`WebSocket connection closed: ${connection.id}`);
+      log.info("WebSocket connection closed", { connection_id: connection.id });
       this.subscription_handler.cleanup_connection(
         connection.session.session_id,
       );
       this.connection_manager.close_connection(connection.id);
     };
 
-    socket.onerror = (error) => {
-      console.error(`WebSocket error for ${connection.id}:`, error);
+    socket.onerror = (_error) => {
+      log.error("WebSocket error", { connection_id: connection.id });
     };
 
     return response;
@@ -749,7 +875,7 @@ export class HttpServer {
     this.cleanup_interval_ids.push(setInterval(() => {
       const cleaned = this.connection_manager.cleanup_idle_connections();
       if (cleaned > 0) {
-        console.log(`Cleaned up ${cleaned} idle connections`);
+        log.debug("Cleaned up idle connections", { count: cleaned });
       }
     }, 5 * 60 * 1000));
 
@@ -757,7 +883,7 @@ export class HttpServer {
     this.cleanup_interval_ids.push(setInterval(() => {
       const cleaned = this.session_manager.cleanup_expired_sessions();
       if (cleaned > 0) {
-        console.log(`Cleaned up ${cleaned} expired sessions`);
+        log.debug("Cleaned up expired sessions", { count: cleaned });
       }
     }, 10 * 60 * 1000));
 
@@ -765,7 +891,7 @@ export class HttpServer {
     this.cleanup_interval_ids.push(setInterval(() => {
       const cleaned = this.transaction_manager.cleanup_abandoned_transactions();
       if (cleaned > 0) {
-        console.log(`Cleaned up ${cleaned} abandoned transactions`);
+        log.debug("Cleaned up abandoned transactions", { count: cleaned });
       }
     }, 2 * 60 * 1000));
   }

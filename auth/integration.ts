@@ -2,10 +2,13 @@
  * Auth Integration with Disc Server
  */
 
+import { getLogger } from "../lib/logger.ts";
 import { AuthProvider } from "./provider.ts";
-import { AuthMiddleware, AuthContext, RequestHandler } from "./middleware.ts";
+import { AuthContext, AuthMiddleware, RequestHandler } from "./middleware.ts";
 import { AuthConfig, LoginCredentials, RegisterData } from "./types.ts";
 import { DatabaseConnection } from "../lib/database.ts";
+
+const log = getLogger("auth");
 
 export interface AuthIntegration {
   provider: AuthProvider;
@@ -16,7 +19,7 @@ export interface AuthIntegration {
 export class AuthRoutes {
   constructor(
     private provider: AuthProvider,
-    private middleware: AuthMiddleware
+    private middleware: AuthMiddleware,
   ) {}
 
   /**
@@ -74,27 +77,29 @@ export class AuthRoutes {
    * Handle logout
    */
   logout(): RequestHandler {
-    return this.middleware.requireAuth(async (request: Request, _context?: AuthContext) => {
-      try {
-        // Get session ID from request body or extract from token
-        const url = new URL(request.url);
-        const sessionId = url.searchParams.get("session_id");
+    return this.middleware.requireAuth(
+      async (request: Request, _context?: AuthContext) => {
+        try {
+          // Get session ID from request body or extract from token
+          const url = new URL(request.url);
+          const sessionId = url.searchParams.get("session_id");
 
-        if (sessionId) {
-          await this.provider.logout(sessionId);
-        } else {
-          // Logout current session - we'd need session tracking for this
-          // For now, just return success
+          if (sessionId) {
+            await this.provider.logout(sessionId);
+          } else {
+            // Logout current session - we'd need session tracking for this
+            // For now, just return success
+          }
+
+          return new Response(JSON.stringify({ success: true }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        } catch (error) {
+          return this.handleError(error);
         }
-
-        return new Response(JSON.stringify({ success: true }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      } catch (error) {
-        return this.handleError(error);
-      }
-    });
+      },
+    );
   }
 
   /**
@@ -112,7 +117,7 @@ export class AuthRoutes {
             {
               status: 400,
               headers: { "Content-Type": "application/json" },
-            }
+            },
           );
         }
 
@@ -132,66 +137,72 @@ export class AuthRoutes {
    * Get current user profile
    */
   profile(): RequestHandler {
-    return this.middleware.requireAuth(async (_request: Request, context?: AuthContext) => {
-      try {
-        const user = await this.provider.get_user(context!.user_id);
+    return this.middleware.requireAuth(
+      async (_request: Request, context?: AuthContext) => {
+        try {
+          const user = await this.provider.get_user(context!.user_id);
 
-        if (!user) {
-          return new Response(
-            JSON.stringify({ error: "User not found" }),
-            {
-              status: 404,
-              headers: { "Content-Type": "application/json" },
-            }
-          );
+          if (!user) {
+            return new Response(
+              JSON.stringify({ error: "User not found" }),
+              {
+                status: 404,
+                headers: { "Content-Type": "application/json" },
+              },
+            );
+          }
+
+          // Remove sensitive data
+          const { password_hash, ...safeUser } = user;
+
+          return new Response(JSON.stringify(safeUser), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        } catch (error) {
+          return this.handleError(error);
         }
-
-        // Remove sensitive data
-        const { password_hash, ...safeUser } = user;
-
-        return new Response(JSON.stringify(safeUser), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      } catch (error) {
-        return this.handleError(error);
-      }
-    });
+      },
+    );
   }
 
   /**
    * Update password
    */
   updatePassword(): RequestHandler {
-    return this.middleware.requireAuth(async (request: Request, context?: AuthContext) => {
-      try {
-        const body = await request.json();
-        const { old_password, new_password } = body;
+    return this.middleware.requireAuth(
+      async (request: Request, context?: AuthContext) => {
+        try {
+          const body = await request.json();
+          const { old_password, new_password } = body;
 
-        if (!old_password || !new_password) {
-          return new Response(
-            JSON.stringify({ error: "Both old and new passwords are required" }),
-            {
-              status: 400,
-              headers: { "Content-Type": "application/json" },
-            }
+          if (!old_password || !new_password) {
+            return new Response(
+              JSON.stringify({
+                error: "Both old and new passwords are required",
+              }),
+              {
+                status: 400,
+                headers: { "Content-Type": "application/json" },
+              },
+            );
+          }
+
+          await this.provider.update_password(
+            context!.user_id,
+            old_password,
+            new_password,
           );
+
+          return new Response(JSON.stringify({ success: true }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        } catch (error) {
+          return this.handleError(error);
         }
-
-        await this.provider.update_password(
-          context!.user_id,
-          old_password,
-          new_password
-        );
-
-        return new Response(JSON.stringify({ success: true }), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      } catch (error) {
-        return this.handleError(error);
-      }
-    });
+      },
+    );
   }
 
   /**
@@ -209,7 +220,7 @@ export class AuthRoutes {
             {
               status: 400,
               headers: { "Content-Type": "application/json" },
-            }
+            },
           );
         }
 
@@ -220,12 +231,12 @@ export class AuthRoutes {
         return new Response(
           JSON.stringify({
             success: true,
-            message: "Password reset email sent"
+            message: "Password reset email sent",
           }),
           {
             status: 200,
             headers: { "Content-Type": "application/json" },
-          }
+          },
         );
       } catch (error) {
         return this.handleError(error);
@@ -244,11 +255,13 @@ export class AuthRoutes {
 
         if (!reset_token || !new_password) {
           return new Response(
-            JSON.stringify({ error: "Reset token and new password are required" }),
+            JSON.stringify({
+              error: "Reset token and new password are required",
+            }),
             {
               status: 400,
               headers: { "Content-Type": "application/json" },
-            }
+            },
           );
         }
 
@@ -279,7 +292,7 @@ export class AuthRoutes {
             {
               status: 400,
               headers: { "Content-Type": "application/json" },
-            }
+            },
           );
         }
 
@@ -295,19 +308,32 @@ export class AuthRoutes {
     };
   }
 
-  private handleError(error: any): Response {
-    console.error("Auth route error:", error);
+  private handleError(error: unknown): Response {
+    log.error("Auth route error", {
+      error: error instanceof Error ? error.message : String(error),
+    });
 
-    if (error.name === "AuthError") {
+    // Check for AuthError shape using type narrowing
+    if (
+      error !== null &&
+      typeof error === "object" &&
+      "name" in error &&
+      (error as { name: unknown }).name === "AuthError"
+    ) {
+      const authErr = error as {
+        code: string;
+        message: string;
+        status_code: number;
+      };
       return new Response(
         JSON.stringify({
-          error: error.message,
-          code: error.code
+          error: authErr.message,
+          code: authErr.code,
         }),
         {
-          status: error.status_code,
+          status: authErr.status_code,
           headers: { "Content-Type": "application/json" },
-        }
+        },
       );
     }
 
@@ -316,7 +342,7 @@ export class AuthRoutes {
       {
         status: 500,
         headers: { "Content-Type": "application/json" },
-      }
+      },
     );
   }
 }
@@ -326,7 +352,7 @@ export class AuthRoutes {
  */
 export async function initializeAuth(
   config: AuthConfig,
-  db: DatabaseConnection
+  db: DatabaseConnection,
 ): Promise<AuthIntegration> {
   const provider = new AuthProvider(config, db);
   await provider.initialize();

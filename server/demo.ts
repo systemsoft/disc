@@ -1,4 +1,5 @@
 #!/usr/bin/env -S deno run --allow-net --allow-env
+// deno-lint-ignore-file no-console
 
 /**
  * Disc Server Demo
@@ -22,13 +23,13 @@ async function runDemo(): Promise<void> {
 
   // Start server in background (not blocking)
   console.log("📡 Starting server...");
-  
+
   const serverPromise = server.start().catch((error) => {
     console.error("Server failed:", error);
   });
 
   // Give server time to start
-  await new Promise(resolve => setTimeout(resolve, 1000));
+  await new Promise((resolve) => setTimeout(resolve, 1000));
 
   // Demo HTTP requests
   console.log("\n🌐 Testing HTTP endpoints:");
@@ -64,7 +65,6 @@ async function runDemo(): Promise<void> {
     const statsResponse = await fetch("http://localhost:8080/stats");
     const statsData = await statsResponse.text();
     console.log(statsData.substring(0, 200) + "...");
-
   } catch (error) {
     console.error("Demo request failed:", error);
   }

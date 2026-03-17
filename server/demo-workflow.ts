@@ -1,3 +1,4 @@
+// deno-lint-ignore-file no-console
 /**
  * Demo script showing the complete Disc server protocol implementation
  * Demonstrates HTTP endpoints, EdgeQL processing, and WebSocket subscriptions
@@ -26,7 +27,7 @@ async function runDemo() {
     void server.start();
 
     // Give server time to start
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     console.log("\n🔍 Testing HTTP Endpoints:");
     console.log("==========================");
@@ -58,12 +59,15 @@ async function runDemo() {
         variables: {},
       }),
     });
-    
+
     const queryResult = await queryResponse.json();
     console.log("   Status:", queryResponse.status);
     console.log("   Query successful:", !queryResult.errors);
     if (queryResult.data) {
-      console.log("   Results count:", Array.isArray(queryResult.data) ? queryResult.data.length : 1);
+      console.log(
+        "   Results count:",
+        Array.isArray(queryResult.data) ? queryResult.data.length : 1,
+      );
     }
     if (queryResult.extensions) {
       console.log("   Duration:", queryResult.extensions.duration_ms, "ms");
@@ -72,32 +76,38 @@ async function runDemo() {
 
     // Test EdgeQL with variables
     console.log("\n4. EdgeQL Query with Variables:");
-    const variableQueryResponse = await fetch(`http://localhost:${DEMO_PORT}/query`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: "select User filter .id = <uuid>$user_id { name, email }",
-        variables: {
-          user_id: "01234567-89ab-cdef-0123-456789abcdef",
-        },
-      }),
-    });
-    
+    const variableQueryResponse = await fetch(
+      `http://localhost:${DEMO_PORT}/query`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: "select User filter .id = <uuid>$user_id { name, email }",
+          variables: {
+            user_id: "01234567-89ab-cdef-0123-456789abcdef",
+          },
+        }),
+      },
+    );
+
     const variableResult = await variableQueryResponse.json();
     console.log("   Status:", variableQueryResponse.status);
     console.log("   Query successful:", !variableResult.errors);
 
     // Test invalid query
     console.log("\n5. Invalid EdgeQL Query:");
-    const invalidQueryResponse = await fetch(`http://localhost:${DEMO_PORT}/query`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        query: "select User { name email }", // Missing comma
-        variables: {},
-      }),
-    });
-    
+    const invalidQueryResponse = await fetch(
+      `http://localhost:${DEMO_PORT}/query`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: "select User { name email }", // Missing comma
+          variables: {},
+        }),
+      },
+    );
+
     const invalidResult = await invalidQueryResponse.json();
     console.log("   Status:", invalidQueryResponse.status);
     console.log("   Has errors:", !!invalidResult.errors);
@@ -121,7 +131,7 @@ async function runDemo() {
     // Test WebSocket connection
     console.log("\n7. WebSocket Connection:");
     const websocket = new WebSocket(`ws://localhost:${DEMO_PORT}`);
-    
+
     const wsTestPromise = new Promise<void>((resolve) => {
       let messageCount = 0;
 
@@ -151,7 +161,7 @@ async function runDemo() {
       websocket.onmessage = (event) => {
         messageCount++;
         const message = JSON.parse(event.data);
-        
+
         if (message.type === "query_result") {
           console.log("   📨 Query result received");
           console.log("       Has data:", !!message.payload.data);
@@ -194,17 +204,37 @@ async function runDemo() {
 
     console.log("\n📊 Final Statistics:");
     console.log("====================");
-    
-    const finalStatsResponse = await fetch(`http://localhost:${DEMO_PORT}/stats`);
+
+    const finalStatsResponse = await fetch(
+      `http://localhost:${DEMO_PORT}/stats`,
+    );
     const finalStats = await finalStatsResponse.json();
     console.log("   Total requests processed:", finalStats.queries.total);
-    console.log("   Average response time:", Math.round(finalStats.queries.avg_duration_ms), "ms");
-    console.log("   Server uptime:", Math.round(finalStats.uptime_ms / 1000), "seconds");
-    console.log("   Memory usage:", Math.round(finalStats.memory_usage.heap_used / 1024 / 1024), "MB");
+    console.log(
+      "   Average response time:",
+      Math.round(finalStats.queries.avg_duration_ms),
+      "ms",
+    );
+    console.log(
+      "   Server uptime:",
+      Math.round(finalStats.uptime_ms / 1000),
+      "seconds",
+    );
+    console.log(
+      "   Memory usage:",
+      Math.round(finalStats.memory_usage.heap_used / 1024 / 1024),
+      "MB",
+    );
 
     if (finalStats.subscriptions) {
-      console.log("   Active subscriptions:", finalStats.subscriptions.active_subscriptions);
-      console.log("   Connections with subscriptions:", finalStats.subscriptions.total_connections_with_subscriptions);
+      console.log(
+        "   Active subscriptions:",
+        finalStats.subscriptions.active_subscriptions,
+      );
+      console.log(
+        "   Connections with subscriptions:",
+        finalStats.subscriptions.total_connections_with_subscriptions,
+      );
     }
 
     console.log("\n✅ Demo completed successfully!");
@@ -218,7 +248,6 @@ async function runDemo() {
     console.log("• Connection and session management");
     console.log("• Comprehensive server statistics");
     console.log("• Health monitoring endpoints");
-
   } catch (error) {
     console.error("❌ Demo failed:", error);
   } finally {

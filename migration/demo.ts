@@ -1,3 +1,4 @@
+// deno-lint-ignore-file no-console
 /**
  * Migration Engine Demo
  * Demonstrates the complete migration pipeline from schema changes to DDL generation
@@ -30,18 +31,28 @@ function createSchemaV1(): Module[] {
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "name" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
               required: true,
               multi: false,
             },
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "email" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
               required: true,
               multi: false,
               constraints: [
-                { kind: "Constraint", name: { kind: "Identifier", value: "exclusive" }, on: { kind: "PathExpression", path: [".email"] } },
+                {
+                  kind: "Constraint",
+                  name: { kind: "Identifier", value: "exclusive" },
+                  on: { kind: "PathExpression", path: [".email"] },
+                },
               ],
             },
           ],
@@ -63,24 +74,37 @@ function createSchemaV2(): Module[] {
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "name" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
               required: true,
               multi: false,
             },
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "email" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
               required: true,
               multi: false,
               constraints: [
-                { kind: "Constraint", name: { kind: "Identifier", value: "exclusive" }, on: { kind: "PathExpression", path: [".email"] } },
+                {
+                  kind: "Constraint",
+                  name: { kind: "Identifier", value: "exclusive" },
+                  on: { kind: "PathExpression", path: [".email"] },
+                },
               ],
             },
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "active" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["bool"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["bool"] },
+              },
               required: false,
               multi: false,
               default: { kind: "Literal", type: "boolean", value: true },
@@ -88,10 +112,17 @@ function createSchemaV2(): Module[] {
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "created_at" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["datetime"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["datetime"] },
+              },
               required: true,
               multi: false,
-              default: { kind: "FunctionCall", name: { kind: "QualifiedName", parts: ["datetime_current"] }, args: [] },
+              default: {
+                kind: "FunctionCall",
+                name: { kind: "QualifiedName", parts: ["datetime_current"] },
+                args: [],
+              },
             },
           ],
         },
@@ -102,21 +133,30 @@ function createSchemaV2(): Module[] {
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "title" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
               required: true,
               multi: false,
             },
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "content" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
               required: true,
               multi: false,
             },
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "published" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["bool"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["bool"] },
+              },
               required: false,
               multi: false,
               default: { kind: "Literal", type: "boolean", value: false },
@@ -124,7 +164,10 @@ function createSchemaV2(): Module[] {
             {
               kind: "LinkDeclaration",
               name: { kind: "Identifier", value: "author" },
-              target: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["User"] } },
+              target: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["User"] },
+              },
               required: true,
               multi: false,
               onTargetDelete: "restrict",
@@ -132,7 +175,10 @@ function createSchemaV2(): Module[] {
             {
               kind: "LinkDeclaration",
               name: { kind: "Identifier", value: "tags" },
-              target: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["Tag"] } },
+              target: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["Tag"] },
+              },
               required: false,
               multi: true,
             },
@@ -145,17 +191,27 @@ function createSchemaV2(): Module[] {
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "name" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
               required: true,
               multi: false,
               constraints: [
-                { kind: "Constraint", name: { kind: "Identifier", value: "exclusive" }, on: { kind: "PathExpression", path: [".name"] } },
+                {
+                  kind: "Constraint",
+                  name: { kind: "Identifier", value: "exclusive" },
+                  on: { kind: "PathExpression", path: [".name"] },
+                },
               ],
             },
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "color" },
-              type: { kind: "TypeRef", name: { kind: "QualifiedName", parts: ["str"] } },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
               required: false,
               multi: false,
               default: { kind: "Literal", type: "string", value: "#000000" },
@@ -185,7 +241,9 @@ function printMigrationPlan(plan: Types.MigrationPlan): void {
     console.log(`   ${migration.description}`);
     console.log(`   Operations: ${migration.operations.length}`);
     migration.operations.forEach((op, j) => {
-      console.log(`     ${j + 1}. ${op.kind}: ${JSON.stringify(op).slice(0, 100)}...`);
+      console.log(
+        `     ${j + 1}. ${op.kind}: ${JSON.stringify(op).slice(0, 100)}...`,
+      );
     });
     console.log("");
   });
@@ -301,7 +359,9 @@ async function runDemo(): Promise<void> {
     console.log(`   Applied Migrations: ${state.applied_migrations.length}`);
     console.log(`   Current Schema Hash: ${state.current_schema_hash}`);
     console.log(`   Last Migration: ${state.last_migration_id || "None"}`);
-    console.log(`   Last Applied: ${state.last_applied_at?.toISOString() || "Never"}`);
+    console.log(
+      `   Last Applied: ${state.last_applied_at?.toISOString() || "Never"}`,
+    );
   });
 
   demoSection("Advanced Features", () => {
@@ -339,13 +399,15 @@ async function runDemo(): Promise<void> {
     console.log("  PostgreSQL DDL generation");
     console.log("  Migration execution with state tracking");
     console.log("  Comprehensive error handling and rollback");
-    console.log("\nPhase 4 (Migration Engine) is complete and ready for production use!");
+    console.log(
+      "\nPhase 4 (Migration Engine) is complete and ready for production use!",
+    );
   });
 }
 
 // Run the demo
 if (import.meta.main) {
-  await runDemo().catch(error => {
+  await runDemo().catch((error) => {
     console.error("Demo failed:", error);
     Deno.exit(1);
   });

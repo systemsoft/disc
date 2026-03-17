@@ -1,3 +1,4 @@
+// deno-lint-ignore-file no-console
 /**
  * CLI Commands Implementation - Core command functionality
  */
@@ -12,9 +13,7 @@ import { ConnectionPool } from "../lib/connection-pool.ts";
 import { initCommand, InitOptions } from "./init.ts";
 import { shellCommand, ShellOptions } from "./shell.ts";
 import { watchCommand, WatchOptions } from "./watch.ts";
-import {
-  PostgresManager,
-} from "../postgres/mod.ts";
+import { PostgresManager } from "../postgres/mod.ts";
 
 export interface CLIArgs {
   [key: string]: any;
@@ -28,6 +27,8 @@ export interface ServeOptions {
   jwt_secret?: string;
   enable_auth?: boolean;
   enable_access_policies?: boolean;
+  tls_cert?: string;
+  tls_key?: string;
 }
 
 export class CLICommands {
@@ -127,6 +128,14 @@ export class CLICommands {
         Deno.env.set("DISC_ENABLE_ACCESS_POLICIES", "true");
       }
 
+      // Set TLS env vars from CLI flags
+      if (options.tls_cert) {
+        Deno.env.set("DISC_TLS_CERT", options.tls_cert);
+      }
+      if (options.tls_key) {
+        Deno.env.set("DISC_TLS_KEY", options.tls_key);
+      }
+
       // Try to load the project schema from SDL
       const schema = await this.readSchemaAsCompilerSchema(
         "./dbschema/default.esdl",
@@ -147,7 +156,10 @@ export class CLICommands {
       if (options.jwt_secret || Deno.env.get("DISC_JWT_SECRET")) {
         console.log("🔐 Authentication enabled");
       }
-      if (options.enable_access_policies || Deno.env.get("DISC_ENABLE_ACCESS_POLICIES")) {
+      if (
+        options.enable_access_policies ||
+        Deno.env.get("DISC_ENABLE_ACCESS_POLICIES")
+      ) {
         console.log("🛡️ Access policies enabled");
       }
 
@@ -212,9 +224,13 @@ export class CLICommands {
 
       if (schema) {
         const typeNames = Array.from(schema.types.keys()).join(", ");
-        console.log(`📖 Loaded schema from ${schemaFile} with types: ${typeNames}`);
+        console.log(
+          `📖 Loaded schema from ${schemaFile} with types: ${typeNames}`,
+        );
       } else {
-        console.log(`⚠️  No schema found at ${schemaFile}, falling back to test schema`);
+        console.log(
+          `⚠️  No schema found at ${schemaFile}, falling back to test schema`,
+        );
         schema = Context.createTestSchema();
         console.log(
           `📖 Using test schema with types: ${
@@ -313,7 +329,9 @@ export class CLICommands {
       console.log(`   Data: ${status.dataDir}`);
       console.log(`   DSN: ${instance.dsn()}`);
     } catch (error) {
-      console.error(`❌ Failed to start PostgreSQL: ${(error as Error).message}`);
+      console.error(
+        `❌ Failed to start PostgreSQL: ${(error as Error).message}`,
+      );
       throw error;
     }
   }
@@ -329,7 +347,9 @@ export class CLICommands {
       await this.postgresManager.stopInstance(projectName);
       console.log("✅ PostgreSQL stopped successfully");
     } catch (error) {
-      console.error(`❌ Failed to stop PostgreSQL: ${(error as Error).message}`);
+      console.error(
+        `❌ Failed to stop PostgreSQL: ${(error as Error).message}`,
+      );
       throw error;
     }
   }
@@ -390,11 +410,11 @@ export class CLICommands {
   async ui(args: CLIArgs): Promise<void> {
     const port = args.port || 5656;
     console.log(`🌐 Opening Disc Admin UI...`);
-    
+
     try {
       // Import the UI server module
       const { uiServer } = await import("../ui/server-integration.ts");
-      
+
       // Check if UI is built
       const isBuilt = await uiServer.isBuilt();
       if (!isBuilt) {
@@ -402,7 +422,7 @@ export class CLICommands {
         console.error("   cd ui && npm install && npm run build");
         return;
       }
-      
+
       // Open in browser
       await uiServer.openInBrowser(port);
     } catch (error) {
@@ -430,7 +450,9 @@ export class CLICommands {
       // Show new status
       await this.status(args);
     } catch (error) {
-      console.error(`❌ Failed to restart PostgreSQL: ${(error as Error).message}`);
+      console.error(
+        `❌ Failed to restart PostgreSQL: ${(error as Error).message}`,
+      );
       throw error;
     }
   }

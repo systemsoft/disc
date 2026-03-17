@@ -9,7 +9,9 @@ import * as EdgeQL from "../edgeql/mod.ts";
 import * as Context from "../compiler/context.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { DatabaseExecutionError } from "../lib/errors.ts";
-import { logger } from "../postgres/logger.ts";
+import { getLogger } from "../lib/logger.ts";
+
+const log = getLogger("simple-edgeql-protocol");
 
 export interface SimpleEdgeQLOptions {
   schema?: Context.Schema;
@@ -30,7 +32,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
     this.schema = options.schema || Context.createTestSchema();
 
     if (options.enable_access_policies) {
-      logger.warn(
+      log.warn(
         'Access policies are not supported by SimpleEdgeQLProtocolHandler. Use protocol: "full" for access policy enforcement.',
       );
     }
@@ -128,7 +130,9 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
 
       return response;
     } catch (error) {
-      console.error("Query execution error:", error);
+      log.error("Query execution error", {
+        error: error instanceof Error ? error.message : String(error),
+      });
       const errorMessage = error instanceof Error
         ? error.message
         : "Unknown error";
@@ -189,17 +193,16 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       const lexer = new EdgeQL.EdgeQLLexer(query);
       const tokens = lexer.tokenize();
 
-      console.log(
-        `[EdgeQL] Lexed ${tokens.length} tokens for query: ${
-          query.substring(0, 50)
-        }...`,
-      );
+      log.debug("Lexed tokens for query", {
+        token_count: tokens.length,
+        query_prefix: query.substring(0, 50),
+      });
 
       // Use the real EdgeQL parser (it takes source string, not tokens)
       const parser = new EdgeQL.EdgeQLParser(query);
       const ast = parser.parse();
 
-      console.log(`[EdgeQL] Successfully parsed ${ast.kind} query`);
+      log.debug("Successfully parsed query", { kind: ast.kind });
       return {
         success: true,
         ast: ast,
@@ -209,7 +212,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       const errorMessage = error instanceof Error
         ? error.message
         : "Unknown parsing error";
-      console.log(`[EdgeQL] Exception during parsing: ${errorMessage}`);
+      log.debug("Exception during parsing", { error: errorMessage });
       return {
         success: false,
         error: errorMessage,
@@ -256,13 +259,13 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
         finalSQL = finalSQL.replace(new RegExp(`\\$${name}`, "g"), sqlValue);
       }
 
-      console.log(`[Compiler] Generated SQL: ${finalSQL}`);
+      log.debug("Generated SQL", { sql: finalSQL });
       return { success: true, sql: finalSQL };
     } catch (error) {
       const errorMessage = error instanceof Error
         ? error.message
         : "Unknown compilation error";
-      console.log(`[Compiler] Compilation error: ${errorMessage}`);
+      log.debug("Compilation error", { error: errorMessage });
       return {
         success: false,
         error: errorMessage,
@@ -396,9 +399,9 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
     variables: Record<string, any>,
     context: Types.QueryContext,
   ): Promise<{ data: any; warnings?: string[] }> {
-    logger.info(`[Execution] SQL: ${sql}`);
-    logger.info(`[Execution] Variables: ${JSON.stringify(variables)}`);
-    logger.info(`[Execution] Session: ${context.session.session_id}`);
+    log.info("Executing SQL", { sql });
+    log.info("Query variables", { variables: JSON.stringify(variables) });
+    log.info("Query session", { session_id: context.session.session_id });
 
     if (this.options.dry_run) {
       return {
@@ -444,7 +447,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
         const dbError = error instanceof Error
           ? error
           : new Error(String(error));
-        logger.error(`Database execution error: ${dbError.message}`);
+        log.error("Database execution error", { error: dbError.message });
         throw new DatabaseExecutionError(
           `Database query failed: ${dbError.message}`,
           sql,

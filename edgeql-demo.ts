@@ -1,8 +1,9 @@
 #!/usr/bin/env deno run
+// deno-lint-ignore-file no-console
 
 /**
  * EdgeQL Parser and Compiler Demo
- * 
+ *
  * This demo shows the complete pipeline from EdgeQL query to SQL
  */
 
@@ -23,12 +24,12 @@ function compileAndShow(name: string, edgeql: string) {
   console.log("\nEdgeQL Query:");
   console.log("-------------");
   console.log(edgeql.trim());
-  
+
   try {
     // Parse EdgeQL
     const parser = new EdgeQLParser(edgeql);
     const ast = parser.parse();
-    
+
     console.log("\nParsed AST (simplified):");
     console.log("------------------------");
     console.log(`Type: ${ast.kind}`);
@@ -41,15 +42,15 @@ function compileAndShow(name: string, edgeql: string) {
     if ("filter" in ast && ast.filter) {
       console.log(`Has filter: yes`);
     }
-    
+
     // Compile to SQL
     const result = compiler.compile(ast);
     if (!result.ok) {
       throw result.error;
     }
-    
+
     const sql = codegen.generate(result.value);
-    
+
     console.log("\nGenerated SQL:");
     console.log("--------------");
     console.log(sql);
@@ -61,7 +62,7 @@ function compileAndShow(name: string, edgeql: string) {
 // Demo 1: Simple SELECT
 compileAndShow(
   "Simple SELECT",
-  "SELECT User"
+  "SELECT User",
 );
 
 // Demo 2: SELECT with Shape
@@ -72,12 +73,12 @@ compileAndShow(
     name,
     email,
     created_at
-  }`
+  }`,
 );
 
 // Demo 3: SELECT with Nested Shape
 compileAndShow(
-  "SELECT with Nested Shape", 
+  "SELECT with Nested Shape",
   `SELECT User {
     name,
     email,
@@ -86,7 +87,7 @@ compileAndShow(
       title,
       created_at
     }
-  }`
+  }`,
 );
 
 // Demo 4: SELECT with Filter
@@ -96,7 +97,7 @@ compileAndShow(
     name,
     email
   } 
-  FILTER .active = true AND .age >= 18`
+  FILTER .active = true AND .age >= 18`,
 );
 
 // Demo 5: SELECT with ORDER BY and LIMIT
@@ -107,7 +108,7 @@ compileAndShow(
     email
   }
   ORDER BY .created_at DESC
-  LIMIT 10`
+  LIMIT 10`,
 );
 
 // Demo 6: Computed Properties
@@ -117,7 +118,7 @@ compileAndShow(
     name,
     full_name := .first_name ++ ' ' ++ .last_name,
     post_count := count(.posts)
-  }`
+  }`,
 );
 
 // Demo 7: INSERT Query
@@ -127,7 +128,7 @@ compileAndShow(
     name := "Alice Smith",
     email := "alice@example.com",
     active := true
-  }`
+  }`,
 );
 
 // Demo 8: UPDATE Query
@@ -138,14 +139,14 @@ compileAndShow(
   SET {
     name := "Alice Johnson",
     updated_at := datetime_current()
-  }`
+  }`,
 );
 
 // Demo 9: DELETE Query
 compileAndShow(
   "DELETE Query",
   `DELETE User
-  FILTER .email = "old@example.com"`
+  FILTER .email = "old@example.com"`,
 );
 
 // Demo 10: Complex Query with WITH
@@ -162,7 +163,7 @@ compileAndShow(
     email
   }
   ORDER BY .name
-  LIMIT 5`
+  LIMIT 5`,
 );
 
 console.log("\n" + "=".repeat(60));
