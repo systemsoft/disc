@@ -95,7 +95,7 @@ Deno.test("policy-adapter: deny and allow policies on same type", () => {
 // Test 4: Policy with condition expression sets both condition and using
 // ---------------------------------------------------------------------------
 
-Deno.test("policy-adapter: policy with condition sets condition and using", () => {
+Deno.test("policy-adapter: policy with condition sets condition and using as AccessExpressionNode", () => {
   const conditionExpr = {
     kind: "BinaryOp" as const,
     op: "=",
@@ -126,8 +126,13 @@ Deno.test("policy-adapter: policy with condition sets condition and using", () =
 
   assertEquals(result.length, 1);
   assertEquals(result[0].name, "owner_only");
-  assertEquals(result[0].condition, conditionExpr);
-  assertEquals(result[0].using, conditionExpr);
+  // condition and using are now converted AccessExpressionNodes
+  assertEquals(result[0].condition!.kind, "AccessComparison");
+  assertEquals((result[0].condition as any).operator, "=");
+  assertEquals((result[0].condition as any).left.kind, "AccessPath");
+  assertEquals((result[0].condition as any).left.path, ["author"]);
+  assertEquals((result[0].condition as any).right.kind, "AccessPath");
+  assertEquals((result[0].condition as any).right.path, ["current_user"]);
   // condition and using should be the exact same reference
   assertEquals(result[0].condition === result[0].using, true);
 });

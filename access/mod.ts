@@ -34,3 +34,4 @@ export type {
 } from "./ast.ts";
 
 export { adaptAccessPolicies } from "./policy-adapter.ts";
+export { convertExpression } from "./expression-converter.ts";

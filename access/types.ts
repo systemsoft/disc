@@ -2,7 +2,7 @@
  * Access Control Types and Interfaces
  */
 
-import { Expression } from "../schema/ast.ts";
+import type { AccessExpressionNode } from "./ast.ts";
 
 /**
  * Access control operations that can be restricted
@@ -22,11 +22,11 @@ export interface AccessAction {
  */
 export interface AccessPolicy {
   actions: AccessAction[];
-  condition?: Expression;
+  condition?: AccessExpressionNode;
   name: string;
   objectType: string;
-  using?: Expression; // For row-level security
-  withCheck?: Expression; // For insert/update checks
+  using?: AccessExpressionNode; // For row-level security
+  withCheck?: AccessExpressionNode; // For insert/update checks
 }
 
 /**

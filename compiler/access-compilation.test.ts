@@ -128,7 +128,7 @@ Deno.test("Access Compilation - allow policy with using expression injects SQL c
       operator: "=",
       left: { kind: "AccessPath", path: ["id"] },
       right: { kind: "AccessGlobal", name: "current_user" },
-    } as any,
+    },
   };
 
   const schema = createSchemaWithPolicies([]);
@@ -215,7 +215,7 @@ Deno.test("Access Compilation - access context changes evaluation outcome", () =
       // AccessGlobal "current_user" evaluates to Boolean(context.userId)
       kind: "AccessGlobal",
       name: "current_user",
-    } as any,
+    },
   };
 
   const schema = createSchemaWithPolicies([]);

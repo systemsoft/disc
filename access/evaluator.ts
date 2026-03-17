@@ -11,16 +11,14 @@ import {
   AccessOperation,
   AccessConfig,
 } from "./types.ts";
-import {
+import type {
   AccessExpressionNode,
   AccessComparisonNode,
   AccessLogicalNode,
-  AccessLiteralNode,
   AccessGlobalNode,
   AccessPathNode,
   AccessFunctionNode,
 } from "./ast.ts";
-import { Expression } from "../schema/ast.ts";
 import { ValidationError } from "../lib/errors.ts";
 
 export class AccessEvaluator {
@@ -184,45 +182,36 @@ export class AccessEvaluator {
    * Evaluate an expression against the context
    */
   private evaluateExpression(
-    expr: Expression | AccessExpressionNode,
+    expr: AccessExpressionNode,
     context: AccessContext
   ): boolean {
-    // Handle different expression types
-    const node = expr as AccessExpressionNode;
-
-    switch (node.kind) {
+    switch (expr.kind) {
       case "AccessLiteral": {
-        const literal = node as AccessLiteralNode;
-        return Boolean(literal.value);
+        return Boolean(expr.value);
       }
 
       case "AccessGlobal": {
-        const global = node as AccessGlobalNode;
-        return this.evaluateGlobal(global.name, context);
+        return this.evaluateGlobal(expr.name, context);
       }
 
       case "AccessPath": {
-        const path = node as AccessPathNode;
-        return Boolean(this.resolvePath(path.path, context));
+        return Boolean(this.resolvePath(expr.path, context));
       }
 
       case "AccessComparison": {
-        const comp = node as AccessComparisonNode;
-        return this.evaluateComparison(comp, context);
+        return this.evaluateComparison(expr, context);
       }
 
       case "AccessLogical": {
-        const logical = node as AccessLogicalNode;
-        return this.evaluateLogical(logical, context);
+        return this.evaluateLogical(expr, context);
       }
 
       case "AccessFunction": {
-        const func = node as AccessFunctionNode;
-        return this.evaluateFunction(func, context);
+        return this.evaluateFunction(expr, context);
       }
 
       default: {
-        throw new ValidationError(`Unknown expression kind: ${(node as any).kind}`);
+        throw new ValidationError(`Unknown expression kind: ${(expr as any).kind}`);
       }
     }
   }
@@ -380,25 +369,19 @@ export class AccessEvaluator {
    * Convert an expression to SQL WHERE clause
    */
   private expressionToSQL(
-    expr: Expression | AccessExpressionNode,
+    expr: AccessExpressionNode,
     context: AccessContext
   ): string {
-    const node = expr as AccessExpressionNode;
-
-    switch (node.kind) {
+    switch (expr.kind) {
       case "AccessLiteral": {
-        const literal = node as AccessLiteralNode;
+        if (expr.type === "string")
+          return `'${String(expr.value).replace(/'/g, "''")}'`;
 
-        if (literal.type === "string")
-          return `'${String(literal.value).replace(/'/g, "''")}'`;
-
-        return String(literal.value);
+        return String(expr.value);
       }
 
       case "AccessGlobal": {
-        const global = node as AccessGlobalNode;
-
-        switch (global.name) {
+        switch (expr.name) {
           case "current_user": {
             return context.userId ? `'${context.userId}'` : "NULL";
           }
@@ -414,38 +397,32 @@ export class AccessEvaluator {
       }
 
       case "AccessPath": {
-        const path = node as AccessPathNode;
-        // Convert path to SQL column reference
-        return path.path.join(".");
+        return expr.path.join(".");
       }
 
       case "AccessComparison": {
-        const comp = node as AccessComparisonNode;
-        const left = this.expressionToSQL(comp.left, context);
-        const right = this.expressionToSQL(comp.right, context);
+        const left = this.expressionToSQL(expr.left, context);
+        const right = this.expressionToSQL(expr.right, context);
 
-        return `(${left} ${comp.operator} ${right})`;
+        return `(${left} ${expr.operator} ${right})`;
       }
 
       case "AccessLogical": {
-        const logical = node as AccessLogicalNode;
+        if (expr.operator === "not")
+          return `NOT (${this.expressionToSQL(expr.operands[0], context)})`;
 
-        if (logical.operator === "not")
-          return `NOT (${this.expressionToSQL(logical.operands[0], context)})`;
-
-        const parts = logical.operands.map(op => this.expressionToSQL(op, context));
-        return `(${parts.join(` ${logical.operator.toUpperCase()} `)})`;
+        const parts = expr.operands.map(op => this.expressionToSQL(op, context));
+        return `(${parts.join(` ${expr.operator.toUpperCase()} `)})`;
       }
 
       case "AccessFunction": {
-        const func = node as AccessFunctionNode;
-        const args = func.args.map(arg => this.expressionToSQL(arg, context)).join(", ");
+        const args = expr.args.map(arg => this.expressionToSQL(arg, context)).join(", ");
 
-        return `${func.name}(${args})`;
+        return `${expr.name}(${args})`;
       }
 
       default: {
-        throw new ValidationError(`Cannot convert ${(node as any).kind} to SQL`);
+        throw new ValidationError(`Cannot convert ${(expr as any).kind} to SQL`);
       }
     }
   }

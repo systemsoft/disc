@@ -13,6 +13,7 @@ import type {
   AccessAction as RuntimeAccessAction,
   AccessPolicy as RuntimeAccessPolicy,
 } from "./types.ts";
+import { convertExpression } from "./expression-converter.ts";
 
 /**
  * Converts a single SDL AccessAction into a runtime AccessAction, stripping
@@ -49,8 +50,9 @@ export function adaptAccessPolicies(
     };
 
     if (sdl.condition !== undefined) {
-      policy.condition = sdl.condition;
-      policy.using = sdl.condition;
+      const converted = convertExpression(sdl.condition);
+      policy.condition = converted;
+      policy.using = converted;
     }
 
     return policy;

@@ -92,11 +92,6 @@ async function schemaFromSDL(sdlSource: string) {
 Deno.test("E2E Access - SDL with allow policy produces valid response", async () => {
   const schema = await schemaFromSDL(SDL_WITH_POLICY);
 
-  // Disable RLS so that the SDL-derived `using` expression (a schema AST
-  // BinaryOp node) is not passed to expressionToSQL.  The evaluator only
-  // handles Access* AST nodes in that path; schema AST expressions from SDL
-  // are only usable for condition evaluation (not SQL injection) at this
-  // stage of the implementation.
   const handler = new EdgeQLProtocolHandler({
     schema,
     dry_run: true,
