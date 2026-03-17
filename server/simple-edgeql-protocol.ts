@@ -15,6 +15,7 @@ export interface SimpleEdgeQLOptions {
   dry_run?: boolean;
   database_url?: string;
   connection_pool?: ConnectionPool;
+  enable_access_policies?: boolean;
 }
 
 export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
@@ -25,7 +26,11 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
   constructor(options: SimpleEdgeQLOptions = {}) {
     this.options = options;
     this.schema = options.schema || Context.createTestSchema();
-    
+
+    if (options.enable_access_policies) {
+      logger.warn("Access policies are not supported by SimpleEdgeQLProtocolHandler. Use protocol: \"full\" for access policy enforcement.");
+    }
+
     // Use provided pool or create new one if database URL provided
     if (options.connection_pool) {
       this.pool = options.connection_pool;

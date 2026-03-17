@@ -27,6 +27,7 @@ export interface ServeOptions {
   config?: string;
   jwt_secret?: string;
   enable_auth?: boolean;
+  enable_access_policies?: boolean;
 }
 
 export class CLICommands {
@@ -122,6 +123,9 @@ export class CLICommands {
       if (options.enable_auth) {
         Deno.env.set("DISC_ENABLE_AUTH", "true");
       }
+      if (options.enable_access_policies) {
+        Deno.env.set("DISC_ENABLE_ACCESS_POLICIES", "true");
+      }
 
       // Try to load the project schema from SDL
       const schema = await this.readSchemaAsCompilerSchema(
@@ -142,6 +146,9 @@ export class CLICommands {
       // Log auth status
       if (options.jwt_secret || Deno.env.get("DISC_JWT_SECRET")) {
         console.log("🔐 Authentication enabled");
+      }
+      if (options.enable_access_policies || Deno.env.get("DISC_ENABLE_ACCESS_POLICIES")) {
+        console.log("🛡️ Access policies enabled");
       }
 
       // Create server from environment variables, passing schema if available

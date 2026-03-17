@@ -26,6 +26,7 @@ export interface ServerConfig {
   enable_websockets: boolean;
   jwt_secret?: string;
   enable_auth?: boolean;
+  enable_access_policies?: boolean;
   auth_config?: AuthServerConfig;
   enable_explain?: boolean;
   dry_run?: boolean;

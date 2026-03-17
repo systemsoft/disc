@@ -32,3 +32,5 @@ export type {
   AccessOperationNode,
   AccessExpressionNode,
 } from "./ast.ts";
+
+export { adaptAccessPolicies } from "./policy-adapter.ts";

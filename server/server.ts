@@ -46,6 +46,13 @@ export interface DiscServerOptions extends Partial<Types.ServerConfig> {
    * registers /auth/* routes, and populates AuthContext from JWT tokens.
    */
   enable_auth?: boolean;
+
+  /**
+   * Enable access policy enforcement. When true, access policies from SDL
+   * are registered with the compiler and auth context is bridged per-request.
+   * Requires protocol: "full" for actual enforcement.
+   */
+  enable_access_policies?: boolean;
 }
 
 export class DiscServer {
@@ -79,6 +86,7 @@ export class DiscServer {
         : true,
       jwt_secret: config.jwt_secret,
       enable_auth: config.enable_auth,
+      enable_access_policies: config.enable_access_policies,
       auth_config: config.auth_config,
       tls: config.tls,
     };
@@ -91,6 +99,7 @@ export class DiscServer {
       dry_run: config.dry_run || false,
       database_url: this.config.database_url,
       schema: config.schema,
+      enable_access_policies: config.enable_access_policies,
     };
 
     if (config.protocol === "full") {
@@ -242,6 +251,7 @@ export function create_server_from_env(
   schema?: Schema,
 ): DiscServer {
   const enableAuth = Deno.env.get("DISC_ENABLE_AUTH");
+  const enableAccessPolicies = Deno.env.get("DISC_ENABLE_ACCESS_POLICIES");
   const config: DiscServerOptions = {
     host: Deno.env.get("DISC_HOST") || "localhost",
     port: parseInt(Deno.env.get("DISC_PORT") || "5656"),
@@ -252,6 +262,7 @@ export function create_server_from_env(
     enable_websockets: Deno.env.get("DISC_ENABLE_WEBSOCKETS") !== "false",
     jwt_secret: Deno.env.get("DISC_JWT_SECRET"),
     enable_auth: enableAuth !== undefined ? enableAuth !== "false" : undefined,
+    enable_access_policies: enableAccessPolicies !== undefined ? enableAccessPolicies !== "false" : undefined,
     postgres_instance,
     protocol: Deno.env.get("DISC_PROTOCOL") === "full" ? "full" : "simple",
     schema,

@@ -4,6 +4,7 @@
 
 import { getBuiltinFunctions } from "./builtin-functions.ts";
 import * as EdgeQLAST from "../edgeql/ast.ts";
+import type { AccessPolicy } from "../access/types.ts";
 
 export interface CompilationContext {
   schema: Schema;
@@ -23,6 +24,7 @@ export interface TypeDef {
   properties: Map<string, PropertyDef>;
   links: Map<string, LinkDef>;
   tableName: string;
+  accessPolicies?: AccessPolicy[];
 }
 
 export interface PropertyDef {

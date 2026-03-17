@@ -12,7 +12,8 @@ import { MigrationError } from "../lib/errors.ts";
 import { Err, Ok, Result } from "../lib/result.ts";
 import { SDLParser } from "../schema/parser.ts";
 import { Module, SDLConverter } from "../schema/converter.ts";
-import { TypeDeclaration } from "../schema/ast.ts";
+import { AccessPolicy as SDLAccessPolicy, TypeDeclaration } from "../schema/ast.ts";
+import { adaptAccessPolicies } from "../access/policy-adapter.ts";
 import { getBuiltinFunctions } from "../compiler/builtin-functions.ts";
 import { LinkDef, PropertyDef, Schema, TypeDef } from "../compiler/context.ts";
 import { MigrationEngine } from "./engine.ts";
@@ -173,12 +174,21 @@ export class SchemaManager {
           });
         }
 
+        // Extract access policies from the type declaration
+        const sdlPolicies = typeDecl.members.filter(
+          (m): m is SDLAccessPolicy => m.kind === "AccessPolicy"
+        );
+        const accessPolicies = sdlPolicies.length > 0
+          ? adaptAccessPolicies(typeName, sdlPolicies)
+          : undefined;
+
         types.set(typeName, {
           name: typeName,
           kind: "object",
           tableName,
           properties,
           links,
+          accessPolicies,
         });
       }
     }

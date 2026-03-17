@@ -9,6 +9,7 @@ import * as Context from "../compiler/context.ts";
 import * as SQL from "../compiler/sql.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { logger } from "../postgres/logger.ts";
+import { authContextToAccessContext } from "./access-bridge.ts";
 
 export interface EdgeQLExecutionOptions {
   schema?: Context.Schema;
@@ -16,6 +17,7 @@ export interface EdgeQLExecutionOptions {
   dry_run?: boolean;
   database_url?: string;
   connection_pool?: ConnectionPool;
+  enable_access_policies?: boolean;
 }
 
 export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
@@ -27,7 +29,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
   constructor(options: EdgeQLExecutionOptions = {}) {
     this.options = options;
     this.schema = options.schema || Context.createTestSchema();
-    this.compiler = new Compiler.EdgeQLCompiler(this.schema);
+    this.compiler = this.createCompiler(this.schema);
 
     // Use provided pool or create new one if database URL provided
     if (options.connection_pool) {
@@ -39,6 +41,35 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         maxConnections: 10,
       });
     }
+  }
+
+  private createCompiler(schema: Context.Schema): Compiler.EdgeQLCompiler {
+    const compilerOptions: Compiler.CompilerOptions = this.options.enable_access_policies
+      ? {
+          enableAccessControl: true,
+          accessConfig: {
+            mode: "permissive",
+            defaultAllow: true,
+            enableRLS: true,
+            enableAudit: false,
+          },
+        }
+      : { enableAccessControl: false };
+
+    const compiler = new Compiler.EdgeQLCompiler(schema, compilerOptions);
+
+    // Register policies from schema TypeDefs
+    if (this.options.enable_access_policies) {
+      for (const typeDef of schema.types.values()) {
+        if (typeDef.accessPolicies) {
+          for (const policy of typeDef.accessPolicies) {
+            compiler.registerAccessPolicy(policy);
+          }
+        }
+      }
+    }
+
+    return compiler;
   }
 
   async handle_request(
@@ -54,6 +85,11 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         return {
           errors: validation_errors,
         };
+      }
+
+      // Set access context from auth context before compilation
+      if (this.options.enable_access_policies && context.auth) {
+        this.compiler.setAccessContext(authContextToAccessContext(context.auth));
       }
 
       // Parse EdgeQL query
@@ -638,7 +674,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
   // Schema management methods
   updateSchema(schema: Context.Schema): void {
     this.schema = schema;
-    this.compiler = new Compiler.EdgeQLCompiler(schema);
+    this.compiler = this.createCompiler(schema);
   }
 
   getSchema(): Context.Schema {

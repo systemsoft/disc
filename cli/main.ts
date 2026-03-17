@@ -46,6 +46,7 @@ OPTIONS:
   --no-monitor         Disable PostgreSQL health monitoring
   --jwt-secret <key>   JWT signing secret for authentication
   --enable-auth        Enable authentication system (requires --jwt-secret)
+  --enable-access-policies  Enable access policy enforcement (requires --enable-auth)
 
 EXAMPLES:
   disc init my-project                # Initialize new project with PostgreSQL
@@ -78,6 +79,7 @@ async function main() {
       "skip-postgres",
       "no-monitor",
       "enable-auth",
+      "enable-access-policies",
     ],
     string: [
       "port",
@@ -162,6 +164,7 @@ async function main() {
           config: args.config,
           jwt_secret: args["jwt-secret"],
           enable_auth: args["enable-auth"],
+          enable_access_policies: args["enable-access-policies"],
         });
         break;
       }
