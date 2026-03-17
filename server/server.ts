@@ -142,6 +142,14 @@ export class DiscServer {
   update_config(updates: Partial<Types.ServerConfig>): void {
     this.config = { ...this.config, ...updates };
   }
+
+  updateSchema(schema: Schema): void {
+    this.protocol_handler.updateSchema?.(schema);
+  }
+
+  getProtocolHandler(): Types.ProtocolHandler {
+    return this.protocol_handler;
+  }
 }
 
 export function create_default_config(): Types.ServerConfig {

@@ -2,6 +2,8 @@
  * Server types and interfaces for Disc database
  */
 
+import type { Schema } from "../compiler/context.ts";
+
 export interface ServerConfig {
   host: string;
   port: number;
@@ -151,6 +153,8 @@ export interface ProtocolHandler {
   initialize?(): Promise<void>;
   /** Gracefully close the handler (e.g. drain connection pool). */
   close?(): Promise<void>;
+  /** Update the handler's schema at runtime (e.g. after a migration). */
+  updateSchema?(schema: Schema): void;
 }
 
 export interface ConnectionManager {

@@ -13,6 +13,7 @@ import { Err, Ok, Result } from "../lib/result.ts";
 import { SDLParser } from "../schema/parser.ts";
 import { Module, SDLConverter } from "../schema/converter.ts";
 import { TypeDeclaration } from "../schema/ast.ts";
+import { getBuiltinFunctions } from "../compiler/builtin-functions.ts";
 import { LinkDef, PropertyDef, Schema, TypeDef } from "../compiler/context.ts";
 import { MigrationEngine } from "./engine.ts";
 import * as Types from "./types.ts";
@@ -66,6 +67,7 @@ function sdlTypeToSqlType(sdlType: string): string {
 export interface SchemaManagerOptions {
   pool?: ConnectionPool;
   dryRun?: boolean;
+  onSchemaChange?: (schema: Schema) => void;
 }
 
 export class SchemaManager {
@@ -74,10 +76,12 @@ export class SchemaManager {
   private engine?: MigrationEngine;
   private currentModules: Module[] | null = null;
   private currentSchema: Schema | null = null;
+  private onSchemaChange?: (schema: Schema) => void;
 
   constructor(options: SchemaManagerOptions) {
     this.pool = options.pool;
     this.dryRun = options.dryRun ?? false;
+    this.onSchemaChange = options.onSchemaChange;
   }
 
   /**
@@ -179,9 +183,35 @@ export class SchemaManager {
       }
     }
 
+    // Second pass: resolve backlinks for multi-links.
+    // For each type's multi-link, check if the target type has a single link
+    // pointing back to this type. If so, set linkDef.backlink to that reverse
+    // link's name so the compiler can generate correct JOIN conditions.
+    for (const [typeName, typeDef] of types) {
+      for (const [_linkName, linkDef] of typeDef.links) {
+        if (!linkDef.multi) {
+          continue;
+        }
+
+        const targetTypeDef = types.get(linkDef.target);
+        if (!targetTypeDef) {
+          continue;
+        }
+
+        // Find a single (non-multi) link on the target that points back to
+        // this type
+        for (const [candidateName, candidateLink] of targetTypeDef.links) {
+          if (!candidateLink.multi && candidateLink.target === typeName) {
+            linkDef.backlink = candidateName;
+            break;
+          }
+        }
+      }
+    }
+
     return {
       types,
-      functions: new Map(),
+      functions: getBuiltinFunctions(),
     };
   }
 
@@ -225,6 +255,7 @@ export class SchemaManager {
       // Update internal state even in dry-run so subsequent calls see the new schema
       this.currentModules = newModules;
       this.currentSchema = this.modulesToSchema(newModules);
+      this.onSchemaChange?.(this.currentSchema);
 
       // Return synthetic results for each planned migration
       const results: Types.MigrationResult[] = plan.migrations.map((m) => ({
@@ -245,6 +276,7 @@ export class SchemaManager {
     // Update internal state on success
     this.currentModules = newModules;
     this.currentSchema = this.modulesToSchema(newModules);
+    this.onSchemaChange?.(this.currentSchema);
 
     return execResult;
   }

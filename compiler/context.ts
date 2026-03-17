@@ -2,6 +2,7 @@
  * Compilation context and schema information
  */
 
+import { getBuiltinFunctions } from "./builtin-functions.ts";
 import * as EdgeQLAST from "../edgeql/ast.ts";
 
 export interface CompilationContext {
@@ -169,9 +170,6 @@ export function createTestSchema(): Schema {
       ["User", userType],
       ["Post", postType],
     ]),
-    functions: new Map([
-      ["count", { name: "count", args: [{ name: "expr", type: "any", required: true }], returnType: "int64", sqlName: "COUNT" }],
-      ["datetime_current", { name: "datetime_current", args: [], returnType: "datetime", sqlName: "NOW" }],
-    ]),
+    functions: getBuiltinFunctions(),
   };
 }

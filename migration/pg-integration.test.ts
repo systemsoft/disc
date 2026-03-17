@@ -442,12 +442,10 @@ Deno.test({
       await manager.initialize();
 
       const sdl = `
-        module default {
-          type TestSmUser {
-            required name: str;
-            required email: str;
-          };
-        };
+        type TestSmUser {
+          required name: str;
+          required email: str;
+        }
       `;
 
       const result = await manager.applySchema(sdl);
@@ -488,11 +486,9 @@ Deno.test({
 
       // Step 1: Apply initial schema
       const sdlV1 = `
-        module default {
-          type TestEvolveUser {
-            required name: str;
-          };
-        };
+        type TestEvolveUser {
+          required name: str;
+        }
       `;
 
       const resultV1 = await manager.applySchema(sdlV1);
@@ -506,12 +502,10 @@ Deno.test({
 
       // Step 2: Apply evolved schema (add age column)
       const sdlV2 = `
-        module default {
-          type TestEvolveUser {
-            required name: str;
-            age: int32;
-          };
-        };
+        type TestEvolveUser {
+          required name: str;
+          age: int32;
+        }
       `;
 
       const resultV2 = await manager.applySchema(sdlV2);
@@ -546,12 +540,10 @@ Deno.test({
       await manager.initialize();
 
       const sdl = `
-        module default {
-          type TestSchemaType {
-            required title: str;
-            active: bool;
-          };
-        };
+        type TestSchemaType {
+          required title: str;
+          active: bool;
+        }
       `;
 
       const result = await manager.applySchema(sdl);
