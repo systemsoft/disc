@@ -33,5 +33,5 @@ export type {
   AccessExpressionNode,
 } from "./ast.ts";
 
-export { adaptAccessPolicies } from "./policy-adapter.ts";
+export { adaptAccessPolicies, containsColumnReference, extractGlobalGuard } from "./policy-adapter.ts";
 export { convertExpression } from "./expression-converter.ts";

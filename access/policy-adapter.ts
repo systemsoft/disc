@@ -13,6 +13,7 @@ import type {
   AccessAction as RuntimeAccessAction,
   AccessPolicy as RuntimeAccessPolicy,
 } from "./types.ts";
+import type { AccessExpressionNode } from "./ast.ts";
 import { convertExpression } from "./expression-converter.ts";
 
 /**
@@ -27,6 +28,85 @@ function adaptAccessAction(sdlAction: SDLAccessAction): RuntimeAccessAction {
 }
 
 /**
+ * Returns true if the expression tree contains any AccessPath nodes
+ * (column references that can only be resolved against database rows).
+ */
+export function containsColumnReference(expr: AccessExpressionNode): boolean {
+  switch (expr.kind) {
+    case "AccessPath":
+      return true;
+    case "AccessLiteral":
+    case "AccessGlobal":
+      return false;
+    case "AccessComparison":
+      return containsColumnReference(expr.left) || containsColumnReference(expr.right);
+    case "AccessLogical":
+      return expr.operands.some(containsColumnReference);
+    case "AccessFunction":
+      return expr.args.some(containsColumnReference);
+    default:
+      return false;
+  }
+}
+
+/**
+ * Extracts a minimal condition guard from an expression by collecting all
+ * referenced globals and combining them with AND. This checks that required
+ * context values (e.g. current_user) are present before the SQL filter runs.
+ *
+ * Returns undefined if no globals are referenced (pure column expression).
+ */
+export function extractGlobalGuard(expr: AccessExpressionNode): AccessExpressionNode | undefined {
+  const globals: AccessExpressionNode[] = [];
+  collectGlobals(expr, globals);
+
+  if (globals.length === 0) {
+    return undefined;
+  }
+
+  if (globals.length === 1) {
+    return globals[0];
+  }
+
+  return {
+    kind: "AccessLogical",
+    operator: "and",
+    operands: globals,
+  };
+}
+
+function collectGlobals(expr: AccessExpressionNode, out: AccessExpressionNode[]): void {
+  switch (expr.kind) {
+    case "AccessGlobal": {
+      // Avoid duplicates
+      if (!out.some((g) => g.kind === "AccessGlobal" && g.name === expr.name)) {
+        out.push(expr);
+      }
+      break;
+    }
+    case "AccessComparison": {
+      collectGlobals(expr.left, out);
+      collectGlobals(expr.right, out);
+      break;
+    }
+    case "AccessLogical": {
+      for (const operand of expr.operands) {
+        collectGlobals(operand, out);
+      }
+      break;
+    }
+    case "AccessFunction": {
+      for (const arg of expr.args) {
+        collectGlobals(arg, out);
+      }
+      break;
+    }
+    default:
+      break;
+  }
+}
+
+/**
  * Converts an array of SDL AST access policies into runtime access policy
  * objects suitable for registration with AccessEvaluator.
  *
@@ -34,9 +114,9 @@ function adaptAccessAction(sdlAction: SDLAccessAction): RuntimeAccessAction {
  * - `sdl.name.value`  → `runtime.name`
  * - `objectType` arg  → `runtime.objectType`
  * - `sdl.actions[]`   → `runtime.actions[]` (only `allow` and `operations` kept)
- * - `sdl.condition`   → `runtime.condition` AND `runtime.using`
- *   (the same expression is assigned to both fields so the evaluator can use
- *   it for row-level filtering as well as condition evaluation)
+ * - `sdl.condition`   → `runtime.using` (always, for SQL WHERE generation)
+ * - `sdl.condition`   → `runtime.condition` ONLY if no column references;
+ *   otherwise a minimal global-presence guard is extracted
  */
 export function adaptAccessPolicies(
   objectType: string,
@@ -51,8 +131,16 @@ export function adaptAccessPolicies(
 
     if (sdl.condition !== undefined) {
       const converted = convertExpression(sdl.condition);
-      policy.condition = converted;
       policy.using = converted;
+
+      if (containsColumnReference(converted)) {
+        // Column references can't be evaluated in-memory; extract a
+        // minimal guard that checks required globals are present.
+        policy.condition = extractGlobalGuard(converted);
+      } else {
+        // Pure context expression — safe for in-memory evaluation.
+        policy.condition = converted;
+      }
     }
 
     return policy;

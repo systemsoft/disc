@@ -92,20 +92,21 @@ Deno.test("policy-adapter: deny and allow policies on same type", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 4: Policy with condition expression sets both condition and using
+// Test 4: Column-referencing condition separates condition from using
 // ---------------------------------------------------------------------------
 
-Deno.test("policy-adapter: policy with condition sets condition and using as AccessExpressionNode", () => {
+Deno.test("policy-adapter: column-referencing condition separates condition from using", () => {
+  // .author = global current_user — has column ref (.author) + global
   const conditionExpr = {
     kind: "BinaryOp" as const,
     op: "=",
     left: {
       kind: "PathExpression" as const,
-      path: ["author"],
+      path: [".", "author"],
     },
     right: {
       kind: "PathExpression" as const,
-      path: ["current_user"],
+      path: ["global", "current_user"],
     },
   };
 
@@ -126,15 +127,112 @@ Deno.test("policy-adapter: policy with condition sets condition and using as Acc
 
   assertEquals(result.length, 1);
   assertEquals(result[0].name, "owner_only");
-  // condition and using are now converted AccessExpressionNodes
+
+  // using gets the full expression (for SQL WHERE generation)
+  assertEquals(result[0].using!.kind, "AccessComparison");
+  assertEquals((result[0].using as any).operator, "=");
+  assertEquals((result[0].using as any).left.kind, "AccessPath");
+  assertEquals((result[0].using as any).left.path, ["author"]);
+  assertEquals((result[0].using as any).right.kind, "AccessGlobal");
+  assertEquals((result[0].using as any).right.name, "current_user");
+
+  // condition is a minimal global guard (not the full expression)
+  assertEquals(result[0].condition!.kind, "AccessGlobal");
+  assertEquals((result[0].condition as any).name, "current_user");
+
+  // condition and using are NOT the same reference
+  assertEquals(result[0].condition !== result[0].using, true);
+});
+
+// ---------------------------------------------------------------------------
+// Test 4b: Pure context condition sets both condition and using
+// ---------------------------------------------------------------------------
+
+Deno.test("policy-adapter: pure context condition sets both condition and using", () => {
+  // global current_role = "admin" — no column references
+  const conditionExpr = {
+    kind: "BinaryOp" as const,
+    op: "=",
+    left: {
+      kind: "PathExpression" as const,
+      path: ["global", "current_role"],
+    },
+    right: {
+      kind: "Literal" as const,
+      type: "string" as const,
+      value: "admin",
+    },
+  };
+
+  const sdlPolicy: SDLAccessPolicy = {
+    kind: "AccessPolicy",
+    name: createIdentifier("admin_only"),
+    actions: [
+      {
+        kind: "AccessAction",
+        allow: true,
+        operations: ["all"],
+      },
+    ],
+    condition: conditionExpr,
+  };
+
+  const result = adaptAccessPolicies("AdminPanel", [sdlPolicy]);
+
+  assertEquals(result.length, 1);
+  assertEquals(result[0].name, "admin_only");
+
+  // Both condition and using are the full expression (no column refs)
   assertEquals(result[0].condition!.kind, "AccessComparison");
-  assertEquals((result[0].condition as any).operator, "=");
-  assertEquals((result[0].condition as any).left.kind, "AccessPath");
-  assertEquals((result[0].condition as any).left.path, ["author"]);
-  assertEquals((result[0].condition as any).right.kind, "AccessPath");
-  assertEquals((result[0].condition as any).right.path, ["current_user"]);
-  // condition and using should be the exact same reference
-  assertEquals(result[0].condition === result[0].using, true);
+  assertEquals(result[0].using!.kind, "AccessComparison");
+  assertEquals(result[0].condition, result[0].using);
+});
+
+// ---------------------------------------------------------------------------
+// Test 4c: Pure column expression sets using only, condition undefined
+// ---------------------------------------------------------------------------
+
+Deno.test("policy-adapter: pure column expression sets using only", () => {
+  // .status = "active" — column ref, no globals
+  const conditionExpr = {
+    kind: "BinaryOp" as const,
+    op: "=",
+    left: {
+      kind: "PathExpression" as const,
+      path: [".", "status"],
+    },
+    right: {
+      kind: "Literal" as const,
+      type: "string" as const,
+      value: "active",
+    },
+  };
+
+  const sdlPolicy: SDLAccessPolicy = {
+    kind: "AccessPolicy",
+    name: createIdentifier("active_only"),
+    actions: [
+      {
+        kind: "AccessAction",
+        allow: true,
+        operations: ["select"],
+      },
+    ],
+    condition: conditionExpr,
+  };
+
+  const result = adaptAccessPolicies("Item", [sdlPolicy]);
+
+  assertEquals(result.length, 1);
+  assertEquals(result[0].name, "active_only");
+
+  // using gets the full expression
+  assertEquals(result[0].using!.kind, "AccessComparison");
+  assertEquals((result[0].using as any).left.kind, "AccessPath");
+  assertEquals((result[0].using as any).left.path, ["status"]);
+
+  // condition is undefined — no globals to guard on, always fires
+  assertEquals(result[0].condition, undefined);
 });
 
 // ---------------------------------------------------------------------------
