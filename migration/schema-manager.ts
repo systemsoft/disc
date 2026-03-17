@@ -250,6 +250,84 @@ export class SchemaManager {
   }
 
   /**
+   * Parse SDL and generate a migration plan without executing it.
+   *
+   * This is the planning-only path used by `disc migrate --create`. It parses
+   * the SDL source, diffs against the current schema state, and returns the
+   * resulting MigrationPlan. No DDL is executed and no internal state is
+   * mutated.
+   */
+  planSchema(
+    sdlSource: string,
+  ): Result<Types.MigrationPlan, MigrationError> {
+    // Parse SDL
+    const parseResult = this.parseSDL(sdlSource);
+    if (!parseResult.ok) {
+      return parseResult;
+    }
+    const newModules = parseResult.value;
+
+    // Ensure engine exists
+    if (!this.engine) {
+      return Err(
+        new MigrationError(
+          "SchemaManager not initialized. Call initialize() before planSchema().",
+        ),
+      );
+    }
+
+    // Plan migration: diff currentModules vs newModules
+    return this.engine.planMigration(this.currentModules, newModules);
+  }
+
+  /**
+   * Extract DDL statements from a migration plan.
+   *
+   * Pass-through to the migration engine's DDL generator. Returns the array
+   * of SQL strings that would be executed if the plan were applied.
+   */
+  generateDDL(
+    plan: Types.MigrationPlan,
+  ): Result<string[], MigrationError> {
+    if (!this.engine) {
+      return Err(
+        new MigrationError(
+          "SchemaManager not initialized. Call initialize() before generateDDL().",
+        ),
+      );
+    }
+
+    return this.engine.generateDDL(plan);
+  }
+
+  /**
+   * Validate that a migration plan is safe to apply.
+   *
+   * Delegates to the migration engine's validation logic which checks for
+   * breaking changes, data loss risks, and structural issues. Returns
+   * ok(undefined) when the plan passes validation.
+   */
+  validateMigration(
+    plan: Types.MigrationPlan,
+  ): Result<void, MigrationError> {
+    if (!this.engine) {
+      return Err(
+        new MigrationError(
+          "SchemaManager not initialized. Call initialize() before validateMigration().",
+        ),
+      );
+    }
+
+    const result = this.engine.validateMigration(plan);
+    if (!result.ok) {
+      return result;
+    }
+
+    // Engine returns Result<boolean>, normalize to Result<void>
+    return Ok(undefined);
+  }
+
+  /**
    * Get the current compiler Schema, or null if no schema has been loaded.
    */
   getSchema(): Schema | null {

@@ -2,11 +2,13 @@
  * CLI Commands Implementation - Core command functionality
  */
 
-import { MigrationEngine } from "../migration/engine.ts";
-import * as Types from "../migration/types.ts";
+import { SchemaManager } from "../migration/schema-manager.ts";
+import type { Module } from "../schema/converter.ts";
 import { create_server_from_env } from "../server/server.ts";
 import * as Codegen from "../codegen/mod.ts";
 import * as Context from "../compiler/context.ts";
+import type { Schema } from "../compiler/context.ts";
+import { ConnectionPool } from "../lib/connection-pool.ts";
 import { initCommand, InitOptions } from "./init.ts";
 import { shellCommand, ShellOptions } from "./shell.ts";
 import { watchCommand, WatchOptions } from "./watch.ts";
@@ -42,28 +44,44 @@ export class CLICommands {
    * Handle migration commands (create and apply)
    */
   async migrate(args: CLIArgs): Promise<void> {
-    const config: Types.MigrationConfig = {
-      migrations_dir: "./migrations",
-      schema_file: args.schema || "./schema.esdl",
-      database_url: Deno.env.get("DATABASE_URL") ||
-        "postgresql://localhost:5432/disc_dev",
-      dry_run: args["dry-run"] || false,
-      auto_approve: args["auto-approve"] || false,
-      backup_before_migration: true,
-      rollback_on_error: true,
-    };
+    const schemaFile = args.schema || "./dbschema/default.esdl";
+    const dryRun = args["dry-run"] || false;
+    const databaseUrl = args["backend-dsn"] ||
+      Deno.env.get("DATABASE_URL") ||
+      "postgresql://localhost:5432/disc_dev";
 
-    const engine = new MigrationEngine(config);
+    let pool: ConnectionPool | undefined;
+    let manager: SchemaManager | undefined;
 
     try {
-      if (args.create) {
-        await this.createMigration(engine, config);
+      if (dryRun) {
+        // Dry-run mode: no pool needed, no PostgreSQL connection required
+        manager = new SchemaManager({ dryRun: true });
+        await manager.initialize();
       } else {
-        await this.applyMigrations(engine, config);
+        // Live mode: create pool and wire to SchemaManager
+        pool = new ConnectionPool({ connectionString: databaseUrl });
+        await pool.initialize();
+
+        manager = new SchemaManager({ pool, dryRun: false });
+        await manager.initialize();
+      }
+
+      if (args.create) {
+        await this.createMigration(manager, schemaFile);
+      } else {
+        await this.applyMigrations(manager, schemaFile, dryRun);
       }
     } catch (error) {
-      console.error(`❌ Migration failed: ${(error as Error).message}`);
+      console.error(`Migration failed: ${(error as Error).message}`);
       throw error;
+    } finally {
+      if (manager) {
+        await manager.close();
+      }
+      if (pool) {
+        await pool.close();
+      }
     }
   }
 
@@ -95,8 +113,26 @@ export class CLICommands {
       // Set DATABASE_URL for the server
       Deno.env.set("DATABASE_URL", instance.dsn());
 
-      // Create server from environment variables
-      const server = create_server_from_env();
+      // Try to load the project schema from SDL
+      const schema = await this.readSchemaAsCompilerSchema(
+        "./dbschema/default.esdl",
+      );
+
+      if (schema) {
+        const objectTypeCount = Array.from(schema.types.values()).filter(
+          (t) => t.kind === "object",
+        ).length;
+        console.log(
+          `  Loaded schema with ${objectTypeCount} object types`,
+        );
+      } else {
+        console.log("  No schema file found, using default test schema");
+      }
+
+      // Create server from environment variables, passing schema if available
+      const server = schema
+        ? create_server_from_env(undefined, schema)
+        : create_server_from_env();
 
       // Override with CLI arguments if provided
       const config = server.get_config();
@@ -140,7 +176,7 @@ export class CLICommands {
     console.log("🚀 Generating TypeScript types...");
 
     const outputDir = args.output || "./generated";
-    const schemaFile = args.schema || "./schema.esdl";
+    const schemaFile = args.schema || "./dbschema/default.esdl";
     const target = args.target || "client";
 
     console.log(`📋 Configuration:`);
@@ -149,14 +185,21 @@ export class CLICommands {
     console.log(`   Target: ${target}`);
 
     try {
-      // For now, use the test schema since we don't have SDL parser yet
-      // In production, this would parse the actual .esdl file
-      const schema = Context.createTestSchema();
-      console.log(
-        `📖 Using test schema with types: ${
-          Array.from(schema.types.keys()).join(", ")
-        }`,
-      );
+      // Try to read real schema from SDL file via SchemaManager
+      let schema = await this.readSchemaAsCompilerSchema(schemaFile);
+
+      if (schema) {
+        const typeNames = Array.from(schema.types.keys()).join(", ");
+        console.log(`📖 Loaded schema from ${schemaFile} with types: ${typeNames}`);
+      } else {
+        console.log(`⚠️  No schema found at ${schemaFile}, falling back to test schema`);
+        schema = Context.createTestSchema();
+        console.log(
+          `📖 Using test schema with types: ${
+            Array.from(schema.types.keys()).join(", ")
+          }`,
+        );
+      }
 
       // Generate TypeScript code
       const config: Partial<Codegen.CodegenConfig> = {
@@ -371,47 +414,40 @@ export class CLICommands {
   }
 
   private async createMigration(
-    engine: MigrationEngine,
-    config: Types.MigrationConfig,
+    manager: SchemaManager,
+    schemaFile: string,
   ): Promise<void> {
-    console.log("🚀 Creating new migration...");
+    console.log("Creating new migration...");
 
-    // Read current schema
-    const currentSchema = await this.readSchemaFile(config.schema_file);
+    // Read SDL source from schema file
+    let sdlSource: string;
 
-    if (!currentSchema) {
-      console.error(`❌ Schema file not found: ${config.schema_file}`);
-      return;
-    }
-
-    // Get migration state to find previous schema
-    const state = engine.getMigrationState();
-    let previousSchema = null;
-
-    if (state.applied_migrations.length > 0) {
-      console.log(
-        `📋 Previous migrations found: ${state.applied_migrations.length}`,
-      );
+    try {
+      sdlSource = await Deno.readTextFile(schemaFile);
+    } catch (error) {
+      if (error instanceof Deno.errors.NotFound) {
+        console.error(`Schema file not found: ${schemaFile}`);
+        return;
+      }
+      throw error;
     }
 
     // Plan the migration
-    const planResult = engine.planMigration(previousSchema, currentSchema);
+    const planResult = manager.planSchema(sdlSource);
 
     if (!planResult.ok) {
-      console.error(
-        `❌ Migration planning failed: ${planResult.error.message}`,
-      );
+      console.error(`Migration planning failed: ${planResult.error.message}`);
       return;
     }
 
     const plan = planResult.value;
 
     if (plan.operations_count === 0) {
-      console.log("✅ No changes detected - schema is up to date");
+      console.log("No changes detected - schema is up to date");
       return;
     }
 
-    console.log(`📋 Migration Plan:`);
+    console.log(`Migration Plan:`);
     console.log(`   Operations: ${plan.operations_count}`);
     console.log(`   Estimated Duration: ${plan.estimated_duration || 0}ms\n`);
 
@@ -422,9 +458,9 @@ export class CLICommands {
     });
 
     // Generate DDL for preview
-    const ddlResult = engine.generateDDL(plan);
+    const ddlResult = manager.generateDDL(plan);
     if (ddlResult.ok) {
-      console.log("💾 Generated DDL:");
+      console.log("Generated DDL:");
       ddlResult.value.forEach((stmt, i) => {
         if (stmt.trim() && !stmt.startsWith("--")) {
           console.log(`   ${i + 1}. ${stmt}`);
@@ -432,92 +468,93 @@ export class CLICommands {
       });
     }
 
-    console.log("\n✅ Migration created successfully");
-    console.log("💡 Run 'disc migrate' to apply the migration");
+    // Validate the migration
+    const validationResult = manager.validateMigration(plan);
+    if (!validationResult.ok) {
+      console.log(`Validation warning: ${validationResult.error.message}`);
+    }
+
+    console.log("\nMigration created successfully");
+    console.log("Run 'disc migrate' to apply the migration");
   }
 
   private async applyMigrations(
-    engine: MigrationEngine,
-    config: Types.MigrationConfig,
+    manager: SchemaManager,
+    schemaFile: string,
+    dryRun: boolean,
   ): Promise<void> {
-    console.log("🚀 Applying migrations...");
+    console.log("Applying migrations...");
 
-    // Read current schema
-    const currentSchema = await this.readSchemaFile(config.schema_file);
+    // Read SDL source from schema file
+    let sdlSource: string;
 
-    if (!currentSchema) {
-      console.error(`❌ Schema file not found: ${config.schema_file}`);
-      return;
-    }
-
-    // Plan the migration
-    const planResult = engine.planMigration(null, currentSchema);
-
-    if (!planResult.ok) {
-      console.error(
-        `❌ Migration planning failed: ${planResult.error.message}`,
-      );
-      return;
-    }
-
-    const plan = planResult.value;
-
-    if (plan.operations_count === 0) {
-      console.log("✅ No migrations to apply - schema is up to date");
-      return;
-    }
-
-    // Validate the migration
-    const validationResult = engine.validateMigration(plan);
-    if (!validationResult.ok) {
-      console.log(
-        `⚠️  Migration validation warnings: ${validationResult.error.message}`,
-      );
-
-      if (!config.auto_approve) {
-        const proceed = confirm(
-          "Do you want to proceed with potentially dangerous operations?",
-        );
-        if (!proceed) {
-          console.log("Migration cancelled");
-          return;
-        }
+    try {
+      sdlSource = await Deno.readTextFile(schemaFile);
+    } catch (error) {
+      if (error instanceof Deno.errors.NotFound) {
+        console.error(`Schema file not found: ${schemaFile}`);
+        return;
       }
+      throw error;
     }
 
-    // Show what will be applied
-    console.log(`📋 Applying ${plan.migrations.length} migration(s):`);
-    plan.migrations.forEach((migration, i) => {
-      console.log(`  ${i + 1}. ${migration.name}`);
-      console.log(`     ${migration.description}`);
-    });
+    if (dryRun) {
+      // Dry-run: plan and show DDL without executing
+      const planResult = manager.planSchema(sdlSource);
 
-    if (config.dry_run) {
-      console.log("\n🔄 DRY RUN - No changes will be applied");
-
-      const ddlResult = engine.generateDDL(plan);
-      if (ddlResult.ok) {
-        console.log("\n💾 DDL that would be executed:");
-        ddlResult.value.forEach((stmt, i) => {
-          console.log(`   ${i + 1}. ${stmt}`);
-        });
-      }
-    } else {
-      // Execute the migration
-      const executeResult = await engine.executeMigration(plan);
-
-      if (!executeResult.ok) {
+      if (!planResult.ok) {
         console.error(
-          `❌ Migration execution failed: ${executeResult.error.message}`,
+          `Migration planning failed: ${planResult.error.message}`,
         );
         return;
       }
 
-      const results = executeResult.value;
-      console.log("\n📊 Migration Results:");
+      const plan = planResult.value;
+
+      if (plan.operations_count === 0) {
+        console.log("No migrations to apply - schema is up to date");
+        return;
+      }
+
+      console.log(`DRY RUN - ${plan.migrations.length} migration(s) planned:`);
+      plan.migrations.forEach((migration, i) => {
+        console.log(`  ${i + 1}. ${migration.name}`);
+        console.log(`     ${migration.description}`);
+      });
+
+      const ddlResult = manager.generateDDL(plan);
+      if (ddlResult.ok) {
+        console.log("\nDDL that would be executed:");
+        ddlResult.value.forEach((stmt, i) => {
+          if (stmt.trim() && !stmt.startsWith("--")) {
+            console.log(`   ${i + 1}. ${stmt}`);
+          }
+        });
+      }
+
+      console.log("\nNo changes applied (dry-run mode)");
+    } else {
+      // Live execution: applySchema handles parse + diff + execute
+      const applyResult = await manager.applySchema(sdlSource);
+
+      if (!applyResult.ok) {
+        console.error(
+          `Migration execution failed: ${applyResult.error.message}`,
+        );
+        return;
+      }
+
+      const results = applyResult.value;
+
+      if (results.length === 0) {
+        console.log("No migrations to apply - schema is up to date");
+        return;
+      }
+
+      console.log("\nMigration Results:");
 
       results.forEach((result, i) => {
-        const status = result.success ? "✅ Success" : "❌ Failed";
+        const status = result.success ? "Success" : "Failed";
         console.log(`  ${i + 1}. Migration ${result.migration_id}: ${status}`);
         console.log(`     Duration: ${result.duration_ms}ms`);
         console.log(`     Applied: ${result.applied_at.toISOString()}`);
@@ -527,7 +564,12 @@ export class CLICommands {
         }
       });
 
-      console.log("\n🎉 All migrations applied successfully!");
+      const allSucceeded = results.every((r) => r.success);
+      if (allSucceeded) {
+        console.log("\nAll migrations applied successfully!");
+      } else {
+        console.error("\nSome migrations failed. Review the errors above.");
+      }
     }
   }
 
@@ -553,65 +595,65 @@ export class CLICommands {
     return parts[parts.length - 1] || "default";
   }
 
-  private async readSchemaFile(filePath: string): Promise<any[] | null> {
+  /**
+   * Read and parse an SDL schema file into Module[] representation.
+   *
+   * Reads the file from disk and parses the SDL source via SchemaManager.
+   * Returns null if the file does not exist or parsing fails.
+   */
+  private async readSchemaFile(filePath: string): Promise<Module[] | null> {
     try {
       console.log(`📖 Reading schema from ${filePath}`);
 
-      const exists = await Deno.stat(filePath).then(() => true).catch(() =>
-        false
-      );
-      if (!exists) {
+      let sdlSource: string;
+
+      try {
+        sdlSource = await Deno.readTextFile(filePath);
+      } catch (error) {
+        if (error instanceof Deno.errors.NotFound) {
+          return null;
+        }
+        throw error;
+      }
+
+      const manager = new SchemaManager({});
+      const result = manager.parseSDL(sdlSource);
+
+      if (!result.ok) {
+        console.error(`❌ Failed to parse schema: ${result.error.message}`);
         return null;
       }
 
-      // Return a mock schema for demonstration - would be replaced with real SDL parsing
-      return [
-        {
-          kind: "Module",
-          name: { kind: "Identifier", name: "default", quoted: false },
-          items: [
-            {
-              kind: "TypeDef",
-              name: { kind: "Identifier", name: "User", quoted: false },
-              extending: [],
-              items: [
-                {
-                  kind: "Property",
-                  name: { kind: "Identifier", name: "name", quoted: false },
-                  type: {
-                    kind: "NamedType",
-                    name: { kind: "Identifier", name: "str", quoted: false },
-                  },
-                  required: true,
-                  multi: false,
-                },
-                {
-                  kind: "Property",
-                  name: { kind: "Identifier", name: "email", quoted: false },
-                  type: {
-                    kind: "NamedType",
-                    name: { kind: "Identifier", name: "str", quoted: false },
-                  },
-                  required: true,
-                  multi: false,
-                  constraints: [
-                    {
-                      kind: "Constraint",
-                      name: {
-                        kind: "Identifier",
-                        name: "exclusive",
-                        quoted: false,
-                      },
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      ];
+      return result.value;
     } catch (error) {
       console.error(`Failed to read schema file: ${(error as Error).message}`);
+      return null;
+    }
+  }
+
+  /**
+   * Read an SDL schema file and convert it to a compiler Schema.
+   *
+   * Calls readSchemaFile() to get Module[], then converts to a Schema
+   * via SchemaManager.modulesToSchema(). Returns null if the file cannot
+   * be read or parsing fails.
+   */
+  private async readSchemaAsCompilerSchema(
+    filePath: string,
+  ): Promise<Schema | null> {
+    const modules = await this.readSchemaFile(filePath);
+
+    if (!modules) {
+      return null;
+    }
+
+    try {
+      const manager = new SchemaManager({});
+      return manager.modulesToSchema(modules);
+    } catch (error) {
+      console.error(
+        `❌ Failed to convert schema: ${(error as Error).message}`,
+      );
       return null;
     }
   }

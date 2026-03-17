@@ -8,6 +8,7 @@ import { SimpleEdgeQLProtocolHandler } from "./simple-edgeql-protocol.ts";
 import { EdgeQLProtocolHandler } from "./edgeql-protocol.ts";
 import { PostgresInstance } from "../postgres/instance.ts";
 import { logger } from "../postgres/logger.ts";
+import type { Schema } from "../compiler/context.ts";
 
 /**
  * Options for constructing a DiscServer.
@@ -27,6 +28,12 @@ export interface DiscServerOptions extends Partial<Types.ServerConfig> {
    * - "full": EdgeQLProtocolHandler — real EdgeQL compiler integration
    */
   protocol?: "simple" | "full";
+
+  /**
+   * An optional parsed Schema to pass to the protocol handler.
+   * When provided, the handler uses this schema instead of the default test schema.
+   */
+  schema?: Schema;
 }
 
 export class DiscServer {
@@ -65,6 +72,7 @@ export class DiscServer {
       enable_explain: config.enable_explain || false,
       dry_run: config.dry_run || false,
       database_url: this.config.database_url,
+      schema: config.schema,
     };
 
     if (config.protocol === "full") {
@@ -155,6 +163,7 @@ export function create_default_config(): Types.ServerConfig {
  */
 export function create_server_from_env(
   postgres_instance?: PostgresInstance,
+  schema?: Schema,
 ): DiscServer {
   const config: DiscServerOptions = {
     host: Deno.env.get("DISC_HOST") || "localhost",
@@ -167,6 +176,7 @@ export function create_server_from_env(
     jwt_secret: Deno.env.get("DISC_JWT_SECRET"),
     postgres_instance,
     protocol: Deno.env.get("DISC_PROTOCOL") === "full" ? "full" : "simple",
+    schema,
   };
 
   // Parse CORS origins if provided

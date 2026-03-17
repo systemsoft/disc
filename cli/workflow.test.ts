@@ -77,12 +77,12 @@ Deno.test("CLI Workflow - Migration planning and execution", async () => {
 };`,
     );
 
-    // Test migration create
+    // Test migration create (dry-run to avoid needing a real database)
     await commands.migrate({
       _: ["migrate"],
       create: true,
       schema: schemaFile,
-      "dry-run": false,
+      "dry-run": true,
       "auto-approve": false,
     });
 
