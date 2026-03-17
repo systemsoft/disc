@@ -138,9 +138,19 @@ export interface ExecutionResult {
 }
 
 export interface ProtocolHandler {
-  handle_request(request: QueryRequest, context: QueryContext): Promise<QueryResponse>;
-  handle_subscription?(request: SubscriptionRequest, context: QueryContext): AsyncIterableIterator<SubscriptionMessage>;
+  handle_request(
+    request: QueryRequest,
+    context: QueryContext,
+  ): Promise<QueryResponse>;
+  handle_subscription?(
+    request: SubscriptionRequest,
+    context: QueryContext,
+  ): AsyncIterableIterator<SubscriptionMessage>;
   validate_request(request: QueryRequest): QueryError[];
+  /** Initialize the handler (e.g. connect to database, warm up pool). */
+  initialize?(): Promise<void>;
+  /** Gracefully close the handler (e.g. drain connection pool). */
+  close?(): Promise<void>;
 }
 
 export interface ConnectionManager {
@@ -160,7 +170,10 @@ export interface SessionManager {
 }
 
 export interface TransactionManager {
-  begin_transaction(session_id: string, options?: Partial<Transaction>): Transaction;
+  begin_transaction(
+    session_id: string,
+    options?: Partial<Transaction>,
+  ): Transaction;
   get_transaction(id: string): Transaction | null;
   commit_transaction(id: string): Promise<void>;
   rollback_transaction(id: string): Promise<void>;

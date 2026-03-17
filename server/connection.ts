@@ -3,6 +3,9 @@
  */
 
 import * as Types from "./types.ts";
+import { ConnectionPool } from "../lib/connection-pool.ts";
+import { DatabaseConnection } from "../lib/database.ts";
+import { logger } from "../postgres/logger.ts";
 
 export class SessionManager implements Types.SessionManager {
   private sessions = new Map<string, Types.SessionContext>();
@@ -156,6 +159,9 @@ export class ConnectionManager implements Types.ConnectionManager {
 export class TransactionManager implements Types.TransactionManager {
   private transactions = new Map<string, Types.Transaction>();
   private transaction_timeout_ms: number;
+  private pool?: ConnectionPool;
+  private transaction_connections = new Map<string, DatabaseConnection>();
+  private pending_begins = new Map<string, Promise<void>>();
   private stats = {
     committed: 0,
     rolled_back: 0,
@@ -163,6 +169,23 @@ export class TransactionManager implements Types.TransactionManager {
 
   constructor(transaction_timeout_ms = 10 * 60 * 1000) { // 10 minutes default
     this.transaction_timeout_ms = transaction_timeout_ms;
+  }
+
+  /**
+   * Set the connection pool for real PostgreSQL transaction management.
+   * When a pool is available, BEGIN/COMMIT/ROLLBACK execute against the database.
+   * When no pool is set, the manager falls back to mock/no-op behavior.
+   */
+  setPool(pool: ConnectionPool): void {
+    this.pool = pool;
+    logger.info("TransactionManager: connection pool attached");
+  }
+
+  /**
+   * Get the connection pool, if one has been set.
+   */
+  getPool(): ConnectionPool | undefined {
+    return this.pool;
   }
 
   begin_transaction(
@@ -181,11 +204,28 @@ export class TransactionManager implements Types.TransactionManager {
     };
 
     this.transactions.set(transaction_id, transaction);
+
+    // If a pool is available, acquire a connection and execute BEGIN asynchronously.
+    // The promise is stored so commit/rollback can await it before proceeding.
+    if (this.pool) {
+      const beginPromise = this.execute_begin(transaction_id, transaction);
+      this.pending_begins.set(transaction_id, beginPromise);
+    }
+
     return transaction;
   }
 
   get_transaction(id: string): Types.Transaction | null {
     return this.transactions.get(id) || null;
+  }
+
+  /**
+   * Get the database connection held by an active transaction.
+   * Useful for executing queries within an explicit transaction context.
+   * Returns null if no pool is attached or the transaction has no held connection.
+   */
+  get_transaction_connection(id: string): DatabaseConnection | undefined {
+    return this.transaction_connections.get(id);
   }
 
   async commit_transaction(id: string): Promise<void> {
@@ -194,8 +234,28 @@ export class TransactionManager implements Types.TransactionManager {
       throw new Error(`Transaction ${id} not found`);
     }
 
-    // In a real implementation, this would execute COMMIT on PostgreSQL
-    // For now, we'll simulate successful commit
+    // Await pending BEGIN if pool is available
+    const pendingBegin = this.pending_begins.get(id);
+    if (pendingBegin) {
+      await pendingBegin;
+      this.pending_begins.delete(id);
+    }
+
+    // Execute COMMIT on the held connection if available
+    const conn = this.transaction_connections.get(id);
+    if (conn && this.pool) {
+      try {
+        await conn.execute("COMMIT");
+        logger.info(`Transaction ${id}: COMMIT executed on PostgreSQL`);
+      } catch (error) {
+        logger.error(`Transaction ${id}: COMMIT failed: ${error}`);
+        throw error;
+      } finally {
+        this.pool.release(conn);
+        this.transaction_connections.delete(id);
+      }
+    }
+
     this.transactions.delete(id);
     this.stats.committed++;
   }
@@ -206,8 +266,28 @@ export class TransactionManager implements Types.TransactionManager {
       throw new Error(`Transaction ${id} not found`);
     }
 
-    // In a real implementation, this would execute ROLLBACK on PostgreSQL
-    // For now, we'll simulate successful rollback
+    // Await pending BEGIN if pool is available
+    const pendingBegin = this.pending_begins.get(id);
+    if (pendingBegin) {
+      await pendingBegin;
+      this.pending_begins.delete(id);
+    }
+
+    // Execute ROLLBACK on the held connection if available
+    const conn = this.transaction_connections.get(id);
+    if (conn && this.pool) {
+      try {
+        await conn.execute("ROLLBACK");
+        logger.info(`Transaction ${id}: ROLLBACK executed on PostgreSQL`);
+      } catch (error) {
+        logger.error(`Transaction ${id}: ROLLBACK failed: ${error}`);
+        throw error;
+      } finally {
+        this.pool.release(conn);
+        this.transaction_connections.delete(id);
+      }
+    }
+
     this.transactions.delete(id);
     this.stats.rolled_back++;
   }
@@ -224,6 +304,24 @@ export class TransactionManager implements Types.TransactionManager {
     }
 
     for (const id of abandoned_transactions) {
+      // Release any held connections for abandoned transactions
+      const conn = this.transaction_connections.get(id);
+      if (conn && this.pool) {
+        try {
+          // Best-effort ROLLBACK on abandoned transactions
+          conn.execute("ROLLBACK").then(() => {
+            this.pool!.release(conn);
+          }).catch((error) => {
+            logger.error(`Failed to rollback abandoned transaction ${id}: ${error}`);
+            this.pool!.release(conn);
+          });
+        } catch (_) {
+          // Swallowing here is intentional: cleanup must not throw
+          this.pool.release(conn);
+        }
+        this.transaction_connections.delete(id);
+      }
+      this.pending_begins.delete(id);
       this.transactions.delete(id);
     }
 
@@ -240,6 +338,44 @@ export class TransactionManager implements Types.TransactionManager {
       committed: this.stats.committed,
       rolled_back: this.stats.rolled_back,
     };
+  }
+
+  private async execute_begin(
+    transaction_id: string,
+    transaction: Types.Transaction
+  ): Promise<void> {
+    if (!this.pool) return;
+
+    try {
+      const conn = await this.pool.acquire();
+      this.transaction_connections.set(transaction_id, conn);
+
+      // Build BEGIN statement with isolation level and read-only options
+      let beginSQL = "BEGIN";
+      if (transaction.isolation_level === "serializable") {
+        beginSQL += " ISOLATION LEVEL SERIALIZABLE";
+      } else if (transaction.isolation_level === "repeatable_read") {
+        beginSQL += " ISOLATION LEVEL REPEATABLE READ";
+      } else {
+        beginSQL += " ISOLATION LEVEL READ COMMITTED";
+      }
+
+      if (transaction.read_only) {
+        beginSQL += " READ ONLY";
+      }
+
+      await conn.execute(beginSQL);
+      logger.info(`Transaction ${transaction_id}: ${beginSQL} executed on PostgreSQL`);
+    } catch (error) {
+      logger.error(`Transaction ${transaction_id}: BEGIN failed: ${error}`);
+      // Clean up on failure
+      const conn = this.transaction_connections.get(transaction_id);
+      if (conn && this.pool) {
+        this.pool.release(conn);
+        this.transaction_connections.delete(transaction_id);
+      }
+      throw error;
+    }
   }
 
   private generate_transaction_id(): string {
