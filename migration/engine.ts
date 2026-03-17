@@ -9,6 +9,8 @@ import { DDLGenerator } from "./ddl.ts";
 import { Result, Ok, Err } from "../lib/result.ts";
 import { MigrationError } from "../lib/errors.ts";
 import { DatabaseConnection } from "../lib/database.ts";
+import { ConnectionPool } from "../lib/connection-pool.ts";
+import { MigrationTracker } from "./tracker.ts";
 import { logger } from "../postgres/logger.ts";
 
 export class MigrationEngine {
@@ -16,8 +18,31 @@ export class MigrationEngine {
   private ddlGenerator = new DDLGenerator();
   private appliedMigrations = new Set<string>();
   private db?: DatabaseConnection;
+  private pool?: ConnectionPool;
+  private tracker?: MigrationTracker;
 
-  constructor(private config: Types.MigrationConfig) {}
+  constructor(private config: Types.MigrationConfig) {
+    if (config.connection_pool) {
+      this.pool = config.connection_pool;
+    }
+  }
+
+  /**
+   * Initialize the migration engine (set up tracker if pool is available)
+   */
+  async initialize(): Promise<void> {
+    if (this.pool) {
+      this.tracker = new MigrationTracker(this.pool);
+      await this.tracker.initialize();
+      // Load previously applied migrations from DB
+      const applied = await this.tracker.getAppliedMigrations();
+      if (applied.ok) {
+        for (const id of applied.value) {
+          this.appliedMigrations.add(id);
+        }
+      }
+    }
+  }
 
   /**
    * Generate a migration plan from schema changes
@@ -103,6 +128,10 @@ export class MigrationEngine {
         });
 
         this.appliedMigrations.add(migration.id);
+
+        if (this.tracker) {
+          await this.tracker.recordMigration(migration, results[results.length - 1]);
+        }
       }
 
       return Ok(results);
@@ -176,6 +205,10 @@ export class MigrationEngine {
         });
 
         this.appliedMigrations.add(migration.id);
+
+        if (this.tracker) {
+          await this.tracker.recordMigration(migration, results[results.length - 1]);
+        }
       } catch (error) {
         if (this.config.rollback_on_error && rollbackSQL) {
           try {
@@ -457,13 +490,29 @@ export class MigrationEngine {
   }
 
   private async executeStatements(statements: string[]): Promise<void> {
+    // Filter out comment-only lines and empty lines
+    const executableStatements = statements.filter((s) =>
+      s.trim() && !s.trim().startsWith("--")
+    );
+
     if (this.config.dry_run) {
       logger.info("DRY RUN - Would execute:");
-      statements.forEach(stmt => logger.info(`  ${stmt}`));
+      executableStatements.forEach((stmt) => logger.info(`  ${stmt}`));
       return;
     }
 
-    // Ensure database connection
+    // Pool-based execution path (preferred)
+    if (this.pool) {
+      await this.pool.transaction(async (conn) => {
+        for (const stmt of executableStatements) {
+          logger.info(`Executing: ${stmt.substring(0, 100)}...`);
+          await conn.execute(stmt);
+        }
+      });
+      return;
+    }
+
+    // Fallback: direct DatabaseConnection
     if (!this.db) {
       if (!this.config.database_url) {
         throw new Error("Database URL not configured");
@@ -474,11 +523,9 @@ export class MigrationEngine {
 
     // Execute statements in a transaction
     await this.db.transaction(async () => {
-      for (const statement of statements) {
-        if (statement.trim()) {
-          logger.info(`Executing: ${statement.substring(0, 100)}...`);
-          await this.db!.execute(statement);
-        }
+      for (const statement of executableStatements) {
+        logger.info(`Executing: ${statement.substring(0, 100)}...`);
+        await this.db!.execute(statement);
       }
     });
   }
@@ -629,6 +676,7 @@ export class MigrationEngine {
    * Close database connection
    */
   async close(): Promise<void> {
+    this.tracker = undefined;
     if (this.db) {
       await this.db.close();
       this.db = undefined;

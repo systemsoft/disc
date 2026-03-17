@@ -2,6 +2,8 @@
  * Migration system types and interfaces
  */
 
+import { ConnectionPool } from "../lib/connection-pool.ts";
+
 export interface Migration {
   id: string;
   name: string;
@@ -241,6 +243,7 @@ export interface MigrationConfig {
   auto_approve: boolean;
   backup_before_migration: boolean;
   rollback_on_error: boolean;
+  connection_pool?: ConnectionPool;
 }
 
 export interface MigrationCheckpoint {
