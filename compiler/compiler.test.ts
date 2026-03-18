@@ -2,11 +2,12 @@
  * Tests for EdgeQL to SQL Compiler
  */
 
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertThrows } from "@std/assert";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { EdgeQLCompiler } from "./compiler.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import { createTestSchema } from "./context.ts";
+import { CompilationError } from "../lib/errors.ts";
 
 const schema = createTestSchema();
 const compiler = new EdgeQLCompiler(schema);
@@ -1096,4 +1097,171 @@ Deno.test("SQL Code Generator - WindowFunctionExpression with frame", () => {
     true,
     "SQL should contain frame spec",
   );
+});
+
+// =========================================================================
+// OVER Enforcement Tests
+// =========================================================================
+
+Deno.test("OVER enforcement - window-only function without OVER throws error", () => {
+  const source = `SELECT row_number()`;
+
+  assertThrows(
+    () => {
+      compileEdgeQL(source);
+    },
+    CompilationError,
+    "requires an OVER clause",
+  );
+});
+
+Deno.test("OVER enforcement - non-window function with OVER throws error", () => {
+  // Construct a WindowFunctionCall AST node with name "len" (a scalar function)
+  // and compile it directly, since the parser would not produce this combination
+  const testSchema = createTestSchema();
+  const testCompiler = new EdgeQLCompiler(testSchema);
+
+  const ast: import("../edgeql/ast.ts").SelectQuery = {
+    kind: "SelectQuery",
+    expr: {
+      kind: "WindowFunctionCall",
+      name: { kind: "QualifiedName", parts: ["len"] },
+      args: [{
+        name: undefined,
+        value: { kind: "Literal", type: "string", value: "hello" },
+      }],
+      over: {
+        kind: "WindowOverClause",
+        orderBy: [{
+          expr: { kind: "Path", steps: [{ type: "property", name: "name" }] },
+          direction: "ASC",
+        }],
+      },
+    },
+  };
+
+  const result = testCompiler.compile(ast);
+  assertEquals(result.ok, false, "Should fail compilation");
+  if (!result.ok) {
+    assertEquals(
+      result.error.message.includes("cannot be used with an OVER clause"),
+      true,
+      "Error should mention OVER clause restriction",
+    );
+  }
+});
+
+Deno.test("OVER enforcement - aggregate function with OVER succeeds", () => {
+  const source = `
+    SELECT User {
+      name,
+      running_count := count(.name) OVER (PARTITION BY .active)
+    }
+  `;
+  const sql = compileEdgeQL(source);
+
+  assertEquals(
+    sql.includes("COUNT("),
+    true,
+    "SQL should contain COUNT(",
+  );
+  assertEquals(
+    sql.includes("OVER"),
+    true,
+    "SQL should contain OVER clause",
+  );
+  assertEquals(
+    sql.includes("PARTITION BY"),
+    true,
+    "SQL should contain PARTITION BY",
+  );
+});
+
+Deno.test("Frame exclusion compiles to correct SQL", () => {
+  const source = `
+    SELECT User {
+      name,
+      rn := row_number() OVER (ORDER BY .name ASC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE CURRENT ROW)
+    }
+  `;
+  const sql = compileEdgeQL(source);
+
+  assertEquals(
+    sql.includes("EXCLUDE CURRENT ROW"),
+    true,
+    "SQL should contain EXCLUDE CURRENT ROW",
+  );
+  assertEquals(
+    sql.includes("ROWS BETWEEN"),
+    true,
+    "SQL should contain frame spec",
+  );
+});
+
+// =========================================================================
+// Recursive CTE Compilation Tests
+// =========================================================================
+
+Deno.test("SQL Compiler - WITH RECURSIVE generates SQL WITH RECURSIVE", () => {
+  const source = `
+    WITH RECURSIVE nums := (SELECT User FILTER .active = true)
+    SELECT nums { name }
+  `;
+  const sql = compileEdgeQL(source);
+
+  assertEquals(
+    sql.includes("WITH RECURSIVE"),
+    true,
+    "SQL should contain WITH RECURSIVE",
+  );
+  assertEquals(
+    sql.includes("nums"),
+    true,
+    "SQL should contain the CTE name 'nums'",
+  );
+});
+
+Deno.test("SQL Compiler - WITH without RECURSIVE does not produce WITH RECURSIVE", () => {
+  const source = `
+    WITH active := (SELECT User FILTER .active = true)
+    SELECT active { name }
+  `;
+  const sql = compileEdgeQL(source);
+
+  assertEquals(
+    sql.includes("WITH"),
+    true,
+    "SQL should contain WITH",
+  );
+  assertEquals(
+    sql.includes("WITH RECURSIVE"),
+    false,
+    "SQL should NOT contain WITH RECURSIVE",
+  );
+});
+
+// =========================================================================
+// CTE Multiple References Tests (Stage 4)
+// =========================================================================
+
+Deno.test("SQL Compiler - WITH CTE referenced once generates valid SQL with CTE alias", () => {
+  const source = `
+    WITH active := (SELECT User FILTER .active = true)
+    SELECT active { name, email }
+  `;
+
+  const sql = compileEdgeQL(source);
+
+  // The SQL should contain a WITH clause defining the CTE
+  assertEquals(sql.includes("WITH"), true, "SQL should contain WITH");
+  assertEquals(
+    sql.includes("active"),
+    true,
+    "SQL should reference CTE alias 'active'",
+  );
+  // The body query should produce a FROM clause referencing the CTE
+  assertEquals(sql.includes("FROM"), true, "Body should have FROM clause");
+  // The shape should resolve both 'name' and 'email'
+  assertEquals(sql.includes("'name'"), true, "Shape should resolve 'name'");
+  assertEquals(sql.includes("'email'"), true, "Shape should resolve 'email'");
 });

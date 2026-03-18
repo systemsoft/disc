@@ -1376,3 +1376,129 @@ Deno.test({
     }
   },
 });
+
+// =========================================================================
+// Stage 4 — CTE Multiple References
+// =========================================================================
+
+Deno.test({
+  name:
+    "PG Stage 4: WITH CTE single reference produces correct filtered results",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    try {
+      const { manager, schema } = await applyEmployeeSchema(pool);
+
+      // Seed data: mix of active and inactive employees
+      await pool.query(`
+        INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
+          (gen_random_uuid(), 'Alice', 'eng', 100000, true),
+          (gen_random_uuid(), 'Bob', 'eng', 120000, false),
+          (gen_random_uuid(), 'Carol', 'sales', 90000, true),
+          (gen_random_uuid(), 'Dave', 'ops', 80000, true),
+          (gen_random_uuid(), 'Eve', 'sales', 95000, false)
+      `);
+
+      // Compile and execute a WITH CTE query
+      const sql = compileEdgeQL(
+        `WITH active_emps := (SELECT TestEmployee FILTER .active = true)
+         SELECT active_emps { name, department }`,
+        schema,
+      );
+
+      // Verify the SQL uses WITH
+      assertEquals(sql.includes("WITH"), true, "SQL should contain WITH");
+      assertEquals(
+        sql.includes("active_emps"),
+        true,
+        "SQL should reference CTE alias 'active_emps'",
+      );
+
+      const result = await pool.query(sql);
+
+      // Should return only active employees: Alice, Carol, Dave
+      assertEquals(
+        result.rowCount,
+        3,
+        "CTE should return exactly 3 active employees",
+      );
+
+      const names = result.rows.map((row: Record<string, unknown>) => {
+        const data = row.jsonb_build_object ?? row;
+        return (data as Record<string, unknown>).name;
+      });
+      assertEquals(
+        names.sort(),
+        ["Alice", "Carol", "Dave"],
+        "CTE should return Alice, Carol, and Dave (active employees)",
+      );
+
+      await manager.close();
+    } finally {
+      await cleanupEmployee(pool);
+      await pool.close();
+    }
+  },
+});
+
+Deno.test({
+  name:
+    "PG Stage 4: CTE referenced multiple times in raw SQL produces correct results",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    try {
+      const { manager } = await applyEmployeeSchema(pool);
+
+      // Seed data: employees with varying salaries
+      await pool.query(`
+        INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
+          (gen_random_uuid(), 'Alice', 'eng', 60000, true),
+          (gen_random_uuid(), 'Bob', 'eng', 80000, true),
+          (gen_random_uuid(), 'Carol', 'sales', 90000, true),
+          (gen_random_uuid(), 'Dave', 'ops', 40000, true),
+          (gen_random_uuid(), 'Eve', 'sales', 70000, true)
+      `);
+
+      // Run a raw SQL CTE that references the CTE name in two places:
+      // once for counting and once for listing names.
+      // This verifies PostgreSQL correctly handles multiple CTE references.
+      const cteSQL = `
+        WITH high_earners AS (
+          SELECT name, salary FROM ${EMPLOYEE_TABLE} WHERE salary > 50000
+        )
+        SELECT
+          (SELECT COUNT(*)::int FROM high_earners) AS total_count,
+          (SELECT json_agg(name ORDER BY name) FROM high_earners) AS names
+      `;
+
+      const result = await pool.query(cteSQL);
+
+      // Employees with salary > 50000: Alice (60k), Bob (80k), Carol (90k), Eve (70k)
+      assertEquals(
+        Number(result.rows[0].total_count),
+        4,
+        "Should count 4 high earners (salary > 50000)",
+      );
+
+      const names = result.rows[0].names as string[];
+      assertEquals(
+        names.sort(),
+        ["Alice", "Bob", "Carol", "Eve"],
+        "CTE multi-reference should list Alice, Bob, Carol, Eve",
+      );
+
+      await manager.close();
+    } finally {
+      await cleanupEmployee(pool);
+      await pool.close();
+    }
+  },
+});

@@ -91,11 +91,37 @@ export class EdgeQLParser {
     const bindings: AST.WithBinding[] = [];
 
     do {
+      let recursive = false;
+
+      // Check for RECURSIVE modifier with look-ahead.
+      // "recursive" is parsed as an IDENT. We distinguish the modifier from a
+      // binding named "recursive" by peeking at the token after it: if the
+      // next token is NOT `:=`, then "recursive" is a modifier and the real
+      // binding name follows.
+      if (
+        this.check(TokenType.IDENT) &&
+        this.peek().value.toLowerCase() === "recursive"
+      ) {
+        const nextPos = this.current + 1;
+        if (
+          nextPos < this.tokens.length &&
+          this.tokens[nextPos].type !== TokenType.ASSIGN
+        ) {
+          this.advance(); // consume "recursive"
+          recursive = true;
+        }
+      }
+
       const name = this.parseIdentifier();
       this.consume(TokenType.ASSIGN, "Expected ':=' in WITH binding");
       const value = this.parseExpression();
 
-      bindings.push({ kind: "WithBinding", name, value });
+      bindings.push({
+        kind: "WithBinding",
+        name,
+        value,
+        recursive: recursive || undefined,
+      });
     } while (this.match(TokenType.COMMA));
 
     const body = this.parseQuery();
@@ -1119,6 +1145,59 @@ export class EdgeQLParser {
           mode,
           start,
         };
+      }
+
+      // Parse optional EXCLUDE clause
+      if (
+        frame && this.check(TokenType.IDENT) &&
+        this.peek().value.toLowerCase() === "exclude"
+      ) {
+        this.advance(); // consume "exclude"
+
+        if (this.check(TokenType.CURRENT)) {
+          this.advance(); // consume CURRENT
+          // expect ROW as identifier
+          if (
+            this.check(TokenType.IDENT) &&
+            this.peek().value.toLowerCase() === "row"
+          ) {
+            this.advance();
+            frame.exclude = "CURRENT ROW";
+          } else {
+            throw this.error("Expected 'ROW' after 'CURRENT' in EXCLUDE");
+          }
+        } else if (this.check(TokenType.GROUP)) {
+          this.advance();
+          frame.exclude = "GROUP";
+        } else if (this.check(TokenType.IDENT)) {
+          const val = this.peek().value.toLowerCase();
+          if (val === "ties") {
+            this.advance();
+            frame.exclude = "TIES";
+          } else if (val === "no") {
+            this.advance();
+            // expect "others" as identifier
+            if (
+              this.check(TokenType.IDENT) &&
+              this.peek().value.toLowerCase() === "others"
+            ) {
+              this.advance();
+              frame.exclude = "NO OTHERS";
+            } else {
+              throw this.error(
+                "Expected 'OTHERS' after 'NO' in EXCLUDE",
+              );
+            }
+          } else {
+            throw this.error(
+              "Expected 'CURRENT ROW', 'GROUP', 'TIES', or 'NO OTHERS' after 'EXCLUDE'",
+            );
+          }
+        } else {
+          throw this.error(
+            "Expected 'CURRENT ROW', 'GROUP', 'TIES', or 'NO OTHERS' after 'EXCLUDE'",
+          );
+        }
       }
     }
 

@@ -1045,6 +1045,11 @@ export class EdgeQLCompiler {
     // Standard 1:1 function name mapping
     let sqlName = functionName;
     const funcDef = this.ctx.schema.functions.get(functionName);
+    if (funcDef?.windowOnly) {
+      throw new CompilationError(
+        `Function '${functionName}' requires an OVER clause`,
+      );
+    }
     if (funcDef?.sqlName) {
       sqlName = funcDef.sqlName;
     }
@@ -1061,6 +1066,11 @@ export class EdgeQLCompiler {
     // Map function name to SQL
     let sqlName = functionName;
     const funcDef = this.ctx.schema.functions.get(functionName);
+    if (!funcDef?.windowOnly && !funcDef?.windowCompatible) {
+      throw new CompilationError(
+        `Function '${functionName}' cannot be used with an OVER clause`,
+      );
+    }
     if (funcDef?.sqlName) {
       sqlName = funcDef.sqlName;
     }
@@ -1105,6 +1115,7 @@ export class EdgeQLCompiler {
         mode: over.frame.mode,
         start,
         end,
+        exclude: over.frame.exclude,
       };
     }
 
@@ -1401,7 +1412,7 @@ export class EdgeQLCompiler {
       ctes.push({
         kind: "CTE",
         name: cteName,
-        recursive: false,
+        recursive: binding.recursive || false,
         columns: [],
         query: bindingQuery,
       });

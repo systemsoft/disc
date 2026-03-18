@@ -61,6 +61,8 @@ export interface FunctionDef {
   args: ArgDef[];
   returnType: string;
   sqlName?: string;
+  windowOnly?: boolean; // true for functions that REQUIRE an OVER clause (row_number, rank, etc.)
+  windowCompatible?: boolean; // true for functions that CAN use an OVER clause (count, sum, etc.)
 }
 
 export interface ArgDef {

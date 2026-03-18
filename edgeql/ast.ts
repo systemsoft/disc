@@ -76,6 +76,7 @@ export interface WithBinding extends EdgeQLNode {
   kind: "WithBinding";
   name: Identifier;
   value: Expression;
+  recursive?: boolean;
 }
 
 // GROUP query
@@ -355,6 +356,7 @@ export interface WindowFrameClause extends EdgeQLNode {
   mode: "ROWS" | "RANGE" | "GROUPS";
   start: FrameBound;
   end?: FrameBound;
+  exclude?: "CURRENT ROW" | "GROUP" | "TIES" | "NO OTHERS";
 }
 
 export interface FrameBound extends EdgeQLNode {

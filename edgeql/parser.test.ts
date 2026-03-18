@@ -633,3 +633,156 @@ Deno.test("EdgeQL Analyzer - Type Checking", () => {
   // Without schema, analyzer should still run without crashing
   assertEquals(Array.isArray(errors), true);
 });
+
+Deno.test("frame exclusion parsing - EXCLUDE CURRENT ROW", () => {
+  const source = `
+    SELECT User {
+      name,
+      rn := row_number() OVER (ORDER BY .name ASC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE CURRENT ROW)
+    }
+  `;
+
+  const parser = new EdgeQLParser(source);
+  const ast = parser.parse();
+
+  assertEquals(ast.kind, "SelectQuery");
+  if (ast.kind === "SelectQuery") {
+    const rnElement = ast.shape?.elements[1];
+    assertEquals(rnElement?.expr.kind, "WindowFunctionCall");
+
+    if (rnElement?.expr.kind === "WindowFunctionCall") {
+      assertEquals(rnElement.expr.over.frame?.kind, "WindowFrameClause");
+      assertEquals(rnElement.expr.over.frame?.mode, "ROWS");
+      assertEquals(
+        rnElement.expr.over.frame?.start.type,
+        "UNBOUNDED PRECEDING",
+      );
+      assertEquals(rnElement.expr.over.frame?.end?.type, "CURRENT ROW");
+      assertEquals(rnElement.expr.over.frame?.exclude, "CURRENT ROW");
+    }
+  }
+});
+
+Deno.test("frame exclusion parsing - EXCLUDE GROUP", () => {
+  const source = `
+    SELECT User {
+      name,
+      rn := row_number() OVER (ORDER BY .name ASC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE GROUP)
+    }
+  `;
+
+  const parser = new EdgeQLParser(source);
+  const ast = parser.parse();
+
+  assertEquals(ast.kind, "SelectQuery");
+  if (ast.kind === "SelectQuery") {
+    const rnElement = ast.shape?.elements[1];
+    assertEquals(rnElement?.expr.kind, "WindowFunctionCall");
+
+    if (rnElement?.expr.kind === "WindowFunctionCall") {
+      assertEquals(rnElement.expr.over.frame?.kind, "WindowFrameClause");
+      assertEquals(rnElement.expr.over.frame?.exclude, "GROUP");
+    }
+  }
+});
+
+Deno.test("frame exclusion parsing - EXCLUDE TIES", () => {
+  const source = `
+    SELECT User {
+      name,
+      rn := row_number() OVER (ORDER BY .name ASC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE TIES)
+    }
+  `;
+
+  const parser = new EdgeQLParser(source);
+  const ast = parser.parse();
+
+  assertEquals(ast.kind, "SelectQuery");
+  if (ast.kind === "SelectQuery") {
+    const rnElement = ast.shape?.elements[1];
+    assertEquals(rnElement?.expr.kind, "WindowFunctionCall");
+
+    if (rnElement?.expr.kind === "WindowFunctionCall") {
+      assertEquals(rnElement.expr.over.frame?.kind, "WindowFrameClause");
+      assertEquals(rnElement.expr.over.frame?.exclude, "TIES");
+    }
+  }
+});
+
+Deno.test("frame exclusion parsing - EXCLUDE NO OTHERS", () => {
+  const source = `
+    SELECT User {
+      name,
+      rn := row_number() OVER (ORDER BY .name ASC ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW EXCLUDE NO OTHERS)
+    }
+  `;
+
+  const parser = new EdgeQLParser(source);
+  const ast = parser.parse();
+
+  assertEquals(ast.kind, "SelectQuery");
+  if (ast.kind === "SelectQuery") {
+    const rnElement = ast.shape?.elements[1];
+    assertEquals(rnElement?.expr.kind, "WindowFunctionCall");
+
+    if (rnElement?.expr.kind === "WindowFunctionCall") {
+      assertEquals(rnElement.expr.over.frame?.kind, "WindowFrameClause");
+      assertEquals(rnElement.expr.over.frame?.exclude, "NO OTHERS");
+    }
+  }
+});
+
+// =========================================================================
+// Recursive CTE Parsing
+// =========================================================================
+
+Deno.test("EdgeQL Parser - WITH RECURSIVE binding", () => {
+  const source = `WITH RECURSIVE nums := (SELECT User) SELECT nums`;
+
+  const parser = new EdgeQLParser(source);
+  const ast = parser.parse();
+
+  assertEquals(ast.kind, "WithBlock");
+  if (ast.kind === "WithBlock") {
+    assertEquals(ast.bindings.length, 1);
+    assertEquals(ast.bindings[0].name.name, "nums");
+    assertEquals(ast.bindings[0].recursive, true);
+    assertEquals(ast.body.kind, "SelectQuery");
+  }
+});
+
+Deno.test("EdgeQL Parser - WITH non-recursive default", () => {
+  const source = `WITH active := (SELECT User) SELECT active`;
+
+  const parser = new EdgeQLParser(source);
+  const ast = parser.parse();
+
+  assertEquals(ast.kind, "WithBlock");
+  if (ast.kind === "WithBlock") {
+    assertEquals(ast.bindings.length, 1);
+    assertEquals(ast.bindings[0].name.name, "active");
+    assertEquals(ast.bindings[0].recursive, undefined);
+    assertEquals(ast.body.kind, "SelectQuery");
+  }
+});
+
+Deno.test("EdgeQL Parser - WITH mixed recursive and non-recursive", () => {
+  const source = `
+    WITH
+      RECURSIVE tree := (SELECT User),
+      flat := (SELECT User)
+    SELECT tree
+  `;
+
+  const parser = new EdgeQLParser(source);
+  const ast = parser.parse();
+
+  assertEquals(ast.kind, "WithBlock");
+  if (ast.kind === "WithBlock") {
+    assertEquals(ast.bindings.length, 2);
+    assertEquals(ast.bindings[0].name.name, "tree");
+    assertEquals(ast.bindings[0].recursive, true);
+    assertEquals(ast.bindings[1].name.name, "flat");
+    assertEquals(ast.bindings[1].recursive, undefined);
+  }
+});

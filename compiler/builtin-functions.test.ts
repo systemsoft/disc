@@ -413,3 +413,83 @@ Deno.test("each call returns a fresh Map instance", () => {
     "both should have the same number of entries",
   );
 });
+
+// Window function classification tests
+
+Deno.test("window-only functions have windowOnly: true", () => {
+  const fns = getBuiltinFunctions();
+  const windowOnlyNames = [
+    "row_number",
+    "rank",
+    "dense_rank",
+    "ntile",
+    "lag",
+    "lead",
+    "first_value",
+    "last_value",
+  ];
+
+  for (const name of windowOnlyNames) {
+    const fn = fns.get(name);
+    assertExists(fn, `${name} should exist in built-in functions`);
+    assertEquals(
+      fn.windowOnly,
+      true,
+      `${name} should have windowOnly === true`,
+    );
+  }
+});
+
+Deno.test("aggregate functions have windowCompatible: true", () => {
+  const fns = getBuiltinFunctions();
+  const windowCompatibleNames = [
+    "count",
+    "min",
+    "max",
+    "sum",
+    "avg",
+    "stddev",
+    "stddev_pop",
+    "stddev_samp",
+    "array_agg",
+  ];
+
+  for (const name of windowCompatibleNames) {
+    const fn = fns.get(name);
+    assertExists(fn, `${name} should exist in built-in functions`);
+    assertEquals(
+      fn.windowCompatible,
+      true,
+      `${name} should have windowCompatible === true`,
+    );
+  }
+});
+
+Deno.test("scalar functions have neither windowOnly nor windowCompatible", () => {
+  const fns = getBuiltinFunctions();
+  const scalarNames = [
+    "len",
+    "str_lower",
+    "str_upper",
+    "math_abs",
+    "math_ceil",
+    "math_floor",
+    "round",
+    "str_trim",
+  ];
+
+  for (const name of scalarNames) {
+    const fn = fns.get(name);
+    assertExists(fn, `${name} should exist in built-in functions`);
+    assertEquals(
+      fn.windowOnly,
+      undefined,
+      `${name} should not have windowOnly set`,
+    );
+    assertEquals(
+      fn.windowCompatible,
+      undefined,
+      `${name} should not have windowCompatible set`,
+    );
+  }
+});

@@ -438,6 +438,9 @@ export class SQLCodeGenerator {
       if (over) over += " ";
       over +=
         `${expr.over.frame.mode} BETWEEN ${expr.over.frame.start} AND ${expr.over.frame.end}`;
+      if (expr.over.frame.exclude) {
+        over += ` EXCLUDE ${expr.over.frame.exclude}`;
+      }
     }
 
     return `${expr.function}(${args}) OVER (${over})`;
