@@ -1502,3 +1502,229 @@ Deno.test({
     }
   },
 });
+
+// =========================================================================
+// Frame Exclusion & Recursive CTEs — PG E2E
+// =========================================================================
+
+Deno.test({
+  name:
+    "PG E2E: Frame exclusion — SUM OVER ROWS EXCLUDE CURRENT ROW computes correctly",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    try {
+      const { manager } = await applyEmployeeSchema(pool);
+
+      // Seed 4 employees with distinct salaries
+      await pool.query(`
+        INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
+          (gen_random_uuid(), 'Alice', 'eng', 100, true),
+          (gen_random_uuid(), 'Bob', 'eng', 200, true),
+          (gen_random_uuid(), 'Carol', 'eng', 300, true),
+          (gen_random_uuid(), 'Dave', 'eng', 400, true)
+      `);
+
+      // Frame exclusion: running sum of all preceding rows EXCLUDING the
+      // current row.
+      //
+      // Alphabetical order: Alice(100), Bob(200), Carol(300), Dave(400)
+      //
+      // ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW gives a frame that
+      // includes every row from the start up to and including the current row.
+      // EXCLUDE CURRENT ROW removes the current row from that frame.
+      //
+      // Expected running_sum values:
+      //   Alice: frame is {Alice} minus Alice → empty → NULL
+      //   Bob:   frame is {Alice, Bob} minus Bob → {Alice} → 100
+      //   Carol: frame is {Alice, Bob, Carol} minus Carol → {Alice, Bob} → 300
+      //   Dave:  frame is {Alice, Bob, Carol, Dave} minus Dave → {Alice, Bob, Carol} → 600
+      const result = await pool.query(`
+        SELECT
+          name,
+          salary,
+          SUM(salary) OVER (
+            ORDER BY name
+            ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+            EXCLUDE CURRENT ROW
+          ) AS running_sum
+        FROM ${EMPLOYEE_TABLE}
+        ORDER BY name
+      `);
+
+      assertEquals(result.rowCount, 4, "Should return 4 rows");
+
+      // Alice: no preceding rows after excluding self → NULL
+      assertEquals(
+        result.rows[0].name,
+        "Alice",
+        "First row should be Alice",
+      );
+      assertEquals(
+        result.rows[0].running_sum,
+        null,
+        "Alice running_sum should be NULL (no other rows in frame)",
+      );
+
+      // Bob: only Alice in frame → 100
+      assertEquals(result.rows[1].name, "Bob", "Second row should be Bob");
+      assertEquals(
+        Number(result.rows[1].running_sum),
+        100,
+        "Bob running_sum should be 100 (Alice only)",
+      );
+
+      // Carol: Alice + Bob in frame → 300
+      assertEquals(
+        result.rows[2].name,
+        "Carol",
+        "Third row should be Carol",
+      );
+      assertEquals(
+        Number(result.rows[2].running_sum),
+        300,
+        "Carol running_sum should be 300 (Alice + Bob)",
+      );
+
+      // Dave: Alice + Bob + Carol in frame → 600
+      assertEquals(result.rows[3].name, "Dave", "Fourth row should be Dave");
+      assertEquals(
+        Number(result.rows[3].running_sum),
+        600,
+        "Dave running_sum should be 600 (Alice + Bob + Carol)",
+      );
+
+      await manager.close();
+    } finally {
+      await cleanupEmployee(pool);
+      await pool.close();
+    }
+  },
+});
+
+Deno.test({
+  name: "PG E2E: Recursive CTE — generate series 1..5",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    try {
+      // Pure SQL — no schema setup needed.
+      // WITH RECURSIVE builds a sequence from 1 to 5.
+      const result = await pool.query(`
+        WITH RECURSIVE nums(n) AS (
+          SELECT 1
+          UNION ALL
+          SELECT n + 1 FROM nums WHERE n < 5
+        )
+        SELECT n FROM nums ORDER BY n
+      `);
+
+      assertEquals(result.rowCount, 5, "Should return 5 rows");
+
+      const values = result.rows.map((row: Record<string, unknown>) =>
+        Number(row.n)
+      );
+      assertEquals(
+        values,
+        [1, 2, 3, 4, 5],
+        "Recursive CTE should produce [1, 2, 3, 4, 5]",
+      );
+    } finally {
+      await pool.close();
+    }
+  },
+});
+
+Deno.test({
+  name: "PG E2E: Recursive CTE — org chart hierarchy traversal",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    try {
+      // Create a temporary table for the org chart
+      await pool.query(`
+        CREATE TEMPORARY TABLE temp_org (
+          id SERIAL PRIMARY KEY,
+          name TEXT NOT NULL,
+          manager_id INT REFERENCES temp_org(id)
+        )
+      `);
+
+      // Insert hierarchy: CEO → VP → Director → Manager
+      await pool.query(
+        "INSERT INTO temp_org (id, name, manager_id) VALUES (1, 'CEO', NULL)",
+      );
+      await pool.query(
+        "INSERT INTO temp_org (id, name, manager_id) VALUES (2, 'VP', 1)",
+      );
+      await pool.query(
+        "INSERT INTO temp_org (id, name, manager_id) VALUES (3, 'Director', 2)",
+      );
+      await pool.query(
+        "INSERT INTO temp_org (id, name, manager_id) VALUES (4, 'Manager', 3)",
+      );
+
+      // Recursive CTE to traverse the hierarchy and compute depth
+      const result = await pool.query(`
+        WITH RECURSIVE org_chart(id, name, manager_id, depth) AS (
+          SELECT id, name, manager_id, 0
+          FROM temp_org
+          WHERE manager_id IS NULL
+          UNION ALL
+          SELECT e.id, e.name, e.manager_id, oc.depth + 1
+          FROM temp_org e
+          JOIN org_chart oc ON e.manager_id = oc.id
+        )
+        SELECT name, depth FROM org_chart ORDER BY depth, name
+      `);
+
+      assertEquals(result.rowCount, 4, "Should return 4 org chart members");
+
+      // Verify depth-ordered results
+      assertEquals(result.rows[0].name, "CEO", "Depth 0 should be CEO");
+      assertEquals(
+        Number(result.rows[0].depth),
+        0,
+        "CEO should be at depth 0",
+      );
+
+      assertEquals(result.rows[1].name, "VP", "Depth 1 should be VP");
+      assertEquals(Number(result.rows[1].depth), 1, "VP should be at depth 1");
+
+      assertEquals(
+        result.rows[2].name,
+        "Director",
+        "Depth 2 should be Director",
+      );
+      assertEquals(
+        Number(result.rows[2].depth),
+        2,
+        "Director should be at depth 2",
+      );
+
+      assertEquals(
+        result.rows[3].name,
+        "Manager",
+        "Depth 3 should be Manager",
+      );
+      assertEquals(
+        Number(result.rows[3].depth),
+        3,
+        "Manager should be at depth 3",
+      );
+    } finally {
+      // Clean up the temporary table
+      await pool.query("DROP TABLE IF EXISTS temp_org CASCADE");
+      await pool.close();
+    }
+  },
+});

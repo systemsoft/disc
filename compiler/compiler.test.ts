@@ -1204,7 +1204,11 @@ Deno.test("Frame exclusion compiles to correct SQL", () => {
 
 Deno.test("SQL Compiler - WITH RECURSIVE generates SQL WITH RECURSIVE", () => {
   const source = `
-    WITH RECURSIVE nums := (SELECT User FILTER .active = true)
+    WITH RECURSIVE nums := (
+      SELECT User FILTER .active = true
+      UNION
+      SELECT User FILTER .name = 'admin'
+    )
     SELECT nums { name }
   `;
   const sql = compileEdgeQL(source);
@@ -1237,6 +1241,59 @@ Deno.test("SQL Compiler - WITH without RECURSIVE does not produce WITH RECURSIVE
     sql.includes("WITH RECURSIVE"),
     false,
     "SQL should NOT contain WITH RECURSIVE",
+  );
+});
+
+Deno.test("SQL Compiler - recursive CTE requires UNION ALL", () => {
+  const source = `
+    WITH RECURSIVE nums := (SELECT User FILTER .active = true)
+    SELECT nums
+  `;
+
+  assertThrows(
+    () => compileEdgeQL(source),
+    CompilationError,
+    "must contain a UNION ALL between base case and recursive case",
+  );
+});
+
+Deno.test("SQL Compiler - recursive CTE rejects INTERSECT", () => {
+  const source = `
+    WITH RECURSIVE nums := (
+      SELECT User FILTER .active = true
+      INTERSECT
+      SELECT User FILTER .name = 'admin'
+    )
+    SELECT nums
+  `;
+
+  assertThrows(
+    () => compileEdgeQL(source),
+    CompilationError,
+    "must contain a UNION ALL between base case and recursive case",
+  );
+});
+
+Deno.test("SQL Compiler - valid recursive CTE with UNION compiles", () => {
+  const source = `
+    WITH RECURSIVE nums := (
+      SELECT User FILTER .active = true
+      UNION
+      SELECT User FILTER .name = 'admin'
+    )
+    SELECT nums { name }
+  `;
+  const sql = compileEdgeQL(source);
+
+  assertEquals(
+    sql.includes("WITH RECURSIVE"),
+    true,
+    "SQL should contain WITH RECURSIVE",
+  );
+  assertEquals(
+    sql.includes("UNION ALL"),
+    true,
+    "SQL should contain UNION ALL",
   );
 });
 

@@ -1369,6 +1369,21 @@ export class EdgeQLCompiler {
     const registeredAliases: string[] = [];
 
     for (const binding of query.bindings) {
+      // Validate recursive CTEs: must contain a UNION (which maps to SQL
+      // UNION ALL) between a base case and recursive case
+      if (binding.recursive) {
+        const hasUnion = binding.value.kind === "Subquery" &&
+          binding.value.query.kind === "SelectQuery" &&
+          binding.value.query.expr.kind === "BinaryOp" &&
+          (binding.value.query.expr as EdgeQLAST.BinaryOp).op === "UNION";
+
+        if (!hasUnion) {
+          throw new CompilationError(
+            `Recursive CTE '${binding.name.name}' must contain a UNION ALL between base case and recursive case`,
+          );
+        }
+      }
+
       let bindingQuery: SQL.SQLStatement;
       let underlyingTypeName: string | undefined;
 
