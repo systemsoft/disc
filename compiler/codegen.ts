@@ -6,6 +6,40 @@
 import * as SQL from "./sql.ts";
 
 export class SQLCodeGenerator {
+  private static readonly RESERVED_KEYWORDS = new Set([
+    "SELECT",
+    "FROM",
+    "WHERE",
+    "INSERT",
+    "UPDATE",
+    "DELETE",
+    "JOIN",
+    "INNER",
+    "LEFT",
+    "RIGHT",
+    "FULL",
+    "ON",
+    "AS",
+    "AND",
+    "OR",
+    "NOT",
+    "ORDER",
+    "BY",
+    "GROUP",
+    "HAVING",
+    "LIMIT",
+    "OFFSET",
+    "DISTINCT",
+    "CASE",
+    "WHEN",
+    "THEN",
+    "ELSE",
+    "END",
+    "NULL",
+    "TRUE",
+    "FALSE",
+  ]);
+
   private indentLevel = 0;
   private readonly indentSize = 2;
 
@@ -37,56 +71,68 @@ export class SQLCodeGenerator {
   }
 
   private generateSelectStatement(stmt: SQL.SelectStatement): string {
-    let sql = "SELECT";
+    const parts: string[] = [];
 
-    // DISTINCT
+    // SELECT + DISTINCT
     if (stmt.select.distinct) {
-      sql += " DISTINCT";
+      parts.push("SELECT DISTINCT");
+    } else {
+      parts.push("SELECT");
     }
 
     // SELECT clause
-    sql += "\n" + this.indent() + this.generateSelectClause(stmt.select);
+    parts.push("\n" + this.indent() + this.generateSelectClause(stmt.select));
 
     // FROM clause
     if (stmt.from && stmt.from.tables.length > 0) {
-      sql += "\nFROM\n" + this.indent() + this.generateFromClause(stmt.from);
+      parts.push(
+        "\nFROM\n" + this.indent() + this.generateFromClause(stmt.from),
+      );
     }
 
     // WHERE clause
     if (stmt.where) {
-      sql += "\nWHERE\n" + this.indent() +
-        this.generateExpression(stmt.where.condition);
+      parts.push(
+        "\nWHERE\n" + this.indent() +
+          this.generateExpression(stmt.where.condition),
+      );
     }
 
     // GROUP BY clause
     if (stmt.groupBy) {
-      sql += "\nGROUP BY\n" + this.indent() +
-        this.generateGroupByClause(stmt.groupBy);
+      parts.push(
+        "\nGROUP BY\n" + this.indent() +
+          this.generateGroupByClause(stmt.groupBy),
+      );
     }
 
     // HAVING clause
     if (stmt.having) {
-      sql += "\nHAVING\n" + this.indent() +
-        this.generateExpression(stmt.having.condition);
+      parts.push(
+        "\nHAVING\n" + this.indent() +
+          this.generateExpression(stmt.having.condition),
+      );
     }
 
     // ORDER BY clause
     if (stmt.orderBy) {
-      sql += "\nORDER BY\n" + this.indent() +
-        this.generateOrderByClause(stmt.orderBy);
+      parts.push(
+        "\nORDER BY\n" + this.indent() +
+          this.generateOrderByClause(stmt.orderBy),
+      );
     }
 
     // LIMIT clause
     if (stmt.limit) {
-      sql += "\nLIMIT " + this.generateExpression(stmt.limit.count);
+      parts.push("\nLIMIT " + this.generateExpression(stmt.limit.count));
     }
 
     // OFFSET clause
     if (stmt.offset) {
-      sql += "\nOFFSET " + this.generateExpression(stmt.offset.count);
+      parts.push("\nOFFSET " + this.generateExpression(stmt.offset.count));
     }
 
-    return sql;
+    return parts.join("");
   }
 
   private generateSelectClause(select: SQL.SelectClause): string {
@@ -110,34 +156,40 @@ export class SQLCodeGenerator {
   }
 
   private generateTableReference(table: SQL.TableReference): string {
-    let sql: string;
+    const parts: string[] = [];
 
     if (table.subquery) {
       const lateral = table.lateral ? "LATERAL " : "";
       this.indentLevel++;
       const subSql = this.generateStatement(table.subquery);
       this.indentLevel--;
-      sql = `${lateral}(\n${this.indent()}  ${subSql}\n${this.indent()})`;
+      parts.push(
+        `${lateral}(\n${this.indent()}  ${subSql}\n${this.indent()})`,
+      );
     } else {
-      sql = this.escapeIdentifier(table.name);
+      parts.push(this.escapeIdentifier(table.name));
     }
 
     if (table.alias) {
-      sql += " AS " + this.escapeIdentifier(table.alias);
+      parts.push(" AS " + this.escapeIdentifier(table.alias));
       if (table.columnAliases && table.columnAliases.length > 0) {
-        sql += "(" +
-          table.columnAliases.map((c) => this.escapeIdentifier(c)).join(", ") +
-          ")";
+        parts.push(
+          "(" +
+            table.columnAliases.map((c) => this.escapeIdentifier(c)).join(
+              ", ",
+            ) +
+            ")",
+        );
       }
     }
 
     if (table.joins) {
       for (const join of table.joins) {
-        sql += "\n" + this.generateJoinClause(join);
+        parts.push("\n" + this.generateJoinClause(join));
       }
     }
 
-    return sql;
+    return parts.join("");
   }
 
   private generateJoinClause(join: SQL.JoinClause): string {
@@ -158,33 +210,43 @@ export class SQLCodeGenerator {
   }
 
   private generateInsertStatement(stmt: SQL.InsertStatement): string {
-    let sql = "INSERT INTO " + this.escapeIdentifier(stmt.table);
+    const parts: string[] = [];
+
+    parts.push("INSERT INTO " + this.escapeIdentifier(stmt.table));
 
     if (stmt.columns.length > 0) {
-      sql += " (" + stmt.columns.map((col) =>
-        this.escapeIdentifier(col)
-      ).join(", ") + ")";
+      parts.push(
+        " (" + stmt.columns.map((col) =>
+          this.escapeIdentifier(col)
+        ).join(", ") + ")",
+      );
     }
 
-    sql += "\nVALUES";
+    parts.push("\nVALUES");
 
     for (let i = 0; i < stmt.values.length; i++) {
-      if (i > 0) sql += ",";
-      sql += "\n" + this.indent() + "(" + stmt.values[i].map((expr) =>
-        this.generateExpression(expr)
-      ).join(", ") + ")";
+      if (i > 0) parts.push(",");
+      parts.push(
+        "\n" + this.indent() + "(" + stmt.values[i].map((expr) =>
+          this.generateExpression(expr)
+        ).join(", ") + ")",
+      );
     }
 
     if (stmt.onConflict) {
-      sql += "\n" + this.generateOnConflictClause(stmt.onConflict);
+      parts.push("\n" + this.generateOnConflictClause(stmt.onConflict));
     }
 
     if (stmt.returning) {
-      sql += "\nRETURNING " +
-        stmt.returning.map((item) => this.generateSelectItem(item)).join(", ");
+      parts.push(
+        "\nRETURNING " +
+          stmt.returning.map((item) => this.generateSelectItem(item)).join(
+            ", ",
+          ),
+      );
     }
 
-    return sql;
+    return parts.join("");
   }
 
   private generateOnConflictClause(onConflict: SQL.OnConflictClause): string {
@@ -344,21 +406,27 @@ export class SQLCodeGenerator {
   }
 
   private generateCaseExpression(expr: SQL.CaseExpression): string {
-    let sql = "CASE";
+    const parts: string[] = [];
+
+    parts.push("CASE");
 
     for (const whenClause of expr.when) {
-      sql += "\n" + this.indent() + "WHEN " +
-        this.generateExpression(whenClause.condition);
-      sql += " THEN " + this.generateExpression(whenClause.then);
+      parts.push(
+        "\n" + this.indent() + "WHEN " +
+          this.generateExpression(whenClause.condition),
+      );
+      parts.push(" THEN " + this.generateExpression(whenClause.then));
     }
 
     if (expr.else) {
-      sql += "\n" + this.indent() + "ELSE " +
-        this.generateExpression(expr.else);
+      parts.push(
+        "\n" + this.indent() + "ELSE " +
+          this.generateExpression(expr.else),
+      );
     }
 
-    sql += "\n" + this.indent() + "END";
-    return sql;
+    parts.push("\n" + this.indent() + "END");
+    return parts.join("");
   }
 
   private generateJsonBuildObject(expr: SQL.JsonBuildObject): string {
@@ -419,31 +487,36 @@ export class SQLCodeGenerator {
     expr: SQL.WindowFunctionExpression,
   ): string {
     const args = expr.args.map((a) => this.generateExpression(a)).join(", ");
-    let over = "";
+    const overParts: string[] = [];
 
     if (expr.over.partitionBy && expr.over.partitionBy.length > 0) {
-      over += "PARTITION BY " +
-        expr.over.partitionBy.map((e) => this.generateExpression(e)).join(", ");
+      overParts.push(
+        "PARTITION BY " +
+          expr.over.partitionBy.map((e) => this.generateExpression(e)).join(
+            ", ",
+          ),
+      );
     }
 
     if (expr.over.orderBy && expr.over.orderBy.length > 0) {
-      if (over) over += " ";
-      over += "ORDER BY " +
-        expr.over.orderBy.map((item) =>
-          `${this.generateExpression(item.expression)} ${item.direction}`
-        ).join(", ");
+      overParts.push(
+        "ORDER BY " +
+          expr.over.orderBy.map((item) =>
+            `${this.generateExpression(item.expression)} ${item.direction}`
+          ).join(", "),
+      );
     }
 
     if (expr.over.frame) {
-      if (over) over += " ";
-      over +=
+      let frameSql =
         `${expr.over.frame.mode} BETWEEN ${expr.over.frame.start} AND ${expr.over.frame.end}`;
       if (expr.over.frame.exclude) {
-        over += ` EXCLUDE ${expr.over.frame.exclude}`;
+        frameSql += ` EXCLUDE ${expr.over.frame.exclude}`;
       }
+      overParts.push(frameSql);
     }
 
-    return `${expr.function}(${args}) OVER (${over})`;
+    return `${expr.function}(${args}) OVER (${overParts.join(" ")})`;
   }
 
   private generateCastExpression(expr: SQL.CastExpression): string {
@@ -476,40 +549,7 @@ export class SQLCodeGenerator {
   }
 
   private isReservedKeyword(word: string): boolean {
-    const keywords = new Set([
-      "select",
-      "from",
-      "where",
-      "insert",
-      "update",
-      "delete",
-      "join",
-      "inner",
-      "left",
-      "right",
-      "full",
-      "on",
-      "as",
-      "and",
-      "or",
-      "not",
-      "order",
-      "by",
-      "group",
-      "having",
-      "limit",
-      "offset",
-      "distinct",
-      "case",
-      "when",
-      "then",
-      "else",
-      "end",
-      "null",
-      "true",
-      "false",
-    ]);
-    return keywords.has(word.toLowerCase());
+    return SQLCodeGenerator.RESERVED_KEYWORDS.has(word.toUpperCase());
   }
 
   private indent(): string {

@@ -480,7 +480,8 @@ export class EdgeQLLexer {
 
     this.advance(); // Skip opening quote
 
-    let value = "";
+    const parts: string[] = [];
+    let runStart = this.pos;
     let escaped = false;
 
     while (this.pos < this.source.length) {
@@ -493,23 +494,31 @@ export class EdgeQLLexer {
       }
 
       if (escaped) {
-        value += this.processEscape(ch);
+        parts.push(this.processEscape(ch));
         escaped = false;
         this.advance();
+        runStart = this.pos;
       } else if (ch === "\\") {
+        // Flush the plain-text run before the backslash
+        if (this.pos > runStart) {
+          parts.push(this.source.slice(runStart, this.pos));
+        }
         escaped = true;
         this.advance();
       } else if (ch === quote) {
+        // Flush the remaining plain-text run
+        if (this.pos > runStart) {
+          parts.push(this.source.slice(runStart, this.pos));
+        }
         this.advance();
         return createToken(
           TokenType.STRING,
-          value,
+          parts.join(""),
           startLine,
           startColumn,
           startPos,
         );
       } else {
-        value += ch;
         this.advance();
       }
     }
@@ -528,7 +537,7 @@ export class EdgeQLLexer {
     const quote = this.peek();
     this.advance(); // Skip quote
 
-    let value = "";
+    const contentStart = this.pos;
 
     while (this.pos < this.source.length) {
       const ch = this.peek();
@@ -540,6 +549,7 @@ export class EdgeQLLexer {
       }
 
       if (ch === quote) {
+        const value = this.source.slice(contentStart, this.pos);
         this.advance();
         return createToken(
           TokenType.STRING,
@@ -550,7 +560,6 @@ export class EdgeQLLexer {
         );
       }
 
-      value += ch;
       this.advance();
     }
 
@@ -568,7 +577,8 @@ export class EdgeQLLexer {
     const quote = this.peek();
     this.advance(); // Skip quote
 
-    let value = "";
+    const parts: string[] = [];
+    let runStart = this.pos;
     let escaped = false;
 
     while (this.pos < this.source.length) {
@@ -581,23 +591,31 @@ export class EdgeQLLexer {
       }
 
       if (escaped) {
-        value += this.processEscape(ch);
+        parts.push(this.processEscape(ch));
         escaped = false;
         this.advance();
+        runStart = this.pos;
       } else if (ch === "\\") {
+        // Flush the plain-text run before the backslash
+        if (this.pos > runStart) {
+          parts.push(this.source.slice(runStart, this.pos));
+        }
         escaped = true;
         this.advance();
       } else if (ch === quote) {
+        // Flush the remaining plain-text run
+        if (this.pos > runStart) {
+          parts.push(this.source.slice(runStart, this.pos));
+        }
         this.advance();
         return createToken(
           TokenType.BYTES,
-          value,
+          parts.join(""),
           startLine,
           startColumn,
           startPos,
         );
       } else {
-        value += ch;
         this.advance();
       }
     }
@@ -614,7 +632,7 @@ export class EdgeQLLexer {
 
     this.advance(); // Skip opening backtick
 
-    let value = "";
+    const contentStart = this.pos;
 
     while (this.pos < this.source.length) {
       const ch = this.peek();
@@ -626,6 +644,7 @@ export class EdgeQLLexer {
       }
 
       if (ch === "`") {
+        const value = this.source.slice(contentStart, this.pos);
         this.advance();
         return createToken(
           TokenType.BACKTICK_IDENT,
@@ -636,7 +655,6 @@ export class EdgeQLLexer {
         );
       }
 
-      value += ch;
       this.advance();
     }
 
@@ -650,29 +668,24 @@ export class EdgeQLLexer {
     const startLine = this.line;
     const startColumn = this.column;
 
-    let value = "";
     let isFloat = false;
 
     // Handle negative numbers
     if (this.peek() === "-") {
-      value += "-";
       this.advance();
     }
 
     // Scan integer part
     while (this.isDigit(this.peek())) {
-      value += this.peek();
       this.advance();
     }
 
     // Check for decimal point
     if (this.peek() === "." && this.isDigit(this.peekAhead(1))) {
       isFloat = true;
-      value += ".";
       this.advance();
 
       while (this.isDigit(this.peek())) {
-        value += this.peek();
         this.advance();
       }
     }
@@ -681,12 +694,10 @@ export class EdgeQLLexer {
     const ch = this.peek();
     if (ch === "e" || ch === "E") {
       isFloat = true;
-      value += ch;
       this.advance();
 
       const sign = this.peek();
       if (sign === "+" || sign === "-") {
-        value += sign;
         this.advance();
       }
 
@@ -697,16 +708,16 @@ export class EdgeQLLexer {
       }
 
       while (this.isDigit(this.peek())) {
-        value += this.peek();
         this.advance();
       }
     }
 
     // Check for 'n' suffix (bigint)
     if (this.peek() === "n" && !isFloat) {
-      value += "n";
       this.advance();
     }
+
+    const value = this.source.slice(startPos, this.pos);
 
     return createToken(
       isFloat ? TokenType.FLOAT : TokenType.INTEGER,
@@ -722,20 +733,18 @@ export class EdgeQLLexer {
     const startLine = this.line;
     const startColumn = this.column;
 
-    let value = "";
-
     // Handle special built-in names like __source__
     if (this.peek() === "_" && this.peekAhead(1) === "_") {
       while (this.isIdentCont(this.peek()) || this.peek() === "_") {
-        value += this.peek();
         this.advance();
       }
     } else {
       while (this.isIdentCont(this.peek())) {
-        value += this.peek();
         this.advance();
       }
     }
+
+    const value = this.source.slice(startPos, this.pos);
 
     // Check if it's a keyword
     const keywordType = KEYWORDS.get(value.toLowerCase());
@@ -780,8 +789,6 @@ export class EdgeQLLexer {
 
     this.advance(); // Skip $
 
-    let value = "$";
-
     if (!this.isIdentStart(this.peek()) && !this.isDigit(this.peek())) {
       throw new SyntaxError(`Invalid parameter name`, {
         location: { line: startLine, column: startColumn, offset: startPos },
@@ -789,9 +796,10 @@ export class EdgeQLLexer {
     }
 
     while (this.isIdentCont(this.peek()) || this.isDigit(this.peek())) {
-      value += this.peek();
       this.advance();
     }
+
+    const value = this.source.slice(startPos, this.pos);
 
     return createToken(
       TokenType.PARAMETER,

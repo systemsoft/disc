@@ -65,6 +65,11 @@ export class ExplainCache {
       return undefined;
     }
 
+    // LRU reordering: delete and re-insert to move to end of Map
+    // This ensures the oldest (least recently used) entry is always first
+    this.entries.delete(hash);
+    this.entries.set(hash, entry);
+
     this.stats_data.hits++;
     return entry.plan;
   }
@@ -72,10 +77,14 @@ export class ExplainCache {
   set(hash: string, plan: unknown): void {
     const now = this.config.nowFn();
 
-    // Evict expired entries first to free space before capacity check
-    this.evictExpired(now);
+    // Only scan for expired entries when at capacity to avoid unnecessary O(n) scans.
+    // get() already performs lazy per-entry TTL checks, so expired entries are
+    // invisible to callers even without eager scanning.
+    if (this.entries.size >= this.config.max_size) {
+      this.evictExpired(now);
+    }
 
-    // Capacity eviction: remove oldest inserted entry if at max
+    // Capacity eviction: remove oldest (first) entry via Map insertion order — O(1)
     while (this.entries.size >= this.config.max_size) {
       this.evictOldest();
     }
@@ -89,7 +98,16 @@ export class ExplainCache {
   }
 
   stats(): ExplainCacheStats {
-    return { ...this.stats_data, size: this.entries.size };
+    // Count only non-expired entries so size reflects entries visible via get().
+    // This is not on the hot path (diagnostics only), so the scan is acceptable.
+    const now = this.config.nowFn();
+    let liveCount = 0;
+    for (const entry of this.entries.values()) {
+      if (now <= entry.expiresAt) {
+        liveCount++;
+      }
+    }
+    return { ...this.stats_data, size: liveCount };
   }
 
   clear(): void {
@@ -107,18 +125,11 @@ export class ExplainCache {
   }
 
   private evictOldest(): void {
-    let oldestKey: string | undefined;
-    let oldestTime = Infinity;
-
-    for (const [key, entry] of this.entries) {
-      if (entry.inserted_at < oldestTime) {
-        oldestTime = entry.inserted_at;
-        oldestKey = key;
-      }
-    }
-
-    if (oldestKey) {
-      this.entries.delete(oldestKey);
+    // Map preserves insertion order; the first key is the oldest (least recently used)
+    // because get() reorders accessed entries to the end via delete + re-set.
+    const oldest = this.entries.keys().next();
+    if (!oldest.done) {
+      this.entries.delete(oldest.value);
       this.stats_data.evictions++;
     }
   }

@@ -145,15 +145,17 @@ export function union(
 // SQL generation extensions
 
 export function generateCTE(cte: CTE): string {
-  let sql = cte.name;
+  const parts: string[] = [];
+
+  parts.push(cte.name);
 
   if (cte.columns && cte.columns.length > 0) {
-    sql += ` (${cte.columns.join(", ")})`;
+    parts.push(` (${cte.columns.join(", ")})`);
   }
 
-  sql += " AS (" + generateSQL(cte.query) + ")";
+  parts.push(" AS (" + generateSQL(cte.query) + ")");
 
-  return sql;
+  return parts.join("");
 }
 
 export function generateWithClause(withClause: WithClause): string {
@@ -169,51 +171,56 @@ export function generateWithClause(withClause: WithClause): string {
 }
 
 export function generateWindowFunction(window: WindowFunction): string {
-  let sql = window.function + "(";
+  const outerParts: string[] = [];
+
+  outerParts.push(window.function + "(");
 
   if (window.args.length > 0) {
-    sql += window.args.map(generateExpression).join(", ");
+    outerParts.push(window.args.map(generateExpression).join(", "));
   }
 
-  sql += ") OVER (";
+  outerParts.push(") OVER (");
 
   const spec = window.over;
-  const parts: string[] = [];
+  const specParts: string[] = [];
 
   if (spec.partitionBy && spec.partitionBy.length > 0) {
-    parts.push(
+    specParts.push(
       "PARTITION BY " + spec.partitionBy.map(generateExpression).join(", "),
     );
   }
 
   if (spec.orderBy && spec.orderBy.length > 0) {
-    parts.push("ORDER BY " + spec.orderBy.map(generateOrderItem).join(", "));
+    specParts.push(
+      "ORDER BY " + spec.orderBy.map(generateOrderItem).join(", "),
+    );
   }
 
   if (spec.frame) {
-    parts.push(generateWindowFrame(spec.frame));
+    specParts.push(generateWindowFrame(spec.frame));
   }
 
-  sql += parts.join(" ");
-  sql += ")";
+  outerParts.push(specParts.join(" "));
+  outerParts.push(")");
 
-  return sql;
+  return outerParts.join("");
 }
 
 export function generateWindowFrame(frame: WindowFrame): string {
-  let sql = frame.mode + " ";
+  const parts: string[] = [];
 
-  sql += generateFrameBound(frame.start);
+  parts.push(frame.mode + " ");
+  parts.push(generateFrameBound(frame.start));
 
   if (frame.end) {
-    sql += " AND " + generateFrameBound(frame.end);
+    parts.push(" AND " + generateFrameBound(frame.end));
   }
 
   if (frame.exclude) {
-    sql += " EXCLUDE " + frame.exclude;
+    parts.push(" EXCLUDE " + frame.exclude);
   }
 
-  return sql;
+  return parts.join("");
 }
 
 export function generateFrameBound(bound: FrameBound): string {
@@ -225,37 +232,41 @@ export function generateFrameBound(bound: FrameBound): string {
 }
 
 export function generateLateralJoin(lateral: LateralJoin): string {
-  let sql = "LATERAL (" + generateSQL(lateral.subquery) + ")";
+  const parts: string[] = [];
+
+  parts.push("LATERAL (" + generateSQL(lateral.subquery) + ")");
 
   if (lateral.alias) {
-    sql += " AS " + lateral.alias;
+    parts.push(" AS " + lateral.alias);
   }
 
-  return sql;
+  return parts.join("");
 }
 
 export function generateAggregateWithFilter(agg: AggregateWithFilter): string {
-  let sql = agg.function + "(";
+  const parts: string[] = [];
+
+  parts.push(agg.function + "(");
 
   if (agg.distinct) {
-    sql += "DISTINCT ";
+    parts.push("DISTINCT ");
   }
 
   if (agg.args.length > 0) {
-    sql += agg.args.map(generateExpression).join(", ");
+    parts.push(agg.args.map(generateExpression).join(", "));
   }
 
   if (agg.orderBy && agg.orderBy.length > 0) {
-    sql += " ORDER BY " + agg.orderBy.map(generateOrderItem).join(", ");
+    parts.push(" ORDER BY " + agg.orderBy.map(generateOrderItem).join(", "));
   }
 
-  sql += ")";
+  parts.push(")");
 
   if (agg.filter) {
-    sql += " FILTER (WHERE " + generateExpression(agg.filter) + ")";
+    parts.push(" FILTER (WHERE " + generateExpression(agg.filter) + ")");
   }
 
-  return sql;
+  return parts.join("");
 }
 
 export function generateUnion(union: UnionStatement): string {
@@ -264,15 +275,16 @@ export function generateUnion(union: UnionStatement): string {
 }
 
 export function generateOrderItem(item: OrderItem): string {
-  let sql = generateExpression(item.expression);
+  const parts: string[] = [];
 
-  sql += " " + item.direction;
+  parts.push(generateExpression(item.expression));
+  parts.push(" " + item.direction);
 
   if (item.nulls) {
-    sql += " NULLS " + item.nulls;
+    parts.push(" NULLS " + item.nulls);
   }
 
-  return sql;
+  return parts.join("");
 }
 
 // Placeholder functions to be integrated with main SQL module

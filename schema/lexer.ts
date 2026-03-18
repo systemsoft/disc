@@ -391,7 +391,8 @@ export class SDLLexer {
 
     this.advance(); // Skip opening quote
 
-    let value = "";
+    const parts: string[] = [];
+    let runStart = this.pos;
     let escaped = false;
 
     while (this.pos < this.source.length) {
@@ -404,23 +405,31 @@ export class SDLLexer {
       }
 
       if (escaped) {
-        value += this.processEscape(ch);
+        parts.push(this.processEscape(ch));
         escaped = false;
         this.advance();
+        runStart = this.pos;
       } else if (ch === "\\") {
+        // Flush the plain-text run before the backslash
+        if (this.pos > runStart) {
+          parts.push(this.source.slice(runStart, this.pos));
+        }
         escaped = true;
         this.advance();
       } else if (ch === quote) {
+        // Flush the remaining plain-text run
+        if (this.pos > runStart) {
+          parts.push(this.source.slice(runStart, this.pos));
+        }
         this.advance();
         return createToken(
           TokenType.STRING,
-          value,
+          parts.join(""),
           startLine,
           startColumn,
           startPos,
         );
       } else {
-        value += ch;
         this.advance();
       }
     }
@@ -437,7 +446,7 @@ export class SDLLexer {
 
     this.advance(); // Skip opening backtick
 
-    let value = "";
+    const contentStart = this.pos;
 
     while (this.pos < this.source.length) {
       const ch = this.peek();
@@ -449,6 +458,7 @@ export class SDLLexer {
       }
 
       if (ch === "`") {
+        const value = this.source.slice(contentStart, this.pos);
         this.advance();
         return createToken(
           TokenType.BACKTICK_IDENT,
@@ -459,7 +469,6 @@ export class SDLLexer {
         );
       }
 
-      value += ch;
       this.advance();
     }
 
@@ -482,7 +491,7 @@ export class SDLLexer {
 
     this.advance(); // Skip opening quote
 
-    let value = "";
+    const contentStart = this.pos;
 
     while (this.pos < this.source.length) {
       const ch = this.peek();
@@ -494,6 +503,7 @@ export class SDLLexer {
       }
 
       if (ch === quote) {
+        const value = this.source.slice(contentStart, this.pos);
         this.advance();
         return createToken(
           TokenType.STRING,
@@ -504,7 +514,6 @@ export class SDLLexer {
         );
       }
 
-      value += ch;
       this.advance();
     }
 
@@ -518,23 +527,19 @@ export class SDLLexer {
     const startLine = this.line;
     const startColumn = this.column;
 
-    let value = "";
     let isFloat = false;
 
     // Scan integer part
     while (this.isDigit(this.peek())) {
-      value += this.peek();
       this.advance();
     }
 
     // Check for decimal point
     if (this.peek() === "." && this.isDigit(this.peekAhead(1))) {
       isFloat = true;
-      value += ".";
       this.advance();
 
       while (this.isDigit(this.peek())) {
-        value += this.peek();
         this.advance();
       }
     }
@@ -543,12 +548,10 @@ export class SDLLexer {
     const ch = this.peek();
     if (ch === "e" || ch === "E") {
       isFloat = true;
-      value += ch;
       this.advance();
 
       const sign = this.peek();
       if (sign === "+" || sign === "-") {
-        value += sign;
         this.advance();
       }
 
@@ -559,10 +562,11 @@ export class SDLLexer {
       }
 
       while (this.isDigit(this.peek())) {
-        value += this.peek();
         this.advance();
       }
     }
+
+    const value = this.source.slice(startPos, this.pos);
 
     return createToken(
       isFloat ? TokenType.FLOAT : TokenType.INTEGER,
@@ -578,12 +582,11 @@ export class SDLLexer {
     const startLine = this.line;
     const startColumn = this.column;
 
-    let value = "";
-
     while (this.isIdentCont(this.peek())) {
-      value += this.peek();
       this.advance();
     }
+
+    const value = this.source.slice(startPos, this.pos);
 
     // Check if it's a keyword
     const keywordType = KEYWORDS.get(value.toLowerCase());
@@ -617,8 +620,6 @@ export class SDLLexer {
 
     this.advance(); // Skip $
 
-    let value = "$";
-
     if (!this.isIdentStart(this.peek())) {
       throw new SyntaxError(`Invalid parameter name`, {
         location: { line: startLine, column: startColumn, offset: startPos },
@@ -626,9 +627,10 @@ export class SDLLexer {
     }
 
     while (this.isIdentCont(this.peek())) {
-      value += this.peek();
       this.advance();
     }
+
+    const value = this.source.slice(startPos, this.pos);
 
     return createToken(
       TokenType.PARAMETER,

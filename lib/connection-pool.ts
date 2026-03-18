@@ -55,10 +55,13 @@ interface PoolStatistics {
 export class ConnectionPool {
   private config: PoolConfig;
   private connections: Map<string, PooledConnection> = new Map();
+  private connectionToPooled: Map<DatabaseConnection, PooledConnection> =
+    new Map();
   private idleConnections: PooledConnection[] = [];
   private waitQueue: WaitQueueEntry[] = [];
   private cleanupIntervalId?: number;
   private closed = false;
+  private activeCount = 0;
   private leakTimers: Map<string, number> = new Map();
   private stats: PoolStatistics = {
     totalConnections: 0,
@@ -140,6 +143,7 @@ export class ConnectionPool {
       pooled.acquireStackTrace = acquireStack;
       this.startLeakTimer(pooled);
       this.stats.totalAcquired++;
+      this.activeCount++;
       this.updateStats();
       return pooled.connection;
     }
@@ -153,6 +157,7 @@ export class ConnectionPool {
         pooled.acquireStackTrace = acquireStack;
         this.startLeakTimer(pooled);
         this.stats.totalAcquired++;
+        this.activeCount++;
         this.updateStats();
         return pooled.connection;
       }
@@ -182,14 +187,8 @@ export class ConnectionPool {
   }
 
   release(connection: DatabaseConnection): void {
-    // Find the pooled connection
-    let pooled: PooledConnection | undefined;
-    for (const [_id, pc] of this.connections) {
-      if (pc.connection === connection) {
-        pooled = pc;
-        break;
-      }
-    }
+    // O(1) reverse lookup instead of linear scan through all connections
+    const pooled = this.connectionToPooled.get(connection);
 
     if (!pooled) {
       logger.warn("Attempted to release unknown connection");
@@ -202,6 +201,7 @@ export class ConnectionPool {
     pooled.acquireStackTrace = undefined;
     pooled.lastUsedAt = new Date();
     this.stats.totalReleased++;
+    this.activeCount--;
 
     // Check if there are waiting requests
     if (this.waitQueue.length > 0) {
@@ -212,6 +212,7 @@ export class ConnectionPool {
       pooled.lastUsedAt = new Date();
       this.startLeakTimer(pooled);
       this.stats.totalAcquired++;
+      this.activeCount++;
       this.updateStats();
       entry.resolve(connection);
       return;
@@ -312,7 +313,9 @@ export class ConnectionPool {
 
     await Promise.all(promises);
     this.connections.clear();
+    this.connectionToPooled.clear();
     this.idleConnections = [];
+    this.activeCount = 0;
 
     logger.info("Connection pool closed");
   }
@@ -395,6 +398,7 @@ export class ConnectionPool {
         };
 
         this.connections.set(pooled.id, pooled);
+        this.connectionToPooled.set(connection, pooled);
         this.stats.totalCreated++;
         this.updateStats();
 
@@ -433,6 +437,7 @@ export class ConnectionPool {
     }
 
     this.connections.delete(pooled.id);
+    this.connectionToPooled.delete(pooled.connection);
     this.stats.totalDestroyed++;
     this.updateStats();
 
@@ -455,8 +460,7 @@ export class ConnectionPool {
 
   private updateStats(): void {
     this.stats.totalConnections = this.connections.size;
-    this.stats.activeConnections = Array.from(this.connections.values())
-      .filter((pc) => pc.inUse).length;
+    this.stats.activeConnections = this.activeCount;
     this.stats.idleConnections = this.idleConnections.length;
     this.stats.waitQueueSize = this.waitQueue.length;
   }
