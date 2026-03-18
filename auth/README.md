@@ -32,14 +32,20 @@ The auth module provides comprehensive authentication and authorization capabili
 
 ```
 auth/
-├── database-interface.ts    # Database abstraction
-├── integration.ts           # Server integration and route handlers
-├── middleware.ts            # HTTP middleware for Express-style apps
-├── mod.ts                   # Module exports
-├── provider.ts              # Core authentication provider
-├── README.md                # This file
-├── test-database.ts         # In-memory test database
-└── types.ts                 # TypeScript interfaces and types
+├── basic.test.ts              # Basic auth unit tests
+├── database-interface.ts      # Database abstraction
+├── integration.ts             # Server integration and route handlers
+├── middleware.test.ts          # Middleware unit tests
+├── middleware.ts              # HTTP middleware for Express-style apps
+├── mod.ts                     # Module exports
+├── pg-database-adapter.test.ts # PG adapter unit tests (13 tests)
+├── pg-database-adapter.ts     # PostgreSQL adapter (? → $1,$2 placeholder bridging)
+├── pg-integration.test.ts     # PG integration tests (7 tests, requires DISC_PG_AUTO=1)
+├── provider.test.ts           # Provider unit tests
+├── provider.ts                # Core authentication provider
+├── README.md                  # This file
+├── test-database.ts           # In-memory test database
+└── types.ts                   # TypeScript interfaces and types
 ```
 
 ## Usage

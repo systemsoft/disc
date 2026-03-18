@@ -170,34 +170,30 @@ Deno.test("CLI Workflow - Server configuration", async () => {
   }
 });
 
-// This test calls commands.shell() which tries to connect to a remote host
-// (192.168.1.100:8080). It requires a full server stack, not just local PG.
-// Keep ignored until the shell command supports proper mocking.
-Deno.test({
-  name: "CLI Workflow - Shell connection options",
-  ignore: true,
-  fn: async () => {
-    const console = new ConsoleCapture();
+Deno.test("CLI Workflow - Shell connection options", () => {
+  // Verify ShellOptions interface accepts all expected fields
+  // without actually connecting to a database
+  const shellOptions: import("./shell.ts").ShellOptions = {
+    host: "192.168.1.100",
+    port: 8080,
+    database: "custom_db",
+    nonInteractive: true,
+    execute: "select User { name }",
+  };
 
-    try {
-      // Test shell options parsing
-      const shellOptions = {
-        host: "192.168.1.100",
-        port: 8080,
-        database: "custom_db",
-        non_interactive: true,
-        execute: "select User { name }",
-      };
+  assertEquals(shellOptions.host, "192.168.1.100");
+  assertEquals(shellOptions.port, 8080);
+  assertEquals(shellOptions.database, "custom_db");
+  assertEquals(shellOptions.nonInteractive, true);
+  assertEquals(shellOptions.execute, "select User { name }");
 
-      // Should be able to execute shell with these options
-      // (Mock execution since we can't connect to real server)
-      await commands.shell(shellOptions);
-
-      assert(true, "Shell configuration should be valid");
-    } finally {
-      console.restore();
-    }
-  },
+  // Verify defaults when options are omitted
+  const defaultOptions: import("./shell.ts").ShellOptions = {};
+  assertEquals(defaultOptions.host, undefined);
+  assertEquals(defaultOptions.port, undefined);
+  assertEquals(defaultOptions.database, undefined);
+  assertEquals(defaultOptions.nonInteractive, undefined);
+  assertEquals(defaultOptions.execute, undefined);
 });
 
 Deno.test("CLI Workflow - Watch command setup", async () => {
@@ -220,16 +216,16 @@ Deno.test("CLI Workflow - Watch command setup", async () => {
 
     // Test watch configuration (without actually starting watcher)
     const watchOptions = {
-      schema_file: schemaFile,
-      output_dir: outputDir,
-      delay_ms: 500,
+      schemaFile: schemaFile,
+      outputDir: outputDir,
+      delayMs: 500,
     };
 
     // This would start file watching in real usage
     // For test, we just validate the configuration
-    assert(watchOptions.schema_file.includes("schema.esdl"));
-    assert(watchOptions.output_dir.includes("generated"));
-    assertEquals(watchOptions.delay_ms, 500);
+    assert(watchOptions.schemaFile.includes("schema.esdl"));
+    assert(watchOptions.outputDir.includes("generated"));
+    assertEquals(watchOptions.delayMs, 500);
   } finally {
     console.restore();
     await cleanupTempDir(tempDir);
