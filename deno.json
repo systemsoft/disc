@@ -60,7 +60,9 @@
     "fmt": "deno fmt",
     "lint": "deno lint",
     "check": "deno task lint && deno task fmt --check && deno task test",
-    "serve": "deno run --allow-net --allow-read --allow-env server/main.ts"
+    "serve": "deno run --allow-net --allow-read --allow-env server/main.ts",
+    "bench": "deno bench --allow-all --no-check benchmarks/",
+    "bench:pg": "DISC_PG_AUTO=1 deno bench --allow-all --no-check benchmarks/"
   },
   "test": {
     "include": ["**/*.test.ts", "tests/**/*.ts"],
