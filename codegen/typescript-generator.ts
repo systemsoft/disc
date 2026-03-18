@@ -306,29 +306,21 @@ export class TypeScriptGenerator {
     content += this.generateFileHeader("Disc Client");
     content += "\n";
 
-    // Imports
-    content += `import * as Types from "./types.ts";\n`;
+    // Import from SDK instead of generating inline client
+    content +=
+      `import { DiscClient as BaseClient, type DiscClientConfig } from "../sdk/mod.ts";\n`;
+    content += `export type { DiscClientConfig } from "../sdk/mod.ts";\n`;
+    content +=
+      `export { AuthManager, SubscriptionClient } from "../sdk/mod.ts";\n`;
     content += `import * as Queries from "./queries.ts";\n\n`;
 
-    // Client configuration interface
-    content += `export interface DiscClientConfig {\n`;
-    content += `  host?: string;\n`;
-    content += `  port?: number;\n`;
-    content += `  protocol?: "http" | "https";\n`;
-    content += `  timeout?: number;\n`;
-    content += `  headers?: Record<string, string>;\n`;
-    content += `}\n\n`;
-
-    // Main client class
+    // Typed client class extending SDK client with query builders
     content += `/**\n`;
-    content += ` * Type-safe Disc database client\n`;
+    content += ` * Type-safe Disc database client with query builders\n`;
     content += ` */\n`;
-    content += `export class DiscClient {\n`;
-    content += `  private baseUrl: string;\n`;
-    content += `  private timeout: number;\n`;
-    content += `  private headers: Record<string, string>;\n\n`;
+    content += `export class DiscClient extends BaseClient {\n`;
 
-    // Query builders
+    // Query builder properties
     for (const [typeName, typeDef] of this.schema.types) {
       if (typeDef.kind === "object") {
         const builderName = `${
@@ -343,23 +335,8 @@ export class TypeScriptGenerator {
     content += `\n`;
 
     // Constructor
-    content +=
-      `  constructor(config: DiscClientConfig = {}, options?: { transactionId?: string }) {\n`;
-    content += `    const host = config.host || "localhost";\n`;
-    content += `    const port = config.port || 5656;\n`;
-    content += `    const protocol = config.protocol || "http";\n`;
-    content += `    this.baseUrl = \`\${protocol}://\${host}:\${port}\`;\n`;
-    content += `    this.timeout = config.timeout || 30000;\n`;
-    content += `    this.headers = {\n`;
-    content += `      "Content-Type": "application/json",\n`;
-    content += `      ...config.headers,\n`;
-    content += `    };\n`;
-    content += `    \n`;
-    content += `    // Add transaction ID to headers if provided\n`;
-    content += `    if (options?.transactionId) {\n`;
-    content +=
-      `      this.headers['X-Transaction-ID'] = options.transactionId;\n`;
-    content += `    }\n\n`;
+    content += `  constructor(config?: DiscClientConfig) {\n`;
+    content += `    super(config);\n`;
 
     // Initialize query builders
     for (const [typeName] of this.schema.types) {
@@ -369,134 +346,7 @@ export class TypeScriptGenerator {
         `    this.${propertyName} = new Queries.${builderName}(this);\n`;
     }
 
-    content += `  }\n\n`;
-
-    // Raw query method
-    content += `  /** Execute raw EdgeQL query */\n`;
-    content +=
-      `  async query<T = any>(query: string, variables?: Record<string, any>): Promise<T> {\n`;
-    content +=
-      `    const response = await fetch(\`\${this.baseUrl}/query\`, {\n`;
-    content += `      method: "POST",\n`;
-    content += `      headers: this.headers,\n`;
-    content += `      body: JSON.stringify({ query, variables }),\n`;
-    content += `      signal: AbortSignal.timeout(this.timeout),\n`;
-    content += `    });\n\n`;
-    content += `    if (!response.ok) {\n`;
-    content +=
-      `      throw new Error(\`HTTP \${response.status}: \${response.statusText}\`);\n`;
-    content += `    }\n\n`;
-    content += `    const result = await response.json();\n\n`;
-    content += `    if (result.errors && result.errors.length > 0) {\n`;
-    content +=
-      `      throw new Error(\`EdgeQL Error: \${result.errors[0].message}\`);\n`;
-    content += `    }\n\n`;
-    content += `    return result.data;\n`;
-    content += `  }\n\n`;
-
-    // Transaction support
-    content += `  /** Execute queries in transaction */\n`;
-    content +=
-      `  async transaction<T>(fn: (client: DiscClient) => Promise<T>): Promise<T> {\n`;
-    content += `    // Start transaction\n`;
-    content += `    const txId = await this.beginTransaction();\n`;
-    content += `    \n`;
-    content += `    try {\n`;
-    content +=
-      `      // Create a new client instance with transaction context\n`;
-    content +=
-      `      const txClient = new DiscClient(this.baseUrl, { transactionId: txId });\n`;
-    content += `      \n`;
-    content += `      // Execute the function with transaction client\n`;
-    content += `      const result = await fn(txClient);\n`;
-    content += `      \n`;
-    content += `      // Commit transaction\n`;
-    content += `      await this.commitTransaction(txId);\n`;
-    content += `      \n`;
-    content += `      return result;\n`;
-    content += `    } catch (error) {\n`;
-    content += `      // Rollback transaction on error\n`;
-    content += `      await this.rollbackTransaction(txId);\n`;
-    content += `      throw error;\n`;
-    content += `    }\n`;
-    content += `  }\n\n`;
-
-    // Add transaction management methods
-    content += `  /** Begin a new transaction */\n`;
-    content += `  private async beginTransaction(): Promise<string> {\n`;
-    content +=
-      `    const response = await fetch(\`\${this.baseUrl}/transaction/begin\`, {\n`;
-    content += `      method: 'POST',\n`;
-    content += `      headers: {\n`;
-    content += `        'Content-Type': 'application/json',\n`;
-    content += `      },\n`;
-    content += `    });\n`;
-    content += `    \n`;
-    content += `    if (!response.ok) {\n`;
-    content +=
-      `      throw new Error(\`Failed to begin transaction: \${response.statusText}\`);\n`;
-    content += `    }\n`;
-    content += `    \n`;
-    content += `    const result = await response.json();\n`;
-    content += `    return result.transactionId;\n`;
-    content += `  }\n\n`;
-
-    content += `  /** Commit a transaction */\n`;
-    content +=
-      `  private async commitTransaction(txId: string): Promise<void> {\n`;
-    content +=
-      `    const response = await fetch(\`\${this.baseUrl}/transaction/\${txId}/commit\`, {\n`;
-    content += `      method: 'POST',\n`;
-    content += `      headers: {\n`;
-    content += `        'Content-Type': 'application/json',\n`;
-    content += `      },\n`;
-    content += `    });\n`;
-    content += `    \n`;
-    content += `    if (!response.ok) {\n`;
-    content +=
-      `      throw new Error(\`Failed to commit transaction: \${response.statusText}\`);\n`;
-    content += `    }\n`;
-    content += `  }\n\n`;
-
-    content += `  /** Rollback a transaction */\n`;
-    content +=
-      `  private async rollbackTransaction(txId: string): Promise<void> {\n`;
-    content += `    try {\n`;
-    content +=
-      `      const response = await fetch(\`\${this.baseUrl}/transaction/\${txId}/rollback\`, {\n`;
-    content += `        method: 'POST',\n`;
-    content += `        headers: {\n`;
-    content += `          'Content-Type': 'application/json',\n`;
-    content += `        },\n`;
-    content += `      });\n`;
-    content += `      \n`;
-    content += `      if (!response.ok) {\n`;
-    content +=
-      `        console.error(\`Failed to rollback transaction: \${response.statusText}\`);\n`;
-    content += `      }\n`;
-    content += `    } catch (error) {\n`;
-    content +=
-      `      console.error('Error during transaction rollback:', error);\n`;
-    content += `    }\n`;
-    content += `  }\n\n`;
-
-    // Health check
-    content += `  /** Check server health */\n`;
-    content +=
-      `  async health(): Promise<{ status: string; uptimeMs: number }> {\n`;
-    content +=
-      `    const response = await fetch(\`\${this.baseUrl}/health\`);\n`;
-    content += `    return await response.json();\n`;
-    content += `  }\n\n`;
-
-    // Server stats
-    content += `  /** Get server statistics */\n`;
-    content += `  async stats(): Promise<Record<string, any>> {\n`;
-    content +=
-      `    const response = await fetch(\`\${this.baseUrl}/stats\`);\n`;
-    content += `    return await response.json();\n`;
     content += `  }\n`;
-
     content += `}\n`;
 
     return {
@@ -522,6 +372,11 @@ export class TypeScriptGenerator {
 
     content += `// Client\n`;
     content += `export * from "./client.ts";\n\n`;
+
+    // SDK re-exports
+    content += `// SDK re-exports\n`;
+    content +=
+      `export { AuthManager, SubscriptionClient } from "./client.ts";\n\n`;
 
     // Default export
     content += `// Default client export\n`;

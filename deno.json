@@ -16,7 +16,8 @@
     "./cli": "./cli/mod.ts",
     "./schema": "./schema/mod.ts",
     "./edgeql": "./edgeql/mod.ts",
-    "./compiler": "./compiler/mod.ts"
+    "./compiler": "./compiler/mod.ts",
+    "./sdk": "./sdk/mod.ts"
   },
   "fmt": {
     "useTabs": false,
