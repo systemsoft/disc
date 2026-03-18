@@ -10,11 +10,15 @@ import { configureLogging } from "../lib/logger.ts";
 import { PostgresInstance } from "../postgres/instance.ts";
 import { logger } from "../postgres/logger.ts";
 import type { Schema } from "../compiler/context.ts";
+import { mergeSchemaAdditions } from "../compiler/context.ts";
 import { AuthProvider } from "../auth/provider.ts";
 import { AuthMiddleware } from "../auth/middleware.ts";
 import { AuthRoutes } from "../auth/integration.ts";
 import { PgDatabaseAdapter } from "../auth/pg-database-adapter.ts";
 import { DatabaseConnection } from "../lib/database.ts";
+import { ExtensionRegistry } from "../extensions/registry.ts";
+import { createExtensionContext } from "../extensions/context.ts";
+import type { Extension } from "../extensions/types.ts";
 
 /**
  * Options for constructing a DiscServer.
@@ -60,6 +64,12 @@ export interface DiscServerOptions extends Partial<Types.ServerConfig> {
    * Only relevant when enableExplain is true. Default: 300_000 (5 minutes).
    */
   explainCacheTtlMs?: number;
+
+  /**
+   * Optional list of extensions to register with the server.
+   * Each extension is initialized during server start and shut down during stop.
+   */
+  extensions?: Extension[];
 }
 
 export class DiscServer {
@@ -71,6 +81,7 @@ export class DiscServer {
   private authMiddleware?: AuthMiddleware;
   private authRoutes?: AuthRoutes;
   private auth_db?: DatabaseConnection;
+  private extensionRegistry: ExtensionRegistry;
   private stopping = false;
   private signal_handler?: () => void;
 
@@ -107,6 +118,14 @@ export class DiscServer {
     };
 
     this.postgresInstance = config.postgresInstance;
+
+    // Initialize extension registry and register extensions from options
+    this.extensionRegistry = new ExtensionRegistry();
+    if (config.extensions) {
+      for (const ext of config.extensions) {
+        this.extensionRegistry.register(ext);
+      }
+    }
 
     // Initialize the selected protocol handler
     const handlerOptions = {
@@ -151,6 +170,41 @@ export class DiscServer {
         await this.initializeAuth();
       }
 
+      // Initialize extensions
+      if (this.extensionRegistry.size > 0) {
+        const extCtx = createExtensionContext({
+          schema: this.config.extensions
+            ? (this.protocolHandler as any).schema ||
+              { types: new Map(), functions: new Map() }
+            : { types: new Map(), functions: new Map() },
+          config: this.config,
+        });
+        await this.extensionRegistry.initializeAll(extCtx);
+
+        // Merge extension functions and types into the protocol handler schema
+        const extFunctions = this.extensionRegistry.getAllFunctions();
+        const extTypes = this.extensionRegistry.getAllTypes();
+        if (
+          (extFunctions.length > 0 || extTypes.length > 0) &&
+          this.protocolHandler.updateSchema
+        ) {
+          const handlerSchema: {
+            types: Map<string, any>;
+            functions: Map<string, any>;
+          } = (this.protocolHandler as any).schema ||
+            { types: new Map(), functions: new Map() };
+          const merged = mergeSchemaAdditions(
+            handlerSchema,
+            extFunctions,
+            extTypes,
+          );
+          this.protocolHandler.updateSchema(merged);
+          logger.info(
+            `Merged ${extFunctions.length} extension function(s) and ${extTypes.length} extension type(s) into schema`,
+          );
+        }
+      }
+
       // Initialize HTTP server
       this.httpServer = new HttpServer({
         config: this.config,
@@ -158,6 +212,10 @@ export class DiscServer {
         authProvider: this.authProvider,
         authMiddleware: this.authMiddleware,
         authRoutes: this.authRoutes,
+        extensionRoutes: this.extensionRegistry.getAllRoutes(),
+        extensionHealthGetter: this.extensionRegistry.size > 0
+          ? () => this.extensionRegistry.getHealthStatus()
+          : undefined,
       });
 
       // Register signal handlers for graceful shutdown
@@ -204,6 +262,12 @@ export class DiscServer {
       await this.httpServer.drain(drainTimeout);
 
       await this.httpServer.stop();
+    }
+
+    // Shut down extensions
+    if (this.extensionRegistry.size > 0) {
+      await this.extensionRegistry.shutdownAll();
+      logger.info("Extensions shut down");
     }
 
     // Close database connections in protocol handler (drain pool)
@@ -277,6 +341,10 @@ export class DiscServer {
   getProtocolHandler(): Types.ProtocolHandler {
     return this.protocolHandler;
   }
+
+  getExtensionRegistry(): ExtensionRegistry {
+    return this.extensionRegistry;
+  }
 }
 
 export function createDefaultConfig(): Types.ServerConfig {
@@ -294,11 +362,13 @@ export function createDefaultConfig(): Types.ServerConfig {
 
 /**
  * Create a DiscServer from environment variables.
- * Optionally accepts a PostgresInstance for bundled PG mode.
+ * Optionally accepts a PostgresInstance for bundled PG mode,
+ * a parsed Schema, and a list of extensions to register.
  */
 export function createServerFromEnv(
   postgresInstance?: PostgresInstance,
   schema?: Schema,
+  extensions?: Extension[],
 ): DiscServer {
   // Configure structured logging from env vars
   const logLevel = (Deno.env.get("DISC_LOG_LEVEL") || "INFO").toUpperCase();
@@ -338,6 +408,7 @@ export function createServerFromEnv(
     postgresInstance,
     protocol: Deno.env.get("DISC_PROTOCOL") === "full" ? "full" : "simple",
     schema,
+    extensions,
   };
 
   // Parse CORS origins if provided

@@ -18,6 +18,7 @@ import { SubscriptionHandler } from "./subscription-handler.ts";
 import type { AuthProvider } from "../auth/provider.ts";
 import type { AuthMiddleware } from "../auth/middleware.ts";
 import type { AuthRoutes } from "../auth/integration.ts";
+import type { ExtensionRoute } from "../extensions/types.ts";
 
 export interface HttpServerOptions {
   config: Types.ServerConfig;
@@ -25,6 +26,10 @@ export interface HttpServerOptions {
   authProvider?: AuthProvider;
   authMiddleware?: AuthMiddleware;
   authRoutes?: AuthRoutes;
+  extensionRoutes?: Map<string, ExtensionRoute[]>;
+  extensionHealthGetter?: () => Promise<
+    Map<string, { healthy: boolean; details?: string }>
+  >;
 }
 
 export class HttpServer {
@@ -37,6 +42,10 @@ export class HttpServer {
   private authProvider?: AuthProvider;
   private authMiddleware?: AuthMiddleware;
   private authRoutes?: AuthRoutes;
+  private extensionRoutes: Map<string, ExtensionRoute[]>;
+  private extensionHealthGetter?: () => Promise<
+    Map<string, { healthy: boolean; details?: string }>
+  >;
   private rate_limiter?: RateLimiter;
   private server?: Deno.HttpServer<Deno.NetAddr>;
   private redirect_server?: Deno.HttpServer<Deno.NetAddr>;
@@ -57,6 +66,8 @@ export class HttpServer {
     this.authProvider = options.authProvider;
     this.authMiddleware = options.authMiddleware;
     this.authRoutes = options.authRoutes;
+    this.extensionRoutes = options.extensionRoutes || new Map();
+    this.extensionHealthGetter = options.extensionHealthGetter;
     this.connection_manager = new ConnectionManager();
     this.session_manager = new SessionManager();
     this.transaction_manager = new TransactionManager();
@@ -241,6 +252,11 @@ export class HttpServer {
       // Handle regular HTTP requests
       const url = new URL(request.url);
 
+      // Extension route handling
+      if (url.pathname.startsWith("/ext/")) {
+        return await this.handleExtensionRoute(request, url);
+      }
+
       // Auth route handling
       if (url.pathname.startsWith("/auth/")) {
         return await this.handle_auth_route(request, url);
@@ -305,6 +321,16 @@ export class HttpServer {
         reset_confirm: "/auth/reset/confirm",
         verify: "/auth/verify",
       };
+    }
+
+    if (this.extensionRoutes.size > 0) {
+      const extEndpoints: Record<string, string[]> = {};
+      for (const [name, routes] of this.extensionRoutes) {
+        extEndpoints[name] = routes.map((r) =>
+          `${r.method} /ext/${name}${r.path}`
+        );
+      }
+      endpoints.extensions = extEndpoints;
     }
 
     const info = {
@@ -520,15 +546,30 @@ export class HttpServer {
   }
 
   private async handle_health(): Promise<Response> {
+    // Gather extension health if available
+    let extensionHealth:
+      | Record<string, { healthy: boolean; details?: string }>
+      | undefined;
+    if (this.extensionHealthGetter) {
+      const extMap = await this.extensionHealthGetter();
+      if (extMap.size > 0) {
+        extensionHealth = Object.fromEntries(extMap);
+      }
+    }
+
     if (this.protocolHandler.checkHealth) {
       const health = await this.protocolHandler.checkHealth();
       const httpStatus = health.status === "unhealthy" ? 503 : 200;
 
-      const body = {
+      const body: Record<string, unknown> = {
         ...health,
         timestamp: new Date().toISOString(),
         uptimeMs: Date.now() - this.startTime.getTime(),
       };
+
+      if (extensionHealth !== undefined) {
+        body.extensions = extensionHealth;
+      }
 
       return new Response(JSON.stringify(body, null, 2), {
         status: httpStatus,
@@ -537,13 +578,17 @@ export class HttpServer {
     }
 
     // Fallback when handler does not support checkHealth
-    const body = {
+    const body: Record<string, unknown> = {
       status: "healthy",
       timestamp: new Date().toISOString(),
       uptimeMs: Date.now() - this.startTime.getTime(),
       connections: this.connection_manager.get_stats(),
       memory: this.get_memory_stats(),
     };
+
+    if (extensionHealth !== undefined) {
+      body.extensions = extensionHealth;
+    }
 
     return new Response(JSON.stringify(body, null, 2), {
       headers: this.get_default_headers("application/json"),
@@ -767,6 +812,42 @@ export class HttpServer {
           type: "error",
           payload: { message: `Unknown message type: ${type}` },
         }));
+    }
+  }
+
+  private async handleExtensionRoute(
+    request: Request,
+    url: URL,
+  ): Promise<Response> {
+    // Parse /ext/<name>/<path>
+    const parts = url.pathname.slice(5).split("/"); // strip "/ext/"
+    const extName = parts[0];
+    const extPath = "/" + parts.slice(1).join("/");
+
+    const routes = this.extensionRoutes.get(extName);
+    if (!routes) {
+      return this.create_error_response(
+        `Extension "${extName}" not found`,
+        404,
+      );
+    }
+
+    const route = routes.find(
+      (r) => r.path === extPath && r.method === request.method,
+    );
+    if (!route) {
+      return this.create_error_response("Extension route not found", 404);
+    }
+
+    try {
+      return await route.handler(request);
+    } catch (error) {
+      log.error("Extension route error", {
+        extension: extName,
+        path: extPath,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return this.create_error_response("Extension error", 500);
     }
   }
 

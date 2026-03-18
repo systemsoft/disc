@@ -102,7 +102,7 @@ export class MigrationError extends DiscError {
 
 export class DatabaseExecutionError extends DiscError {
   readonly sql: string;
-  readonly cause: Error;
+  override readonly cause: Error;
 
   constructor(
     message: string,
@@ -115,7 +115,7 @@ export class DatabaseExecutionError extends DiscError {
     this.cause = cause;
   }
 
-  formatError(): string {
+  override formatError(): string {
     let output = super.formatError();
     output += `\n\nSQL: ${this.sql}`;
     output += `\nCaused by: ${this.cause.message}`;
@@ -140,7 +140,7 @@ export class QueryTimeoutError extends DiscError {
     this.timeoutMs = timeoutMs;
   }
 
-  formatError(): string {
+  override formatError(): string {
     let output = super.formatError();
     output += `\n\nSQL: ${this.sql}`;
     output += `\nTimeout: ${this.timeoutMs}ms`;

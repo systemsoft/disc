@@ -190,6 +190,24 @@ export function removeCTEAlias(
   ctx.cteAliases.delete(name);
 }
 
+export function mergeSchemaAdditions(
+  base: Schema,
+  additionalFunctions: FunctionDef[],
+  additionalTypes: TypeDef[],
+): Schema {
+  const functions = new Map(base.functions);
+  for (const fn of additionalFunctions) {
+    functions.set(fn.name, fn);
+  }
+
+  const types = new Map(base.types);
+  for (const type of additionalTypes) {
+    types.set(type.name, type);
+  }
+
+  return { types, functions };
+}
+
 // Default schema with basic types for testing
 export function createTestSchema(): Schema {
   const userType: TypeDef = {

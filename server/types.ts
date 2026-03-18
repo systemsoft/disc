@@ -3,6 +3,7 @@
  */
 
 import type { Schema } from "../compiler/context.ts";
+import type { Extension } from "../extensions/types.ts";
 
 export interface AuthServerConfig {
   jwtIssuer?: string;
@@ -42,6 +43,7 @@ export interface ServerConfig {
     redirect?: boolean;
     redirectPort?: number;
   };
+  extensions?: Extension[];
 }
 
 export interface QueryRequest {
