@@ -441,20 +441,6 @@ export function unionAll(queries: SQLStatement[]): UnionAllStatement {
   };
 }
 
-// Lateral join support
-
-export interface LateralSubquery extends SQLNode {
-  kind: "LateralSubquery";
-  query: SQLStatement;
-}
-
-export function lateral(query: SQLStatement): LateralSubquery {
-  return {
-    kind: "LateralSubquery",
-    query,
-  };
-}
-
 // JOIN helpers
 
 export function innerJoin(options: {

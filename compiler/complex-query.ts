@@ -152,10 +152,8 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
    */
   private optimizeCorrelatedSubquery(subquery: any): SQL.SQLStatement {
     // Convert correlated subquery to LATERAL JOIN for better performance
-    const _lateral = SQL.lateral(this.compileQuery(subquery.query));
-
     return SQL.select({
-      from: _lateral,
+      from: this.compileQuery(subquery.query),
       selections: subquery.selections || ["*"],
     });
   }

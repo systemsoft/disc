@@ -574,3 +574,171 @@ Deno.test({
     }
   },
 });
+
+// --- String search functions: contains() and find() ---
+
+Deno.test({
+  name: "PG Phase 10: contains() and find() string search functions",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    try {
+      const { manager, schema } = await applyEmployeeSchema(pool);
+
+      // Seed data
+      await pool.query(`
+        INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
+          (gen_random_uuid(), 'Alice', 'eng', 100000, true),
+          (gen_random_uuid(), 'Bob', 'eng', 120000, true),
+          (gen_random_uuid(), 'Carol', 'sales', 90000, true)
+      `);
+
+      // contains(.name, "li") should match "Alice"
+      const containsSql = compileEdgeQL(
+        'select TestEmployee { name } filter contains(.name, "li")',
+        schema,
+      );
+      const containsResult = await pool.query(containsSql);
+      assertEquals(
+        containsResult.rowCount,
+        1,
+        "contains() should match only Alice",
+      );
+
+      // find(.name, "ob") != -1 should match "Bob"
+      const findSql = compileEdgeQL(
+        'select TestEmployee { name } filter find(.name, "ob") != -1',
+        schema,
+      );
+      const findResult = await pool.query(findSql);
+      assertEquals(
+        findResult.rowCount,
+        1,
+        "find() != -1 should match only Bob",
+      );
+
+      await manager.close();
+    } finally {
+      await cleanupEmployee(pool);
+      await pool.close();
+    }
+  },
+});
+
+// --- Type cast functions: to_str, to_int64, to_float64 ---
+
+Deno.test({
+  name: "PG Phase 10: to_str, to_int64, to_float64 type cast functions",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    try {
+      // to_str: CAST(42 AS text)
+      const strResult = await pool.query("SELECT CAST(42 AS text) AS val");
+      assertEquals(strResult.rows[0].val, "42", "CAST(42 AS text) should be '42'");
+
+      // to_int64: CAST('123' AS bigint)
+      const intResult = await pool.query("SELECT CAST('123' AS bigint) AS val");
+      assertEquals(
+        Number(intResult.rows[0].val),
+        123,
+        "CAST('123' AS bigint) should be 123",
+      );
+
+      // to_float64: CAST('3.14' AS double precision)
+      const floatResult = await pool.query(
+        "SELECT CAST('3.14' AS double precision) AS val",
+      );
+      const floatVal = Number(floatResult.rows[0].val);
+      assertEquals(
+        Math.abs(floatVal - 3.14) < 0.001,
+        true,
+        "CAST('3.14' AS double precision) should be approximately 3.14",
+      );
+    } finally {
+      await pool.close();
+    }
+  },
+});
+
+// --- str_pad functions: LPAD / RPAD ---
+
+Deno.test({
+  name: "PG Phase 10: str_pad_start and str_pad_end (LPAD/RPAD)",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    try {
+      // str_pad_start → LPAD
+      const lpadResult = await pool.query("SELECT LPAD('hi', 5, '*') AS val");
+      assertEquals(lpadResult.rows[0].val, "***hi", "LPAD should pad start");
+
+      // str_pad_end → RPAD
+      const rpadResult = await pool.query("SELECT RPAD('hi', 5, '*') AS val");
+      assertEquals(rpadResult.rows[0].val, "hi***", "RPAD should pad end");
+    } finally {
+      await pool.close();
+    }
+  },
+});
+
+// --- FOR with subquery LATERAL JOIN ---
+
+Deno.test({
+  name: "PG Phase 10: FOR with subquery iterator uses LATERAL JOIN",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    try {
+      const { manager, schema } = await applyEmployeeSchema(pool);
+
+      // Seed data with distinct departments
+      await pool.query(`
+        INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
+          (gen_random_uuid(), 'Alice', 'eng', 100000, true),
+          (gen_random_uuid(), 'Bob', 'sales', 120000, true),
+          (gen_random_uuid(), 'Carol', 'ops', 90000, true)
+      `);
+
+      // Compile a FOR with subquery iterator
+      // FOR x IN (select TestEmployee.department) UNION (select x)
+      // This should produce a LATERAL JOIN in the compiled SQL
+      const sql = compileEdgeQL(
+        "FOR x IN (select TestEmployee.department) UNION (select x)",
+        schema,
+      );
+
+      // Verify the compiled SQL contains LATERAL
+      assertEquals(
+        sql.includes("LATERAL"),
+        true,
+        "FOR with subquery should compile to LATERAL JOIN",
+      );
+
+      // Execute the compiled SQL — should return department values
+      const result = await pool.query(sql);
+      assertEquals(
+        result.rowCount >= 1,
+        true,
+        "LATERAL query should return at least one row",
+      );
+
+      await manager.close();
+    } finally {
+      await cleanupEmployee(pool);
+      await pool.close();
+    }
+  },
+});
