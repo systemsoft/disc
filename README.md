@@ -123,6 +123,7 @@ disc ui        # Open admin UI in browser
 ## Features
 
 ### Core
+
 - Full SDL parser and schema validation
 - EdgeQL parser with complete AST support
 - EdgeQL-to-SQL compiler with query caching
@@ -131,6 +132,7 @@ disc ui        # Open admin UI in browser
 - Real query execution against PostgreSQL
 
 ### Server
+
 - HTTP/JSON API with WebSocket support
 - Rate limiting (token bucket per IP)
 - TLS/HTTPS with HTTP-to-HTTPS redirect
@@ -140,12 +142,14 @@ disc ui        # Open admin UI in browser
 - Request timeouts and CORS
 
 ### Security
+
 - JWT authentication with session management
 - Object-level access policies
 - Row-level security enforcement
 - Auth context bridging
 
 ### Developer Experience
+
 - Admin UI (SvelteKit, TRON-inspired design)
 - TypeScript type generation from schemas
 - Interactive EdgeQL REPL

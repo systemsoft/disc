@@ -272,9 +272,7 @@ export class DiscShell {
         if (this.session) {
           this.session.timingEnabled = !this.session.timingEnabled;
           console.log(
-            `⏱️  Timing ${
-              this.session.timingEnabled ? "enabled" : "disabled"
-            }`,
+            `⏱️  Timing ${this.session.timingEnabled ? "enabled" : "disabled"}`,
           );
         }
         break;

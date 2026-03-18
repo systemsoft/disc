@@ -571,9 +571,7 @@ export class MigrationEngine {
       case "DropType":
         return `Drop type ${(operation as Types.DropTypeOperation).typeName}`;
       case "AlterType":
-        return `Alter type ${
-          (operation as Types.AlterTypeOperation).typeName
-        }`;
+        return `Alter type ${(operation as Types.AlterTypeOperation).typeName}`;
       default:
         return operation.kind;
     }

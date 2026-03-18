@@ -249,10 +249,9 @@ Deno.test("Migration Engine - Execute Migration with Rollback on Error", async (
   };
 
   // Mock the private executeStatements method to simulate a failure
-  (engine as unknown as Record<string, unknown>).executeStatements =
-    () => {
-      throw new Error("Simulated database error");
-    };
+  (engine as unknown as Record<string, unknown>).executeStatements = () => {
+    throw new Error("Simulated database error");
+  };
 
   // Should attempt rollback when migration fails
   const result = await engine.executeMigrationWithRollback(plan);

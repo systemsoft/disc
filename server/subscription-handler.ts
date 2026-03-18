@@ -26,8 +26,8 @@ export class SubscriptionHandler {
 
   constructor(options: SubscriptionOptions = {}) {
     this.options = {
-      maxSubscriptionsPerConnection:
-        options.maxSubscriptionsPerConnection || 10,
+      maxSubscriptionsPerConnection: options.maxSubscriptionsPerConnection ||
+        10,
       subscriptionTimeoutMs: options.subscriptionTimeoutMs ||
         30 * 60 * 1000, // 30 minutes
       heartbeatIntervalMs: options.heartbeatIntervalMs || 30 * 1000, // 30 seconds
