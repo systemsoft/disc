@@ -28,7 +28,7 @@ Deno.test("ExplainCache - TTL expiration: get returns undefined after TTL elapse
   let now = 1_000;
   const cache = new ExplainCache({
     ttl_ms: 500,
-    now_fn: () => now,
+    nowFn: () => now,
   });
 
   cache.set("hash1", { plan: "data" });
@@ -42,7 +42,7 @@ Deno.test("ExplainCache - TTL not yet elapsed: get returns cached plan", () => {
   let now = 1_000;
   const cache = new ExplainCache({
     ttl_ms: 500,
-    now_fn: () => now,
+    nowFn: () => now,
   });
 
   cache.set("hash1", { plan: "data" });
@@ -59,7 +59,7 @@ Deno.test("ExplainCache - capacity eviction: oldest entry is evicted when max_si
   const cache = new ExplainCache({
     max_size: 3,
     ttl_ms: 60_000,
-    now_fn: () => now,
+    nowFn: () => now,
   });
 
   cache.set("a", "plan-a");
@@ -85,7 +85,7 @@ Deno.test("ExplainCache - stats: hits, misses, and evictions increment correctly
   const cache = new ExplainCache({
     max_size: 2,
     ttl_ms: 60_000,
-    now_fn: () => now,
+    nowFn: () => now,
   });
 
   cache.set("a", "plan-a");
@@ -125,7 +125,7 @@ Deno.test("ExplainCache - expired entries are evicted during set, freeing capaci
   const cache = new ExplainCache({
     max_size: 2,
     ttl_ms: 500,
-    now_fn: () => now,
+    nowFn: () => now,
   });
 
   cache.set("a", "plan-a");
@@ -149,7 +149,7 @@ Deno.test("ExplainCache - stats size reflects current number of live entries", (
   let now = 1_000;
   const cache = new ExplainCache({
     ttl_ms: 500,
-    now_fn: () => now,
+    nowFn: () => now,
   });
 
   cache.set("a", "plan-a");

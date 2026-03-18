@@ -26,15 +26,15 @@ import type {
 function makeContext(): QueryContext {
   return {
     session: {
-      session_id: "test_timeout",
+      sessionId: "test_timeout",
       database: "test_db",
-      created_at: new Date(),
-      last_activity: new Date(),
+      createdAt: new Date(),
+      lastActivity: new Date(),
       variables: {},
     },
     auth: { roles: [], permissions: [] },
-    request_id: "test_request",
-    started_at: new Date(),
+    requestId: "test_request",
+    startedAt: new Date(),
   };
 }
 
@@ -150,8 +150,8 @@ Deno.test(
     const { pool: slowPool, cleanup } = makeSlowPool(500);
 
     const handler = new EdgeQLProtocolHandler({
-      connection_pool: slowPool,
-      request_timeout: 50,
+      connectionPool: slowPool,
+      requestTimeout: 50,
     });
 
     const request = {
@@ -160,7 +160,7 @@ Deno.test(
     };
 
     try {
-      const response = await handler.handle_request(
+      const response = await handler.handleRequest(
         request,
         makeContext(),
       );
@@ -194,8 +194,8 @@ Deno.test(
     const fastPool = makeFastPool();
 
     const handler = new EdgeQLProtocolHandler({
-      connection_pool: fastPool,
-      request_timeout: 5000,
+      connectionPool: fastPool,
+      requestTimeout: 5000,
     });
 
     const request = {
@@ -203,7 +203,7 @@ Deno.test(
       variables: {},
     };
 
-    const response = await handler.handle_request(
+    const response = await handler.handleRequest(
       request,
       makeContext(),
     );
@@ -232,7 +232,7 @@ function createSlowProtocolHandler(delayMs: number): {
   const timerIds: number[] = [];
 
   const handler: ProtocolHandler = {
-    async handle_request(
+    async handleRequest(
       _request: QueryRequest,
       _context: QueryContext,
     ): Promise<QueryResponse> {
@@ -242,7 +242,7 @@ function createSlowProtocolHandler(delayMs: number): {
       });
       return { data: { ok: true } };
     },
-    validate_request(_request: QueryRequest): QueryError[] {
+    validateRequest(_request: QueryRequest): QueryError[] {
       return [];
     },
   };
@@ -260,13 +260,13 @@ function createSlowProtocolHandler(delayMs: number): {
 
 function createFastProtocolHandler(): ProtocolHandler {
   return {
-    handle_request(
+    handleRequest(
       _request: QueryRequest,
       _context: QueryContext,
     ): Promise<QueryResponse> {
       return Promise.resolve({ data: { ok: true } });
     },
-    validate_request(_request: QueryRequest): QueryError[] {
+    validateRequest(_request: QueryRequest): QueryError[] {
       return [];
     },
   };
@@ -278,11 +278,11 @@ function createTestConfig(
   return {
     host: "localhost",
     port: 0,
-    database_url: "postgresql://localhost:5432/test",
-    max_connections: 10,
-    request_timeout: 5000,
-    enable_cors: false,
-    enable_websockets: false,
+    databaseUrl: "postgresql://localhost:5432/test",
+    maxConnections: 10,
+    requestTimeout: 5000,
+    enableCors: false,
+    enableWebsockets: false,
     ...overrides,
   };
 }
@@ -291,10 +291,10 @@ Deno.test(
   "HTTP timeout - returns 408 when request exceeds timeout",
   async () => {
     const { handler, cleanup: handlerCleanup } = createSlowProtocolHandler(500);
-    const config = createTestConfig({ request_timeout: 50 });
+    const config = createTestConfig({ requestTimeout: 50 });
     const server = new HttpServer({
       config,
-      protocol_handler: handler,
+      protocolHandler: handler,
     });
 
     const abortController = new AbortController();
@@ -306,7 +306,7 @@ Deno.test(
         onListen() {},
       },
       (request: Request, info: Deno.ServeHandlerInfo) => {
-        return (server as any).handle_request(request, info);
+        return (server as any).handleRequest(request, info);
       },
     );
 
@@ -343,10 +343,10 @@ Deno.test(
   "HTTP timeout - returns 200 when request completes within timeout",
   async () => {
     const handler = createFastProtocolHandler();
-    const config = createTestConfig({ request_timeout: 5000 });
+    const config = createTestConfig({ requestTimeout: 5000 });
     const server = new HttpServer({
       config,
-      protocol_handler: handler,
+      protocolHandler: handler,
     });
 
     const abortController = new AbortController();
@@ -358,7 +358,7 @@ Deno.test(
         onListen() {},
       },
       (request: Request, info: Deno.ServeHandlerInfo) => {
-        return (server as any).handle_request(request, info);
+        return (server as any).handleRequest(request, info);
       },
     );
 

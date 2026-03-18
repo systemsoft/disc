@@ -22,12 +22,12 @@ function createTestMigration(): Types.Migration {
     id: "test-migration-001",
     name: "create_user_table",
     description: "Create initial user table",
-    created_at: new Date("2024-01-01T10:00:00Z"),
-    schema_hash: "abc123",
+    createdAt: new Date("2024-01-01T10:00:00Z"),
+    schemaHash: "abc123",
     operations: [
       {
         kind: "CreateType",
-        type_name: "User",
+        typeName: "User",
         properties: [
           {
             name: "name",
@@ -48,10 +48,10 @@ function createTestMigration(): Types.Migration {
 function createTestMigrationResult(): Types.MigrationResult {
   return {
     success: true,
-    migration_id: "test-migration-001",
-    applied_at: new Date("2024-01-01T10:01:00Z"),
-    duration_ms: 150,
-    rollback_sql: ["DROP TABLE IF EXISTS user CASCADE;"],
+    migrationId: "test-migration-001",
+    appliedAt: new Date("2024-01-01T10:01:00Z"),
+    durationMs: 150,
+    rollbackSql: ["DROP TABLE IF EXISTS user CASCADE;"],
   };
 }
 
@@ -199,7 +199,7 @@ Deno.test({
     let stateResult = await tracker.getMigrationState();
     assertEquals(stateResult.ok, true);
     if (stateResult.ok) {
-      assertEquals(stateResult.value.applied_migrations.length, 0);
+      assertEquals(stateResult.value.appliedMigrations.length, 0);
     }
 
     // Apply migration
@@ -211,11 +211,11 @@ Deno.test({
     stateResult = await tracker.getMigrationState();
     assertEquals(stateResult.ok, true);
     if (stateResult.ok) {
-      assertEquals(stateResult.value.applied_migrations.length, 1);
-      assertEquals(stateResult.value.last_migration_id, migration.id);
+      assertEquals(stateResult.value.appliedMigrations.length, 1);
+      assertEquals(stateResult.value.lastMigrationId, migration.id);
       assertEquals(
-        stateResult.value.current_schema_hash,
-        migration.schema_hash,
+        stateResult.value.currentSchemaHash,
+        migration.schemaHash,
       );
     }
 
@@ -235,14 +235,14 @@ Deno.test({
     const checkpoint: Types.MigrationCheckpoint = {
       id: "checkpoint-001",
       name: "before_user_table_changes",
-      created_at: new Date("2024-01-01T09:00:00Z"),
-      schema_state: {
+      createdAt: new Date("2024-01-01T09:00:00Z"),
+      schemaState: {
         version: "1.0",
         tables: ["existing_table"],
       },
-      migration_state: {
-        applied_migrations: [],
-        current_schema_hash: "initial",
+      migrationState: {
+        appliedMigrations: [],
+        currentSchemaHash: "initial",
       },
     };
 
@@ -276,21 +276,21 @@ Deno.test({
       {
         id: "checkpoint-001",
         name: "first_checkpoint",
-        created_at: new Date("2024-01-01T09:00:00Z"),
-        schema_state: { version: "1.0" },
-        migration_state: {
-          applied_migrations: [],
-          current_schema_hash: "initial",
+        createdAt: new Date("2024-01-01T09:00:00Z"),
+        schemaState: { version: "1.0" },
+        migrationState: {
+          appliedMigrations: [],
+          currentSchemaHash: "initial",
         },
       },
       {
         id: "checkpoint-002",
         name: "second_checkpoint",
-        created_at: new Date("2024-01-01T10:00:00Z"),
-        schema_state: { version: "1.1" },
-        migration_state: {
-          applied_migrations: ["migration-001"],
-          current_schema_hash: "hash123",
+        createdAt: new Date("2024-01-01T10:00:00Z"),
+        schemaState: { version: "1.1" },
+        migrationState: {
+          appliedMigrations: ["migration-001"],
+          currentSchemaHash: "hash123",
         },
       },
     ];
@@ -335,7 +335,7 @@ Deno.test({
         ...createTestMigration(),
         id: "migration-002",
         name: "add_posts",
-        created_at: new Date("2024-01-01T11:00:00Z"),
+        createdAt: new Date("2024-01-01T11:00:00Z"),
       },
     ];
 
@@ -343,8 +343,8 @@ Deno.test({
       const migration = migrations[i];
       const result = {
         ...createTestMigrationResult(),
-        migration_id: migration.id,
-        applied_at: new Date(`2024-01-01T${10 + i}:01:00Z`),
+        migrationId: migration.id,
+        appliedAt: new Date(`2024-01-01T${10 + i}:01:00Z`),
       };
       await tracker.recordMigration(migration, result);
     }
@@ -491,7 +491,7 @@ Deno.test({
       };
       const result = {
         ...createTestMigrationResult(),
-        migration_id: migration.id,
+        migrationId: migration.id,
       };
 
       await tracker.recordMigration(migration, result);
@@ -543,7 +543,7 @@ Deno.test({
       };
       const result = {
         ...createTestMigrationResult(),
-        migration_id: migration.id,
+        migrationId: migration.id,
       };
 
       operations.push(tracker.recordMigration(migration, result));

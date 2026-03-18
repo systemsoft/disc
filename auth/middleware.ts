@@ -6,7 +6,7 @@ import { AuthProvider } from "./provider.ts";
 import { TokenPayload } from "./types.ts";
 
 export interface AuthContext extends TokenPayload {
-  user_id: string;
+  userId: string;
 }
 
 export interface CORSOptions {
@@ -36,10 +36,10 @@ export class AuthMiddleware {
     }
 
     try {
-      const payload = await this.provider.verify_token(token);
+      const payload = await this.provider.verifyToken(token);
       return {
         ...payload,
-        user_id: payload.sub,
+        userId: payload.sub,
       };
     } catch {
       return null;

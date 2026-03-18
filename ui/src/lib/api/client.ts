@@ -35,7 +35,7 @@ export interface SchemaType {
 export interface Migration {
   id: string;
   name: string;
-  applied_at: string;
+  appliedAt: string;
   checksum: string;
   sql?: string;
 }

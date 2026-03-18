@@ -180,12 +180,12 @@ export function createTestSchema(): Schema {
         multi: false,
         columnName: "email",
       }],
-      ["created_at", {
-        name: "created_at",
+      ["createdAt", {
+        name: "createdAt",
         type: "datetime",
         required: true,
         multi: false,
-        columnName: "created_at",
+        columnName: "createdAt",
       }],
       ["active", {
         name: "active",
@@ -239,12 +239,12 @@ export function createTestSchema(): Schema {
         multi: false,
         columnName: "body",
       }],
-      ["created_at", {
-        name: "created_at",
+      ["createdAt", {
+        name: "createdAt",
         type: "datetime",
         required: true,
         multi: false,
-        columnName: "created_at",
+        columnName: "createdAt",
       }],
     ]),
     links: new Map([

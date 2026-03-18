@@ -14,9 +14,9 @@ import { ensureDir } from "@std/fs";
 import * as Types from "../migration/types.ts";
 
 export interface WatchOptions {
-  schema_file?: string;
-  output_dir?: string;
-  delay_ms?: number;
+  schemaFile?: string;
+  outputDir?: string;
+  delayMs?: number;
 }
 
 export interface FileChangeEvent {
@@ -37,9 +37,9 @@ export class WatchCommand {
   async execute(options: WatchOptions): Promise<void> {
     console.log("🔍 Watching schema files for changes...");
 
-    const schemaFile = options.schema_file || "./schema.esdl";
-    const outputDir = options.output_dir || "./generated";
-    const delayMs = options.delay_ms || 1000;
+    const schemaFile = options.schemaFile || "./schema.esdl";
+    const outputDir = options.outputDir || "./generated";
+    const delayMs = options.delayMs || 1000;
 
     console.log(`📂 Watching: ${schemaFile}`);
     console.log(`📁 Output: ${outputDir}`);
@@ -237,13 +237,13 @@ export class WatchCommand {
 
       // Create migration engine
       const config: Types.MigrationConfig = {
-        database_url: databaseUrl,
-        dry_run: dryRun,
-        auto_approve: false,
-        migrations_dir: "./migrations",
-        schema_file: "./schema.esdl",
-        backup_before_migration: false,
-        rollback_on_error: true,
+        databaseUrl: databaseUrl,
+        dryRun: dryRun,
+        autoApprove: false,
+        migrationsDir: "./migrations",
+        schemaFile: "./schema.esdl",
+        backupBeforeMigration: false,
+        rollbackOnError: true,
       };
       const engine = new MigrationEngine(config);
 
@@ -277,7 +277,7 @@ export class WatchCommand {
         if (execResult.ok) {
           console.log(
             `   ✅ Migration applied successfully (${
-              execResult.value[0].duration_ms
+              execResult.value[0].durationMs
             }ms)`,
           );
 
@@ -298,22 +298,22 @@ export class WatchCommand {
   private formatOperation(op: Types.MigrationOperation): string {
     switch (op.kind) {
       case "CreateType":
-        return `Create type '${(op as Types.CreateTypeOperation).type_name}'`;
+        return `Create type '${(op as Types.CreateTypeOperation).typeName}'`;
       case "DropType":
-        return `Drop type '${(op as Types.DropTypeOperation).type_name}'`;
+        return `Drop type '${(op as Types.DropTypeOperation).typeName}'`;
       case "AlterType":
-        return `Alter type '${(op as Types.AlterTypeOperation).type_name}'`;
+        return `Alter type '${(op as Types.AlterTypeOperation).typeName}'`;
       case "AddProperty":
         return `Add property '${
           (op as Types.AddPropertyOperation).property.name
         }'`;
       case "DropProperty":
         return `Drop property '${
-          (op as Types.DropPropertyOperation).property_name
+          (op as Types.DropPropertyOperation).propertyName
         }'`;
       case "AlterProperty":
         return `Alter property '${
-          (op as Types.AlterPropertyOperation).property_name
+          (op as Types.AlterPropertyOperation).propertyName
         }'`;
       default:
         return `${op.kind}: ${JSON.stringify(op)}`;
@@ -330,7 +330,7 @@ export class WatchCommand {
       // Use the test schema for now - in production, would parse the actual schema
       const schema = Context.createTestSchema();
       const result = generateTypeScript(schema, {
-        output_dir: outputDir,
+        outputDir: outputDir,
       });
 
       // Write generated files
@@ -349,7 +349,7 @@ export class WatchCommand {
     required email: str {
       constraint exclusive;
     };
-    created_at: datetime {
+    createdAt: datetime {
       default := datetime_current();
     };
   };

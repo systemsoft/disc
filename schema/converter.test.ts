@@ -117,7 +117,7 @@ Deno.test("SDL Converter - Convert Type with Links", () => {
 Deno.test("SDL Converter - Convert Type with Default Values", () => {
   const source = `
     type User {
-      created_at: datetime {
+      createdAt: datetime {
         default := datetime_current();
       };
     }
@@ -139,7 +139,7 @@ Deno.test("SDL Converter - Convert Type with Default Values", () => {
 Deno.test("SDL Converter - Convert Type Extension", () => {
   const source = `
     abstract type Timestamped {
-      required created_at: datetime;
+      required createdAt: datetime;
     }
     
     type User extending Timestamped {

@@ -21,27 +21,27 @@ import type { AuthRoutes } from "../auth/integration.ts";
 
 export interface HttpServerOptions {
   config: Types.ServerConfig;
-  protocol_handler: Types.ProtocolHandler;
-  auth_provider?: AuthProvider;
-  auth_middleware?: AuthMiddleware;
-  auth_routes?: AuthRoutes;
+  protocolHandler: Types.ProtocolHandler;
+  authProvider?: AuthProvider;
+  authMiddleware?: AuthMiddleware;
+  authRoutes?: AuthRoutes;
 }
 
 export class HttpServer {
   private config: Types.ServerConfig;
-  private protocol_handler: Types.ProtocolHandler;
+  private protocolHandler: Types.ProtocolHandler;
   private connection_manager: ConnectionManager;
   private session_manager: SessionManager;
   private transaction_manager: TransactionManager;
   private subscription_handler: SubscriptionHandler;
-  private auth_provider?: AuthProvider;
-  private auth_middleware?: AuthMiddleware;
-  private auth_routes?: AuthRoutes;
+  private authProvider?: AuthProvider;
+  private authMiddleware?: AuthMiddleware;
+  private authRoutes?: AuthRoutes;
   private rate_limiter?: RateLimiter;
   private server?: Deno.HttpServer<Deno.NetAddr>;
   private redirect_server?: Deno.HttpServer<Deno.NetAddr>;
   private cleanup_interval_ids: number[] = [];
-  private start_time: Date;
+  private startTime: Date;
   private in_flight_requests = 0;
   private shutting_down = false;
   private stats = {
@@ -53,23 +53,23 @@ export class HttpServer {
 
   constructor(options: HttpServerOptions) {
     this.config = options.config;
-    this.protocol_handler = options.protocol_handler;
-    this.auth_provider = options.auth_provider;
-    this.auth_middleware = options.auth_middleware;
-    this.auth_routes = options.auth_routes;
+    this.protocolHandler = options.protocolHandler;
+    this.authProvider = options.authProvider;
+    this.authMiddleware = options.authMiddleware;
+    this.authRoutes = options.authRoutes;
     this.connection_manager = new ConnectionManager();
     this.session_manager = new SessionManager();
     this.transaction_manager = new TransactionManager();
     this.subscription_handler = new SubscriptionHandler();
-    this.start_time = new Date();
+    this.startTime = new Date();
 
     if (
-      options.config.rate_limit_rpm && options.config.rate_limit_rpm > 0
+      options.config.rateLimitRpm && options.config.rateLimitRpm > 0
     ) {
       this.rate_limiter = new RateLimiter({
-        requests_per_minute: options.config.rate_limit_rpm,
-        burst_size: options.config.rate_limit_burst ||
-          options.config.rate_limit_rpm,
+        requestsPerMinute: options.config.rateLimitRpm,
+        burstSize: options.config.rateLimitBurst ||
+          options.config.rateLimitRpm,
       });
     }
   }
@@ -84,7 +84,7 @@ export class HttpServer {
       request: Request,
       info: Deno.ServeHandlerInfo,
     ): Response | Promise<Response> => {
-      return this.handle_request(request, info);
+      return this.handleRequest(request, info);
     };
 
     const serveOptions: Deno.ServeOptions & {
@@ -97,8 +97,8 @@ export class HttpServer {
     };
 
     if (this.config.tls) {
-      const cert = await Deno.readTextFile(this.config.tls.cert_file);
-      const key = await Deno.readTextFile(this.config.tls.key_file);
+      const cert = await Deno.readTextFile(this.config.tls.certFile);
+      const key = await Deno.readTextFile(this.config.tls.keyFile);
       serveOptions.cert = cert;
       serveOptions.key = key;
     }
@@ -107,7 +107,7 @@ export class HttpServer {
 
     // Start redirect server if TLS redirect is enabled
     if (this.config.tls?.redirect) {
-      const redirectPort = this.config.tls.redirect_port || 80;
+      const redirectPort = this.config.tls.redirectPort || 80;
       const httpsPort = this.config.port;
       const host = this.config.host;
 
@@ -134,8 +134,8 @@ export class HttpServer {
       url: `${protocol}://${this.config.host}:${this.config.port}`,
     });
     log.info("Server configuration", {
-      cors: this.config.enable_cors,
-      websockets: this.config.enable_websockets,
+      cors: this.config.enableCors,
+      websockets: this.config.enableWebsockets,
     });
 
     await Promise.all([
@@ -172,10 +172,10 @@ export class HttpServer {
    * Drain in-flight requests by setting the shutting_down flag and polling
    * until all requests complete or the timeout expires.
    */
-  async drain(timeout_ms: number): Promise<void> {
+  async drain(timeoutMs: number): Promise<void> {
     this.shutting_down = true;
 
-    const deadline = Date.now() + timeout_ms;
+    const deadline = Date.now() + timeoutMs;
     while (this.in_flight_requests > 0 && Date.now() < deadline) {
       await new Promise<void>((resolve) => setTimeout(resolve, 100));
     }
@@ -188,7 +188,7 @@ export class HttpServer {
     return this.in_flight_requests;
   }
 
-  private async handle_request(
+  private async handleRequest(
     request: Request,
     info: Deno.ServeHandlerInfo,
   ): Promise<Response> {
@@ -205,10 +205,10 @@ export class HttpServer {
 
     // Enforce rate limit before touching in-flight counter or stats
     if (this.rate_limiter) {
-      const client_ip = "hostname" in info.remoteAddr
+      const clientIp = "hostname" in info.remoteAddr
         ? info.remoteAddr.hostname
         : "unknown";
-      if (!this.rate_limiter.allow(client_ip)) {
+      if (!this.rate_limiter.allow(clientIp)) {
         const headers = this.get_default_headers("application/json");
         headers.set("Retry-After", "60");
         return new Response(
@@ -219,8 +219,8 @@ export class HttpServer {
     }
 
     this.in_flight_requests++;
-    const start_time = Date.now();
-    const request_id = this.generate_request_id();
+    const startTime = Date.now();
+    const requestId = this.generate_request_id();
 
     try {
       this.stats.total_requests++;
@@ -232,7 +232,7 @@ export class HttpServer {
 
       // Handle WebSocket upgrade
       if (
-        this.config.enable_websockets &&
+        this.config.enableWebsockets &&
         request.headers.get("upgrade") === "websocket"
       ) {
         return this.handle_websocket_upgrade(request, info);
@@ -251,7 +251,7 @@ export class HttpServer {
         case "/":
           return this.handle_root();
         case "/query":
-          return await this.handle_query(request, info, request_id);
+          return await this.handle_query(request, info, requestId);
         case "/health":
           return await this.handle_health();
         case "/health/live":
@@ -268,12 +268,12 @@ export class HttpServer {
     } catch (error) {
       this.stats.failed_requests++;
       log.error("Request failed", {
-        request_id,
+        requestId,
         error: error instanceof Error ? error.message : String(error),
       });
       return this.create_error_response("Internal Server Error", 500);
     } finally {
-      const duration = Date.now() - start_time;
+      const duration = Date.now() - startTime;
       this.stats.total_duration_ms += duration;
       this.in_flight_requests--;
     }
@@ -283,17 +283,17 @@ export class HttpServer {
     const endpoints: Record<string, any> = {
       query: "/query",
       health: "/health",
-      health_live: "/health/live",
-      health_ready: "/health/ready",
+      healthLive: "/health/live",
+      healthReady: "/health/ready",
       stats: "/stats",
-      websocket: this.config.enable_websockets ? "ws://upgrade" : null,
+      websocket: this.config.enableWebsockets ? "ws://upgrade" : null,
     };
 
-    if (this.config.enable_metrics) {
+    if (this.config.enableMetrics) {
       endpoints.metrics = "/metrics";
     }
 
-    if (this.auth_routes) {
+    if (this.authRoutes) {
       endpoints.auth = {
         register: "/auth/register",
         login: "/auth/login",
@@ -322,7 +322,7 @@ export class HttpServer {
   private async handle_query(
     request: Request,
     info: Deno.ServeHandlerInfo,
-    request_id: string,
+    requestId: string,
   ): Promise<Response> {
     if (request.method !== "POST") {
       return this.create_error_response("Method Not Allowed", 405);
@@ -331,22 +331,22 @@ export class HttpServer {
     try {
       // Parse request body
       const body = await request.text();
-      let query_request: Types.QueryRequest;
+      let queryRequest: Types.QueryRequest;
 
       try {
-        query_request = JSON.parse(body);
+        queryRequest = JSON.parse(body);
       } catch {
         return this.create_error_response("Invalid JSON", 400);
       }
 
       // Validate request
-      const validation_errors = this.protocol_handler.validate_request(
-        query_request,
+      const validationErrors = this.protocolHandler.validateRequest(
+        queryRequest,
       );
-      if (validation_errors.length > 0) {
+      if (validationErrors.length > 0) {
         return new Response(
           JSON.stringify({
-            errors: validation_errors,
+            errors: validationErrors,
           }),
           {
             status: 400,
@@ -356,28 +356,28 @@ export class HttpServer {
       }
 
       // Create connection and session
-      const remote_addr = "hostname" in info.remoteAddr
+      const remoteAddr = "hostname" in info.remoteAddr
         ? info.remoteAddr.hostname
         : "unknown";
-      const connection = this.connection_manager.create_connection(
+      const connection = this.connection_manager.createConnection(
         "http",
-        remote_addr,
+        remoteAddr,
         undefined,
         request.headers.get("user-agent") || undefined,
       );
 
       // Build auth context from JWT if auth middleware is configured
-      const auth_context: Types.AuthContext = { roles: [], permissions: [] };
-      if (this.auth_middleware) {
-        const auth_result = await this.auth_middleware.authenticate(request);
-        if (auth_result) {
-          auth_context.user_id = auth_result.user_id;
-          auth_context.jwt_claims = {
-            sub: auth_result.sub,
-            email: auth_result.email,
-            username: auth_result.username,
-            iss: auth_result.iss,
-            aud: auth_result.aud,
+      const authContext: Types.AuthContext = { roles: [], permissions: [] };
+      if (this.authMiddleware) {
+        const authResult = await this.authMiddleware.authenticate(request);
+        if (authResult) {
+          authContext.userId = authResult.userId;
+          authContext.jwtClaims = {
+            sub: authResult.sub,
+            email: authResult.email,
+            username: authResult.username,
+            iss: authResult.iss,
+            aud: authResult.aud,
           };
         }
       }
@@ -385,15 +385,15 @@ export class HttpServer {
       // Create query context
       const context: Types.QueryContext = {
         session: connection.session,
-        auth: auth_context,
-        request_id,
-        started_at: new Date(),
-        client_info: this.parse_client_info(request),
+        auth: authContext,
+        requestId,
+        startedAt: new Date(),
+        clientInfo: this.parse_client_info(request),
       };
 
       // Execute query with optional HTTP-level timeout safety net
       let response: Types.QueryResponse;
-      const timeoutMs = this.config.request_timeout;
+      const timeoutMs = this.config.requestTimeout;
 
       if (timeoutMs && timeoutMs > 0) {
         let timerId: number | undefined;
@@ -408,7 +408,7 @@ export class HttpServer {
 
         try {
           response = await Promise.race([
-            this.protocol_handler.handle_request(query_request, context),
+            this.protocolHandler.handleRequest(queryRequest, context),
             timeoutPromise,
           ]);
         } catch (error) {
@@ -437,14 +437,14 @@ export class HttpServer {
           }
         }
       } else {
-        response = await this.protocol_handler.handle_request(
-          query_request,
+        response = await this.protocolHandler.handleRequest(
+          queryRequest,
           context,
         );
       }
 
       // Update session activity
-      this.session_manager.update_activity(connection.session.session_id);
+      this.session_manager.updateActivity(connection.session.sessionId);
 
       // Determine HTTP status based on response content
       // Errors with code "WARNING" are not real errors (e.g. dry-run mode)
@@ -467,18 +467,18 @@ export class HttpServer {
       });
     } catch (error) {
       log.error("Query execution failed", {
-        request_id,
+        requestId,
         error: error instanceof Error ? error.message : String(error),
       });
 
-      const error_response: Types.QueryResponse = {
+      const errorResponse: Types.QueryResponse = {
         errors: [{
           message: "Internal server error",
           extensions: { code: "INTERNAL_ERROR" },
         }],
       };
 
-      return new Response(JSON.stringify(error_response), {
+      return new Response(JSON.stringify(errorResponse), {
         status: 500,
         headers: this.get_default_headers("application/json"),
       });
@@ -496,8 +496,8 @@ export class HttpServer {
   }
 
   private async handle_health_ready(): Promise<Response> {
-    if (this.protocol_handler.checkHealth) {
-      const health = await this.protocol_handler.checkHealth();
+    if (this.protocolHandler.checkHealth) {
+      const health = await this.protocolHandler.checkHealth();
       const httpStatus = health.status === "unhealthy" ? 503 : 200;
 
       return new Response(
@@ -520,14 +520,14 @@ export class HttpServer {
   }
 
   private async handle_health(): Promise<Response> {
-    if (this.protocol_handler.checkHealth) {
-      const health = await this.protocol_handler.checkHealth();
+    if (this.protocolHandler.checkHealth) {
+      const health = await this.protocolHandler.checkHealth();
       const httpStatus = health.status === "unhealthy" ? 503 : 200;
 
       const body = {
         ...health,
         timestamp: new Date().toISOString(),
-        uptime_ms: Date.now() - this.start_time.getTime(),
+        uptimeMs: Date.now() - this.startTime.getTime(),
       };
 
       return new Response(JSON.stringify(body, null, 2), {
@@ -540,7 +540,7 @@ export class HttpServer {
     const body = {
       status: "healthy",
       timestamp: new Date().toISOString(),
-      uptime_ms: Date.now() - this.start_time.getTime(),
+      uptimeMs: Date.now() - this.startTime.getTime(),
       connections: this.connection_manager.get_stats(),
       memory: this.get_memory_stats(),
     };
@@ -551,31 +551,31 @@ export class HttpServer {
   }
 
   private handle_stats(): Response {
-    const subscription_stats = this.subscription_handler
+    const subscriptionStats = this.subscription_handler
       .get_subscription_stats();
 
     // Gather handler-level cache/metrics stats if available
-    const handlerStats = this.protocol_handler.getStats?.();
+    const handlerStats = this.protocolHandler.getStats?.();
 
     const stats: Types.ServerStats & {
-      subscriptions: typeof subscription_stats;
+      subscriptions: typeof subscriptionStats;
     } = {
       connections: this.connection_manager.get_stats(),
       queries: {
         total: this.stats.total_requests,
         successful: this.stats.successful_requests,
         failed: this.stats.failed_requests,
-        avg_duration_ms: this.stats.total_requests > 0
+        avgDurationMs: this.stats.total_requests > 0
           ? this.stats.total_duration_ms / this.stats.total_requests
           : 0,
       },
       transactions: this.transaction_manager.get_stats(),
-      memory_usage: this.get_memory_stats(),
-      uptime_ms: Date.now() - this.start_time.getTime(),
-      subscriptions: subscription_stats,
+      memoryUsage: this.get_memory_stats(),
+      uptimeMs: Date.now() - this.startTime.getTime(),
+      subscriptions: subscriptionStats,
       cache: handlerStats?.cache,
-      query_metrics: handlerStats?.query_metrics,
-      rate_limit: this.rate_limiter?.stats(),
+      queryMetrics: handlerStats?.queryMetrics,
+      rateLimit: this.rate_limiter?.stats(),
     };
 
     return new Response(JSON.stringify(stats, null, 2), {
@@ -584,12 +584,12 @@ export class HttpServer {
   }
 
   private handle_metrics(): Response {
-    if (!this.config.enable_metrics) {
+    if (!this.config.enableMetrics) {
       return this.create_error_response("Not Found", 404);
     }
 
-    const handlerStats = this.protocol_handler.getStats?.();
-    const poolStats = this.protocol_handler.getPoolStats?.() ?? null;
+    const handlerStats = this.protocolHandler.getStats?.();
+    const poolStats = this.protocolHandler.getPoolStats?.() ?? null;
 
     const source: MetricsSource = {
       http: {
@@ -599,10 +599,10 @@ export class HttpServer {
         total_duration_ms: this.stats.total_duration_ms,
       },
       cache: handlerStats?.cache,
-      query_metrics: handlerStats?.query_metrics,
+      queryMetrics: handlerStats?.queryMetrics,
       pool: poolStats,
-      rate_limit: this.rate_limiter?.stats(),
-      uptime_ms: Date.now() - this.start_time.getTime(),
+      rateLimit: this.rate_limiter?.stats(),
+      uptimeMs: Date.now() - this.startTime.getTime(),
       memory: this.get_memory_stats(),
     };
 
@@ -615,7 +615,7 @@ export class HttpServer {
   }
 
   private handle_preflight(request: Request): Response {
-    if (!this.config.enable_cors) {
+    if (!this.config.enableCors) {
       return this.create_error_response("CORS not enabled", 405);
     }
 
@@ -634,18 +634,18 @@ export class HttpServer {
   ): Response {
     const { socket, response } = Deno.upgradeWebSocket(request);
 
-    const remote_addr = "hostname" in info.remoteAddr
+    const remoteAddr = "hostname" in info.remoteAddr
       ? info.remoteAddr.hostname
       : "unknown";
-    const connection = this.connection_manager.create_connection(
+    const connection = this.connection_manager.createConnection(
       "websocket",
-      remote_addr,
+      remoteAddr,
       undefined,
       request.headers.get("user-agent") || undefined,
     );
 
     socket.onopen = () => {
-      log.info("WebSocket connection opened", { connection_id: connection.id });
+      log.info("WebSocket connection opened", { connectionId: connection.id });
     };
 
     socket.onmessage = async (event) => {
@@ -664,15 +664,15 @@ export class HttpServer {
     };
 
     socket.onclose = () => {
-      log.info("WebSocket connection closed", { connection_id: connection.id });
+      log.info("WebSocket connection closed", { connectionId: connection.id });
       this.subscription_handler.cleanup_connection(
-        connection.session.session_id,
+        connection.session.sessionId,
       );
-      this.connection_manager.close_connection(connection.id);
+      this.connection_manager.closeConnection(connection.id);
     };
 
     socket.onerror = (_error) => {
-      log.error("WebSocket error", { connection_id: connection.id });
+      log.error("WebSocket error", { connectionId: connection.id });
     };
 
     return response;
@@ -694,12 +694,12 @@ export class HttpServer {
             permissions: [],
             ...connection.session.variables?._auth_context,
           },
-          request_id: this.generate_request_id(),
-          started_at: new Date(),
+          requestId: this.generate_request_id(),
+          startedAt: new Date(),
         };
 
         try {
-          const response = await this.protocol_handler.handle_request(
+          const response = await this.protocolHandler.handleRequest(
             payload,
             context,
           );
@@ -723,12 +723,12 @@ export class HttpServer {
         const context: Types.QueryContext = {
           session: connection.session,
           auth: { roles: [], permissions: [] },
-          request_id: this.generate_request_id(),
-          started_at: new Date(),
+          requestId: this.generate_request_id(),
+          startedAt: new Date(),
         };
 
         try {
-          await this.subscription_handler.handle_subscription(
+          await this.subscription_handler.handleSubscription(
             payload,
             context,
             socket,
@@ -746,17 +746,17 @@ export class HttpServer {
       }
 
       case "unsubscribe": {
-        const { subscription_id } = payload;
-        if (subscription_id) {
-          this.subscription_handler.stop_subscription(subscription_id);
+        const { subscriptionId } = payload;
+        if (subscriptionId) {
+          this.subscription_handler.stop_subscription(subscriptionId);
           socket.send(JSON.stringify({
             type: "subscription_stopped",
-            payload: { subscription_id },
+            payload: { subscriptionId },
           }));
         } else {
           socket.send(JSON.stringify({
             type: "error",
-            payload: { message: "subscription_id is required for unsubscribe" },
+            payload: { message: "subscriptionId is required for unsubscribe" },
           }));
         }
         break;
@@ -774,7 +774,7 @@ export class HttpServer {
     request: Request,
     url: URL,
   ): Promise<Response> {
-    if (!this.auth_routes) {
+    if (!this.authRoutes) {
       return this.create_error_response("Authentication not configured", 404);
     }
 
@@ -783,33 +783,33 @@ export class HttpServer {
 
     switch (route) {
       case "register":
-        return await this.auth_routes.register()(request);
+        return await this.authRoutes.register()(request);
       case "login":
-        return await this.auth_routes.login()(request);
+        return await this.authRoutes.login()(request);
       case "logout":
-        return await this.auth_routes.logout()(request);
+        return await this.authRoutes.logout()(request);
       case "refresh":
-        return await this.auth_routes.refresh()(request);
+        return await this.authRoutes.refresh()(request);
       case "profile":
-        return await this.auth_routes.profile()(request);
+        return await this.authRoutes.profile()(request);
       case "password":
-        return await this.auth_routes.updatePassword()(request);
+        return await this.authRoutes.updatePassword()(request);
       case "reset":
-        return await this.auth_routes.resetPasswordRequest()(request);
+        return await this.authRoutes.resetPasswordRequest()(request);
       case "reset/confirm":
-        return await this.auth_routes.resetPassword()(request);
+        return await this.authRoutes.resetPassword()(request);
       case "verify":
-        return await this.auth_routes.verifyEmail()(request);
+        return await this.authRoutes.verifyEmail()(request);
       default:
         return this.create_error_response("Unknown auth endpoint", 404);
     }
   }
 
-  private get_default_headers(content_type: string): Headers {
+  private get_default_headers(contentType: string): Headers {
     const headers = new Headers();
-    headers.set("Content-Type", content_type);
+    headers.set("Content-Type", contentType);
 
-    if (this.config.enable_cors) {
+    if (this.config.enableCors) {
       headers.set("Access-Control-Allow-Origin", "*"); // TODO: Use config origins
       headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
       headers.set(
@@ -825,7 +825,7 @@ export class HttpServer {
     const origin = request.headers.get("origin");
     if (!origin) return "*";
 
-    if (this.config.cors_origins && this.config.cors_origins.includes(origin)) {
+    if (this.config.corsOrigins && this.config.corsOrigins.includes(origin)) {
       return origin;
     }
 
@@ -841,12 +841,12 @@ export class HttpServer {
 
   private parse_client_info(
     request: Request,
-  ): Types.QueryContext["client_info"] {
-    const user_agent = request.headers.get("user-agent");
-    if (!user_agent) return undefined;
+  ): Types.QueryContext["clientInfo"] {
+    const userAgent = request.headers.get("user-agent");
+    if (!userAgent) return undefined;
 
     // Parse common client patterns
-    if (user_agent.includes("disc-client")) {
+    if (userAgent.includes("disc-client")) {
       return {
         name: "disc-client",
         version: "unknown",
@@ -861,11 +861,11 @@ export class HttpServer {
     };
   }
 
-  private get_memory_stats(): Types.ServerStats["memory_usage"] {
+  private get_memory_stats(): Types.ServerStats["memoryUsage"] {
     const memoryUsage = Deno.memoryUsage();
     return {
-      heap_used: memoryUsage.heapUsed,
-      heap_total: memoryUsage.heapTotal,
+      heapUsed: memoryUsage.heapUsed,
+      heapTotal: memoryUsage.heapTotal,
       external: memoryUsage.external,
     };
   }
@@ -873,7 +873,7 @@ export class HttpServer {
   private start_cleanup_intervals(): void {
     // Cleanup idle connections every 5 minutes
     this.cleanup_interval_ids.push(setInterval(() => {
-      const cleaned = this.connection_manager.cleanup_idle_connections();
+      const cleaned = this.connection_manager.cleanupIdleConnections();
       if (cleaned > 0) {
         log.debug("Cleaned up idle connections", { count: cleaned });
       }
@@ -881,7 +881,7 @@ export class HttpServer {
 
     // Cleanup expired sessions every 10 minutes
     this.cleanup_interval_ids.push(setInterval(() => {
-      const cleaned = this.session_manager.cleanup_expired_sessions();
+      const cleaned = this.session_manager.cleanupExpiredSessions();
       if (cleaned > 0) {
         log.debug("Cleaned up expired sessions", { count: cleaned });
       }
@@ -889,7 +889,7 @@ export class HttpServer {
 
     // Cleanup abandoned transactions every 2 minutes
     this.cleanup_interval_ids.push(setInterval(() => {
-      const cleaned = this.transaction_manager.cleanup_abandoned_transactions();
+      const cleaned = this.transaction_manager.cleanupAbandonedTransactions();
       if (cleaned > 0) {
         log.debug("Cleaned up abandoned transactions", { count: cleaned });
       }

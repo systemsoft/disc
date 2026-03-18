@@ -9,75 +9,75 @@ import type { ServerConfig } from "./types.ts";
 import { SimpleEdgeQLProtocolHandler } from "./simple-edgeql-protocol.ts";
 
 // ---------------------------------------------------------------------------
-// Test 1: TLS config is properly set when cert_file and key_file are provided
+// Test 1: TLS config is properly set when certFile and keyFile are provided
 // ---------------------------------------------------------------------------
 
-Deno.test("TLS config - cert_file and key_file are stored in ServerConfig", () => {
+Deno.test("TLS config - certFile and keyFile are stored in ServerConfig", () => {
   const server = new DiscServer({
     tls: {
-      cert_file: "/path/to/cert.pem",
-      key_file: "/path/to/key.pem",
+      certFile: "/path/to/cert.pem",
+      keyFile: "/path/to/key.pem",
     },
   });
 
   const config = server.get_config();
-  assertEquals(config.tls?.cert_file, "/path/to/cert.pem");
-  assertEquals(config.tls?.key_file, "/path/to/key.pem");
+  assertEquals(config.tls?.certFile, "/path/to/cert.pem");
+  assertEquals(config.tls?.keyFile, "/path/to/key.pem");
 });
 
 // ---------------------------------------------------------------------------
-// Test 2: HttpServer.start() throws when cert_file does not exist
+// Test 2: HttpServer.start() throws when certFile does not exist
 // ---------------------------------------------------------------------------
 
 Deno.test(
   {
-    name: "TLS config - start() throws when cert_file does not exist",
+    name: "TLS config - start() throws when certFile does not exist",
     // sanitize: false because HttpServer's SubscriptionHandler heartbeat
     // interval starts at construction time and cannot be cleared when
     // start() throws before stop() is ever called.
     sanitizeOps: false,
     sanitizeResources: false,
     fn: async () => {
-      // Use dry_run: true so no ConnectionPool interval is created
-      const protocol_handler = new SimpleEdgeQLProtocolHandler({
-        dry_run: true,
+      // Use dryRun: true so no ConnectionPool interval is created
+      const protocolHandler = new SimpleEdgeQLProtocolHandler({
+        dryRun: true,
       });
 
       const config: ServerConfig = {
         host: "localhost",
         port: 19543,
-        database_url: "postgresql://localhost:5432/disc",
-        max_connections: 10,
-        request_timeout: 5000,
-        enable_cors: false,
-        enable_websockets: false,
+        databaseUrl: "postgresql://localhost:5432/disc",
+        maxConnections: 10,
+        requestTimeout: 5000,
+        enableCors: false,
+        enableWebsockets: false,
         tls: {
-          cert_file: "/nonexistent/path/to/cert.pem",
-          key_file: "/nonexistent/path/to/key.pem",
+          certFile: "/nonexistent/path/to/cert.pem",
+          keyFile: "/nonexistent/path/to/key.pem",
         },
       };
 
-      const http_server = new HttpServer({ config, protocol_handler });
+      const httpServer = new HttpServer({ config, protocolHandler });
 
       await assertRejects(
-        () => http_server.start(),
+        () => httpServer.start(),
         Deno.errors.NotFound,
       );
 
       // Best-effort cleanup of heartbeat interval
-      await http_server.stop();
+      await httpServer.stop();
     },
   },
 );
 
 // ---------------------------------------------------------------------------
-// Test 3: HttpServer.start() throws when key_file does not exist but cert
+// Test 3: HttpServer.start() throws when keyFile does not exist but cert
 //         exists (we use a real temp cert, missing key path)
 // ---------------------------------------------------------------------------
 
 Deno.test(
   {
-    name: "TLS config - start() throws when key_file does not exist",
+    name: "TLS config - start() throws when keyFile does not exist",
     // sanitize: false because HttpServer's SubscriptionHandler heartbeat
     // interval starts at construction time and cannot be cleared when
     // start() throws before stop() is ever called.
@@ -92,34 +92,34 @@ Deno.test(
       );
 
       try {
-        // Use dry_run: true so no ConnectionPool interval is created
-        const protocol_handler = new SimpleEdgeQLProtocolHandler({
-          dry_run: true,
+        // Use dryRun: true so no ConnectionPool interval is created
+        const protocolHandler = new SimpleEdgeQLProtocolHandler({
+          dryRun: true,
         });
 
         const config: ServerConfig = {
           host: "localhost",
           port: 19544,
-          database_url: "postgresql://localhost:5432/disc",
-          max_connections: 10,
-          request_timeout: 5000,
-          enable_cors: false,
-          enable_websockets: false,
+          databaseUrl: "postgresql://localhost:5432/disc",
+          maxConnections: 10,
+          requestTimeout: 5000,
+          enableCors: false,
+          enableWebsockets: false,
           tls: {
-            cert_file: tmpCert,
-            key_file: "/nonexistent/path/to/key.pem",
+            certFile: tmpCert,
+            keyFile: "/nonexistent/path/to/key.pem",
           },
         };
 
-        const http_server = new HttpServer({ config, protocol_handler });
+        const httpServer = new HttpServer({ config, protocolHandler });
 
         await assertRejects(
-          () => http_server.start(),
+          () => httpServer.start(),
           Deno.errors.NotFound,
         );
 
         // Best-effort cleanup of heartbeat interval
-        await http_server.stop();
+        await httpServer.stop();
       } finally {
         await Deno.remove(tmpCert);
       }
@@ -128,37 +128,37 @@ Deno.test(
 );
 
 // ---------------------------------------------------------------------------
-// Test 4: redirect and redirect_port default values are correct in ServerConfig
+// Test 4: redirect and redirectPort default values are correct in ServerConfig
 // ---------------------------------------------------------------------------
 
 Deno.test("TLS config - redirect defaults to undefined when not set", () => {
   const server = new DiscServer({
     tls: {
-      cert_file: "/path/to/cert.pem",
-      key_file: "/path/to/key.pem",
+      certFile: "/path/to/cert.pem",
+      keyFile: "/path/to/key.pem",
     },
   });
 
   const config = server.get_config();
   assertEquals(config.tls?.redirect, undefined);
-  assertEquals(config.tls?.redirect_port, undefined);
+  assertEquals(config.tls?.redirectPort, undefined);
 });
 
 Deno.test(
-  "TLS config - redirect and redirect_port are stored when provided",
+  "TLS config - redirect and redirectPort are stored when provided",
   () => {
     const server = new DiscServer({
       tls: {
-        cert_file: "/path/to/cert.pem",
-        key_file: "/path/to/key.pem",
+        certFile: "/path/to/cert.pem",
+        keyFile: "/path/to/key.pem",
         redirect: true,
-        redirect_port: 8080,
+        redirectPort: 8080,
       },
     });
 
     const config = server.get_config();
     assertEquals(config.tls?.redirect, true);
-    assertEquals(config.tls?.redirect_port, 8080);
+    assertEquals(config.tls?.redirectPort, 8080);
   },
 );
 

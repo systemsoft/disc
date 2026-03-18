@@ -100,7 +100,7 @@ export class DDLGenerator {
 
   private generateCreateType(operation: Types.CreateTypeOperation): string[] {
     const statements: string[] = [];
-    const tableName = this.typeNameToTableName(operation.type_name);
+    const tableName = this.typeNameToTableName(operation.typeName);
 
     // Generate column definitions from properties
     const columns: Types.ColumnDefinition[] = [
@@ -109,7 +109,7 @@ export class DDLGenerator {
         name: "id",
         type: "UUID",
         nullable: false,
-        primary_key: true,
+        primaryKey: true,
         unique: false,
         default: "gen_random_uuid()",
       },
@@ -121,7 +121,7 @@ export class DDLGenerator {
         name: property.name,
         type: this.mapEdgeQLTypeToPostgreSQL(property.type),
         nullable: !property.required,
-        primary_key: false,
+        primaryKey: false,
         unique: property.constraints.includes("exclusive"),
         default: property.default
           ? this.formatDefaultValue(property.default, property.type)
@@ -137,12 +137,12 @@ export class DDLGenerator {
           name: `${link.name}_id`,
           type: "UUID",
           nullable: !link.required,
-          primary_key: false,
+          primaryKey: false,
           unique: false,
           references: {
             table: this.typeNameToTableName(link.target),
             column: "id",
-            on_delete: link.on_target_delete || "RESTRICT",
+            onDelete: link.onTargetDelete || "RESTRICT",
           },
         });
       }
@@ -160,24 +160,24 @@ export class DDLGenerator {
             name: "source_id",
             type: "UUID",
             nullable: false,
-            primary_key: false,
+            primaryKey: false,
             unique: false,
             references: {
               table: tableName,
               column: "id",
-              on_delete: "CASCADE",
+              onDelete: "CASCADE",
             },
           },
           {
             name: "target_id",
             type: "UUID",
             nullable: false,
-            primary_key: false,
+            primaryKey: false,
             unique: false,
             references: {
               table: this.typeNameToTableName(link.target),
               column: "id",
-              on_delete: "CASCADE",
+              onDelete: "CASCADE",
             },
           },
         ];
@@ -211,7 +211,7 @@ export class DDLGenerator {
           });`,
         );
       }
-      if (column.unique && !column.primary_key) {
+      if (column.unique && !column.primaryKey) {
         statements.push(
           `CREATE UNIQUE INDEX ${
             this.escapeIdentifier(`uk_${tableName}_${column.name}`)
@@ -226,7 +226,7 @@ export class DDLGenerator {
   }
 
   private generateDropType(operation: Types.DropTypeOperation): string[] {
-    const tableName = this.typeNameToTableName(operation.type_name);
+    const tableName = this.typeNameToTableName(operation.typeName);
     return [
       `DROP TABLE IF EXISTS ${this.escapeIdentifier(tableName)} CASCADE;`,
     ];
@@ -234,7 +234,7 @@ export class DDLGenerator {
 
   private generateAlterType(operation: Types.AlterTypeOperation): string[] {
     const statements: string[] = [];
-    const tableName = this.typeNameToTableName(operation.type_name);
+    const tableName = this.typeNameToTableName(operation.typeName);
 
     for (const typeOp of operation.operations) {
       statements.push(...this.generateTypeOperationDDL(tableName, typeOp));
@@ -307,7 +307,7 @@ export class DDLGenerator {
   ): string[] {
     return [
       `ALTER TABLE ${this.escapeIdentifier(tableName)} DROP COLUMN IF EXISTS ${
-        this.escapeIdentifier(operation.property_name)
+        this.escapeIdentifier(operation.propertyName)
       };`,
     ];
   }
@@ -317,7 +317,7 @@ export class DDLGenerator {
     operation: Types.AlterPropertyOperation,
   ): string[] {
     const statements: string[] = [];
-    const columnName = this.escapeIdentifier(operation.property_name);
+    const columnName = this.escapeIdentifier(operation.propertyName);
     const tableRef = this.escapeIdentifier(tableName);
 
     for (const change of operation.changes) {
@@ -325,12 +325,12 @@ export class DDLGenerator {
         case "ChangeType":
           statements.push(
             `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} TYPE ${
-              this.mapEdgeQLTypeToPostgreSQL(change.new_value)
+              this.mapEdgeQLTypeToPostgreSQL(change.newValue)
             };`,
           );
           break;
         case "ChangeRequired":
-          if (change.new_value) {
+          if (change.newValue) {
             statements.push(
               `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET NOT NULL;`,
             );
@@ -341,10 +341,10 @@ export class DDLGenerator {
           }
           break;
         case "ChangeDefault":
-          if (change.new_value !== undefined) {
+          if (change.newValue !== undefined) {
             statements.push(
               `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET DEFAULT ${
-                this.formatDefaultValue(change.new_value, "unknown")
+                this.formatDefaultValue(change.newValue, "unknown")
               };`,
             );
           } else {
@@ -374,24 +374,24 @@ export class DDLGenerator {
           name: "source_id",
           type: "UUID",
           nullable: false,
-          primary_key: false,
+          primaryKey: false,
           unique: false,
           references: {
             table: tableName,
             column: "id",
-            on_delete: "CASCADE",
+            onDelete: "CASCADE",
           },
         },
         {
           name: "target_id",
           type: "UUID",
           nullable: false,
-          primary_key: false,
+          primaryKey: false,
           unique: false,
           references: {
             table: this.typeNameToTableName(link.target),
             column: "id",
-            on_delete: link.on_target_delete || "CASCADE",
+            onDelete: link.onTargetDelete || "CASCADE",
           },
         },
       ];
@@ -422,7 +422,7 @@ export class DDLGenerator {
           this.escapeIdentifier(`fk_${tableName}_${columnName}`)
         } FOREIGN KEY (${this.escapeIdentifier(columnName)}) REFERENCES ${
           this.escapeIdentifier(targetTable)
-        } (id) ON DELETE ${link.on_target_delete || "RESTRICT"};`,
+        } (id) ON DELETE ${link.onTargetDelete || "RESTRICT"};`,
       );
       statements.push(
         `CREATE INDEX ${
@@ -441,7 +441,7 @@ export class DDLGenerator {
     operation: Types.DropLinkOperation,
   ): string[] {
     const statements: string[] = [];
-    const linkName = operation.link_name;
+    const linkName = operation.linkName;
 
     // Drop junction table if it exists
     const junctionTableName = `${tableName}_${linkName}`;
@@ -469,14 +469,14 @@ export class DDLGenerator {
     // Link alteration is complex and often requires recreating the link
     // For now, return a comment indicating this needs manual handling
     return [
-      `-- ALTER LINK ${operation.link_name}: Complex operation requiring manual handling`,
+      `-- ALTER LINK ${operation.linkName}: Complex operation requiring manual handling`,
     ];
   }
 
   private generateCreateTable(operation: Types.CreateTableOperation): string[] {
     return [
       this.generateCreateTableFromColumns(
-        operation.table_name,
+        operation.tableName,
         operation.columns,
       ),
     ];
@@ -485,7 +485,7 @@ export class DDLGenerator {
   private generateDropTable(operation: Types.DropTableOperation): string[] {
     return [
       `DROP TABLE IF EXISTS ${
-        this.escapeIdentifier(operation.table_name)
+        this.escapeIdentifier(operation.tableName)
       } CASCADE;`,
     ];
   }
@@ -495,7 +495,7 @@ export class DDLGenerator {
 
     for (const tableOp of operation.operations) {
       statements.push(
-        ...this.generateTableOperationDDL(operation.table_name, tableOp),
+        ...this.generateTableOperationDDL(operation.tableName, tableOp),
       );
     }
 
@@ -548,7 +548,7 @@ export class DDLGenerator {
   ): string[] {
     return [
       `ALTER TABLE ${this.escapeIdentifier(tableName)} DROP COLUMN IF EXISTS ${
-        this.escapeIdentifier(operation.column_name)
+        this.escapeIdentifier(operation.columnName)
       };`,
     ];
   }
@@ -558,18 +558,18 @@ export class DDLGenerator {
     operation: Types.AlterColumnOperation,
   ): string[] {
     const statements: string[] = [];
-    const columnName = this.escapeIdentifier(operation.column_name);
+    const columnName = this.escapeIdentifier(operation.columnName);
     const tableRef = this.escapeIdentifier(tableName);
 
     for (const change of operation.changes) {
       switch (change.kind) {
         case "ChangeType":
           statements.push(
-            `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} TYPE ${change.new_value};`,
+            `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} TYPE ${change.newValue};`,
           );
           break;
         case "ChangeNullable":
-          if (change.new_value) {
+          if (change.newValue) {
             statements.push(
               `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} DROP NOT NULL;`,
             );
@@ -580,9 +580,9 @@ export class DDLGenerator {
           }
           break;
         case "ChangeDefault":
-          if (change.new_value !== undefined) {
+          if (change.newValue !== undefined) {
             statements.push(
-              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET DEFAULT ${change.new_value};`,
+              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET DEFAULT ${change.newValue};`,
             );
           } else {
             statements.push(
@@ -614,7 +614,7 @@ export class DDLGenerator {
 
   private generateDropIndex(operation: Types.DropIndexOperation): string[] {
     return [
-      `DROP INDEX IF EXISTS ${this.escapeIdentifier(operation.index_name)};`,
+      `DROP INDEX IF EXISTS ${this.escapeIdentifier(operation.indexName)};`,
     ];
   }
 
@@ -637,7 +637,7 @@ export class DDLGenerator {
   private generateColumnDefinition(column: Types.ColumnDefinition): string {
     let def = `${this.escapeIdentifier(column.name)} ${column.type}`;
 
-    if (column.primary_key) {
+    if (column.primaryKey) {
       def += " PRIMARY KEY";
     }
 
@@ -645,7 +645,7 @@ export class DDLGenerator {
       def += " NOT NULL";
     }
 
-    if (column.unique && !column.primary_key) {
+    if (column.unique && !column.primaryKey) {
       def += " UNIQUE";
     }
 
@@ -665,11 +665,11 @@ export class DDLGenerator {
     }
 
     const constraintName = `fk_${tableName}_${column.name}`;
-    const onDelete = column.references.on_delete
-      ? ` ON DELETE ${column.references.on_delete}`
+    const onDelete = column.references.onDelete
+      ? ` ON DELETE ${column.references.onDelete}`
       : "";
-    const onUpdate = column.references.on_update
-      ? ` ON UPDATE ${column.references.on_update}`
+    const onUpdate = column.references.onUpdate
+      ? ` ON UPDATE ${column.references.onUpdate}`
       : "";
 
     return `CONSTRAINT ${this.escapeIdentifier(constraintName)} FOREIGN KEY (${
@@ -811,7 +811,7 @@ export class DDLGenerator {
     operation: Types.CreateTypeOperation,
   ): string[] {
     // To rollback CreateType, we drop the table
-    const tableName = this.typeNameToTableName(operation.type_name);
+    const tableName = this.typeNameToTableName(operation.typeName);
     return [
       `DROP TABLE IF EXISTS ${this.escapeIdentifier(tableName)} CASCADE;`,
     ];
@@ -822,7 +822,7 @@ export class DDLGenerator {
   ): string[] {
     // To rollback DropType, we would need to recreate the table
     // This requires the original schema information which we don't have
-    const tableName = this.typeNameToTableName(operation.type_name);
+    const tableName = this.typeNameToTableName(operation.typeName);
     return [
       `-- MANUAL ROLLBACK REQUIRED: Recreate table '${tableName}'`,
       `-- The original table structure was lost when it was dropped.`,
@@ -834,7 +834,7 @@ export class DDLGenerator {
     operation: Types.AlterTypeOperation,
   ): string[] {
     const statements: string[] = [];
-    const tableName = this.typeNameToTableName(operation.type_name);
+    const tableName = this.typeNameToTableName(operation.typeName);
 
     // Process type operations in reverse order
     for (const typeOp of operation.operations.reverse()) {
@@ -905,9 +905,9 @@ export class DDLGenerator {
     // To rollback DropProperty, we would need to add the column back
     // This requires the original column definition which we don't have
     return [
-      `-- MANUAL ROLLBACK REQUIRED: Add column '${operation.property_name}' back to table '${tableName}'`,
+      `-- MANUAL ROLLBACK REQUIRED: Add column '${operation.propertyName}' back to table '${tableName}'`,
       `-- ALTER TABLE ${this.escapeIdentifier(tableName)} ADD COLUMN ${
-        this.escapeIdentifier(operation.property_name)
+        this.escapeIdentifier(operation.propertyName)
       } <TYPE> <CONSTRAINTS>;`,
       `-- Please determine the correct type and constraints from backup or documentation.`,
     ];
@@ -918,7 +918,7 @@ export class DDLGenerator {
     operation: Types.AlterPropertyOperation,
   ): string[] {
     const statements: string[] = [];
-    const columnName = this.escapeIdentifier(operation.property_name);
+    const columnName = this.escapeIdentifier(operation.propertyName);
     const tableRef = this.escapeIdentifier(tableName);
 
     // Process changes in reverse order
@@ -927,12 +927,12 @@ export class DDLGenerator {
         case "ChangeType":
           statements.push(
             `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} TYPE ${
-              this.mapEdgeQLTypeToPostgreSQL(change.old_value)
+              this.mapEdgeQLTypeToPostgreSQL(change.oldValue)
             };`,
           );
           break;
         case "ChangeRequired":
-          if (change.old_value) {
+          if (change.oldValue) {
             statements.push(
               `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET NOT NULL;`,
             );
@@ -943,10 +943,10 @@ export class DDLGenerator {
           }
           break;
         case "ChangeDefault":
-          if (change.old_value !== undefined) {
+          if (change.oldValue !== undefined) {
             statements.push(
               `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET DEFAULT ${
-                this.formatDefaultValue(change.old_value, "unknown")
+                this.formatDefaultValue(change.oldValue, "unknown")
               };`,
             );
           } else {
@@ -996,7 +996,7 @@ export class DDLGenerator {
     // To rollback DropLink, we would need to recreate the link
     // This requires the original link definition which we don't have
     return [
-      `-- MANUAL ROLLBACK REQUIRED: Recreate link '${operation.link_name}' on table '${tableName}'`,
+      `-- MANUAL ROLLBACK REQUIRED: Recreate link '${operation.linkName}' on table '${tableName}'`,
       `-- This may involve creating a junction table or adding a foreign key column.`,
       `-- Please refer to backup or documentation for the original link structure.`,
     ];
@@ -1008,7 +1008,7 @@ export class DDLGenerator {
   ): string[] {
     // Link alteration rollback is complex and requires the original link definition
     return [
-      `-- MANUAL ROLLBACK REQUIRED: Revert changes to link '${operation.link_name}' on table '${tableName}'`,
+      `-- MANUAL ROLLBACK REQUIRED: Revert changes to link '${operation.linkName}' on table '${tableName}'`,
       `-- Link alterations may involve changing junction tables or foreign key constraints.`,
       `-- Please refer to backup or documentation for the original link configuration.`,
     ];
@@ -1019,7 +1019,7 @@ export class DDLGenerator {
   ): string[] {
     return [
       `DROP TABLE IF EXISTS ${
-        this.escapeIdentifier(operation.table_name)
+        this.escapeIdentifier(operation.tableName)
       } CASCADE;`,
     ];
   }
@@ -1028,7 +1028,7 @@ export class DDLGenerator {
     operation: Types.DropTableOperation,
   ): string[] {
     return [
-      `-- MANUAL ROLLBACK REQUIRED: Recreate table '${operation.table_name}'`,
+      `-- MANUAL ROLLBACK REQUIRED: Recreate table '${operation.tableName}'`,
       `-- The original table structure was lost when it was dropped.`,
       `-- Please restore from backup or recreate the table manually.`,
     ];
@@ -1042,7 +1042,7 @@ export class DDLGenerator {
     // Process table operations in reverse order
     for (const tableOp of operation.operations.reverse()) {
       statements.push(
-        ...this.generateRollbackTableOperation(operation.table_name, tableOp),
+        ...this.generateRollbackTableOperation(operation.tableName, tableOp),
       );
     }
 
@@ -1092,9 +1092,9 @@ export class DDLGenerator {
     operation: Types.DropColumnOperation,
   ): string[] {
     return [
-      `-- MANUAL ROLLBACK REQUIRED: Add column '${operation.column_name}' back to table '${tableName}'`,
+      `-- MANUAL ROLLBACK REQUIRED: Add column '${operation.columnName}' back to table '${tableName}'`,
       `-- ALTER TABLE ${this.escapeIdentifier(tableName)} ADD COLUMN ${
-        this.escapeIdentifier(operation.column_name)
+        this.escapeIdentifier(operation.columnName)
       } <TYPE> <CONSTRAINTS>;`,
       `-- Please determine the correct type and constraints from backup or documentation.`,
     ];
@@ -1105,7 +1105,7 @@ export class DDLGenerator {
     operation: Types.AlterColumnOperation,
   ): string[] {
     const statements: string[] = [];
-    const columnName = this.escapeIdentifier(operation.column_name);
+    const columnName = this.escapeIdentifier(operation.columnName);
     const tableRef = this.escapeIdentifier(tableName);
 
     // Process changes in reverse order
@@ -1113,11 +1113,11 @@ export class DDLGenerator {
       switch (change.kind) {
         case "ChangeType":
           statements.push(
-            `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} TYPE ${change.old_value};`,
+            `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} TYPE ${change.oldValue};`,
           );
           break;
         case "ChangeNullable":
-          if (change.old_value) {
+          if (change.oldValue) {
             statements.push(
               `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} DROP NOT NULL;`,
             );
@@ -1128,9 +1128,9 @@ export class DDLGenerator {
           }
           break;
         case "ChangeDefault":
-          if (change.old_value !== undefined) {
+          if (change.oldValue !== undefined) {
             statements.push(
-              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET DEFAULT ${change.old_value};`,
+              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET DEFAULT ${change.oldValue};`,
             );
           } else {
             statements.push(
@@ -1156,7 +1156,7 @@ export class DDLGenerator {
     operation: Types.DropIndexOperation,
   ): string[] {
     return [
-      `-- MANUAL ROLLBACK REQUIRED: Recreate index '${operation.index_name}'`,
+      `-- MANUAL ROLLBACK REQUIRED: Recreate index '${operation.indexName}'`,
       `-- The original index definition was lost when it was dropped.`,
       `-- Please refer to backup or documentation for the original index structure.`,
     ];

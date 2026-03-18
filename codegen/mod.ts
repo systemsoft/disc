@@ -20,15 +20,15 @@ export function generateTypeScript(
   config: Partial<Types.CodegenConfig> = {},
 ): Types.CodegenResult {
   const fullConfig: Types.CodegenConfig = {
-    output_dir: config.output_dir || "./generated",
-    schema_source: config.schema_source || "./schema.esdl",
+    outputDir: config.outputDir || "./generated",
+    schemaSource: config.schemaSource || "./schema.esdl",
     target: config.target || "client",
-    type_prefix: config.type_prefix || "",
-    interface_suffix: config.interface_suffix || "",
-    include_query_builders: config.include_query_builders !== false,
-    include_mutations: config.include_mutations !== false,
-    include_client: config.include_client !== false,
-    format_output: config.format_output !== false,
+    typePrefix: config.typePrefix || "",
+    interfaceSuffix: config.interfaceSuffix || "",
+    includeQueryBuilders: config.includeQueryBuilders !== false,
+    includeMutations: config.includeMutations !== false,
+    includeClient: config.includeClient !== false,
+    formatOutput: config.formatOutput !== false,
   };
 
   const generator = new TypeScriptGenerator(schema, fullConfig);
@@ -90,28 +90,28 @@ export async function writeGeneratedFiles(
 export const DEFAULT_CONFIGS = {
   client: (): Partial<Types.CodegenConfig> => ({
     target: "client",
-    output_dir: "./generated",
-    include_query_builders: true,
-    include_client: true,
-    include_mutations: true,
-    format_output: true,
+    outputDir: "./generated",
+    includeQueryBuilders: true,
+    includeClient: true,
+    includeMutations: true,
+    formatOutput: true,
   }),
 
   server: (): Partial<Types.CodegenConfig> => ({
     target: "server",
-    output_dir: "./src/generated",
-    include_query_builders: false,
-    include_client: false,
-    include_mutations: false,
-    format_output: true,
+    outputDir: "./src/generated",
+    includeQueryBuilders: false,
+    includeClient: false,
+    includeMutations: false,
+    formatOutput: true,
   }),
 
   both: (): Partial<Types.CodegenConfig> => ({
     target: "both",
-    output_dir: "./generated",
-    include_query_builders: true,
-    include_client: true,
-    include_mutations: true,
-    format_output: true,
+    outputDir: "./generated",
+    includeQueryBuilders: true,
+    includeClient: true,
+    includeMutations: true,
+    formatOutput: true,
   }),
 };

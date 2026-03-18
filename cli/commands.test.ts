@@ -1,4 +1,3 @@
-// deno-lint-ignore-file no-console
 /**
  * CLI Commands Tests - Test core command functionality
  */
@@ -21,25 +20,25 @@ import {
 // Mock the actual command handlers
 function createMockMigrateConfig(args: any): any {
   return {
-    migrations_dir: "./migrations",
-    schema_file: args.schema || "./schema.esdl",
-    database_url: Deno.env.get("DATABASE_URL") ||
+    migrationsDir: "./migrations",
+    schemaFile: args.schema || "./schema.esdl",
+    databaseUrl: Deno.env.get("DATABASE_URL") ||
       "postgresql://localhost:5432/disc_dev",
-    dry_run: args["dry-run"] || false,
-    auto_approve: args["auto-approve"] || false,
-    backup_before_migration: true,
-    rollback_on_error: true,
+    dryRun: args["dry-run"] || false,
+    autoApprove: args["auto-approve"] || false,
+    backupBeforeMigration: true,
+    rollbackOnError: true,
   };
 }
 
 function createMockCodegenConfig(args: any): any {
   return {
-    output_dir: args.output || "./generated",
+    outputDir: args.output || "./generated",
     target: args.target || "client",
-    include_query_builders: args["no-queries"] !== true,
-    include_mutations: args["no-mutations"] !== true,
-    include_client: args["no-client"] !== true,
-    format_output: args["no-format"] !== true,
+    includeQueryBuilders: args["no-queries"] !== true,
+    includeMutations: args["no-mutations"] !== true,
+    includeClient: args["no-client"] !== true,
+    formatOutput: args["no-format"] !== true,
   };
 }
 
@@ -86,9 +85,9 @@ Deno.test("CLI Commands - migrate create workflow", async () => {
 
     const config = createMockMigrateConfig(args);
 
-    assertEquals(config.schema_file, schemaPath);
-    assertEquals(config.backup_before_migration, true);
-    assertEquals(config.rollback_on_error, true);
+    assertEquals(config.schemaFile, schemaPath);
+    assertEquals(config.backupBeforeMigration, true);
+    assertEquals(config.rollbackOnError, true);
 
     // Simulate migration creation output
     console.capture();
@@ -126,7 +125,7 @@ Deno.test("CLI Commands - migrate apply workflow", async () => {
     };
 
     const config = createMockMigrateConfig(args);
-    assertEquals(config.dry_run, true);
+    assertEquals(config.dryRun, true);
 
     // Simulate apply workflow output
     console.capture();
@@ -164,8 +163,8 @@ Deno.test("CLI Commands - serve command configuration", async () => {
     const defaultConfig = {
       host: Deno.env.get("DISC_HOST") || "localhost",
       port: parseInt(Deno.env.get("DISC_PORT") || "5656"),
-      enable_cors: true,
-      enable_websockets: true,
+      enableCors: true,
+      enableWebsockets: true,
     };
 
     // Apply CLI overrides
@@ -176,8 +175,8 @@ Deno.test("CLI Commands - serve command configuration", async () => {
 
     assertEquals(finalConfig.host, "0.0.0.0"); // from env
     assertEquals(finalConfig.port, 9000); // from CLI override
-    assertEquals(finalConfig.enable_cors, true);
-    assertEquals(finalConfig.enable_websockets, true);
+    assertEquals(finalConfig.enableCors, true);
+    assertEquals(finalConfig.enableWebsockets, true);
 
     // Simulate server startup output
     console.capture();
@@ -229,12 +228,12 @@ Deno.test("CLI Commands - codegen workflow", async () => {
 
     const config = createMockCodegenConfig(args);
 
-    assertEquals(config.output_dir, outputDir);
+    assertEquals(config.outputDir, outputDir);
     assertEquals(config.target, "client");
-    assertEquals(config.include_query_builders, true);
-    assertEquals(config.include_mutations, true);
-    assertEquals(config.include_client, true);
-    assertEquals(config.format_output, true);
+    assertEquals(config.includeQueryBuilders, true);
+    assertEquals(config.includeMutations, true);
+    assertEquals(config.includeClient, true);
+    assertEquals(config.formatOutput, true);
 
     // Simulate codegen output
     console.capture();
@@ -355,10 +354,10 @@ Deno.test("CLI Commands - codegen config validation", () => {
 
   const restrictiveConfig = createMockCodegenConfig(restrictiveArgs);
 
-  assertEquals(restrictiveConfig.include_query_builders, false);
-  assertEquals(restrictiveConfig.include_mutations, false);
-  assertEquals(restrictiveConfig.include_client, false);
-  assertEquals(restrictiveConfig.format_output, false);
+  assertEquals(restrictiveConfig.includeQueryBuilders, false);
+  assertEquals(restrictiveConfig.includeMutations, false);
+  assertEquals(restrictiveConfig.includeClient, false);
+  assertEquals(restrictiveConfig.formatOutput, false);
 
   // Test all no-* flags set to false
   const permissiveArgs = {
@@ -370,8 +369,8 @@ Deno.test("CLI Commands - codegen config validation", () => {
 
   const permissiveConfig = createMockCodegenConfig(permissiveArgs);
 
-  assertEquals(permissiveConfig.include_query_builders, true);
-  assertEquals(permissiveConfig.include_mutations, true);
-  assertEquals(permissiveConfig.include_client, true);
-  assertEquals(permissiveConfig.format_output, true);
+  assertEquals(permissiveConfig.includeQueryBuilders, true);
+  assertEquals(permissiveConfig.includeMutations, true);
+  assertEquals(permissiveConfig.includeClient, true);
+  assertEquals(permissiveConfig.formatOutput, true);
 });

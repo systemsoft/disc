@@ -3,15 +3,15 @@
  */
 
 export interface CodegenConfig {
-  output_dir: string;
-  schema_source: string;
+  outputDir: string;
+  schemaSource: string;
   target: "client" | "server" | "both";
-  type_prefix?: string;
-  interface_suffix?: string;
-  include_query_builders: boolean;
-  include_mutations: boolean;
-  include_client: boolean;
-  format_output: boolean;
+  typePrefix?: string;
+  interfaceSuffix?: string;
+  includeQueryBuilders: boolean;
+  includeMutations: boolean;
+  includeClient: boolean;
+  formatOutput: boolean;
 }
 
 export interface TypeDefinition {
@@ -30,20 +30,20 @@ export interface PropertyDefinition {
   nullable: boolean;
   array: boolean;
   description?: string;
-  default_value?: string;
+  defaultValue?: string;
 }
 
 export interface QueryBuilderDefinition {
   name: string;
-  target_type: string;
+  targetType: string;
   methods: QueryMethod[];
-  return_type: string;
+  returnType: string;
 }
 
 export interface QueryMethod {
   name: string;
   parameters: MethodParameter[];
-  return_type: string;
+  returnType: string;
   body: string;
   description?: string;
 }
@@ -56,17 +56,17 @@ export interface MethodParameter {
 }
 
 export interface ClientDefinition {
-  class_name: string;
+  className: string;
   methods: ClientMethod[];
-  constructor_params: MethodParameter[];
+  constructorParams: MethodParameter[];
   imports: string[];
 }
 
 export interface ClientMethod {
   name: string;
   parameters: MethodParameter[];
-  return_type: string;
-  is_async: boolean;
+  returnType: string;
+  isAsync: boolean;
   body: string;
   description?: string;
 }
@@ -84,117 +84,117 @@ export interface GeneratedFile {
 }
 
 export interface TypeMapping {
-  edgeql_type: string;
-  typescript_type: string;
-  nullable_type: string;
-  array_type: string;
-  import_required?: string;
+  edgeqlType: string;
+  typescriptType: string;
+  nullableType: string;
+  arrayType: string;
+  importRequired?: string;
 }
 
 // Built-in type mappings
 export const DEFAULT_TYPE_MAPPINGS: TypeMapping[] = [
   {
-    edgeql_type: "str",
-    typescript_type: "string",
-    nullable_type: "string | null",
-    array_type: "string[]",
+    edgeqlType: "str",
+    typescriptType: "string",
+    nullableType: "string | null",
+    arrayType: "string[]",
   },
   {
-    edgeql_type: "bool",
-    typescript_type: "boolean",
-    nullable_type: "boolean | null",
-    array_type: "boolean[]",
+    edgeqlType: "bool",
+    typescriptType: "boolean",
+    nullableType: "boolean | null",
+    arrayType: "boolean[]",
   },
   {
-    edgeql_type: "int16",
-    typescript_type: "number",
-    nullable_type: "number | null",
-    array_type: "number[]",
+    edgeqlType: "int16",
+    typescriptType: "number",
+    nullableType: "number | null",
+    arrayType: "number[]",
   },
   {
-    edgeql_type: "int32",
-    typescript_type: "number",
-    nullable_type: "number | null",
-    array_type: "number[]",
+    edgeqlType: "int32",
+    typescriptType: "number",
+    nullableType: "number | null",
+    arrayType: "number[]",
   },
   {
-    edgeql_type: "int64",
-    typescript_type: "number",
-    nullable_type: "number | null",
-    array_type: "number[]",
+    edgeqlType: "int64",
+    typescriptType: "number",
+    nullableType: "number | null",
+    arrayType: "number[]",
   },
   {
-    edgeql_type: "float32",
-    typescript_type: "number",
-    nullable_type: "number | null",
-    array_type: "number[]",
+    edgeqlType: "float32",
+    typescriptType: "number",
+    nullableType: "number | null",
+    arrayType: "number[]",
   },
   {
-    edgeql_type: "float64",
-    typescript_type: "number",
-    nullable_type: "number | null",
-    array_type: "number[]",
+    edgeqlType: "float64",
+    typescriptType: "number",
+    nullableType: "number | null",
+    arrayType: "number[]",
   },
   {
-    edgeql_type: "decimal",
-    typescript_type: "number",
-    nullable_type: "number | null",
-    array_type: "number[]",
+    edgeqlType: "decimal",
+    typescriptType: "number",
+    nullableType: "number | null",
+    arrayType: "number[]",
   },
   {
-    edgeql_type: "uuid",
-    typescript_type: "string",
-    nullable_type: "string | null",
-    array_type: "string[]",
+    edgeqlType: "uuid",
+    typescriptType: "string",
+    nullableType: "string | null",
+    arrayType: "string[]",
   },
   {
-    edgeql_type: "datetime",
-    typescript_type: "Date",
-    nullable_type: "Date | null",
-    array_type: "Date[]",
+    edgeqlType: "datetime",
+    typescriptType: "Date",
+    nullableType: "Date | null",
+    arrayType: "Date[]",
   },
   {
-    edgeql_type: "duration",
-    typescript_type: "string",
-    nullable_type: "string | null",
-    array_type: "string[]",
+    edgeqlType: "duration",
+    typescriptType: "string",
+    nullableType: "string | null",
+    arrayType: "string[]",
   },
   {
-    edgeql_type: "bytes",
-    typescript_type: "Uint8Array",
-    nullable_type: "Uint8Array | null",
-    array_type: "Uint8Array[]",
-    import_required: "// Note: Uint8Array is built-in",
+    edgeqlType: "bytes",
+    typescriptType: "Uint8Array",
+    nullableType: "Uint8Array | null",
+    arrayType: "Uint8Array[]",
+    importRequired: "// Note: Uint8Array is built-in",
   },
   {
-    edgeql_type: "json",
-    typescript_type: "unknown",
-    nullable_type: "unknown | null",
-    array_type: "unknown[]",
+    edgeqlType: "json",
+    typescriptType: "unknown",
+    nullableType: "unknown | null",
+    arrayType: "unknown[]",
   },
   {
-    edgeql_type: "cal::local_datetime",
-    typescript_type: "Date",
-    nullable_type: "Date | null",
-    array_type: "Date[]",
+    edgeqlType: "cal::local_datetime",
+    typescriptType: "Date",
+    nullableType: "Date | null",
+    arrayType: "Date[]",
   },
   {
-    edgeql_type: "cal::local_date",
-    typescript_type: "string",
-    nullable_type: "string | null",
-    array_type: "string[]",
+    edgeqlType: "cal::local_date",
+    typescriptType: "string",
+    nullableType: "string | null",
+    arrayType: "string[]",
   },
   {
-    edgeql_type: "cal::local_time",
-    typescript_type: "string",
-    nullable_type: "string | null",
-    array_type: "string[]",
+    edgeqlType: "cal::local_time",
+    typescriptType: "string",
+    nullableType: "string | null",
+    arrayType: "string[]",
   },
 ];
 
 export function getTypeMapping(edgeqlType: string): TypeMapping | null {
   return DEFAULT_TYPE_MAPPINGS.find((mapping) =>
-    mapping.edgeql_type === edgeqlType
+    mapping.edgeqlType === edgeqlType
   ) || null;
 }
 
@@ -221,8 +221,8 @@ export function mapEdgeQLTypeToTypeScript(
   }
 
   if (multi) {
-    return required ? mapping.array_type : `${mapping.array_type} | null`;
+    return required ? mapping.arrayType : `${mapping.arrayType} | null`;
   }
 
-  return required ? mapping.typescript_type : mapping.nullable_type;
+  return required ? mapping.typescriptType : mapping.nullableType;
 }

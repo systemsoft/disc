@@ -30,7 +30,7 @@ async function createAuthServer(): Promise<{
   await db.connect();
 
   const provider = new AuthProvider(
-    { jwt_secret: TEST_JWT_SECRET },
+    { jwtSecret: TEST_JWT_SECRET },
     db,
   );
   await provider.initialize();
@@ -45,21 +45,21 @@ async function createAuthServer(): Promise<{
     config: {
       host: TEST_HOST,
       port,
-      database_url: "postgresql://localhost:5432/test",
-      max_connections: 10,
-      request_timeout: 5000,
-      enable_cors: true,
-      enable_websockets: false,
-      jwt_secret: TEST_JWT_SECRET,
-      enable_auth: true,
+      databaseUrl: "postgresql://localhost:5432/test",
+      maxConnections: 10,
+      requestTimeout: 5000,
+      enableCors: true,
+      enableWebsockets: false,
+      jwtSecret: TEST_JWT_SECRET,
+      enableAuth: true,
     },
-    protocol_handler: {
-      handle_request: async () => ({ data: { result: "ok" } }),
-      validate_request: () => [],
+    protocolHandler: {
+      handleRequest: async () => ({ data: { result: "ok" } }),
+      validateRequest: () => [],
     },
-    auth_provider: provider,
-    auth_middleware: middleware,
-    auth_routes: routes,
+    authProvider: provider,
+    authMiddleware: middleware,
+    authRoutes: routes,
   });
 
   return { server, provider, db, port };
@@ -71,15 +71,15 @@ function createNoAuthServer(port: number): HttpServer {
     config: {
       host: TEST_HOST,
       port,
-      database_url: "postgresql://localhost:5432/test",
-      max_connections: 10,
-      request_timeout: 5000,
-      enable_cors: true,
-      enable_websockets: false,
+      databaseUrl: "postgresql://localhost:5432/test",
+      maxConnections: 10,
+      requestTimeout: 5000,
+      enableCors: true,
+      enableWebsockets: false,
     },
-    protocol_handler: {
-      handle_request: async () => ({ data: { result: "ok" } }),
-      validate_request: () => [],
+    protocolHandler: {
+      handleRequest: async () => ({ data: { result: "ok" } }),
+      validateRequest: () => [],
     },
   });
 }
@@ -262,7 +262,7 @@ Deno.test({
     await db.connect();
 
     const provider = new AuthProvider(
-      { jwt_secret: TEST_JWT_SECRET },
+      { jwtSecret: TEST_JWT_SECRET },
       db,
     );
     await provider.initialize();
@@ -276,24 +276,24 @@ Deno.test({
       config: {
         host: TEST_HOST,
         port,
-        database_url: "postgresql://localhost:5432/test",
-        max_connections: 10,
-        request_timeout: 5000,
-        enable_cors: true,
-        enable_websockets: false,
-        jwt_secret: TEST_JWT_SECRET,
-        enable_auth: true,
+        databaseUrl: "postgresql://localhost:5432/test",
+        maxConnections: 10,
+        requestTimeout: 5000,
+        enableCors: true,
+        enableWebsockets: false,
+        jwtSecret: TEST_JWT_SECRET,
+        enableAuth: true,
       },
-      protocol_handler: {
-        handle_request: async (_req: any, ctx: any) => {
+      protocolHandler: {
+        handleRequest: async (_req: any, ctx: any) => {
           capturedContext = ctx;
           return { data: { result: "ok" } };
         },
-        validate_request: () => [],
+        validateRequest: () => [],
       },
-      auth_provider: provider,
-      auth_middleware: middleware,
-      auth_routes: routes,
+      authProvider: provider,
+      authMiddleware: middleware,
+      authRoutes: routes,
     });
 
     const serverPromise = server.start();
@@ -331,9 +331,9 @@ Deno.test({
 
       // Verify AuthContext was populated
       assertExists(capturedContext);
-      assertExists(capturedContext.auth.user_id);
-      assertExists(capturedContext.auth.jwt_claims);
-      assertEquals(capturedContext.auth.jwt_claims.email, "queryuser@test.com");
+      assertExists(capturedContext.auth.userId);
+      assertExists(capturedContext.auth.jwtClaims);
+      assertEquals(capturedContext.auth.jwtClaims.email, "queryuser@test.com");
     } finally {
       await server.stop();
       await db.close();

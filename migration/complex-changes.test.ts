@@ -322,13 +322,13 @@ function createRenamedTypeSchema(): Module[] {
 }
 
 const config: Types.MigrationConfig = {
-  migrations_dir: "./migrations",
-  schema_file: "./schema.esdl",
-  database_url: "postgresql://localhost:5432/test",
-  dry_run: true,
-  auto_approve: false,
-  backup_before_migration: true,
-  rollback_on_error: true,
+  migrationsDir: "./migrations",
+  schemaFile: "./schema.esdl",
+  databaseUrl: "postgresql://localhost:5432/test",
+  dryRun: true,
+  autoApprove: false,
+  backupBeforeMigration: true,
+  rollbackOnError: true,
 };
 
 Deno.test("Schema Differ - Detect Property Rename (appears as drop + add)", () => {
@@ -341,7 +341,7 @@ Deno.test("Schema Differ - Detect Property Rename (appears as drop + add)", () =
   // Should detect changes to User type
   const userAlterOp = operations.find((op) =>
     op.kind === "AlterType" &&
-    (op as Types.AlterTypeOperation).type_name === "User"
+    (op as Types.AlterTypeOperation).typeName === "User"
   ) as Types.AlterTypeOperation;
 
   assertEquals(userAlterOp !== undefined, true);
@@ -349,7 +349,7 @@ Deno.test("Schema Differ - Detect Property Rename (appears as drop + add)", () =
   // Should have drop "name" and add "full_name"
   const dropNameOp = userAlterOp.operations.find((op) =>
     op.kind === "DropProperty" &&
-    (op as Types.DropPropertyOperation).property_name === "name"
+    (op as Types.DropPropertyOperation).propertyName === "name"
   );
   const addFullNameOp = userAlterOp.operations.find((op) =>
     op.kind === "AddProperty" &&
@@ -362,7 +362,7 @@ Deno.test("Schema Differ - Detect Property Rename (appears as drop + add)", () =
   // Should also have drop "age" and add "birth_year"
   const dropAgeOp = userAlterOp.operations.find((op) =>
     op.kind === "DropProperty" &&
-    (op as Types.DropPropertyOperation).property_name === "age"
+    (op as Types.DropPropertyOperation).propertyName === "age"
   );
   const addBirthYearOp = userAlterOp.operations.find((op) =>
     op.kind === "AddProperty" &&
@@ -382,7 +382,7 @@ Deno.test("Schema Differ - Detect Type Changes in Properties", () => {
 
   const userAlterOp = operations.find((op) =>
     op.kind === "AlterType" &&
-    (op as Types.AlterTypeOperation).type_name === "User"
+    (op as Types.AlterTypeOperation).typeName === "User"
   ) as Types.AlterTypeOperation;
 
   assertEquals(userAlterOp !== undefined, true);
@@ -390,7 +390,7 @@ Deno.test("Schema Differ - Detect Type Changes in Properties", () => {
   // Should detect type change for age property
   const ageAlterOp = userAlterOp.operations.find((op) =>
     op.kind === "AlterProperty" &&
-    (op as Types.AlterPropertyOperation).property_name === "age"
+    (op as Types.AlterPropertyOperation).propertyName === "age"
   ) as Types.AlterPropertyOperation;
 
   assertEquals(ageAlterOp !== undefined, true);
@@ -403,16 +403,16 @@ Deno.test("Schema Differ - Detect Type Changes in Properties", () => {
     change.kind === "ChangeType"
   );
   assertEquals(typeChange !== undefined, true);
-  assertEquals(typeChange!.old_value, "int32");
-  assertEquals(typeChange!.new_value, "float64");
+  assertEquals(typeChange!.oldValue, "int32");
+  assertEquals(typeChange!.newValue, "float64");
 
   // Should include required change
   const requiredChange = ageAlterOp.changes.find((change) =>
     change.kind === "ChangeRequired"
   );
   assertEquals(requiredChange !== undefined, true);
-  assertEquals(requiredChange!.old_value, false);
-  assertEquals(requiredChange!.new_value, true);
+  assertEquals(requiredChange!.oldValue, false);
+  assertEquals(requiredChange!.newValue, true);
 
   // Should include default change
   const defaultChange = ageAlterOp.changes.find((change) =>
@@ -430,7 +430,7 @@ Deno.test("Schema Differ - Detect Link Changes", () => {
 
   const postAlterOp = operations.find((op) =>
     op.kind === "AlterType" &&
-    (op as Types.AlterTypeOperation).type_name === "Post"
+    (op as Types.AlterTypeOperation).typeName === "Post"
   ) as Types.AlterTypeOperation;
 
   assertEquals(postAlterOp !== undefined, true);
@@ -438,7 +438,7 @@ Deno.test("Schema Differ - Detect Link Changes", () => {
   // Should detect changes to author link
   const authorAlterOp = postAlterOp.operations.find((op) =>
     op.kind === "AlterLink" &&
-    (op as Types.AlterLinkOperation).link_name === "author"
+    (op as Types.AlterLinkOperation).linkName === "author"
   ) as Types.AlterLinkOperation;
 
   assertEquals(authorAlterOp !== undefined, true);
@@ -449,16 +449,16 @@ Deno.test("Schema Differ - Detect Link Changes", () => {
     change.kind === "ChangeRequired"
   );
   assertEquals(requiredChange !== undefined, true);
-  assertEquals(requiredChange!.old_value, true);
-  assertEquals(requiredChange!.new_value, false);
+  assertEquals(requiredChange!.oldValue, true);
+  assertEquals(requiredChange!.newValue, false);
 
   // Should include multi change
   const multiChange = authorAlterOp.changes.find((change) =>
     change.kind === "ChangeMulti"
   );
   assertEquals(multiChange !== undefined, true);
-  assertEquals(multiChange!.old_value, false);
-  assertEquals(multiChange!.new_value, true);
+  assertEquals(multiChange!.oldValue, false);
+  assertEquals(multiChange!.newValue, true);
 });
 
 Deno.test("Schema Differ - Detect Type Rename (appears as drop + add)", () => {
@@ -471,11 +471,11 @@ Deno.test("Schema Differ - Detect Type Rename (appears as drop + add)", () => {
   // Should detect User type being dropped and Account type being added
   const dropUserOp = operations.find((op) =>
     op.kind === "DropType" &&
-    (op as Types.DropTypeOperation).type_name === "User"
+    (op as Types.DropTypeOperation).typeName === "User"
   );
   const createAccountOp = operations.find((op) =>
     op.kind === "CreateType" &&
-    (op as Types.CreateTypeOperation).type_name === "Account"
+    (op as Types.CreateTypeOperation).typeName === "Account"
   );
 
   assertEquals(dropUserOp !== undefined, true);
@@ -484,7 +484,7 @@ Deno.test("Schema Differ - Detect Type Rename (appears as drop + add)", () => {
   // Should also update Post type to change link target
   const postAlterOp = operations.find((op) =>
     op.kind === "AlterType" &&
-    (op as Types.AlterTypeOperation).type_name === "Post"
+    (op as Types.AlterTypeOperation).typeName === "Post"
   ) as Types.AlterTypeOperation;
 
   assertEquals(postAlterOp !== undefined, true);
@@ -492,7 +492,7 @@ Deno.test("Schema Differ - Detect Type Rename (appears as drop + add)", () => {
   // Should have alter link operation
   const authorAlterOp = postAlterOp.operations.find((op) =>
     op.kind === "AlterLink" &&
-    (op as Types.AlterLinkOperation).link_name === "author"
+    (op as Types.AlterLinkOperation).linkName === "author"
   ) as Types.AlterLinkOperation;
 
   assertEquals(authorAlterOp !== undefined, true);
@@ -501,34 +501,34 @@ Deno.test("Schema Differ - Detect Type Rename (appears as drop + add)", () => {
     change.kind === "ChangeTarget"
   );
   assertEquals(targetChange !== undefined, true);
-  assertEquals(targetChange!.old_value, "User");
-  assertEquals(targetChange!.new_value, "Account");
+  assertEquals(targetChange!.oldValue, "User");
+  assertEquals(targetChange!.newValue, "Account");
 });
 
 Deno.test("DDL Generator - Handle Complex Type Changes", () => {
   const generator = new DDLGenerator();
   const operation: Types.AlterTypeOperation = {
     kind: "AlterType",
-    type_name: "User",
+    typeName: "User",
     operations: [
       {
         kind: "AlterProperty",
-        property_name: "age",
+        propertyName: "age",
         changes: [
           {
             kind: "ChangeType",
-            old_value: "int32",
-            new_value: "float64",
+            oldValue: "int32",
+            newValue: "float64",
           },
           {
             kind: "ChangeRequired",
-            old_value: false,
-            new_value: true,
+            oldValue: false,
+            newValue: true,
           },
           {
             kind: "ChangeDefault",
-            old_value: undefined,
-            new_value: 0.0,
+            oldValue: undefined,
+            newValue: 0.0,
           },
         ],
       } as Types.AlterPropertyOperation,
@@ -562,21 +562,21 @@ Deno.test("DDL Generator - Handle Link Changes to Multi", () => {
   const generator = new DDLGenerator();
   const operation: Types.AlterTypeOperation = {
     kind: "AlterType",
-    type_name: "Post",
+    typeName: "Post",
     operations: [
       {
         kind: "AlterLink",
-        link_name: "author",
+        linkName: "author",
         changes: [
           {
             kind: "ChangeMulti",
-            old_value: false,
-            new_value: true,
+            oldValue: false,
+            newValue: true,
           },
           {
             kind: "ChangeRequired",
-            old_value: true,
-            new_value: false,
+            oldValue: true,
+            newValue: false,
           },
         ],
       } as Types.AlterLinkOperation,
@@ -651,7 +651,7 @@ Deno.test("Migration Engine - Handle Constraint Changes", () => {
     const operations = planResult.value.migrations[0].operations;
     const userAlterOp = operations.find((op) =>
       op.kind === "AlterType" &&
-      (op as Types.AlterTypeOperation).type_name === "User"
+      (op as Types.AlterTypeOperation).typeName === "User"
     ) as Types.AlterTypeOperation;
 
     assertEquals(userAlterOp !== undefined, true);
@@ -659,7 +659,7 @@ Deno.test("Migration Engine - Handle Constraint Changes", () => {
     // Should have operation to change email property (removing exclusive constraint)
     const emailAlterOp = userAlterOp.operations.find((op) =>
       op.kind === "AlterProperty" &&
-      (op as Types.AlterPropertyOperation).property_name === "email"
+      (op as Types.AlterPropertyOperation).propertyName === "email"
     );
 
     assertEquals(emailAlterOp !== undefined, true);

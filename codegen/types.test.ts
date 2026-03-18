@@ -8,18 +8,18 @@ import * as Types from "./types.ts";
 Deno.test("Types - getTypeMapping for built-in types", () => {
   const strMapping = Types.getTypeMapping("str");
   assertExists(strMapping);
-  assertEquals(strMapping.edgeql_type, "str");
-  assertEquals(strMapping.typescript_type, "string");
-  assertEquals(strMapping.nullable_type, "string | null");
-  assertEquals(strMapping.array_type, "string[]");
+  assertEquals(strMapping.edgeqlType, "str");
+  assertEquals(strMapping.typescriptType, "string");
+  assertEquals(strMapping.nullableType, "string | null");
+  assertEquals(strMapping.arrayType, "string[]");
 
   const boolMapping = Types.getTypeMapping("bool");
   assertExists(boolMapping);
-  assertEquals(boolMapping.typescript_type, "boolean");
+  assertEquals(boolMapping.typescriptType, "boolean");
 
   const intMapping = Types.getTypeMapping("int32");
   assertExists(intMapping);
-  assertEquals(intMapping.typescript_type, "number");
+  assertEquals(intMapping.typescriptType, "number");
 });
 
 Deno.test("Types - getTypeMapping for nonexistent type", () => {
@@ -124,51 +124,51 @@ Deno.test("Types - DEFAULT_TYPE_MAPPINGS completeness", () => {
   for (const type of expectedTypes) {
     const mapping = Types.getTypeMapping(type);
     assertExists(mapping, `Missing mapping for type: ${type}`);
-    assertExists(mapping.typescript_type);
-    assertExists(mapping.nullable_type);
-    assertExists(mapping.array_type);
+    assertExists(mapping.typescriptType);
+    assertExists(mapping.nullableType);
+    assertExists(mapping.arrayType);
   }
 });
 
 Deno.test("Types - TypeMapping interface structure", () => {
   const mapping = Types.DEFAULT_TYPE_MAPPINGS[0];
 
-  assertExists(mapping.edgeql_type);
-  assertExists(mapping.typescript_type);
-  assertExists(mapping.nullable_type);
-  assertExists(mapping.array_type);
+  assertExists(mapping.edgeqlType);
+  assertExists(mapping.typescriptType);
+  assertExists(mapping.nullableType);
+  assertExists(mapping.arrayType);
 
-  // import_required is optional
-  if (mapping.import_required !== undefined) {
-    assertEquals(typeof mapping.import_required, "string");
+  // importRequired is optional
+  if (mapping.importRequired !== undefined) {
+    assertEquals(typeof mapping.importRequired, "string");
   }
 });
 
 Deno.test("Types - CodegenConfig interface defaults", () => {
   // Test that partial config can be constructed
   const partialConfig: Partial<Types.CodegenConfig> = {
-    output_dir: "./test-output",
+    outputDir: "./test-output",
     target: "client",
   };
 
-  assertEquals(partialConfig.output_dir, "./test-output");
+  assertEquals(partialConfig.outputDir, "./test-output");
   assertEquals(partialConfig.target, "client");
 
   // Test full config
   const fullConfig: Types.CodegenConfig = {
-    output_dir: "./generated",
-    schema_source: "./schema.esdl",
+    outputDir: "./generated",
+    schemaSource: "./schema.esdl",
     target: "both",
-    type_prefix: "",
-    interface_suffix: "",
-    include_query_builders: true,
-    include_mutations: true,
-    include_client: true,
-    format_output: true,
+    typePrefix: "",
+    interfaceSuffix: "",
+    includeQueryBuilders: true,
+    includeMutations: true,
+    includeClient: true,
+    formatOutput: true,
   };
 
   assertEquals(fullConfig.target, "both");
-  assertEquals(fullConfig.include_query_builders, true);
+  assertEquals(fullConfig.includeQueryBuilders, true);
 });
 
 Deno.test("Types - PropertyDefinition structure", () => {
@@ -179,7 +179,7 @@ Deno.test("Types - PropertyDefinition structure", () => {
     nullable: false,
     array: false,
     description: "User email address",
-    default_value: undefined,
+    defaultValue: undefined,
   };
 
   assertEquals(property.name, "email");

@@ -5,7 +5,7 @@
 
 import { SchemaManager } from "../migration/schema-manager.ts";
 import type { Module } from "../schema/converter.ts";
-import { create_server_from_env } from "../server/server.ts";
+import { createServerFromEnv } from "../server/server.ts";
 import * as Codegen from "../codegen/mod.ts";
 import * as Context from "../compiler/context.ts";
 import type { Schema } from "../compiler/context.ts";
@@ -24,11 +24,11 @@ export interface ServeOptions {
   port?: number;
   host?: string;
   config?: string;
-  jwt_secret?: string;
-  enable_auth?: boolean;
-  enable_access_policies?: boolean;
-  tls_cert?: string;
-  tls_key?: string;
+  jwtSecret?: string;
+  enableAuth?: boolean;
+  enableAccessPolicies?: boolean;
+  tlsCert?: string;
+  tlsKey?: string;
 }
 
 export class CLICommands {
@@ -118,22 +118,22 @@ export class CLICommands {
       Deno.env.set("DATABASE_URL", instance.dsn());
 
       // Set auth env vars from CLI flags
-      if (options.jwt_secret) {
-        Deno.env.set("DISC_JWT_SECRET", options.jwt_secret);
+      if (options.jwtSecret) {
+        Deno.env.set("DISC_JWT_SECRET", options.jwtSecret);
       }
-      if (options.enable_auth) {
+      if (options.enableAuth) {
         Deno.env.set("DISC_ENABLE_AUTH", "true");
       }
-      if (options.enable_access_policies) {
+      if (options.enableAccessPolicies) {
         Deno.env.set("DISC_ENABLE_ACCESS_POLICIES", "true");
       }
 
       // Set TLS env vars from CLI flags
-      if (options.tls_cert) {
-        Deno.env.set("DISC_TLS_CERT", options.tls_cert);
+      if (options.tlsCert) {
+        Deno.env.set("DISC_TLS_CERT", options.tlsCert);
       }
-      if (options.tls_key) {
-        Deno.env.set("DISC_TLS_KEY", options.tls_key);
+      if (options.tlsKey) {
+        Deno.env.set("DISC_TLS_KEY", options.tlsKey);
       }
 
       // Try to load the project schema from SDL
@@ -153,11 +153,11 @@ export class CLICommands {
       }
 
       // Log auth status
-      if (options.jwt_secret || Deno.env.get("DISC_JWT_SECRET")) {
+      if (options.jwtSecret || Deno.env.get("DISC_JWT_SECRET")) {
         console.log("🔐 Authentication enabled");
       }
       if (
-        options.enable_access_policies ||
+        options.enableAccessPolicies ||
         Deno.env.get("DISC_ENABLE_ACCESS_POLICIES")
       ) {
         console.log("🛡️ Access policies enabled");
@@ -165,8 +165,8 @@ export class CLICommands {
 
       // Create server from environment variables, passing schema if available
       const server = schema
-        ? create_server_from_env(undefined, schema)
-        : create_server_from_env();
+        ? createServerFromEnv(undefined, schema)
+        : createServerFromEnv();
 
       // Override with CLI arguments if provided
       const config = server.get_config();
@@ -241,13 +241,13 @@ export class CLICommands {
 
       // Generate TypeScript code
       const config: Partial<Codegen.CodegenConfig> = {
-        output_dir: outputDir,
-        schema_source: schemaFile,
+        outputDir: outputDir,
+        schemaSource: schemaFile,
         target: target as "client" | "server" | "both",
-        include_query_builders: args["no-queries"] !== true,
-        include_mutations: args["no-mutations"] !== true,
-        include_client: args["no-client"] !== true,
-        format_output: args["no-format"] !== true,
+        includeQueryBuilders: args["no-queries"] !== true,
+        includeMutations: args["no-mutations"] !== true,
+        includeClient: args["no-client"] !== true,
+        formatOutput: args["no-format"] !== true,
       };
 
       console.log(`⚙️  Generating code...`);
@@ -486,14 +486,14 @@ export class CLICommands {
 
     const plan = planResult.value;
 
-    if (plan.operations_count === 0) {
+    if (plan.operationsCount === 0) {
       console.log("No changes detected - schema is up to date");
       return;
     }
 
     console.log(`Migration Plan:`);
-    console.log(`   Operations: ${plan.operations_count}`);
-    console.log(`   Estimated Duration: ${plan.estimated_duration || 0}ms\n`);
+    console.log(`   Operations: ${plan.operationsCount}`);
+    console.log(`   Estimated Duration: ${plan.estimatedDuration || 0}ms\n`);
 
     plan.migrations.forEach((migration, i) => {
       console.log(`${i + 1}. ${migration.name} (${migration.id})`);
@@ -555,7 +555,7 @@ export class CLICommands {
 
       const plan = planResult.value;
 
-      if (plan.operations_count === 0) {
+      if (plan.operationsCount === 0) {
         console.log("No migrations to apply - schema is up to date");
         return;
       }
@@ -599,9 +599,9 @@ export class CLICommands {
 
       results.forEach((result, i) => {
         const status = result.success ? "Success" : "Failed";
-        console.log(`  ${i + 1}. Migration ${result.migration_id}: ${status}`);
-        console.log(`     Duration: ${result.duration_ms}ms`);
-        console.log(`     Applied: ${result.applied_at.toISOString()}`);
+        console.log(`  ${i + 1}. Migration ${result.migrationId}: ${status}`);
+        console.log(`     Duration: ${result.durationMs}ms`);
+        console.log(`     Applied: ${result.appliedAt.toISOString()}`);
 
         if (result.error) {
           console.log(`     Error: ${result.error}`);

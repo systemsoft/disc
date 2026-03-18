@@ -13,13 +13,13 @@ function createTestConfig(
   overrides: Partial<Types.MigrationConfig> = {},
 ): Types.MigrationConfig {
   return {
-    migrations_dir: "./migrations",
-    schema_file: "./schema.esdl",
-    database_url: "postgresql://localhost:5432/test",
-    dry_run: true,
-    auto_approve: false,
-    backup_before_migration: true,
-    rollback_on_error: true,
+    migrationsDir: "./migrations",
+    schemaFile: "./schema.esdl",
+    databaseUrl: "postgresql://localhost:5432/test",
+    dryRun: true,
+    autoApprove: false,
+    backupBeforeMigration: true,
+    rollbackOnError: true,
     ...overrides,
   };
 }
@@ -65,7 +65,7 @@ Deno.test("DDL Generator - Generate Rollback SQL for CreateType", () => {
   const generator = new DDLGenerator();
   const operation: Types.CreateTypeOperation = {
     kind: "CreateType",
-    type_name: "User",
+    typeName: "User",
     properties: [
       {
         name: "name",
@@ -90,7 +90,7 @@ Deno.test("DDL Generator - Generate Rollback SQL for DropType", () => {
   const generator = new DDLGenerator();
   const operation: Types.DropTypeOperation = {
     kind: "DropType",
-    type_name: "User",
+    typeName: "User",
   };
 
   // For drop operations, rollback would need schema information to recreate
@@ -106,7 +106,7 @@ Deno.test("DDL Generator - Generate Rollback SQL for AddProperty", () => {
   const generator = new DDLGenerator();
   const operation: Types.AlterTypeOperation = {
     kind: "AlterType",
-    type_name: "User",
+    typeName: "User",
     operations: [
       {
         kind: "AddProperty",
@@ -133,11 +133,11 @@ Deno.test("DDL Generator - Generate Rollback SQL for DropProperty", () => {
   const generator = new DDLGenerator();
   const operation: Types.AlterTypeOperation = {
     kind: "AlterType",
-    type_name: "User",
+    typeName: "User",
     operations: [
       {
         kind: "DropProperty",
-        property_name: "active",
+        propertyName: "active",
       } as Types.DropPropertyOperation,
     ],
   };
@@ -154,21 +154,21 @@ Deno.test("DDL Generator - Generate Rollback SQL for AlterProperty", () => {
   const generator = new DDLGenerator();
   const operation: Types.AlterTypeOperation = {
     kind: "AlterType",
-    type_name: "User",
+    typeName: "User",
     operations: [
       {
         kind: "AlterProperty",
-        property_name: "age",
+        propertyName: "age",
         changes: [
           {
             kind: "ChangeType",
-            old_value: "int32",
-            new_value: "int64",
+            oldValue: "int32",
+            newValue: "int64",
           },
           {
             kind: "ChangeRequired",
-            old_value: false,
-            new_value: true,
+            oldValue: false,
+            newValue: true,
           },
         ],
       } as Types.AlterPropertyOperation,
@@ -215,7 +215,7 @@ Deno.test("Migration Engine - Generate Migration with Rollback", () => {
 });
 
 Deno.test("Migration Engine - Execute Migration with Rollback on Error", async () => {
-  const config = createTestConfig({ rollback_on_error: true });
+  const config = createTestConfig({ rollbackOnError: true });
   const engine = new MigrationEngine(config);
 
   // Create a plan that will fail during execution
@@ -224,12 +224,12 @@ Deno.test("Migration Engine - Execute Migration with Rollback on Error", async (
       id: "test-migration-fail",
       name: "failing migration",
       description: "This migration will fail",
-      created_at: new Date(),
-      schema_hash: "test",
+      createdAt: new Date(),
+      schemaHash: "test",
       operations: [
         {
           kind: "CreateType",
-          type_name: "User",
+          typeName: "User",
           properties: [
             {
               name: "invalid field with spaces",
@@ -244,8 +244,8 @@ Deno.test("Migration Engine - Execute Migration with Rollback on Error", async (
         } as Types.CreateTypeOperation,
       ],
     }],
-    target_schema_hash: "test",
-    operations_count: 1,
+    targetSchemaHash: "test",
+    operationsCount: 1,
   };
 
   // Mock the private executeStatements method to simulate a failure
@@ -308,12 +308,12 @@ Deno.test("Migration Engine - Rollback To Specific Migration", async () => {
         id: `test-${migData.name}`,
         name: migData.name,
         description: `Test ${migData.name}`,
-        created_at: new Date(),
-        schema_hash: migData.name,
+        createdAt: new Date(),
+        schemaHash: migData.name,
         operations: migData.operations,
       }],
-      target_schema_hash: migData.name,
-      operations_count: migData.operations.length,
+      targetSchemaHash: migData.name,
+      operationsCount: migData.operations.length,
     };
 
     await engine.executeMigration(plan);
@@ -345,27 +345,27 @@ Deno.test("Migration Engine - Validate Rollback Safety", () => {
       id: "destructive-migration",
       name: "destructive changes",
       description: "This migration may lose data",
-      created_at: new Date(),
-      schema_hash: "destructive",
+      createdAt: new Date(),
+      schemaHash: "destructive",
       operations: [
         {
           kind: "DropType",
-          type_name: "User",
+          typeName: "User",
         } as Types.DropTypeOperation,
         {
           kind: "AlterType",
-          type_name: "Post",
+          typeName: "Post",
           operations: [
             {
               kind: "DropProperty",
-              property_name: "content",
+              propertyName: "content",
             } as Types.DropPropertyOperation,
           ],
         } as Types.AlterTypeOperation,
       ],
     }],
-    target_schema_hash: "destructive",
-    operations_count: 2,
+    targetSchemaHash: "destructive",
+    operationsCount: 2,
   };
 
   const validationResult = engine.validateRollbackSafety(destructivePlan);
@@ -385,7 +385,7 @@ Deno.test("Migration Engine - Validate Rollback Safety", () => {
 });
 
 Deno.test("Migration Engine - Create Migration Checkpoint", async () => {
-  const config = createTestConfig({ backup_before_migration: true });
+  const config = createTestConfig({ backupBeforeMigration: true });
   const engine = new MigrationEngine(config);
 
   // Create checkpoint before migration
@@ -397,8 +397,8 @@ Deno.test("Migration Engine - Create Migration Checkpoint", async () => {
   if (checkpointResult.ok) {
     const checkpoint = checkpointResult.value;
     assertEquals(typeof checkpoint.id, "string");
-    assertEquals(typeof checkpoint.created_at, "object");
-    assertEquals(checkpoint.schema_state !== undefined, true);
+    assertEquals(typeof checkpoint.createdAt, "object");
+    assertEquals(checkpoint.schemaState !== undefined, true);
   }
 });
 
@@ -429,6 +429,6 @@ Deno.test("Migration Engine - Restore From Checkpoint", async () => {
 
     // State should be restored
     const currentState = engine.getMigrationState();
-    assertEquals(currentState.applied_migrations.length, 0);
+    assertEquals(currentState.appliedMigrations.length, 0);
   }
 });

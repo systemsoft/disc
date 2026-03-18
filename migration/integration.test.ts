@@ -22,13 +22,13 @@ const RUN_PG = canRunPgTests();
 // Helper function to create test config
 function createIntegrationTestConfig(): Types.MigrationConfig {
   return {
-    migrations_dir: "./migrations",
-    schema_file: "./test.esdl",
-    database_url: "postgresql://localhost:5432/test_integration",
-    dry_run: true,
-    auto_approve: false,
-    backup_before_migration: true,
-    rollback_on_error: true,
+    migrationsDir: "./migrations",
+    schemaFile: "./test.esdl",
+    databaseUrl: "postgresql://localhost:5432/test_integration",
+    dryRun: true,
+    autoApprove: false,
+    backupBeforeMigration: true,
+    rollbackOnError: true,
   };
 }
 
@@ -40,7 +40,7 @@ module default {
     required email: str {
       constraint exclusive;
     };
-    created_at: datetime {
+    createdAt: datetime {
       default := datetime_current();
     };
   };
@@ -54,7 +54,7 @@ module default {
     required email: str {
       constraint exclusive;
     };
-    created_at: datetime {
+    createdAt: datetime {
       default := datetime_current();
     };
     # New properties
@@ -79,11 +79,11 @@ module default {
 const complexSchema = `
 module default {
   abstract type Timestamped {
-    required created_at: datetime {
+    required createdAt: datetime {
       default := datetime_current();
       readonly := true;
     };
-    required updated_at: datetime {
+    required updatedAt: datetime {
       default := datetime_current();
     };
   };
@@ -105,7 +105,7 @@ module default {
     };
     required content: str;
     required author: User {
-      on_target_delete := DeleteAction.CASCADE;
+      onTargetDelete := DeleteAction.CASCADE;
     };
     published: bool {
       default := false;
@@ -151,8 +151,8 @@ Deno.test("Integration - Parse and Generate Initial Migration", () => {
 
     const createTypeOp = plan.migrations[0]
       .operations[0] as Types.CreateTypeOperation;
-    assertEquals(createTypeOp.type_name, "User");
-    assertEquals(createTypeOp.properties.length, 3); // name, email, created_at
+    assertEquals(createTypeOp.typeName, "User");
+    assertEquals(createTypeOp.properties.length, 3); // name, email, createdAt
   }
 });
 
@@ -186,11 +186,11 @@ Deno.test("Integration - Schema Evolution Migration", () => {
 
     const alterUserOp = operations.find((op: Types.MigrationOperation) =>
       op.kind === "AlterType" &&
-      (op as Types.AlterTypeOperation).type_name === "User"
+      (op as Types.AlterTypeOperation).typeName === "User"
     );
     const createPostOp = operations.find((op: Types.MigrationOperation) =>
       op.kind === "CreateType" &&
-      (op as Types.CreateTypeOperation).type_name === "Post"
+      (op as Types.CreateTypeOperation).typeName === "Post"
     );
 
     assertEquals(alterUserOp !== undefined, true);
@@ -226,16 +226,16 @@ Deno.test("Integration - Complex Schema with Inheritance", () => {
     assertEquals(createOps.length >= 3, true); // User, Post, Tag (Timestamped is abstract)
 
     const userCreateOp = createOps.find((op: Types.MigrationOperation) =>
-      (op as Types.CreateTypeOperation).type_name === "User"
+      (op as Types.CreateTypeOperation).typeName === "User"
     ) as Types.CreateTypeOperation;
 
     assertEquals(userCreateOp !== undefined, true);
     // Should inherit properties from Timestamped
     const hasCreatedAt = userCreateOp.properties.some((prop) =>
-      prop.name === "created_at"
+      prop.name === "createdAt"
     );
     const hasUpdatedAt = userCreateOp.properties.some((prop) =>
-      prop.name === "updated_at"
+      prop.name === "updatedAt"
     );
     assertEquals(hasCreatedAt, true);
     assertEquals(hasUpdatedAt, true);
@@ -248,7 +248,7 @@ Deno.test({
   fn: async () => {
     const dsn = await getTestDsn();
     await cleanupTestTables(dsn);
-    const config = { ...createIntegrationTestConfig(), database_url: dsn };
+    const config = { ...createIntegrationTestConfig(), databaseUrl: dsn };
     const engine = new MigrationEngine(config);
     const tracker = new MigrationTracker(dsn);
     const validator = new SchemaValidator();
@@ -296,7 +296,7 @@ Deno.test({
   fn: async () => {
     const dsn = await getTestDsn();
     await cleanupTestTables(dsn);
-    const config = { ...createIntegrationTestConfig(), database_url: dsn };
+    const config = { ...createIntegrationTestConfig(), databaseUrl: dsn };
     const engine = new MigrationEngine(config);
     const tracker = new MigrationTracker(dsn);
     const validator = new SchemaValidator();
@@ -520,7 +520,7 @@ Deno.test("Integration - Performance with Large Schema", () => {
     required name: str;
     required value: int32;
     description: str;
-    created_at: datetime {
+    createdAt: datetime {
       default := datetime_current();
     };
   };

@@ -45,7 +45,7 @@ async function tableExists(dsn: string, tableName: string): Promise<boolean> {
     const result = await client.queryObject<{ exists: boolean }>(
       `SELECT EXISTS (
         SELECT 1 FROM information_schema.tables
-        WHERE table_schema = 'public' AND table_name = $1
+        WHERE table_schema = 'public' AND tableName = $1
       ) AS exists`,
       [tableName],
     );
@@ -59,17 +59,17 @@ async function tableExists(dsn: string, tableName: string): Promise<boolean> {
 async function getColumns(
   dsn: string,
   tableName: string,
-): Promise<{ column_name: string; data_type: string }[]> {
+): Promise<{ columnName: string; data_type: string }[]> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
   try {
     await client.connect();
     const result = await client.queryObject<
-      { column_name: string; data_type: string }
+      { columnName: string; data_type: string }
     >(
-      `SELECT column_name, data_type
+      `SELECT columnName, data_type
        FROM information_schema.columns
-       WHERE table_schema = 'public' AND table_name = $1
+       WHERE table_schema = 'public' AND tableName = $1
        ORDER BY ordinal_position`,
       [tableName],
     );
@@ -106,14 +106,14 @@ function makePool(dsn: string): ConnectionPool {
 /** Create a MigrationEngine configured for testing with a pool. */
 function makeEngine(pool: ConnectionPool, dryRun = false): MigrationEngine {
   const config: Types.MigrationConfig = {
-    migrations_dir: "",
-    schema_file: "",
-    database_url: "",
-    dry_run: dryRun,
-    auto_approve: true,
-    backup_before_migration: false,
-    rollback_on_error: true,
-    connection_pool: pool,
+    migrationsDir: "",
+    schemaFile: "",
+    databaseUrl: "",
+    dryRun: dryRun,
+    autoApprove: true,
+    backupBeforeMigration: false,
+    rollbackOnError: true,
+    connectionPool: pool,
   };
   return new MigrationEngine(config);
 }
@@ -139,7 +139,7 @@ Deno.test({
       // Build a CreateType operation that will produce a CREATE TABLE DDL
       const createOp: Types.CreateTypeOperation = {
         kind: "CreateType",
-        type_name: tableName,
+        typeName: tableName,
         properties: [
           {
             name: "name",
@@ -166,15 +166,15 @@ Deno.test({
         id: `test_${Date.now()}`,
         name: "create_test_table",
         description: "Test table creation",
-        created_at: new Date(),
-        schema_hash: "test_hash",
+        createdAt: new Date(),
+        schemaHash: "test_hash",
         operations: [createOp],
       };
 
       const plan: Types.MigrationPlan = {
         migrations: [migration],
-        target_schema_hash: "test_hash",
-        operations_count: 1,
+        targetSchemaHash: "test_hash",
+        operationsCount: 1,
       };
 
       const result = await engine.executeMigration(plan);
@@ -186,7 +186,7 @@ Deno.test({
 
       // Verify columns
       const columns = await getColumns(dsn, tableName);
-      const columnNames = columns.map((c) => c.column_name);
+      const columnNames = columns.map((c) => c.columnName);
       assertEquals(columnNames.includes("id"), true, "Should have id column");
       assertEquals(
         columnNames.includes("name"),
@@ -225,7 +225,7 @@ Deno.test({
       // Build a simple migration
       const createOp: Types.CreateTypeOperation = {
         kind: "CreateType",
-        type_name: tableName,
+        typeName: tableName,
         properties: [
           {
             name: "value",
@@ -244,15 +244,15 @@ Deno.test({
         id: migrationId,
         name: "tracked_migration",
         description: "Migration with tracker recording",
-        created_at: new Date(),
-        schema_hash: "track_hash",
+        createdAt: new Date(),
+        schemaHash: "track_hash",
         operations: [createOp],
       };
 
       const plan: Types.MigrationPlan = {
         migrations: [migration],
-        target_schema_hash: "track_hash",
-        operations_count: 1,
+        targetSchemaHash: "track_hash",
+        operationsCount: 1,
       };
 
       const result = await engine.executeMigration(plan);
@@ -281,7 +281,7 @@ Deno.test({
 });
 
 Deno.test({
-  name: "PG Migration: dry_run mode does not touch database",
+  name: "PG Migration: dryRun mode does not touch database",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -297,7 +297,7 @@ Deno.test({
       // Build a CreateType operation
       const createOp: Types.CreateTypeOperation = {
         kind: "CreateType",
-        type_name: tableName,
+        typeName: tableName,
         properties: [
           {
             name: "phantom",
@@ -315,15 +315,15 @@ Deno.test({
         id: `dryrun_${Date.now()}`,
         name: "dry_run_migration",
         description: "Should not execute",
-        created_at: new Date(),
-        schema_hash: "dry_hash",
+        createdAt: new Date(),
+        schemaHash: "dry_hash",
         operations: [createOp],
       };
 
       const plan: Types.MigrationPlan = {
         migrations: [migration],
-        target_schema_hash: "dry_hash",
-        operations_count: 1,
+        targetSchemaHash: "dry_hash",
+        operationsCount: 1,
       };
 
       const result = await engine.executeMigration(plan);
@@ -339,7 +339,7 @@ Deno.test({
 
       await engine.close();
     } finally {
-      // Best-effort cleanup in case dry_run somehow failed and table was created
+      // Best-effort cleanup in case dryRun somehow failed and table was created
       await dropTables(
         dsn,
         tableName,
@@ -368,7 +368,7 @@ Deno.test({
       // First migration: create a valid table (this should succeed on its own)
       const validCreateOp: Types.CreateTypeOperation = {
         kind: "CreateType",
-        type_name: tableName,
+        typeName: tableName,
         properties: [
           {
             name: "name",
@@ -388,7 +388,7 @@ Deno.test({
       // a single transaction, the first should be rolled back.
       const invalidAlterOp: Types.AlterTypeOperation = {
         kind: "AlterType",
-        type_name: `nonexistent_table_${Date.now()}`,
+        typeName: `nonexistent_table_${Date.now()}`,
         operations: [
           {
             kind: "AddProperty",
@@ -408,15 +408,15 @@ Deno.test({
         id: `rollback_${Date.now()}`,
         name: "should_rollback",
         description: "First op succeeds, second fails, all rolls back",
-        created_at: new Date(),
-        schema_hash: "rollback_hash",
+        createdAt: new Date(),
+        schemaHash: "rollback_hash",
         operations: [validCreateOp, invalidAlterOp],
       };
 
       const plan: Types.MigrationPlan = {
         migrations: [migration],
-        target_schema_hash: "rollback_hash",
-        operations_count: 2,
+        targetSchemaHash: "rollback_hash",
+        operationsCount: 2,
       };
 
       const result = await engine.executeMigration(plan);
@@ -490,7 +490,7 @@ Deno.test({
 
       // Verify columns
       const columns = await getColumns(dsn, expectedTable);
-      const columnNames = columns.map((c) => c.column_name);
+      const columnNames = columns.map((c) => c.columnName);
       assertEquals(columnNames.includes("id"), true, "Should have id column");
       assertEquals(
         columnNames.includes("name"),
@@ -543,7 +543,7 @@ Deno.test({
 
       // Verify initial columns
       let columns = await getColumns(dsn, expectedTable);
-      let columnNames = columns.map((c) => c.column_name);
+      let columnNames = columns.map((c) => c.columnName);
       assertEquals(
         columnNames.includes("name"),
         true,
@@ -568,7 +568,7 @@ Deno.test({
 
       // Verify the new column was added
       columns = await getColumns(dsn, expectedTable);
-      columnNames = columns.map((c) => c.column_name);
+      columnNames = columns.map((c) => c.columnName);
       assertEquals(
         columnNames.includes("name"),
         true,

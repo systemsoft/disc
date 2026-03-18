@@ -1,4 +1,3 @@
-// deno-lint-ignore-file no-console
 /**
  * CLI Shell Command Tests - Test interactive EdgeQL REPL functionality
  */
@@ -18,8 +17,8 @@ interface ShellOptions {
   host?: string;
   port?: number;
   database?: string;
-  schema_file?: string;
-  non_interactive?: boolean;
+  schemaFile?: string;
+  nonInteractive?: boolean;
   execute?: string;
 }
 
@@ -28,7 +27,7 @@ interface ShellSession {
   database: string;
   host: string;
   port: number;
-  query_count: number;
+  queryCount: number;
   history: string[];
 }
 
@@ -38,7 +37,7 @@ function createMockShellSession(options: ShellOptions = {}): ShellSession {
     database: options.database || "disc_dev",
     host: options.host || "localhost",
     port: options.port || 5656,
-    query_count: 0,
+    queryCount: 0,
     history: [],
   };
 }
@@ -46,7 +45,7 @@ function createMockShellSession(options: ShellOptions = {}): ShellSession {
 async function mockShellCommand(options: ShellOptions = {}): Promise<string[]> {
   const output: string[] = [];
 
-  if (options.non_interactive) {
+  if (options.nonInteractive) {
     output.push("🚀 Starting Disc shell in non-interactive mode...");
   } else {
     output.push("🚀 Starting Disc EdgeQL shell...");
@@ -73,10 +72,10 @@ async function mockShellCommand(options: ShellOptions = {}): Promise<string[]> {
       output.push(`Query executed successfully`);
     }
 
-    session.query_count++;
+    session.queryCount++;
     output.push("");
     output.push("✅ Query executed, exiting...");
-  } else if (options.non_interactive) {
+  } else if (options.nonInteractive) {
     output.push(
       "💡 Use --execute to run a query, or omit --non-interactive for REPL mode",
     );
@@ -166,7 +165,7 @@ Deno.test("CLI Shell - non-interactive mode", async () => {
 
   try {
     const options: ShellOptions = {
-      non_interactive: true,
+      nonInteractive: true,
     };
 
     const output = await mockShellCommand(options);
@@ -250,7 +249,7 @@ Deno.test("CLI Shell - detailed types command", async () => {
     console.log("    id: uuid (required)");
     console.log("    name: str (required)");
     console.log("    email: str (required, exclusive)");
-    console.log("    created_at: datetime (default: datetime_current())");
+    console.log("    createdAt: datetime (default: datetime_current())");
     console.log("  Links:");
     console.log("    posts: Post (multi)");
     console.log("");
@@ -259,7 +258,7 @@ Deno.test("CLI Shell - detailed types command", async () => {
     console.log("    id: uuid (required)");
     console.log("    title: str (required)");
     console.log("    content: str (required)");
-    console.log("    created_at: datetime (default: datetime_current())");
+    console.log("    createdAt: datetime (default: datetime_current())");
     console.log("  Links:");
     console.log("    author: User (required)");
 

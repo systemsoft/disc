@@ -51,19 +51,19 @@ Deno.test({
 
     try {
       const provider = new AuthProvider(
-        { jwt_secret: "pg-test-secret" },
+        { jwtSecret: "pg-test-secret" },
         adapter,
       );
       await provider.initialize();
 
       // Verify tables exist
       const usersResult = await conn.query(
-        "SELECT 1 FROM information_schema.tables WHERE table_name = 'users'",
+        "SELECT 1 FROM information_schema.tables WHERE tableName = 'users'",
       );
       assertEquals(usersResult.rowCount, 1);
 
       const sessionsResult = await conn.query(
-        "SELECT 1 FROM information_schema.tables WHERE table_name = 'sessions'",
+        "SELECT 1 FROM information_schema.tables WHERE tableName = 'sessions'",
       );
       assertEquals(sessionsResult.rowCount, 1);
     } finally {
@@ -88,7 +88,7 @@ Deno.test({
 
     try {
       const provider = new AuthProvider(
-        { jwt_secret: "pg-test-secret" },
+        { jwtSecret: "pg-test-secret" },
         adapter,
       );
       await provider.initialize();
@@ -113,7 +113,7 @@ Deno.test({
       assertEquals(usersResult.rows[0].email, "pgtest@example.com");
 
       const sessionsResult = await conn.query(
-        "SELECT user_id FROM sessions WHERE user_id = $1",
+        "SELECT userId FROM sessions WHERE userId = $1",
         [response.user.id],
       );
       assertEquals(sessionsResult.rowCount, 1);
@@ -139,7 +139,7 @@ Deno.test({
 
     try {
       const provider = new AuthProvider(
-        { jwt_secret: "pg-test-secret" },
+        { jwtSecret: "pg-test-secret" },
         adapter,
       );
       await provider.initialize();
@@ -180,7 +180,7 @@ Deno.test({
 
     try {
       const provider = new AuthProvider(
-        { jwt_secret: "pg-test-secret" },
+        { jwtSecret: "pg-test-secret" },
         adapter,
       );
       await provider.initialize();
@@ -191,7 +191,7 @@ Deno.test({
       });
 
       // Verify token
-      const payload = await provider.verify_token(registerResponse.token);
+      const payload = await provider.verifyToken(registerResponse.token);
       assertEquals(payload.email, "jwt-test@example.com");
       assertExists(payload.sub);
       assertExists(payload.exp);
@@ -217,7 +217,7 @@ Deno.test({
 
     try {
       const provider = new AuthProvider(
-        { jwt_secret: "pg-test-secret" },
+        { jwtSecret: "pg-test-secret" },
         adapter,
       );
       await provider.initialize();
@@ -227,20 +227,20 @@ Deno.test({
         password: "password123",
       });
 
-      assertExists(registerResponse.refresh_token);
+      assertExists(registerResponse.refreshToken);
 
       // Refresh
       const refreshResponse = await provider.refresh(
-        registerResponse.refresh_token!,
+        registerResponse.refreshToken!,
       );
 
       assertExists(refreshResponse.token);
-      assertExists(refreshResponse.refresh_token);
+      assertExists(refreshResponse.refreshToken);
       assertEquals(refreshResponse.user.email, "refresh-test@example.com");
 
       // Old refresh token should be invalid (session revoked)
       await assertRejects(
-        () => provider.refresh(registerResponse.refresh_token!),
+        () => provider.refresh(registerResponse.refreshToken!),
         AuthError,
       );
     } finally {
@@ -265,7 +265,7 @@ Deno.test({
 
     try {
       const provider = new AuthProvider(
-        { jwt_secret: "pg-test-secret" },
+        { jwtSecret: "pg-test-secret" },
         adapter,
       );
       await provider.initialize();
@@ -288,7 +288,7 @@ Deno.test({
 
       // Token should fail verification (session revoked)
       await assertRejects(
-        () => provider.verify_token(registerResponse.token),
+        () => provider.verifyToken(registerResponse.token),
         AuthError,
       );
     } finally {
@@ -313,7 +313,7 @@ Deno.test({
 
     try {
       const provider = new AuthProvider(
-        { jwt_secret: "pg-test-secret" },
+        { jwtSecret: "pg-test-secret" },
         adapter,
       );
       await provider.initialize();
@@ -325,13 +325,13 @@ Deno.test({
       });
 
       // Request reset
-      const resetToken = await provider.reset_password_request(
+      const resetToken = await provider.resetPasswordRequest(
         "reset-test@example.com",
       );
       assertExists(resetToken);
 
       // Reset password
-      await provider.reset_password(resetToken, "newpassword456");
+      await provider.resetPassword(resetToken, "newpassword456");
 
       // Login with new password
       const loginResponse = await provider.login({

@@ -15,7 +15,7 @@ export interface ExplainCacheConfig {
   /** Maximum number of entries. Default: 500. */
   max_size: number;
   /** Injectable clock for tests. Defaults to Date.now. */
-  now_fn?: () => number;
+  nowFn?: () => number;
 }
 
 export interface ExplainCacheStats {
@@ -27,7 +27,7 @@ export interface ExplainCacheStats {
 
 interface CacheEntry {
   plan: unknown;
-  expires_at: number;
+  expiresAt: number;
   inserted_at: number;
 }
 
@@ -45,7 +45,7 @@ export class ExplainCache {
     this.config = {
       ttl_ms: config.ttl_ms ?? 300_000,
       max_size: config.max_size ?? 500,
-      now_fn: config.now_fn ?? Date.now,
+      nowFn: config.nowFn ?? Date.now,
     };
   }
 
@@ -58,7 +58,7 @@ export class ExplainCache {
     }
 
     // Check if expired
-    if (this.config.now_fn() > entry.expires_at) {
+    if (this.config.nowFn() > entry.expiresAt) {
       this.entries.delete(hash);
       this.stats_data.size = this.entries.size;
       this.stats_data.misses++;
@@ -70,7 +70,7 @@ export class ExplainCache {
   }
 
   set(hash: string, plan: unknown): void {
-    const now = this.config.now_fn();
+    const now = this.config.nowFn();
 
     // Evict expired entries first to free space before capacity check
     this.evictExpired(now);
@@ -82,7 +82,7 @@ export class ExplainCache {
 
     this.entries.set(hash, {
       plan,
-      expires_at: now + this.config.ttl_ms,
+      expiresAt: now + this.config.ttl_ms,
       inserted_at: now,
     });
     this.stats_data.size = this.entries.size;
@@ -99,7 +99,7 @@ export class ExplainCache {
 
   private evictExpired(now: number): void {
     for (const [key, entry] of this.entries) {
-      if (now > entry.expires_at) {
+      if (now > entry.expiresAt) {
         this.entries.delete(key);
         this.stats_data.evictions++;
       }

@@ -54,7 +54,7 @@ Deno.test("Benchmark - Message parsing", () => {
     outputFormat: Types.OutputFormat.JSON,
     expectedCardinality: Types.Cardinality.Many,
     commandText:
-      "SELECT User { id, name, email, posts: { title, content } } FILTER .active = true ORDER BY .created_at DESC LIMIT 100",
+      "SELECT User { id, name, email, posts: { title, content } } FILTER .active = true ORDER BY .createdAt DESC LIMIT 100",
   };
 
   const message = builder.buildMessage(parseMessage);
@@ -261,7 +261,7 @@ Deno.test("Benchmark - End-to-end message roundtrip", () => {
     length: 0,
     annotations: [
       { name: "query_id", value: "exec-123" },
-      { name: "user_id", value: "user-456" },
+      { name: "userId", value: "user-456" },
     ],
     allowedCapabilities: 0xffffn,
     compilationFlags: 0x5678n,
@@ -270,7 +270,7 @@ Deno.test("Benchmark - End-to-end message roundtrip", () => {
     outputFormat: Types.OutputFormat.Binary,
     expectedCardinality: Types.Cardinality.Many,
     commandText:
-      "SELECT User { id, name, email, profile: { bio, avatar_url }, posts: { id, title, content, tags, created_at } } FILTER .id = <uuid>$0",
+      "SELECT User { id, name, email, profile: { bio, avatar_url }, posts: { id, title, content, tags, createdAt } } FILTER .id = <uuid>$0",
     stateDataDescriptorId: Types.uuidToBytes(
       "11111111-2222-3333-4444-555555555555",
     ),

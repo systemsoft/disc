@@ -13,12 +13,12 @@ describe("AuthProvider", () => {
   let provider: AuthProvider;
   let db: TestDatabase;
   const testConfig: AuthConfig = {
-    jwt_secret: "test-secret-key-for-testing-only",
-    bcrypt_rounds: 10,
-    token_expiry: 3600,
-    refresh_token_expiry: 86400,
-    allow_registration: true,
-    password_min_length: 8,
+    jwtSecret: "test-secret-key-for-testing-only",
+    bcryptRounds: 10,
+    tokenExpiry: 3600,
+    refreshTokenExpiry: 86400,
+    allowRegistration: true,
+    passwordMinLength: 8,
   };
 
   beforeEach(async () => {
@@ -57,13 +57,13 @@ describe("AuthProvider", () => {
       };
 
       const response = await provider.register(registerData);
-      const user = await provider.get_user(response.user.id);
+      const user = await provider.getUser(response.user.id);
 
       // Password should be hashed, not plain text
       assertExists(user);
-      assertNotEquals(user.password_hash, "PlainTextPassword123!");
+      assertNotEquals(user.passwordHash, "PlainTextPassword123!");
       // Hash should be bcrypt format ($2b$...)
-      assert(user.password_hash.startsWith("$2"));
+      assert(user.passwordHash.startsWith("$2"));
     });
 
     it("should reject duplicate email registration", async () => {
@@ -96,7 +96,7 @@ describe("AuthProvider", () => {
 
     it("should reject registration when disabled", async () => {
       const noRegProvider = new AuthProvider(
-        { ...testConfig, allow_registration: false },
+        { ...testConfig, allowRegistration: false },
         db,
       );
       await noRegProvider.initialize();
@@ -205,7 +205,7 @@ describe("AuthProvider", () => {
       };
 
       const response = await provider.register(registerData);
-      const payload = await provider.verify_token(response.token);
+      const payload = await provider.verifyToken(response.token);
 
       assertExists(payload);
       assertEquals(payload.email, "token@example.com");
@@ -216,7 +216,7 @@ describe("AuthProvider", () => {
     it("should reject expired tokens", async () => {
       // Create provider with very short expiry
       const shortExpiryProvider = new AuthProvider(
-        { ...testConfig, token_expiry: 0 },
+        { ...testConfig, tokenExpiry: 0 },
         db,
       );
       await shortExpiryProvider.initialize();
@@ -232,7 +232,7 @@ describe("AuthProvider", () => {
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       await assertRejects(
-        () => shortExpiryProvider.verify_token(response.token),
+        () => shortExpiryProvider.verifyToken(response.token),
         Error,
         AuthErrorCode.TOKEN_EXPIRED,
       );
@@ -245,9 +245,9 @@ describe("AuthProvider", () => {
       };
 
       const response = await provider.register(registerData);
-      assertExists(response.refresh_token);
+      assertExists(response.refreshToken);
 
-      const newResponse = await provider.refresh(response.refresh_token!);
+      const newResponse = await provider.refresh(response.refreshToken!);
 
       assertExists(newResponse.token);
       assertNotEquals(newResponse.token, response.token);
@@ -275,7 +275,7 @@ describe("AuthProvider", () => {
       assertExists(response.session);
       assertExists(response.session.id);
       assertExists(response.session.token);
-      assertEquals(response.session.user_id, response.user.id);
+      assertEquals(response.session.userId, response.user.id);
     });
 
     it("should logout and invalidate session", async () => {
@@ -289,7 +289,7 @@ describe("AuthProvider", () => {
 
       // Verify token should fail after logout
       await assertRejects(
-        () => provider.verify_token(response.token),
+        () => provider.verifyToken(response.token),
         Error,
         AuthErrorCode.SESSION_EXPIRED,
       );
@@ -311,16 +311,16 @@ describe("AuthProvider", () => {
       const response2 = await provider.login(credentials);
 
       // Revoke all sessions
-      await provider.revoke_all_sessions(response1.user.id);
+      await provider.revokeAllSessions(response1.user.id);
 
       // Both tokens should be invalid
       await assertRejects(
-        () => provider.verify_token(response1.token),
+        () => provider.verifyToken(response1.token),
         Error,
         AuthErrorCode.SESSION_EXPIRED,
       );
       await assertRejects(
-        () => provider.verify_token(response2.token),
+        () => provider.verifyToken(response2.token),
         Error,
         AuthErrorCode.SESSION_EXPIRED,
       );
@@ -343,7 +343,7 @@ describe("AuthProvider", () => {
         password: "OldPassword123!",
       });
 
-      await provider.update_password(
+      await provider.updatePassword(
         response.user.id,
         "OldPassword123!",
         "NewPassword456!",
@@ -376,7 +376,7 @@ describe("AuthProvider", () => {
 
       await assertRejects(
         () =>
-          provider.update_password(
+          provider.updatePassword(
             response.user.id,
             "WrongOldPassword",
             "NewPassword456!",
@@ -388,13 +388,13 @@ describe("AuthProvider", () => {
 
     it("should handle password reset flow", async () => {
       // Request password reset
-      const resetToken = await provider.reset_password_request(
+      const resetToken = await provider.resetPasswordRequest(
         "password@example.com",
       );
       assertExists(resetToken);
 
       // Reset password with token
-      await provider.reset_password(resetToken, "ResetPassword789!");
+      await provider.resetPassword(resetToken, "ResetPassword789!");
 
       // Login with new password
       const response = await provider.login({
@@ -406,7 +406,7 @@ describe("AuthProvider", () => {
 
     it("should reject invalid reset tokens", async () => {
       await assertRejects(
-        () => provider.reset_password("invalid-token", "NewPassword123!"),
+        () => provider.resetPassword("invalid-token", "NewPassword123!"),
         Error,
         AuthErrorCode.INVALID_TOKEN,
       );
@@ -416,7 +416,7 @@ describe("AuthProvider", () => {
   describe("Email Verification", () => {
     it("should handle email verification flow", async () => {
       const verifyProvider = new AuthProvider(
-        { ...testConfig, require_email_verification: true },
+        { ...testConfig, requireEmailVerification: true },
         db,
       );
       await verifyProvider.initialize();
@@ -429,9 +429,9 @@ describe("AuthProvider", () => {
       const response = await verifyProvider.register(registerData);
 
       // User should be unverified initially
-      const user = await verifyProvider.get_user(response.user.id);
+      const user = await verifyProvider.getUser(response.user.id);
       assertExists(user);
-      assertEquals(user.email_verified, false);
+      assertEquals(user.emailVerified, false);
 
       // Get verification token (normally sent via email)
       const result = await db.query(
@@ -441,17 +441,17 @@ describe("AuthProvider", () => {
       const verificationToken = result.rows[0].verification_token;
 
       // Verify email
-      await verifyProvider.verify_email(verificationToken);
+      await verifyProvider.verifyEmail(verificationToken);
 
       // Check user is now verified
-      const verifiedUser = await verifyProvider.get_user(response.user.id);
+      const verifiedUser = await verifyProvider.getUser(response.user.id);
       assertExists(verifiedUser);
-      assertEquals(verifiedUser.email_verified, true);
+      assertEquals(verifiedUser.emailVerified, true);
     });
 
     it("should reject login for unverified emails when required", async () => {
       const verifyProvider = new AuthProvider(
-        { ...testConfig, require_email_verification: true },
+        { ...testConfig, requireEmailVerification: true },
         db,
       );
       await verifyProvider.initialize();

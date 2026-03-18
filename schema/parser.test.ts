@@ -202,7 +202,7 @@ Deno.test("SDL Parser - Default Values", () => {
   const source = `
     type Post {
       required title: str;
-      created_at: datetime {
+      createdAt: datetime {
         default := datetime_current();
         readonly := true;
       };
@@ -389,7 +389,7 @@ Deno.test("SDL Validator - Valid Schema", () => {
     type Post {
       required title: str;
       required author: User;
-      created_at: datetime;
+      createdAt: datetime;
     }
   `;
 

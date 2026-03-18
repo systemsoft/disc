@@ -279,7 +279,7 @@ Deno.test("Access Control - Block INSERT without permission", () => {
 
   // Register read-only policy
   const policy: AccessPolicy = {
-    name: "read_only",
+    name: "readOnly",
     objectType: "Document",
     actions: [
       { allow: true, operations: ["select"] },

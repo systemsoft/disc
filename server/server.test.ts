@@ -17,60 +17,60 @@ Deno.test("Server Config - Default Values", () => {
 
   assertEquals(config.host, "localhost");
   assertEquals(config.port, 5656);
-  assertEquals(config.enable_cors, true);
-  assertEquals(config.enable_websockets, true);
-  assertEquals(config.max_connections, 100);
+  assertEquals(config.enableCors, true);
+  assertEquals(config.enableWebsockets, true);
+  assertEquals(config.maxConnections, 100);
 });
 
 Deno.test("Server Config - Custom Values", () => {
   const server = new DiscServer({
     host: "0.0.0.0",
     port: 8080,
-    enable_cors: false,
-    max_connections: 50,
+    enableCors: false,
+    maxConnections: 50,
   });
 
   const config = server.get_config();
 
   assertEquals(config.host, "0.0.0.0");
   assertEquals(config.port, 8080);
-  assertEquals(config.enable_cors, false);
-  assertEquals(config.max_connections, 50);
+  assertEquals(config.enableCors, false);
+  assertEquals(config.maxConnections, 50);
 });
 
 Deno.test("Protocol Handler - Validate EdgeQL Request", () => {
   const handler = new EdgeQLProtocolHandler();
 
   // Valid request
-  const valid_request = {
+  const validRequest = {
     query: "select User { name, email }",
     variables: {},
   };
 
-  const valid_errors = handler.validate_request(valid_request);
-  assertEquals(valid_errors.length, 0);
+  const validErrors = handler.validateRequest(validRequest);
+  assertEquals(validErrors.length, 0);
 
   // Invalid request - missing query
-  const invalid_request = {
+  const invalidRequest = {
     query: "",
     variables: {},
   };
 
-  const invalid_errors = handler.validate_request(invalid_request);
-  assertEquals(invalid_errors.length > 0, true);
-  assertStringIncludes(invalid_errors[0].message, "Query is required");
+  const invalidErrors = handler.validateRequest(invalidRequest);
+  assertEquals(invalidErrors.length > 0, true);
+  assertStringIncludes(invalidErrors[0].message, "Query is required");
 });
 
 Deno.test("Protocol Handler - Query Too Large", () => {
   const handler = new EdgeQLProtocolHandler();
 
-  const large_query = "select User { name }".repeat(10000); // > 100KB
+  const largeQuery = "select User { name }".repeat(10000); // > 100KB
   const request = {
-    query: large_query,
+    query: largeQuery,
     variables: {},
   };
 
-  const errors = handler.validate_request(request);
+  const errors = handler.validateRequest(request);
   assertEquals(errors.length > 0, true);
   assertStringIncludes(errors[0].message, "Query too large");
 });
@@ -79,68 +79,68 @@ Deno.test("Protocol Handler - Syntax Validation", () => {
   const handler = new EdgeQLProtocolHandler();
 
   // Unbalanced braces
-  const unbalanced_request = {
+  const unbalancedRequest = {
     query: "select User { name, email",
     variables: {},
   };
 
-  const errors = handler.validate_request(unbalanced_request);
+  const errors = handler.validateRequest(unbalancedRequest);
   assertEquals(errors.length > 0, true);
   assertStringIncludes(errors[0].message, "Unbalanced braces");
 });
 
 Deno.test("Session Manager - Create and Retrieve Session", () => {
   const manager = new SessionManager();
-  const session = manager.create_session("test_db");
+  const session = manager.createSession("test_db");
 
   assertEquals(session.database, "test_db");
-  assertEquals(typeof session.session_id, "string");
+  assertEquals(typeof session.sessionId, "string");
   assertEquals(session.variables, {});
 
-  const retrieved = manager.get_session(session.session_id);
-  assertEquals(retrieved?.session_id, session.session_id);
+  const retrieved = manager.getSession(session.sessionId);
+  assertEquals(retrieved?.sessionId, session.sessionId);
   assertEquals(retrieved?.database, "test_db");
 });
 
 Deno.test("Session Manager - Update Activity", async () => {
   const manager = new SessionManager();
-  const session = manager.create_session("test_db");
-  const original_time = session.last_activity;
+  const session = manager.createSession("test_db");
+  const originalTime = session.lastActivity;
 
   // Wait a bit and update activity
   await new Promise((resolve) => setTimeout(resolve, 10));
-  manager.update_activity(session.session_id);
+  manager.updateActivity(session.sessionId);
 
-  const updated = manager.get_session(session.session_id);
-  assertEquals(updated!.last_activity > original_time, true);
+  const updated = manager.getSession(session.sessionId);
+  assertEquals(updated!.lastActivity > originalTime, true);
 });
 
 Deno.test("Session Manager - Close Session", () => {
   const manager = new SessionManager();
 
-  const session = manager.create_session("test_db");
-  assertEquals(manager.get_session(session.session_id) !== null, true);
+  const session = manager.createSession("test_db");
+  assertEquals(manager.getSession(session.sessionId) !== null, true);
 
-  manager.close_session(session.session_id);
-  assertEquals(manager.get_session(session.session_id), null);
+  manager.closeSession(session.sessionId);
+  assertEquals(manager.getSession(session.sessionId), null);
 });
 
 Deno.test("Connection Manager - Create Connection", () => {
   const manager = new ConnectionManager();
-  const connection = manager.create_connection("http", "127.0.0.1");
+  const connection = manager.createConnection("http", "127.0.0.1");
 
   assertEquals(connection.type, "http");
-  assertEquals(connection.remote_addr, "127.0.0.1");
+  assertEquals(connection.remoteAddr, "127.0.0.1");
   assertEquals(typeof connection.id, "string");
-  assertEquals(typeof connection.session.session_id, "string");
+  assertEquals(typeof connection.session.sessionId, "string");
 });
 
 Deno.test("Connection Manager - Get Stats", () => {
   const manager = new ConnectionManager();
 
-  manager.create_connection("http", "127.0.0.1");
-  manager.create_connection("websocket", "127.0.0.1");
-  manager.create_connection("http", "192.168.1.1");
+  manager.createConnection("http", "127.0.0.1");
+  manager.createConnection("websocket", "127.0.0.1");
+  manager.createConnection("http", "192.168.1.1");
 
   const stats = manager.get_stats();
 
@@ -153,34 +153,34 @@ Deno.test("Connection Manager - Get Stats", () => {
 Deno.test("Transaction Manager - Begin Transaction", () => {
   const manager = new TransactionManager();
 
-  const transaction = manager.begin_transaction("session_001", {
-    isolation_level: "serializable",
-    read_only: true,
+  const transaction = manager.beginTransaction("session_001", {
+    isolationLevel: "serializable",
+    readOnly: true,
   });
 
-  assertEquals(transaction.session_id, "session_001");
-  assertEquals(transaction.isolation_level, "serializable");
-  assertEquals(transaction.read_only, true);
+  assertEquals(transaction.sessionId, "session_001");
+  assertEquals(transaction.isolationLevel, "serializable");
+  assertEquals(transaction.readOnly, true);
   assertEquals(typeof transaction.id, "string");
   assertEquals(Array.isArray(transaction.statements), true);
 });
 
 Deno.test("Transaction Manager - Commit Transaction", async () => {
   const manager = new TransactionManager();
-  const transaction = manager.begin_transaction("session_001");
-  assertEquals(manager.get_transaction(transaction.id) !== null, true);
+  const transaction = manager.beginTransaction("session_001");
+  assertEquals(manager.getTransaction(transaction.id) !== null, true);
 
-  await manager.commit_transaction(transaction.id);
-  assertEquals(manager.get_transaction(transaction.id), null);
+  await manager.commitTransaction(transaction.id);
+  assertEquals(manager.getTransaction(transaction.id), null);
 });
 
 Deno.test("Transaction Manager - Rollback Transaction", async () => {
   const manager = new TransactionManager();
-  const transaction = manager.begin_transaction("session_001");
-  assertEquals(manager.get_transaction(transaction.id) !== null, true);
+  const transaction = manager.beginTransaction("session_001");
+  assertEquals(manager.getTransaction(transaction.id) !== null, true);
 
-  await manager.rollback_transaction(transaction.id);
-  assertEquals(manager.get_transaction(transaction.id), null);
+  await manager.rollbackTransaction(transaction.id);
+  assertEquals(manager.getTransaction(transaction.id), null);
 });
 
 Deno.test("Protocol Handler - Mock Query Execution", async () => {
@@ -193,23 +193,23 @@ Deno.test("Protocol Handler - Mock Query Execution", async () => {
 
   const context = {
     session: {
-      session_id: "test_session",
+      sessionId: "test_session",
       database: "test_db",
-      created_at: new Date(),
-      last_activity: new Date(),
+      createdAt: new Date(),
+      lastActivity: new Date(),
       variables: {},
     },
     auth: { roles: [], permissions: [] },
-    request_id: "test_request",
-    started_at: new Date(),
+    requestId: "test_request",
+    startedAt: new Date(),
   };
 
-  const response = await handler.handle_request(request, context);
+  const response = await handler.handleRequest(request, context);
 
   assertEquals(response.errors, undefined);
   assertEquals(Array.isArray(response.data), true);
-  assertEquals(response.extensions?.duration_ms !== undefined, true);
-  assertEquals(typeof response.extensions?.query_hash, "string");
+  assertEquals(response.extensions?.durationMs !== undefined, true);
+  assertEquals(typeof response.extensions?.queryHash, "string");
 });
 
 Deno.test("Protocol Handler - Error Handling", async () => {
@@ -222,18 +222,18 @@ Deno.test("Protocol Handler - Error Handling", async () => {
 
   const context = {
     session: {
-      session_id: "test_session",
+      sessionId: "test_session",
       database: "test_db",
-      created_at: new Date(),
-      last_activity: new Date(),
+      createdAt: new Date(),
+      lastActivity: new Date(),
       variables: {},
     },
     auth: { roles: [], permissions: [] },
-    request_id: "test_request",
-    started_at: new Date(),
+    requestId: "test_request",
+    startedAt: new Date(),
   };
 
-  const response = await handler.handle_request(request, context);
+  const response = await handler.handleRequest(request, context);
 
   assertEquals(response.data, undefined);
   assertEquals(Array.isArray(response.errors), true);

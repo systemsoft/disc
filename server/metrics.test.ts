@@ -16,10 +16,10 @@ function makeSource(
       failed_requests: 5,
       total_duration_ms: 50000,
     },
-    uptime_ms: 120000,
+    uptimeMs: 120000,
     memory: {
-      heap_used: 1024 * 1024 * 10,
-      heap_total: 1024 * 1024 * 50,
+      heapUsed: 1024 * 1024 * 10,
+      heapTotal: 1024 * 1024 * 50,
       external: 1024 * 512,
     },
     ...overrides,
@@ -109,9 +109,9 @@ Deno.test("renderMetrics omits pool stats when pool is null", () => {
   assertEquals(output.includes("pool_waiters"), false);
 });
 
-Deno.test("renderMetrics includes rate limit stats when rate_limit is provided", () => {
+Deno.test("renderMetrics includes rate limit stats when rateLimit is provided", () => {
   const source = makeSource({
-    rate_limit: { rejected_count: 15, active_clients: 8 },
+    rateLimit: { rejectedCount: 15, activeClients: 8 },
   });
   const output = renderMetrics(source);
 
@@ -121,10 +121,10 @@ Deno.test("renderMetrics includes rate limit stats when rate_limit is provided",
 
 Deno.test("renderMetrics always includes memory and uptime metrics", () => {
   const source = makeSource({
-    uptime_ms: 60000,
+    uptimeMs: 60000,
     memory: {
-      heap_used: 1000,
-      heap_total: 2000,
+      heapUsed: 1000,
+      heapTotal: 2000,
       external: 500,
     },
   });

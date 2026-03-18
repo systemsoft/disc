@@ -544,7 +544,7 @@ export class EdgeQLCompiler {
         // Computed property: name := expression
         value = this.compileExpression(element.expr);
       } else if (element.shape) {
-        // Link with nested shape: posts: { title, created_at }
+        // Link with nested shape: posts: { title, createdAt }
         const linkName = element.name.name;
         const link = Context.getLink(this.ctx, typeName, linkName);
         if (link) {

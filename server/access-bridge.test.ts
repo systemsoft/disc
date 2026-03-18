@@ -4,10 +4,10 @@ import type { AuthContext } from "./types.ts";
 
 Deno.test("access-bridge: maps full auth context", () => {
   const auth: AuthContext = {
-    user_id: "user-123",
+    userId: "user-123",
     roles: ["admin", "editor"],
     permissions: ["read", "write"],
-    jwt_claims: { sub: "user-123", exp: 9999999999 },
+    jwtClaims: { sub: "user-123", exp: 9999999999 },
   };
 
   const result = authContextToAccessContext(auth);
@@ -40,7 +40,7 @@ Deno.test("access-bridge: maps empty auth context", () => {
 
 Deno.test("access-bridge: uses only first role as userRole", () => {
   const auth: AuthContext = {
-    user_id: "user-456",
+    userId: "user-456",
     roles: ["viewer", "editor", "admin"],
     permissions: ["read"],
   };
@@ -56,10 +56,10 @@ Deno.test("access-bridge: uses only first role as userRole", () => {
 
 Deno.test("access-bridge: jwt claims flow through to sessionData", () => {
   const auth: AuthContext = {
-    user_id: "user-789",
+    userId: "user-789",
     roles: ["member"],
     permissions: [],
-    jwt_claims: { iss: "disc-auth", iat: 1700000000, custom_field: "value" },
+    jwtClaims: { iss: "disc-auth", iat: 1700000000, custom_field: "value" },
   };
 
   const result = authContextToAccessContext(auth);

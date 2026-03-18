@@ -96,13 +96,13 @@ export class TestDatabase implements DatabaseInterface {
     // Apply default values for columns not in INSERT
     if (tableName === "users") {
       if (!("active" in row)) row.active = true;
-      if (!("email_verified" in row)) row.email_verified = false;
-      if (!("created_at" in row)) row.created_at = new Date().toISOString();
-      if (!("updated_at" in row)) row.updated_at = new Date().toISOString();
+      if (!("emailVerified" in row)) row.emailVerified = false;
+      if (!("createdAt" in row)) row.createdAt = new Date().toISOString();
+      if (!("updatedAt" in row)) row.updatedAt = new Date().toISOString();
     }
     if (tableName === "sessions") {
       if (!("revoked" in row)) row.revoked = false;
-      if (!("created_at" in row)) row.created_at = new Date().toISOString();
+      if (!("createdAt" in row)) row.createdAt = new Date().toISOString();
     }
 
     table.push(row);
@@ -136,7 +136,7 @@ export class TestDatabase implements DatabaseInterface {
   }
 
   private handleSelectWithJoin(sql: string, params: any[]): QueryResult {
-    // Parse: SELECT ... FROM sessions s JOIN users u ON s.user_id = u.id WHERE ...
+    // Parse: SELECT ... FROM sessions s JOIN users u ON s.userId = u.id WHERE ...
     const fromMatch = sql.match(
       /from\s+(\w+)\s+(\w+)\s+join\s+(\w+)\s+(\w+)\s+on\s+(\w+)\.(\w+)\s*=\s*(\w+)\.(\w+)/i,
     );
@@ -228,7 +228,7 @@ export class TestDatabase implements DatabaseInterface {
         assignments.forEach((assignment) => {
           const eqPos = assignment.indexOf("=");
           if (eqPos === -1) return;
-          const column = assignment.substring(0, eqPos).trim().toLowerCase();
+          const column = assignment.substring(0, eqPos).trim();
           const value = assignment.substring(eqPos + 1).trim();
 
           if (value === "?") {
@@ -402,13 +402,13 @@ export class TestDatabase implements DatabaseInterface {
 
     // Handle "column IS NOT NULL"
     if (lower.includes(" is not null")) {
-      const col = lower.split(" is not null")[0].trim();
+      const col = trimmed.split(/\s+is\s+not\s+null/i)[0].trim();
       return row[col] !== null && row[col] !== undefined;
     }
 
     // Handle "column IS NULL"
     if (lower.includes(" is null")) {
-      const col = lower.split(" is null")[0].trim();
+      const col = trimmed.split(/\s+is\s+null/i)[0].trim();
       return row[col] === null || row[col] === undefined;
     }
 
@@ -416,7 +416,7 @@ export class TestDatabase implements DatabaseInterface {
     if (trimmed.includes(">")) {
       const parts = trimmed.split(">").map((s) => s.trim());
       if (parts.length === 2) {
-        const col = parts[0].toLowerCase();
+        const col = parts[0].trim();
         const valuePart = parts[1].trim();
         let compareValue: string;
         if (valuePart.toLowerCase().includes("current_timestamp")) {
@@ -439,7 +439,7 @@ export class TestDatabase implements DatabaseInterface {
     ) {
       const parts = trimmed.split("<").map((s) => s.trim());
       if (parts.length === 2) {
-        const col = parts[0].toLowerCase();
+        const col = parts[0].trim();
         const valuePart = parts[1].trim();
         let compareValue: string;
         if (valuePart.toLowerCase().includes("current_timestamp")) {
@@ -458,7 +458,7 @@ export class TestDatabase implements DatabaseInterface {
     // Handle equality: "column = value"
     if (trimmed.includes("=")) {
       const eqPos = trimmed.indexOf("=");
-      const col = trimmed.substring(0, eqPos).trim().toLowerCase();
+      const col = trimmed.substring(0, eqPos).trim();
       const valuePart = trimmed.substring(eqPos + 1).trim();
 
       let expectedValue: any;

@@ -58,7 +58,7 @@ class MockHTTPHandler {
           headers: new Headers({ "Content-Type": "application/json" }),
           body: JSON.stringify({
             data: [{ id: "test-id", name: "Test User" }],
-            extensions: { duration_ms: 10, query_hash: "abc123" },
+            extensions: { durationMs: 10, queryHash: "abc123" },
           }),
         };
       } catch (error) {
@@ -315,9 +315,9 @@ Deno.test("HTTP Handler - query with variables", async () => {
   const handler = new MockHTTPHandler();
 
   const bodyString = JSON.stringify({
-    query: "select User { name, email } filter .id = <uuid>$user_id",
+    query: "select User { name, email } filter .id = <uuid>$userId",
     variables: {
-      user_id: "550e8400-e29b-41d4-a716-446655440000",
+      userId: "550e8400-e29b-41d4-a716-446655440000",
     },
   });
 

@@ -55,10 +55,10 @@ type User {
 function createTestContext(auth?: Partial<AuthContext>): QueryContext {
   return {
     session: {
-      session_id: "test-session",
+      sessionId: "test-session",
       database: "test",
-      created_at: new Date(),
-      last_activity: new Date(),
+      createdAt: new Date(),
+      lastActivity: new Date(),
       variables: {},
     },
     auth: {
@@ -66,8 +66,8 @@ function createTestContext(auth?: Partial<AuthContext>): QueryContext {
       permissions: [],
       ...auth,
     },
-    request_id: "test-request",
-    started_at: new Date(),
+    requestId: "test-request",
+    startedAt: new Date(),
   };
 }
 
@@ -94,18 +94,18 @@ Deno.test("E2E Access - SDL with allow policy produces valid response", async ()
 
   const handler = new EdgeQLProtocolHandler({
     schema,
-    dry_run: true,
-    enable_explain: true,
-    enable_access_policies: true,
+    dryRun: true,
+    enableExplain: true,
+    enableAccessPolicies: true,
   });
 
   const request: QueryRequest = { query: "SELECT User { name, email }" };
 
-  // Auth context with a user_id — the allow policy condition checks
+  // Auth context with a userId — the allow policy condition checks
   // current_user which maps to userId in the AccessContext.
-  const context = createTestContext({ user_id: "user-abc" });
+  const context = createTestContext({ userId: "user-abc" });
 
-  const response = await handler.handle_request(request, context);
+  const response = await handler.handleRequest(request, context);
 
   assertExists(response, "Expected a response object");
 
@@ -133,15 +133,15 @@ Deno.test("E2E Access - SDL without policy returns normal response", async () =>
 
   const handler = new EdgeQLProtocolHandler({
     schema,
-    dry_run: true,
-    enable_explain: true,
-    enable_access_policies: false,
+    dryRun: true,
+    enableExplain: true,
+    enableAccessPolicies: false,
   });
 
   const request: QueryRequest = { query: "SELECT User { name, email }" };
   const context = createTestContext();
 
-  const response = await handler.handle_request(request, context);
+  const response = await handler.handleRequest(request, context);
 
   assertExists(response, "Expected a response object");
 
@@ -177,9 +177,9 @@ Deno.test("E2E Access - deny INSERT policy blocks insert query", async () => {
 
   const handler = new EdgeQLProtocolHandler({
     schema,
-    dry_run: true,
-    enable_explain: true,
-    enable_access_policies: true,
+    dryRun: true,
+    enableExplain: true,
+    enableAccessPolicies: true,
   });
 
   const request: QueryRequest = {
@@ -187,7 +187,7 @@ Deno.test("E2E Access - deny INSERT policy blocks insert query", async () => {
   };
   const context = createTestContext();
 
-  const response = await handler.handle_request(request, context);
+  const response = await handler.handleRequest(request, context);
 
   assertExists(response, "Expected a response object");
   // The deny insert policy should result in an error response
@@ -211,20 +211,20 @@ Deno.test("E2E Access - auth context flows through to policy evaluation", async 
 
   const handler = new EdgeQLProtocolHandler({
     schema,
-    dry_run: true,
-    enable_explain: true,
-    enable_access_policies: true,
+    dryRun: true,
+    enableExplain: true,
+    enableAccessPolicies: true,
   });
 
   const request: QueryRequest = { query: "SELECT User { name, email }" };
 
-  // Authenticated context with a user_id
+  // Authenticated context with a userId
   const authContext = createTestContext({
-    user_id: "user-xyz-789",
+    userId: "user-xyz-789",
     roles: ["member"],
   });
 
-  const response = await handler.handle_request(request, authContext);
+  const response = await handler.handleRequest(request, authContext);
 
   assertExists(response, "Expected a response object");
 
@@ -240,7 +240,7 @@ Deno.test("E2E Access - auth context flows through to policy evaluation", async 
     }`,
   );
 
-  // Dry-run data should carry the user_id through the access context bridge
+  // Dry-run data should carry the userId through the access context bridge
   // (the SQL is emitted even in dry-run, so we can inspect it if explain is on)
   if (response.extensions?.sql) {
     assertExists(
@@ -260,9 +260,9 @@ Deno.test("E2E Access - schema reload updates active policies", async () => {
 
   const handler = new EdgeQLProtocolHandler({
     schema: schemaA,
-    dry_run: true,
-    enable_explain: true,
-    enable_access_policies: true,
+    dryRun: true,
+    enableExplain: true,
+    enableAccessPolicies: true,
   });
 
   const insertRequest: QueryRequest = {
@@ -271,7 +271,7 @@ Deno.test("E2E Access - schema reload updates active policies", async () => {
   const context = createTestContext();
 
   // With schema A (no policies), INSERT should succeed in dry-run mode
-  const responseA = await handler.handle_request(insertRequest, context);
+  const responseA = await handler.handleRequest(insertRequest, context);
   assertExists(responseA, "Expected response from schema A");
   const hasErrorA = responseA.errors !== undefined &&
     responseA.errors.length > 0;
@@ -281,7 +281,7 @@ Deno.test("E2E Access - schema reload updates active policies", async () => {
   handler.updateSchema(schemaB);
 
   // After schema update with deny insert policy, INSERT should be blocked
-  const responseB = await handler.handle_request(insertRequest, context);
+  const responseB = await handler.handleRequest(insertRequest, context);
   assertExists(responseB, "Expected response from schema B");
 
   // Schema B with deny insert must produce an error (or at minimum a different

@@ -24,13 +24,13 @@ const RUN_PG = canRunPgTests();
 // Helper function to create test config
 function createPerformanceTestConfig(): Types.MigrationConfig {
   return {
-    migrations_dir: "./migrations",
-    schema_file: "./perf_test.esdl",
-    database_url: "postgresql://localhost:5432/test_performance",
-    dry_run: true,
-    auto_approve: false,
-    backup_before_migration: true,
-    rollback_on_error: true,
+    migrationsDir: "./migrations",
+    schemaFile: "./perf_test.esdl",
+    databaseUrl: "postgresql://localhost:5432/test_performance",
+    dryRun: true,
+    autoApprove: false,
+    backupBeforeMigration: true,
+    rollbackOnError: true,
   };
 }
 
@@ -72,7 +72,7 @@ function createLargeSchema(numTypes: number): Module[] {
       },
       {
         kind: "PropertyDeclaration",
-        name: { kind: "Identifier", value: "created_at" },
+        name: { kind: "Identifier", value: "createdAt" },
         type: {
           kind: "TypeRef",
           name: { kind: "QualifiedName", parts: ["datetime"] },
@@ -346,12 +346,12 @@ Deno.test({
         id: `perf-migration-${i.toString().padStart(3, "0")}`,
         name: `migration_${i}`,
         description: `Performance test migration ${i}`,
-        created_at: new Date(Date.now() + i * 1000),
-        schema_hash: `hash_${i}`,
+        createdAt: new Date(Date.now() + i * 1000),
+        schemaHash: `hash_${i}`,
         operations: [
           {
             kind: "CreateType",
-            type_name: `PerfType${i}`,
+            typeName: `PerfType${i}`,
             properties: [
               {
                 name: "name",
@@ -374,9 +374,9 @@ Deno.test({
     for (const migration of migrations) {
       const result: Types.MigrationResult = {
         success: true,
-        migration_id: migration.id,
-        applied_at: new Date(),
-        duration_ms: 100,
+        migrationId: migration.id,
+        appliedAt: new Date(),
+        durationMs: 100,
       };
 
       const recordResult = await tracker.recordMigration(migration, result);
@@ -424,16 +424,16 @@ Deno.test({
         id: `history-test-${i}`,
         name: `migration_${i}`,
         description: `History test migration ${i}`,
-        created_at: new Date(Date.now() + i * 1000),
-        schema_hash: `hash_${i}`,
+        createdAt: new Date(Date.now() + i * 1000),
+        schemaHash: `hash_${i}`,
         operations: [],
       };
 
       const result: Types.MigrationResult = {
         success: true,
-        migration_id: migration.id,
-        applied_at: new Date(),
-        duration_ms: 100,
+        migrationId: migration.id,
+        appliedAt: new Date(),
+        durationMs: 100,
       };
 
       await tracker.recordMigration(migration, result);

@@ -62,17 +62,17 @@ Deno.test("child context merging", () => {
   configureLogging({ level: "DEBUG", format: "json", output });
 
   const log = new Logger("parent-module");
-  const child = log.child({ service: "auth", user_id: "u-123" });
+  const child = log.child({ service: "auth", userId: "u-123" });
   child.info("Child message");
 
   assertEquals(lines.length, 1);
   const entry = JSON.parse(lines[0]);
   assertEquals(entry.service, "auth");
-  assertEquals(entry.user_id, "u-123");
+  assertEquals(entry.userId, "u-123");
   assertEquals(entry.message, "Child message");
 });
 
-Deno.test("withRequest scoping adds request_id", () => {
+Deno.test("withRequest scoping adds requestId", () => {
   const { lines, output } = captureOutput();
   configureLogging({ level: "DEBUG", format: "json", output });
 
@@ -82,8 +82,8 @@ Deno.test("withRequest scoping adds request_id", () => {
 
   assertEquals(lines.length, 1);
   const entry = JSON.parse(lines[0]);
-  assertEquals(entry.request_id, "req_abc123");
-  assertEquals(entry.client_ip, "127.0.0.1");
+  assertEquals(entry.requestId, "req_abc123");
+  assertEquals(entry.clientIp, "127.0.0.1");
 });
 
 Deno.test("configureLogging changes level", () => {
@@ -138,11 +138,11 @@ Deno.test("extra fields merged into output", () => {
   configureLogging({ level: "DEBUG", format: "json", output });
 
   const log = new Logger("extra-module");
-  log.info("With extras", { duration_ms: 42, query: "SELECT 1" });
+  log.info("With extras", { durationMs: 42, query: "SELECT 1" });
 
   assertEquals(lines.length, 1);
   const entry = JSON.parse(lines[0]);
-  assertEquals(entry.duration_ms, 42);
+  assertEquals(entry.durationMs, 42);
   assertEquals(entry.query, "SELECT 1");
 });
 

@@ -249,7 +249,7 @@ Deno.test("Complex query integration - compileWindowFunction produces valid SQL"
       expression: EdgeQLAST.createPath([{
         kind: "PathStep" as const,
         type: "property" as const,
-        name: "created_at",
+        name: "createdAt",
       }]),
       direction: "DESC",
     }],

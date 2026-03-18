@@ -36,7 +36,7 @@ export class SchemaDiffer {
         if (alterOps.length > 0) {
           operations.push({
             kind: "AlterType",
-            type_name: typeName,
+            typeName: typeName,
             operations: alterOps,
           } as Types.AlterTypeOperation);
         }
@@ -69,7 +69,7 @@ export class SchemaDiffer {
 
     return {
       kind: "CreateType",
-      type_name: typeDef.name.value,
+      typeName: typeDef.name.value,
       properties,
       links,
     };
@@ -174,7 +174,7 @@ export class SchemaDiffer {
           required: member.required || false,
           multi: member.multi || false,
           cardinality: member.multi ? "many" : "one",
-          on_target_delete: this.mapOnTargetDelete(member.onTargetDelete),
+          onTargetDelete: this.mapOnTargetDelete(member.onTargetDelete),
           annotations: this.extractAnnotations(member.annotations || []),
         });
       }
@@ -185,7 +185,7 @@ export class SchemaDiffer {
 
   private mapOnTargetDelete(
     value?: "restrict" | "cascade" | "allow" | "deferred restrict",
-  ): Types.LinkDefinition["on_target_delete"] {
+  ): Types.LinkDefinition["onTargetDelete"] {
     if (!value) return undefined;
     switch (value) {
       case "restrict":
@@ -252,7 +252,7 @@ export class SchemaDiffer {
         if (changes.length > 0) {
           operations.push({
             kind: "AlterProperty",
-            property_name: propName,
+            propertyName: propName,
             changes,
           } as Types.AlterPropertyOperation);
         }
@@ -271,32 +271,32 @@ export class SchemaDiffer {
     if (oldProp.type !== newProp.type) {
       changes.push({
         kind: "ChangeType",
-        old_value: oldProp.type,
-        new_value: newProp.type,
+        oldValue: oldProp.type,
+        newValue: newProp.type,
       });
     }
 
     if (oldProp.required !== newProp.required) {
       changes.push({
         kind: "ChangeRequired",
-        old_value: oldProp.required,
-        new_value: newProp.required,
+        oldValue: oldProp.required,
+        newValue: newProp.required,
       });
     }
 
     if (oldProp.multi !== newProp.multi) {
       changes.push({
         kind: "ChangeMulti",
-        old_value: oldProp.multi,
-        new_value: newProp.multi,
+        oldValue: oldProp.multi,
+        newValue: newProp.multi,
       });
     }
 
     if (oldProp.default !== newProp.default) {
       changes.push({
         kind: "ChangeDefault",
-        old_value: oldProp.default,
-        new_value: newProp.default,
+        oldValue: oldProp.default,
+        newValue: newProp.default,
       });
     }
 
@@ -327,7 +327,7 @@ export class SchemaDiffer {
       if (!newLinksMap.has(linkName)) {
         operations.push({
           kind: "DropLink",
-          link_name: linkName,
+          linkName: linkName,
         } as Types.DropLinkOperation);
       }
     }
@@ -340,7 +340,7 @@ export class SchemaDiffer {
         if (changes.length > 0) {
           operations.push({
             kind: "AlterLink",
-            link_name: linkName,
+            linkName: linkName,
             changes,
           } as Types.AlterLinkOperation);
         }
@@ -359,40 +359,40 @@ export class SchemaDiffer {
     if (oldLink.target !== newLink.target) {
       changes.push({
         kind: "ChangeTarget",
-        old_value: oldLink.target,
-        new_value: newLink.target,
+        oldValue: oldLink.target,
+        newValue: newLink.target,
       });
     }
 
     if (oldLink.required !== newLink.required) {
       changes.push({
         kind: "ChangeRequired",
-        old_value: oldLink.required,
-        new_value: newLink.required,
+        oldValue: oldLink.required,
+        newValue: newLink.required,
       });
     }
 
     if (oldLink.multi !== newLink.multi) {
       changes.push({
         kind: "ChangeMulti",
-        old_value: oldLink.multi,
-        new_value: newLink.multi,
+        oldValue: oldLink.multi,
+        newValue: newLink.multi,
       });
     }
 
     if (oldLink.cardinality !== newLink.cardinality) {
       changes.push({
         kind: "ChangeCardinality",
-        old_value: oldLink.cardinality,
-        new_value: newLink.cardinality,
+        oldValue: oldLink.cardinality,
+        newValue: newLink.cardinality,
       });
     }
 
-    if (oldLink.on_target_delete !== newLink.on_target_delete) {
+    if (oldLink.onTargetDelete !== newLink.onTargetDelete) {
       changes.push({
         kind: "ChangeOnDelete",
-        old_value: oldLink.on_target_delete,
-        new_value: newLink.on_target_delete,
+        oldValue: oldLink.onTargetDelete,
+        newValue: newLink.onTargetDelete,
       });
     }
 

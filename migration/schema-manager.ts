@@ -263,7 +263,7 @@ export class SchemaManager {
     }
     const plan = planResult.value;
 
-    // If dry_run, skip execution
+    // If dryRun, skip execution
     if (this.dryRun) {
       // Update internal state even in dry-run so subsequent calls see the new schema
       this.currentModules = newModules;
@@ -273,9 +273,9 @@ export class SchemaManager {
       // Return synthetic results for each planned migration
       const results: Types.MigrationResult[] = plan.migrations.map((m) => ({
         "success": true,
-        "migration_id": m.id,
-        "applied_at": new Date(),
-        "duration_ms": 0,
+        "migrationId": m.id,
+        "appliedAt": new Date(),
+        "durationMs": 0,
       }));
       return Ok(results);
     }
@@ -392,14 +392,14 @@ export class SchemaManager {
    */
   async initialize(): Promise<void> {
     const config: Types.MigrationConfig = {
-      "migrations_dir": "",
-      "schema_file": "",
-      "database_url": "",
-      "dry_run": this.dryRun,
-      "auto_approve": true,
-      "backup_before_migration": false,
-      "rollback_on_error": true,
-      "connection_pool": this.pool,
+      "migrationsDir": "",
+      "schemaFile": "",
+      "databaseUrl": "",
+      "dryRun": this.dryRun,
+      "autoApprove": true,
+      "backupBeforeMigration": false,
+      "rollbackOnError": true,
+      "connectionPool": this.pool,
     };
 
     this.engine = new MigrationEngine(config);

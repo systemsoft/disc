@@ -18,7 +18,7 @@ Deno.test("ComplexQueryCompiler - compiles nested subqueries", () => {
   const schema = Context.createTestSchema();
   const compiler = new ComplexQueryCompiler(schema);
 
-  // SELECT User FILTER .id IN (SELECT Post FILTER .created_at > '2024-01-01')
+  // SELECT User FILTER .id IN (SELECT Post FILTER .createdAt > '2024-01-01')
   // Using valid AST: a SelectQuery with a filter that uses IN with a Subquery
   const query: EdgeQLAST.SelectQuery = {
     kind: "SelectQuery",
@@ -98,7 +98,7 @@ Deno.test("ComplexQueryCompiler - compiles window functions via compileWindowFun
       expression: EdgeQLAST.createPath([{
         kind: "PathStep" as const,
         type: "property" as const,
-        name: "created_at",
+        name: "createdAt",
       }]),
       direction: "DESC",
     }],

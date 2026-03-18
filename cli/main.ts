@@ -131,11 +131,11 @@ async function main() {
         await commands.init({
           name,
           template: args.template as "basic" | "minimal" | "full" || "basic",
-          database_url: args["database-url"],
+          databaseUrl: args["database-url"],
           force: args.force,
           directory: args.directory,
-          backend_dsn: args["backend-dsn"],
-          skip_postgres: args["skip-postgres"],
+          backendDsn: args["backend-dsn"],
+          skipPostgres: args["skip-postgres"],
         });
         break;
       }
@@ -150,8 +150,8 @@ async function main() {
           host: args.host,
           port: args.port ? parseInt(args.port) : undefined,
           database: args.database,
-          schema_file: args.schema,
-          non_interactive: args["non-interactive"],
+          schemaFile: args.schema,
+          nonInteractive: args["non-interactive"],
           execute: args.execute,
         });
         break;
@@ -167,20 +167,20 @@ async function main() {
           port: args.port ? parseInt(args.port) : undefined,
           host: args.host,
           config: args.config,
-          jwt_secret: args["jwt-secret"],
-          enable_auth: args["enable-auth"],
-          enable_access_policies: args["enable-access-policies"],
-          tls_cert: args["tls-cert"],
-          tls_key: args["tls-key"],
+          jwtSecret: args["jwt-secret"],
+          enableAuth: args["enable-auth"],
+          enableAccessPolicies: args["enable-access-policies"],
+          tlsCert: args["tls-cert"],
+          tlsKey: args["tls-key"],
         });
         break;
       }
 
       case "watch": {
         await commands.watch({
-          schema_file: args.schema,
-          output_dir: args.output,
-          delay_ms: 1000,
+          schemaFile: args.schema,
+          outputDir: args.output,
+          delayMs: 1000,
         });
         break;
       }

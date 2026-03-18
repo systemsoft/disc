@@ -6,40 +6,40 @@ export interface User {
   id: string;
   email: string;
   username?: string;
-  password_hash: string;
-  created_at: Date;
-  updated_at: Date;
-  email_verified: boolean;
+  passwordHash: string;
+  createdAt: Date;
+  updatedAt: Date;
+  emailVerified: boolean;
   active: boolean;
   metadata?: Record<string, any>;
 }
 
 export interface Session {
   id: string;
-  user_id: string;
+  userId: string;
   token: string;
-  refresh_token?: string;
-  created_at: Date;
-  expires_at: Date;
-  last_activity?: Date;
-  ip_address?: string;
-  user_agent?: string;
+  refreshToken?: string;
+  createdAt: Date;
+  expiresAt: Date;
+  lastActivity?: Date;
+  ipAddress?: string;
+  userAgent?: string;
 }
 
 export interface AuthConfig {
-  jwt_secret: string;
-  jwt_issuer?: string;
-  jwt_audience?: string;
-  token_expiry?: number; // seconds
-  refresh_token_expiry?: number; // seconds
-  bcrypt_rounds?: number;
-  session_timeout?: number; // seconds
-  allow_registration?: boolean;
-  require_email_verification?: boolean;
-  password_min_length?: number;
-  password_require_uppercase?: boolean;
-  password_require_numbers?: boolean;
-  password_require_special?: boolean;
+  jwtSecret: string;
+  jwtIssuer?: string;
+  jwtAudience?: string;
+  tokenExpiry?: number; // seconds
+  refreshTokenExpiry?: number; // seconds
+  bcryptRounds?: number;
+  sessionTimeout?: number; // seconds
+  allowRegistration?: boolean;
+  requireEmailVerification?: boolean;
+  passwordMinLength?: number;
+  passwordRequireUppercase?: boolean;
+  passwordRequireNumbers?: boolean;
+  passwordRequireSpecial?: boolean;
 }
 
 export interface LoginCredentials {
@@ -67,10 +67,10 @@ export interface TokenPayload {
 }
 
 export interface AuthResponse {
-  user: Omit<User, "password_hash">;
+  user: Omit<User, "passwordHash">;
   session: Session;
   token: string;
-  refresh_token?: string;
+  refreshToken?: string;
 }
 
 export interface PasswordValidationResult {
@@ -81,19 +81,19 @@ export interface PasswordValidationResult {
 export interface AuthProvider {
   login(credentials: LoginCredentials): Promise<AuthResponse>;
   register(data: RegisterData): Promise<AuthResponse>;
-  logout(session_id: string): Promise<void>;
-  refresh(refresh_token: string): Promise<AuthResponse>;
-  verify_token(token: string): Promise<TokenPayload>;
-  get_user(user_id: string): Promise<User | null>;
-  update_password(
-    user_id: string,
+  logout(sessionId: string): Promise<void>;
+  refresh(refreshToken: string): Promise<AuthResponse>;
+  verifyToken(token: string): Promise<TokenPayload>;
+  getUser(userId: string): Promise<User | null>;
+  updatePassword(
+    userId: string,
     old_password: string,
     new_password: string,
   ): Promise<void>;
-  reset_password_request(email: string): Promise<string>; // returns reset token
-  reset_password(reset_token: string, new_password: string): Promise<void>;
-  verify_email(verification_token: string): Promise<void>;
-  revoke_all_sessions(user_id: string): Promise<void>;
+  resetPasswordRequest(email: string): Promise<string>; // returns reset token
+  resetPassword(reset_token: string, new_password: string): Promise<void>;
+  verifyEmail(verification_token: string): Promise<void>;
+  revokeAllSessions(userId: string): Promise<void>;
 }
 
 export class AuthError extends Error {

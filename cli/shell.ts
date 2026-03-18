@@ -12,8 +12,8 @@ export interface ShellOptions {
   host?: string;
   port?: number;
   database?: string;
-  schema_file?: string;
-  non_interactive?: boolean;
+  schemaFile?: string;
+  nonInteractive?: boolean;
   execute?: string;
 }
 
@@ -23,7 +23,7 @@ export interface ShellSession {
   database: string;
   user?: string;
   connected: boolean;
-  timing_enabled: boolean;
+  timingEnabled: boolean;
 }
 
 export class DiscShell {
@@ -49,7 +49,7 @@ export class DiscShell {
         database,
         user: Deno.env.get("USER") || "disc",
         connected: false,
-        timing_enabled: false,
+        timingEnabled: false,
       };
 
       // Connect to database
@@ -57,8 +57,8 @@ export class DiscShell {
       console.log(`📡 Connected to database: ${database}`);
       console.log("");
 
-      if (options.schema_file) {
-        await this.loadSchema(options.schema_file);
+      if (options.schemaFile) {
+        await this.loadSchema(options.schemaFile);
       }
 
       if (options.execute) {
@@ -69,7 +69,7 @@ export class DiscShell {
         return;
       }
 
-      if (options.non_interactive) {
+      if (options.nonInteractive) {
         console.log(
           "💡 Use --execute to run a query, or omit --non-interactive for REPL mode",
         );
@@ -270,10 +270,10 @@ export class DiscShell {
 
       case "\\timing":
         if (this.session) {
-          this.session.timing_enabled = !this.session.timing_enabled;
+          this.session.timingEnabled = !this.session.timingEnabled;
           console.log(
             `⏱️  Timing ${
-              this.session.timing_enabled ? "enabled" : "disabled"
+              this.session.timingEnabled ? "enabled" : "disabled"
             }`,
           );
         }
@@ -332,7 +332,7 @@ export class DiscShell {
         console.log("✅ Query executed successfully");
       }
 
-      if (this.session?.timing_enabled) {
+      if (this.session?.timingEnabled) {
         const duration = Date.now() - startTime;
         console.log(`⏱️  Time: ${duration}ms`);
       }
@@ -348,7 +348,7 @@ export class DiscShell {
     const startTime = Date.now();
     await this.executeRealQuery(query);
 
-    if (this.session?.timing_enabled) {
+    if (this.session?.timingEnabled) {
       const duration = Date.now() - startTime;
       console.log(`⏱️  Total time: ${duration}ms`);
     }

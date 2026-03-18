@@ -9,10 +9,10 @@ describe("Auth Module Smoke Test", () => {
   let db: TestDatabase;
 
   const testConfig: AuthConfig = {
-    jwt_secret: "test-secret-key-at-least-32-characters-long",
-    bcrypt_rounds: 4, // Faster for testing
-    token_expiry: 3600,
-    password_min_length: 6, // Shorter for testing
+    jwtSecret: "test-secret-key-at-least-32-characters-long",
+    bcryptRounds: 4, // Faster for testing
+    tokenExpiry: 3600,
+    passwordMinLength: 6, // Shorter for testing
   };
 
   beforeEach(async () => {

@@ -26,19 +26,19 @@ export class AuthProvider implements IAuthProvider {
 
   constructor(config: AuthConfig, db: DatabaseInterface) {
     this.config = {
-      jwt_secret: config.jwt_secret,
-      jwt_issuer: config.jwt_issuer || "disc",
-      jwt_audience: config.jwt_audience || "disc-api",
-      token_expiry: config.token_expiry ?? 3600, // 1 hour
-      refresh_token_expiry: config.refresh_token_expiry ?? 604800, // 7 days
-      bcrypt_rounds: config.bcrypt_rounds ?? 12,
-      session_timeout: config.session_timeout ?? 3600,
-      allow_registration: config.allow_registration ?? true,
-      require_email_verification: config.require_email_verification ?? false,
-      password_min_length: config.password_min_length || 8,
-      password_require_uppercase: config.password_require_uppercase ?? false,
-      password_require_numbers: config.password_require_numbers ?? false,
-      password_require_special: config.password_require_special ?? false,
+      jwtSecret: config.jwtSecret,
+      jwtIssuer: config.jwtIssuer || "disc",
+      jwtAudience: config.jwtAudience || "disc-api",
+      tokenExpiry: config.tokenExpiry ?? 3600, // 1 hour
+      refreshTokenExpiry: config.refreshTokenExpiry ?? 604800, // 7 days
+      bcryptRounds: config.bcryptRounds ?? 12,
+      sessionTimeout: config.sessionTimeout ?? 3600,
+      allowRegistration: config.allowRegistration ?? true,
+      requireEmailVerification: config.requireEmailVerification ?? false,
+      passwordMinLength: config.passwordMinLength || 8,
+      passwordRequireUppercase: config.passwordRequireUppercase ?? false,
+      passwordRequireNumbers: config.passwordRequireNumbers ?? false,
+      passwordRequireSpecial: config.passwordRequireSpecial ?? false,
     };
     this.db = db;
   }
@@ -46,7 +46,7 @@ export class AuthProvider implements IAuthProvider {
   async initialize(): Promise<void> {
     // Create crypto key for JWT signing
     const encoder = new TextEncoder();
-    const keyData = encoder.encode(this.config.jwt_secret);
+    const keyData = encoder.encode(this.config.jwtSecret);
     this.cryptoKey = await crypto.subtle.importKey(
       "raw",
       keyData,
@@ -66,10 +66,10 @@ export class AuthProvider implements IAuthProvider {
         id TEXT PRIMARY KEY,
         email TEXT UNIQUE NOT NULL,
         username TEXT UNIQUE,
-        password_hash TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        email_verified BOOLEAN DEFAULT FALSE,
+        passwordHash TEXT NOT NULL,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        emailVerified BOOLEAN DEFAULT FALSE,
         active BOOLEAN DEFAULT TRUE,
         metadata TEXT,
         verification_token TEXT,
@@ -82,22 +82,22 @@ export class AuthProvider implements IAuthProvider {
     await this.db.execute(`
       CREATE TABLE IF NOT EXISTS sessions (
         id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL,
+        userId TEXT NOT NULL,
         token TEXT UNIQUE NOT NULL,
-        refresh_token TEXT UNIQUE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        expires_at TIMESTAMP NOT NULL,
-        last_activity TIMESTAMP,
-        ip_address TEXT,
-        user_agent TEXT,
+        refreshToken TEXT UNIQUE,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        expiresAt TIMESTAMP NOT NULL,
+        lastActivity TIMESTAMP,
+        ipAddress TEXT,
+        userAgent TEXT,
         revoked BOOLEAN DEFAULT FALSE,
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
       )
     `);
 
     // Indexes
     await this.db.execute(
-      `CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(userId)`,
     );
     await this.db.execute(
       `CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)`,
@@ -111,7 +111,7 @@ export class AuthProvider implements IAuthProvider {
   }
 
   async register(data: RegisterData): Promise<AuthResponse> {
-    if (!this.config.allow_registration) {
+    if (!this.config.allowRegistration) {
       throw new AuthError(
         "Registration is disabled",
         AuthErrorCode.REGISTRATION_DISABLED,
@@ -144,19 +144,19 @@ export class AuthProvider implements IAuthProvider {
     }
 
     // Hash password
-    const salt = await bcrypt.genSalt(this.config.bcrypt_rounds);
+    const salt = await bcrypt.genSalt(this.config.bcryptRounds);
     const passwordHash = await bcrypt.hash(data.password, salt);
 
     // Create user
     const userId = this.generateId();
-    const verificationToken = this.config.require_email_verification
+    const verificationToken = this.config.requireEmailVerification
       ? this.generateToken()
       : null;
 
     await this.db.execute(
       `
       INSERT INTO users (
-        id, email, username, password_hash, email_verified, 
+        id, email, username, passwordHash, emailVerified, 
         metadata, verification_token
       ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `,
@@ -165,14 +165,14 @@ export class AuthProvider implements IAuthProvider {
         data.email,
         data.username || null,
         passwordHash,
-        !this.config.require_email_verification,
+        !this.config.requireEmailVerification,
         data.metadata ? JSON.stringify(data.metadata) : null,
         verificationToken,
       ],
     );
 
     // Get created user
-    const user = await this.get_user(userId);
+    const user = await this.getUser(userId);
     if (!user) {
       throw new Error("Failed to create user");
     }
@@ -186,18 +186,18 @@ export class AuthProvider implements IAuthProvider {
 
     // Update session with tokens
     await this.db.execute(
-      "UPDATE sessions SET token = ?, refresh_token = ? WHERE id = ?",
+      "UPDATE sessions SET token = ?, refreshToken = ? WHERE id = ?",
       [token, refreshToken, session.id],
     );
 
     session.token = token;
-    session.refresh_token = refreshToken;
+    session.refreshToken = refreshToken;
 
     return {
       user: this.sanitizeUser(user),
       session,
       token,
-      refresh_token: refreshToken,
+      refreshToken: refreshToken,
     };
   }
 
@@ -230,7 +230,7 @@ export class AuthProvider implements IAuthProvider {
     }
 
     // Check email verification
-    if (this.config.require_email_verification && !user.email_verified) {
+    if (this.config.requireEmailVerification && !user.emailVerified) {
       throw new AuthError(
         "Email not verified",
         AuthErrorCode.EMAIL_NOT_VERIFIED,
@@ -241,7 +241,7 @@ export class AuthProvider implements IAuthProvider {
     // Verify password
     const passwordMatch = await bcrypt.compare(
       credentials.password,
-      user.password_hash,
+      user.passwordHash,
     );
     if (!passwordMatch) {
       throw new AuthError(
@@ -260,18 +260,18 @@ export class AuthProvider implements IAuthProvider {
 
     // Update session with tokens
     await this.db.execute(
-      "UPDATE sessions SET token = ?, refresh_token = ? WHERE id = ?",
+      "UPDATE sessions SET token = ?, refreshToken = ? WHERE id = ?",
       [token, refreshToken, session.id],
     );
 
     session.token = token;
-    session.refresh_token = refreshToken;
+    session.refreshToken = refreshToken;
 
     return {
       user: this.sanitizeUser(user),
       session,
       token,
-      refresh_token: refreshToken,
+      refreshToken: refreshToken,
     };
   }
 
@@ -285,14 +285,14 @@ export class AuthProvider implements IAuthProvider {
   async refresh(refreshToken: string): Promise<AuthResponse> {
     // Find session by refresh token
     // Use explicit columns with aliases to avoid duplicate field names
-    // (both sessions and users have id, created_at)
+    // (both sessions and users have id, createdAt)
     const result = await this.db.query(
-      `SELECT s.id AS session_id, s.user_id, s.refresh_token, s.revoked,
-              u.id, u.email, u.username, u.password_hash,
-              u.created_at, u.updated_at, u.email_verified, u.active, u.metadata
+      `SELECT s.id AS sessionId, s.userId, s.refreshToken, s.revoked,
+              u.id, u.email, u.username, u.passwordHash,
+              u.createdAt, u.updatedAt, u.emailVerified, u.active, u.metadata
        FROM sessions s
-       JOIN users u ON s.user_id = u.id
-       WHERE s.refresh_token = ? AND s.revoked = FALSE`,
+       JOIN users u ON s.userId = u.id
+       WHERE s.refreshToken = ? AND s.revoked = FALSE`,
       [refreshToken],
     );
 
@@ -306,7 +306,7 @@ export class AuthProvider implements IAuthProvider {
 
     const row = result.rows[0];
     const user = this.rowToUser(row);
-    const oldSessionId = row.session_id;
+    const oldSessionId = row.sessionId;
 
     // Revoke old session
     await this.db.execute(
@@ -323,22 +323,22 @@ export class AuthProvider implements IAuthProvider {
 
     // Update session with tokens
     await this.db.execute(
-      "UPDATE sessions SET token = ?, refresh_token = ? WHERE id = ?",
+      "UPDATE sessions SET token = ?, refreshToken = ? WHERE id = ?",
       [token, newRefreshToken, session.id],
     );
 
     session.token = token;
-    session.refresh_token = newRefreshToken;
+    session.refreshToken = newRefreshToken;
 
     return {
       user: this.sanitizeUser(user),
       session,
       token,
-      refresh_token: newRefreshToken,
+      refreshToken: newRefreshToken,
     };
   }
 
-  async verify_token(token: string): Promise<TokenPayload> {
+  async verifyToken(token: string): Promise<TokenPayload> {
     if (!this.cryptoKey) {
       throw new Error("Auth provider not initialized");
     }
@@ -395,7 +395,7 @@ export class AuthProvider implements IAuthProvider {
     }
   }
 
-  async get_user(userId: string): Promise<User | null> {
+  async getUser(userId: string): Promise<User | null> {
     const result = await this.db.query(
       "SELECT * FROM users WHERE id = ?",
       [userId],
@@ -408,12 +408,12 @@ export class AuthProvider implements IAuthProvider {
     return this.rowToUser(result.rows[0]);
   }
 
-  async update_password(
+  async updatePassword(
     userId: string,
     oldPassword: string,
     newPassword: string,
   ): Promise<void> {
-    const user = await this.get_user(userId);
+    const user = await this.getUser(userId);
     if (!user) {
       throw new AuthError(
         "User not found",
@@ -423,7 +423,7 @@ export class AuthProvider implements IAuthProvider {
     }
 
     // Verify old password
-    const passwordMatch = await bcrypt.compare(oldPassword, user.password_hash);
+    const passwordMatch = await bcrypt.compare(oldPassword, user.passwordHash);
     if (!passwordMatch) {
       throw new AuthError(
         "Invalid credentials",
@@ -443,20 +443,20 @@ export class AuthProvider implements IAuthProvider {
     }
 
     // Hash new password
-    const newSalt = await bcrypt.genSalt(this.config.bcrypt_rounds);
+    const newSalt = await bcrypt.genSalt(this.config.bcryptRounds);
     const newPasswordHash = await bcrypt.hash(newPassword, newSalt);
 
     // Update password
     await this.db.execute(
-      "UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+      "UPDATE users SET passwordHash = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?",
       [newPasswordHash, userId],
     );
 
     // Revoke all sessions
-    await this.revoke_all_sessions(userId);
+    await this.revokeAllSessions(userId);
   }
 
-  async reset_password_request(email: string): Promise<string> {
+  async resetPasswordRequest(email: string): Promise<string> {
     const result = await this.db.query(
       "SELECT id FROM users WHERE email = ?",
       [email],
@@ -482,7 +482,7 @@ export class AuthProvider implements IAuthProvider {
     return resetToken;
   }
 
-  async reset_password(resetToken: string, newPassword: string): Promise<void> {
+  async resetPassword(resetToken: string, newPassword: string): Promise<void> {
     const result = await this.db.query(
       "SELECT id FROM users WHERE reset_token = ? AND reset_token_expires > CURRENT_TIMESTAMP",
       [resetToken],
@@ -509,21 +509,21 @@ export class AuthProvider implements IAuthProvider {
     }
 
     // Hash new password
-    const resetSalt = await bcrypt.genSalt(this.config.bcrypt_rounds);
+    const resetSalt = await bcrypt.genSalt(this.config.bcryptRounds);
     const passwordHash = await bcrypt.hash(newPassword, resetSalt);
 
     // Update password and clear reset token
     await this.db.execute(
-      `UPDATE users SET password_hash = ?, reset_token = NULL, 
-       reset_token_expires = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      `UPDATE users SET passwordHash = ?, reset_token = NULL, 
+       reset_token_expires = NULL, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`,
       [passwordHash, userId],
     );
 
     // Revoke all sessions
-    await this.revoke_all_sessions(userId);
+    await this.revokeAllSessions(userId);
   }
 
-  async verify_email(verificationToken: string): Promise<void> {
+  async verifyEmail(verificationToken: string): Promise<void> {
     const result = await this.db.query(
       "SELECT id FROM users WHERE verification_token = ?",
       [verificationToken],
@@ -538,27 +538,27 @@ export class AuthProvider implements IAuthProvider {
     }
 
     await this.db.execute(
-      `UPDATE users SET email_verified = TRUE, verification_token = NULL, 
-       updated_at = CURRENT_TIMESTAMP WHERE verification_token = ?`,
+      `UPDATE users SET emailVerified = TRUE, verification_token = NULL, 
+       updatedAt = CURRENT_TIMESTAMP WHERE verification_token = ?`,
       [verificationToken],
     );
   }
 
-  async revoke_all_sessions(userId: string): Promise<void> {
+  async revokeAllSessions(userId: string): Promise<void> {
     await this.db.execute(
-      "UPDATE sessions SET revoked = TRUE WHERE user_id = ?",
+      "UPDATE sessions SET revoked = TRUE WHERE userId = ?",
       [userId],
     );
   }
 
   private async createSession(userId: string): Promise<Session> {
     const sessionId = this.generateId();
-    const expiresAt = new Date(Date.now() + this.config.session_timeout * 1000);
+    const expiresAt = new Date(Date.now() + this.config.sessionTimeout * 1000);
 
     await this.db.execute(
       `
       INSERT INTO sessions (
-        id, user_id, token, expires_at
+        id, userId, token, expiresAt
       ) VALUES (?, ?, ?, ?)
     `,
       [sessionId, userId, "", expiresAt.toISOString()],
@@ -566,10 +566,10 @@ export class AuthProvider implements IAuthProvider {
 
     return {
       id: sessionId,
-      user_id: userId,
+      userId: userId,
       token: "",
-      created_at: new Date(),
-      expires_at: expiresAt,
+      createdAt: new Date(),
+      expiresAt: expiresAt,
     };
   }
 
@@ -584,9 +584,9 @@ export class AuthProvider implements IAuthProvider {
       email: user.email,
       username: user.username,
       iat: now,
-      exp: now + this.config.token_expiry,
-      iss: this.config.jwt_issuer,
-      aud: this.config.jwt_audience,
+      exp: now + this.config.tokenExpiry,
+      iss: this.config.jwtIssuer,
+      aud: this.config.jwtAudience,
       jti: this.generateId(),
     };
 
@@ -600,22 +600,22 @@ export class AuthProvider implements IAuthProvider {
   private validatePassword(password: string): PasswordValidationResult {
     const errors: string[] = [];
 
-    if (password.length < this.config.password_min_length) {
+    if (password.length < this.config.passwordMinLength) {
       errors.push(
-        `Password must be at least ${this.config.password_min_length} characters`,
+        `Password must be at least ${this.config.passwordMinLength} characters`,
       );
     }
 
-    if (this.config.password_require_uppercase && !/[A-Z]/.test(password)) {
+    if (this.config.passwordRequireUppercase && !/[A-Z]/.test(password)) {
       errors.push("Password must contain at least one uppercase letter");
     }
 
-    if (this.config.password_require_numbers && !/[0-9]/.test(password)) {
+    if (this.config.passwordRequireNumbers && !/[0-9]/.test(password)) {
       errors.push("Password must contain at least one number");
     }
 
     if (
-      this.config.password_require_special &&
+      this.config.passwordRequireSpecial &&
       !/[!@#$%^&*(),.?":{}|<>]/.test(password)
     ) {
       errors.push("Password must contain at least one special character");
@@ -632,17 +632,17 @@ export class AuthProvider implements IAuthProvider {
       id: row.id,
       email: row.email,
       username: row.username,
-      password_hash: row.password_hash,
-      created_at: new Date(row.created_at),
-      updated_at: new Date(row.updated_at),
-      email_verified: Boolean(row.email_verified),
+      passwordHash: row.passwordHash,
+      createdAt: new Date(row.createdAt),
+      updatedAt: new Date(row.updatedAt),
+      emailVerified: Boolean(row.emailVerified),
       active: Boolean(row.active),
       metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
     };
   }
 
-  private sanitizeUser(user: User): Omit<User, "password_hash"> {
-    const { password_hash, ...sanitized } = user;
+  private sanitizeUser(user: User): Omit<User, "passwordHash"> {
+    const { passwordHash, ...sanitized } = user;
     return sanitized;
   }
 

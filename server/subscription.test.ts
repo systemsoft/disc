@@ -33,15 +33,15 @@ class MockWebSocket {
 function createTestContext(): Types.QueryContext {
   return {
     session: {
-      session_id: "test_session_123",
+      sessionId: "test_session_123",
       database: "test_db",
-      created_at: new Date(),
-      last_activity: new Date(),
+      createdAt: new Date(),
+      lastActivity: new Date(),
       variables: {},
     },
     auth: { roles: [], permissions: [] },
-    request_id: "test_request_123",
-    started_at: new Date(),
+    requestId: "test_request_123",
+    startedAt: new Date(),
   };
 }
 
@@ -57,7 +57,7 @@ Deno.test("Subscription Handler - Basic Subscription", async () => {
   };
 
   try {
-    await handler.handle_subscription(subscription, context, websocket);
+    await handler.handleSubscription(subscription, context, websocket);
 
     // Should have sent initial data
     const messages = (websocket as unknown as MockWebSocket).getAllMessages();
@@ -80,13 +80,13 @@ Deno.test("Subscription Handler - Validation Errors", async () => {
 
   try {
     // Test invalid query (INSERT not allowed)
-    const invalid_subscription: Types.SubscriptionRequest = {
+    const invalidSubscription: Types.SubscriptionRequest = {
       id: "sub_002",
       query: "insert User { name := 'test' }",
       variables: {},
     };
 
-    await handler.handle_subscription(invalid_subscription, context, websocket);
+    await handler.handleSubscription(invalidSubscription, context, websocket);
 
     const messages = (websocket as unknown as MockWebSocket).getAllMessages();
     assertEquals(messages.length, 1);
@@ -111,16 +111,16 @@ Deno.test("Subscription Handler - Forbidden Operations", async () => {
   const context = createTestContext();
 
   try {
-    const forbidden_operations = ["update", "delete", "drop", "alter"];
+    const forbiddenOperations = ["update", "delete", "drop", "alter"];
 
-    for (const operation of forbidden_operations) {
+    for (const operation of forbiddenOperations) {
       const subscription: Types.SubscriptionRequest = {
         id: `sub_${operation}`,
         query: `${operation} User`,
         variables: {},
       };
 
-      await handler.handle_subscription(subscription, context, websocket);
+      await handler.handleSubscription(subscription, context, websocket);
 
       const messages = (websocket as unknown as MockWebSocket).getAllMessages();
       const lastMessage = messages[messages.length - 1];
@@ -149,7 +149,7 @@ Deno.test("Subscription Handler - Stop Subscription", async () => {
       variables: {},
     };
 
-    await handler.handle_subscription(subscription, context, websocket);
+    await handler.handleSubscription(subscription, context, websocket);
 
     // Stop the subscription
     handler.stop_subscription("sub_003");
@@ -181,21 +181,21 @@ Deno.test("Subscription Handler - Connection Cleanup", async () => {
     ];
 
     for (const sub of subscriptions) {
-      await handler.handle_subscription(
+      await handler.handleSubscription(
         { ...sub, variables: {} },
         context,
         websocket,
       );
     }
 
-    const initial_stats = handler.get_subscription_stats();
-    assertEquals(initial_stats.active_subscriptions, 3);
+    const initialStats = handler.get_subscription_stats();
+    assertEquals(initialStats.active_subscriptions, 3);
 
     // Cleanup connection
-    handler.cleanup_connection(context.session.session_id);
+    handler.cleanup_connection(context.session.sessionId);
 
-    const final_stats = handler.get_subscription_stats();
-    assertEquals(final_stats.active_subscriptions, 0);
+    const finalStats = handler.get_subscription_stats();
+    assertEquals(finalStats.active_subscriptions, 0);
   } finally {
     handler.dispose();
   }
@@ -203,27 +203,27 @@ Deno.test("Subscription Handler - Connection Cleanup", async () => {
 
 Deno.test("Subscription Handler - Subscription Limits", async () => {
   const handler = new SubscriptionHandler({
-    max_subscriptions_per_connection: 2,
+    maxSubscriptionsPerConnection: 2,
   });
   const websocket = new MockWebSocket() as unknown as WebSocket;
   const context = createTestContext();
 
   try {
     // Create subscriptions up to limit
-    await handler.handle_subscription(
+    await handler.handleSubscription(
       { id: "sub_007", query: "select User { name }", variables: {} },
       context,
       websocket,
     );
 
-    await handler.handle_subscription(
+    await handler.handleSubscription(
       { id: "sub_008", query: "select Post { title }", variables: {} },
       context,
       websocket,
     );
 
     // This should fail due to limit
-    await handler.handle_subscription(
+    await handler.handleSubscription(
       { id: "sub_009", query: "select User { email }", variables: {} },
       context,
       websocket,
@@ -251,18 +251,18 @@ Deno.test("Subscription Handler - Statistics", async () => {
       createTestContext(),
       {
         ...createTestContext(),
-        session: { ...createTestContext().session, session_id: "session_456" },
+        session: { ...createTestContext().session, sessionId: "session_456" },
       },
     ];
 
     // Create subscriptions across multiple connections
-    await handler.handle_subscription(
+    await handler.handleSubscription(
       { id: "sub_010", query: "select User { name }", variables: {} },
       contexts[0],
       websocket,
     );
 
-    await handler.handle_subscription(
+    await handler.handleSubscription(
       { id: "sub_011", query: "select Post { title }", variables: {} },
       contexts[1],
       websocket,
@@ -275,8 +275,8 @@ Deno.test("Subscription Handler - Statistics", async () => {
     assertEquals(stats.subscriptions_by_connection.length, 2);
 
     // Each connection should have 1 subscription
-    for (const conn_stat of stats.subscriptions_by_connection) {
-      assertEquals(conn_stat.count, 1);
+    for (const connStat of stats.subscriptions_by_connection) {
+      assertEquals(connStat.count, 1);
     }
   } finally {
     handler.dispose();
@@ -290,44 +290,44 @@ Deno.test("Subscription Handler - Mock Data Generation", async () => {
 
   try {
     // Test User query mock data
-    const user_subscription: Types.SubscriptionRequest = {
+    const userSubscription: Types.SubscriptionRequest = {
       id: "sub_012",
       query: "select User { name, email, status }",
       variables: {},
     };
 
-    await handler.handle_subscription(user_subscription, context, websocket);
+    await handler.handleSubscription(userSubscription, context, websocket);
 
     let messages = (websocket as unknown as MockWebSocket).getAllMessages();
-    let data_message = messages.find((m) => m.payload?.type === "data");
+    let dataMessage = messages.find((m) => m.payload?.type === "data");
 
-    assertExists(data_message);
-    const user_data = data_message.payload.payload;
-    assertEquals(Array.isArray(user_data), true);
-    assertEquals(user_data.length > 0, true);
-    assertExists(user_data[0].name);
-    assertExists(user_data[0].email);
+    assertExists(dataMessage);
+    const userData = dataMessage.payload.payload;
+    assertEquals(Array.isArray(userData), true);
+    assertEquals(userData.length > 0, true);
+    assertExists(userData[0].name);
+    assertExists(userData[0].email);
 
     // Clear messages
     (websocket as unknown as MockWebSocket).messages = [];
 
     // Test Post query mock data
-    const post_subscription: Types.SubscriptionRequest = {
+    const postSubscription: Types.SubscriptionRequest = {
       id: "sub_013",
       query: "select Post { title, content, author }",
       variables: {},
     };
 
-    await handler.handle_subscription(post_subscription, context, websocket);
+    await handler.handleSubscription(postSubscription, context, websocket);
 
     messages = (websocket as unknown as MockWebSocket).getAllMessages();
-    data_message = messages.find((m) => m.payload?.type === "data");
+    dataMessage = messages.find((m) => m.payload?.type === "data");
 
-    assertExists(data_message);
-    const post_data = data_message.payload.payload;
-    assertEquals(Array.isArray(post_data), true);
-    assertExists(post_data[0].title);
-    assertExists(post_data[0].content);
+    assertExists(dataMessage);
+    const postData = dataMessage.payload.payload;
+    assertEquals(Array.isArray(postData), true);
+    assertExists(postData[0].title);
+    assertExists(postData[0].content);
   } finally {
     handler.dispose();
   }
@@ -345,7 +345,7 @@ Deno.test("Subscription Handler - WebSocket State Handling", async () => {
       variables: {},
     };
 
-    await handler.handle_subscription(
+    await handler.handleSubscription(
       subscription,
       context,
       websocket as unknown as WebSocket,

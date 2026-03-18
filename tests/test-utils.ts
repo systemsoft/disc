@@ -46,7 +46,7 @@ module default {
       constraint exclusive;
     };
     multi posts: Post;
-    created_at: datetime {
+    createdAt: datetime {
       default := datetime_current();
       readonly := true;
     };
@@ -56,7 +56,7 @@ module default {
     required title: str;
     required body: str;
     required author: User;
-    created_at: datetime {
+    createdAt: datetime {
       default := datetime_current();
     };
   };

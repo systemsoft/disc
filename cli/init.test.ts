@@ -1,4 +1,3 @@
-// deno-lint-ignore-file no-console
 /**
  * CLI Init Command Tests - Test project initialization functionality
  */
@@ -15,7 +14,7 @@ import {
 interface InitOptions {
   name?: string;
   template?: "basic" | "minimal" | "full";
-  database_url?: string;
+  databaseUrl?: string;
   force?: boolean;
 }
 
@@ -25,7 +24,7 @@ async function mockInitCommand(
 ): Promise<void> {
   const projectName = options.name || "disc-project";
   const template = options.template || "basic";
-  const databaseUrl = options.database_url ||
+  const databaseUrl = options.databaseUrl ||
     "postgresql://localhost:5432/disc_dev";
 
   // Create project directory
@@ -47,7 +46,7 @@ async function mockInitCommand(
     required email: str {
       constraint exclusive;
     };
-    created_at: datetime {
+    createdAt: datetime {
       default := datetime_current();
     };
   };
@@ -61,7 +60,7 @@ async function mockInitCommand(
       constraint exclusive;
     };
     multi posts: Post;
-    created_at: datetime {
+    createdAt: datetime {
       default := datetime_current();
     };
   };
@@ -73,10 +72,10 @@ async function mockInitCommand(
     published: bool {
       default := false;
     };
-    created_at: datetime {
+    createdAt: datetime {
       default := datetime_current();
     };
-    updated_at: datetime {
+    updatedAt: datetime {
       default := datetime_current();
     };
   };
@@ -350,7 +349,7 @@ Deno.test("CLI Init - custom database URL", async () => {
 
     await mockInitCommand(tempDir, {
       name: projectName,
-      database_url: customDbUrl,
+      databaseUrl: customDbUrl,
     });
 
     const projectDir = `${tempDir}/${projectName}`;

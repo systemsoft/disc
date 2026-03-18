@@ -15,11 +15,11 @@ const log = getLogger("simple-edgeql-protocol");
 
 export interface SimpleEdgeQLOptions {
   schema?: Context.Schema;
-  enable_explain?: boolean;
-  dry_run?: boolean;
-  database_url?: string;
-  connection_pool?: ConnectionPool;
-  enable_access_policies?: boolean;
+  enableExplain?: boolean;
+  dryRun?: boolean;
+  databaseUrl?: string;
+  connectionPool?: ConnectionPool;
+  enableAccessPolicies?: boolean;
 }
 
 export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
@@ -31,36 +31,36 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
     this.options = options;
     this.schema = options.schema || Context.createTestSchema();
 
-    if (options.enable_access_policies) {
+    if (options.enableAccessPolicies) {
       log.warn(
         'Access policies are not supported by SimpleEdgeQLProtocolHandler. Use protocol: "full" for access policy enforcement.',
       );
     }
 
     // Use provided pool or create new one if database URL provided
-    if (options.connection_pool) {
-      this.pool = options.connection_pool;
-    } else if (options.database_url && !options.dry_run) {
+    if (options.connectionPool) {
+      this.pool = options.connectionPool;
+    } else if (options.databaseUrl && !options.dryRun) {
       this.pool = new ConnectionPool({
-        connectionString: options.database_url,
+        connectionString: options.databaseUrl,
         minConnections: 2,
         maxConnections: 10,
       });
     }
   }
 
-  async handle_request(
+  async handleRequest(
     request: Types.QueryRequest,
     context: Types.QueryContext,
   ): Promise<Types.QueryResponse> {
-    const start_time = Date.now();
+    const startTime = Date.now();
 
     try {
       // Validate the request
-      const validation_errors = this.validate_request(request);
-      if (validation_errors.length > 0) {
+      const validationErrors = this.validateRequest(request);
+      if (validationErrors.length > 0) {
         return {
-          errors: validation_errors,
+          errors: validationErrors,
         };
       }
 
@@ -103,16 +103,16 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
         context,
       );
 
-      const duration_ms = Date.now() - start_time;
+      const durationMs = Date.now() - startTime;
 
       // Return successful response
       const response: Types.QueryResponse = {
         data: executionResult.data,
         extensions: {
-          duration_ms,
-          query_hash: this.hash_query(request.query),
-          sql: this.options.enable_explain ? compilationResult.sql : undefined,
-          parse_info: this.options.enable_explain
+          durationMs,
+          queryHash: this.hash_query(request.query),
+          sql: this.options.enableExplain ? compilationResult.sql : undefined,
+          parse_info: this.options.enableExplain
             ? {
               ast_kind: parseResult.ast.kind,
               token_count: parseResult.token_count,
@@ -142,14 +142,14 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
           message: errorMessage,
           extensions: {
             code: "EXECUTION_ERROR",
-            duration_ms: Date.now() - start_time,
+            durationMs: Date.now() - startTime,
           },
         }],
       };
     }
   }
 
-  validate_request(request: Types.QueryRequest): Types.QueryError[] {
+  validateRequest(request: Types.QueryRequest): Types.QueryError[] {
     const errors: Types.QueryError[] = [];
 
     // Check if query is provided
@@ -178,8 +178,8 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
 
     // Basic EdgeQL syntax validation
     if (request.query) {
-      const syntax_errors = this.validate_edgeql_syntax(request.query);
-      errors.push(...syntax_errors);
+      const syntaxErrors = this.validate_edgeql_syntax(request.query);
+      errors.push(...syntaxErrors);
     }
 
     return errors;
@@ -401,14 +401,14 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
   ): Promise<{ data: any; warnings?: string[] }> {
     log.info("Executing SQL", { sql });
     log.info("Query variables", { variables: JSON.stringify(variables) });
-    log.info("Query session", { session_id: context.session.session_id });
+    log.info("Query session", { sessionId: context.session.sessionId });
 
-    if (this.options.dry_run) {
+    if (this.options.dryRun) {
       return {
         data: {
           sql,
           variables,
-          dry_run: true,
+          dryRun: true,
         },
         warnings: ["Query executed in dry-run mode"],
       };
@@ -489,7 +489,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
         data: {
           executed: true,
           sql: sql.substring(0, 100),
-          session_id: context.session.session_id,
+          sessionId: context.session.sessionId,
           timestamp: new Date().toISOString(),
         },
       };
@@ -500,18 +500,18 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
     const errors: Types.QueryError[] = [];
 
     // Basic syntax checks
-    const balanced_braces = this.check_balanced_braces(query);
-    if (!balanced_braces.valid) {
+    const balancedBraces = this.check_balanced_braces(query);
+    if (!balancedBraces.valid) {
       errors.push({
-        message: `Unbalanced braces at position ${balanced_braces.position}`,
-        locations: [{ line: 1, column: balanced_braces.position }],
+        message: `Unbalanced braces at position ${balancedBraces.position}`,
+        locations: [{ line: 1, column: balancedBraces.position }],
         extensions: { code: "SYNTAX_ERROR" },
       });
     }
 
     // Check for valid EdgeQL query start
     const normalized = query.trim().toLowerCase();
-    const valid_start_keywords = [
+    const validStartKeywords = [
       "select",
       "insert",
       "update",
@@ -522,11 +522,11 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       "configure",
     ];
 
-    const starts_with_valid = valid_start_keywords.some((keyword) =>
+    const startsWithValid = validStartKeywords.some((keyword) =>
       normalized.startsWith(keyword)
     );
 
-    if (!starts_with_valid && normalized.length > 0) {
+    if (!startsWithValid && normalized.length > 0) {
       errors.push({
         message: "Query must start with a valid EdgeQL statement",
         extensions: { code: "SYNTAX_ERROR" },
@@ -565,7 +565,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
         id: "01234567-89ab-cdef-0123-456789abcdef",
         name: "Alice Johnson",
         email: "alice@example.com",
-        created_at: "2024-01-15T10:30:00Z",
+        createdAt: "2024-01-15T10:30:00Z",
         active: true,
         age: 29,
       },
@@ -573,7 +573,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
         id: "11234567-89ab-cdef-0123-456789abcdef",
         name: "Bob Smith",
         email: "bob@example.com",
-        created_at: "2024-01-20T09:15:00Z",
+        createdAt: "2024-01-20T09:15:00Z",
         active: true,
         age: 35,
       },
@@ -585,7 +585,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       id: `${Date.now()}-89ab-cdef-0123-456789abcdef`,
       name: "New User",
       email: "newuser@example.com",
-      created_at: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
       active: true,
       age: null,
     };
@@ -596,10 +596,10 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       id: "01234567-89ab-cdef-0123-456789abcdef",
       name: "Alice Johnson Updated",
       email: "alice.updated@example.com",
-      created_at: "2024-01-15T10:30:00Z",
+      createdAt: "2024-01-15T10:30:00Z",
       active: false,
       age: 30,
-      updated_at: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
   }
 
@@ -638,7 +638,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
     try {
       const start = Date.now();
       await this.pool.query("SELECT 1");
-      const latency_ms = Date.now() - start;
+      const latencyMs = Date.now() - start;
 
       const poolStats = this.buildPoolStats();
       const status: HealthStatus["status"] = poolStats.waiters > 0
@@ -647,7 +647,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
 
       return {
         status,
-        database: { connected: true, latency_ms },
+        database: { connected: true, latencyMs },
         pool: poolStats,
       };
     } catch (_error) {

@@ -17,13 +17,13 @@ const TEST_HOST = "localhost";
 const BASE_URL = `http://${TEST_HOST}:${TEST_PORT}`;
 
 const SAMPLE_QUERIES = {
-  valid_select: "select User { name, email }",
-  valid_insert: "insert User { name := 'Alice', email := 'alice@example.com' }",
-  valid_update:
+  validSelect: "select User { name, email }",
+  validInsert: "insert User { name := 'Alice', email := 'alice@example.com' }",
+  validUpdate:
     "update User filter .id = <uuid>$id set { name := 'Alice Updated' }",
-  valid_delete: "delete User filter .id = <uuid>$id",
-  invalid_syntax: "select User { name email }", // Missing comma
-  empty_query: "",
+  validDelete: "delete User filter .id = <uuid>$id",
+  invalidSyntax: "select User { name email }", // Missing comma
+  emptyQuery: "",
 };
 
 // Helper function to make HTTP requests
@@ -37,14 +37,14 @@ async function makeRequest(
 ): Promise<Response> {
   const { method = "GET", headers = {}, body } = options;
 
-  const request_headers = new Headers({
+  const requestHeaders = new Headers({
     "Content-Type": "application/json",
     ...headers,
   });
 
   return await fetch(`${BASE_URL}${path}`, {
     method,
-    headers: request_headers,
+    headers: requestHeaders,
     body,
   });
 }
@@ -84,10 +84,10 @@ class ServerTestHarness {
     this.server = new DiscServer({
       host: TEST_HOST,
       port: TEST_PORT,
-      enable_cors: true,
-      enable_websockets: true,
-      dry_run: true,
-      enable_explain: true,
+      enableCors: true,
+      enableWebsockets: true,
+      dryRun: true,
+      enableExplain: true,
     });
 
     this.server_promise = this.server.start();
@@ -151,7 +151,7 @@ Deno.test({
       const health = await response.json();
       assertEquals(health.status, "healthy");
       assertExists(health.timestamp);
-      assertEquals(typeof health.uptime_ms, "number");
+      assertEquals(typeof health.uptimeMs, "number");
     } finally {
       await harness.stop();
     }
@@ -174,8 +174,8 @@ Deno.test({
       assertExists(stats.connections);
       assertExists(stats.queries);
       assertExists(stats.transactions);
-      assertExists(stats.memory_usage);
-      assertEquals(typeof stats.uptime_ms, "number");
+      assertExists(stats.memoryUsage);
+      assertEquals(typeof stats.uptimeMs, "number");
     } finally {
       await harness.stop();
     }
@@ -227,7 +227,7 @@ Deno.test({
     await harness.start();
 
     try {
-      const result = await queryEdgeQL(SAMPLE_QUERIES.valid_select);
+      const result = await queryEdgeQL(SAMPLE_QUERIES.validSelect);
 
       assertEquals(result.ok, true);
       assertEquals(result.status, 200);
@@ -240,8 +240,8 @@ Deno.test({
         }
       }
       assertExists(result.extensions);
-      assertEquals(typeof result.extensions.duration_ms, "number");
-      assertEquals(typeof result.extensions.query_hash, "string");
+      assertEquals(typeof result.extensions.durationMs, "number");
+      assertEquals(typeof result.extensions.queryHash, "string");
     } finally {
       await harness.stop();
     }
@@ -257,7 +257,7 @@ Deno.test({
     await harness.start();
 
     try {
-      const result = await queryEdgeQL(SAMPLE_QUERIES.valid_insert);
+      const result = await queryEdgeQL(SAMPLE_QUERIES.validInsert);
 
       assertEquals(result.ok, true);
       assertEquals(result.status, 200);
@@ -281,7 +281,7 @@ Deno.test({
         id: "01234567-89ab-cdef-0123-456789abcdef",
       };
 
-      const result = await queryEdgeQL(SAMPLE_QUERIES.valid_update, variables);
+      const result = await queryEdgeQL(SAMPLE_QUERIES.validUpdate, variables);
 
       assertEquals(result.ok, true);
       assertEquals(result.status, 200);
@@ -301,7 +301,7 @@ Deno.test({
     await harness.start();
 
     try {
-      const result = await queryEdgeQL(SAMPLE_QUERIES.invalid_syntax);
+      const result = await queryEdgeQL(SAMPLE_QUERIES.invalidSyntax);
 
       assertEquals(result.ok, false);
       assertEquals(result.status, 400);
@@ -322,7 +322,7 @@ Deno.test({
     await harness.start();
 
     try {
-      const result = await queryEdgeQL(SAMPLE_QUERIES.empty_query);
+      const result = await queryEdgeQL(SAMPLE_QUERIES.emptyQuery);
 
       assertEquals(result.ok, false);
       assertEquals(result.status, 400);
@@ -441,8 +441,8 @@ Deno.test({
       const result = await queryEdgeQL("select User { name } limit 1");
 
       assertEquals(result.ok, true);
-      assertExists(result.extensions?.duration_ms);
-      assert(result.extensions!.duration_ms < 1000); // Should be much faster than timeout
+      assertExists(result.extensions?.durationMs);
+      assert(result.extensions!.durationMs < 1000); // Should be much faster than timeout
     } finally {
       await harness.stop();
     }
@@ -459,8 +459,8 @@ Deno.test({
 
     try {
       // Make multiple requests and verify sessions are tracked
-      const result1 = await queryEdgeQL(SAMPLE_QUERIES.valid_select);
-      const result2 = await queryEdgeQL(SAMPLE_QUERIES.valid_select);
+      const result1 = await queryEdgeQL(SAMPLE_QUERIES.validSelect);
+      const result2 = await queryEdgeQL(SAMPLE_QUERIES.validSelect);
 
       assertEquals(result1.ok, true);
       assertEquals(result2.ok, true);
@@ -485,7 +485,7 @@ Deno.test({
     await harness.start();
 
     try {
-      const result = await queryEdgeQL(SAMPLE_QUERIES.valid_select, {}, {
+      const result = await queryEdgeQL(SAMPLE_QUERIES.validSelect, {}, {
         "User-Agent": "disc-client/1.0.0",
       });
 
@@ -507,7 +507,7 @@ Deno.test({
 
     try {
       // The test server has explain mode enabled
-      const result = await queryEdgeQL(SAMPLE_QUERIES.valid_select);
+      const result = await queryEdgeQL(SAMPLE_QUERIES.validSelect);
 
       assertEquals(result.ok, true);
       assertExists(result.extensions);
@@ -531,15 +531,15 @@ Deno.test({
     await harness.start();
 
     try {
-      // The test server has dry_run enabled
-      const result = await queryEdgeQL(SAMPLE_QUERIES.valid_insert);
+      // The test server has dryRun enabled
+      const result = await queryEdgeQL(SAMPLE_QUERIES.validInsert);
 
       assertEquals(result.ok, true);
       assertExists(result.data);
 
-      // In dry-run mode, should get mock data with dry_run flag
-      if (result.data.dry_run !== undefined) {
-        assertEquals(result.data.dry_run, true);
+      // In dry-run mode, should get mock data with dryRun flag
+      if (result.data.dryRun !== undefined) {
+        assertEquals(result.data.dryRun, true);
       }
     } finally {
       await harness.stop();

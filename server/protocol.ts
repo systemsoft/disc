@@ -12,18 +12,18 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     // Legacy mock handler — real compiler integration is in EdgeQLProtocolHandler (edgeql-protocol.ts)
   }
 
-  async handle_request(
+  async handleRequest(
     request: Types.QueryRequest,
     context: Types.QueryContext,
   ): Promise<Types.QueryResponse> {
-    const start_time = Date.now();
+    const startTime = Date.now();
 
     try {
       // Validate the request
-      const validation_errors = this.validate_request(request);
-      if (validation_errors.length > 0) {
+      const validationErrors = this.validateRequest(request);
+      if (validationErrors.length > 0) {
         return {
-          errors: validation_errors,
+          errors: validationErrors,
         };
       }
 
@@ -34,13 +34,13 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         context,
       );
 
-      const duration_ms = Date.now() - start_time;
+      const durationMs = Date.now() - startTime;
 
       return {
         data: result,
         extensions: {
-          duration_ms,
-          query_hash: this.hash_query(request.query),
+          durationMs,
+          queryHash: this.hash_query(request.query),
         },
       };
     } catch (error) {
@@ -56,14 +56,14 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
           message: errorMessage,
           extensions: {
             code: "EXECUTION_ERROR",
-            duration_ms: Date.now() - start_time,
+            durationMs: Date.now() - startTime,
           },
         }],
       };
     }
   }
 
-  validate_request(request: Types.QueryRequest): Types.QueryError[] {
+  validateRequest(request: Types.QueryRequest): Types.QueryError[] {
     const errors: Types.QueryError[] = [];
 
     // Check if query is provided
@@ -92,8 +92,8 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
 
     // Basic EdgeQL syntax validation
     if (request.query) {
-      const syntax_errors = this.validate_edgeql_syntax(request.query);
-      errors.push(...syntax_errors);
+      const syntaxErrors = this.validate_edgeql_syntax(request.query);
+      errors.push(...syntaxErrors);
     }
 
     return errors;
@@ -107,17 +107,17 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     // Mock implementation - would integrate with real EdgeQL compiler
 
     // Simulate different types of queries
-    const normalized_query = query.trim().toLowerCase();
+    const normalizedQuery = query.trim().toLowerCase();
 
-    if (normalized_query.startsWith("select user")) {
+    if (normalizedQuery.startsWith("select user")) {
       return this.mock_user_data();
-    } else if (normalized_query.startsWith("insert user")) {
+    } else if (normalizedQuery.startsWith("insert user")) {
       return this.mock_insert_result();
-    } else if (normalized_query.startsWith("update user")) {
+    } else if (normalizedQuery.startsWith("update user")) {
       return this.mock_update_result();
-    } else if (normalized_query.startsWith("delete user")) {
+    } else if (normalizedQuery.startsWith("delete user")) {
       return this.mock_delete_result();
-    } else if (normalized_query.includes("count")) {
+    } else if (normalizedQuery.includes("count")) {
       return { count: 42 };
     } else {
       // Generic mock response
@@ -125,7 +125,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         result: "Query executed successfully",
         query: query.substring(0, 100),
         variables,
-        session_id: context.session.session_id,
+        sessionId: context.session.sessionId,
         timestamp: new Date().toISOString(),
       };
     }
@@ -135,24 +135,24 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     const errors: Types.QueryError[] = [];
 
     // Basic syntax checks
-    const balanced_braces = this.check_balanced_braces(query);
-    if (!balanced_braces.valid) {
+    const balancedBraces = this.check_balanced_braces(query);
+    if (!balancedBraces.valid) {
       errors.push({
-        message: `Unbalanced braces at position ${balanced_braces.position}`,
-        locations: [{ line: 1, column: balanced_braces.position }],
+        message: `Unbalanced braces at position ${balancedBraces.position}`,
+        locations: [{ line: 1, column: balancedBraces.position }],
         extensions: { code: "SYNTAX_ERROR" },
       });
     }
 
     // Check for SQL injection patterns (basic protection)
-    const sql_injection_patterns = [
+    const sqlInjectionPatterns = [
       /;\s*(drop|delete|truncate|alter)\s+/i,
       /union\s+select/i,
       /--\s*$/m,
       /\/\*.*\*\//,
     ];
 
-    for (const pattern of sql_injection_patterns) {
+    for (const pattern of sqlInjectionPatterns) {
       if (pattern.test(query)) {
         errors.push({
           message: "Query contains potentially dangerous patterns",
@@ -163,9 +163,9 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     }
 
     // Check for reserved EdgeQL keywords in correct context
-    const invalid_keywords = this.check_keyword_usage(query);
-    if (invalid_keywords.length > 0) {
-      errors.push(...invalid_keywords);
+    const invalidKeywords = this.check_keyword_usage(query);
+    if (invalidKeywords.length > 0) {
+      errors.push(...invalidKeywords);
     }
 
     return errors;
@@ -199,7 +199,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     // Check for proper EdgeQL query structure
     const normalized = query.trim().toLowerCase();
 
-    const valid_start_keywords = [
+    const validStartKeywords = [
       "select",
       "insert",
       "update",
@@ -210,11 +210,11 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       "configure",
     ];
 
-    const starts_with_valid = valid_start_keywords.some((keyword) =>
+    const startsWithValid = validStartKeywords.some((keyword) =>
       normalized.startsWith(keyword)
     );
 
-    if (!starts_with_valid && normalized.length > 0) {
+    if (!startsWithValid && normalized.length > 0) {
       errors.push({
         message: "Query must start with a valid EdgeQL statement",
         extensions: { code: "SYNTAX_ERROR" },
@@ -230,7 +230,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         id: "user_001",
         name: "Alice Johnson",
         email: "alice@example.com",
-        created_at: "2024-01-15T10:30:00Z",
+        createdAt: "2024-01-15T10:30:00Z",
         active: true,
         posts: [
           {
@@ -238,7 +238,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
             title: "Hello World",
             content: "This is my first post!",
             published: true,
-            created_at: "2024-01-16T14:20:00Z",
+            createdAt: "2024-01-16T14:20:00Z",
           },
         ],
       },
@@ -246,7 +246,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         id: "user_002",
         name: "Bob Smith",
         email: "bob@example.com",
-        created_at: "2024-01-20T09:15:00Z",
+        createdAt: "2024-01-20T09:15:00Z",
         active: true,
         posts: [],
       },
@@ -258,7 +258,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       id: `user_${Date.now()}`,
       name: "New User",
       email: "newuser@example.com",
-      created_at: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
       active: true,
     };
   }
@@ -269,7 +269,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       id: "user_001",
       name: "Alice Johnson Updated",
       email: "alice.updated@example.com",
-      updated_at: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
   }
 
@@ -293,7 +293,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
 }
 
 export class GraphQLProtocolHandler implements Types.ProtocolHandler {
-  async handle_request(
+  async handleRequest(
     _request: Types.QueryRequest,
     _context: Types.QueryContext,
   ): Promise<Types.QueryResponse> {
@@ -307,7 +307,7 @@ export class GraphQLProtocolHandler implements Types.ProtocolHandler {
     };
   }
 
-  validate_request(_request: Types.QueryRequest): Types.QueryError[] {
+  validateRequest(_request: Types.QueryRequest): Types.QueryError[] {
     return [{
       message: "GraphQL protocol not yet implemented",
       extensions: { code: "NOT_IMPLEMENTED" },

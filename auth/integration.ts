@@ -82,7 +82,7 @@ export class AuthRoutes {
         try {
           // Get session ID from request body or extract from token
           const url = new URL(request.url);
-          const sessionId = url.searchParams.get("session_id");
+          const sessionId = url.searchParams.get("sessionId");
 
           if (sessionId) {
             await this.provider.logout(sessionId);
@@ -109,7 +109,7 @@ export class AuthRoutes {
     return async (request: Request) => {
       try {
         const body = await request.json();
-        const refreshToken = body.refresh_token;
+        const refreshToken = body.refreshToken;
 
         if (!refreshToken) {
           return new Response(
@@ -140,7 +140,7 @@ export class AuthRoutes {
     return this.middleware.requireAuth(
       async (_request: Request, context?: AuthContext) => {
         try {
-          const user = await this.provider.get_user(context!.user_id);
+          const user = await this.provider.getUser(context!.userId);
 
           if (!user) {
             return new Response(
@@ -153,7 +153,7 @@ export class AuthRoutes {
           }
 
           // Remove sensitive data
-          const { password_hash, ...safeUser } = user;
+          const { passwordHash, ...safeUser } = user;
 
           return new Response(JSON.stringify(safeUser), {
             status: 200,
@@ -188,8 +188,8 @@ export class AuthRoutes {
             );
           }
 
-          await this.provider.update_password(
-            context!.user_id,
+          await this.provider.updatePassword(
+            context!.userId,
             old_password,
             new_password,
           );
@@ -224,7 +224,7 @@ export class AuthRoutes {
           );
         }
 
-        await this.provider.reset_password_request(email);
+        await this.provider.resetPasswordRequest(email);
 
         // In a real implementation, you'd send this token via email
         // For now, just return success (don't expose token in production!)
@@ -265,7 +265,7 @@ export class AuthRoutes {
           );
         }
 
-        await this.provider.reset_password(reset_token, new_password);
+        await this.provider.resetPassword(reset_token, new_password);
 
         return new Response(JSON.stringify({ success: true }), {
           status: 200,
@@ -296,7 +296,7 @@ export class AuthRoutes {
           );
         }
 
-        await this.provider.verify_email(token);
+        await this.provider.verifyEmail(token);
 
         return new Response(JSON.stringify({ success: true }), {
           status: 200,

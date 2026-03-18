@@ -8,32 +8,32 @@ import { Result } from "../lib/result.ts";
 
 Deno.test("MigrationConfig - default values", () => {
   const config: Types.MigrationConfig = {
-    migrations_dir: "./migrations",
-    schema_file: "./schema.esdl",
-    database_url: "postgresql://localhost:5432/disc_dev",
-    dry_run: false,
-    auto_approve: false,
-    backup_before_migration: true,
-    rollback_on_error: true,
+    migrationsDir: "./migrations",
+    schemaFile: "./schema.esdl",
+    databaseUrl: "postgresql://localhost:5432/disc_dev",
+    dryRun: false,
+    autoApprove: false,
+    backupBeforeMigration: true,
+    rollbackOnError: true,
   };
 
-  assertEquals(config.migrations_dir, "./migrations");
-  assertEquals(config.dry_run, false);
-  assertEquals(config.auto_approve, false);
-  assertEquals(config.backup_before_migration, true);
-  assertEquals(config.rollback_on_error, true);
+  assertEquals(config.migrationsDir, "./migrations");
+  assertEquals(config.dryRun, false);
+  assertEquals(config.autoApprove, false);
+  assertEquals(config.backupBeforeMigration, true);
+  assertEquals(config.rollbackOnError, true);
 });
 
 Deno.test("MigrationState - structure", () => {
   const state: Types.MigrationState = {
-    applied_migrations: ["migration-001"],
-    current_schema_hash: "abc123",
-    last_migration_id: "migration-001",
+    appliedMigrations: ["migration-001"],
+    currentSchemaHash: "abc123",
+    lastMigrationId: "migration-001",
   };
 
-  assertEquals(state.applied_migrations.length, 1);
-  assertEquals(state.current_schema_hash, "abc123");
-  assertEquals(state.last_migration_id, "migration-001");
+  assertEquals(state.appliedMigrations.length, 1);
+  assertEquals(state.currentSchemaHash, "abc123");
+  assertEquals(state.lastMigrationId, "migration-001");
 });
 
 Deno.test("MigrationPlan - structure", () => {
@@ -43,33 +43,33 @@ Deno.test("MigrationPlan - structure", () => {
         id: "test-migration",
         name: "Initial schema",
         description: "Create initial types",
-        created_at: new Date(),
-        schema_hash: "hash123",
+        createdAt: new Date(),
+        schemaHash: "hash123",
         operations: [
           {
             kind: "CreateType",
-            type_name: "User",
+            typeName: "User",
             properties: [],
             links: [],
           } as Types.CreateTypeOperation,
         ],
       },
     ],
-    target_schema_hash: "hash123",
-    operations_count: 1,
-    estimated_duration: 100,
+    targetSchemaHash: "hash123",
+    operationsCount: 1,
+    estimatedDuration: 100,
   };
 
   assertEquals(plan.migrations.length, 1);
-  assertEquals(plan.operations_count, 1);
-  assertEquals(plan.estimated_duration, 100);
+  assertEquals(plan.operationsCount, 1);
+  assertEquals(plan.estimatedDuration, 100);
   assertEquals(plan.migrations[0].operations[0].kind, "CreateType");
 });
 
 Deno.test("CreateTypeOperation - structure", () => {
   const operation: Types.CreateTypeOperation = {
     kind: "CreateType",
-    type_name: "User",
+    typeName: "User",
     properties: [
       {
         name: "name",
@@ -92,7 +92,7 @@ Deno.test("CreateTypeOperation - structure", () => {
   };
 
   assertEquals(operation.kind, "CreateType");
-  assertEquals(operation.type_name, "User");
+  assertEquals(operation.typeName, "User");
   assertEquals(operation.properties.length, 1);
   assertEquals(operation.links.length, 1);
   assertEquals(operation.properties[0].constraints.length, 1);
@@ -101,7 +101,7 @@ Deno.test("CreateTypeOperation - structure", () => {
 Deno.test("AlterTypeOperation - structure", () => {
   const operation: Types.AlterTypeOperation = {
     kind: "AlterType",
-    type_name: "User",
+    typeName: "User",
     operations: [
       {
         kind: "AddProperty",
@@ -116,13 +116,13 @@ Deno.test("AlterTypeOperation - structure", () => {
       } as Types.AddPropertyOperation,
       {
         kind: "DropProperty",
-        property_name: "old_field",
+        propertyName: "old_field",
       } as Types.DropPropertyOperation,
     ],
   };
 
   assertEquals(operation.kind, "AlterType");
-  assertEquals(operation.type_name, "User");
+  assertEquals(operation.typeName, "User");
   assertEquals(operation.operations.length, 2);
   assertEquals(operation.operations[0].kind, "AddProperty");
   assertEquals(operation.operations[1].kind, "DropProperty");
@@ -131,16 +131,16 @@ Deno.test("AlterTypeOperation - structure", () => {
 Deno.test("DropTypeOperation - structure", () => {
   const operation: Types.DropTypeOperation = {
     kind: "DropType",
-    type_name: "ObsoleteType",
+    typeName: "ObsoleteType",
   };
 
   assertEquals(operation.kind, "DropType");
-  assertEquals(operation.type_name, "ObsoleteType");
+  assertEquals(operation.typeName, "ObsoleteType");
 });
 
 Deno.test("PropertyDefinition - all fields", () => {
   const property: Types.PropertyDefinition = {
-    name: "created_at",
+    name: "createdAt",
     type: "datetime",
     required: false,
     multi: false,
@@ -152,7 +152,7 @@ Deno.test("PropertyDefinition - all fields", () => {
     },
   };
 
-  assertEquals(property.name, "created_at");
+  assertEquals(property.name, "createdAt");
   assertEquals(property.type, "datetime");
   assertEquals(property.required, false);
   assertEquals(property.multi, false);
@@ -179,7 +179,7 @@ Deno.test("LinkDefinition - single and multi links", () => {
     multi: true,
     annotations: {
       description: "Associated tags",
-      on_delete: "restrict",
+      onDelete: "restrict",
     },
   };
 
@@ -188,28 +188,28 @@ Deno.test("LinkDefinition - single and multi links", () => {
 
   assertEquals(multiLink.multi, true);
   assertEquals(multiLink.required, false);
-  assertEquals(multiLink.annotations.on_delete, "restrict");
+  assertEquals(multiLink.annotations.onDelete, "restrict");
 });
 
 Deno.test("MigrationResult - success case", () => {
   const result: Types.MigrationResult = {
-    migration_id: "migration-001",
+    migrationId: "migration-001",
     success: true,
-    duration_ms: 250,
-    applied_at: new Date(),
+    durationMs: 250,
+    appliedAt: new Date(),
   };
 
   assertEquals(result.success, true);
-  assertEquals(result.duration_ms, 250);
-  assertExists(result.applied_at);
+  assertEquals(result.durationMs, 250);
+  assertExists(result.appliedAt);
 });
 
 Deno.test("MigrationResult - failure case", () => {
   const result: Types.MigrationResult = {
-    migration_id: "migration-002",
+    migrationId: "migration-002",
     success: false,
-    duration_ms: 100,
-    applied_at: new Date(),
+    durationMs: 100,
+    appliedAt: new Date(),
     error: "Constraint violation: duplicate key",
   };
 
@@ -239,36 +239,36 @@ Deno.test("AddPropertyOperation - structure", () => {
 Deno.test("DropPropertyOperation - structure", () => {
   const operation: Types.DropPropertyOperation = {
     kind: "DropProperty",
-    property_name: "deprecated_field",
+    propertyName: "deprecated_field",
   };
 
   assertEquals(operation.kind, "DropProperty");
-  assertEquals(operation.property_name, "deprecated_field");
+  assertEquals(operation.propertyName, "deprecated_field");
 });
 
 Deno.test("AlterPropertyOperation - structure", () => {
   const operation: Types.AlterPropertyOperation = {
     kind: "AlterProperty",
-    property_name: "email",
+    propertyName: "email",
     changes: [
       {
         kind: "ChangeRequired",
-        old_value: false,
-        new_value: true,
+        oldValue: false,
+        newValue: true,
       },
       {
         kind: "AddConstraint",
-        new_value: "exclusive",
+        newValue: "exclusive",
       },
       {
         kind: "DropConstraint",
-        old_value: "min_length(3)",
+        oldValue: "min_length(3)",
       },
     ],
   };
 
   assertEquals(operation.kind, "AlterProperty");
-  assertEquals(operation.property_name, "email");
+  assertEquals(operation.propertyName, "email");
   assertEquals(operation.changes.length, 3);
   assertEquals(operation.changes[0].kind, "ChangeRequired");
   assertEquals(operation.changes[1].kind, "AddConstraint");
@@ -279,14 +279,14 @@ Deno.test("MigrationOperation - discriminated union", () => {
   const operations: Types.MigrationOperation[] = [
     {
       kind: "CreateType",
-      type_name: "User",
+      typeName: "User",
       properties: [],
       links: [],
     } as Types.CreateTypeOperation,
-    { kind: "DropType", type_name: "OldType" } as Types.DropTypeOperation,
+    { kind: "DropType", typeName: "OldType" } as Types.DropTypeOperation,
     {
       kind: "AlterType",
-      type_name: "User",
+      typeName: "User",
       operations: [],
     } as Types.AlterTypeOperation,
   ];
@@ -301,7 +301,7 @@ Deno.test("MigrationOperation - discriminated union", () => {
   assertExists(op0.links);
 
   const op1 = operations[1] as Types.DropTypeOperation;
-  assertExists(op1.type_name);
+  assertExists(op1.typeName);
 
   const op2 = operations[2] as Types.AlterTypeOperation;
   assertExists(op2.operations);

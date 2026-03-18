@@ -59,9 +59,9 @@ Deno.test("convertPlaceholders - mixed string and param placeholders", () => {
 Deno.test("convertPlaceholders - complex INSERT with many params", () => {
   assertEquals(
     convertPlaceholders(
-      "INSERT INTO users (id, email, username, password_hash, email_verified, metadata, verification_token) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO users (id, email, username, passwordHash, emailVerified, metadata, verification_token) VALUES (?, ?, ?, ?, ?, ?, ?)",
     ),
-    "INSERT INTO users (id, email, username, password_hash, email_verified, metadata, verification_token) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+    "INSERT INTO users (id, email, username, passwordHash, emailVerified, metadata, verification_token) VALUES ($1, $2, $3, $4, $5, $6, $7)",
   );
 });
 

@@ -29,7 +29,7 @@ const TEST_SDL = `
     required title: str;
     required body: str;
     required link author -> User;
-    created_at: datetime;
+    createdAt: datetime;
   }
 `;
 

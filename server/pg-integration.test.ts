@@ -52,7 +52,7 @@ async function setupTestTable(dsn: string): Promise<void> {
         name TEXT NOT NULL,
         email TEXT NOT NULL,
         active BOOLEAN NOT NULL DEFAULT TRUE,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        createdAt TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `);
     await client.queryArray(`
@@ -102,18 +102,18 @@ async function countRows(
 function makeContext(): Types.QueryContext {
   return {
     session: {
-      session_id: `test_sess_${Date.now()}`,
+      sessionId: `test_sess_${Date.now()}`,
       database: "disc_test",
-      created_at: new Date(),
-      last_activity: new Date(),
+      createdAt: new Date(),
+      lastActivity: new Date(),
       variables: {},
     },
     auth: {
       roles: [],
       permissions: [],
     },
-    request_id: `req_${Date.now()}`,
-    started_at: new Date(),
+    requestId: `req_${Date.now()}`,
+    startedAt: new Date(),
   };
 }
 
@@ -281,7 +281,7 @@ Deno.test({
 
     try {
       // Begin transaction
-      const txn = txnManager.begin_transaction("test-session-commit");
+      const txn = txnManager.beginTransaction("test-session-commit");
       assertExists(txn.id);
 
       // Wait for the async BEGIN to complete
@@ -295,7 +295,7 @@ Deno.test({
       );
 
       // Commit the transaction
-      await txnManager.commit_transaction(txn.id);
+      await txnManager.commitTransaction(txn.id);
 
       // Verify the row persisted after commit
       const total = await countRows(dsn);
@@ -330,7 +330,7 @@ Deno.test({
 
     try {
       // Begin transaction
-      const txn = txnManager.begin_transaction("test-session-rollback");
+      const txn = txnManager.beginTransaction("test-session-rollback");
       assertExists(txn.id);
 
       // Wait for the async BEGIN to complete
@@ -344,7 +344,7 @@ Deno.test({
       );
 
       // Rollback the transaction
-      await txnManager.rollback_transaction(txn.id);
+      await txnManager.rollbackTransaction(txn.id);
 
       // Verify the row was NOT persisted after rollback
       const total = await countRows(dsn);
@@ -501,18 +501,18 @@ Deno.test({
     await pool.initialize();
 
     const handler = new SimpleEdgeQLProtocolHandler({
-      connection_pool: pool,
-      enable_explain: true,
+      connectionPool: pool,
+      enableExplain: true,
     });
     await handler.initialize();
 
     try {
       // Validate that empty query is rejected
-      const errors = handler.validate_request({ query: "" });
+      const errors = handler.validateRequest({ query: "" });
       assertNotEquals(errors.length, 0);
 
       // Validate that a well-formed EdgeQL query passes validation
-      const noErrors = handler.validate_request({
+      const noErrors = handler.validateRequest({
         query: "select User { name }",
       });
       assertEquals(noErrors.length, 0);
@@ -525,34 +525,34 @@ Deno.test({
 
 Deno.test({
   name:
-    "PG Integration: SimpleEdgeQLProtocolHandler -- dry_run returns SQL info",
+    "PG Integration: SimpleEdgeQLProtocolHandler -- dryRun returns SQL info",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
 
     // Create a handler in dry-run mode to verify compilation without execution
     const dryHandler = new SimpleEdgeQLProtocolHandler({
-      database_url: dsn,
-      dry_run: true,
-      enable_explain: true,
+      databaseUrl: dsn,
+      dryRun: true,
+      enableExplain: true,
     });
 
     const ctx = makeContext();
 
     // Execute a select query in dry-run mode
-    const dryResponse = await dryHandler.handle_request(
+    const dryResponse = await dryHandler.handleRequest(
       { query: "select User { name, email }" },
       ctx,
     );
 
     // Dry run should return SQL in the data
     assertExists(dryResponse.data);
-    assertEquals(dryResponse.data.dry_run, true);
+    assertEquals(dryResponse.data.dryRun, true);
     assertExists(dryResponse.data.sql);
 
     // The response should have extension info about the query
     assertExists(dryResponse.extensions);
-    assertExists(dryResponse.extensions?.duration_ms);
+    assertExists(dryResponse.extensions?.durationMs);
 
     await dryHandler.close();
   },
@@ -570,22 +570,22 @@ Deno.test({
     const dsn = await getTestDsn();
 
     const handler = new EdgeQLProtocolHandler({
-      database_url: dsn,
-      dry_run: true,
-      enable_explain: true,
+      databaseUrl: dsn,
+      dryRun: true,
+      enableExplain: true,
     });
 
     const ctx = makeContext();
 
     // Execute a select query via the compiler-backed handler
-    const response = await handler.handle_request(
+    const response = await handler.handleRequest(
       { query: "select User { name, email }" },
       ctx,
     );
 
     // In dry-run mode the response should contain the generated SQL
     assertExists(response.data);
-    assertEquals(response.data.dry_run, true);
+    assertEquals(response.data.dryRun, true);
     assertExists(response.data.sql);
 
     // The SQL should be a SELECT statement
@@ -641,22 +641,22 @@ Deno.test({
     const dsn = await getTestDsn();
 
     const handler = new EdgeQLProtocolHandler({
-      database_url: dsn,
-      dry_run: true,
+      databaseUrl: dsn,
+      dryRun: true,
     });
 
     // Empty query should fail validation
-    const emptyErrors = handler.validate_request({ query: "" });
+    const emptyErrors = handler.validateRequest({ query: "" });
     assertNotEquals(emptyErrors.length, 0);
 
     // Invalid start keyword should fail
-    const invalidErrors = handler.validate_request({
+    const invalidErrors = handler.validateRequest({
       query: "INVALID QUERY",
     });
     assertNotEquals(invalidErrors.length, 0);
 
     // Valid EdgeQL should pass
-    const validErrors = handler.validate_request({
+    const validErrors = handler.validateRequest({
       query: "select User { name }",
     });
     assertEquals(validErrors.length, 0);

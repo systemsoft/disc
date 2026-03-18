@@ -7,9 +7,9 @@ import type { AccessContext } from "../access/types.ts";
 
 export function authContextToAccessContext(auth: AuthContext): AccessContext {
   return {
-    userId: auth.user_id,
+    userId: auth.userId,
     userRole: auth.roles.length > 0 ? auth.roles[0] : undefined,
-    sessionData: auth.jwt_claims as Record<string, unknown> | undefined,
+    sessionData: auth.jwtClaims as Record<string, unknown> | undefined,
     requestContext: {
       roles: auth.roles,
       permissions: auth.permissions,

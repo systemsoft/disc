@@ -30,11 +30,11 @@ function createTestConfig(
   return {
     host: "localhost",
     port: 0,
-    database_url: "postgresql://localhost:5432/test",
-    max_connections: 10,
-    request_timeout: 5000,
-    enable_cors: false,
-    enable_websockets: false,
+    databaseUrl: "postgresql://localhost:5432/test",
+    maxConnections: 10,
+    requestTimeout: 5000,
+    enableCors: false,
+    enableWebsockets: false,
     ...overrides,
   };
 }
@@ -46,13 +46,13 @@ function createHealthyProtocolHandler(
   healthResponse: HealthStatus,
 ): ProtocolHandler {
   return {
-    handle_request(
+    handleRequest(
       _request: QueryRequest,
       _context: QueryContext,
     ): Promise<QueryResponse> {
       return Promise.resolve({ data: { ok: true } });
     },
-    validate_request(_request: QueryRequest): QueryError[] {
+    validateRequest(_request: QueryRequest): QueryError[] {
       return [];
     },
     checkHealth(): Promise<HealthStatus> {
@@ -75,13 +75,13 @@ function createHealthyProtocolHandler(
  */
 function createBasicProtocolHandler(): ProtocolHandler {
   return {
-    handle_request(
+    handleRequest(
       _request: QueryRequest,
       _context: QueryContext,
     ): Promise<QueryResponse> {
       return Promise.resolve({ data: { ok: true } });
     },
-    validate_request(_request: QueryRequest): QueryError[] {
+    validateRequest(_request: QueryRequest): QueryError[] {
       return [];
     },
   };
@@ -104,7 +104,7 @@ function withTestServer(
   const config = createTestConfig(configOverrides);
   const server = new HttpServer({
     config,
-    protocol_handler: handler,
+    protocolHandler: handler,
   });
 
   const abortController = new AbortController();
@@ -116,7 +116,7 @@ function withTestServer(
       onListen() {},
     },
     (request: Request, info: Deno.ServeHandlerInfo) => {
-      return (server as any).handle_request(request, info);
+      return (server as any).handleRequest(request, info);
     },
   );
 
@@ -186,7 +186,7 @@ Deno.test(
   async () => {
     const handler = createHealthyProtocolHandler({
       status: "healthy",
-      database: { connected: true, latency_ms: 1 },
+      database: { connected: true, latencyMs: 1 },
       pool: { total: 5, idle: 3, active: 2, waiters: 0 },
     });
     const { port, cleanup } = withTestServer(handler);
@@ -236,7 +236,7 @@ Deno.test(
   async () => {
     const handler = createHealthyProtocolHandler({
       status: "degraded",
-      database: { connected: true, latency_ms: 50 },
+      database: { connected: true, latencyMs: 50 },
       pool: { total: 10, idle: 0, active: 10, waiters: 3 },
     });
     const { port, cleanup } = withTestServer(handler);
@@ -261,7 +261,7 @@ Deno.test(
   async () => {
     const handler = createHealthyProtocolHandler({
       status: "healthy",
-      database: { connected: true, latency_ms: 2 },
+      database: { connected: true, latencyMs: 2 },
       pool: { total: 5, idle: 3, active: 2, waiters: 0 },
     });
     const { port, cleanup } = withTestServer(handler);
@@ -277,14 +277,14 @@ Deno.test(
       assertEquals(body.status, "healthy");
       assertExists(body.database);
       assertEquals(body.database.connected, true);
-      assertEquals(typeof body.database.latency_ms, "number");
+      assertEquals(typeof body.database.latencyMs, "number");
       assertExists(body.pool);
       assertEquals(body.pool.total, 5);
       assertEquals(body.pool.idle, 3);
       assertEquals(body.pool.active, 2);
       assertEquals(body.pool.waiters, 0);
       assertExists(body.timestamp);
-      assertEquals(typeof body.uptime_ms, "number");
+      assertEquals(typeof body.uptimeMs, "number");
     } finally {
       await cleanup();
     }
@@ -296,7 +296,7 @@ Deno.test(
   async () => {
     const handler = createHealthyProtocolHandler({
       status: "degraded",
-      database: { connected: true, latency_ms: 100 },
+      database: { connected: true, latencyMs: 100 },
       pool: { total: 10, idle: 0, active: 10, waiters: 5 },
     });
     const { port, cleanup } = withTestServer(handler);
@@ -366,7 +366,7 @@ Deno.test(
       assertEquals(body.database, undefined);
       assertEquals(body.pool, undefined);
       assertExists(body.timestamp);
-      assertEquals(typeof body.uptime_ms, "number");
+      assertEquals(typeof body.uptimeMs, "number");
     } finally {
       await cleanup();
     }
@@ -390,7 +390,7 @@ Deno.test(
       const body = await response.json();
       assertEquals(body.status, "healthy");
       assertExists(body.timestamp);
-      assertEquals(typeof body.uptime_ms, "number");
+      assertEquals(typeof body.uptimeMs, "number");
     } finally {
       await cleanup();
     }

@@ -134,13 +134,13 @@ function createExtendedTestSchema(): Module[] {
 }
 
 const config: Types.MigrationConfig = {
-  migrations_dir: "./migrations",
-  schema_file: "./schema.esdl",
-  database_url: "postgresql://localhost:5432/test",
-  dry_run: true,
-  auto_approve: false,
-  backup_before_migration: true,
-  rollback_on_error: true,
+  migrationsDir: "./migrations",
+  schemaFile: "./schema.esdl",
+  databaseUrl: "postgresql://localhost:5432/test",
+  dryRun: true,
+  autoApprove: false,
+  backupBeforeMigration: true,
+  rollbackOnError: true,
 };
 
 Deno.test("Schema Differ - Add Type", () => {
@@ -154,7 +154,7 @@ Deno.test("Schema Differ - Add Type", () => {
   assertEquals(operations[0].kind, "CreateType");
 
   const createOp = operations[0] as Types.CreateTypeOperation;
-  assertEquals(createOp.type_name, "User");
+  assertEquals(createOp.typeName, "User");
   assertEquals(createOp.properties.length, 2);
   assertEquals(createOp.properties[0].name, "name");
   assertEquals(createOp.properties[1].name, "email");
@@ -171,7 +171,7 @@ Deno.test("Schema Differ - Remove Type", () => {
   assertEquals(operations[0].kind, "DropType");
 
   const dropOp = operations[0] as Types.DropTypeOperation;
-  assertEquals(dropOp.type_name, "User");
+  assertEquals(dropOp.typeName, "User");
 });
 
 Deno.test("Schema Differ - Add Property", () => {
@@ -187,7 +187,7 @@ Deno.test("Schema Differ - Add Property", () => {
   const alterOp = operations.find((op) =>
     op.kind === "AlterType"
   ) as Types.AlterTypeOperation;
-  assertEquals(alterOp.type_name, "User");
+  assertEquals(alterOp.typeName, "User");
   assertEquals(alterOp.operations.length, 1);
   assertEquals(alterOp.operations[0].kind, "AddProperty");
 
@@ -201,7 +201,7 @@ Deno.test("DDL Generator - Create Type", () => {
   const generator = new DDLGenerator();
   const operation: Types.CreateTypeOperation = {
     kind: "CreateType",
-    type_name: "User",
+    typeName: "User",
     properties: [
       {
         name: "name",
@@ -238,7 +238,7 @@ Deno.test("DDL Generator - Add Property", () => {
   const generator = new DDLGenerator();
   const operation: Types.AlterTypeOperation = {
     kind: "AlterType",
-    type_name: "User",
+    typeName: "User",
     operations: [
       {
         kind: "AddProperty",
@@ -268,7 +268,7 @@ Deno.test("DDL Generator - Create Link", () => {
   const generator = new DDLGenerator();
   const operation: Types.CreateTypeOperation = {
     kind: "CreateType",
-    type_name: "Post",
+    typeName: "Post",
     properties: [
       {
         name: "title",
@@ -324,7 +324,7 @@ Deno.test("Migration Engine - Plan Initial Migration", () => {
     assertEquals(plan.migrations.length, 1);
     assertEquals(plan.migrations[0].operations.length, 1);
     assertEquals(plan.migrations[0].operations[0].kind, "CreateType");
-    assertEquals(plan.operations_count, 1);
+    assertEquals(plan.operationsCount, 1);
   }
 });
 
@@ -340,17 +340,17 @@ Deno.test("Migration Engine - Plan Schema Evolution", () => {
     const plan = result.value;
 
     assertEquals(plan.migrations.length, 1);
-    assertEquals(plan.operations_count >= 1, true);
+    assertEquals(plan.operationsCount >= 1, true);
 
     // Should include alter User and create Post
     const operations = plan.migrations[0].operations;
     const hasAlterUser = operations.some((op) =>
       op.kind === "AlterType" &&
-      (op as Types.AlterTypeOperation).type_name === "User"
+      (op as Types.AlterTypeOperation).typeName === "User"
     );
     const hasCreatePost = operations.some((op) =>
       op.kind === "CreateType" &&
-      (op as Types.CreateTypeOperation).type_name === "Post"
+      (op as Types.CreateTypeOperation).typeName === "Post"
     );
 
     assertEquals(hasAlterUser, true);
@@ -390,17 +390,17 @@ Deno.test("Migration Engine - Validate Migration", () => {
       id: "test-migration",
       name: "test",
       description: "Test migration",
-      created_at: new Date(),
-      schema_hash: "test",
+      createdAt: new Date(),
+      schemaHash: "test",
       operations: [
         {
           kind: "DropType",
-          type_name: "User",
+          typeName: "User",
         } as Types.DropTypeOperation,
       ],
     }],
-    target_schema_hash: "test",
-    operations_count: 1,
+    targetSchemaHash: "test",
+    operationsCount: 1,
   };
 
   const result = engine.validateMigration(plan);
@@ -413,7 +413,7 @@ Deno.test("Migration Engine - Validate Migration", () => {
 });
 
 Deno.test("Migration Engine - Execute Migration", async () => {
-  const engine = new MigrationEngine({ ...config, dry_run: true });
+  const engine = new MigrationEngine({ ...config, dryRun: true });
   const schema = createTestSchema();
 
   const planResult = engine.planMigration(null, schema);
@@ -427,7 +427,7 @@ Deno.test("Migration Engine - Execute Migration", async () => {
       const results = executeResult.value;
       assertEquals(results.length, 1);
       assertEquals(results[0].success, true);
-      assertEquals(typeof results[0].duration_ms, "number");
+      assertEquals(typeof results[0].durationMs, "number");
     }
   }
 });
@@ -438,7 +438,7 @@ Deno.test("Migration Engine - Track Migration State", async () => {
 
   // Initially no migrations applied
   let state = engine.getMigrationState();
-  assertEquals(state.applied_migrations.length, 0);
+  assertEquals(state.appliedMigrations.length, 0);
 
   // Execute a migration
   const planResult = engine.planMigration(null, schema);
@@ -450,7 +450,7 @@ Deno.test("Migration Engine - Track Migration State", async () => {
 
     // Check that migration is now tracked
     state = engine.getMigrationState();
-    assertEquals(state.applied_migrations.length, 1);
+    assertEquals(state.appliedMigrations.length, 1);
     assertEquals(
       engine.isMigrationApplied(planResult.value.migrations[0].id),
       true,
@@ -462,7 +462,7 @@ Deno.test("DDL Generator - Type Mapping", () => {
   const generator = new DDLGenerator();
   const operation: Types.CreateTypeOperation = {
     kind: "CreateType",
-    type_name: "TestTypes",
+    typeName: "TestTypes",
     properties: [
       {
         name: "str_field",
@@ -531,7 +531,7 @@ Deno.test("DDL Generator - Identifier Escaping", () => {
   const generator = new DDLGenerator();
   const operation: Types.CreateTypeOperation = {
     kind: "CreateType",
-    type_name: "TestEscaping",
+    typeName: "TestEscaping",
     properties: [
       {
         name: "order",

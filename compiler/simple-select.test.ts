@@ -86,12 +86,12 @@ function createTestSchema(): Context.Schema {
         multi: false,
         columnName: "body",
       }],
-      ["created_at", {
-        name: "created_at",
+      ["createdAt", {
+        name: "createdAt",
         type: "datetime",
         required: true,
         multi: false,
-        columnName: "created_at",
+        columnName: "createdAt",
       }],
     ]),
     links: new Map([

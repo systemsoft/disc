@@ -21,7 +21,7 @@ export class TypeScriptGenerator {
 
     // Initialize built-in type mappings
     Types.DEFAULT_TYPE_MAPPINGS.forEach((mapping) => {
-      this.type_mappings.set(mapping.edgeql_type, mapping);
+      this.type_mappings.set(mapping.edgeqlType, mapping);
     });
   }
 
@@ -38,13 +38,13 @@ export class TypeScriptGenerator {
       result.files.push(typesFile);
 
       // Generate query builders
-      if (this.config.include_query_builders) {
+      if (this.config.includeQueryBuilders) {
         const queryFile = this.generateQueryBuilders();
         result.files.push(queryFile);
       }
 
       // Generate client
-      if (this.config.include_client) {
+      if (this.config.includeClient) {
         const clientFile = this.generateClient();
         result.files.push(clientFile);
       }
@@ -83,7 +83,7 @@ export class TypeScriptGenerator {
     content += this.generateUtilityTypes();
 
     return {
-      path: `${this.config.output_dir}/types.ts`,
+      path: `${this.config.outputDir}/types.ts`,
       content: this.formatContent(content),
       type: "types",
     };
@@ -190,7 +190,7 @@ export class TypeScriptGenerator {
     }
 
     return {
-      path: `${this.config.output_dir}/queries.ts`,
+      path: `${this.config.outputDir}/queries.ts`,
       content: this.formatContent(content),
       type: "queries",
     };
@@ -483,7 +483,7 @@ export class TypeScriptGenerator {
     // Health check
     content += `  /** Check server health */\n`;
     content +=
-      `  async health(): Promise<{ status: string; uptime_ms: number }> {\n`;
+      `  async health(): Promise<{ status: string; uptimeMs: number }> {\n`;
     content +=
       `    const response = await fetch(\`\${this.baseUrl}/health\`);\n`;
     content += `    return await response.json();\n`;
@@ -500,7 +500,7 @@ export class TypeScriptGenerator {
     content += `}\n`;
 
     return {
-      path: `${this.config.output_dir}/client.ts`,
+      path: `${this.config.outputDir}/client.ts`,
       content: this.formatContent(content),
       type: "client",
     };
@@ -529,7 +529,7 @@ export class TypeScriptGenerator {
     content += `export default DiscClient;\n`;
 
     return {
-      path: `${this.config.output_dir}/index.ts`,
+      path: `${this.config.outputDir}/index.ts`,
       content: this.formatContent(content),
       type: "index",
     };
@@ -546,8 +546,8 @@ export class TypeScriptGenerator {
     content += `export interface QueryResult<T> {\n`;
     content += `  data: T;\n`;
     content += `  extensions?: {\n`;
-    content += `    duration_ms?: number;\n`;
-    content += `    query_hash?: string;\n`;
+    content += `    durationMs?: number;\n`;
+    content += `    queryHash?: string;\n`;
     content += `    sql?: string;\n`;
     content += `  };\n`;
     content += `}\n\n`;
@@ -584,13 +584,13 @@ export class TypeScriptGenerator {
   }
 
   private getTypeScriptTypeName(edgeqlTypeName: string): string {
-    const prefix = this.config.type_prefix || "";
-    const suffix = this.config.interface_suffix || "";
+    const prefix = this.config.typePrefix || "";
+    const suffix = this.config.interfaceSuffix || "";
     return `${prefix}${edgeqlTypeName}${suffix}`;
   }
 
   private formatContent(content: string): string {
-    if (!this.config.format_output) {
+    if (!this.config.formatOutput) {
       return content;
     }
 

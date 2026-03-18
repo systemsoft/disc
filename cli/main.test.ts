@@ -223,22 +223,22 @@ Deno.test("CLI - migration config construction", () => {
 
     // Simulate migration config construction
     const config = {
-      migrations_dir: "./migrations",
-      schema_file: args.schema || "./schema.esdl",
-      database_url: Deno.env.get("DATABASE_URL") ||
+      migrationsDir: "./migrations",
+      schemaFile: args.schema || "./schema.esdl",
+      databaseUrl: Deno.env.get("DATABASE_URL") ||
         "postgresql://localhost:5432/disc_dev",
-      dry_run: args["dry-run"] || false,
-      auto_approve: args["auto-approve"] || false,
-      backup_before_migration: true,
-      rollback_on_error: true,
+      dryRun: args["dry-run"] || false,
+      autoApprove: args["auto-approve"] || false,
+      backupBeforeMigration: true,
+      rollbackOnError: true,
     };
 
-    assertEquals(config.schema_file, "./test.esdl");
-    assertEquals(config.database_url, "postgresql://localhost:5432/test_disc");
-    assertEquals(config.dry_run, true);
-    assertEquals(config.auto_approve, false);
-    assertEquals(config.backup_before_migration, true);
-    assertEquals(config.rollback_on_error, true);
+    assertEquals(config.schemaFile, "./test.esdl");
+    assertEquals(config.databaseUrl, "postgresql://localhost:5432/test_disc");
+    assertEquals(config.dryRun, true);
+    assertEquals(config.autoApprove, false);
+    assertEquals(config.backupBeforeMigration, true);
+    assertEquals(config.rollbackOnError, true);
   } finally {
     env.restore();
   }
@@ -257,20 +257,20 @@ Deno.test("CLI - codegen config construction", () => {
 
   // Simulate codegen config construction
   const config = {
-    output_dir: args.output || "./generated",
+    outputDir: args.output || "./generated",
     target: args.target || "client",
-    include_query_builders: args["no-queries"] !== true,
-    include_mutations: args["no-mutations"] !== true,
-    include_client: args["no-client"] !== true,
-    format_output: args["no-format"] !== true,
+    includeQueryBuilders: args["no-queries"] !== true,
+    includeMutations: args["no-mutations"] !== true,
+    includeClient: args["no-client"] !== true,
+    formatOutput: args["no-format"] !== true,
   };
 
-  assertEquals(config.output_dir, "./custom/types");
+  assertEquals(config.outputDir, "./custom/types");
   assertEquals(config.target, "server");
-  assertEquals(config.include_query_builders, false); // no-queries is true
-  assertEquals(config.include_mutations, true); // no-mutations is false
-  assertEquals(config.include_client, false); // no-client is true
-  assertEquals(config.format_output, true); // no-format is false
+  assertEquals(config.includeQueryBuilders, false); // no-queries is true
+  assertEquals(config.includeMutations, true); // no-mutations is false
+  assertEquals(config.includeClient, false); // no-client is true
+  assertEquals(config.formatOutput, true); // no-format is false
 });
 
 // Test alias handling

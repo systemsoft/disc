@@ -25,11 +25,11 @@ Deno.test("Codegen - generateTypeScript with default config", () => {
 Deno.test("Codegen - generateTypeScript with custom config", () => {
   const schema = Context.createTestSchema();
   const config: Partial<Types.CodegenConfig> = {
-    output_dir: "./custom-output",
+    outputDir: "./custom-output",
     target: "server",
-    include_query_builders: false,
-    include_client: false,
-    type_prefix: "Db",
+    includeQueryBuilders: false,
+    includeClient: false,
+    typePrefix: "Db",
   };
 
   const result = Codegen.generateTypeScript(schema, config);
@@ -37,11 +37,11 @@ Deno.test("Codegen - generateTypeScript with custom config", () => {
   assertExists(result);
   assertEquals(result.errors.length, 0);
 
-  // Should not have client files when include_client is false
+  // Should not have client files when includeClient is false
   const hasClientFile = result.files.some((f) => f.type === "client");
   assertEquals(hasClientFile, false);
 
-  // Should not have query files when include_query_builders is false
+  // Should not have query files when includeQueryBuilders is false
   const hasQueryFile = result.files.some((f) => f.type === "queries");
   assertEquals(hasQueryFile, false);
 });
@@ -50,8 +50,8 @@ Deno.test("Codegen - generateTypeScript client target", () => {
   const schema = Context.createTestSchema();
   const config: Partial<Types.CodegenConfig> = {
     target: "client",
-    include_query_builders: true,
-    include_client: true,
+    includeQueryBuilders: true,
+    includeClient: true,
   };
 
   const result = Codegen.generateTypeScript(schema, config);
@@ -72,8 +72,8 @@ Deno.test("Codegen - generateTypeScript server target", () => {
   const schema = Context.createTestSchema();
   const config: Partial<Types.CodegenConfig> = {
     target: "server",
-    include_query_builders: false,
-    include_client: false,
+    includeQueryBuilders: false,
+    includeClient: false,
   };
 
   const result = Codegen.generateTypeScript(schema, config);
@@ -93,9 +93,9 @@ Deno.test("Codegen - generateTypeScript both target", () => {
   const schema = Context.createTestSchema();
   const config: Partial<Types.CodegenConfig> = {
     target: "both",
-    include_query_builders: true,
-    include_client: true,
-    include_mutations: true,
+    includeQueryBuilders: true,
+    includeClient: true,
+    includeMutations: true,
   };
 
   const result = Codegen.generateTypeScript(schema, config);
@@ -121,7 +121,7 @@ Deno.test("Codegen - writeGeneratedFiles creates files", async () => {
   try {
     const schema = Context.createTestSchema();
     const result = Codegen.generateTypeScript(schema, {
-      output_dir: "generated",
+      outputDir: "generated",
     });
 
     await Codegen.writeGeneratedFiles(result, tempDir);
@@ -146,7 +146,7 @@ Deno.test("Codegen - writeGeneratedFiles creates output directory", async () => 
   try {
     const schema = Context.createTestSchema();
     const result = Codegen.generateTypeScript(schema, {
-      output_dir: "custom-dir",
+      outputDir: "custom-dir",
     });
 
     await Codegen.writeGeneratedFiles(result, tempDir);
@@ -163,21 +163,21 @@ Deno.test("Codegen - writeGeneratedFiles creates output directory", async () => 
 Deno.test("Codegen - DEFAULT_CONFIGS presets", () => {
   const clientConfig = Codegen.DEFAULT_CONFIGS.client();
   assertEquals(clientConfig.target, "client");
-  assertEquals(clientConfig.include_query_builders, true);
-  assertEquals(clientConfig.include_client, true);
-  assertEquals(clientConfig.include_mutations, true);
+  assertEquals(clientConfig.includeQueryBuilders, true);
+  assertEquals(clientConfig.includeClient, true);
+  assertEquals(clientConfig.includeMutations, true);
 
   const serverConfig = Codegen.DEFAULT_CONFIGS.server();
   assertEquals(serverConfig.target, "server");
-  assertEquals(serverConfig.include_query_builders, false);
-  assertEquals(serverConfig.include_client, false);
-  assertEquals(serverConfig.include_mutations, false);
+  assertEquals(serverConfig.includeQueryBuilders, false);
+  assertEquals(serverConfig.includeClient, false);
+  assertEquals(serverConfig.includeMutations, false);
 
   const bothConfig = Codegen.DEFAULT_CONFIGS.both();
   assertEquals(bothConfig.target, "both");
-  assertEquals(bothConfig.include_query_builders, true);
-  assertEquals(bothConfig.include_client, true);
-  assertEquals(bothConfig.include_mutations, true);
+  assertEquals(bothConfig.includeQueryBuilders, true);
+  assertEquals(bothConfig.includeClient, true);
+  assertEquals(bothConfig.includeMutations, true);
 });
 
 Deno.test("Codegen - generated TypeScript content validation", () => {
@@ -203,7 +203,7 @@ Deno.test("Codegen - generated client content validation", () => {
   const schema = Context.createTestSchema();
   const config: Partial<Types.CodegenConfig> = {
     target: "client",
-    include_client: true,
+    includeClient: true,
   };
 
   const result = Codegen.generateTypeScript(schema, config);
@@ -261,8 +261,8 @@ Deno.test("Codegen - error handling for empty schema", () => {
 Deno.test("Codegen - config merging with defaults", () => {
   const schema = Context.createTestSchema();
   const partialConfig: Partial<Types.CodegenConfig> = {
-    output_dir: "./test-output",
-    include_mutations: false,
+    outputDir: "./test-output",
+    includeMutations: false,
   };
 
   const result = Codegen.generateTypeScript(schema, partialConfig);
@@ -278,7 +278,7 @@ Deno.test("Codegen - config merging with defaults", () => {
 Deno.test("Codegen - file path generation", () => {
   const schema = Context.createTestSchema();
   const config: Partial<Types.CodegenConfig> = {
-    output_dir: "custom/nested/path",
+    outputDir: "custom/nested/path",
   };
 
   const result = Codegen.generateTypeScript(schema, config);

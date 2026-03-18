@@ -31,7 +31,7 @@ async function createE2EServer(port: number): Promise<{
   await db.connect();
 
   const provider = new AuthProvider(
-    { jwt_secret: TEST_JWT_SECRET },
+    { jwtSecret: TEST_JWT_SECRET },
     db,
   );
   await provider.initialize();
@@ -45,24 +45,24 @@ async function createE2EServer(port: number): Promise<{
     config: {
       host: TEST_HOST,
       port,
-      database_url: "postgresql://localhost:5432/test",
-      max_connections: 10,
-      request_timeout: 5000,
-      enable_cors: true,
-      enable_websockets: false,
-      jwt_secret: TEST_JWT_SECRET,
-      enable_auth: true,
+      databaseUrl: "postgresql://localhost:5432/test",
+      maxConnections: 10,
+      requestTimeout: 5000,
+      enableCors: true,
+      enableWebsockets: false,
+      jwtSecret: TEST_JWT_SECRET,
+      enableAuth: true,
     },
-    protocol_handler: {
-      handle_request: async (_req: any, ctx: any) => {
+    protocolHandler: {
+      handleRequest: async (_req: any, ctx: any) => {
         capturedContexts.push(ctx);
         return { data: { result: "ok" } };
       },
-      validate_request: () => [],
+      validateRequest: () => [],
     },
-    auth_provider: provider,
-    auth_middleware: middleware,
-    auth_routes: routes,
+    authProvider: provider,
+    authMiddleware: middleware,
+    authRoutes: routes,
   });
 
   return { server, db, capturedContexts };
@@ -95,12 +95,12 @@ Deno.test({
       assertEquals(registerRes.status, 201);
       const registerBody = await registerRes.json();
       assertExists(registerBody.token);
-      assertExists(registerBody.refresh_token);
+      assertExists(registerBody.refreshToken);
       assertEquals(registerBody.user.email, "e2e@test.com");
       assertEquals(registerBody.user.username, "e2euser");
 
       const token = registerBody.token;
-      const refreshToken = registerBody.refresh_token;
+      const refreshToken = registerBody.refreshToken;
       const sessionId = registerBody.session.id;
 
       // 2. Login (separate flow)
@@ -142,24 +142,24 @@ Deno.test({
 
       // Verify captured AuthContext
       assertEquals(capturedContexts.length, 1);
-      assertExists(capturedContexts[0].auth.user_id);
-      assertExists(capturedContexts[0].auth.jwt_claims);
-      assertEquals(capturedContexts[0].auth.jwt_claims.email, "e2e@test.com");
+      assertExists(capturedContexts[0].auth.userId);
+      assertExists(capturedContexts[0].auth.jwtClaims);
+      assertEquals(capturedContexts[0].auth.jwtClaims.email, "e2e@test.com");
 
       // 5. Refresh token
       const refreshRes = await fetch(`${base}/auth/refresh`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: refreshToken }),
+        body: JSON.stringify({ refreshToken: refreshToken }),
       });
       assertEquals(refreshRes.status, 200);
       const refreshBody = await refreshRes.json();
       assertExists(refreshBody.token);
-      assertExists(refreshBody.refresh_token);
+      assertExists(refreshBody.refreshToken);
 
       // 6. Logout
       const logoutRes = await fetch(
-        `${base}/auth/logout?session_id=${loginBody.session.id}`,
+        `${base}/auth/logout?sessionId=${loginBody.session.id}`,
         {
           method: "GET",
           headers: { Authorization: `Bearer ${loginToken}` },
@@ -196,10 +196,10 @@ Deno.test({
       assertEquals(queryRes.status, 200);
       await queryRes.json();
 
-      // AuthContext should have no user_id
+      // AuthContext should have no userId
       assertEquals(capturedContexts.length, 1);
-      assertEquals(capturedContexts[0].auth.user_id, undefined);
-      assertEquals(capturedContexts[0].auth.jwt_claims, undefined);
+      assertEquals(capturedContexts[0].auth.userId, undefined);
+      assertEquals(capturedContexts[0].auth.jwtClaims, undefined);
     } finally {
       await server.stop();
       await db.close();

@@ -8,9 +8,9 @@ export interface Migration {
   id: string;
   name: string;
   description: string;
-  created_at: Date;
-  applied_at?: Date;
-  schema_hash: string;
+  createdAt: Date;
+  appliedAt?: Date;
+  schemaHash: string;
   operations: MigrationOperation[];
 }
 
@@ -21,19 +21,19 @@ export interface MigrationOperation {
 // Schema operations
 export interface CreateTypeOperation extends MigrationOperation {
   kind: "CreateType";
-  type_name: string;
+  typeName: string;
   properties: PropertyDefinition[];
   links: LinkDefinition[];
 }
 
 export interface DropTypeOperation extends MigrationOperation {
   kind: "DropType";
-  type_name: string;
+  typeName: string;
 }
 
 export interface AlterTypeOperation extends MigrationOperation {
   kind: "AlterType";
-  type_name: string;
+  typeName: string;
   operations: TypeOperation[];
 }
 
@@ -48,12 +48,12 @@ export interface AddPropertyOperation extends TypeOperation {
 
 export interface DropPropertyOperation extends TypeOperation {
   kind: "DropProperty";
-  property_name: string;
+  propertyName: string;
 }
 
 export interface AlterPropertyOperation extends TypeOperation {
   kind: "AlterProperty";
-  property_name: string;
+  propertyName: string;
   changes: PropertyChange[];
 }
 
@@ -64,19 +64,19 @@ export interface AddLinkOperation extends TypeOperation {
 
 export interface DropLinkOperation extends TypeOperation {
   kind: "DropLink";
-  link_name: string;
+  linkName: string;
 }
 
 export interface AlterLinkOperation extends TypeOperation {
   kind: "AlterLink";
-  link_name: string;
+  linkName: string;
   changes: LinkChange[];
 }
 
 // DDL operations
 export interface CreateTableOperation extends MigrationOperation {
   kind: "CreateTable";
-  table_name: string;
+  tableName: string;
   columns: ColumnDefinition[];
   constraints: ConstraintDefinition[];
   indexes: IndexDefinition[];
@@ -84,12 +84,12 @@ export interface CreateTableOperation extends MigrationOperation {
 
 export interface DropTableOperation extends MigrationOperation {
   kind: "DropTable";
-  table_name: string;
+  tableName: string;
 }
 
 export interface AlterTableOperation extends MigrationOperation {
   kind: "AlterTable";
-  table_name: string;
+  tableName: string;
   operations: TableOperation[];
 }
 
@@ -104,12 +104,12 @@ export interface AddColumnOperation extends TableOperation {
 
 export interface DropColumnOperation extends TableOperation {
   kind: "DropColumn";
-  column_name: string;
+  columnName: string;
 }
 
 export interface AlterColumnOperation extends TableOperation {
   kind: "AlterColumn";
-  column_name: string;
+  columnName: string;
   changes: ColumnChange[];
 }
 
@@ -120,7 +120,7 @@ export interface AddConstraintOperation extends TableOperation {
 
 export interface DropConstraintOperation extends TableOperation {
   kind: "DropConstraint";
-  constraint_name: string;
+  constraintName: string;
 }
 
 export interface CreateIndexOperation extends MigrationOperation {
@@ -130,7 +130,7 @@ export interface CreateIndexOperation extends MigrationOperation {
 
 export interface DropIndexOperation extends MigrationOperation {
   kind: "DropIndex";
-  index_name: string;
+  indexName: string;
 }
 
 // Schema definitions
@@ -150,7 +150,7 @@ export interface LinkDefinition {
   required: boolean;
   multi: boolean;
   cardinality?: string;
-  on_target_delete?: "RESTRICT" | "CASCADE" | "SET NULL" | "SET DEFAULT";
+  onTargetDelete?: "RESTRICT" | "CASCADE" | "SET NULL" | "SET DEFAULT";
   annotations: Record<string, any>;
 }
 
@@ -162,8 +162,8 @@ export interface PropertyChange {
     | "ChangeDefault"
     | "AddConstraint"
     | "DropConstraint";
-  old_value?: any;
-  new_value?: any;
+  oldValue?: any;
+  newValue?: any;
 }
 
 export interface LinkChange {
@@ -173,8 +173,8 @@ export interface LinkChange {
     | "ChangeMulti"
     | "ChangeCardinality"
     | "ChangeOnDelete";
-  old_value?: any;
-  new_value?: any;
+  oldValue?: any;
+  newValue?: any;
 }
 
 // DDL definitions
@@ -183,13 +183,13 @@ export interface ColumnDefinition {
   type: string;
   nullable: boolean;
   default?: string;
-  primary_key: boolean;
+  primaryKey: boolean;
   unique: boolean;
   references?: {
     table: string;
     column: string;
-    on_delete?: "RESTRICT" | "CASCADE" | "SET NULL" | "SET DEFAULT";
-    on_update?: "RESTRICT" | "CASCADE" | "SET NULL" | "SET DEFAULT";
+    onDelete?: "RESTRICT" | "CASCADE" | "SET NULL" | "SET DEFAULT";
+    onUpdate?: "RESTRICT" | "CASCADE" | "SET NULL" | "SET DEFAULT";
   };
 }
 
@@ -200,8 +200,8 @@ export interface ConstraintDefinition {
   references?: {
     table: string;
     columns: string[];
-    on_delete?: "RESTRICT" | "CASCADE" | "SET NULL" | "SET DEFAULT";
-    on_update?: "RESTRICT" | "CASCADE" | "SET NULL" | "SET DEFAULT";
+    onDelete?: "RESTRICT" | "CASCADE" | "SET NULL" | "SET DEFAULT";
+    onUpdate?: "RESTRICT" | "CASCADE" | "SET NULL" | "SET DEFAULT";
   };
   condition?: string; // For CHECK constraints
 }
@@ -222,62 +222,62 @@ export interface ColumnChange {
     | "ChangeDefault"
     | "AddConstraint"
     | "DropConstraint";
-  old_value?: any;
-  new_value?: any;
+  oldValue?: any;
+  newValue?: any;
 }
 
 // Migration state
 export interface MigrationState {
-  applied_migrations: string[];
-  current_schema_hash: string;
-  last_migration_id?: string;
-  last_applied_at?: Date;
+  appliedMigrations: string[];
+  currentSchemaHash: string;
+  lastMigrationId?: string;
+  lastAppliedAt?: Date;
 }
 
 export interface MigrationPlan {
   migrations: Migration[];
-  target_schema_hash: string;
-  operations_count: number;
-  estimated_duration?: number;
+  targetSchemaHash: string;
+  operationsCount: number;
+  estimatedDuration?: number;
 }
 
 export interface MigrationResult {
   success: boolean;
-  migration_id: string;
-  applied_at: Date;
-  duration_ms: number;
+  migrationId: string;
+  appliedAt: Date;
+  durationMs: number;
   error?: string;
-  rollback_sql?: string[];
+  rollbackSql?: string[];
 }
 
 // Migration configuration
 export interface MigrationConfig {
-  migrations_dir: string;
-  schema_file: string;
-  database_url: string;
-  dry_run: boolean;
-  auto_approve: boolean;
-  backup_before_migration: boolean;
-  rollback_on_error: boolean;
-  connection_pool?: ConnectionPool;
+  migrationsDir: string;
+  schemaFile: string;
+  databaseUrl: string;
+  dryRun: boolean;
+  autoApprove: boolean;
+  backupBeforeMigration: boolean;
+  rollbackOnError: boolean;
+  connectionPool?: ConnectionPool;
 }
 
 export interface MigrationCheckpoint {
   id: string;
   name: string;
-  created_at: Date;
-  schema_state: any;
-  migration_state: MigrationState;
+  createdAt: Date;
+  schemaState: any;
+  migrationState: MigrationState;
 }
 
 export interface MigrationHistoryEntry {
   id: string;
   name: string;
   description: string;
-  schema_hash: string;
-  applied_at: Date;
-  duration_ms: number;
-  created_at: Date;
+  schemaHash: string;
+  appliedAt: Date;
+  durationMs: number;
+  createdAt: Date;
 }
 
 // Helper functions for creating operations
@@ -288,7 +288,7 @@ export function createTypeOperation(
 ): CreateTypeOperation {
   return {
     kind: "CreateType",
-    type_name: name,
+    typeName: name,
     properties,
     links,
   };
@@ -297,7 +297,7 @@ export function createTypeOperation(
 export function dropTypeOperation(name: string): DropTypeOperation {
   return {
     kind: "DropType",
-    type_name: name,
+    typeName: name,
   };
 }
 
@@ -313,7 +313,7 @@ export function addPropertyOperation(
 export function dropPropertyOperation(name: string): DropPropertyOperation {
   return {
     kind: "DropProperty",
-    property_name: name,
+    propertyName: name,
   };
 }
 
@@ -325,7 +325,7 @@ export function createTableOperation(
 ): CreateTableOperation {
   return {
     kind: "CreateTable",
-    table_name: name,
+    tableName: name,
     columns,
     constraints,
     indexes,
@@ -335,7 +335,7 @@ export function createTableOperation(
 export function dropTableOperation(name: string): DropTableOperation {
   return {
     kind: "DropTable",
-    table_name: name,
+    tableName: name,
   };
 }
 
@@ -351,6 +351,6 @@ export function addColumnOperation(
 export function dropColumnOperation(name: string): DropColumnOperation {
   return {
     kind: "DropColumn",
-    column_name: name,
+    columnName: name,
   };
 }

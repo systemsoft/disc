@@ -27,7 +27,7 @@ Deno.test("EdgeQL Parser - SELECT with Shape", () => {
     SELECT User {
       name,
       email,
-      created_at
+      createdAt
     }
   `;
 
@@ -89,7 +89,7 @@ Deno.test("EdgeQL Parser - SELECT with ORDER BY and LIMIT", () => {
     SELECT User {
       name
     }
-    ORDER BY .created_at DESC
+    ORDER BY .createdAt DESC
     LIMIT 10
   `;
 
@@ -167,10 +167,10 @@ Deno.test("EdgeQL Parser - INSERT with UNLESS CONFLICT", () => {
 Deno.test("EdgeQL Parser - UPDATE Query", () => {
   const source = `
     UPDATE User
-    FILTER .id = <uuid>$user_id
+    FILTER .id = <uuid>$userId
     SET {
       name := $new_name,
-      updated_at := datetime_current()
+      updatedAt := datetime_current()
     }
   `;
 

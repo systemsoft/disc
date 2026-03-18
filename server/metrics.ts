@@ -23,7 +23,7 @@ export interface MetricsSource {
     parse: { hits: number; misses: number; evictions: number; size: number };
   };
   /** Query metrics (optional) */
-  query_metrics?: {
+  queryMetrics?: {
     totalQueries: number;
     avgParseMs: number;
     avgCompileMs: number;
@@ -38,16 +38,16 @@ export interface MetricsSource {
     waiters: number;
   } | null;
   /** Rate limiter stats (optional) */
-  rate_limit?: {
-    rejected_count: number;
-    active_clients: number;
+  rateLimit?: {
+    rejectedCount: number;
+    activeClients: number;
   };
   /** Server uptime in ms */
-  uptime_ms: number;
+  uptimeMs: number;
   /** Memory usage */
   memory: {
-    heap_used: number;
-    heap_total: number;
+    heapUsed: number;
+    heapTotal: number;
     external: number;
   };
 }
@@ -157,16 +157,16 @@ export function renderMetrics(
   }
 
   // Rate limit metrics
-  if (source.rate_limit) {
+  if (source.rateLimit) {
     counter(
       `${prefix}_rate_limit_rejected_total`,
       "Rate-limited requests rejected",
-      source.rate_limit.rejected_count,
+      source.rateLimit.rejectedCount,
     );
     gauge(
       `${prefix}_rate_limit_active_clients`,
       "Active rate limit client buckets",
-      source.rate_limit.active_clients,
+      source.rateLimit.activeClients,
     );
   }
 
@@ -174,12 +174,12 @@ export function renderMetrics(
   gauge(
     `${prefix}_process_memory_heap_used_bytes`,
     "Process heap memory used",
-    source.memory.heap_used,
+    source.memory.heapUsed,
   );
   gauge(
     `${prefix}_process_memory_heap_total_bytes`,
     "Process heap memory total",
-    source.memory.heap_total,
+    source.memory.heapTotal,
   );
   gauge(
     `${prefix}_process_memory_external_bytes`,
@@ -189,7 +189,7 @@ export function renderMetrics(
   gauge(
     `${prefix}_uptime_seconds`,
     "Server uptime in seconds",
-    source.uptime_ms / 1000,
+    source.uptimeMs / 1000,
   );
 
   return lines.join("\n") + "\n";

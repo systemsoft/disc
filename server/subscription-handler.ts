@@ -12,9 +12,9 @@ const log = getLogger("subscription");
 const WS_OPEN = 1;
 
 export interface SubscriptionOptions {
-  max_subscriptions_per_connection?: number;
-  subscription_timeout_ms?: number;
-  heartbeat_interval_ms?: number;
+  maxSubscriptionsPerConnection?: number;
+  subscriptionTimeoutMs?: number;
+  heartbeatIntervalMs?: number;
 }
 
 export class SubscriptionHandler {
@@ -26,63 +26,63 @@ export class SubscriptionHandler {
 
   constructor(options: SubscriptionOptions = {}) {
     this.options = {
-      max_subscriptions_per_connection:
-        options.max_subscriptions_per_connection || 10,
-      subscription_timeout_ms: options.subscription_timeout_ms ||
+      maxSubscriptionsPerConnection:
+        options.maxSubscriptionsPerConnection || 10,
+      subscriptionTimeoutMs: options.subscriptionTimeoutMs ||
         30 * 60 * 1000, // 30 minutes
-      heartbeat_interval_ms: options.heartbeat_interval_ms || 30 * 1000, // 30 seconds
+      heartbeatIntervalMs: options.heartbeatIntervalMs || 30 * 1000, // 30 seconds
     };
 
     this.start_heartbeat();
   }
 
-  async handle_subscription(
+  async handleSubscription(
     subscription: Types.SubscriptionRequest,
     context: Types.QueryContext,
     websocket: WebSocket,
   ): Promise<void> {
-    const connection_id = context.session.session_id;
+    const connectionId = context.session.sessionId;
 
     // Check subscription limits
-    const existing_subs = this.connection_subscriptions.get(connection_id) ||
+    const existingSubs = this.connection_subscriptions.get(connectionId) ||
       new Set();
-    if (existing_subs.size >= this.options.max_subscriptions_per_connection) {
+    if (existingSubs.size >= this.options.maxSubscriptionsPerConnection) {
       this.send_error(websocket, subscription.id, "Too many subscriptions");
       return;
     }
 
     // Validate subscription query
-    const validation_errors = this.validate_subscription_query(
+    const validationErrors = this.validate_subscription_query(
       subscription.query,
     );
-    if (validation_errors.length > 0) {
+    if (validationErrors.length > 0) {
       // Send all validation errors concatenated for better diagnostics
-      const combined = validation_errors.map((e) => e.message).join("; ");
+      const combined = validationErrors.map((e) => e.message).join("; ");
       this.send_error(websocket, subscription.id, combined);
       return;
     }
 
     try {
       // Create active subscription
-      const active_subscription: ActiveSubscription = {
+      const activeSubscription: ActiveSubscription = {
         id: subscription.id,
         query: subscription.query,
         variables: subscription.variables || {},
-        connection_id,
+        connectionId,
         websocket,
         context,
-        created_at: new Date(),
-        last_ping: new Date(),
+        createdAt: new Date(),
+        lastPing: new Date(),
         status: "active",
       };
 
       // Store subscription
-      this.subscriptions.set(subscription.id, active_subscription);
-      existing_subs.add(subscription.id);
-      this.connection_subscriptions.set(connection_id, existing_subs);
+      this.subscriptions.set(subscription.id, activeSubscription);
+      existingSubs.add(subscription.id);
+      this.connection_subscriptions.set(connectionId, existingSubs);
 
       // Start the subscription (for now, we'll send periodic updates)
-      await this.start_subscription(active_subscription);
+      await this.start_subscription(activeSubscription);
     } catch (error) {
       const errorMessage = error instanceof Error
         ? error.message
@@ -91,32 +91,32 @@ export class SubscriptionHandler {
     }
   }
 
-  stop_subscription(subscription_id: string): void {
-    const subscription = this.subscriptions.get(subscription_id);
+  stop_subscription(subscriptionId: string): void {
+    const subscription = this.subscriptions.get(subscriptionId);
     if (!subscription) return;
 
     subscription.status = "stopped";
-    this.subscriptions.delete(subscription_id);
+    this.subscriptions.delete(subscriptionId);
 
-    const connection_subs = this.connection_subscriptions.get(
-      subscription.connection_id,
+    const connectionSubs = this.connection_subscriptions.get(
+      subscription.connectionId,
     );
-    if (connection_subs) {
-      connection_subs.delete(subscription_id);
+    if (connectionSubs) {
+      connectionSubs.delete(subscriptionId);
     }
 
-    this.send_complete(subscription.websocket, subscription_id);
+    this.send_complete(subscription.websocket, subscriptionId);
   }
 
-  cleanup_connection(connection_id: string): void {
-    const subscription_ids = this.connection_subscriptions.get(connection_id);
-    if (!subscription_ids) return;
+  cleanup_connection(connectionId: string): void {
+    const subscriptionIds = this.connection_subscriptions.get(connectionId);
+    if (!subscriptionIds) return;
 
-    for (const subscription_id of subscription_ids) {
-      this.stop_subscription(subscription_id);
+    for (const subscriptionId of subscriptionIds) {
+      this.stop_subscription(subscriptionId);
     }
 
-    this.connection_subscriptions.delete(connection_id);
+    this.connection_subscriptions.delete(connectionId);
   }
 
   /**
@@ -149,24 +149,24 @@ export class SubscriptionHandler {
     subscription: ActiveSubscription,
   ): Promise<void> {
     // Send initial data
-    const initial_data = this.generate_mock_initial_data(subscription.query);
-    this.send_data(subscription.websocket, subscription.id, initial_data);
+    const initialData = this.generate_mock_initial_data(subscription.query);
+    this.send_data(subscription.websocket, subscription.id, initialData);
 
     // Start periodic updates (for demonstration/mock purposes)
-    const send_update = () => {
+    const sendUpdate = () => {
       if (subscription.status !== "active") return;
 
-      const mock_data = this.generate_mock_update(subscription.query);
-      this.send_data(subscription.websocket, subscription.id, mock_data);
+      const mockData = this.generate_mock_update(subscription.query);
+      this.send_data(subscription.websocket, subscription.id, mockData);
 
       // Schedule next update (simulate real-time data)
       if (subscription.status === "active") {
-        const id = setTimeout(send_update, 5000 + Math.random() * 5000);
+        const id = setTimeout(sendUpdate, 5000 + Math.random() * 5000);
         this.pending_timeouts.add(id);
       }
     };
 
-    const id = setTimeout(send_update, 5000);
+    const id = setTimeout(sendUpdate, 5000);
     this.pending_timeouts.add(id);
   }
 
@@ -177,8 +177,8 @@ export class SubscriptionHandler {
     const normalized = query.trim().toLowerCase();
 
     // Check for forbidden operations in subscriptions
-    const forbidden_keywords = ["insert", "update", "delete", "drop", "alter"];
-    for (const keyword of forbidden_keywords) {
+    const forbiddenKeywords = ["insert", "update", "delete", "drop", "alter"];
+    for (const keyword of forbiddenKeywords) {
       // Check if query starts with or contains the forbidden keyword
       if (
         normalized.startsWith(keyword) || normalized.includes(` ${keyword} `)
@@ -227,7 +227,7 @@ export class SubscriptionHandler {
           title: "Welcome to Disc Database",
           content: "This is the first post in our new database!",
           author: "Alice Johnson",
-          created_at: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
         },
       ];
     }
@@ -242,11 +242,11 @@ export class SubscriptionHandler {
   private generate_mock_update(query: string): any {
     if (query.includes("User")) {
       const updates = [
-        { type: "user_online", user_id: "user_003", name: "Charlie Wilson" },
-        { type: "user_offline", user_id: "user_002" },
+        { type: "user_online", userId: "user_003", name: "Charlie Wilson" },
+        { type: "user_offline", userId: "user_002" },
         {
           type: "user_updated",
-          user_id: "user_001",
+          userId: "user_001",
           field: "status",
           value: "busy",
         },
@@ -258,24 +258,24 @@ export class SubscriptionHandler {
         id: `post_${Date.now()}`,
         title: `New Post ${new Date().toLocaleTimeString()}`,
         author: "System",
-        created_at: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
       };
     }
 
     return {
       type: "heartbeat",
       timestamp: new Date().toISOString(),
-      subscription_id: Math.random().toString(36).substring(7),
+      subscriptionId: Math.random().toString(36).substring(7),
     };
   }
 
   private send_data(
     websocket: WebSocket,
-    subscription_id: string,
+    subscriptionId: string,
     data: any,
   ): void {
     const message: Types.SubscriptionMessage = {
-      id: subscription_id,
+      id: subscriptionId,
       type: "data",
       payload: data,
     };
@@ -285,21 +285,21 @@ export class SubscriptionHandler {
 
   private send_error(
     websocket: WebSocket,
-    subscription_id: string,
-    error_message: string,
+    subscriptionId: string,
+    errorMessage: string,
   ): void {
     const message: Types.SubscriptionMessage = {
-      id: subscription_id,
+      id: subscriptionId,
       type: "error",
-      payload: { message: error_message },
+      payload: { message: errorMessage },
     };
 
     this.send_message(websocket, message);
   }
 
-  private send_complete(websocket: WebSocket, subscription_id: string): void {
+  private send_complete(websocket: WebSocket, subscriptionId: string): void {
     const message: Types.SubscriptionMessage = {
-      id: subscription_id,
+      id: subscriptionId,
       type: "complete",
     };
 
@@ -325,11 +325,11 @@ export class SubscriptionHandler {
 
       for (const [id, subscription] of this.subscriptions) {
         // Check if subscription has been inactive
-        const inactive_time = now.getTime() - subscription.last_ping.getTime();
+        const inactiveTime = now.getTime() - subscription.lastPing.getTime();
 
-        if (inactive_time > this.options.subscription_timeout_ms) {
+        if (inactiveTime > this.options.subscriptionTimeoutMs) {
           log.debug("Cleaning up inactive subscription", {
-            subscription_id: id,
+            subscriptionId: id,
           });
           this.stop_subscription(id);
           continue;
@@ -337,7 +337,7 @@ export class SubscriptionHandler {
 
         // Send heartbeat
         if (subscription.websocket.readyState === WS_OPEN) {
-          subscription.last_ping = now;
+          subscription.lastPing = now;
           this.send_message(subscription.websocket, {
             id: subscription.id,
             type: "data",
@@ -348,28 +348,28 @@ export class SubscriptionHandler {
           this.stop_subscription(id);
         }
       }
-    }, this.options.heartbeat_interval_ms);
+    }, this.options.heartbeatIntervalMs);
   }
 
   get_subscription_stats(): {
     active_subscriptions: number;
     total_connections_with_subscriptions: number;
     subscriptions_by_connection: Array<
-      { connection_id: string; count: number }
+      { connectionId: string; count: number }
     >;
   } {
-    const connections_with_subs = Array.from(
+    const connectionsWithSubs = Array.from(
       this.connection_subscriptions.entries(),
     )
-      .map(([connection_id, subs]) => ({
-        connection_id,
+      .map(([connectionId, subs]) => ({
+        connectionId,
         count: subs.size,
       }));
 
     return {
       active_subscriptions: this.subscriptions.size,
       total_connections_with_subscriptions: this.connection_subscriptions.size,
-      subscriptions_by_connection: connections_with_subs,
+      subscriptions_by_connection: connectionsWithSubs,
     };
   }
 }
@@ -378,10 +378,10 @@ interface ActiveSubscription {
   id: string;
   query: string;
   variables: Record<string, any>;
-  connection_id: string;
+  connectionId: string;
   websocket: WebSocket;
   context: Types.QueryContext;
-  created_at: Date;
-  last_ping: Date;
+  createdAt: Date;
+  lastPing: Date;
   status: "active" | "stopped" | "error";
 }

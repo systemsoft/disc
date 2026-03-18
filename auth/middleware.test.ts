@@ -13,10 +13,10 @@ describe("AuthMiddleware", () => {
   let testUserId: string;
 
   const testConfig: AuthConfig = {
-    jwt_secret: "test-secret-key-at-least-32-characters-long",
-    bcrypt_rounds: 4,
-    token_expiry: 3600,
-    password_min_length: 6,
+    jwtSecret: "test-secret-key-at-least-32-characters-long",
+    bcryptRounds: 4,
+    tokenExpiry: 3600,
+    passwordMinLength: 6,
   };
 
   beforeEach(async () => {
@@ -51,7 +51,7 @@ describe("AuthMiddleware", () => {
       const context = await middleware.authenticate(request);
 
       assertExists(context);
-      assertEquals(context.user_id, testUserId);
+      assertEquals(context.userId, testUserId);
       assertEquals(context.email, "test@example.com");
     });
 
@@ -65,7 +65,7 @@ describe("AuthMiddleware", () => {
       const context = await middleware.authenticate(request);
 
       assertExists(context);
-      assertEquals(context.user_id, testUserId);
+      assertEquals(context.userId, testUserId);
     });
 
     it("should extract token from query parameter", async () => {
@@ -74,7 +74,7 @@ describe("AuthMiddleware", () => {
       const context = await middleware.authenticate(request);
 
       assertExists(context);
-      assertEquals(context.user_id, testUserId);
+      assertEquals(context.userId, testUserId);
     });
 
     it("should return null for missing token", async () => {
@@ -144,7 +144,7 @@ describe("AuthMiddleware", () => {
       await protectedHandler(request);
 
       assertExists(capturedContext);
-      assertEquals(capturedContext.user_id, testUserId);
+      assertEquals(capturedContext.userId, testUserId);
       assertEquals(capturedContext.email, "test@example.com");
     });
   });
@@ -167,7 +167,7 @@ describe("AuthMiddleware", () => {
       await optionalHandler(request);
 
       assertExists(capturedContext);
-      assertEquals(capturedContext.user_id, testUserId);
+      assertEquals(capturedContext.userId, testUserId);
     });
 
     it("should allow unauthenticated requests with null context", async () => {

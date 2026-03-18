@@ -28,13 +28,13 @@ function createMockHandler(options?: {
   onUpdateSchema?: (schema: Schema) => void;
 }): ProtocolHandler {
   return {
-    async handle_request(
+    async handleRequest(
       _request: QueryRequest,
       _context: QueryContext,
     ): Promise<QueryResponse> {
       return { data: null };
     },
-    validate_request(_request: QueryRequest) {
+    validateRequest(_request: QueryRequest) {
       return [];
     },
     updateSchema: options?.onUpdateSchema
@@ -97,7 +97,7 @@ Deno.test("Schema Reload - DiscServer delegates updateSchema to handler", () => 
   let delegatedSchema: Schema | null = null;
 
   const server = new DiscServer({
-    dry_run: true,
+    dryRun: true,
   });
 
   // Replace the protocol handler with our mock via getProtocolHandler

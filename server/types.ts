@@ -5,49 +5,49 @@
 import type { Schema } from "../compiler/context.ts";
 
 export interface AuthServerConfig {
-  jwt_issuer?: string;
-  jwt_audience?: string;
-  token_expiry?: number;
-  bcrypt_rounds?: number;
-  session_timeout?: number;
-  allow_registration?: boolean;
-  require_email_verification?: boolean;
-  password_min_length?: number;
+  jwtIssuer?: string;
+  jwtAudience?: string;
+  tokenExpiry?: number;
+  bcryptRounds?: number;
+  sessionTimeout?: number;
+  allowRegistration?: boolean;
+  requireEmailVerification?: boolean;
+  passwordMinLength?: number;
 }
 
 export interface ServerConfig {
   host: string;
   port: number;
-  database_url: string;
-  max_connections: number;
-  request_timeout: number;
-  enable_cors: boolean;
-  cors_origins?: string[];
-  enable_websockets: boolean;
-  jwt_secret?: string;
-  enable_auth?: boolean;
-  enable_access_policies?: boolean;
-  auth_config?: AuthServerConfig;
-  enable_explain?: boolean;
-  dry_run?: boolean;
-  cache_max_size?: number;
-  shutdown_drain_timeout?: number;
-  slow_query_threshold_ms?: number;
-  enable_metrics?: boolean;
-  rate_limit_rpm?: number;
-  rate_limit_burst?: number;
+  databaseUrl: string;
+  maxConnections: number;
+  requestTimeout: number;
+  enableCors: boolean;
+  corsOrigins?: string[];
+  enableWebsockets: boolean;
+  jwtSecret?: string;
+  enableAuth?: boolean;
+  enableAccessPolicies?: boolean;
+  authConfig?: AuthServerConfig;
+  enableExplain?: boolean;
+  dryRun?: boolean;
+  cacheMaxSize?: number;
+  shutdownDrainTimeout?: number;
+  slowQueryThresholdMs?: number;
+  enableMetrics?: boolean;
+  rateLimitRpm?: number;
+  rateLimitBurst?: number;
   tls?: {
-    cert_file: string;
-    key_file: string;
+    certFile: string;
+    keyFile: string;
     redirect?: boolean;
-    redirect_port?: number;
+    redirectPort?: number;
   };
 }
 
 export interface QueryRequest {
   query: string;
   variables?: Record<string, any>;
-  operation_name?: string;
+  operationName?: string;
 }
 
 export interface QueryResponse {
@@ -67,12 +67,12 @@ export interface QueryError {
 }
 
 export interface SessionContext {
-  session_id: string;
-  user_id?: string;
+  sessionId: string;
+  userId?: string;
   database: string;
-  transaction_id?: string;
-  created_at: Date;
-  last_activity: Date;
+  transactionId?: string;
+  createdAt: Date;
+  lastActivity: Date;
   variables: Record<string, any>;
 }
 
@@ -80,17 +80,17 @@ export interface Connection {
   id: string;
   type: "http" | "websocket";
   session: SessionContext;
-  created_at: Date;
-  remote_addr: string;
-  user_agent?: string;
+  createdAt: Date;
+  remoteAddr: string;
+  userAgent?: string;
 }
 
 export interface Transaction {
   id: string;
-  session_id: string;
-  isolation_level: "read_committed" | "repeatable_read" | "serializable";
-  read_only: boolean;
-  started_at: Date;
+  sessionId: string;
+  isolationLevel: "read_committed" | "repeatable_read" | "serializable";
+  readOnly: boolean;
+  startedAt: Date;
   statements: string[];
 }
 
@@ -98,7 +98,7 @@ export interface SubscriptionRequest {
   id: string;
   query: string;
   variables?: Record<string, any>;
-  operation_name?: string;
+  operationName?: string;
 }
 
 export interface SubscriptionMessage {
@@ -118,19 +118,19 @@ export interface ServerStats {
     total: number;
     successful: number;
     failed: number;
-    avg_duration_ms: number;
+    avgDurationMs: number;
   };
   transactions: {
     active: number;
     committed: number;
-    rolled_back: number;
+    rolledBack: number;
   };
-  memory_usage: {
-    heap_used: number;
-    heap_total: number;
+  memoryUsage: {
+    heapUsed: number;
+    heapTotal: number;
     external: number;
   };
-  uptime_ms: number;
+  uptimeMs: number;
   cache?: {
     compilation: {
       evictions: number;
@@ -147,32 +147,32 @@ export interface ServerStats {
       size: number;
     };
   };
-  query_metrics?: {
+  queryMetrics?: {
     avgCompileMs: number;
     avgExecuteMs: number;
     avgParseMs: number;
     cacheHitRate: number;
     totalQueries: number;
   };
-  rate_limit?: {
-    rejected_count: number;
-    active_clients: number;
+  rateLimit?: {
+    rejectedCount: number;
+    activeClients: number;
   };
 }
 
 export interface AuthContext {
-  user_id?: string;
+  userId?: string;
   roles: string[];
   permissions: string[];
-  jwt_claims?: Record<string, any>;
+  jwtClaims?: Record<string, any>;
 }
 
 export interface QueryContext {
   session: SessionContext;
   auth: AuthContext;
-  request_id: string;
-  started_at: Date;
-  client_info?: {
+  requestId: string;
+  startedAt: Date;
+  clientInfo?: {
     name: string;
     version: string;
     library: string;
@@ -183,16 +183,16 @@ export interface ExecutionResult {
   success: boolean;
   data?: any;
   errors?: QueryError[];
-  duration_ms: number;
-  rows_affected?: number;
-  query_hash?: string;
+  durationMs: number;
+  rowsAffected?: number;
+  queryHash?: string;
 }
 
 export interface HealthStatus {
   status: "healthy" | "degraded" | "unhealthy";
   database?: {
     connected: boolean;
-    latency_ms?: number;
+    latencyMs?: number;
   };
   pool?: {
     total: number;
@@ -203,15 +203,15 @@ export interface HealthStatus {
 }
 
 export interface ProtocolHandler {
-  handle_request(
+  handleRequest(
     request: QueryRequest,
     context: QueryContext,
   ): Promise<QueryResponse>;
-  handle_subscription?(
+  handleSubscription?(
     request: SubscriptionRequest,
     context: QueryContext,
   ): AsyncIterableIterator<SubscriptionMessage>;
-  validate_request(request: QueryRequest): QueryError[];
+  validateRequest(request: QueryRequest): QueryError[];
   /** Initialize the handler (e.g. connect to database, warm up pool). */
   initialize?(): Promise<void>;
   /** Gracefully close the handler (e.g. drain connection pool). */
@@ -221,7 +221,7 @@ export interface ProtocolHandler {
   /** Return cache and query metrics stats if available. */
   getStats?(): {
     cache?: ServerStats["cache"];
-    query_metrics?: ServerStats["query_metrics"];
+    queryMetrics?: ServerStats["queryMetrics"];
   };
   /** Check database and pool health, returning overall status. */
   checkHealth?(): Promise<HealthStatus>;
@@ -235,28 +235,28 @@ export interface ProtocolHandler {
 }
 
 export interface ConnectionManager {
-  create_connection(type: Connection["type"], remote_addr: string): Connection;
-  get_connection(id: string): Connection | null;
-  close_connection(id: string): void;
-  get_active_connections(): Connection[];
-  cleanup_idle_connections(): number;
+  createConnection(type: Connection["type"], remoteAddr: string): Connection;
+  getConnection(id: string): Connection | null;
+  closeConnection(id: string): void;
+  getActiveConnections(): Connection[];
+  cleanupIdleConnections(): number;
 }
 
 export interface SessionManager {
-  create_session(database: string): SessionContext;
-  get_session(id: string): SessionContext | null;
-  update_activity(id: string): void;
-  close_session(id: string): void;
-  cleanup_expired_sessions(): number;
+  createSession(database: string): SessionContext;
+  getSession(id: string): SessionContext | null;
+  updateActivity(id: string): void;
+  closeSession(id: string): void;
+  cleanupExpiredSessions(): number;
 }
 
 export interface TransactionManager {
-  begin_transaction(
-    session_id: string,
+  beginTransaction(
+    sessionId: string,
     options?: Partial<Transaction>,
   ): Transaction;
-  get_transaction(id: string): Transaction | null;
-  commit_transaction(id: string): Promise<void>;
-  rollback_transaction(id: string): Promise<void>;
-  cleanup_abandoned_transactions(): number;
+  getTransaction(id: string): Transaction | null;
+  commitTransaction(id: string): Promise<void>;
+  rollbackTransaction(id: string): Promise<void>;
+  cleanupAbandonedTransactions(): number;
 }

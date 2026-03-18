@@ -17,15 +17,15 @@ import { ConnectionPool } from "../lib/connection-pool.ts";
 function makeContext(): Types.QueryContext {
   return {
     session: {
-      session_id: "test_error_propagation",
+      sessionId: "test_error_propagation",
       database: "test_db",
-      created_at: new Date(),
-      last_activity: new Date(),
+      createdAt: new Date(),
+      lastActivity: new Date(),
       variables: {},
     },
     auth: { roles: [], permissions: [] },
-    request_id: "test_request",
-    started_at: new Date(),
+    requestId: "test_request",
+    startedAt: new Date(),
   };
 }
 
@@ -80,7 +80,7 @@ Deno.test(
     );
 
     const handler = new EdgeQLProtocolHandler({
-      connection_pool: faultyPool,
+      connectionPool: faultyPool,
     });
 
     const request = {
@@ -88,7 +88,7 @@ Deno.test(
       variables: {},
     };
 
-    const response = await handler.handle_request(request, makeContext());
+    const response = await handler.handleRequest(request, makeContext());
 
     // The error must surface — NOT be swallowed into mock data
     assert(response.errors !== undefined, "Expected errors in response");
@@ -107,7 +107,7 @@ Deno.test(
 Deno.test(
   "EdgeQLProtocolHandler - no pool returns mock data (dev mode preserved)",
   async () => {
-    // No connection_pool, no database_url → mock path
+    // No connectionPool, no databaseUrl → mock path
     const handler = new EdgeQLProtocolHandler();
 
     const request = {
@@ -115,7 +115,7 @@ Deno.test(
       variables: {},
     };
 
-    const response = await handler.handle_request(request, makeContext());
+    const response = await handler.handleRequest(request, makeContext());
 
     // Mock data should be returned successfully
     assertEquals(response.errors, undefined);
@@ -134,7 +134,7 @@ Deno.test(
     );
 
     const handler = new SimpleEdgeQLProtocolHandler({
-      connection_pool: faultyPool,
+      connectionPool: faultyPool,
     });
 
     const request = {
@@ -142,7 +142,7 @@ Deno.test(
       variables: {},
     };
 
-    const response = await handler.handle_request(request, makeContext());
+    const response = await handler.handleRequest(request, makeContext());
 
     // The error must surface
     assert(response.errors !== undefined, "Expected errors in response");
@@ -161,7 +161,7 @@ Deno.test(
 Deno.test(
   "SimpleEdgeQLProtocolHandler - no pool returns mock data (dev mode preserved)",
   async () => {
-    // No connection_pool, no database_url → mock path
+    // No connectionPool, no databaseUrl → mock path
     const handler = new SimpleEdgeQLProtocolHandler();
 
     const request = {
@@ -169,7 +169,7 @@ Deno.test(
       variables: {},
     };
 
-    const response = await handler.handle_request(request, makeContext());
+    const response = await handler.handleRequest(request, makeContext());
 
     // Mock data should be returned successfully
     assertEquals(response.errors, undefined);

@@ -8,11 +8,11 @@ import { PostgresManager } from "../postgres/mod.ts";
 export interface InitOptions {
   name: string;
   template?: "basic" | "minimal" | "full";
-  database_url?: string;
+  databaseUrl?: string;
   force?: boolean;
   directory?: string;
-  backend_dsn?: string; // External PostgreSQL DSN
-  skip_postgres?: boolean; // Skip PostgreSQL setup
+  backendDsn?: string; // External PostgreSQL DSN
+  skipPostgres?: boolean; // Skip PostgreSQL setup
 }
 
 export class InitCommand {
@@ -59,17 +59,17 @@ export class InitCommand {
       await this.createProjectFiles(projectDir, options);
 
       // Initialize PostgreSQL unless skipped or external DSN provided
-      if (!options.skip_postgres && !options.backend_dsn) {
+      if (!options.skipPostgres && !options.backendDsn) {
         console.log("\n📦 Setting up bundled PostgreSQL...");
         await this.initializePostgres(options.name);
-      } else if (options.backend_dsn) {
-        console.log(`\n🔗 Using external PostgreSQL: ${options.backend_dsn}`);
+      } else if (options.backendDsn) {
+        console.log(`\n🔗 Using external PostgreSQL: ${options.backendDsn}`);
       }
 
       console.log("\n✅ Project initialized successfully!");
       console.log(`💡 Next steps:`);
       console.log(`   cd ${options.name}`);
-      if (!options.skip_postgres && !options.backend_dsn) {
+      if (!options.skipPostgres && !options.backendDsn) {
         console.log(`   disc start  # Start PostgreSQL`);
       }
       console.log(`   disc migrate`);
@@ -92,7 +92,7 @@ export class InitCommand {
     options: InitOptions,
   ): Promise<void> {
     const template = options.template || "basic";
-    const databaseUrl = options.database_url ||
+    const databaseUrl = options.databaseUrl ||
       "postgresql://localhost:5432/disc_dev";
 
     // Create schema.esdl
@@ -137,7 +137,7 @@ export class InitCommand {
     required email: str {
       constraint exclusive;
     };
-    created_at: datetime {
+    createdAt: datetime {
       default := datetime_current();
     };
   };
@@ -151,7 +151,7 @@ export class InitCommand {
       constraint exclusive;
     };
     multi posts: Post;
-    created_at: datetime {
+    createdAt: datetime {
       default := datetime_current();
     };
   };
@@ -163,10 +163,10 @@ export class InitCommand {
     published: bool {
       default := false;
     };
-    created_at: datetime {
+    createdAt: datetime {
       default := datetime_current();
     };
-    updated_at: datetime {
+    updatedAt: datetime {
       default := datetime_current();
     };
   };

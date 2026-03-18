@@ -1,5 +1,3 @@
-// deno-lint-ignore-file camelcase
-
 export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR";
 export type LogFormat = "json" | "text";
 
@@ -14,7 +12,7 @@ export interface LogEntry {
   level: LogLevel;
   module: string;
   message: string;
-  request_id?: string;
+  requestId?: string;
   [key: string]: unknown;
 }
 
@@ -64,8 +62,8 @@ export class Logger {
     return new Logger(this.module, { ...this.extra, ...extra });
   }
 
-  withRequest(request_id: string, client_ip?: string): Logger {
-    return this.child({ request_id, ...(client_ip ? { client_ip } : {}) });
+  withRequest(requestId: string, clientIp?: string): Logger {
+    return this.child({ requestId, ...(clientIp ? { clientIp } : {}) });
   }
 
   private log(

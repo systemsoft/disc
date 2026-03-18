@@ -9,59 +9,59 @@ import { logger } from "../postgres/logger.ts";
 
 export class SessionManager implements Types.SessionManager {
   private sessions = new Map<string, Types.SessionContext>();
-  private session_timeout_ms: number;
+  private sessionTimeoutMs: number;
 
-  constructor(session_timeout_ms = 30 * 60 * 1000) { // 30 minutes default
-    this.session_timeout_ms = session_timeout_ms;
+  constructor(sessionTimeoutMs = 30 * 60 * 1000) { // 30 minutes default
+    this.sessionTimeoutMs = sessionTimeoutMs;
   }
 
-  create_session(database: string): Types.SessionContext {
-    const session_id = this.generate_session_id();
+  createSession(database: string): Types.SessionContext {
+    const sessionId = this.generate_session_id();
     const now = new Date();
 
     const session: Types.SessionContext = {
-      session_id,
+      sessionId,
       database,
-      created_at: now,
-      last_activity: now,
+      createdAt: now,
+      lastActivity: now,
       variables: {},
     };
 
-    this.sessions.set(session_id, session);
+    this.sessions.set(sessionId, session);
     return session;
   }
 
-  get_session(id: string): Types.SessionContext | null {
+  getSession(id: string): Types.SessionContext | null {
     return this.sessions.get(id) || null;
   }
 
-  update_activity(id: string): void {
+  updateActivity(id: string): void {
     const session = this.sessions.get(id);
     if (session) {
-      session.last_activity = new Date();
+      session.lastActivity = new Date();
     }
   }
 
-  close_session(id: string): void {
+  closeSession(id: string): void {
     this.sessions.delete(id);
   }
 
-  cleanup_expired_sessions(): number {
+  cleanupExpiredSessions(): number {
     const now = new Date();
-    const expired_sessions: string[] = [];
+    const expiredSessions: string[] = [];
 
     for (const [id, session] of this.sessions) {
-      const idle_time = now.getTime() - session.last_activity.getTime();
-      if (idle_time > this.session_timeout_ms) {
-        expired_sessions.push(id);
+      const idleTime = now.getTime() - session.lastActivity.getTime();
+      if (idleTime > this.sessionTimeoutMs) {
+        expiredSessions.push(id);
       }
     }
 
-    for (const id of expired_sessions) {
+    for (const id of expiredSessions) {
       this.sessions.delete(id);
     }
 
-    return expired_sessions.length;
+    return expiredSessions.length;
   }
 
   get_active_sessions(): Types.SessionContext[] {
@@ -75,71 +75,71 @@ export class SessionManager implements Types.SessionManager {
 
 export class ConnectionManager implements Types.ConnectionManager {
   private connections = new Map<string, Types.Connection>();
-  private connection_timeout_ms: number;
+  private connectionTimeoutMs: number;
 
-  constructor(connection_timeout_ms = 5 * 60 * 1000) { // 5 minutes default
-    this.connection_timeout_ms = connection_timeout_ms;
+  constructor(connectionTimeoutMs = 5 * 60 * 1000) { // 5 minutes default
+    this.connectionTimeoutMs = connectionTimeoutMs;
   }
 
-  create_connection(
+  createConnection(
     type: Types.Connection["type"],
-    remote_addr: string,
+    remoteAddr: string,
     session?: Types.SessionContext,
-    user_agent?: string,
+    userAgent?: string,
   ): Types.Connection {
-    const connection_id = this.generate_connection_id();
+    const connectionId = this.generate_connection_id();
 
     // Create a default session if none provided
-    const conn_session = session || {
-      session_id: this.generate_connection_id(),
+    const connSession = session || {
+      sessionId: this.generate_connection_id(),
       database: "default",
-      created_at: new Date(),
-      last_activity: new Date(),
+      createdAt: new Date(),
+      lastActivity: new Date(),
       variables: {},
     };
 
     const connection: Types.Connection = {
-      id: connection_id,
+      id: connectionId,
       type,
-      session: conn_session,
-      created_at: new Date(),
-      remote_addr,
-      user_agent,
+      session: connSession,
+      createdAt: new Date(),
+      remoteAddr,
+      userAgent,
     };
 
-    this.connections.set(connection_id, connection);
+    this.connections.set(connectionId, connection);
     return connection;
   }
 
-  get_connection(id: string): Types.Connection | null {
+  getConnection(id: string): Types.Connection | null {
     return this.connections.get(id) || null;
   }
 
-  close_connection(id: string): void {
+  closeConnection(id: string): void {
     this.connections.delete(id);
   }
 
-  get_active_connections(): Types.Connection[] {
+  getActiveConnections(): Types.Connection[] {
     return Array.from(this.connections.values());
   }
 
-  cleanup_idle_connections(): number {
+  cleanupIdleConnections(): number {
     const now = new Date();
-    const idle_connections: string[] = [];
+    const idleConnections: string[] = [];
 
     for (const [id, connection] of this.connections) {
-      const idle_time = now.getTime() -
-        connection.session.last_activity.getTime();
-      if (idle_time > this.connection_timeout_ms) {
-        idle_connections.push(id);
+      const idleTime = now.getTime() -
+        connection.session.lastActivity.getTime();
+      if (idleTime > this.connectionTimeoutMs) {
+        idleConnections.push(id);
       }
     }
 
-    for (const id of idle_connections) {
+    for (const id of idleConnections) {
       this.connections.delete(id);
     }
 
-    return idle_connections.length;
+    return idleConnections.length;
   }
 
   get_stats(): Types.ServerStats["connections"] {
@@ -159,17 +159,17 @@ export class ConnectionManager implements Types.ConnectionManager {
 
 export class TransactionManager implements Types.TransactionManager {
   private transactions = new Map<string, Types.Transaction>();
-  private transaction_timeout_ms: number;
+  private transactionTimeoutMs: number;
   private pool?: ConnectionPool;
   private transaction_connections = new Map<string, DatabaseConnection>();
   private pending_begins = new Map<string, Promise<void>>();
   private stats = {
     committed: 0,
-    rolled_back: 0,
+    rolledBack: 0,
   };
 
-  constructor(transaction_timeout_ms = 10 * 60 * 1000) { // 10 minutes default
-    this.transaction_timeout_ms = transaction_timeout_ms;
+  constructor(transactionTimeoutMs = 10 * 60 * 1000) { // 10 minutes default
+    this.transactionTimeoutMs = transactionTimeoutMs;
   }
 
   /**
@@ -189,34 +189,34 @@ export class TransactionManager implements Types.TransactionManager {
     return this.pool;
   }
 
-  begin_transaction(
-    session_id: string,
+  beginTransaction(
+    sessionId: string,
     options: Partial<Types.Transaction> = {},
   ): Types.Transaction {
-    const transaction_id = this.generate_transaction_id();
+    const transactionId = this.generate_transaction_id();
 
     const transaction: Types.Transaction = {
-      id: transaction_id,
-      session_id,
-      isolation_level: options.isolation_level || "read_committed",
-      read_only: options.read_only || false,
-      started_at: new Date(),
+      id: transactionId,
+      sessionId,
+      isolationLevel: options.isolationLevel || "read_committed",
+      readOnly: options.readOnly || false,
+      startedAt: new Date(),
       statements: [],
     };
 
-    this.transactions.set(transaction_id, transaction);
+    this.transactions.set(transactionId, transaction);
 
     // If a pool is available, acquire a connection and execute BEGIN asynchronously.
     // The promise is stored so commit/rollback can await it before proceeding.
     if (this.pool) {
-      const beginPromise = this.execute_begin(transaction_id, transaction);
-      this.pending_begins.set(transaction_id, beginPromise);
+      const beginPromise = this.execute_begin(transactionId, transaction);
+      this.pending_begins.set(transactionId, beginPromise);
     }
 
     return transaction;
   }
 
-  get_transaction(id: string): Types.Transaction | null {
+  getTransaction(id: string): Types.Transaction | null {
     return this.transactions.get(id) || null;
   }
 
@@ -229,7 +229,7 @@ export class TransactionManager implements Types.TransactionManager {
     return this.transaction_connections.get(id);
   }
 
-  async commit_transaction(id: string): Promise<void> {
+  async commitTransaction(id: string): Promise<void> {
     const transaction = this.transactions.get(id);
     if (!transaction) {
       throw new Error(`Transaction ${id} not found`);
@@ -261,7 +261,7 @@ export class TransactionManager implements Types.TransactionManager {
     this.stats.committed++;
   }
 
-  async rollback_transaction(id: string): Promise<void> {
+  async rollbackTransaction(id: string): Promise<void> {
     const transaction = this.transactions.get(id);
     if (!transaction) {
       throw new Error(`Transaction ${id} not found`);
@@ -290,21 +290,21 @@ export class TransactionManager implements Types.TransactionManager {
     }
 
     this.transactions.delete(id);
-    this.stats.rolled_back++;
+    this.stats.rolledBack++;
   }
 
-  cleanup_abandoned_transactions(): number {
+  cleanupAbandonedTransactions(): number {
     const now = new Date();
-    const abandoned_transactions: string[] = [];
+    const abandonedTransactions: string[] = [];
 
     for (const [id, transaction] of this.transactions) {
-      const age = now.getTime() - transaction.started_at.getTime();
-      if (age > this.transaction_timeout_ms) {
-        abandoned_transactions.push(id);
+      const age = now.getTime() - transaction.startedAt.getTime();
+      if (age > this.transactionTimeoutMs) {
+        abandonedTransactions.push(id);
       }
     }
 
-    for (const id of abandoned_transactions) {
+    for (const id of abandonedTransactions) {
       // Release any held connections for abandoned transactions
       const conn = this.transaction_connections.get(id);
       if (conn && this.pool) {
@@ -328,7 +328,7 @@ export class TransactionManager implements Types.TransactionManager {
       this.transactions.delete(id);
     }
 
-    return abandoned_transactions.length;
+    return abandonedTransactions.length;
   }
 
   get_active_transactions(): Types.Transaction[] {
@@ -339,45 +339,45 @@ export class TransactionManager implements Types.TransactionManager {
     return {
       active: this.transactions.size,
       committed: this.stats.committed,
-      rolled_back: this.stats.rolled_back,
+      rolledBack: this.stats.rolledBack,
     };
   }
 
   private async execute_begin(
-    transaction_id: string,
+    transactionId: string,
     transaction: Types.Transaction,
   ): Promise<void> {
     if (!this.pool) return;
 
     try {
       const conn = await this.pool.acquire();
-      this.transaction_connections.set(transaction_id, conn);
+      this.transaction_connections.set(transactionId, conn);
 
       // Build BEGIN statement with isolation level and read-only options
       let beginSQL = "BEGIN";
-      if (transaction.isolation_level === "serializable") {
+      if (transaction.isolationLevel === "serializable") {
         beginSQL += " ISOLATION LEVEL SERIALIZABLE";
-      } else if (transaction.isolation_level === "repeatable_read") {
+      } else if (transaction.isolationLevel === "repeatable_read") {
         beginSQL += " ISOLATION LEVEL REPEATABLE READ";
       } else {
         beginSQL += " ISOLATION LEVEL READ COMMITTED";
       }
 
-      if (transaction.read_only) {
+      if (transaction.readOnly) {
         beginSQL += " READ ONLY";
       }
 
       await conn.execute(beginSQL);
       logger.info(
-        `Transaction ${transaction_id}: ${beginSQL} executed on PostgreSQL`,
+        `Transaction ${transactionId}: ${beginSQL} executed on PostgreSQL`,
       );
     } catch (error) {
-      logger.error(`Transaction ${transaction_id}: BEGIN failed: ${error}`);
+      logger.error(`Transaction ${transactionId}: BEGIN failed: ${error}`);
       // Clean up on failure
-      const conn = this.transaction_connections.get(transaction_id);
+      const conn = this.transaction_connections.get(transactionId);
       if (conn && this.pool) {
         this.pool.release(conn);
-        this.transaction_connections.delete(transaction_id);
+        this.transaction_connections.delete(transactionId);
       }
       throw error;
     }

@@ -99,12 +99,12 @@ function createTestSchema(): Context.Schema {
         multi: false,
         columnName: "title",
       }],
-      ["created_at", {
-        name: "created_at",
+      ["createdAt", {
+        name: "createdAt",
         type: "datetime",
         required: false,
         multi: false,
-        columnName: "created_at",
+        columnName: "createdAt",
       }],
     ]),
     links: new Map([
@@ -210,7 +210,7 @@ Deno.test("EdgeQL to SQL - SELECT with nested shape", () => {
       name,
       posts: {
         title,
-        created_at
+        createdAt
       }
     }
   `;
@@ -223,7 +223,7 @@ Deno.test("EdgeQL to SQL - SELECT with nested shape", () => {
   assertStringIncludes(normalized, "'posts'");
   assertStringIncludes(
     normalized,
-    "jsonb_agg(jsonb_build_object('title', posts.title, 'created_at', posts.created_at))",
+    "jsonb_agg(jsonb_build_object('title', posts.title, 'createdAt', posts.createdAt))",
   );
   assertStringIncludes(normalized, "FROM posts");
   assertStringIncludes(normalized, "posts.author_id =");

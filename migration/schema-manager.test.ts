@@ -198,9 +198,9 @@ Deno.test("SchemaManager - getSchema - returns null before any load", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 8. applySchema in dry_run mode -- no DB needed
+// 8. applySchema in dryRun mode -- no DB needed
 // ---------------------------------------------------------------------------
-Deno.test("SchemaManager - applySchema - dry_run mode returns ok without DB", async () => {
+Deno.test("SchemaManager - applySchema - dryRun mode returns ok without DB", async () => {
   const manager = new SchemaManager({ dryRun: true });
   await manager.initialize();
 

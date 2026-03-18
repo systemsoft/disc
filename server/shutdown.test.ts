@@ -21,12 +21,12 @@ import type {
 /** Minimal protocol handler for shutdown tests. */
 function createMockProtocolHandler(
   options: {
-    /** Delay (ms) before handle_request resolves. */
+    /** Delay (ms) before handleRequest resolves. */
     requestDelay?: number;
   } = {},
 ): ProtocolHandler {
   return {
-    async handle_request(
+    async handleRequest(
       _request: QueryRequest,
       _context: QueryContext,
     ): Promise<QueryResponse> {
@@ -37,7 +37,7 @@ function createMockProtocolHandler(
       }
       return { data: { ok: true } };
     },
-    validate_request(_request: QueryRequest): QueryError[] {
+    validateRequest(_request: QueryRequest): QueryError[] {
       return [];
     },
   };
@@ -50,11 +50,11 @@ function createTestConfig(
   return {
     host: "localhost",
     port: 0, // not used directly in these unit tests
-    database_url: "postgresql://localhost:5432/test",
-    max_connections: 10,
-    request_timeout: 5000,
-    enable_cors: false,
-    enable_websockets: false,
+    databaseUrl: "postgresql://localhost:5432/test",
+    maxConnections: 10,
+    requestTimeout: 5000,
+    enableCors: false,
+    enableWebsockets: false,
     ...overrides,
   };
 }
@@ -66,14 +66,14 @@ Deno.test(
     const config = createTestConfig();
     const server = new HttpServer({
       config,
-      protocol_handler: handler,
+      protocolHandler: handler,
     });
 
     // Start draining -- this sets the shutting_down flag immediately
     const drainPromise = server.drain(1000);
 
     // After drain is called, getInFlightCount should be 0 and new requests
-    // should be rejected. Since handle_request is private, we verify
+    // should be rejected. Since handleRequest is private, we verify
     // behavior through the drain/getInFlightCount API.
     assertEquals(server.getInFlightCount(), 0);
 
@@ -96,7 +96,7 @@ Deno.test(
     const config = createTestConfig();
     const server = new HttpServer({
       config,
-      protocol_handler: handler,
+      protocolHandler: handler,
     });
 
     // Before any requests, in-flight count should be 0
@@ -122,7 +122,7 @@ Deno.test(
     const config = createTestConfig();
     const server = new HttpServer({
       config,
-      protocol_handler: handler,
+      protocolHandler: handler,
     });
 
     assertEquals(server.getInFlightCount(), 0);
@@ -147,7 +147,7 @@ Deno.test(
     const config = createTestConfig();
     const server = new HttpServer({
       config,
-      protocol_handler: handler,
+      protocolHandler: handler,
     });
 
     const timeoutMs = 250;
@@ -171,7 +171,7 @@ Deno.test(
     const config = createTestConfig();
     const server = new HttpServer({
       config,
-      protocol_handler: handler,
+      protocolHandler: handler,
     });
 
     assertEquals(server.getInFlightCount(), 0);
@@ -188,7 +188,7 @@ Deno.test(
     const config = createTestConfig();
     const server = new HttpServer({
       config,
-      protocol_handler: handler,
+      protocolHandler: handler,
     });
 
     // Call drain multiple times -- should be idempotent

@@ -24,15 +24,15 @@ import type { CacheStats } from "../lib/query-cache.ts";
 
 export interface EdgeQLExecutionOptions {
   schema?: Context.Schema;
-  enable_explain?: boolean;
-  explain_cache_ttl_ms?: number;
-  dry_run?: boolean;
-  database_url?: string;
-  connection_pool?: ConnectionPool;
-  enable_access_policies?: boolean;
-  cache_max_size?: number;
-  slow_query_threshold_ms?: number;
-  request_timeout?: number;
+  enableExplain?: boolean;
+  explainCacheTtlMs?: number;
+  dryRun?: boolean;
+  databaseUrl?: string;
+  connectionPool?: ConnectionPool;
+  enableAccessPolicies?: boolean;
+  cacheMaxSize?: number;
+  slowQueryThresholdMs?: number;
+  requestTimeout?: number;
 }
 
 interface CachedCompilation {
@@ -61,22 +61,22 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     this.schema = options.schema || Context.createTestSchema();
     this.compiler = this.createCompiler(this.schema);
 
-    const cacheSize = options.cache_max_size ?? 1000;
+    const cacheSize = options.cacheMaxSize ?? 1000;
     this.compilationCache = new QueryCache<CachedCompilation>(cacheSize);
     this.parseCache = new QueryCache<EdgeQL.Query>(cacheSize);
 
-    if (options.enable_explain) {
+    if (options.enableExplain) {
       this.explainCache = new ExplainCache({
-        ttl_ms: options.explain_cache_ttl_ms,
+        ttl_ms: options.explainCacheTtlMs,
       });
     }
 
     // Use provided pool or create new one if database URL provided
-    if (options.connection_pool) {
-      this.pool = options.connection_pool;
-    } else if (options.database_url && !options.dry_run) {
+    if (options.connectionPool) {
+      this.pool = options.connectionPool;
+    } else if (options.databaseUrl && !options.dryRun) {
       this.pool = new ConnectionPool({
-        connectionString: options.database_url,
+        connectionString: options.databaseUrl,
         minConnections: 2,
         maxConnections: 10,
       });
@@ -85,7 +85,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
 
   private createCompiler(schema: Context.Schema): Compiler.EdgeQLCompiler {
     const compilerOptions: Compiler.CompilerOptions =
-      this.options.enable_access_policies
+      this.options.enableAccessPolicies
         ? {
           enableAccessControl: true,
           accessConfig: {
@@ -100,7 +100,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     const compiler = new Compiler.EdgeQLCompiler(schema, compilerOptions);
 
     // Register policies from schema TypeDefs
-    if (this.options.enable_access_policies) {
+    if (this.options.enableAccessPolicies) {
       for (const typeDef of schema.types.values()) {
         if (typeDef.accessPolicies) {
           for (const policy of typeDef.accessPolicies) {
@@ -113,35 +113,35 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     return compiler;
   }
 
-  async handle_request(
+  async handleRequest(
     request: Types.QueryRequest,
     context: Types.QueryContext,
   ): Promise<Types.QueryResponse> {
-    const start_time = Date.now();
+    const startTime = Date.now();
 
     try {
       // Validate the request
-      const validation_errors = this.validate_request(request);
-      if (validation_errors.length > 0) {
+      const validationErrors = this.validateRequest(request);
+      if (validationErrors.length > 0) {
         return {
-          errors: validation_errors,
+          errors: validationErrors,
         };
       }
 
       const queryHash = hashString(request.query);
-      let cache_hit = false;
+      let cacheHit = false;
       let sqlString: string;
       let sqlStatement: SQL.SQLStatement;
       let parsedAST: EdgeQL.Query | undefined;
-      let parse_ms = 0;
-      let compile_ms = 0;
+      let parseMs = 0;
+      let compileMs = 0;
 
       // Build compilation cache key (includes access context when policies enabled)
       let compilationKey = queryHash;
 
-      if (this.options.enable_access_policies && context.auth) {
+      if (this.options.enableAccessPolicies && context.auth) {
         const ctxHash = hashAccessContext(
-          context.auth.user_id,
+          context.auth.userId,
           context.auth.roles?.[0],
         );
         compilationKey = makeCompilationCacheKey(queryHash, ctxHash);
@@ -151,7 +151,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       const cached = this.compilationCache.get(compilationKey);
 
       if (cached) {
-        cache_hit = true;
+        cacheHit = true;
         sqlString = cached.sqlString;
         sqlStatement = cached.sqlAST;
       } else {
@@ -162,10 +162,10 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         let ast = this.parseCache.get(queryHash);
 
         if (ast) {
-          parse_ms = Date.now() - parseStart;
+          parseMs = Date.now() - parseStart;
         } else {
           const parseResult = this.parseEdgeQLQuery(request.query);
-          parse_ms = Date.now() - parseStart;
+          parseMs = Date.now() - parseStart;
 
           if (!parseResult.success) {
             return {
@@ -186,7 +186,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         parsedAST = ast;
 
         // Set access context before compilation (affects generated SQL)
-        if (this.options.enable_access_policies && context.auth) {
+        if (this.options.enableAccessPolicies && context.auth) {
           this.compiler.setAccessContext(
             authContextToAccessContext(context.auth),
           );
@@ -195,7 +195,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         // Compile EdgeQL to SQL
         const compileStart = Date.now();
         const compileResult = this.compiler.compile(ast);
-        compile_ms = Date.now() - compileStart;
+        compileMs = Date.now() - compileStart;
 
         if (!compileResult.ok) {
           return {
@@ -226,24 +226,24 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         request.variables || {},
         context,
       );
-      const execute_ms = Date.now() - executeStart;
+      const executeMs = Date.now() - executeStart;
 
-      const duration_ms = Date.now() - start_time;
+      const durationMs = Date.now() - startTime;
 
       // Accumulate metrics
       this.metrics.totalQueries++;
-      this.metrics.totalParseMs += parse_ms;
-      this.metrics.totalCompileMs += compile_ms;
-      this.metrics.totalExecuteMs += execute_ms;
+      this.metrics.totalParseMs += parseMs;
+      this.metrics.totalCompileMs += compileMs;
+      this.metrics.totalExecuteMs += executeMs;
 
-      if (cache_hit) {
+      if (cacheHit) {
         this.metrics.cacheHits++;
       }
 
       // Slow query logging
-      const threshold = this.options.slow_query_threshold_ms ?? 1000;
+      const threshold = this.options.slowQueryThresholdMs ?? 1000;
 
-      if (duration_ms >= threshold) {
+      if (durationMs >= threshold) {
         const truncatedQuery = request.query.length > 200
           ? request.query.substring(0, 200) + "..."
           : request.query;
@@ -252,11 +252,11 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
           : sqlString;
 
         log.warn("Slow query", {
-          duration_ms,
-          parse_ms,
-          compile_ms,
-          execute_ms,
-          cache_hit,
+          durationMs,
+          parseMs,
+          compileMs,
+          executeMs,
+          cacheHit,
           query: truncatedQuery,
           sql: truncatedSQL,
         });
@@ -266,20 +266,20 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       const response: Types.QueryResponse = {
         data: result.data,
         extensions: {
-          duration_ms,
-          parse_ms,
-          compile_ms,
-          execute_ms,
-          cache_hit,
-          query_hash: queryHash,
-          sql: this.options.enable_explain ? sqlString : undefined,
-          compilation_info: this.options.enable_explain
+          durationMs,
+          parseMs,
+          compileMs,
+          executeMs,
+          cacheHit,
+          queryHash: queryHash,
+          sql: this.options.enableExplain ? sqlString : undefined,
+          compilation_info: this.options.enableExplain
             ? {
               ast: parsedAST,
               sql_ast: sqlStatement,
             }
             : undefined,
-          explain_plan: this.options.enable_explain
+          explain_plan: this.options.enableExplain
             ? await this.getExplainPlan(queryHash, sqlString)
             : undefined,
         },
@@ -304,8 +304,8 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
             message: error.message,
             extensions: {
               code: "TIMEOUT",
-              duration_ms: Date.now() - start_time,
-              timeout_ms: error.timeoutMs,
+              durationMs: Date.now() - startTime,
+              timeoutMs: error.timeoutMs,
             },
           }],
         };
@@ -320,14 +320,14 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
           message: errorMessage,
           extensions: {
             code: "EXECUTION_ERROR",
-            duration_ms: Date.now() - start_time,
+            durationMs: Date.now() - startTime,
           },
         }],
       };
     }
   }
 
-  validate_request(request: Types.QueryRequest): Types.QueryError[] {
+  validateRequest(request: Types.QueryRequest): Types.QueryError[] {
     const errors: Types.QueryError[] = [];
 
     // Check if query is provided
@@ -356,8 +356,8 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
 
     // Basic EdgeQL syntax validation
     if (request.query) {
-      const syntax_errors = this.validate_edgeql_syntax(request.query);
-      errors.push(...syntax_errors);
+      const syntaxErrors = this.validate_edgeql_syntax(request.query);
+      errors.push(...syntaxErrors);
     }
 
     return errors;
@@ -595,20 +595,20 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     context: Types.QueryContext,
   ): Promise<{ data: any; warnings?: string[] }> {
     log.info("Executing SQL", {
-      session_id: context.session.session_id,
+      sessionId: context.session.sessionId,
       sql,
     });
     log.info("Query variables", {
-      session_id: context.session.session_id,
+      sessionId: context.session.sessionId,
       variables: JSON.stringify(variables),
     });
 
-    if (this.options.dry_run) {
+    if (this.options.dryRun) {
       return {
         data: {
           sql,
           variables,
-          dry_run: true,
+          dryRun: true,
         },
         warnings: ["Query executed in dry-run mode"],
       };
@@ -618,7 +618,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     if (this.pool) {
       try {
         const params = this.prepareParameters(variables);
-        const timeoutMs = this.options.request_timeout ?? 0;
+        const timeoutMs = this.options.requestTimeout ?? 0;
 
         const result = timeoutMs > 0
           ? await this.pool.queryWithTimeout(sql, params, timeoutMs)
@@ -695,7 +695,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         data: {
           executed: true,
           sql: sql.substring(0, 100),
-          session_id: context.session.session_id,
+          sessionId: context.session.sessionId,
           timestamp: new Date().toISOString(),
         },
       };
@@ -706,18 +706,18 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     const errors: Types.QueryError[] = [];
 
     // Basic syntax checks
-    const balanced_braces = this.check_balanced_braces(query);
-    if (!balanced_braces.valid) {
+    const balancedBraces = this.check_balanced_braces(query);
+    if (!balancedBraces.valid) {
       errors.push({
-        message: `Unbalanced braces at position ${balanced_braces.position}`,
-        locations: [{ line: 1, column: balanced_braces.position }],
+        message: `Unbalanced braces at position ${balancedBraces.position}`,
+        locations: [{ line: 1, column: balancedBraces.position }],
         extensions: { code: "SYNTAX_ERROR" },
       });
     }
 
     // Check for valid EdgeQL query start
     const normalized = query.trim().toLowerCase();
-    const valid_start_keywords = [
+    const validStartKeywords = [
       "select",
       "insert",
       "update",
@@ -728,11 +728,11 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       "configure",
     ];
 
-    const starts_with_valid = valid_start_keywords.some((keyword) =>
+    const startsWithValid = validStartKeywords.some((keyword) =>
       normalized.startsWith(keyword)
     );
 
-    if (!starts_with_valid && normalized.length > 0) {
+    if (!startsWithValid && normalized.length > 0) {
       errors.push({
         message: "Query must start with a valid EdgeQL statement",
         extensions: { code: "SYNTAX_ERROR" },
@@ -770,7 +770,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         id: "01234567-89ab-cdef-0123-456789abcdef",
         name: "Alice Johnson",
         email: "alice@example.com",
-        created_at: "2024-01-15T10:30:00Z",
+        createdAt: "2024-01-15T10:30:00Z",
         active: true,
         age: 29,
       },
@@ -778,7 +778,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         id: "11234567-89ab-cdef-0123-456789abcdef",
         name: "Bob Smith",
         email: "bob@example.com",
-        created_at: "2024-01-20T09:15:00Z",
+        createdAt: "2024-01-20T09:15:00Z",
         active: true,
         age: 35,
       },
@@ -790,7 +790,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       id: `${Date.now()}-89ab-cdef-0123-456789abcdef`,
       name: "New User",
       email: "newuser@example.com",
-      created_at: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
       active: true,
       age: null,
     };
@@ -801,10 +801,10 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       id: "01234567-89ab-cdef-0123-456789abcdef",
       name: "Alice Johnson Updated",
       email: "alice.updated@example.com",
-      created_at: "2024-01-15T10:30:00Z",
+      createdAt: "2024-01-15T10:30:00Z",
       active: true,
       age: 30,
-      updated_at: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
   }
 
@@ -893,7 +893,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
   getStats(): {
     cache?: Types.ServerStats["cache"];
     explain_cache?: ExplainCacheStats;
-    query_metrics?: Types.ServerStats["query_metrics"];
+    queryMetrics?: Types.ServerStats["queryMetrics"];
   } {
     const compilationStats = this.compilationCache.stats();
     const parseStats = this.parseCache.stats();
@@ -922,7 +922,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         },
       },
       explain_cache: this.explainCache?.stats(),
-      query_metrics: metrics,
+      queryMetrics: metrics,
     };
   }
 
@@ -943,7 +943,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     try {
       const start = Date.now();
       await this.pool.query("SELECT 1");
-      const latency_ms = Date.now() - start;
+      const latencyMs = Date.now() - start;
 
       const poolStats = this.buildPoolStats();
       const status: Types.HealthStatus["status"] = poolStats.waiters > 0
@@ -952,7 +952,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
 
       return {
         status,
-        database: { connected: true, latency_ms },
+        database: { connected: true, latencyMs },
         pool: poolStats,
       };
     } catch (_error) {

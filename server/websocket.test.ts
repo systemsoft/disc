@@ -128,9 +128,9 @@ class WebSocketServerHarness {
     this.server = new DiscServer({
       host: TEST_HOST,
       port: TEST_PORT,
-      enable_cors: true,
-      enable_websockets: true,
-      dry_run: true,
+      enableCors: true,
+      enableWebsockets: true,
+      dryRun: true,
     });
 
     this.server_promise = this.server.start();
@@ -481,9 +481,9 @@ Deno.test({
       client.send({
         type: "query",
         payload: {
-          query: "select User filter .id = <uuid>$user_id { name, email }",
+          query: "select User filter .id = <uuid>$userId { name, email }",
           variables: {
-            user_id: "01234567-89ab-cdef-0123-456789abcdef",
+            userId: "01234567-89ab-cdef-0123-456789abcdef",
           },
         },
       });

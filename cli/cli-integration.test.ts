@@ -22,7 +22,7 @@ import {
 import { CLICommands } from "./commands.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
 import * as Context from "../compiler/context.ts";
-import { create_server_from_env, DiscServer } from "../server/server.ts";
+import { createServerFromEnv, DiscServer } from "../server/server.ts";
 import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
@@ -85,7 +85,7 @@ async function tableExists(dsn: string, tableName: string): Promise<boolean> {
     const result = await client.queryObject<{ exists: boolean }>(
       `SELECT EXISTS (
         SELECT 1 FROM information_schema.tables
-        WHERE table_schema = 'public' AND table_name = $1
+        WHERE table_schema = 'public' AND tableName = $1
       ) AS exists`,
       [tableName],
     );
@@ -354,7 +354,7 @@ Deno.test(
       host: "localhost",
       port: 0,
       schema,
-      dry_run: true,
+      dryRun: true,
     });
 
     assertExists(server, "DiscServer should be created with schema option");
@@ -373,7 +373,7 @@ Deno.test(
     const server = new DiscServer({
       host: "localhost",
       port: 0,
-      dry_run: true,
+      dryRun: true,
     });
 
     assertExists(server, "DiscServer should be created without schema option");
@@ -384,15 +384,15 @@ Deno.test(
 );
 
 // ---------------------------------------------------------------------------
-// 9. create_server_from_env passes schema through
+// 9. createServerFromEnv passes schema through
 // ---------------------------------------------------------------------------
 Deno.test(
-  "CLI Integration - create_server_from_env passes schema through",
+  "CLI Integration - createServerFromEnv passes schema through",
   () => {
     const schema = Context.createTestSchema();
-    const server = create_server_from_env(undefined, schema);
+    const server = createServerFromEnv(undefined, schema);
 
-    assertExists(server, "create_server_from_env should return a DiscServer");
+    assertExists(server, "createServerFromEnv should return a DiscServer");
 
     const config = server.get_config();
     assertExists(config, "Server should have a config");
@@ -656,7 +656,7 @@ Deno.test({
         "Plan should have at least one migration",
       );
       assert(
-        plan.operations_count > 0,
+        plan.operationsCount > 0,
         "Plan should have at least one operation",
       );
 
