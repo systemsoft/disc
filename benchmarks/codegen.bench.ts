@@ -16,14 +16,17 @@ const queries: Record<string, string> = {
   "simple": "SELECT User { name }",
   "complex":
     "SELECT User { name, email, posts: { title, body } } FILTER .name = 'Alice' ORDER BY .name LIMIT 10",
-  "insert":
-    "INSERT User { name := 'Alice', email := 'alice@example.com' }",
-  "update":
-    "UPDATE User FILTER .name = 'Alice' SET { name := 'Bob' }",
+  "insert": "INSERT User { name := 'Alice', email := 'alice@example.com' }",
+  "update": "UPDATE User FILTER .name = 'Alice' SET { name := 'Bob' }",
 };
 
 // Pre-compile to SQL ASTs
-const sqlAsts: Record<string, ReturnType<SQLCodeGenerator["generate"]> extends string ? Parameters<SQLCodeGenerator["generate"]>[0] : never> = {};
+const sqlAsts: Record<
+  string,
+  ReturnType<SQLCodeGenerator["generate"]> extends string
+    ? Parameters<SQLCodeGenerator["generate"]>[0]
+    : never
+> = {};
 
 for (const [name, query] of Object.entries(queries)) {
   const parser = new EdgeQLParser(query);

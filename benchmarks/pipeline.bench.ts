@@ -13,13 +13,10 @@ const schema = createTestSchema();
 
 const queries: Record<string, string> = {
   "simple select": "SELECT User { name }",
-  "filtered select":
-    "SELECT User { name } FILTER .name = 'Alice'",
+  "filtered select": "SELECT User { name } FILTER .name = 'Alice'",
   "nested shape": "SELECT User { name, posts: { title } }",
-  "insert":
-    "INSERT User { name := 'Alice', email := 'alice@example.com' }",
-  "update":
-    "UPDATE User FILTER .name = 'Alice' SET { name := 'Bob' }",
+  "insert": "INSERT User { name := 'Alice', email := 'alice@example.com' }",
+  "update": "UPDATE User FILTER .name = 'Alice' SET { name := 'Bob' }",
   "delete": "DELETE User FILTER .name = 'Alice'",
   "complex":
     "SELECT User { name, email, posts: { title, body } } FILTER .name = 'Alice' ORDER BY .name LIMIT 10",

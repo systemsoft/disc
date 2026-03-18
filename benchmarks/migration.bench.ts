@@ -8,8 +8,8 @@ import { SchemaDiffer } from "../migration/differ.ts";
 import type { Module } from "../schema/converter.ts";
 import type {
   Identifier,
-  PropertyDeclaration,
   LinkDeclaration,
+  PropertyDeclaration,
   TypeDeclaration,
   TypeRef,
 } from "../schema/ast.ts";
@@ -112,15 +112,17 @@ const multiTypeSchema: Module[] = [
 ];
 
 const largeSchema: Module[] = [
-  mod("default", Array.from({ length: 20 }, (_, i) =>
-    typeDef(`Type${i}`, [
-      prop("id", "uuid", { required: true }),
-      prop("name", "str", { required: true }),
-      prop("description", "str"),
-      prop("createdAt", "datetime", { required: true }),
-      prop("updatedAt", "datetime"),
-    ])
-  )),
+  mod(
+    "default",
+    Array.from({ length: 20 }, (_, i) =>
+      typeDef(`Type${i}`, [
+        prop("id", "uuid", { required: true }),
+        prop("name", "str", { required: true }),
+        prop("description", "str"),
+        prop("createdAt", "datetime", { required: true }),
+        prop("updatedAt", "datetime"),
+      ])),
+  ),
 ];
 
 const differ = new SchemaDiffer();
