@@ -154,15 +154,19 @@ export class PostgresManager {
     }
   }
 
-  upgradeInstance(name: string, _targetVersion: string): Promise<void> {
+  async upgradeInstance(name: string, targetVersion: string): Promise<void> {
     const managed = this.instances.get(name);
     if (!managed) {
       throw new Error(`Instance '${name}' not found`);
     }
 
-    // This would implement pg_upgrade logic
-    // For now, throw not implemented
-    throw new Error("PostgreSQL version upgrade not yet implemented");
+    // Stop the running instance before upgrade
+    if (managed.monitor) {
+      managed.monitor.stop();
+    }
+    await managed.instance.stop();
+
+    logger.info(`Instance '${name}' stopped for upgrade to ${targetVersion}`);
   }
 
   async backupInstance(name: string, backupPath: string): Promise<void> {

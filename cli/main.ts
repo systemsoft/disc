@@ -27,6 +27,8 @@ COMMANDS:
   serve         Start the Disc server (includes PostgreSQL)
   ui            Open admin UI in browser
   watch         Watch schema files and auto-migrate in dev
+  pg log         View PostgreSQL logs
+  pg upgrade     Upgrade PostgreSQL version
 
 OPTIONS:
   -h, --help           Show this help message
@@ -50,6 +52,10 @@ OPTIONS:
   --enable-access-policies  Enable access policy enforcement (requires --enable-auth)
   --tls-cert <path>    Path to TLS certificate file
   --tls-key <path>     Path to TLS private key file
+  -f, --follow           Follow log output (pg log)
+  --lines <n>            Number of log lines to show (default: 50)
+  --level <level>        Filter logs by level (ERROR, WARNING, LOG, FATAL, PANIC)
+  --target-version <v>   Target PostgreSQL version for upgrade
 
 EXAMPLES:
   disc init my-project                # Initialize new project with PostgreSQL
@@ -63,6 +69,11 @@ EXAMPLES:
   disc shell                          # Open EdgeQL REPL
   disc codegen                        # Generate TypeScript types
   disc serve                          # Start Disc server with PostgreSQL
+  disc pg log                           # View last 50 lines of PostgreSQL log
+  disc pg log -f                        # Follow PostgreSQL log output
+  disc pg log --level ERROR             # Show only ERROR level log lines
+  disc pg upgrade --target-version 17.0 # Upgrade PostgreSQL to version 17.0
+  disc pg upgrade --target-version 17.0 --dry-run  # Preview upgrade plan
 `;
 
 async function main() {
@@ -83,6 +94,7 @@ async function main() {
       "no-monitor",
       "enable-auth",
       "enable-access-policies",
+      "follow",
     ],
     string: [
       "port",
@@ -100,6 +112,9 @@ async function main() {
       "jwt-secret",
       "tls-cert",
       "tls-key",
+      "lines",
+      "level",
+      "target-version",
     ],
     alias: {
       h: "help",
@@ -109,6 +124,7 @@ async function main() {
       s: "schema",
       o: "output",
       t: "target",
+      f: "follow",
     },
   }) as CLIArgs;
 
@@ -207,6 +223,39 @@ async function main() {
 
       case "ui": {
         await commands.ui(args);
+        break;
+      }
+
+      case "pg": {
+        const subcommand = String(args._[1] || "");
+        switch (subcommand) {
+          case "log":
+            await commands.pgLog({
+              lines: args.lines ? parseInt(String(args.lines)) : 50,
+              follow: args.follow || false,
+              level: args.level,
+              project: args.name,
+            });
+            break;
+          case "upgrade":
+            if (!args["target-version"]) {
+              console.error(
+                "Error: --target-version is required for pg upgrade",
+              );
+              Deno.exit(1);
+            }
+            await commands.pgUpgrade({
+              targetVersion: args["target-version"],
+              dryRun: args["dry-run"] || false,
+              backup: true,
+              project: args.name,
+            });
+            break;
+          default:
+            console.error(`Unknown pg subcommand: ${subcommand}`);
+            console.log("Available: pg log, pg upgrade");
+            Deno.exit(1);
+        }
         break;
       }
 

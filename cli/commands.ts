@@ -13,6 +13,8 @@ import { ConnectionPool } from "../lib/connection-pool.ts";
 import { initCommand, InitOptions } from "./init.ts";
 import { shellCommand, ShellOptions } from "./shell.ts";
 import { watchCommand, WatchOptions } from "./watch.ts";
+import { pgLogCommand, PgLogOptions } from "./pg-log.ts";
+import { pgUpgradeCommand, PgUpgradeOptions } from "./pg-upgrade.ts";
 import { PostgresManager } from "../postgres/mod.ts";
 
 export interface CLIArgs {
@@ -455,6 +457,20 @@ export class CLICommands {
       );
       throw error;
     }
+  }
+
+  /**
+   * View PostgreSQL logs
+   */
+  async pgLog(options: PgLogOptions): Promise<void> {
+    await pgLogCommand.execute(options);
+  }
+
+  /**
+   * Upgrade PostgreSQL version
+   */
+  async pgUpgrade(options: PgUpgradeOptions): Promise<void> {
+    await pgUpgradeCommand.execute(options);
   }
 
   private async createMigration(
