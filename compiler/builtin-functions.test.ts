@@ -5,13 +5,13 @@
 import { assertEquals, assertExists } from "@std/assert";
 import { getBuiltinFunctions } from "./builtin-functions.ts";
 
-Deno.test("getBuiltinFunctions returns a Map with at least 25 entries", () => {
+Deno.test("getBuiltinFunctions returns a Map with at least 32 entries", () => {
   const fns = getBuiltinFunctions();
   assertEquals(fns instanceof Map, true);
   assertEquals(
-    fns.size >= 25,
+    fns.size >= 32,
     true,
-    `Expected at least 25 functions, got ${fns.size}`,
+    `Expected at least 32 functions, got ${fns.size}`,
   );
 });
 
@@ -263,6 +263,71 @@ Deno.test("str_replace maps to SQL REPLACE with return type str", () => {
   assertEquals(fn.sqlName, "REPLACE");
   assertEquals(fn.returnType, "str");
   assertEquals(fn.args.length, 3);
+});
+
+// String search functions
+Deno.test("contains has 2 args and returns bool with no sqlName", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("contains");
+  assertExists(fn);
+  assertEquals(fn.sqlName, undefined);
+  assertEquals(fn.returnType, "bool");
+  assertEquals(fn.args.length, 2);
+});
+
+Deno.test("find has 2 args and returns int64 with no sqlName", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("find");
+  assertExists(fn);
+  assertEquals(fn.sqlName, undefined);
+  assertEquals(fn.returnType, "int64");
+  assertEquals(fn.args.length, 2);
+});
+
+Deno.test("str_pad_start maps to SQL LPAD with return type str", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("str_pad_start");
+  assertExists(fn);
+  assertEquals(fn.sqlName, "LPAD");
+  assertEquals(fn.returnType, "str");
+  assertEquals(fn.args.length, 3);
+});
+
+Deno.test("str_pad_end maps to SQL RPAD with return type str", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("str_pad_end");
+  assertExists(fn);
+  assertEquals(fn.sqlName, "RPAD");
+  assertEquals(fn.returnType, "str");
+  assertEquals(fn.args.length, 3);
+});
+
+// Type casting functions
+Deno.test("to_str has 1 arg and returns str with no sqlName", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("to_str");
+  assertExists(fn);
+  assertEquals(fn.sqlName, undefined);
+  assertEquals(fn.returnType, "str");
+  assertEquals(fn.args.length, 1);
+});
+
+Deno.test("to_int64 has 1 arg and returns int64 with no sqlName", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("to_int64");
+  assertExists(fn);
+  assertEquals(fn.sqlName, undefined);
+  assertEquals(fn.returnType, "int64");
+  assertEquals(fn.args.length, 1);
+});
+
+Deno.test("to_float64 has 1 arg and returns float64 with no sqlName", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("to_float64");
+  assertExists(fn);
+  assertEquals(fn.sqlName, undefined);
+  assertEquals(fn.returnType, "float64");
+  assertEquals(fn.args.length, 1);
 });
 
 Deno.test("each call returns a fresh Map instance", () => {

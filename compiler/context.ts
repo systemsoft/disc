@@ -4,6 +4,7 @@
 
 import { getBuiltinFunctions } from "./builtin-functions.ts";
 import * as EdgeQLAST from "../edgeql/ast.ts";
+import * as SQL from "./sql.ts";
 import type { AccessPolicy } from "../access/types.ts";
 
 export interface CompilationContext {
@@ -72,6 +73,7 @@ export interface VariableDef {
   name: string;
   type: string;
   expression: EdgeQLAST.Expression;
+  sqlOverride?: SQL.SQLExpression;
 }
 
 export function createContext(schema: Schema): CompilationContext {

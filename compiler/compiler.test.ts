@@ -474,7 +474,7 @@ Deno.test("SQL Compiler - FOR with single-element set", () => {
   assertEquals(sql.includes("'Alice'"), true);
 });
 
-Deno.test("SQL Compiler - FOR with subquery iterator errors", () => {
+Deno.test("SQL Compiler - FOR with subquery iterator produces LATERAL", () => {
   const source = `
     FOR user IN (SELECT User)
     UNION (
@@ -482,14 +482,104 @@ Deno.test("SQL Compiler - FOR with subquery iterator errors", () => {
       FILTER .email = "test"
     )
   `;
+  const sql = compileEdgeQL(source);
 
-  let threw = false;
-  try {
-    compileEdgeQL(source);
-  } catch {
-    threw = true;
-  }
-  assertEquals(threw, true);
+  assertEquals(sql.includes("LATERAL"), true);
+  assertEquals(sql.includes("for_iter"), true);
+  assertEquals(sql.includes("for_sub"), true);
+});
+
+Deno.test("SQL Compiler - FOR with subquery LATERAL structure", () => {
+  const source = `
+    FOR x IN (SELECT User)
+    UNION (
+      INSERT User {
+        name := x,
+        email := "copied@test.com"
+      }
+    )
+  `;
+  const sql = compileEdgeQL(source);
+
+  // Should produce FROM (iterator) AS for_iter(val), LATERAL (body) AS for_sub
+  assertEquals(sql.includes("LATERAL"), true);
+  assertEquals(sql.includes("for_iter"), true);
+  assertEquals(sql.includes("for_sub"), true);
+  assertEquals(sql.includes("INSERT INTO"), true);
+  assertEquals(sql.includes("for_iter"), true);
+});
+
+// contains() and find() compilation tests
+
+Deno.test("SQL Compiler - contains() compiles to STRPOS > 0", () => {
+  const source = `SELECT contains("hello world", "world")`;
+  const sql = compileEdgeQL(source);
+
+  assertEquals(sql.includes("STRPOS"), true);
+  assertEquals(sql.includes("> 0"), true);
+  assertEquals(sql.includes("'hello world'"), true);
+  assertEquals(sql.includes("'world'"), true);
+});
+
+Deno.test("SQL Compiler - find() compiles to STRPOS - 1", () => {
+  const source = `SELECT find("hello world", "world")`;
+  const sql = compileEdgeQL(source);
+
+  assertEquals(sql.includes("STRPOS"), true);
+  assertEquals(sql.includes("- 1"), true);
+  assertEquals(sql.includes("'hello world'"), true);
+  assertEquals(sql.includes("'world'"), true);
+});
+
+// Type cast function compilation tests
+
+Deno.test("SQL Compiler - to_str() compiles to CAST AS text", () => {
+  const source = `SELECT to_str(42)`;
+  const sql = compileEdgeQL(source);
+
+  assertEquals(sql.includes("CAST"), true);
+  assertEquals(sql.includes("AS text"), true);
+  assertEquals(sql.includes("42"), true);
+});
+
+Deno.test("SQL Compiler - to_int64() compiles to CAST AS bigint", () => {
+  const source = `SELECT to_int64("42")`;
+  const sql = compileEdgeQL(source);
+
+  assertEquals(sql.includes("CAST"), true);
+  assertEquals(sql.includes("AS bigint"), true);
+  assertEquals(sql.includes("'42'"), true);
+});
+
+Deno.test("SQL Compiler - to_float64() compiles to CAST AS double precision", () => {
+  const source = `SELECT to_float64("3.14")`;
+  const sql = compileEdgeQL(source);
+
+  assertEquals(sql.includes("CAST"), true);
+  assertEquals(sql.includes("AS double precision"), true);
+  assertEquals(sql.includes("'3.14'"), true);
+});
+
+// CastExpression codegen test
+
+Deno.test("SQL Code Generator - CastExpression", () => {
+  const codegen2 = new SQLCodeGenerator();
+  const sql = codegen2.generate({
+    kind: "SelectStatement",
+    select: {
+      kind: "SelectClause",
+      columns: [{
+        kind: "SelectItem",
+        expression: {
+          kind: "CastExpression",
+          expression: { kind: "LiteralExpression", type: "number", value: 42 },
+          targetType: "text",
+        },
+      }],
+    },
+  });
+
+  assertEquals(sql.includes("CAST(42 AS text)"), true);
 });
 
 // UnionAllStatement codegen test

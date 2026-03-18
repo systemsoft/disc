@@ -110,9 +110,25 @@ export class SQLCodeGenerator {
   }
 
   private generateTableReference(table: SQL.TableReference): string {
-    let sql = this.escapeIdentifier(table.name);
+    let sql: string;
+
+    if (table.subquery) {
+      const lateral = table.lateral ? "LATERAL " : "";
+      this.indentLevel++;
+      const subSql = this.generateStatement(table.subquery);
+      this.indentLevel--;
+      sql = `${lateral}(\n${this.indent()}  ${subSql}\n${this.indent()})`;
+    } else {
+      sql = this.escapeIdentifier(table.name);
+    }
+
     if (table.alias) {
       sql += " AS " + this.escapeIdentifier(table.alias);
+      if (table.columnAliases && table.columnAliases.length > 0) {
+        sql += "(" +
+          table.columnAliases.map((c) => this.escapeIdentifier(c)).join(", ") +
+          ")";
+      }
     }
 
     if (table.joins) {
@@ -257,6 +273,8 @@ export class SQLCodeGenerator {
         return this.generateAggregateExpression(expr);
       case "WindowFunctionExpression":
         return this.generateWindowFunctionExpression(expr);
+      case "CastExpression":
+        return this.generateCastExpression(expr);
       default:
         throw new Error(
           `Unsupported expression type: ${
@@ -422,6 +440,12 @@ export class SQLCodeGenerator {
     }
 
     return `${expr.function}(${args}) OVER (${over})`;
+  }
+
+  private generateCastExpression(expr: SQL.CastExpression): string {
+    return `CAST(${
+      this.generateExpression(expr.expression)
+    } AS ${expr.targetType})`;
   }
 
   private needsParentheses(expr: SQL.SQLExpression): boolean {

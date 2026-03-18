@@ -16,6 +16,42 @@ import {
   AccessSQLInjector,
 } from "../access/mod.ts";
 
+/** Maps EdgeQL type names to PostgreSQL type names */
+function edgeqlTypeToPgType(edgeqlType: string): string {
+  const typeMap: Record<string, string> = {
+    "str": "text",
+    "int16": "smallint",
+    "int32": "integer",
+    "int64": "bigint",
+    "float32": "real",
+    "float64": "double precision",
+    "bool": "boolean",
+    "bytes": "bytea",
+    "datetime": "timestamptz",
+    "duration": "interval",
+    "json": "jsonb",
+    "uuid": "uuid",
+    "bigint": "numeric",
+    "decimal": "numeric",
+    "sequence": "bigint",
+    "std::str": "text",
+    "std::int16": "smallint",
+    "std::int32": "integer",
+    "std::int64": "bigint",
+    "std::float32": "real",
+    "std::float64": "double precision",
+    "std::bool": "boolean",
+    "std::bytes": "bytea",
+    "std::datetime": "timestamptz",
+    "std::duration": "interval",
+    "std::json": "jsonb",
+    "std::uuid": "uuid",
+    "std::bigint": "numeric",
+    "std::decimal": "numeric",
+  };
+  return typeMap[edgeqlType] ?? edgeqlType;
+}
+
 export interface CompilerOptions {
   enableAccessControl?: boolean;
   accessConfig?: AccessConfig;
@@ -809,6 +845,7 @@ export class EdgeQLCompiler {
     // Check scope variables first (e.g., FOR loop variable)
     const varDef = this.ctx.currentScope.variables.get(identifier.name);
     if (varDef) {
+      if (varDef.sqlOverride) return varDef.sqlOverride;
       return this.compileExpression(varDef.expression);
     }
 
@@ -816,6 +853,7 @@ export class EdgeQLCompiler {
     for (let i = this.ctx.scopes.length - 1; i >= 0; i--) {
       const parentVar = this.ctx.scopes[i].variables.get(identifier.name);
       if (parentVar) {
+        if (parentVar.sqlOverride) return parentVar.sqlOverride;
         return this.compileExpression(parentVar.expression);
       }
     }
@@ -854,11 +892,57 @@ export class EdgeQLCompiler {
 
   private compileFunctionCall(
     funcCall: EdgeQLAST.FunctionCall,
-  ): SQL.FunctionCall {
+  ): SQL.SQLExpression {
     const functionName = funcCall.name.parts.join("_");
     const args = funcCall.args.map((arg) => this.compileExpression(arg.value));
 
-    // Map EdgeQL functions to SQL functions
+    // Special compilation for functions that aren't simple 1:1 mappings
+    switch (functionName) {
+      case "contains":
+        // contains(str, sub) → STRPOS(str, sub) > 0
+        if (args.length !== 2) {
+          throw new CompilationError("contains() requires exactly 2 arguments");
+        }
+        return SQL.createBinaryExpression(
+          ">",
+          SQL.createFunctionCall("STRPOS", args),
+          SQL.createLiteral("number", 0),
+        );
+
+      case "find":
+        // find(str, sub) → STRPOS(str, sub) - 1
+        // PG STRPOS is 1-indexed (0 = not found), EdgeQL find is 0-indexed (-1 = not found)
+        if (args.length !== 2) {
+          throw new CompilationError("find() requires exactly 2 arguments");
+        }
+        return SQL.createBinaryExpression(
+          "-",
+          SQL.createFunctionCall("STRPOS", args),
+          SQL.createLiteral("number", 1),
+        );
+
+      case "to_str":
+        if (args.length !== 1) {
+          throw new CompilationError("to_str() requires exactly 1 argument");
+        }
+        return SQL.createCastExpression(args[0], "text");
+
+      case "to_int64":
+        if (args.length !== 1) {
+          throw new CompilationError("to_int64() requires exactly 1 argument");
+        }
+        return SQL.createCastExpression(args[0], "bigint");
+
+      case "to_float64":
+        if (args.length !== 1) {
+          throw new CompilationError(
+            "to_float64() requires exactly 1 argument",
+          );
+        }
+        return SQL.createCastExpression(args[0], "double precision");
+    }
+
+    // Standard 1:1 function name mapping
     let sqlName = functionName;
     const funcDef = this.ctx.schema.functions.get(functionName);
     if (funcDef?.sqlName) {
@@ -877,11 +961,9 @@ export class EdgeQLCompiler {
   private compileTypeCast(cast: EdgeQLAST.TypeCast): SQL.SQLExpression {
     const expr = this.compileExpression(cast.expr);
     const typeName = cast.type.name.parts.join("::");
+    const pgType = edgeqlTypeToPgType(typeName);
 
-    return SQL.createFunctionCall("CAST", [
-      expr,
-      SQL.createLiteral("string", typeName),
-    ]);
+    return SQL.createCastExpression(expr, pgType);
   }
 
   private compilePathInExpression(path: EdgeQLAST.Path): SQL.SQLExpression {
@@ -1148,9 +1230,51 @@ export class EdgeQLCompiler {
       return SQL.unionAll(compiledQueries);
     }
 
-    // Subquery iterator would require LATERAL JOIN — deferred
+    // Subquery iterator: FOR x IN (SELECT ...) UNION (body)
+    // Compile to: SELECT for_sub.* FROM (iterator) AS for_iter(val), LATERAL (body) AS for_sub
+    if (query.iterator.kind === "Subquery") {
+      const iteratorStmt = this.compileQuery(query.iterator.query);
+
+      Context.pushScope(this.ctx);
+
+      // Bind variable to a column reference on the iterator alias
+      this.ctx.currentScope.variables.set(varName, {
+        name: varName,
+        type: "any",
+        expression: { kind: "Literal", type: "empty", value: null },
+        sqlOverride: SQL.createColumnReference("val", "for_iter"),
+      });
+
+      const bodyStmt = this.compileQuery(query.body);
+
+      Context.popScope(this.ctx);
+
+      // Build: SELECT for_sub.* FROM (iterator) AS for_iter(val), LATERAL (body) AS for_sub
+      return SQL.createSelectStatement({
+        select: SQL.createSelectClause([
+          SQL.createSelectItem(SQL.createColumnReference("*", "for_sub")),
+        ]),
+        from: SQL.createFromClause([
+          {
+            kind: "TableReference",
+            name: "",
+            subquery: iteratorStmt,
+            alias: "for_iter",
+            columnAliases: ["val"],
+          },
+          {
+            kind: "TableReference",
+            name: "",
+            subquery: bodyStmt,
+            lateral: true,
+            alias: "for_sub",
+          },
+        ]),
+      });
+    }
+
     throw new CompilationError(
-      "FOR query with subquery iterator not yet supported (use set literal)",
+      `FOR query iterator must be a set literal or subquery, got ${query.iterator.kind}`,
     );
   }
 

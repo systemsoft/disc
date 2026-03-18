@@ -157,6 +157,60 @@ export function getBuiltinFunctions(): Map<string, FunctionDef> {
       sqlName: "ROUND",
     }],
 
+    ["str_pad_start", {
+      name: "str_pad_start",
+      args: [
+        { name: "val", type: "str", required: true },
+        { name: "n", type: "int64", required: true },
+        { name: "fill", type: "str", required: false },
+      ],
+      returnType: "str",
+      sqlName: "LPAD",
+    }],
+    ["str_pad_end", {
+      name: "str_pad_end",
+      args: [
+        { name: "val", type: "str", required: true },
+        { name: "n", type: "int64", required: true },
+        { name: "fill", type: "str", required: false },
+      ],
+      returnType: "str",
+      sqlName: "RPAD",
+    }],
+    ["contains", {
+      name: "contains",
+      args: [
+        { name: "haystack", type: "str", required: true },
+        { name: "needle", type: "str", required: true },
+      ],
+      returnType: "bool",
+    }],
+    ["find", {
+      name: "find",
+      args: [
+        { name: "haystack", type: "str", required: true },
+        { name: "needle", type: "str", required: true },
+      ],
+      returnType: "int64",
+    }],
+
+    // Type casting functions (compiled to CAST expressions, no sqlName)
+    ["to_str", {
+      name: "to_str",
+      args: [{ name: "val", type: "any", required: true }],
+      returnType: "str",
+    }],
+    ["to_int64", {
+      name: "to_int64",
+      args: [{ name: "val", type: "any", required: true }],
+      returnType: "int64",
+    }],
+    ["to_float64", {
+      name: "to_float64",
+      args: [{ name: "val", type: "any", required: true }],
+      returnType: "float64",
+    }],
+
     // Datetime functions
     ["datetime_current", {
       name: "datetime_current",

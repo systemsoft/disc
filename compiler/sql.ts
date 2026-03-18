@@ -47,6 +47,9 @@ export interface TableReference extends SQLNode {
   kind: "TableReference";
   name: string;
   alias?: string;
+  subquery?: SQLStatement;
+  lateral?: boolean;
+  columnAliases?: string[];
   joins?: JoinClause[];
 }
 
@@ -165,7 +168,8 @@ export type SQLExpression =
   | ParameterReference
   | RawSQLExpression
   | AggregateExpression
-  | WindowFunctionExpression;
+  | WindowFunctionExpression
+  | CastExpression;
 
 export interface ColumnReference extends SQLExpressionBase {
   kind: "ColumnReference";
@@ -547,6 +551,24 @@ export interface WindowFrame extends SQLNode {
   start: string;
   end: string;
   exclude?: string;
+}
+
+// Type cast expression: CAST(expr AS type)
+export interface CastExpression extends SQLExpressionBase {
+  kind: "CastExpression";
+  expression: SQLExpression;
+  targetType: string;
+}
+
+export function createCastExpression(
+  expression: SQLExpression,
+  targetType: string,
+): CastExpression {
+  return {
+    kind: "CastExpression",
+    expression,
+    targetType,
+  };
 }
 
 export function aggregate(
