@@ -12,9 +12,6 @@ import {
   EnvMock,
 } from "../tests/test-utils.ts";
 import { commands } from "./commands.ts";
-import { canRunPgTests } from "../tests/pg-test-harness.ts";
-
-const RUN_PG = canRunPgTests();
 
 Deno.test("CLI Workflow - Complete project initialization", async () => {
   const console = new ConsoleCapture();
@@ -142,7 +139,7 @@ Deno.test("CLI Workflow - Code generation", async () => {
   }
 });
 
-Deno.test("CLI Workflow - Server configuration", async () => {
+Deno.test("CLI Workflow - Server configuration", () => {
   const console = new ConsoleCapture();
   const env = new EnvMock();
 
@@ -310,7 +307,7 @@ Deno.test("CLI Workflow - Command argument validation", async () => {
   }
 });
 
-Deno.test("CLI Workflow - Environment variable integration", async () => {
+Deno.test("CLI Workflow - Environment variable integration", () => {
   const env = new EnvMock();
 
   try {

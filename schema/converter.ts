@@ -40,7 +40,7 @@ export class SDLConverter {
     // If there are items not in a module, add them to default module
     if (defaultModuleItems.length > 0) {
       // Check if default module already exists
-      let defaultModule = modules.find((m) => m.name === "default");
+      const defaultModule = modules.find((m) => m.name === "default");
       if (defaultModule) {
         // Add items to existing default module
         defaultModule.items.push(...defaultModuleItems);

@@ -54,9 +54,9 @@ async function createE2EServer(port: number): Promise<{
       enableAuth: true,
     },
     protocolHandler: {
-      handleRequest: async (_req: any, ctx: any) => {
+      handleRequest: (_req: any, ctx: any) => {
         capturedContexts.push(ctx);
-        return { data: { result: "ok" } };
+        return Promise.resolve({ data: { result: "ok" } });
       },
       validateRequest: () => [],
     },
@@ -78,7 +78,7 @@ Deno.test({
     const { server, db, capturedContexts } = await createE2EServer(port);
     const base = `http://${TEST_HOST}:${port}`;
 
-    const serverPromise = server.start();
+    const _serverPromise = server.start();
     await new Promise((r) => setTimeout(r, 200));
 
     try {
@@ -99,9 +99,9 @@ Deno.test({
       assertEquals(registerBody.user.email, "e2e@test.com");
       assertEquals(registerBody.user.username, "e2euser");
 
-      const token = registerBody.token;
+      const _token = registerBody.token;
       const refreshToken = registerBody.refreshToken;
-      const sessionId = registerBody.session.id;
+      const _sessionId = registerBody.session.id;
 
       // 2. Login (separate flow)
       const loginRes = await fetch(`${base}/auth/login`, {
@@ -184,7 +184,7 @@ Deno.test({
     const { server, db, capturedContexts } = await createE2EServer(port);
     const base = `http://${TEST_HOST}:${port}`;
 
-    const serverPromise = server.start();
+    const _serverPromise = server.start();
     await new Promise((r) => setTimeout(r, 200));
 
     try {
@@ -216,7 +216,7 @@ Deno.test({
     const { server, db } = await createE2EServer(port);
     const base = `http://${TEST_HOST}:${port}`;
 
-    const serverPromise = server.start();
+    const _serverPromise = server.start();
     await new Promise((r) => setTimeout(r, 200));
 
     try {

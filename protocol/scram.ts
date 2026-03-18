@@ -24,7 +24,7 @@ export class ScramClient {
   /**
    * Generate client-first message for SCRAM-SHA-256
    */
-  async getInitialMessage(): Promise<string> {
+  getInitialMessage(): string {
     const gs2Header = "n,,"; // No channel binding
     const clientFirstBare = `n=${
       this.saslPrep(this.username)
@@ -217,6 +217,7 @@ export class ScramClient {
    */
   private saslPrep(str: string): string {
     // Remove non-printable ASCII characters
+    // deno-lint-ignore no-control-regex
     return str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
   }
 }

@@ -99,11 +99,11 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     return errors;
   }
 
-  private async execute_edgeql_query(
+  private execute_edgeql_query(
     query: string,
     variables: Record<string, any>,
     context: Types.QueryContext,
-  ): Promise<any> {
+  ): any {
     // Mock implementation - would integrate with real EdgeQL compiler
 
     // Simulate different types of queries
@@ -293,18 +293,16 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
 }
 
 export class GraphQLProtocolHandler implements Types.ProtocolHandler {
-  async handleRequest(
+  handleRequest(
     _request: Types.QueryRequest,
     _context: Types.QueryContext,
   ): Promise<Types.QueryResponse> {
-    // GraphQL implementation would go here
-    // For now, return not implemented
-    return {
+    return Promise.resolve({
       errors: [{
         message: "GraphQL protocol not yet implemented",
         extensions: { code: "NOT_IMPLEMENTED" },
       }],
-    };
+    });
   }
 
   validateRequest(_request: Types.QueryRequest): Types.QueryError[] {

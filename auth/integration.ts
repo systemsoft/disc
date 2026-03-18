@@ -153,7 +153,7 @@ export class AuthRoutes {
           }
 
           // Remove sensitive data
-          const { passwordHash, ...safeUser } = user;
+          const { passwordHash: _passwordHash, ...safeUser } = user;
 
           return new Response(JSON.stringify(safeUser), {
             status: 200,

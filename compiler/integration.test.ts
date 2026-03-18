@@ -2,7 +2,7 @@
  * Integration tests for EdgeQL to SQL compilation
  */
 
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import { assertStringIncludes } from "@std/assert";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { EdgeQLCompiler } from "./compiler.ts";
 import { SQLCodeGenerator } from "./codegen.ts";

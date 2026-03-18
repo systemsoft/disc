@@ -28,11 +28,11 @@ function createMockHandler(options?: {
   onUpdateSchema?: (schema: Schema) => void;
 }): ProtocolHandler {
   return {
-    async handleRequest(
+    handleRequest(
       _request: QueryRequest,
       _context: QueryContext,
     ): Promise<QueryResponse> {
-      return { data: null };
+      return Promise.resolve({ data: null });
     },
     validateRequest(_request: QueryRequest) {
       return [];

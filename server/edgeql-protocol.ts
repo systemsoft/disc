@@ -557,16 +557,18 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         })`;
       case "UnaryExpression":
         return `${expr.operator} ${this.generateExpression(expr.operand)}`;
-      case "FunctionCall":
+      case "FunctionCall": {
         const args = expr.args.map((arg) => this.generateExpression(arg)).join(
           ", ",
         );
         return `${expr.name}(${args})`;
-      case "JsonBuildObject":
+      }
+      case "JsonBuildObject": {
         const fields = expr.fields.map((field) =>
           `'${field.key}', ${this.generateExpression(field.value)}`
         ).join(", ");
         return `jsonb_build_object(${fields})`;
+      }
       case "ParameterReference":
         return `$${expr.index}`;
       default:

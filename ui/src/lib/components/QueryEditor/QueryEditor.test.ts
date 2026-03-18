@@ -58,7 +58,7 @@ describe("QueryEditor", () => {
     expect(mockOnExecute).toHaveBeenCalledWith(query);
   });
 
-  it("shows loading state during execution", async () => {
+  it("shows loading state during execution", () => {
     render(QueryEditor, {
       onExecute: mockOnExecute,
       loading: true,
@@ -81,7 +81,7 @@ describe("QueryEditor", () => {
       .toHaveClass("error-message");
   });
 
-  it("shows query history panel", async () => {
+  it("shows query history panel", () => {
     const history = [
       { query: "SELECT User { name }", timestamp: new Date(), success: true },
       { query: "SELECT Post { title }", timestamp: new Date(), success: false },
@@ -104,7 +104,7 @@ describe("QueryEditor", () => {
     ];
 
     let currentValue = "";
-    const { component } = render(QueryEditor, {
+    const { component: _component } = render(QueryEditor, {
       onExecute: mockOnExecute,
       showHistory: true,
       history,

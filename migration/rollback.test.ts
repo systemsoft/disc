@@ -250,7 +250,7 @@ Deno.test("Migration Engine - Execute Migration with Rollback on Error", async (
 
   // Mock the private executeStatements method to simulate a failure
   (engine as unknown as Record<string, unknown>).executeStatements =
-    async () => {
+    () => {
       throw new Error("Simulated database error");
     };
 

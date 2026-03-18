@@ -3,7 +3,7 @@
  * CLI Shell Command Implementation - Interactive EdgeQL REPL
  */
 
-import { TextLineStream } from "jsr:@std/streams/text-line-stream";
+import { TextLineStream } from "jsr:@std/streams@1.0.8/text-line-stream";
 import { DatabaseConnection } from "../lib/database.ts";
 import { PostgresManager } from "../postgres/manager.ts";
 import { join } from "@std/path";
@@ -104,7 +104,7 @@ export class DiscShell {
       if (this.session) {
         this.session.connected = true;
       }
-    } catch (error) {
+    } catch (_error) {
       console.log(
         "⚠️  Direct connection failed, checking for Disc-managed instance...",
       );

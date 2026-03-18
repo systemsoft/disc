@@ -87,7 +87,9 @@ export class ConsoleCapture {
   private errors: string[] = [];
 
   constructor() {
+    // deno-lint-ignore no-console
     this.originalLog = console.log;
+    // deno-lint-ignore no-console
     this.originalError = console.error;
   }
 
@@ -100,10 +102,12 @@ export class ConsoleCapture {
     this.logs = [];
     this.errors = [];
 
+    // deno-lint-ignore no-console
     console.log = (...args: unknown[]) => {
       this.logs.push(args.join(" "));
     };
 
+    // deno-lint-ignore no-console
     console.error = (...args: unknown[]) => {
       this.errors.push(args.join(" "));
     };
@@ -115,7 +119,9 @@ export class ConsoleCapture {
   }
 
   stop(): void {
+    // deno-lint-ignore no-console
     console.log = this.originalLog;
+    // deno-lint-ignore no-console
     console.error = this.originalError;
   }
 

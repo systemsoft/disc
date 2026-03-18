@@ -16,7 +16,7 @@ class WebSocketTestClient {
   private errors: any[] = [];
   private connected = false;
 
-  async connect(): Promise<void> {
+  connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       this.socket = new WebSocket(WS_URL);
 
@@ -60,7 +60,7 @@ class WebSocketTestClient {
     }
   }
 
-  async waitForMessage(timeout = 5000): Promise<any> {
+  waitForMessage(timeout = 5000): Promise<any> {
     return new Promise((resolve, reject) => {
       const checkForMessage = () => {
         if (this.messages.length > 0) {
@@ -86,7 +86,7 @@ class WebSocketTestClient {
     return [...this.errors];
   }
 
-  async closeAndWait(): Promise<void> {
+  closeAndWait(): Promise<void> {
     if (this.socket) {
       return new Promise((resolve) => {
         const prevOnClose = this.socket!.onclose;
@@ -100,6 +100,7 @@ class WebSocketTestClient {
         this.socket!.close();
       });
     }
+    return Promise.resolve();
   }
 
   close(): void {

@@ -3,9 +3,6 @@ import { join } from "@std/path";
 import { PostgresBinaryDownloader } from "./downloader.ts";
 import { ensureDir } from "@std/fs";
 
-// Skip guard: tests that require real PG binaries or archive extraction
-const HAS_PG_BINARY = !!Deno.env.get("DISC_PG_BINARY_PATH");
-
 const TEST_BASE_DIR = join(
   Deno.makeTempDirSync(),
   "disc-postgres-download-test",
@@ -95,7 +92,7 @@ Deno.test("PostgresBinaryDownloader - handles missing binaries", async () => {
   await Deno.remove(TEST_BASE_DIR, { recursive: true });
 });
 
-Deno.test("PostgresBinaryDownloader - validates checksums", async () => {
+Deno.test("PostgresBinaryDownloader - validates checksums", () => {
   const downloader = new PostgresBinaryDownloader(TEST_BASE_DIR);
 
   // Get manifest to verify it has checksums

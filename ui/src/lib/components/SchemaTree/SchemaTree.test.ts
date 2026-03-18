@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/svelte";
 import SchemaTree from "./SchemaTree.svelte";
 
@@ -113,7 +113,7 @@ describe("SchemaTree", () => {
   });
 
   it("highlights selected type", async () => {
-    const { component } = render(SchemaTree, {
+    const { component: _component } = render(SchemaTree, {
       schema: mockSchema,
       onTypeSelect: () => {},
     });

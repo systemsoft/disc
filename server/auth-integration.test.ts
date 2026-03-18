@@ -54,7 +54,7 @@ async function createAuthServer(): Promise<{
       enableAuth: true,
     },
     protocolHandler: {
-      handleRequest: async () => ({ data: { result: "ok" } }),
+      handleRequest: () => Promise.resolve({ data: { result: "ok" } }),
       validateRequest: () => [],
     },
     authProvider: provider,
@@ -78,7 +78,7 @@ function createNoAuthServer(port: number): HttpServer {
       enableWebsockets: false,
     },
     protocolHandler: {
-      handleRequest: async () => ({ data: { result: "ok" } }),
+      handleRequest: () => Promise.resolve({ data: { result: "ok" } }),
       validateRequest: () => [],
     },
   });
@@ -91,7 +91,7 @@ Deno.test("auth routes return 404 when auth not configured", async () => {
   const server = createNoAuthServer(port);
 
   // Start server in background
-  const serverPromise = server.start();
+  const _serverPromise = server.start();
 
   // Wait for server to start
   await new Promise((r) => setTimeout(r, 200));
@@ -118,7 +118,7 @@ Deno.test("root endpoint excludes auth when not configured", async () => {
   const port = TEST_PORT + Math.floor(Math.random() * 1000) + 2000;
   const server = createNoAuthServer(port);
 
-  const serverPromise = server.start();
+  const _serverPromise = server.start();
   await new Promise((r) => setTimeout(r, 200));
 
   try {
@@ -136,7 +136,7 @@ Deno.test("root endpoint excludes auth when not configured", async () => {
 Deno.test("root endpoint includes auth endpoints when configured", async () => {
   const { server, db, port } = await createAuthServer();
 
-  const serverPromise = server.start();
+  const _serverPromise = server.start();
   await new Promise((r) => setTimeout(r, 200));
 
   try {
@@ -157,7 +157,7 @@ Deno.test("root endpoint includes auth endpoints when configured", async () => {
 Deno.test("register and login flow via HTTP", async () => {
   const { server, db, port } = await createAuthServer();
 
-  const serverPromise = server.start();
+  const _serverPromise = server.start();
   await new Promise((r) => setTimeout(r, 200));
 
   try {
@@ -207,7 +207,7 @@ Deno.test({
   fn: async () => {
     const { server, db, port } = await createAuthServer();
 
-    const serverPromise = server.start();
+    const _serverPromise = server.start();
     await new Promise((r) => setTimeout(r, 200));
 
     try {
@@ -285,9 +285,9 @@ Deno.test({
         enableAuth: true,
       },
       protocolHandler: {
-        handleRequest: async (_req: any, ctx: any) => {
+        handleRequest: (_req: any, ctx: any) => {
           capturedContext = ctx;
-          return { data: { result: "ok" } };
+          return Promise.resolve({ data: { result: "ok" } });
         },
         validateRequest: () => [],
       },
@@ -296,7 +296,7 @@ Deno.test({
       authRoutes: routes,
     });
 
-    const serverPromise = server.start();
+    const _serverPromise = server.start();
     await new Promise((r) => setTimeout(r, 200));
 
     try {
@@ -344,7 +344,7 @@ Deno.test({
 Deno.test("query endpoint works without token (optional auth)", async () => {
   const { server, db, port } = await createAuthServer();
 
-  const serverPromise = server.start();
+  const _serverPromise = server.start();
   await new Promise((r) => setTimeout(r, 200));
 
   try {
@@ -366,7 +366,7 @@ Deno.test("query endpoint works without token (optional auth)", async () => {
 Deno.test("unknown auth endpoint returns 404", async () => {
   const { server, db, port } = await createAuthServer();
 
-  const serverPromise = server.start();
+  const _serverPromise = server.start();
   await new Promise((r) => setTimeout(r, 200));
 
   try {

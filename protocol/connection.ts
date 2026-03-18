@@ -88,9 +88,9 @@ export class ProtocolConnection {
   /**
    * Handle a single protocol message
    */
-  private async handleMessage(
+  private handleMessage(
     message: Types.Message,
-  ): Promise<Uint8Array | null> {
+  ): Uint8Array | null | Promise<Uint8Array> {
     switch (this.state) {
       case ConnectionState.AwaitingHandshake:
         if (message.type === Types.MessageType.ClientHandshake) {
@@ -182,9 +182,9 @@ export class ProtocolConnection {
     return this.builder.buildMessage(authSasl);
   }
 
-  private async handleSASLInitial(
+  private handleSASLInitial(
     message: Types.AuthenticationSASLInitialResponse,
-  ): Promise<Uint8Array> {
+  ): Uint8Array {
     if (message.mechanism !== "SCRAM-SHA-256") {
       return this.sendError(
         Types.ErrorSeverity.Fatal,
@@ -290,9 +290,9 @@ export class ProtocolConnection {
     }
   }
 
-  private async handleCommand(
+  private handleCommand(
     message: Types.Message,
-  ): Promise<Uint8Array | null> {
+  ): Uint8Array | null {
     switch (message.type) {
       case Types.MessageType.Parse:
         return this.handleParse(message as Types.ParseMessage);
@@ -320,7 +320,7 @@ export class ProtocolConnection {
     }
   }
 
-  private async handleParse(message: Types.ParseMessage): Promise<Uint8Array> {
+  private handleParse(message: Types.ParseMessage): Uint8Array {
     // This is where we would compile the EdgeQL query
     // For now, return a mock response
 
@@ -351,9 +351,9 @@ export class ProtocolConnection {
     return this.combineResponses(responses);
   }
 
-  private async handleExecute(
+  private handleExecute(
     message: Types.ExecuteMessage,
-  ): Promise<Uint8Array> {
+  ): Uint8Array {
     // This is where we would execute the compiled query
     // For now, return mock data
 

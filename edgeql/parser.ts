@@ -247,7 +247,7 @@ export class EdgeQLParser {
 
     const expr = this.parseExpression();
 
-    let using: AST.Identifier[] = [];
+    const using: AST.Identifier[] = [];
     if (
       this.check(TokenType.IDENT) && this.peek().value.toLowerCase() === "using"
     ) {
@@ -422,7 +422,7 @@ export class EdgeQLParser {
   }
 
   private parseIfElseExpression(): AST.Expression {
-    let expr = this.parseOrExpression();
+    const expr = this.parseOrExpression();
 
     if (this.match(TokenType.IF)) {
       const condition = this.parseOrExpression();

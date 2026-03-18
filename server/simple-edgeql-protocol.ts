@@ -466,11 +466,11 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
     return Object.values(variables);
   }
 
-  private async executeMockQuery(
+  private executeMockQuery(
     sql: string,
     _variables: Record<string, any>,
     context: Types.QueryContext,
-  ): Promise<{ data: any; warnings?: string[] }> {
+  ): { data: any; warnings?: string[] } {
     // Original mock implementation for fallback
     const normalizedSQL = sql.toLowerCase().trim();
 

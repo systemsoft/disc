@@ -145,7 +145,7 @@ Deno.test("CLI Commands - migrate apply workflow", async () => {
   }
 });
 
-Deno.test("CLI Commands - serve command configuration", async () => {
+Deno.test("CLI Commands - serve command configuration", () => {
   const console = new ConsoleCapture();
   const env = new EnvMock();
 
@@ -191,7 +191,7 @@ Deno.test("CLI Commands - serve command configuration", async () => {
   }
 });
 
-Deno.test("CLI Commands - shell command placeholder", async () => {
+Deno.test("CLI Commands - shell command placeholder", () => {
   const console = new ConsoleCapture();
 
   try {
@@ -258,7 +258,7 @@ Deno.test("CLI Commands - codegen workflow", async () => {
   }
 });
 
-Deno.test("CLI Commands - watch command placeholder", async () => {
+Deno.test("CLI Commands - watch command placeholder", () => {
   const console = new ConsoleCapture();
 
   try {
@@ -298,7 +298,7 @@ Deno.test("CLI Commands - error handling for invalid schema", async () => {
   }
 });
 
-Deno.test("CLI Commands - migration validation warnings", async () => {
+Deno.test("CLI Commands - migration validation warnings", () => {
   const console = new ConsoleCapture();
 
   try {
@@ -323,7 +323,7 @@ Deno.test("CLI Commands - migration validation warnings", async () => {
   }
 });
 
-Deno.test("CLI Commands - environment variable defaults", async () => {
+Deno.test("CLI Commands - environment variable defaults", () => {
   const env = new EnvMock();
 
   try {

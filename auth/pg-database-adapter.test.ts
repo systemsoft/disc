@@ -73,27 +73,30 @@ class FakeDatabaseConnection {
   private _connected = false;
   queryResult: QueryResult = { rows: [], rowCount: 0 };
 
-  async connect(): Promise<void> {
+  connect(): Promise<void> {
     this.calls.push({ method: "connect", args: [] });
     this._connected = true;
+    return Promise.resolve();
   }
 
-  async close(): Promise<void> {
+  close(): Promise<void> {
     this.calls.push({ method: "close", args: [] });
     this._connected = false;
+    return Promise.resolve();
   }
 
   isConnected(): boolean {
     return this._connected;
   }
 
-  async execute(sql: string, params?: any[]): Promise<void> {
+  execute(sql: string, params?: any[]): Promise<void> {
     this.calls.push({ method: "execute", args: [sql, params] });
+    return Promise.resolve();
   }
 
-  async query(sql: string, params?: any[]): Promise<QueryResult> {
+  query(sql: string, params?: any[]): Promise<QueryResult> {
     this.calls.push({ method: "query", args: [sql, params] });
-    return this.queryResult;
+    return Promise.resolve(this.queryResult);
   }
 
   async transaction<T>(fn: () => Promise<T>): Promise<T> {
@@ -178,8 +181,9 @@ Deno.test("PgDatabaseAdapter - transaction passes adapter to callback", async ()
 
   let receivedDb: DatabaseInterface | null = null;
 
-  await adapter.transaction(async (db) => {
+  await adapter.transaction((db) => {
     receivedDb = db;
+    return Promise.resolve();
   });
 
   // The callback should receive the adapter itself (for correct placeholder conversion)

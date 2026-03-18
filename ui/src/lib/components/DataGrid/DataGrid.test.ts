@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { fireEvent, render, screen } from "@testing-library/svelte";
 import DataGrid from "./DataGrid.svelte";
 
 describe("DataGrid", () => {
@@ -237,7 +237,7 @@ describe("DataGrid", () => {
         key: "actions",
         label: "Actions",
         sortable: false,
-        render: (value, row) => `Edit ${row.id}`,
+        render: (_value, row) => `Edit ${row.id}`,
       },
     ];
 

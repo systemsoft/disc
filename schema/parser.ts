@@ -769,7 +769,7 @@ export class SDLParser {
     const name = this.parseQualifiedName();
 
     let array = false;
-    let optional = false;
+    const optional = false;
 
     // Check for array syntax
     if (this.match(TokenType.LBRACKET)) {

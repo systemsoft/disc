@@ -529,7 +529,7 @@ Deno.test("Performance - Complex Schema with Deep Inheritance", () => {
   assertLessOrEqual(duration, 8000); // 8 seconds
 });
 
-Deno.test("Performance - Concurrent Migration Operations", async () => {
+Deno.test("Performance - Concurrent Migration Operations", () => {
   const numConcurrentOps = 50;
   const config = createPerformanceTestConfig();
   const operations: ReturnType<MigrationEngine["planMigration"]>[] = [];

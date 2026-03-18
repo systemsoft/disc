@@ -9,13 +9,15 @@ export class TestDatabase implements DatabaseInterface {
   private tables: Map<string, any[]> = new Map();
   private connected = false;
 
-  async connect(): Promise<void> {
+  connect(): Promise<void> {
     this.connected = true;
+    return Promise.resolve();
   }
 
-  async close(): Promise<void> {
+  close(): Promise<void> {
     this.connected = false;
     this.tables.clear();
+    return Promise.resolve();
   }
 
   isConnected(): boolean {
@@ -26,25 +28,25 @@ export class TestDatabase implements DatabaseInterface {
     await this.query(sql, params);
   }
 
-  async query(sql: string, params: any[] = []): Promise<QueryResult> {
+  query(sql: string, params: any[] = []): Promise<QueryResult> {
     const normalizedSQL = sql.replace(/\s+/g, " ").trim().toLowerCase();
 
     if (normalizedSQL.includes("create table")) {
       this.handleCreateTable(sql);
-      return { rows: [], rowCount: 0 };
+      return Promise.resolve({ rows: [], rowCount: 0 });
     } else if (normalizedSQL.includes("create index")) {
-      return { rows: [], rowCount: 0 };
+      return Promise.resolve({ rows: [], rowCount: 0 });
     } else if (normalizedSQL.startsWith("insert")) {
-      return this.handleInsert(sql, params);
+      return Promise.resolve(this.handleInsert(sql, params));
     } else if (normalizedSQL.startsWith("select")) {
-      return this.handleSelect(sql, params);
+      return Promise.resolve(this.handleSelect(sql, params));
     } else if (normalizedSQL.startsWith("update")) {
-      return this.handleUpdate(sql, [...params]);
+      return Promise.resolve(this.handleUpdate(sql, [...params]));
     } else if (normalizedSQL.startsWith("delete")) {
-      return this.handleDelete(sql, params);
+      return Promise.resolve(this.handleDelete(sql, params));
     }
 
-    return { rows: [], rowCount: 0 };
+    return Promise.resolve({ rows: [], rowCount: 0 });
   }
 
   async transaction<T>(fn: (db: TestDatabase) => Promise<T>): Promise<T> {
@@ -150,7 +152,7 @@ export class TestDatabase implements DatabaseInterface {
     const rightAlias = fromMatch[4];
     const joinLeftAlias = fromMatch[5];
     const joinLeftCol = fromMatch[6];
-    const joinRightAlias = fromMatch[7];
+    const _joinRightAlias = fromMatch[7];
     const joinRightCol = fromMatch[8];
 
     const leftRows = this.tables.get(leftTable) || [];
@@ -221,7 +223,7 @@ export class TestDatabase implements DatabaseInterface {
       const setClause = setMatch[1];
       // Split on comma but not inside parentheses
       const assignments = this.splitSetClause(setClause);
-      let setIdx = 0;
+      const setIdx = 0;
 
       rowsToUpdate.forEach((row) => {
         let localSetIdx = setIdx;

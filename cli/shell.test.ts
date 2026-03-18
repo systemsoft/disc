@@ -42,7 +42,7 @@ function createMockShellSession(options: ShellOptions = {}): ShellSession {
   };
 }
 
-async function mockShellCommand(options: ShellOptions = {}): Promise<string[]> {
+function mockShellCommand(options: ShellOptions = {}): string[] {
   const output: string[] = [];
 
   if (options.nonInteractive) {
@@ -179,7 +179,7 @@ Deno.test("CLI Shell - non-interactive mode", async () => {
   }
 });
 
-Deno.test("CLI Shell - help command output", async () => {
+Deno.test("CLI Shell - help command output", () => {
   const console = new ConsoleCapture();
 
   try {
@@ -214,7 +214,7 @@ Deno.test("CLI Shell - help command output", async () => {
   }
 });
 
-Deno.test("CLI Shell - list types command", async () => {
+Deno.test("CLI Shell - list types command", () => {
   const console = new ConsoleCapture();
 
   try {
@@ -237,7 +237,7 @@ Deno.test("CLI Shell - list types command", async () => {
   }
 });
 
-Deno.test("CLI Shell - detailed types command", async () => {
+Deno.test("CLI Shell - detailed types command", () => {
   const console = new ConsoleCapture();
 
   try {
@@ -273,7 +273,7 @@ Deno.test("CLI Shell - detailed types command", async () => {
   }
 });
 
-Deno.test("CLI Shell - query timing", async () => {
+Deno.test("CLI Shell - query timing", () => {
   const console = new ConsoleCapture();
 
   try {
@@ -294,7 +294,7 @@ Deno.test("CLI Shell - query timing", async () => {
   }
 });
 
-Deno.test("CLI Shell - connection error handling", async () => {
+Deno.test("CLI Shell - connection error handling", () => {
   const console = new ConsoleCapture();
 
   try {
@@ -360,7 +360,7 @@ insert Post {
   }
 });
 
-Deno.test("CLI Shell - command history", async () => {
+Deno.test("CLI Shell - command history", () => {
   const console = new ConsoleCapture();
 
   try {
@@ -387,7 +387,7 @@ Deno.test("CLI Shell - command history", async () => {
   }
 });
 
-Deno.test("CLI Shell - auto-completion simulation", async () => {
+Deno.test("CLI Shell - auto-completion simulation", () => {
   const console = new ConsoleCapture();
 
   try {
@@ -413,7 +413,7 @@ Deno.test("CLI Shell - auto-completion simulation", async () => {
   }
 });
 
-Deno.test("CLI Shell - multi-line query", async () => {
+Deno.test("CLI Shell - multi-line query", () => {
   const console = new ConsoleCapture();
 
   try {

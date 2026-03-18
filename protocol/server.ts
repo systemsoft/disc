@@ -86,7 +86,7 @@ export class ProtocolServer {
   /**
    * Start the server
    */
-  async start(): Promise<void> {
+  start(): void {
     if (this.running) {
       throw new Error("Server is already running");
     }
@@ -308,7 +308,7 @@ class Connection {
     }
   }
 
-  async close(): Promise<void> {
+  close(): void {
     if (!this.running) return;
     this.running = false;
 

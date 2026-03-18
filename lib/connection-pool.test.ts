@@ -50,7 +50,7 @@ Deno.test("ConnectionPool - initializes minimum connections", async () => {
   // Mock connect method for testing
   const originalConnect = DatabaseConnection.prototype.connect;
   let connectCount = 0;
-  DatabaseConnection.prototype.connect = async function () {
+  DatabaseConnection.prototype.connect = function () {
     connectCount++;
     return Promise.resolve();
   };
@@ -75,7 +75,7 @@ Deno.test("ConnectionPool - acquires and releases connections", async () => {
   });
 
   // Mock connect method
-  DatabaseConnection.prototype.connect = async function () {
+  DatabaseConnection.prototype.connect = function () {
     return Promise.resolve();
   };
 
@@ -110,7 +110,7 @@ Deno.test("ConnectionPool - respects max connections limit", async () => {
     connectionTimeout: 100, // Short timeout for testing
   });
 
-  DatabaseConnection.prototype.connect = async function () {
+  DatabaseConnection.prototype.connect = function () {
     return Promise.resolve();
   };
 
@@ -146,9 +146,9 @@ Deno.test("ConnectionPool - handles connection errors gracefully", async () => {
   });
 
   let connectAttempts = 0;
-  DatabaseConnection.prototype.connect = async function () {
+  DatabaseConnection.prototype.connect = function () {
     connectAttempts++;
-    throw new Error("Connection failed");
+    return Promise.reject(new Error("Connection failed"));
   };
 
   await assertRejects(
@@ -172,17 +172,17 @@ Deno.test("ConnectionPool - validates connections before returning", async () =>
   });
 
   let validateCalled = false;
-  DatabaseConnection.prototype.connect = async function () {
+  DatabaseConnection.prototype.connect = function () {
     return Promise.resolve();
   };
 
   // Mock query method for validation
-  DatabaseConnection.prototype.query = async function (sql: string) {
+  DatabaseConnection.prototype.query = function (sql: string) {
     if (sql === "SELECT 1") {
       validateCalled = true;
-      return { rows: [{ "?column?": 1 }], rowCount: 1 };
+      return Promise.resolve({ rows: [{ "?column?": 1 }], rowCount: 1 });
     }
-    return { rows: [], rowCount: 0 };
+    return Promise.resolve({ rows: [], rowCount: 0 });
   };
 
   await pool.initialize();
@@ -202,7 +202,7 @@ Deno.test("ConnectionPool - removes idle connections after timeout", async () =>
     idleTimeout: 100, // 100ms for testing
   });
 
-  DatabaseConnection.prototype.connect = async function () {
+  DatabaseConnection.prototype.connect = function () {
     return Promise.resolve();
   };
 
@@ -264,7 +264,7 @@ Deno.test("ConnectionPool - queues requests when pool is full", async () => {
     maxWaitQueueSize: 10,
   });
 
-  DatabaseConnection.prototype.connect = async function () {
+  DatabaseConnection.prototype.connect = function () {
     return Promise.resolve();
   };
 
@@ -300,7 +300,7 @@ Deno.test("ConnectionPool - rejects when wait queue is full", async () => {
     connectionTimeout: 100,
   });
 
-  DatabaseConnection.prototype.connect = async function () {
+  DatabaseConnection.prototype.connect = function () {
     return Promise.resolve();
   };
 
@@ -332,7 +332,7 @@ Deno.test("ConnectionPool - tracks statistics", async () => {
     maxConnections: 5,
   });
 
-  DatabaseConnection.prototype.connect = async function () {
+  DatabaseConnection.prototype.connect = function () {
     return Promise.resolve();
   };
 
@@ -366,18 +366,18 @@ Deno.test("ConnectionPool - executes query through pool", async () => {
     maxConnections: 5,
   });
 
-  DatabaseConnection.prototype.connect = async function () {
+  DatabaseConnection.prototype.connect = function () {
     return Promise.resolve();
   };
 
-  DatabaseConnection.prototype.query = async function (
+  DatabaseConnection.prototype.query = function (
     sql: string,
     params?: any[],
   ) {
     if (sql === "SELECT $1::text") {
-      return { rows: [{ text: params?.[0] }], rowCount: 1 };
+      return Promise.resolve({ rows: [{ text: params?.[0] }], rowCount: 1 });
     }
-    return { rows: [], rowCount: 0 };
+    return Promise.resolve({ rows: [], rowCount: 0 });
   };
 
   await pool.initialize();
@@ -399,11 +399,11 @@ Deno.test("ConnectionPool - executes transaction through pool", async () => {
   let transactionStarted = false;
   let transactionCommitted = false;
 
-  DatabaseConnection.prototype.connect = async function () {
+  DatabaseConnection.prototype.connect = function () {
     return Promise.resolve();
   };
 
-  DatabaseConnection.prototype.execute = async function (sql: string) {
+  DatabaseConnection.prototype.execute = function (sql: string) {
     if (sql === "BEGIN") transactionStarted = true;
     if (sql === "COMMIT") transactionCommitted = true;
     return Promise.resolve();
@@ -411,9 +411,9 @@ Deno.test("ConnectionPool - executes transaction through pool", async () => {
 
   await pool.initialize();
 
-  const result = await pool.transaction(async (_conn) => {
+  const result = await pool.transaction((_conn) => {
     assertEquals(transactionStarted, true);
-    return "success";
+    return Promise.resolve("success");
   });
 
   assertEquals(result, "success");

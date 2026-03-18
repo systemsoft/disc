@@ -145,9 +145,9 @@ export class SubscriptionHandler {
     this.connection_subscriptions.clear();
   }
 
-  private async start_subscription(
+  private start_subscription(
     subscription: ActiveSubscription,
-  ): Promise<void> {
+  ): void {
     // Send initial data
     const initialData = this.generate_mock_initial_data(subscription.query);
     this.send_data(subscription.websocket, subscription.id, initialData);

@@ -15,9 +15,7 @@ import type {
   AccessComparisonNode,
   AccessExpressionNode,
   AccessFunctionNode,
-  AccessGlobalNode,
   AccessLogicalNode,
-  AccessPathNode,
 } from "./ast.ts";
 import { ValidationError } from "../lib/errors.ts";
 

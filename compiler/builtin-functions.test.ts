@@ -4,7 +4,6 @@
 
 import { assertEquals, assertExists } from "@std/assert";
 import { getBuiltinFunctions } from "./builtin-functions.ts";
-import { FunctionDef } from "./context.ts";
 
 Deno.test("getBuiltinFunctions returns a Map with at least 12 entries", () => {
   const fns = getBuiltinFunctions();

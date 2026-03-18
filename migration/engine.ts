@@ -287,9 +287,9 @@ export class MigrationEngine {
   /**
    * Rollback a specific migration
    */
-  async rollbackMigration(
+  rollbackMigration(
     migrationId: string,
-  ): Promise<Result<boolean, MigrationError>> {
+  ): Result<boolean, MigrationError> {
     if (!this.appliedMigrations.has(migrationId)) {
       return Err(new MigrationError(`Migration ${migrationId} is not applied`));
     }
@@ -367,9 +367,9 @@ export class MigrationEngine {
   /**
    * Create a checkpoint before migration
    */
-  async createMigrationCheckpoint(
+  createMigrationCheckpoint(
     name: string,
-  ): Promise<Result<Types.MigrationCheckpoint, MigrationError>> {
+  ): Result<Types.MigrationCheckpoint, MigrationError> {
     try {
       const checkpoint: Types.MigrationCheckpoint = {
         id: this.generateCheckpointId(),
@@ -395,9 +395,9 @@ export class MigrationEngine {
   /**
    * Restore from a migration checkpoint
    */
-  async restoreFromCheckpoint(
+  restoreFromCheckpoint(
     checkpointId: string,
-  ): Promise<Result<boolean, MigrationError>> {
+  ): Result<boolean, MigrationError> {
     try {
       // In a real implementation, this would restore database state from checkpoint
       // For now, we simulate successful restore

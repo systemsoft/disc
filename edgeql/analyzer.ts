@@ -353,10 +353,11 @@ export class EdgeQLAnalyzer {
       case "Subquery":
         return this.analyzeQuery(expr.query);
 
-      case "ShapeExpr":
+      case "ShapeExpr": {
         const baseType = this.analyzeExpression(expr.expr);
         this.analyzeShape(expr.shape, baseType);
         return baseType;
+      }
 
       default:
         return undefined;

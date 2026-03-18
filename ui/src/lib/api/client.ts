@@ -101,6 +101,7 @@ export class DiscAPIClient {
 
       return await response.json();
     } catch (error) {
+      // deno-lint-ignore no-console
       console.error("Failed to fetch schema:", error);
       return [];
     }
@@ -121,6 +122,7 @@ export class DiscAPIClient {
 
       return await response.json();
     } catch (error) {
+      // deno-lint-ignore no-console
       console.error(`Failed to fetch type ${typeName}:`, error);
       return null;
     }
@@ -263,6 +265,7 @@ export class DiscAPIClient {
 
       return await response.json();
     } catch (error) {
+      // deno-lint-ignore no-console
       console.error("Failed to fetch migrations:", error);
       return [];
     }
@@ -284,7 +287,7 @@ export class DiscAPIClient {
       }
 
       return await response.json();
-    } catch (error) {
+    } catch (_error) {
       return {
         version: "unknown",
         connected: false,
