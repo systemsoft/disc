@@ -284,9 +284,14 @@ export class AuthProvider implements IAuthProvider {
 
   async refresh(refreshToken: string): Promise<AuthResponse> {
     // Find session by refresh token
+    // Use explicit columns with aliases to avoid duplicate field names
+    // (both sessions and users have id, created_at)
     const result = await this.db.query(
-      `SELECT s.*, u.* FROM sessions s 
-       JOIN users u ON s.user_id = u.id 
+      `SELECT s.id AS session_id, s.user_id, s.refresh_token, s.revoked,
+              u.id, u.email, u.username, u.password_hash,
+              u.created_at, u.updated_at, u.email_verified, u.active, u.metadata
+       FROM sessions s
+       JOIN users u ON s.user_id = u.id
        WHERE s.refresh_token = ? AND s.revoked = FALSE`,
       [refreshToken],
     );
@@ -301,7 +306,7 @@ export class AuthProvider implements IAuthProvider {
 
     const row = result.rows[0];
     const user = this.rowToUser(row);
-    const oldSessionId = row.id;
+    const oldSessionId = row.session_id;
 
     // Revoke old session
     await this.db.execute(
