@@ -429,15 +429,29 @@ export function withCTEs(ctes: CTE[], query: SQLStatement): CTEStatement {
   };
 }
 
+export type SetOperator = "UNION ALL" | "UNION" | "INTERSECT" | "EXCEPT";
+
 export interface UnionAllStatement extends SQLNode {
   kind: "UnionAllStatement";
   queries: SQLStatement[];
+  operator?: SetOperator;
 }
 
 export function unionAll(queries: SQLStatement[]): UnionAllStatement {
   return {
     kind: "UnionAllStatement",
     queries,
+  };
+}
+
+export function setOperation(
+  operator: SetOperator,
+  queries: SQLStatement[],
+): UnionAllStatement {
+  return {
+    kind: "UnionAllStatement",
+    queries,
+    operator,
   };
 }
 

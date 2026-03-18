@@ -428,6 +428,71 @@ Deno.test({
   },
 });
 
+// --- GROUP BY with HAVING ---
+
+Deno.test({
+  name:
+    "PG Phase 11.3: GROUP BY with FILTER (HAVING) returns only matching groups",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    try {
+      const { manager, schema } = await applyEmployeeSchema(pool);
+
+      // Seed data: eng has 3, sales has 2, ops has 1
+      await pool.query(`
+        INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
+          (gen_random_uuid(), 'Alice', 'eng', 100000, true),
+          (gen_random_uuid(), 'Bob', 'eng', 120000, true),
+          (gen_random_uuid(), 'Carol', 'eng', 110000, true),
+          (gen_random_uuid(), 'Dave', 'sales', 90000, true),
+          (gen_random_uuid(), 'Eve', 'sales', 95000, true),
+          (gen_random_uuid(), 'Frank', 'ops', 80000, true)
+      `);
+
+      // GROUP BY .department FILTER count(TestEmployee) > 2
+      // Only eng (3 employees) should pass; sales (2) and ops (1) should be excluded
+      const sql = compileEdgeQL(
+        "GROUP TestEmployee BY .department FILTER count(TestEmployee) > 2",
+        schema,
+      );
+
+      // Verify the compiled SQL contains HAVING
+      assertEquals(sql.includes("HAVING"), true, "SQL should contain HAVING");
+
+      const result = await pool.query(sql);
+
+      // Should return only 1 group (eng)
+      assertEquals(
+        result.rowCount,
+        1,
+        "Should return only 1 department group with > 2 employees",
+      );
+
+      // Verify the returned group is eng
+      const firstRow = result.rows[0];
+      const rowData = firstRow.jsonb_build_object ?? firstRow;
+      const key = (rowData as Record<string, unknown>).key as Record<
+        string,
+        unknown
+      >;
+      assertEquals(
+        key.department,
+        "eng",
+        "The only group should be 'eng'",
+      );
+
+      await manager.close();
+    } finally {
+      await cleanupEmployee(pool);
+      await pool.close();
+    }
+  },
+});
+
 // --- Aggregate: avg ---
 
 Deno.test({
@@ -641,7 +706,11 @@ Deno.test({
     try {
       // to_str: CAST(42 AS text)
       const strResult = await pool.query("SELECT CAST(42 AS text) AS val");
-      assertEquals(strResult.rows[0].val, "42", "CAST(42 AS text) should be '42'");
+      assertEquals(
+        strResult.rows[0].val,
+        "42",
+        "CAST(42 AS text) should be '42'",
+      );
 
       // to_int64: CAST('123' AS bigint)
       const intResult = await pool.query("SELECT CAST('123' AS bigint) AS val");
@@ -733,6 +802,571 @@ Deno.test({
         result.rowCount >= 1,
         true,
         "LATERAL query should return at least one row",
+      );
+
+      await manager.close();
+    } finally {
+      await cleanupEmployee(pool);
+      await pool.close();
+    }
+  },
+});
+
+// =========================================================================
+// Phase 11.1a — OFFSET tests
+// =========================================================================
+
+Deno.test({
+  name:
+    "PG Phase 11.1a: SELECT with OFFSET and LIMIT returns correct page of results",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    try {
+      const { manager, schema } = await applyEmployeeSchema(pool);
+
+      // Seed 10 rows with distinct names that sort alphabetically
+      await pool.query(`
+        INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
+          (gen_random_uuid(), 'Alice', 'eng', 100000, true),
+          (gen_random_uuid(), 'Bob', 'eng', 110000, true),
+          (gen_random_uuid(), 'Carol', 'sales', 120000, true),
+          (gen_random_uuid(), 'Dave', 'eng', 130000, true),
+          (gen_random_uuid(), 'Eve', 'ops', 140000, true),
+          (gen_random_uuid(), 'Frank', 'sales', 150000, true),
+          (gen_random_uuid(), 'Grace', 'eng', 160000, true),
+          (gen_random_uuid(), 'Hank', 'ops', 170000, true),
+          (gen_random_uuid(), 'Iris', 'sales', 180000, true),
+          (gen_random_uuid(), 'Jack', 'eng', 190000, true)
+      `);
+
+      // Compile EdgeQL: ORDER BY .name OFFSET 3 LIMIT 3
+      // Alphabetical order: Alice, Bob, Carol, Dave, Eve, Frank, Grace, Hank, Iris, Jack
+      // OFFSET 3 skips Alice, Bob, Carol -> returns Dave, Eve, Frank
+      const sql = compileEdgeQL(
+        "SELECT TestEmployee { name } ORDER BY .name OFFSET 3 LIMIT 3",
+        schema,
+      );
+
+      // Verify the SQL contains both OFFSET and LIMIT
+      assertEquals(sql.includes("OFFSET"), true, "SQL should contain OFFSET");
+      assertEquals(sql.includes("LIMIT"), true, "SQL should contain LIMIT");
+
+      // Execute the compiled SQL
+      const result = await pool.query(sql);
+
+      // Should return exactly 3 rows
+      assertEquals(
+        result.rowCount,
+        3,
+        "Should return exactly 3 rows with OFFSET 3 LIMIT 3",
+      );
+
+      // Extract names from JSON results and verify they are the correct 3
+      const names = result.rows.map((row: Record<string, unknown>) => {
+        const data = row.jsonb_build_object ?? row;
+        return (data as Record<string, unknown>).name;
+      });
+
+      assertEquals(
+        names.sort(),
+        ["Dave", "Eve", "Frank"],
+        "OFFSET 3 LIMIT 3 should return Dave, Eve, Frank (alphabetically 4th-6th)",
+      );
+
+      await manager.close();
+    } finally {
+      await cleanupEmployee(pool);
+      await pool.close();
+    }
+  },
+});
+
+// =========================================================================
+// Phase 11.1b — Subquery in expression position
+// =========================================================================
+
+Deno.test({
+  name:
+    "PG Phase 11.1b: FILTER .department IN (SELECT ...) subquery filters correctly",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    try {
+      const { manager, schema } = await applyEmployeeSchema(pool);
+
+      // Seed data across multiple departments
+      await pool.query(`
+        INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
+          (gen_random_uuid(), 'Alice', 'eng', 100000, true),
+          (gen_random_uuid(), 'Bob', 'eng', 120000, true),
+          (gen_random_uuid(), 'Carol', 'sales', 90000, false),
+          (gen_random_uuid(), 'Dave', 'ops', 80000, true),
+          (gen_random_uuid(), 'Eve', 'sales', 95000, true)
+      `);
+
+      // Use a subquery to get departments of active employees, then filter
+      // by that set. The subquery selects departments where active = true.
+      // eng (Alice, Bob), ops (Dave), sales (Eve) are active departments.
+      // Carol (sales, inactive) should still appear because sales has at
+      // least one active employee (Eve).
+      const sql = compileEdgeQL(
+        `SELECT TestEmployee { name, department }
+         FILTER .department IN (
+           SELECT TestEmployee.department FILTER .active = true
+         )`,
+        schema,
+      );
+
+      // Verify the SQL contains a subquery with IN
+      assertEquals(sql.includes("IN"), true, "SQL should contain IN");
+
+      // Execute the compiled SQL
+      const result = await pool.query(sql);
+
+      // All 5 employees should match because eng, sales, and ops all have
+      // at least one active employee
+      assertEquals(
+        result.rowCount,
+        5,
+        "All 5 employees should match since all departments have active members",
+      );
+
+      await manager.close();
+    } finally {
+      await cleanupEmployee(pool);
+      await pool.close();
+    }
+  },
+});
+
+// =========================================================================
+// Phase 11.2 — WITH / CTE name resolution
+// =========================================================================
+
+Deno.test({
+  name:
+    "PG Phase 11.2: WITH CTE filters active employees and body query references CTE name",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    try {
+      const { manager, schema } = await applyEmployeeSchema(pool);
+
+      // Seed data: mix of active and inactive employees
+      await pool.query(`
+        INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
+          (gen_random_uuid(), 'Alice', 'eng', 100000, true),
+          (gen_random_uuid(), 'Bob', 'eng', 120000, false),
+          (gen_random_uuid(), 'Carol', 'sales', 90000, true),
+          (gen_random_uuid(), 'Dave', 'ops', 80000, false)
+      `);
+
+      // Compile: WITH active_emps := (SELECT ... FILTER .active = true)
+      //          SELECT active_emps { name }
+      const sql = compileEdgeQL(
+        `WITH active_emps := (SELECT TestEmployee FILTER .active = true)
+         SELECT active_emps { name }`,
+        schema,
+      );
+
+      // Verify the SQL uses WITH and references the CTE
+      assertEquals(sql.includes("WITH"), true, "SQL should contain WITH");
+      assertEquals(
+        sql.includes("active_emps"),
+        true,
+        "SQL should reference the CTE name",
+      );
+
+      // Execute and verify only active employees are returned
+      const result = await pool.query(sql);
+      assertEquals(
+        result.rowCount,
+        2,
+        "Should return exactly 2 active employees (Alice, Carol)",
+      );
+
+      // Extract names and verify
+      const names = result.rows.map((row: Record<string, unknown>) => {
+        const data = row.jsonb_build_object ?? row;
+        return (data as Record<string, unknown>).name;
+      });
+      assertEquals(
+        names.sort(),
+        ["Alice", "Carol"],
+        "Active employees should be Alice and Carol",
+      );
+
+      await manager.close();
+    } finally {
+      await cleanupEmployee(pool);
+      await pool.close();
+    }
+  },
+});
+
+Deno.test({
+  name: "PG Phase 11.2: WITH CTE pre-computes filtered set used in main query",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    try {
+      const { manager, schema } = await applyEmployeeSchema(pool);
+
+      // Seed data with varying salaries
+      await pool.query(`
+        INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
+          (gen_random_uuid(), 'Alice', 'eng', 50000, true),
+          (gen_random_uuid(), 'Bob', 'eng', 100000, true),
+          (gen_random_uuid(), 'Carol', 'eng', 150000, true)
+      `);
+
+      // Use WITH to pre-compute a filtered set, then select from it
+      const sql = compileEdgeQL(
+        `WITH high_earners := (SELECT TestEmployee FILTER .salary > 80000)
+         SELECT high_earners { name, salary }`,
+        schema,
+      );
+
+      // Execute and verify
+      const result = await pool.query(sql);
+      assertEquals(
+        result.rowCount,
+        2,
+        "Should return 2 high earners (Bob=100k, Carol=150k)",
+      );
+
+      const names = result.rows.map((row: Record<string, unknown>) => {
+        const data = row.jsonb_build_object ?? row;
+        return (data as Record<string, unknown>).name;
+      });
+      assertEquals(
+        names.sort(),
+        ["Bob", "Carol"],
+        "High earners should be Bob and Carol",
+      );
+
+      await manager.close();
+    } finally {
+      await cleanupEmployee(pool);
+      await pool.close();
+    }
+  },
+});
+
+// =========================================================================
+// Phase 11.1c — INTERSECT / EXCEPT set operations
+// =========================================================================
+
+Deno.test({
+  name: "PG Phase 11.1c: INTERSECT returns only rows present in both queries",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    try {
+      const { manager, schema } = await applyEmployeeSchema(pool);
+
+      // Seed data: mix of active/inactive across departments
+      await pool.query(`
+        INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
+          (gen_random_uuid(), 'Alice', 'eng', 100000, true),
+          (gen_random_uuid(), 'Bob', 'eng', 120000, false),
+          (gen_random_uuid(), 'Carol', 'sales', 90000, true),
+          (gen_random_uuid(), 'Dave', 'eng', 110000, true),
+          (gen_random_uuid(), 'Eve', 'sales', 95000, false)
+      `);
+
+      // INTERSECT: active employees INTERSECT eng employees
+      // Active: Alice (eng), Carol (sales), Dave (eng)
+      // Eng: Alice (eng), Bob (eng), Dave (eng)
+      // Intersection: Alice (eng, active), Dave (eng, active)
+      const sql = compileEdgeQL(
+        `SELECT TestEmployee { name } FILTER .active = true
+         INTERSECT
+         SELECT TestEmployee { name } FILTER .department = "eng"`,
+        schema,
+      );
+
+      // Verify the SQL contains INTERSECT
+      assertEquals(
+        sql.includes("INTERSECT"),
+        true,
+        "SQL should contain INTERSECT",
+      );
+
+      const result = await pool.query(sql);
+
+      // Should return 2 rows: Alice and Dave (active AND eng)
+      assertEquals(
+        result.rowCount,
+        2,
+        "INTERSECT should return 2 employees (active AND eng)",
+      );
+
+      const names = result.rows.map((row: Record<string, unknown>) => {
+        const data = row.jsonb_build_object ?? row;
+        return (data as Record<string, unknown>).name;
+      });
+      assertEquals(
+        names.sort(),
+        ["Alice", "Dave"],
+        "INTERSECT should return Alice and Dave",
+      );
+
+      await manager.close();
+    } finally {
+      await cleanupEmployee(pool);
+      await pool.close();
+    }
+  },
+});
+
+// =========================================================================
+// Phase 11.4 — Window Functions E2E
+// =========================================================================
+
+Deno.test({
+  name:
+    "PG Phase 11.4: Window function row_number() OVER (PARTITION BY .department ORDER BY .salary DESC)",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    try {
+      const { manager, schema } = await applyEmployeeSchema(pool);
+
+      // Seed data: employees across departments with different salaries
+      await pool.query(`
+        INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
+          (gen_random_uuid(), 'Alice', 'eng', 120000, true),
+          (gen_random_uuid(), 'Bob', 'eng', 100000, true),
+          (gen_random_uuid(), 'Carol', 'eng', 110000, true),
+          (gen_random_uuid(), 'Dave', 'sales', 90000, true),
+          (gen_random_uuid(), 'Eve', 'sales', 95000, true)
+      `);
+
+      // Compile EdgeQL with window function
+      const sql = compileEdgeQL(
+        `SELECT TestEmployee {
+          name,
+          dept_rank := row_number() OVER (PARTITION BY .department ORDER BY .salary DESC)
+        }`,
+        schema,
+      );
+
+      // Verify the SQL contains window function constructs
+      assertEquals(
+        sql.includes("ROW_NUMBER()"),
+        true,
+        "SQL should contain ROW_NUMBER()",
+      );
+      assertEquals(
+        sql.includes("OVER"),
+        true,
+        "SQL should contain OVER",
+      );
+      assertEquals(
+        sql.includes("PARTITION BY"),
+        true,
+        "SQL should contain PARTITION BY",
+      );
+
+      // Execute the compiled SQL
+      const result = await pool.query(sql);
+
+      // Should return all 5 employees
+      assertEquals(
+        result.rowCount,
+        5,
+        "Should return all 5 employees with ranks",
+      );
+
+      // Extract the results and verify ranking within departments
+      const rows = result.rows.map((row: Record<string, unknown>) => {
+        const data = row.jsonb_build_object ?? row;
+        return data as Record<string, unknown>;
+      });
+
+      // eng department: Alice (120k) = rank 1, Carol (110k) = rank 2, Bob (100k) = rank 3
+      const engRows = rows.filter((r) =>
+        r.name === "Alice" || r.name === "Bob" || r.name === "Carol"
+      );
+      assertEquals(engRows.length, 3, "Should have 3 eng employees");
+
+      // Find Alice's rank (should be 1 — highest salary in eng)
+      const aliceRow = rows.find((r) => r.name === "Alice");
+      assertExists(aliceRow, "Alice should exist");
+      assertEquals(
+        Number(aliceRow.dept_rank),
+        1,
+        "Alice should be rank 1 in eng (highest salary)",
+      );
+
+      // sales department: Eve (95k) = rank 1, Dave (90k) = rank 2
+      const eveRow = rows.find((r) => r.name === "Eve");
+      assertExists(eveRow, "Eve should exist");
+      assertEquals(
+        Number(eveRow.dept_rank),
+        1,
+        "Eve should be rank 1 in sales (highest salary)",
+      );
+
+      await manager.close();
+    } finally {
+      await cleanupEmployee(pool);
+      await pool.close();
+    }
+  },
+});
+
+Deno.test({
+  name:
+    "PG Phase 11.4: Aggregate as window function: sum(.salary) OVER (ORDER BY .name)",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    try {
+      const { manager, schema } = await applyEmployeeSchema(pool);
+
+      // Seed data: 3 employees with known salaries
+      await pool.query(`
+        INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
+          (gen_random_uuid(), 'Alice', 'eng', 100, true),
+          (gen_random_uuid(), 'Bob', 'eng', 200, true),
+          (gen_random_uuid(), 'Carol', 'eng', 300, true)
+      `);
+
+      // sum(.salary) OVER (ORDER BY .name) produces a running total
+      const sql = compileEdgeQL(
+        `SELECT TestEmployee {
+          name,
+          running_total := sum(.salary) OVER (ORDER BY .name)
+        }`,
+        schema,
+      );
+
+      assertEquals(sql.includes("SUM("), true, "SQL should contain SUM(");
+      assertEquals(sql.includes("OVER"), true, "SQL should contain OVER");
+
+      const result = await pool.query(sql);
+      assertEquals(result.rowCount, 3, "Should return 3 employees");
+
+      // Extract and sort by name
+      const rows = result.rows.map((row: Record<string, unknown>) => {
+        const data = row.jsonb_build_object ?? row;
+        return data as Record<string, unknown>;
+      });
+
+      // Alphabetical order: Alice (100), Bob (200), Carol (300)
+      // Running totals: Alice=100, Bob=300, Carol=600
+      const aliceRow = rows.find((r) => r.name === "Alice");
+      assertExists(aliceRow, "Alice should exist");
+      assertEquals(
+        Number(aliceRow.running_total),
+        100,
+        "Alice running total should be 100",
+      );
+
+      const bobRow = rows.find((r) => r.name === "Bob");
+      assertExists(bobRow, "Bob should exist");
+      assertEquals(
+        Number(bobRow.running_total),
+        300,
+        "Bob running total should be 300",
+      );
+
+      const carolRow = rows.find((r) => r.name === "Carol");
+      assertExists(carolRow, "Carol should exist");
+      assertEquals(
+        Number(carolRow.running_total),
+        600,
+        "Carol running total should be 600",
+      );
+
+      await manager.close();
+    } finally {
+      await cleanupEmployee(pool);
+      await pool.close();
+    }
+  },
+});
+
+Deno.test({
+  name: "PG Phase 11.1c: EXCEPT returns rows in first query but not in second",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    try {
+      const { manager, schema } = await applyEmployeeSchema(pool);
+
+      // Seed data: mix of active/inactive across departments
+      await pool.query(`
+        INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
+          (gen_random_uuid(), 'Alice', 'eng', 100000, true),
+          (gen_random_uuid(), 'Bob', 'eng', 120000, false),
+          (gen_random_uuid(), 'Carol', 'sales', 90000, true),
+          (gen_random_uuid(), 'Dave', 'eng', 110000, true),
+          (gen_random_uuid(), 'Eve', 'sales', 95000, false)
+      `);
+
+      // EXCEPT: active employees EXCEPT eng employees
+      // Active: Alice (eng), Carol (sales), Dave (eng)
+      // Eng: Alice (eng), Bob (eng), Dave (eng)
+      // Except: Carol (active but not eng)
+      const sql = compileEdgeQL(
+        `SELECT TestEmployee { name } FILTER .active = true
+         EXCEPT
+         SELECT TestEmployee { name } FILTER .department = "eng"`,
+        schema,
+      );
+
+      // Verify the SQL contains EXCEPT
+      assertEquals(
+        sql.includes("EXCEPT"),
+        true,
+        "SQL should contain EXCEPT",
+      );
+
+      const result = await pool.query(sql);
+
+      // Should return 1 row: Carol (active but NOT eng)
+      assertEquals(
+        result.rowCount,
+        1,
+        "EXCEPT should return 1 employee (active but not eng)",
+      );
+
+      const names = result.rows.map((row: Record<string, unknown>) => {
+        const data = row.jsonb_build_object ?? row;
+        return (data as Record<string, unknown>).name;
+      });
+      assertEquals(
+        names,
+        ["Carol"],
+        "EXCEPT should return only Carol",
       );
 
       await manager.close();

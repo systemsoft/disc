@@ -399,8 +399,9 @@ export class SQLCodeGenerator {
   }
 
   private generateUnionAllStatement(stmt: SQL.UnionAllStatement): string {
+    const op = stmt.operator ?? "UNION ALL";
     return stmt.queries.map((q) => this.generateStatement(q)).join(
-      "\nUNION ALL\n",
+      `\n${op}\n`,
     );
   }
 

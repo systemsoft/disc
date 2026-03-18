@@ -498,6 +498,123 @@ Deno.test("EdgeQL Parser - GROUP with USING binding", () => {
   }
 });
 
+Deno.test("EdgeQL Parser - GROUP BY with FILTER (HAVING)", () => {
+  const source = `GROUP User BY .department FILTER count(User) > 2`;
+
+  const parser = new EdgeQLParser(source);
+  const ast = parser.parse();
+
+  assertEquals(ast.kind, "GroupQuery");
+  if (ast.kind === "GroupQuery") {
+    assertEquals(ast.expr.kind, "TypeName");
+    assertEquals(ast.by.elements.length, 1);
+    // Verify the filter field exists and is a BinaryOp (count(User) > 2)
+    assertEquals(ast.filter?.kind, "BinaryOp");
+    if (ast.filter?.kind === "BinaryOp") {
+      assertEquals(ast.filter.op, ">");
+      assertEquals(ast.filter.left.kind, "FunctionCall");
+      if (ast.filter.left.kind === "FunctionCall") {
+        assertEquals(ast.filter.left.name.parts[0], "count");
+      }
+      assertEquals(ast.filter.right.kind, "Literal");
+      if (ast.filter.right.kind === "Literal") {
+        assertEquals(ast.filter.right.value, 2);
+      }
+    }
+  }
+});
+
+// =========================================================================
+// Window Function Parsing
+// =========================================================================
+
+Deno.test("EdgeQL Parser - Window function: row_number() OVER (PARTITION BY ... ORDER BY ...)", () => {
+  const source = `
+    SELECT User {
+      name,
+      rank := row_number() OVER (PARTITION BY .department ORDER BY .salary DESC)
+    }
+  `;
+
+  const parser = new EdgeQLParser(source);
+  const ast = parser.parse();
+
+  assertEquals(ast.kind, "SelectQuery");
+  if (ast.kind === "SelectQuery") {
+    assertEquals(ast.shape?.elements.length, 2);
+    const rankElement = ast.shape?.elements[1];
+    assertEquals(rankElement?.name?.name, "rank");
+    assertEquals(rankElement?.computable, true);
+    assertEquals(rankElement?.expr.kind, "WindowFunctionCall");
+
+    if (rankElement?.expr.kind === "WindowFunctionCall") {
+      assertEquals(rankElement.expr.name.parts[0], "row_number");
+      assertEquals(rankElement.expr.args.length, 0);
+      assertEquals(rankElement.expr.over.kind, "WindowOverClause");
+      assertEquals(rankElement.expr.over.partitionBy?.length, 1);
+      assertEquals(rankElement.expr.over.orderBy?.length, 1);
+      assertEquals(rankElement.expr.over.orderBy?.[0].direction, "DESC");
+    }
+  }
+});
+
+Deno.test("EdgeQL Parser - Aggregate as window: sum(.salary) OVER (PARTITION BY .department)", () => {
+  const source = `
+    SELECT User {
+      name,
+      dept_total := sum(.salary) OVER (PARTITION BY .department)
+    }
+  `;
+
+  const parser = new EdgeQLParser(source);
+  const ast = parser.parse();
+
+  assertEquals(ast.kind, "SelectQuery");
+  if (ast.kind === "SelectQuery") {
+    const deptTotalElement = ast.shape?.elements[1];
+    assertEquals(deptTotalElement?.expr.kind, "WindowFunctionCall");
+
+    if (deptTotalElement?.expr.kind === "WindowFunctionCall") {
+      assertEquals(deptTotalElement.expr.name.parts[0], "sum");
+      assertEquals(deptTotalElement.expr.args.length, 1);
+      assertEquals(deptTotalElement.expr.over.partitionBy?.length, 1);
+      assertEquals(deptTotalElement.expr.over.orderBy, undefined);
+      assertEquals(deptTotalElement.expr.over.frame, undefined);
+    }
+  }
+});
+
+Deno.test("EdgeQL Parser - Window function with frame spec", () => {
+  const source = `
+    SELECT User {
+      name,
+      rn := row_number() OVER (ORDER BY .id ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+    }
+  `;
+
+  const parser = new EdgeQLParser(source);
+  const ast = parser.parse();
+
+  assertEquals(ast.kind, "SelectQuery");
+  if (ast.kind === "SelectQuery") {
+    const rnElement = ast.shape?.elements[1];
+    assertEquals(rnElement?.expr.kind, "WindowFunctionCall");
+
+    if (rnElement?.expr.kind === "WindowFunctionCall") {
+      assertEquals(rnElement.expr.name.parts[0], "row_number");
+      assertEquals(rnElement.expr.over.partitionBy, undefined);
+      assertEquals(rnElement.expr.over.orderBy?.length, 1);
+      assertEquals(rnElement.expr.over.frame?.kind, "WindowFrameClause");
+      assertEquals(rnElement.expr.over.frame?.mode, "ROWS");
+      assertEquals(
+        rnElement.expr.over.frame?.start.type,
+        "UNBOUNDED PRECEDING",
+      );
+      assertEquals(rnElement.expr.over.frame?.end?.type, "CURRENT ROW");
+    }
+  }
+});
+
 Deno.test("EdgeQL Analyzer - Type Checking", () => {
   const source = `
     SELECT User {

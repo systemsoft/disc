@@ -211,6 +211,64 @@ export function getBuiltinFunctions(): Map<string, FunctionDef> {
       returnType: "float64",
     }],
 
+    // Window functions (only valid with OVER clause)
+    ["row_number", {
+      name: "row_number",
+      args: [],
+      returnType: "int64",
+      sqlName: "ROW_NUMBER",
+    }],
+    ["rank", {
+      name: "rank",
+      args: [],
+      returnType: "int64",
+      sqlName: "RANK",
+    }],
+    ["dense_rank", {
+      name: "dense_rank",
+      args: [],
+      returnType: "int64",
+      sqlName: "DENSE_RANK",
+    }],
+    ["ntile", {
+      name: "ntile",
+      args: [{ name: "n", type: "int64", required: true }],
+      returnType: "int64",
+      sqlName: "NTILE",
+    }],
+    ["lag", {
+      name: "lag",
+      args: [
+        { name: "expr", type: "any", required: true },
+        { name: "offset", type: "int64", required: false },
+        { name: "default", type: "any", required: false },
+      ],
+      returnType: "any",
+      sqlName: "LAG",
+    }],
+    ["lead", {
+      name: "lead",
+      args: [
+        { name: "expr", type: "any", required: true },
+        { name: "offset", type: "int64", required: false },
+        { name: "default", type: "any", required: false },
+      ],
+      returnType: "any",
+      sqlName: "LEAD",
+    }],
+    ["first_value", {
+      name: "first_value",
+      args: [{ name: "expr", type: "any", required: true }],
+      returnType: "any",
+      sqlName: "FIRST_VALUE",
+    }],
+    ["last_value", {
+      name: "last_value",
+      args: [{ name: "expr", type: "any", required: true }],
+      returnType: "any",
+      sqlName: "LAST_VALUE",
+    }],
+
     // Datetime functions
     ["datetime_current", {
       name: "datetime_current",

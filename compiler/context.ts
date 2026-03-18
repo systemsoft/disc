@@ -12,6 +12,17 @@ export interface CompilationContext {
   aliasCounter: number;
   currentScope: Scope;
   scopes: Scope[];
+  /** Maps CTE binding names to their resolved type info */
+  cteAliases: Map<string, CTEAlias>;
+}
+
+export interface CTEAlias {
+  /** The CTE name used in SQL (e.g., "active") */
+  cteName: string;
+  /** The underlying schema type name, if the CTE wraps a typed query */
+  typeName?: string;
+  /** The resolved TypeDef for shape compilation, if available */
+  typeDef?: TypeDef;
 }
 
 export interface Schema {
@@ -82,6 +93,7 @@ export function createContext(schema: Schema): CompilationContext {
     aliasCounter: 0,
     currentScope: { aliases: new Map(), variables: new Map() },
     scopes: [],
+    cteAliases: new Map(),
   };
 }
 
@@ -152,6 +164,28 @@ export function getLink(
 ): LinkDef | undefined {
   const type = getTypeDef(ctx, typeName);
   return type?.links.get(linkName);
+}
+
+export function addCTEAlias(
+  ctx: CompilationContext,
+  name: string,
+  alias: CTEAlias,
+): void {
+  ctx.cteAliases.set(name, alias);
+}
+
+export function getCTEAlias(
+  ctx: CompilationContext,
+  name: string,
+): CTEAlias | undefined {
+  return ctx.cteAliases.get(name);
+}
+
+export function removeCTEAlias(
+  ctx: CompilationContext,
+  name: string,
+): void {
+  ctx.cteAliases.delete(name);
 }
 
 // Default schema with basic types for testing

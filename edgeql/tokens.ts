@@ -34,6 +34,18 @@ export enum TokenType {
   OFFSET = "OFFSET",
   GROUP = "GROUP",
 
+  // Window function keywords (non-reserved)
+  OVER = "OVER",
+  PARTITION = "PARTITION",
+  ROWS = "ROWS",
+  RANGE = "RANGE",
+  GROUPS = "GROUPS",
+  BETWEEN = "BETWEEN",
+  UNBOUNDED = "UNBOUNDED",
+  PRECEDING = "PRECEDING",
+  FOLLOWING = "FOLLOWING",
+  CURRENT = "CURRENT",
+
   // Logical
   AND = "AND",
   OR = "OR",
@@ -159,6 +171,18 @@ export const KEYWORDS = new Map<string, TokenType>([
   ["limit", TokenType.LIMIT],
   ["offset", TokenType.OFFSET],
   ["group", TokenType.GROUP],
+
+  // Window function keywords
+  ["over", TokenType.OVER],
+  ["partition", TokenType.PARTITION],
+  ["rows", TokenType.ROWS],
+  ["range", TokenType.RANGE],
+  ["groups", TokenType.GROUPS],
+  ["between", TokenType.BETWEEN],
+  ["unbounded", TokenType.UNBOUNDED],
+  ["preceding", TokenType.PRECEDING],
+  ["following", TokenType.FOLLOWING],
+  ["current", TokenType.CURRENT],
 
   // Logical
   ["and", TokenType.AND],

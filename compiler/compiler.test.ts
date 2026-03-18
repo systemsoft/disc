@@ -436,6 +436,16 @@ Deno.test("SQL Compiler - GROUP BY unknown type error", () => {
   assertEquals(threw, true);
 });
 
+Deno.test("SQL Compiler - GROUP BY with FILTER produces HAVING", () => {
+  const source = `GROUP User BY .active FILTER count(User) > 2`;
+  const sql = compileEdgeQL(source);
+
+  assertEquals(sql.includes("GROUP BY"), true);
+  assertEquals(sql.includes("HAVING"), true);
+  assertEquals(sql.includes("COUNT"), true);
+  assertEquals(sql.includes("> 2"), true);
+});
+
 // FOR query tests
 
 Deno.test("SQL Compiler - FOR with set literal multi-element", () => {
@@ -615,4 +625,475 @@ Deno.test("SQL Code Generator - UnionAllStatement", () => {
   assertEquals(sql.includes("UNION ALL"), true);
   assertEquals(sql.includes("1"), true);
   assertEquals(sql.includes("2"), true);
+});
+
+// Subquery in expression position tests
+
+Deno.test("SQL Compiler - Subquery in FILTER with IN operator", () => {
+  const source = `
+    SELECT User { name }
+    FILTER .name IN (SELECT User.name FILTER .active = true)
+  `;
+  const sql = compileEdgeQL(source);
+
+  // Should contain IN with a subquery
+  assertEquals(sql.includes("IN"), true);
+  assertEquals(sql.includes("WHERE"), true);
+  // The subquery should produce a nested SELECT
+  assertEquals(sql.includes("name"), true);
+});
+
+Deno.test("SQL Compiler - Subquery in expression position compiles to SubqueryExpression", () => {
+  const source = `
+    SELECT User { name }
+    FILTER .active = (SELECT true)
+  `;
+  const sql = compileEdgeQL(source);
+
+  // The RHS of = should be a subquery wrapped in parens
+  assertEquals(sql.includes("WHERE"), true);
+  assertEquals(sql.includes("SELECT"), true);
+  assertEquals(sql.includes("TRUE"), true);
+});
+
+Deno.test("SQL Compiler - EXISTS with subquery", () => {
+  const source = `
+    SELECT User { name }
+    FILTER EXISTS (SELECT User FILTER .active = true)
+  `;
+  const sql = compileEdgeQL(source);
+
+  // Should generate EXISTS with a subquery
+  assertEquals(sql.includes("EXISTS"), true);
+  assertEquals(sql.includes("WHERE"), true);
+});
+
+// OFFSET tests
+
+Deno.test("SQL Compiler - SELECT with OFFSET and LIMIT", () => {
+  const source = `
+    SELECT User {
+      name
+    }
+    ORDER BY .name
+    OFFSET 5
+    LIMIT 10
+  `;
+
+  const sql = compileEdgeQL(source);
+
+  // Should generate ORDER BY, OFFSET, and LIMIT
+  assertEquals(sql.includes("ORDER BY"), true);
+  assertEquals(sql.includes("OFFSET 5"), true);
+  assertEquals(sql.includes("LIMIT 10"), true);
+});
+
+Deno.test("SQL Code Generator - OFFSET Clause", () => {
+  const codegen = new SQLCodeGenerator();
+  const sql = codegen.generate({
+    kind: "SelectStatement",
+    select: {
+      kind: "SelectClause",
+      columns: [{
+        kind: "SelectItem",
+        expression: {
+          kind: "ColumnReference",
+          column: "name",
+        },
+      }],
+    },
+    orderBy: {
+      kind: "OrderByClause",
+      items: [{
+        kind: "OrderByItem",
+        expression: {
+          kind: "ColumnReference",
+          column: "name",
+        },
+        direction: "ASC",
+      }],
+    },
+    offset: {
+      kind: "OffsetClause",
+      count: {
+        kind: "LiteralExpression",
+        type: "number",
+        value: 5,
+      },
+    },
+    limit: {
+      kind: "LimitClause",
+      count: {
+        kind: "LiteralExpression",
+        type: "number",
+        value: 10,
+      },
+    },
+  });
+
+  assertEquals(sql.includes("ORDER BY"), true);
+  assertEquals(sql.includes("name ASC"), true);
+  assertEquals(sql.includes("OFFSET 5"), true);
+  assertEquals(sql.includes("LIMIT 10"), true);
+});
+
+// WITH / CTE name resolution tests
+
+Deno.test("SQL Compiler - WITH CTE body references CTE name with shape", () => {
+  const source = `
+    WITH active := (SELECT User FILTER .active = true)
+    SELECT active { name }
+  `;
+
+  const sql = compileEdgeQL(source);
+
+  // Should produce a WITH clause containing the CTE
+  assertEquals(sql.includes("WITH"), true, "SQL should contain WITH");
+  // The CTE name should appear as the source table in the body
+  assertEquals(
+    sql.includes("FROM"),
+    true,
+    "Body query should have a FROM clause",
+  );
+  // The shape should resolve the 'name' property
+  assertEquals(
+    sql.includes("'name'"),
+    true,
+    "Shape should resolve the 'name' property",
+  );
+  // The CTE name should be used in FROM
+  assertEquals(
+    sql.includes("active"),
+    true,
+    "SQL should reference the CTE alias 'active'",
+  );
+});
+
+Deno.test("SQL Compiler - WITH multiple CTEs, body references second CTE", () => {
+  const source = `
+    WITH
+      seniors := (SELECT User FILTER .age > 60),
+      youngsters := (SELECT User FILTER .age < 25)
+    SELECT youngsters { name, email }
+  `;
+
+  const sql = compileEdgeQL(source);
+
+  // Should have both CTEs in the WITH clause
+  assertEquals(sql.includes("WITH"), true, "SQL should contain WITH");
+  assertEquals(
+    sql.includes("seniors"),
+    true,
+    "SQL should contain 'seniors' CTE",
+  );
+  assertEquals(
+    sql.includes("youngsters"),
+    true,
+    "SQL should contain 'youngsters' CTE",
+  );
+  // The body should reference youngsters as a table
+  assertEquals(sql.includes("FROM"), true, "Body should have FROM clause");
+  // Shape fields should be resolved
+  assertEquals(sql.includes("'name'"), true, "Shape should resolve 'name'");
+  assertEquals(sql.includes("'email'"), true, "Shape should resolve 'email'");
+});
+
+Deno.test("SQL Compiler - WITH CTE without shape selects all columns", () => {
+  const source = `
+    WITH active := (SELECT User FILTER .active = true)
+    SELECT active
+  `;
+
+  const sql = compileEdgeQL(source);
+
+  // Should produce WITH and FROM referencing the CTE
+  assertEquals(sql.includes("WITH"), true, "SQL should contain WITH");
+  assertEquals(
+    sql.includes("active"),
+    true,
+    "SQL should reference the CTE alias",
+  );
+  // Should use implicit shape (jsonb_build_object with all columns)
+  assertEquals(
+    sql.includes("jsonb_build_object"),
+    true,
+    "Implicit shape should produce jsonb_build_object",
+  );
+});
+
+// INTERSECT / EXCEPT set operation tests
+
+Deno.test("SQL Compiler - INTERSECT produces SQL INTERSECT", () => {
+  const source = `
+    SELECT User { name } FILTER .active = true
+    INTERSECT
+    SELECT User { name } FILTER .age > 30
+  `;
+
+  const sql = compileEdgeQL(source);
+
+  assertEquals(
+    sql.includes("INTERSECT"),
+    true,
+    "SQL should contain INTERSECT",
+  );
+  // Should NOT contain UNION ALL
+  assertEquals(
+    sql.includes("UNION ALL"),
+    false,
+    "SQL should not contain UNION ALL for INTERSECT",
+  );
+});
+
+Deno.test("SQL Compiler - EXCEPT produces SQL EXCEPT", () => {
+  const source = `
+    SELECT User { name } FILTER .active = true
+    EXCEPT
+    SELECT User { name } FILTER .age > 30
+  `;
+
+  const sql = compileEdgeQL(source);
+
+  assertEquals(
+    sql.includes("EXCEPT"),
+    true,
+    "SQL should contain EXCEPT",
+  );
+  // Should NOT contain UNION ALL
+  assertEquals(
+    sql.includes("UNION ALL"),
+    false,
+    "SQL should not contain UNION ALL for EXCEPT",
+  );
+});
+
+Deno.test("SQL Compiler - UNION produces SQL UNION ALL", () => {
+  const source = `
+    SELECT User { name } FILTER .active = true
+    UNION
+    SELECT User { name } FILTER .age > 30
+  `;
+
+  const sql = compileEdgeQL(source);
+
+  assertEquals(
+    sql.includes("UNION ALL"),
+    true,
+    "EdgeQL UNION should produce SQL UNION ALL",
+  );
+});
+
+Deno.test("SQL Code Generator - UnionAllStatement with INTERSECT operator", () => {
+  const codegen = new SQLCodeGenerator();
+  const sql = codegen.generate({
+    kind: "UnionAllStatement",
+    queries: [
+      {
+        kind: "SelectStatement",
+        select: {
+          kind: "SelectClause",
+          columns: [{
+            kind: "SelectItem",
+            expression: { kind: "LiteralExpression", type: "number", value: 1 },
+          }],
+        },
+      },
+      {
+        kind: "SelectStatement",
+        select: {
+          kind: "SelectClause",
+          columns: [{
+            kind: "SelectItem",
+            expression: { kind: "LiteralExpression", type: "number", value: 2 },
+          }],
+        },
+      },
+    ],
+    operator: "INTERSECT",
+  });
+
+  assertEquals(sql.includes("INTERSECT"), true, "SQL should contain INTERSECT");
+  assertEquals(
+    sql.includes("UNION ALL"),
+    false,
+    "SQL should not contain UNION ALL",
+  );
+});
+
+Deno.test("SQL Code Generator - UnionAllStatement with EXCEPT operator", () => {
+  const codegen = new SQLCodeGenerator();
+  const sql = codegen.generate({
+    kind: "UnionAllStatement",
+    queries: [
+      {
+        kind: "SelectStatement",
+        select: {
+          kind: "SelectClause",
+          columns: [{
+            kind: "SelectItem",
+            expression: { kind: "LiteralExpression", type: "number", value: 1 },
+          }],
+        },
+      },
+      {
+        kind: "SelectStatement",
+        select: {
+          kind: "SelectClause",
+          columns: [{
+            kind: "SelectItem",
+            expression: { kind: "LiteralExpression", type: "number", value: 2 },
+          }],
+        },
+      },
+    ],
+    operator: "EXCEPT",
+  });
+
+  assertEquals(sql.includes("EXCEPT"), true, "SQL should contain EXCEPT");
+  assertEquals(
+    sql.includes("UNION ALL"),
+    false,
+    "SQL should not contain UNION ALL",
+  );
+});
+
+Deno.test("SQL Code Generator - UnionAllStatement defaults to UNION ALL when no operator", () => {
+  const codegen = new SQLCodeGenerator();
+  const sql = codegen.generate({
+    kind: "UnionAllStatement",
+    queries: [
+      {
+        kind: "SelectStatement",
+        select: {
+          kind: "SelectClause",
+          columns: [{
+            kind: "SelectItem",
+            expression: { kind: "LiteralExpression", type: "number", value: 1 },
+          }],
+        },
+      },
+      {
+        kind: "SelectStatement",
+        select: {
+          kind: "SelectClause",
+          columns: [{
+            kind: "SelectItem",
+            expression: { kind: "LiteralExpression", type: "number", value: 2 },
+          }],
+        },
+      },
+    ],
+    // No operator field — should default to UNION ALL
+  });
+
+  assertEquals(sql.includes("UNION ALL"), true, "Should default to UNION ALL");
+});
+
+// =========================================================================
+// Window Function Compilation Tests
+// =========================================================================
+
+Deno.test("SQL Compiler - Window function: row_number() OVER (PARTITION BY ... ORDER BY ...)", () => {
+  const source = `
+    SELECT User {
+      name,
+      rank := row_number() OVER (PARTITION BY .department ORDER BY .salary DESC)
+    }
+  `;
+  const sql = compileEdgeQL(source);
+
+  assertEquals(
+    sql.includes("ROW_NUMBER()"),
+    true,
+    "SQL should contain ROW_NUMBER()",
+  );
+  assertEquals(
+    sql.includes("OVER"),
+    true,
+    "SQL should contain OVER clause",
+  );
+  assertEquals(
+    sql.includes("PARTITION BY"),
+    true,
+    "SQL should contain PARTITION BY",
+  );
+  assertEquals(
+    sql.includes("ORDER BY"),
+    true,
+    "SQL should contain ORDER BY in OVER clause",
+  );
+  assertEquals(
+    sql.includes("DESC"),
+    true,
+    "SQL should contain DESC direction",
+  );
+});
+
+Deno.test("SQL Compiler - Aggregate as window: sum(.salary) OVER (ORDER BY .name)", () => {
+  const source = `
+    SELECT User {
+      name,
+      running_total := sum(.salary) OVER (ORDER BY .name)
+    }
+  `;
+  const sql = compileEdgeQL(source);
+
+  assertEquals(
+    sql.includes("SUM("),
+    true,
+    "SQL should contain SUM(",
+  );
+  assertEquals(
+    sql.includes("OVER"),
+    true,
+    "SQL should contain OVER clause",
+  );
+  assertEquals(
+    sql.includes("ORDER BY"),
+    true,
+    "SQL should contain ORDER BY in OVER clause",
+  );
+});
+
+Deno.test("SQL Code Generator - WindowFunctionExpression with frame", () => {
+  const codegen2 = new SQLCodeGenerator();
+  const sql = codegen2.generate({
+    kind: "SelectStatement",
+    select: {
+      kind: "SelectClause",
+      columns: [{
+        kind: "SelectItem",
+        expression: {
+          kind: "WindowFunctionExpression",
+          function: "ROW_NUMBER",
+          args: [],
+          over: {
+            kind: "WindowClause",
+            orderBy: [{
+              kind: "OrderByItem",
+              expression: { kind: "ColumnReference", column: "id" },
+              direction: "ASC",
+            }],
+            frame: {
+              kind: "WindowFrame",
+              mode: "ROWS",
+              start: "UNBOUNDED PRECEDING",
+              end: "CURRENT ROW",
+            },
+          },
+        },
+      }],
+    },
+  });
+
+  assertEquals(
+    sql.includes("ROW_NUMBER() OVER"),
+    true,
+    "SQL should contain ROW_NUMBER() OVER",
+  );
+  assertEquals(
+    sql.includes("ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"),
+    true,
+    "SQL should contain frame spec",
+  );
 });

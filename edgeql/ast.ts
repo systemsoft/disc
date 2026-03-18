@@ -84,6 +84,7 @@ export interface GroupQuery extends EdgeQLNode {
   expr: Expression;
   using: WithBinding[];
   by: GroupByClause;
+  filter?: Expression;
 }
 
 export interface GroupByClause extends EdgeQLNode {
@@ -134,6 +135,7 @@ export type Expression =
   | Path
   | TypeCast
   | FunctionCall
+  | WindowFunctionCall
   | BinaryOp
   | UnaryOp
   | IfElse
@@ -331,6 +333,34 @@ export interface TypeName extends EdgeQLNode {
 export interface QualifiedName extends EdgeQLNode {
   kind: "QualifiedName";
   parts: string[];
+}
+
+// Window function call
+export interface WindowFunctionCall extends EdgeQLNode {
+  kind: "WindowFunctionCall";
+  name: QualifiedName;
+  args: FunctionArg[];
+  over: WindowOverClause;
+}
+
+export interface WindowOverClause extends EdgeQLNode {
+  kind: "WindowOverClause";
+  partitionBy?: Expression[];
+  orderBy?: OrderByClause[];
+  frame?: WindowFrameClause;
+}
+
+export interface WindowFrameClause extends EdgeQLNode {
+  kind: "WindowFrameClause";
+  mode: "ROWS" | "RANGE" | "GROUPS";
+  start: FrameBound;
+  end?: FrameBound;
+}
+
+export interface FrameBound extends EdgeQLNode {
+  kind: "FrameBound";
+  type: "UNBOUNDED PRECEDING" | "CURRENT ROW" | "UNBOUNDED FOLLOWING" | string;
+  offset?: Expression;
 }
 
 // Helper functions for creating AST nodes

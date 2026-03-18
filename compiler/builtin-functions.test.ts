@@ -330,6 +330,79 @@ Deno.test("to_float64 has 1 arg and returns float64 with no sqlName", () => {
   assertEquals(fn.args.length, 1);
 });
 
+// Window functions
+Deno.test("row_number maps to SQL ROW_NUMBER with return type int64", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("row_number");
+  assertExists(fn);
+  assertEquals(fn.sqlName, "ROW_NUMBER");
+  assertEquals(fn.returnType, "int64");
+  assertEquals(fn.args.length, 0);
+});
+
+Deno.test("rank maps to SQL RANK with return type int64", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("rank");
+  assertExists(fn);
+  assertEquals(fn.sqlName, "RANK");
+  assertEquals(fn.returnType, "int64");
+  assertEquals(fn.args.length, 0);
+});
+
+Deno.test("dense_rank maps to SQL DENSE_RANK with return type int64", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("dense_rank");
+  assertExists(fn);
+  assertEquals(fn.sqlName, "DENSE_RANK");
+  assertEquals(fn.returnType, "int64");
+  assertEquals(fn.args.length, 0);
+});
+
+Deno.test("ntile maps to SQL NTILE with return type int64", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("ntile");
+  assertExists(fn);
+  assertEquals(fn.sqlName, "NTILE");
+  assertEquals(fn.returnType, "int64");
+  assertEquals(fn.args.length, 1);
+});
+
+Deno.test("lag maps to SQL LAG with return type any", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("lag");
+  assertExists(fn);
+  assertEquals(fn.sqlName, "LAG");
+  assertEquals(fn.returnType, "any");
+  assertEquals(fn.args.length, 3);
+});
+
+Deno.test("lead maps to SQL LEAD with return type any", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("lead");
+  assertExists(fn);
+  assertEquals(fn.sqlName, "LEAD");
+  assertEquals(fn.returnType, "any");
+  assertEquals(fn.args.length, 3);
+});
+
+Deno.test("first_value maps to SQL FIRST_VALUE with return type any", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("first_value");
+  assertExists(fn);
+  assertEquals(fn.sqlName, "FIRST_VALUE");
+  assertEquals(fn.returnType, "any");
+  assertEquals(fn.args.length, 1);
+});
+
+Deno.test("last_value maps to SQL LAST_VALUE with return type any", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("last_value");
+  assertExists(fn);
+  assertEquals(fn.sqlName, "LAST_VALUE");
+  assertEquals(fn.returnType, "any");
+  assertEquals(fn.args.length, 1);
+});
+
 Deno.test("each call returns a fresh Map instance", () => {
   const fns1 = getBuiltinFunctions();
   const fns2 = getBuiltinFunctions();

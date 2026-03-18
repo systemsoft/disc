@@ -402,7 +402,12 @@ export class EdgeQLCompiler {
 
   private compileSelectQuery(
     query: EdgeQLAST.SelectQuery,
-  ): SQL.SelectStatement {
+  ): SQL.SQLStatement {
+    // Handle set operations (UNION, INTERSECT, EXCEPT) at the query level
+    if (query.expr.kind === "BinaryOp" && this.isSetOperator(query.expr.op)) {
+      return this.compileSetOperation(query.expr);
+    }
+
     Context.pushScope(this.ctx);
 
     try {
@@ -496,6 +501,43 @@ export class EdgeQLCompiler {
       }
 
       return { selectItems, fromClause };
+    }
+
+    if (expr.kind === "Identifier") {
+      // Check if this identifier references a CTE alias
+      const cteAlias = Context.getCTEAlias(this.ctx, expr.name);
+      if (cteAlias) {
+        // The CTE name acts as a virtual table — SELECT FROM the CTE name
+        const tableAlias = Context.addTableAlias(
+          this.ctx,
+          cteAlias.cteName,
+          cteAlias.cteName,
+          cteAlias.typeName || cteAlias.cteName,
+        );
+        const fromClause = SQL.createFromClause([
+          SQL.createTableReference(cteAlias.cteName, tableAlias),
+        ]);
+
+        let selectItems: SQL.SelectItem[];
+        if (shape && cteAlias.typeName && cteAlias.typeDef) {
+          // Use the underlying type's schema to compile the shape
+          selectItems = this.compileShape(
+            shape,
+            cteAlias.typeName,
+            tableAlias,
+          );
+        } else if (cteAlias.typeDef) {
+          // No explicit shape — select all columns as JSON object
+          selectItems = this.compileImplicitShape(cteAlias.typeDef, tableAlias);
+        } else {
+          // No type info — select all columns
+          selectItems = [
+            SQL.createSelectItem(SQL.createColumnReference("*", tableAlias)),
+          ];
+        }
+
+        return { selectItems, fromClause };
+      }
     }
 
     if (expr.kind === "Path") {
@@ -800,6 +842,8 @@ export class EdgeQLCompiler {
         return this.compileUnaryOp(expr);
       case "FunctionCall":
         return this.compileFunctionCall(expr);
+      case "WindowFunctionCall":
+        return this.compileWindowFunctionCall(expr);
       case "Parameter":
         return this.compileParameter(expr);
       case "TypeCast":
@@ -810,6 +854,8 @@ export class EdgeQLCompiler {
         return this.compileTypeName(expr);
       case "SetExpr":
         return this.compileSetExpr(expr);
+      case "Subquery":
+        return this.compileSubqueryExpression(expr);
       default:
         throw new CompilationError(`Unsupported expression: ${expr.kind}`);
     }
@@ -882,6 +928,60 @@ export class EdgeQLCompiler {
     return SQL.createBinaryExpression(sqlOp, left, right);
   }
 
+  /** Check if an EdgeQL binary operator is a set operation. */
+  private isSetOperator(op: string): boolean {
+    return op === "UNION" || op === "INTERSECT" || op === "EXCEPT";
+  }
+
+  /**
+   * Compile a BinaryOp representing a set operation (UNION, INTERSECT, EXCEPT)
+   * into a SQL UnionAllStatement with the appropriate operator.
+   */
+  private compileSetOperation(
+    binOp: EdgeQLAST.BinaryOp,
+  ): SQL.UnionAllStatement {
+    // Map EdgeQL set operator to SQL set operator
+    let sqlOp: SQL.SetOperator;
+    switch (binOp.op) {
+      case "UNION":
+        sqlOp = "UNION ALL";
+        break;
+      case "INTERSECT":
+        sqlOp = "INTERSECT";
+        break;
+      case "EXCEPT":
+        sqlOp = "EXCEPT";
+        break;
+      default:
+        throw new CompilationError(`Unsupported set operator: ${binOp.op}`);
+    }
+
+    // Compile left and right operands as queries
+    const leftStmt = this.compileSetOperand(binOp.left);
+    const rightStmt = this.compileSetOperand(binOp.right);
+
+    return SQL.setOperation(sqlOp, [leftStmt, rightStmt]);
+  }
+
+  /**
+   * Compile a set operation operand. The operand is typically a Subquery
+   * wrapping a SelectQuery, but could be another BinaryOp for chained
+   * set operations.
+   */
+  private compileSetOperand(expr: EdgeQLAST.Expression): SQL.SQLStatement {
+    if (expr.kind === "Subquery") {
+      return this.compileQuery(expr.query);
+    }
+    if (expr.kind === "BinaryOp" && this.isSetOperator(expr.op)) {
+      return this.compileSetOperation(expr);
+    }
+    // Fallback: wrap expression in a SELECT
+    const compiled = this.compileExpression(expr);
+    return SQL.createSelectStatement({
+      select: SQL.createSelectClause([SQL.createSelectItem(compiled)]),
+    });
+  }
+
   private compileUnaryOp(unaryOp: EdgeQLAST.UnaryOp): SQL.UnaryExpression {
     return {
       kind: "UnaryExpression",
@@ -950,6 +1050,96 @@ export class EdgeQLCompiler {
     }
 
     return SQL.createFunctionCall(sqlName, args);
+  }
+
+  private compileWindowFunctionCall(
+    wfc: EdgeQLAST.WindowFunctionCall,
+  ): SQL.WindowFunctionExpression {
+    const functionName = wfc.name.parts.join("_");
+    const args = wfc.args.map((arg) => this.compileExpression(arg.value));
+
+    // Map function name to SQL
+    let sqlName = functionName;
+    const funcDef = this.ctx.schema.functions.get(functionName);
+    if (funcDef?.sqlName) {
+      sqlName = funcDef.sqlName;
+    }
+
+    // Compile the OVER clause
+    const over = this.compileWindowOverClause(wfc.over);
+
+    return SQL.windowFunction(sqlName, args, over);
+  }
+
+  private compileWindowOverClause(
+    over: EdgeQLAST.WindowOverClause,
+  ): SQL.WindowClause {
+    // Compile PARTITION BY
+    let partitionBy: SQL.SQLExpression[] | undefined;
+    if (over.partitionBy && over.partitionBy.length > 0) {
+      partitionBy = over.partitionBy.map((expr) =>
+        this.compileExpression(expr)
+      );
+    }
+
+    // Compile ORDER BY
+    let orderBy: SQL.OrderByItem[] | undefined;
+    if (over.orderBy && over.orderBy.length > 0) {
+      orderBy = over.orderBy.map((item) => ({
+        kind: "OrderByItem" as const,
+        expression: this.compileExpression(item.expr),
+        direction: item.direction || "ASC" as "ASC" | "DESC",
+      }));
+    }
+
+    // Compile frame spec
+    let frame: SQL.WindowFrame | undefined;
+    if (over.frame) {
+      const start = this.compileFrameBound(over.frame.start);
+      const end = over.frame.end
+        ? this.compileFrameBound(over.frame.end)
+        : start;
+
+      frame = {
+        kind: "WindowFrame",
+        mode: over.frame.mode,
+        start,
+        end,
+      };
+    }
+
+    return {
+      kind: "WindowClause",
+      partitionBy,
+      orderBy,
+      frame,
+    };
+  }
+
+  private compileFrameBound(bound: EdgeQLAST.FrameBound): string {
+    switch (bound.type) {
+      case "UNBOUNDED PRECEDING":
+        return "UNBOUNDED PRECEDING";
+      case "CURRENT ROW":
+        return "CURRENT ROW";
+      case "UNBOUNDED FOLLOWING":
+        return "UNBOUNDED FOLLOWING";
+      case "OFFSET PRECEDING": {
+        // Extract literal value for the offset
+        if (bound.offset && bound.offset.kind === "Literal") {
+          return `${bound.offset.value} PRECEDING`;
+        }
+        return "0 PRECEDING";
+      }
+      case "OFFSET FOLLOWING": {
+        if (bound.offset && bound.offset.kind === "Literal") {
+          return `${bound.offset.value} FOLLOWING`;
+        }
+        return "0 FOLLOWING";
+      }
+      default:
+        return bound.type;
+    }
   }
 
   private compileParameter(param: EdgeQLAST.Parameter): SQL.SQLExpression {
@@ -1163,12 +1353,29 @@ export class EdgeQLCompiler {
   }
 
   private compileWithBlock(query: EdgeQLAST.WithBlock): SQL.SQLStatement {
-    // Compile each WITH binding into a CTE
+    // Compile each WITH binding into a CTE and register CTE aliases
     const ctes: SQL.CTE[] = [];
+    const registeredAliases: string[] = [];
+
     for (const binding of query.bindings) {
       let bindingQuery: SQL.SQLStatement;
+      let underlyingTypeName: string | undefined;
+
       if (binding.value.kind === "Subquery") {
-        bindingQuery = this.compileQuery(binding.value.query);
+        // Extract the underlying type name from the inner query for shape
+        // resolution in the body query
+        underlyingTypeName = this.extractQueryTypeName(binding.value.query);
+
+        // Compile the CTE inner query as raw columns (SELECT * FROM ...)
+        // so the body query can reference individual columns by name
+        if (
+          underlyingTypeName &&
+          binding.value.query.kind === "SelectQuery"
+        ) {
+          bindingQuery = this.compileSelectQueryRaw(binding.value.query);
+        } else {
+          bindingQuery = this.compileQuery(binding.value.query);
+        }
       } else {
         // Direct expression - wrap in a SELECT
         const expr = this.compileExpression(binding.value);
@@ -1177,20 +1384,117 @@ export class EdgeQLCompiler {
         });
       }
 
+      const cteName = binding.name.name;
+
+      // Register this CTE alias so the body query can resolve it
+      const typeDef = underlyingTypeName
+        ? Context.getTypeDef(this.ctx, underlyingTypeName)
+        : undefined;
+
+      Context.addCTEAlias(this.ctx, cteName, {
+        cteName,
+        typeName: underlyingTypeName,
+        typeDef,
+      });
+      registeredAliases.push(cteName);
+
       ctes.push({
         kind: "CTE",
-        name: binding.name.name,
+        name: cteName,
         recursive: false,
         columns: [],
         query: bindingQuery,
       });
     }
 
-    // Compile the body query
+    // Compile the body query (CTE aliases are now resolvable)
     const mainQuery = this.compileQuery(query.body);
+
+    // Clean up CTE aliases after body compilation
+    for (const alias of registeredAliases) {
+      Context.removeCTEAlias(this.ctx, alias);
+    }
 
     // Combine CTEs with the main query
     return SQL.withCTEs(ctes, mainQuery);
+  }
+
+  /**
+   * Compile a SELECT query producing raw columns (SELECT * FROM table WHERE ...)
+   * instead of JSON-wrapped output. Used for CTE inner queries so the body
+   * query can reference individual columns from the CTE.
+   */
+  private compileSelectQueryRaw(
+    query: EdgeQLAST.SelectQuery,
+  ): SQL.SelectStatement {
+    Context.pushScope(this.ctx);
+
+    try {
+      // Resolve the type and create the FROM clause
+      let fromClause: SQL.FromClause;
+
+      if (query.expr.kind === "TypeName") {
+        const typeName = query.expr.name.parts[0];
+        const typeDef = Context.getTypeDef(this.ctx, typeName);
+        if (!typeDef) {
+          throw new CompilationError(`Type '${typeName}' not found`);
+        }
+
+        const tableAlias = Context.addTableAlias(
+          this.ctx,
+          typeName.toLowerCase(),
+          typeDef.tableName,
+          typeName,
+        );
+        fromClause = SQL.createFromClause([
+          SQL.createTableReference(typeDef.tableName, tableAlias),
+        ]);
+      } else {
+        // Fall back to the regular compile path for non-type expressions
+        return this.compileSelectQuery(query);
+      }
+
+      // Compile WHERE clause
+      let whereClause: SQL.WhereClause | undefined;
+      if (query.filter) {
+        const condition = this.compileExpression(query.filter);
+        whereClause = SQL.createWhereClause(condition);
+      }
+
+      // SELECT * (raw columns, no JSON wrapping)
+      const selectClause = SQL.createSelectClause([
+        SQL.createSelectItem(SQL.createColumnReference("*")),
+      ]);
+
+      return SQL.createSelectStatement({
+        select: selectClause,
+        from: fromClause,
+        where: whereClause,
+      });
+    } finally {
+      Context.popScope(this.ctx);
+    }
+  }
+
+  /**
+   * Extract the underlying type name from a query, if it references a known
+   * schema type. Used by compileWithBlock to associate CTE aliases with types.
+   */
+  private extractQueryTypeName(query: EdgeQLAST.Query): string | undefined {
+    if (query.kind === "SelectQuery") {
+      if (query.expr?.kind === "TypeName") {
+        return query.expr.name.parts[0];
+      }
+      if (query.expr?.kind === "Path") {
+        const firstStep = query.expr.steps[0];
+        if (firstStep?.type === "property") {
+          // Check if this is a known type
+          const typeDef = Context.getTypeDef(this.ctx, firstStep.name);
+          if (typeDef) return firstStep.name;
+        }
+      }
+    }
+    return undefined;
   }
 
   private compileForQuery(query: EdgeQLAST.ForQuery): SQL.SQLStatement {
@@ -1378,10 +1682,21 @@ export class EdgeQLCompiler {
       expressions: groupByExprs,
     };
 
+    // Compile FILTER to HAVING clause
+    let havingClause: SQL.HavingClause | undefined;
+    if (query.filter) {
+      const havingCondition = this.compileExpression(query.filter);
+      havingClause = {
+        kind: "HavingClause",
+        condition: havingCondition,
+      };
+    }
+
     return SQL.createSelectStatement({
       select: selectClause,
       from: fromClause,
       groupBy: groupByClause,
+      having: havingClause,
     });
   }
 
@@ -1410,6 +1725,35 @@ export class EdgeQLCompiler {
       kind: "RawSQLExpression" as const,
       sql: "(" + parts.join(", ") + ")",
     };
+  }
+
+  private compileSubqueryExpression(
+    subquery: EdgeQLAST.Subquery,
+  ): SQL.SQLExpression {
+    const compiled = this.compileQuery(subquery.query);
+
+    // compileQuery returns a SQLStatement which could be any statement type.
+    // For SubqueryExpression we need a SelectStatement. If it's already one,
+    // use it directly. Otherwise wrap in a simple SELECT that references it.
+    if (compiled.kind === "SelectStatement") {
+      return SQL.createSubqueryExpression(compiled);
+    }
+
+    // For CTEStatement, UnionAllStatement, etc. — wrap inside a derived select
+    // by placing the statement as a subquery in FROM and selecting *.
+    const wrapper: SQL.SelectStatement = SQL.createSelectStatement({
+      select: SQL.createSelectClause([
+        SQL.createSelectItem(SQL.createColumnReference("*")),
+      ]),
+      from: SQL.createFromClause([{
+        kind: "TableReference",
+        name: "",
+        subquery: compiled,
+        alias: "subq",
+      }]),
+    });
+
+    return SQL.createSubqueryExpression(wrapper);
   }
 
   private compileTypeName(typeName: EdgeQLAST.TypeName): SQL.SQLExpression {

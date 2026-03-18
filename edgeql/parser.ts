@@ -269,7 +269,13 @@ export class EdgeQLParser {
 
     const by: AST.GroupByClause = { kind: "GroupByClause", elements };
 
-    return { kind: "GroupQuery", expr, using, by };
+    // Optional FILTER clause (compiles to SQL HAVING)
+    let filter: AST.Expression | undefined;
+    if (this.match(TokenType.FILTER)) {
+      filter = this.parseExpression();
+    }
+
+    return { kind: "GroupQuery", expr, using, by, filter };
   }
 
   private parseOrderByList(): AST.OrderByClause[] {
@@ -744,16 +750,22 @@ export class EdgeQLParser {
         const args = this.parseFunctionArguments();
         this.consume(TokenType.RPAREN, "Expected ')'");
 
+        let funcName: AST.QualifiedName;
         if (expr.kind === "Identifier") {
-          const name = AST.createQualifiedName([expr.name]);
-          expr = AST.createFunctionCall(name, args);
+          funcName = AST.createQualifiedName([expr.name]);
         } else if (expr.kind === "Path") {
           // Convert path to qualified name for function call
           const parts = expr.steps.map((s) => s.name);
-          const name = AST.createQualifiedName(parts);
-          expr = AST.createFunctionCall(name, args);
+          funcName = AST.createQualifiedName(parts);
         } else {
           throw this.error("Invalid function call");
+        }
+
+        // Check for OVER clause (window function)
+        if (this.check(TokenType.OVER)) {
+          expr = this.parseWindowFunctionCall(funcName, args);
+        } else {
+          expr = AST.createFunctionCall(funcName, args);
         }
       } // Array/set indexing
       else if (this.match(TokenType.LBRACKET)) {
@@ -1036,6 +1048,131 @@ export class EdgeQLParser {
     } while (this.match(TokenType.COMMA));
 
     return args;
+  }
+
+  private parseWindowFunctionCall(
+    name: AST.QualifiedName,
+    args: AST.FunctionArg[],
+  ): AST.WindowFunctionCall {
+    this.consume(TokenType.OVER, "Expected 'OVER'");
+    this.consume(TokenType.LPAREN, "Expected '(' after OVER");
+
+    const over = this.parseWindowOverClause();
+
+    this.consume(TokenType.RPAREN, "Expected ')' to close OVER clause");
+
+    return {
+      kind: "WindowFunctionCall",
+      name,
+      args,
+      over,
+    };
+  }
+
+  private parseWindowOverClause(): AST.WindowOverClause {
+    let partitionBy: AST.Expression[] | undefined;
+    let orderBy: AST.OrderByClause[] | undefined;
+    let frame: AST.WindowFrameClause | undefined;
+
+    // Parse PARTITION BY
+    if (this.check(TokenType.PARTITION)) {
+      this.advance(); // consume PARTITION
+      this.consume(TokenType.BY, "Expected 'BY' after 'PARTITION'");
+
+      partitionBy = [];
+      do {
+        partitionBy.push(this.parseExpression());
+      } while (this.match(TokenType.COMMA));
+    }
+
+    // Parse ORDER BY
+    if (this.match(TokenType.ORDER)) {
+      this.consume(TokenType.BY, "Expected 'BY' after 'ORDER'");
+      orderBy = this.parseOrderByList();
+    }
+
+    // Parse frame spec: ROWS|RANGE|GROUPS BETWEEN ... AND ...
+    if (
+      this.check(TokenType.ROWS) || this.check(TokenType.RANGE) ||
+      this.check(TokenType.GROUPS)
+    ) {
+      const modeToken = this.advance();
+      const mode = modeToken.value.toUpperCase() as "ROWS" | "RANGE" | "GROUPS";
+
+      if (this.match(TokenType.BETWEEN)) {
+        const start = this.parseFrameBound();
+        this.consume(TokenType.AND, "Expected 'AND' in frame spec");
+        const end = this.parseFrameBound();
+
+        frame = {
+          kind: "WindowFrameClause",
+          mode,
+          start,
+          end,
+        };
+      } else {
+        // Single bound (no BETWEEN): e.g., ROWS UNBOUNDED PRECEDING
+        const start = this.parseFrameBound();
+
+        frame = {
+          kind: "WindowFrameClause",
+          mode,
+          start,
+        };
+      }
+    }
+
+    return {
+      kind: "WindowOverClause",
+      partitionBy,
+      orderBy,
+      frame,
+    };
+  }
+
+  private parseFrameBound(): AST.FrameBound {
+    // UNBOUNDED PRECEDING
+    if (this.check(TokenType.UNBOUNDED)) {
+      this.advance();
+      if (this.check(TokenType.PRECEDING)) {
+        this.advance();
+        return { kind: "FrameBound", type: "UNBOUNDED PRECEDING" };
+      }
+      if (this.check(TokenType.FOLLOWING)) {
+        this.advance();
+        return { kind: "FrameBound", type: "UNBOUNDED FOLLOWING" };
+      }
+      throw this.error("Expected 'PRECEDING' or 'FOLLOWING' after 'UNBOUNDED'");
+    }
+
+    // CURRENT ROW
+    if (this.check(TokenType.CURRENT)) {
+      this.advance();
+      // Expect ROW as an identifier
+      if (
+        this.check(TokenType.IDENT) &&
+        this.peek().value.toLowerCase() === "row"
+      ) {
+        this.advance();
+        return { kind: "FrameBound", type: "CURRENT ROW" };
+      }
+      throw this.error("Expected 'ROW' after 'CURRENT'");
+    }
+
+    // <N> PRECEDING or <N> FOLLOWING
+    const offset = this.parseExpression();
+    if (this.check(TokenType.PRECEDING)) {
+      this.advance();
+      return { kind: "FrameBound", type: "OFFSET PRECEDING", offset };
+    }
+    if (this.check(TokenType.FOLLOWING)) {
+      this.advance();
+      return { kind: "FrameBound", type: "OFFSET FOLLOWING", offset };
+    }
+
+    throw this.error(
+      "Expected 'PRECEDING', 'FOLLOWING', 'CURRENT ROW', or 'UNBOUNDED' in frame bound",
+    );
   }
 
   private parseSubquery(): AST.Subquery {
