@@ -457,6 +457,47 @@ Deno.test("EdgeQL Parser - Syntax Error", () => {
   );
 });
 
+Deno.test("EdgeQL Parser - GROUP BY simple property", () => {
+  const source = `GROUP User BY .active`;
+
+  const parser = new EdgeQLParser(source);
+  const ast = parser.parse();
+
+  assertEquals(ast.kind, "GroupQuery");
+  if (ast.kind === "GroupQuery") {
+    assertEquals(ast.expr.kind, "TypeName");
+    assertEquals(ast.using.length, 0);
+    assertEquals(ast.by.elements.length, 1);
+  }
+});
+
+Deno.test("EdgeQL Parser - GROUP BY multiple expressions", () => {
+  const source = `GROUP User BY .active, .age`;
+
+  const parser = new EdgeQLParser(source);
+  const ast = parser.parse();
+
+  assertEquals(ast.kind, "GroupQuery");
+  if (ast.kind === "GroupQuery") {
+    assertEquals(ast.by.elements.length, 2);
+  }
+});
+
+Deno.test("EdgeQL Parser - GROUP with USING binding", () => {
+  const source = `GROUP User USING dept := .department BY dept`;
+
+  const parser = new EdgeQLParser(source);
+  const ast = parser.parse();
+
+  assertEquals(ast.kind, "GroupQuery");
+  if (ast.kind === "GroupQuery") {
+    assertEquals(ast.using.length, 1);
+    assertEquals(ast.using[0].name.name, "dept");
+    assertEquals(ast.using[0].value.kind, "Path");
+    assertEquals(ast.by.elements.length, 1);
+  }
+});
+
 Deno.test("EdgeQL Analyzer - Type Checking", () => {
   const source = `
     SELECT User {

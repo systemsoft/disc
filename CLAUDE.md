@@ -127,6 +127,7 @@ disc/
 - Functions/Variables: `camelCase`
 - Constants: `SCREAMING_SNAKE_CASE`
 - Test files: `*.test.ts` colocated or in `tests/`
+- **SQL/PostgreSQL identifiers: `snake_case`** — All column names, table names, and config directives inside SQL strings and PostgreSQL config must use `snake_case`. PostgreSQL lowercases all unquoted identifiers, so `schemaHash` becomes `schemahash` and breaks row access. Map PG results back to camelCase in TypeScript mapping functions (see `auth/provider.ts` `rowToUser()` and `migration/tracker.ts` row mappers).
 
 ### Error Handling
 

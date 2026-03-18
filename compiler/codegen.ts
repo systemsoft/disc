@@ -25,6 +25,8 @@ export class SQLCodeGenerator {
         return this.generateDeleteStatement(stmt);
       case "CTEStatement":
         return this.generateCTEStatement(stmt);
+      case "UnionAllStatement":
+        return this.generateUnionAllStatement(stmt);
       default:
         throw new Error(
           `Unsupported statement type: ${
@@ -376,6 +378,12 @@ export class SQLCodeGenerator {
 
     const main = this.generateStatement(stmt.query);
     return `WITH ${ctes}\n${main}`;
+  }
+
+  private generateUnionAllStatement(stmt: SQL.UnionAllStatement): string {
+    return stmt.queries.map((q) => this.generateStatement(q)).join(
+      "\nUNION ALL\n",
+    );
   }
 
   private generateAggregateExpression(expr: SQL.AggregateExpression): string {

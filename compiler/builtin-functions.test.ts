@@ -5,13 +5,13 @@
 import { assertEquals, assertExists } from "@std/assert";
 import { getBuiltinFunctions } from "./builtin-functions.ts";
 
-Deno.test("getBuiltinFunctions returns a Map with at least 12 entries", () => {
+Deno.test("getBuiltinFunctions returns a Map with at least 25 entries", () => {
   const fns = getBuiltinFunctions();
   assertEquals(fns instanceof Map, true);
   assertEquals(
-    fns.size >= 12,
+    fns.size >= 25,
     true,
-    `Expected at least 12 functions, got ${fns.size}`,
+    `Expected at least 25 functions, got ${fns.size}`,
   );
 });
 
@@ -151,6 +151,118 @@ Deno.test("assert_single is a pass-through with no sqlName", () => {
   assertEquals(fn.sqlName, undefined);
   assertEquals(fn.returnType, "any");
   assertEquals(fn.args.length, 1);
+});
+
+// Aggregate functions - new
+Deno.test("avg maps to SQL AVG with return type float64", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("avg");
+  assertExists(fn);
+  assertEquals(fn.sqlName, "AVG");
+  assertEquals(fn.returnType, "float64");
+  assertEquals(fn.args.length, 1);
+});
+
+Deno.test("stddev maps to SQL STDDEV with return type float64", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("stddev");
+  assertExists(fn);
+  assertEquals(fn.sqlName, "STDDEV");
+  assertEquals(fn.returnType, "float64");
+});
+
+Deno.test("stddev_pop maps to SQL STDDEV_POP with return type float64", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("stddev_pop");
+  assertExists(fn);
+  assertEquals(fn.sqlName, "STDDEV_POP");
+  assertEquals(fn.returnType, "float64");
+});
+
+Deno.test("stddev_samp maps to SQL STDDEV_SAMP with return type float64", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("stddev_samp");
+  assertExists(fn);
+  assertEquals(fn.sqlName, "STDDEV_SAMP");
+  assertEquals(fn.returnType, "float64");
+});
+
+// Math functions
+Deno.test("math_abs maps to SQL ABS with return type anyreal", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("math_abs");
+  assertExists(fn);
+  assertEquals(fn.sqlName, "ABS");
+  assertEquals(fn.returnType, "anyreal");
+  assertEquals(fn.args.length, 1);
+});
+
+Deno.test("math_ceil maps to SQL CEIL with return type float64", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("math_ceil");
+  assertExists(fn);
+  assertEquals(fn.sqlName, "CEIL");
+  assertEquals(fn.returnType, "float64");
+});
+
+Deno.test("math_floor maps to SQL FLOOR with return type float64", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("math_floor");
+  assertExists(fn);
+  assertEquals(fn.sqlName, "FLOOR");
+  assertEquals(fn.returnType, "float64");
+});
+
+Deno.test("round maps to SQL ROUND with return type float64", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("round");
+  assertExists(fn);
+  assertEquals(fn.sqlName, "ROUND");
+  assertEquals(fn.returnType, "float64");
+});
+
+// String functions - new
+Deno.test("str_trim maps to SQL TRIM with return type str", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("str_trim");
+  assertExists(fn);
+  assertEquals(fn.sqlName, "TRIM");
+  assertEquals(fn.returnType, "str");
+  assertEquals(fn.args.length, 1);
+});
+
+Deno.test("str_ltrim maps to SQL LTRIM with return type str", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("str_ltrim");
+  assertExists(fn);
+  assertEquals(fn.sqlName, "LTRIM");
+  assertEquals(fn.returnType, "str");
+});
+
+Deno.test("str_rtrim maps to SQL RTRIM with return type str", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("str_rtrim");
+  assertExists(fn);
+  assertEquals(fn.sqlName, "RTRIM");
+  assertEquals(fn.returnType, "str");
+});
+
+Deno.test("str_repeat maps to SQL REPEAT with return type str", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("str_repeat");
+  assertExists(fn);
+  assertEquals(fn.sqlName, "REPEAT");
+  assertEquals(fn.returnType, "str");
+  assertEquals(fn.args.length, 2);
+});
+
+Deno.test("str_replace maps to SQL REPLACE with return type str", () => {
+  const fns = getBuiltinFunctions();
+  const fn = fns.get("str_replace");
+  assertExists(fn);
+  assertEquals(fn.sqlName, "REPLACE");
+  assertEquals(fn.returnType, "str");
+  assertEquals(fn.args.length, 3);
 });
 
 Deno.test("each call returns a fresh Map instance", () => {

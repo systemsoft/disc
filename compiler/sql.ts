@@ -11,7 +11,8 @@ export type SQLStatement =
   | InsertStatement
   | UpdateStatement
   | DeleteStatement
-  | CTEStatement;
+  | CTEStatement
+  | UnionAllStatement;
 
 export interface SelectStatement extends SQLNode {
   kind: "SelectStatement";
@@ -421,6 +422,18 @@ export function withCTEs(ctes: CTE[], query: SQLStatement): CTEStatement {
     kind: "CTEStatement",
     ctes,
     query,
+  };
+}
+
+export interface UnionAllStatement extends SQLNode {
+  kind: "UnionAllStatement";
+  queries: SQLStatement[];
+}
+
+export function unionAll(queries: SQLStatement[]): UnionAllStatement {
+  return {
+    kind: "UnionAllStatement",
+    queries,
   };
 }
 

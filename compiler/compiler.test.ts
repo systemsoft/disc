@@ -399,3 +399,130 @@ Deno.test("SQL Compiler - DELETE Query", () => {
   assertEquals(sql.includes("email = 'old@example.com'"), true);
   assertEquals(sql.includes("RETURNING"), true);
 });
+
+// GROUP BY tests
+
+Deno.test("SQL Compiler - GROUP BY single property", () => {
+  const source = `GROUP User BY .active`;
+  const sql = compileEdgeQL(source);
+
+  assertEquals(sql.includes("GROUP BY"), true);
+  assertEquals(sql.includes("users"), true);
+  assertEquals(sql.includes("jsonb_build_object"), true);
+  assertEquals(sql.includes("'key'"), true);
+  assertEquals(sql.includes("'elements'"), true);
+  assertEquals(sql.includes("jsonb_agg"), true);
+  assertEquals(sql.includes("active"), true);
+});
+
+Deno.test("SQL Compiler - GROUP BY multiple expressions", () => {
+  const source = `GROUP User BY .active, .age`;
+  const sql = compileEdgeQL(source);
+
+  assertEquals(sql.includes("GROUP BY"), true);
+  assertEquals(sql.includes("active"), true);
+  assertEquals(sql.includes("age"), true);
+});
+
+Deno.test("SQL Compiler - GROUP BY unknown type error", () => {
+  const source = `GROUP Unknown BY .foo`;
+
+  let threw = false;
+  try {
+    compileEdgeQL(source);
+  } catch {
+    threw = true;
+  }
+  assertEquals(threw, true);
+});
+
+// FOR query tests
+
+Deno.test("SQL Compiler - FOR with set literal multi-element", () => {
+  const source = `
+    FOR name IN {"Alice", "Bob"}
+    UNION (
+      INSERT User {
+        name := name,
+        email := "test@test.com"
+      }
+    )
+  `;
+  const sql = compileEdgeQL(source);
+
+  assertEquals(sql.includes("UNION ALL"), true);
+  assertEquals(sql.includes("INSERT INTO"), true);
+  assertEquals(sql.includes("'Alice'"), true);
+  assertEquals(sql.includes("'Bob'"), true);
+});
+
+Deno.test("SQL Compiler - FOR with single-element set", () => {
+  const source = `
+    FOR name IN {"Alice"}
+    UNION (
+      INSERT User {
+        name := name,
+        email := "test@test.com"
+      }
+    )
+  `;
+  const sql = compileEdgeQL(source);
+
+  // Single element should not produce UNION ALL
+  assertEquals(sql.includes("UNION ALL"), false);
+  assertEquals(sql.includes("INSERT INTO"), true);
+  assertEquals(sql.includes("'Alice'"), true);
+});
+
+Deno.test("SQL Compiler - FOR with subquery iterator errors", () => {
+  const source = `
+    FOR user IN (SELECT User)
+    UNION (
+      DELETE User
+      FILTER .email = "test"
+    )
+  `;
+
+  let threw = false;
+  try {
+    compileEdgeQL(source);
+  } catch {
+    threw = true;
+  }
+  assertEquals(threw, true);
+});
+
+// UnionAllStatement codegen test
+
+Deno.test("SQL Code Generator - UnionAllStatement", () => {
+  const codegen = new SQLCodeGenerator();
+  const sql = codegen.generate({
+    kind: "UnionAllStatement",
+    queries: [
+      {
+        kind: "SelectStatement",
+        select: {
+          kind: "SelectClause",
+          columns: [{
+            kind: "SelectItem",
+            expression: { kind: "LiteralExpression", type: "number", value: 1 },
+          }],
+        },
+      },
+      {
+        kind: "SelectStatement",
+        select: {
+          kind: "SelectClause",
+          columns: [{
+            kind: "SelectItem",
+            expression: { kind: "LiteralExpression", type: "number", value: 2 },
+          }],
+        },
+      },
+    ],
+  });
+
+  assertEquals(sql.includes("UNION ALL"), true);
+  assertEquals(sql.includes("1"), true);
+  assertEquals(sql.includes("2"), true);
+});

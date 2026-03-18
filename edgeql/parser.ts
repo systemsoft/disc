@@ -247,13 +247,16 @@ export class EdgeQLParser {
 
     const expr = this.parseExpression();
 
-    const using: AST.Identifier[] = [];
+    const using: AST.WithBinding[] = [];
     if (
       this.check(TokenType.IDENT) && this.peek().value.toLowerCase() === "using"
     ) {
       this.advance(); // consume 'using'
       do {
-        using.push(this.parseIdentifier());
+        const name = this.parseIdentifier();
+        this.consume(TokenType.ASSIGN, "Expected ':=' in USING binding");
+        const value = this.parseExpression();
+        using.push({ kind: "WithBinding", name, value });
       } while (this.match(TokenType.COMMA));
     }
 

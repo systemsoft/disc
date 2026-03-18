@@ -43,6 +43,30 @@ export function getBuiltinFunctions(): Map<string, FunctionDef> {
       returnType: "int64",
       sqlName: "SUM",
     }],
+    ["avg", {
+      name: "avg",
+      args: [{ name: "expr", type: "anyreal", required: true }],
+      returnType: "float64",
+      sqlName: "AVG",
+    }],
+    ["stddev", {
+      name: "stddev",
+      args: [{ name: "expr", type: "anyreal", required: true }],
+      returnType: "float64",
+      sqlName: "STDDEV",
+    }],
+    ["stddev_pop", {
+      name: "stddev_pop",
+      args: [{ name: "expr", type: "anyreal", required: true }],
+      returnType: "float64",
+      sqlName: "STDDEV_POP",
+    }],
+    ["stddev_samp", {
+      name: "stddev_samp",
+      args: [{ name: "expr", type: "anyreal", required: true }],
+      returnType: "float64",
+      sqlName: "STDDEV_SAMP",
+    }],
     ["array_agg", {
       name: "array_agg",
       args: [{ name: "expr", type: "any", required: true }],
@@ -68,6 +92,69 @@ export function getBuiltinFunctions(): Map<string, FunctionDef> {
       args: [{ name: "val", type: "str", required: true }],
       returnType: "str",
       sqlName: "UPPER",
+    }],
+    ["str_trim", {
+      name: "str_trim",
+      args: [{ name: "val", type: "str", required: true }],
+      returnType: "str",
+      sqlName: "TRIM",
+    }],
+    ["str_ltrim", {
+      name: "str_ltrim",
+      args: [{ name: "val", type: "str", required: true }],
+      returnType: "str",
+      sqlName: "LTRIM",
+    }],
+    ["str_rtrim", {
+      name: "str_rtrim",
+      args: [{ name: "val", type: "str", required: true }],
+      returnType: "str",
+      sqlName: "RTRIM",
+    }],
+    ["str_repeat", {
+      name: "str_repeat",
+      args: [
+        { name: "val", type: "str", required: true },
+        { name: "n", type: "int64", required: true },
+      ],
+      returnType: "str",
+      sqlName: "REPEAT",
+    }],
+    ["str_replace", {
+      name: "str_replace",
+      args: [
+        { name: "val", type: "str", required: true },
+        { name: "old", type: "str", required: true },
+        { name: "new", type: "str", required: true },
+      ],
+      returnType: "str",
+      sqlName: "REPLACE",
+    }],
+
+    // Math functions
+    ["math_abs", {
+      name: "math_abs",
+      args: [{ name: "val", type: "anyreal", required: true }],
+      returnType: "anyreal",
+      sqlName: "ABS",
+    }],
+    ["math_ceil", {
+      name: "math_ceil",
+      args: [{ name: "val", type: "anyreal", required: true }],
+      returnType: "float64",
+      sqlName: "CEIL",
+    }],
+    ["math_floor", {
+      name: "math_floor",
+      args: [{ name: "val", type: "anyreal", required: true }],
+      returnType: "float64",
+      sqlName: "FLOOR",
+    }],
+    ["round", {
+      name: "round",
+      args: [{ name: "val", type: "anyreal", required: true }],
+      returnType: "float64",
+      sqlName: "ROUND",
     }],
 
     // Datetime functions

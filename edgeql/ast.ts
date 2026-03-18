@@ -82,7 +82,7 @@ export interface WithBinding extends EdgeQLNode {
 export interface GroupQuery extends EdgeQLNode {
   kind: "GroupQuery";
   expr: Expression;
-  using: Identifier[];
+  using: WithBinding[];
   by: GroupByClause;
 }
 

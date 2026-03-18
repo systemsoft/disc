@@ -16,6 +16,8 @@ import { EdgeQLParser } from "../edgeql/parser.ts";
 import { EdgeQLCompiler } from "./compiler.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 
+import { Schema } from "./context.ts";
+
 const RUN_PG = canRunPgTests();
 
 // ---------------------------------------------------------------------------
@@ -343,6 +345,231 @@ Deno.test({
       await pool.query(
         "DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE",
       );
+      await pool.close();
+    }
+  },
+});
+
+// =========================================================================
+// Phase 10 — Advanced Query Features E2E
+// =========================================================================
+
+/** Extended SDL with employee type for GROUP BY / aggregate tests. */
+const EMPLOYEE_SDL = `
+  type TestEmployee {
+    required name: str;
+    required department: str;
+    required salary: int64;
+    required active: bool;
+  }
+`;
+
+const EMPLOYEE_TABLE = "test_employee";
+
+/** Apply the employee SDL and return the schema for compilation. */
+async function applyEmployeeSchema(
+  pool: ConnectionPool,
+): Promise<{ manager: SchemaManager; schema: Schema }> {
+  const manager = new SchemaManager({ pool });
+  await manager.initialize();
+
+  const result = await manager.applySchema(EMPLOYEE_SDL);
+  assertEquals(
+    result.ok,
+    true,
+    `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`,
+  );
+
+  const schema = manager.getSchema();
+  assertExists(schema, "Schema should exist after applySchema");
+
+  return { manager, schema: schema! };
+}
+
+/** Drop employee-related tables. */
+async function cleanupEmployee(pool: ConnectionPool): Promise<void> {
+  await pool.query(`DROP TABLE IF EXISTS ${EMPLOYEE_TABLE} CASCADE`);
+  await pool.query("DROP TABLE IF EXISTS disc_migrations CASCADE");
+  await pool.query("DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE");
+}
+
+// --- GROUP BY ---
+
+Deno.test({
+  name: "PG Phase 10: GROUP BY department returns correct groups",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    try {
+      const { manager, schema } = await applyEmployeeSchema(pool);
+
+      // Seed data: 2 departments
+      await pool.query(`
+        INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
+          (gen_random_uuid(), 'Alice', 'eng', 100000, true),
+          (gen_random_uuid(), 'Bob', 'eng', 120000, true),
+          (gen_random_uuid(), 'Carol', 'sales', 90000, true)
+      `);
+
+      const sql = compileEdgeQL("GROUP TestEmployee BY .department", schema);
+      const result = await pool.query(sql);
+
+      // Should get 2 groups (eng, sales)
+      assertEquals(result.rowCount, 2, "Should return 2 department groups");
+
+      await manager.close();
+    } finally {
+      await cleanupEmployee(pool);
+      await pool.close();
+    }
+  },
+});
+
+// --- Aggregate: avg ---
+
+Deno.test({
+  name: "PG Phase 10: avg(salary) returns correct average",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    try {
+      const { manager } = await applyEmployeeSchema(pool);
+
+      await pool.query(`
+        INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
+          (gen_random_uuid(), 'A', 'eng', 100, true),
+          (gen_random_uuid(), 'B', 'eng', 200, true),
+          (gen_random_uuid(), 'C', 'eng', 300, true)
+      `);
+
+      // Verify avg works via raw SQL against the migrated table
+      const result = await pool.query(
+        `SELECT AVG(salary) AS avg_salary FROM ${EMPLOYEE_TABLE}`,
+      );
+      assertEquals(
+        Number(result.rows[0].avg_salary),
+        200,
+        "Average should be 200",
+      );
+
+      await manager.close();
+    } finally {
+      await cleanupEmployee(pool);
+      await pool.close();
+    }
+  },
+});
+
+// --- Math functions ---
+
+Deno.test({
+  name: "PG Phase 10: Math functions (ABS, CEIL, FLOOR, ROUND) with literals",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    try {
+      const abs = await pool.query("SELECT ABS(-42) AS val");
+      assertEquals(Number(abs.rows[0].val), 42);
+
+      const ceil = await pool.query("SELECT CEIL(3.2) AS val");
+      assertEquals(Number(ceil.rows[0].val), 4);
+
+      const floor = await pool.query("SELECT FLOOR(3.8) AS val");
+      assertEquals(Number(floor.rows[0].val), 3);
+
+      const round = await pool.query("SELECT ROUND(3.5) AS val");
+      assertEquals(Number(round.rows[0].val), 4);
+    } finally {
+      await pool.close();
+    }
+  },
+});
+
+// --- String functions ---
+
+Deno.test({
+  name: "PG Phase 10: String functions (TRIM, REPLACE) with literals",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    try {
+      const trim = await pool.query("SELECT TRIM('  hello  ') AS val");
+      assertEquals(trim.rows[0].val, "hello");
+
+      const replace = await pool.query(
+        "SELECT REPLACE('hello world', 'world', 'disc') AS val",
+      );
+      assertEquals(replace.rows[0].val, "hello disc");
+
+      const ltrim = await pool.query("SELECT LTRIM('  hi') AS val");
+      assertEquals(ltrim.rows[0].val, "hi");
+
+      const rtrim = await pool.query("SELECT RTRIM('hi  ') AS val");
+      assertEquals(rtrim.rows[0].val, "hi");
+
+      const repeat = await pool.query("SELECT REPEAT('ab', 3) AS val");
+      assertEquals(repeat.rows[0].val, "ababab");
+    } finally {
+      await pool.close();
+    }
+  },
+});
+
+// --- FOR batch INSERT ---
+
+Deno.test({
+  name: "PG Phase 10: FOR batch INSERT creates all rows",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    const pool = makePool(dsn);
+    await pool.initialize();
+
+    try {
+      const { manager, schema } = await applyEmployeeSchema(pool);
+
+      // Compile a FOR loop inserting 3 employees
+      const sql = compileEdgeQL(
+        `FOR dept IN {"eng", "sales", "ops"}
+         UNION (
+           INSERT TestEmployee {
+             name := "BatchPerson",
+             department := dept,
+             salary := 50000,
+             active := true
+           }
+         )`,
+        schema,
+      );
+
+      // Execute — should be a UNION ALL of 3 INSERTs
+      await pool.query(sql);
+
+      // Verify all 3 rows created
+      const verify = await pool.query(
+        `SELECT count(*)::int AS cnt FROM ${EMPLOYEE_TABLE} WHERE name = 'BatchPerson'`,
+      );
+      assertEquals(
+        Number(verify.rows[0].cnt),
+        3,
+        "Should have 3 batch-inserted rows",
+      );
+
+      await manager.close();
+    } finally {
+      await cleanupEmployee(pool);
       await pool.close();
     }
   },
