@@ -58,12 +58,12 @@ Deno.test({
 
       // Verify tables exist
       const usersResult = await conn.query(
-        "SELECT 1 FROM information_schema.tables WHERE tableName = 'users'",
+        "SELECT 1 FROM information_schema.tables WHERE table_name = 'users'",
       );
       assertEquals(usersResult.rowCount, 1);
 
       const sessionsResult = await conn.query(
-        "SELECT 1 FROM information_schema.tables WHERE tableName = 'sessions'",
+        "SELECT 1 FROM information_schema.tables WHERE table_name = 'sessions'",
       );
       assertEquals(sessionsResult.rowCount, 1);
     } finally {
@@ -113,7 +113,7 @@ Deno.test({
       assertEquals(usersResult.rows[0].email, "pgtest@example.com");
 
       const sessionsResult = await conn.query(
-        "SELECT userId FROM sessions WHERE userId = $1",
+        "SELECT user_id FROM sessions WHERE user_id = $1",
         [response.user.id],
       );
       assertEquals(sessionsResult.rowCount, 1);

@@ -39,12 +39,12 @@ export class MigrationTracker {
           id TEXT PRIMARY KEY,
           name TEXT NOT NULL,
           description TEXT,
-          schemaHash TEXT NOT NULL,
-          appliedAt TIMESTAMP WITH TIME ZONE NOT NULL,
-          durationMs INTEGER NOT NULL,
-          rollbackSql TEXT[],
+          schema_hash TEXT NOT NULL,
+          applied_at TIMESTAMP WITH TIME ZONE NOT NULL,
+          duration_ms INTEGER NOT NULL,
+          rollback_sql TEXT[],
           checksum TEXT NOT NULL,
-          createdAt TIMESTAMP WITH TIME ZONE NOT NULL
+          created_at TIMESTAMP WITH TIME ZONE NOT NULL
         );
       `);
 
@@ -53,9 +53,9 @@ export class MigrationTracker {
         CREATE TABLE IF NOT EXISTS disc_migration_checkpoints (
           id TEXT PRIMARY KEY,
           name TEXT NOT NULL,
-          createdAt TIMESTAMP WITH TIME ZONE NOT NULL,
-          schemaState JSONB NOT NULL,
-          migrationState JSONB NOT NULL
+          created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+          schema_state JSONB NOT NULL,
+          migration_state JSONB NOT NULL
         );
       `);
 
@@ -87,8 +87,8 @@ export class MigrationTracker {
       await this.pool.execute(
         `
         INSERT INTO disc_migrations (
-          id, name, description, schemaHash, appliedAt, 
-          durationMs, rollbackSql, checksum, createdAt
+          id, name, description, schema_hash, applied_at,
+          duration_ms, rollback_sql, checksum, created_at
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9
         )
@@ -166,8 +166,8 @@ export class MigrationTracker {
 
     try {
       const result = await this.pool.query(`
-        SELECT id FROM disc_migrations 
-        ORDER BY appliedAt ASC
+        SELECT id FROM disc_migrations
+        ORDER BY applied_at ASC
       `);
 
       const migrationIds = result.rows.map((row: any) => row.id);
@@ -195,19 +195,19 @@ export class MigrationTracker {
 
     try {
       const result = await this.pool.query(`
-        SELECT id, name, description, schemaHash, appliedAt, durationMs, createdAt
-        FROM disc_migrations 
-        ORDER BY appliedAt DESC
+        SELECT id, name, description, schema_hash, applied_at, duration_ms, created_at
+        FROM disc_migrations
+        ORDER BY applied_at DESC
       `);
 
       const history = result.rows.map((row: any) => ({
         id: row.id,
         name: row.name,
         description: row.description,
-        schemaHash: row.schemaHash,
-        appliedAt: row.appliedAt,
-        durationMs: row.durationMs,
-        createdAt: row.createdAt,
+        schemaHash: row.schema_hash,
+        appliedAt: row.applied_at,
+        durationMs: row.duration_ms,
+        createdAt: row.created_at,
       }));
 
       return Ok(history);
@@ -269,9 +269,9 @@ export class MigrationTracker {
       }
 
       const lastMigrationResult = await this.pool.query(`
-        SELECT id, appliedAt, schemaHash 
-        FROM disc_migrations 
-        ORDER BY appliedAt DESC 
+        SELECT id, applied_at, schema_hash
+        FROM disc_migrations
+        ORDER BY applied_at DESC
         LIMIT 1
       `);
 
@@ -279,9 +279,9 @@ export class MigrationTracker {
 
       const state: Types.MigrationState = {
         appliedMigrations: appliedResult.value,
-        currentSchemaHash: lastMigration?.schemaHash || "initial",
+        currentSchemaHash: lastMigration?.schema_hash || "initial",
         lastMigrationId: lastMigration?.id,
-        lastAppliedAt: lastMigration?.appliedAt,
+        lastAppliedAt: lastMigration?.applied_at,
       };
 
       return Ok(state);
@@ -310,7 +310,7 @@ export class MigrationTracker {
       await this.pool.execute(
         `
         INSERT INTO disc_migration_checkpoints (
-          id, name, createdAt, schemaState, migrationState
+          id, name, created_at, schema_state, migration_state
         ) VALUES (
           $1, $2, $3, $4, $5
         )
@@ -349,8 +349,8 @@ export class MigrationTracker {
     try {
       const result = await this.pool.query(
         `
-        SELECT id, name, createdAt, schemaState, migrationState
-        FROM disc_migration_checkpoints 
+        SELECT id, name, created_at, schema_state, migration_state
+        FROM disc_migration_checkpoints
         WHERE id = $1
       `,
         [checkpointId],
@@ -364,13 +364,13 @@ export class MigrationTracker {
       const checkpoint: Types.MigrationCheckpoint = {
         id: row.id,
         name: row.name,
-        createdAt: row.createdAt,
-        schemaState: typeof row.schemaState === "string"
-          ? JSON.parse(row.schemaState)
-          : row.schemaState,
-        migrationState: typeof row.migrationState === "string"
-          ? JSON.parse(row.migrationState)
-          : row.migrationState,
+        createdAt: row.created_at,
+        schemaState: typeof row.schema_state === "string"
+          ? JSON.parse(row.schema_state)
+          : row.schema_state,
+        migrationState: typeof row.migration_state === "string"
+          ? JSON.parse(row.migration_state)
+          : row.migration_state,
       };
 
       return Ok(checkpoint);
@@ -397,21 +397,21 @@ export class MigrationTracker {
 
     try {
       const result = await this.pool.query(`
-        SELECT id, name, createdAt, schemaState, migrationState
-        FROM disc_migration_checkpoints 
-        ORDER BY createdAt DESC
+        SELECT id, name, created_at, schema_state, migration_state
+        FROM disc_migration_checkpoints
+        ORDER BY created_at DESC
       `);
 
       const checkpoints = result.rows.map((row: any) => ({
         id: row.id,
         name: row.name,
-        createdAt: row.createdAt,
-        schemaState: typeof row.schemaState === "string"
-          ? JSON.parse(row.schemaState)
-          : row.schemaState,
-        migrationState: typeof row.migrationState === "string"
-          ? JSON.parse(row.migrationState)
-          : row.migrationState,
+        createdAt: row.created_at,
+        schemaState: typeof row.schema_state === "string"
+          ? JSON.parse(row.schema_state)
+          : row.schema_state,
+        migrationState: typeof row.migration_state === "string"
+          ? JSON.parse(row.migration_state)
+          : row.migration_state,
       }));
 
       return Ok(checkpoints);
@@ -439,7 +439,7 @@ export class MigrationTracker {
     try {
       const result = await this.pool.query(
         `
-        SELECT rollbackSql FROM disc_migrations WHERE id = $1
+        SELECT rollback_sql FROM disc_migrations WHERE id = $1
       `,
         [migrationId],
       );
@@ -448,7 +448,7 @@ export class MigrationTracker {
         return Err(new MigrationError(`Migration ${migrationId} not found`));
       }
 
-      return Ok(result.rows[0].rollbackSql || []);
+      return Ok(result.rows[0].rollback_sql || []);
     } catch (error) {
       return Err(
         new MigrationError(
@@ -470,18 +470,18 @@ export class MigrationTracker {
 
     try {
       const result = await this.pool.query(`
-        SELECT id, name, description, schemaHash, createdAt
-        FROM disc_migrations 
-        ORDER BY appliedAt ASC
+        SELECT id, name, description, schema_hash, created_at
+        FROM disc_migrations
+        ORDER BY applied_at ASC
       `);
 
       if (result.rows.length === 0) {
         return Ok(true);
       }
 
-      // Verify integrity: each row must have a non-empty schemaHash
+      // Verify integrity: each row must have a non-empty schema_hash
       for (const row of result.rows) {
-        if (!row.schemaHash || String(row.schemaHash).trim() === "") {
+        if (!row.schema_hash || String(row.schema_hash).trim() === "") {
           return Err(
             new MigrationError(
               `Migration "${row.name}" (${row.id}) has empty schemaHash — possible data corruption`,

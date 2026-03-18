@@ -26,7 +26,7 @@ export class PostgresConfig {
       `port = ${
         port === 0 ? 5432 : port
       }  # Default port for socket file naming`,
-      `maxConnections = ${maxConnections}`,
+      `max_connections = ${maxConnections}`,
       `superuser_reserved_connections = 3`,
     ];
 

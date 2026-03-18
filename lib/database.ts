@@ -183,7 +183,7 @@ export class DatabaseConnection {
     const result = await this.query(
       `SELECT 1 FROM information_schema.tables 
        WHERE table_schema = 'public' 
-       AND tableName = $1`,
+       AND table_name = $1`,
       [tableName],
     );
     return result.rowCount > 0;

@@ -98,13 +98,13 @@ export class TestDatabase implements DatabaseInterface {
     // Apply default values for columns not in INSERT
     if (tableName === "users") {
       if (!("active" in row)) row.active = true;
-      if (!("emailVerified" in row)) row.emailVerified = false;
-      if (!("createdAt" in row)) row.createdAt = new Date().toISOString();
-      if (!("updatedAt" in row)) row.updatedAt = new Date().toISOString();
+      if (!("email_verified" in row)) row.email_verified = false;
+      if (!("created_at" in row)) row.created_at = new Date().toISOString();
+      if (!("updated_at" in row)) row.updated_at = new Date().toISOString();
     }
     if (tableName === "sessions") {
       if (!("revoked" in row)) row.revoked = false;
-      if (!("createdAt" in row)) row.createdAt = new Date().toISOString();
+      if (!("created_at" in row)) row.created_at = new Date().toISOString();
     }
 
     table.push(row);

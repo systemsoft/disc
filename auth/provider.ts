@@ -66,10 +66,10 @@ export class AuthProvider implements IAuthProvider {
         id TEXT PRIMARY KEY,
         email TEXT UNIQUE NOT NULL,
         username TEXT UNIQUE,
-        passwordHash TEXT NOT NULL,
-        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        emailVerified BOOLEAN DEFAULT FALSE,
+        password_hash TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        email_verified BOOLEAN DEFAULT FALSE,
         active BOOLEAN DEFAULT TRUE,
         metadata TEXT,
         verification_token TEXT,
@@ -82,22 +82,22 @@ export class AuthProvider implements IAuthProvider {
     await this.db.execute(`
       CREATE TABLE IF NOT EXISTS sessions (
         id TEXT PRIMARY KEY,
-        userId TEXT NOT NULL,
+        user_id TEXT NOT NULL,
         token TEXT UNIQUE NOT NULL,
-        refreshToken TEXT UNIQUE,
-        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        expiresAt TIMESTAMP NOT NULL,
-        lastActivity TIMESTAMP,
-        ipAddress TEXT,
-        userAgent TEXT,
+        refresh_token TEXT UNIQUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        expires_at TIMESTAMP NOT NULL,
+        last_activity TIMESTAMP,
+        ip_address TEXT,
+        user_agent TEXT,
         revoked BOOLEAN DEFAULT FALSE,
-        FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       )
     `);
 
     // Indexes
     await this.db.execute(
-      `CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(userId)`,
+      `CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)`,
     );
     await this.db.execute(
       `CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)`,
@@ -156,7 +156,7 @@ export class AuthProvider implements IAuthProvider {
     await this.db.execute(
       `
       INSERT INTO users (
-        id, email, username, passwordHash, emailVerified, 
+        id, email, username, password_hash, email_verified,
         metadata, verification_token
       ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `,
@@ -186,7 +186,7 @@ export class AuthProvider implements IAuthProvider {
 
     // Update session with tokens
     await this.db.execute(
-      "UPDATE sessions SET token = ?, refreshToken = ? WHERE id = ?",
+      "UPDATE sessions SET token = ?, refresh_token = ? WHERE id = ?",
       [token, refreshToken, session.id],
     );
 
@@ -260,7 +260,7 @@ export class AuthProvider implements IAuthProvider {
 
     // Update session with tokens
     await this.db.execute(
-      "UPDATE sessions SET token = ?, refreshToken = ? WHERE id = ?",
+      "UPDATE sessions SET token = ?, refresh_token = ? WHERE id = ?",
       [token, refreshToken, session.id],
     );
 
@@ -287,12 +287,12 @@ export class AuthProvider implements IAuthProvider {
     // Use explicit columns with aliases to avoid duplicate field names
     // (both sessions and users have id, createdAt)
     const result = await this.db.query(
-      `SELECT s.id AS sessionId, s.userId, s.refreshToken, s.revoked,
-              u.id, u.email, u.username, u.passwordHash,
-              u.createdAt, u.updatedAt, u.emailVerified, u.active, u.metadata
+      `SELECT s.id AS session_id, s.user_id, s.refresh_token, s.revoked,
+              u.id, u.email, u.username, u.password_hash,
+              u.created_at, u.updated_at, u.email_verified, u.active, u.metadata
        FROM sessions s
-       JOIN users u ON s.userId = u.id
-       WHERE s.refreshToken = ? AND s.revoked = FALSE`,
+       JOIN users u ON s.user_id = u.id
+       WHERE s.refresh_token = ? AND s.revoked = FALSE`,
       [refreshToken],
     );
 
@@ -306,7 +306,7 @@ export class AuthProvider implements IAuthProvider {
 
     const row = result.rows[0];
     const user = this.rowToUser(row);
-    const oldSessionId = row.sessionId;
+    const oldSessionId = row.session_id;
 
     // Revoke old session
     await this.db.execute(
@@ -323,7 +323,7 @@ export class AuthProvider implements IAuthProvider {
 
     // Update session with tokens
     await this.db.execute(
-      "UPDATE sessions SET token = ?, refreshToken = ? WHERE id = ?",
+      "UPDATE sessions SET token = ?, refresh_token = ? WHERE id = ?",
       [token, newRefreshToken, session.id],
     );
 
@@ -448,7 +448,7 @@ export class AuthProvider implements IAuthProvider {
 
     // Update password
     await this.db.execute(
-      "UPDATE users SET passwordHash = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?",
+      "UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
       [newPasswordHash, userId],
     );
 
@@ -514,8 +514,8 @@ export class AuthProvider implements IAuthProvider {
 
     // Update password and clear reset token
     await this.db.execute(
-      `UPDATE users SET passwordHash = ?, reset_token = NULL, 
-       reset_token_expires = NULL, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`,
+      `UPDATE users SET password_hash = ?, reset_token = NULL,
+       reset_token_expires = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
       [passwordHash, userId],
     );
 
@@ -538,15 +538,15 @@ export class AuthProvider implements IAuthProvider {
     }
 
     await this.db.execute(
-      `UPDATE users SET emailVerified = TRUE, verification_token = NULL, 
-       updatedAt = CURRENT_TIMESTAMP WHERE verification_token = ?`,
+      `UPDATE users SET email_verified = TRUE, verification_token = NULL,
+       updated_at = CURRENT_TIMESTAMP WHERE verification_token = ?`,
       [verificationToken],
     );
   }
 
   async revokeAllSessions(userId: string): Promise<void> {
     await this.db.execute(
-      "UPDATE sessions SET revoked = TRUE WHERE userId = ?",
+      "UPDATE sessions SET revoked = TRUE WHERE user_id = ?",
       [userId],
     );
   }
@@ -558,7 +558,7 @@ export class AuthProvider implements IAuthProvider {
     await this.db.execute(
       `
       INSERT INTO sessions (
-        id, userId, token, expiresAt
+        id, user_id, token, expires_at
       ) VALUES (?, ?, ?, ?)
     `,
       [sessionId, userId, "", expiresAt.toISOString()],
@@ -632,10 +632,10 @@ export class AuthProvider implements IAuthProvider {
       id: row.id,
       email: row.email,
       username: row.username,
-      passwordHash: row.passwordHash,
-      createdAt: new Date(row.createdAt),
-      updatedAt: new Date(row.updatedAt),
-      emailVerified: Boolean(row.emailVerified),
+      passwordHash: row.password_hash,
+      createdAt: new Date(row.created_at),
+      updatedAt: new Date(row.updated_at),
+      emailVerified: Boolean(row.email_verified),
       active: Boolean(row.active),
       metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
     };

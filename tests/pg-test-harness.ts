@@ -347,7 +347,7 @@ function buildTestPgConf(port: number, socketDir: string): string {
     `listen_addresses = 'localhost'`,
     `port = ${port}`,
     `unix_socket_directories = '${socketDir}'`,
-    `maxConnections = 20`,
+    `max_connections = 20`,
     `shared_buffers = 32MB`,
     `work_mem = 4MB`,
     `fsync = off`,

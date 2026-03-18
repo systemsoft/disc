@@ -85,7 +85,7 @@ async function tableExists(dsn: string, tableName: string): Promise<boolean> {
     const result = await client.queryObject<{ exists: boolean }>(
       `SELECT EXISTS (
         SELECT 1 FROM information_schema.tables
-        WHERE table_schema = 'public' AND tableName = $1
+        WHERE table_schema = 'public' AND table_name = $1
       ) AS exists`,
       [tableName],
     );

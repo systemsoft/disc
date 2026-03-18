@@ -45,7 +45,7 @@ async function tableExists(dsn: string, tableName: string): Promise<boolean> {
     const result = await client.queryObject<{ exists: boolean }>(
       `SELECT EXISTS (
         SELECT 1 FROM information_schema.tables
-        WHERE table_schema = 'public' AND tableName = $1
+        WHERE table_schema = 'public' AND table_name = $1
       ) AS exists`,
       [tableName],
     );
@@ -59,17 +59,17 @@ async function tableExists(dsn: string, tableName: string): Promise<boolean> {
 async function getColumns(
   dsn: string,
   tableName: string,
-): Promise<{ columnName: string; data_type: string }[]> {
+): Promise<{ column_name: string; data_type: string }[]> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
   try {
     await client.connect();
     const result = await client.queryObject<
-      { columnName: string; data_type: string }
+      { column_name: string; data_type: string }
     >(
-      `SELECT columnName, data_type
+      `SELECT column_name, data_type
        FROM information_schema.columns
-       WHERE table_schema = 'public' AND tableName = $1
+       WHERE table_schema = 'public' AND table_name = $1
        ORDER BY ordinal_position`,
       [tableName],
     );
@@ -186,7 +186,7 @@ Deno.test({
 
       // Verify columns
       const columns = await getColumns(dsn, tableName);
-      const columnNames = columns.map((c) => c.columnName);
+      const columnNames = columns.map((c) => c.column_name);
       assertEquals(columnNames.includes("id"), true, "Should have id column");
       assertEquals(
         columnNames.includes("name"),
@@ -490,7 +490,7 @@ Deno.test({
 
       // Verify columns
       const columns = await getColumns(dsn, expectedTable);
-      const columnNames = columns.map((c) => c.columnName);
+      const columnNames = columns.map((c) => c.column_name);
       assertEquals(columnNames.includes("id"), true, "Should have id column");
       assertEquals(
         columnNames.includes("name"),
@@ -543,7 +543,7 @@ Deno.test({
 
       // Verify initial columns
       let columns = await getColumns(dsn, expectedTable);
-      let columnNames = columns.map((c) => c.columnName);
+      let columnNames = columns.map((c) => c.column_name);
       assertEquals(
         columnNames.includes("name"),
         true,
@@ -568,7 +568,7 @@ Deno.test({
 
       // Verify the new column was added
       columns = await getColumns(dsn, expectedTable);
-      columnNames = columns.map((c) => c.columnName);
+      columnNames = columns.map((c) => c.column_name);
       assertEquals(
         columnNames.includes("name"),
         true,
