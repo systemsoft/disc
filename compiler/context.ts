@@ -37,6 +37,13 @@ export interface TypeDef {
   links: Map<string, LinkDef>;
   tableName: string;
   accessPolicies?: AccessPolicy[];
+  /** Enum member values for scalar enum types */
+  enumValues?: string[];
+}
+
+export interface PropertyConstraint {
+  name: string;
+  args?: string[];
 }
 
 export interface PropertyDef {
@@ -45,6 +52,16 @@ export interface PropertyDef {
   required: boolean;
   multi: boolean;
   columnName: string;
+  /** Original EdgeQL type name (e.g., "str", "int32", "bool") before SQL mapping */
+  edgeqlType?: string;
+  /** Whether this property is readonly (cannot be set after creation) */
+  readonly?: boolean;
+  /** Whether this property has a default value expression */
+  hasDefault?: boolean;
+  /** Whether this property is a computed expression (not stored) */
+  computed?: boolean;
+  /** Constraints applied to this property (e.g., exclusive, max_length) */
+  constraints?: PropertyConstraint[];
 }
 
 export interface LinkDef {
@@ -210,6 +227,15 @@ export function mergeSchemaAdditions(
 
 // Default schema with basic types for testing
 export function createTestSchema(): Schema {
+  const statusType: TypeDef = {
+    name: "Status",
+    kind: "enum",
+    tableName: "status",
+    properties: new Map(),
+    links: new Map(),
+    enumValues: ["active", "inactive", "pending"],
+  };
+
   const userType: TypeDef = {
     name: "User",
     kind: "object",
@@ -221,6 +247,8 @@ export function createTestSchema(): Schema {
         required: true,
         multi: false,
         columnName: "id",
+        edgeqlType: "uuid",
+        hasDefault: true,
       }],
       ["name", {
         name: "name",
@@ -228,6 +256,8 @@ export function createTestSchema(): Schema {
         required: true,
         multi: false,
         columnName: "name",
+        edgeqlType: "str",
+        constraints: [{ name: "max_length", args: ["255"] }],
       }],
       ["email", {
         name: "email",
@@ -235,13 +265,18 @@ export function createTestSchema(): Schema {
         required: true,
         multi: false,
         columnName: "email",
+        edgeqlType: "str",
+        constraints: [{ name: "exclusive" }],
       }],
       ["createdAt", {
         name: "createdAt",
         type: "datetime",
         required: true,
         multi: false,
-        columnName: "createdAt",
+        columnName: "created_at",
+        edgeqlType: "datetime",
+        readonly: true,
+        hasDefault: true,
       }],
       ["active", {
         name: "active",
@@ -249,6 +284,7 @@ export function createTestSchema(): Schema {
         required: false,
         multi: false,
         columnName: "active",
+        edgeqlType: "bool",
       }],
       ["age", {
         name: "age",
@@ -256,6 +292,16 @@ export function createTestSchema(): Schema {
         required: false,
         multi: false,
         columnName: "age",
+        edgeqlType: "int32",
+      }],
+      ["postCount", {
+        name: "postCount",
+        type: "int32",
+        required: false,
+        multi: false,
+        columnName: "post_count",
+        edgeqlType: "int32",
+        computed: true,
       }],
     ]),
     links: new Map([
@@ -280,6 +326,8 @@ export function createTestSchema(): Schema {
         required: true,
         multi: false,
         columnName: "id",
+        edgeqlType: "uuid",
+        hasDefault: true,
       }],
       ["title", {
         name: "title",
@@ -287,6 +335,7 @@ export function createTestSchema(): Schema {
         required: true,
         multi: false,
         columnName: "title",
+        edgeqlType: "str",
       }],
       ["body", {
         name: "body",
@@ -294,13 +343,17 @@ export function createTestSchema(): Schema {
         required: true,
         multi: false,
         columnName: "body",
+        edgeqlType: "str",
       }],
       ["createdAt", {
         name: "createdAt",
         type: "datetime",
         required: true,
         multi: false,
-        columnName: "createdAt",
+        columnName: "created_at",
+        edgeqlType: "datetime",
+        readonly: true,
+        hasDefault: true,
       }],
     ]),
     links: new Map([
@@ -316,6 +369,7 @@ export function createTestSchema(): Schema {
 
   return {
     types: new Map([
+      ["Status", statusType],
       ["User", userType],
       ["Post", postType],
     ]),

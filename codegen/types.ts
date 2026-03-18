@@ -198,12 +198,72 @@ export function getTypeMapping(edgeqlType: string): TypeMapping | null {
   ) || null;
 }
 
+/**
+ * Map SQL type names to their EdgeQL equivalents for backward compatibility.
+ * When PropertyDef.edgeqlType is missing, the type field may contain SQL types
+ * (e.g., "text", "integer") instead of EdgeQL types (e.g., "str", "int32").
+ */
+const SQL_TO_EDGEQL_TYPE_MAP: Record<string, string> = {
+  "text": "str",
+  "boolean": "bool",
+  "smallint": "int16",
+  "integer": "int32",
+  "bigint": "int64",
+  "real": "float32",
+  "double precision": "float64",
+  "numeric": "decimal",
+  "uuid": "uuid",
+  "timestamptz": "datetime",
+  "timestamp": "cal::local_datetime",
+  "interval": "duration",
+  "bytea": "bytes",
+  "jsonb": "json",
+  "date": "cal::local_date",
+  "time": "cal::local_time",
+};
+
+/**
+ * Map an EdgeQL type name to its EdgeQL cast syntax.
+ */
+export function mapEdgeQLTypeToEdgeQLCast(edgeqlType: string): string {
+  const castMap: Record<string, string> = {
+    "str": "<str>",
+    "int16": "<int16>",
+    "int32": "<int32>",
+    "int64": "<int64>",
+    "float32": "<float32>",
+    "float64": "<float64>",
+    "bool": "<bool>",
+    "datetime": "<datetime>",
+    "duration": "<duration>",
+    "uuid": "<uuid>",
+    "bytes": "<bytes>",
+    "json": "<json>",
+    "bigint": "<bigint>",
+    "decimal": "<decimal>",
+    "sequence": "<sequence>",
+    "cal::local_datetime": "<cal::local_datetime>",
+    "cal::local_date": "<cal::local_date>",
+    "cal::local_time": "<cal::local_time>",
+  };
+  return castMap[edgeqlType] || `<${edgeqlType}>`;
+}
+
 export function mapEdgeQLTypeToTypeScript(
   edgeqlType: string,
   required: boolean = true,
   multi: boolean = false,
 ): string {
-  const mapping = getTypeMapping(edgeqlType);
+  // Try direct EdgeQL type mapping first
+  let mapping = getTypeMapping(edgeqlType);
+
+  // Fall back to SQL type name mapping for backward compatibility
+  if (!mapping) {
+    const edgeqlEquivalent = SQL_TO_EDGEQL_TYPE_MAP[edgeqlType];
+    if (edgeqlEquivalent) {
+      mapping = getTypeMapping(edgeqlEquivalent);
+    }
+  }
 
   if (!mapping) {
     // For object types, use the type name directly

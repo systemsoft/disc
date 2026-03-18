@@ -71,9 +71,12 @@ export class TypeScriptGenerator {
     content += this.generateFileHeader("Type Definitions");
     content += "\n";
 
-    // Generate interfaces for each type
+    // Generate interfaces and enum types
     for (const [_typeName, typeDef] of this.schema.types) {
-      if (typeDef.kind === "object") {
+      if (typeDef.kind === "enum" && typeDef.enumValues) {
+        content += this.generateEnumType(typeDef);
+        content += "\n";
+      } else if (typeDef.kind === "object") {
         content += this.generateInterface(typeDef);
         content += "\n";
       }
@@ -121,18 +124,74 @@ export class TypeScriptGenerator {
     return content;
   }
 
+  private generateEnumType(typeDef: Context.TypeDef): string {
+    const typeName = this.getTypeScriptTypeName(typeDef.name);
+    let content = "";
+
+    content += `/**\n`;
+    content += ` * ${typeDef.name} enum type from EdgeQL schema\n`;
+    content += ` */\n`;
+
+    const values = (typeDef.enumValues ?? [])
+      .map((v) => `"${v}"`)
+      .join(" | ");
+
+    content += `export type ${typeName} = ${values || "never"};\n`;
+
+    return content;
+  }
+
   private generatePropertyDefinition(
     name: string,
     prop: Context.PropertyDef,
   ): string {
     let content = "";
 
-    // Property documentation
-    content += `  /** ${prop.type}${prop.required ? " (required)" : ""} */\n`;
+    // Use edgeqlType when available for accurate type display and mapping
+    const typeForMapping = prop.edgeqlType ?? prop.type;
+
+    // Build JSDoc tags for constraints, readonly, and default metadata
+    const jsdocTags: string[] = [];
+
+    if (prop.readonly) {
+      jsdocTags.push("@readonly");
+    }
+
+    if (prop.hasDefault) {
+      jsdocTags.push("@default");
+    }
+
+    if (prop.constraints && prop.constraints.length > 0) {
+      for (const constraint of prop.constraints) {
+        if (constraint.args && constraint.args.length > 0) {
+          jsdocTags.push(
+            `@constraint ${constraint.name}(${constraint.args.join(", ")})`,
+          );
+        } else {
+          jsdocTags.push(`@constraint ${constraint.name}`);
+        }
+      }
+    }
+
+    // Generate JSDoc: multi-line when tags are present, single-line otherwise
+    if (jsdocTags.length > 0) {
+      content += `  /**\n`;
+      content += `   * ${typeForMapping}${
+        prop.required ? " (required)" : ""
+      }\n`;
+      for (const tag of jsdocTags) {
+        content += `   * ${tag}\n`;
+      }
+      content += `   */\n`;
+    } else {
+      content += `  /** ${typeForMapping}${
+        prop.required ? " (required)" : ""
+      } */\n`;
+    }
 
     // Property declaration
     const tsType = Types.mapEdgeQLTypeToTypeScript(
-      prop.type,
+      typeForMapping,
       prop.required,
       prop.multi,
     );
@@ -200,6 +259,15 @@ export class TypeScriptGenerator {
     const typeName = this.getTypeScriptTypeName(typeDef.name);
     const builderName = `${typeName}QueryBuilder`;
 
+    // Build the type casts map from property definitions (skip "id")
+    const typeCastEntries: string[] = [];
+    for (const [propName, prop] of typeDef.properties) {
+      if (propName === "id") continue;
+      const edgeqlType = prop.edgeqlType ?? prop.type;
+      const cast = Types.mapEdgeQLTypeToEdgeQLCast(edgeqlType);
+      typeCastEntries.push(`    ${propName}: "${cast}"`);
+    }
+
     let content = "";
 
     // Builder class
@@ -207,6 +275,13 @@ export class TypeScriptGenerator {
     content += ` * Query builder for ${typeName}\n`;
     content += ` */\n`;
     content += `export class ${builderName} {\n`;
+
+    // Static type casts map
+    content += `  private static _typeCasts: Record<string, string> = {\n`;
+    content += typeCastEntries.join(",\n");
+    if (typeCastEntries.length > 0) content += ",\n";
+    content += `  };\n\n`;
+
     content += `  constructor(private client: DiscClient) {}\n\n`;
 
     // Select methods
@@ -237,7 +312,7 @@ export class TypeScriptGenerator {
     // Filter method
     content += `  /** Filter ${typeName} objects */\n`;
     content +=
-      `  async filter(condition: string, variables?: Record<string, any>, shape?: string): Promise<Types.${typeName}[]> {\n`;
+      `  async filter(condition: string, variables?: Types.${typeName}FilterVars, shape?: string): Promise<Types.${typeName}[]> {\n`;
     content += `    const query = shape\n`;
     content +=
       `      ? \`select ${typeDef.name} \${shape} filter \${condition}\`\n`;
@@ -250,9 +325,10 @@ export class TypeScriptGenerator {
     // Insert method
     content += `  /** Insert new ${typeName} */\n`;
     content +=
-      `  async insert(data: Partial<Omit<Types.${typeName}, 'id'>>): Promise<Types.${typeName}> {\n`;
+      `  async insert(data: Types.${typeName}Insert): Promise<Types.${typeName}> {\n`;
     content += `    const assignments = Object.entries(data)\n`;
-    content += `      .map(([key, value]) => \`\${key} := <str>$\${key}\`)\n`;
+    content +=
+      `      .map(([key, value]) => \`\${key} := \${${builderName}._typeCasts[key] || "<str>"}$\${key}\`)\n`;
     content += `      .join(', ');\n`;
     content +=
       `    const query = \`insert ${typeDef.name} { \${assignments} }\`;\n`;
@@ -263,9 +339,10 @@ export class TypeScriptGenerator {
     // Update method
     content += `  /** Update ${typeName} by ID */\n`;
     content +=
-      `  async update(id: string, data: Partial<Omit<Types.${typeName}, 'id'>>): Promise<Types.${typeName}> {\n`;
+      `  async update(id: string, data: Types.${typeName}Update): Promise<Types.${typeName}> {\n`;
     content += `    const assignments = Object.entries(data)\n`;
-    content += `      .map(([key, value]) => \`\${key} := <str>$\${key}\`)\n`;
+    content +=
+      `      .map(([key, value]) => \`\${key} := \${${builderName}._typeCasts[key] || "<str>"}$\${key}\`)\n`;
     content += `      .join(', ');\n`;
     content +=
       `    const query = \`update ${typeDef.name} filter .id = <uuid>$id set { \${assignments} }\`;\n`;
@@ -285,7 +362,7 @@ export class TypeScriptGenerator {
     // Count method
     content += `  /** Count ${typeName} objects */\n`;
     content +=
-      `  async count(condition?: string, variables?: Record<string, any>): Promise<number> {\n`;
+      `  async count(condition?: string, variables?: Types.${typeName}FilterVars): Promise<number> {\n`;
     content += `    const query = condition\n`;
     content +=
       `      ? \`select count(${typeDef.name} filter \${condition})\`\n`;
@@ -415,15 +492,119 @@ export class TypeScriptGenerator {
     content += `  extensions?: Record<string, any>;\n`;
     content += `}\n\n`;
 
-    content += `/** Insert/Update data types */\n`;
-    for (const [typeName] of this.schema.types) {
+    content += `/** Insert/Update/FilterVars data types */\n`;
+    for (const [typeName, typeDef] of this.schema.types) {
+      // Skip enum types — they don't have insert/update/filter types
+      if (typeDef.kind === "enum") {
+        continue;
+      }
+
       const tsTypeName = this.getTypeScriptTypeName(typeName);
-      content +=
-        `export type ${tsTypeName}Insert = Omit<${tsTypeName}, 'id'>;\n`;
-      content +=
-        `export type ${tsTypeName}Update = Partial<${tsTypeName}Insert>;\n`;
+
+      // Generate Insert interface with smart rules
+      content += this.generateInsertType(tsTypeName, typeDef);
+      content += "\n";
+
+      // Generate Update interface with smart rules
+      content += this.generateUpdateType(tsTypeName, typeDef);
+      content += "\n";
+
+      // Generate FilterVars interface for typed filter/count parameters
+      content += this.generateFilterVarsType(tsTypeName, typeDef);
+      content += "\n";
     }
 
+    return content;
+  }
+
+  private generateInsertType(
+    tsTypeName: string,
+    typeDef: Context.TypeDef,
+  ): string {
+    let content = "";
+    content += `export interface ${tsTypeName}Insert {\n`;
+
+    for (const [propName, prop] of typeDef.properties) {
+      // Exclude id (auto-generated UUID)
+      if (propName === "id") continue;
+
+      // Exclude computed properties
+      if (prop.computed) continue;
+
+      // Exclude readonly properties that have a default (e.g., created_at)
+      if (prop.readonly && prop.hasDefault) continue;
+
+      const typeForMapping = prop.edgeqlType ?? prop.type;
+      const tsType = Types.mapEdgeQLTypeToTypeScript(
+        typeForMapping,
+        true, // always use non-nullable base type
+        prop.multi,
+      );
+
+      // Properties with defaults are optional in insert even if required in schema
+      const isOptional = !prop.required || prop.hasDefault;
+      const optional = isOptional ? "?" : "";
+
+      content += `  ${propName}${optional}: ${tsType};\n`;
+    }
+
+    content += `}\n`;
+    return content;
+  }
+
+  private generateUpdateType(
+    tsTypeName: string,
+    typeDef: Context.TypeDef,
+  ): string {
+    let content = "";
+    content += `export interface ${tsTypeName}Update {\n`;
+
+    for (const [propName, prop] of typeDef.properties) {
+      // Exclude id
+      if (propName === "id") continue;
+
+      // Exclude computed properties
+      if (prop.computed) continue;
+
+      // Exclude readonly properties
+      if (prop.readonly) continue;
+
+      const typeForMapping = prop.edgeqlType ?? prop.type;
+      const tsType = Types.mapEdgeQLTypeToTypeScript(
+        typeForMapping,
+        true, // always use non-nullable base type
+        prop.multi,
+      );
+
+      // Everything in update is optional
+      content += `  ${propName}?: ${tsType};\n`;
+    }
+
+    content += `}\n`;
+    return content;
+  }
+
+  private generateFilterVarsType(
+    tsTypeName: string,
+    typeDef: Context.TypeDef,
+  ): string {
+    let content = "";
+    content += `export interface ${tsTypeName}FilterVars {\n`;
+
+    for (const [propName, prop] of typeDef.properties) {
+      const typeForMapping = prop.edgeqlType ?? prop.type;
+      const tsType = Types.mapEdgeQLTypeToTypeScript(
+        typeForMapping,
+        true, // always use non-nullable base type
+        prop.multi,
+      );
+
+      content += `  ${propName}?: ${tsType};\n`;
+    }
+
+    // Index signature for flexibility
+    content += `  [key: string]: unknown;\n`;
+    content += `}\n`;
     return content;
   }
 

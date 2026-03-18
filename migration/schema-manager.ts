@@ -14,11 +14,20 @@ import { SDLParser } from "../schema/parser.ts";
 import { Module, SDLConverter } from "../schema/converter.ts";
 import {
   AccessPolicy as SDLAccessPolicy,
+  Constraint as SDLConstraint,
+  Expression,
+  ScalarTypeDeclaration,
   TypeDeclaration,
 } from "../schema/ast.ts";
 import { adaptAccessPolicies } from "../access/policy-adapter.ts";
 import { getBuiltinFunctions } from "../compiler/builtin-functions.ts";
-import { LinkDef, PropertyDef, Schema, TypeDef } from "../compiler/context.ts";
+import {
+  LinkDef,
+  PropertyConstraint,
+  PropertyDef,
+  Schema,
+  TypeDef,
+} from "../compiler/context.ts";
 import { MigrationEngine } from "./engine.ts";
 import * as Types from "./types.ts";
 
@@ -66,6 +75,46 @@ function typeNameToTableName(typeName: string): string {
  */
 function sdlTypeToSqlType(sdlType: string): string {
   return SDL_TO_SQL_TYPE_MAP[sdlType] ?? "text";
+}
+
+/**
+ * Stringify an SDL Expression node into a human-readable string.
+ * Used for rendering constraint arguments in codegen output.
+ */
+function stringifyExpression(expr: Expression): string {
+  switch (expr.kind) {
+    case "Literal":
+      return String(expr.value);
+    case "PathExpression":
+      return expr.path.join(".");
+    case "FunctionCall":
+      return `${expr.name.parts.join("::")}(${
+        expr.args.map(stringifyExpression).join(", ")
+      })`;
+    default:
+      return String((expr as { value?: unknown }).value ?? "");
+  }
+}
+
+/**
+ * Extract PropertyConstraint[] from SDL Constraint AST nodes.
+ */
+function extractPropertyConstraints(
+  sdlConstraints: SDLConstraint[] | undefined,
+): PropertyConstraint[] | undefined {
+  if (!sdlConstraints || sdlConstraints.length === 0) {
+    return undefined;
+  }
+
+  return sdlConstraints.map((c) => {
+    const constraint: PropertyConstraint = {
+      name: c.name?.value ?? "unknown",
+    };
+    if (c.args && c.args.length > 0) {
+      constraint.args = c.args.map(stringifyExpression);
+    }
+    return constraint;
+  });
 }
 
 export interface SchemaManagerOptions {
@@ -125,6 +174,31 @@ export class SchemaManager {
 
     for (const module of modules) {
       for (const item of module.items) {
+        // Handle scalar enum types
+        if (item.kind === "ScalarTypeDeclaration") {
+          const scalarDecl = item as ScalarTypeDeclaration;
+          const scalarName = scalarDecl.name.value;
+
+          // Detect enum scalars: scalar type Status extending enum<...>
+          // The extending TypeRef name will be "enum" if the parser captured it
+          const isEnum = scalarDecl.extending?.some((ext) =>
+            ext.name.parts[0] === "enum"
+          ) ?? false;
+
+          if (isEnum) {
+            types.set(scalarName, {
+              name: scalarName,
+              kind: "enum",
+              tableName: typeNameToTableName(scalarName),
+              properties: new Map(),
+              links: new Map(),
+              enumValues: [],
+            });
+          }
+
+          continue;
+        }
+
         if (item.kind !== "TypeDeclaration") {
           continue;
         }
@@ -152,12 +226,21 @@ export class SchemaManager {
           const sdlTypeName = propDecl.type.name.parts.join("::");
           const sqlType = sdlTypeToSqlType(sdlTypeName);
 
+          const constraints = extractPropertyConstraints(
+            propDecl.constraints,
+          );
+
           properties.set(propName, {
             name: propName,
             type: sqlType,
             required: propDecl.required ?? false,
             multi: propDecl.multi ?? false,
             columnName: propName,
+            edgeqlType: sdlTypeName,
+            readonly: propDecl.readonly ?? false,
+            hasDefault: propDecl.default !== undefined,
+            computed: propDecl.computed !== undefined,
+            constraints,
           });
         }
 

@@ -254,3 +254,52 @@ Deno.test("Types - edge cases for type mapping", () => {
     "string[] | null",
   );
 });
+
+// --- mapEdgeQLTypeToEdgeQLCast tests ---
+
+Deno.test("Types - mapEdgeQLTypeToEdgeQLCast for standard types", () => {
+  assertEquals(Types.mapEdgeQLTypeToEdgeQLCast("str"), "<str>");
+  assertEquals(Types.mapEdgeQLTypeToEdgeQLCast("int32"), "<int32>");
+  assertEquals(Types.mapEdgeQLTypeToEdgeQLCast("bool"), "<bool>");
+  assertEquals(Types.mapEdgeQLTypeToEdgeQLCast("datetime"), "<datetime>");
+});
+
+Deno.test("Types - mapEdgeQLTypeToEdgeQLCast for all numeric types", () => {
+  assertEquals(Types.mapEdgeQLTypeToEdgeQLCast("int16"), "<int16>");
+  assertEquals(Types.mapEdgeQLTypeToEdgeQLCast("int64"), "<int64>");
+  assertEquals(Types.mapEdgeQLTypeToEdgeQLCast("float32"), "<float32>");
+  assertEquals(Types.mapEdgeQLTypeToEdgeQLCast("float64"), "<float64>");
+  assertEquals(Types.mapEdgeQLTypeToEdgeQLCast("bigint"), "<bigint>");
+  assertEquals(Types.mapEdgeQLTypeToEdgeQLCast("decimal"), "<decimal>");
+});
+
+Deno.test("Types - mapEdgeQLTypeToEdgeQLCast for temporal types", () => {
+  assertEquals(Types.mapEdgeQLTypeToEdgeQLCast("duration"), "<duration>");
+  assertEquals(
+    Types.mapEdgeQLTypeToEdgeQLCast("cal::local_datetime"),
+    "<cal::local_datetime>",
+  );
+  assertEquals(
+    Types.mapEdgeQLTypeToEdgeQLCast("cal::local_date"),
+    "<cal::local_date>",
+  );
+  assertEquals(
+    Types.mapEdgeQLTypeToEdgeQLCast("cal::local_time"),
+    "<cal::local_time>",
+  );
+});
+
+Deno.test("Types - mapEdgeQLTypeToEdgeQLCast for uuid, bytes, json, sequence", () => {
+  assertEquals(Types.mapEdgeQLTypeToEdgeQLCast("uuid"), "<uuid>");
+  assertEquals(Types.mapEdgeQLTypeToEdgeQLCast("bytes"), "<bytes>");
+  assertEquals(Types.mapEdgeQLTypeToEdgeQLCast("json"), "<json>");
+  assertEquals(Types.mapEdgeQLTypeToEdgeQLCast("sequence"), "<sequence>");
+});
+
+Deno.test("Types - mapEdgeQLTypeToEdgeQLCast fallback for unknown type", () => {
+  assertEquals(Types.mapEdgeQLTypeToEdgeQLCast("custom_type"), "<custom_type>");
+  assertEquals(
+    Types.mapEdgeQLTypeToEdgeQLCast("my_module::MyType"),
+    "<my_module::MyType>",
+  );
+});

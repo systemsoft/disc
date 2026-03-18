@@ -288,3 +288,264 @@ Deno.test("Codegen - file path generation", () => {
     assertStringIncludes(file.path, "custom/nested/path");
   }
 });
+
+// --- Stage 15.5 integration tests ---
+
+Deno.test("Codegen - full pipeline with enriched test schema", () => {
+  const schema = Context.createTestSchema();
+  const result = Codegen.generateTypeScript(schema, {
+    includeQueryBuilders: true,
+    includeClient: false,
+  });
+
+  assertEquals(result.errors.length, 0);
+
+  const typesFile = result.files.find((f) => f.type === "types");
+  assertExists(typesFile);
+  const typesContent = typesFile.content;
+
+  // Correct TypeScript types on interfaces
+  assertStringIncludes(typesContent, "name: string");
+  assertStringIncludes(typesContent, "email: string");
+  assertStringIncludes(typesContent, "createdAt: Date");
+  assertStringIncludes(typesContent, "active?: boolean");
+  assertStringIncludes(typesContent, "age?: number");
+
+  // Computed property postCount should appear on the interface
+  assertStringIncludes(typesContent, "postCount?: number");
+
+  // Enum union type generated
+  assertStringIncludes(
+    typesContent,
+    'export type Status = "active" | "inactive" | "pending";',
+  );
+
+  // Smart Insert type: excludes id, excludes computed (postCount),
+  // excludes readonly+hasDefault (createdAt)
+  const insertStart = typesContent.indexOf("export interface UserInsert");
+  assertEquals(insertStart !== -1, true);
+  const insertEnd = typesContent.indexOf("}", insertStart);
+  const insertBlock = typesContent.substring(insertStart, insertEnd + 1);
+
+  assertEquals(insertBlock.includes("id:"), false);
+  assertEquals(insertBlock.includes("id?:"), false);
+  assertEquals(insertBlock.includes("postCount"), false);
+  assertEquals(insertBlock.includes("createdAt"), false);
+  assertStringIncludes(insertBlock, "name: string;");
+  assertStringIncludes(insertBlock, "email: string;");
+
+  // Smart Update type: excludes id, readonly (createdAt), computed (postCount)
+  const updateStart = typesContent.indexOf("export interface UserUpdate");
+  assertEquals(updateStart !== -1, true);
+  const updateEnd = typesContent.indexOf("}", updateStart);
+  const updateBlock = typesContent.substring(updateStart, updateEnd + 1);
+
+  assertEquals(updateBlock.includes("id:"), false);
+  assertEquals(updateBlock.includes("id?:"), false);
+  assertEquals(updateBlock.includes("postCount"), false);
+  assertEquals(updateBlock.includes("createdAt"), false);
+  assertStringIncludes(updateBlock, "name?: string;");
+  assertStringIncludes(updateBlock, "email?: string;");
+
+  // FilterVars with correct types
+  const filterStart = typesContent.indexOf("export interface UserFilterVars");
+  assertEquals(filterStart !== -1, true);
+  const filterEnd = typesContent.indexOf("}", filterStart);
+  const filterBlock = typesContent.substring(filterStart, filterEnd + 1);
+
+  assertStringIncludes(filterBlock, "id?: string;");
+  assertStringIncludes(filterBlock, "email?: string;");
+  assertStringIncludes(filterBlock, "age?: number;");
+  assertStringIncludes(filterBlock, "createdAt?: Date;");
+
+  // JSDoc with constraints
+  assertStringIncludes(typesContent, "@constraint exclusive");
+  assertStringIncludes(typesContent, "@constraint max_length(255)");
+
+  // Query builders should have correct _typeCasts
+  const queryFile = result.files.find((f) => f.type === "queries");
+  assertExists(queryFile);
+  const queryContent = queryFile.content;
+
+  assertStringIncludes(queryContent, "_typeCasts");
+  assertStringIncludes(queryContent, 'name: "<str>"');
+  assertStringIncludes(queryContent, 'email: "<str>"');
+  assertStringIncludes(queryContent, 'age: "<int32>"');
+  assertStringIncludes(queryContent, 'active: "<bool>"');
+  assertStringIncludes(queryContent, 'createdAt: "<datetime>"');
+});
+
+Deno.test("Codegen - backward compatibility with minimal PropertyDef", () => {
+  // Create a minimal schema with NO new fields (no edgeqlType, readonly,
+  // hasDefault, computed, constraints) to verify backward compat
+  const minimalSchema: Context.Schema = {
+    types: new Map([
+      ["Item", {
+        name: "Item",
+        kind: "object",
+        tableName: "items",
+        properties: new Map([
+          ["id", {
+            name: "id",
+            type: "uuid",
+            required: true,
+            multi: false,
+            columnName: "id",
+          }],
+          ["title", {
+            name: "title",
+            type: "str",
+            required: true,
+            multi: false,
+            columnName: "title",
+          }],
+          ["count", {
+            name: "count",
+            type: "int32",
+            required: false,
+            multi: false,
+            columnName: "count",
+          }],
+        ]),
+        links: new Map(),
+      }],
+    ]),
+    functions: new Map(),
+  };
+
+  const result = Codegen.generateTypeScript(minimalSchema, {
+    includeQueryBuilders: true,
+    includeClient: false,
+  });
+
+  // Should generate without errors
+  assertEquals(result.errors.length, 0);
+
+  const typesFile = result.files.find((f) => f.type === "types");
+  assertExists(typesFile);
+
+  // Interface should still generate correct types via type field fallback
+  assertStringIncludes(typesFile.content, "title: string");
+  assertStringIncludes(typesFile.content, "count?: number");
+
+  // Insert/Update types should still be generated
+  assertStringIncludes(typesFile.content, "export interface ItemInsert");
+  assertStringIncludes(typesFile.content, "export interface ItemUpdate");
+
+  // Query builders should still work with type field fallback
+  const queryFile = result.files.find((f) => f.type === "queries");
+  assertExists(queryFile);
+  assertStringIncludes(queryFile.content, 'title: "<str>"');
+  assertStringIncludes(queryFile.content, 'count: "<int32>"');
+});
+
+Deno.test("Codegen - mixed schema with enum and object types", () => {
+  const schema = Context.createTestSchema();
+  const result = Codegen.generateTypeScript(schema, {
+    includeQueryBuilders: true,
+    includeClient: false,
+  });
+
+  assertEquals(result.errors.length, 0);
+
+  const typesFile = result.files.find((f) => f.type === "types");
+  assertExists(typesFile);
+  const content = typesFile.content;
+
+  // Enum type generates a union type
+  assertStringIncludes(
+    content,
+    'export type Status = "active" | "inactive" | "pending";',
+  );
+
+  // Object types generate interfaces
+  assertStringIncludes(content, "export interface User");
+  assertStringIncludes(content, "export interface Post");
+
+  // Enum does NOT generate interface, Insert, Update, or FilterVars
+  assertEquals(content.includes("export interface Status"), false);
+  assertEquals(content.includes("StatusInsert"), false);
+  assertEquals(content.includes("StatusUpdate"), false);
+  assertEquals(content.includes("StatusFilterVars"), false);
+
+  // Object types DO generate Insert/Update/FilterVars
+  assertStringIncludes(content, "export interface UserInsert");
+  assertStringIncludes(content, "export interface UserUpdate");
+  assertStringIncludes(content, "export interface UserFilterVars");
+  assertStringIncludes(content, "export interface PostInsert");
+  assertStringIncludes(content, "export interface PostUpdate");
+  assertStringIncludes(content, "export interface PostFilterVars");
+
+  // Query builders should only exist for object types, not enums
+  const queryFile = result.files.find((f) => f.type === "queries");
+  assertExists(queryFile);
+  assertStringIncludes(queryFile.content, "UserQueryBuilder");
+  assertStringIncludes(queryFile.content, "PostQueryBuilder");
+  assertEquals(queryFile.content.includes("StatusQueryBuilder"), false);
+});
+
+Deno.test("Codegen - all features combined in single generated file", () => {
+  const schema = Context.createTestSchema();
+  const result = Codegen.generateTypeScript(schema, {
+    includeQueryBuilders: true,
+    includeClient: false,
+  });
+
+  assertEquals(result.errors.length, 0);
+
+  const typesFile = result.files.find((f) => f.type === "types");
+  assertExists(typesFile);
+  const content = typesFile.content;
+
+  // File header
+  assertStringIncludes(content, "Generated by Disc TypeScript Codegen");
+
+  // Enum union type section
+  assertStringIncludes(content, "export type Status");
+
+  // Interface section
+  assertStringIncludes(content, "export interface User");
+  assertStringIncludes(content, "export interface Post");
+
+  // Utility types section
+  assertStringIncludes(content, "export interface QueryResult");
+  assertStringIncludes(content, "export interface QueryError");
+
+  // Insert/Update/FilterVars for User
+  assertStringIncludes(content, "export interface UserInsert");
+  assertStringIncludes(content, "export interface UserUpdate");
+  assertStringIncludes(content, "export interface UserFilterVars");
+
+  // Insert/Update/FilterVars for Post
+  assertStringIncludes(content, "export interface PostInsert");
+  assertStringIncludes(content, "export interface PostUpdate");
+  assertStringIncludes(content, "export interface PostFilterVars");
+
+  // JSDoc with constraints present
+  assertStringIncludes(content, "@constraint exclusive");
+  assertStringIncludes(content, "@constraint max_length(255)");
+
+  // JSDoc with readonly and default metadata
+  assertStringIncludes(content, "@readonly");
+  assertStringIncludes(content, "@default");
+
+  // Query builders file
+  const queryFile = result.files.find((f) => f.type === "queries");
+  assertExists(queryFile);
+  const queryContent = queryFile.content;
+
+  // Type casts map
+  assertStringIncludes(queryContent, "_typeCasts");
+
+  // Builder classes
+  assertStringIncludes(queryContent, "UserQueryBuilder");
+  assertStringIncludes(queryContent, "PostQueryBuilder");
+
+  // Typed method signatures
+  assertStringIncludes(queryContent, "Types.UserInsert");
+  assertStringIncludes(queryContent, "Types.UserUpdate");
+  assertStringIncludes(queryContent, "Types.UserFilterVars");
+  assertStringIncludes(queryContent, "Types.PostInsert");
+  assertStringIncludes(queryContent, "Types.PostUpdate");
+  assertStringIncludes(queryContent, "Types.PostFilterVars");
+});
