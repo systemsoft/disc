@@ -79,16 +79,19 @@ Compiles to PostgreSQL SQL automatically.
 ## CLI Commands
 
 ```bash
-disc init      # Initialize a new Disc project
-disc start     # Start the server and bundled PostgreSQL
-disc stop      # Stop the server and PostgreSQL
-disc status    # Show instance status
-disc migrate   # Generate and apply migrations
-disc shell     # Interactive EdgeQL REPL
-disc codegen   # Generate TypeScript types
-disc watch     # Watch schema files and auto-migrate in dev
-disc serve     # Start the Disc server
-disc ui        # Open admin UI in browser
+disc init                      # Initialize a new Disc project
+disc start                     # Start the server and bundled PostgreSQL
+disc stop                      # Stop the server and PostgreSQL
+disc status                    # Show instance status
+disc migrate                   # Generate and apply migrations
+disc shell                     # Interactive EdgeQL REPL
+disc codegen                   # Generate TypeScript types
+disc watch                     # Watch schema files and auto-migrate in dev
+disc serve                     # Start the Disc server
+disc ui                        # Open admin UI in browser
+disc pg log                    # View PostgreSQL logs
+disc pg log -f                 # Follow log output
+disc pg upgrade --target-version 17.0  # Upgrade PostgreSQL
 ```
 
 ## Architecture
