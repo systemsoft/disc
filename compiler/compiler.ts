@@ -16,6 +16,7 @@ import {
   AccessSQLInjector,
 } from "../access/mod.ts";
 import { describeSchema, describeType } from "./introspection.ts";
+import { SQLCodeGenerator } from "./codegen.ts";
 
 /** Maps EdgeQL type names to PostgreSQL type names */
 function edgeqlTypeToPgType(edgeqlType: string): string {
@@ -1289,6 +1290,11 @@ export class EdgeQLCompiler {
     };
   }
 
+  /** Renders a SQL AST expression to a SQL string (for RawSQLExpression construction) */
+  private renderSqlExpr(expr: SQL.SQLExpression): string {
+    return new SQLCodeGenerator().generateExpression(expr);
+  }
+
   private compileFunctionCall(
     funcCall: EdgeQLAST.FunctionCall,
   ): SQL.SQLExpression {
@@ -1346,6 +1352,302 @@ export class EdgeQLCompiler {
           );
         }
         return SQL.createCastExpression(args[0], "double precision");
+
+      // Additional type cast functions
+      case "to_int16":
+        if (args.length !== 1) {
+          throw new CompilationError("to_int16() requires exactly 1 argument");
+        }
+        return SQL.createCastExpression(args[0], "smallint");
+
+      case "to_int32":
+        if (args.length !== 1) {
+          throw new CompilationError("to_int32() requires exactly 1 argument");
+        }
+        return SQL.createCastExpression(args[0], "integer");
+
+      case "to_float32":
+        if (args.length !== 1) {
+          throw new CompilationError(
+            "to_float32() requires exactly 1 argument",
+          );
+        }
+        return SQL.createCastExpression(args[0], "real");
+
+      case "to_bigint":
+        if (args.length !== 1) {
+          throw new CompilationError(
+            "to_bigint() requires exactly 1 argument",
+          );
+        }
+        return SQL.createCastExpression(args[0], "numeric");
+
+      case "to_decimal":
+        if (args.length !== 1) {
+          throw new CompilationError(
+            "to_decimal() requires exactly 1 argument",
+          );
+        }
+        return SQL.createCastExpression(args[0], "numeric");
+
+      case "to_bool":
+        if (args.length !== 1) {
+          throw new CompilationError("to_bool() requires exactly 1 argument");
+        }
+        return SQL.createCastExpression(args[0], "boolean");
+
+      case "to_uuid":
+        if (args.length !== 1) {
+          throw new CompilationError("to_uuid() requires exactly 1 argument");
+        }
+        return SQL.createCastExpression(args[0], "uuid");
+
+      case "to_datetime":
+        if (args.length !== 1) {
+          throw new CompilationError(
+            "to_datetime() requires exactly 1 argument",
+          );
+        }
+        return SQL.createCastExpression(
+          args[0],
+          "timestamp with time zone",
+        );
+
+      case "to_duration":
+        if (args.length !== 1) {
+          throw new CompilationError(
+            "to_duration() requires exactly 1 argument",
+          );
+        }
+        return SQL.createCastExpression(args[0], "interval");
+
+      // Calendar conversion functions → CAST
+      case "cal_to_local_date":
+        if (args.length !== 1) {
+          throw new CompilationError(
+            "cal::to_local_date() requires exactly 1 argument",
+          );
+        }
+        return SQL.createCastExpression(args[0], "date");
+
+      case "cal_to_local_time":
+        if (args.length !== 1) {
+          throw new CompilationError(
+            "cal::to_local_time() requires exactly 1 argument",
+          );
+        }
+        return SQL.createCastExpression(
+          args[0],
+          "time without time zone",
+        );
+
+      case "cal_to_local_datetime":
+        if (args.length !== 1) {
+          throw new CompilationError(
+            "cal::to_local_datetime() requires exactly 1 argument",
+          );
+        }
+        return SQL.createCastExpression(
+          args[0],
+          "timestamp without time zone",
+        );
+
+      // String functions with special compilation
+      case "str_starts_with":
+        // str_starts_with(s, prefix) → STARTS_WITH(s, prefix) (PG 15+)
+        if (args.length !== 2) {
+          throw new CompilationError(
+            "str_starts_with() requires exactly 2 arguments",
+          );
+        }
+        return SQL.createFunctionCall("STARTS_WITH", args);
+
+      case "str_ends_with":
+        // str_ends_with(s, suffix) → RIGHT(s, LENGTH(suffix)) = suffix
+        if (args.length !== 2) {
+          throw new CompilationError(
+            "str_ends_with() requires exactly 2 arguments",
+          );
+        }
+        return SQL.createBinaryExpression(
+          "=",
+          SQL.createFunctionCall("RIGHT", [
+            args[0],
+            SQL.createFunctionCall("LENGTH", [args[1]]),
+          ]),
+          args[1],
+        );
+
+      // Math special compilation
+      case "math_e":
+        // math::e() → EXP(1)
+        return SQL.createFunctionCall("EXP", [
+          SQL.createLiteral("number", 1),
+        ]);
+
+      // Regex functions with special compilation
+      case "re_match":
+        // re_match(pattern, str) → REGEXP_MATCH(str, pattern) — swap args
+        if (args.length !== 2) {
+          throw new CompilationError(
+            "re_match() requires exactly 2 arguments",
+          );
+        }
+        return SQL.createFunctionCall("REGEXP_MATCH", [args[1], args[0]]);
+
+      case "re_match_all":
+        // re_match_all(pattern, str) → REGEXP_MATCHES(str, pattern, 'g')
+        if (args.length !== 2) {
+          throw new CompilationError(
+            "re_match_all() requires exactly 2 arguments",
+          );
+        }
+        return SQL.createFunctionCall("REGEXP_MATCHES", [
+          args[1],
+          args[0],
+          SQL.createLiteral("string", "g"),
+        ]);
+
+      case "re_replace":
+        // re_replace(pattern, sub, str) → REGEXP_REPLACE(str, pattern, sub)
+        if (args.length !== 3) {
+          throw new CompilationError(
+            "re_replace() requires exactly 3 arguments",
+          );
+        }
+        return SQL.createFunctionCall("REGEXP_REPLACE", [
+          args[2],
+          args[0],
+          args[1],
+        ]);
+
+      case "re_test":
+        // re_test(pattern, str) → str ~ pattern
+        if (args.length !== 2) {
+          throw new CompilationError(
+            "re_test() requires exactly 2 arguments",
+          );
+        }
+        return SQL.createBinaryExpression("~", args[1], args[0]);
+
+      // Datetime special compilation
+      case "datetime_get": {
+        // datetime_get(val, field) → EXTRACT(field FROM val)
+        if (args.length !== 2) {
+          throw new CompilationError(
+            "datetime_get() requires exactly 2 arguments",
+          );
+        }
+        const getFieldArg = funcCall.args[1].value;
+        const getField =
+          getFieldArg.kind === "Literal" && typeof getFieldArg.value === "string"
+            ? getFieldArg.value
+            : "epoch";
+        return {
+          kind: "RawSQLExpression" as const,
+          sql: `EXTRACT(${getField} FROM ${
+            this.renderSqlExpr(args[0])
+          })`,
+        };
+      }
+
+      case "datetime_truncate": {
+        // datetime_truncate(val, field) → DATE_TRUNC(field, val)
+        if (args.length !== 2) {
+          throw new CompilationError(
+            "datetime_truncate() requires exactly 2 arguments",
+          );
+        }
+        return SQL.createFunctionCall("DATE_TRUNC", [args[1], args[0]]);
+      }
+
+      // JSON special compilation
+      case "json_get":
+        // json_get(val, key) → val -> key
+        if (args.length !== 2) {
+          throw new CompilationError(
+            "json_get() requires exactly 2 arguments",
+          );
+        }
+        return SQL.createJsonbAccess(args[0], "->", args[1]);
+
+      // Array special compilation
+      case "array_get":
+        // array_get(arr, n) → arr[n + 1] (PG is 1-indexed)
+        if (args.length !== 2) {
+          throw new CompilationError(
+            "array_get() requires exactly 2 arguments",
+          );
+        }
+        return {
+          kind: "RawSQLExpression" as const,
+          sql: `(${
+            this.renderSqlExpr(args[0])
+          })[${
+            this.renderSqlExpr(args[1])
+          } + 1]`,
+        };
+
+      // Set functions with special compilation
+      case "enumerate":
+        // enumerate(val) → ROW_NUMBER() OVER () paired with val as jsonb array
+        if (args.length !== 1) {
+          throw new CompilationError(
+            "enumerate() requires exactly 1 argument",
+          );
+        }
+        return {
+          kind: "RawSQLExpression" as const,
+          sql: `jsonb_build_array(ROW_NUMBER() OVER () - 1, ${
+            this.renderSqlExpr(args[0])
+          })`,
+        };
+
+      case "distinct":
+        // distinct(expr) → wraps expression with DISTINCT keyword
+        if (args.length !== 1) {
+          throw new CompilationError(
+            "distinct() requires exactly 1 argument",
+          );
+        }
+        return {
+          kind: "RawSQLExpression" as const,
+          sql: `DISTINCT ${
+            this.renderSqlExpr(args[0])
+          }`,
+        };
+
+      case "exists":
+        // exists(expr) → EXISTS (subquery) or (expr IS NOT NULL)
+        if (args.length !== 1) {
+          throw new CompilationError(
+            "exists() requires exactly 1 argument",
+          );
+        }
+        return SQL.createBinaryExpression(
+          "IS NOT",
+          args[0],
+          SQL.createLiteral("null", null),
+        );
+
+      // Sequence functions
+      case "sequence_next":
+        // sequence_next(name) → NEXTVAL(name)
+        if (args.length !== 1) {
+          throw new CompilationError(
+            "sequence_next() requires exactly 1 argument",
+          );
+        }
+        return SQL.createFunctionCall("NEXTVAL", args);
+
+      case "sequence_reset":
+        // sequence_reset(name, val) → SETVAL(name, val)
+        if (args.length !== 2) {
+          throw new CompilationError(
+            "sequence_reset() requires exactly 2 arguments",
+          );
+        }
+        return SQL.createFunctionCall("SETVAL", args);
     }
 
     // Standard 1:1 function name mapping

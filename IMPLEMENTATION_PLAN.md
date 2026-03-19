@@ -78,77 +78,82 @@ Tasks:
 **Goal**: Implement all missing Gel standard library functions
 **Success Criteria**: All Gel std functions compile to correct SQL and execute against PG
 **Tests**: Unit tests per function, PG E2E for each category
-**Status**: Not Started
+**Status**: Complete
 
 Tasks (by category):
 
 **String functions**:
-- [ ] `str_title` → `INITCAP`
-- [ ] `str_split` → `STRING_TO_ARRAY`
-- [ ] `str_starts_with` → `STARTS_WITH` (PG 15+) or `LEFT(s, LENGTH(prefix)) = prefix`
-- [ ] `str_ends_with` → `RIGHT(s, LENGTH(suffix)) = suffix`
+- [x] `str_title` → `INITCAP`
+- [x] `str_split` → `STRING_TO_ARRAY`
+- [x] `str_starts_with` → `STARTS_WITH` (PG 15+)
+- [x] `str_ends_with` → `RIGHT(s, LENGTH(suffix)) = suffix`
 
 **Math functions** (module-qualified `math::`):
-- [ ] `math::sqrt` → `SQRT`
-- [ ] `math::pow` → `POWER`
-- [ ] `math::log` → `LOG`
-- [ ] `math::ln` → `LN`
-- [ ] `math::pi` → `PI()`
-- [ ] `math::e` → `EXP(1)` (compile as literal)
-- [ ] `math::mean` → alias for `AVG`
+- [x] `math::sqrt` → `SQRT`
+- [x] `math::pow` → `POWER`
+- [x] `math::log` → `LOG`
+- [x] `math::ln` → `LN`
+- [x] `math::pi` → `PI()`
+- [x] `math::e` → `EXP(1)` (special compilation)
+- [x] `math::mean` → alias for `AVG` (windowCompatible)
 
-**Regex functions**:
-- [ ] `re_match` → `REGEXP_MATCH`
-- [ ] `re_match_all` → `REGEXP_MATCHES(..., 'g')`
-- [ ] `re_replace` → `REGEXP_REPLACE`
-- [ ] `re_test` → `expr ~ pattern` (boolean)
+**Regex functions** (argument order swapped for PG):
+- [x] `re_match` → `REGEXP_MATCH` (args swapped: str, pattern)
+- [x] `re_match_all` → `REGEXP_MATCHES(str, pattern, 'g')`
+- [x] `re_replace` → `REGEXP_REPLACE(str, pattern, sub)` (args reordered)
+- [x] `re_test` → `str ~ pattern` (boolean)
 
 **Datetime functions**:
-- [ ] `datetime_get` → `EXTRACT(field FROM val)`
-- [ ] `datetime_of_transaction` → `TRANSACTION_TIMESTAMP()`
-- [ ] `datetime_truncate` → `DATE_TRUNC(field, val)`
-- [ ] `to_datetime` → `CAST(val AS TIMESTAMPTZ)`
-- [ ] `to_duration` → `CAST(val AS INTERVAL)`
+- [x] `datetime_get` → `EXTRACT(field FROM val)`
+- [x] `datetime_of_transaction` → `TRANSACTION_TIMESTAMP()`
+- [x] `datetime_truncate` → `DATE_TRUNC(field, val)`
+- [x] `to_datetime` → `CAST(val AS TIMESTAMPTZ)`
+- [x] `to_duration` → `CAST(val AS INTERVAL)`
 
 **Calendar conversion functions**:
-- [ ] `cal::to_local_date` → `CAST(val AS DATE)`
-- [ ] `cal::to_local_time` → `CAST(val AS TIME)`
-- [ ] `cal::to_local_datetime` → `CAST(val AS TIMESTAMP)`
+- [x] `cal::to_local_date` → `CAST(val AS DATE)`
+- [x] `cal::to_local_time` → `CAST(val AS TIME WITHOUT TIME ZONE)`
+- [x] `cal::to_local_datetime` → `CAST(val AS TIMESTAMP WITHOUT TIME ZONE)`
 
 **JSON functions**:
-- [ ] `to_json` → `TO_JSONB`
-- [ ] `json_typeof` → `JSONB_TYPEOF`
-- [ ] `json_array_unpack` → `JSONB_ARRAY_ELEMENTS`
-- [ ] `json_object_unpack` → `JSONB_EACH`
-- [ ] `json_get` → `->` / `->>`
+- [x] `to_json` → `TO_JSONB`
+- [x] `json_typeof` → `JSONB_TYPEOF`
+- [x] `json_array_unpack` → `JSONB_ARRAY_ELEMENTS`
+- [x] `json_object_unpack` → `JSONB_EACH`
+- [x] `json_get` → `->` operator (JsonbAccessExpression)
 
 **Array functions**:
-- [ ] `array_get` → `arr[n+1]` (adjust for 1-indexing)
-- [ ] `array_unpack` → `UNNEST`
-- [ ] `array_join` → `ARRAY_TO_STRING`
+- [x] `array_get` → `arr[n+1]` (1-indexed RawSQLExpression)
+- [x] `array_unpack` → `UNNEST`
+- [x] `array_join` → `ARRAY_TO_STRING`
 
 **Type converter functions**:
-- [ ] `to_int16` → `CAST AS smallint`
-- [ ] `to_int32` → `CAST AS integer`
-- [ ] `to_float32` → `CAST AS real`
-- [ ] `to_bigint` → `CAST AS numeric`
-- [ ] `to_decimal` → `CAST AS numeric`
-- [ ] `to_bool` → `CAST AS boolean`
-- [ ] `to_uuid` → `CAST AS uuid`
+- [x] `to_int16` → `CAST AS smallint`
+- [x] `to_int32` → `CAST AS integer`
+- [x] `to_float32` → `CAST AS real`
+- [x] `to_bigint` → `CAST AS numeric`
+- [x] `to_decimal` → `CAST AS numeric`
+- [x] `to_bool` → `CAST AS boolean`
+- [x] `to_uuid` → `CAST AS uuid`
 
 **UUID functions**:
-- [ ] `uuid_generate_v4` → `gen_random_uuid()`
+- [x] `uuid_generate_v4` → `GEN_RANDOM_UUID`
 
 **Generic set functions**:
-- [ ] `any` → `BOOL_OR`
-- [ ] `all` → `BOOL_AND`
-- [ ] `exists` → `EXISTS(subquery)`
-- [ ] `enumerate` → `ROW_NUMBER() OVER ()` paired with value
-- [ ] `distinct` → function-form wrapping DISTINCT
+- [x] `any` → `BOOL_OR` (windowCompatible)
+- [x] `all` → `BOOL_AND` (windowCompatible)
+- [x] `exists` → `IS NOT NULL` (note: parser also handles `exists` as unary keyword operator → `EXISTS`)
+- [x] `enumerate` → `jsonb_build_array(ROW_NUMBER() OVER () - 1, val)`
+- [x] `distinct` → `DISTINCT val`
 
 **Sequence functions**:
-- [ ] `sequence_next` → `NEXTVAL`
-- [ ] `sequence_reset` → `SETVAL`
+- [x] `sequence_next` → `NEXTVAL`
+- [x] `sequence_reset` → `SETVAL`
+
+**Tests**:
+- [x] 43 unit tests (compiler/stage27-functions.test.ts)
+- [x] 24 PG E2E tests (compiler/pg-stage27.test.ts)
+- [x] SQLCodeGenerator.generateExpression() made public for RawSQLExpression rendering
 
 ---
 

@@ -139,6 +139,37 @@ export function getBuiltinFunctions(): Map<string, FunctionDef> {
       returnType: "str",
       sqlName: "REPLACE",
     }],
+    ["str_title", {
+      name: "str_title",
+      args: [{ name: "val", type: "str", required: true }],
+      returnType: "str",
+      sqlName: "INITCAP",
+    }],
+    ["str_split", {
+      name: "str_split",
+      args: [
+        { name: "val", type: "str", required: true },
+        { name: "delimiter", type: "str", required: true },
+      ],
+      returnType: "array",
+      sqlName: "STRING_TO_ARRAY",
+    }],
+    ["str_starts_with", {
+      name: "str_starts_with",
+      args: [
+        { name: "val", type: "str", required: true },
+        { name: "prefix", type: "str", required: true },
+      ],
+      returnType: "bool",
+    }],
+    ["str_ends_with", {
+      name: "str_ends_with",
+      args: [
+        { name: "val", type: "str", required: true },
+        { name: "suffix", type: "str", required: true },
+      ],
+      returnType: "bool",
+    }],
 
     // Math functions
     ["math_abs", {
@@ -164,6 +195,54 @@ export function getBuiltinFunctions(): Map<string, FunctionDef> {
       args: [{ name: "val", type: "anyreal", required: true }],
       returnType: "float64",
       sqlName: "ROUND",
+    }],
+    ["math_sqrt", {
+      name: "math_sqrt",
+      args: [{ name: "val", type: "anyreal", required: true }],
+      returnType: "float64",
+      sqlName: "SQRT",
+    }],
+    ["math_pow", {
+      name: "math_pow",
+      args: [
+        { name: "base", type: "anyreal", required: true },
+        { name: "exp", type: "anyreal", required: true },
+      ],
+      returnType: "float64",
+      sqlName: "POWER",
+    }],
+    ["math_log", {
+      name: "math_log",
+      args: [
+        { name: "base", type: "anyreal", required: true },
+        { name: "val", type: "anyreal", required: true },
+      ],
+      returnType: "float64",
+      sqlName: "LOG",
+    }],
+    ["math_ln", {
+      name: "math_ln",
+      args: [{ name: "val", type: "anyreal", required: true }],
+      returnType: "float64",
+      sqlName: "LN",
+    }],
+    ["math_pi", {
+      name: "math_pi",
+      args: [],
+      returnType: "float64",
+      sqlName: "PI",
+    }],
+    ["math_e", {
+      name: "math_e",
+      args: [],
+      returnType: "float64",
+    }],
+    ["math_mean", {
+      name: "math_mean",
+      args: [{ name: "expr", type: "anyreal", required: true }],
+      returnType: "float64",
+      sqlName: "AVG",
+      windowCompatible: true,
     }],
 
     ["str_pad_start", {
@@ -218,6 +297,78 @@ export function getBuiltinFunctions(): Map<string, FunctionDef> {
       name: "to_float64",
       args: [{ name: "val", type: "any", required: true }],
       returnType: "float64",
+    }],
+    ["to_int16", {
+      name: "to_int16",
+      args: [{ name: "val", type: "any", required: true }],
+      returnType: "int16",
+    }],
+    ["to_int32", {
+      name: "to_int32",
+      args: [{ name: "val", type: "any", required: true }],
+      returnType: "int32",
+    }],
+    ["to_float32", {
+      name: "to_float32",
+      args: [{ name: "val", type: "any", required: true }],
+      returnType: "float32",
+    }],
+    ["to_bigint", {
+      name: "to_bigint",
+      args: [{ name: "val", type: "any", required: true }],
+      returnType: "bigint",
+    }],
+    ["to_decimal", {
+      name: "to_decimal",
+      args: [{ name: "val", type: "any", required: true }],
+      returnType: "decimal",
+    }],
+    ["to_bool", {
+      name: "to_bool",
+      args: [{ name: "val", type: "any", required: true }],
+      returnType: "bool",
+    }],
+    ["to_uuid", {
+      name: "to_uuid",
+      args: [{ name: "val", type: "any", required: true }],
+      returnType: "uuid",
+    }],
+
+    // Regex functions (special compilation — no direct SQL name passthrough)
+    ["re_match", {
+      name: "re_match",
+      args: [
+        { name: "pattern", type: "str", required: true },
+        { name: "val", type: "str", required: true },
+      ],
+      returnType: "array",
+      sqlName: "REGEXP_MATCH",
+    }],
+    ["re_match_all", {
+      name: "re_match_all",
+      args: [
+        { name: "pattern", type: "str", required: true },
+        { name: "val", type: "str", required: true },
+      ],
+      returnType: "array",
+    }],
+    ["re_replace", {
+      name: "re_replace",
+      args: [
+        { name: "pattern", type: "str", required: true },
+        { name: "sub", type: "str", required: true },
+        { name: "val", type: "str", required: true },
+      ],
+      returnType: "str",
+      sqlName: "REGEXP_REPLACE",
+    }],
+    ["re_test", {
+      name: "re_test",
+      args: [
+        { name: "pattern", type: "str", required: true },
+        { name: "val", type: "str", required: true },
+      ],
+      returnType: "bool",
     }],
 
     // Window functions (only valid with OVER clause)
@@ -298,6 +449,168 @@ export function getBuiltinFunctions(): Map<string, FunctionDef> {
       args: [],
       returnType: "datetime",
       sqlName: "STATEMENT_TIMESTAMP",
+    }],
+    ["datetime_get", {
+      name: "datetime_get",
+      args: [
+        { name: "val", type: "datetime", required: true },
+        { name: "field", type: "str", required: true },
+      ],
+      returnType: "float64",
+    }],
+    ["datetime_of_transaction", {
+      name: "datetime_of_transaction",
+      args: [],
+      returnType: "datetime",
+      sqlName: "TRANSACTION_TIMESTAMP",
+    }],
+    ["datetime_truncate", {
+      name: "datetime_truncate",
+      args: [
+        { name: "val", type: "datetime", required: true },
+        { name: "field", type: "str", required: true },
+      ],
+      returnType: "datetime",
+    }],
+    ["to_datetime", {
+      name: "to_datetime",
+      args: [{ name: "val", type: "any", required: true }],
+      returnType: "datetime",
+    }],
+    ["to_duration", {
+      name: "to_duration",
+      args: [{ name: "val", type: "any", required: true }],
+      returnType: "duration",
+    }],
+
+    // Calendar conversion functions (compiled to CAST expressions)
+    ["cal_to_local_date", {
+      name: "cal_to_local_date",
+      args: [{ name: "val", type: "any", required: true }],
+      returnType: "cal::local_date",
+    }],
+    ["cal_to_local_time", {
+      name: "cal_to_local_time",
+      args: [{ name: "val", type: "any", required: true }],
+      returnType: "cal::local_time",
+    }],
+    ["cal_to_local_datetime", {
+      name: "cal_to_local_datetime",
+      args: [{ name: "val", type: "any", required: true }],
+      returnType: "cal::local_datetime",
+    }],
+
+    // JSON functions
+    ["to_json", {
+      name: "to_json",
+      args: [{ name: "val", type: "any", required: true }],
+      returnType: "json",
+      sqlName: "TO_JSONB",
+    }],
+    ["json_typeof", {
+      name: "json_typeof",
+      args: [{ name: "val", type: "json", required: true }],
+      returnType: "str",
+      sqlName: "JSONB_TYPEOF",
+    }],
+    ["json_array_unpack", {
+      name: "json_array_unpack",
+      args: [{ name: "val", type: "json", required: true }],
+      returnType: "json",
+      sqlName: "JSONB_ARRAY_ELEMENTS",
+    }],
+    ["json_object_unpack", {
+      name: "json_object_unpack",
+      args: [{ name: "val", type: "json", required: true }],
+      returnType: "json",
+      sqlName: "JSONB_EACH",
+    }],
+    ["json_get", {
+      name: "json_get",
+      args: [
+        { name: "val", type: "json", required: true },
+        { name: "key", type: "str", required: true },
+      ],
+      returnType: "json",
+    }],
+
+    // Array functions
+    ["array_get", {
+      name: "array_get",
+      args: [
+        { name: "val", type: "array", required: true },
+        { name: "index", type: "int64", required: true },
+      ],
+      returnType: "any",
+    }],
+    ["array_unpack", {
+      name: "array_unpack",
+      args: [{ name: "val", type: "array", required: true }],
+      returnType: "any",
+      sqlName: "UNNEST",
+    }],
+    ["array_join", {
+      name: "array_join",
+      args: [
+        { name: "val", type: "array", required: true },
+        { name: "delimiter", type: "str", required: true },
+      ],
+      returnType: "str",
+      sqlName: "ARRAY_TO_STRING",
+    }],
+
+    // UUID functions
+    ["uuid_generate_v4", {
+      name: "uuid_generate_v4",
+      args: [],
+      returnType: "uuid",
+      sqlName: "GEN_RANDOM_UUID",
+    }],
+
+    // Set/Generic functions (special compilation for most)
+    ["any", {
+      name: "any",
+      args: [{ name: "vals", type: "bool", required: true }],
+      returnType: "bool",
+      sqlName: "BOOL_OR",
+      windowCompatible: true,
+    }],
+    ["all", {
+      name: "all",
+      args: [{ name: "vals", type: "bool", required: true }],
+      returnType: "bool",
+      sqlName: "BOOL_AND",
+      windowCompatible: true,
+    }],
+    ["enumerate", {
+      name: "enumerate",
+      args: [{ name: "val", type: "any", required: true }],
+      returnType: "tuple",
+    }],
+    ["distinct", {
+      name: "distinct",
+      args: [{ name: "val", type: "any", required: true }],
+      returnType: "any",
+    }],
+    ["exists", {
+      name: "exists",
+      args: [{ name: "val", type: "any", required: true }],
+      returnType: "bool",
+    }],
+
+    // Sequence functions (compiled to NEXTVAL/SETVAL)
+    ["sequence_next", {
+      name: "sequence_next",
+      args: [{ name: "name", type: "str", required: true }],
+      returnType: "int64",
+    }],
+    ["sequence_reset", {
+      name: "sequence_reset",
+      args: [
+        { name: "name", type: "str", required: true },
+        { name: "val", type: "int64", required: true },
+      ],
+      returnType: "int64",
     }],
 
     // Assertion functions (pass-through, no SQL mapping)

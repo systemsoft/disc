@@ -307,7 +307,7 @@ export class SQLCodeGenerator {
     return sql;
   }
 
-  private generateExpression(expr: SQL.SQLExpression): string {
+  generateExpression(expr: SQL.SQLExpression): string {
     switch (expr.kind) {
       case "ColumnReference":
         return this.generateColumnReference(expr);
