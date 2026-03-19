@@ -113,9 +113,9 @@ Deno.test("Collection Compilation - Tuple of integers", () => {
   const sql = compileEdgeQL(source);
 
   assertEquals(
-    sql.includes("ROW("),
+    sql.includes("jsonb_build_array("),
     true,
-    "SQL should contain ROW( function call",
+    "SQL should contain jsonb_build_array( function call",
   );
   assertEquals(
     sql.includes("1, 2, 3"),
@@ -129,9 +129,9 @@ Deno.test("Collection Compilation - Tuple with mixed types", () => {
   const sql = compileEdgeQL(source);
 
   assertEquals(
-    sql.includes("ROW("),
+    sql.includes("jsonb_build_array("),
     true,
-    "SQL should contain ROW(",
+    "SQL should contain jsonb_build_array(",
   );
   assertEquals(
     sql.includes("1"),
@@ -155,9 +155,9 @@ Deno.test("Collection Compilation - Two-element tuple", () => {
   const sql = compileEdgeQL(source);
 
   assertEquals(
-    sql.includes("ROW("),
+    sql.includes("jsonb_build_array("),
     true,
-    "SQL should contain ROW(",
+    "SQL should contain jsonb_build_array(",
   );
   assertEquals(
     sql.includes("42"),
@@ -295,7 +295,7 @@ Deno.test("SQL Code Generator - ARRAY function call uses bracket syntax", () => 
   );
 });
 
-Deno.test("SQL Code Generator - ROW function call uses parentheses", () => {
+Deno.test("SQL Code Generator - jsonb_build_array function call uses parentheses", () => {
   const gen = new SQLCodeGenerator();
   const sql = gen.generate({
     kind: "SelectStatement",
@@ -305,7 +305,7 @@ Deno.test("SQL Code Generator - ROW function call uses parentheses", () => {
         kind: "SelectItem",
         expression: {
           kind: "FunctionCall",
-          name: "ROW",
+          name: "jsonb_build_array",
           args: [
             { kind: "LiteralExpression", type: "number", value: 1 },
             { kind: "LiteralExpression", type: "string", value: "hi" },
@@ -316,9 +316,9 @@ Deno.test("SQL Code Generator - ROW function call uses parentheses", () => {
   });
 
   assertEquals(
-    sql.includes("ROW(1, 'hi')"),
+    sql.includes("jsonb_build_array(1, 'hi')"),
     true,
-    "Codegen should render ROW with parentheses",
+    "Codegen should render jsonb_build_array with parentheses",
   );
 });
 

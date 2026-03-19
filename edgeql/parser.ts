@@ -88,6 +88,20 @@ export class EdgeQLParser {
   private parseWithBlock(): AST.WithBlock {
     this.consume(TokenType.WITH, "Expected 'WITH'");
 
+    // Check for WITH MODULE <name> — sets module scope for type resolution
+    let module: string | undefined;
+    if (this.check(TokenType.MODULE)) {
+      this.advance(); // consume MODULE
+      module = this.parseIdentifier().name;
+
+      // If followed by a comma, continue parsing regular WITH bindings.
+      // Otherwise the next token is the query body (SELECT, INSERT, etc.)
+      if (!this.match(TokenType.COMMA)) {
+        const body = this.parseQuery();
+        return { kind: "WithBlock", module, bindings: [], body };
+      }
+    }
+
     const bindings: AST.WithBinding[] = [];
 
     do {
@@ -126,7 +140,7 @@ export class EdgeQLParser {
 
     const body = this.parseQuery();
 
-    return { kind: "WithBlock", bindings, body };
+    return { kind: "WithBlock", module, bindings, body };
   }
 
   private parseForQuery(): AST.ForQuery {
@@ -382,6 +396,46 @@ export class EdgeQLParser {
       cardinality = { ...cardinality, kind: "Cardinality", multi: false };
     }
 
+    // Check for polymorphic shape field: [IS Type].property
+    if (this.check(TokenType.LBRACKET)) {
+      const bracketCheckpoint = this.current;
+      this.advance(); // consume [
+      if (this.match(TokenType.IS)) {
+        const typeName = this.parseTypeName();
+        this.consume(
+          TokenType.RBRACKET,
+          "Expected ']' after type in polymorphic shape",
+        );
+        this.consume(
+          TokenType.DOT,
+          "Expected '.' after [IS Type] in polymorphic shape",
+        );
+        const propIdent = this.parseIdentifier();
+        const propName = propIdent.name;
+
+        // Build the expression as an Identifier for the property
+        const expr: AST.Expression = AST.createIdentifier(propName);
+
+        // Check for nested shape
+        let shape: AST.Shape | undefined;
+        if (this.check(TokenType.LBRACE)) {
+          shape = this.parseShape();
+        }
+
+        return {
+          kind: "ShapeElement",
+          expr,
+          name: propIdent,
+          cardinality,
+          shape,
+          typeFilter: typeName.name.parts.join("::"),
+        };
+      } else {
+        // Not a polymorphic shape, rewind
+        this.current = bracketCheckpoint;
+      }
+    }
+
     // Check if it's a computed property (name := expr)
     const checkpoint = this.current;
     if (this.check(TokenType.IDENT) || this.check(TokenType.BACKTICK_IDENT)) {
@@ -597,8 +651,13 @@ export class EdgeQLParser {
         const right = this.parseCoalesceExpression();
         expr = AST.createBinaryOp("IN", expr, right);
       } else if (this.match(TokenType.IS)) {
-        const right = this.parseCoalesceExpression();
-        expr = AST.createBinaryOp("IS", expr, right);
+        if (this.match(TokenType.NOT)) {
+          const right = this.parseCoalesceExpression();
+          expr = AST.createBinaryOp("IS NOT", expr, right);
+        } else {
+          const right = this.parseCoalesceExpression();
+          expr = AST.createBinaryOp("IS", expr, right);
+        }
       } else {
         break;
       }
@@ -717,24 +776,49 @@ export class EdgeQLParser {
     while (true) {
       // Property or link access
       if (this.match(TokenType.DOT)) {
-        const step = this.parsePathStep();
-
-        // Convert to path if not already
-        if (expr.kind === "Path") {
-          expr.steps.push(step);
-        } else if (expr.kind === "Identifier" || expr.kind === "TypeName") {
-          // Convert identifier/typename to path
-          const firstStep: AST.PathStep = {
-            kind: "PathStep",
-            type: "property",
-            name: expr.kind === "Identifier"
-              ? expr.name
-              : expr.name.parts.join("::"),
-            optional: false,
+        // Check for numeric tuple index access (e.g., .0, .1, .2)
+        if (this.check(TokenType.INTEGER)) {
+          const indexToken = this.advance();
+          const index = parseInt(indexToken.value);
+          expr = {
+            kind: "TupleAccessExpr",
+            tuple: expr,
+            accessType: "index",
+            index,
           };
-          expr = AST.createPath([firstStep, step]);
+        } else if (
+          (expr.kind === "TupleExpr" || expr.kind === "NamedTuple" ||
+            expr.kind === "TupleAccessExpr") &&
+          (this.check(TokenType.IDENT) || this.check(TokenType.BACKTICK_IDENT))
+        ) {
+          // Named tuple field access (e.g., (name := 'foo').name)
+          const fieldName = this.parseIdentifier().name;
+          expr = {
+            kind: "TupleAccessExpr",
+            tuple: expr,
+            accessType: "name",
+            fieldName,
+          };
         } else {
-          throw this.error("Cannot apply path access to this expression");
+          const step = this.parsePathStep();
+
+          // Convert to path if not already
+          if (expr.kind === "Path") {
+            expr.steps.push(step);
+          } else if (expr.kind === "Identifier" || expr.kind === "TypeName") {
+            // Convert identifier/typename to path
+            const firstStep: AST.PathStep = {
+              kind: "PathStep",
+              type: "property",
+              name: expr.kind === "Identifier"
+                ? expr.name
+                : expr.name.parts.join("::"),
+              optional: false,
+            };
+            expr = AST.createPath([firstStep, step]);
+          } else {
+            throw this.error("Cannot apply path access to this expression");
+          }
         }
       } // Backward link
       else if (this.match(TokenType.BACKLINK)) {
@@ -793,17 +877,53 @@ export class EdgeQLParser {
         } else {
           expr = AST.createFunctionCall(funcName, args);
         }
-      } // Array/set indexing
+      } // Type intersection [IS Type] or array/set indexing
       else if (this.match(TokenType.LBRACKET)) {
-        const index = this.parseExpression();
-        this.consume(TokenType.RBRACKET, "Expected ']'");
+        // Check for [IS Type] type intersection
+        if (this.match(TokenType.IS)) {
+          const typeName = this.parseTypeName();
+          this.consume(
+            TokenType.RBRACKET,
+            "Expected ']' after type intersection",
+          );
 
-        // Create a function call for indexing
-        const name = AST.createQualifiedName(["__index__"]);
-        expr = AST.createFunctionCall(name, [
-          { kind: "FunctionArg", value: expr },
-          { kind: "FunctionArg", value: index },
-        ]);
+          const typeIntersectionStep: AST.PathStep = {
+            kind: "PathStep",
+            type: "type_intersection",
+            name: typeName.name.parts.join("::"),
+          };
+
+          // Convert to path if not already
+          if (expr.kind === "Path") {
+            expr.steps.push(typeIntersectionStep);
+          } else if (expr.kind === "Identifier" || expr.kind === "TypeName") {
+            const firstName = expr.kind === "Identifier"
+              ? expr.name
+              : expr.name.parts.join("::");
+            const firstStep: AST.PathStep = {
+              kind: "PathStep",
+              type: "property",
+              name: firstName,
+              optional: false,
+            };
+            expr = AST.createPath([firstStep, typeIntersectionStep]);
+          } else {
+            throw this.error(
+              "Cannot apply type intersection to this expression",
+            );
+          }
+        } else {
+          // Regular array/set indexing
+          const index = this.parseExpression();
+          this.consume(TokenType.RBRACKET, "Expected ']'");
+
+          // Create a function call for indexing
+          const name = AST.createQualifiedName(["__index__"]);
+          expr = AST.createFunctionCall(name, [
+            { kind: "FunctionArg", value: expr },
+            { kind: "FunctionArg", value: index },
+          ]);
+        }
       } // Shape (only if not skipping)
       else if (!this.skipShapeInPostfix && this.check(TokenType.LBRACE)) {
         const shape = this.parseShape();

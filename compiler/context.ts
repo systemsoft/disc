@@ -14,6 +14,8 @@ export interface CompilationContext {
   scopes: Scope[];
   /** Maps CTE binding names to their resolved type info */
   cteAliases: Map<string, CTEAlias>;
+  /** Module scope set by WITH MODULE <name> for unqualified type resolution */
+  moduleScope?: string;
 }
 
 export interface CTEAlias {
@@ -39,6 +41,14 @@ export interface TypeDef {
   accessPolicies?: AccessPolicy[];
   /** Enum member values for scalar enum types */
   enumValues?: string[];
+  /** Whether this is an abstract type (cannot be instantiated directly) */
+  abstract?: boolean;
+  /** Name of the parent type (e.g., "Shape") for single inheritance */
+  parentType?: string;
+  /** Names of direct child types (e.g., ["Circle", "Rectangle"]) */
+  subtypes?: string[];
+  /** Column name for type discrimination (e.g., "__type__") */
+  discriminatorColumn?: string;
 }
 
 export interface PropertyConstraint {
@@ -170,12 +180,44 @@ export function getTypeDef(
   return ctx.schema.types.get(name);
 }
 
+/**
+ * Resolve a type name respecting the current module scope.
+ *
+ * Resolution order:
+ * 1. Exact name (already qualified or known at top level)
+ * 2. If unqualified and moduleScope is set: try moduleScope::name
+ * 3. If unqualified: try default::name
+ */
+export function resolveTypeName(
+  ctx: CompilationContext,
+  name: string,
+): TypeDef | undefined {
+  // 1. Exact match
+  let typeDef = ctx.schema.types.get(name);
+  if (typeDef) return typeDef;
+
+  // Only try qualified lookups for unqualified names
+  if (!name.includes("::")) {
+    // 2. Module scope (set by WITH MODULE)
+    if (ctx.moduleScope) {
+      typeDef = ctx.schema.types.get(`${ctx.moduleScope}::${name}`);
+      if (typeDef) return typeDef;
+    }
+
+    // 3. Default module
+    typeDef = ctx.schema.types.get(`default::${name}`);
+    if (typeDef) return typeDef;
+  }
+
+  return undefined;
+}
+
 export function getProperty(
   ctx: CompilationContext,
   typeName: string,
   propName: string,
 ): PropertyDef | undefined {
-  const type = getTypeDef(ctx, typeName);
+  const type = resolveTypeName(ctx, typeName);
   return type?.properties.get(propName);
 }
 
@@ -184,7 +226,7 @@ export function getLink(
   typeName: string,
   linkName: string,
 ): LinkDef | undefined {
-  const type = getTypeDef(ctx, typeName);
+  const type = resolveTypeName(ctx, typeName);
   return type?.links.get(linkName);
 }
 
@@ -208,6 +250,63 @@ export function removeCTEAlias(
   name: string,
 ): void {
   ctx.cteAliases.delete(name);
+}
+
+/** Check if a name refers to an enum type in the schema */
+export function isEnumType(schema: Schema, name: string): boolean {
+  const typeDef = schema.types.get(name);
+  return !!typeDef && Array.isArray(typeDef.enumValues) &&
+    typeDef.enumValues.length > 0;
+}
+
+/** Convert a PascalCase type name to snake_case for SQL enum type naming */
+export function getEnumSqlType(name: string): string {
+  return name.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
+}
+
+/**
+ * Get all subtypes transitively (breadth-first).
+ *
+ * For example, if Circle extends Shape and Ellipse extends Circle,
+ * getAllSubtypes(schema, "Shape") returns ["Circle", "Ellipse"].
+ */
+export function getAllSubtypes(
+  schema: Schema,
+  typeName: string,
+): string[] {
+  const typeDef = schema.types.get(typeName);
+  if (!typeDef?.subtypes || typeDef.subtypes.length === 0) return [];
+
+  const result: string[] = [];
+  const queue = [...typeDef.subtypes];
+  while (queue.length > 0) {
+    const name = queue.shift()!;
+    result.push(name);
+    const sub = schema.types.get(name);
+    if (sub?.subtypes) {
+      queue.push(...sub.subtypes);
+    }
+  }
+  return result;
+}
+
+/**
+ * Get type hierarchy ancestry (from type up to root).
+ *
+ * For example, getTypeHierarchy(schema, "Ellipse") might return
+ * ["Ellipse", "Circle", "Shape"] if Ellipse extends Circle extends Shape.
+ */
+export function getTypeHierarchy(
+  schema: Schema,
+  typeName: string,
+): string[] {
+  const result: string[] = [typeName];
+  let current = schema.types.get(typeName);
+  while (current?.parentType) {
+    result.push(current.parentType);
+    current = schema.types.get(current.parentType);
+  }
+  return result;
 }
 
 export function mergeSchemaAdditions(

@@ -67,12 +67,41 @@ export class SchemaDiffer {
     const properties = this.extractPropertiesWithInheritance(typeDef, allTypes);
     const links = this.extractLinksWithInheritance(typeDef, allTypes);
 
-    return {
+    const op: Types.CreateTypeOperation = {
       kind: "CreateType",
       typeName: typeDef.name.value,
       properties,
       links,
     };
+
+    // Populate hierarchy fields for DDL discriminator column generation
+    if (typeDef.abstract) {
+      op.abstract = true;
+    }
+
+    if (typeDef.extending && typeDef.extending.length > 0) {
+      op.parentType = typeDef.extending[0].name.parts.join("::");
+    }
+
+    // Compute direct subtypes from allTypes map
+    if (allTypes) {
+      const subtypes: string[] = [];
+      for (const [name, otherType] of allTypes) {
+        if (
+          otherType.extending &&
+          otherType.extending.some((ext) =>
+            ext.name.parts.join("::") === typeDef.name.value
+          )
+        ) {
+          subtypes.push(name);
+        }
+      }
+      if (subtypes.length > 0) {
+        op.subtypes = subtypes;
+      }
+    }
+
+    return op;
   }
 
   /**

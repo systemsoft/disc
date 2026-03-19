@@ -476,17 +476,22 @@ export class EdgeQLCompiler {
   } {
     if (expr.kind === "TypeName") {
       // SELECT User -> SELECT * FROM users
-      const typeName = expr.name.parts[0];
-      const typeDef = Context.getTypeDef(this.ctx, typeName);
+      const typeName = expr.name.parts.join("::");
+      const typeDef = Context.resolveTypeName(this.ctx, typeName);
       if (!typeDef) {
         throw new CompilationError(`Type '${typeName}' not found`);
       }
+
+      // Use the canonical name from the resolved TypeDef for property/link
+      // lookups, since the schema may store the type under its qualified name
+      // (e.g., "other::Foo") even though the query used "Foo".
+      const resolvedName = typeDef.name;
 
       const tableAlias = Context.addTableAlias(
         this.ctx,
         typeName.toLowerCase(),
         typeDef.tableName,
-        typeName,
+        resolvedName,
       );
       const fromClause = SQL.createFromClause([
         SQL.createTableReference(typeDef.tableName, tableAlias),
@@ -494,7 +499,7 @@ export class EdgeQLCompiler {
 
       let selectItems: SQL.SelectItem[];
       if (shape) {
-        selectItems = this.compileShape(shape, typeName, tableAlias);
+        selectItems = this.compileShape(shape, resolvedName, tableAlias);
       } else {
         // Select all columns as JSON object
         selectItems = this.compileImplicitShape(typeDef, tableAlias);
@@ -563,8 +568,8 @@ export class EdgeQLCompiler {
       let fromClause = SQL.createFromClause([]);
       for (const arg of expr.args) {
         if (arg.value.kind === "TypeName") {
-          const argTypeName = arg.value.name.parts[0];
-          const argTypeDef = Context.getTypeDef(this.ctx, argTypeName);
+          const argTypeName = arg.value.name.parts.join("::");
+          const argTypeDef = Context.resolveTypeName(this.ctx, argTypeName);
           if (argTypeDef) {
             const tableAlias = Context.addTableAlias(
               this.ctx,
@@ -614,6 +619,11 @@ export class EdgeQLCompiler {
     typeName: string,
     tableAlias: string,
   ): SQL.JsonField | null {
+    // Handle polymorphic shape fields: [IS Type].property
+    if (element.typeFilter) {
+      return this.compilePolymorphicShapeElement(element, typeName, tableAlias);
+    }
+
     let key: string;
     let value: SQL.SQLExpression;
 
@@ -677,6 +687,79 @@ export class EdgeQLCompiler {
     }
 
     return SQL.createJsonField(key, value);
+  }
+
+  /**
+   * Compile a polymorphic shape element: [IS Type].property
+   *
+   * Generates:
+   *   CASE WHEN __type__ IN ('Type', subtypes...) THEN column_value ELSE NULL END
+   */
+  private compilePolymorphicShapeElement(
+    element: EdgeQLAST.ShapeElement,
+    _parentTypeName: string,
+    tableAlias: string,
+  ): SQL.JsonField | null {
+    const filterTypeName = element.typeFilter!;
+    const filterTypeDef = Context.resolveTypeName(this.ctx, filterTypeName);
+    if (!filterTypeDef) {
+      throw new CompilationError(
+        `Type '${filterTypeName}' not found for polymorphic shape field`,
+      );
+    }
+
+    // Resolve the property from the filtered type
+    const propName = element.name?.name ||
+      (element.expr.kind === "Identifier" ? element.expr.name : "");
+    if (!propName) {
+      throw new CompilationError(
+        "Polymorphic shape element must reference a property",
+      );
+    }
+
+    const property = Context.getProperty(
+      this.ctx,
+      filterTypeDef.name,
+      propName,
+    );
+    if (!property) {
+      throw new CompilationError(
+        `Property '${propName}' not found on type '${filterTypeDef.name}'`,
+      );
+    }
+
+    // Build the type check condition
+    const allTypes = [
+      filterTypeDef.name,
+      ...Context.getAllSubtypes(this.ctx.schema, filterTypeDef.name),
+    ];
+    let condition: SQL.SQLExpression;
+
+    if (allTypes.length === 1) {
+      condition = SQL.createBinaryExpression(
+        "=",
+        SQL.createColumnReference("__type__", tableAlias),
+        SQL.createLiteral("string", allTypes[0]),
+      );
+    } else {
+      const typeList = allTypes.map((t) => `'${t}'`).join(", ");
+      condition = {
+        kind: "RawSQLExpression" as const,
+        sql: `${tableAlias}.__type__ IN (${typeList})`,
+      };
+    }
+
+    // CASE WHEN condition THEN column ELSE NULL END
+    const columnRef = SQL.createColumnReference(
+      property.columnName,
+      tableAlias,
+    );
+    const caseExpr = SQL.createCaseExpression(
+      [SQL.createWhenClause(condition, columnRef)],
+      SQL.createLiteral("null", null),
+    );
+
+    return SQL.createJsonField(propName, caseExpr);
   }
 
   private compileImplicitShape(
@@ -899,8 +982,23 @@ export class EdgeQLCompiler {
       const typeStep = path.steps[0];
       const propStep = path.steps[1];
       if (typeStep.type === "property" && propStep.type === "property") {
+        // Check if this is an enum literal (e.g., Status.active)
+        const enumDef = Context.resolveTypeName(this.ctx, typeStep.name);
+        if (
+          enumDef && Array.isArray(enumDef.enumValues) &&
+          enumDef.enumValues.length > 0
+        ) {
+          const enumExpr = this.compileEnumLiteral(
+            typeStep.name,
+            propStep.name,
+          );
+          const selectItems = [SQL.createSelectItem(enumExpr)];
+          const fromClause = SQL.createFromClause([]);
+          return { selectItems, fromClause };
+        }
+
         const typeName = typeStep.name;
-        const typeDef = Context.getTypeDef(this.ctx, typeName);
+        const typeDef = Context.resolveTypeName(this.ctx, typeName);
         if (typeDef) {
           const tableAlias = Context.addTableAlias(
             this.ctx,
@@ -967,6 +1065,8 @@ export class EdgeQLCompiler {
         return this.compileTupleExpr(expr as EdgeQLAST.TupleExpr);
       case "NamedTuple":
         return this.compileNamedTuple(expr as EdgeQLAST.NamedTuple);
+      case "TupleAccessExpr":
+        return this.compileTupleAccess(expr as EdgeQLAST.TupleAccessExpr);
       case "Detached":
         return this.compileDetached(expr as EdgeQLAST.Detached);
       case "Introspection":
@@ -1024,7 +1124,12 @@ export class EdgeQLCompiler {
     );
   }
 
-  private compileBinaryOp(binOp: EdgeQLAST.BinaryOp): SQL.BinaryExpression {
+  private compileBinaryOp(binOp: EdgeQLAST.BinaryOp): SQL.SQLExpression {
+    // Handle IS / IS NOT for polymorphic type checking
+    if (binOp.op === "IS" || binOp.op === "IS NOT") {
+      return this.compileIsTypeCheck(binOp);
+    }
+
     const left = this.compileExpression(binOp.left);
     const right = this.compileExpression(binOp.right);
 
@@ -1041,6 +1146,75 @@ export class EdgeQLCompiler {
     }
 
     return SQL.createBinaryExpression(sqlOp, left, right);
+  }
+
+  /**
+   * Compile IS / IS NOT type checks into discriminator column checks.
+   *
+   * `expr IS Type` where Type has subtypes ->
+   *   __type__ IN ('Type', 'Sub1', 'Sub2', ...)
+   *
+   * `expr IS Type` where Type is a leaf ->
+   *   __type__ = 'Type'
+   *
+   * `expr IS NOT Type` -> negated versions of the above
+   */
+  private compileIsTypeCheck(binOp: EdgeQLAST.BinaryOp): SQL.SQLExpression {
+    const isNot = binOp.op === "IS NOT";
+
+    // The right side should be a TypeName or Identifier referring to a type
+    let typeName: string;
+    if (binOp.right.kind === "TypeName") {
+      typeName = binOp.right.name.parts.join("::");
+    } else if (binOp.right.kind === "Identifier") {
+      typeName = binOp.right.name;
+    } else {
+      // Fallback: compile as generic IS / IS NOT (e.g., IS NULL)
+      const left = this.compileExpression(binOp.left);
+      const right = this.compileExpression(binOp.right);
+      return SQL.createBinaryExpression(binOp.op, left, right);
+    }
+
+    // Resolve the type in the schema
+    const typeDef = Context.resolveTypeName(this.ctx, typeName);
+    if (!typeDef) {
+      throw new CompilationError(
+        `Type '${typeName}' not found in schema for IS check`,
+      );
+    }
+
+    // Build the list of matching type names (type + all transitive subtypes)
+    const allTypes = [
+      typeDef.name,
+      ...Context.getAllSubtypes(this.ctx.schema, typeDef.name),
+    ];
+
+    // Compile the left side (the expression being checked)
+    // For paths like `.prop IS Type`, the left side resolves to a table alias
+    // The discriminator column is always "__type__" on whatever table context
+    // we're currently in.
+    // For a simple pattern like `Shape IS Circle`, the left side is the type
+    // reference itself. We need the table alias to reference __type__.
+    const discriminatorCol = SQL.createColumnReference("__type__");
+
+    if (allTypes.length === 1) {
+      // Leaf type: simple equality check
+      const op = isNot ? "!=" : "=";
+      return SQL.createBinaryExpression(
+        op,
+        discriminatorCol,
+        SQL.createLiteral("string", allTypes[0]),
+      );
+    }
+
+    // Multiple types: IN / NOT IN expression
+    const typeList = allTypes.map((t) => `'${t}'`).join(", ");
+    const inOp = isNot ? "NOT IN" : "IN";
+
+    return {
+      kind: "RawSQLExpression" as const,
+      sql: `__type__ ${inOp} (${typeList})`,
+    };
   }
 
   /** Check if an EdgeQL binary operator is a set operation. */
@@ -1293,9 +1467,29 @@ export class EdgeQLCompiler {
       }
     }
 
-    // Handle multi-step paths
+    // Handle 2-step paths: check for enum literals before rejecting
+    if (path.steps.length === 2) {
+      const firstStep = path.steps[0];
+      const secondStep = path.steps[1];
+      const enumDefPath = firstStep.type === "property"
+        ? Context.resolveTypeName(this.ctx, firstStep.name)
+        : undefined;
+      if (
+        firstStep.type === "property" && secondStep.type === "property" &&
+        enumDefPath && Array.isArray(enumDefPath.enumValues) &&
+        enumDefPath.enumValues.length > 0
+      ) {
+        return this.compileEnumLiteral(firstStep.name, secondStep.name);
+      }
+
+      // Non-enum multi-step paths would require joins in a full implementation
+      throw new CompilationError(
+        `Multi-step path expressions not yet implemented`,
+      );
+    }
+
+    // Handle other multi-step paths
     if (path.steps.length > 1) {
-      // This would require joins in a full implementation
       throw new CompilationError(
         `Multi-step path expressions not yet implemented`,
       );
@@ -1304,11 +1498,40 @@ export class EdgeQLCompiler {
     throw new CompilationError(`Complex path expressions not yet implemented`);
   }
 
+  /**
+   * Compile an enum literal path (e.g., Status.active) into a SQL type-cast
+   * expression like 'active'::status.
+   */
+  private compileEnumLiteral(
+    enumTypeName: string,
+    memberName: string,
+  ): SQL.RawSQLExpression {
+    const typeDef = Context.resolveTypeName(this.ctx, enumTypeName);
+    if (!typeDef || !typeDef.enumValues) {
+      throw new CompilationError(
+        `Enum type '${enumTypeName}' not found`,
+      );
+    }
+
+    if (!typeDef.enumValues.includes(memberName)) {
+      throw new CompilationError(
+        `'${memberName}' is not a member of enum type '${enumTypeName}'. ` +
+          `Valid members: ${typeDef.enumValues.join(", ")}`,
+      );
+    }
+
+    const sqlType = Context.getEnumSqlType(enumTypeName);
+    return {
+      kind: "RawSQLExpression",
+      sql: `'${memberName}'::${sqlType}`,
+    };
+  }
+
   private compileInsertQuery(
     query: EdgeQLAST.InsertQuery,
   ): SQL.InsertStatement {
-    const typeName = query.type.name.parts[0];
-    const typeDef = Context.getTypeDef(this.ctx, typeName);
+    const typeName = query.type.name.parts.join("::");
+    const typeDef = Context.resolveTypeName(this.ctx, typeName);
     if (!typeDef) {
       throw new CompilationError(`Type '${typeName}' not found`);
     }
@@ -1449,8 +1672,8 @@ export class EdgeQLCompiler {
   private compileUpdateQuery(
     query: EdgeQLAST.UpdateQuery,
   ): SQL.UpdateStatement {
-    const typeName = query.type.name.parts[0];
-    const typeDef = Context.getTypeDef(this.ctx, typeName);
+    const typeName = query.type.name.parts.join("::");
+    const typeDef = Context.resolveTypeName(this.ctx, typeName);
     if (!typeDef) {
       throw new CompilationError(`Type '${typeName}' not found`);
     }
@@ -1513,8 +1736,8 @@ export class EdgeQLCompiler {
   private compileDeleteQuery(
     query: EdgeQLAST.DeleteQuery,
   ): SQL.DeleteStatement {
-    const typeName = query.type.name.parts[0];
-    const typeDef = Context.getTypeDef(this.ctx, typeName);
+    const typeName = query.type.name.parts.join("::");
+    const typeDef = Context.resolveTypeName(this.ctx, typeName);
     if (!typeDef) {
       throw new CompilationError(`Type '${typeName}' not found`);
     }
@@ -1540,6 +1763,12 @@ export class EdgeQLCompiler {
   }
 
   private compileWithBlock(query: EdgeQLAST.WithBlock): SQL.SQLStatement {
+    // Set module scope if WITH MODULE <name> was specified
+    const previousModuleScope = this.ctx.moduleScope;
+    if (query.module) {
+      this.ctx.moduleScope = query.module;
+    }
+
     // Compile each WITH binding into a CTE and register CTE aliases
     const ctes: SQL.CTE[] = [];
     const registeredAliases: string[] = [];
@@ -1590,7 +1819,7 @@ export class EdgeQLCompiler {
 
       // Register this CTE alias so the body query can resolve it
       const typeDef = underlyingTypeName
-        ? Context.getTypeDef(this.ctx, underlyingTypeName)
+        ? Context.resolveTypeName(this.ctx, underlyingTypeName)
         : undefined;
 
       Context.addCTEAlias(this.ctx, cteName, {
@@ -1617,6 +1846,14 @@ export class EdgeQLCompiler {
       Context.removeCTEAlias(this.ctx, alias);
     }
 
+    // Restore previous module scope
+    this.ctx.moduleScope = previousModuleScope;
+
+    // If there are no CTEs (WITH MODULE only, no bindings), return body directly
+    if (ctes.length === 0) {
+      return mainQuery;
+    }
+
     // Combine CTEs with the main query
     return SQL.withCTEs(ctes, mainQuery);
   }
@@ -1636,8 +1873,8 @@ export class EdgeQLCompiler {
       let fromClause: SQL.FromClause;
 
       if (query.expr.kind === "TypeName") {
-        const typeName = query.expr.name.parts[0];
-        const typeDef = Context.getTypeDef(this.ctx, typeName);
+        const typeName = query.expr.name.parts.join("::");
+        const typeDef = Context.resolveTypeName(this.ctx, typeName);
         if (!typeDef) {
           throw new CompilationError(`Type '${typeName}' not found`);
         }
@@ -1685,13 +1922,13 @@ export class EdgeQLCompiler {
   private extractQueryTypeName(query: EdgeQLAST.Query): string | undefined {
     if (query.kind === "SelectQuery") {
       if (query.expr?.kind === "TypeName") {
-        return query.expr.name.parts[0];
+        return query.expr.name.parts.join("::");
       }
       if (query.expr?.kind === "Path") {
         const firstStep = query.expr.steps[0];
         if (firstStep?.type === "property") {
           // Check if this is a known type
-          const typeDef = Context.getTypeDef(this.ctx, firstStep.name);
+          const typeDef = Context.resolveTypeName(this.ctx, firstStep.name);
           if (typeDef) return firstStep.name;
         }
       }
@@ -1819,8 +2056,8 @@ export class EdgeQLCompiler {
       );
     }
 
-    const typeName = query.expr.name.parts[0];
-    const typeDef = Context.getTypeDef(this.ctx, typeName);
+    const typeName = query.expr.name.parts.join("::");
+    const typeDef = Context.resolveTypeName(this.ctx, typeName);
     if (!typeDef) {
       throw new CompilationError(`Type '${typeName}' not found`);
     }
@@ -2003,7 +2240,31 @@ export class EdgeQLCompiler {
 
   private compileTupleExpr(tupleExpr: EdgeQLAST.TupleExpr): SQL.SQLExpression {
     const elements = tupleExpr.elements.map((el) => this.compileExpression(el));
-    return SQL.createFunctionCall("ROW", elements);
+    return SQL.createFunctionCall("jsonb_build_array", elements);
+  }
+
+  private compileTupleAccess(
+    access: EdgeQLAST.TupleAccessExpr,
+  ): SQL.SQLExpression {
+    const tupleExpr = this.compileExpression(access.tuple);
+
+    if (access.accessType === "index" && access.index !== undefined) {
+      // Numeric index access: tuple_expr -> N
+      return SQL.createJsonbAccess(
+        tupleExpr,
+        "->",
+        SQL.createLiteral("number", access.index),
+      );
+    } else if (access.accessType === "name" && access.fieldName) {
+      // Named field access: tuple_expr ->> 'name'
+      return SQL.createJsonbAccess(
+        tupleExpr,
+        "->>",
+        SQL.createLiteral("string", access.fieldName),
+      );
+    }
+
+    throw new CompilationError("Invalid tuple access expression");
   }
 
   private compileNamedTuple(
@@ -2039,8 +2300,8 @@ export class EdgeQLCompiler {
   private compileTypeName(typeName: EdgeQLAST.TypeName): SQL.SQLExpression {
     // For function arguments, a TypeName like "User" often means "all User objects"
     // In the context of count(User), this would be like "SELECT * FROM users"
-    const name = typeName.name.parts[0];
-    const typeDef = Context.getTypeDef(this.ctx, name);
+    const name = typeName.name.parts.join("::");
+    const typeDef = Context.resolveTypeName(this.ctx, name);
     if (!typeDef) {
       throw new CompilationError(`Type '${name}' not found`);
     }

@@ -68,6 +68,7 @@ export interface ForQuery extends EdgeQLNode {
 // WITH block
 export interface WithBlock extends EdgeQLNode {
   kind: "WithBlock";
+  module?: string;
   bindings: WithBinding[];
   body: Query;
 }
@@ -120,6 +121,8 @@ export interface ShapeElement extends EdgeQLNode {
   computable?: boolean;
   cardinality?: Cardinality;
   shape?: Shape;
+  /** Type filter for polymorphic shape fields: [IS Type].property */
+  typeFilter?: string;
 }
 
 export interface Cardinality extends EdgeQLNode {
@@ -144,6 +147,7 @@ export type Expression =
   | ArrayExpr
   | TupleExpr
   | NamedTuple
+  | TupleAccessExpr
   | Introspection
   | Detached
   | TypeName
@@ -296,6 +300,15 @@ export interface NamedTupleElement extends EdgeQLNode {
   kind: "NamedTupleElement";
   name: string;
   value: Expression;
+}
+
+// Tuple element access (numeric index or named field)
+export interface TupleAccessExpr extends EdgeQLNode {
+  kind: "TupleAccessExpr";
+  tuple: Expression;
+  accessType: "index" | "name";
+  index?: number;
+  fieldName?: string;
 }
 
 // Introspection

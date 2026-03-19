@@ -119,6 +119,22 @@ export class DDLGenerator {
       },
     ];
 
+    // Add __type__ discriminator column for types participating in a hierarchy
+    // (types that have subtypes OR types that have a parentType)
+    if (
+      (operation.subtypes && operation.subtypes.length > 0) ||
+      operation.parentType
+    ) {
+      columns.push({
+        name: "__type__",
+        type: "VARCHAR(255)",
+        nullable: false,
+        primaryKey: false,
+        unique: false,
+        default: `'${operation.typeName}'`,
+      });
+    }
+
     // Add property columns (skip computed properties — they're virtual, evaluated at query time)
     for (const property of operation.properties) {
       if (property.computed) continue;

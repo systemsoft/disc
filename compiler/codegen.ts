@@ -337,6 +337,8 @@ export class SQLCodeGenerator {
         return this.generateWindowFunctionExpression(expr);
       case "CastExpression":
         return this.generateCastExpression(expr);
+      case "JsonbAccessExpression":
+        return this.generateJsonbAccessExpression(expr);
       default:
         throw new Error(
           `Unsupported expression type: ${
@@ -527,6 +529,26 @@ export class SQLCodeGenerator {
     return `CAST(${
       this.generateExpression(expr.expression)
     } AS ${expr.targetType})`;
+  }
+
+  private generateJsonbAccessExpression(
+    expr: SQL.JsonbAccessExpression,
+  ): string {
+    const base = this.generateExpression(expr.expression);
+    const accessor = this.generateExpression(expr.accessor);
+    // Wrap complex base expressions in parentheses for correct precedence
+    if (
+      this.needsParentheses(expr.expression) || this.isComplex(expr.expression)
+    ) {
+      return `(${base}) ${expr.operator} ${accessor}`;
+    }
+    return `${base} ${expr.operator} ${accessor}`;
+  }
+
+  private isComplex(expr: SQL.SQLExpression): boolean {
+    return expr.kind === "FunctionCall" || expr.kind === "JsonBuildObject" ||
+      expr.kind === "SubqueryExpression" || expr.kind === "CaseExpression" ||
+      expr.kind === "JsonbAccessExpression";
   }
 
   private needsParentheses(expr: SQL.SQLExpression): boolean {

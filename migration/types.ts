@@ -24,6 +24,12 @@ export interface CreateTypeOperation extends MigrationOperation {
   typeName: string;
   properties: PropertyDefinition[];
   links: LinkDefinition[];
+  /** Whether this is an abstract type */
+  abstract?: boolean;
+  /** Name of the parent type for single inheritance */
+  parentType?: string;
+  /** Names of direct child types */
+  subtypes?: string[];
 }
 
 export interface DropTypeOperation extends MigrationOperation {
@@ -286,12 +292,18 @@ export function createTypeOperation(
   name: string,
   properties: PropertyDefinition[],
   links: LinkDefinition[],
+  options?: {
+    abstract?: boolean;
+    parentType?: string;
+    subtypes?: string[];
+  },
 ): CreateTypeOperation {
   return {
     kind: "CreateType",
     typeName: name,
     properties,
     links,
+    ...options,
   };
 }
 

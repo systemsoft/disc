@@ -169,7 +169,8 @@ export type SQLExpression =
   | RawSQLExpression
   | AggregateExpression
   | WindowFunctionExpression
-  | CastExpression;
+  | CastExpression
+  | JsonbAccessExpression;
 
 export interface ColumnReference extends SQLExpressionBase {
   kind: "ColumnReference";
@@ -568,6 +569,27 @@ export function createCastExpression(
     kind: "CastExpression",
     expression,
     targetType,
+  };
+}
+
+// JSONB element access: expr -> N (returns jsonb) or expr ->> 'key' (returns text)
+export interface JsonbAccessExpression extends SQLExpressionBase {
+  kind: "JsonbAccessExpression";
+  expression: SQLExpression;
+  operator: "->" | "->>";
+  accessor: SQLExpression;
+}
+
+export function createJsonbAccess(
+  expression: SQLExpression,
+  operator: "->" | "->>",
+  accessor: SQLExpression,
+): JsonbAccessExpression {
+  return {
+    kind: "JsonbAccessExpression",
+    expression,
+    operator,
+    accessor,
   };
 }
 

@@ -268,21 +268,72 @@ export class SchemaManager {
           ? adaptAccessPolicies(typeName, sdlPolicies)
           : undefined;
 
-        types.set(typeName, {
+        // Extract inheritance info from SDL AST
+        const isAbstract = typeDecl.abstract ?? false;
+        const parentTypeName = typeDecl.extending?.[0]?.name.parts.join(
+          "::",
+        );
+
+        const typeDef: TypeDef = {
           name: typeName,
           kind: "object",
           tableName,
           properties,
           links,
           accessPolicies,
-        });
+        };
+
+        if (isAbstract) {
+          typeDef.abstract = true;
+        }
+        if (parentTypeName) {
+          typeDef.parentType = parentTypeName;
+        }
+
+        types.set(typeName, typeDef);
       }
     }
 
-    // Second pass: resolve backlinks and junction tables for multi-links.
-    // For each type's multi-link, check if the target type has a single link
-    // pointing back (backlink) or a reciprocal multi-link (many-to-many via
-    // junction table).
+    // Second pass: resolve type hierarchy — populate subtypes, merge
+    // inherited properties/links, and set discriminator columns.
+    for (const [_typeName, typeDef] of types) {
+      if (!typeDef.parentType) {
+        continue;
+      }
+
+      const parentDef = types.get(typeDef.parentType);
+      if (!parentDef) {
+        continue;
+      }
+
+      // Register this type as a subtype of its parent
+      if (!parentDef.subtypes) {
+        parentDef.subtypes = [];
+      }
+      parentDef.subtypes.push(typeDef.name);
+
+      // Set discriminator column on parent
+      parentDef.discriminatorColumn = "__type__";
+
+      // Merge inherited properties: add parent props that child doesn't have
+      for (const [propName, propDef] of parentDef.properties) {
+        if (!typeDef.properties.has(propName)) {
+          typeDef.properties.set(propName, { ...propDef });
+        }
+      }
+
+      // Merge inherited links: add parent links that child doesn't have
+      for (const [linkName, linkDef] of parentDef.links) {
+        if (!typeDef.links.has(linkName)) {
+          typeDef.links.set(linkName, { ...linkDef });
+        }
+      }
+    }
+
+    // Third pass: resolve backlinks and junction tables for multi-links.
+    // For each type's multi-link, check if the target type has a single
+    // link pointing back (backlink) or a reciprocal multi-link
+    // (many-to-many via junction table).
     const resolvedJunctions = new Set<string>();
 
     for (const [typeName, typeDef] of types) {
