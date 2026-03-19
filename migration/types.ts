@@ -140,6 +140,7 @@ export interface PropertyDefinition {
   required: boolean;
   multi: boolean;
   default?: any;
+  computed?: string; // Expression string for computed properties (virtual, evaluated at query time)
   constraints: string[];
   annotations: Record<string, any>;
 }

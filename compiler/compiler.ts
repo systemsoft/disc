@@ -781,7 +781,17 @@ export class EdgeQLCompiler {
       where: SQL.createWhereClause(joinCondition),
     });
 
-    return SQL.createSubqueryExpression(subquery);
+    const subqueryExpr = SQL.createSubqueryExpression(subquery);
+
+    // Wrap optional multi-links with COALESCE to return empty array instead of null
+    if (!link.required && link.multi) {
+      return SQL.createFunctionCall("COALESCE", [
+        subqueryExpr,
+        { kind: "RawSQLExpression" as const, sql: "'[]'::jsonb" },
+      ]);
+    }
+
+    return subqueryExpr;
   }
 
   private compilePathExpression(
@@ -856,6 +866,18 @@ export class EdgeQLCompiler {
         return this.compileSetExpr(expr);
       case "Subquery":
         return this.compileSubqueryExpression(expr);
+      case "IfElse":
+        return this.compileIfElse(expr as EdgeQLAST.IfElse);
+      case "ArrayExpr":
+        return this.compileArrayExpr(expr as EdgeQLAST.ArrayExpr);
+      case "TupleExpr":
+        return this.compileTupleExpr(expr as EdgeQLAST.TupleExpr);
+      case "NamedTuple":
+        return this.compileNamedTuple(expr as EdgeQLAST.NamedTuple);
+      case "Detached":
+        return this.compileDetached(expr as EdgeQLAST.Detached);
+      case "Introspection":
+        return this.compileIntrospection(expr as EdgeQLAST.Introspection);
       default:
         throw new CompilationError(`Unsupported expression: ${expr.kind}`);
     }
@@ -1243,8 +1265,69 @@ export class EdgeQLCompiler {
       }
 
       if (query.unless.else) {
-        // DO UPDATE
-        throw new CompilationError("ON CONFLICT DO UPDATE not yet implemented");
+        // DO UPDATE - extract SET clauses from the else UpdateQuery
+        const elseExpr = query.unless.else;
+        let updateQuery: EdgeQLAST.UpdateQuery | undefined;
+
+        // The parser wraps ELSE (...) in a Subquery node
+        if (elseExpr.kind === "Subquery") {
+          const subquery = elseExpr as EdgeQLAST.Subquery;
+          if (subquery.query.kind === "UpdateQuery") {
+            updateQuery = subquery.query as EdgeQLAST.UpdateQuery;
+          }
+        } else if (elseExpr.kind === "UpdateQuery") {
+          // Direct UpdateQuery (in case parser ever produces this)
+          updateQuery = elseExpr as EdgeQLAST.UpdateQuery;
+        }
+
+        if (!updateQuery) {
+          throw new CompilationError(
+            "UPSERT else clause must be an UpdateQuery",
+          );
+        }
+
+        const setClauses: SQL.SetClause[] = [];
+        for (const element of updateQuery.shape.elements) {
+          if (!element.name || !element.computable) {
+            throw new CompilationError(
+              "UPSERT else clause requires computed assignments (name := value)",
+            );
+          }
+
+          const propName = element.name.name;
+          const property = Context.getProperty(this.ctx, typeName, propName);
+          if (!property) {
+            const link = Context.getLink(this.ctx, typeName, propName);
+            if (link && link.columnName) {
+              setClauses.push({
+                kind: "SetClause",
+                column: link.columnName,
+                value: this.compileExpression(element.expr),
+              });
+            } else {
+              throw new CompilationError(
+                `Property '${propName}' not found on type '${typeName}'`,
+              );
+            }
+          } else {
+            setClauses.push({
+              kind: "SetClause",
+              column: property.columnName,
+              value: this.compileExpression(element.expr),
+            });
+          }
+        }
+
+        const updateAction: SQL.UpdateAction = {
+          kind: "UpdateAction",
+          set: setClauses,
+        };
+
+        onConflict = {
+          kind: "OnConflictClause",
+          target: target.length > 0 ? target : undefined,
+          action: updateAction,
+        };
       } else {
         // DO NOTHING
         onConflict = {
@@ -1780,6 +1863,57 @@ export class EdgeQLCompiler {
     });
 
     return SQL.createSubqueryExpression(wrapper);
+  }
+
+  private compileIfElse(ifElse: EdgeQLAST.IfElse): SQL.CaseExpression {
+    const condition = this.compileExpression(ifElse.condition);
+    const thenExpr = this.compileExpression(ifElse.then);
+    const elseExpr = this.compileExpression(ifElse.else);
+
+    return SQL.createCaseExpression(
+      [SQL.createWhenClause(condition, thenExpr)],
+      elseExpr,
+    );
+  }
+
+  private compileArrayExpr(arrayExpr: EdgeQLAST.ArrayExpr): SQL.SQLExpression {
+    const elements = arrayExpr.elements.map((el) => this.compileExpression(el));
+    return SQL.createFunctionCall("ARRAY", elements);
+  }
+
+  private compileTupleExpr(tupleExpr: EdgeQLAST.TupleExpr): SQL.SQLExpression {
+    const elements = tupleExpr.elements.map((el) => this.compileExpression(el));
+    return SQL.createFunctionCall("ROW", elements);
+  }
+
+  private compileNamedTuple(
+    namedTuple: EdgeQLAST.NamedTuple,
+  ): SQL.SQLExpression {
+    const fields = namedTuple.elements.map((el) =>
+      SQL.createJsonField(el.name, this.compileExpression(el.value))
+    );
+    return SQL.createJsonBuildObject(fields);
+  }
+
+  private compileDetached(detached: EdgeQLAST.Detached): SQL.SQLExpression {
+    // DETACHED strips scope context — compile inner expression without
+    // scope resolution (the expression runs in a fresh scope context)
+    Context.pushScope(this.ctx);
+    try {
+      return this.compileExpression(detached.expr);
+    } finally {
+      Context.popScope(this.ctx);
+    }
+  }
+
+  private compileIntrospection(
+    introspection: EdgeQLAST.Introspection,
+  ): SQL.SQLExpression {
+    const typeName = introspection.type.name.parts.join("::");
+    throw new CompilationError(
+      `Introspection queries (INTROSPECT ${typeName}) are not yet supported. ` +
+        `Schema metadata queries require the schema reflection catalog.`,
+    );
   }
 
   private compileTypeName(typeName: EdgeQLAST.TypeName): SQL.SQLExpression {

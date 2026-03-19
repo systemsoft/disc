@@ -115,8 +115,10 @@ export class DDLGenerator {
       },
     ];
 
-    // Add property columns
+    // Add property columns (skip computed properties — they're virtual, evaluated at query time)
     for (const property of operation.properties) {
+      if (property.computed) continue;
+
       columns.push({
         name: property.name,
         type: this.mapEdgeQLTypeToPostgreSQL(property.type),
@@ -222,6 +224,11 @@ export class DDLGenerator {
       }
     }
 
+    // Generate CHECK constraints from property constraints
+    statements.push(
+      ...this.generateCheckConstraints(tableName, operation.properties),
+    );
+
     return statements;
   }
 
@@ -288,17 +295,32 @@ export class DDLGenerator {
     operation: Types.AddPropertyOperation,
   ): string[] {
     const property = operation.property;
+
+    // Skip computed properties — they're virtual, no column needed
+    if (property.computed) {
+      return [
+        `-- Computed property '${property.name}' is virtual, no column needed`,
+      ];
+    }
+
     const columnType = this.mapEdgeQLTypeToPostgreSQL(property.type);
     const nullable = property.required ? "NOT NULL" : "NULL";
     const defaultClause = property.default
       ? ` DEFAULT ${this.formatDefaultValue(property.default, property.type)}`
       : "";
 
-    return [
+    const statements = [
       `ALTER TABLE ${this.escapeIdentifier(tableName)} ADD COLUMN ${
         this.escapeIdentifier(property.name)
       } ${columnType} ${nullable}${defaultClause};`,
     ];
+
+    // Generate CHECK constraints for the new property
+    statements.push(
+      ...this.generateCheckConstraints(tableName, [property]),
+    );
+
+    return statements;
   }
 
   private generateDropProperty(
@@ -679,6 +701,84 @@ export class DDLGenerator {
     })${onDelete}${onUpdate}`;
   }
 
+  /**
+   * Generate CHECK constraint statements from property constraint annotations.
+   * Maps EdgeQL constraint names to SQL CHECK expressions.
+   */
+  private generateCheckConstraints(
+    tableName: string,
+    properties: Types.PropertyDefinition[],
+  ): string[] {
+    const statements: string[] = [];
+
+    for (const property of properties) {
+      for (const constraint of property.constraints) {
+        const checkExpr = this.constraintToCheckExpression(
+          property.name,
+          constraint,
+        );
+
+        if (checkExpr) {
+          const safeName = constraint.replace(/[^a-zA-Z0-9_]/g, "_");
+          const constraintName =
+            `chk_${tableName}_${property.name}_${safeName}`;
+
+          statements.push(
+            `ALTER TABLE ${this.escapeIdentifier(tableName)} ADD CONSTRAINT ${
+              this.escapeIdentifier(constraintName)
+            } CHECK (${checkExpr});`,
+          );
+        }
+      }
+    }
+
+    return statements;
+  }
+
+  /**
+   * Convert an EdgeQL constraint string to a SQL CHECK expression.
+   * Returns null for constraints that are not mapped to CHECK (e.g. exclusive).
+   */
+  private constraintToCheckExpression(
+    columnName: string,
+    constraint: string,
+  ): string | null {
+    const col = this.escapeIdentifier(columnName);
+
+    // Parse constraint format: name(arg1,arg2) or just name
+    const match = constraint.match(/^(\w+)(?:\((.+)\))?$/);
+
+    if (!match) {
+      return null;
+    }
+
+    const name = match[1];
+    const arg = match[2]?.trim();
+
+    switch (name) {
+      case "max_len_value":
+        if (arg) return `length(${col}) <= ${arg}`;
+        break;
+      case "min_len_value":
+        if (arg) return `length(${col}) >= ${arg}`;
+        break;
+      case "max_value":
+        if (arg) return `${col} <= ${arg}`;
+        break;
+      case "min_value":
+        if (arg) return `${col} >= ${arg}`;
+        break;
+      case "regexp":
+        if (arg) return `${col} ~ '${arg.replace(/'/g, "''")}'`;
+        break;
+      // "exclusive" is handled as UNIQUE constraint, skip here
+      case "exclusive":
+        return null;
+    }
+
+    return null;
+  }
+
   private typeNameToTableName(typeName: string): string {
     // Convert PascalCase type names to snake_case table names
     return typeName
@@ -890,6 +990,13 @@ export class DDLGenerator {
     tableName: string,
     operation: Types.AddPropertyOperation,
   ): string[] {
+    // Computed properties have no column — nothing to roll back
+    if (operation.property.computed) {
+      return [
+        `-- Computed property '${operation.property.name}' was virtual, no column to drop`,
+      ];
+    }
+
     // To rollback AddProperty, we drop the column
     return [
       `ALTER TABLE ${this.escapeIdentifier(tableName)} DROP COLUMN IF EXISTS ${

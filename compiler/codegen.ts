@@ -395,6 +395,10 @@ export class SQLCodeGenerator {
     const args = expr.args.map((arg) => this.generateExpression(arg)).join(
       ", ",
     );
+    // Special case: ARRAY uses bracket syntax in PostgreSQL
+    if (expr.name === "ARRAY") {
+      return `ARRAY[${args}]`;
+    }
     return `${expr.name}(${args})`;
   }
 

@@ -154,6 +154,9 @@ export class SchemaDiffer {
           default: member.default
             ? this.extractDefaultValue(member.default)
             : undefined,
+          computed: member.computed
+            ? this.extractExpressionString(member.computed)
+            : undefined,
           constraints: this.extractConstraints(member.constraints || []),
           annotations: this.extractAnnotations(member.annotations || []),
         });
@@ -411,8 +414,60 @@ export class SchemaDiffer {
     return expr.kind;
   }
 
+  /**
+   * Extract a string representation of an AST expression.
+   * Used for computed property expressions.
+   */
+  private extractExpressionString(expr: AST.Expression): string {
+    switch (expr.kind) {
+      case "Literal":
+        if (typeof expr.value === "string") return `'${expr.value}'`;
+        return String(expr.value);
+      case "FunctionCall":
+        return `${expr.name.parts.join("::")}(${
+          expr.args.map((a) => this.extractExpressionString(a)).join(", ")
+        })`;
+      case "PathExpression":
+        return expr.path.join(".");
+      case "BinaryOp":
+        return `${this.extractExpressionString(expr.left)} ${expr.op} ${
+          this.extractExpressionString(expr.right)
+        }`;
+      case "UnaryOp":
+        return `${expr.op} ${this.extractExpressionString(expr.operand)}`;
+      case "TypeCast":
+        return `<${expr.type.name.parts.join("::")}>${
+          this.extractExpressionString(expr.expr)
+        }`;
+      case "Parameter":
+        return `$${expr.name}`;
+      case "ConditionalExpression":
+        return `${this.extractExpressionString(expr.consequent)} if ${
+          this.extractExpressionString(expr.test)
+        } else ${this.extractExpressionString(expr.alternate)}`;
+      default:
+        return String(expr.kind);
+    }
+  }
+
   private extractConstraints(constraints: AST.Constraint[]): string[] {
-    return constraints.map((constraint) => constraint.name?.value || "unnamed");
+    return constraints.map((constraint) => {
+      const name = constraint.name?.value || "unnamed";
+
+      if (constraint.args && constraint.args.length > 0) {
+        const args = constraint.args.map((arg) => {
+          if (arg.kind === "Literal") {
+            return String(arg.value);
+          }
+
+          return String(arg);
+        }).join(",");
+
+        return `${name}(${args})`;
+      }
+
+      return name;
+    });
   }
 
   private extractAnnotations(
