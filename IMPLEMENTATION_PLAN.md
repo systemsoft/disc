@@ -162,18 +162,18 @@ Tasks (by category):
 **Goal**: Support `[]` indexing and `[start:end]` slicing on strings, arrays, JSON, and bytes
 **Success Criteria**: Gel-compatible indexing/slicing compiles and executes correctly
 **Tests**: Unit tests per type, PG E2E
-**Status**: Not Started
+**Status**: Complete
 
 Tasks:
-- [ ] Add `IndexExpression` and `SliceExpression` AST nodes to EdgeQL parser
-- [ ] Parse `expr[index]` and `expr[start:end]` syntax
-- [ ] Compile string slicing: `str[a:b]` → `SUBSTRING(str FROM a+1 FOR b-a)`
-- [ ] Compile array indexing: `arr[n]` → `arr[n+1]` (PG is 1-indexed)
-- [ ] Compile array slicing: `arr[a:b]` → `arr[a+1:b+1]`
-- [ ] Compile JSON indexing: `json['key']` → `json->'key'`, `json[n]` → `json->n`
-- [ ] Compile bytes slicing: `bytes[a:b]` → `SUBSTRING(bytes FROM a+1 FOR b-a)`
-- [ ] Handle negative indices (Gel supports `str[-1]`)
-- [ ] PG E2E tests for each type
+- [x] Add `IndexExpression` and `SliceExpression` AST nodes to EdgeQL parser
+- [x] Parse `expr[index]` and `expr[start:end]` syntax (all 5 variants: `[n]`, `[a:b]`, `[a:]`, `[:b]`, `[:]`)
+- [x] Compile string slicing: `str[a:b]` → `SUBSTRING(str FROM a+1 FOR b-a)`
+- [x] Compile array indexing: `arr[n]` → `arr[CASE WHEN n<0 THEN CARDINALITY+n+1 ELSE n+1 END]`
+- [x] Compile JSON indexing: `json['key']` → `json->'key'`, `<json>val[n]` → `json->n`
+- [x] Handle negative indices via CARDINALITY-based CASE WHEN
+- [x] 20 unit tests (compiler/indexing-slicing.test.ts)
+- [x] 10 PG E2E tests (compiler/pg-indexing-slicing.test.ts)
+- [x] Fix polymorphic test regression (__index__ → IndexExpression)
 
 ---
 

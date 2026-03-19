@@ -490,11 +490,11 @@ Deno.test("polymorphic - type intersection [IS Type] is distinct from array inde
     assertEquals(lastStep.name, "Circle");
   }
 
-  // [0] should produce an __index__ function call (array indexing)
+  // [0] should produce an IndexExpression (array indexing)
   const astIndex = parseEdgeQL("SELECT Shape[0]");
   assertEquals(astIndex.kind, "SelectQuery");
-  // The expr should be a FunctionCall with __index__
-  assertEquals(astIndex.expr.kind, "FunctionCall");
+  // The expr should be an IndexExpression
+  assertEquals(astIndex.expr.kind, "IndexExpression");
 });
 
 // ---------------------------------------------------------------------------

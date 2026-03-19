@@ -1082,6 +1082,14 @@ export class EdgeQLCompiler {
         return this.compileDetached(expr as EdgeQLAST.Detached);
       case "Introspection":
         return this.compileIntrospection(expr as EdgeQLAST.Introspection);
+      case "IndexExpression":
+        return this.compileIndexExpression(
+          expr as EdgeQLAST.IndexExpression,
+        );
+      case "SliceExpression":
+        return this.compileSliceExpression(
+          expr as EdgeQLAST.SliceExpression,
+        );
       default:
         throw new CompilationError(`Unsupported expression: ${expr.kind}`);
     }
@@ -2656,6 +2664,92 @@ export class EdgeQLCompiler {
       `Introspection queries (INTROSPECT ${typeName}) are not yet supported. ` +
         `Schema metadata queries require the schema reflection catalog.`,
     );
+  }
+
+  private compileIndexExpression(
+    indexExpr: EdgeQLAST.IndexExpression,
+  ): SQL.SQLExpression {
+    const base = this.compileExpression(indexExpr.expr);
+    const idx = this.compileExpression(indexExpr.index);
+
+    // String key access → jsonb -> 'key'
+    if (
+      indexExpr.index.kind === "Literal" &&
+      indexExpr.index.type === "string"
+    ) {
+      return SQL.createJsonbAccess(base, "->", idx);
+    }
+
+    // JSON type cast base → jsonb -> index
+    if (
+      indexExpr.expr.kind === "TypeCast" &&
+      indexExpr.expr.type.name.parts.some((p: string) =>
+        p === "json" || p === "jsonb"
+      )
+    ) {
+      return SQL.createJsonbAccess(base, "->", idx);
+    }
+
+    // Default: array indexing with negative index support
+    // EdgeQL uses 0-based indexing; PG uses 1-based
+    // Negative indices count from end: -1 = last element
+    const baseStr = this.renderSqlExpr(base);
+    const idxStr = this.renderSqlExpr(idx);
+    return {
+      kind: "RawSQLExpression" as const,
+      sql:
+        `(${baseStr})[CASE WHEN ${idxStr} < 0 THEN CARDINALITY(${baseStr}) + ${idxStr} + 1 ELSE ${idxStr} + 1 END]`,
+    };
+  }
+
+  private compileSliceExpression(
+    sliceExpr: EdgeQLAST.SliceExpression,
+  ): SQL.SQLExpression {
+    const base = this.compileExpression(sliceExpr.expr);
+    const baseStr = this.renderSqlExpr(base);
+
+    const hasStart = sliceExpr.start !== undefined;
+    const hasEnd = sliceExpr.end !== undefined;
+
+    if (!hasStart && !hasEnd) {
+      // [:] — identity
+      return base;
+    }
+
+    if (hasStart && hasEnd) {
+      // [a:b] → SUBSTRING(expr FROM a+1 FOR b-a)
+      const startStr = this.renderSqlExpr(
+        this.compileExpression(sliceExpr.start!),
+      );
+      const endStr = this.renderSqlExpr(
+        this.compileExpression(sliceExpr.end!),
+      );
+      return {
+        kind: "RawSQLExpression" as const,
+        sql:
+          `SUBSTRING(${baseStr} FROM ${startStr} + 1 FOR ${endStr} - ${startStr})`,
+      };
+    }
+
+    if (hasStart) {
+      // [a:] → SUBSTRING(expr FROM a+1)
+      const startStr = this.renderSqlExpr(
+        this.compileExpression(sliceExpr.start!),
+      );
+      return {
+        kind: "RawSQLExpression" as const,
+        sql: `SUBSTRING(${baseStr} FROM ${startStr} + 1)`,
+      };
+    }
+
+    // [:b] → SUBSTRING(expr FROM 1 FOR b)
+    const endStr = this.renderSqlExpr(
+      this.compileExpression(sliceExpr.end!),
+    );
+    return {
+      kind: "RawSQLExpression" as const,
+      sql: `SUBSTRING(${baseStr} FROM 1 FOR ${endStr})`,
+    };
   }
 
   /**

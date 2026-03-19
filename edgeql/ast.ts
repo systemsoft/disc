@@ -165,7 +165,9 @@ export type Expression =
   | Detached
   | TypeName
   | Subquery
-  | ShapeExpr;
+  | ShapeExpr
+  | IndexExpression
+  | SliceExpression;
 
 // Literals
 export interface Literal extends EdgeQLNode {
@@ -324,6 +326,22 @@ export interface TupleAccessExpr extends EdgeQLNode {
   fieldName?: string;
 }
 
+
+// Index expression: expr[n]
+export interface IndexExpression extends EdgeQLNode {
+  kind: "IndexExpression";
+  expr: Expression;
+  index: Expression;
+}
+
+// Slice expression: expr[a:b]
+export interface SliceExpression extends EdgeQLNode {
+  kind: "SliceExpression";
+  expr: Expression;
+  start?: Expression;
+  end?: Expression;
+}
+
 // Introspection
 export interface Introspection extends EdgeQLNode {
   kind: "Introspection";
@@ -459,4 +477,19 @@ export function createShapeElement(
     expr,
     ...options,
   };
+}
+
+export function createIndexExpression(
+  expr: Expression,
+  index: Expression,
+): IndexExpression {
+  return { kind: "IndexExpression", expr, index };
+}
+
+export function createSliceExpression(
+  expr: Expression,
+  start?: Expression,
+  end?: Expression,
+): SliceExpression {
+  return { kind: "SliceExpression", expr, start, end };
 }

@@ -943,16 +943,37 @@ export class EdgeQLParser {
             );
           }
         } else {
-          // Regular array/set indexing
-          const index = this.parseExpression();
-          this.consume(TokenType.RBRACKET, "Expected ']'");
-
-          // Create a function call for indexing
-          const name = AST.createQualifiedName(["__index__"]);
-          expr = AST.createFunctionCall(name, [
-            { kind: "FunctionArg", value: expr },
-            { kind: "FunctionArg", value: index },
-          ]);
+          // Index or slice expression: expr[n] or expr[a:b]
+          if (this.check(TokenType.COLON)) {
+            // [:b] or [:]
+            this.advance(); // consume ':'
+            if (this.check(TokenType.RBRACKET)) {
+              this.advance();
+              expr = AST.createSliceExpression(expr);
+            } else {
+              const end = this.parseExpression();
+              this.consume(TokenType.RBRACKET, "Expected ']'");
+              expr = AST.createSliceExpression(expr, undefined, end);
+            }
+          } else {
+            const first = this.parseExpression();
+            if (this.check(TokenType.COLON)) {
+              // [a:b] or [a:]
+              this.advance(); // consume ':'
+              if (this.check(TokenType.RBRACKET)) {
+                this.advance();
+                expr = AST.createSliceExpression(expr, first);
+              } else {
+                const end = this.parseExpression();
+                this.consume(TokenType.RBRACKET, "Expected ']'");
+                expr = AST.createSliceExpression(expr, first, end);
+              }
+            } else {
+              // [n] — plain index
+              this.consume(TokenType.RBRACKET, "Expected ']'");
+              expr = AST.createIndexExpression(expr, first);
+            }
+          }
         }
       } // Shape (only if not skipping)
       else if (!this.skipShapeInPostfix && this.check(TokenType.LBRACE)) {
