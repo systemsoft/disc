@@ -383,7 +383,12 @@ export class SchemaValidator {
         (name === "max_value" || name === "min_value" ||
           name === "max_ex_value" || name === "min_ex_value") &&
         !NUMERIC_TYPES.has(propertyType) && propertyType !== "datetime" &&
-        propertyType !== "duration"
+        propertyType !== "duration" &&
+        propertyType !== "cal::local_datetime" &&
+        propertyType !== "cal::local_date" &&
+        propertyType !== "cal::local_time" &&
+        propertyType !== "cal::relative_duration" &&
+        propertyType !== "cal::date_duration"
       ) {
         this.addError(
           `Constraint '${name}' can only be applied to numeric or temporal properties, not '${propertyType}'`,
@@ -435,6 +440,8 @@ export class SchemaValidator {
       "cal::local_datetime",
       "cal::local_date",
       "cal::local_time",
+      "cal::relative_duration",
+      "cal::date_duration",
     ];
 
     if (builtinTypes.includes(typeName)) {

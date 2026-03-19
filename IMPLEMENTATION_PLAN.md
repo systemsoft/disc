@@ -51,21 +51,25 @@ Tasks:
 **Goal**: Support all `cal::` types throughout the stack
 **Success Criteria**: SDL properties with cal types parse, compile to correct PG types, and round-trip through queries
 **Tests**: SDL parsing, type resolution, DDL generation, query compilation, PG E2E
-**Status**: Not Started
+**Status**: Complete
 
 Tasks:
-- [ ] Add types to type system: `cal::local_date`, `cal::local_time`, `cal::local_datetime`, `cal::relative_duration`, `cal::date_duration`
-- [ ] Update SDL parser to resolve `cal::` module-qualified types
-- [ ] Map to PostgreSQL types:
+- [x] Add types to type system: `cal::local_date`, `cal::local_time`, `cal::local_datetime`, `cal::relative_duration`, `cal::date_duration`
+- [x] Update SDL parser to resolve `cal::` module-qualified types (validator + converter)
+- [x] Map to PostgreSQL types:
   - `cal::local_date` → `DATE`
   - `cal::local_time` → `TIME WITHOUT TIME ZONE`
   - `cal::local_datetime` → `TIMESTAMP WITHOUT TIME ZONE`
   - `cal::relative_duration` → `INTERVAL`
   - `cal::date_duration` → `INTERVAL`
-- [ ] Update DDL generator for cal type columns
-- [ ] Update codegen to emit TypeScript types (Date, string, etc.)
-- [ ] Add cal conversion functions to built-in functions (see Stage 28)
-- [ ] PG E2E: insert/select/filter with each cal type
+- [x] Update DDL generator for cal type columns (migration/ddl.ts mapEdgeQLTypeToPostgreSQL)
+- [x] Update compiler type mapping (compiler/compiler.ts edgeqlTypeToPgType)
+- [x] Update codegen to emit TypeScript types (Date for local_datetime, string for others)
+- [x] Update cast map and SDL→SQL type maps for all 5 cal types
+- [x] Update schema validator: cal types as valid built-in types, value constraints allowed on cal types
+- [x] Cal conversion functions deferred to Stage 27 (cal::to_local_date, etc.)
+- [x] 43 unit tests (compiler/cal-types.test.ts)
+- [x] 6 PG E2E tests (compiler/pg-cal-types.test.ts): DDL column type verification + value round-trip
 
 ---
 

@@ -190,6 +190,18 @@ export const DEFAULT_TYPE_MAPPINGS: TypeMapping[] = [
     nullableType: "string | null",
     arrayType: "string[]",
   },
+  {
+    edgeqlType: "cal::relative_duration",
+    typescriptType: "string",
+    nullableType: "string | null",
+    arrayType: "string[]",
+  },
+  {
+    edgeqlType: "cal::date_duration",
+    typescriptType: "string",
+    nullableType: "string | null",
+    arrayType: "string[]",
+  },
 ];
 
 export function getTypeMapping(edgeqlType: string): TypeMapping | null {
@@ -245,6 +257,8 @@ export function mapEdgeQLTypeToEdgeQLCast(edgeqlType: string): string {
     "cal::local_datetime": "<cal::local_datetime>",
     "cal::local_date": "<cal::local_date>",
     "cal::local_time": "<cal::local_time>",
+    "cal::relative_duration": "<cal::relative_duration>",
+    "cal::date_duration": "<cal::date_duration>",
   };
   return castMap[edgeqlType] || `<${edgeqlType}>`;
 }

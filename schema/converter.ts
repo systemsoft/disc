@@ -229,6 +229,8 @@ export class SDLConverter {
       "cal::local_datetime": "TIMESTAMP",
       "cal::local_date": "DATE",
       "cal::local_time": "TIME",
+      "cal::relative_duration": "INTERVAL",
+      "cal::date_duration": "INTERVAL",
     };
 
     return typeMap[sdlType] || "TEXT";
@@ -256,6 +258,8 @@ export class SDLConverter {
       "cal::local_datetime",
       "cal::local_date",
       "cal::local_time",
+      "cal::relative_duration",
+      "cal::date_duration",
     ];
     return builtins.includes(typeName);
   }

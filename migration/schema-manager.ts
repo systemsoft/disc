@@ -53,6 +53,8 @@ const SDL_TO_SQL_TYPE_MAP: Record<string, string> = {
   "cal::local_datetime": "timestamp",
   "cal::local_date": "date",
   "cal::local_time": "time",
+  "cal::relative_duration": "interval",
+  "cal::date_duration": "interval",
 };
 
 /**

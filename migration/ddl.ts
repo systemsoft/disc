@@ -938,6 +938,11 @@ export class DDLGenerator {
       "duration": "INTERVAL",
       "bytes": "BYTEA",
       "json": "JSONB",
+      "cal::local_date": "DATE",
+      "cal::local_time": "TIME WITHOUT TIME ZONE",
+      "cal::local_datetime": "TIMESTAMP WITHOUT TIME ZONE",
+      "cal::relative_duration": "INTERVAL",
+      "cal::date_duration": "INTERVAL",
     };
 
     return typeMap[edgeqlType] || "TEXT";

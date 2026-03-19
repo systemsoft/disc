@@ -49,6 +49,11 @@ function edgeqlTypeToPgType(edgeqlType: string): string {
     "std::uuid": "uuid",
     "std::bigint": "numeric",
     "std::decimal": "numeric",
+    "cal::local_date": "date",
+    "cal::local_time": "time without time zone",
+    "cal::local_datetime": "timestamp without time zone",
+    "cal::relative_duration": "interval",
+    "cal::date_duration": "interval",
   };
   return typeMap[edgeqlType] ?? edgeqlType;
 }
