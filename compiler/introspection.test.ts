@@ -46,7 +46,7 @@ Deno.test("describeType - basic object type returns correct name and module", ()
   assertEquals(desc.name, "User");
   assertEquals(desc.module, "default");
   assertEquals(desc.abstract, false);
-  assertEquals(desc.parentType, null);
+  assertEquals(desc.parentTypes, []);
 });
 
 Deno.test("describeType - properties are listed with correct metadata", () => {
@@ -139,7 +139,7 @@ Deno.test("describeType - abstract type is flagged", () => {
   assertEquals(desc.abstract, true);
 });
 
-Deno.test("describeType - type with parent reports parentType", () => {
+Deno.test("describeType - type with parent reports parentTypes", () => {
   const parentType: TypeDef = {
     name: "Shape",
     kind: "object",
@@ -154,7 +154,7 @@ Deno.test("describeType - type with parent reports parentType", () => {
     name: "Circle",
     kind: "object",
     tableName: "shapes",
-    parentType: "Shape",
+    parentTypes: ["Shape"],
     properties: new Map([
       ["radius", {
         name: "radius",
@@ -174,7 +174,7 @@ Deno.test("describeType - type with parent reports parentType", () => {
   };
 
   const desc = describeType(testSchema, "Circle");
-  assertEquals(desc.parentType, "Shape");
+  assertEquals(desc.parentTypes, ["Shape"]);
 });
 
 // =========================================================================

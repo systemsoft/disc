@@ -120,10 +120,10 @@ export class DDLGenerator {
     ];
 
     // Add __type__ discriminator column for types participating in a hierarchy
-    // (types that have subtypes OR types that have a parentType)
+    // (types that have subtypes OR types that have parentTypes)
     if (
       (operation.subtypes && operation.subtypes.length > 0) ||
-      operation.parentType
+      (operation.parentTypes && operation.parentTypes.length > 0)
     ) {
       columns.push({
         name: "__type__",

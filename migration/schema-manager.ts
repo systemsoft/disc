@@ -272,8 +272,8 @@ export class SchemaManager {
 
         // Extract inheritance info from SDL AST
         const isAbstract = typeDecl.abstract ?? false;
-        const parentTypeName = typeDecl.extending?.[0]?.name.parts.join(
-          "::",
+        const parentTypeNames = typeDecl.extending?.map(
+          (ext) => ext.name.parts.join("::"),
         );
 
         const typeDef: TypeDef = {
@@ -288,8 +288,8 @@ export class SchemaManager {
         if (isAbstract) {
           typeDef.abstract = true;
         }
-        if (parentTypeName) {
-          typeDef.parentType = parentTypeName;
+        if (parentTypeNames && parentTypeNames.length > 0) {
+          typeDef.parentTypes = parentTypeNames;
         }
 
         types.set(typeName, typeDef);
@@ -298,36 +298,39 @@ export class SchemaManager {
 
     // Second pass: resolve type hierarchy — populate subtypes, merge
     // inherited properties/links, and set discriminator columns.
+    // Supports multiple inheritance: each parent contributes properties/links.
     for (const [_typeName, typeDef] of types) {
-      if (!typeDef.parentType) {
+      if (!typeDef.parentTypes || typeDef.parentTypes.length === 0) {
         continue;
       }
 
-      const parentDef = types.get(typeDef.parentType);
-      if (!parentDef) {
-        continue;
-      }
-
-      // Register this type as a subtype of its parent
-      if (!parentDef.subtypes) {
-        parentDef.subtypes = [];
-      }
-      parentDef.subtypes.push(typeDef.name);
-
-      // Set discriminator column on parent
-      parentDef.discriminatorColumn = "__type__";
-
-      // Merge inherited properties: add parent props that child doesn't have
-      for (const [propName, propDef] of parentDef.properties) {
-        if (!typeDef.properties.has(propName)) {
-          typeDef.properties.set(propName, { ...propDef });
+      for (const parentName of typeDef.parentTypes) {
+        const parentDef = types.get(parentName);
+        if (!parentDef) {
+          continue;
         }
-      }
 
-      // Merge inherited links: add parent links that child doesn't have
-      for (const [linkName, linkDef] of parentDef.links) {
-        if (!typeDef.links.has(linkName)) {
-          typeDef.links.set(linkName, { ...linkDef });
+        // Register this type as a subtype of each parent
+        if (!parentDef.subtypes) {
+          parentDef.subtypes = [];
+        }
+        parentDef.subtypes.push(typeDef.name);
+
+        // Set discriminator column on parent
+        parentDef.discriminatorColumn = "__type__";
+
+        // Merge inherited properties: add parent props that child doesn't have
+        for (const [propName, propDef] of parentDef.properties) {
+          if (!typeDef.properties.has(propName)) {
+            typeDef.properties.set(propName, { ...propDef });
+          }
+        }
+
+        // Merge inherited links: add parent links that child doesn't have
+        for (const [linkName, linkDef] of parentDef.links) {
+          if (!typeDef.links.has(linkName)) {
+            typeDef.links.set(linkName, { ...linkDef });
+          }
         }
       }
     }

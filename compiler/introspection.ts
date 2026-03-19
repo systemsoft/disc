@@ -41,7 +41,7 @@ export interface TypeDescription {
   name: string;
   module: string;
   abstract: boolean;
-  parentType: string | null;
+  parentTypes: string[];
   properties: PropertyDescription[];
   links: LinkDescription[];
   accessPolicies: string[];
@@ -150,7 +150,7 @@ function buildTypeDescription(typeDef: TypeDef): TypeDescription {
     name: typeDef.name,
     module,
     abstract: typeDef.abstract ?? false,
-    parentType: typeDef.parentType ?? null,
+    parentTypes: typeDef.parentTypes ?? [],
     properties,
     links,
     accessPolicies,

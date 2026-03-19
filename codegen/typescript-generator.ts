@@ -102,8 +102,17 @@ export class TypeScriptGenerator {
     content += ` * Table: ${typeDef.tableName}\n`;
     content += ` */\n`;
 
-    // Interface declaration
-    content += `export interface ${interfaceName} {\n`;
+    // Interface declaration (with extends for inherited types)
+    if (typeDef.parentTypes && typeDef.parentTypes.length > 0) {
+      const parentNames = typeDef.parentTypes.map((p) =>
+        this.getTypeScriptTypeName(p)
+      );
+      content += `export interface ${interfaceName} extends ${
+        parentNames.join(", ")
+      } {\n`;
+    } else {
+      content += `export interface ${interfaceName} {\n`;
+    }
 
     // ID field (always present)
     content += `  /** Unique identifier */\n`;

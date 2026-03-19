@@ -27,8 +27,8 @@ export interface CreateTypeOperation extends MigrationOperation {
   links: LinkDefinition[];
   /** Whether this is an abstract type */
   abstract?: boolean;
-  /** Name of the parent type for single inheritance */
-  parentType?: string;
+  /** Names of parent types (supports multiple inheritance) */
+  parentTypes?: string[];
   /** Names of direct child types */
   subtypes?: string[];
 }
@@ -296,7 +296,7 @@ export function createTypeOperation(
   links: LinkDefinition[],
   options?: {
     abstract?: boolean;
-    parentType?: string;
+    parentTypes?: string[];
     subtypes?: string[];
   },
 ): CreateTypeOperation {

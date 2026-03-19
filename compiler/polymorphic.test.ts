@@ -93,7 +93,7 @@ function createPolymorphicSchema(): Schema {
   const circle = makeTypeDef({
     name: "Circle",
     tableName: "circles",
-    parentType: "Shape",
+    parentTypes: ["Shape"],
     properties: new Map([
       ["id", {
         name: "id",
@@ -134,7 +134,7 @@ function createPolymorphicSchema(): Schema {
   const rectangle = makeTypeDef({
     name: "Rectangle",
     tableName: "rectangles",
-    parentType: "Shape",
+    parentTypes: ["Shape"],
     properties: new Map([
       ["id", {
         name: "id",
@@ -206,7 +206,7 @@ function createMultiLevelSchema(): Schema {
   const ellipse = makeTypeDef({
     name: "Ellipse",
     tableName: "ellipses",
-    parentType: "Circle",
+    parentTypes: ["Circle"],
     properties: new Map([
       ["id", {
         name: "id",

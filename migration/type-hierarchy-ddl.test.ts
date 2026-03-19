@@ -67,7 +67,7 @@ Deno.test("DDL Type Hierarchy - child type gets __type__ column with own name as
       },
     ],
     links: [],
-    parentType: "Shape",
+    parentTypes: ["Shape"],
   };
 
   const statements = generator.generateDDL([operation]);
@@ -123,7 +123,7 @@ Deno.test("DDL Type Hierarchy - multi-level hierarchy: all levels get __type__ c
       },
     ],
     links: [],
-    parentType: "Shape",
+    parentTypes: ["Shape"],
     subtypes: ["Ellipse"],
   };
 
@@ -142,7 +142,7 @@ Deno.test("DDL Type Hierarchy - multi-level hierarchy: all levels get __type__ c
       },
     ],
     links: [],
-    parentType: "Circle",
+    parentTypes: ["Circle"],
   };
 
   const statements = generator.generateDDL([shapeOp, circleOp, ellipseOp]);
@@ -212,7 +212,7 @@ Deno.test("DDL Type Hierarchy - types without hierarchy do NOT get __type__ colu
       },
     ],
     links: [],
-    // No abstract, parentType, or subtypes
+    // No abstract, parentTypes, or subtypes
   };
 
   const statements = generator.generateDDL([operation]);

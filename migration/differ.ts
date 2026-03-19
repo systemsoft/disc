@@ -80,7 +80,9 @@ export class SchemaDiffer {
     }
 
     if (typeDef.extending && typeDef.extending.length > 0) {
-      op.parentType = typeDef.extending[0].name.parts.join("::");
+      op.parentTypes = typeDef.extending.map((ext) =>
+        ext.name.parts.join("::")
+      );
     }
 
     // Compute direct subtypes from allTypes map

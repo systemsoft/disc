@@ -431,7 +431,7 @@ Deno.test({
         name: "Circle",
         kind: "object",
         tableName: "circles",
-        parentType: "Shape",
+        parentTypes: ["Shape"],
         properties: new Map([
           ["id", {
             name: "id",
@@ -466,7 +466,7 @@ Deno.test({
         name: "Rectangle",
         kind: "object",
         tableName: "rectangles",
-        parentType: "Shape",
+        parentTypes: ["Shape"],
         properties: new Map([
           ["id", {
             name: "id",
@@ -618,7 +618,7 @@ Deno.test({
         name: "Circle",
         kind: "object",
         tableName: "circles",
-        parentType: "Shape",
+        parentTypes: ["Shape"],
         properties: new Map([
           ["id", {
             name: "id",
@@ -661,7 +661,7 @@ Deno.test({
         name: "Rectangle",
         kind: "object",
         tableName: "rectangles",
-        parentType: "Shape",
+        parentTypes: ["Shape"],
         properties: new Map([
           ["id", {
             name: "id",

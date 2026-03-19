@@ -1,7 +1,7 @@
 /**
  * Tests for type hierarchy infrastructure (Phase 23.4)
  *
- * Validates TypeDef inheritance fields (abstract, parentType, subtypes,
+ * Validates TypeDef inheritance fields (abstract, parentTypes, subtypes,
  * discriminatorColumn) and the getAllSubtypes / getTypeHierarchy helpers.
  *
  * These tests construct TypeDef objects directly — no SDL parsing needed.
@@ -72,7 +72,7 @@ function createHierarchySchema(): Schema {
   const circle = makeTypeDef({
     name: "Circle",
     tableName: "circles",
-    parentType: "Shape",
+    parentTypes: ["Shape"],
     properties: new Map([
       ["id", {
         name: "id",
@@ -105,7 +105,7 @@ function createHierarchySchema(): Schema {
   const rectangle = makeTypeDef({
     name: "Rectangle",
     tableName: "rectangles",
-    parentType: "Shape",
+    parentTypes: ["Shape"],
     properties: new Map([
       ["id", {
         name: "id",
@@ -190,7 +190,7 @@ function createMultiLevelSchema(): Schema {
   const circle = makeTypeDef({
     name: "Circle",
     tableName: "circles",
-    parentType: "Shape",
+    parentTypes: ["Shape"],
     subtypes: ["Ellipse"],
     properties: new Map([
       ["id", {
@@ -224,7 +224,7 @@ function createMultiLevelSchema(): Schema {
   const rectangle = makeTypeDef({
     name: "Rectangle",
     tableName: "rectangles",
-    parentType: "Shape",
+    parentTypes: ["Shape"],
     properties: new Map([
       ["id", {
         name: "id",
@@ -257,7 +257,7 @@ function createMultiLevelSchema(): Schema {
   const ellipse = makeTypeDef({
     name: "Ellipse",
     tableName: "ellipses",
-    parentType: "Circle",
+    parentTypes: ["Circle"],
     properties: new Map([
       ["id", {
         name: "id",
@@ -310,17 +310,17 @@ function createMultiLevelSchema(): Schema {
 // Tests
 // ---------------------------------------------------------------------------
 
-Deno.test("type hierarchy - parentType is populated correctly", () => {
+Deno.test("type hierarchy - parentTypes is populated correctly", () => {
   const schema = createHierarchySchema();
 
   const circle = schema.types.get("Circle")!;
-  assertEquals(circle.parentType, "Shape");
+  assertEquals(circle.parentTypes, ["Shape"]);
 
   const rectangle = schema.types.get("Rectangle")!;
-  assertEquals(rectangle.parentType, "Shape");
+  assertEquals(rectangle.parentTypes, ["Shape"]);
 
   const shape = schema.types.get("Shape")!;
-  assertEquals(shape.parentType, undefined);
+  assertEquals(shape.parentTypes, undefined);
 });
 
 Deno.test("type hierarchy - subtypes populated correctly (parent knows children)", () => {
@@ -396,10 +396,10 @@ Deno.test("type hierarchy - multi-level inheritance (grandparent -> parent -> ch
 
   // Ellipse extends Circle extends Shape
   const ellipse = schema.types.get("Ellipse")!;
-  assertEquals(ellipse.parentType, "Circle");
+  assertEquals(ellipse.parentTypes, ["Circle"]);
 
   const circle = schema.types.get("Circle")!;
-  assertEquals(circle.parentType, "Shape");
+  assertEquals(circle.parentTypes, ["Shape"]);
   assertEquals(circle.subtypes, ["Ellipse"]);
 
   const shape = schema.types.get("Shape")!;
@@ -459,7 +459,7 @@ Deno.test("type hierarchy - child properties override parent properties", () => 
   const child = makeTypeDef({
     name: "Derived",
     tableName: "deriveds",
-    parentType: "Base",
+    parentTypes: ["Base"],
     properties: new Map([
       ["id", {
         name: "id",

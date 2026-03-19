@@ -43,8 +43,8 @@ export interface TypeDef {
   enumValues?: string[];
   /** Whether this is an abstract type (cannot be instantiated directly) */
   abstract?: boolean;
-  /** Name of the parent type (e.g., "Shape") for single inheritance */
-  parentType?: string;
+  /** Names of parent types (e.g., ["Shape"] or ["Timestamped", "Authored"] for multiple inheritance) */
+  parentTypes?: string[];
   /** Names of direct child types (e.g., ["Circle", "Rectangle"]) */
   subtypes?: string[];
   /** Column name for type discrimination (e.g., "__type__") */
@@ -302,10 +302,18 @@ export function getTypeHierarchy(
   typeName: string,
 ): string[] {
   const result: string[] = [typeName];
-  let current = schema.types.get(typeName);
-  while (current?.parentType) {
-    result.push(current.parentType);
-    current = schema.types.get(current.parentType);
+  const visited = new Set<string>([typeName]);
+  const queue = [...(schema.types.get(typeName)?.parentTypes ?? [])];
+
+  while (queue.length > 0) {
+    const name = queue.shift()!;
+    if (visited.has(name)) continue;
+    visited.add(name);
+    result.push(name);
+    const parentDef = schema.types.get(name);
+    if (parentDef?.parentTypes) {
+      queue.push(...parentDef.parentTypes);
+    }
   }
   return result;
 }

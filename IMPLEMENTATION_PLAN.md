@@ -182,17 +182,21 @@ Tasks:
 **Goal**: Support `type X extending A, B, C` in SDL
 **Success Criteria**: Types extending multiple parents inherit all properties/links, DDL creates correct table structure
 **Tests**: SDL parsing, validation, DDL generation, query compilation, PG E2E
-**Status**: Not Started
+**Status**: Complete
 
 Tasks:
-- [ ] Update SDL parser to accept comma-separated extends list
-- [ ] Update schema validator for multiple parent resolution (property merging, conflict detection)
-- [ ] Define conflict resolution rules (diamond problem — same property from two parents)
-- [ ] Update DDL generator: multiple inheritance → single PG table with union of all parent columns
-- [ ] Update compiler type resolution: walk multiple parent chains
-- [ ] Update migration differ for multi-parent changes
-- [ ] Update codegen to emit TypeScript interfaces with intersection types
-- [ ] PG E2E: types extending 2-3 parents, query with filters on inherited properties
+- [x] SDL parser already supports comma-separated extends list (parseTypeRefList)
+- [x] Schema validator already iterates all parents for validation
+- [x] Conflict resolution: first-seen-wins for diamond problem (seenNames set deduplication)
+- [x] TypeDef.parentType → parentTypes (string[]) across compiler/context.ts, migration/types.ts
+- [x] SchemaManager: extract all parents from extending[], multi-parent merge in inheritance pass
+- [x] DDL generator: discriminator column check uses parentTypes array
+- [x] Migration differ: stores all parent names in op.parentTypes array
+- [x] Compiler getTypeHierarchy(): BFS traversal across multiple parent chains (no duplicates)
+- [x] Introspection: parentTypes reported as string[] array
+- [x] Codegen: generates `export interface X extends A, B { }` for multi-parent types
+- [x] 8 unit tests (compiler/multiple-inheritance.test.ts)
+- [x] 4 PG E2E tests (compiler/pg-multiple-inheritance.test.ts)
 
 ---
 
