@@ -89,6 +89,9 @@ disc codegen                   # Generate TypeScript types
 disc watch                     # Watch schema files and auto-migrate in dev
 disc serve                     # Start the Disc server
 disc ui                        # Open admin UI in browser
+disc build                     # Compile to native binary
+disc build --platform linux-x64  # Cross-compile for Linux
+disc deploy --format <fmt>     # Generate deployment scaffolds (docker, compose, systemd, env)
 disc pg log                    # View PostgreSQL logs
 disc pg log -f                 # Follow log output
 disc pg upgrade --target-version 17.0  # Upgrade PostgreSQL
@@ -166,6 +169,36 @@ For production deployments or users who prefer to manage their own Postgres:
 ```bash
 disc init --backend-dsn "postgres://user:pass@host:5432/disc"
 ```
+
+## Deployment
+
+### Native Binary
+
+```bash
+disc build                          # Build for current platform
+disc build --platform linux-x64     # Cross-compile for Linux
+disc build --platform linux-arm64   # Cross-compile for Linux ARM
+```
+
+### Docker
+
+```bash
+docker build -t disc .              # Production image (external PG)
+docker build -f Dockerfile.bundled -t disc-bundled .  # All-in-one with PG
+docker compose up -d                # Start Disc + PostgreSQL
+```
+
+### Scaffold Generator
+
+```bash
+disc deploy --format env            # Generate .env.production template
+disc deploy --format systemd        # Generate systemd service unit
+disc deploy --format compose        # Generate docker-compose.yml
+disc deploy --format docker         # Generate Dockerfile
+```
+
+See [Production Deployment Guide](docs/production-deployment.md) for full details
+including TLS setup, connection pool tuning, health checks, monitoring, and more.
 
 ## Development
 

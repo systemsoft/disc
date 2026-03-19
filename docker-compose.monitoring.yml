@@ -1,0 +1,40 @@
+# =============================================================================
+# Disc Database — Docker Compose monitoring overlay
+# =============================================================================
+# Adds Prometheus and Grafana to the base stack.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+# =============================================================================
+
+services:
+  disc:
+    environment:
+      DISC_ENABLE_METRICS: "true"
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - disc
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    volumes:
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  prometheus_data:
+  grafana_data:

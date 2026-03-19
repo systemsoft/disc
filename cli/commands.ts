@@ -13,6 +13,8 @@ import { ConnectionPool } from "../lib/connection-pool.ts";
 import { initCommand, InitOptions } from "./init.ts";
 import { shellCommand, ShellOptions } from "./shell.ts";
 import { watchCommand, WatchOptions } from "./watch.ts";
+import { buildCommand, BuildOptions } from "./build.ts";
+import { deployCommand, DeployOptions } from "./deploy.ts";
 import { pgLogCommand, PgLogOptions } from "./pg-log.ts";
 import { pgUpgradeCommand, PgUpgradeOptions } from "./pg-upgrade.ts";
 import { PostgresManager } from "../postgres/mod.ts";
@@ -457,6 +459,20 @@ export class CLICommands {
       );
       throw error;
     }
+  }
+
+  /**
+   * Build a self-contained binary via deno compile
+   */
+  async build(options: BuildOptions): Promise<void> {
+    await buildCommand.execute(options);
+  }
+
+  /**
+   * Generate deployment artifacts
+   */
+  async deploy(options: DeployOptions): Promise<void> {
+    await deployCommand.execute(options);
   }
 
   /**

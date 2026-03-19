@@ -1,0 +1,42 @@
+# =============================================================================
+# Disc Database — Docker Compose (production stack)
+# =============================================================================
+# Minimal setup: Disc server + PostgreSQL 16.
+#
+# Usage:
+#   docker compose up -d
+#   docker compose down
+#   docker compose logs -f disc
+# =============================================================================
+
+services:
+  disc:
+    build: .
+    ports:
+      - "5656:5656"
+    environment:
+      DATABASE_URL: postgres://disc:disc@postgres:5432/disc
+      DISC_HOST: "0.0.0.0"
+      DISC_PORT: "5656"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: disc
+      POSTGRES_PASSWORD: disc
+      POSTGRES_DB: disc
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U disc"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  pgdata:

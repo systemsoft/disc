@@ -27,6 +27,8 @@ COMMANDS:
   serve         Start the Disc server (includes PostgreSQL)
   ui            Open admin UI in browser
   watch         Watch schema files and auto-migrate in dev
+  build         Compile Disc into a self-contained binary
+  deploy        Generate deployment artifacts (Dockerfile, compose, systemd, env)
   pg log         View PostgreSQL logs
   pg upgrade     Upgrade PostgreSQL version
 
@@ -56,6 +58,9 @@ OPTIONS:
   --lines <n>            Number of log lines to show (default: 50)
   --level <level>        Filter logs by level (ERROR, WARNING, LOG, FATAL, PANIC)
   --target-version <v>   Target PostgreSQL version for upgrade
+  --platform <platform>  Target platform for build (linux-x64, linux-arm64, darwin-x64, darwin-arm64)
+  --lite                 Skip UI assets in build (future use)
+  --format <format>      Deploy format: docker, compose, systemd, env
 
 EXAMPLES:
   disc init my-project                # Initialize new project with PostgreSQL
@@ -74,6 +79,14 @@ EXAMPLES:
   disc pg log --level ERROR             # Show only ERROR level log lines
   disc pg upgrade --target-version 17.0 # Upgrade PostgreSQL to version 17.0
   disc pg upgrade --target-version 17.0 --dry-run  # Preview upgrade plan
+  disc build                                       # Build binary for current platform
+  disc build --platform linux-x64                  # Cross-compile for Linux x64
+  disc build --output ./my-disc                    # Custom output path
+  disc deploy --format docker                      # Generate Dockerfile
+  disc deploy --format compose                     # Generate docker-compose.yml
+  disc deploy --format systemd                     # Generate systemd service unit
+  disc deploy --format env                         # Generate .env.production template
+  disc deploy --format docker --output ./infra     # Custom output directory
 `;
 
 async function main() {
@@ -95,6 +108,7 @@ async function main() {
       "enable-auth",
       "enable-access-policies",
       "follow",
+      "lite",
     ],
     string: [
       "port",
@@ -115,6 +129,8 @@ async function main() {
       "lines",
       "level",
       "target-version",
+      "platform",
+      "format",
     ],
     alias: {
       h: "help",
@@ -223,6 +239,29 @@ async function main() {
 
       case "ui": {
         await commands.ui(args);
+        break;
+      }
+
+      case "build": {
+        await commands.build({
+          platform: args.platform,
+          output: args.output,
+          lite: args.lite,
+        });
+        break;
+      }
+
+      case "deploy": {
+        if (!args.format) {
+          console.error(
+            "Error: --format is required for deploy. Valid formats: docker, compose, systemd, env",
+          );
+          Deno.exit(1);
+        }
+        await commands.deploy({
+          format: args.format,
+          output: args.output,
+        });
         break;
       }
 

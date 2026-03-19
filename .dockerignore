@@ -1,0 +1,36 @@
+# Version control
+.git
+
+# Claude Code
+.claude
+thoughts
+
+# Reference implementation
+reference-gel
+
+# Test files
+**/*.test.ts
+**/test-fixtures/
+
+# Node modules
+node_modules
+ui/node_modules
+ui/.svelte-kit
+
+# Environment files
+.env
+.env.*
+
+# Documentation (not needed at runtime)
+*.md
+!README.md
+
+# Benchmarks and docs
+bench/
+benchmarks/
+docs/
+
+# Debug/test scripts at project root
+debug_*.ts
+test_*.ts
+test-links.ts

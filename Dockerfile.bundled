@@ -1,0 +1,153 @@
+# =============================================================================
+# Disc Database — Bundled Dockerfile (Disc + PostgreSQL 16 in one image)
+# =============================================================================
+# All-in-one image for quick demos, development, and local testing.
+# PostgreSQL 16 is installed via apt and managed by a lightweight entrypoint
+# script that starts PG, waits for readiness, then launches Disc.
+#
+# Usage:
+#   docker build -f Dockerfile.bundled -t disc-bundled .
+#   docker run -p 5656:5656 disc-bundled
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Stage 1: deps — cache Deno dependencies
+# ---------------------------------------------------------------------------
+FROM denoland/deno:latest AS deps
+
+WORKDIR /app
+
+COPY deno.json deno.lock* ./
+
+RUN deno install
+
+# ---------------------------------------------------------------------------
+# Stage 2: bundled (Deno + PostgreSQL 16)
+# ---------------------------------------------------------------------------
+FROM denoland/deno:latest
+
+WORKDIR /app
+
+# Install PostgreSQL 16 from the official PostgreSQL apt repository.
+# hadolint ignore=DL3008
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    gnupg2 \
+    lsb-release \
+    wget \
+  && echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+    > /etc/apt/sources.list.d/pgdg.list \
+  && wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add - \
+  && apt-get update \
+  && apt-get install -y --no-install-recommends \
+    postgresql-16 \
+    postgresql-client-16 \
+  && rm -rf /var/lib/apt/lists/*
+
+# Create a dedicated disc user that owns both the PG data and the app.
+RUN groupadd --system disc \
+  && useradd --system --gid disc --create-home disc
+
+# Prepare PostgreSQL data directory.
+ENV PGDATA=/var/lib/postgresql/16/disc
+RUN mkdir -p "$PGDATA" /run/postgresql /var/log/postgresql \
+  && chown -R disc:disc "$PGDATA" /run/postgresql /var/log/postgresql
+
+# Pull cached Deno dependencies.
+COPY --from=deps /root/.cache/deno /root/.cache/deno
+
+# Copy the full source tree.
+COPY . .
+
+# Remove files not needed at runtime.
+RUN rm -rf \
+  .git \
+  .claude \
+  thoughts \
+  reference-gel \
+  tests/ \
+  benchmarks/ \
+  docs/ \
+  ui/node_modules \
+  ui/.svelte-kit \
+  **/*.test.ts
+
+# Pre-cache modules.
+RUN deno cache cli/main.ts
+
+# Write the entrypoint script.
+# It initializes PG (if needed), starts it, waits for readiness, then execs Disc.
+RUN cat <<'ENTRY' > /app/docker-entrypoint.sh
+#!/bin/bash
+set -e
+
+# ---- PostgreSQL setup ----
+
+# Initialize the data directory if it is empty.
+if [ ! -s "$PGDATA/PG_VERSION" ]; then
+  echo "disc-bundled: initializing PostgreSQL data directory..."
+  /usr/lib/postgresql/16/bin/initdb \
+    --username=disc \
+    --encoding=UTF-8 \
+    --locale=C.UTF-8 \
+    -D "$PGDATA"
+
+  # Listen only on localhost; Disc connects via Unix socket or 127.0.0.1.
+  {
+    echo "listen_addresses = '127.0.0.1'"
+    echo "port = 5432"
+    echo "unix_socket_directories = '/run/postgresql'"
+    echo "max_connections = 100"
+    echo "shared_buffers = 128MB"
+    echo "log_destination = 'stderr'"
+    echo "logging_collector = off"
+  } >> "$PGDATA/postgresql.conf"
+
+  # Allow local connections without password (container-internal only).
+  {
+    echo "local   all   all                 trust"
+    echo "host    all   all   127.0.0.1/32  trust"
+  } > "$PGDATA/pg_hba.conf"
+fi
+
+# Start PostgreSQL in the background.
+echo "disc-bundled: starting PostgreSQL..."
+/usr/lib/postgresql/16/bin/pg_ctl \
+  -D "$PGDATA" \
+  -l /var/log/postgresql/postgresql.log \
+  -w start
+
+# Create the disc database if it does not exist.
+if ! /usr/lib/postgresql/16/bin/psql -U disc -lqt | cut -d\| -f1 | grep -qw disc; then
+  /usr/lib/postgresql/16/bin/createdb -U disc disc
+  echo "disc-bundled: created database 'disc'"
+fi
+
+echo "disc-bundled: PostgreSQL ready"
+
+# ---- Disc server ----
+
+export DATABASE_URL="postgresql://disc@127.0.0.1:5432/disc"
+export DISC_HOST="0.0.0.0"
+export DISC_PORT="${DISC_PORT:-5656}"
+
+exec deno run --allow-all --no-check cli/main.ts "$@"
+ENTRY
+
+RUN chmod +x /app/docker-entrypoint.sh
+
+# Ensure the disc user owns the app directory.
+RUN chown -R disc:disc /app
+
+# Switch to non-root user.
+USER disc
+
+# Expose Disc (5656) and PostgreSQL (5432, optional external access).
+EXPOSE 5656 5432
+
+# Health check.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD deno eval "const r = await fetch('http://localhost:5656/health/ready'); if (!r.ok) Deno.exit(1);"
+
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD ["serve"]

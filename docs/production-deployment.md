@@ -415,142 +415,209 @@ Create panels for:
 
 ## Docker Deployment
 
-### Dockerfile
+Disc ships with production-ready Docker files in the repository root.
 
-Multi-stage build using Deno:
+### Production Image (External PostgreSQL)
 
-```dockerfile
-FROM denoland/deno:2.3.1 AS builder
+Use the multi-stage `Dockerfile` for production deployments with an external PostgreSQL.
+This image caches dependencies in a separate stage, removes test and documentation files,
+runs as a non-root user, and includes a built-in health check.
 
-WORKDIR /app
-COPY deno.json deno.lock ./
-COPY . .
-
-# Cache dependencies
-RUN deno cache mod.ts
-
-FROM denoland/deno:2.3.1
-
-WORKDIR /app
-
-# Copy application source
-COPY --from=builder /app .
-
-# Disc server runs on 5656 by default
-EXPOSE 5656
-
-# Non-root user for security
-USER deno
-
-CMD ["deno", "run", \
-  "--allow-net", \
-  "--allow-read", \
-  "--allow-write", \
-  "--allow-env", \
-  "--allow-run", \
-  "cli/main.ts", "serve"]
+```bash
+docker build -t disc .
+docker run -e DATABASE_URL="postgres://user:pass@host:5432/disc" -p 5656:5656 disc
 ```
 
-### docker-compose.yml
+The entrypoint supports running any CLI subcommand:
 
-Full local stack with Prometheus and Grafana:
-
-```yaml
-version: "3.9"
-
-services:
-  disc:
-    build: .
-    ports:
-      - "5656:5656"
-    environment:
-      DATABASE_URL: postgresql://disc:disc@postgres:5432/disc
-      DISC_HOST: 0.0.0.0
-      DISC_PORT: "5656"
-      DISC_MAX_CONNECTIONS: "50"
-      DISC_REQUEST_TIMEOUT: "30000"
-      DISC_ENABLE_CORS: "true"
-      DISC_CORS_ORIGINS: "https://app.example.com"
-      DISC_JWT_SECRET: "${DISC_JWT_SECRET}"
-      DISC_ENABLE_AUTH: "true"
-      DISC_ENABLE_ACCESS_POLICIES: "true"
-      DISC_PROTOCOL: "full"
-      DISC_CACHE_MAX_SIZE: "1000"
-      DISC_SLOW_QUERY_MS: "500"
-      DISC_RATE_LIMIT_RPM: "300"
-      DISC_RATE_LIMIT_BURST: "50"
-      DISC_ENABLE_METRICS: "true"
-      DISC_LOG_LEVEL: "INFO"
-      DISC_LOG_FORMAT: "json"
-      DISC_SHUTDOWN_DRAIN_TIMEOUT: "30000"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:5656/health/ready"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 20s
-    restart: unless-stopped
-
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: disc
-      POSTGRES_PASSWORD: disc
-      POSTGRES_DB: disc
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U disc -d disc"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-  prometheus:
-    image: prom/prometheus:v2.51.0
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.retention.time=15d"
-    restart: unless-stopped
-
-  grafana:
-    image: grafana/grafana:10.4.0
-    ports:
-      - "3000:3000"
-    environment:
-      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_PASSWORD:-admin}"
-    volumes:
-      - grafana_data:/var/lib/grafana
-    depends_on:
-      - prometheus
-    restart: unless-stopped
-
-volumes:
-  postgres_data:
-  prometheus_data:
-  grafana_data:
+```bash
+docker run disc migrate    # Run migrations
+docker run disc shell      # Open EdgeQL shell
 ```
 
-`prometheus.yml` for the compose stack:
+See `Dockerfile` for the full multi-stage build definition.
 
-```yaml
-global:
-  scrape_interval: 15s
+### All-in-One Image (Bundled PostgreSQL)
 
-scrape_configs:
-  - job_name: disc
-    static_configs:
-      - targets: ["disc:5656"]
-    metrics_path: /metrics
+Use `Dockerfile.bundled` for development, demos, or single-container deployments.
+This image installs PostgreSQL 16 inside the container and manages its lifecycle
+automatically via an entrypoint script.
+
+```bash
+docker build -f Dockerfile.bundled -t disc-bundled .
+docker run -p 5656:5656 disc-bundled
 ```
+
+No `DATABASE_URL` is required -- the entrypoint initializes PostgreSQL, creates the
+database, and connects Disc automatically.
+
+See `Dockerfile.bundled` for the full build definition and entrypoint script.
+
+### Docker Compose
+
+The repository includes two compose files:
+
+- `docker-compose.yml` -- production stack with Disc and PostgreSQL
+- `docker-compose.monitoring.yml` -- overlay that adds Prometheus and Grafana
+
+```bash
+# Production stack (Disc + PostgreSQL)
+docker compose up -d
+
+# With monitoring (adds Prometheus + Grafana)
+docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+
+# View logs
+docker compose logs -f disc
+
+# Stop
+docker compose down
+```
+
+The monitoring overlay expects a Prometheus config at `deploy/prometheus.yml` and
+automatically sets `DISC_ENABLE_METRICS=true` on the Disc service.
+
+Convenience tasks are available in `deno.json`:
+
+```bash
+deno task docker:build     # Build the production image
+deno task docker:up        # Start the compose stack
+deno task docker:down      # Stop the compose stack
+```
+
+---
+
+## Native Binary
+
+Disc can be compiled to a self-contained native binary using Deno's `deno compile`.
+The resulting binary requires no runtime installation -- it embeds Deno and all
+dependencies.
+
+### Building
+
+```bash
+# Build for the current platform
+disc build
+
+# Or via Deno task
+deno task build
+```
+
+The binary is written to `./disc` by default.
+
+### Cross-Compilation
+
+Target a specific platform with the `--platform` flag:
+
+```bash
+disc build --platform linux-x64
+disc build --platform linux-arm64
+disc build --platform darwin-x64
+disc build --platform darwin-arm64
+```
+
+Platform-specific Deno tasks are also available:
+
+```bash
+deno task build:linux-x64
+deno task build:linux-arm64
+deno task build:darwin-x64
+deno task build:darwin-arm64
+```
+
+When cross-compiling, the output binary is named `./disc-{platform}` (e.g.,
+`./disc-linux-x64`). You can override the output path with `--output`:
+
+```bash
+disc build --platform linux-x64 --output ./dist/disc-server
+```
+
+### Available Platforms
+
+| Platform         | Deno Target                     |
+| ---------------- | ------------------------------- |
+| `darwin-arm64`   | `aarch64-apple-darwin`          |
+| `darwin-x64`     | `x86_64-apple-darwin`           |
+| `linux-arm64`    | `aarch64-unknown-linux-gnu`     |
+| `linux-x64`      | `x86_64-unknown-linux-gnu`      |
+
+### Cross-Compilation Limitations
+
+Deno's cross-compilation downloads a platform-specific runtime snapshot. This works
+reliably for most cases, but note:
+
+- The binary size may differ across platforms
+- Native plugins or FFI bindings (if any) are not cross-compiled
+- The resulting binary cannot be executed on the build host when targeting a different
+  OS or architecture
+
+### Deployment with Native Binary
+
+The compiled binary can be deployed directly to a VM or bare-metal server:
+
+```bash
+# Build for Linux
+disc build --platform linux-x64
+
+# Copy to server
+scp ./disc-linux-x64 server:/usr/local/bin/disc
+
+# Run on server
+ssh server "DATABASE_URL=postgres://... /usr/local/bin/disc serve"
+```
+
+This pairs well with the systemd service unit generated by `disc deploy --format systemd`.
+
+---
+
+## Deploy Scaffold Generator
+
+The `disc deploy` command generates project-specific deployment artifacts. Instead of
+writing Dockerfiles, compose files, or service units from scratch, use the scaffold
+generator to produce a starting point tailored to your project.
+
+### Usage
+
+```bash
+disc deploy --format <format> [--output <directory>]
+```
+
+The `--output` flag controls where generated files are written. Defaults to `./deploy`.
+
+### Formats
+
+| Format    | Output File          | Description                                         |
+| --------- | -------------------- | --------------------------------------------------- |
+| `docker`  | `Dockerfile`         | Basic Dockerfile for running Disc with external PG  |
+| `compose` | `docker-compose.yml` | Compose stack with Disc and PostgreSQL               |
+| `systemd` | `disc.service`       | systemd service unit for Linux deployments           |
+| `env`     | `.env.production`    | Environment variable template with all Disc settings |
+
+### Examples
+
+Generate an environment variable template:
+
+```bash
+disc deploy --format env
+# Writes ./deploy/.env.production
+```
+
+Generate a systemd service unit to a custom directory:
+
+```bash
+disc deploy --format systemd --output ./infra
+# Writes ./infra/disc.service
+```
+
+Generate a docker-compose file:
+
+```bash
+disc deploy --format compose
+# Writes ./deploy/docker-compose.yml
+```
+
+The generated files include comments indicating they were scaffolded by `disc deploy`
+and are meant to be customized for your specific infrastructure.
 
 ---
 
