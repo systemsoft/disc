@@ -541,6 +541,121 @@ export class SchemaManager {
   }
 
   /**
+   * Rollback the most recently applied migration.
+   *
+   * Loads the latest migration from the tracker and delegates rollback
+   * execution to the migration engine. Warning: rolling back a DROP TABLE
+   * cannot restore data.
+   */
+  async rollbackLastMigration(): Promise<Result<void, MigrationError>> {
+    if (!this.engine) {
+      return Err(
+        new MigrationError(
+          "SchemaManager not initialized. Call initialize() before rollbackLastMigration().",
+        ),
+      );
+    }
+
+    return await this.engine.executeRollback(await this.getLatestMigrationId());
+  }
+
+  /**
+   * Rollback all migrations applied after the specified migration ID.
+   * The target migration itself is preserved.
+   */
+  async rollbackToMigration(
+    migrationId: string,
+  ): Promise<Result<void, MigrationError>> {
+    if (!this.engine) {
+      return Err(
+        new MigrationError(
+          "SchemaManager not initialized. Call initialize() before rollbackToMigration().",
+        ),
+      );
+    }
+
+    return await this.engine.executeRollbackTo(migrationId);
+  }
+
+  /**
+   * Get migration status information.
+   */
+  async getMigrationStatus(): Promise<
+    Result<
+      {
+        applied: number;
+        currentSchemaHash: string | null;
+        latestMigration: {
+          id: string;
+          name: string;
+          appliedAt: Date;
+        } | null;
+      },
+      MigrationError
+    >
+  > {
+    if (!this.engine) {
+      return Err(
+        new MigrationError(
+          "SchemaManager not initialized. Call initialize() before getMigrationStatus().",
+        ),
+      );
+    }
+
+    const statusResult = await this.engine.getMigrationStatus();
+    if (!statusResult.ok) {
+      return statusResult;
+    }
+
+    const status = statusResult.value;
+    return Ok({
+      applied: status.applied,
+      currentSchemaHash: status.currentSchemaHash,
+      latestMigration: status.latestMigration
+        ? {
+          id: status.latestMigration.id,
+          name: status.latestMigration.name,
+          appliedAt: status.latestMigration.appliedAt,
+        }
+        : null,
+    });
+  }
+
+  /**
+   * Get full migration history, ordered by applied_at DESC.
+   */
+  async getMigrationHistory(): Promise<
+    Result<Types.MigrationHistoryEntry[], MigrationError>
+  > {
+    if (!this.engine) {
+      return Err(
+        new MigrationError(
+          "SchemaManager not initialized. Call initialize() before getMigrationHistory().",
+        ),
+      );
+    }
+
+    return await this.engine.getMigrationHistory();
+  }
+
+  /**
+   * Get the ID of the latest applied migration. Throws if no migrations exist.
+   */
+  private async getLatestMigrationId(): Promise<string> {
+    const statusResult = await this.engine!.getMigrationStatus();
+    if (!statusResult.ok) {
+      throw statusResult.error;
+    }
+
+    const latest = statusResult.value.latestMigration;
+    if (!latest) {
+      throw new MigrationError("No migrations have been applied");
+    }
+
+    return latest.id;
+  }
+
+  /**
    * Get the current compiler Schema, or null if no schema has been loaded.
    */
   getSchema(): Schema | null {

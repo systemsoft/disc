@@ -29,6 +29,9 @@ COMMANDS:
   watch         Watch schema files and auto-migrate in dev
   build         Compile Disc into a self-contained binary
   deploy        Generate deployment artifacts (Dockerfile, compose, systemd, env)
+  db create      Create a new Disc-managed database
+  db list        List all Disc-managed databases
+  db drop        Drop a Disc-managed database (requires --force)
   pg log         View PostgreSQL logs
   pg upgrade     Upgrade PostgreSQL version
 
@@ -46,6 +49,7 @@ OPTIONS:
   --no-mutations       Skip mutation method generation
   --no-client          Skip client library generation
   --no-format          Skip output formatting
+  --database-url <url> PostgreSQL connection URL for db commands
   --backend-dsn <url>  Use external PostgreSQL (skip bundled)
   --skip-postgres      Skip PostgreSQL setup in init
   --no-monitor         Disable PostgreSQL health monitoring
@@ -61,6 +65,12 @@ OPTIONS:
   --platform <platform>  Target platform for build (linux-x64, linux-arm64, darwin-x64, darwin-arm64)
   --lite                 Skip UI assets in build (future use)
   --format <format>      Deploy format: docker, compose, systemd, env
+  --status               Show migration status (applied count, latest migration)
+  --rollback             Rollback the most recent migration (requires --force)
+  --rollback-to <id>     Rollback all migrations after the specified ID (requires --force)
+  --squash               Squash multiple migrations into one
+  --squash-from <id>     Start of squash range (inclusive)
+  --squash-to <id>       End of squash range (inclusive)
 
 EXAMPLES:
   disc init my-project                # Initialize new project with PostgreSQL
@@ -71,6 +81,11 @@ EXAMPLES:
   disc migrate --create               # Create migration without applying
   disc migrate --dry-run              # Preview migration changes
   disc migrate --auto-approve         # Apply migration without prompts
+  disc migrate --status               # Show migration status
+  disc migrate --rollback --force     # Rollback the most recent migration
+  disc migrate --rollback-to m20240101T100000_abc123 --force  # Rollback to a specific migration
+  disc migrate --squash                            # Squash all migrations
+  disc migrate --squash --squash-from m001 --squash-to m005  # Squash a range
   disc shell                          # Open EdgeQL REPL
   disc codegen                        # Generate TypeScript types
   disc serve                          # Start Disc server with PostgreSQL
@@ -87,6 +102,9 @@ EXAMPLES:
   disc deploy --format systemd                     # Generate systemd service unit
   disc deploy --format env                         # Generate .env.production template
   disc deploy --format docker --output ./infra     # Custom output directory
+  disc db create my_app                            # Create database disc_my_app
+  disc db list                                     # List all Disc-managed databases
+  disc db drop my_app --force                      # Drop database disc_my_app
 `;
 
 async function main() {
@@ -109,6 +127,9 @@ async function main() {
       "enable-access-policies",
       "follow",
       "lite",
+      "status",
+      "rollback",
+      "squash",
     ],
     string: [
       "port",
@@ -122,6 +143,7 @@ async function main() {
       "template",
       "name",
       "directory",
+      "database-url",
       "backend-dsn",
       "jwt-secret",
       "tls-cert",
@@ -131,6 +153,9 @@ async function main() {
       "target-version",
       "platform",
       "format",
+      "rollback-to",
+      "squash-from",
+      "squash-to",
     ],
     alias: {
       h: "help",
@@ -293,6 +318,42 @@ async function main() {
           default:
             console.error(`Unknown pg subcommand: ${subcommand}`);
             console.log("Available: pg log, pg upgrade");
+            Deno.exit(1);
+        }
+        break;
+      }
+
+      case "db": {
+        const dbSubcommand = String(args._[1] || "");
+        switch (dbSubcommand) {
+          case "create": {
+            const dbName = String(args._[2] || "");
+            if (!dbName) {
+              console.error(
+                "Error: database name is required. Usage: disc db create <name>",
+              );
+              Deno.exit(1);
+            }
+            await commands.dbCreate(dbName, args);
+            break;
+          }
+          case "list":
+            await commands.dbList(args);
+            break;
+          case "drop": {
+            const dropName = String(args._[2] || "");
+            if (!dropName) {
+              console.error(
+                "Error: database name is required. Usage: disc db drop <name> --force",
+              );
+              Deno.exit(1);
+            }
+            await commands.dbDrop(dropName, args);
+            break;
+          }
+          default:
+            console.error(`Unknown db subcommand: ${dbSubcommand}`);
+            console.log("Available: db create, db list, db drop");
             Deno.exit(1);
         }
         break;

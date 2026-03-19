@@ -19,6 +19,13 @@ import type { AuthProvider } from "../auth/provider.ts";
 import type { AuthMiddleware } from "../auth/middleware.ts";
 import type { AuthRoutes } from "../auth/integration.ts";
 import type { ExtensionRoute } from "../extensions/types.ts";
+import type { DatabaseRegistry } from "./database-registry.ts";
+import type { SchemaProvider } from "./schema-endpoint.ts";
+import {
+  handleGetSchema,
+  handleGetSchemaType,
+  handleGetSchemaTypes,
+} from "./schema-endpoint.ts";
 
 export interface HttpServerOptions {
   config: Types.ServerConfig;
@@ -30,6 +37,8 @@ export interface HttpServerOptions {
   extensionHealthGetter?: () => Promise<
     Map<string, { healthy: boolean; details?: string }>
   >;
+  databaseRegistry?: DatabaseRegistry;
+  schemaProvider?: SchemaProvider;
 }
 
 export class HttpServer {
@@ -46,6 +55,8 @@ export class HttpServer {
   private extensionHealthGetter?: () => Promise<
     Map<string, { healthy: boolean; details?: string }>
   >;
+  private databaseRegistry?: DatabaseRegistry;
+  private schemaProvider?: SchemaProvider;
   private rate_limiter?: RateLimiter;
   private server?: Deno.HttpServer<Deno.NetAddr>;
   private redirect_server?: Deno.HttpServer<Deno.NetAddr>;
@@ -68,6 +79,8 @@ export class HttpServer {
     this.authRoutes = options.authRoutes;
     this.extensionRoutes = options.extensionRoutes || new Map();
     this.extensionHealthGetter = options.extensionHealthGetter;
+    this.databaseRegistry = options.databaseRegistry;
+    this.schemaProvider = options.schemaProvider;
     this.connection_manager = new ConnectionManager();
     this.session_manager = new SessionManager();
     this.transaction_manager = new TransactionManager();
@@ -262,6 +275,11 @@ export class HttpServer {
         return await this.handle_auth_route(request, url);
       }
 
+      // Schema introspection route handling
+      if (url.pathname === "/schema" || url.pathname.startsWith("/schema/")) {
+        return this.handle_schema_route(url);
+      }
+
       // Route handling
       switch (url.pathname) {
         case "/":
@@ -323,6 +341,14 @@ export class HttpServer {
       };
     }
 
+    if (this.schemaProvider) {
+      endpoints.schema = {
+        describe: "/schema",
+        types: "/schema/types",
+        type: "/schema/types/:name",
+      };
+    }
+
     if (this.extensionRoutes.size > 0) {
       const extEndpoints: Record<string, string[]> = {};
       for (const [name, routes] of this.extensionRoutes) {
@@ -381,6 +407,21 @@ export class HttpServer {
         );
       }
 
+      // Resolve target database from request headers/params
+      const queryUrl = new URL(request.url);
+      const databaseName = this.resolveDatabaseName(request, queryUrl);
+
+      // Validate the database exists in the registry (if registry is available)
+      if (
+        this.databaseRegistry &&
+        !this.databaseRegistry.getDatabase(databaseName)
+      ) {
+        return this.create_error_response(
+          `Unknown database: "${databaseName}"`,
+          400,
+        );
+      }
+
       // Create connection and session
       const remoteAddr = "hostname" in info.remoteAddr
         ? info.remoteAddr.hostname
@@ -391,6 +432,9 @@ export class HttpServer {
         undefined,
         request.headers.get("user-agent") || undefined,
       );
+
+      // Set the resolved database name on the session
+      connection.session.database = databaseName;
 
       // Build auth context from JWT if auth middleware is configured
       const authContext: Types.AuthContext = { roles: [], permissions: [] };
@@ -851,6 +895,42 @@ export class HttpServer {
     }
   }
 
+  private handle_schema_route(url: URL): Response {
+    if (!this.schemaProvider) {
+      return this.create_error_response(
+        "Schema introspection not configured",
+        404,
+      );
+    }
+
+    const routeCtx = {
+      schemaProvider: this.schemaProvider,
+      defaultHeaders: () => this.get_default_headers("application/json"),
+    };
+
+    // Exact match: /schema
+    if (url.pathname === "/schema") {
+      return handleGetSchema(routeCtx);
+    }
+
+    // Exact match: /schema/types
+    if (url.pathname === "/schema/types") {
+      return handleGetSchemaTypes(routeCtx, url);
+    }
+
+    // Pattern match: /schema/types/:name
+    if (url.pathname.startsWith("/schema/types/")) {
+      const typeName = decodeURIComponent(
+        url.pathname.slice("/schema/types/".length),
+      );
+      if (typeName) {
+        return handleGetSchemaType(routeCtx, typeName);
+      }
+    }
+
+    return this.create_error_response("Not Found", 404);
+  }
+
   private async handle_auth_route(
     request: Request,
     url: URL,
@@ -918,6 +998,24 @@ export class HttpServer {
       status,
       headers: this.get_default_headers("application/json"),
     });
+  }
+
+  /**
+   * Resolve the target database name from the request.
+   * Precedence: X-Database header > ?database= query param > "disc" (default).
+   */
+  private resolveDatabaseName(request: Request, url: URL): string {
+    const headerValue = request.headers.get("X-Database");
+    if (headerValue) {
+      return headerValue;
+    }
+
+    const paramValue = url.searchParams.get("database");
+    if (paramValue) {
+      return paramValue;
+    }
+
+    return "disc";
   }
 
   private parse_client_info(

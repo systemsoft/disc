@@ -15,6 +15,7 @@ import {
   AccessPolicy,
   AccessSQLInjector,
 } from "../access/mod.ts";
+import { describeSchema, describeType } from "./introspection.ts";
 
 /** Maps EdgeQL type names to PostgreSQL type names */
 function edgeqlTypeToPgType(edgeqlType: string): string {
@@ -395,6 +396,10 @@ export class EdgeQLCompiler {
         return this.compileForQuery(query);
       case "GroupQuery":
         return this.compileGroupQuery(query);
+      case "DescribeType":
+        return this.compileDescribeType(query);
+      case "DescribeSchema":
+        return this.compileDescribeSchema();
       default:
         throw new CompilationError(`Unsupported query type: ${query.kind}`);
     }
@@ -1283,6 +1288,13 @@ export class EdgeQLCompiler {
     funcCall: EdgeQLAST.FunctionCall,
   ): SQL.SQLExpression {
     const functionName = funcCall.name.parts.join("_");
+    const qualifiedName = funcCall.name.parts.join("::");
+
+    // Check for schema:: introspection functions
+    if (qualifiedName.startsWith("schema::")) {
+      return this.compileIntrospectionFunction(qualifiedName, funcCall);
+    }
+
     const args = funcCall.args.map((arg) => this.compileExpression(arg.value));
 
     // Special compilation for functions that aren't simple 1:1 mappings
@@ -2287,6 +2299,48 @@ export class EdgeQLCompiler {
     }
   }
 
+  /**
+   * Compile DESCRIBE TYPE <typeName> into a SELECT statement returning the
+   * type description as a JSON literal. The introspection is resolved at
+   * compile time from the in-memory schema, then embedded as a SQL string
+   * literal so the result passes through PG normally.
+   */
+  private compileDescribeType(
+    query: EdgeQLAST.DescribeTypeQuery,
+  ): SQL.SelectStatement {
+    const description = describeType(this.ctx.schema, query.typeName);
+    const json = JSON.stringify(description);
+
+    // SELECT '<json>'::jsonb
+    const rawExpr: SQL.RawSQLExpression = {
+      kind: "RawSQLExpression",
+      sql: `'${json.replace(/'/g, "''")}'::jsonb`,
+    };
+
+    return SQL.createSelectStatement({
+      select: SQL.createSelectClause([SQL.createSelectItem(rawExpr)]),
+    });
+  }
+
+  /**
+   * Compile DESCRIBE SCHEMA into a SELECT statement returning the full schema
+   * description as a JSON literal.
+   */
+  private compileDescribeSchema(): SQL.SelectStatement {
+    const description = describeSchema(this.ctx.schema);
+    const json = JSON.stringify(description);
+
+    // SELECT '<json>'::jsonb
+    const rawExpr: SQL.RawSQLExpression = {
+      kind: "RawSQLExpression",
+      sql: `'${json.replace(/'/g, "''")}'::jsonb`,
+    };
+
+    return SQL.createSelectStatement({
+      select: SQL.createSelectClause([SQL.createSelectItem(rawExpr)]),
+    });
+  }
+
   private compileIntrospection(
     introspection: EdgeQLAST.Introspection,
   ): SQL.SQLExpression {
@@ -2295,6 +2349,62 @@ export class EdgeQLCompiler {
       `Introspection queries (INTROSPECT ${typeName}) are not yet supported. ` +
         `Schema metadata queries require the schema reflection catalog.`,
     );
+  }
+
+  /**
+   * Compile a schema:: introspection function call into a SELECT returning
+   * a JSON literal. These functions are resolved at compile time from the
+   * in-memory schema, following the same pattern as DESCRIBE TYPE/SCHEMA.
+   */
+  private compileIntrospectionFunction(
+    qualifiedName: string,
+    funcCall: EdgeQLAST.FunctionCall,
+  ): SQL.RawSQLExpression {
+    let json: string;
+
+    switch (qualifiedName) {
+      case "schema::types": {
+        const description = describeSchema(this.ctx.schema);
+        const typeNames = description.types.map((t) => t.name);
+        json = JSON.stringify(typeNames);
+        break;
+      }
+
+      case "schema::get_type": {
+        if (funcCall.args.length !== 1) {
+          throw new CompilationError(
+            "schema::get_type() requires exactly 1 argument",
+          );
+        }
+        const arg = funcCall.args[0].value;
+        if (arg.kind !== "Literal" || arg.type !== "string") {
+          throw new CompilationError(
+            "schema::get_type() argument must be a string literal",
+          );
+        }
+        const typeName = arg.value as string;
+        const description = describeType(this.ctx.schema, typeName);
+        json = JSON.stringify(description);
+        break;
+      }
+
+      case "schema::functions": {
+        const description = describeSchema(this.ctx.schema);
+        const funcNames = description.functions.map((f) => f.name);
+        json = JSON.stringify(funcNames);
+        break;
+      }
+
+      default:
+        throw new CompilationError(
+          `Unknown introspection function: ${qualifiedName}`,
+        );
+    }
+
+    return {
+      kind: "RawSQLExpression",
+      sql: `'${json.replace(/'/g, "''")}'::jsonb`,
+    };
   }
 
   private compileTypeName(typeName: EdgeQLAST.TypeName): SQL.SQLExpression {

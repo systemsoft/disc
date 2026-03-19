@@ -9,6 +9,7 @@ import * as EdgeQL from "../edgeql/mod.ts";
 import * as Context from "../compiler/context.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { DatabaseExecutionError } from "../lib/errors.ts";
+import type { DatabaseRegistry } from "./database-registry.ts";
 import { getLogger } from "../lib/logger.ts";
 
 const log = getLogger("simple-edgeql-protocol");
@@ -20,6 +21,7 @@ export interface SimpleEdgeQLOptions {
   databaseUrl?: string;
   connectionPool?: ConnectionPool;
   enableAccessPolicies?: boolean;
+  databaseRegistry?: DatabaseRegistry;
 }
 
 export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
@@ -394,6 +396,23 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
     return sql;
   }
 
+  /**
+   * Resolve the connection pool for the current query context.
+   * If a DatabaseRegistry is available and the session specifies a database,
+   * look up the pool from the registry. Otherwise, fall back to the handler's
+   * own pool.
+   */
+  private resolvePool(context: Types.QueryContext): ConnectionPool | undefined {
+    const registry = this.options.databaseRegistry;
+    if (registry && context.session.database) {
+      const entry = registry.getDatabase(context.session.database);
+      if (entry) {
+        return entry.pool;
+      }
+    }
+    return this.pool;
+  }
+
   private async executeQuery(
     sql: string,
     variables: Record<string, any>,
@@ -414,11 +433,14 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       };
     }
 
+    // Resolve the correct pool (registry-aware or default)
+    const pool = this.resolvePool(context);
+
     // Use connection pool if available
-    if (this.pool) {
+    if (pool) {
       try {
         // Execute the SQL using the pool
-        const result = await this.pool.query(
+        const result = await pool.query(
           sql,
           this.prepareParameters(variables),
         );
@@ -684,6 +706,13 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       active: stats.activeConnections,
       waiters: stats.waitQueueSize,
     };
+  }
+
+  /**
+   * Set the database registry for multi-database pool routing.
+   */
+  setDatabaseRegistry(registry: DatabaseRegistry): void {
+    this.options.databaseRegistry = registry;
   }
 
   // Schema management

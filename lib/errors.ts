@@ -100,6 +100,12 @@ export class MigrationError extends DiscError {
   }
 }
 
+export class DatabaseRegistryError extends DiscError {
+  constructor(message: string, context?: ErrorContext) {
+    super(message, context);
+  }
+}
+
 export class DatabaseExecutionError extends DiscError {
   readonly sql: string;
   override readonly cause: Error;

@@ -9,6 +9,7 @@ import * as Context from "../compiler/context.ts";
 import * as SQL from "../compiler/sql.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { DatabaseExecutionError, QueryTimeoutError } from "../lib/errors.ts";
+import type { DatabaseRegistry } from "./database-registry.ts";
 import { ExplainCache, ExplainCacheStats } from "../lib/explain-cache.ts";
 import { getLogger } from "../lib/logger.ts";
 import { authContextToAccessContext } from "./access-bridge.ts";
@@ -33,6 +34,7 @@ export interface EdgeQLExecutionOptions {
   cacheMaxSize?: number;
   slowQueryThresholdMs?: number;
   requestTimeout?: number;
+  databaseRegistry?: DatabaseRegistry;
 }
 
 interface CachedCompilation {
@@ -571,6 +573,12 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       }
       case "ParameterReference":
         return `$${expr.index}`;
+      case "RawSQLExpression":
+        // Raw SQL is injected as-is. Used by DESCRIBE TYPE/SCHEMA which
+        // embed compile-time-resolved JSON as a SQL string literal
+        // (e.g., SELECT '<json>'::jsonb). No special handling needed —
+        // the result passes through PG normally.
+        return (expr as SQL.RawSQLExpression).sql;
       default:
         return "NULL";
     }
@@ -589,6 +597,25 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       default:
         return "NULL";
     }
+  }
+
+  /**
+   * Resolve the connection pool for the current query context.
+   * If a DatabaseRegistry is available and the session specifies a database,
+   * look up the pool from the registry. Otherwise, fall back to the handler's
+   * own pool.
+   */
+  private resolvePool(context: Types.QueryContext): ConnectionPool | undefined {
+    const registry = this.options.databaseRegistry;
+    if (registry && context.session.database) {
+      const entry = registry.getDatabase(context.session.database);
+      if (entry) {
+        return entry.pool;
+      }
+      // If the database name is not found in the registry, fall through
+      // to the default pool for backward compatibility.
+    }
+    return this.pool;
   }
 
   private async executeSQL(
@@ -616,15 +643,18 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       };
     }
 
+    // Resolve the correct pool (registry-aware or default)
+    const pool = this.resolvePool(context);
+
     // Use connection pool if available
-    if (this.pool) {
+    if (pool) {
       try {
         const params = this.prepareParameters(variables);
         const timeoutMs = this.options.requestTimeout ?? 0;
 
         const result = timeoutMs > 0
-          ? await this.pool.queryWithTimeout(sql, params, timeoutMs)
-          : await this.pool.query(sql, params);
+          ? await pool.queryWithTimeout(sql, params, timeoutMs)
+          : await pool.query(sql, params);
 
         // Format result based on query type
         const normalizedSQL = sql.toLowerCase().trim();
@@ -854,6 +884,15 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     if (this.pool) {
       await this.pool.close();
     }
+  }
+
+  /**
+   * Set the database registry for multi-database pool routing.
+   * When set, executeSQL resolves the pool from the registry based on
+   * the session's database name.
+   */
+  setDatabaseRegistry(registry: DatabaseRegistry): void {
+    this.options.databaseRegistry = registry;
   }
 
   // Schema management methods

@@ -311,5 +311,25 @@ export function getBuiltinFunctions(): Map<string, FunctionDef> {
       args: [{ name: "expr", type: "any", required: true }],
       returnType: "any",
     }],
+
+    // Schema introspection functions (resolved at compile time)
+    ["schema::types", {
+      name: "schema::types",
+      args: [],
+      returnType: "json",
+      introspection: true,
+    }],
+    ["schema::get_type", {
+      name: "schema::get_type",
+      args: [{ name: "name", type: "str", required: true }],
+      returnType: "json",
+      introspection: true,
+    }],
+    ["schema::functions", {
+      name: "schema::functions",
+      args: [],
+      returnType: "json",
+      introspection: true,
+    }],
   ]);
 }

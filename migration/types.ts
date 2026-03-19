@@ -12,6 +12,7 @@ export interface Migration {
   appliedAt?: Date;
   schemaHash: string;
   operations: MigrationOperation[];
+  dataMigrationFile?: string;
 }
 
 export interface MigrationOperation {
@@ -285,6 +286,7 @@ export interface MigrationHistoryEntry {
   appliedAt: Date;
   durationMs: number;
   createdAt: Date;
+  dataMigration: boolean;
 }
 
 // Helper functions for creating operations

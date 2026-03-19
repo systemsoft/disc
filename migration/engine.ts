@@ -11,6 +11,7 @@ import { MigrationError } from "../lib/errors.ts";
 import { DatabaseConnection } from "../lib/database.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { MigrationTracker } from "./tracker.ts";
+import { DataMigrationRunner } from "./data-migration.ts";
 import { logger } from "../postgres/logger.ts";
 
 export class MigrationEngine {
@@ -136,6 +137,9 @@ export class MigrationEngine {
         // Execute DDL statements
         await this.executeStatements(ddlStatements);
 
+        // Run matching data migration if one exists
+        await this.runDataMigrationForSchema(migration);
+
         const endTime = Date.now();
 
         results.push({
@@ -235,6 +239,9 @@ export class MigrationEngine {
         );
         await this.executeStatements(ddlStatements);
 
+        // Run matching data migration if one exists
+        await this.runDataMigrationForSchema(migration);
+
         const endTime = Date.now();
 
         results.push({
@@ -285,7 +292,7 @@ export class MigrationEngine {
   }
 
   /**
-   * Rollback a specific migration
+   * Rollback a specific migration by executing its stored rollback SQL
    */
   rollbackMigration(
     migrationId: string,
@@ -311,7 +318,170 @@ export class MigrationEngine {
   }
 
   /**
+   * Rollback a specific migration using stored rollback SQL from the tracker.
+   * Executes rollback SQL in a transaction, then removes the migration record.
+   */
+  async executeRollback(
+    migrationId: string,
+  ): Promise<Result<void, MigrationError>> {
+    if (!this.tracker) {
+      return Err(
+        new MigrationError(
+          "Cannot execute rollback without a database connection (tracker not initialized)",
+        ),
+      );
+    }
+
+    // Load rollback SQL from tracker
+    const rollbackSqlResult = await this.tracker.getRollbackSQL(migrationId);
+    if (!rollbackSqlResult.ok) {
+      return Err(rollbackSqlResult.error);
+    }
+
+    const rollbackSql = rollbackSqlResult.value;
+    if (rollbackSql.length === 0) {
+      return Err(
+        new MigrationError(
+          `No rollback SQL available for migration ${migrationId}. ` +
+            "The migration was recorded without rollback instructions.",
+        ),
+      );
+    }
+
+    try {
+      // Execute rollback SQL statements in a transaction
+      logger.info(`Rolling back migration ${migrationId}...`);
+      await this.executeStatements(rollbackSql);
+
+      // Remove the migration record from the tracker
+      const removeResult = await this.tracker.removeMigration(migrationId);
+      if (!removeResult.ok) {
+        return Err(removeResult.error);
+      }
+
+      // Update in-memory state
+      this.appliedMigrations.delete(migrationId);
+
+      logger.info(`Successfully rolled back migration ${migrationId}`);
+      return Ok(void 0);
+    } catch (error) {
+      return Err(
+        new MigrationError(
+          `Failed to execute rollback for migration ${migrationId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        ),
+      );
+    }
+  }
+
+  /**
+   * Rollback all migrations applied after the specified migration ID.
+   * Rolls back in reverse chronological order (most recent first).
+   */
+  async executeRollbackTo(
+    migrationId: string,
+  ): Promise<Result<void, MigrationError>> {
+    if (!this.tracker) {
+      return Err(
+        new MigrationError(
+          "Cannot execute rollback without a database connection (tracker not initialized)",
+        ),
+      );
+    }
+
+    // Get all migrations after the target
+    const migrationsResult = await this.tracker.getMigrationsAfter(migrationId);
+    if (!migrationsResult.ok) {
+      return Err(migrationsResult.error);
+    }
+
+    const migrationsToRollback = migrationsResult.value;
+    if (migrationsToRollback.length === 0) {
+      logger.info(
+        `No migrations to rollback after ${migrationId} — already at target`,
+      );
+      return Ok(void 0);
+    }
+
+    // Migrations are already in DESC order (most recent first) from getMigrationsAfter
+    logger.info(
+      `Rolling back ${migrationsToRollback.length} migration(s) to reach ${migrationId}...`,
+    );
+
+    for (const migration of migrationsToRollback) {
+      const rollbackResult = await this.executeRollback(migration.id);
+      if (!rollbackResult.ok) {
+        return Err(
+          new MigrationError(
+            `Rollback-to stopped at migration ${migration.id}: ${rollbackResult.error.message}`,
+          ),
+        );
+      }
+    }
+
+    return Ok(void 0);
+  }
+
+  /**
+   * Get migration status information from the tracker
+   */
+  async getMigrationStatus(): Promise<
+    Result<
+      {
+        applied: number;
+        currentSchemaHash: string | null;
+        latestMigration: Types.MigrationHistoryEntry | null;
+      },
+      MigrationError
+    >
+  > {
+    if (!this.tracker) {
+      return Err(
+        new MigrationError(
+          "Cannot get migration status without a database connection (tracker not initialized)",
+        ),
+      );
+    }
+
+    const appliedResult = await this.tracker.getAppliedMigrations();
+    if (!appliedResult.ok) {
+      return Err(appliedResult.error);
+    }
+
+    const latestResult = await this.tracker.getLatestMigration();
+    if (!latestResult.ok) {
+      return Err(latestResult.error);
+    }
+
+    return Ok({
+      applied: appliedResult.value.length,
+      currentSchemaHash: latestResult.value?.schemaHash ?? null,
+      latestMigration: latestResult.value,
+    });
+  }
+
+  /**
+   * Get full migration history from the tracker
+   */
+  async getMigrationHistory(): Promise<
+    Result<Types.MigrationHistoryEntry[], MigrationError>
+  > {
+    if (!this.tracker) {
+      return Err(
+        new MigrationError(
+          "Cannot get migration history without a database connection (tracker not initialized)",
+        ),
+      );
+    }
+
+    return await this.tracker.getMigrationHistory();
+  }
+
+  /**
    * Rollback to a specific migration (rollback all migrations applied after it)
+   * Note: This is the in-memory-only version. For database-backed rollback,
+   * use executeRollbackTo() instead.
    */
   async rollbackToMigration(
     migrationId: string,
@@ -463,6 +633,46 @@ export class MigrationEngine {
     }
 
     return Ok(true);
+  }
+
+  /**
+   * Discover and run a data migration file that matches a schema migration's timestamp.
+   * Data migration files live in the configured migrationsDir as `m<timestamp>_<name>.data.ts`.
+   */
+  private async runDataMigrationForSchema(
+    migration: Types.Migration,
+  ): Promise<void> {
+    if (!this.pool) return;
+
+    // Extract timestamp from migration ID: m<timestamp>_<randomSuffix>
+    const match = migration.id.match(/^m(\d{8,}T?\d*)/);
+    if (!match) return;
+
+    const timestamp = match[1];
+    const runner = new DataMigrationRunner();
+    const migrationsDir = this.config.migrationsDir;
+
+    try {
+      const dataMigrations = await runner.discoverMigrations(migrationsDir);
+      const matching = runner.findMatchingDataMigration(
+        dataMigrations,
+        timestamp,
+      );
+
+      if (matching) {
+        logger.info(
+          `Found matching data migration for ${migration.id}: ${matching.name}`,
+        );
+        await runner.runMigration(matching, this.pool);
+        // Mark the schema migration as having an associated data migration
+        migration.dataMigrationFile = matching.name;
+      }
+    } catch (error) {
+      // If directory doesn't exist, that's fine — no data migrations
+      if (!(error instanceof Deno.errors.NotFound)) {
+        throw error;
+      }
+    }
   }
 
   private generateInitialMigration(

@@ -17,7 +17,9 @@ import { buildCommand, BuildOptions } from "./build.ts";
 import { deployCommand, DeployOptions } from "./deploy.ts";
 import { pgLogCommand, PgLogOptions } from "./pg-log.ts";
 import { pgUpgradeCommand, PgUpgradeOptions } from "./pg-upgrade.ts";
+import { dbCommand } from "./db.ts";
 import { PostgresManager } from "../postgres/mod.ts";
+import { MigrationSquasher, SquashableMigration } from "../migration/squash.ts";
 
 export interface CLIArgs {
   [key: string]: any;
@@ -75,7 +77,13 @@ export class CLICommands {
         await manager.initialize();
       }
 
-      if (args.create) {
+      if (args.status) {
+        await this.showMigrationStatus(manager);
+      } else if (args.rollback || args["rollback-to"]) {
+        await this.handleRollback(manager, args);
+      } else if (args.squash) {
+        await this.handleSquash(manager, args);
+      } else if (args.create) {
         await this.createMigration(manager, schemaFile);
       } else {
         await this.applyMigrations(manager, schemaFile, dryRun);
@@ -487,6 +495,186 @@ export class CLICommands {
    */
   async pgUpgrade(options: PgUpgradeOptions): Promise<void> {
     await pgUpgradeCommand.execute(options);
+  }
+
+  /**
+   * Create a new Disc-managed database
+   */
+  async dbCreate(name: string, args: CLIArgs): Promise<void> {
+    const databaseUrl = args["database-url"] ||
+      Deno.env.get("DATABASE_URL") ||
+      "postgresql://localhost:5432/disc";
+    await dbCommand.create({ name, databaseUrl });
+  }
+
+  /**
+   * List all Disc-managed databases
+   */
+  async dbList(args: CLIArgs): Promise<void> {
+    const databaseUrl = args["database-url"] ||
+      Deno.env.get("DATABASE_URL") ||
+      "postgresql://localhost:5432/disc";
+    await dbCommand.list({ databaseUrl });
+  }
+
+  /**
+   * Drop a Disc-managed database
+   */
+  async dbDrop(name: string, args: CLIArgs): Promise<void> {
+    const databaseUrl = args["database-url"] ||
+      Deno.env.get("DATABASE_URL") ||
+      "postgresql://localhost:5432/disc";
+    await dbCommand.drop({
+      name,
+      databaseUrl,
+      force: args.force || false,
+    });
+  }
+
+  private async showMigrationStatus(
+    manager: SchemaManager,
+  ): Promise<void> {
+    console.log("Migration Status\n");
+
+    const statusResult = await manager.getMigrationStatus();
+    if (!statusResult.ok) {
+      console.error(
+        `Failed to get migration status: ${statusResult.error.message}`,
+      );
+      return;
+    }
+
+    const status = statusResult.value;
+
+    console.log(`  Applied migrations: ${status.applied}`);
+    console.log(
+      `  Current schema hash: ${status.currentSchemaHash || "(none)"}`,
+    );
+
+    if (status.latestMigration) {
+      console.log(`\n  Latest migration:`);
+      console.log(`    ID: ${status.latestMigration.id}`);
+      console.log(`    Name: ${status.latestMigration.name}`);
+      console.log(
+        `    Applied at: ${status.latestMigration.appliedAt.toISOString()}`,
+      );
+    } else {
+      console.log(`\n  No migrations have been applied yet.`);
+    }
+  }
+
+  private async handleRollback(
+    manager: SchemaManager,
+    args: CLIArgs,
+  ): Promise<void> {
+    if (!args.force) {
+      console.error(
+        "Error: Rollback is a destructive operation that may cause data loss.",
+      );
+      console.error(
+        "       Rolling back DROP TABLE cannot restore lost data.",
+      );
+      console.error(
+        "       Use --force to confirm you understand the risks.",
+      );
+      return;
+    }
+
+    if (args["rollback-to"]) {
+      const targetId = args["rollback-to"];
+      console.log(`Rolling back all migrations after ${targetId}...`);
+
+      const result = await manager.rollbackToMigration(targetId);
+      if (!result.ok) {
+        console.error(`Rollback failed: ${result.error.message}`);
+        return;
+      }
+
+      console.log(`Successfully rolled back to migration ${targetId}`);
+    } else {
+      console.log("Rolling back the most recent migration...");
+
+      const result = await manager.rollbackLastMigration();
+      if (!result.ok) {
+        console.error(`Rollback failed: ${result.error.message}`);
+        return;
+      }
+
+      console.log("Successfully rolled back the last migration");
+    }
+  }
+
+  private async handleSquash(
+    manager: SchemaManager,
+    args: CLIArgs,
+  ): Promise<void> {
+    console.log("Squashing migrations...");
+
+    const fromId = args["squash-from"] as string | undefined;
+    const toId = args["squash-to"] as string | undefined;
+
+    // Get migration history to build squashable list
+    const statusResult = await manager.getMigrationStatus();
+    if (!statusResult.ok) {
+      console.error(
+        `Failed to get migration status: ${statusResult.error.message}`,
+      );
+      return;
+    }
+
+    if (statusResult.value.applied === 0) {
+      console.log("No migrations to squash.");
+      return;
+    }
+
+    // Build SquashableMigration list from history
+    // Note: In a full implementation, we'd load DDL statements from stored migration files.
+    // For now, we create entries from the history and rely on the squasher for validation.
+    const historyResult = await manager.getMigrationHistory();
+    if (!historyResult.ok) {
+      console.error(
+        `Failed to get migration history: ${historyResult.error.message}`,
+      );
+      return;
+    }
+
+    // History is DESC by default, reverse to ASC for squashing
+    const history = historyResult.value.reverse();
+
+    const squashable: SquashableMigration[] = history.map((entry) => ({
+      id: entry.id,
+      name: entry.name,
+      statements: [], // Would be loaded from migration files in production
+      rollbackStatements: [],
+      hasDataMigration: entry.dataMigration,
+    }));
+
+    const squasher = new MigrationSquasher();
+
+    try {
+      const result = squasher.squash(squashable, fromId, toId);
+
+      if (result.squashedIds.length === 0) {
+        console.log("No migrations in the specified range to squash.");
+        return;
+      }
+
+      console.log(`\nSquash Result:`);
+      console.log(`  Name: ${result.name}`);
+      console.log(`  Migrations squashed: ${result.squashedIds.length}`);
+      console.log(`  Combined statements: ${result.statements.length}`);
+      console.log(
+        `  Combined rollback statements: ${result.rollbackStatements.length}`,
+      );
+      console.log(`\n  Squashed migration IDs:`);
+      result.squashedIds.forEach((id) => console.log(`    - ${id}`));
+
+      console.log(
+        "\nSquash preview complete. In production, this would replace the individual migrations with the squashed result.",
+      );
+    } catch (error) {
+      console.error(`Squash failed: ${(error as Error).message}`);
+    }
   }
 
   private async createMigration(

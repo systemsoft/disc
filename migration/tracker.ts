@@ -44,8 +44,22 @@ export class MigrationTracker {
           duration_ms INTEGER NOT NULL,
           rollback_sql TEXT[],
           checksum TEXT NOT NULL,
-          created_at TIMESTAMP WITH TIME ZONE NOT NULL
+          created_at TIMESTAMP WITH TIME ZONE NOT NULL,
+          data_migration BOOLEAN NOT NULL DEFAULT FALSE
         );
+      `);
+
+      // Add data_migration column if upgrading from an older schema
+      await this.pool.execute(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'disc_migrations' AND column_name = 'data_migration'
+          ) THEN
+            ALTER TABLE disc_migrations ADD COLUMN data_migration BOOLEAN NOT NULL DEFAULT FALSE;
+          END IF;
+        END $$;
       `);
 
       // Create checkpoints table
@@ -88,9 +102,9 @@ export class MigrationTracker {
         `
         INSERT INTO disc_migrations (
           id, name, description, schema_hash, applied_at,
-          duration_ms, rollback_sql, checksum, created_at
+          duration_ms, rollback_sql, checksum, created_at, data_migration
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
         )
       `,
         [
@@ -103,6 +117,7 @@ export class MigrationTracker {
           result.rollbackSql || [],
           this.calculateMigrationChecksum(migration),
           migration.createdAt,
+          !!migration.dataMigrationFile,
         ],
       );
 
@@ -195,20 +210,14 @@ export class MigrationTracker {
 
     try {
       const result = await this.pool.query(`
-        SELECT id, name, description, schema_hash, applied_at, duration_ms, created_at
+        SELECT id, name, description, schema_hash, applied_at, duration_ms, created_at, data_migration
         FROM disc_migrations
         ORDER BY applied_at DESC
       `);
 
-      const history = result.rows.map((row: any) => ({
-        id: row.id,
-        name: row.name,
-        description: row.description,
-        schemaHash: row.schema_hash,
-        appliedAt: row.applied_at,
-        durationMs: row.duration_ms,
-        createdAt: row.created_at,
-      }));
+      const history = result.rows.map((row: any) =>
+        this.mapRowToHistoryEntry(row)
+      );
 
       return Ok(history);
     } catch (error) {
@@ -427,6 +436,92 @@ export class MigrationTracker {
   }
 
   /**
+   * Get the most recently applied migration
+   */
+  async getLatestMigration(): Promise<
+    Result<Types.MigrationHistoryEntry | null, MigrationError>
+  > {
+    if (!this.initialized) {
+      return Err(new MigrationError("Migration tracker not initialized"));
+    }
+
+    try {
+      const result = await this.pool.query(`
+        SELECT id, name, description, schema_hash, applied_at, duration_ms, created_at, data_migration
+        FROM disc_migrations
+        ORDER BY applied_at DESC
+        LIMIT 1
+      `);
+
+      if (result.rows.length === 0) {
+        return Ok(null);
+      }
+
+      return Ok(this.mapRowToHistoryEntry(result.rows[0]));
+    } catch (error) {
+      return Err(
+        new MigrationError(
+          `Failed to get latest migration: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        ),
+      );
+    }
+  }
+
+  /**
+   * Get all migrations applied after the given migration ID, ordered by applied_at DESC
+   */
+  async getMigrationsAfter(
+    migrationId: string,
+  ): Promise<Result<Types.MigrationHistoryEntry[], MigrationError>> {
+    if (!this.initialized) {
+      return Err(new MigrationError("Migration tracker not initialized"));
+    }
+
+    try {
+      // First get the applied_at timestamp for the reference migration
+      const refResult = await this.pool.query(
+        `SELECT applied_at FROM disc_migrations WHERE id = $1`,
+        [migrationId],
+      );
+
+      if (refResult.rows.length === 0) {
+        return Err(
+          new MigrationError(`Migration ${migrationId} not found`),
+        );
+      }
+
+      const refAppliedAt = refResult.rows[0].applied_at;
+
+      // Get all migrations applied after the reference migration
+      const result = await this.pool.query(
+        `
+        SELECT id, name, description, schema_hash, applied_at, duration_ms, created_at, data_migration
+        FROM disc_migrations
+        WHERE applied_at > $1
+        ORDER BY applied_at DESC
+      `,
+        [refAppliedAt],
+      );
+
+      const migrations = result.rows.map((row: any) =>
+        this.mapRowToHistoryEntry(row)
+      );
+
+      return Ok(migrations);
+    } catch (error) {
+      return Err(
+        new MigrationError(
+          `Failed to get migrations after ${migrationId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        ),
+      );
+    }
+  }
+
+  /**
    * Get rollback SQL for a migration
    */
   async getRollbackSQL(
@@ -503,11 +598,91 @@ export class MigrationTracker {
   }
 
   /**
+   * Get all migrations in the range [fromId, toId] inclusive, ordered by applied_at ASC.
+   * Used for squash validation to check if any data migrations exist in the range.
+   */
+  async getMigrationsInRange(
+    fromId: string,
+    toId: string,
+  ): Promise<Result<Types.MigrationHistoryEntry[], MigrationError>> {
+    if (!this.initialized) {
+      return Err(new MigrationError("Migration tracker not initialized"));
+    }
+
+    try {
+      // Get the applied_at timestamps for both boundary migrations
+      const fromResult = await this.pool.query(
+        `SELECT applied_at FROM disc_migrations WHERE id = $1`,
+        [fromId],
+      );
+      if (fromResult.rows.length === 0) {
+        return Err(
+          new MigrationError(`Migration ${fromId} not found`),
+        );
+      }
+
+      const toResult = await this.pool.query(
+        `SELECT applied_at FROM disc_migrations WHERE id = $1`,
+        [toId],
+      );
+      if (toResult.rows.length === 0) {
+        return Err(
+          new MigrationError(`Migration ${toId} not found`),
+        );
+      }
+
+      const fromAppliedAt = fromResult.rows[0].applied_at;
+      const toAppliedAt = toResult.rows[0].applied_at;
+
+      const result = await this.pool.query(
+        `
+        SELECT id, name, description, schema_hash, applied_at, duration_ms, created_at, data_migration
+        FROM disc_migrations
+        WHERE applied_at >= $1 AND applied_at <= $2
+        ORDER BY applied_at ASC
+      `,
+        [fromAppliedAt, toAppliedAt],
+      );
+
+      const migrations = result.rows.map((row: any) =>
+        this.mapRowToHistoryEntry(row)
+      );
+
+      return Ok(migrations);
+    } catch (error) {
+      return Err(
+        new MigrationError(
+          `Failed to get migrations in range ${fromId}..${toId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        ),
+      );
+    }
+  }
+
+  /**
    * Close connection pool
    */
   async close(): Promise<void> {
     await this.pool.close();
     this.initialized = false;
+  }
+
+  /**
+   * Map a database row to a MigrationHistoryEntry.
+   * Centralizes the snake_case -> camelCase conversion.
+   */
+  private mapRowToHistoryEntry(row: any): Types.MigrationHistoryEntry {
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      schemaHash: row.schema_hash,
+      appliedAt: row.applied_at,
+      durationMs: row.duration_ms,
+      createdAt: row.created_at,
+      dataMigration: row.data_migration ?? false,
+    };
   }
 
   private calculateMigrationChecksum(migration: Types.Migration): string {

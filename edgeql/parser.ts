@@ -51,6 +51,9 @@ export class EdgeQLParser {
     } // GROUP query
     else if (this.check(TokenType.GROUP)) {
       query = this.parseGroupQuery();
+    } // DESCRIBE query
+    else if (this.check(TokenType.DESCRIBE)) {
+      query = this.parseDescribe();
     } else {
       throw this.error(`Expected query statement, got ${this.peek().value}`);
     }
@@ -316,6 +319,30 @@ export class EdgeQLParser {
     }
 
     return { kind: "GroupQuery", expr, using, by, filter };
+  }
+
+  private parseDescribe(): AST.DescribeTypeQuery | AST.DescribeSchemaQuery {
+    this.consume(TokenType.DESCRIBE, "Expected 'DESCRIBE'");
+
+    if (this.match(TokenType.TYPE)) {
+      // DESCRIBE TYPE <typeName>
+      const parts: string[] = [];
+      parts.push(this.parseIdentifier().name);
+
+      while (this.match(TokenType.NAMESPACE)) {
+        parts.push(this.parseIdentifier().name);
+      }
+
+      return { kind: "DescribeType", typeName: parts.join("::") };
+    }
+
+    if (this.match(TokenType.SCHEMA)) {
+      return { kind: "DescribeSchema" };
+    }
+
+    throw this.error(
+      `Expected 'TYPE' or 'SCHEMA' after 'DESCRIBE', got '${this.peek().value}'`,
+    );
   }
 
   private parseOrderByList(): AST.OrderByClause[] {
@@ -867,6 +894,9 @@ export class EdgeQLParser {
           // Convert path to qualified name for function call
           const parts = expr.steps.map((s) => s.name);
           funcName = AST.createQualifiedName(parts);
+        } else if (expr.kind === "TypeName") {
+          // Qualified name parsed as TypeName (e.g., schema::types)
+          funcName = expr.name;
         } else {
           throw this.error("Invalid function call");
         }
@@ -1105,6 +1135,24 @@ export class EdgeQLParser {
       return AST.createFunctionCall(name, [
         { kind: "FunctionArg", value: expr },
       ]);
+    }
+
+    // Keyword used as namespace prefix (e.g., schema::types())
+    // When a keyword like SCHEMA is followed by ::, treat it as a qualified
+    // name rather than a keyword so that schema::get_type() etc. parse correctly.
+    if (
+      this.check(TokenType.SCHEMA) &&
+      this.current + 1 < this.tokens.length &&
+      this.tokens[this.current + 1].type === TokenType.NAMESPACE
+    ) {
+      const parts: string[] = [];
+      parts.push(this.advance().value.toLowerCase());
+
+      while (this.match(TokenType.NAMESPACE)) {
+        parts.push(this.parseIdentifier().name);
+      }
+
+      return AST.createTypeName(parts);
     }
 
     // Type name or identifier

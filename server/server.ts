@@ -19,6 +19,7 @@ import { DatabaseConnection } from "../lib/database.ts";
 import { ExtensionRegistry } from "../extensions/registry.ts";
 import { createExtensionContext } from "../extensions/context.ts";
 import type { Extension } from "../extensions/types.ts";
+import { DatabaseRegistry } from "./database-registry.ts";
 
 /**
  * Options for constructing a DiscServer.
@@ -70,6 +71,19 @@ export interface DiscServerOptions extends Partial<Types.ServerConfig> {
    * Each extension is initialized during server start and shut down during stop.
    */
   extensions?: Extension[];
+
+  /**
+   * Enable multi-database support via DatabaseRegistry.
+   * When true, the server creates a DatabaseRegistry and routes requests
+   * to the correct pool based on the X-Database header or ?database= param.
+   */
+  enableMultiDatabase?: boolean;
+
+  /**
+   * Pre-configured named databases mapped to DSNs.
+   * Only used when enableMultiDatabase is true.
+   */
+  databases?: Record<string, string>;
 }
 
 export class DiscServer {
@@ -82,6 +96,7 @@ export class DiscServer {
   private authRoutes?: AuthRoutes;
   private auth_db?: DatabaseConnection;
   private extensionRegistry: ExtensionRegistry;
+  private databaseRegistry?: DatabaseRegistry;
   private stopping = false;
   private signal_handler?: () => void;
 
@@ -115,6 +130,8 @@ export class DiscServer {
       rateLimitRpm: config.rateLimitRpm,
       rateLimitBurst: config.rateLimitBurst,
       tls: config.tls,
+      databases: config.databases,
+      enableMultiDatabase: config.enableMultiDatabase,
     };
 
     this.postgresInstance = config.postgresInstance;
@@ -163,6 +180,13 @@ export class DiscServer {
       if (this.protocolHandler.initialize) {
         await this.protocolHandler.initialize();
         logger.info("Protocol handler initialized (connection pool ready)");
+      }
+
+      // Initialize database registry for multi-database support
+      if (this.config.enableMultiDatabase) {
+        this.databaseRegistry = new DatabaseRegistry();
+        await this.databaseRegistry.initialize(this.config.databaseUrl);
+        logger.info("DatabaseRegistry initialized for multi-database support");
       }
 
       // Initialize auth if jwtSecret is set and enableAuth is not explicitly false
@@ -216,6 +240,12 @@ export class DiscServer {
         extensionHealthGetter: this.extensionRegistry.size > 0
           ? () => this.extensionRegistry.getHealthStatus()
           : undefined,
+        databaseRegistry: this.databaseRegistry,
+        schemaProvider: () => {
+          // Access the handler's current schema (may be updated at runtime)
+          const handler = this.protocolHandler as any;
+          return handler.schema || { types: new Map(), functions: new Map() };
+        },
       });
 
       // Register signal handlers for graceful shutdown
@@ -268,6 +298,12 @@ export class DiscServer {
     if (this.extensionRegistry.size > 0) {
       await this.extensionRegistry.shutdownAll();
       logger.info("Extensions shut down");
+    }
+
+    // Close database registry pools
+    if (this.databaseRegistry) {
+      await this.databaseRegistry.close();
+      logger.info("DatabaseRegistry closed (all pools drained)");
     }
 
     // Close database connections in protocol handler (drain pool)
@@ -344,6 +380,10 @@ export class DiscServer {
 
   getExtensionRegistry(): ExtensionRegistry {
     return this.extensionRegistry;
+  }
+
+  getDatabaseRegistry(): DatabaseRegistry | undefined {
+    return this.databaseRegistry;
   }
 }
 
@@ -448,3 +488,4 @@ export {
 } from "./protocol.ts";
 export { EdgeQLProtocolHandler } from "./edgeql-protocol.ts";
 export { SimpleEdgeQLProtocolHandler } from "./simple-edgeql-protocol.ts";
+export { DatabaseRegistry } from "./database-registry.ts";

@@ -93,6 +93,7 @@ export interface FunctionDef {
   sqlName?: string;
   windowOnly?: boolean; // true for functions that REQUIRE an OVER clause (row_number, rank, etc.)
   windowCompatible?: boolean; // true for functions that CAN use an OVER clause (count, sum, etc.)
+  introspection?: boolean; // true for schema:: functions resolved at compile time
 }
 
 export interface ArgDef {

@@ -241,3 +241,55 @@ export function createDiscConnection(
     user: "disc",
   });
 }
+
+/**
+ * Replace the database name component in a PostgreSQL DSN.
+ * Supports both postgresql:// and postgres:// schemes.
+ *
+ * Examples:
+ *   replaceDsnDatabase("postgresql://user:pass@host:5432/mydb", "other")
+ *   => "postgresql://user:pass@host:5432/other"
+ */
+export function replaceDsnDatabase(dsn: string, dbName: string): string {
+  const url = new URL(dsn);
+  url.pathname = `/${dbName}`;
+  return url.toString();
+}
+
+/**
+ * Create a PostgreSQL database by connecting to the `postgres` maintenance DB.
+ * Closes the admin connection when done.
+ */
+export async function createDatabase(
+  mainDsn: string,
+  dbName: string,
+): Promise<void> {
+  const adminDsn = replaceDsnDatabase(mainDsn, "postgres");
+  const adminConn = new DatabaseConnection(adminDsn);
+  try {
+    await adminConn.connect();
+    await adminConn.execute(`CREATE DATABASE "${dbName}"`);
+    logger.info(`Created database: ${dbName}`);
+  } finally {
+    await adminConn.close();
+  }
+}
+
+/**
+ * Drop a PostgreSQL database by connecting to the `postgres` maintenance DB.
+ * Closes the admin connection when done.
+ */
+export async function dropDatabase(
+  mainDsn: string,
+  dbName: string,
+): Promise<void> {
+  const adminDsn = replaceDsnDatabase(mainDsn, "postgres");
+  const adminConn = new DatabaseConnection(adminDsn);
+  try {
+    await adminConn.connect();
+    await adminConn.execute(`DROP DATABASE "${dbName}"`);
+    logger.info(`Dropped database: ${dbName}`);
+  } finally {
+    await adminConn.close();
+  }
+}

@@ -92,7 +92,9 @@ export enum TokenType {
 
   // Special
   MODULE = "MODULE",
+  SCHEMA = "SCHEMA",
   TYPE = "TYPE",
+  DESCRIBE = "DESCRIBE",
   TRUE = "TRUE",
   FALSE = "FALSE",
   EMPTY = "EMPTY",
@@ -230,7 +232,9 @@ export const KEYWORDS = new Map<string, TokenType>([
 
   // Special
   ["module", TokenType.MODULE],
+  ["schema", TokenType.SCHEMA],
   ["type", TokenType.TYPE],
+  ["describe", TokenType.DESCRIBE],
   ["true", TokenType.TRUE],
   ["false", TokenType.FALSE],
   ["empty", TokenType.EMPTY],

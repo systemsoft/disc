@@ -18,7 +18,9 @@ export type Query =
   | DeleteQuery
   | ForQuery
   | WithBlock
-  | GroupQuery;
+  | GroupQuery
+  | DescribeTypeQuery
+  | DescribeSchemaQuery;
 
 // SELECT query
 export interface SelectQuery extends EdgeQLNode {
@@ -92,6 +94,17 @@ export interface GroupQuery extends EdgeQLNode {
 export interface GroupByClause extends EdgeQLNode {
   kind: "GroupByClause";
   elements: Expression[];
+}
+
+// DESCRIBE TYPE <typeName>
+export interface DescribeTypeQuery extends EdgeQLNode {
+  kind: "DescribeType";
+  typeName: string;
+}
+
+// DESCRIBE SCHEMA
+export interface DescribeSchemaQuery extends EdgeQLNode {
+  kind: "DescribeSchema";
 }
 
 // Clauses

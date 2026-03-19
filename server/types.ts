@@ -44,6 +44,8 @@ export interface ServerConfig {
     redirectPort?: number;
   };
   extensions?: Extension[];
+  databases?: Record<string, string>;
+  enableMultiDatabase?: boolean;
 }
 
 export interface QueryRequest {
