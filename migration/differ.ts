@@ -66,6 +66,7 @@ export class SchemaDiffer {
   ): Types.CreateTypeOperation {
     const properties = this.extractPropertiesWithInheritance(typeDef, allTypes);
     const links = this.extractLinksWithInheritance(typeDef, allTypes);
+    const triggers = this.extractTriggers(typeDef);
 
     const op: Types.CreateTypeOperation = {
       kind: "CreateType",
@@ -101,6 +102,10 @@ export class SchemaDiffer {
       if (subtypes.length > 0) {
         op.subtypes = subtypes;
       }
+    }
+
+    if (triggers.length > 0) {
+      op.triggers = triggers;
     }
 
     return op;
@@ -252,6 +257,14 @@ export class SchemaDiffer {
 
     operations.push(...this.diffLinks(oldLinks, newLinks));
 
+    // Diff triggers
+    const oldTriggers = this.extractTriggers(oldType);
+    const newTriggers = this.extractTriggers(newType);
+
+    operations.push(
+      ...this.diffTriggers(oldType.name.value, oldTriggers, newTriggers),
+    );
+
     return operations;
   }
 
@@ -399,6 +412,70 @@ export class SchemaDiffer {
             linkName: linkName,
             changes,
           } as Types.AlterLinkOperation);
+        }
+      }
+    }
+
+    return operations;
+  }
+
+  private extractTriggers(
+    typeDef: AST.TypeDeclaration,
+  ): Types.TriggerDefinition[] {
+    const triggers: Types.TriggerDefinition[] = [];
+
+    for (const member of typeDef.members) {
+      if (member.kind === "TriggerDeclaration") {
+        triggers.push({
+          name: member.name.value,
+          timing: member.timing,
+          events: [...member.events],
+          scope: member.scope,
+          body: this.extractExpressionString(member.body),
+        });
+      }
+    }
+
+    return triggers;
+  }
+
+  private diffTriggers(
+    typeName: string,
+    oldTriggers: Types.TriggerDefinition[],
+    newTriggers: Types.TriggerDefinition[],
+  ): Types.TypeOperation[] {
+    const operations: Types.TypeOperation[] = [];
+
+    const oldTriggersMap = new Map(oldTriggers.map((t) => [t.name, t]));
+    const newTriggersMap = new Map(newTriggers.map((t) => [t.name, t]));
+
+    // Added triggers
+    for (const [triggerName, triggerDef] of newTriggersMap) {
+      if (!oldTriggersMap.has(triggerName)) {
+        operations.push(Types.addTriggerOperation(typeName, triggerDef));
+      }
+    }
+
+    // Removed triggers
+    for (const [triggerName] of oldTriggersMap) {
+      if (!newTriggersMap.has(triggerName)) {
+        operations.push(Types.dropTriggerOperation(typeName, triggerName));
+      }
+    }
+
+    // Modified triggers — drop old + add new (triggers can't be altered in place)
+    for (const [triggerName, newTrigger] of newTriggersMap) {
+      const oldTrigger = oldTriggersMap.get(triggerName);
+      if (oldTrigger) {
+        const timingChanged = oldTrigger.timing !== newTrigger.timing;
+        const eventsChanged = JSON.stringify([...oldTrigger.events].sort()) !==
+          JSON.stringify([...newTrigger.events].sort());
+        const scopeChanged = oldTrigger.scope !== newTrigger.scope;
+        const bodyChanged = oldTrigger.body !== newTrigger.body;
+
+        if (timingChanged || eventsChanged || scopeChanged || bodyChanged) {
+          operations.push(Types.dropTriggerOperation(typeName, triggerName));
+          operations.push(Types.addTriggerOperation(typeName, newTrigger));
         }
       }
     }

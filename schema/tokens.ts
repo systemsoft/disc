@@ -49,6 +49,7 @@ export enum TokenType {
   INSERT = "INSERT",
   UPDATE = "UPDATE",
   DELETE = "DELETE",
+  TRIGGER = "TRIGGER",
 
   // Operators & Punctuation
   ASSIGN = "ASSIGN", // :=
@@ -126,6 +127,7 @@ export const KEYWORDS = new Map<string, TokenType>([
   ["insert", TokenType.INSERT],
   ["update", TokenType.UPDATE],
   ["delete", TokenType.DELETE],
+  ["trigger", TokenType.TRIGGER],
 ]);
 
 export interface Token {

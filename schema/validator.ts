@@ -166,6 +166,7 @@ export class SchemaValidator {
     // Validate members
     const propertyNames = new Set<string>();
     const linkNames = new Set<string>();
+    const triggerNames = new Set<string>();
 
     for (const member of type.members) {
       switch (member.kind) {
@@ -198,6 +199,9 @@ export class SchemaValidator {
           break;
         case "AccessPolicy":
           this.validateAccessPolicy(member);
+          break;
+        case "TriggerDeclaration":
+          this.validateTrigger(member, type.name.value, triggerNames);
           break;
       }
     }
@@ -337,12 +341,21 @@ export class SchemaValidator {
     // Known constraints and their validation rules
     const STRING_TYPES = new Set(["str", "bytes"]);
     const NUMERIC_TYPES = new Set([
-      "int16", "int32", "int64", "float32", "float64", "decimal", "bigint",
+      "int16",
+      "int32",
+      "int64",
+      "float32",
+      "float64",
+      "decimal",
+      "bigint",
     ]);
     const SINGLE_ARG_CONSTRAINTS = new Set([
-      "max_len_value", "min_len_value",
-      "max_value", "min_value",
-      "max_ex_value", "min_ex_value",
+      "max_len_value",
+      "min_len_value",
+      "max_value",
+      "min_value",
+      "max_ex_value",
+      "min_ex_value",
     ]);
 
     // Validate argument count for known constraints
@@ -416,6 +429,41 @@ export class SchemaValidator {
         );
       }
     }
+  }
+
+  private validateTrigger(
+    trigger: AST.TriggerDeclaration,
+    typeName: string,
+    triggerNames: Set<string>,
+  ): void {
+    // Check for duplicate trigger names within the type
+    if (triggerNames.has(trigger.name.value)) {
+      this.addError(
+        `Trigger '${trigger.name.value}' is already defined in type '${typeName}'`,
+      );
+    }
+    triggerNames.add(trigger.name.value);
+
+    // Validate at least one event
+    if (trigger.events.length === 0) {
+      this.addError(
+        `Trigger '${trigger.name.value}' must specify at least one event`,
+      );
+    }
+
+    // Validate no duplicate events
+    const seenEvents = new Set<string>();
+    for (const event of trigger.events) {
+      if (seenEvents.has(event)) {
+        this.addError(
+          `Trigger '${trigger.name.value}' has duplicate event '${event}'`,
+        );
+      }
+      seenEvents.add(event);
+    }
+
+    // Validate body expression
+    this.validateExpression(trigger.body);
   }
 
   private validateTypeRef(typeRef: AST.TypeRef): void {

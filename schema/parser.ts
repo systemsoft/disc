@@ -318,6 +318,10 @@ export class SDLParser {
       return this.parseAccessPolicy();
     }
 
+    if (this.match(TokenType.TRIGGER)) {
+      return this.parseTriggerDeclaration();
+    }
+
     // Check for computed property/link (name := expression)
     if (this.check(TokenType.IDENT) || this.check(TokenType.BACKTICK_IDENT)) {
       const checkpoint = this.current;
@@ -662,6 +666,112 @@ export class SDLParser {
     if (annotations.length > 0) policy.annotations = annotations;
 
     return policy;
+  }
+
+  private parseTriggerDeclaration(): AST.TriggerDeclaration {
+    const name = this.parseIdentifier();
+
+    // Parse timing: "after" or "before" (contextual identifiers)
+    const timingToken = this.peek();
+    let timing: AST.TriggerTiming;
+    if (
+      timingToken.type === TokenType.IDENT &&
+      (timingToken.value === "after" || timingToken.value === "before")
+    ) {
+      timing = timingToken.value as AST.TriggerTiming;
+      this.advance();
+    } else {
+      throw this.error(
+        `Expected 'after' or 'before' in trigger declaration, got '${timingToken.value}'`,
+      );
+    }
+
+    // Parse comma-separated events (insert, update, delete)
+    const events = this.parseTriggerEvents();
+
+    // Parse scope: "for each" or "for all" (contextual identifiers)
+    const forToken = this.peek();
+    if (forToken.type !== TokenType.IDENT || forToken.value !== "for") {
+      throw this.error(
+        `Expected 'for' in trigger declaration, got '${forToken.value}'`,
+      );
+    }
+    this.advance();
+
+    const scopeToken = this.peek();
+    let scope: AST.TriggerScope;
+    if (
+      scopeToken.type === TokenType.IDENT &&
+      (scopeToken.value === "each" || scopeToken.value === "all")
+    ) {
+      scope = scopeToken.value as AST.TriggerScope;
+      this.advance();
+    } else {
+      throw this.error(
+        `Expected 'each' or 'all' after 'for' in trigger declaration, got '${scopeToken.value}'`,
+      );
+    }
+
+    // Parse "do" keyword (contextual identifier)
+    const doToken = this.peek();
+    if (doToken.type !== TokenType.IDENT || doToken.value !== "do") {
+      throw this.error(
+        `Expected 'do' in trigger declaration, got '${doToken.value}'`,
+      );
+    }
+    this.advance();
+
+    // Parse body expression inside parens
+    this.consume(TokenType.LPAREN, "Expected '(' after 'do'");
+    const body = this.parseExpression();
+    this.consume(
+      TokenType.RPAREN,
+      "Expected ')' after trigger body expression",
+    );
+
+    this.consume(
+      TokenType.SEMICOLON,
+      "Expected ';' after trigger declaration",
+    );
+
+    return {
+      kind: "TriggerDeclaration",
+      name,
+      timing,
+      events,
+      scope,
+      body,
+    };
+  }
+
+  private parseTriggerEvents(): AST.TriggerEvent[] {
+    const events: AST.TriggerEvent[] = [];
+
+    do {
+      if (this.match(TokenType.INSERT)) {
+        events.push("insert");
+      } else if (this.match(TokenType.UPDATE)) {
+        events.push("update");
+      } else if (this.match(TokenType.DELETE)) {
+        events.push("delete");
+      } else if (this.check(TokenType.IDENT)) {
+        const val = this.peek().value;
+        if (val === "insert" || val === "update" || val === "delete") {
+          events.push(val as AST.TriggerEvent);
+          this.advance();
+        } else {
+          throw this.error(
+            `Expected trigger event (insert, update, delete), got '${val}'`,
+          );
+        }
+      } else {
+        throw this.error(
+          `Expected trigger event (insert, update, delete), got '${this.peek().value}'`,
+        );
+      }
+    } while (this.match(TokenType.COMMA));
+
+    return events;
   }
 
   private parseFunctionParameters(): AST.FunctionParameter[] {

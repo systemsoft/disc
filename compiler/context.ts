@@ -32,6 +32,14 @@ export interface Schema {
   functions: Map<string, FunctionDef>;
 }
 
+export interface TriggerDef {
+  name: string;
+  timing: "before" | "after";
+  events: ("insert" | "update" | "delete")[];
+  scope: "each" | "all";
+  body: string;
+}
+
 export interface TypeDef {
   name: string;
   kind: "object" | "scalar" | "enum";
@@ -39,6 +47,8 @@ export interface TypeDef {
   links: Map<string, LinkDef>;
   tableName: string;
   accessPolicies?: AccessPolicy[];
+  /** Trigger definitions attached to this type */
+  triggers?: TriggerDef[];
   /** Enum member values for scalar enum types */
   enumValues?: string[];
   /** Whether this is an abstract type (cannot be instantiated directly) */

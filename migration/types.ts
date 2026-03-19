@@ -31,6 +31,8 @@ export interface CreateTypeOperation extends MigrationOperation {
   parentTypes?: string[];
   /** Names of direct child types */
   subtypes?: string[];
+  /** Trigger definitions for this type */
+  triggers?: TriggerDefinition[];
 }
 
 export interface DropTypeOperation extends MigrationOperation {
@@ -78,6 +80,24 @@ export interface AlterLinkOperation extends TypeOperation {
   kind: "AlterLink";
   linkName: string;
   changes: LinkChange[];
+}
+
+export interface TriggerDefinition {
+  name: string;
+  timing: "before" | "after";
+  events: ("insert" | "update" | "delete")[];
+  scope: "each" | "all";
+  body: string; // Serialized EdgeQL expression
+}
+
+export interface AddTriggerOperation extends TypeOperation {
+  kind: "AddTrigger";
+  trigger: TriggerDefinition;
+}
+
+export interface DropTriggerOperation extends TypeOperation {
+  kind: "DropTrigger";
+  triggerName: string;
 }
 
 // DDL operations
@@ -367,5 +387,25 @@ export function dropColumnOperation(name: string): DropColumnOperation {
   return {
     kind: "DropColumn",
     columnName: name,
+  };
+}
+
+export function addTriggerOperation(
+  _typeName: string,
+  trigger: TriggerDefinition,
+): AddTriggerOperation {
+  return {
+    kind: "AddTrigger",
+    trigger,
+  };
+}
+
+export function dropTriggerOperation(
+  _typeName: string,
+  triggerName: string,
+): DropTriggerOperation {
+  return {
+    kind: "DropTrigger",
+    triggerName,
   };
 }

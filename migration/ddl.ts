@@ -271,6 +271,13 @@ export class DDLGenerator {
       ...this.generateCheckConstraints(tableName, operation.properties),
     );
 
+    // Generate triggers
+    if (operation.triggers) {
+      for (const trigger of operation.triggers) {
+        statements.push(...this.generateCreateTrigger(tableName, trigger));
+      }
+    }
+
     return statements;
   }
 
@@ -326,6 +333,16 @@ export class DDLGenerator {
         return this.generateAlterLink(
           tableName,
           operation as Types.AlterLinkOperation,
+        );
+      case "AddTrigger":
+        return this.generateCreateTrigger(
+          tableName,
+          (operation as Types.AddTriggerOperation).trigger,
+        );
+      case "DropTrigger":
+        return this.generateDropTrigger(
+          tableName,
+          (operation as Types.DropTriggerOperation).triggerName,
         );
       default:
         throw new Error(`Unsupported type operation: ${operation.kind}`);
@@ -888,7 +905,9 @@ export class DDLGenerator {
           const values = arg.split(",").map((v: string) => {
             const trimmed = v.trim();
             // If already quoted (from differ serialization), use as-is
-            if (trimmed.startsWith("'") && trimmed.endsWith("'")) return trimmed;
+            if (trimmed.startsWith("'") && trimmed.endsWith("'")) {
+              return trimmed;
+            }
             // Numeric values don't need quoting
             if (/^-?\d+(\.\d+)?$/.test(trimmed)) return trimmed;
             // String values need single-quote wrapping
@@ -1045,6 +1064,54 @@ export class DDLGenerator {
   }
 
   // ========================================
+  // Trigger DDL Generation Methods
+  // ========================================
+
+  private generateCreateTrigger(
+    tableName: string,
+    trigger: Types.TriggerDefinition,
+  ): string[] {
+    const fnName = `${tableName}__${trigger.name}_fn`;
+    const triggerName = `${tableName}__${trigger.name}`;
+
+    // Replace EdgeQL trigger variables with PostgreSQL equivalents
+    const body = trigger.body
+      .replace(/__new__/g, "NEW")
+      .replace(/__old__/g, "OLD")
+      .replace(/__action__/g, "TG_OP");
+
+    const timing = trigger.timing.toUpperCase();
+    const events = trigger.events.map((e) => e.toUpperCase()).join(" OR ");
+    const scope = trigger.scope === "each" ? "ROW" : "STATEMENT";
+
+    return [
+      `CREATE OR REPLACE FUNCTION ${
+        this.escapeIdentifier(fnName)
+      }() RETURNS TRIGGER AS $$ BEGIN ${body}; RETURN NEW; END; $$ LANGUAGE plpgsql;`,
+      `CREATE TRIGGER ${
+        this.escapeIdentifier(triggerName)
+      } ${timing} ${events} ON ${
+        this.escapeIdentifier(tableName)
+      } FOR EACH ${scope} EXECUTE FUNCTION ${this.escapeIdentifier(fnName)}();`,
+    ];
+  }
+
+  private generateDropTrigger(
+    tableName: string,
+    triggerName: string,
+  ): string[] {
+    const pgTriggerName = `${tableName}__${triggerName}`;
+    const fnName = `${tableName}__${triggerName}_fn`;
+
+    return [
+      `DROP TRIGGER IF EXISTS ${this.escapeIdentifier(pgTriggerName)} ON ${
+        this.escapeIdentifier(tableName)
+      };`,
+      `DROP FUNCTION IF EXISTS ${this.escapeIdentifier(fnName)}();`,
+    ];
+  }
+
+  // ========================================
   // Rollback DDL Generation Methods
   // ========================================
 
@@ -1120,6 +1187,21 @@ export class DDLGenerator {
           tableName,
           operation as Types.AlterLinkOperation,
         );
+      case "AddTrigger":
+        // Rollback AddTrigger = DropTrigger
+        return this.generateDropTrigger(
+          tableName,
+          (operation as Types.AddTriggerOperation).trigger.name,
+        );
+      case "DropTrigger":
+        // Can't restore trigger body from just the name
+        return [
+          `-- MANUAL ROLLBACK REQUIRED: Recreate trigger '${
+            (operation as Types.DropTriggerOperation).triggerName
+          }' on table '${tableName}'`,
+          `-- The original trigger body was lost when it was dropped.`,
+          `-- Please refer to backup or documentation for the original trigger definition.`,
+        ];
       default:
         throw new Error(
           `Unsupported rollback type operation: ${operation.kind}`,

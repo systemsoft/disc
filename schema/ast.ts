@@ -89,6 +89,20 @@ export interface AnnotationDeclaration extends SDLNode {
   type?: TypeRef;
 }
 
+// Trigger types
+export type TriggerTiming = "before" | "after";
+export type TriggerEvent = "insert" | "update" | "delete";
+export type TriggerScope = "each" | "all";
+
+export interface TriggerDeclaration extends SDLNode {
+  kind: "TriggerDeclaration";
+  name: Identifier;
+  timing: TriggerTiming;
+  events: TriggerEvent[];
+  scope: TriggerScope;
+  body: Expression;
+}
+
 // Type members
 export type TypeMember =
   | PropertyDeclaration
@@ -96,7 +110,8 @@ export type TypeMember =
   | Constraint
   | Index
   | Annotation
-  | AccessPolicy;
+  | AccessPolicy
+  | TriggerDeclaration;
 
 // Property declaration
 export interface PropertyDeclaration extends SDLNode {

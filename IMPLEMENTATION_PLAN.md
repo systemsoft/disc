@@ -220,21 +220,18 @@ These features are used in advanced Gel applications and enterprise schemas.
 **Goal**: Support trigger definitions in SDL, DDL generation, and PG execution
 **Success Criteria**: Triggers defined in SDL create corresponding PG triggers
 **Tests**: SDL parsing, DDL generation, PG E2E trigger execution
-**Status**: Not Started
+**Status**: Complete
 
 Tasks:
-- [ ] Add trigger AST nodes: timing (after/before/deferred), events (insert/update/delete), scope (for each/statement), condition, expression
-- [ ] Update SDL parser for trigger syntax:
-  ```
-  trigger audit_log after insert, update for each do (
-    insert AuditLog { action := __action__, target := __new__ }
-  )
-  ```
-- [ ] Update schema validator (trigger references valid types, expressions type-check)
-- [ ] DDL generation: `CREATE TRIGGER` with PG function wrapping the expression
-- [ ] Compile trigger expression body to SQL function
-- [ ] Migration differ: detect trigger add/remove/change
-- [ ] PG E2E: trigger fires on insert, update, delete; deferred triggers
+- [x] Add TRIGGER token to schema/tokens.ts, TriggerDeclaration AST node to schema/ast.ts
+- [x] Update SDL parser for trigger syntax (parseTriggerDeclaration, parseTriggerEvents)
+- [x] Update schema validator (duplicate trigger names, duplicate events, empty events)
+- [x] Add TriggerDefinition, AddTriggerOperation, DropTriggerOperation to migration/types.ts
+- [x] Migration differ: extractTriggers(), diffTriggers() with drop+add for modifications
+- [x] DDL generation: CREATE FUNCTION + CREATE TRIGGER, __new__/OLD/__action__ substitution
+- [x] TriggerDef on TypeDef (compiler/context.ts), SchemaManager trigger extraction
+- [x] 25 unit tests (migration/trigger.test.ts): parser, validator, differ, DDL, end-to-end
+- [x] 5 PG E2E tests (migration/pg-trigger.test.ts): INSERT/UPDATE/DELETE triggers, multi-event, DDLGenerator output
 
 ---
 

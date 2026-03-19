@@ -17,6 +17,7 @@ import {
   Constraint as SDLConstraint,
   Expression,
   ScalarTypeDeclaration,
+  TriggerDeclaration,
   TypeDeclaration,
 } from "../schema/ast.ts";
 import { adaptAccessPolicies } from "../access/policy-adapter.ts";
@@ -26,6 +27,7 @@ import {
   PropertyConstraint,
   PropertyDef,
   Schema,
+  TriggerDef,
   TypeDef,
 } from "../compiler/context.ts";
 import { MigrationEngine } from "./engine.ts";
@@ -81,11 +83,13 @@ function sdlTypeToSqlType(sdlType: string): string {
 
 /**
  * Stringify an SDL Expression node into a human-readable string.
- * Used for rendering constraint arguments in codegen output.
+ * Used for rendering constraint arguments, trigger bodies, and
+ * computed property expressions.
  */
 function stringifyExpression(expr: Expression): string {
   switch (expr.kind) {
     case "Literal":
+      if (typeof expr.value === "string") return `'${expr.value}'`;
       return String(expr.value);
     case "PathExpression":
       return expr.path.join(".");
@@ -93,6 +97,22 @@ function stringifyExpression(expr: Expression): string {
       return `${expr.name.parts.join("::")}(${
         expr.args.map(stringifyExpression).join(", ")
       })`;
+    case "BinaryOp":
+      return `${stringifyExpression(expr.left)} ${expr.op} ${
+        stringifyExpression(expr.right)
+      }`;
+    case "UnaryOp":
+      return `${expr.op} ${stringifyExpression(expr.operand)}`;
+    case "TypeCast":
+      return `<${expr.type.name.parts.join("::")}>${
+        stringifyExpression(expr.expr)
+      }`;
+    case "Parameter":
+      return `$${expr.name}`;
+    case "ConditionalExpression":
+      return `${stringifyExpression(expr.consequent)} if ${
+        stringifyExpression(expr.test)
+      } else ${stringifyExpression(expr.alternate)}`;
     default:
       return String((expr as { value?: unknown }).value ?? "");
   }
@@ -270,6 +290,20 @@ export class SchemaManager {
           ? adaptAccessPolicies(typeName, sdlPolicies)
           : undefined;
 
+        // Extract triggers from the type declaration
+        const triggerDecls = typeDecl.members.filter(
+          (m): m is TriggerDeclaration => m.kind === "TriggerDeclaration",
+        );
+        const triggers: TriggerDef[] | undefined = triggerDecls.length > 0
+          ? triggerDecls.map((t) => ({
+            name: t.name.value,
+            timing: t.timing,
+            events: [...t.events],
+            scope: t.scope,
+            body: stringifyExpression(t.body),
+          }))
+          : undefined;
+
         // Extract inheritance info from SDL AST
         const isAbstract = typeDecl.abstract ?? false;
         const parentTypeNames = typeDecl.extending?.map(
@@ -283,6 +317,7 @@ export class SchemaManager {
           properties,
           links,
           accessPolicies,
+          triggers,
         };
 
         if (isAbstract) {
