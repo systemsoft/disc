@@ -71,6 +71,9 @@ export interface LinkDef {
   multi: boolean;
   columnName?: string; // For foreign keys
   backlink?: string;
+  junctionTable?: string; // For many-to-many via junction table
+  junctionSourceColumn?: string; // Column referencing this type (default: "source_id")
+  junctionTargetColumn?: string; // Column referencing target type (default: "target_id")
 }
 
 export interface FunctionDef {

@@ -461,10 +461,12 @@ Deno.test("SQL Compiler - FOR with set literal multi-element", () => {
   `;
   const sql = compileEdgeQL(source);
 
-  assertEquals(sql.includes("UNION ALL"), true);
+  // Multi-element FOR INSERTs merge into a single multi-row INSERT
   assertEquals(sql.includes("INSERT INTO"), true);
   assertEquals(sql.includes("'Alice'"), true);
   assertEquals(sql.includes("'Bob'"), true);
+  // Should NOT use UNION ALL (invalid for INSERT statements)
+  assertEquals(sql.includes("UNION ALL"), false);
 });
 
 Deno.test("SQL Compiler - FOR with single-element set", () => {

@@ -5,7 +5,11 @@
 import * as Types from "./types.ts";
 
 export class DDLGenerator {
+  /** Tracks junction tables already emitted in this DDL batch to avoid duplicates */
+  private createdJunctionTables = new Set<string>();
+
   generateDDL(operations: Types.MigrationOperation[]): string[] {
+    this.createdJunctionTables.clear();
     const statements: string[] = [];
 
     for (const operation of operations) {
@@ -157,6 +161,28 @@ export class DDLGenerator {
     for (const link of operation.links) {
       if (link.multi) {
         const junctionTableName = `${tableName}_${link.name}`;
+
+        // Skip if this exact junction table name was already created
+        if (this.createdJunctionTables.has(junctionTableName)) {
+          continue;
+        }
+
+        // For many-to-many between DIFFERENT types, check if the reciprocal
+        // direction already created a junction table (e.g., "group_users"
+        // already covers the "user_groups" relationship). Only applies when
+        // source != target to avoid incorrectly deduplicating self-referencing
+        // multi-links (e.g., User.friends and User.enemies).
+        const targetTable = this.typeNameToTableName(link.target);
+        if (tableName !== targetTable) {
+          const reverseKey = `${targetTable}→${tableName}`;
+          if (this.createdJunctionTables.has(reverseKey)) {
+            continue;
+          }
+        }
+
+        this.createdJunctionTables.add(junctionTableName);
+        this.createdJunctionTables.add(`${tableName}→${targetTable}`);
+
         const junctionColumns: Types.ColumnDefinition[] = [
           {
             name: "source_id",
@@ -177,7 +203,7 @@ export class DDLGenerator {
             primaryKey: false,
             unique: false,
             references: {
-              table: this.typeNameToTableName(link.target),
+              table: targetTable,
               column: "id",
               onDelete: "CASCADE",
             },
@@ -391,6 +417,21 @@ export class DDLGenerator {
     if (link.multi) {
       // Multi-valued link - create junction table
       const junctionTableName = `${tableName}_${link.name}`;
+      const targetTable = this.typeNameToTableName(link.target);
+
+      // Skip if already created or reciprocal exists
+      if (this.createdJunctionTables.has(junctionTableName)) {
+        return statements;
+      }
+      if (tableName !== targetTable) {
+        const reverseKey = `${targetTable}→${tableName}`;
+        if (this.createdJunctionTables.has(reverseKey)) {
+          return statements;
+        }
+      }
+      this.createdJunctionTables.add(junctionTableName);
+      this.createdJunctionTables.add(`${tableName}→${targetTable}`);
+
       const junctionColumns: Types.ColumnDefinition[] = [
         {
           name: "source_id",
@@ -411,7 +452,7 @@ export class DDLGenerator {
           primaryKey: false,
           unique: false,
           references: {
-            table: this.typeNameToTableName(link.target),
+            table: targetTable,
             column: "id",
             onDelete: link.onTargetDelete || "CASCADE",
           },

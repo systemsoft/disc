@@ -699,15 +699,68 @@ export class EdgeQLCompiler {
     link: Context.LinkDef,
     parentAlias: string,
   ): SQL.SQLExpression {
-    // This is a simplified implementation
-    // In a full implementation, this would generate a subquery with proper joins
     if (link.columnName) {
       // Simple foreign key reference
       return SQL.createColumnReference(link.columnName, parentAlias);
+    } else if (link.junctionTable) {
+      // Many-to-many: subquery returning array of target IDs via junction table
+      const jt = link.junctionTable;
+      const srcCol = link.junctionSourceColumn || "source_id";
+      const tgtCol = link.junctionTargetColumn || "target_id";
+
+      const subquery = SQL.createSelectStatement({
+        select: SQL.createSelectClause([
+          SQL.createSelectItem(
+            SQL.createFunctionCall("jsonb_agg", [
+              SQL.createColumnReference(tgtCol, jt),
+            ]),
+          ),
+        ]),
+        from: SQL.createFromClause([SQL.createTableReference(jt)]),
+        where: SQL.createWhereClause(
+          SQL.createBinaryExpression(
+            "=",
+            SQL.createColumnReference(srcCol, jt),
+            SQL.createColumnReference("id", parentAlias),
+          ),
+        ),
+      });
+      return SQL.createSubqueryExpression(subquery);
+    } else if (link.backlink) {
+      // Reverse link via backlink: subquery returning array of target IDs
+      const targetTypeDef = Context.getTypeDef(this.ctx, link.target);
+      if (!targetTypeDef) {
+        throw new CompilationError(
+          `Target type '${link.target}' not found for link '${link.name}'`,
+        );
+      }
+      const reverseLink = targetTypeDef.links.get(link.backlink);
+      const fkColumn = reverseLink?.columnName ||
+        `${link.name.toLowerCase()}_id`;
+
+      const subquery = SQL.createSelectStatement({
+        select: SQL.createSelectClause([
+          SQL.createSelectItem(
+            SQL.createFunctionCall("jsonb_agg", [
+              SQL.createColumnReference("id", targetTypeDef.tableName),
+            ]),
+          ),
+        ]),
+        from: SQL.createFromClause([
+          SQL.createTableReference(targetTypeDef.tableName),
+        ]),
+        where: SQL.createWhereClause(
+          SQL.createBinaryExpression(
+            "=",
+            SQL.createColumnReference(fkColumn, targetTypeDef.tableName),
+            SQL.createColumnReference("id", parentAlias),
+          ),
+        ),
+      });
+      return SQL.createSubqueryExpression(subquery);
     } else {
-      // Backlink - would need a subquery
       throw new CompilationError(
-        `Backlink compilation not yet implemented: ${link.name}`,
+        `Cannot compile link reference without FK, backlink, or junction table: ${link.name}`,
       );
     }
   }
@@ -748,10 +801,14 @@ export class EdgeQLCompiler {
     const jsonObject = SQL.createJsonBuildObject(jsonFields);
     const jsonAgg = SQL.createJsonAgg(jsonObject);
 
-    // Determine the join condition
-    // If the link has a columnName, it's a forward link (the target has the FK)
-    // If the link has a backlink, the target table has a FK pointing to the parent
+    // Determine the join condition and FROM clause
+    // Three cases:
+    // 1. columnName: forward link (source has FK column)
+    // 2. backlink: reverse link (target has FK column pointing back)
+    // 3. junctionTable: many-to-many via junction table
     let joinCondition: SQL.SQLExpression;
+    let fromClause: SQL.FromClause;
+
     if (link.columnName) {
       // Forward link: parent.link_column = target.id
       joinCondition = SQL.createBinaryExpression(
@@ -759,6 +816,41 @@ export class EdgeQLCompiler {
         SQL.createColumnReference("id", targetTypeDef.tableName),
         SQL.createColumnReference(link.columnName, parentAlias),
       );
+      fromClause = SQL.createFromClause([
+        SQL.createTableReference(targetTypeDef.tableName),
+      ]);
+    } else if (link.junctionTable) {
+      // Many-to-many via junction table:
+      // SELECT ... FROM target JOIN junction ON junction.target_col = target.id
+      // WHERE junction.source_col = parent.id
+      const jt = link.junctionTable;
+      const srcCol = link.junctionSourceColumn || "source_id";
+      const tgtCol = link.junctionTargetColumn || "target_id";
+
+      joinCondition = SQL.createBinaryExpression(
+        "=",
+        SQL.createColumnReference(srcCol, jt),
+        SQL.createColumnReference("id", parentAlias),
+      );
+
+      // JOIN junction table to target table
+      const joinExpr = SQL.createBinaryExpression(
+        "=",
+        SQL.createColumnReference(tgtCol, jt),
+        SQL.createColumnReference("id", targetTypeDef.tableName),
+      );
+
+      const targetTableRef = SQL.createTableReference(
+        targetTypeDef.tableName,
+      );
+      targetTableRef.joins = [{
+        kind: "JoinClause",
+        type: "INNER",
+        table: SQL.createTableReference(jt),
+        condition: joinExpr,
+      }];
+
+      fromClause = SQL.createFromClause([targetTableRef]);
     } else {
       // Reverse link (multi): target.fk_column = parent.id
       // Find the reverse link's column name from the target type
@@ -770,14 +862,15 @@ export class EdgeQLCompiler {
         SQL.createColumnReference(fkColumn, targetTypeDef.tableName),
         SQL.createColumnReference("id", parentAlias),
       );
+      fromClause = SQL.createFromClause([
+        SQL.createTableReference(targetTypeDef.tableName),
+      ]);
     }
 
     // Build the subquery
     const subquery: SQL.SelectStatement = SQL.createSelectStatement({
       select: SQL.createSelectClause([SQL.createSelectItem(jsonAgg)]),
-      from: SQL.createFromClause([
-        SQL.createTableReference(targetTypeDef.tableName),
-      ]),
+      from: fromClause,
       where: SQL.createWhereClause(joinCondition),
     });
 
@@ -1638,6 +1731,33 @@ export class EdgeQLCompiler {
 
       if (compiledQueries.length === 1) {
         return compiledQueries[0];
+      }
+
+      // If all queries are INSERTs into the same table, merge into a single
+      // multi-row INSERT instead of UNION ALL (which is invalid for INSERTs)
+      if (
+        compiledQueries.every((q) =>
+          q.kind === "InsertStatement" &&
+          (q as SQL.InsertStatement).table ===
+            (compiledQueries[0] as SQL.InsertStatement).table
+        )
+      ) {
+        const first = compiledQueries[0] as SQL.InsertStatement;
+        const mergedValues: SQL.SQLExpression[][] = [];
+        for (const q of compiledQueries) {
+          const insert = q as SQL.InsertStatement;
+          for (const row of insert.values) {
+            mergedValues.push(row);
+          }
+        }
+        return {
+          kind: "InsertStatement",
+          table: first.table,
+          columns: first.columns,
+          values: mergedValues,
+          returning: first.returning,
+          onConflict: first.onConflict,
+        } as SQL.InsertStatement;
       }
 
       return SQL.unionAll(compiledQueries);

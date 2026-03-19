@@ -279,10 +279,12 @@ export class SchemaManager {
       }
     }
 
-    // Second pass: resolve backlinks for multi-links.
+    // Second pass: resolve backlinks and junction tables for multi-links.
     // For each type's multi-link, check if the target type has a single link
-    // pointing back to this type. If so, set linkDef.backlink to that reverse
-    // link's name so the compiler can generate correct JOIN conditions.
+    // pointing back (backlink) or a reciprocal multi-link (many-to-many via
+    // junction table).
+    const resolvedJunctions = new Set<string>();
+
     for (const [typeName, typeDef] of types) {
       for (const [_linkName, linkDef] of typeDef.links) {
         if (!linkDef.multi) {
@@ -294,12 +296,44 @@ export class SchemaManager {
           continue;
         }
 
-        // Find a single (non-multi) link on the target that points back to
-        // this type
+        // First try: single-link backlink on the target type
+        let foundBacklink = false;
         for (const [candidateName, candidateLink] of targetTypeDef.links) {
           if (!candidateLink.multi && candidateLink.target === typeName) {
             linkDef.backlink = candidateName;
+            foundBacklink = true;
             break;
+          }
+        }
+
+        // Second try: many-to-many — target has a reciprocal multi-link
+        if (!foundBacklink) {
+          const tableName = typeDef.tableName;
+          const junctionTable = `${tableName}_${linkDef.name}`;
+
+          linkDef.junctionTable = junctionTable;
+          linkDef.junctionSourceColumn = "source_id";
+          linkDef.junctionTargetColumn = "target_id";
+
+          // Mark the reciprocal link on the target type if it exists
+          for (
+            const [_candidateName, candidateLink] of targetTypeDef.links
+          ) {
+            if (candidateLink.multi && candidateLink.target === typeName) {
+              // Use canonical ordering to avoid duplicate junction tables:
+              // the junction table belongs to whichever type comes first
+              // alphabetically
+              const pairKey = [typeName, linkDef.target].sort().join("|");
+              if (!resolvedJunctions.has(pairKey)) {
+                resolvedJunctions.add(pairKey);
+                // The reciprocal link uses the OTHER side's junction table
+                // with swapped source/target columns
+                candidateLink.junctionTable = junctionTable;
+                candidateLink.junctionSourceColumn = "target_id";
+                candidateLink.junctionTargetColumn = "source_id";
+              }
+              break;
+            }
           }
         }
       }
