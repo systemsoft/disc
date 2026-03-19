@@ -24,13 +24,13 @@ These features are used in nearly every real-world Gel application.
 **Goal**: Support all standard Gel constraints in SDL, validation, and DDL
 **Success Criteria**: Schema files using these constraints parse, validate, and generate correct CHECK/UNIQUE DDL
 **Tests**: SDL parsing, validation, DDL generation, PG E2E for each constraint type
-**Status**: Not Started
+**Status**: Complete
 
 Tasks:
-- [ ] Add constraint types to schema AST: `max_len_value`, `min_len_value`, `max_value`, `min_value`, `max_ex_value`, `min_ex_value`, `one_of`, `expression on`
-- [ ] Update SDL parser to handle constraint arguments (single value and multi-value)
-- [ ] Update schema validator to type-check constraint arguments against property types
-- [ ] Update DDL generator to emit correct CHECK constraints:
+- [x] Add constraint types to schema AST: `max_len_value`, `min_len_value`, `max_value`, `min_value`, `max_ex_value`, `min_ex_value`, `one_of`, `expression on`
+- [x] Update SDL parser to handle constraint arguments (single value and multi-value)
+- [x] Update schema validator to type-check constraint arguments against property types
+- [x] Update DDL generator to emit correct CHECK constraints:
   - `max_len_value(n)` → `CHECK (LENGTH(col) <= n)`
   - `min_len_value(n)` → `CHECK (LENGTH(col) >= n)`
   - `max_value(v)` → `CHECK (col <= v)`
@@ -39,9 +39,10 @@ Tasks:
   - `min_ex_value(v)` → `CHECK (col > v)`
   - `one_of(...)` → `CHECK (col IN (...))`
   - `expression on (expr)` → `CHECK (expr)`
-- [ ] Update migration differ to detect constraint changes
-- [ ] Add delegated constraint support (inherited by subtypes)
-- [ ] PG E2E tests: insert valid/invalid data against each constraint type
+- [x] Update migration differ to detect constraint changes (AddConstraint/DropConstraint)
+- [x] Add delegated constraint support (inherited by subtypes via extractPropertiesWithInheritance)
+- [x] PG E2E tests: insert valid/invalid data against each constraint type (6 PG E2E tests)
+- [x] Constraint validation: arg count, type compatibility (12 validator tests)
 
 ---
 

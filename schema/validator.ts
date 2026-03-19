@@ -270,10 +270,11 @@ export class SchemaValidator {
       this.validateExpression(property.computed);
     }
 
-    // Validate constraints
+    // Validate constraints with property type context
     if (property.constraints) {
+      const propertyType = property.type.name.parts.join("::");
       for (const constraint of property.constraints) {
-        this.validateConstraint(constraint);
+        this.validateConstraint(constraint, propertyType);
       }
     }
   }
@@ -314,7 +315,10 @@ export class SchemaValidator {
     }
   }
 
-  private validateConstraint(constraint: AST.Constraint): void {
+  private validateConstraint(
+    constraint: AST.Constraint,
+    propertyType?: string,
+  ): void {
     // Validate constraint expression
     if (constraint.on) {
       this.validateExpression(constraint.on);
@@ -324,6 +328,66 @@ export class SchemaValidator {
     if (constraint.args) {
       for (const arg of constraint.args) {
         this.validateExpression(arg);
+      }
+    }
+
+    const name = constraint.name?.value;
+    if (!name) return;
+
+    // Known constraints and their validation rules
+    const STRING_TYPES = new Set(["str", "bytes"]);
+    const NUMERIC_TYPES = new Set([
+      "int16", "int32", "int64", "float32", "float64", "decimal", "bigint",
+    ]);
+    const SINGLE_ARG_CONSTRAINTS = new Set([
+      "max_len_value", "min_len_value",
+      "max_value", "min_value",
+      "max_ex_value", "min_ex_value",
+    ]);
+
+    // Validate argument count for known constraints
+    if (SINGLE_ARG_CONSTRAINTS.has(name)) {
+      if (!constraint.args || constraint.args.length !== 1) {
+        this.addError(
+          `Constraint '${name}' requires exactly one argument`,
+        );
+      }
+    }
+
+    if (name === "one_of") {
+      if (!constraint.args || constraint.args.length === 0) {
+        this.addError(
+          "Constraint 'one_of' requires at least one argument",
+        );
+      }
+    }
+
+    if (name === "expression" && !constraint.on) {
+      this.addError(
+        "Constraint 'expression' requires an 'on' expression",
+      );
+    }
+
+    // Type compatibility checks (when property type is known)
+    if (propertyType) {
+      if (
+        (name === "max_len_value" || name === "min_len_value") &&
+        !STRING_TYPES.has(propertyType)
+      ) {
+        this.addError(
+          `Constraint '${name}' can only be applied to 'str' or 'bytes' properties, not '${propertyType}'`,
+        );
+      }
+
+      if (
+        (name === "max_value" || name === "min_value" ||
+          name === "max_ex_value" || name === "min_ex_value") &&
+        !NUMERIC_TYPES.has(propertyType) && propertyType !== "datetime" &&
+        propertyType !== "duration"
+      ) {
+        this.addError(
+          `Constraint '${name}' can only be applied to numeric or temporal properties, not '${propertyType}'`,
+        );
       }
     }
   }

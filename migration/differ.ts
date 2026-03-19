@@ -332,6 +332,28 @@ export class SchemaDiffer {
       });
     }
 
+    // Compare constraints
+    const oldConstraints = new Set(oldProp.constraints);
+    const newConstraints = new Set(newProp.constraints);
+
+    for (const constraint of newConstraints) {
+      if (!oldConstraints.has(constraint)) {
+        changes.push({
+          kind: "AddConstraint",
+          newValue: constraint,
+        });
+      }
+    }
+
+    for (const constraint of oldConstraints) {
+      if (!newConstraints.has(constraint)) {
+        changes.push({
+          kind: "DropConstraint",
+          oldValue: constraint,
+        });
+      }
+    }
+
     return changes;
   }
 
@@ -482,6 +504,12 @@ export class SchemaDiffer {
   private extractConstraints(constraints: AST.Constraint[]): string[] {
     return constraints.map((constraint) => {
       const name = constraint.name?.value || "unnamed";
+
+      // Handle "expression on (...)" constraints
+      if (name === "expression" && constraint.on) {
+        const exprStr = this.extractExpressionString(constraint.on);
+        return `expression_on(${exprStr})`;
+      }
 
       if (constraint.args && constraint.args.length > 0) {
         const args = constraint.args.map((arg) => {

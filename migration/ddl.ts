@@ -417,6 +417,54 @@ export class DDLGenerator {
             );
           }
           break;
+        case "AddConstraint": {
+          const checkExpr = this.constraintToCheckExpression(
+            operation.propertyName,
+            change.newValue,
+          );
+          if (checkExpr) {
+            const safeName = change.newValue.replace(/[^a-zA-Z0-9_]/g, "_");
+            const constraintName =
+              `chk_${tableName}_${operation.propertyName}_${safeName}`;
+            statements.push(
+              `ALTER TABLE ${tableRef} ADD CONSTRAINT ${
+                this.escapeIdentifier(constraintName)
+              } CHECK (${checkExpr});`,
+            );
+          }
+          // Handle exclusive constraint as UNIQUE index
+          if (change.newValue === "exclusive") {
+            statements.push(
+              `CREATE UNIQUE INDEX ${
+                this.escapeIdentifier(
+                  `idx_${tableName}_${operation.propertyName}_unique`,
+                )
+              } ON ${tableRef} (${columnName});`,
+            );
+          }
+          break;
+        }
+        case "DropConstraint": {
+          const safeName = change.oldValue.replace(/[^a-zA-Z0-9_]/g, "_");
+          const constraintName =
+            `chk_${tableName}_${operation.propertyName}_${safeName}`;
+          statements.push(
+            `ALTER TABLE ${tableRef} DROP CONSTRAINT IF EXISTS ${
+              this.escapeIdentifier(constraintName)
+            };`,
+          );
+          // Handle exclusive constraint UNIQUE index removal
+          if (change.oldValue === "exclusive") {
+            statements.push(
+              `DROP INDEX IF EXISTS ${
+                this.escapeIdentifier(
+                  `idx_${tableName}_${operation.propertyName}_unique`,
+                )
+              };`,
+            );
+          }
+          break;
+        }
       }
     }
 
@@ -828,6 +876,37 @@ export class DDLGenerator {
       case "regexp":
         if (arg) return `${col} ~ '${arg.replace(/'/g, "''")}'`;
         break;
+      case "max_ex_value":
+        if (arg) return `${col} < ${arg}`;
+        break;
+      case "min_ex_value":
+        if (arg) return `${col} > ${arg}`;
+        break;
+      case "one_of":
+        if (arg) {
+          // Split comma-separated values and quote each one for SQL IN clause
+          const values = arg.split(",").map((v: string) => {
+            const trimmed = v.trim();
+            // If already quoted (from differ serialization), use as-is
+            if (trimmed.startsWith("'") && trimmed.endsWith("'")) return trimmed;
+            // Numeric values don't need quoting
+            if (/^-?\d+(\.\d+)?$/.test(trimmed)) return trimmed;
+            // String values need single-quote wrapping
+            return `'${trimmed.replace(/'/g, "''")}'`;
+          });
+          return `${col} IN (${values.join(", ")})`;
+        }
+        break;
+      case "expression":
+        // expression on (...) constraints - handled via "expression_on" format from differ
+        break;
+      case "expression_on":
+        if (arg) {
+          // Replace __subject__ with the column name
+          const expr = arg.replace(/__subject__/g, col);
+          return expr;
+        }
+        break;
       // "exclusive" is handled as UNIQUE constraint, skip here
       case "exclusive":
         return null;
@@ -1119,6 +1198,36 @@ export class DDLGenerator {
             );
           }
           break;
+        case "AddConstraint": {
+          // Rollback: drop the constraint that was added
+          const safeName = change.newValue.replace(/[^a-zA-Z0-9_]/g, "_");
+          const constraintName =
+            `chk_${tableName}_${operation.propertyName}_${safeName}`;
+          statements.push(
+            `ALTER TABLE ${tableRef} DROP CONSTRAINT IF EXISTS ${
+              this.escapeIdentifier(constraintName)
+            };`,
+          );
+          break;
+        }
+        case "DropConstraint": {
+          // Rollback: re-add the constraint that was dropped
+          const checkExpr = this.constraintToCheckExpression(
+            operation.propertyName,
+            change.oldValue,
+          );
+          if (checkExpr) {
+            const safeName = change.oldValue.replace(/[^a-zA-Z0-9_]/g, "_");
+            const constraintName =
+              `chk_${tableName}_${operation.propertyName}_${safeName}`;
+            statements.push(
+              `ALTER TABLE ${tableRef} ADD CONSTRAINT ${
+                this.escapeIdentifier(constraintName)
+              } CHECK (${checkExpr});`,
+            );
+          }
+          break;
+        }
       }
     }
 

@@ -555,3 +555,423 @@ Deno.test("DDL Generator - regexp constraint escapes single quotes in pattern", 
   // Single quote in pattern should be escaped to double single quote
   assertStringIncludes(checkStatements[0], "label ~ '^[a-z'']+$'");
 });
+
+// ============================================================
+// Stage 25: New constraint types
+// ============================================================
+
+Deno.test("DDL Generator - max_ex_value generates CHECK with strict less-than", () => {
+  const generator = new DDLGenerator();
+  const operation: Types.CreateTypeOperation = {
+    kind: "CreateType",
+    typeName: "Bid",
+    properties: [
+      {
+        name: "amount",
+        type: "float64",
+        required: true,
+        multi: false,
+        constraints: ["max_ex_value(1000000)"],
+        annotations: {},
+      },
+    ],
+    links: [],
+  };
+
+  const statements = generator.generateDDL([operation]);
+  const checkStatements = statements.filter((s) => s.includes("CHECK"));
+
+  assertEquals(checkStatements.length, 1);
+  assertStringIncludes(checkStatements[0], "CHECK (amount < 1000000)");
+});
+
+Deno.test("DDL Generator - min_ex_value generates CHECK with strict greater-than", () => {
+  const generator = new DDLGenerator();
+  const operation: Types.CreateTypeOperation = {
+    kind: "CreateType",
+    typeName: "Temperature",
+    properties: [
+      {
+        name: "kelvin",
+        type: "float64",
+        required: true,
+        multi: false,
+        constraints: ["min_ex_value(0)"],
+        annotations: {},
+      },
+    ],
+    links: [],
+  };
+
+  const statements = generator.generateDDL([operation]);
+  const checkStatements = statements.filter((s) => s.includes("CHECK"));
+
+  assertEquals(checkStatements.length, 1);
+  assertStringIncludes(checkStatements[0], "CHECK (kelvin > 0)");
+});
+
+Deno.test("DDL Generator - one_of generates CHECK with IN clause for string values", () => {
+  const generator = new DDLGenerator();
+  const operation: Types.CreateTypeOperation = {
+    kind: "CreateType",
+    typeName: "Task",
+    properties: [
+      {
+        name: "status",
+        type: "str",
+        required: true,
+        multi: false,
+        constraints: ["one_of(active,inactive,archived)"],
+        annotations: {},
+      },
+    ],
+    links: [],
+  };
+
+  const statements = generator.generateDDL([operation]);
+  const checkStatements = statements.filter((s) => s.includes("CHECK"));
+
+  assertEquals(checkStatements.length, 1);
+  assertStringIncludes(
+    checkStatements[0],
+    "CHECK (status IN ('active', 'inactive', 'archived'))",
+  );
+});
+
+Deno.test("DDL Generator - one_of generates CHECK with IN clause for numeric values", () => {
+  const generator = new DDLGenerator();
+  const operation: Types.CreateTypeOperation = {
+    kind: "CreateType",
+    typeName: "Config",
+    properties: [
+      {
+        name: "level",
+        type: "int32",
+        required: true,
+        multi: false,
+        constraints: ["one_of(1,2,3,4,5)"],
+        annotations: {},
+      },
+    ],
+    links: [],
+  };
+
+  const statements = generator.generateDDL([operation]);
+  const checkStatements = statements.filter((s) => s.includes("CHECK"));
+
+  assertEquals(checkStatements.length, 1);
+  assertStringIncludes(
+    checkStatements[0],
+    "CHECK (level IN (1, 2, 3, 4, 5))",
+  );
+});
+
+Deno.test("DDL Generator - expression_on generates CHECK with __subject__ replaced by column name", () => {
+  const generator = new DDLGenerator();
+  const operation: Types.CreateTypeOperation = {
+    kind: "CreateType",
+    typeName: "Discount",
+    properties: [
+      {
+        name: "percentage",
+        type: "float64",
+        required: true,
+        multi: false,
+        constraints: [
+          "expression_on(__subject__ >= 0 AND __subject__ <= 100)",
+        ],
+        annotations: {},
+      },
+    ],
+    links: [],
+  };
+
+  const statements = generator.generateDDL([operation]);
+  const checkStatements = statements.filter((s) => s.includes("CHECK"));
+
+  assertEquals(checkStatements.length, 1);
+  assertStringIncludes(
+    checkStatements[0],
+    "CHECK (percentage >= 0 AND percentage <= 100)",
+  );
+});
+
+Deno.test("DDL Generator - combined exclusive and value constraints on same property", () => {
+  const generator = new DDLGenerator();
+  const operation: Types.CreateTypeOperation = {
+    kind: "CreateType",
+    typeName: "Product",
+    properties: [
+      {
+        name: "sku",
+        type: "str",
+        required: true,
+        multi: false,
+        constraints: ["exclusive", "min_len_value(3)", "max_len_value(20)"],
+        annotations: {},
+      },
+    ],
+    links: [],
+  };
+
+  const statements = generator.generateDDL([operation]);
+  const checkStatements = statements.filter((s) => s.includes("CHECK"));
+  const uniqueStatements = statements.filter((s) => s.includes("UNIQUE"));
+
+  // exclusive -> UNIQUE, min_len_value/max_len_value -> CHECK
+  assertEquals(checkStatements.length, 2);
+  assertEquals(uniqueStatements.length >= 1, true);
+  assertStringIncludes(checkStatements[0], "length(sku) >= 3");
+  assertStringIncludes(checkStatements[1], "length(sku) <= 20");
+});
+
+// ============================================================
+// Constraint differ: add/drop detection
+// ============================================================
+
+Deno.test("Schema Differ - detects added constraint on existing property", () => {
+  const differ = new SchemaDiffer();
+
+  const makeSchema = (constraints: any[]): Module[] => [{
+    name: "default",
+    items: [{
+      kind: "TypeDeclaration",
+      name: { kind: "Identifier", value: "User" },
+      members: [{
+        kind: "PropertyDeclaration",
+        name: { kind: "Identifier", value: "name" },
+        type: {
+          kind: "TypeRef",
+          name: { kind: "QualifiedName", parts: ["str"] },
+        },
+        required: true,
+        multi: false,
+        constraints,
+      }],
+    }],
+  }];
+
+  const oldSchema = makeSchema([]);
+  const newSchema = makeSchema([{
+    kind: "Constraint",
+    name: { kind: "Identifier", value: "max_len_value" },
+    args: [{ kind: "Literal", type: "integer", value: 255 }],
+  }]);
+
+  const operations = differ.diff(oldSchema, newSchema);
+
+  // Should be AlterType with AlterProperty containing AddConstraint
+  assertEquals(operations.length, 1);
+  assertEquals(operations[0].kind, "AlterType");
+  const alterType = operations[0] as Types.AlterTypeOperation;
+  assertEquals(alterType.operations.length, 1);
+  assertEquals(alterType.operations[0].kind, "AlterProperty");
+  const alterProp = alterType.operations[0] as Types.AlterPropertyOperation;
+  assertEquals(alterProp.changes.length, 1);
+  assertEquals(alterProp.changes[0].kind, "AddConstraint");
+  assertEquals(alterProp.changes[0].newValue, "max_len_value(255)");
+});
+
+Deno.test("Schema Differ - detects dropped constraint on existing property", () => {
+  const differ = new SchemaDiffer();
+
+  const makeSchema = (constraints: any[]): Module[] => [{
+    name: "default",
+    items: [{
+      kind: "TypeDeclaration",
+      name: { kind: "Identifier", value: "User" },
+      members: [{
+        kind: "PropertyDeclaration",
+        name: { kind: "Identifier", value: "name" },
+        type: {
+          kind: "TypeRef",
+          name: { kind: "QualifiedName", parts: ["str"] },
+        },
+        required: true,
+        multi: false,
+        constraints,
+      }],
+    }],
+  }];
+
+  const oldSchema = makeSchema([{
+    kind: "Constraint",
+    name: { kind: "Identifier", value: "max_len_value" },
+    args: [{ kind: "Literal", type: "integer", value: 255 }],
+  }]);
+  const newSchema = makeSchema([]);
+
+  const operations = differ.diff(oldSchema, newSchema);
+
+  assertEquals(operations.length, 1);
+  assertEquals(operations[0].kind, "AlterType");
+  const alterType = operations[0] as Types.AlterTypeOperation;
+  assertEquals(alterType.operations.length, 1);
+  assertEquals(alterType.operations[0].kind, "AlterProperty");
+  const alterProp = alterType.operations[0] as Types.AlterPropertyOperation;
+  assertEquals(alterProp.changes.length, 1);
+  assertEquals(alterProp.changes[0].kind, "DropConstraint");
+  assertEquals(alterProp.changes[0].oldValue, "max_len_value(255)");
+});
+
+Deno.test("Schema Differ - detects constraint modification (value change)", () => {
+  const differ = new SchemaDiffer();
+
+  const makeSchema = (maxLen: number): Module[] => [{
+    name: "default",
+    items: [{
+      kind: "TypeDeclaration",
+      name: { kind: "Identifier", value: "User" },
+      members: [{
+        kind: "PropertyDeclaration",
+        name: { kind: "Identifier", value: "name" },
+        type: {
+          kind: "TypeRef",
+          name: { kind: "QualifiedName", parts: ["str"] },
+        },
+        required: true,
+        multi: false,
+        constraints: [{
+          kind: "Constraint",
+          name: { kind: "Identifier", value: "max_len_value" },
+          args: [{ kind: "Literal", type: "integer", value: maxLen }],
+        }],
+      }],
+    }],
+  }];
+
+  const oldSchema = makeSchema(255);
+  const newSchema = makeSchema(100);
+
+  const operations = differ.diff(oldSchema, newSchema);
+
+  assertEquals(operations.length, 1);
+  assertEquals(operations[0].kind, "AlterType");
+  const alterType = operations[0] as Types.AlterTypeOperation;
+  const alterProp = alterType.operations[0] as Types.AlterPropertyOperation;
+  // Constraint value change = drop old + add new
+  const addConstraint = alterProp.changes.find(
+    (c: Types.PropertyChange) => c.kind === "AddConstraint",
+  );
+  const dropConstraint = alterProp.changes.find(
+    (c: Types.PropertyChange) => c.kind === "DropConstraint",
+  );
+  assertEquals(addConstraint?.newValue, "max_len_value(100)");
+  assertEquals(dropConstraint?.oldValue, "max_len_value(255)");
+});
+
+// ============================================================
+// Schema Differ: expression on constraint serialization
+// ============================================================
+
+Deno.test("Schema Differ - expression on constraint serialized as expression_on(...)", () => {
+  const differ = new SchemaDiffer();
+
+  const schema: Module[] = [{
+    name: "default",
+    items: [{
+      kind: "TypeDeclaration",
+      name: { kind: "Identifier", value: "Discount" },
+      members: [{
+        kind: "PropertyDeclaration",
+        name: { kind: "Identifier", value: "percentage" },
+        type: {
+          kind: "TypeRef",
+          name: { kind: "QualifiedName", parts: ["float64"] },
+        },
+        required: true,
+        multi: false,
+        constraints: [{
+          kind: "Constraint",
+          name: { kind: "Identifier", value: "expression" },
+          on: {
+            kind: "BinaryOp",
+            op: "AND",
+            left: {
+              kind: "BinaryOp",
+              op: ">=",
+              left: {
+                kind: "PathExpression",
+                path: ["__subject__"],
+              },
+              right: { kind: "Literal", type: "integer", value: 0 },
+            },
+            right: {
+              kind: "BinaryOp",
+              op: "<=",
+              left: {
+                kind: "PathExpression",
+                path: ["__subject__"],
+              },
+              right: { kind: "Literal", type: "integer", value: 100 },
+            },
+          },
+        }],
+      }],
+    }],
+  }];
+
+  const operations = differ.diff([], schema);
+  const createOp = operations[0] as Types.CreateTypeOperation;
+  const constraint = createOp.properties[0].constraints[0];
+
+  // Should be serialized as expression_on(...)
+  assertEquals(constraint.startsWith("expression_on("), true);
+  assertStringIncludes(constraint, "__subject__");
+});
+
+// ============================================================
+// DDL: AddConstraint/DropConstraint on AlterProperty
+// ============================================================
+
+Deno.test("DDL Generator - AddConstraint generates ALTER TABLE ADD CONSTRAINT", () => {
+  const generator = new DDLGenerator();
+  const operation: Types.AlterTypeOperation = {
+    kind: "AlterType",
+    typeName: "User",
+    operations: [
+      {
+        kind: "AlterProperty",
+        propertyName: "age",
+        changes: [{
+          kind: "AddConstraint",
+          newValue: "min_value(0)",
+        }],
+      } as Types.AlterPropertyOperation,
+    ],
+  };
+
+  const statements = generator.generateDDL([operation]);
+  const checkStatements = statements.filter((s) => s.includes("CHECK"));
+
+  assertEquals(checkStatements.length, 1);
+  assertStringIncludes(checkStatements[0], "ADD CONSTRAINT");
+  assertStringIncludes(checkStatements[0], "CHECK (age >= 0)");
+});
+
+Deno.test("DDL Generator - DropConstraint generates ALTER TABLE DROP CONSTRAINT", () => {
+  const generator = new DDLGenerator();
+  const operation: Types.AlterTypeOperation = {
+    kind: "AlterType",
+    typeName: "User",
+    operations: [
+      {
+        kind: "AlterProperty",
+        propertyName: "age",
+        changes: [{
+          kind: "DropConstraint",
+          oldValue: "min_value(0)",
+        }],
+      } as Types.AlterPropertyOperation,
+    ],
+  };
+
+  const statements = generator.generateDDL([operation]);
+  const dropStatements = statements.filter((s) =>
+    s.includes("DROP CONSTRAINT")
+  );
+
+  assertEquals(dropStatements.length, 1);
+  assertStringIncludes(dropStatements[0], "DROP CONSTRAINT IF EXISTS");
+  assertStringIncludes(dropStatements[0], "chk_user_age_min_value_0_");
+});
