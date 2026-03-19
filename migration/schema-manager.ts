@@ -26,6 +26,7 @@ import {
   LinkDef,
   PropertyConstraint,
   PropertyDef,
+  RewriteDef,
   Schema,
   TriggerDef,
   TypeDef,
@@ -252,6 +253,15 @@ export class SchemaManager {
             propDecl.constraints,
           );
 
+          // Extract rewrites from the property declaration
+          const rewrites: RewriteDef[] | undefined =
+            propDecl.rewrites && propDecl.rewrites.length > 0
+              ? propDecl.rewrites.map((r) => ({
+                events: [...r.events],
+                body: r.using,
+              }))
+              : undefined;
+
           properties.set(propName, {
             name: propName,
             type: sqlType,
@@ -263,6 +273,7 @@ export class SchemaManager {
             hasDefault: propDecl.default !== undefined,
             computed: propDecl.computed !== undefined,
             constraints,
+            rewrites,
           });
         }
 

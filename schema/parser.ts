@@ -389,6 +389,7 @@ export class SDLParser {
     if (this.match(TokenType.LBRACE)) {
       const constraints: AST.Constraint[] = [];
       const annotations: AST.Annotation[] = [];
+      const rewrites: AST.RewriteDeclaration[] = [];
 
       while (!this.check(TokenType.RBRACE) && !this.isAtEnd()) {
         if (this.match(TokenType.CONSTRAINT)) {
@@ -406,6 +407,8 @@ export class SDLParser {
             TokenType.SEMICOLON,
             "Expected ';' after readonly value",
           );
+        } else if (this.match(TokenType.REWRITE)) {
+          rewrites.push(this.parseRewriteDeclaration());
         } else {
           this.advance(); // Skip unknown tokens
         }
@@ -415,6 +418,7 @@ export class SDLParser {
 
       if (constraints.length > 0) property.constraints = constraints;
       if (annotations.length > 0) property.annotations = annotations;
+      if (rewrites.length > 0) property.rewrites = rewrites;
     } else {
       this.consume(
         TokenType.SEMICOLON,
@@ -772,6 +776,89 @@ export class SDLParser {
     } while (this.match(TokenType.COMMA));
 
     return events;
+  }
+
+  private parseRewriteDeclaration(): AST.RewriteDeclaration {
+    // Parse comma-separated events: insert and/or update
+    const events: AST.RewriteEvent[] = [];
+
+    do {
+      if (this.match(TokenType.INSERT)) {
+        events.push("insert");
+      } else if (this.match(TokenType.UPDATE)) {
+        events.push("update");
+      } else if (this.check(TokenType.IDENT)) {
+        const val = this.peek().value;
+        if (val === "insert" || val === "update") {
+          events.push(val as AST.RewriteEvent);
+          this.advance();
+        } else {
+          throw this.error(
+            `Expected rewrite event (insert, update), got '${val}'`,
+          );
+        }
+      } else {
+        throw this.error(
+          `Expected rewrite event (insert, update), got '${this.peek().value}'`,
+        );
+      }
+    } while (this.match(TokenType.COMMA));
+
+    // Parse contextual "using" keyword
+    if (this.match(TokenType.USING)) {
+      // Matched the USING keyword token
+    } else if (
+      this.check(TokenType.IDENT) && this.peek().value === "using"
+    ) {
+      this.advance();
+    } else {
+      throw this.error(
+        `Expected 'using' after rewrite events, got '${this.peek().value}'`,
+      );
+    }
+
+    // Parse the expression in parentheses
+    this.consume(TokenType.LPAREN, "Expected '(' after 'using'");
+
+    // Collect the expression text between the parens
+    let parenDepth = 1;
+    const exprTokens: string[] = [];
+
+    while (!this.isAtEnd() && parenDepth > 0) {
+      const token = this.peek();
+
+      if (token.type === TokenType.LPAREN) {
+        parenDepth++;
+        exprTokens.push(token.value);
+        this.advance();
+      } else if (token.type === TokenType.RPAREN) {
+        parenDepth--;
+        if (parenDepth === 0) {
+          break;
+        }
+        exprTokens.push(token.value);
+        this.advance();
+      } else {
+        exprTokens.push(token.value);
+        this.advance();
+      }
+    }
+
+    this.consume(
+      TokenType.RPAREN,
+      "Expected ')' after rewrite expression",
+    );
+
+    this.consume(
+      TokenType.SEMICOLON,
+      "Expected ';' after rewrite declaration",
+    );
+
+    return {
+      kind: "RewriteDeclaration",
+      events,
+      using: exprTokens.join(""),
+    };
   }
 
   private parseFunctionParameters(): AST.FunctionParameter[] {

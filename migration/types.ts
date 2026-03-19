@@ -100,6 +100,23 @@ export interface DropTriggerOperation extends TypeOperation {
   triggerName: string;
 }
 
+export interface RewriteDefinition {
+  events: ("insert" | "update")[];
+  body: string;
+}
+
+export interface AddRewriteOperation extends TypeOperation {
+  kind: "AddRewrite";
+  propertyName: string;
+  rewrite: RewriteDefinition;
+}
+
+export interface DropRewriteOperation extends TypeOperation {
+  kind: "DropRewrite";
+  propertyName: string;
+  events: ("insert" | "update")[];
+}
+
 // DDL operations
 export interface CreateTableOperation extends MigrationOperation {
   kind: "CreateTable";
@@ -170,6 +187,7 @@ export interface PropertyDefinition {
   computed?: string; // Expression string for computed properties (virtual, evaluated at query time)
   constraints: string[];
   annotations: Record<string, any>;
+  rewrites?: RewriteDefinition[];
 }
 
 export interface LinkDefinition {
@@ -407,5 +425,29 @@ export function dropTriggerOperation(
   return {
     kind: "DropTrigger",
     triggerName,
+  };
+}
+
+export function createAddRewriteOperation(
+  _typeName: string,
+  propertyName: string,
+  rewrite: RewriteDefinition,
+): AddRewriteOperation {
+  return {
+    kind: "AddRewrite",
+    propertyName,
+    rewrite,
+  };
+}
+
+export function createDropRewriteOperation(
+  _typeName: string,
+  propertyName: string,
+  events: ("insert" | "update")[],
+): DropRewriteOperation {
+  return {
+    kind: "DropRewrite",
+    propertyName,
+    events,
   };
 }

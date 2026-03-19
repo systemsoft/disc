@@ -281,6 +281,14 @@ export class SchemaValidator {
         this.validateConstraint(constraint, propertyType);
       }
     }
+
+    // Validate rewrites
+    if (property.rewrites) {
+      const seenEvents = new Set<string>();
+      for (const rewrite of property.rewrites) {
+        this.validateRewrite(rewrite, property.name.value, seenEvents);
+      }
+    }
   }
 
   private validateLink(link: AST.LinkDeclaration): void {
@@ -464,6 +472,45 @@ export class SchemaValidator {
 
     // Validate body expression
     this.validateExpression(trigger.body);
+  }
+
+  private validateRewrite(
+    rewrite: AST.RewriteDeclaration,
+    propertyName: string,
+    seenEvents: Set<string>,
+  ): void {
+    // Validate events are non-empty
+    if (rewrite.events.length === 0) {
+      this.addError(
+        `Rewrite on property '${propertyName}' must specify at least one event`,
+      );
+    }
+
+    // Validate events are only "insert" or "update"
+    for (const event of rewrite.events) {
+      if (event !== "insert" && event !== "update") {
+        this.addError(
+          `Invalid rewrite event '${event}' on property '${propertyName}'; expected 'insert' or 'update'`,
+        );
+      }
+    }
+
+    // Check for duplicate events across rewrites on the same property
+    for (const event of rewrite.events) {
+      if (seenEvents.has(event)) {
+        this.addError(
+          `Duplicate rewrite event '${event}' on property '${propertyName}'`,
+        );
+      }
+      seenEvents.add(event);
+    }
+
+    // Validate using expression is non-empty
+    if (!rewrite.using || rewrite.using.trim() === "") {
+      this.addError(
+        `Rewrite on property '${propertyName}' must have a 'using' expression`,
+      );
+    }
   }
 
   private validateTypeRef(typeRef: AST.TypeRef): void {

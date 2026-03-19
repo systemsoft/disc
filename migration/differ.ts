@@ -182,7 +182,8 @@ export class SchemaDiffer {
 
     for (const member of typeDef.members) {
       if (member.kind === "PropertyDeclaration") {
-        properties.push({
+        const rewrites = this.extractRewrites(member);
+        const propDef: Types.PropertyDefinition = {
           name: member.name.value,
           type: this.typeToString(member.type),
           required: member.required || false,
@@ -195,7 +196,11 @@ export class SchemaDiffer {
             : undefined,
           constraints: this.extractConstraints(member.constraints || []),
           annotations: this.extractAnnotations(member.annotations || []),
-        });
+        };
+        if (rewrites.length > 0) {
+          propDef.rewrites = rewrites;
+        }
+        properties.push(propDef);
       }
     }
 
@@ -244,12 +249,34 @@ export class SchemaDiffer {
     newType: AST.TypeDeclaration,
   ): Types.TypeOperation[] {
     const operations: Types.TypeOperation[] = [];
+    const typeName = oldType.name.value;
 
     // Diff properties
     const oldProps = this.extractProperties(oldType);
     const newProps = this.extractProperties(newType);
 
     operations.push(...this.diffProperties(oldProps, newProps));
+
+    // Diff rewrites for properties that exist in both old and new schemas
+    const oldPropsMap = new Map(oldProps.map((p) => [p.name, p]));
+    const newPropsMap = new Map(newProps.map((p) => [p.name, p]));
+
+    for (const [propName, newProp] of newPropsMap) {
+      const oldProp = oldPropsMap.get(propName);
+      if (oldProp) {
+        operations.push(
+          ...this.diffRewrites(
+            typeName,
+            propName,
+            oldProp.rewrites || [],
+            newProp.rewrites || [],
+          ),
+        );
+      }
+    }
+
+    // For newly added properties, rewrites are included in the PropertyDefinition
+    // For dropped properties, rewrites are implicitly removed with the property
 
     // Diff links
     const oldLinks = this.extractLinks(oldType);
@@ -262,7 +289,7 @@ export class SchemaDiffer {
     const newTriggers = this.extractTriggers(newType);
 
     operations.push(
-      ...this.diffTriggers(oldType.name.value, oldTriggers, newTriggers),
+      ...this.diffTriggers(typeName, oldTriggers, newTriggers),
     );
 
     return operations;
@@ -476,6 +503,90 @@ export class SchemaDiffer {
         if (timingChanged || eventsChanged || scopeChanged || bodyChanged) {
           operations.push(Types.dropTriggerOperation(typeName, triggerName));
           operations.push(Types.addTriggerOperation(typeName, newTrigger));
+        }
+      }
+    }
+
+    return operations;
+  }
+
+  private extractRewrites(
+    propDecl: AST.PropertyDeclaration,
+  ): Types.RewriteDefinition[] {
+    const rewrites: Types.RewriteDefinition[] = [];
+
+    if (propDecl.rewrites) {
+      for (const rewrite of propDecl.rewrites) {
+        rewrites.push({
+          events: [...rewrite.events],
+          body: rewrite.using,
+        });
+      }
+    }
+
+    return rewrites;
+  }
+
+  private diffRewrites(
+    typeName: string,
+    propertyName: string,
+    oldRewrites: Types.RewriteDefinition[],
+    newRewrites: Types.RewriteDefinition[],
+  ): Types.TypeOperation[] {
+    const operations: Types.TypeOperation[] = [];
+
+    // Key rewrites by their sorted event set for comparison
+    const eventKey = (events: ("insert" | "update")[]): string =>
+      [...events].sort().join(",");
+
+    const oldRewritesMap = new Map(
+      oldRewrites.map((r) => [eventKey(r.events), r]),
+    );
+    const newRewritesMap = new Map(
+      newRewrites.map((r) => [eventKey(r.events), r]),
+    );
+
+    // Added rewrites
+    for (const [key, rewriteDef] of newRewritesMap) {
+      if (!oldRewritesMap.has(key)) {
+        operations.push(
+          Types.createAddRewriteOperation(typeName, propertyName, rewriteDef),
+        );
+      }
+    }
+
+    // Removed rewrites
+    for (const [key, rewriteDef] of oldRewritesMap) {
+      if (!newRewritesMap.has(key)) {
+        operations.push(
+          Types.createDropRewriteOperation(
+            typeName,
+            propertyName,
+            rewriteDef.events,
+          ),
+        );
+      }
+    }
+
+    // Modified rewrites — drop old + add new (rewrites can't be altered in place)
+    for (const [key, newRewrite] of newRewritesMap) {
+      const oldRewrite = oldRewritesMap.get(key);
+      if (oldRewrite) {
+        if (oldRewrite.body !== newRewrite.body) {
+          operations.push(
+            Types.createDropRewriteOperation(
+              typeName,
+              propertyName,
+              oldRewrite.events,
+            ),
+          );
+          operations.push(
+            Types.createAddRewriteOperation(
+              typeName,
+              propertyName,
+              newRewrite,
+            ),
+          );
         }
       }
     }

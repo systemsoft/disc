@@ -103,6 +103,15 @@ export interface TriggerDeclaration extends SDLNode {
   body: Expression;
 }
 
+// Rewrite types
+export type RewriteEvent = "insert" | "update";
+
+export interface RewriteDeclaration extends SDLNode {
+  kind: "RewriteDeclaration";
+  events: RewriteEvent[];
+  using: string;
+}
+
 // Type members
 export type TypeMember =
   | PropertyDeclaration
@@ -127,6 +136,7 @@ export interface PropertyDeclaration extends SDLNode {
   default?: Expression;
   constraints?: Constraint[];
   annotations?: Annotation[];
+  rewrites?: RewriteDeclaration[];
 }
 
 // Link declaration

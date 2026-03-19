@@ -40,6 +40,11 @@ export interface TriggerDef {
   body: string;
 }
 
+export interface RewriteDef {
+  events: ("insert" | "update")[];
+  body: string;
+}
+
 export interface TypeDef {
   name: string;
   kind: "object" | "scalar" | "enum";
@@ -82,6 +87,8 @@ export interface PropertyDef {
   computed?: boolean;
   /** Constraints applied to this property (e.g., exclusive, max_length) */
   constraints?: PropertyConstraint[];
+  /** Rewrite rules for insert/update operations */
+  rewrites?: RewriteDef[];
 }
 
 export interface LinkDef {

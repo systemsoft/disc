@@ -240,17 +240,18 @@ Tasks:
 **Goal**: Support `rewrite` declarations in SDL for auto-computed values on INSERT/UPDATE
 **Success Criteria**: Rewrite rules execute transparently during mutations
 **Tests**: SDL parsing, DDL generation, PG E2E
-**Status**: Not Started
+**Status**: Complete
 
 Tasks:
-- [ ] Add rewrite AST nodes: events (insert/update), target property, expression
-- [ ] Update SDL parser for rewrite syntax:
-  ```
-  rewrite insert, update using (datetime_current())
-  ```
-- [ ] Compile rewrites to PG trigger-based approach or DEFAULT/GENERATED ALWAYS AS
-- [ ] Migration differ: detect rewrite add/remove/change
-- [ ] PG E2E: auto-set `updated_at` on update, `created_at` on insert
+- [x] Add REWRITE token to schema/tokens.ts, RewriteDeclaration AST node to schema/ast.ts
+- [x] Update SDL parser for rewrite syntax in parsePropertyBody() (parseRewriteDeclaration)
+- [x] Update schema validator (duplicate events, invalid events, empty expression)
+- [x] Add RewriteDefinition, AddRewriteOperation, DropRewriteOperation to migration/types.ts
+- [x] Migration differ: extractRewrites(), diffRewrites() with drop+add for modifications
+- [x] DDL generation: BEFORE trigger + PL/pgSQL function, datetime_of_statement→statement_timestamp substitution
+- [x] RewriteDef on PropertyDef (compiler/context.ts), SchemaManager rewrite extraction
+- [x] 26 unit tests (migration/rewrite.test.ts): parser, validator, differ, DDL, end-to-end
+- [x] 5 PG E2E tests (migration/pg-rewrite.test.ts): INSERT/UPDATE/combined rewrites, __old__ reference, DDLGenerator output
 
 ---
 

@@ -278,6 +278,17 @@ export class DDLGenerator {
       }
     }
 
+    // Generate rewrite rules (property-level triggers)
+    for (const property of operation.properties) {
+      if (property.rewrites) {
+        for (const rewrite of property.rewrites) {
+          statements.push(
+            ...this.generateCreateRewrite(tableName, property.name, rewrite),
+          );
+        }
+      }
+    }
+
     return statements;
   }
 
@@ -344,6 +355,22 @@ export class DDLGenerator {
           tableName,
           (operation as Types.DropTriggerOperation).triggerName,
         );
+      case "AddRewrite": {
+        const addRewriteOp = operation as Types.AddRewriteOperation;
+        return this.generateCreateRewrite(
+          tableName,
+          addRewriteOp.propertyName,
+          addRewriteOp.rewrite,
+        );
+      }
+      case "DropRewrite": {
+        const dropRewriteOp = operation as Types.DropRewriteOperation;
+        return this.generateDropRewrite(
+          tableName,
+          dropRewriteOp.propertyName,
+          dropRewriteOp.events,
+        );
+      }
       default:
         throw new Error(`Unsupported type operation: ${operation.kind}`);
     }
@@ -1112,6 +1139,74 @@ export class DDLGenerator {
   }
 
   // ========================================
+  // Rewrite DDL Generation Methods
+  // ========================================
+
+  /**
+   * Generate a PL/pgSQL trigger function and CREATE TRIGGER for a rewrite rule.
+   * Rewrite rules automatically set a column value BEFORE INSERT/UPDATE.
+   */
+  private generateCreateRewrite(
+    tableName: string,
+    propertyName: string,
+    rewrite: Types.RewriteDefinition,
+  ): string[] {
+    const fnName = `${tableName}__${propertyName}__rewrite_fn`;
+    const triggerName = `${tableName}__${propertyName}__rewrite`;
+
+    // Compile the rewrite body expression with variable substitutions
+    const compiledExpr = this.compileRewriteExpression(rewrite.body);
+
+    // Build event list from rewrite events
+    const eventList = rewrite.events.map((e) => e.toUpperCase()).join(" OR ");
+
+    return [
+      `CREATE OR REPLACE FUNCTION ${
+        this.escapeIdentifier(fnName)
+      }() RETURNS TRIGGER AS $$ BEGIN NEW.${
+        this.escapeIdentifier(propertyName)
+      } := ${compiledExpr}; RETURN NEW; END; $$ LANGUAGE plpgsql;`,
+      `CREATE TRIGGER ${
+        this.escapeIdentifier(triggerName)
+      } BEFORE ${eventList} ON ${
+        this.escapeIdentifier(tableName)
+      } FOR EACH ROW EXECUTE FUNCTION ${this.escapeIdentifier(fnName)}();`,
+    ];
+  }
+
+  /**
+   * Generate DROP statements for a rewrite rule's trigger and function.
+   */
+  private generateDropRewrite(
+    tableName: string,
+    propertyName: string,
+    _events: ("insert" | "update")[],
+  ): string[] {
+    const triggerName = `${tableName}__${propertyName}__rewrite`;
+    const fnName = `${tableName}__${propertyName}__rewrite_fn`;
+
+    return [
+      `DROP TRIGGER IF EXISTS ${this.escapeIdentifier(triggerName)} ON ${
+        this.escapeIdentifier(tableName)
+      };`,
+      `DROP FUNCTION IF EXISTS ${this.escapeIdentifier(fnName)}();`,
+    ];
+  }
+
+  /**
+   * Compile a rewrite body expression by substituting EdgeQL builtins
+   * with their PostgreSQL equivalents.
+   */
+  private compileRewriteExpression(body: string): string {
+    return body
+      .replace(/datetime_of_statement\(\)/g, "statement_timestamp()")
+      .replace(/datetime_current\(\)/g, "now()")
+      .replace(/datetime_of_transaction\(\)/g, "transaction_timestamp()")
+      .replace(/__subject__/g, "NEW")
+      .replace(/__old__/g, "OLD");
+  }
+
+  // ========================================
   // Rollback DDL Generation Methods
   // ========================================
 
@@ -1202,6 +1297,25 @@ export class DDLGenerator {
           `-- The original trigger body was lost when it was dropped.`,
           `-- Please refer to backup or documentation for the original trigger definition.`,
         ];
+      case "AddRewrite": {
+        // Rollback AddRewrite = DropRewrite
+        const addRewriteOp = operation as Types.AddRewriteOperation;
+        return this.generateDropRewrite(
+          tableName,
+          addRewriteOp.propertyName,
+          addRewriteOp.rewrite.events,
+        );
+      }
+      case "DropRewrite": {
+        // Can't restore rewrite body from just the property name and events
+        const dropRewriteOp = operation as Types.DropRewriteOperation;
+        return [
+          `-- MANUAL ROLLBACK REQUIRED: Recreate rewrite rule for property '${dropRewriteOp.propertyName}' on table '${tableName}'`,
+          `-- Events: ${dropRewriteOp.events.join(", ")}`,
+          `-- The original rewrite body was lost when it was dropped.`,
+          `-- Please refer to backup or documentation for the original rewrite definition.`,
+        ];
+      }
       default:
         throw new Error(
           `Unsupported rollback type operation: ${operation.kind}`,
