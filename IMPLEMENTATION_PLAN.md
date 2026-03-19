@@ -1,122 +1,403 @@
 # Disc Database — Implementation Plan
 
-> Last Updated: 2026-03-17
-> Status: Core Complete — Future Phases
+> Last Updated: 2026-03-19
+> Status: Gel Parity — Tiers 1-3
+> Gap Analysis: `thoughts/shared/plans/2026-03-19-gel-parity-gap-analysis.md`
 
-## Completed Work (Phases 1-9)
+## Completed Work (Phases 1-24)
 
-All core database integration and production infrastructure is complete. 724 tests passing.
+All core database integration and production infrastructure is complete. 1365 tests passing.
 
-- Phase 1: Fix core execution path (compiler, type errors)
-- Phase 2: Database integration (real PG execution, connection pooling, transactions)
-- Phase 3: CLI integration (SchemaManager, migrate, serve, codegen wiring)
-- Phase 4: Query compilation integration (built-in functions, backlinks, schema reload)
-- Phase 5: Auth system integration (JWT, PgDatabaseAdapter, server lifecycle)
-- Phase 6: Access policies integration (SDL adapter, RLS, auth-access bridge)
-- Phase 6b: Real PG access policy E2E tests
-- Phase 7: Query compilation cache and observability (LRU cache, per-query metrics, slow query logging)
-- Phase 8: Production hardening (error propagation, graceful shutdown, timeouts, health checks)
-- Phase 9: Production infrastructure (rate limiting, structured logging, TLS, metrics, EXPLAIN cache, deployment guide)
+- Phases 1-9: Core execution, PG integration, CLI, auth, access policies, caching, production hardening
+- Phases 10-15: Advanced queries, extensions, client SDK, codegen, CLI docs
+- Phases 16-19: Deployment tooling, production E2E tests
+- Phases 20-24: Advanced expressions, junction tables, polymorphism, multi-database, introspection
 
 ---
 
-## Stage 10: Client SDK
+## Tier 1: Blocks Any Migration
 
-**Goal**: TypeScript client library for Disc
-**Success Criteria**: Published package with type-safe queries
+These features are used in nearly every real-world Gel application.
+
+### Stage 25: Built-in Constraints
+
+**Goal**: Support all standard Gel constraints in SDL, validation, and DDL
+**Success Criteria**: Schema files using these constraints parse, validate, and generate correct CHECK/UNIQUE DDL
+**Tests**: SDL parsing, validation, DDL generation, PG E2E for each constraint type
 **Status**: Not Started
 
-### Tasks
-
-- [ ] Design client API surface (`createClient`, `query`, `execute`, `transaction`)
-- [ ] Implement connection handling (HTTP + WebSocket)
-- [ ] Add query builder with TypeScript types from `disc codegen` output
-- [ ] Connection pooling and automatic retries
-- [ ] Type-safe result mapping
-- [ ] Publish to JSR
+Tasks:
+- [ ] Add constraint types to schema AST: `max_len_value`, `min_len_value`, `max_value`, `min_value`, `max_ex_value`, `min_ex_value`, `one_of`, `expression on`
+- [ ] Update SDL parser to handle constraint arguments (single value and multi-value)
+- [ ] Update schema validator to type-check constraint arguments against property types
+- [ ] Update DDL generator to emit correct CHECK constraints:
+  - `max_len_value(n)` → `CHECK (LENGTH(col) <= n)`
+  - `min_len_value(n)` → `CHECK (LENGTH(col) >= n)`
+  - `max_value(v)` → `CHECK (col <= v)`
+  - `min_value(v)` → `CHECK (col >= v)`
+  - `max_ex_value(v)` → `CHECK (col < v)`
+  - `min_ex_value(v)` → `CHECK (col > v)`
+  - `one_of(...)` → `CHECK (col IN (...))`
+  - `expression on (expr)` → `CHECK (expr)`
+- [ ] Update migration differ to detect constraint changes
+- [ ] Add delegated constraint support (inherited by subtypes)
+- [ ] PG E2E tests: insert valid/invalid data against each constraint type
 
 ---
 
-## Stage 11: Performance Benchmarking
+### Stage 26: Calendar Types
 
-**Goal**: Establish baselines and optimize critical paths
-**Success Criteria**: Documented benchmarks, optimized hot paths
+**Goal**: Support all `cal::` types throughout the stack
+**Success Criteria**: SDL properties with cal types parse, compile to correct PG types, and round-trip through queries
+**Tests**: SDL parsing, type resolution, DDL generation, query compilation, PG E2E
 **Status**: Not Started
 
-### Tasks
-
-- [ ] Benchmark query compilation throughput (queries/sec)
-- [ ] Benchmark connection pool under load
-- [ ] Profile EdgeQL parsing for large queries
-- [ ] Benchmark migration diffing for complex schemas
-- [ ] Identify and optimize hot paths
-- [ ] Document performance baselines
+Tasks:
+- [ ] Add types to type system: `cal::local_date`, `cal::local_time`, `cal::local_datetime`, `cal::relative_duration`, `cal::date_duration`
+- [ ] Update SDL parser to resolve `cal::` module-qualified types
+- [ ] Map to PostgreSQL types:
+  - `cal::local_date` → `DATE`
+  - `cal::local_time` → `TIME WITHOUT TIME ZONE`
+  - `cal::local_datetime` → `TIMESTAMP WITHOUT TIME ZONE`
+  - `cal::relative_duration` → `INTERVAL`
+  - `cal::date_duration` → `INTERVAL`
+- [ ] Update DDL generator for cal type columns
+- [ ] Update codegen to emit TypeScript types (Date, string, etc.)
+- [ ] Add cal conversion functions to built-in functions (see Stage 28)
+- [ ] PG E2E: insert/select/filter with each cal type
 
 ---
 
-## Stage 12: Advanced Query Features
+### Stage 27: Built-in Functions — Complete Standard Library
 
-**Goal**: Expand EdgeQL compilation coverage
-**Success Criteria**: GROUP BY, CTEs, window functions, FOR loops
+**Goal**: Implement all missing Gel standard library functions
+**Success Criteria**: All Gel std functions compile to correct SQL and execute against PG
+**Tests**: Unit tests per function, PG E2E for each category
 **Status**: Not Started
 
-### Tasks
+Tasks (by category):
 
-- [ ] Aggregate functions and GROUP BY compilation
-- [ ] WITH clauses / Common Table Expressions
-- [ ] Window functions (row_number, rank, etc.)
-- [ ] FOR loops and set operations
-- [ ] LIMIT/OFFSET optimization
-- [ ] Polymorphic queries (type intersection)
+**String functions**:
+- [ ] `str_title` → `INITCAP`
+- [ ] `str_split` → `STRING_TO_ARRAY`
+- [ ] `str_starts_with` → `STARTS_WITH` (PG 15+) or `LEFT(s, LENGTH(prefix)) = prefix`
+- [ ] `str_ends_with` → `RIGHT(s, LENGTH(suffix)) = suffix`
+
+**Math functions** (module-qualified `math::`):
+- [ ] `math::sqrt` → `SQRT`
+- [ ] `math::pow` → `POWER`
+- [ ] `math::log` → `LOG`
+- [ ] `math::ln` → `LN`
+- [ ] `math::pi` → `PI()`
+- [ ] `math::e` → `EXP(1)` (compile as literal)
+- [ ] `math::mean` → alias for `AVG`
+
+**Regex functions**:
+- [ ] `re_match` → `REGEXP_MATCH`
+- [ ] `re_match_all` → `REGEXP_MATCHES(..., 'g')`
+- [ ] `re_replace` → `REGEXP_REPLACE`
+- [ ] `re_test` → `expr ~ pattern` (boolean)
+
+**Datetime functions**:
+- [ ] `datetime_get` → `EXTRACT(field FROM val)`
+- [ ] `datetime_of_transaction` → `TRANSACTION_TIMESTAMP()`
+- [ ] `datetime_truncate` → `DATE_TRUNC(field, val)`
+- [ ] `to_datetime` → `CAST(val AS TIMESTAMPTZ)`
+- [ ] `to_duration` → `CAST(val AS INTERVAL)`
+
+**Calendar conversion functions**:
+- [ ] `cal::to_local_date` → `CAST(val AS DATE)`
+- [ ] `cal::to_local_time` → `CAST(val AS TIME)`
+- [ ] `cal::to_local_datetime` → `CAST(val AS TIMESTAMP)`
+
+**JSON functions**:
+- [ ] `to_json` → `TO_JSONB`
+- [ ] `json_typeof` → `JSONB_TYPEOF`
+- [ ] `json_array_unpack` → `JSONB_ARRAY_ELEMENTS`
+- [ ] `json_object_unpack` → `JSONB_EACH`
+- [ ] `json_get` → `->` / `->>`
+
+**Array functions**:
+- [ ] `array_get` → `arr[n+1]` (adjust for 1-indexing)
+- [ ] `array_unpack` → `UNNEST`
+- [ ] `array_join` → `ARRAY_TO_STRING`
+
+**Type converter functions**:
+- [ ] `to_int16` → `CAST AS smallint`
+- [ ] `to_int32` → `CAST AS integer`
+- [ ] `to_float32` → `CAST AS real`
+- [ ] `to_bigint` → `CAST AS numeric`
+- [ ] `to_decimal` → `CAST AS numeric`
+- [ ] `to_bool` → `CAST AS boolean`
+- [ ] `to_uuid` → `CAST AS uuid`
+
+**UUID functions**:
+- [ ] `uuid_generate_v4` → `gen_random_uuid()`
+
+**Generic set functions**:
+- [ ] `any` → `BOOL_OR`
+- [ ] `all` → `BOOL_AND`
+- [ ] `exists` → `EXISTS(subquery)`
+- [ ] `enumerate` → `ROW_NUMBER() OVER ()` paired with value
+- [ ] `distinct` → function-form wrapping DISTINCT
+
+**Sequence functions**:
+- [ ] `sequence_next` → `NEXTVAL`
+- [ ] `sequence_reset` → `SETVAL`
 
 ---
 
-## Stage 13: Extension System
+### Stage 28: Indexing & Slicing Expressions
 
-**Goal**: Modular extension framework
-**Success Criteria**: OAuth extension working, extension install/uninstall lifecycle
+**Goal**: Support `[]` indexing and `[start:end]` slicing on strings, arrays, JSON, and bytes
+**Success Criteria**: Gel-compatible indexing/slicing compiles and executes correctly
+**Tests**: Unit tests per type, PG E2E
 **Status**: Not Started
 
-### Tasks
-
-- [ ] Design extension interface (install, uninstall, getFunctions, getTypes)
-- [ ] OAuth 2.0 providers (Google, GitHub, Apple)
-- [ ] WebAuthn / passkey support
-- [ ] AI extension (`ext::ai` equivalent)
-- [ ] Vector search (`pgvector` integration)
-- [ ] Full-text search extension
+Tasks:
+- [ ] Add `IndexExpression` and `SliceExpression` AST nodes to EdgeQL parser
+- [ ] Parse `expr[index]` and `expr[start:end]` syntax
+- [ ] Compile string slicing: `str[a:b]` → `SUBSTRING(str FROM a+1 FOR b-a)`
+- [ ] Compile array indexing: `arr[n]` → `arr[n+1]` (PG is 1-indexed)
+- [ ] Compile array slicing: `arr[a:b]` → `arr[a+1:b+1]`
+- [ ] Compile JSON indexing: `json['key']` → `json->'key'`, `json[n]` → `json->n`
+- [ ] Compile bytes slicing: `bytes[a:b]` → `SUBSTRING(bytes FROM a+1 FOR b-a)`
+- [ ] Handle negative indices (Gel supports `str[-1]`)
+- [ ] PG E2E tests for each type
 
 ---
 
-## Stage 14: Operational Tooling
+### Stage 29: Multiple Inheritance
 
-**Goal**: Production operations support
-**Success Criteria**: Backup/restore, replication awareness
+**Goal**: Support `type X extending A, B, C` in SDL
+**Success Criteria**: Types extending multiple parents inherit all properties/links, DDL creates correct table structure
+**Tests**: SDL parsing, validation, DDL generation, query compilation, PG E2E
 **Status**: Not Started
 
-### Tasks
-
-- [ ] `disc backup create` / `disc backup restore`
-- [ ] Read replica connection routing
-- [ ] Multi-tenancy (schema-per-tenant isolation)
-- [ ] `disc pg upgrade` for major version upgrades
-- [ ] Container images (Docker) and Kubernetes manifests
+Tasks:
+- [ ] Update SDL parser to accept comma-separated extends list
+- [ ] Update schema validator for multiple parent resolution (property merging, conflict detection)
+- [ ] Define conflict resolution rules (diamond problem — same property from two parents)
+- [ ] Update DDL generator: multiple inheritance → single PG table with union of all parent columns
+- [ ] Update compiler type resolution: walk multiple parent chains
+- [ ] Update migration differ for multi-parent changes
+- [ ] Update codegen to emit TypeScript interfaces with intersection types
+- [ ] PG E2E: types extending 2-3 parents, query with filters on inherited properties
 
 ---
 
-## Stage 15: Binary Protocol
+### Stage 30: Type Converter Functions
 
-**Goal**: Gel client compatibility (stretch goal)
-**Success Criteria**: Existing Gel TypeScript client connects to Disc
+**Goal**: Complete all `to_*` cast functions
+**Success Criteria**: All Gel cast functions compile correctly
+**Tests**: Unit + PG E2E per function
 **Status**: Not Started
 
-### Tasks
-
-- [ ] Implement Gel binary protocol message format
-- [ ] Type descriptor encoding/decoding
-- [ ] SASL authentication handshake
-- [ ] Test with official Gel TypeScript client
+(Merged into Stage 27 — listed separately for tracking)
 
 ---
 
-_This plan covers future work. See `PROJECT_STATE.md` for current status._
+## Tier 2: Blocks Complex Schemas
+
+These features are used in advanced Gel applications and enterprise schemas.
+
+### Stage 31: Triggers
+
+**Goal**: Support trigger definitions in SDL, DDL generation, and PG execution
+**Success Criteria**: Triggers defined in SDL create corresponding PG triggers
+**Tests**: SDL parsing, DDL generation, PG E2E trigger execution
+**Status**: Not Started
+
+Tasks:
+- [ ] Add trigger AST nodes: timing (after/before/deferred), events (insert/update/delete), scope (for each/statement), condition, expression
+- [ ] Update SDL parser for trigger syntax:
+  ```
+  trigger audit_log after insert, update for each do (
+    insert AuditLog { action := __action__, target := __new__ }
+  )
+  ```
+- [ ] Update schema validator (trigger references valid types, expressions type-check)
+- [ ] DDL generation: `CREATE TRIGGER` with PG function wrapping the expression
+- [ ] Compile trigger expression body to SQL function
+- [ ] Migration differ: detect trigger add/remove/change
+- [ ] PG E2E: trigger fires on insert, update, delete; deferred triggers
+
+---
+
+### Stage 32: Rewrite Rules
+
+**Goal**: Support `rewrite` declarations in SDL for auto-computed values on INSERT/UPDATE
+**Success Criteria**: Rewrite rules execute transparently during mutations
+**Tests**: SDL parsing, DDL generation, PG E2E
+**Status**: Not Started
+
+Tasks:
+- [ ] Add rewrite AST nodes: events (insert/update), target property, expression
+- [ ] Update SDL parser for rewrite syntax:
+  ```
+  rewrite insert, update using (datetime_current())
+  ```
+- [ ] Compile rewrites to PG trigger-based approach or DEFAULT/GENERATED ALWAYS AS
+- [ ] Migration differ: detect rewrite add/remove/change
+- [ ] PG E2E: auto-set `updated_at` on update, `created_at` on insert
+
+---
+
+### Stage 33: Expression Aliases
+
+**Goal**: Support `alias` declarations in SDL
+**Success Criteria**: Aliases can be queried as if they were types
+**Tests**: SDL parsing, query compilation, PG E2E
+**Status**: Not Started
+
+Tasks:
+- [ ] Add alias AST node: name, expression (EdgeQL query)
+- [ ] Update SDL parser for alias syntax:
+  ```
+  alias ActiveUsers := (select User filter .active = true)
+  ```
+- [ ] Resolve alias references during query compilation (inline the expression as a CTE)
+- [ ] Migration differ: detect alias add/remove/change
+- [ ] PG E2E: select from alias, filter alias, use alias in WITH
+
+---
+
+### Stage 34: Range & Multirange Types
+
+**Goal**: Support `range<T>` and `multirange<T>` throughout the stack
+**Success Criteria**: Range properties work in SDL, queries, and PG execution
+**Tests**: SDL parsing, DDL, query compilation, PG E2E
+**Status**: Not Started
+
+Tasks:
+- [ ] Add range/multirange to type system with parameterized type support
+- [ ] Map to PG types: `range<int32>` → `int4range`, `range<int64>` → `int8range`, `range<float64>` → `numrange`, `range<datetime>` → `tstzrange`, `range<cal::local_date>` → `daterange`, `range<cal::local_datetime>` → `tsrange`
+- [ ] Add range construction: `range(lower, upper)` → PG range constructor
+- [ ] Add range functions: `range_get_lower`, `range_get_upper`, `range_is_empty`, `range_contains`, `range_overlaps`, `contains` (element in range)
+- [ ] Multirange equivalents
+- [ ] Range operators: `@>`, `<@`, `&&`, `<<`, `>>`, `&<`, `&>`, `-|-`
+- [ ] PG E2E: range creation, containment, overlap queries
+
+---
+
+### Stage 35: Remaining SDL Features
+
+**Goal**: Implement remaining SDL features for complex schemas
+**Success Criteria**: All features parse, validate, and generate correct DDL
+**Tests**: SDL parsing, DDL, PG E2E
+**Status**: Not Started
+
+Tasks:
+- [ ] Collection type properties in SDL: `property tags: array<str>`, `property coords: tuple<float64, float64>`
+  - Map to PG array types and composite types
+- [ ] `on target delete set empty` — clear link when target is deleted
+  - DDL: `ON DELETE SET NULL` for the FK column
+- [ ] `on source delete` — source-side deletion behavior
+  - Implement via PG trigger or CASCADE on reverse FK
+- [ ] Link inheritance — links extending abstract links
+  - Validate link type compatibility, merge link properties
+- [ ] Abstract polymorphic types in function signatures (`anytype`, `anyscalar`, etc.)
+  - Used for generic function overloading resolution
+
+---
+
+## Tier 3: Blocks Client Library Compatibility
+
+### Stage 36: Operators — Bitwise & Regex
+
+**Goal**: Support all Gel operators
+**Success Criteria**: Operators parse and compile to correct PG SQL
+**Tests**: Parser tests, compilation tests, PG E2E
+**Status**: Not Started
+
+Tasks:
+- [ ] Bitwise operators in EdgeQL parser: `&`, `|`, `^`, `<<`, `>>`, `~` (unary NOT)
+- [ ] Compile bitwise to PG: direct mapping (same operators)
+- [ ] Regex match operators: `~` (match), `!~` (not match), `~*` (case-insensitive match), `!~*`
+- [ ] PG E2E: bitwise math, regex filtering
+
+---
+
+### Stage 37: CONFIGURE Queries
+
+**Goal**: Support runtime configuration via EdgeQL
+**Success Criteria**: `CONFIGURE` queries modify PG settings and Disc config
+**Tests**: Parser, compilation, PG E2E
+**Status**: Not Started
+
+Tasks:
+- [ ] Add CONFIGURE AST nodes: scope (SYSTEM/INSTANCE/DATABASE), action (SET/RESET)
+- [ ] Parse `CONFIGURE SYSTEM SET <key> := <value>`
+- [ ] Map config keys to PG `SET` commands or Disc config table
+- [ ] `CONFIGURE DATABASE SET` → database-scoped config
+- [ ] Persist config in `disc_config` table
+- [ ] PG E2E: set and query config values
+
+---
+
+### Stage 38: Complete Binary Protocol
+
+**Goal**: Full compatibility with Gel's wire protocol for existing client libraries
+**Success Criteria**: Official Gel TypeScript/Python client connects to Disc and executes queries
+**Tests**: Protocol message encoding/decoding, client library integration tests
+**Status**: Not Started
+
+Tasks:
+- [ ] Implement all Gel binary protocol message types (reference `reference-gel/edb/protocol/`)
+- [ ] Type descriptor encoding/decoding for all types including cal, range, multirange
+- [ ] SASL/SCRAM-SHA-256 authentication handshake
+- [ ] State synchronization messages
+- [ ] Prepared statement support
+- [ ] Error message format compatibility
+- [ ] Test with `gel-js` official TypeScript client
+- [ ] Test with `gel-python` official Python client
+
+---
+
+### Stage 39: Migration DDL for New Schema Features
+
+**Goal**: DDL generation and diffing for triggers, rewrites, aliases, new constraints
+**Success Criteria**: Migrations correctly handle add/remove/modify of all new schema objects
+**Tests**: Differ tests, DDL generation tests, PG E2E migration round-trips
+**Status**: Not Started
+
+(Tracked within each feature stage above — this stage covers any remaining integration gaps)
+
+Tasks:
+- [ ] Verify migration differ handles all new AST node types
+- [ ] Verify DDL generator emits correct SQL for all new types
+- [ ] Integration test: full schema with triggers, rewrites, aliases, constraints → migrate → verify PG state
+- [ ] Rollback test: ensure all new DDL operations can be reversed
+
+---
+
+## Dependency Graph
+
+```
+Stage 25 (Constraints) ──────────────────────┐
+Stage 26 (Cal Types) ───────────────┐        │
+Stage 27 (Functions) ───────────────┤        │
+Stage 28 (Indexing/Slicing) ────────┤        │
+Stage 29 (Multiple Inheritance) ────┤        │
+                                    ├── Tier 1 Complete
+                                    │
+Stage 31 (Triggers) ────────────────┤
+Stage 32 (Rewrites) ────────────────┤
+Stage 33 (Aliases) ─────────────────┤
+Stage 34 (Range Types) ─────────────┤
+Stage 35 (SDL Features) ────────────┤
+                                    ├── Tier 2 Complete
+                                    │
+Stage 36 (Operators) ───────────────┤
+Stage 37 (CONFIGURE) ───────────────┤
+Stage 38 (Binary Protocol) ─────────┤   Depends on all type
+Stage 39 (Migration DDL) ───────────┤   additions (T1-T7)
+                                    └── Tier 3 Complete
+```
+
+Most stages within a tier are independent and can be parallelized. Stage 38 (Binary Protocol) depends on all type system additions being complete since the protocol must serialize all types.
+
+---
+
+_Gap analysis: `thoughts/shared/plans/2026-03-19-gel-parity-gap-analysis.md`_
+_Previous phases (1-24) are documented in handoffs: `thoughts/shared/handoffs/disc-database/`_
