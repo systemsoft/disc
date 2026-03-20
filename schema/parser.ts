@@ -84,6 +84,10 @@ export class SDLParser {
       return this.parseGlobalDeclaration();
     }
 
+    if (this.match(TokenType.LINK)) {
+      return this.parseAbstractLinkDeclaration(isAbstract);
+    }
+
     if (this.match(TokenType.ANNOTATION)) {
       return this.parseAnnotationDeclaration(isAbstract);
     }
@@ -282,6 +286,70 @@ export class SDLParser {
     return { kind: "AnnotationDeclaration", abstract, name, type };
   }
 
+  private parseAbstractLinkDeclaration(
+    abstract?: boolean,
+  ): AST.LinkDeclaration {
+    const name = this.parseIdentifier();
+
+    // Check for extending clause
+    let extending: AST.TypeRef[] | undefined;
+    if (this.match(TokenType.EXTENDING)) {
+      extending = this.parseTypeRefList();
+    }
+
+    // Abstract link declarations may have no target type (just a body with
+    // properties and constraints), or they may have an arrow target.
+    let target: AST.TypeRef;
+    if (this.match(TokenType.ARROW)) {
+      target = this.parseTypeRef();
+    } else {
+      // No target -- use a placeholder TypeRef
+      target = AST.createTypeRef(AST.createQualifiedName(["std::BaseObject"]));
+    }
+
+    const link: AST.LinkDeclaration = {
+      kind: "LinkDeclaration",
+      name,
+      target,
+      abstract,
+    };
+
+    if (extending && extending.length > 0) {
+      link.extending = extending;
+    }
+
+    if (this.match(TokenType.LBRACE)) {
+      const properties: AST.PropertyDeclaration[] = [];
+      const constraints: AST.Constraint[] = [];
+      const annotations: AST.Annotation[] = [];
+
+      while (!this.check(TokenType.RBRACE) && !this.isAtEnd()) {
+        const propQualifiers = this.parsePointerQualifiers();
+
+        if (this.match(TokenType.PROPERTY)) {
+          properties.push(this.parsePropertyDeclaration(propQualifiers));
+        } else if (this.match(TokenType.CONSTRAINT)) {
+          constraints.push(this.parseConstraint());
+        } else if (this.match(TokenType.ANNOTATION)) {
+          annotations.push(this.parseAnnotation());
+        } else {
+          this.advance(); // Skip unknown tokens
+        }
+      }
+
+      this.consume(TokenType.RBRACE, "Expected '}' after abstract link body");
+
+      if (properties.length > 0) link.properties = properties;
+      if (constraints.length > 0) link.constraints = constraints;
+      if (annotations.length > 0) link.annotations = annotations;
+    }
+
+    // Consume optional trailing semicolon
+    this.match(TokenType.SEMICOLON);
+
+    return link;
+  }
+
   private parseTypeMember(): AST.TypeMember | null {
     // Skip semicolons
     while (this.match(TokenType.SEMICOLON)) {
@@ -347,6 +415,21 @@ export class SDLParser {
         const type = this.parseTypeRef();
         const prop = this.parsePropertyBody(name, type, qualifiers);
         return prop;
+      } else if (this.check(TokenType.EXTENDING)) {
+        // Link shorthand with extending clause: name extending X -> Type
+        let linkExtending: AST.TypeRef[] | undefined;
+        if (this.match(TokenType.EXTENDING)) {
+          linkExtending = this.parseTypeRefList();
+        }
+        this.consume(TokenType.ARROW, "Expected '->' after extending clause");
+        const extTarget = this.parseTypeRef();
+        const extLink = this.parseLinkBody(
+          name,
+          extTarget,
+          qualifiers,
+          linkExtending,
+        );
+        return extLink;
       } else if (this.match(TokenType.ARROW)) {
         // Link shorthand
         const target = this.parseTypeRef();
@@ -431,16 +514,24 @@ export class SDLParser {
 
   private parseLinkDeclaration(qualifiers: any): AST.LinkDeclaration {
     const name = this.parseIdentifier();
+
+    // Check for extending clause before the arrow
+    let extending: AST.TypeRef[] | undefined;
+    if (this.match(TokenType.EXTENDING)) {
+      extending = this.parseTypeRefList();
+    }
+
     this.consume(TokenType.ARROW, "Expected '->' after link name");
     const target = this.parseTypeRef();
 
-    return this.parseLinkBody(name, target, qualifiers);
+    return this.parseLinkBody(name, target, qualifiers, extending);
   }
 
   private parseLinkBody(
     name: AST.Identifier,
     target: AST.TypeRef,
     qualifiers: any,
+    extending?: AST.TypeRef[],
   ): AST.LinkDeclaration {
     const link: AST.LinkDeclaration = {
       kind: "LinkDeclaration",
@@ -448,6 +539,10 @@ export class SDLParser {
       target,
       ...qualifiers,
     };
+
+    if (extending && extending.length > 0) {
+      link.extending = extending;
+    }
 
     if (this.match(TokenType.LBRACE)) {
       const properties: AST.PropertyDeclaration[] = [];
@@ -474,11 +569,46 @@ export class SDLParser {
             TokenType.SEMICOLON,
             "Expected ';' after readonly value",
           );
+        } else if (this.match(TokenType.EXTENDING)) {
+          // extending inside link body: extending AbstractLink1, AbstractLink2;
+          const bodyExtending = this.parseTypeRefList();
+          if (!link.extending) {
+            link.extending = bodyExtending;
+          } else {
+            link.extending.push(...bodyExtending);
+          }
+          this.consume(
+            TokenType.SEMICOLON,
+            "Expected ';' after extending clause",
+          );
         } else if (this.match(TokenType.ON)) {
-          // on target delete
-          this.consume(TokenType.IDENT, "Expected 'target' after 'on'");
-          this.consume(TokenType.DELETE, "Expected 'delete' after 'target'");
-          link.onTargetDelete = this.parseDeletePolicy();
+          // on target delete ... | on source delete ...
+          const directionToken = this.peek();
+          if (
+            directionToken.type !== TokenType.IDENT ||
+            (directionToken.value !== "target" &&
+              directionToken.value !== "source")
+          ) {
+            throw this.error(
+              `Expected 'target' or 'source' after 'on', got '${directionToken.value}'`,
+            );
+          }
+          this.advance(); // consume direction ident
+
+          if (directionToken.value === "target") {
+            this.consume(
+              TokenType.DELETE,
+              "Expected 'delete' after 'target'",
+            );
+            link.onTargetDelete = this.parseDeletePolicy();
+          } else {
+            // source
+            this.consume(
+              TokenType.DELETE,
+              "Expected 'delete' after 'source'",
+            );
+            link.onSourceDelete = this.parseSourceDeletePolicy();
+          }
           this.consume(TokenType.SEMICOLON, "Expected ';' after delete policy");
         } else {
           this.advance(); // Skip unknown tokens
@@ -956,10 +1086,57 @@ export class SDLParser {
           this.advance();
           this.consume(TokenType.IDENT, "Expected 'restrict' after 'deferred'");
           return "deferred restrict";
+        case "set": {
+          this.advance();
+          const nextToken = this.peek();
+          if (
+            nextToken.type === TokenType.IDENT &&
+            nextToken.value === "empty"
+          ) {
+            this.advance();
+            return "set empty";
+          }
+          throw this.error(
+            `Expected 'empty' after 'set', got '${nextToken.value}'`,
+          );
+        }
       }
     }
 
     throw this.error(`Invalid delete policy: ${token.value}`);
+  }
+
+  private parseSourceDeletePolicy(): AST.LinkDeclaration["onSourceDelete"] {
+    const token = this.peek();
+
+    // "allow"
+    if (token.type === TokenType.ALLOW) {
+      this.advance();
+      return "allow";
+    }
+
+    if (token.type === TokenType.IDENT && token.value === "allow") {
+      this.advance();
+      return "allow";
+    }
+
+    // "delete target"
+    if (token.type === TokenType.DELETE) {
+      this.advance();
+      const targetToken = this.peek();
+      if (
+        targetToken.type === TokenType.IDENT &&
+        targetToken.value === "target"
+      ) {
+        this.advance();
+        return "delete target";
+      }
+      throw this.error(
+        `Expected 'target' after 'delete', got '${targetToken.value}'`,
+      );
+    }
+
+    throw this.error(`Invalid source delete policy: ${token.value}`);
   }
 
   private parseTypeRef(): AST.TypeRef {
@@ -969,11 +1146,14 @@ export class SDLParser {
     const optional = false;
     let params: AST.TypeRef[] | undefined;
 
-    // Check for parameterized type syntax: range<int32>, multirange<datetime>
+    // Check for parameterized type syntax: array<str>, tuple<int64, str>, range<int32>
     if (this.match(TokenType.LESS)) {
       params = [];
       params.push(this.parseTypeRef());
-      this.consume(TokenType.GREATER, "Expected '>' after type parameter");
+      while (this.match(TokenType.COMMA)) {
+        params.push(this.parseTypeRef());
+      }
+      this.consume(TokenType.GREATER, "Expected '>' after type parameter(s)");
     }
 
     // Check for array syntax

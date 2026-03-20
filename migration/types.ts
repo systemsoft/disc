@@ -208,7 +208,9 @@ export interface LinkDefinition {
   required: boolean;
   multi: boolean;
   cardinality?: string;
+  extending?: string[];
   onTargetDelete?: "RESTRICT" | "CASCADE" | "SET NULL" | "SET DEFAULT";
+  onSourceDelete?: "ALLOW" | "DELETE TARGET";
   annotations: Record<string, any>;
 }
 
@@ -230,7 +232,9 @@ export interface LinkChange {
     | "ChangeRequired"
     | "ChangeMulti"
     | "ChangeCardinality"
-    | "ChangeOnDelete";
+    | "ChangeExtending"
+    | "ChangeOnDelete"
+    | "ChangeOnSourceDelete";
   oldValue?: any;
   newValue?: any;
 }

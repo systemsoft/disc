@@ -56,6 +56,23 @@ function edgeqlTypeToPgType(edgeqlType: string): string {
     "cal::local_datetime": "timestamp without time zone",
     "cal::relative_duration": "interval",
     "cal::date_duration": "interval",
+    // Array types
+    "array<str>": "text[]",
+    "array<int16>": "smallint[]",
+    "array<int32>": "integer[]",
+    "array<int64>": "bigint[]",
+    "array<float32>": "real[]",
+    "array<float64>": "double precision[]",
+    "array<bool>": "boolean[]",
+    "array<uuid>": "uuid[]",
+    "array<datetime>": "timestamptz[]",
+    "array<json>": "jsonb[]",
+    "array<bytes>": "bytea[]",
+    "array<bigint>": "numeric[]",
+    "array<decimal>": "numeric[]",
+    "array<cal::local_date>": "date[]",
+    "array<cal::local_time>": "time without time zone[]",
+    "array<cal::local_datetime>": "timestamp without time zone[]",
     // Range types
     "range<int32>": "int4range",
     "range<int64>": "int8range",
@@ -73,7 +90,16 @@ function edgeqlTypeToPgType(edgeqlType: string): string {
     "multirange<cal::local_date>": "datemultirange",
     "multirange<cal::local_datetime>": "tsmultirange",
   };
-  return typeMap[edgeqlType] ?? edgeqlType;
+  if (typeMap[edgeqlType]) {
+    return typeMap[edgeqlType];
+  }
+
+  // Tuple types map to jsonb (PostgreSQL has no native tuple type)
+  if (edgeqlType.startsWith("tuple<")) {
+    return "jsonb";
+  }
+
+  return edgeqlType;
 }
 
 export interface CompilerOptions {

@@ -5,9 +5,11 @@
 import { ValidationError } from "../lib/errors.ts";
 import * as AST from "./ast.ts";
 import { Module, SDLConverter } from "./converter.ts";
+import { isPolymorphicType } from "../compiler/context.ts";
 
 interface ValidationContext {
   types: Map<string, AST.TypeDeclaration | AST.ScalarTypeDeclaration>;
+  abstractLinks: Map<string, AST.LinkDeclaration>;
   modules: Map<string, AST.ModuleDeclaration>;
   currentModule?: string;
   errors: ValidationError[];
@@ -20,6 +22,7 @@ export class SchemaValidator {
   constructor() {
     this.context = {
       types: new Map(),
+      abstractLinks: new Map(),
       modules: new Map(),
       errors: [],
     };
@@ -68,6 +71,9 @@ export class SchemaValidator {
       case "ScalarTypeDeclaration":
         this.collectType(decl);
         break;
+      case "LinkDeclaration":
+        this.collectAbstractLink(decl);
+        break;
     }
   }
 
@@ -107,6 +113,12 @@ export class SchemaValidator {
     this.context.types.set(typeName, type);
   }
 
+  private collectAbstractLink(link: AST.LinkDeclaration): void {
+    if (!link.abstract) return;
+    const linkName = this.getQualifiedTypeName(link.name);
+    this.context.abstractLinks.set(linkName, link);
+  }
+
   private validateDocumentReferences(document: AST.SDLDocument): void {
     for (const decl of document.declarations) {
       this.validateDeclaration(decl);
@@ -135,6 +147,9 @@ export class SchemaValidator {
         break;
       case "AnnotationDeclaration":
         this.validateAnnotation(decl);
+        break;
+      case "LinkDeclaration":
+        this.validateLink(decl);
         break;
     }
   }
@@ -292,8 +307,41 @@ export class SchemaValidator {
   }
 
   private validateLink(link: AST.LinkDeclaration): void {
-    // Validate target type
-    this.validateTypeRef(link.target);
+    // Validate target type (skip placeholder target for abstract links without targets)
+    const targetName = link.target.name.parts.join("::");
+    if (targetName !== "std::BaseObject") {
+      this.validateTypeRef(link.target);
+    }
+
+    // Validate extending references
+    if (link.extending) {
+      const visited = new Set<string>();
+      for (const baseRef of link.extending) {
+        const baseName = baseRef.name.parts.join("::");
+
+        // Check that referenced link exists and is abstract
+        if (!this.context.abstractLinks.has(baseName)) {
+          this.addError(
+            `Link '${link.name.value}' extends '${baseName}', but no abstract link '${baseName}' is defined`,
+          );
+        }
+
+        // Check for circular inheritance
+        if (visited.has(baseName)) {
+          this.addError(
+            `Circular link inheritance detected: '${link.name.value}' extends '${baseName}' multiple times`,
+          );
+        }
+        visited.add(baseName);
+
+        // Recursively check for cycles through the abstract link chain
+        this.checkLinkInheritanceCycle(
+          baseName,
+          link.name.value,
+          new Set([link.name.value]),
+        );
+      }
+    }
 
     // Validate default expression
     if (link.default) {
@@ -324,6 +372,31 @@ export class SchemaValidator {
       for (const constraint of link.constraints) {
         this.validateConstraint(constraint);
       }
+    }
+  }
+
+  private checkLinkInheritanceCycle(
+    linkName: string,
+    originalName: string,
+    visited: Set<string>,
+  ): void {
+    const abstractLink = this.context.abstractLinks.get(linkName);
+    if (!abstractLink || !abstractLink.extending) return;
+
+    for (const baseRef of abstractLink.extending) {
+      const baseName = baseRef.name.parts.join("::");
+
+      if (baseName === originalName) {
+        this.addError(
+          `Circular link inheritance detected: '${originalName}' -> '${linkName}' -> '${baseName}'`,
+        );
+        return;
+      }
+
+      if (visited.has(baseName)) return;
+      visited.add(baseName);
+
+      this.checkLinkInheritanceCycle(baseName, originalName, visited);
     }
   }
 
@@ -539,7 +612,31 @@ export class SchemaValidator {
       "cal::date_duration",
     ];
 
-    // Validate parameterized types: range<T> and multirange<T>
+    // Validate parameterized types: array<T>, tuple<T1, T2, ...>, range<T>, multirange<T>
+    if (typeName === "array") {
+      if (!typeRef.params || typeRef.params.length !== 1) {
+        this.addError(
+          `Type 'array' requires exactly one type parameter`,
+        );
+        return;
+      }
+      this.validateTypeRef(typeRef.params[0]);
+      return;
+    }
+
+    if (typeName === "tuple") {
+      if (!typeRef.params || typeRef.params.length === 0) {
+        this.addError(
+          `Type 'tuple' requires at least one type parameter`,
+        );
+        return;
+      }
+      for (const param of typeRef.params) {
+        this.validateTypeRef(param);
+      }
+      return;
+    }
+
     if (typeName === "range" || typeName === "multirange") {
       if (!typeRef.params || typeRef.params.length !== 1) {
         this.addError(
@@ -578,6 +675,11 @@ export class SchemaValidator {
 
     if (builtinTypes.includes(typeName)) {
       return; // Built-in type is valid
+    }
+
+    // Accept abstract polymorphic types (anytype, anyscalar, anyenum, etc.)
+    if (isPolymorphicType(typeName)) {
+      return;
     }
 
     // Try to resolve in current module

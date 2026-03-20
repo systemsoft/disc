@@ -231,9 +231,35 @@ export class SDLConverter {
       "cal::local_time": "TIME",
       "cal::relative_duration": "INTERVAL",
       "cal::date_duration": "INTERVAL",
+      // Array types
+      "array<str>": "TEXT[]",
+      "array<int16>": "SMALLINT[]",
+      "array<int32>": "INTEGER[]",
+      "array<int64>": "BIGINT[]",
+      "array<float32>": "REAL[]",
+      "array<float64>": "DOUBLE PRECISION[]",
+      "array<bool>": "BOOLEAN[]",
+      "array<uuid>": "UUID[]",
+      "array<datetime>": "TIMESTAMPTZ[]",
+      "array<json>": "JSONB[]",
+      "array<bytes>": "BYTEA[]",
+      "array<bigint>": "NUMERIC[]",
+      "array<decimal>": "NUMERIC[]",
+      "array<cal::local_date>": "DATE[]",
+      "array<cal::local_time>": "TIME[]",
+      "array<cal::local_datetime>": "TIMESTAMP[]",
     };
 
-    return typeMap[sdlType] || "TEXT";
+    if (typeMap[sdlType]) {
+      return typeMap[sdlType];
+    }
+
+    // Tuple types map to JSONB (PostgreSQL has no native tuple type)
+    if (sdlType.startsWith("tuple<")) {
+      return "JSONB";
+    }
+
+    return "TEXT";
   }
 
   /**

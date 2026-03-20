@@ -265,15 +265,25 @@ export class SchemaDiffer {
 
     for (const member of typeDef.members) {
       if (member.kind === "LinkDeclaration") {
-        links.push({
+        const linkDef: Types.LinkDefinition = {
           name: member.name.value,
           target: this.typeToString(member.target),
           required: member.required || false,
           multi: member.multi || false,
           cardinality: member.multi ? "many" : "one",
           onTargetDelete: this.mapOnTargetDelete(member.onTargetDelete),
+          onSourceDelete: this.mapOnSourceDelete(member.onSourceDelete),
           annotations: this.extractAnnotations(member.annotations || []),
-        });
+        };
+
+        // Extract extending references
+        if (member.extending && member.extending.length > 0) {
+          linkDef.extending = member.extending.map((ext) =>
+            ext.name.parts.join("::")
+          );
+        }
+
+        links.push(linkDef);
       }
     }
 
@@ -281,7 +291,12 @@ export class SchemaDiffer {
   }
 
   private mapOnTargetDelete(
-    value?: "restrict" | "cascade" | "allow" | "deferred restrict",
+    value?:
+      | "restrict"
+      | "cascade"
+      | "allow"
+      | "deferred restrict"
+      | "set empty",
   ): Types.LinkDefinition["onTargetDelete"] {
     if (!value) return undefined;
     switch (value) {
@@ -292,6 +307,22 @@ export class SchemaDiffer {
         return "CASCADE";
       case "allow":
         return "SET NULL";
+      case "set empty":
+        return "SET NULL";
+      default:
+        return undefined;
+    }
+  }
+
+  private mapOnSourceDelete(
+    value?: "allow" | "delete target",
+  ): Types.LinkDefinition["onSourceDelete"] {
+    if (!value) return undefined;
+    switch (value) {
+      case "allow":
+        return "ALLOW";
+      case "delete target":
+        return "DELETE TARGET";
       default:
         return undefined;
     }
@@ -690,6 +721,29 @@ export class SchemaDiffer {
         kind: "ChangeOnDelete",
         oldValue: oldLink.onTargetDelete,
         newValue: newLink.onTargetDelete,
+      });
+    }
+
+    if (oldLink.onSourceDelete !== newLink.onSourceDelete) {
+      changes.push({
+        kind: "ChangeOnSourceDelete",
+        oldValue: oldLink.onSourceDelete,
+        newValue: newLink.onSourceDelete,
+      });
+    }
+
+    // Compare extending arrays
+    const oldExtending = JSON.stringify(
+      (oldLink.extending ?? []).sort(),
+    );
+    const newExtending = JSON.stringify(
+      (newLink.extending ?? []).sort(),
+    );
+    if (oldExtending !== newExtending) {
+      changes.push({
+        kind: "ChangeExtending",
+        oldValue: oldLink.extending,
+        newValue: newLink.extending,
       });
     }
 

@@ -7,6 +7,35 @@ import * as EdgeQLAST from "../edgeql/ast.ts";
 import * as SQL from "./sql.ts";
 import type { AccessPolicy } from "../access/types.ts";
 
+/**
+ * Abstract polymorphic types used in EdgeQL function signatures.
+ *
+ * These allow generic function definitions where a parameter accepts
+ * any concrete type (e.g., `anytype` matches `str`, `int64`, `float64`, etc.).
+ */
+export const POLYMORPHIC_TYPES = new Set([
+  "anytype",
+  "anyscalar",
+  "anyenum",
+  "anytuple",
+  "anyobject",
+  "anyreal",
+  "anyint",
+  "anyfloat",
+  "anynumeric",
+]);
+
+/**
+ * Check whether a type name is an abstract polymorphic type.
+ *
+ * Polymorphic types match any concrete type during function overload
+ * resolution. For example, a function parameter typed `anytype` will
+ * accept `str`, `int64`, `float64`, or any other concrete type.
+ */
+export function isPolymorphicType(typeName: string): boolean {
+  return POLYMORPHIC_TYPES.has(typeName);
+}
+
 export interface CompilationContext {
   schema: Schema;
   aliasCounter: number;

@@ -313,6 +313,15 @@ export class DDLGenerator {
       }
     }
 
+    // Generate source delete triggers
+    for (const link of operation.links) {
+      if (link.onSourceDelete === "DELETE TARGET") {
+        statements.push(
+          ...this.generateSourceDeleteTrigger(tableName, link),
+        );
+      }
+    }
+
     return statements;
   }
 
@@ -628,6 +637,13 @@ export class DDLGenerator {
       );
     }
 
+    // Generate source delete trigger if needed
+    if (link.onSourceDelete === "DELETE TARGET") {
+      statements.push(
+        ...this.generateSourceDeleteTrigger(tableName, link),
+      );
+    }
+
     return statements;
   }
 
@@ -658,14 +674,47 @@ export class DDLGenerator {
   }
 
   private generateAlterLink(
-    _tableName: string,
+    tableName: string,
     operation: Types.AlterLinkOperation,
   ): string[] {
-    // Link alteration is complex and often requires recreating the link
-    // For now, return a comment indicating this needs manual handling
-    return [
-      `-- ALTER LINK ${operation.linkName}: Complex operation requiring manual handling`,
-    ];
+    const statements: string[] = [];
+
+    for (const change of operation.changes) {
+      if (change.kind === "ChangeOnSourceDelete") {
+        // Drop existing source delete trigger if present
+        if (
+          change.oldValue === "DELETE TARGET"
+        ) {
+          statements.push(
+            ...this.dropSourceDeleteTrigger(tableName, operation.linkName),
+          );
+        }
+        // Create new source delete trigger if needed
+        if (
+          change.newValue === "DELETE TARGET"
+        ) {
+          // For alter operations the link target is not directly available,
+          // so we generate a comment about manual target check
+          statements.push(
+            `-- Source delete trigger for link '${operation.linkName}' on table '${tableName}' requires target table name`,
+            `-- Please verify the generated trigger targets the correct table`,
+          );
+        }
+      } else {
+        // Other link changes still need manual handling
+        statements.push(
+          `-- ALTER LINK ${operation.linkName}: ${change.kind} requires manual handling`,
+        );
+      }
+    }
+
+    if (statements.length === 0) {
+      statements.push(
+        `-- ALTER LINK ${operation.linkName}: No changes to apply`,
+      );
+    }
+
+    return statements;
   }
 
   private generateCreateTable(operation: Types.CreateTableOperation): string[] {
@@ -1013,6 +1062,23 @@ export class DDLGenerator {
       "cal::local_datetime": "TIMESTAMP WITHOUT TIME ZONE",
       "cal::relative_duration": "INTERVAL",
       "cal::date_duration": "INTERVAL",
+      // Array types
+      "array<str>": "TEXT[]",
+      "array<int16>": "SMALLINT[]",
+      "array<int32>": "INTEGER[]",
+      "array<int64>": "BIGINT[]",
+      "array<float32>": "REAL[]",
+      "array<float64>": "DOUBLE PRECISION[]",
+      "array<bool>": "BOOLEAN[]",
+      "array<uuid>": "UUID[]",
+      "array<datetime>": "TIMESTAMPTZ[]",
+      "array<json>": "JSONB[]",
+      "array<bytes>": "BYTEA[]",
+      "array<bigint>": "NUMERIC[]",
+      "array<decimal>": "NUMERIC[]",
+      "array<cal::local_date>": "DATE[]",
+      "array<cal::local_time>": "TIME WITHOUT TIME ZONE[]",
+      "array<cal::local_datetime>": "TIMESTAMP WITHOUT TIME ZONE[]",
       // Range types
       "range<int32>": "INT4RANGE",
       "range<int64>": "INT8RANGE",
@@ -1031,7 +1097,16 @@ export class DDLGenerator {
       "multirange<cal::local_datetime>": "TSMULTIRANGE",
     };
 
-    return typeMap[edgeqlType] || "TEXT";
+    if (typeMap[edgeqlType]) {
+      return typeMap[edgeqlType];
+    }
+
+    // Tuple types map to JSONB (PostgreSQL has no native tuple type)
+    if (edgeqlType.startsWith("tuple<")) {
+      return "JSONB";
+    }
+
+    return "TEXT";
   }
 
   private formatDefaultValue(value: any, _type: string): string {
@@ -1172,6 +1247,75 @@ export class DDLGenerator {
 
     return [
       `DROP TRIGGER IF EXISTS ${this.escapeIdentifier(pgTriggerName)} ON ${
+        this.escapeIdentifier(tableName)
+      };`,
+      `DROP FUNCTION IF EXISTS ${this.escapeIdentifier(fnName)}();`,
+    ];
+  }
+
+  // ========================================
+  // Source Delete Trigger DDL Generation
+  // ========================================
+
+  /**
+   * Generate a BEFORE DELETE trigger on the source table that cascades
+   * deletion to the target when `on source delete delete target` is set.
+   */
+  private generateSourceDeleteTrigger(
+    tableName: string,
+    link: Types.LinkDefinition,
+  ): string[] {
+    const targetTable = this.typeNameToTableName(link.target);
+    const fnName = `disc_source_delete_${tableName}_${link.name}`;
+    const triggerName = `trg_source_delete_${tableName}_${link.name}`;
+
+    if (link.multi) {
+      // Multi-valued link uses junction table
+      const junctionTable = `${tableName}_${link.name}`;
+      return [
+        `CREATE OR REPLACE FUNCTION ${
+          this.escapeIdentifier(fnName)
+        }() RETURNS TRIGGER AS $$ BEGIN DELETE FROM ${
+          this.escapeIdentifier(targetTable)
+        } WHERE id IN (SELECT target_id FROM ${
+          this.escapeIdentifier(junctionTable)
+        } WHERE source_id = OLD.id); RETURN OLD; END; $$ LANGUAGE plpgsql;`,
+        `CREATE TRIGGER ${
+          this.escapeIdentifier(triggerName)
+        } BEFORE DELETE ON ${
+          this.escapeIdentifier(tableName)
+        } FOR EACH ROW EXECUTE FUNCTION ${this.escapeIdentifier(fnName)}();`,
+      ];
+    }
+
+    // Single-valued link: delete from target where id matches
+    const columnName = `${link.name}_id`;
+    return [
+      `CREATE OR REPLACE FUNCTION ${
+        this.escapeIdentifier(fnName)
+      }() RETURNS TRIGGER AS $$ BEGIN DELETE FROM ${
+        this.escapeIdentifier(targetTable)
+      } WHERE id = OLD.${
+        this.escapeIdentifier(columnName)
+      }; RETURN OLD; END; $$ LANGUAGE plpgsql;`,
+      `CREATE TRIGGER ${this.escapeIdentifier(triggerName)} BEFORE DELETE ON ${
+        this.escapeIdentifier(tableName)
+      } FOR EACH ROW EXECUTE FUNCTION ${this.escapeIdentifier(fnName)}();`,
+    ];
+  }
+
+  /**
+   * Generate DROP statements for a source delete trigger and its function.
+   */
+  private dropSourceDeleteTrigger(
+    tableName: string,
+    linkName: string,
+  ): string[] {
+    const fnName = `disc_source_delete_${tableName}_${linkName}`;
+    const triggerName = `trg_source_delete_${tableName}_${linkName}`;
+
+    return [
+      `DROP TRIGGER IF EXISTS ${this.escapeIdentifier(triggerName)} ON ${
         this.escapeIdentifier(tableName)
       };`,
       `DROP FUNCTION IF EXISTS ${this.escapeIdentifier(fnName)}();`,

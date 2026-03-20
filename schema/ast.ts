@@ -21,6 +21,7 @@ export type Declaration =
   | ModuleDeclaration
   | TypeDeclaration
   | ScalarTypeDeclaration
+  | LinkDeclaration
   | AliasDeclaration
   | FunctionDeclaration
   | GlobalDeclaration
@@ -151,10 +152,17 @@ export interface LinkDeclaration extends SDLNode {
   readonly?: boolean;
   computed?: Expression;
   default?: Expression;
+  extending?: TypeRef[];
   properties?: PropertyDeclaration[];
   constraints?: Constraint[];
   annotations?: Annotation[];
-  onTargetDelete?: "restrict" | "cascade" | "allow" | "deferred restrict";
+  onTargetDelete?:
+    | "restrict"
+    | "cascade"
+    | "allow"
+    | "deferred restrict"
+    | "set empty";
+  onSourceDelete?: "allow" | "delete target";
 }
 
 // Constraint

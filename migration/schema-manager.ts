@@ -17,6 +17,7 @@ import {
   AliasDeclaration,
   Constraint as SDLConstraint,
   Expression,
+  LinkDeclaration,
   ScalarTypeDeclaration,
   TriggerDeclaration,
   TypeDeclaration,
@@ -60,6 +61,23 @@ const SDL_TO_SQL_TYPE_MAP: Record<string, string> = {
   "cal::local_time": "time",
   "cal::relative_duration": "interval",
   "cal::date_duration": "interval",
+  // Array types
+  "array<str>": "text[]",
+  "array<int16>": "smallint[]",
+  "array<int32>": "integer[]",
+  "array<int64>": "bigint[]",
+  "array<float32>": "real[]",
+  "array<float64>": "double precision[]",
+  "array<bool>": "boolean[]",
+  "array<uuid>": "uuid[]",
+  "array<datetime>": "timestamptz[]",
+  "array<json>": "jsonb[]",
+  "array<bytes>": "bytea[]",
+  "array<bigint>": "numeric[]",
+  "array<decimal>": "numeric[]",
+  "array<cal::local_date>": "date[]",
+  "array<cal::local_time>": "time[]",
+  "array<cal::local_datetime>": "timestamp[]",
   // Range types
   "range<int32>": "int4range",
   "range<int64>": "int8range",
@@ -97,7 +115,16 @@ function typeNameToTableName(typeName: string): string {
  * Map an SDL type name to a SQL column type
  */
 function sdlTypeToSqlType(sdlType: string): string {
-  return SDL_TO_SQL_TYPE_MAP[sdlType] ?? "text";
+  if (SDL_TO_SQL_TYPE_MAP[sdlType]) {
+    return SDL_TO_SQL_TYPE_MAP[sdlType];
+  }
+
+  // Tuple types map to jsonb (PostgreSQL has no native tuple type)
+  if (sdlType.startsWith("tuple<")) {
+    return "jsonb";
+  }
+
+  return "text";
 }
 
 /**
@@ -105,13 +132,21 @@ function sdlTypeToSqlType(sdlType: string): string {
  * For example: range<int32>, multirange<cal::local_date>
  */
 function typeRefToSdlString(
-  typeRef: { name: { parts: string[] }; params?: { name: { parts: string[] }; params?: unknown[] }[] },
+  typeRef: {
+    name: { parts: string[] };
+    params?: { name: { parts: string[] }; params?: unknown[] }[];
+  },
 ): string {
   let result = typeRef.name.parts.join("::");
   if (typeRef.params && typeRef.params.length > 0) {
     result += `<${
       typeRef.params.map((p) =>
-        typeRefToSdlString(p as { name: { parts: string[] }; params?: { name: { parts: string[] }; params?: unknown[] }[] })
+        typeRefToSdlString(
+          p as {
+            name: { parts: string[] };
+            params?: { name: { parts: string[] }; params?: unknown[] }[];
+          },
+        )
       ).join(", ")
     }>`;
   }
@@ -252,6 +287,20 @@ export class SchemaManager {
     const aliases = new Map<string, AliasDef>();
     const converter = new SDLConverter();
 
+    // First pass: collect abstract link declarations for link inheritance
+    const abstractLinks = new Map<string, LinkDeclaration>();
+    for (const module of modules) {
+      for (const item of module.items) {
+        if (
+          item.kind === "LinkDeclaration" &&
+          (item as LinkDeclaration).abstract
+        ) {
+          const linkDecl = item as LinkDeclaration;
+          abstractLinks.set(linkDecl.name.value, linkDecl);
+        }
+      }
+    }
+
     for (const module of modules) {
       for (const item of module.items) {
         // Handle alias declarations
@@ -376,9 +425,39 @@ export class SchemaManager {
           });
         }
 
-        // Extract links from the type declaration
+        // Extract links from the type declaration, resolving link inheritance
         const linkDeclarations = converter.extractLinks(typeDecl);
         for (const linkDecl of linkDeclarations) {
+          // Resolve link inheritance: merge properties and constraints
+          // from abstract links into this concrete link
+          if (linkDecl.extending) {
+            for (const baseRef of linkDecl.extending) {
+              const baseName = baseRef.name.parts.join("::");
+              const abstractLink = abstractLinks.get(baseName);
+              if (!abstractLink) continue;
+
+              // Merge inherited properties (concrete wins)
+              if (abstractLink.properties) {
+                const ownPropNames = new Set(
+                  (linkDecl.properties ?? []).map((p) => p.name.value),
+                );
+                const inherited = abstractLink.properties.filter(
+                  (p) => !ownPropNames.has(p.name.value),
+                );
+                if (inherited.length > 0) {
+                  if (!linkDecl.properties) linkDecl.properties = [];
+                  linkDecl.properties.push(...inherited);
+                }
+              }
+
+              // Merge inherited constraints
+              if (abstractLink.constraints) {
+                if (!linkDecl.constraints) linkDecl.constraints = [];
+                linkDecl.constraints.push(...abstractLink.constraints);
+              }
+            }
+          }
+
           const linkName = linkDecl.name.value;
           const targetName = linkDecl.target.name.parts.join("::");
           const isMulti = linkDecl.multi ?? false;
