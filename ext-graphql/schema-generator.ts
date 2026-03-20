@@ -5,10 +5,7 @@
  * GraphQLType representations and a full GraphQL SDL string.
  */
 
-import type {
-  PropertyDef,
-  Schema,
-} from "../compiler/context.ts";
+import type { PropertyDef, Schema } from "../compiler/context.ts";
 import type { GraphQLField, GraphQLType } from "./types.ts";
 
 /**

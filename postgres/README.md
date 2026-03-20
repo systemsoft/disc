@@ -6,17 +6,17 @@ Bundled PostgreSQL binary management and lifecycle for Disc. Handles downloading
 
 ```typescript
 import {
-  PostgresManager,
-  PostgresInstance,
-  PostgresBinaryDownloader,
-  PostgresConfig,
-  PostgresMonitor,
-  getDefaultManager,
   createInstance,
-  startInstance,
-  stopInstance,
+  getDefaultManager,
   getInstance,
   listInstances,
+  PostgresBinaryDownloader,
+  PostgresConfig,
+  PostgresInstance,
+  PostgresManager,
+  PostgresMonitor,
+  startInstance,
+  stopInstance,
 } from "disc/postgres/mod.ts";
 ```
 
@@ -53,7 +53,7 @@ const manager = new PostgresManager("/custom/path/instances");
 ```typescript
 // Create and initialize a new instance
 const instance = await manager.createInstance("my-project", {
-  port: 5433,             // optional, 0 = Unix socket only (default)
+  port: 5433, // optional, 0 = Unix socket only (default)
   postgresVersion: "16.4", // optional (default: "16.4")
 });
 
@@ -67,14 +67,14 @@ await manager.startInstance("my-project", false);
 await manager.stopInstance("my-project");
 
 // Destroy (stop + remove from manager, optionally delete data)
-await manager.destroyInstance("my-project", true);  // removeData = true
+await manager.destroyInstance("my-project", true); // removeData = true
 ```
 
 ### Instance Discovery and Status
 
 ```typescript
 // List known instance names
-manager.listInstances();  // ["my-project", "test-db"]
+manager.listInstances(); // ["my-project", "test-db"]
 
 // Get an instance by name
 const instance = manager.getInstance("my-project");
@@ -115,20 +115,20 @@ import type { PostgresInstanceOptions } from "disc/postgres/mod.ts";
 const instance = new PostgresInstance({
   instanceName: "my-project",
   dataDir: "/path/to/data",
-  socketDir: "/path/to/socket",       // optional
-  port: 0,                             // 0 = Unix socket only
-  postgresVersion: "16.4",             // optional
-  pgBinDir: "/custom/pg/bin",          // optional: skip download, use existing binaries
+  socketDir: "/path/to/socket", // optional
+  port: 0, // 0 = Unix socket only
+  postgresVersion: "16.4", // optional
+  pgBinDir: "/custom/pg/bin", // optional: skip download, use existing binaries
 });
 ```
 
 ### Lifecycle Methods
 
 ```typescript
-await instance.init();      // download PG (if needed), initdb, generate config
-await instance.start();     // pg_ctl start (waits for startup)
-await instance.stop();      // pg_ctl stop -m fast (with force-kill fallback)
-await instance.restart();   // stop + start
+await instance.init(); // download PG (if needed), initdb, generate config
+await instance.start(); // pg_ctl start (waits for startup)
+await instance.stop(); // pg_ctl stop -m fast (with force-kill fallback)
+await instance.restart(); // stop + start
 ```
 
 ### Status and Connection
@@ -141,9 +141,9 @@ const dsn = instance.dsn();
 // Unix socket: "postgresql://disc@/my-project?host=/path/to/socket"
 // TCP: "postgresql://disc@localhost:5433/my-project"
 
-instance.getSocketPath();   // "/path/to/socket/.s.PGSQL.5432"
-instance.getDataDir();      // "/path/to/data"
-instance.getPort();         // 0
+instance.getSocketPath(); // "/path/to/socket/.s.PGSQL.5432"
+instance.getDataDir(); // "/path/to/data"
+instance.getPort(); // 0
 ```
 
 ## PostgresBinaryDownloader
@@ -164,12 +164,12 @@ const versionDir = await downloader.ensurePostgres("16.4");
 
 ### Platform Support
 
-| Platform        | Source                                          |
-|-----------------|-------------------------------------------------|
-| macOS (arm64)   | EDB official binaries                           |
-| macOS (x64)     | EDB official binaries                           |
-| Linux (x64)     | Zonky embedded-postgres-binaries                |
-| Linux (arm64)   | Zonky embedded-postgres-binaries                |
+| Platform      | Source                           |
+| ------------- | -------------------------------- |
+| macOS (arm64) | EDB official binaries            |
+| macOS (x64)   | EDB official binaries            |
+| Linux (x64)   | Zonky embedded-postgres-binaries |
+| Linux (arm64) | Zonky embedded-postgres-binaries |
 
 Supported versions: `16.4`, `17.0`. Downloads are SHA-256 checksummed.
 
@@ -183,18 +183,18 @@ const config = new PostgresConfig();
 // Generate postgresql.conf
 const content = config.generate({
   dataDir: "/path/to/data",
-  port: 0,                   // 0 = socket only
+  port: 0, // 0 = socket only
   socketDir: "/path/to/socket",
-  maxConnections: 100,        // default: 100
-  sharedBuffers: "128MB",     // default: "128MB"
-  workMem: "4MB",             // default: "4MB"
+  maxConnections: 100, // default: 100
+  sharedBuffers: "128MB", // default: "128MB"
+  workMem: "4MB", // default: "4MB"
 });
 
 // Generate pg_hba.conf
 const hbaContent = config.generateHBAConfig();
 
 // Auto-tune based on available memory
-const tuned = config.tuneForMemory(4096);  // 4GB
+const tuned = config.tuneForMemory(4096); // 4GB
 // { sharedBuffers: "1024MB", workMem: "40MB", maxConnections: 100 }
 ```
 
@@ -214,10 +214,10 @@ Health monitor that periodically checks PostgreSQL status and auto-restarts on f
 
 ```typescript
 const monitor = new PostgresMonitor(instance, {
-  checkIntervalMs: 30000,         // default: 30 seconds
-  autoRestart: true,              // default: true
-  maxRestartAttempts: 3,          // default: 3
-  restartDelayMs: 5000,           // default: 5 seconds
+  checkIntervalMs: 30000, // default: 30 seconds
+  autoRestart: true, // default: true
+  maxRestartAttempts: 3, // default: 3
+  restartDelayMs: 5000, // default: 5 seconds
 });
 
 await monitor.start();
@@ -230,7 +230,7 @@ const health = await monitor.checkHealth();
 monitor.getLastHealthStatus();
 
 // Quick healthy check
-monitor.isHealthy();  // true | false
+monitor.isHealthy(); // true | false
 
 // Get detailed metrics (db size, table stats, connections)
 const metrics = await monitor.getMetrics();
@@ -256,7 +256,13 @@ When a health check fails and `autoRestart` is enabled:
 The module exports convenience functions that use a default singleton `PostgresManager`:
 
 ```typescript
-import { createInstance, startInstance, stopInstance, getInstance, listInstances } from "disc/postgres/mod.ts";
+import {
+  createInstance,
+  getInstance,
+  listInstances,
+  startInstance,
+  stopInstance,
+} from "disc/postgres/mod.ts";
 
 const instance = await createInstance("test-db");
 await startInstance("test-db");

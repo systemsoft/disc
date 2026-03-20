@@ -74,7 +74,9 @@ export class BuildCommand {
   validatePlatform(platform: string): void {
     if (!PLATFORM_MAP[platform]) {
       throw new Error(
-        `Invalid platform: "${platform}". Valid platforms: ${AVAILABLE_PLATFORMS.join(", ")}`,
+        `Invalid platform: "${platform}". Valid platforms: ${
+          AVAILABLE_PLATFORMS.join(", ")
+        }`,
       );
     }
   }

@@ -406,8 +406,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Stage 25: expression on constraint enforced by PostgreSQL",
+  name: "PG Stage 25: expression on constraint enforced by PostgreSQL",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -633,8 +632,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Stage 25: Delegated constraint inheritance enforced by PostgreSQL",
+  name: "PG Stage 25: Delegated constraint inheritance enforced by PostgreSQL",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();

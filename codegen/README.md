@@ -6,10 +6,10 @@ TypeScript type generator for Disc. Reads the EdgeQL schema and produces typed i
 
 ```typescript
 import {
-  generateTypeScript,
-  writeGeneratedFiles,
-  TypeScriptGenerator,
   DEFAULT_CONFIGS,
+  generateTypeScript,
+  TypeScriptGenerator,
+  writeGeneratedFiles,
 } from "disc/codegen/mod.ts";
 
 import type {
@@ -52,15 +52,15 @@ disc codegen --output ./src   # Custom output directory
 
 ```typescript
 interface CodegenConfig {
-  outputDir: string;               // output directory (default: "./generated")
-  schemaSource: string;            // SDL schema file path (default: "./schema.esdl")
-  target: "client" | "server" | "both";  // generation target (default: "client")
-  typePrefix?: string;             // prefix for generated type names
-  interfaceSuffix?: string;        // suffix for generated interface names
-  includeQueryBuilders: boolean;   // generate query builder classes (default: true)
-  includeMutations: boolean;       // generate mutation helpers (default: true)
-  includeClient: boolean;          // generate typed client class (default: true)
-  formatOutput: boolean;           // format generated code (default: true)
+  outputDir: string; // output directory (default: "./generated")
+  schemaSource: string; // SDL schema file path (default: "./schema.esdl")
+  target: "client" | "server" | "both"; // generation target (default: "client")
+  typePrefix?: string; // prefix for generated type names
+  interfaceSuffix?: string; // suffix for generated interface names
+  includeQueryBuilders: boolean; // generate query builder classes (default: true)
+  includeMutations: boolean; // generate mutation helpers (default: true)
+  includeClient: boolean; // generate typed client class (default: true)
+  formatOutput: boolean; // format generated code (default: true)
 }
 ```
 
@@ -158,9 +158,9 @@ Insert types exclude `id` (auto-generated), computed properties, and readonly pr
 
 ```typescript
 export interface UserInsert {
-  email: string;        // required, no default
-  name: string;         // required, no default
-  status?: Status;      // optional
+  email: string; // required, no default
+  name: string; // required, no default
+  status?: Status; // optional
 }
 ```
 
@@ -214,7 +214,11 @@ class UserQueryBuilder {
 
   async select(shape?: string): Promise<User[]>;
   async selectById(id: string, shape?: string): Promise<User | null>;
-  async filter(condition: string, variables?: UserFilterVars, shape?: string): Promise<User[]>;
+  async filter(
+    condition: string,
+    variables?: UserFilterVars,
+    shape?: string,
+  ): Promise<User[]>;
   async insert(data: UserInsert): Promise<User>;
   async update(id: string, data: UserUpdate): Promise<User>;
   async delete(id: string): Promise<User>;
@@ -251,21 +255,21 @@ Re-exports everything from `types.ts`, `queries.ts`, and `client.ts`.
 
 EdgeQL types are mapped to TypeScript types:
 
-| EdgeQL Type           | TypeScript Type | Nullable        |
-|-----------------------|-----------------|-----------------|
-| `str`                 | `string`        | `string \| null` |
-| `bool`                | `boolean`       | `boolean \| null`|
-| `int16`, `int32`, `int64` | `number`   | `number \| null` |
-| `float32`, `float64`  | `number`       | `number \| null` |
-| `decimal`             | `number`        | `number \| null` |
-| `uuid`                | `string`        | `string \| null` |
-| `datetime`            | `Date`          | `Date \| null`   |
-| `duration`            | `string`        | `string \| null` |
-| `bytes`               | `Uint8Array`    | `Uint8Array \| null` |
-| `json`                | `unknown`       | `unknown \| null`|
-| `cal::local_datetime` | `Date`          | `Date \| null`   |
-| `cal::local_date`     | `string`        | `string \| null` |
-| `cal::local_time`     | `string`        | `string \| null` |
+| EdgeQL Type               | TypeScript Type | Nullable             |
+| ------------------------- | --------------- | -------------------- |
+| `str`                     | `string`        | `string \| null`     |
+| `bool`                    | `boolean`       | `boolean \| null`    |
+| `int16`, `int32`, `int64` | `number`        | `number \| null`     |
+| `float32`, `float64`      | `number`        | `number \| null`     |
+| `decimal`                 | `number`        | `number \| null`     |
+| `uuid`                    | `string`        | `string \| null`     |
+| `datetime`                | `Date`          | `Date \| null`       |
+| `duration`                | `string`        | `string \| null`     |
+| `bytes`                   | `Uint8Array`    | `Uint8Array \| null` |
+| `json`                    | `unknown`       | `unknown \| null`    |
+| `cal::local_datetime`     | `Date`          | `Date \| null`       |
+| `cal::local_date`         | `string`        | `string \| null`     |
+| `cal::local_time`         | `string`        | `string \| null`     |
 
 SQL type names (`text`, `integer`, `boolean`, etc.) are also supported for backward compatibility and mapped through to their EdgeQL equivalents.
 

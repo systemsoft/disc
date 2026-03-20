@@ -51,7 +51,8 @@ Deno.test("EdgeQL Parser - Qualified GlobalRef with module", () => {
 });
 
 Deno.test("EdgeQL Parser - SET GLOBAL with type-cast value", () => {
-  const source = `SET GLOBAL current_user_id := <uuid>'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'`;
+  const source =
+    `SET GLOBAL current_user_id := <uuid>'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'`;
 
   const parser = new EdgeQLParser(source);
   const ast = parser.parse();
@@ -69,7 +70,8 @@ Deno.test("EdgeQL Parser - SET GLOBAL with type-cast value", () => {
 });
 
 Deno.test("EdgeQL Parser - SET GLOBAL with qualified name", () => {
-  const source = `SET GLOBAL default::current_user_id := <uuid>'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'`;
+  const source =
+    `SET GLOBAL default::current_user_id := <uuid>'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'`;
 
   const parser = new EdgeQLParser(source);
   const ast = parser.parse();

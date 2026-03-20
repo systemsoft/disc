@@ -22,7 +22,7 @@ Disc is a TypeScript-native database fork of Gel (EdgeDB), replacing the Python/
 - **EdgeQL Parser** (100%)
   - Complete lexer, parser, AST
   - Supports SELECT, INSERT, UPDATE, DELETE, FOR, GROUP BY, WITH/CTE, EXPLAIN, CONFIGURE, DESCRIBE
-  - Bitwise operators (&, |, ^, <<, >>), regex operators (~, !~, ~*, !~*)
+  - Bitwise operators (&, |, ^, <<, >>), regex operators (~~, !~~, ~~*, !~~*)
   - Window functions (OVER, PARTITION BY, frame clauses)
   - Subquery expressions (IN, EXISTS, scalar), INTERSECT/EXCEPT, HAVING
   - IF/ELSE expressions, indexing/slicing, type casts

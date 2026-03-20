@@ -472,7 +472,10 @@ Deno.test("query-execution - Execute with NONE output format skips Data message"
   // Execute a DDL-like query with NONE format
   await sendMessage(
     conn,
-    executeMsgWithFormat("create type Foo { required name: str }", OutputFormat.NONE),
+    executeMsgWithFormat(
+      "create type Foo { required name: str }",
+      OutputFormat.NONE,
+    ),
   );
 
   // Read CommandDataDescription

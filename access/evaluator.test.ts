@@ -322,7 +322,10 @@ Deno.test("AccessEvaluator - built-in globals still work with backward compatibi
   assertEquals(evaluator.expressionToSQL(roleExpr, context), "'admin'");
 
   // current_session SQL generation
-  const sessionExpr = { kind: "AccessGlobal" as const, name: "current_session" };
+  const sessionExpr = {
+    kind: "AccessGlobal" as const,
+    name: "current_session",
+  };
   assertEquals(evaluator.expressionToSQL(sessionExpr, context), "'true'");
 
   // Built-in evaluateGlobal still works via policy condition
@@ -340,7 +343,10 @@ Deno.test("AccessEvaluator - built-in globals still work with backward compatibi
 
   // With userId set, condition should pass
   const withUser: AccessContext = { userId: "user-123" };
-  assertEquals(evaluator.evaluate("Resource", "select", withUser).allowed, true);
+  assertEquals(
+    evaluator.evaluate("Resource", "select", withUser).allowed,
+    true,
+  );
 
   // Without userId, condition should fail
   const noUser: AccessContext = {};

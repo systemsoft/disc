@@ -57,9 +57,12 @@ Deno.test("Validator - max_len_value without args produces error", () => {
   const result = validator.validate(doc);
 
   assertEquals(result.ok, false);
-  assertEquals(result.errors!.some((e) =>
-    e.message.includes("max_len_value") && e.message.includes("one argument")
-  ), true);
+  assertEquals(
+    result.errors!.some((e) =>
+      e.message.includes("max_len_value") && e.message.includes("one argument")
+    ),
+    true,
+  );
 });
 
 Deno.test("Validator - one_of without args produces error", () => {
@@ -73,9 +76,12 @@ Deno.test("Validator - one_of without args produces error", () => {
   const result = validator.validate(doc);
 
   assertEquals(result.ok, false);
-  assertEquals(result.errors!.some((e) =>
-    e.message.includes("one_of") && e.message.includes("at least one")
-  ), true);
+  assertEquals(
+    result.errors!.some((e) =>
+      e.message.includes("one_of") && e.message.includes("at least one")
+    ),
+    true,
+  );
 });
 
 Deno.test("Validator - expression without on produces error", () => {
@@ -88,9 +94,12 @@ Deno.test("Validator - expression without on produces error", () => {
   const result = validator.validate(doc);
 
   assertEquals(result.ok, false);
-  assertEquals(result.errors!.some((e) =>
-    e.message.includes("expression") && e.message.includes("'on' expression")
-  ), true);
+  assertEquals(
+    result.errors!.some((e) =>
+      e.message.includes("expression") && e.message.includes("'on' expression")
+    ),
+    true,
+  );
 });
 
 // ============================================================
@@ -108,9 +117,13 @@ Deno.test("Validator - max_len_value on non-string type produces error", () => {
   const result = validator.validate(doc);
 
   assertEquals(result.ok, false);
-  assertEquals(result.errors!.some((e) =>
-    e.message.includes("max_len_value") && e.message.includes("'str' or 'bytes'")
-  ), true);
+  assertEquals(
+    result.errors!.some((e) =>
+      e.message.includes("max_len_value") &&
+      e.message.includes("'str' or 'bytes'")
+    ),
+    true,
+  );
 });
 
 Deno.test("Validator - max_len_value on str type is valid", () => {
@@ -137,9 +150,13 @@ Deno.test("Validator - min_value on str type produces error", () => {
   const result = validator.validate(doc);
 
   assertEquals(result.ok, false);
-  assertEquals(result.errors!.some((e) =>
-    e.message.includes("min_value") && e.message.includes("numeric or temporal")
-  ), true);
+  assertEquals(
+    result.errors!.some((e) =>
+      e.message.includes("min_value") &&
+      e.message.includes("numeric or temporal")
+    ),
+    true,
+  );
 });
 
 Deno.test("Validator - min_value on int64 type is valid", () => {
@@ -179,9 +196,13 @@ Deno.test("Validator - min_ex_value on bool type produces error", () => {
   const result = validator.validate(doc);
 
   assertEquals(result.ok, false);
-  assertEquals(result.errors!.some((e) =>
-    e.message.includes("min_ex_value") && e.message.includes("numeric or temporal")
-  ), true);
+  assertEquals(
+    result.errors!.some((e) =>
+      e.message.includes("min_ex_value") &&
+      e.message.includes("numeric or temporal")
+    ),
+    true,
+  );
 });
 
 // ============================================================
@@ -223,7 +244,10 @@ Deno.test("Validator - expression with on expression is valid", () => {
     on: {
       kind: "BinaryOp",
       operator: ">",
-      left: { kind: "PathExpression", path: "__subject__" } as unknown as AST.Expression,
+      left: {
+        kind: "PathExpression",
+        path: "__subject__",
+      } as unknown as AST.Expression,
       right: { kind: "Literal", type: "integer", value: 0 } as AST.Literal,
     } as unknown as AST.Expression,
   }]);

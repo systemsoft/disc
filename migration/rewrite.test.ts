@@ -290,8 +290,7 @@ Deno.test("Validator - rewrite with empty using expression produces error", () =
   const result = validator.validate(doc as any);
 
   const emptyErrors = (result.errors || []).filter(
-    (e) =>
-      e.message.includes("using") && e.message.includes("expression"),
+    (e) => e.message.includes("using") && e.message.includes("expression"),
   );
   assertEquals(emptyErrors.length >= 1, true);
 });
@@ -630,8 +629,7 @@ Deno.test("DDL - variable substitution: datetime_of_statement() -> statement_tim
   const statements = generateDDL([operation]);
 
   const fnStatement = statements.find(
-    (s) =>
-      s.includes("CREATE OR REPLACE FUNCTION") && s.includes("rewrite_fn"),
+    (s) => s.includes("CREATE OR REPLACE FUNCTION") && s.includes("rewrite_fn"),
   );
 
   assertEquals(fnStatement !== undefined, true);
@@ -665,8 +663,7 @@ Deno.test("DDL - variable substitution: __old__ -> OLD", () => {
   const statements = generateDDL([operation]);
 
   const fnStatement = statements.find(
-    (s) =>
-      s.includes("CREATE OR REPLACE FUNCTION") && s.includes("rewrite_fn"),
+    (s) => s.includes("CREATE OR REPLACE FUNCTION") && s.includes("rewrite_fn"),
   );
 
   assertEquals(fnStatement !== undefined, true);
@@ -756,8 +753,7 @@ Deno.test("DDL - generateCreateType includes rewrites in output", () => {
 
   // Should have 2 CREATE FUNCTION for rewrite (one for created_at, one for updated_at)
   const createFns = statements.filter(
-    (s) =>
-      s.includes("CREATE OR REPLACE FUNCTION") && s.includes("rewrite_fn"),
+    (s) => s.includes("CREATE OR REPLACE FUNCTION") && s.includes("rewrite_fn"),
   );
   assertEquals(createFns.length, 2);
 
@@ -966,8 +962,7 @@ Deno.test("End-to-end - full pipeline: SDL -> parse -> diff -> DDL -> verify con
 
   // Should have 2 rewrite functions
   const rewriteFns = ddl.filter(
-    (s) =>
-      s.includes("CREATE OR REPLACE FUNCTION") && s.includes("rewrite_fn"),
+    (s) => s.includes("CREATE OR REPLACE FUNCTION") && s.includes("rewrite_fn"),
   );
   assertEquals(rewriteFns.length, 2);
 

@@ -109,7 +109,9 @@ function createHealthyProtocolHandler(
 function withTestServer(
   handler: ProtocolHandler,
   configOverrides: Partial<ServerConfig> = {},
-  optionOverrides: Partial<Omit<HttpServerOptions, "config" | "protocolHandler">> = {},
+  optionOverrides: Partial<
+    Omit<HttpServerOptions, "config" | "protocolHandler">
+  > = {},
 ): {
   port: number;
   cleanup: () => Promise<void>;

@@ -33,8 +33,7 @@ function makePool(dsn: string): ConnectionPool {
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Stage 43: str_lower/str_upper/str_title on actual data",
+  name: "PG Stage 43: str_lower/str_upper/str_title on actual data",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -61,8 +60,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Stage 43: str_split — STRING_TO_ARRAY produces array",
+  name: "PG Stage 43: str_split — STRING_TO_ARRAY produces array",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -89,8 +87,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Stage 43: re_match — REGEXP_MATCH returns first match",
+  name: "PG Stage 43: re_match — REGEXP_MATCH returns first match",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -118,8 +115,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Stage 43: re_replace — REGEXP_REPLACE substitutes pattern",
+  name: "PG Stage 43: re_replace — REGEXP_REPLACE substitutes pattern",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -143,8 +139,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Stage 43: re_test — ~ operator filters matching patterns",
+  name: "PG Stage 43: re_test — ~ operator filters matching patterns",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -172,8 +167,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Stage 43: math_sqrt and math_power on numeric data",
+  name: "PG Stage 43: math_sqrt and math_power on numeric data",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -197,8 +191,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Stage 43: math_log, math_log10, math_log2 on numeric data",
+  name: "PG Stage 43: math_log, math_log10, math_log2 on numeric data",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -235,8 +228,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Stage 43: uuid_generate_v4 — GEN_RANDOM_UUID() returns valid UUID",
+  name: "PG Stage 43: uuid_generate_v4 — GEN_RANDOM_UUID() returns valid UUID",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -304,8 +296,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Stage 43: json_typeof — JSONB_TYPEOF on different JSON values",
+  name: "PG Stage 43: json_typeof — JSONB_TYPEOF on different JSON values",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -353,8 +344,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Stage 43: bytes_get_bit — GET_BIT on bytea data",
+  name: "PG Stage 43: bytes_get_bit — GET_BIT on bytea data",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -384,8 +374,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Stage 43: bytes_to_str — CONVERT_FROM converts bytea to text",
+  name: "PG Stage 43: bytes_to_str — CONVERT_FROM converts bytea to text",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();

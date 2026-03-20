@@ -6,23 +6,23 @@ Modular extension system for the Disc database server. Extensions can register c
 
 ```typescript
 import {
-  BaseExtension,
-  ExtensionRegistry,
-  createExtensionContext,
-  AuthExtensionAdapter,
   AccessExtensionAdapter,
+  AuthExtensionAdapter,
+  BaseExtension,
+  createExtensionContext,
+  ExtensionRegistry,
 } from "disc/extensions/mod.ts";
 
 import type {
-  Extension,
-  ExtensionMetadata,
-  ExtensionRoute,
-  ExtensionMiddleware,
-  ExtensionDatabaseSetup,
-  ExtensionContext,
-  ExtensionConfig,
-  ExtensionState,
   CompilerHook,
+  Extension,
+  ExtensionConfig,
+  ExtensionContext,
+  ExtensionDatabaseSetup,
+  ExtensionMetadata,
+  ExtensionMiddleware,
+  ExtensionRoute,
+  ExtensionState,
 } from "disc/extensions/mod.ts";
 ```
 
@@ -53,7 +53,7 @@ interface ExtensionMetadata {
   name: string;
   version: string;
   description?: string;
-  dependencies?: string[];  // names of extensions that must be initialized first
+  dependencies?: string[]; // names of extensions that must be initialized first
 }
 ```
 
@@ -61,13 +61,13 @@ interface ExtensionMetadata {
 
 Extensions move through these states:
 
-| State            | Description                               |
-|------------------|-------------------------------------------|
-| `uninitialized`  | Registered but not yet initialized        |
-| `initializing`   | Currently being initialized               |
-| `ready`          | Successfully initialized and operational  |
-| `error`          | Initialization or runtime error           |
-| `shutdown`       | Cleanly shut down                         |
+| State           | Description                              |
+| --------------- | ---------------------------------------- |
+| `uninitialized` | Registered but not yet initialized       |
+| `initializing`  | Currently being initialized              |
+| `ready`         | Successfully initialized and operational |
+| `error`         | Initialization or runtime error          |
+| `shutdown`      | Cleanly shut down                        |
 
 ## BaseExtension
 
@@ -75,7 +75,10 @@ Abstract base class with sensible defaults for all extension methods. Extend thi
 
 ```typescript
 import { BaseExtension } from "disc/extensions/mod.ts";
-import type { ExtensionMetadata, ExtensionContext } from "disc/extensions/mod.ts";
+import type {
+  ExtensionContext,
+  ExtensionMetadata,
+} from "disc/extensions/mod.ts";
 
 class MyExtension extends BaseExtension {
   readonly metadata: ExtensionMetadata = {
@@ -145,16 +148,16 @@ const context = createExtensionContext({ schema, config });
 await registry.initializeAll(context);
 
 // Access extensions
-registry.get("my-extension");      // Extension | undefined
-registry.getAll();                 // Extension[]
-registry.size;                     // number
+registry.get("my-extension"); // Extension | undefined
+registry.getAll(); // Extension[]
+registry.size; // number
 
 // Collect extension contributions
-registry.getAllFunctions();        // FunctionDef[]
-registry.getAllTypes();            // TypeDef[]
-registry.getAllRoutes();           // Map<string, ExtensionRoute[]>
-registry.getAllMiddleware();       // ExtensionMiddleware[] (sorted by priority)
-registry.getAllCompilerHooks();    // CompilerHook[]
+registry.getAllFunctions(); // FunctionDef[]
+registry.getAllTypes(); // TypeDef[]
+registry.getAllRoutes(); // Map<string, ExtensionRoute[]>
+registry.getAllMiddleware(); // ExtensionMiddleware[] (sorted by priority)
+registry.getAllCompilerHooks(); // CompilerHook[]
 
 // Health
 await registry.getHealthStatus(); // Map<string, { healthy, details? }>
@@ -189,7 +192,10 @@ Middleware runs on every request, sorted by `priority` (lower numbers run first)
 interface ExtensionMiddleware {
   name: string;
   priority: number;
-  handle: (request: Request, next: () => Promise<Response>) => Promise<Response>;
+  handle: (
+    request: Request,
+    next: () => Promise<Response>,
+  ) => Promise<Response>;
 }
 ```
 
@@ -200,7 +206,10 @@ Extensions can transform function calls at compile time:
 ```typescript
 interface CompilerHook {
   name: string;
-  transformFunctionCall?: (funcName: string, args: string[]) => string | undefined;
+  transformFunctionCall?: (
+    funcName: string,
+    args: string[],
+  ) => string | undefined;
 }
 ```
 
@@ -252,12 +261,12 @@ registry.register(accessExt);
 
 ## Error Classes
 
-| Error                      | Description                                    |
-|----------------------------|------------------------------------------------|
-| `ExtensionError`           | Base error for extension system                |
-| `ExtensionInitError`       | Initialization failure (includes extension name)|
-| `ExtensionConfigError`     | Invalid extension configuration                |
-| `ExtensionDependencyError` | Missing or circular dependencies               |
+| Error                      | Description                                      |
+| -------------------------- | ------------------------------------------------ |
+| `ExtensionError`           | Base error for extension system                  |
+| `ExtensionInitError`       | Initialization failure (includes extension name) |
+| `ExtensionConfigError`     | Invalid extension configuration                  |
+| `ExtensionDependencyError` | Missing or circular dependencies                 |
 
 ## Creating a Custom Extension
 

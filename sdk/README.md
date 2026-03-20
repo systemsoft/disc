@@ -6,10 +6,10 @@ TypeScript client SDK for consuming Disc from applications. Provides a typed HTT
 
 ```typescript
 import {
-  createClient,
-  DiscClient,
   AuthManager,
+  createClient,
   createSubscriptionClient,
+  DiscClient,
   SubscriptionClient,
   Transaction,
 } from "disc/sdk/mod.ts";
@@ -25,11 +25,11 @@ The core HTTP client for querying a Disc server. Handles request timeouts, retri
 import type { DiscClientConfig } from "disc/sdk/mod.ts";
 
 const client = createClient({
-  baseUrl: "http://localhost:5656",  // default
-  timeout: 30000,                    // request timeout in ms (default: 30000)
-  headers: { "X-Custom": "value" },  // custom headers on every request
-  retries: 3,                        // retry count on network/server errors (default: 0)
-  retryDelay: 1000,                  // base delay between retries in ms (default: 1000)
+  baseUrl: "http://localhost:5656", // default
+  timeout: 30000, // request timeout in ms (default: 30000)
+  headers: { "X-Custom": "value" }, // custom headers on every request
+  retries: 3, // retry count on network/server errors (default: 0)
+  retryDelay: 1000, // base delay between retries in ms (default: 1000)
 });
 ```
 
@@ -68,7 +68,7 @@ const stats = await client.stats();
 
 ```typescript
 client.setAuthToken("jwt-token-here");
-client.getAuthToken();  // "jwt-token-here" | undefined
+client.getAuthToken(); // "jwt-token-here" | undefined
 client.clearAuthToken();
 ```
 
@@ -81,8 +81,8 @@ import { AuthManager } from "disc/sdk/mod.ts";
 import type { AuthManagerOptions } from "disc/sdk/mod.ts";
 
 const auth = new AuthManager(client, {
-  autoRefresh: true,   // default: true
-  refreshBuffer: 60,   // seconds before expiry to trigger refresh (default: 60)
+  autoRefresh: true, // default: true
+  refreshBuffer: 60, // seconds before expiry to trigger refresh (default: 60)
 });
 ```
 
@@ -93,8 +93,8 @@ const auth = new AuthManager(client, {
 const response = await auth.register({
   email: "alice@example.com",
   password: "secure-password",
-  username: "alice",                    // optional
-  metadata: { role: "admin" },          // optional
+  username: "alice", // optional
+  metadata: { role: "admin" }, // optional
 });
 // response.user, response.token, response.session
 
@@ -105,8 +105,8 @@ const loginResponse = await auth.login({
 });
 
 // Check authentication state
-auth.isAuthenticated();  // true
-auth.getUser();          // cached AuthUser from last login/register
+auth.isAuthenticated(); // true
+auth.getUser(); // cached AuthUser from last login/register
 ```
 
 ### Token Refresh and Profile
@@ -125,8 +125,8 @@ await auth.updatePassword("old-password", "new-password");
 ### Logout and Cleanup
 
 ```typescript
-await auth.logout();    // POST /auth/logout, clears local state
-auth.dispose();         // cancel any pending auto-refresh timer
+await auth.logout(); // POST /auth/logout, clears local state
+auth.dispose(); // cancel any pending auto-refresh timer
 ```
 
 ## Transaction
@@ -137,12 +137,12 @@ Execute multiple queries atomically using a callback pattern. The transaction au
 const result = await client.transaction(async (tx) => {
   const user = await tx.query<User>(
     "insert User { name := <str>$name, email := <str>$email }",
-    { name: "Bob", email: "bob@example.com" }
+    { name: "Bob", email: "bob@example.com" },
   );
 
   await tx.query(
     "insert Post { title := <str>$title, author := (select User filter .id = <uuid>$id) }",
-    { title: "Hello World", id: user.id }
+    { title: "Hello World", id: user.id },
   );
 
   return user;
@@ -153,17 +153,17 @@ const result = await client.transaction(async (tx) => {
 
 A `Transaction` moves through these states:
 
-| State         | Description                              |
-|---------------|------------------------------------------|
-| `active`      | Queries can be executed                  |
-| `committed`   | Transaction committed successfully       |
-| `rolled_back` | Transaction was rolled back              |
+| State         | Description                        |
+| ------------- | ---------------------------------- |
+| `active`      | Queries can be executed            |
+| `committed`   | Transaction committed successfully |
+| `rolled_back` | Transaction was rolled back        |
 
 Attempting to query, commit, or rollback a non-active transaction throws `DiscTransactionError`.
 
 ```typescript
-tx.getState();  // "active" | "committed" | "rolled_back"
-tx.getId();     // transaction ID string
+tx.getState(); // "active" | "committed" | "rolled_back"
+tx.getId(); // transaction ID string
 ```
 
 ## SubscriptionClient
@@ -179,10 +179,10 @@ import type { SubscriptionClientConfig } from "disc/sdk/mod.ts";
 const sub = createSubscriptionClient(
   { baseUrl: "http://localhost:5656" },
   {
-    autoReconnect: true,          // default: true
-    maxReconnectAttempts: 5,      // default: 5
-    reconnectDelay: 1000,         // base delay in ms (default: 1000)
-  }
+    autoReconnect: true, // default: true
+    maxReconnectAttempts: 5, // default: 5
+    reconnectDelay: 1000, // base delay in ms (default: 1000)
+  },
 );
 
 await sub.connect();
@@ -195,10 +195,10 @@ const handle = sub.subscribe<User>(
   "select User { name, email }",
   {
     onData: (data) => console.log("Update:", data),
-    onError: (err) => console.error("Error:", err),    // optional
-    onComplete: () => console.log("Stream ended"),      // optional
+    onError: (err) => console.error("Error:", err), // optional
+    onComplete: () => console.log("Stream ended"), // optional
   },
-  { filter: "active" }  // optional variables
+  { filter: "active" }, // optional variables
 );
 
 // Unsubscribe
@@ -211,34 +211,34 @@ sub.unsubscribe(handle.id);
 ### Connection Management
 
 ```typescript
-sub.isConnected();  // true when WebSocket is OPEN
-sub.close();        // close connection and clean up all subscriptions
+sub.isConnected(); // true when WebSocket is OPEN
+sub.close(); // close connection and clean up all subscriptions
 ```
 
 ## Error Hierarchy
 
 All SDK errors extend `DiscClientError`, which carries a `code` from `DiscErrorCode`.
 
-| Error Class            | Code                | When                                         |
-|------------------------|---------------------|----------------------------------------------|
-| `DiscQueryError`       | `QUERY_ERROR`       | Server returns query errors                  |
-| `DiscNetworkError`     | `NETWORK_ERROR`     | Fetch failure, DNS resolution error          |
-| `DiscTimeoutError`     | `TIMEOUT`           | Request exceeds configured timeout           |
-| `DiscAuthError`        | `AUTH_ERROR`         | 401/403 response or missing token            |
-| `DiscConnectionError`  | `CONNECTION_ERROR`   | Server unreachable, connection refused        |
-| `DiscTransactionError` | `TRANSACTION_ERROR`  | Operation on non-active transaction          |
-| `DiscProtocolError`    | `PROTOCOL_ERROR`     | Unexpected response format                   |
-| `DiscServerError`      | `SERVER_ERROR`       | 5xx response from server                     |
+| Error Class            | Code                | When                                   |
+| ---------------------- | ------------------- | -------------------------------------- |
+| `DiscQueryError`       | `QUERY_ERROR`       | Server returns query errors            |
+| `DiscNetworkError`     | `NETWORK_ERROR`     | Fetch failure, DNS resolution error    |
+| `DiscTimeoutError`     | `TIMEOUT`           | Request exceeds configured timeout     |
+| `DiscAuthError`        | `AUTH_ERROR`        | 401/403 response or missing token      |
+| `DiscConnectionError`  | `CONNECTION_ERROR`  | Server unreachable, connection refused |
+| `DiscTransactionError` | `TRANSACTION_ERROR` | Operation on non-active transaction    |
+| `DiscProtocolError`    | `PROTOCOL_ERROR`    | Unexpected response format             |
+| `DiscServerError`      | `SERVER_ERROR`      | 5xx response from server               |
 
 ```typescript
-import { DiscQueryError, DiscErrorCode } from "disc/sdk/mod.ts";
+import { DiscErrorCode, DiscQueryError } from "disc/sdk/mod.ts";
 
 try {
   await client.query("invalid query");
 } catch (err) {
   if (err instanceof DiscQueryError) {
-    console.log(err.code);    // DiscErrorCode.QUERY_ERROR
-    console.log(err.errors);  // QueryError[] from server
+    console.log(err.code); // DiscErrorCode.QUERY_ERROR
+    console.log(err.errors); // QueryError[] from server
   }
 }
 ```
@@ -253,20 +253,20 @@ try {
 
 Key type exports from `sdk/types.ts`:
 
-| Type                      | Description                                      |
-|---------------------------|--------------------------------------------------|
-| `DiscClientConfig`        | Client constructor options                       |
-| `QueryRequest`            | Query payload (query, variables, operationName)  |
-| `QueryResponse<T>`       | Response envelope (data, errors, extensions)     |
-| `QueryExtensions`         | Timing info (parseMs, compileMs, executeMs)      |
-| `HealthStatus`            | Server health (status, database, pool)           |
-| `ServerStats`             | Connections, queries, transactions, memory, cache|
-| `AuthTokens`              | JWT token and optional refresh token             |
-| `AuthUser`                | User profile (id, email, username, metadata)     |
-| `AuthResponse`            | Login/register response (user, session, token)   |
-| `LoginCredentials`        | Email/username + password                        |
-| `RegisterData`            | Email, password, optional username/metadata      |
-| `TransactionState`        | "active", "committed", "rolled_back"             |
-| `SubscriptionCallbacks<T>`| onData, onError, onComplete handlers             |
-| `SubscriptionHandle`      | Subscription id + unsubscribe function           |
-| `IsolationLevel`          | "read_committed", "repeatable_read", "serializable"|
+| Type                       | Description                                         |
+| -------------------------- | --------------------------------------------------- |
+| `DiscClientConfig`         | Client constructor options                          |
+| `QueryRequest`             | Query payload (query, variables, operationName)     |
+| `QueryResponse<T>`         | Response envelope (data, errors, extensions)        |
+| `QueryExtensions`          | Timing info (parseMs, compileMs, executeMs)         |
+| `HealthStatus`             | Server health (status, database, pool)              |
+| `ServerStats`              | Connections, queries, transactions, memory, cache   |
+| `AuthTokens`               | JWT token and optional refresh token                |
+| `AuthUser`                 | User profile (id, email, username, metadata)        |
+| `AuthResponse`             | Login/register response (user, session, token)      |
+| `LoginCredentials`         | Email/username + password                           |
+| `RegisterData`             | Email, password, optional username/metadata         |
+| `TransactionState`         | "active", "committed", "rolled_back"                |
+| `SubscriptionCallbacks<T>` | onData, onError, onComplete handlers                |
+| `SubscriptionHandle`       | Subscription id + unsubscribe function              |
+| `IsolationLevel`           | "read_committed", "repeatable_read", "serializable" |

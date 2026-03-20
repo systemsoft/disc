@@ -10,19 +10,19 @@ import { MigrationEngine } from "disc/migration/engine.ts";
 import { SchemaDiffer } from "disc/migration/differ.ts";
 import { MigrationTracker } from "disc/migration/tracker.ts";
 import type {
+  AlterTypeOperation,
+  CreateTypeOperation,
+  DropTypeOperation,
+  LinkDefinition,
   Migration,
+  MigrationCheckpoint,
+  MigrationConfig,
+  MigrationHistoryEntry,
+  MigrationOperation,
   MigrationPlan,
   MigrationResult,
   MigrationState,
-  MigrationConfig,
-  MigrationCheckpoint,
-  MigrationHistoryEntry,
-  MigrationOperation,
-  CreateTypeOperation,
-  DropTypeOperation,
-  AlterTypeOperation,
   PropertyDefinition,
-  LinkDefinition,
 } from "disc/migration/types.ts";
 ```
 
@@ -97,7 +97,9 @@ Parse SDL, diff against current state, generate DDL, and execute:
 const result = await manager.applySchema(sdlSource);
 if (result.ok) {
   for (const migrationResult of result.value) {
-    console.log(`Applied: ${migrationResult.migrationId} in ${migrationResult.durationMs}ms`);
+    console.log(
+      `Applied: ${migrationResult.migrationId} in ${migrationResult.durationMs}ms`,
+    );
   }
 }
 ```
@@ -112,7 +114,9 @@ Generate a migration plan without executing it. Used by `disc migrate --create`:
 const planResult = manager.planSchema(sdlSource);
 if (planResult.ok) {
   const plan = planResult.value;
-  console.log(`${plan.operationsCount} operations, estimated ${plan.estimatedDuration}ms`);
+  console.log(
+    `${plan.operationsCount} operations, estimated ${plan.estimatedDuration}ms`,
+  );
 }
 ```
 
@@ -143,8 +147,8 @@ if (!validResult.ok) {
 ### Access Current State
 
 ```typescript
-manager.getSchema();   // Schema | null
-manager.getModules();  // Module[] | null
+manager.getSchema(); // Schema | null
+manager.getModules(); // Module[] | null
 ```
 
 ## MigrationEngine
@@ -160,7 +164,7 @@ const engine = new MigrationEngine({
   autoApprove: true,
   backupBeforeMigration: false,
   rollbackOnError: true,
-  connectionPool: pool,       // optional, preferred over databaseUrl
+  connectionPool: pool, // optional, preferred over databaseUrl
 });
 
 await engine.initialize();
@@ -239,22 +243,22 @@ const operations = differ.diff(oldModules, newModules);
 
 The differ detects:
 
-| Change                  | Operation Type     |
-|-------------------------|--------------------|
-| New type added          | `CreateType`       |
-| Type removed            | `DropType`         |
-| Type modified           | `AlterType`        |
-| Property added          | `AddProperty`      |
-| Property removed        | `DropProperty`     |
-| Property type changed   | `AlterProperty` (ChangeType) |
-| Property required changed | `AlterProperty` (ChangeRequired) |
-| Property cardinality changed | `AlterProperty` (ChangeMulti) |
-| Property default changed | `AlterProperty` (ChangeDefault) |
-| Link added              | `AddLink`          |
-| Link removed            | `DropLink`         |
-| Link target changed     | `AlterLink` (ChangeTarget) |
-| Link cardinality changed | `AlterLink` (ChangeMulti) |
-| Link on-delete changed  | `AlterLink` (ChangeOnDelete) |
+| Change                       | Operation Type                   |
+| ---------------------------- | -------------------------------- |
+| New type added               | `CreateType`                     |
+| Type removed                 | `DropType`                       |
+| Type modified                | `AlterType`                      |
+| Property added               | `AddProperty`                    |
+| Property removed             | `DropProperty`                   |
+| Property type changed        | `AlterProperty` (ChangeType)     |
+| Property required changed    | `AlterProperty` (ChangeRequired) |
+| Property cardinality changed | `AlterProperty` (ChangeMulti)    |
+| Property default changed     | `AlterProperty` (ChangeDefault)  |
+| Link added                   | `AddLink`                        |
+| Link removed                 | `DropLink`                       |
+| Link target changed          | `AlterLink` (ChangeTarget)       |
+| Link cardinality changed     | `AlterLink` (ChangeMulti)        |
+| Link on-delete changed       | `AlterLink` (ChangeOnDelete)     |
 
 Inheritance is resolved: properties and links from parent types (via `extending`) are included in `CreateType` operations for concrete types.
 
@@ -273,15 +277,15 @@ Persists migration history and checkpoints to a PostgreSQL database using the `d
 
 ```typescript
 const tracker = new MigrationTracker(pool);
-await tracker.initialize();  // creates tables if needed
+await tracker.initialize(); // creates tables if needed
 
 // Record a migration
 await tracker.recordMigration(migration, result);
 
 // Query history
-const applied = await tracker.getAppliedMigrations();  // string[]
-const history = await tracker.getMigrationHistory();    // MigrationHistoryEntry[]
-const state = await tracker.getMigrationState();        // MigrationState
+const applied = await tracker.getAppliedMigrations(); // string[]
+const history = await tracker.getMigrationHistory(); // MigrationHistoryEntry[]
+const state = await tracker.getMigrationState(); // MigrationState
 
 // Check specific migration
 const isApplied = await tracker.isMigrationApplied("m20240115T103000_abc123");
@@ -303,17 +307,17 @@ await tracker.close();
 
 ### disc_migrations Table Schema
 
-| Column        | Type                     | Description                 |
-|---------------|--------------------------|-----------------------------|
-| `id`          | `TEXT PRIMARY KEY`       | Migration ID                |
-| `name`        | `TEXT NOT NULL`          | Generated migration name    |
-| `description` | `TEXT`                   | Human-readable description  |
-| `schema_hash` | `TEXT NOT NULL`          | Hash of target schema       |
-| `applied_at`  | `TIMESTAMPTZ NOT NULL`   | When migration was applied  |
-| `duration_ms` | `INTEGER NOT NULL`       | Execution time in ms        |
-| `rollback_sql`| `TEXT[]`                 | Rollback DDL statements     |
-| `checksum`    | `TEXT NOT NULL`          | Migration content checksum  |
-| `created_at`  | `TIMESTAMPTZ NOT NULL`   | When migration was created  |
+| Column         | Type                   | Description                |
+| -------------- | ---------------------- | -------------------------- |
+| `id`           | `TEXT PRIMARY KEY`     | Migration ID               |
+| `name`         | `TEXT NOT NULL`        | Generated migration name   |
+| `description`  | `TEXT`                 | Human-readable description |
+| `schema_hash`  | `TEXT NOT NULL`        | Hash of target schema      |
+| `applied_at`   | `TIMESTAMPTZ NOT NULL` | When migration was applied |
+| `duration_ms`  | `INTEGER NOT NULL`     | Execution time in ms       |
+| `rollback_sql` | `TEXT[]`               | Rollback DDL statements    |
+| `checksum`     | `TEXT NOT NULL`        | Migration content checksum |
+| `created_at`   | `TIMESTAMPTZ NOT NULL` | When migration was created |
 
 ## CLI Integration
 

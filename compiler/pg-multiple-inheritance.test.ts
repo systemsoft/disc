@@ -406,7 +406,8 @@ Deno.test({
 
       const articleRow = articleResult.rows[0];
       const articleData =
-        (articleRow as Record<string, unknown>).jsonb_build_object ?? articleRow;
+        (articleRow as Record<string, unknown>).jsonb_build_object ??
+          articleRow;
       const article = articleData as Record<string, unknown>;
 
       assertEquals(

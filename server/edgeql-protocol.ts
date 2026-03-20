@@ -225,8 +225,9 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       // execute the SET LOCAL on the connection, then return a success response.
       if (parsedAST && parsedAST.kind === "SetGlobalQuery") {
         const setGlobalAST = parsedAST as EdgeQL.SetGlobalQuery;
-        const globalKey =
-          `global::${setGlobalAST.module || "default"}::${setGlobalAST.name}`;
+        const globalKey = `global::${
+          setGlobalAST.module || "default"
+        }::${setGlobalAST.name}`;
         context.session.variables[globalKey] = sqlString;
 
         const executeStart = Date.now();

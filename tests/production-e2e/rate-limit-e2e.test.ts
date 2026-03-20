@@ -179,19 +179,19 @@ Deno.test({
   name: "Production E2E: No rate limiter when rateLimitRpm is 0",
   sanitizeResources: false,
   fn: async () => {
-  const handler = createBasicProtocolHandler();
-  const { port, cleanup } = withTestServer(handler, {
-    rateLimitRpm: 0,
-  });
+    const handler = createBasicProtocolHandler();
+    const { port, cleanup } = withTestServer(handler, {
+      rateLimitRpm: 0,
+    });
 
-  try {
-    for (let i = 0; i < 20; i++) {
-      const response = await fetch(`http://127.0.0.1:${port}/`);
-      assertEquals(response.status, 200);
-      await response.body?.cancel();
+    try {
+      for (let i = 0; i < 20; i++) {
+        const response = await fetch(`http://127.0.0.1:${port}/`);
+        assertEquals(response.status, 200);
+        await response.body?.cancel();
+      }
+    } finally {
+      await cleanup();
     }
-  } finally {
-    await cleanup();
-  }
   },
 });

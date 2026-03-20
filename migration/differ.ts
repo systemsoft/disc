@@ -91,14 +91,20 @@ export class SchemaDiffer {
         const edgeqlType = this.typeToString(globalDef.decl.type);
         const pgType = this.edgeqlTypeToPgType(edgeqlType);
         operations.push(
-          Types.createGlobalOperation(globalDef.decl.name.value, moduleName, edgeqlType, pgType, {
-            required: globalDef.decl.required,
-            multi: globalDef.decl.multi,
-            default: globalDef.decl.default
-              ? this.extractExpressionString(globalDef.decl.default)
-              : undefined,
-            readonly: globalDef.decl.readonly,
-          }),
+          Types.createGlobalOperation(
+            globalDef.decl.name.value,
+            moduleName,
+            edgeqlType,
+            pgType,
+            {
+              required: globalDef.decl.required,
+              multi: globalDef.decl.multi,
+              default: globalDef.decl.default
+                ? this.extractExpressionString(globalDef.decl.default)
+                : undefined,
+              readonly: globalDef.decl.readonly,
+            },
+          ),
         );
       }
     }
@@ -107,7 +113,10 @@ export class SchemaDiffer {
     for (const [globalName, globalDef] of oldGlobals) {
       if (!newGlobals.has(globalName)) {
         operations.push(
-          Types.dropGlobalOperation(globalDef.decl.name.value, globalDef.module),
+          Types.dropGlobalOperation(
+            globalDef.decl.name.value,
+            globalDef.module,
+          ),
         );
       }
     }
@@ -139,16 +148,25 @@ export class SchemaDiffer {
           oldReadonly !== newReadonly
         ) {
           operations.push(
-            Types.dropGlobalOperation(oldGlobalDef.decl.name.value, oldGlobalDef.module),
+            Types.dropGlobalOperation(
+              oldGlobalDef.decl.name.value,
+              oldGlobalDef.module,
+            ),
           );
           const pgType = this.edgeqlTypeToPgType(newType);
           operations.push(
-            Types.createGlobalOperation(newGlobalDef.decl.name.value, newGlobalDef.module, newType, pgType, {
-              required: newGlobalDef.decl.required,
-              multi: newGlobalDef.decl.multi,
-              default: newDefault,
-              readonly: newGlobalDef.decl.readonly,
-            }),
+            Types.createGlobalOperation(
+              newGlobalDef.decl.name.value,
+              newGlobalDef.module,
+              newType,
+              pgType,
+              {
+                required: newGlobalDef.decl.required,
+                multi: newGlobalDef.decl.multi,
+                default: newDefault,
+                readonly: newGlobalDef.decl.readonly,
+              },
+            ),
           );
         }
       }

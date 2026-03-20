@@ -212,7 +212,8 @@ class WebSocketTestClient {
 // --- Tests ---
 
 Deno.test({
-  name: "Production E2E: Subscribe then unsubscribe returns subscription_stopped",
+  name:
+    "Production E2E: Subscribe then unsubscribe returns subscription_stopped",
   sanitizeResources: false,
   sanitizeOps: false,
   fn: async () => {

@@ -151,7 +151,9 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`,
+        `applySchema should succeed: ${
+          result.ok ? "" : JSON.stringify(result)
+        }`,
       );
 
       // Range types report as USER-DEFINED in data_type; check udt_name instead
@@ -211,7 +213,9 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`,
+        `applySchema should succeed: ${
+          result.ok ? "" : JSON.stringify(result)
+        }`,
       );
 
       // Multirange types also report as USER-DEFINED; check udt_name
@@ -268,7 +272,11 @@ Deno.test({
       `;
 
       const result = await manager.applySchema(sdl);
-      assertEquals(result.ok, true, `applySchema failed: ${JSON.stringify(result)}`);
+      assertEquals(
+        result.ok,
+        true,
+        `applySchema failed: ${JSON.stringify(result)}`,
+      );
 
       // Insert a row with a range value
       await execRawSQL(
@@ -312,8 +320,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Range E2E: LOWER() and UPPER() return correct bounds of int4range",
+  name: "PG Range E2E: LOWER() and UPPER() return correct bounds of int4range",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -390,8 +397,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Range E2E: @> operator checks element containment in range",
+  name: "PG Range E2E: @> operator checks element containment in range",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -412,7 +418,11 @@ Deno.test({
       `;
 
       const result = await manager.applySchema(sdl);
-      assertEquals(result.ok, true, `applySchema failed: ${JSON.stringify(result)}`);
+      assertEquals(
+        result.ok,
+        true,
+        `applySchema failed: ${JSON.stringify(result)}`,
+      );
 
       // Insert rows with different ranges
       await execRawSQL(
@@ -453,8 +463,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Range E2E: && operator detects range overlap",
+  name: "PG Range E2E: && operator detects range overlap",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -514,7 +523,11 @@ Deno.test({
       `;
 
       const result = await manager.applySchema(sdl);
-      assertEquals(result.ok, true, `applySchema failed: ${JSON.stringify(result)}`);
+      assertEquals(
+        result.ok,
+        true,
+        `applySchema failed: ${JSON.stringify(result)}`,
+      );
 
       // Insert rows with overlapping ranges
       await execRawSQL(
@@ -578,7 +591,11 @@ Deno.test({
       `;
 
       const result = await manager.applySchema(sdl);
-      assertEquals(result.ok, true, `applySchema failed: ${JSON.stringify(result)}`);
+      assertEquals(
+        result.ok,
+        true,
+        `applySchema failed: ${JSON.stringify(result)}`,
+      );
 
       // Verify column type is tstzrange
       const columns = await getColumns(dsn, expectedTable);
@@ -672,7 +689,11 @@ Deno.test({
       `;
 
       const result = await manager.applySchema(sdl);
-      assertEquals(result.ok, true, `applySchema failed: ${JSON.stringify(result)}`);
+      assertEquals(
+        result.ok,
+        true,
+        `applySchema failed: ${JSON.stringify(result)}`,
+      );
 
       // Insert a multirange value: two disjoint ranges [1,5) and [10,20)
       await execRawSQL(

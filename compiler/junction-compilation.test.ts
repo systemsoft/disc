@@ -187,7 +187,11 @@ Deno.test("Junction compilation - SELECT User { name, memberships: { name } } us
   );
 
   // The shape fields should appear in the output
-  assertStringIncludes(lower, "'name'", "SQL should include the name shape field");
+  assertStringIncludes(
+    lower,
+    "'name'",
+    "SQL should include the name shape field",
+  );
 
   // The subquery should aggregate results via jsonb_agg
   assertStringIncludes(
@@ -411,7 +415,9 @@ Deno.test("SchemaManager - M2M detection sets junctionTable on both LinkDefs", (
   assertEquals(
     parseResult.ok,
     true,
-    `SDL parsing should succeed: ${parseResult.ok ? "" : parseResult.error?.message}`,
+    `SDL parsing should succeed: ${
+      parseResult.ok ? "" : parseResult.error?.message
+    }`,
   );
 
   if (!parseResult.ok) {

@@ -174,8 +174,7 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name:
-    "PG Rewrite: UPDATE rewrite auto-sets updated_at when row is updated",
+  name: "PG Rewrite: UPDATE rewrite auto-sets updated_at when row is updated",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -459,7 +458,11 @@ Deno.test({
       );
 
       assertEquals(rows.length, 1);
-      assertEquals(rows[0].counter, 1, "Counter should be 1 after first update");
+      assertEquals(
+        rows[0].counter,
+        1,
+        "Counter should be 1 after first update",
+      );
 
       // Second update: counter should become 2
       await execSQL(
@@ -563,7 +566,8 @@ Deno.test({
       // (skip CREATE TABLE since we already created the table)
       const rewriteSql = allStatements.filter(
         (s) =>
-          s.includes("CREATE OR REPLACE FUNCTION") && s.includes("rewrite_fn") ||
+          s.includes("CREATE OR REPLACE FUNCTION") &&
+            s.includes("rewrite_fn") ||
           s.includes("CREATE TRIGGER") && s.includes("rewrite"),
       );
 

@@ -219,7 +219,11 @@ Deno.test("EXPLAIN — basic EXPLAIN SELECT parses", () => {
   const parser = new EdgeQLParser("EXPLAIN SELECT User { name }");
   const ast = parser.parse();
   assertEquals(ast.kind, "ExplainQuery");
-  const explain = ast as { analyze?: boolean; buffers?: boolean; query: { kind: string } };
+  const explain = ast as {
+    analyze?: boolean;
+    buffers?: boolean;
+    query: { kind: string };
+  };
   assertEquals(explain.analyze, false);
   assertEquals(explain.buffers, false);
   assertEquals(explain.query.kind, "SelectQuery");

@@ -534,12 +534,12 @@ disc build --platform linux-x64 --output ./dist/disc-server
 
 ### Available Platforms
 
-| Platform         | Deno Target                     |
-| ---------------- | ------------------------------- |
-| `darwin-arm64`   | `aarch64-apple-darwin`          |
-| `darwin-x64`     | `x86_64-apple-darwin`           |
-| `linux-arm64`    | `aarch64-unknown-linux-gnu`     |
-| `linux-x64`      | `x86_64-unknown-linux-gnu`      |
+| Platform       | Deno Target                 |
+| -------------- | --------------------------- |
+| `darwin-arm64` | `aarch64-apple-darwin`      |
+| `darwin-x64`   | `x86_64-apple-darwin`       |
+| `linux-arm64`  | `aarch64-unknown-linux-gnu` |
+| `linux-x64`    | `x86_64-unknown-linux-gnu`  |
 
 ### Cross-Compilation Limitations
 
@@ -586,9 +586,9 @@ The `--output` flag controls where generated files are written. Defaults to `./d
 
 ### Formats
 
-| Format    | Output File          | Description                                         |
-| --------- | -------------------- | --------------------------------------------------- |
-| `docker`  | `Dockerfile`         | Basic Dockerfile for running Disc with external PG  |
+| Format    | Output File          | Description                                          |
+| --------- | -------------------- | ---------------------------------------------------- |
+| `docker`  | `Dockerfile`         | Basic Dockerfile for running Disc with external PG   |
 | `compose` | `docker-compose.yml` | Compose stack with Disc and PostgreSQL               |
 | `systemd` | `disc.service`       | systemd service unit for Linux deployments           |
 | `env`     | `.env.production`    | Environment variable template with all Disc settings |

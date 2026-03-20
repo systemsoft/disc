@@ -113,9 +113,7 @@ export function encodeScalarValue(
     case "datetime": {
       // Value is a Date or number (ms since Unix epoch).
       // Wire format: int64 microseconds since 2000-01-01 UTC.
-      const msUnix = value instanceof Date
-        ? value.getTime()
-        : value as number;
+      const msUnix = value instanceof Date ? value.getTime() : value as number;
       const usGel = BigInt(msUnix) * 1000n - GEL_EPOCH_OFFSET_US;
       const buf = new Uint8Array(8);
       new DataView(buf.buffer).setBigInt64(0, usGel, false);
@@ -124,9 +122,7 @@ export function encodeScalarValue(
 
     case "local_datetime": {
       // Same encoding as datetime (int64 us since 2000-01-01) but no timezone
-      const msUnix = value instanceof Date
-        ? value.getTime()
-        : value as number;
+      const msUnix = value instanceof Date ? value.getTime() : value as number;
       const usGel = BigInt(msUnix) * 1000n - GEL_EPOCH_OFFSET_US;
       const buf = new Uint8Array(8);
       new DataView(buf.buffer).setBigInt64(0, usGel, false);
@@ -135,9 +131,7 @@ export function encodeScalarValue(
 
     case "local_date": {
       // int32 days since 2000-01-01
-      const msUnix = value instanceof Date
-        ? value.getTime()
-        : value as number;
+      const msUnix = value instanceof Date ? value.getTime() : value as number;
       const daysSinceGelEpoch = Math.floor(
         (msUnix - GEL_EPOCH_OFFSET_MS) / 86400000,
       );
@@ -179,9 +173,7 @@ export function encodeScalarValue(
 
     case "json": {
       // 1-byte format version prefix (0x01) + UTF-8 JSON string
-      const jsonStr = typeof value === "string"
-        ? value
-        : JSON.stringify(value);
+      const jsonStr = typeof value === "string" ? value : JSON.stringify(value);
       const jsonBytes = textEncoder.encode(jsonStr);
       const buf = new Uint8Array(1 + jsonBytes.length);
       buf[0] = 0x01;
@@ -536,9 +528,7 @@ function encodeDecimal(value: string | number): Uint8Array {
   const paddedInt = "0".repeat(intPadLen) + intPart;
 
   // Pad fractional part on the right to multiple of 4
-  const fracPadLen = fracPart.length % 4 === 0
-    ? 0
-    : 4 - (fracPart.length % 4);
+  const fracPadLen = fracPart.length % 4 === 0 ? 0 : 4 - (fracPart.length % 4);
   const paddedFrac = fracPart + "0".repeat(fracPadLen);
 
   fullDigits = paddedInt + paddedFrac;

@@ -7,7 +7,7 @@ HTTP/JSON server for the Disc database. Handles EdgeQL query execution, WebSocke
 ### Programmatic
 
 ```typescript
-import { DiscServer, createServerFromEnv } from "disc/server/server.ts";
+import { createServerFromEnv, DiscServer } from "disc/server/server.ts";
 
 // From environment variables
 const server = createServerFromEnv();
@@ -18,7 +18,7 @@ const server = new DiscServer({
   host: "localhost",
   port: 5656,
   databaseUrl: "postgresql://localhost:5432/disc",
-  protocol: "full",       // "simple" (default) or "full" (real EdgeQL compiler)
+  protocol: "full", // "simple" (default) or "full" (real EdgeQL compiler)
   enableAuth: true,
   jwtSecret: "my-secret",
 });
@@ -120,17 +120,17 @@ Prometheus-compatible metrics endpoint. Only available when `enableMetrics` is t
 
 Available when `jwtSecret` is configured and `enableAuth` is not `false`.
 
-| Method | Path                  | Description                    |
-|--------|-----------------------|--------------------------------|
-| POST   | `/auth/register`      | Register a new user            |
-| POST   | `/auth/login`         | Login with email/username      |
-| POST   | `/auth/logout`        | Logout and revoke session      |
-| POST   | `/auth/refresh`       | Refresh access token           |
-| GET    | `/auth/profile`       | Get current user profile       |
-| POST   | `/auth/password`      | Update password                |
-| POST   | `/auth/reset`         | Request password reset         |
-| POST   | `/auth/reset/confirm` | Confirm password reset         |
-| GET    | `/auth/verify`        | Verify email address           |
+| Method | Path                  | Description               |
+| ------ | --------------------- | ------------------------- |
+| POST   | `/auth/register`      | Register a new user       |
+| POST   | `/auth/login`         | Login with email/username |
+| POST   | `/auth/logout`        | Logout and revoke session |
+| POST   | `/auth/refresh`       | Refresh access token      |
+| GET    | `/auth/profile`       | Get current user profile  |
+| POST   | `/auth/password`      | Update password           |
+| POST   | `/auth/reset`         | Request password reset    |
+| POST   | `/auth/reset/confirm` | Confirm password reset    |
+| GET    | `/auth/verify`        | Verify email address      |
 
 ### Extension Routes (`/ext/*`)
 
@@ -143,16 +143,22 @@ Connect via WebSocket upgrade on the server URL. Messages are JSON objects with 
 ### Client-to-Server Messages
 
 **Query:**
+
 ```json
 { "type": "query", "payload": { "query": "select User { name }" } }
 ```
 
 **Subscribe:**
+
 ```json
-{ "type": "subscribe", "payload": { "id": "sub_1", "query": "select User { name }" } }
+{
+  "type": "subscribe",
+  "payload": { "id": "sub_1", "query": "select User { name }" }
+}
 ```
 
 **Unsubscribe:**
+
 ```json
 { "type": "unsubscribe", "payload": { "subscriptionId": "sub_1" } }
 ```
@@ -170,55 +176,55 @@ Connect via WebSocket upgrade on the server URL. Messages are JSON objects with 
 
 ### ServerConfig
 
-| Field                   | Type       | Default                   | Description                              |
-|-------------------------|------------|---------------------------|------------------------------------------|
-| `host`                  | `string`   | `"localhost"`             | Bind address                             |
-| `port`                  | `number`   | `5656`                    | Listen port                              |
-| `databaseUrl`           | `string`   | `"postgresql://..."`      | PostgreSQL connection string             |
-| `maxConnections`        | `number`   | `100`                     | Max concurrent connections               |
-| `requestTimeout`        | `number`   | `30000`                   | Request timeout in ms                    |
-| `enableCors`            | `boolean`  | `true`                    | Enable CORS headers                      |
-| `corsOrigins`           | `string[]` | `undefined`               | Allowed CORS origins                     |
-| `enableWebsockets`      | `boolean`  | `true`                    | Enable WebSocket upgrade                 |
-| `jwtSecret`             | `string`   | `undefined`               | JWT signing secret (enables auth)        |
-| `enableAuth`            | `boolean`  | `undefined`               | Explicit auth toggle                     |
-| `enableAccessPolicies`  | `boolean`  | `undefined`               | Enable SDL access policy enforcement     |
-| `cacheMaxSize`          | `number`   | `1000`                    | Max entries in parse/compilation caches  |
-| `shutdownDrainTimeout`  | `number`   | `30000`                   | Drain timeout on shutdown in ms          |
-| `slowQueryThresholdMs`  | `number`   | `1000`                    | Slow query log threshold                 |
-| `enableMetrics`         | `boolean`  | `false`                   | Enable `/metrics` endpoint               |
-| `rateLimitRpm`          | `number`   | `undefined`               | Requests per minute per IP               |
-| `rateLimitBurst`        | `number`   | `undefined`               | Burst size for rate limiter              |
-| `tls`                   | `object`   | `undefined`               | TLS certificate and key paths            |
+| Field                  | Type       | Default              | Description                             |
+| ---------------------- | ---------- | -------------------- | --------------------------------------- |
+| `host`                 | `string`   | `"localhost"`        | Bind address                            |
+| `port`                 | `number`   | `5656`               | Listen port                             |
+| `databaseUrl`          | `string`   | `"postgresql://..."` | PostgreSQL connection string            |
+| `maxConnections`       | `number`   | `100`                | Max concurrent connections              |
+| `requestTimeout`       | `number`   | `30000`              | Request timeout in ms                   |
+| `enableCors`           | `boolean`  | `true`               | Enable CORS headers                     |
+| `corsOrigins`          | `string[]` | `undefined`          | Allowed CORS origins                    |
+| `enableWebsockets`     | `boolean`  | `true`               | Enable WebSocket upgrade                |
+| `jwtSecret`            | `string`   | `undefined`          | JWT signing secret (enables auth)       |
+| `enableAuth`           | `boolean`  | `undefined`          | Explicit auth toggle                    |
+| `enableAccessPolicies` | `boolean`  | `undefined`          | Enable SDL access policy enforcement    |
+| `cacheMaxSize`         | `number`   | `1000`               | Max entries in parse/compilation caches |
+| `shutdownDrainTimeout` | `number`   | `30000`              | Drain timeout on shutdown in ms         |
+| `slowQueryThresholdMs` | `number`   | `1000`               | Slow query log threshold                |
+| `enableMetrics`        | `boolean`  | `false`              | Enable `/metrics` endpoint              |
+| `rateLimitRpm`         | `number`   | `undefined`          | Requests per minute per IP              |
+| `rateLimitBurst`       | `number`   | `undefined`          | Burst size for rate limiter             |
+| `tls`                  | `object`   | `undefined`          | TLS certificate and key paths           |
 
 ### Environment Variables
 
-| Variable                       | Maps To                    |
-|--------------------------------|----------------------------|
-| `DISC_HOST`                    | `host`                     |
-| `DISC_PORT`                    | `port`                     |
-| `DATABASE_URL`                 | `databaseUrl`              |
-| `DISC_MAX_CONNECTIONS`         | `maxConnections`           |
-| `DISC_REQUEST_TIMEOUT`         | `requestTimeout`           |
-| `DISC_ENABLE_CORS`             | `enableCors`               |
-| `DISC_CORS_ORIGINS`            | `corsOrigins` (comma-separated) |
-| `DISC_ENABLE_WEBSOCKETS`       | `enableWebsockets`         |
-| `DISC_JWT_SECRET`              | `jwtSecret`                |
-| `DISC_ENABLE_AUTH`             | `enableAuth`               |
-| `DISC_ENABLE_ACCESS_POLICIES`  | `enableAccessPolicies`     |
-| `DISC_CACHE_MAX_SIZE`          | `cacheMaxSize`             |
-| `DISC_SLOW_QUERY_MS`           | `slowQueryThresholdMs`     |
-| `DISC_ENABLE_METRICS`          | `enableMetrics`            |
-| `DISC_RATE_LIMIT_RPM`          | `rateLimitRpm`             |
-| `DISC_RATE_LIMIT_BURST`        | `rateLimitBurst`           |
-| `DISC_PROTOCOL`                | `protocol` ("simple"/"full") |
-| `DISC_LOG_LEVEL`               | Logging level (DEBUG/INFO/WARN/ERROR) |
-| `DISC_LOG_FORMAT`              | Logging format ("json"/"text") |
-| `DISC_TLS_CERT`                | TLS certificate file path  |
-| `DISC_TLS_KEY`                 | TLS key file path          |
-| `DISC_TLS_REDIRECT`            | Enable HTTP-to-HTTPS redirect |
-| `DISC_TLS_REDIRECT_PORT`       | HTTP redirect listen port  |
-| `DISC_EXPLAIN_CACHE_TTL`       | EXPLAIN plan cache TTL in ms |
+| Variable                      | Maps To                               |
+| ----------------------------- | ------------------------------------- |
+| `DISC_HOST`                   | `host`                                |
+| `DISC_PORT`                   | `port`                                |
+| `DATABASE_URL`                | `databaseUrl`                         |
+| `DISC_MAX_CONNECTIONS`        | `maxConnections`                      |
+| `DISC_REQUEST_TIMEOUT`        | `requestTimeout`                      |
+| `DISC_ENABLE_CORS`            | `enableCors`                          |
+| `DISC_CORS_ORIGINS`           | `corsOrigins` (comma-separated)       |
+| `DISC_ENABLE_WEBSOCKETS`      | `enableWebsockets`                    |
+| `DISC_JWT_SECRET`             | `jwtSecret`                           |
+| `DISC_ENABLE_AUTH`            | `enableAuth`                          |
+| `DISC_ENABLE_ACCESS_POLICIES` | `enableAccessPolicies`                |
+| `DISC_CACHE_MAX_SIZE`         | `cacheMaxSize`                        |
+| `DISC_SLOW_QUERY_MS`          | `slowQueryThresholdMs`                |
+| `DISC_ENABLE_METRICS`         | `enableMetrics`                       |
+| `DISC_RATE_LIMIT_RPM`         | `rateLimitRpm`                        |
+| `DISC_RATE_LIMIT_BURST`       | `rateLimitBurst`                      |
+| `DISC_PROTOCOL`               | `protocol` ("simple"/"full")          |
+| `DISC_LOG_LEVEL`              | Logging level (DEBUG/INFO/WARN/ERROR) |
+| `DISC_LOG_FORMAT`             | Logging format ("json"/"text")        |
+| `DISC_TLS_CERT`               | TLS certificate file path             |
+| `DISC_TLS_KEY`                | TLS key file path                     |
+| `DISC_TLS_REDIRECT`           | Enable HTTP-to-HTTPS redirect         |
+| `DISC_TLS_REDIRECT_PORT`      | HTTP redirect listen port             |
+| `DISC_EXPLAIN_CACHE_TTL`      | EXPLAIN plan cache TTL in ms          |
 
 ## Server Lifecycle
 
@@ -248,8 +254,8 @@ const server = new DiscServer({
   tls: {
     certFile: "/path/to/cert.pem",
     keyFile: "/path/to/key.pem",
-    redirect: true,       // optional: redirect HTTP to HTTPS
-    redirectPort: 80,     // optional: HTTP redirect listen port
+    redirect: true, // optional: redirect HTTP to HTTPS
+    redirectPort: 80, // optional: HTTP redirect listen port
   },
 });
 ```

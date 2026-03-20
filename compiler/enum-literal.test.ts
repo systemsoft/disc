@@ -63,7 +63,8 @@ Deno.test("enum literal - in filter expression", () => {
 // =========================================================================
 
 Deno.test("enum literal - in insert value", () => {
-  const source = `INSERT User { name := "Alice", email := "alice@example.com", status := Status.pending }`;
+  const source =
+    `INSERT User { name := "Alice", email := "alice@example.com", status := Status.pending }`;
 
   // The User type doesn't have a status property in createTestSchema,
   // so we need a schema with that property for a full INSERT test.
@@ -114,7 +115,11 @@ Deno.test("enum literal - non-enum path is not treated as enum literal", () => {
   const sql = compileEdgeQL(source);
 
   // User.name should compile to a column reference, not an enum cast
-  assertEquals(sql.includes("::"), false, "Non-enum path should not have a type cast");
+  assertEquals(
+    sql.includes("::"),
+    false,
+    "Non-enum path should not have a type cast",
+  );
   assertStringIncludes(sql, "name");
   assertStringIncludes(sql, "FROM");
   assertStringIncludes(sql, "users");
@@ -125,7 +130,8 @@ Deno.test("enum literal - non-enum path is not treated as enum literal", () => {
 // =========================================================================
 
 Deno.test("enum literal - multiple enum references in one query", () => {
-  const source = `SELECT "match" IF Status.active = Status.active ELSE "no match"`;
+  const source =
+    `SELECT "match" IF Status.active = Status.active ELSE "no match"`;
   const sql = compileEdgeQL(source);
 
   // Both enum references should be compiled
