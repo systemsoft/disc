@@ -5,6 +5,7 @@
 export interface CodegenConfig {
   outputDir: string;
   schemaSource: string;
+  schemaDir?: string;
   target: "client" | "server" | "both";
   typePrefix?: string;
   interfaceSuffix?: string;
@@ -80,7 +81,7 @@ export interface CodegenResult {
 export interface GeneratedFile {
   path: string;
   content: string;
-  type: "types" | "client" | "queries" | "mutations" | "index";
+  type: "types" | "interfaces" | "client" | "queries" | "mutations" | "index";
 }
 
 export interface TypeMapping {

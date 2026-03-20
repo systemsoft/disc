@@ -223,40 +223,59 @@ export class CLICommands {
   async codegen(args: CLIArgs): Promise<void> {
     console.log("🚀 Generating TypeScript types...");
 
-    const outputDir = args.output || "./generated";
-    const schemaFile = args.schema || "./dbschema/default.esdl";
+    const outputDir = args.output || "./dbschema/disc-client";
+    const schemaDir = args["schema-dir"] || "./dbschema";
+    const schemaFile = args.schema as string | undefined;
     const target = args.target || "client";
 
-    console.log(`📋 Configuration:`);
-    console.log(`   Schema: ${schemaFile}`);
-    console.log(`   Output: ${outputDir}`);
-    console.log(`   Target: ${target}`);
-
     try {
-      // Try to read real schema from SDL file via SchemaManager
-      let schema = await this.readSchemaAsCompilerSchema(schemaFile);
+      let schema: Schema;
 
-      if (schema) {
-        const typeNames = Array.from(schema.types.keys()).join(", ");
-        console.log(
-          `📖 Loaded schema from ${schemaFile} with types: ${typeNames}`,
-        );
+      if (schemaFile) {
+        // Single-file mode (explicit --schema flag)
+        console.log(`📋 Schema: ${schemaFile}`);
+        const loaded = await this.readSchemaAsCompilerSchema(schemaFile);
+
+        if (loaded) {
+          schema = loaded;
+          const typeNames = Array.from(schema.types.keys()).join(", ");
+          console.log(`📖 Loaded types: ${typeNames}`);
+        } else {
+          console.log(
+            `⚠️  No schema found at ${schemaFile}, falling back to test schema`,
+          );
+          schema = Context.createTestSchema();
+        }
       } else {
-        console.log(
-          `⚠️  No schema found at ${schemaFile}, falling back to test schema`,
-        );
-        schema = Context.createTestSchema();
-        console.log(
-          `📖 Using test schema with types: ${
-            Array.from(schema.types.keys()).join(", ")
-          }`,
-        );
+        // Multi-file mode: discover schema files from directory
+        console.log(`📋 Schema dir: ${schemaDir}`);
+        const files = await Codegen.discoverSchemaFiles(schemaDir);
+
+        if (files.length > 0) {
+          console.log(
+            `📖 Discovered ${files.length} schema file(s): ${
+              files.map((f) => f.split("/").pop()).join(", ")
+            }`,
+          );
+          schema = await Codegen.loadMultiFileSchema(files);
+          const typeNames = Array.from(schema.types.keys()).join(", ");
+          console.log(`📖 Loaded types: ${typeNames}`);
+        } else {
+          console.log(
+            `⚠️  No schema files found in ${schemaDir}, falling back to test schema`,
+          );
+          schema = Context.createTestSchema();
+        }
       }
+
+      console.log(`📋 Output: ${outputDir}`);
+      console.log(`📋 Target: ${target}`);
 
       // Generate TypeScript code
       const config: Partial<Codegen.CodegenConfig> = {
         outputDir: outputDir,
-        schemaSource: schemaFile,
+        schemaSource: schemaFile || schemaDir,
+        schemaDir: schemaDir,
         target: target as "client" | "server" | "both",
         includeQueryBuilders: args["no-queries"] !== true,
         includeMutations: args["no-mutations"] !== true,

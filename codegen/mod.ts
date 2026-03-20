@@ -7,6 +7,8 @@ export * from "./typescript-generator.ts";
 
 import * as Context from "../compiler/context.ts";
 import { getLogger } from "../lib/logger.ts";
+import { SchemaManager } from "../migration/schema-manager.ts";
+import type { Module } from "../schema/converter.ts";
 import { TypeScriptGenerator } from "./typescript-generator.ts";
 import * as Types from "./types.ts";
 
@@ -82,6 +84,58 @@ export async function writeGeneratedFiles(
   if (result.errors.length > 0) {
     result.errors.forEach((error) => log.error("Codegen error", { error }));
   }
+}
+
+/**
+ * Discover schema files in a directory.
+ * Priority: *.disc -> *.gel -> *.esdl
+ * Returns file paths sorted alphabetically.
+ */
+export async function discoverSchemaFiles(dir: string): Promise<string[]> {
+  const extensions = ["disc", "gel", "esdl"];
+
+  for (const ext of extensions) {
+    const files: string[] = [];
+    try {
+      for await (const entry of Deno.readDir(dir)) {
+        if (entry.isFile && entry.name.endsWith(`.${ext}`)) {
+          files.push(`${dir}/${entry.name}`);
+        }
+      }
+    } catch {
+      // Directory doesn't exist or can't be read
+      continue;
+    }
+
+    if (files.length > 0) {
+      return files.sort();
+    }
+  }
+
+  return [];
+}
+
+/**
+ * Load and merge multiple schema files into a single Schema.
+ * Parses each file via SchemaManager, merges Module arrays,
+ * then converts to a unified compiler Schema.
+ */
+export async function loadMultiFileSchema(
+  files: string[],
+): Promise<Context.Schema> {
+  const manager = new SchemaManager({});
+  const allModules: Module[] = [];
+
+  for (const file of files) {
+    const source = await Deno.readTextFile(file);
+    const result = manager.parseSDL(source);
+    if (!result.ok) {
+      throw new Error(`Failed to parse ${file}: ${result.error.message}`);
+    }
+    allModules.push(...result.value);
+  }
+
+  return manager.modulesToSchema(allModules);
 }
 
 /**

@@ -121,6 +121,8 @@ export interface TypeDef {
   discriminatorColumn?: string;
   /** Annotations (e.g., description) from SDL */
   annotations?: Record<string, string>;
+  /** Module this type belongs to (e.g., "default", "payment") */
+  module?: string;
 }
 
 export interface PropertyConstraint {
@@ -656,5 +658,194 @@ export function createTestSchema(): Schema {
         pgSettingName: "disc.global_default__current_user_id",
       }],
     ]),
+  };
+}
+
+/**
+ * Create a multi-module test schema for testing module-aware codegen.
+ * Mimics a real-world project with default, api, and payment modules.
+ */
+export function createMultiModuleTestSchema(): Schema {
+  // default module types
+  const merchantStatusType: TypeDef = {
+    name: "MerchantStatus",
+    kind: "enum",
+    tableName: "merchant_status",
+    properties: new Map(),
+    links: new Map(),
+    enumValues: ["active", "suspended", "pending"],
+    module: "default",
+  };
+
+  const merchantType: TypeDef = {
+    name: "Merchant",
+    kind: "object",
+    tableName: "merchants",
+    module: "default",
+    properties: new Map([
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+        edgeqlType: "uuid",
+        hasDefault: true,
+      }],
+      ["name", {
+        name: "name",
+        type: "str",
+        required: true,
+        multi: false,
+        columnName: "name",
+        edgeqlType: "str",
+      }],
+      ["status", {
+        name: "status",
+        type: "str",
+        required: false,
+        multi: false,
+        columnName: "status",
+        edgeqlType: "str",
+      }],
+    ]),
+    links: new Map([
+      ["apiKeys", {
+        name: "apiKeys",
+        target: "api::ApiKey",
+        required: false,
+        multi: true,
+        backlink: "merchant",
+      }],
+      ["payments", {
+        name: "payments",
+        target: "payment::Payment",
+        required: false,
+        multi: true,
+        backlink: "merchant",
+      }],
+    ]),
+  };
+
+  // api module types
+  const apiKeyType: TypeDef = {
+    name: "ApiKey",
+    kind: "object",
+    tableName: "api_keys",
+    module: "api",
+    properties: new Map([
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+        edgeqlType: "uuid",
+        hasDefault: true,
+      }],
+      ["key", {
+        name: "key",
+        type: "str",
+        required: true,
+        multi: false,
+        columnName: "key",
+        edgeqlType: "str",
+        constraints: [{ name: "exclusive" }],
+      }],
+      ["active", {
+        name: "active",
+        type: "bool",
+        required: true,
+        multi: false,
+        columnName: "active",
+        edgeqlType: "bool",
+        hasDefault: true,
+      }],
+    ]),
+    links: new Map([
+      ["merchant", {
+        name: "merchant",
+        target: "Merchant",
+        required: true,
+        multi: false,
+        columnName: "merchant_id",
+      }],
+    ]),
+  };
+
+  // payment module types
+  const paymentStatusType: TypeDef = {
+    name: "PaymentStatus",
+    kind: "enum",
+    tableName: "payment_status",
+    properties: new Map(),
+    links: new Map(),
+    enumValues: ["pending", "completed", "failed", "refunded"],
+    module: "payment",
+  };
+
+  const paymentType: TypeDef = {
+    name: "Payment",
+    kind: "object",
+    tableName: "payments",
+    module: "payment",
+    properties: new Map([
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+        edgeqlType: "uuid",
+        hasDefault: true,
+      }],
+      ["amount", {
+        name: "amount",
+        type: "decimal",
+        required: true,
+        multi: false,
+        columnName: "amount",
+        edgeqlType: "decimal",
+      }],
+      ["currency", {
+        name: "currency",
+        type: "str",
+        required: true,
+        multi: false,
+        columnName: "currency",
+        edgeqlType: "str",
+      }],
+      ["status", {
+        name: "status",
+        type: "str",
+        required: false,
+        multi: false,
+        columnName: "status",
+        edgeqlType: "str",
+      }],
+    ]),
+    links: new Map([
+      ["merchant", {
+        name: "merchant",
+        target: "Merchant",
+        required: true,
+        multi: false,
+        columnName: "merchant_id",
+      }],
+    ]),
+  };
+
+  return {
+    types: new Map([
+      // default module: bare keys
+      ["MerchantStatus", merchantStatusType],
+      ["Merchant", merchantType],
+      // api module: qualified keys
+      ["api::ApiKey", apiKeyType],
+      // payment module: qualified keys
+      ["payment::PaymentStatus", paymentStatusType],
+      ["payment::Payment", paymentType],
+    ]),
+    functions: getBuiltinFunctions(),
   };
 }

@@ -374,7 +374,10 @@ export class SchemaManager {
             aliasDef.targetType = targetType;
           }
 
-          aliases.set(aliasName, aliasDef);
+          const aliasKey = module.name === "default"
+            ? aliasName
+            : `${module.name}::${aliasName}`;
+          aliases.set(aliasKey, aliasDef);
           continue;
         }
 
@@ -418,13 +421,17 @@ export class SchemaManager {
           ) ?? false;
 
           if (isEnum) {
-            types.set(scalarName, {
+            const enumKey = module.name === "default"
+              ? scalarName
+              : `${module.name}::${scalarName}`;
+            types.set(enumKey, {
               name: scalarName,
               kind: "enum",
               tableName: typeNameToTableName(scalarName),
               properties: new Map(),
               links: new Map(),
               enumValues: [],
+              module: module.name,
             });
           }
 
@@ -596,7 +603,11 @@ export class SchemaManager {
           typeDef.parentTypes = parentTypeNames;
         }
 
-        types.set(typeName, typeDef);
+        typeDef.module = module.name;
+        const typeKey = module.name === "default"
+          ? typeName
+          : `${module.name}::${typeName}`;
+        types.set(typeKey, typeDef);
       }
     }
 

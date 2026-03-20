@@ -484,6 +484,230 @@ Deno.test("Codegen - mixed schema with enum and object types", () => {
   assertEquals(queryFile.content.includes("StatusQueryBuilder"), false);
 });
 
+// --- Multi-module codegen integration tests ---
+
+Deno.test("Codegen - multi-module schema generates namespaces", () => {
+  const schema = Context.createMultiModuleTestSchema();
+  const result = Codegen.generateTypeScript(schema, {
+    includeQueryBuilders: true,
+    includeClient: false,
+  });
+
+  assertEquals(result.errors.length, 0);
+
+  // Types file should be named interfaces.ts in multi-module mode
+  const typesFile = result.files.find((f) => f.type === "interfaces");
+  assertExists(typesFile);
+  assertStringIncludes(typesFile.path, "interfaces.ts");
+
+  const content = typesFile.content;
+
+  // Should have namespace declarations
+  assertStringIncludes(content, "export namespace $default {");
+  assertStringIncludes(content, "export namespace api {");
+  assertStringIncludes(content, "export namespace payment {");
+});
+
+Deno.test("Codegen - multi-module cross-module link references", () => {
+  const schema = Context.createMultiModuleTestSchema();
+  const result = Codegen.generateTypeScript(schema, {
+    includeQueryBuilders: false,
+    includeClient: false,
+  });
+
+  assertEquals(result.errors.length, 0);
+
+  const typesFile = result.files.find((f) => f.type === "interfaces");
+  assertExists(typesFile);
+  const content = typesFile.content;
+
+  // Merchant (default module) links to api::ApiKey — should use api.ApiKey
+  assertStringIncludes(content, "api.ApiKey[]");
+  // Merchant links to payment::Payment — should use payment.Payment
+  assertStringIncludes(content, "payment.Payment[]");
+  // ApiKey (api module) links to Merchant (default) — should use $default.Merchant
+  assertStringIncludes(content, "$default.Merchant");
+  // Payment (payment module) links to Merchant (default) — should use $default.Merchant
+  // (content already checked above via $default.Merchant)
+});
+
+Deno.test("Codegen - multi-module enums inside namespaces", () => {
+  const schema = Context.createMultiModuleTestSchema();
+  const result = Codegen.generateTypeScript(schema, {
+    includeQueryBuilders: false,
+    includeClient: false,
+  });
+
+  assertEquals(result.errors.length, 0);
+
+  const typesFile = result.files.find((f) => f.type === "interfaces");
+  assertExists(typesFile);
+  const content = typesFile.content;
+
+  // MerchantStatus enum in $default namespace
+  assertStringIncludes(
+    content,
+    'export type MerchantStatus = "active" | "suspended" | "pending"',
+  );
+  // PaymentStatus enum in payment namespace
+  assertStringIncludes(
+    content,
+    'export type PaymentStatus = "pending" | "completed" | "failed" | "refunded"',
+  );
+});
+
+Deno.test("Codegen - multi-module Insert/Update/FilterVars in namespaces", () => {
+  const schema = Context.createMultiModuleTestSchema();
+  const result = Codegen.generateTypeScript(schema, {
+    includeQueryBuilders: false,
+    includeClient: false,
+  });
+
+  assertEquals(result.errors.length, 0);
+
+  const typesFile = result.files.find((f) => f.type === "interfaces");
+  assertExists(typesFile);
+  const content = typesFile.content;
+
+  // Insert/Update/FilterVars should be inside namespaces (indented)
+  assertStringIncludes(content, "  export interface MerchantInsert");
+  assertStringIncludes(content, "  export interface PaymentInsert");
+  assertStringIncludes(content, "  export interface ApiKeyInsert");
+  assertStringIncludes(content, "  export interface MerchantUpdate");
+  assertStringIncludes(content, "  export interface PaymentUpdate");
+  assertStringIncludes(content, "  export interface MerchantFilterVars");
+  assertStringIncludes(content, "  export interface PaymentFilterVars");
+});
+
+Deno.test("Codegen - multi-module query builders use qualified EdgeQL names", () => {
+  const schema = Context.createMultiModuleTestSchema();
+  const result = Codegen.generateTypeScript(schema, {
+    includeQueryBuilders: true,
+    includeClient: false,
+  });
+
+  assertEquals(result.errors.length, 0);
+
+  const queryFile = result.files.find((f) => f.type === "queries");
+  assertExists(queryFile);
+  const content = queryFile.content;
+
+  // Builders for non-default modules use qualified EdgeQL names
+  assertStringIncludes(content, "select payment::Payment");
+  assertStringIncludes(content, "select api::ApiKey");
+  // Default module uses unqualified names
+  assertStringIncludes(content, "select Merchant {");
+
+  // Types are referenced with namespace prefix
+  assertStringIncludes(content, "Types.$default.Merchant");
+  assertStringIncludes(content, "Types.payment.Payment");
+  assertStringIncludes(content, "Types.api.ApiKey");
+
+  // Import from interfaces.ts
+  assertStringIncludes(content, 'from "./interfaces.ts"');
+});
+
+Deno.test("Codegen - multi-module index exports from interfaces.ts", () => {
+  const schema = Context.createMultiModuleTestSchema();
+  const result = Codegen.generateTypeScript(schema, {
+    includeQueryBuilders: true,
+    includeClient: true,
+  });
+
+  assertEquals(result.errors.length, 0);
+
+  const indexFile = result.files.find((f) => f.type === "index");
+  assertExists(indexFile);
+  assertStringIncludes(indexFile.content, "./interfaces.ts");
+});
+
+Deno.test("Codegen - backward compat: schema without module field generates flat types", () => {
+  // createTestSchema() has NO module field on any type
+  const schema = Context.createTestSchema();
+  const result = Codegen.generateTypeScript(schema, {
+    includeQueryBuilders: true,
+    includeClient: false,
+  });
+
+  assertEquals(result.errors.length, 0);
+
+  // Should use types.ts (not interfaces.ts)
+  const typesFile = result.files.find((f) => f.type === "types");
+  assertExists(typesFile);
+  assertStringIncludes(typesFile.path, "types.ts");
+
+  // Should NOT have namespace declarations
+  const content = typesFile.content;
+  assertEquals(content.includes("export namespace"), false);
+
+  // Should have flat exports
+  assertStringIncludes(content, "export interface User {");
+  assertStringIncludes(content, "export interface Post {");
+});
+
+// --- discoverSchemaFiles tests ---
+
+Deno.test("Codegen - discoverSchemaFiles finds .disc files first", async () => {
+  const tempDir = await createTempDir();
+  try {
+    // Create .disc and .gel files
+    await Deno.writeTextFile(`${tempDir}/default.disc`, "module default {}");
+    await Deno.writeTextFile(`${tempDir}/default.gel`, "module default {}");
+
+    const files = await Codegen.discoverSchemaFiles(tempDir);
+    assertEquals(files.length, 1);
+    assertStringIncludes(files[0], ".disc");
+  } finally {
+    await cleanupTempDir(tempDir);
+  }
+});
+
+Deno.test("Codegen - discoverSchemaFiles falls back to .gel", async () => {
+  const tempDir = await createTempDir();
+  try {
+    await Deno.writeTextFile(`${tempDir}/default.gel`, "module default {}");
+    await Deno.writeTextFile(`${tempDir}/api.gel`, "module api {}");
+
+    const files = await Codegen.discoverSchemaFiles(tempDir);
+    assertEquals(files.length, 2);
+    // Should be sorted alphabetically
+    assertStringIncludes(files[0], "api.gel");
+    assertStringIncludes(files[1], "default.gel");
+  } finally {
+    await cleanupTempDir(tempDir);
+  }
+});
+
+Deno.test("Codegen - discoverSchemaFiles falls back to .esdl", async () => {
+  const tempDir = await createTempDir();
+  try {
+    await Deno.writeTextFile(`${tempDir}/schema.esdl`, "module default {}");
+
+    const files = await Codegen.discoverSchemaFiles(tempDir);
+    assertEquals(files.length, 1);
+    assertStringIncludes(files[0], ".esdl");
+  } finally {
+    await cleanupTempDir(tempDir);
+  }
+});
+
+Deno.test("Codegen - discoverSchemaFiles returns empty for empty dir", async () => {
+  const tempDir = await createTempDir();
+  try {
+    const files = await Codegen.discoverSchemaFiles(tempDir);
+    assertEquals(files.length, 0);
+  } finally {
+    await cleanupTempDir(tempDir);
+  }
+});
+
+Deno.test("Codegen - discoverSchemaFiles returns empty for nonexistent dir", async () => {
+  const files = await Codegen.discoverSchemaFiles(
+    "/nonexistent/dir/that/does/not/exist",
+  );
+  assertEquals(files.length, 0);
+});
+
 Deno.test("Codegen - all features combined in single generated file", () => {
   const schema = Context.createTestSchema();
   const result = Codegen.generateTypeScript(schema, {

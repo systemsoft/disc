@@ -64,6 +64,74 @@ export class TypeScriptGenerator {
     return result;
   }
 
+  /** Check if schema has multi-module types */
+  private isMultiModule(): boolean {
+    for (const [_name, typeDef] of this.schema.types) {
+      if (typeDef.module && typeDef.module !== "default") {
+        return true;
+      }
+    }
+    // Also check: if any type has module set at all (even all default), use namespace mode
+    for (const [_name, typeDef] of this.schema.types) {
+      if (typeDef.module) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Group schema types by their module */
+  private groupTypesByModule(): Map<string, Context.TypeDef[]> {
+    const groups = new Map<string, Context.TypeDef[]>();
+    for (const [_name, typeDef] of this.schema.types) {
+      const mod = typeDef.module || "default";
+      if (!groups.has(mod)) {
+        groups.set(mod, []);
+      }
+      groups.get(mod)!.push(typeDef);
+    }
+    return groups;
+  }
+
+  /** Convert module name to TypeScript namespace name */
+  private getModuleNamespace(moduleName: string): string {
+    return moduleName === "default" ? "$default" : moduleName;
+  }
+
+  /**
+   * Resolve a type reference for cross-module use.
+   * If target is in a different module from currentModule, prefix with namespace.
+   * If same module, use bare name.
+   */
+  private resolveTypeReference(
+    target: string,
+    currentModule: string,
+  ): string {
+    // Check if target contains :: (qualified name like "payment::Transaction")
+    let targetModule = "default";
+    let targetName = target;
+
+    if (target.includes("::")) {
+      const parts = target.split("::");
+      targetModule = parts[0];
+      targetName = parts[parts.length - 1];
+    } else {
+      // Try to find the type in the schema to determine its module
+      const typeDef = this.schema.types.get(target);
+      if (typeDef?.module) {
+        targetModule = typeDef.module;
+      }
+    }
+
+    const tsName = this.getTypeScriptTypeName(targetName);
+
+    if (targetModule === currentModule) {
+      return tsName;
+    }
+
+    return `${this.getModuleNamespace(targetModule)}.${tsName}`;
+  }
+
   private generateTypeDefinitions(): Types.GeneratedFile {
     let content = "";
 
@@ -71,85 +139,143 @@ export class TypeScriptGenerator {
     content += this.generateFileHeader("Type Definitions");
     content += "\n";
 
-    // Generate interfaces and enum types
-    for (const [_typeName, typeDef] of this.schema.types) {
-      if (typeDef.kind === "enum" && typeDef.enumValues) {
-        content += this.generateEnumType(typeDef);
-        content += "\n";
-      } else if (typeDef.kind === "object") {
-        content += this.generateInterface(typeDef);
-        content += "\n";
+    if (this.isMultiModule()) {
+      // Namespaced output
+      const groups = this.groupTypesByModule();
+
+      // Sort modules: default first, then alphabetical
+      const sortedModules = Array.from(groups.keys()).sort((a, b) => {
+        if (a === "default") return -1;
+        if (b === "default") return 1;
+        return a.localeCompare(b);
+      });
+
+      for (const mod of sortedModules) {
+        const types = groups.get(mod)!;
+        const ns = this.getModuleNamespace(mod);
+        content += `export namespace ${ns} {\n`;
+
+        for (const typeDef of types) {
+          if (typeDef.kind === "enum" && typeDef.enumValues) {
+            content += this.generateEnumType(typeDef, "  ", mod);
+            content += "\n";
+          } else if (typeDef.kind === "object") {
+            content += this.generateInterface(typeDef, "  ", mod);
+            content += "\n";
+            // Insert/Update/FilterVars inside namespace
+            const tsName = this.getTypeScriptTypeName(typeDef.name);
+            content += this.generateInsertType(tsName, typeDef, "  ");
+            content += "\n";
+            content += this.generateUpdateType(tsName, typeDef, "  ");
+            content += "\n";
+            content += this.generateFilterVarsType(tsName, typeDef, "  ");
+            content += "\n";
+          }
+        }
+
+        content += `}\n\n`;
       }
+
+      // Generate utility types outside namespaces
+      content += this.generateUtilityTypes();
+    } else {
+      // Flat output (existing behavior)
+      for (const [_typeName, typeDef] of this.schema.types) {
+        if (typeDef.kind === "enum" && typeDef.enumValues) {
+          content += this.generateEnumType(typeDef);
+          content += "\n";
+        } else if (typeDef.kind === "object") {
+          content += this.generateInterface(typeDef);
+          content += "\n";
+        }
+      }
+
+      // Generate utility types
+      content += this.generateUtilityTypes();
     }
 
-    // Generate utility types
-    content += this.generateUtilityTypes();
+    const fileName = this.isMultiModule() ? "interfaces.ts" : "types.ts";
 
     return {
-      path: `${this.config.outputDir}/types.ts`,
+      path: `${this.config.outputDir}/${fileName}`,
       content: this.formatContent(content),
-      type: "types",
+      type: this.isMultiModule() ? "interfaces" : "types",
     };
   }
 
-  private generateInterface(typeDef: Context.TypeDef): string {
+  private generateInterface(
+    typeDef: Context.TypeDef,
+    indent: string = "",
+    currentModule?: string,
+  ): string {
     const interfaceName = this.getTypeScriptTypeName(typeDef.name);
     let content = "";
 
     // Documentation comment
-    content += `/**\n`;
+    content += `${indent}/**\n`;
     if (typeDef.annotations?.["description"]) {
-      content += ` * ${typeDef.annotations["description"]}\n`;
-      content += ` *\n`;
+      content += `${indent} * ${typeDef.annotations["description"]}\n`;
+      content += `${indent} *\n`;
     }
-    content += ` * ${typeDef.name} type from EdgeQL schema\n`;
-    content += ` * Table: ${typeDef.tableName}\n`;
-    content += ` */\n`;
+    content += `${indent} * ${typeDef.name} type from EdgeQL schema\n`;
+    content += `${indent} * Table: ${typeDef.tableName}\n`;
+    content += `${indent} */\n`;
 
     // Interface declaration (with extends for inherited types)
     if (typeDef.parentTypes && typeDef.parentTypes.length > 0) {
       const parentNames = typeDef.parentTypes.map((p) =>
-        this.getTypeScriptTypeName(p)
+        currentModule
+          ? this.resolveTypeReference(p, currentModule)
+          : this.getTypeScriptTypeName(p)
       );
-      content += `export interface ${interfaceName} extends ${
+      content += `${indent}export interface ${interfaceName} extends ${
         parentNames.join(", ")
       } {\n`;
     } else {
-      content += `export interface ${interfaceName} {\n`;
+      content += `${indent}export interface ${interfaceName} {\n`;
     }
 
     // ID field (always present)
-    content += `  /** Unique identifier */\n`;
-    content += `  id: string;\n`;
+    content += `${indent}  /** Unique identifier */\n`;
+    content += `${indent}  id: string;\n`;
 
     // Properties
     for (const [propName, prop] of typeDef.properties) {
-      content += this.generatePropertyDefinition(propName, prop);
+      content += this.generatePropertyDefinition(propName, prop, indent);
     }
 
     // Links (relationships)
     for (const [linkName, link] of typeDef.links) {
-      content += this.generateLinkDefinition(linkName, link);
+      content += this.generateLinkDefinition(
+        linkName,
+        link,
+        indent,
+        currentModule,
+      );
     }
 
-    content += `}\n`;
+    content += `${indent}}\n`;
 
     return content;
   }
 
-  private generateEnumType(typeDef: Context.TypeDef): string {
+  private generateEnumType(
+    typeDef: Context.TypeDef,
+    indent: string = "",
+    _currentModule?: string,
+  ): string {
     const typeName = this.getTypeScriptTypeName(typeDef.name);
     let content = "";
 
-    content += `/**\n`;
-    content += ` * ${typeDef.name} enum type from EdgeQL schema\n`;
-    content += ` */\n`;
+    content += `${indent}/**\n`;
+    content += `${indent} * ${typeDef.name} enum type from EdgeQL schema\n`;
+    content += `${indent} */\n`;
 
     const values = (typeDef.enumValues ?? [])
       .map((v) => `"${v}"`)
       .join(" | ");
 
-    content += `export type ${typeName} = ${values || "never"};\n`;
+    content += `${indent}export type ${typeName} = ${values || "never"};\n`;
 
     return content;
   }
@@ -157,6 +283,7 @@ export class TypeScriptGenerator {
   private generatePropertyDefinition(
     name: string,
     prop: Context.PropertyDef,
+    indent: string = "",
   ): string {
     let content = "";
 
@@ -193,16 +320,16 @@ export class TypeScriptGenerator {
 
     // Generate JSDoc: multi-line when tags are present, single-line otherwise
     if (jsdocTags.length > 0) {
-      content += `  /**\n`;
-      content += `   * ${typeForMapping}${
+      content += `${indent}  /**\n`;
+      content += `${indent}   * ${typeForMapping}${
         prop.required ? " (required)" : ""
       }\n`;
       for (const tag of jsdocTags) {
-        content += `   * ${tag}\n`;
+        content += `${indent}   * ${tag}\n`;
       }
-      content += `   */\n`;
+      content += `${indent}   */\n`;
     } else {
-      content += `  /** ${typeForMapping}${
+      content += `${indent}  /** ${typeForMapping}${
         prop.required ? " (required)" : ""
       } */\n`;
     }
@@ -215,22 +342,29 @@ export class TypeScriptGenerator {
     );
     const optional = prop.required ? "" : "?";
 
-    content += `  ${name}${optional}: ${tsType};\n`;
+    content += `${indent}  ${name}${optional}: ${tsType};\n`;
 
     return content;
   }
 
-  private generateLinkDefinition(name: string, link: Context.LinkDef): string {
+  private generateLinkDefinition(
+    name: string,
+    link: Context.LinkDef,
+    indent: string = "",
+    currentModule?: string,
+  ): string {
     let content = "";
 
     // Link documentation
     const relationshipType = link.multi ? "many" : "one";
-    content += `  /** Link to ${link.target} (${relationshipType}${
+    content += `${indent}  /** Link to ${link.target} (${relationshipType}${
       link.required ? ", required" : ""
     }) */\n`;
 
     // Link declaration
-    const targetType = this.getTypeScriptTypeName(link.target);
+    const targetType = currentModule
+      ? this.resolveTypeReference(link.target, currentModule)
+      : this.getTypeScriptTypeName(link.target);
     let tsType = targetType;
 
     if (link.multi) {
@@ -242,7 +376,7 @@ export class TypeScriptGenerator {
     }
 
     const optional = link.required ? "" : "?";
-    content += `  ${name}${optional}: ${tsType};\n`;
+    content += `${indent}  ${name}${optional}: ${tsType};\n`;
 
     return content;
   }
@@ -254,14 +388,17 @@ export class TypeScriptGenerator {
     content += this.generateFileHeader("Query Builders");
     content += "\n";
 
-    // Import types
-    content += `import * as Types from "./types.ts";\n`;
+    const multiModule = this.isMultiModule();
+
+    // Import types - different source file in multi-module mode
+    const typesImport = multiModule ? "./interfaces.ts" : "./types.ts";
+    content += `import * as Types from "${typesImport}";\n`;
     content += `import { DiscClient } from "./client.ts";\n\n`;
 
     // Generate builder for each type
     for (const [_typeName, typeDef] of this.schema.types) {
       if (typeDef.kind === "object") {
-        content += this.generateQueryBuilder(typeDef);
+        content += this.generateQueryBuilder(typeDef, multiModule);
         content += "\n";
       }
     }
@@ -273,9 +410,46 @@ export class TypeScriptGenerator {
     };
   }
 
-  private generateQueryBuilder(typeDef: Context.TypeDef): string {
+  private generateQueryBuilder(
+    typeDef: Context.TypeDef,
+    multiModule: boolean = false,
+  ): string {
     const typeName = this.getTypeScriptTypeName(typeDef.name);
     const builderName = `${typeName}QueryBuilder`;
+
+    // EdgeQL type name: qualified for non-default modules
+    const edgeqlTypeName =
+      (multiModule && typeDef.module && typeDef.module !== "default")
+        ? `${typeDef.module}::${typeDef.name}`
+        : typeDef.name;
+
+    // TypeScript type reference: namespaced in multi-module mode
+    const typeRef = multiModule
+      ? `Types.${
+        this.getModuleNamespace(typeDef.module || "default")
+      }.${typeName}`
+      : `Types.${typeName}`;
+
+    // FilterVars ref
+    const filterVarsRef = multiModule
+      ? `Types.${
+        this.getModuleNamespace(typeDef.module || "default")
+      }.${typeName}FilterVars`
+      : `Types.${typeName}FilterVars`;
+
+    // InsertRef
+    const insertRef = multiModule
+      ? `Types.${
+        this.getModuleNamespace(typeDef.module || "default")
+      }.${typeName}Insert`
+      : `Types.${typeName}Insert`;
+
+    // UpdateRef
+    const updateRef = multiModule
+      ? `Types.${
+        this.getModuleNamespace(typeDef.module || "default")
+      }.${typeName}Update`
+      : `Types.${typeName}Update`;
 
     // Build the type casts map from property definitions (skip "id")
     const typeCastEntries: string[] = [];
@@ -304,87 +478,83 @@ export class TypeScriptGenerator {
 
     // Select methods
     content += `  /** Select all ${typeName} objects */\n`;
-    content +=
-      `  async select(shape?: string): Promise<Types.${typeName}[]> {\n`;
+    content += `  async select(shape?: string): Promise<${typeRef}[]> {\n`;
     content += `    const query = shape \n`;
-    content += `      ? \`select ${typeDef.name} \${shape}\`\n`;
-    content += `      : \`select ${typeDef.name} { * }\`;\n`;
-    content +=
-      `    return await this.client.query<Types.${typeName}[]>(query);\n`;
+    content += `      ? \`select ${edgeqlTypeName} \${shape}\`\n`;
+    content += `      : \`select ${edgeqlTypeName} { * }\`;\n`;
+    content += `    return await this.client.query<${typeRef}[]>(query);\n`;
     content += `  }\n\n`;
 
     // Select by ID
     content += `  /** Select ${typeName} by ID */\n`;
     content +=
-      `  async selectById(id: string, shape?: string): Promise<Types.${typeName} | null> {\n`;
+      `  async selectById(id: string, shape?: string): Promise<${typeRef} | null> {\n`;
     content += `    const query = shape\n`;
     content +=
-      `      ? \`select ${typeDef.name} \${shape} filter .id = <uuid>$id\`\n`;
+      `      ? \`select ${edgeqlTypeName} \${shape} filter .id = <uuid>$id\`\n`;
     content +=
-      `      : \`select ${typeDef.name} { * } filter .id = <uuid>$id\`;\n`;
+      `      : \`select ${edgeqlTypeName} { * } filter .id = <uuid>$id\`;\n`;
     content +=
-      `    const results = await this.client.query<Types.${typeName}[]>(query, { id });\n`;
+      `    const results = await this.client.query<${typeRef}[]>(query, { id });\n`;
     content += `    return results[0] || null;\n`;
     content += `  }\n\n`;
 
     // Filter method
     content += `  /** Filter ${typeName} objects */\n`;
     content +=
-      `  async filter(condition: string, variables?: Types.${typeName}FilterVars, shape?: string): Promise<Types.${typeName}[]> {\n`;
+      `  async filter(condition: string, variables?: ${filterVarsRef}, shape?: string): Promise<${typeRef}[]> {\n`;
     content += `    const query = shape\n`;
     content +=
-      `      ? \`select ${typeDef.name} \${shape} filter \${condition}\`\n`;
+      `      ? \`select ${edgeqlTypeName} \${shape} filter \${condition}\`\n`;
     content +=
-      `      : \`select ${typeDef.name} { * } filter \${condition}\`;\n`;
+      `      : \`select ${edgeqlTypeName} { * } filter \${condition}\`;\n`;
     content +=
-      `    return await this.client.query<Types.${typeName}[]>(query, variables);\n`;
+      `    return await this.client.query<${typeRef}[]>(query, variables);\n`;
     content += `  }\n\n`;
 
     // Insert method
     content += `  /** Insert new ${typeName} */\n`;
-    content +=
-      `  async insert(data: Types.${typeName}Insert): Promise<Types.${typeName}> {\n`;
+    content += `  async insert(data: ${insertRef}): Promise<${typeRef}> {\n`;
     content += `    const assignments = Object.entries(data)\n`;
     content +=
       `      .map(([key, value]) => \`\${key} := \${${builderName}._typeCasts[key] || "<str>"}$\${key}\`)\n`;
     content += `      .join(', ');\n`;
     content +=
-      `    const query = \`insert ${typeDef.name} { \${assignments} }\`;\n`;
-    content +=
-      `    return await this.client.query<Types.${typeName}>(query, data);\n`;
+      `    const query = \`insert ${edgeqlTypeName} { \${assignments} }\`;\n`;
+    content += `    return await this.client.query<${typeRef}>(query, data);\n`;
     content += `  }\n\n`;
 
     // Update method
     content += `  /** Update ${typeName} by ID */\n`;
     content +=
-      `  async update(id: string, data: Types.${typeName}Update): Promise<Types.${typeName}> {\n`;
+      `  async update(id: string, data: ${updateRef}): Promise<${typeRef}> {\n`;
     content += `    const assignments = Object.entries(data)\n`;
     content +=
       `      .map(([key, value]) => \`\${key} := \${${builderName}._typeCasts[key] || "<str>"}$\${key}\`)\n`;
     content += `      .join(', ');\n`;
     content +=
-      `    const query = \`update ${typeDef.name} filter .id = <uuid>$id set { \${assignments} }\`;\n`;
+      `    const query = \`update ${edgeqlTypeName} filter .id = <uuid>$id set { \${assignments} }\`;\n`;
     content +=
-      `    return await this.client.query<Types.${typeName}>(query, { id, ...data });\n`;
+      `    return await this.client.query<${typeRef}>(query, { id, ...data });\n`;
     content += `  }\n\n`;
 
     // Delete method
     content += `  /** Delete ${typeName} by ID */\n`;
-    content += `  async delete(id: string): Promise<Types.${typeName}> {\n`;
+    content += `  async delete(id: string): Promise<${typeRef}> {\n`;
     content +=
-      `    const query = \`delete ${typeDef.name} filter .id = <uuid>$id\`;\n`;
+      `    const query = \`delete ${edgeqlTypeName} filter .id = <uuid>$id\`;\n`;
     content +=
-      `    return await this.client.query<Types.${typeName}>(query, { id });\n`;
+      `    return await this.client.query<${typeRef}>(query, { id });\n`;
     content += `  }\n\n`;
 
     // Count method
     content += `  /** Count ${typeName} objects */\n`;
     content +=
-      `  async count(condition?: string, variables?: Types.${typeName}FilterVars): Promise<number> {\n`;
+      `  async count(condition?: string, variables?: ${filterVarsRef}): Promise<number> {\n`;
     content += `    const query = condition\n`;
     content +=
-      `      ? \`select count(${typeDef.name} filter \${condition})\`\n`;
-    content += `      : \`select count(${typeDef.name})\`;\n`;
+      `      ? \`select count(${edgeqlTypeName} filter \${condition})\`\n`;
+    content += `      : \`select count(${edgeqlTypeName})\`;\n`;
     content +=
       `    return await this.client.query<number>(query, variables);\n`;
     content += `  }\n`;
@@ -401,6 +571,8 @@ export class TypeScriptGenerator {
     content += this.generateFileHeader("Disc Client");
     content += "\n";
 
+    const multiModule = this.isMultiModule();
+
     // Import from SDK instead of generating inline client
     content +=
       `import { DiscClient as BaseClient, type DiscClientConfig } from "../sdk/mod.ts";\n`;
@@ -415,15 +587,40 @@ export class TypeScriptGenerator {
     content += ` */\n`;
     content += `export class DiscClient extends BaseClient {\n`;
 
-    // Query builder properties
-    for (const [typeName, typeDef] of this.schema.types) {
-      if (typeDef.kind === "object") {
-        const builderName = `${
-          this.getTypeScriptTypeName(typeName)
-        }QueryBuilder`;
-        const propertyName = typeName.toLowerCase();
-        content += `  /** Query builder for ${typeName} */\n`;
-        content += `  readonly ${propertyName}: Queries.${builderName};\n`;
+    if (multiModule) {
+      // Group by module with comment headers
+      const groups = this.groupTypesByModule();
+      const sortedModules = Array.from(groups.keys()).sort((a, b) => {
+        if (a === "default") return -1;
+        if (b === "default") return 1;
+        return a.localeCompare(b);
+      });
+
+      for (const mod of sortedModules) {
+        const types = groups.get(mod)!;
+        const objectTypes = types.filter((t) => t.kind === "object");
+        if (objectTypes.length === 0) continue;
+
+        content += `  // ${mod} module\n`;
+        for (const typeDef of objectTypes) {
+          const builderName = `${
+            this.getTypeScriptTypeName(typeDef.name)
+          }QueryBuilder`;
+          const propertyName = typeDef.name.toLowerCase();
+          content += `  readonly ${propertyName}: Queries.${builderName};\n`;
+        }
+      }
+    } else {
+      // Query builder properties
+      for (const [typeName, typeDef] of this.schema.types) {
+        if (typeDef.kind === "object") {
+          const builderName = `${
+            this.getTypeScriptTypeName(typeName)
+          }QueryBuilder`;
+          const propertyName = typeName.toLowerCase();
+          content += `  /** Query builder for ${typeName} */\n`;
+          content += `  readonly ${propertyName}: Queries.${builderName};\n`;
+        }
       }
     }
 
@@ -434,7 +631,8 @@ export class TypeScriptGenerator {
     content += `    super(config);\n`;
 
     // Initialize query builders
-    for (const [typeName] of this.schema.types) {
+    for (const [typeName, typeDef] of this.schema.types) {
+      if (typeDef.kind !== "object") continue;
       const builderName = `${this.getTypeScriptTypeName(typeName)}QueryBuilder`;
       const propertyName = typeName.toLowerCase();
       content +=
@@ -458,9 +656,12 @@ export class TypeScriptGenerator {
     content += this.generateFileHeader("Generated API");
     content += "\n";
 
+    const multiModule = this.isMultiModule();
+    const typesFile = multiModule ? "./interfaces.ts" : "./types.ts";
+
     // Re-exports
     content += `// Type definitions\n`;
-    content += `export * from "./types.ts";\n\n`;
+    content += `export * from "${typesFile}";\n\n`;
 
     content += `// Query builders\n`;
     content += `export * from "./queries.ts";\n\n`;
@@ -510,26 +711,29 @@ export class TypeScriptGenerator {
     content += `  extensions?: Record<string, any>;\n`;
     content += `}\n\n`;
 
-    content += `/** Insert/Update/FilterVars data types */\n`;
-    for (const [typeName, typeDef] of this.schema.types) {
-      // Skip enum types — they don't have insert/update/filter types
-      if (typeDef.kind === "enum") {
-        continue;
+    // Only generate Insert/Update/FilterVars in utility section for flat (non-module) output
+    if (!this.isMultiModule()) {
+      content += `/** Insert/Update/FilterVars data types */\n`;
+      for (const [typeName, typeDef] of this.schema.types) {
+        // Skip enum types — they don't have insert/update/filter types
+        if (typeDef.kind === "enum") {
+          continue;
+        }
+
+        const tsTypeName = this.getTypeScriptTypeName(typeName);
+
+        // Generate Insert interface with smart rules
+        content += this.generateInsertType(tsTypeName, typeDef);
+        content += "\n";
+
+        // Generate Update interface with smart rules
+        content += this.generateUpdateType(tsTypeName, typeDef);
+        content += "\n";
+
+        // Generate FilterVars interface for typed filter/count parameters
+        content += this.generateFilterVarsType(tsTypeName, typeDef);
+        content += "\n";
       }
-
-      const tsTypeName = this.getTypeScriptTypeName(typeName);
-
-      // Generate Insert interface with smart rules
-      content += this.generateInsertType(tsTypeName, typeDef);
-      content += "\n";
-
-      // Generate Update interface with smart rules
-      content += this.generateUpdateType(tsTypeName, typeDef);
-      content += "\n";
-
-      // Generate FilterVars interface for typed filter/count parameters
-      content += this.generateFilterVarsType(tsTypeName, typeDef);
-      content += "\n";
     }
 
     return content;
@@ -538,9 +742,10 @@ export class TypeScriptGenerator {
   private generateInsertType(
     tsTypeName: string,
     typeDef: Context.TypeDef,
+    indent: string = "",
   ): string {
     let content = "";
-    content += `export interface ${tsTypeName}Insert {\n`;
+    content += `${indent}export interface ${tsTypeName}Insert {\n`;
 
     for (const [propName, prop] of typeDef.properties) {
       // Exclude id (auto-generated UUID)
@@ -563,19 +768,20 @@ export class TypeScriptGenerator {
       const isOptional = !prop.required || prop.hasDefault;
       const optional = isOptional ? "?" : "";
 
-      content += `  ${propName}${optional}: ${tsType};\n`;
+      content += `${indent}  ${propName}${optional}: ${tsType};\n`;
     }
 
-    content += `}\n`;
+    content += `${indent}}\n`;
     return content;
   }
 
   private generateUpdateType(
     tsTypeName: string,
     typeDef: Context.TypeDef,
+    indent: string = "",
   ): string {
     let content = "";
-    content += `export interface ${tsTypeName}Update {\n`;
+    content += `${indent}export interface ${tsTypeName}Update {\n`;
 
     for (const [propName, prop] of typeDef.properties) {
       // Exclude id
@@ -595,19 +801,20 @@ export class TypeScriptGenerator {
       );
 
       // Everything in update is optional
-      content += `  ${propName}?: ${tsType};\n`;
+      content += `${indent}  ${propName}?: ${tsType};\n`;
     }
 
-    content += `}\n`;
+    content += `${indent}}\n`;
     return content;
   }
 
   private generateFilterVarsType(
     tsTypeName: string,
     typeDef: Context.TypeDef,
+    indent: string = "",
   ): string {
     let content = "";
-    content += `export interface ${tsTypeName}FilterVars {\n`;
+    content += `${indent}export interface ${tsTypeName}FilterVars {\n`;
 
     for (const [propName, prop] of typeDef.properties) {
       const typeForMapping = prop.edgeqlType ?? prop.type;
@@ -617,12 +824,12 @@ export class TypeScriptGenerator {
         prop.multi,
       );
 
-      content += `  ${propName}?: ${tsType};\n`;
+      content += `${indent}  ${propName}?: ${tsType};\n`;
     }
 
     // Index signature for flexibility
-    content += `  [key: string]: unknown;\n`;
-    content += `}\n`;
+    content += `${indent}  [key: string]: unknown;\n`;
+    content += `${indent}}\n`;
     return content;
   }
 

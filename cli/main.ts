@@ -38,10 +38,12 @@ COMMANDS:
 OPTIONS:
   -h, --help           Show this help message
   -v, --version        Show version information
-  -s, --schema <file>  Schema file path (default: ./schema.esdl)
+  -s, --schema <file>  Schema file path (single-file mode)
+  --schema-dir <dir>   Schema directory for multi-file discovery (default: ./dbschema)
   -c, --config <file>  Configuration file path
-  -o, --output <dir>   Output directory for codegen (default: ./generated)
+  -o, --output <dir>   Output directory for codegen (default: ./dbschema/disc-client)
   -t, --target <type>  Codegen target: client|server|both (default: client)
+  --js                 Generate JavaScript output (future use)
   --dry-run            Show what would be done without executing
   --auto-approve       Skip confirmation prompts
   --create             Create migration without applying
@@ -88,7 +90,9 @@ EXAMPLES:
   disc migrate --squash                            # Squash all migrations
   disc migrate --squash --squash-from m001 --squash-to m005  # Squash a range
   disc shell                          # Open EdgeQL REPL
-  disc codegen                        # Generate TypeScript types
+  disc codegen                        # Generate TypeScript types from ./dbschema/
+  disc codegen --schema-dir ./schema  # Generate from custom schema directory
+  disc codegen --schema ./schema.esdl # Generate from single schema file
   disc serve                          # Start Disc server with PostgreSQL
   disc pg log                           # View last 50 lines of PostgreSQL log
   disc pg log -f                        # Follow PostgreSQL log output
@@ -131,6 +135,7 @@ async function main() {
       "status",
       "rollback",
       "squash",
+      "js",
     ],
     string: [
       "port",
@@ -158,6 +163,7 @@ async function main() {
       "squash-from",
       "squash-to",
       "binary-port",
+      "schema-dir",
     ],
     alias: {
       h: "help",
