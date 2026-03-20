@@ -35,6 +35,7 @@ export interface ServeOptions {
   enableAccessPolicies?: boolean;
   tlsCert?: string;
   tlsKey?: string;
+  binaryPort?: number;
 }
 
 export class CLICommands {
@@ -184,6 +185,7 @@ export class CLICommands {
       const config = server.get_config();
       if (options.port) config.port = options.port;
       if (options.host) config.host = options.host;
+      if (options.binaryPort) config.binaryPort = options.binaryPort;
 
       server.update_config(config);
 

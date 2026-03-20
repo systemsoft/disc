@@ -1,447 +1,424 @@
 /**
- * SASL SCRAM-SHA-256 authentication implementation
- * Based on RFC 7677 and PostgreSQL's implementation
+ * SCRAM-SHA-256 server-side implementation for Gel binary protocol auth.
+ *
+ * Implements RFC 5802 / RFC 7677 (SCRAM-SHA-256) using the Web Crypto API
+ * (crypto.subtle) for all cryptographic operations. No external dependencies.
  */
 
-import { crypto } from "https://deno.land/std@0.208.0/crypto/mod.ts";
-import {
-  decodeBase64,
-  encodeBase64,
-} from "https://deno.land/std@0.208.0/encoding/base64.ts";
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
 
-export class ScramClient {
-  private clientNonce: string;
-  private serverNonce: string = "";
-  private salt: Uint8Array = new Uint8Array();
-  private iterations: number = 0;
-  private authMessage: string = "";
-  private serverSignature: string = "";
+// ---------------------------------------------------------------------------
+// Public types
+// ---------------------------------------------------------------------------
 
-  constructor(private username: string, private password: string) {
-    this.clientNonce = this.generateNonce();
-  }
-
-  /**
-   * Generate client-first message for SCRAM-SHA-256
-   */
-  getInitialMessage(): string {
-    const gs2Header = "n,,"; // No channel binding
-    const clientFirstBare = `n=${
-      this.saslPrep(this.username)
-    },r=${this.clientNonce}`;
-    this.authMessage = clientFirstBare;
-    return gs2Header + clientFirstBare;
-  }
-
-  /**
-   * Process server-first message and generate client-final message
-   */
-  async processServerFirst(serverFirst: string): Promise<string> {
-    const params = this.parseServerMessage(serverFirst);
-
-    if (!params.r || !params.s || !params.i) {
-      throw new Error("Invalid server-first message");
-    }
-
-    // Verify server nonce starts with client nonce
-    if (!params.r.startsWith(this.clientNonce)) {
-      throw new Error("Server nonce does not match client nonce");
-    }
-
-    this.serverNonce = params.r;
-    this.salt = decodeBase64(params.s);
-    this.iterations = parseInt(params.i, 10);
-
-    // Build client-final message
-    const channelBinding = "c=" + encodeBase64("n,,");
-    const clientFinalWithoutProof = `${channelBinding},r=${this.serverNonce}`;
-
-    // Build auth message
-    this.authMessage =
-      `${this.authMessage},${serverFirst},${clientFinalWithoutProof}`;
-
-    // Compute proof
-    const saltedPassword = await this.pbkdf2(
-      this.password,
-      this.salt,
-      this.iterations,
-    );
-
-    const clientKey = await this.hmac(saltedPassword, "Client Key");
-    const storedKey = await this.sha256(clientKey);
-    const clientSignature = await this.hmac(storedKey, this.authMessage);
-    const clientProof = this.xor(clientKey, clientSignature);
-
-    // Compute and store server signature for verification
-    const serverKey = await this.hmac(saltedPassword, "Server Key");
-    this.serverSignature = encodeBase64(
-      await this.hmac(serverKey, this.authMessage),
-    );
-
-    const proof = encodeBase64(clientProof);
-    return `${clientFinalWithoutProof},p=${proof}`;
-  }
-
-  /**
-   * Verify server-final message
-   */
-  verifyServerFinal(serverFinal: string): boolean {
-    const params = this.parseServerMessage(serverFinal);
-
-    if (params.e) {
-      throw new Error(`Server error: ${params.e}`);
-    }
-
-    if (!params.v) {
-      throw new Error("Missing server signature");
-    }
-
-    return params.v === this.serverSignature;
-  }
-
-  /**
-   * Generate a random nonce
-   */
-  private generateNonce(): string {
-    const bytes = new Uint8Array(24);
-    crypto.getRandomValues(bytes);
-    return encodeBase64(bytes).replace(/=/g, "");
-  }
-
-  /**
-   * Parse server message into key-value pairs
-   */
-  private parseServerMessage(message: string): Record<string, string> {
-    const params: Record<string, string> = {};
-    const parts = message.split(",");
-
-    for (const part of parts) {
-      const eq = part.indexOf("=");
-      if (eq !== -1) {
-        const key = part.substring(0, eq);
-        const value = part.substring(eq + 1);
-        params[key] = value;
-      }
-    }
-
-    return params;
-  }
-
-  /**
-   * PBKDF2 key derivation
-   */
-  private async pbkdf2(
-    password: string,
-    salt: Uint8Array,
-    iterations: number,
-  ): Promise<Uint8Array> {
-    const encoder = new TextEncoder();
-    const passwordBytes = encoder.encode(password);
-
-    const key = await crypto.subtle.importKey(
-      "raw",
-      passwordBytes as BufferSource,
-      { name: "PBKDF2" },
-      false,
-      ["deriveBits"],
-    );
-
-    const bits = await crypto.subtle.deriveBits(
-      {
-        name: "PBKDF2",
-        salt: salt as BufferSource,
-        iterations,
-        hash: "SHA-256",
-      },
-      key,
-      256,
-    );
-
-    return new Uint8Array(bits);
-  }
-
-  /**
-   * HMAC-SHA-256
-   */
-  private async hmac(
-    key: Uint8Array | string,
-    message: string,
-  ): Promise<Uint8Array> {
-    const encoder = new TextEncoder();
-    const keyBytes = typeof key === "string" ? encoder.encode(key) : key;
-    const messageBytes = encoder.encode(message);
-
-    const cryptoKey = await crypto.subtle.importKey(
-      "raw",
-      keyBytes as BufferSource,
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"],
-    );
-
-    const signature = await crypto.subtle.sign(
-      "HMAC",
-      cryptoKey,
-      messageBytes,
-    );
-
-    return new Uint8Array(signature);
-  }
-
-  /**
-   * SHA-256 hash
-   */
-  private async sha256(data: Uint8Array): Promise<Uint8Array> {
-    const hash = await crypto.subtle.digest("SHA-256", data as BufferSource);
-    return new Uint8Array(hash);
-  }
-
-  /**
-   * XOR two byte arrays
-   */
-  private xor(a: Uint8Array, b: Uint8Array): Uint8Array {
-    if (a.length !== b.length) {
-      throw new Error("XOR operands must have same length");
-    }
-
-    const result = new Uint8Array(a.length);
-    for (let i = 0; i < a.length; i++) {
-      result[i] = a[i] ^ b[i];
-    }
-    return result;
-  }
-
-  /**
-   * SASLprep normalization (simplified version)
-   * Full implementation would use stringprep profile
-   */
-  private saslPrep(str: string): string {
-    // Remove non-printable ASCII characters
-    // deno-lint-ignore no-control-regex
-    return str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
-  }
+export interface ScramServerState {
+  username: string;
+  clientNonce: string;
+  serverNonce: string;
+  salt: Uint8Array;
+  iterations: number;
+  clientFirstMessageBare: string;
+  serverFirstMessage: string;
 }
 
-export class ScramServer {
-  private clientNonce: string = "";
-  private serverNonce: string;
-  private salt: Uint8Array;
-  private iterations: number;
-  private storedKey: Uint8Array;
-  private serverKey: Uint8Array;
-  private authMessage: string = "";
+// ---------------------------------------------------------------------------
+// Crypto helpers (all using Web Crypto API)
+// ---------------------------------------------------------------------------
 
-  constructor(
-    storedKey: Uint8Array,
-    serverKey: Uint8Array,
-    salt: Uint8Array,
-    iterations = 4096,
-  ) {
-    this.storedKey = storedKey;
-    this.serverKey = serverKey;
-    this.salt = salt;
-    this.iterations = iterations;
-    this.serverNonce = this.generateNonce();
-  }
-
-  /**
-   * Process client-first message and generate server-first message
-   */
-  processClientFirst(clientFirst: string): string {
-    // Parse client-first message
-    const gs2Pos = clientFirst.indexOf(",", 3);
-    const clientFirstBare = clientFirst.substring(gs2Pos + 1);
-
-    const params = this.parseClientMessage(clientFirstBare);
-
-    if (!params.n || !params.r) {
-      throw new Error("Invalid client-first message");
-    }
-
-    this.clientNonce = params.r;
-    this.authMessage = clientFirstBare;
-
-    // Generate server-first message
-    const serverNonce = this.clientNonce + this.serverNonce;
-    const serverFirst = `r=${serverNonce},s=${
-      encodeBase64(this.salt)
-    },i=${this.iterations}`;
-
-    this.authMessage += "," + serverFirst;
-
-    return serverFirst;
-  }
-
-  /**
-   * Process client-final message and generate server-final message
-   */
-  async processClientFinal(clientFinal: string): Promise<string> {
-    const params = this.parseClientMessage(clientFinal);
-
-    if (!params.c || !params.r || !params.p) {
-      throw new Error("Invalid client-final message");
-    }
-
-    // Build auth message
-    const clientFinalWithoutProof = clientFinal.replace(/,p=[^,]*$/, "");
-    this.authMessage += "," + clientFinalWithoutProof;
-
-    // Verify client proof
-    const clientSignature = await this.hmac(this.storedKey, this.authMessage);
-    const clientProof = decodeBase64(params.p);
-    const clientKey = this.xor(clientProof, clientSignature);
-    const storedKey = await this.sha256(clientKey);
-
-    // Compare stored keys
-    if (!this.compareBytes(storedKey, this.storedKey)) {
-      throw new Error("Authentication failed");
-    }
-
-    // Generate server signature
-    const serverSignature = await this.hmac(this.serverKey, this.authMessage);
-
-    return `v=${encodeBase64(serverSignature)}`;
-  }
-
-  private generateNonce(): string {
-    const bytes = new Uint8Array(24);
-    crypto.getRandomValues(bytes);
-    return encodeBase64(bytes).replace(/=/g, "");
-  }
-
-  private parseClientMessage(message: string): Record<string, string> {
-    const params: Record<string, string> = {};
-    const parts = message.split(",");
-
-    for (const part of parts) {
-      const eq = part.indexOf("=");
-      if (eq !== -1) {
-        const key = part.substring(0, eq);
-        const value = part.substring(eq + 1);
-        params[key] = value;
-      }
-    }
-
-    return params;
-  }
-
-  private async hmac(key: Uint8Array, message: string): Promise<Uint8Array> {
-    const encoder = new TextEncoder();
-    const messageBytes = encoder.encode(message);
-
-    const cryptoKey = await crypto.subtle.importKey(
-      "raw",
-      key as BufferSource,
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"],
-    );
-
-    const signature = await crypto.subtle.sign(
-      "HMAC",
-      cryptoKey,
-      messageBytes,
-    );
-
-    return new Uint8Array(signature);
-  }
-
-  private async sha256(data: Uint8Array): Promise<Uint8Array> {
-    const hash = await crypto.subtle.digest("SHA-256", data as BufferSource);
-    return new Uint8Array(hash);
-  }
-
-  private xor(a: Uint8Array, b: Uint8Array): Uint8Array {
-    if (a.length !== b.length) {
-      throw new Error("XOR operands must have same length");
-    }
-
-    const result = new Uint8Array(a.length);
-    for (let i = 0; i < a.length; i++) {
-      result[i] = a[i] ^ b[i];
-    }
-    return result;
-  }
-
-  private compareBytes(a: Uint8Array, b: Uint8Array): boolean {
-    if (a.length !== b.length) return false;
-
-    let result = 0;
-    for (let i = 0; i < a.length; i++) {
-      result |= a[i] ^ b[i];
-    }
-    return result === 0;
-  }
+/**
+ * Compute HMAC-SHA-256 of `data` under `key`.
+ */
+async function hmacSha256(
+  key: Uint8Array,
+  data: Uint8Array,
+): Promise<Uint8Array> {
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    key,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", cryptoKey, data);
+  return new Uint8Array(sig);
 }
 
 /**
- * Generate stored keys for a user (for server-side storage)
+ * Compute SHA-256 digest.
  */
-export async function generateStoredKeys(
-  _username: string,
-  password: string,
-  iterations = 4096,
-): Promise<{
-  storedKey: Uint8Array;
-  serverKey: Uint8Array;
-  salt: Uint8Array;
-  iterations: number;
-}> {
-  const encoder = new TextEncoder();
-  const salt = new Uint8Array(16);
-  crypto.getRandomValues(salt);
+async function sha256(data: Uint8Array): Promise<Uint8Array> {
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return new Uint8Array(digest);
+}
 
-  const passwordBytes = encoder.encode(password);
-
+/**
+ * Hi() — PBKDF2 with HMAC-SHA-256.
+ * Equivalent to PBKDF2(password, salt, iterations, keyLen=32).
+ */
+async function hi(
+  password: Uint8Array,
+  salt: Uint8Array,
+  iterations: number,
+): Promise<Uint8Array> {
   const key = await crypto.subtle.importKey(
     "raw",
-    passwordBytes as BufferSource,
-    { name: "PBKDF2" },
+    password,
+    "PBKDF2",
     false,
     ["deriveBits"],
   );
-
   const bits = await crypto.subtle.deriveBits(
     {
       name: "PBKDF2",
-      salt: salt as BufferSource,
-      iterations,
       hash: "SHA-256",
+      salt: salt,
+      iterations: iterations,
     },
     key,
     256,
   );
-
-  const saltedPassword = new Uint8Array(bits);
-
-  // Generate client key and stored key
-  const clientKeyBytes = encoder.encode("Client Key");
-  const clientKeyCrypto = await crypto.subtle.importKey(
-    "raw",
-    saltedPassword as BufferSource,
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const clientKey = new Uint8Array(
-    await crypto.subtle.sign("HMAC", clientKeyCrypto, clientKeyBytes),
-  );
-  const storedKey = new Uint8Array(
-    await crypto.subtle.digest("SHA-256", clientKey as BufferSource),
-  );
-
-  // Generate server key
-  const serverKeyBytes = encoder.encode("Server Key");
-  const serverKeyCrypto = await crypto.subtle.importKey(
-    "raw",
-    saltedPassword as BufferSource,
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const serverKey = new Uint8Array(
-    await crypto.subtle.sign("HMAC", serverKeyCrypto, serverKeyBytes),
-  );
-
-  return { storedKey, serverKey, salt, iterations };
+  return new Uint8Array(bits);
 }
+
+/**
+ * XOR two equal-length byte arrays.
+ */
+function xorBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
+  if (a.length !== b.length) {
+    throw new Error(
+      `xorBytes: length mismatch (${a.length} vs ${b.length})`,
+    );
+  }
+  const result = new Uint8Array(a.length);
+  for (let i = 0; i < a.length; i++) {
+    result[i] = a[i] ^ b[i];
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Base64 helpers
+// ---------------------------------------------------------------------------
+
+function toBase64(data: Uint8Array): string {
+  let binary = "";
+  for (let i = 0; i < data.length; i++) {
+    binary += String.fromCharCode(data[i]);
+  }
+  return btoa(binary);
+}
+
+function fromBase64(b64: string): Uint8Array {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+// ---------------------------------------------------------------------------
+// Nonce generation
+// ---------------------------------------------------------------------------
+
+function generateNonce(): string {
+  const bytes = new Uint8Array(18);
+  crypto.getRandomValues(bytes);
+  return toBase64(bytes);
+}
+
+// ---------------------------------------------------------------------------
+// Constant-time comparison
+// ---------------------------------------------------------------------------
+
+/**
+ * Constant-time comparison of two byte arrays.
+ */
+function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a[i] ^ b[i];
+  }
+  return diff === 0;
+}
+
+// ---------------------------------------------------------------------------
+// Public API — Server-side functions
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse client-first-message from SASL initial response.
+ *
+ * Format: "n,,n=<user>,r=<client-nonce>"
+ *
+ * The gs2-header is "n,," (no channel binding, no authzid).
+ * The client-first-message-bare is "n=<user>,r=<client-nonce>".
+ */
+export function parseClientFirstMessage(data: Uint8Array): {
+  gs2Header: string;
+  clientFirstMessageBare: string;
+  username: string;
+  clientNonce: string;
+} {
+  const str = textDecoder.decode(data);
+
+  // Split off gs2-header: first two commas delimit it.
+  // gs2-header = gs2-cbind-flag "," [authzid] ","
+  const firstComma = str.indexOf(",");
+  if (firstComma === -1) {
+    throw new Error("SCRAM: malformed client-first-message (no commas)");
+  }
+  const secondComma = str.indexOf(",", firstComma + 1);
+  if (secondComma === -1) {
+    throw new Error(
+      "SCRAM: malformed client-first-message (missing second comma)",
+    );
+  }
+
+  const gs2Header = str.substring(0, secondComma + 1);
+  const clientFirstMessageBare = str.substring(secondComma + 1);
+
+  // Parse attributes from client-first-message-bare
+  const attrs = clientFirstMessageBare.split(",");
+  let username = "";
+  let clientNonce = "";
+
+  for (const attr of attrs) {
+    if (attr.startsWith("n=")) {
+      username = attr.substring(2);
+    } else if (attr.startsWith("r=")) {
+      clientNonce = attr.substring(2);
+    }
+  }
+
+  if (!username) {
+    throw new Error("SCRAM: missing username in client-first-message");
+  }
+  if (!clientNonce) {
+    throw new Error("SCRAM: missing nonce in client-first-message");
+  }
+
+  return { gs2Header, clientFirstMessageBare, username, clientNonce };
+}
+
+/**
+ * Generate server-first-message.
+ *
+ * Format: "r=<combined-nonce>,s=<base64-salt>,i=<iterations>"
+ *
+ * The combined nonce is clientNonce + serverNonce.
+ */
+export function generateServerFirstMessage(
+  clientNonce: string,
+  salt: Uint8Array,
+  iterations: number,
+): { serverNonce: string; serverFirstMessage: string } {
+  const serverNonce = generateNonce();
+  const combinedNonce = clientNonce + serverNonce;
+  const serverFirstMessage = `r=${combinedNonce},s=${
+    toBase64(salt)
+  },i=${iterations}`;
+
+  return { serverNonce, serverFirstMessage };
+}
+
+/**
+ * Verify client-final-message and compute server signature.
+ *
+ * client-final-message format: "c=<channel-binding>,r=<nonce>,p=<proof>"
+ *
+ * Verification:
+ *   AuthMessage = client-first-message-bare + "," +
+ *                 server-first-message + "," +
+ *                 client-final-message-without-proof
+ *   ClientSignature = HMAC(StoredKey, AuthMessage)
+ *   ClientKey = ClientSignature XOR ClientProof
+ *   check: SHA-256(ClientKey) == StoredKey
+ *   ServerSignature = HMAC(ServerKey, AuthMessage)
+ */
+export async function verifyClientFinalMessage(
+  data: Uint8Array,
+  state: ScramServerState,
+  storedKey: Uint8Array,
+  serverKey: Uint8Array,
+): Promise<{ valid: boolean; serverSignature: string }> {
+  const str = textDecoder.decode(data);
+
+  // Parse client-final-message: c=<cb>,r=<nonce>,p=<proof>
+  const attrs = str.split(",");
+  let channelBinding = "";
+  let nonce = "";
+  let proof = "";
+
+  for (const attr of attrs) {
+    if (attr.startsWith("c=")) {
+      channelBinding = attr.substring(2);
+    } else if (attr.startsWith("r=")) {
+      nonce = attr.substring(2);
+    } else if (attr.startsWith("p=")) {
+      proof = attr.substring(2);
+    }
+  }
+
+  if (!channelBinding || !nonce || !proof) {
+    return { valid: false, serverSignature: "" };
+  }
+
+  // Verify nonce: must be clientNonce + serverNonce
+  const expectedNonce = state.clientNonce + state.serverNonce;
+  if (nonce !== expectedNonce) {
+    return { valid: false, serverSignature: "" };
+  }
+
+  // client-final-message-without-proof: everything before ",p="
+  const proofIdx = str.lastIndexOf(",p=");
+  if (proofIdx === -1) {
+    return { valid: false, serverSignature: "" };
+  }
+  const clientFinalMessageWithoutProof = str.substring(0, proofIdx);
+
+  // AuthMessage
+  const authMessage =
+    `${state.clientFirstMessageBare},${state.serverFirstMessage},${clientFinalMessageWithoutProof}`;
+  const authMessageBytes = textEncoder.encode(authMessage);
+
+  // ClientSignature = HMAC(StoredKey, AuthMessage)
+  const clientSignature = await hmacSha256(storedKey, authMessageBytes);
+
+  // ClientKey = ClientSignature XOR ClientProof
+  const clientProof = fromBase64(proof);
+  const clientKey = xorBytes(clientSignature, clientProof);
+
+  // Verify: SHA-256(ClientKey) should equal StoredKey
+  const computedStoredKey = await sha256(clientKey);
+  const valid = constantTimeEqual(computedStoredKey, storedKey);
+
+  // Compute ServerSignature for server-final-message
+  const serverSignatureBytes = await hmacSha256(
+    serverKey,
+    authMessageBytes,
+  );
+  const serverSignature = toBase64(serverSignatureBytes);
+
+  return { valid, serverSignature };
+}
+
+/**
+ * Derive StoredKey and ServerKey from a password + salt + iterations.
+ *
+ *   SaltedPassword = Hi(Normalize(password), salt, iterations)
+ *   ClientKey = HMAC(SaltedPassword, "Client Key")
+ *   StoredKey = SHA-256(ClientKey)
+ *   ServerKey = HMAC(SaltedPassword, "Server Key")
+ */
+export async function deriveKeys(
+  password: string,
+  salt: Uint8Array,
+  iterations: number,
+): Promise<{ storedKey: Uint8Array; serverKey: Uint8Array }> {
+  const passwordBytes = textEncoder.encode(password);
+  const saltedPassword = await hi(passwordBytes, salt, iterations);
+
+  // ClientKey = HMAC(SaltedPassword, "Client Key")
+  const clientKey = await hmacSha256(
+    saltedPassword,
+    textEncoder.encode("Client Key"),
+  );
+
+  // StoredKey = SHA-256(ClientKey)
+  const storedKey = await sha256(clientKey);
+
+  // ServerKey = HMAC(SaltedPassword, "Server Key")
+  const serverKey = await hmacSha256(
+    saltedPassword,
+    textEncoder.encode("Server Key"),
+  );
+
+  return { storedKey, serverKey };
+}
+
+// ---------------------------------------------------------------------------
+// Client-side helpers (exported for testing the full SCRAM flow)
+// ---------------------------------------------------------------------------
+
+/**
+ * Client-side helper: build client-first-message.
+ * Format: "n,,n=<user>,r=<client-nonce>"
+ */
+export function buildClientFirstMessage(
+  username: string,
+  clientNonce: string,
+): { message: Uint8Array; clientFirstMessageBare: string } {
+  const clientFirstMessageBare = `n=${username},r=${clientNonce}`;
+  const message = textEncoder.encode(`n,,${clientFirstMessageBare}`);
+  return { message, clientFirstMessageBare };
+}
+
+/**
+ * Client-side helper: build client-final-message given server-first-message.
+ */
+export async function buildClientFinalMessage(
+  password: string,
+  clientNonce: string,
+  clientFirstMessageBare: string,
+  serverFirstMessage: string,
+): Promise<Uint8Array> {
+  // Parse server-first-message to get combined nonce, salt, iterations
+  const serverAttrs = serverFirstMessage.split(",");
+  let combinedNonce = "";
+  let salt = new Uint8Array(0);
+  let iterations = 0;
+
+  for (const attr of serverAttrs) {
+    if (attr.startsWith("r=")) {
+      combinedNonce = attr.substring(2);
+    } else if (attr.startsWith("s=")) {
+      salt = fromBase64(attr.substring(2));
+    } else if (attr.startsWith("i=")) {
+      iterations = parseInt(attr.substring(2), 10);
+    }
+  }
+
+  // Verify combined nonce starts with client nonce
+  if (!combinedNonce.startsWith(clientNonce)) {
+    throw new Error("SCRAM: server nonce does not contain client nonce");
+  }
+
+  // channel-binding: base64("n,,") = "biws"
+  const gs2Header = textEncoder.encode("n,,");
+  const channelBinding = toBase64(gs2Header);
+
+  // client-final-message-without-proof
+  const clientFinalWithoutProof = `c=${channelBinding},r=${combinedNonce}`;
+
+  // AuthMessage
+  const authMessage =
+    `${clientFirstMessageBare},${serverFirstMessage},${clientFinalWithoutProof}`;
+  const authMessageBytes = textEncoder.encode(authMessage);
+
+  // Derive keys
+  const passwordBytes = textEncoder.encode(password);
+  const saltedPassword = await hi(passwordBytes, salt, iterations);
+  const clientKey = await hmacSha256(
+    saltedPassword,
+    textEncoder.encode("Client Key"),
+  );
+  const storedKey = await sha256(clientKey);
+
+  // ClientSignature = HMAC(StoredKey, AuthMessage)
+  const clientSignature = await hmacSha256(storedKey, authMessageBytes);
+
+  // ClientProof = ClientKey XOR ClientSignature
+  const clientProof = xorBytes(clientKey, clientSignature);
+
+  // client-final-message
+  const clientFinalMessage = `${clientFinalWithoutProof},p=${
+    toBase64(clientProof)
+  }`;
+  return textEncoder.encode(clientFinalMessage);
+}
+
+// Re-export helpers for testing
+export { fromBase64, generateNonce, toBase64 };

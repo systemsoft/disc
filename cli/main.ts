@@ -56,6 +56,7 @@ OPTIONS:
   --jwt-secret <key>   JWT signing secret for authentication
   --enable-auth        Enable authentication system (requires --jwt-secret)
   --enable-access-policies  Enable access policy enforcement (requires --enable-auth)
+  --binary-port <port> Start binary wire protocol server on this port
   --tls-cert <path>    Path to TLS certificate file
   --tls-key <path>     Path to TLS private key file
   -f, --follow           Follow log output (pg log)
@@ -156,6 +157,7 @@ async function main() {
       "rollback-to",
       "squash-from",
       "squash-to",
+      "binary-port",
     ],
     alias: {
       h: "help",
@@ -229,6 +231,9 @@ async function main() {
           enableAccessPolicies: args["enable-access-policies"],
           tlsCert: args["tls-cert"],
           tlsKey: args["tls-key"],
+          binaryPort: args["binary-port"]
+            ? parseInt(args["binary-port"])
+            : undefined,
         });
         break;
       }

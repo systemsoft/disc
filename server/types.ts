@@ -46,6 +46,12 @@ export interface ServerConfig {
   extensions?: Extension[];
   databases?: Record<string, string>;
   enableMultiDatabase?: boolean;
+  /**
+   * Port for the Gel binary wire protocol server.
+   * When set, DiscServer starts a BinaryProtocolServer alongside the HTTP server.
+   * Default: undefined (binary protocol not started).
+   */
+  binaryPort?: number;
 }
 
 export interface QueryRequest {

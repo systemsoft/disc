@@ -20,6 +20,7 @@ import { ExtensionRegistry } from "../extensions/registry.ts";
 import { createExtensionContext } from "../extensions/context.ts";
 import type { Extension } from "../extensions/types.ts";
 import { DatabaseRegistry } from "./database-registry.ts";
+import { BinaryProtocolServer } from "../protocol/binary-server.ts";
 
 /**
  * Options for constructing a DiscServer.
@@ -84,6 +85,20 @@ export interface DiscServerOptions extends Partial<Types.ServerConfig> {
    * Only used when enableMultiDatabase is true.
    */
   databases?: Record<string, string>;
+
+  /**
+   * Port for the Gel binary wire protocol server.
+   * When set, DiscServer starts a BinaryProtocolServer alongside HTTP.
+   * The binary protocol shares the same schema as the HTTP handler.
+   * Default: undefined (binary protocol not started).
+   */
+  binaryPort?: number;
+
+  /**
+   * Password for binary protocol SCRAM-SHA-256 authentication.
+   * Only used when binaryPort is set. If undefined, no auth is required.
+   */
+  binaryPassword?: string;
 }
 
 export class DiscServer {
@@ -97,6 +112,8 @@ export class DiscServer {
   private auth_db?: DatabaseConnection;
   private extensionRegistry: ExtensionRegistry;
   private databaseRegistry?: DatabaseRegistry;
+  private binaryServer?: BinaryProtocolServer;
+  private binaryPassword?: string;
   private stopping = false;
   private signal_handler?: () => void;
 
@@ -132,9 +149,11 @@ export class DiscServer {
       tls: config.tls,
       databases: config.databases,
       enableMultiDatabase: config.enableMultiDatabase,
+      binaryPort: config.binaryPort,
     };
 
     this.postgresInstance = config.postgresInstance;
+    this.binaryPassword = config.binaryPassword;
 
     // Initialize extension registry and register extensions from options
     this.extensionRegistry = new ExtensionRegistry();
@@ -229,6 +248,24 @@ export class DiscServer {
         }
       }
 
+      // Initialize binary protocol server if binaryPort is configured
+      if (this.config.binaryPort !== undefined) {
+        const handlerSchema = (this.protocolHandler as any).schema ||
+          { types: new Map(), functions: new Map() };
+        this.binaryServer = new BinaryProtocolServer({
+          hostname: this.config.host === "localhost"
+            ? "127.0.0.1"
+            : this.config.host,
+          port: this.config.binaryPort,
+          schema: handlerSchema,
+          password: this.binaryPassword,
+        });
+        this.binaryServer.start();
+        logger.info(
+          `Binary protocol server listening on port ${this.binaryServer.port}`,
+        );
+      }
+
       // Initialize HTTP server
       this.httpServer = new HttpServer({
         config: this.config,
@@ -281,6 +318,12 @@ export class DiscServer {
         // Ignore errors from removing listeners (e.g. in test environments)
       }
       this.signal_handler = undefined;
+    }
+
+    // Stop binary protocol server
+    if (this.binaryServer) {
+      await this.binaryServer.stop();
+      logger.info("Binary protocol server stopped");
     }
 
     if (this.httpServer) {
@@ -384,6 +427,10 @@ export class DiscServer {
 
   getDatabaseRegistry(): DatabaseRegistry | undefined {
     return this.databaseRegistry;
+  }
+
+  getBinaryServer(): BinaryProtocolServer | undefined {
+    return this.binaryServer;
   }
 }
 
@@ -489,3 +536,4 @@ export {
 export { EdgeQLProtocolHandler } from "./edgeql-protocol.ts";
 export { SimpleEdgeQLProtocolHandler } from "./simple-edgeql-protocol.ts";
 export { DatabaseRegistry } from "./database-registry.ts";
+export { BinaryProtocolServer } from "../protocol/binary-server.ts";
