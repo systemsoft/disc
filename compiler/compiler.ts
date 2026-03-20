@@ -449,6 +449,8 @@ export class EdgeQLCompiler {
         return this.compileDescribeType(query);
       case "DescribeSchema":
         return this.compileDescribeSchema();
+      case "SetGlobalQuery":
+        return this.compileSetGlobal(query as EdgeQLAST.SetGlobalQuery);
       default:
         throw new CompilationError(`Unsupported query type: ${query.kind}`);
     }
@@ -1343,6 +1345,8 @@ export class EdgeQLCompiler {
         return this.compileSliceExpression(
           expr as EdgeQLAST.SliceExpression,
         );
+      case "GlobalRef":
+        return this.compileGlobalRef(expr as EdgeQLAST.GlobalRef);
       default:
         throw new CompilationError(`Unsupported expression: ${expr.kind}`);
     }
@@ -3054,6 +3058,76 @@ export class EdgeQLCompiler {
     return {
       kind: "RawSQLExpression" as const,
       sql: `SUBSTRING(${baseStr} FROM 1 FOR ${endStr})`,
+    };
+  }
+
+  /**
+   * Compile a GlobalRef expression to SQL.
+   *
+   * Produces: current_setting('disc.global_default__current_user_id', true)::uuid
+   *
+   * Uses PostgreSQL's current_setting() with the missing_ok flag set to true
+   * so that unset globals return NULL rather than raising an error.
+   */
+  private compileGlobalRef(expr: EdgeQLAST.GlobalRef): SQL.SQLExpression {
+    const qualifiedName = expr.module
+      ? `${expr.module}::${expr.name}`
+      : expr.name;
+    const globalDef = Context.resolveGlobal(
+      this.ctx.schema,
+      qualifiedName,
+      this.ctx.moduleScope,
+    );
+    if (!globalDef) {
+      throw new CompilationError(`Unknown global: ${qualifiedName}`);
+    }
+
+    const functionCall = SQL.createFunctionCall("current_setting", [
+      SQL.createLiteral("string", globalDef.pgSettingName),
+      SQL.createLiteral("boolean", true),
+    ]);
+
+    return SQL.createCastExpression(functionCall, globalDef.pgType);
+  }
+
+  /**
+   * Compile a SET GLOBAL query to SQL.
+   *
+   * Produces: SELECT set_config('disc.global_default__current_user_id', <value>::text, true)
+   *
+   * Uses set_config() instead of SET LOCAL because PostgreSQL only allows
+   * SET LOCAL for registered GUC parameters. set_config() works with
+   * arbitrary parameter names.
+   *
+   * Readonly globals cannot be set and will raise a CompilationError.
+   */
+  private compileSetGlobal(
+    query: EdgeQLAST.SetGlobalQuery,
+  ): SQL.RawSQLStatement {
+    const qualifiedName = query.module
+      ? `${query.module}::${query.name}`
+      : query.name;
+    const globalDef = Context.resolveGlobal(
+      this.ctx.schema,
+      qualifiedName,
+      this.ctx.moduleScope,
+    );
+    if (!globalDef) {
+      throw new CompilationError(`Unknown global: ${qualifiedName}`);
+    }
+    if (globalDef.readonly) {
+      throw new CompilationError(
+        `Cannot SET readonly global: ${qualifiedName}`,
+      );
+    }
+
+    const valueSql = this.compileExpression(query.value);
+    const codegen = new SQLCodeGenerator();
+    const valueStr = codegen.generateExpression(valueSql);
+
+    return {
+      kind: "RawSQLStatement",
+      sql: `SELECT set_config('${globalDef.pgSettingName}', ${valueStr}::text, true)`,
     };
   }
 

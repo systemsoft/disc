@@ -20,7 +20,8 @@ export type Query =
   | WithBlock
   | GroupQuery
   | DescribeTypeQuery
-  | DescribeSchemaQuery;
+  | DescribeSchemaQuery
+  | SetGlobalQuery;
 
 // SELECT query
 export interface SelectQuery extends EdgeQLNode {
@@ -107,6 +108,14 @@ export interface DescribeSchemaQuery extends EdgeQLNode {
   kind: "DescribeSchema";
 }
 
+// SET GLOBAL query
+export interface SetGlobalQuery extends EdgeQLNode {
+  kind: "SetGlobalQuery";
+  name: string;
+  module?: string;
+  value: Expression;
+}
+
 // Clauses
 export interface OrderByClause extends EdgeQLNode {
   kind: "OrderByClause";
@@ -163,6 +172,7 @@ export type Expression =
   | TupleAccessExpr
   | Introspection
   | Detached
+  | GlobalRef
   | TypeName
   | Subquery
   | ShapeExpr
@@ -357,6 +367,13 @@ export interface Detached extends EdgeQLNode {
   expr: Expression;
 }
 
+// Global reference
+export interface GlobalRef extends EdgeQLNode {
+  kind: "GlobalRef";
+  name: string;
+  module?: string;
+}
+
 // Shape as expression
 export interface ShapeExpr extends EdgeQLNode {
   kind: "ShapeExpr";
@@ -495,4 +512,16 @@ export function createSliceExpression(
   end?: Expression,
 ): SliceExpression {
   return { kind: "SliceExpression", expr, start, end };
+}
+
+export function createGlobalRef(name: string, module?: string): GlobalRef {
+  return { kind: "GlobalRef", name, module };
+}
+
+export function createSetGlobalQuery(
+  name: string,
+  value: Expression,
+  module?: string,
+): SetGlobalQuery {
+  return { kind: "SetGlobalQuery", name, module, value };
 }

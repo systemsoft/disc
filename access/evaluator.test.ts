@@ -261,3 +261,88 @@ Deno.test("AccessEvaluator - clearPolicies removes all policies", () => {
 
   assertEquals(evaluator.getPolicies().length, 0);
 });
+
+// --- Custom globals integration tests ---
+
+Deno.test("AccessEvaluator - evaluateGlobal returns custom global value from context.globals", () => {
+  const evaluator = new AccessEvaluator(createTestConfig());
+
+  const globals = new Map<string, unknown>();
+  globals.set("tenant_id", "acme-corp");
+  globals.set("is_admin", true);
+
+  const policy: AccessPolicy = {
+    name: "check_custom_global",
+    objectType: "Tenant",
+    actions: [{ allow: true, operations: ["select"] }],
+    condition: {
+      kind: "AccessGlobal",
+      name: "is_admin",
+    } as any,
+  };
+
+  evaluator.registerPolicy(policy);
+
+  const context: AccessContext = { userId: "user1", globals };
+  const decision = evaluator.evaluate("Tenant", "select", context);
+
+  assertEquals(decision.allowed, true);
+  assertEquals(decision.appliedPolicies, ["check_custom_global"]);
+});
+
+Deno.test("AccessEvaluator - expressionToSQL generates current_setting for custom globals", () => {
+  const evaluator = new AccessEvaluator(createTestConfig());
+
+  const expr = {
+    kind: "AccessGlobal" as const,
+    name: "tenant_id",
+  };
+
+  const context: AccessContext = { userId: "user1" };
+  const sql = evaluator.expressionToSQL(expr, context);
+
+  assertEquals(sql, "current_setting('global default::tenant_id', true)");
+});
+
+Deno.test("AccessEvaluator - built-in globals still work with backward compatibility", () => {
+  const evaluator = new AccessEvaluator(createTestConfig());
+
+  const context: AccessContext = {
+    userId: "user-123",
+    userRole: "admin",
+    sessionData: { foo: "bar" },
+  };
+
+  // current_user SQL generation
+  const userExpr = { kind: "AccessGlobal" as const, name: "current_user" };
+  assertEquals(evaluator.expressionToSQL(userExpr, context), "'user-123'");
+
+  // current_role SQL generation
+  const roleExpr = { kind: "AccessGlobal" as const, name: "current_role" };
+  assertEquals(evaluator.expressionToSQL(roleExpr, context), "'admin'");
+
+  // current_session SQL generation
+  const sessionExpr = { kind: "AccessGlobal" as const, name: "current_session" };
+  assertEquals(evaluator.expressionToSQL(sessionExpr, context), "'true'");
+
+  // Built-in evaluateGlobal still works via policy condition
+  const policy: AccessPolicy = {
+    name: "require_user",
+    objectType: "Resource",
+    actions: [{ allow: true, operations: ["select"] }],
+    condition: {
+      kind: "AccessGlobal",
+      name: "current_user",
+    } as any,
+  };
+
+  evaluator.registerPolicy(policy);
+
+  // With userId set, condition should pass
+  const withUser: AccessContext = { userId: "user-123" };
+  assertEquals(evaluator.evaluate("Resource", "select", withUser).allowed, true);
+
+  // Without userId, condition should fail
+  const noUser: AccessContext = {};
+  assertEquals(evaluator.evaluate("Resource", "select", noUser).allowed, false);
+});

@@ -61,6 +61,8 @@ export class SQLCodeGenerator {
         return this.generateCTEStatement(stmt);
       case "UnionAllStatement":
         return this.generateUnionAllStatement(stmt);
+      case "RawSQLStatement":
+        return stmt.sql;
       default:
         throw new Error(
           `Unsupported statement type: ${

@@ -80,6 +80,80 @@ export class SchemaDiffer {
       }
     }
 
+    // Diff globals
+    const oldGlobals = this.extractGlobals(oldSchema);
+    const newGlobals = this.extractGlobals(newSchema);
+
+    // Added globals
+    for (const [globalName, globalDef] of newGlobals) {
+      if (!oldGlobals.has(globalName)) {
+        const moduleName = globalDef.module;
+        const edgeqlType = this.typeToString(globalDef.decl.type);
+        const pgType = this.edgeqlTypeToPgType(edgeqlType);
+        operations.push(
+          Types.createGlobalOperation(globalDef.decl.name.value, moduleName, edgeqlType, pgType, {
+            required: globalDef.decl.required,
+            multi: globalDef.decl.multi,
+            default: globalDef.decl.default
+              ? this.extractExpressionString(globalDef.decl.default)
+              : undefined,
+            readonly: globalDef.decl.readonly,
+          }),
+        );
+      }
+    }
+
+    // Removed globals
+    for (const [globalName, globalDef] of oldGlobals) {
+      if (!newGlobals.has(globalName)) {
+        operations.push(
+          Types.dropGlobalOperation(globalDef.decl.name.value, globalDef.module),
+        );
+      }
+    }
+
+    // Modified globals — drop old + add new (globals can't be altered in place)
+    for (const [globalName, newGlobalDef] of newGlobals) {
+      const oldGlobalDef = oldGlobals.get(globalName);
+      if (oldGlobalDef) {
+        const oldType = this.typeToString(oldGlobalDef.decl.type);
+        const newType = this.typeToString(newGlobalDef.decl.type);
+        const oldRequired = oldGlobalDef.decl.required ?? false;
+        const newRequired = newGlobalDef.decl.required ?? false;
+        const oldMulti = oldGlobalDef.decl.multi ?? false;
+        const newMulti = newGlobalDef.decl.multi ?? false;
+        const oldDefault = oldGlobalDef.decl.default
+          ? this.extractExpressionString(oldGlobalDef.decl.default)
+          : undefined;
+        const newDefault = newGlobalDef.decl.default
+          ? this.extractExpressionString(newGlobalDef.decl.default)
+          : undefined;
+        const oldReadonly = oldGlobalDef.decl.readonly ?? false;
+        const newReadonly = newGlobalDef.decl.readonly ?? false;
+
+        if (
+          oldType !== newType ||
+          oldRequired !== newRequired ||
+          oldMulti !== newMulti ||
+          oldDefault !== newDefault ||
+          oldReadonly !== newReadonly
+        ) {
+          operations.push(
+            Types.dropGlobalOperation(oldGlobalDef.decl.name.value, oldGlobalDef.module),
+          );
+          const pgType = this.edgeqlTypeToPgType(newType);
+          operations.push(
+            Types.createGlobalOperation(newGlobalDef.decl.name.value, newGlobalDef.module, newType, pgType, {
+              required: newGlobalDef.decl.required,
+              multi: newGlobalDef.decl.multi,
+              default: newDefault,
+              readonly: newGlobalDef.decl.readonly,
+            }),
+          );
+        }
+      }
+    }
+
     return operations;
   }
 
@@ -111,6 +185,50 @@ export class SchemaDiffer {
     }
 
     return aliases;
+  }
+
+  private extractGlobals(
+    modules: Module[],
+  ): Map<string, { decl: AST.GlobalDeclaration; module: string }> {
+    const globals = new Map<
+      string,
+      { decl: AST.GlobalDeclaration; module: string }
+    >();
+
+    for (const module of modules) {
+      for (const item of module.items) {
+        if (item.kind === "GlobalDeclaration") {
+          const qualifiedName = `${module.name}::${item.name.value}`;
+          globals.set(qualifiedName, { decl: item, module: module.name });
+        }
+      }
+    }
+
+    return globals;
+  }
+
+  /**
+   * Map an EdgeQL type name to a PostgreSQL type name.
+   * Simplified mapping for migration operations.
+   */
+  private edgeqlTypeToPgType(edgeqlType: string): string {
+    const typeMap: Record<string, string> = {
+      "str": "text",
+      "int16": "smallint",
+      "int32": "integer",
+      "int64": "bigint",
+      "float32": "real",
+      "float64": "double precision",
+      "bool": "boolean",
+      "uuid": "uuid",
+      "datetime": "timestamptz",
+      "duration": "interval",
+      "bytes": "bytea",
+      "json": "jsonb",
+      "decimal": "numeric",
+      "bigint": "numeric",
+    };
+    return typeMap[edgeqlType] || "text";
   }
 
   createTypeOperation(

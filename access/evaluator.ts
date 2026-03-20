@@ -224,6 +224,12 @@ export class AccessEvaluator {
    * Evaluate a global variable
    */
   private evaluateGlobal(name: string, context: AccessContext): boolean {
+    // Check custom globals map first
+    if (context.globals?.has(name)) {
+      return Boolean(context.globals.get(name));
+    }
+
+    // Fall back to built-in globals
     switch (name) {
       case "current_user": {
         return Boolean(context.userId);
@@ -389,6 +395,7 @@ export class AccessEvaluator {
       }
 
       case "AccessGlobal": {
+        // Built-in globals use direct value injection
         switch (expr.name) {
           case "current_user": {
             return context.userId ? `'${context.userId}'` : "NULL";
@@ -398,8 +405,13 @@ export class AccessEvaluator {
             return context.userRole ? `'${context.userRole}'` : "NULL";
           }
 
+          case "current_session": {
+            return context.sessionData ? "'true'" : "NULL";
+          }
+
           default: {
-            return "NULL";
+            // Custom globals use PG current_setting mechanism
+            return `current_setting('global default::${expr.name}', true)`;
           }
         }
       }

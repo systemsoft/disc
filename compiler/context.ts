@@ -60,6 +60,7 @@ export interface Schema {
   types: Map<string, TypeDef>;
   functions: Map<string, FunctionDef>;
   aliases?: Map<string, AliasDef>;
+  globals?: Map<string, GlobalDef>;
 }
 
 export interface TriggerDef {
@@ -79,6 +80,18 @@ export interface AliasDef {
   name: string;
   expression: string;
   targetType?: string;
+}
+
+export interface GlobalDef {
+  name: string;
+  module: string;
+  type: string;
+  pgType: string;
+  required: boolean;
+  multi: boolean;
+  default?: string;
+  readonly: boolean;
+  pgSettingName: string;
 }
 
 export interface TypeDef {
@@ -301,6 +314,41 @@ export function resolveAlias(
   return undefined;
 }
 
+/**
+ * Resolve a global name respecting module scope.
+ *
+ * Resolution order:
+ * 1. Exact name (already qualified or known at top level)
+ * 2. If unqualified and moduleScope is set: try moduleScope::name
+ * 3. If unqualified: try default::name
+ */
+export function resolveGlobal(
+  schema: Schema,
+  name: string,
+  moduleScope?: string,
+): GlobalDef | undefined {
+  if (!schema.globals) return undefined;
+
+  // 1. Exact match
+  let globalDef = schema.globals.get(name);
+  if (globalDef) return globalDef;
+
+  // Only try qualified lookups for unqualified names
+  if (!name.includes("::")) {
+    // 2. Module scope
+    if (moduleScope) {
+      globalDef = schema.globals.get(`${moduleScope}::${name}`);
+      if (globalDef) return globalDef;
+    }
+
+    // 3. Default module
+    globalDef = schema.globals.get(`default::${name}`);
+    if (globalDef) return globalDef;
+  }
+
+  return undefined;
+}
+
 export function getProperty(
   ctx: CompilationContext,
   typeName: string,
@@ -424,6 +472,9 @@ export function mergeSchemaAdditions(
   const result: Schema = { types, functions };
   if (base.aliases) {
     result.aliases = new Map(base.aliases);
+  }
+  if (base.globals) {
+    result.globals = new Map(base.globals);
   }
   return result;
 }
@@ -578,5 +629,17 @@ export function createTestSchema(): Schema {
     ]),
     functions: getBuiltinFunctions(),
     aliases: new Map(),
+    globals: new Map([
+      ["default::current_user_id", {
+        name: "current_user_id",
+        module: "default",
+        type: "uuid",
+        pgType: "uuid",
+        required: false,
+        multi: false,
+        readonly: false,
+        pgSettingName: "disc.global_default__current_user_id",
+      }],
+    ]),
   };
 }

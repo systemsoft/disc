@@ -33,6 +33,7 @@ export interface AccessPolicy {
  * Context for evaluating access policies
  */
 export interface AccessContext {
+  globals?: Map<string, unknown>;
   requestContext?: Record<string, unknown>;
   sessionData?: Record<string, unknown>;
   userId?: string;

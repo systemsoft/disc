@@ -54,6 +54,9 @@ export class EdgeQLParser {
     } // DESCRIBE query
     else if (this.check(TokenType.DESCRIBE)) {
       query = this.parseDescribe();
+    } // SET GLOBAL query
+    else if (this.check(TokenType.SET) && this.isSetGlobal()) {
+      query = this.parseSetGlobal();
     } else {
       throw this.error(`Expected query statement, got ${this.peek().value}`);
     }
@@ -343,6 +346,42 @@ export class EdgeQLParser {
     throw this.error(
       `Expected 'TYPE' or 'SCHEMA' after 'DESCRIBE', got '${this.peek().value}'`,
     );
+  }
+
+  /**
+   * Look-ahead to determine if SET is followed by GLOBAL.
+   * Returns true without consuming any tokens.
+   */
+  private isSetGlobal(): boolean {
+    const nextPos = this.current + 1;
+    return nextPos < this.tokens.length &&
+      this.tokens[nextPos].type === TokenType.GLOBAL;
+  }
+
+  /**
+   * Parse SET GLOBAL <name> := <value>
+   */
+  private parseSetGlobal(): AST.SetGlobalQuery {
+    this.consume(TokenType.SET, "Expected 'SET'");
+    this.consume(TokenType.GLOBAL, "Expected 'GLOBAL' after 'SET'");
+
+    const firstName = this.parseIdentifier().name;
+
+    let name: string;
+    let module: string | undefined;
+
+    // Check for qualified name: module::name
+    if (this.match(TokenType.NAMESPACE)) {
+      module = firstName;
+      name = this.parseIdentifier().name;
+    } else {
+      name = firstName;
+    }
+
+    this.consume(TokenType.ASSIGN, "Expected ':=' after global name");
+    const value = this.parseExpression();
+
+    return AST.createSetGlobalQuery(name, value, module);
   }
 
   private parseOrderByList(): AST.OrderByClause[] {
@@ -1155,10 +1194,17 @@ export class EdgeQLParser {
       return { kind: "Introspection", type };
     }
 
-    // GLOBAL
+    // GLOBAL reference (e.g., global current_user_id, global default::current_user_id)
     if (this.match(TokenType.GLOBAL)) {
-      const name = this.parseIdentifier();
-      return name;
+      const firstName = this.parseIdentifier().name;
+
+      // Check for qualified name: module::name
+      if (this.match(TokenType.NAMESPACE)) {
+        const globalName = this.parseIdentifier().name;
+        return AST.createGlobalRef(globalName, firstName);
+      }
+
+      return AST.createGlobalRef(firstName);
     }
 
     // TYPEOF

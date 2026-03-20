@@ -82,6 +82,22 @@ export class DDLGenerator {
             (operation as Types.DropAliasOperation).aliasName
           }" was compile-time only (no DDL to rollback)`,
         ];
+      case "CreateGlobal":
+        return [
+          `-- Rollback: Global "${
+            (operation as Types.CreateGlobalOperation).module
+          }::${
+            (operation as Types.CreateGlobalOperation).name
+          }" was compile-time only (no DDL to rollback)`,
+        ];
+      case "DropGlobal":
+        return [
+          `-- Rollback: Global "${
+            (operation as Types.DropGlobalOperation).module
+          }::${
+            (operation as Types.DropGlobalOperation).name
+          }" was compile-time only (no DDL to rollback)`,
+        ];
       default:
         throw new Error(`Unsupported rollback operation: ${operation.kind}`);
     }
@@ -121,6 +137,18 @@ export class DDLGenerator {
             (operation as Types.DropAliasOperation).aliasName
           }" removed (no DDL required, was compile-time only)`,
         ];
+      case "CreateGlobal": {
+        const createGlobalOp = operation as Types.CreateGlobalOperation;
+        return [
+          `-- global ${createGlobalOp.module}::${createGlobalOp.name}: ${createGlobalOp.type} (compile-time only)`,
+        ];
+      }
+      case "DropGlobal": {
+        const dropGlobalOp = operation as Types.DropGlobalOperation;
+        return [
+          `-- drop global ${dropGlobalOp.module}::${dropGlobalOp.name} (compile-time only)`,
+        ];
+      }
       default:
         throw new Error(`Unsupported operation: ${operation.kind}`);
     }

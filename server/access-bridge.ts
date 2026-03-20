@@ -5,8 +5,12 @@
 import type { AuthContext } from "./types.ts";
 import type { AccessContext } from "../access/types.ts";
 
-export function authContextToAccessContext(auth: AuthContext): AccessContext {
+export function authContextToAccessContext(
+  auth: AuthContext,
+  sessionGlobals?: Map<string, unknown>,
+): AccessContext {
   return {
+    globals: sessionGlobals,
     userId: auth.userId,
     userRole: auth.roles.length > 0 ? auth.roles[0] : undefined,
     sessionData: auth.jwtClaims as Record<string, unknown> | undefined,

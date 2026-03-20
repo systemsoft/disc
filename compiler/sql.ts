@@ -12,7 +12,8 @@ export type SQLStatement =
   | UpdateStatement
   | DeleteStatement
   | CTEStatement
-  | UnionAllStatement;
+  | UnionAllStatement
+  | RawSQLStatement;
 
 export interface SelectStatement extends SQLNode {
   kind: "SelectStatement";
@@ -454,6 +455,12 @@ export function setOperation(
     queries,
     operator,
   };
+}
+
+// Raw SQL statement (e.g., SET LOCAL ... TO ...)
+export interface RawSQLStatement extends SQLNode {
+  kind: "RawSQLStatement";
+  sql: string;
 }
 
 // JOIN helpers

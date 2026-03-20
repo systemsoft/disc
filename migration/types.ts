@@ -129,6 +129,25 @@ export interface DropAliasOperation extends MigrationOperation {
   aliasName: string;
 }
 
+// Global operations
+export interface CreateGlobalOperation extends MigrationOperation {
+  kind: "CreateGlobal";
+  name: string;
+  module: string;
+  type: string;
+  pgType: string;
+  required: boolean;
+  multi: boolean;
+  default?: string;
+  readonly: boolean;
+}
+
+export interface DropGlobalOperation extends MigrationOperation {
+  kind: "DropGlobal";
+  name: string;
+  module: string;
+}
+
 // DDL operations
 export interface CreateTableOperation extends MigrationOperation {
   kind: "CreateTable";
@@ -465,6 +484,42 @@ export function createDropRewriteOperation(
     kind: "DropRewrite",
     propertyName,
     events,
+  };
+}
+
+export function createGlobalOperation(
+  name: string,
+  module: string,
+  type: string,
+  pgType: string,
+  options?: {
+    required?: boolean;
+    multi?: boolean;
+    default?: string;
+    readonly?: boolean;
+  },
+): CreateGlobalOperation {
+  return {
+    kind: "CreateGlobal",
+    name,
+    module,
+    type,
+    pgType,
+    required: options?.required ?? false,
+    multi: options?.multi ?? false,
+    default: options?.default,
+    readonly: options?.readonly ?? false,
+  };
+}
+
+export function dropGlobalOperation(
+  name: string,
+  module: string,
+): DropGlobalOperation {
+  return {
+    kind: "DropGlobal",
+    name,
+    module,
   };
 }
 

@@ -1,17 +1,20 @@
 # Disc Database — Implementation Plan
 
 > Last Updated: 2026-03-19
-> Status: Gel Parity — Tiers 1-3
+> Status: Gel Parity — Tiers 1-2 Complete, Tier 3 In Progress
 > Gap Analysis: `thoughts/shared/plans/2026-03-19-gel-parity-gap-analysis.md`
 
-## Completed Work (Phases 1-24)
+## Completed Work (Phases 1-36)
 
-All core database integration and production infrastructure is complete. 1365 tests passing.
+All core database integration, production infrastructure, and advanced SDL features are complete. **1690 tests passing.**
 
 - Phases 1-9: Core execution, PG integration, CLI, auth, access policies, caching, production hardening
 - Phases 10-15: Advanced queries, extensions, client SDK, codegen, CLI docs
 - Phases 16-19: Deployment tooling, production E2E tests
 - Phases 20-24: Advanced expressions, junction tables, polymorphism, multi-database, introspection
+- Stages 25-29: Constraints, cal types, standard library (88 functions), indexing/slicing, multiple inheritance
+- Stages 31-35: Triggers, rewrites, aliases, range/multirange types, collection types, deletion policies, link inheritance, polymorphic types
+- Stage 36: Globals (session variables) — GlobalDef, SET GLOBAL, access policy integration, PG session vars
 
 ---
 
@@ -307,40 +310,92 @@ Tasks:
 **Goal**: Implement remaining SDL features for complex schemas
 **Success Criteria**: All features parse, validate, and generate correct DDL
 **Tests**: SDL parsing, DDL, PG E2E
-**Status**: Not Started
+**Status**: Complete
 
 Tasks:
-- [ ] Collection type properties in SDL: `property tags: array<str>`, `property coords: tuple<float64, float64>`
-  - Map to PG array types and composite types
-- [ ] `on target delete set empty` — clear link when target is deleted
-  - DDL: `ON DELETE SET NULL` for the FK column
-- [ ] `on source delete` — source-side deletion behavior
-  - Implement via PG trigger or CASCADE on reverse FK
-- [ ] Link inheritance — links extending abstract links
-  - Validate link type compatibility, merge link properties
-- [ ] Abstract polymorphic types in function signatures (`anytype`, `anyscalar`, etc.)
-  - Used for generic function overloading resolution
+- [x] Collection type properties: `array<T>` → `T[]`, `tuple<T1,T2>` → `JSONB`
+  - Parser comma-separated params, validator array/tuple rules, DDL/schema-manager/compiler/converter type mappings (21 tests)
+- [x] Deletion policies: `on target delete set empty` → `SET NULL` FK, `on source delete delete target` → `BEFORE DELETE` trigger
+  - Parser target/source branching, differ/DDL generation (12 tests)
+- [x] Link inheritance: `extending` on LinkDeclaration, abstract link parsing
+  - Schema-manager property/constraint merging (concrete-wins), validator cycle detection, differ extending diff (9 tests)
+- [x] Abstract polymorphic types: `POLYMORPHIC_TYPES` set (9 types: anytype, anyscalar, anyreal, anyint, anyfloat, anyenum, anytuple, anyobject, scalar)
+  - `isPolymorphicType()` utility, validator acceptance (12 unit + 7 PG E2E tests)
 
 ---
 
-## Tier 3: Blocks Client Library Compatibility
+## Tier 3: Runtime Features & Client Compatibility
 
-### Stage 36: Operators — Bitwise & Regex
+### Stage 36: Globals (Session Variables)
 
-**Goal**: Support all Gel operators
-**Success Criteria**: Operators parse and compile to correct PG SQL
+**Goal**: Support `global` declarations as session-scoped variables accessible in queries and access policies
+**Success Criteria**: Globals declared in SDL can be set per-session and referenced in EdgeQL queries and access policies
+**Tests**: SDL parsing (already works), compiler resolution, migration DDL, session management, PG E2E
+**Status**: Complete
+
+PG mechanism: `set_config('disc.global_default__name', value, true)` (transaction-scoped) + `current_setting('disc.global_default__name', true)::pgtype` (retrieval with NULL for unset).
+
+Tasks:
+- [x] Phase 1: Compiler context — GlobalDef interface, Schema.globals field, resolveGlobal() 3-step resolution
+  - SchemaManager: extract GlobalDeclaration from parsed modules, populate Schema.globals
+  - 7 unit tests (compiler/globals.test.ts): extraction, resolution by exact/module/default/unknown, createTestSchema
+- [x] Phase 2: EdgeQL parsing — GlobalRef AST node + SET GLOBAL statement
+  - Parser: `global name` → GlobalRef, `global module::name` → qualified GlobalRef
+  - Parser: `SET GLOBAL name := expr` → SetGlobalQuery
+  - 5 unit tests (edgeql/global-parser.test.ts): unqualified/qualified refs, SET GLOBAL simple/qualified/numeric
+- [x] Phase 3: Compiler — GlobalRef to SQL, SetGlobal to SQL
+  - `global current_user_id` → `CAST(current_setting('disc.global_default__current_user_id', TRUE) AS uuid)`
+  - `SET GLOBAL name := expr` → `SET LOCAL "disc.global_default__name" TO valueSql` (via RawSQLStatement)
+  - Readonly global SET throws CompilationError, unknown global throws CompilationError
+  - 6 unit tests (compiler/globals-compilation.test.ts)
+- [x] Phase 4: Access policy integration — dynamic schema-driven globals
+  - evaluateGlobal(): check context.globals map first, fall back to hardcoded 3 built-ins
+  - expressionToSQL(): custom globals emit `current_setting('global default::name', true)`
+  - authContextToAccessContext() accepts optional sessionGlobals parameter
+  - 3 new tests in access/evaluator.test.ts (49 total)
+- [x] Phase 5: Server + migration + PG E2E
+  - Protocol handler: SET GLOBAL stores in session.variables, injects set_config() before queries
+  - Migration: CreateGlobal/DropGlobal operations (no-op DDL, compile-time only)
+  - Differ: extractGlobals(), diff globals (add/remove/modify = drop+add)
+  - 4 migration tests (migration/globals.test.ts)
+  - 5 PG E2E tests (compiler/pg-globals.test.ts): filter, unset NULL, SET+query, required unset, access policy style
+
+---
+
+### Stage 37: Operators — Bitwise, Regex & EXPLAIN
+
+**Goal**: Support all remaining Gel operators and EXPLAIN queries
+**Success Criteria**: Operators parse and compile to correct PG SQL; EXPLAIN returns query plans
 **Tests**: Parser tests, compilation tests, PG E2E
 **Status**: Not Started
 
 Tasks:
-- [ ] Bitwise operators in EdgeQL parser: `&`, `|`, `^`, `<<`, `>>`, `~` (unary NOT)
-- [ ] Compile bitwise to PG: direct mapping (same operators)
-- [ ] Regex match operators: `~` (match), `!~` (not match), `~*` (case-insensitive match), `!~*`
-- [ ] PG E2E: bitwise math, regex filtering
+- [ ] Phase 1: Bitwise operators in EdgeQL
+  - Tokens: `BITAND` (`&`), `BITOR` (`|`), `BITXOR` (`^`), `LSHIFT` (`<<`), `RSHIFT` (`>>`), `BITNOT` (`~` unary)
+  - Lexer: disambiguate `&` (bitwise AND) from `&&` (overlaps) — `&&` already handled for ranges
+  - Parser: new precedence level for bitwise ops (between comparison and arithmetic)
+  - Compiler: direct PG mapping (same operators)
+  - Unit tests: each operator, precedence, nested expressions (8 tests)
+- [ ] Phase 2: Regex operators in EdgeQL
+  - Tokens: `REGEX_MATCH` (`~`), `REGEX_NOT_MATCH` (`!~`), `REGEX_IMATCH` (`~*`), `REGEX_NOT_IMATCH` (`!~*`)
+  - Lexer: disambiguate `~` (regex match / bitwise NOT) by context — unary = BITNOT, binary = REGEX_MATCH
+  - Parser: binary operators at comparison precedence level
+  - Compiler: direct PG mapping (same operators)
+  - Unit tests: match, not match, case-insensitive variants (6 tests)
+- [ ] Phase 3: EXPLAIN queries
+  - EdgeQL AST: `ExplainQuery` node with `query` field and options (analyze, buffers, format)
+  - Parser: `EXPLAIN [ANALYZE] [BUFFERS] <query>` syntax
+  - Compiler: wrap compiled SQL in `EXPLAIN (ANALYZE, FORMAT JSON) ...`
+  - Integration with existing explain-cache (lib/explain-cache.ts)
+  - Unit tests: basic EXPLAIN, EXPLAIN ANALYZE, format options (4 tests)
+- [ ] Phase 4: PG E2E tests
+  - Bitwise: AND/OR/XOR/SHIFT on integers
+  - Regex: filter with pattern match, case-insensitive match
+  - EXPLAIN: verify plan structure returned, EXPLAIN ANALYZE timing
 
 ---
 
-### Stage 37: CONFIGURE Queries
+### Stage 38: CONFIGURE Queries
 
 **Goal**: Support runtime configuration via EdgeQL
 **Success Criteria**: `CONFIGURE` queries modify PG settings and Disc config
@@ -348,48 +403,173 @@ Tasks:
 **Status**: Not Started
 
 Tasks:
-- [ ] Add CONFIGURE AST nodes: scope (SYSTEM/INSTANCE/DATABASE), action (SET/RESET)
-- [ ] Parse `CONFIGURE SYSTEM SET <key> := <value>`
-- [ ] Map config keys to PG `SET` commands or Disc config table
-- [ ] `CONFIGURE DATABASE SET` → database-scoped config
-- [ ] Persist config in `disc_config` table
-- [ ] PG E2E: set and query config values
+- [ ] Phase 1: Parser — CONFIGURE AST and parsing
+  - AST nodes: `ConfigureQuery` with scope (SYSTEM/INSTANCE/DATABASE/SESSION), action (SET/RESET/INSERT/REMOVE)
+  - Tokens: CONFIGURE, SYSTEM, INSTANCE, SESSION (DATABASE already exists)
+  - Parser: `CONFIGURE <scope> SET <key> := <value>`, `CONFIGURE <scope> RESET <key>`
+  - Unit tests: parse all 4 scopes, SET/RESET actions, value expressions (8 tests)
+- [ ] Phase 2: Compilation — config key resolution
+  - Config registry: map Gel config keys to PG settings or Disc internal config
+  - SESSION scope → `SET LOCAL <key> = <value>` (transaction-scoped)
+  - DATABASE scope → persist in `disc_config` table
+  - SYSTEM scope → persist in `disc_system_config` table + `ALTER SYSTEM SET`
+  - Known keys: `query_execution_timeout`, `listen_addresses`, `shared_buffers`, etc.
+  - Unit tests: each scope compiles to correct SQL, unknown key error (6 tests)
+- [ ] Phase 3: Config persistence and retrieval
+  - `disc_config` table: `(key TEXT PRIMARY KEY, value JSONB, scope TEXT, updated_at TIMESTAMPTZ)`
+  - MigrationTracker: create config table alongside migrations table
+  - Server startup: load DATABASE/SYSTEM config and apply to connections
+  - Unit tests: persist/retrieve/reset config values (6 tests)
+- [ ] Phase 4: PG E2E tests
+  - SET SESSION config, verify via query
+  - SET DATABASE config, restart, verify persisted
+  - RESET config key, verify default restored
 
 ---
 
-### Stage 38: Complete Binary Protocol
+### Stage 39: Annotations DDL & Abstract Annotations
+
+**Goal**: Surface schema annotations in introspection and support custom annotation types
+**Success Criteria**: Annotations visible in DESCRIBE output and /schema endpoints; abstract annotations parseable
+**Tests**: Introspection output, SDL parsing, PG E2E
+**Status**: Not Started
+
+Annotations are already parsed and extracted by the differ (stored in PropertyDefinition/LinkDefinition). This stage surfaces them properly.
+
+Tasks:
+- [ ] Phase 1: Introspection — annotations in DESCRIBE TYPE output
+  - describeType(): include `annotations` field in JSON output (already in PropertyDefinition)
+  - /schema/types/:name endpoint: return annotations in type description
+  - Codegen: emit `@description` JSDoc tags from annotation values
+  - Unit tests: annotations in DESCRIBE, /schema endpoint, codegen output (6 tests)
+- [ ] Phase 2: Abstract annotation declarations
+  - SDL: `abstract annotation deprecated;` — custom annotation types beyond built-in `description`
+  - Validator: check annotation usage against declared abstract annotations
+  - SchemaManager: collect abstract annotations from module declarations
+  - Unit tests: abstract annotation parsing, validation, undeclared annotation error (4 tests)
+- [ ] Phase 3: PG E2E tests
+  - Schema with annotations → migrate → DESCRIBE TYPE → verify annotations in output
+  - Custom abstract annotation → use on type → verify in introspection
+
+---
+
+### Stage 40: Migration DDL Integration Verification
+
+**Goal**: End-to-end migration verification for all schema features added in Tiers 1-3
+**Success Criteria**: A comprehensive schema using all features round-trips through migrate → rollback → re-migrate
+**Tests**: Full-schema integration tests, rollback verification
+**Status**: Not Started
+
+(All individual DDL generators exist — this stage verifies they compose correctly)
+
+Tasks:
+- [ ] Phase 1: Comprehensive migration test
+  - Create schema using: constraints, triggers, rewrites, aliases, ranges, collection types, deletion policies, link inheritance, multiple inheritance, globals, annotations
+  - Migrate from empty → verify all PG objects created correctly
+  - Verify data insertion respects all constraints, triggers, rewrites
+  - 3-5 integration tests (migration/comprehensive.test.ts)
+- [ ] Phase 2: Rollback verification
+  - Migrate comprehensive schema → rollback → verify clean state
+  - Migrate → modify (add/remove features) → migrate → verify incremental DDL
+  - 3-5 rollback tests (migration/comprehensive-rollback.test.ts)
+- [ ] Phase 3: Schema evolution scenarios
+  - Add trigger to existing type, verify trigger created without data loss
+  - Change constraint params, verify CHECK updated
+  - Remove rewrite rule, verify trigger dropped
+  - Convert single-link to multi-link, verify junction table created
+  - 4-6 evolution tests (migration/schema-evolution.test.ts)
+
+---
+
+### Stage 41: Complete Binary Protocol
 
 **Goal**: Full compatibility with Gel's wire protocol for existing client libraries
-**Success Criteria**: Official Gel TypeScript/Python client connects to Disc and executes queries
+**Success Criteria**: Official Gel TypeScript client connects to Disc and executes basic queries
 **Tests**: Protocol message encoding/decoding, client library integration tests
 **Status**: Not Started
 
+This is the largest remaining stage. Break into sub-phases.
+
 Tasks:
-- [ ] Implement all Gel binary protocol message types (reference `reference-gel/edb/protocol/`)
-- [ ] Type descriptor encoding/decoding for all types including cal, range, multirange
-- [ ] SASL/SCRAM-SHA-256 authentication handshake
-- [ ] State synchronization messages
-- [ ] Prepared statement support
-- [ ] Error message format compatibility
-- [ ] Test with `gel-js` official TypeScript client
-- [ ] Test with `gel-python` official Python client
+- [ ] Phase 1: Protocol message types — encode/decode all message types
+  - Reference: `reference-gel/edb/protocol/`
+  - Client→Server: ClientHandshake, AuthenticationSASLResponse, Execute, Parse, DescribeStatement, Sync, Terminate
+  - Server→Client: ServerHandshake, AuthenticationSASL, CommandComplete, Data, ReadyForCommand, ErrorResponse, ParameterStatus
+  - Binary buffer reader/writer utilities
+  - 20+ unit tests for message round-tripping
+- [ ] Phase 2: Type descriptors — binary serialization for all Disc types
+  - Scalar types: str, int16/32/64, float32/64, bool, bytes, datetime, duration, uuid, bigint, decimal, json
+  - Cal types: local_date, local_time, local_datetime, relative_duration, date_duration
+  - Collection types: array, tuple, named tuple, range, multirange
+  - Object shapes: type descriptors for SELECT result shapes
+  - 15+ unit tests for type descriptor encoding
+- [ ] Phase 3: Connection handshake — SASL/SCRAM-SHA-256
+  - SCRAM-SHA-256 implementation (or use existing Deno crypto)
+  - ServerHandshake → AuthenticationSASL → AuthenticationSASLContinue → AuthenticationSASLFinal → ReadyForCommand
+  - Parameter negotiation (protocol version, extensions)
+  - 8+ tests for auth flow
+- [ ] Phase 4: Query execution flow
+  - Parse → DescribeStatement → Execute pipeline
+  - Prepared statement cache
+  - State sync (current database, module, globals)
+  - Error serialization matching Gel error codes
+  - 10+ tests for query execution
+- [ ] Phase 5: Client library compatibility tests
+  - Install `gel-js` (official TypeScript client), connect to Disc via binary protocol
+  - Basic query execution: SELECT scalar, SELECT object with shape
+  - INSERT/UPDATE/DELETE operations
+  - Transaction support
+  - 10+ integration tests
 
 ---
 
-### Stage 39: Migration DDL for New Schema Features
+## Tier 4: Completeness & Polish
 
-**Goal**: DDL generation and diffing for triggers, rewrites, aliases, new constraints
-**Success Criteria**: Migrations correctly handle add/remove/modify of all new schema objects
-**Tests**: Differ tests, DDL generation tests, PG E2E migration round-trips
+### Stage 42: Full-Text Search (ext::fts)
+
+**Goal**: Built-in full-text search extension using PostgreSQL tsvector/tsquery
+**Success Criteria**: FTS index on properties, `fts::search()` function in EdgeQL
+**Tests**: Extension registration, index creation, search compilation, PG E2E
 **Status**: Not Started
 
-(Tracked within each feature stage above — this stage covers any remaining integration gaps)
+Tasks:
+- [ ] FTS extension module (ext-fts/): Extension interface, types, index builder
+- [ ] SDL: `index fts::index on (.title ++ ' ' ++ .body)` → GIN index on `tsvector`
+- [ ] Built-in functions: `fts::search(type, query)` → `ts_query` / `ts_rank` compilation
+- [ ] DDL: GIN index generation, tsvector column (generated always)
+- [ ] PG E2E: index creation, search with ranking, language config
+
+---
+
+### Stage 43: bytes_get_bit & Remaining Function Gaps
+
+**Goal**: Complete all remaining built-in function gaps
+**Success Criteria**: All Gel standard library functions supported
+**Tests**: Unit + PG E2E per function
+**Status**: Not Started
 
 Tasks:
-- [ ] Verify migration differ handles all new AST node types
-- [ ] Verify DDL generator emits correct SQL for all new types
-- [ ] Integration test: full schema with triggers, rewrites, aliases, constraints → migrate → verify PG state
-- [ ] Rollback test: ensure all new DDL operations can be reversed
+- [ ] `bytes_get_bit` → `GET_BIT`
+- [ ] `uuid_generate_v1mc` → `gen_random_uuid()` (map to v4, v1mc not available in modern PG)
+- [ ] Any remaining function gaps discovered during client library testing
+- [ ] Unit tests + PG E2E for each
+
+---
+
+### Stage 44: GraphQL Extension (ext::graphql)
+
+**Goal**: Auto-generate GraphQL schema from SDL and serve GraphQL queries
+**Success Criteria**: GraphQL introspection works, basic CRUD queries execute
+**Tests**: Schema generation, query translation, PG E2E
+**Status**: Not Started
+
+Tasks:
+- [ ] GraphQL extension module (ext-graphql/): schema generation from Disc types
+- [ ] Type mapping: Object types → GraphQL types, links → connections, constraints → validation
+- [ ] Query translation: GraphQL query → EdgeQL → SQL pipeline
+- [ ] Mutation support: insert/update/delete via GraphQL mutations
+- [ ] /graphql endpoint on server with playground UI
+- [ ] Subscription support via WebSocket
 
 ---
 
@@ -401,23 +581,32 @@ Stage 26 (Cal Types) ───────────────┐        │
 Stage 27 (Functions) ───────────────┤        │
 Stage 28 (Indexing/Slicing) ────────┤        │
 Stage 29 (Multiple Inheritance) ────┤        │
-                                    ├── Tier 1 Complete
+                                    ├── Tier 1 Complete ✅
                                     │
 Stage 31 (Triggers) ────────────────┤
 Stage 32 (Rewrites) ────────────────┤
 Stage 33 (Aliases) ─────────────────┤
 Stage 34 (Range Types) ─────────────┤
 Stage 35 (SDL Features) ────────────┤
-                                    ├── Tier 2 Complete
+                                    ├── Tier 2 Complete ✅
                                     │
-Stage 36 (Operators) ───────────────┤
-Stage 37 (CONFIGURE) ───────────────┤
-Stage 38 (Binary Protocol) ─────────┤   Depends on all type
-Stage 39 (Migration DDL) ───────────┤   additions (T1-T7)
-                                    └── Tier 3 Complete
+Stage 36 (Globals) ────────────────┐│ ✅
+Stage 37 (Operators + EXPLAIN) ────┤│
+Stage 38 (CONFIGURE) ─────────────┐││
+Stage 39 (Annotations DDL) ───────┤││
+Stage 40 (Migration Verify) ──────┤││  Depends on 36-39
+                                   │├── Tier 3
+Stage 41 (Binary Protocol) ───────┤│   Depends on all type
+                                   ││   additions (T1-T8)
+                                   └┴── Tier 3 Complete
+                                    │
+Stage 42 (Full-Text Search) ───────┤
+Stage 43 (Remaining Functions) ────┤
+Stage 44 (GraphQL Extension) ──────┤
+                                    └── Tier 4 Complete
 ```
 
-Most stages within a tier are independent and can be parallelized. Stage 38 (Binary Protocol) depends on all type system additions being complete since the protocol must serialize all types.
+Stages within a tier are mostly independent and can be parallelized. Stage 41 (Binary Protocol) depends on all type system additions. Stage 40 depends on 36-39 being complete.
 
 ---
 

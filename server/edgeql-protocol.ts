@@ -221,10 +221,42 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         });
       }
 
+      // Detect SET GLOBAL queries — store the global in the session and
+      // execute the SET LOCAL on the connection, then return a success response.
+      if (parsedAST && parsedAST.kind === "SetGlobalQuery") {
+        const setGlobalAST = parsedAST as EdgeQL.SetGlobalQuery;
+        const globalKey =
+          `global::${setGlobalAST.module || "default"}::${setGlobalAST.name}`;
+        context.session.variables[globalKey] = sqlString;
+
+        const executeStart = Date.now();
+        await this.executeSetGlobal(sqlString, context);
+        const executeMs = Date.now() - executeStart;
+        const durationMs = Date.now() - startTime;
+
+        this.metrics.totalQueries++;
+        this.metrics.totalParseMs += parseMs;
+        this.metrics.totalCompileMs += compileMs;
+        this.metrics.totalExecuteMs += executeMs;
+
+        return {
+          data: { success: true, global: setGlobalAST.name },
+          extensions: {
+            durationMs,
+            parseMs,
+            compileMs,
+            executeMs,
+            cacheHit,
+          },
+        };
+      }
+
       // Execute query (or simulate execution)
+      // Inject SET LOCAL statements for active session globals before the main query
+      const globalsPrefix = this.buildGlobalsPrefix(context);
       const executeStart = Date.now();
       const result = await this.executeSQL(
-        sqlString,
+        globalsPrefix + sqlString,
         request.variables || {},
         context,
       );
@@ -398,6 +430,8 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         return this.generateUpdateSQL(sqlAST);
       case "DeleteStatement":
         return this.generateDeleteSQL(sqlAST);
+      case "RawSQLStatement":
+        return (sqlAST as SQL.RawSQLStatement).sql;
       default:
         throw new Error(`Unsupported SQL statement type: ${sqlAST.kind}`);
     }
@@ -698,6 +732,44 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     return this.executeMockSQL(sql, variables, context);
   }
 
+  /**
+   * Execute a SET GLOBAL statement (compiled to set_config() SQL).
+   * Runs directly against the connection pool or as a dry-run.
+   */
+  private async executeSetGlobal(
+    sql: string,
+    context: Types.QueryContext,
+  ): Promise<void> {
+    log.info("Executing SET GLOBAL", {
+      sessionId: context.session.sessionId,
+      sql,
+    });
+
+    if (this.options.dryRun) {
+      return;
+    }
+
+    const pool = this.resolvePool(context);
+    if (pool) {
+      await pool.query(sql);
+    }
+  }
+
+  /**
+   * Build a prefix of set_config() calls for all active session globals.
+   * These are injected before regular query execution to ensure globals
+   * are available within the transaction scope.
+   */
+  private buildGlobalsPrefix(context: Types.QueryContext): string {
+    const parts: string[] = [];
+    for (const [key, sql] of Object.entries(context.session.variables)) {
+      if (key.startsWith("global::") && typeof sql === "string") {
+        parts.push(sql + "; ");
+      }
+    }
+    return parts.join("");
+  }
+
   private prepareParameters(variables: Record<string, any>): any[] {
     // Convert variables object to array for PostgreSQL parameterized queries
     // This is simplified — a full implementation would track parameter positions
@@ -758,6 +830,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       "for",
       "describe",
       "configure",
+      "set",
     ];
 
     const startsWithValid = validStartKeywords.some((keyword) =>

@@ -17,6 +17,7 @@ import {
   AliasDeclaration,
   Constraint as SDLConstraint,
   Expression,
+  GlobalDeclaration,
   LinkDeclaration,
   ScalarTypeDeclaration,
   TriggerDeclaration,
@@ -26,6 +27,7 @@ import { adaptAccessPolicies } from "../access/policy-adapter.ts";
 import { getBuiltinFunctions } from "../compiler/builtin-functions.ts";
 import {
   AliasDef,
+  GlobalDef,
   LinkDef,
   PropertyConstraint,
   PropertyDef,
@@ -285,6 +287,7 @@ export class SchemaManager {
   modulesToSchema(modules: Module[]): Schema {
     const types = new Map<string, TypeDef>();
     const aliases = new Map<string, AliasDef>();
+    const globals = new Map<string, GlobalDef>();
     const converter = new SDLConverter();
 
     // First pass: collect abstract link declarations for link inheritance
@@ -342,6 +345,34 @@ export class SchemaManager {
           }
 
           aliases.set(aliasName, aliasDef);
+          continue;
+        }
+
+        // Handle global declarations
+        if (item.kind === "GlobalDeclaration") {
+          const globalDecl = item as GlobalDeclaration;
+          const globalName = globalDecl.name.value;
+          const moduleName = module.name;
+          const qualifiedName = `${moduleName}::${globalName}`;
+          const edgeqlType = typeRefToSdlString(globalDecl.type);
+          const pgType = sdlTypeToSqlType(edgeqlType);
+
+          const globalDef: GlobalDef = {
+            name: globalName,
+            module: moduleName,
+            type: edgeqlType,
+            pgType,
+            required: globalDecl.required ?? false,
+            multi: globalDecl.multi ?? false,
+            readonly: globalDecl.readonly ?? false,
+            pgSettingName: `disc.global_${moduleName}__${globalName}`,
+          };
+
+          if (globalDecl.default) {
+            globalDef.default = stringifyExpression(globalDecl.default);
+          }
+
+          globals.set(qualifiedName, globalDef);
           continue;
         }
 
@@ -625,6 +656,9 @@ export class SchemaManager {
     };
     if (aliases.size > 0) {
       schema.aliases = aliases;
+    }
+    if (globals.size > 0) {
+      schema.globals = globals;
     }
     return schema;
   }
