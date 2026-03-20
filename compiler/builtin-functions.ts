@@ -644,5 +644,64 @@ export function getBuiltinFunctions(): Map<string, FunctionDef> {
       returnType: "json",
       introspection: true,
     }],
+
+    // Range & Multirange functions
+    ["range", {
+      name: "range",
+      args: [
+        { name: "lower", type: "any", required: true },
+        { name: "upper", type: "any", required: true },
+      ],
+      returnType: "range",
+    }],
+    ["range_get_lower", {
+      name: "range_get_lower",
+      args: [{ name: "r", type: "range", required: true }],
+      returnType: "any",
+      sqlName: "LOWER",
+    }],
+    ["range_get_upper", {
+      name: "range_get_upper",
+      args: [{ name: "r", type: "range", required: true }],
+      returnType: "any",
+      sqlName: "UPPER",
+    }],
+    ["range_is_empty", {
+      name: "range_is_empty",
+      args: [{ name: "r", type: "range", required: true }],
+      returnType: "bool",
+      sqlName: "ISEMPTY",
+    }],
+    ["range_unpack", {
+      name: "range_unpack",
+      args: [{ name: "r", type: "range", required: true }],
+      returnType: "any",
+      sqlName: "UNNEST",
+    }],
+    ["multirange", {
+      name: "multirange",
+      args: [{ name: "r", type: "range", required: true }],
+      returnType: "multirange",
+    }],
+    ["range_is_inclusive_lower", {
+      name: "range_is_inclusive_lower",
+      args: [{ name: "r", type: "range", required: true }],
+      returnType: "bool",
+      sqlName: "LOWER_INC",
+    }],
+    ["range_is_inclusive_upper", {
+      name: "range_is_inclusive_upper",
+      args: [{ name: "r", type: "range", required: true }],
+      returnType: "bool",
+      sqlName: "UPPER_INC",
+    }],
+    ["overlaps", {
+      name: "overlaps",
+      args: [
+        { name: "r1", type: "range", required: true },
+        { name: "r2", type: "range", required: true },
+      ],
+      returnType: "bool",
+    }],
   ]);
 }

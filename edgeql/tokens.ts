@@ -145,9 +145,17 @@ export enum TokenType {
   LANGLE = "LANGLE", // <
   RANGLE = "RANGLE", // >
 
+  // Range operators
+  RANGE_CONTAINS = "RANGE_CONTAINS", // @>
+  RANGE_CONTAINED_BY = "RANGE_CONTAINED_BY", // <@
+  RANGE_OVERLAPS = "RANGE_OVERLAPS", // &&
+  RANGE_ADJACENT = "RANGE_ADJACENT", // -|-
+
   // Special
   PARAMETER = "PARAMETER", // $param
   AT = "AT", // @
+  AMPERSAND = "AMPERSAND", // &
+  PIPE = "PIPE", // |
   HASH = "HASH", // #
   EOF = "EOF", // End of file
   NEWLINE = "NEWLINE", // Line break

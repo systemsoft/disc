@@ -215,6 +215,7 @@ export interface TypeRef extends SDLNode {
   name: QualifiedName;
   array?: boolean;
   optional?: boolean;
+  params?: TypeRef[];
 }
 
 // Names
@@ -301,8 +302,13 @@ export function createTypeRef(
   name: QualifiedName,
   optional = false,
   array = false,
+  params?: TypeRef[],
 ): TypeRef {
-  return { kind: "TypeRef", name, optional, array };
+  const ref: TypeRef = { kind: "TypeRef", name, optional, array };
+  if (params && params.length > 0) {
+    ref.params = params;
+  }
+  return ref;
 }
 
 export function createLiteral(

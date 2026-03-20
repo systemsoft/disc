@@ -685,6 +685,18 @@ export class EdgeQLParser {
           const right = this.parseCoalesceExpression();
           expr = AST.createBinaryOp("IS", expr, right);
         }
+      } else if (this.match(TokenType.RANGE_CONTAINS)) {
+        const right = this.parseCoalesceExpression();
+        expr = AST.createBinaryOp("@>", expr, right);
+      } else if (this.match(TokenType.RANGE_CONTAINED_BY)) {
+        const right = this.parseCoalesceExpression();
+        expr = AST.createBinaryOp("<@", expr, right);
+      } else if (this.match(TokenType.RANGE_OVERLAPS)) {
+        const right = this.parseCoalesceExpression();
+        expr = AST.createBinaryOp("&&", expr, right);
+      } else if (this.match(TokenType.RANGE_ADJACENT)) {
+        const right = this.parseCoalesceExpression();
+        expr = AST.createBinaryOp("-|-", expr, right);
       } else {
         break;
       }
@@ -1174,6 +1186,14 @@ export class EdgeQLParser {
       }
 
       return AST.createTypeName(parts);
+    }
+
+    // RANGE keyword used as a function name (e.g., range(1, 10))
+    // When RANGE is followed by '(', treat it as an identifier for function calls
+    // and other range-related function names that start with 'range_'.
+    if (this.check(TokenType.RANGE)) {
+      const value = this.advance().value.toLowerCase();
+      return AST.createIdentifier(value);
     }
 
     // Type name or identifier

@@ -1013,6 +1013,22 @@ export class DDLGenerator {
       "cal::local_datetime": "TIMESTAMP WITHOUT TIME ZONE",
       "cal::relative_duration": "INTERVAL",
       "cal::date_duration": "INTERVAL",
+      // Range types
+      "range<int32>": "INT4RANGE",
+      "range<int64>": "INT8RANGE",
+      "range<float64>": "NUMRANGE",
+      "range<decimal>": "NUMRANGE",
+      "range<datetime>": "TSTZRANGE",
+      "range<cal::local_date>": "DATERANGE",
+      "range<cal::local_datetime>": "TSRANGE",
+      // Multirange types
+      "multirange<int32>": "INT4MULTIRANGE",
+      "multirange<int64>": "INT8MULTIRANGE",
+      "multirange<float64>": "NUMMULTIRANGE",
+      "multirange<decimal>": "NUMMULTIRANGE",
+      "multirange<datetime>": "TSTZMULTIRANGE",
+      "multirange<cal::local_date>": "DATEMULTIRANGE",
+      "multirange<cal::local_datetime>": "TSMULTIRANGE",
     };
 
     return typeMap[edgeqlType] || "TEXT";

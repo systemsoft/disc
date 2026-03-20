@@ -262,7 +262,11 @@ export type BinaryOperator =
   | "IS NOT"
   | "UNION"
   | "INTERSECT"
-  | "EXCEPT";
+  | "EXCEPT"
+  | "@>"
+  | "<@"
+  | "&&"
+  | "-|-";
 
 // Unary operation
 export interface UnaryOp extends EdgeQLNode {
@@ -325,7 +329,6 @@ export interface TupleAccessExpr extends EdgeQLNode {
   index?: number;
   fieldName?: string;
 }
-
 
 // Index expression: expr[n]
 export interface IndexExpression extends EdgeQLNode {

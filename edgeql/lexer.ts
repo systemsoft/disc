@@ -160,6 +160,17 @@ export class EdgeQLLexer {
             startPos,
           );
         }
+        if (this.peek() === "|" && this.peekAhead(1) === "-") {
+          this.advance(); // consume |
+          this.advance(); // consume -
+          return createToken(
+            TokenType.RANGE_ADJACENT,
+            "-|-",
+            startLine,
+            startColumn,
+            startPos,
+          );
+        }
         return createToken(
           TokenType.MINUS,
           "-",
@@ -344,6 +355,16 @@ export class EdgeQLLexer {
             startPos,
           );
         }
+        if (this.peek() === "@") {
+          this.advance();
+          return createToken(
+            TokenType.RANGE_CONTAINED_BY,
+            "<@",
+            startLine,
+            startColumn,
+            startPos,
+          );
+        }
         return createToken(
           TokenType.LESS,
           "<",
@@ -464,7 +485,47 @@ export class EdgeQLLexer {
 
       case "@":
         this.advance();
+        if (this.peek() === ">") {
+          this.advance();
+          return createToken(
+            TokenType.RANGE_CONTAINS,
+            "@>",
+            startLine,
+            startColumn,
+            startPos,
+          );
+        }
         return createToken(TokenType.AT, "@", startLine, startColumn, startPos);
+
+      case "&":
+        this.advance();
+        if (this.peek() === "&") {
+          this.advance();
+          return createToken(
+            TokenType.RANGE_OVERLAPS,
+            "&&",
+            startLine,
+            startColumn,
+            startPos,
+          );
+        }
+        return createToken(
+          TokenType.AMPERSAND,
+          "&",
+          startLine,
+          startColumn,
+          startPos,
+        );
+
+      case "|":
+        this.advance();
+        return createToken(
+          TokenType.PIPE,
+          "|",
+          startLine,
+          startColumn,
+          startPos,
+        );
 
       default:
         throw new SyntaxError(`Unexpected character '${ch}'`, {

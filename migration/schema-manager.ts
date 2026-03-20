@@ -60,6 +60,22 @@ const SDL_TO_SQL_TYPE_MAP: Record<string, string> = {
   "cal::local_time": "time",
   "cal::relative_duration": "interval",
   "cal::date_duration": "interval",
+  // Range types
+  "range<int32>": "int4range",
+  "range<int64>": "int8range",
+  "range<float64>": "numrange",
+  "range<decimal>": "numrange",
+  "range<datetime>": "tstzrange",
+  "range<cal::local_date>": "daterange",
+  "range<cal::local_datetime>": "tsrange",
+  // Multirange types
+  "multirange<int32>": "int4multirange",
+  "multirange<int64>": "int8multirange",
+  "multirange<float64>": "nummultirange",
+  "multirange<decimal>": "nummultirange",
+  "multirange<datetime>": "tstzmultirange",
+  "multirange<cal::local_date>": "datemultirange",
+  "multirange<cal::local_datetime>": "tsmultirange",
 };
 
 /**
@@ -82,6 +98,24 @@ function typeNameToTableName(typeName: string): string {
  */
 function sdlTypeToSqlType(sdlType: string): string {
   return SDL_TO_SQL_TYPE_MAP[sdlType] ?? "text";
+}
+
+/**
+ * Build a full SDL type string from a TypeRef, including type parameters.
+ * For example: range<int32>, multirange<cal::local_date>
+ */
+function typeRefToSdlString(
+  typeRef: { name: { parts: string[] }; params?: { name: { parts: string[] }; params?: unknown[] }[] },
+): string {
+  let result = typeRef.name.parts.join("::");
+  if (typeRef.params && typeRef.params.length > 0) {
+    result += `<${
+      typeRef.params.map((p) =>
+        typeRefToSdlString(p as { name: { parts: string[] }; params?: { name: { parts: string[] }; params?: unknown[] }[] })
+      ).join(", ")
+    }>`;
+  }
+  return result;
 }
 
 /**
@@ -311,7 +345,7 @@ export class SchemaManager {
         const propDeclarations = converter.extractProperties(typeDecl);
         for (const propDecl of propDeclarations) {
           const propName = propDecl.name.value;
-          const sdlTypeName = propDecl.type.name.parts.join("::");
+          const sdlTypeName = typeRefToSdlString(propDecl.type);
           const sqlType = sdlTypeToSqlType(sdlTypeName);
 
           const constraints = extractPropertyConstraints(

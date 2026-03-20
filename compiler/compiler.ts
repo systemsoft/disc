@@ -56,6 +56,22 @@ function edgeqlTypeToPgType(edgeqlType: string): string {
     "cal::local_datetime": "timestamp without time zone",
     "cal::relative_duration": "interval",
     "cal::date_duration": "interval",
+    // Range types
+    "range<int32>": "int4range",
+    "range<int64>": "int8range",
+    "range<float64>": "numrange",
+    "range<decimal>": "numrange",
+    "range<datetime>": "tstzrange",
+    "range<cal::local_date>": "daterange",
+    "range<cal::local_datetime>": "tsrange",
+    // Multirange types
+    "multirange<int32>": "int4multirange",
+    "multirange<int64>": "int8multirange",
+    "multirange<float64>": "nummultirange",
+    "multirange<decimal>": "nummultirange",
+    "multirange<datetime>": "tstzmultirange",
+    "multirange<cal::local_date>": "datemultirange",
+    "multirange<cal::local_datetime>": "tsmultirange",
   };
   return typeMap[edgeqlType] ?? edgeqlType;
 }
@@ -1373,6 +1389,13 @@ export class EdgeQLCompiler {
       case "ILIKE":
         sqlOp = binOp.op;
         break;
+      // Range operators — same syntax in PG
+      case "@>":
+      case "<@":
+      case "&&":
+      case "-|-":
+        sqlOp = binOp.op;
+        break;
     }
 
     return SQL.createBinaryExpression(sqlOp, left, right);
@@ -1529,16 +1552,25 @@ export class EdgeQLCompiler {
 
     // Special compilation for functions that aren't simple 1:1 mappings
     switch (functionName) {
-      case "contains":
-        // contains(str, sub) → STRPOS(str, sub) > 0
+      case "contains": {
+        // Overloaded: string contains vs range contains
+        // String: contains(str, sub) → STRPOS(str, sub) > 0
+        // Range: contains(range, elem) → range @> elem
         if (args.length !== 2) {
           throw new CompilationError("contains() requires exactly 2 arguments");
+        }
+        const containsFirstArg = funcCall.args[0].value;
+        const isContainsRangeArg = containsFirstArg.kind === "FunctionCall" &&
+          containsFirstArg.name.parts.join("_") === "range";
+        if (isContainsRangeArg) {
+          return SQL.createBinaryExpression("@>", args[0], args[1]);
         }
         return SQL.createBinaryExpression(
           ">",
           SQL.createFunctionCall("STRPOS", args),
           SQL.createLiteral("number", 0),
         );
+      }
 
       case "find":
         // find(str, sub) → STRPOS(str, sub) - 1
@@ -1861,6 +1893,48 @@ export class EdgeQLCompiler {
           );
         }
         return SQL.createFunctionCall("SETVAL", args);
+
+      // Range & Multirange functions
+      case "range": {
+        // range(lower, upper) → type-dependent PG range constructor
+        // Detect type from literal args: integer → int4range, float → numrange
+        if (args.length !== 2) {
+          throw new CompilationError(
+            "range() requires exactly 2 arguments",
+          );
+        }
+        let rangeConstructor = "int4range"; // default
+        if (funcCall.args.length >= 1) {
+          const firstArg = funcCall.args[0].value;
+          if (firstArg.kind === "Literal") {
+            if (firstArg.type === "float") {
+              rangeConstructor = "numrange";
+            }
+            // integer → int4range (default), string literal could be date/timestamp
+          }
+        }
+        return SQL.createFunctionCall(rangeConstructor, args);
+      }
+
+      case "multirange": {
+        // multirange(r) → type-dependent PG multirange constructor
+        // Default to int4multirange; enhanced type inference can be added later
+        if (args.length !== 1) {
+          throw new CompilationError(
+            "multirange() requires exactly 1 argument",
+          );
+        }
+        return SQL.createFunctionCall("int4multirange", args);
+      }
+
+      case "overlaps":
+        // overlaps(r1, r2) → r1 && r2
+        if (args.length !== 2) {
+          throw new CompilationError(
+            "overlaps() requires exactly 2 arguments",
+          );
+        }
+        return SQL.createBinaryExpression("&&", args[0], args[1]);
     }
 
     // Standard 1:1 function name mapping

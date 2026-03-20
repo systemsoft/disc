@@ -539,6 +539,43 @@ export class SchemaValidator {
       "cal::date_duration",
     ];
 
+    // Validate parameterized types: range<T> and multirange<T>
+    if (typeName === "range" || typeName === "multirange") {
+      if (!typeRef.params || typeRef.params.length !== 1) {
+        this.addError(
+          `Type '${typeName}' requires exactly one type parameter`,
+        );
+        return;
+      }
+
+      const innerType = typeRef.params[0];
+      const innerTypeName = innerType.name.parts.join("::");
+
+      // Only orderable scalar types are valid inner types for range/multirange
+      const orderableTypes = [
+        "int16",
+        "int32",
+        "int64",
+        "float32",
+        "float64",
+        "decimal",
+        "datetime",
+        "cal::local_date",
+        "cal::local_datetime",
+      ];
+
+      if (!orderableTypes.includes(innerTypeName)) {
+        this.addError(
+          `Type '${innerTypeName}' is not a valid inner type for '${typeName}'; ` +
+            `expected one of: ${orderableTypes.join(", ")}`,
+        );
+      }
+
+      // Also validate the inner type ref itself
+      this.validateTypeRef(innerType);
+      return;
+    }
+
     if (builtinTypes.includes(typeName)) {
       return; // Built-in type is valid
     }

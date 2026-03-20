@@ -967,6 +967,14 @@ export class SDLParser {
 
     let array = false;
     const optional = false;
+    let params: AST.TypeRef[] | undefined;
+
+    // Check for parameterized type syntax: range<int32>, multirange<datetime>
+    if (this.match(TokenType.LESS)) {
+      params = [];
+      params.push(this.parseTypeRef());
+      this.consume(TokenType.GREATER, "Expected '>' after type parameter");
+    }
 
     // Check for array syntax
     if (this.match(TokenType.LBRACKET)) {
@@ -976,7 +984,7 @@ export class SDLParser {
 
     // Check for optional syntax (not in SDL, but might be needed)
 
-    return AST.createTypeRef(name, optional, array);
+    return AST.createTypeRef(name, optional, array, params);
   }
 
   private parseTypeRefList(): AST.TypeRef[] {

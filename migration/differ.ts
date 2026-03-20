@@ -697,7 +697,11 @@ export class SchemaDiffer {
   }
 
   private typeToString(type: AST.TypeRef): string {
-    return type.name.parts.join("::");
+    let result = type.name.parts.join("::");
+    if (type.params && type.params.length > 0) {
+      result += `<${type.params.map((p) => this.typeToString(p)).join(", ")}>`;
+    }
+    return result;
   }
 
   private extractDefaultValue(expr: AST.Expression): any {

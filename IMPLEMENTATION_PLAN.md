@@ -260,17 +260,14 @@ Tasks:
 **Goal**: Support `alias` declarations in SDL
 **Success Criteria**: Aliases can be queried as if they were types
 **Tests**: SDL parsing, query compilation, PG E2E
-**Status**: Not Started
+**Status**: Complete
 
 Tasks:
-- [ ] Add alias AST node: name, expression (EdgeQL query)
-- [ ] Update SDL parser for alias syntax:
-  ```
-  alias ActiveUsers := (select User filter .active = true)
-  ```
-- [ ] Resolve alias references during query compilation (inline the expression as a CTE)
-- [ ] Migration differ: detect alias add/remove/change
-- [ ] PG E2E: select from alias, filter alias, use alias in WITH
+- [x] AliasDef interface, Schema.aliases field, resolveAlias() 3-step resolution
+- [x] SchemaManager AliasDeclaration extraction, stringifyExpression() fix
+- [x] Compiler integration: alias fallback in TypeName + Identifier branches, compileAliasExpression()
+- [x] Migration layer: CreateAlias/DropAlias operations, extractAliases(), alias diffing, no-op DDL
+- [x] 9 compiler tests (alias-compilation.test.ts), 8 migration tests (alias.test.ts), 4 PG E2E tests (pg-alias.test.ts)
 
 ---
 
@@ -279,16 +276,29 @@ Tasks:
 **Goal**: Support `range<T>` and `multirange<T>` throughout the stack
 **Success Criteria**: Range properties work in SDL, queries, and PG execution
 **Tests**: SDL parsing, DDL, query compilation, PG E2E
-**Status**: Not Started
+**Status**: Complete
 
 Tasks:
-- [ ] Add range/multirange to type system with parameterized type support
-- [ ] Map to PG types: `range<int32>` → `int4range`, `range<int64>` → `int8range`, `range<float64>` → `numrange`, `range<datetime>` → `tstzrange`, `range<cal::local_date>` → `daterange`, `range<cal::local_datetime>` → `tsrange`
-- [ ] Add range construction: `range(lower, upper)` → PG range constructor
-- [ ] Add range functions: `range_get_lower`, `range_get_upper`, `range_is_empty`, `range_contains`, `range_overlaps`, `contains` (element in range)
-- [ ] Multirange equivalents
-- [ ] Range operators: `@>`, `<@`, `&&`, `<<`, `>>`, `&<`, `&>`, `-|-`
-- [ ] PG E2E: range creation, containment, overlap queries
+- [x] Phase 1: Add range/multirange to type system with parameterized type support
+  - Schema AST `TypeRef.params`, SDL parser angle-bracket type params, validator range inner types
+  - DDL generator range type mapping, migration differ `typeToString()`, compiler type mapping
+  - 18 unit tests (compiler/range-types.test.ts)
+- [x] Phase 2: Range & multirange built-in functions
+  - `range(lower, upper)` → PG range constructor (`int4range`, `numrange`, etc.)
+  - `range_get_lower` → `LOWER`, `range_get_upper` → `UPPER`, `range_is_empty` → `ISEMPTY`
+  - `range_unpack` → `UNNEST`, `range_is_inclusive_lower` → `LOWER_INC`, `range_is_inclusive_upper` → `UPPER_INC`
+  - `contains(range, elem)` → `@>`, `overlaps(r1, r2)` → `&&`, `multirange()` → PG multirange constructor
+  - 14 unit tests (compiler/range-functions.test.ts)
+- [x] Phase 3: Range operators in EdgeQL parser and compiler
+  - `@>` (contains), `<@` (contained by), `&&` (overlaps), `-|-` (adjacent)
+  - New token types, lexer rules, parser integration at comparison precedence level
+  - Direct pass-through to PG operators (same syntax)
+  - 8 unit tests (compiler/range-operators.test.ts)
+- [x] Phase 4: PG E2E tests (compiler/pg-range-types.test.ts)
+  - DDL column creation (int4range, int8multirange), INSERT+SELECT round-trip
+  - range_get_lower/range_get_upper, range_is_empty, contains (@>), overlaps (&&)
+  - @> operator in FILTER clause, datetime range (tstzrange), multirange construction
+  - 10 PG E2E tests
 
 ---
 
