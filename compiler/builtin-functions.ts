@@ -703,5 +703,68 @@ export function getBuiltinFunctions(): Map<string, FunctionDef> {
       ],
       returnType: "bool",
     }],
+
+    // Bytes functions
+    ["bytes_get_bit", {
+      name: "bytes_get_bit",
+      args: [
+        { name: "val", type: "bytes", required: true },
+        { name: "index", type: "int64", required: true },
+      ],
+      returnType: "int64",
+      sqlName: "GET_BIT",
+    }],
+    ["bytes_to_str", {
+      name: "bytes_to_str",
+      args: [
+        { name: "val", type: "bytes", required: true },
+        { name: "encoding", type: "str", required: true },
+      ],
+      returnType: "str",
+      sqlName: "CONVERT_FROM",
+    }],
+
+    // UUID functions — v1mc maps to v4 (PG 16 has no v1mc built-in)
+    ["uuid_generate_v1mc", {
+      name: "uuid_generate_v1mc",
+      args: [],
+      returnType: "uuid",
+      sqlName: "GEN_RANDOM_UUID",
+    }],
+
+    // Additional math functions
+    ["math_power", {
+      name: "math_power",
+      args: [
+        { name: "base", type: "anyreal", required: true },
+        { name: "exp", type: "anyreal", required: true },
+      ],
+      returnType: "float64",
+      sqlName: "POWER",
+    }],
+    ["math_log10", {
+      name: "math_log10",
+      args: [{ name: "val", type: "anyreal", required: true }],
+      returnType: "float64",
+    }],
+    ["math_log2", {
+      name: "math_log2",
+      args: [{ name: "val", type: "anyreal", required: true }],
+      returnType: "float64",
+    }],
+
+    // Full-text search functions (ext::fts)
+    ["fts::search", {
+      name: "fts::search",
+      args: [{ name: "query", type: "str", required: true }],
+      returnType: "bool",
+      sqlName: "fts__search",
+    }],
+    ["fts::rank", {
+      name: "fts::rank",
+      args: [{ name: "query", type: "str", required: true }],
+      returnType: "float64",
+      sqlName: "fts__rank",
+    }],
   ]);
 }

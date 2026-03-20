@@ -95,6 +95,13 @@ export enum TokenType {
   SCHEMA = "SCHEMA",
   TYPE = "TYPE",
   DESCRIBE = "DESCRIBE",
+  EXPLAIN = "EXPLAIN",
+  ANALYZE = "ANALYZE",
+  CONFIGURE = "CONFIGURE",
+  SYSTEM = "SYSTEM",
+  INSTANCE = "INSTANCE",
+  SESSION = "SESSION",
+  RESET = "RESET",
   TRUE = "TRUE",
   FALSE = "FALSE",
   EMPTY = "EMPTY",
@@ -151,11 +158,22 @@ export enum TokenType {
   RANGE_OVERLAPS = "RANGE_OVERLAPS", // &&
   RANGE_ADJACENT = "RANGE_ADJACENT", // -|-
 
+  // Bitwise operators
+  AMPERSAND = "AMPERSAND", // & (bitwise AND)
+  PIPE = "PIPE", // | (bitwise OR)
+  CARET = "CARET", // ^ (bitwise XOR)
+  LSHIFT = "LSHIFT", // <<
+  RSHIFT = "RSHIFT", // >>
+  TILDE = "TILDE", // ~ (unary bitwise NOT / binary regex match)
+
+  // Regex operators
+  REGEX_NOT_MATCH = "REGEX_NOT_MATCH", // !~
+  REGEX_IMATCH = "REGEX_IMATCH", // ~*
+  REGEX_NOT_IMATCH = "REGEX_NOT_IMATCH", // !~*
+
   // Special
   PARAMETER = "PARAMETER", // $param
   AT = "AT", // @
-  AMPERSAND = "AMPERSAND", // &
-  PIPE = "PIPE", // |
   HASH = "HASH", // #
   EOF = "EOF", // End of file
   NEWLINE = "NEWLINE", // Line break
@@ -243,6 +261,13 @@ export const KEYWORDS = new Map<string, TokenType>([
   ["schema", TokenType.SCHEMA],
   ["type", TokenType.TYPE],
   ["describe", TokenType.DESCRIBE],
+  ["explain", TokenType.EXPLAIN],
+  ["analyze", TokenType.ANALYZE],
+  ["configure", TokenType.CONFIGURE],
+  ["system", TokenType.SYSTEM],
+  ["instance", TokenType.INSTANCE],
+  ["session", TokenType.SESSION],
+  ["reset", TokenType.RESET],
   ["true", TokenType.TRUE],
   ["false", TokenType.FALSE],
   ["empty", TokenType.EMPTY],

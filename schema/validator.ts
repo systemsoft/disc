@@ -7,9 +7,16 @@ import * as AST from "./ast.ts";
 import { Module, SDLConverter } from "./converter.ts";
 import { isPolymorphicType } from "../compiler/context.ts";
 
+/**
+ * Built-in annotation names that do not require an explicit
+ * `abstract annotation` declaration in the schema.
+ */
+const BUILTIN_ANNOTATIONS = new Set(["description", "title", "deprecated"]);
+
 interface ValidationContext {
   types: Map<string, AST.TypeDeclaration | AST.ScalarTypeDeclaration>;
   abstractLinks: Map<string, AST.LinkDeclaration>;
+  abstractAnnotations: Map<string, AST.AnnotationDeclaration>;
   modules: Map<string, AST.ModuleDeclaration>;
   currentModule?: string;
   errors: ValidationError[];
@@ -23,6 +30,7 @@ export class SchemaValidator {
     this.context = {
       types: new Map(),
       abstractLinks: new Map(),
+      abstractAnnotations: new Map(),
       modules: new Map(),
       errors: [],
     };
@@ -74,6 +82,9 @@ export class SchemaValidator {
       case "LinkDeclaration":
         this.collectAbstractLink(decl);
         break;
+      case "AnnotationDeclaration":
+        this.collectAbstractAnnotation(decl);
+        break;
     }
   }
 
@@ -117,6 +128,13 @@ export class SchemaValidator {
     if (!link.abstract) return;
     const linkName = this.getQualifiedTypeName(link.name);
     this.context.abstractLinks.set(linkName, link);
+  }
+
+  private collectAbstractAnnotation(
+    annotation: AST.AnnotationDeclaration,
+  ): void {
+    const annotationName = this.getQualifiedTypeName(annotation.name);
+    this.context.abstractAnnotations.set(annotationName, annotation);
   }
 
   private validateDocumentReferences(document: AST.SDLDocument): void {
@@ -210,7 +228,8 @@ export class SchemaValidator {
           this.validateIndex(member);
           break;
         case "Annotation":
-          // Annotations are validated separately
+          // Validate that annotation name is declared or built-in
+          this.validateAnnotationUsage([member]);
           break;
         case "AccessPolicy":
           this.validateAccessPolicy(member);
@@ -275,6 +294,36 @@ export class SchemaValidator {
     }
   }
 
+  /**
+   * Validate that annotation usages reference either a built-in annotation
+   * (description, title, deprecated) or a user-declared abstract annotation.
+   */
+  private validateAnnotationUsage(
+    annotations: AST.Annotation[] | undefined,
+  ): void {
+    if (!annotations) return;
+
+    for (const ann of annotations) {
+      const name = ann.name.parts.join("::");
+
+      // Check built-in annotations
+      if (BUILTIN_ANNOTATIONS.has(name)) continue;
+
+      // Check user-declared abstract annotations (try unqualified and qualified)
+      if (this.context.abstractAnnotations.has(name)) continue;
+
+      // Try qualified lookup in current module
+      if (this.context.currentModule && !name.includes("::")) {
+        const qualifiedName = `${this.context.currentModule}::${name}`;
+        if (this.context.abstractAnnotations.has(qualifiedName)) continue;
+      }
+
+      this.addError(
+        `Annotation '${name}' is not defined; declare it with 'abstract annotation ${name};' or use a built-in annotation`,
+      );
+    }
+  }
+
   private validateProperty(property: AST.PropertyDeclaration): void {
     // Validate type
     this.validateTypeRef(property.type);
@@ -304,6 +353,9 @@ export class SchemaValidator {
         this.validateRewrite(rewrite, property.name.value, seenEvents);
       }
     }
+
+    // Validate annotation usages
+    this.validateAnnotationUsage(property.annotations);
   }
 
   private validateLink(link: AST.LinkDeclaration): void {
@@ -373,6 +425,9 @@ export class SchemaValidator {
         this.validateConstraint(constraint);
       }
     }
+
+    // Validate annotation usages
+    this.validateAnnotationUsage(link.annotations);
   }
 
   private checkLinkInheritanceCycle(

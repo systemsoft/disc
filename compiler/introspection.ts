@@ -27,6 +27,7 @@ export interface PropertyDescription {
   hasDefault: boolean;
   computed: boolean;
   constraints: string[];
+  annotations: Record<string, string>;
 }
 
 export interface LinkDescription {
@@ -35,6 +36,7 @@ export interface LinkDescription {
   cardinality: "single" | "multi";
   required: boolean;
   readonly: boolean;
+  annotations: Record<string, string>;
 }
 
 export interface TypeDescription {
@@ -46,6 +48,7 @@ export interface TypeDescription {
   links: LinkDescription[];
   accessPolicies: string[];
   indexes: string[];
+  annotations: Record<string, string>;
 }
 
 export interface FunctionDescription {
@@ -155,6 +158,7 @@ function buildTypeDescription(typeDef: TypeDef): TypeDescription {
     links,
     accessPolicies,
     indexes: [],
+    annotations: typeDef.annotations ?? {},
   };
 }
 
@@ -178,6 +182,7 @@ function buildPropertyDescription(prop: PropertyDef): PropertyDescription {
     hasDefault: prop.hasDefault ?? false,
     computed: prop.computed ?? false,
     constraints,
+    annotations: prop.annotations ?? {},
   };
 }
 
@@ -188,6 +193,7 @@ function buildLinkDescription(link: LinkDef): LinkDescription {
     cardinality: link.multi ? "multi" : "single",
     required: link.required,
     readonly: false,
+    annotations: link.annotations ?? {},
   };
 }
 

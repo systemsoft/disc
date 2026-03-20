@@ -15,6 +15,8 @@ import { Module, SDLConverter } from "../schema/converter.ts";
 import {
   AccessPolicy as SDLAccessPolicy,
   AliasDeclaration,
+  Annotation as SDLAnnotation,
+  AnnotationDeclaration,
   Constraint as SDLConstraint,
   Expression,
   GlobalDeclaration,
@@ -26,6 +28,7 @@ import {
 import { adaptAccessPolicies } from "../access/policy-adapter.ts";
 import { getBuiltinFunctions } from "../compiler/builtin-functions.ts";
 import {
+  AbstractAnnotationDef,
   AliasDef,
   GlobalDef,
   LinkDef,
@@ -233,6 +236,21 @@ function extractPropertyConstraints(
   });
 }
 
+function extractAnnotationMap(
+  annotations: SDLAnnotation[] | undefined,
+): Record<string, string> | undefined {
+  if (!annotations || annotations.length === 0) {
+    return undefined;
+  }
+
+  const result: Record<string, string> = {};
+  for (const ann of annotations) {
+    const name = ann.name.parts.join("::");
+    result[name] = ann.value ? stringifyExpression(ann.value) : "true";
+  }
+  return result;
+}
+
 export interface SchemaManagerOptions {
   pool?: ConnectionPool;
   dryRun?: boolean;
@@ -288,12 +306,24 @@ export class SchemaManager {
     const types = new Map<string, TypeDef>();
     const aliases = new Map<string, AliasDef>();
     const globals = new Map<string, GlobalDef>();
+    const abstractAnnotations = new Map<string, AbstractAnnotationDef>();
     const converter = new SDLConverter();
 
-    // First pass: collect abstract link declarations for link inheritance
+    // First pass: collect abstract link and annotation declarations
     const abstractLinks = new Map<string, LinkDeclaration>();
     for (const module of modules) {
       for (const item of module.items) {
+        // Collect abstract annotation declarations
+        if (item.kind === "AnnotationDeclaration") {
+          const annDecl = item as AnnotationDeclaration;
+          const annName = annDecl.name.value;
+          const annDef: AbstractAnnotationDef = { name: annName };
+          if (annDecl.type) {
+            annDef.type = annDecl.type.name.parts.join("::");
+          }
+          abstractAnnotations.set(annName, annDef);
+        }
+
         if (
           item.kind === "LinkDeclaration" &&
           (item as LinkDeclaration).abstract
@@ -441,6 +471,10 @@ export class SchemaManager {
               }))
               : undefined;
 
+          const propAnnotations = extractAnnotationMap(
+            propDecl.annotations,
+          );
+
           properties.set(propName, {
             name: propName,
             type: sqlType,
@@ -453,6 +487,7 @@ export class SchemaManager {
             computed: propDecl.computed !== undefined,
             constraints,
             rewrites,
+            annotations: propAnnotations,
           });
         }
 
@@ -493,12 +528,17 @@ export class SchemaManager {
           const targetName = linkDecl.target.name.parts.join("::");
           const isMulti = linkDecl.multi ?? false;
 
+          const linkAnnotations = extractAnnotationMap(
+            linkDecl.annotations,
+          );
+
           links.set(linkName, {
             name: linkName,
             target: targetName,
             required: linkDecl.required ?? false,
             multi: isMulti,
             columnName: isMulti ? undefined : `${linkName}_id`,
+            annotations: linkAnnotations,
           });
         }
 
@@ -530,6 +570,14 @@ export class SchemaManager {
           (ext) => ext.name.parts.join("::"),
         );
 
+        // Extract type-level annotations from type members
+        const typeAnnotationMembers = typeDecl.members.filter(
+          (m): m is SDLAnnotation => m.kind === "Annotation",
+        );
+        const typeAnnotations = extractAnnotationMap(
+          typeAnnotationMembers.length > 0 ? typeAnnotationMembers : undefined,
+        );
+
         const typeDef: TypeDef = {
           name: typeName,
           kind: "object",
@@ -538,6 +586,7 @@ export class SchemaManager {
           links,
           accessPolicies,
           triggers,
+          annotations: typeAnnotations,
         };
 
         if (isAbstract) {
@@ -659,6 +708,9 @@ export class SchemaManager {
     }
     if (globals.size > 0) {
       schema.globals = globals;
+    }
+    if (abstractAnnotations.size > 0) {
+      schema.abstractAnnotations = abstractAnnotations;
     }
     return schema;
   }

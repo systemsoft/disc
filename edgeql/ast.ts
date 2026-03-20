@@ -21,7 +21,9 @@ export type Query =
   | GroupQuery
   | DescribeTypeQuery
   | DescribeSchemaQuery
-  | SetGlobalQuery;
+  | SetGlobalQuery
+  | ExplainQuery
+  | ConfigureQuery;
 
 // SELECT query
 export interface SelectQuery extends EdgeQLNode {
@@ -114,6 +116,27 @@ export interface SetGlobalQuery extends EdgeQLNode {
   name: string;
   module?: string;
   value: Expression;
+}
+
+// EXPLAIN query
+export interface ExplainQuery extends EdgeQLNode {
+  kind: "ExplainQuery";
+  query: Query;
+  analyze?: boolean;
+  buffers?: boolean;
+  format?: "JSON" | "TEXT" | "YAML" | "XML";
+}
+
+// CONFIGURE query
+export type ConfigureScope = "SESSION" | "DATABASE" | "INSTANCE" | "SYSTEM";
+export type ConfigureAction = "SET" | "RESET";
+
+export interface ConfigureQuery extends EdgeQLNode {
+  kind: "ConfigureQuery";
+  scope: ConfigureScope;
+  action: ConfigureAction;
+  key: string;
+  value?: Expression;
 }
 
 // Clauses
@@ -276,7 +299,16 @@ export type BinaryOperator =
   | "@>"
   | "<@"
   | "&&"
-  | "-|-";
+  | "-|-"
+  | "&"
+  | "|"
+  | "^"
+  | "<<"
+  | ">>"
+  | "~"
+  | "!~"
+  | "~*"
+  | "!~*";
 
 // Unary operation
 export interface UnaryOp extends EdgeQLNode {
@@ -291,7 +323,8 @@ export type UnaryOperator =
   | "NOT"
   | "DISTINCT"
   | "EXISTS"
-  | "DETACHED";
+  | "DETACHED"
+  | "~";
 
 // Conditional
 export interface IfElse extends EdgeQLNode {

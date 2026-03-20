@@ -339,6 +339,26 @@ export class EdgeQLLexer {
             startPos,
           );
         }
+        if (this.peek() === "~") {
+          this.advance();
+          if (this.peek() === "*") {
+            this.advance();
+            return createToken(
+              TokenType.REGEX_NOT_IMATCH,
+              "!~*",
+              startLine,
+              startColumn,
+              startPos,
+            );
+          }
+          return createToken(
+            TokenType.REGEX_NOT_MATCH,
+            "!~",
+            startLine,
+            startColumn,
+            startPos,
+          );
+        }
         throw new SyntaxError(`Unexpected character '!'`, {
           location: { line: startLine, column: startColumn, offset: startPos },
         });
@@ -350,6 +370,16 @@ export class EdgeQLLexer {
           return createToken(
             TokenType.LESSEQ,
             "<=",
+            startLine,
+            startColumn,
+            startPos,
+          );
+        }
+        if (this.peek() === "<") {
+          this.advance();
+          return createToken(
+            TokenType.LSHIFT,
+            "<<",
             startLine,
             startColumn,
             startPos,
@@ -380,6 +410,16 @@ export class EdgeQLLexer {
           return createToken(
             TokenType.GREATEREQ,
             ">=",
+            startLine,
+            startColumn,
+            startPos,
+          );
+        }
+        if (this.peek() === ">") {
+          this.advance();
+          return createToken(
+            TokenType.RSHIFT,
+            ">>",
             startLine,
             startColumn,
             startPos,
@@ -522,6 +562,36 @@ export class EdgeQLLexer {
         return createToken(
           TokenType.PIPE,
           "|",
+          startLine,
+          startColumn,
+          startPos,
+        );
+
+      case "^":
+        this.advance();
+        return createToken(
+          TokenType.CARET,
+          "^",
+          startLine,
+          startColumn,
+          startPos,
+        );
+
+      case "~":
+        this.advance();
+        if (this.peek() === "*") {
+          this.advance();
+          return createToken(
+            TokenType.REGEX_IMATCH,
+            "~*",
+            startLine,
+            startColumn,
+            startPos,
+          );
+        }
+        return createToken(
+          TokenType.TILDE,
+          "~",
           startLine,
           startColumn,
           startPos,

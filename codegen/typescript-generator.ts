@@ -98,6 +98,10 @@ export class TypeScriptGenerator {
 
     // Documentation comment
     content += `/**\n`;
+    if (typeDef.annotations?.["description"]) {
+      content += ` * ${typeDef.annotations["description"]}\n`;
+      content += ` *\n`;
+    }
     content += ` * ${typeDef.name} type from EdgeQL schema\n`;
     content += ` * Table: ${typeDef.tableName}\n`;
     content += ` */\n`;
@@ -159,8 +163,13 @@ export class TypeScriptGenerator {
     // Use edgeqlType when available for accurate type display and mapping
     const typeForMapping = prop.edgeqlType ?? prop.type;
 
-    // Build JSDoc tags for constraints, readonly, and default metadata
+    // Build JSDoc tags for constraints, readonly, default, and annotations
     const jsdocTags: string[] = [];
+
+    // Emit @description from annotations
+    if (prop.annotations?.["description"]) {
+      jsdocTags.push(`@description ${prop.annotations["description"]}`);
+    }
 
     if (prop.readonly) {
       jsdocTags.push("@readonly");

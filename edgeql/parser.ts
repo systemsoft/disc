@@ -57,6 +57,12 @@ export class EdgeQLParser {
     } // SET GLOBAL query
     else if (this.check(TokenType.SET) && this.isSetGlobal()) {
       query = this.parseSetGlobal();
+    } // EXPLAIN query
+    else if (this.check(TokenType.EXPLAIN)) {
+      query = this.parseExplainQuery();
+    } // CONFIGURE query
+    else if (this.check(TokenType.CONFIGURE)) {
+      query = this.parseConfigureQuery();
     } else {
       throw this.error(`Expected query statement, got ${this.peek().value}`);
     }
@@ -346,6 +352,93 @@ export class EdgeQLParser {
     throw this.error(
       `Expected 'TYPE' or 'SCHEMA' after 'DESCRIBE', got '${this.peek().value}'`,
     );
+  }
+
+  private parseExplainQuery(): AST.ExplainQuery {
+    this.consume(TokenType.EXPLAIN, "Expected 'EXPLAIN'");
+
+    let analyze = false;
+    let buffers = false;
+
+    // Parse optional ANALYZE keyword
+    if (this.check(TokenType.ANALYZE)) {
+      this.advance();
+      analyze = true;
+    }
+
+    // Parse optional BUFFERS keyword (contextual identifier)
+    if (
+      this.check(TokenType.IDENT) &&
+      this.peek().value.toLowerCase() === "buffers"
+    ) {
+      this.advance();
+      buffers = true;
+    }
+
+    // Parse the inner query
+    const query = this.parseQuery();
+
+    return {
+      kind: "ExplainQuery",
+      query,
+      analyze,
+      buffers,
+    };
+  }
+
+  private parseConfigureQuery(): AST.ConfigureQuery {
+    this.consume(TokenType.CONFIGURE, "Expected 'CONFIGURE'");
+
+    // Parse scope: SESSION | DATABASE | INSTANCE | SYSTEM
+    let scope: AST.ConfigureScope;
+    if (this.match(TokenType.SESSION)) {
+      scope = "SESSION";
+    } else if (
+      this.check(TokenType.IDENT) &&
+      this.peek().value.toLowerCase() === "database"
+    ) {
+      this.advance();
+      scope = "DATABASE";
+    } else if (this.match(TokenType.INSTANCE)) {
+      scope = "INSTANCE";
+    } else if (this.match(TokenType.SYSTEM)) {
+      scope = "SYSTEM";
+    } else {
+      throw this.error(
+        `Expected 'SESSION', 'DATABASE', 'INSTANCE', or 'SYSTEM' after 'CONFIGURE', got '${this.peek().value}'`,
+      );
+    }
+
+    // Parse action: SET or RESET
+    if (this.match(TokenType.SET)) {
+      // CONFIGURE <scope> SET <key> := <value>
+      const key = this.parseConfigKey();
+      this.consume(TokenType.ASSIGN, "Expected ':=' after config key");
+      const value = this.parseExpression();
+      return { kind: "ConfigureQuery", scope, action: "SET", key, value };
+    }
+
+    if (this.match(TokenType.RESET)) {
+      // CONFIGURE <scope> RESET <key>
+      const key = this.parseConfigKey();
+      return { kind: "ConfigureQuery", scope, action: "RESET", key };
+    }
+
+    throw this.error(
+      `Expected 'SET' or 'RESET' after 'CONFIGURE ${scope}', got '${this.peek().value}'`,
+    );
+  }
+
+  private parseConfigKey(): string {
+    const parts: string[] = [];
+    parts.push(this.parseIdentifier().name);
+
+    // Allow dotted config keys: query.execution_timeout
+    while (this.match(TokenType.DOT)) {
+      parts.push(this.parseIdentifier().name);
+    }
+
+    return parts.join(".");
   }
 
   /**
@@ -736,6 +829,18 @@ export class EdgeQLParser {
       } else if (this.match(TokenType.RANGE_ADJACENT)) {
         const right = this.parseCoalesceExpression();
         expr = AST.createBinaryOp("-|-", expr, right);
+      } else if (this.match(TokenType.TILDE)) {
+        const right = this.parseCoalesceExpression();
+        expr = AST.createBinaryOp("~", expr, right);
+      } else if (this.match(TokenType.REGEX_NOT_MATCH)) {
+        const right = this.parseCoalesceExpression();
+        expr = AST.createBinaryOp("!~", expr, right);
+      } else if (this.match(TokenType.REGEX_IMATCH)) {
+        const right = this.parseCoalesceExpression();
+        expr = AST.createBinaryOp("~*", expr, right);
+      } else if (this.match(TokenType.REGEX_NOT_IMATCH)) {
+        const right = this.parseCoalesceExpression();
+        expr = AST.createBinaryOp("!~*", expr, right);
       } else {
         break;
       }
@@ -756,11 +861,38 @@ export class EdgeQLParser {
   }
 
   private parseConcatExpression(): AST.Expression {
-    let expr = this.parseAdditiveExpression();
+    let expr = this.parseBitwiseExpression();
 
     while (this.match(TokenType.CONCAT)) {
-      const right = this.parseAdditiveExpression();
+      const right = this.parseBitwiseExpression();
       expr = AST.createBinaryOp("++", expr, right);
+    }
+
+    return expr;
+  }
+
+  private parseBitwiseExpression(): AST.Expression {
+    let expr = this.parseAdditiveExpression();
+
+    while (true) {
+      if (this.match(TokenType.AMPERSAND)) {
+        const right = this.parseAdditiveExpression();
+        expr = AST.createBinaryOp("&", expr, right);
+      } else if (this.match(TokenType.PIPE)) {
+        const right = this.parseAdditiveExpression();
+        expr = AST.createBinaryOp("|", expr, right);
+      } else if (this.match(TokenType.CARET)) {
+        const right = this.parseAdditiveExpression();
+        expr = AST.createBinaryOp("^", expr, right);
+      } else if (this.match(TokenType.LSHIFT)) {
+        const right = this.parseAdditiveExpression();
+        expr = AST.createBinaryOp("<<", expr, right);
+      } else if (this.match(TokenType.RSHIFT)) {
+        const right = this.parseAdditiveExpression();
+        expr = AST.createBinaryOp(">>", expr, right);
+      } else {
+        break;
+      }
     }
 
     return expr;
@@ -843,6 +975,11 @@ export class EdgeQLParser {
     if (this.match(TokenType.DETACHED)) {
       const operand = this.parseUnaryExpression();
       return AST.createUnaryOp("DETACHED", operand);
+    }
+
+    if (this.match(TokenType.TILDE)) {
+      const operand = this.parseUnaryExpression();
+      return AST.createUnaryOp("~", operand);
     }
 
     return this.parsePostfixExpression();

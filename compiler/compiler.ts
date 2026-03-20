@@ -19,6 +19,20 @@ import {
 import { describeSchema, describeType } from "./introspection.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 
+/** Maps Gel/Disc config keys to PostgreSQL GUC parameter names */
+const CONFIGURE_KEY_MAP: Record<string, string> = {
+  "query_execution_timeout": "statement_timeout",
+  "listen_addresses": "listen_addresses",
+  "shared_buffers": "shared_buffers",
+  "work_mem": "work_mem",
+  "maintenance_work_mem": "maintenance_work_mem",
+  "effective_cache_size": "effective_cache_size",
+  "max_connections": "max_connections",
+  "log_min_duration_statement": "log_min_duration_statement",
+  "idle_in_transaction_session_timeout": "idle_in_transaction_session_timeout",
+  "lock_timeout": "lock_timeout",
+};
+
 /** Maps EdgeQL type names to PostgreSQL type names */
 function edgeqlTypeToPgType(edgeqlType: string): string {
   const typeMap: Record<string, string> = {
@@ -451,6 +465,10 @@ export class EdgeQLCompiler {
         return this.compileDescribeSchema();
       case "SetGlobalQuery":
         return this.compileSetGlobal(query as EdgeQLAST.SetGlobalQuery);
+      case "ExplainQuery":
+        return this.compileExplainQuery(query as EdgeQLAST.ExplainQuery);
+      case "ConfigureQuery":
+        return this.compileConfigureQuery(query as EdgeQLAST.ConfigureQuery);
       default:
         throw new CompilationError(`Unsupported query type: ${query.kind}`);
     }
@@ -1426,6 +1444,23 @@ export class EdgeQLCompiler {
       case "-|-":
         sqlOp = binOp.op;
         break;
+      // Bitwise operators — same syntax in PG
+      case "&":
+      case "|":
+      case "<<":
+      case ">>":
+        sqlOp = binOp.op;
+        break;
+      case "^":
+        sqlOp = "#"; // PG uses # for bitwise XOR
+        break;
+      // Regex operators — same syntax in PG
+      case "~":
+      case "!~":
+      case "~*":
+      case "!~*":
+        sqlOp = binOp.op;
+        break;
     }
 
     return SQL.createBinaryExpression(sqlOp, left, right);
@@ -1766,6 +1801,30 @@ export class EdgeQLCompiler {
           SQL.createLiteral("number", 1),
         ]);
 
+      case "math_log10":
+        // math::log10(val) → LOG(10, val) — PG LOG(b, x) is base-b logarithm
+        if (args.length !== 1) {
+          throw new CompilationError(
+            "math_log10() requires exactly 1 argument",
+          );
+        }
+        return SQL.createFunctionCall("LOG", [
+          SQL.createLiteral("number", 10),
+          args[0],
+        ]);
+
+      case "math_log2":
+        // math::log2(val) → LOG(2, val) — PG LOG(b, x) is base-b logarithm
+        if (args.length !== 1) {
+          throw new CompilationError(
+            "math_log2() requires exactly 1 argument",
+          );
+        }
+        return SQL.createFunctionCall("LOG", [
+          SQL.createLiteral("number", 2),
+          args[0],
+        ]);
+
       // Regex functions with special compilation
       case "re_match":
         // re_match(pattern, str) → REGEXP_MATCH(str, pattern) — swap args
@@ -1965,6 +2024,35 @@ export class EdgeQLCompiler {
           );
         }
         return SQL.createBinaryExpression("&&", args[0], args[1]);
+
+      // Full-text search functions (ext::fts)
+      case "fts_search":
+        // fts::search(query) → fts_vector @@ plainto_tsquery('english', query)
+        if (args.length !== 1) {
+          throw new CompilationError(
+            "fts::search() requires exactly 1 argument",
+          );
+        }
+        return {
+          kind: "RawSQLExpression" as const,
+          sql: `fts_vector @@ plainto_tsquery('english', ${
+            this.renderSqlExpr(args[0])
+          })`,
+        };
+
+      case "fts_rank":
+        // fts::rank(query) → ts_rank(fts_vector, plainto_tsquery('english', query))
+        if (args.length !== 1) {
+          throw new CompilationError(
+            "fts::rank() requires exactly 1 argument",
+          );
+        }
+        return {
+          kind: "RawSQLExpression" as const,
+          sql: `ts_rank(fts_vector, plainto_tsquery('english', ${
+            this.renderSqlExpr(args[0])
+          }))`,
+        };
     }
 
     // Standard 1:1 function name mapping
@@ -3127,7 +3215,82 @@ export class EdgeQLCompiler {
 
     return {
       kind: "RawSQLStatement",
-      sql: `SELECT set_config('${globalDef.pgSettingName}', ${valueStr}::text, true)`,
+      sql:
+        `SELECT set_config('${globalDef.pgSettingName}', ${valueStr}::text, true)`,
+    };
+  }
+
+  private compileExplainQuery(
+    query: EdgeQLAST.ExplainQuery,
+  ): SQL.RawSQLStatement {
+    const innerStatement = this.compileQuery(query.query);
+    const codegen = new SQLCodeGenerator();
+    const innerSql = codegen.generate(innerStatement);
+
+    const options: string[] = ["FORMAT JSON"];
+    if (query.analyze) {
+      options.push("ANALYZE");
+    }
+    if (query.buffers) {
+      options.push("BUFFERS");
+    }
+
+    return {
+      kind: "RawSQLStatement",
+      sql: `EXPLAIN (${options.join(", ")}) ${innerSql}`,
+    };
+  }
+
+  private compileConfigureQuery(
+    query: EdgeQLAST.ConfigureQuery,
+  ): SQL.RawSQLStatement {
+    const pgKey = CONFIGURE_KEY_MAP[query.key] ?? query.key;
+
+    if (query.action === "RESET") {
+      if (query.scope === "SESSION") {
+        return { kind: "RawSQLStatement", sql: `RESET ${pgKey}` };
+      }
+      if (query.scope === "SYSTEM") {
+        return {
+          kind: "RawSQLStatement",
+          sql: `ALTER SYSTEM RESET ${pgKey}`,
+        };
+      }
+      // DATABASE/INSTANCE: delete from config table
+      return {
+        kind: "RawSQLStatement",
+        sql:
+          `DELETE FROM disc_config WHERE key = '${query.key}' AND scope = '${query.scope}'`,
+      };
+    }
+
+    // SET action
+    if (!query.value) {
+      throw new CompilationError("CONFIGURE SET requires a value");
+    }
+
+    const codegen = new SQLCodeGenerator();
+    const valueSql = codegen.generateExpression(
+      this.compileExpression(query.value),
+    );
+
+    if (query.scope === "SESSION") {
+      return {
+        kind: "RawSQLStatement",
+        sql: `SET LOCAL ${pgKey} = ${valueSql}`,
+      };
+    }
+    if (query.scope === "SYSTEM") {
+      return {
+        kind: "RawSQLStatement",
+        sql: `ALTER SYSTEM SET ${pgKey} = ${valueSql}`,
+      };
+    }
+    // DATABASE/INSTANCE: upsert into config table
+    return {
+      kind: "RawSQLStatement",
+      sql:
+        `INSERT INTO disc_config (key, value, scope, updated_at) VALUES ('${query.key}', to_jsonb(${valueSql}), '${query.scope}', NOW()) ON CONFLICT (key) DO UPDATE SET value = to_jsonb(${valueSql}), updated_at = NOW()`,
     };
   }
 

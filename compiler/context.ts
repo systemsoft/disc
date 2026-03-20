@@ -56,11 +56,17 @@ export interface CTEAlias {
   typeDef?: TypeDef;
 }
 
+export interface AbstractAnnotationDef {
+  name: string;
+  type?: string;
+}
+
 export interface Schema {
   types: Map<string, TypeDef>;
   functions: Map<string, FunctionDef>;
   aliases?: Map<string, AliasDef>;
   globals?: Map<string, GlobalDef>;
+  abstractAnnotations?: Map<string, AbstractAnnotationDef>;
 }
 
 export interface TriggerDef {
@@ -113,6 +119,8 @@ export interface TypeDef {
   subtypes?: string[];
   /** Column name for type discrimination (e.g., "__type__") */
   discriminatorColumn?: string;
+  /** Annotations (e.g., description) from SDL */
+  annotations?: Record<string, string>;
 }
 
 export interface PropertyConstraint {
@@ -138,6 +146,8 @@ export interface PropertyDef {
   constraints?: PropertyConstraint[];
   /** Rewrite rules for insert/update operations */
   rewrites?: RewriteDef[];
+  /** Annotations (e.g., description) from SDL */
+  annotations?: Record<string, string>;
 }
 
 export interface LinkDef {
@@ -150,6 +160,8 @@ export interface LinkDef {
   junctionTable?: string; // For many-to-many via junction table
   junctionSourceColumn?: string; // Column referencing this type (default: "source_id")
   junctionTargetColumn?: string; // Column referencing target type (default: "target_id")
+  /** Annotations (e.g., description) from SDL */
+  annotations?: Record<string, string>;
 }
 
 export interface FunctionDef {
@@ -475,6 +487,9 @@ export function mergeSchemaAdditions(
   }
   if (base.globals) {
     result.globals = new Map(base.globals);
+  }
+  if (base.abstractAnnotations) {
+    result.abstractAnnotations = new Map(base.abstractAnnotations);
   }
   return result;
 }
