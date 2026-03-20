@@ -30,6 +30,7 @@ export interface CTEAlias {
 export interface Schema {
   types: Map<string, TypeDef>;
   functions: Map<string, FunctionDef>;
+  aliases?: Map<string, AliasDef>;
 }
 
 export interface TriggerDef {
@@ -43,6 +44,12 @@ export interface TriggerDef {
 export interface RewriteDef {
   events: ("insert" | "update")[];
   body: string;
+}
+
+export interface AliasDef {
+  name: string;
+  expression: string;
+  targetType?: string;
 }
 
 export interface TypeDef {
@@ -230,6 +237,41 @@ export function resolveTypeName(
   return undefined;
 }
 
+/**
+ * Resolve an alias name respecting module scope.
+ *
+ * Resolution order:
+ * 1. Exact name (already qualified or known at top level)
+ * 2. If unqualified and moduleScope is set: try moduleScope::name
+ * 3. If unqualified: try default::name
+ */
+export function resolveAlias(
+  schema: Schema,
+  name: string,
+  moduleScope?: string,
+): AliasDef | undefined {
+  if (!schema.aliases) return undefined;
+
+  // 1. Exact match
+  let aliasDef = schema.aliases.get(name);
+  if (aliasDef) return aliasDef;
+
+  // Only try qualified lookups for unqualified names
+  if (!name.includes("::")) {
+    // 2. Module scope
+    if (moduleScope) {
+      aliasDef = schema.aliases.get(`${moduleScope}::${name}`);
+      if (aliasDef) return aliasDef;
+    }
+
+    // 3. Default module
+    aliasDef = schema.aliases.get(`default::${name}`);
+    if (aliasDef) return aliasDef;
+  }
+
+  return undefined;
+}
+
 export function getProperty(
   ctx: CompilationContext,
   typeName: string,
@@ -350,7 +392,11 @@ export function mergeSchemaAdditions(
     types.set(type.name, type);
   }
 
-  return { types, functions };
+  const result: Schema = { types, functions };
+  if (base.aliases) {
+    result.aliases = new Map(base.aliases);
+  }
+  return result;
 }
 
 // Default schema with basic types for testing
@@ -502,5 +548,6 @@ export function createTestSchema(): Schema {
       ["Post", postType],
     ]),
     functions: getBuiltinFunctions(),
+    aliases: new Map(),
   };
 }

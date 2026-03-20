@@ -8,6 +8,7 @@ import * as SQL from "./sql.ts";
 import * as Context from "./context.ts";
 import { Err, Ok, Result } from "../lib/result.ts";
 import { CompilationError } from "../lib/errors.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
 import {
   AccessConfig,
   AccessContext,
@@ -489,7 +490,17 @@ export class EdgeQLCompiler {
       // SELECT User -> SELECT * FROM users
       const typeName = expr.name.parts.join("::");
       const typeDef = Context.resolveTypeName(this.ctx, typeName);
+
       if (!typeDef) {
+        // Type not found — check if this is an expression alias
+        const aliasDef = Context.resolveAlias(
+          this.ctx.schema,
+          typeName,
+          this.ctx.moduleScope,
+        );
+        if (aliasDef) {
+          return this.compileAliasExpression(aliasDef, shape);
+        }
         throw new CompilationError(`Type '${typeName}' not found`);
       }
 
@@ -554,6 +565,16 @@ export class EdgeQLCompiler {
 
         return { selectItems, fromClause };
       }
+
+      // Check if this identifier references an expression alias
+      const aliasDef = Context.resolveAlias(
+        this.ctx.schema,
+        expr.name,
+        this.ctx.moduleScope,
+      );
+      if (aliasDef) {
+        return this.compileAliasExpression(aliasDef, shape);
+      }
     }
 
     if (expr.kind === "Path") {
@@ -605,6 +626,196 @@ export class EdgeQLCompiler {
     const fromClause = SQL.createFromClause([]); // No FROM clause needed
 
     return { selectItems, fromClause };
+  }
+
+  /**
+   * Compile an expression alias as a derived table (subquery in FROM).
+   *
+   * Given an alias like:
+   *   alias ActiveUsers := (select User filter .active = true);
+   *
+   * And a query:
+   *   select ActiveUsers { name, email }
+   *
+   * Produces:
+   *   SELECT jsonb_build_object('name', activeusers_1.name, 'email', activeusers_1.email)
+   *   FROM (SELECT * FROM users AS user_2 WHERE user_2.active = true) AS activeusers_1
+   */
+  private compileAliasExpression(
+    aliasDef: Context.AliasDef,
+    shape?: EdgeQLAST.Shape,
+  ): {
+    selectItems: SQL.SelectItem[];
+    fromClause: SQL.FromClause;
+  } {
+    // Strip optional surrounding parentheses from the alias expression
+    let exprText = aliasDef.expression.trim();
+    if (exprText.startsWith("(") && exprText.endsWith(")")) {
+      exprText = exprText.slice(1, -1).trim();
+    }
+
+    // Determine whether the expression is a query (starts with a query keyword)
+    // or a simple type/path reference.
+    const queryKeywords = /^(select|insert|update|delete|with|for|group)\b/i;
+    const isQuery = queryKeywords.test(exprText);
+
+    if (isQuery) {
+      // Parse and compile the alias expression as an EdgeQL query
+      const parser = new EdgeQLParser(exprText);
+      const innerQuery = parser.parse();
+
+      // Compile the inner query to get a SQL statement.  Use a fresh scope so
+      // the inner compilation doesn't leak table aliases into the outer query.
+      Context.pushScope(this.ctx);
+      let innerStatement: SQL.SQLStatement;
+      try {
+        innerStatement = this.compileQuery(innerQuery);
+      } finally {
+        Context.popScope(this.ctx);
+      }
+
+      // Build a derived-table reference: (inner SQL) AS alias_N
+      const aliasBase = aliasDef.name.replace(/::/g, "_").toLowerCase();
+      const subqueryAlias = Context.generateAlias(this.ctx, aliasBase);
+
+      // For the subquery to work as a derived table we need the raw rows, not
+      // JSON-wrapped output.  If the inner statement is a SELECT that wraps
+      // results in jsonb_build_object, re-compile as a raw SELECT * query
+      // instead so outer shape compilation can reference individual columns.
+      let derivedStatement: SQL.SQLStatement;
+      if (innerQuery.kind === "SelectQuery") {
+        Context.pushScope(this.ctx);
+        try {
+          derivedStatement = this.compileSelectQueryRaw(innerQuery);
+        } finally {
+          Context.popScope(this.ctx);
+        }
+      } else {
+        derivedStatement = innerStatement;
+      }
+
+      const tableRef: SQL.TableReference = {
+        kind: "TableReference",
+        name: subqueryAlias,
+        alias: subqueryAlias,
+        subquery: derivedStatement,
+      };
+
+      const fromClause = SQL.createFromClause([tableRef]);
+
+      // If a target type is known, use it to compile the shape
+      let selectItems: SQL.SelectItem[];
+      if (shape && aliasDef.targetType) {
+        const targetTypeDef = Context.resolveTypeName(
+          this.ctx,
+          aliasDef.targetType,
+        );
+        if (targetTypeDef) {
+          // Register the alias in scope so shape compilation can resolve columns
+          this.ctx.currentScope.aliases.set(
+            aliasDef.name.replace(/::/g, "_").toLowerCase(),
+            {
+              table: subqueryAlias,
+              alias: subqueryAlias,
+              type: targetTypeDef.name,
+            },
+          );
+          selectItems = this.compileShape(
+            shape,
+            targetTypeDef.name,
+            subqueryAlias,
+          );
+        } else {
+          // Target type not found — fall back to SELECT *
+          selectItems = [
+            SQL.createSelectItem(SQL.createColumnReference("*", subqueryAlias)),
+          ];
+        }
+      } else if (shape && !aliasDef.targetType) {
+        // Shape provided but no target type — select columns by name from
+        // the shape elements, referencing the derived table alias directly.
+        const fields: SQL.JsonField[] = [];
+        for (const element of shape.elements) {
+          const propName = element.name?.name ||
+            (element.expr.kind === "Identifier" ? element.expr.name : null);
+          if (propName) {
+            fields.push(
+              SQL.createJsonField(
+                propName,
+                SQL.createColumnReference(propName, subqueryAlias),
+              ),
+            );
+          }
+        }
+        if (fields.length > 0) {
+          selectItems = [
+            SQL.createSelectItem(SQL.createJsonBuildObject(fields)),
+          ];
+        } else {
+          selectItems = [
+            SQL.createSelectItem(SQL.createColumnReference("*", subqueryAlias)),
+          ];
+        }
+      } else {
+        // No shape — if target type is known, use implicit shape; else SELECT *
+        if (aliasDef.targetType) {
+          const targetTypeDef = Context.resolveTypeName(
+            this.ctx,
+            aliasDef.targetType,
+          );
+          if (targetTypeDef) {
+            selectItems = this.compileImplicitShape(
+              targetTypeDef,
+              subqueryAlias,
+            );
+          } else {
+            selectItems = [
+              SQL.createSelectItem(
+                SQL.createColumnReference("*", subqueryAlias),
+              ),
+            ];
+          }
+        } else {
+          selectItems = [
+            SQL.createSelectItem(
+              SQL.createColumnReference("*", subqueryAlias),
+            ),
+          ];
+        }
+      }
+
+      return { selectItems, fromClause };
+    } else {
+      // The alias expression is a simple type or path reference (e.g., User).
+      // Resolve the referenced type and compile as a regular type select.
+      const targetName = aliasDef.targetType || exprText;
+      const typeDef = Context.resolveTypeName(this.ctx, targetName);
+      if (!typeDef) {
+        throw new CompilationError(
+          `Alias '${aliasDef.name}' references unknown type '${targetName}'`,
+        );
+      }
+
+      const resolvedName = typeDef.name;
+      const tableAlias = Context.addTableAlias(
+        this.ctx,
+        aliasDef.name.replace(/::/g, "_").toLowerCase(),
+        typeDef.tableName,
+        resolvedName,
+      );
+      const fromClause = SQL.createFromClause([
+        SQL.createTableReference(typeDef.tableName, tableAlias),
+      ]);
+
+      let selectItems: SQL.SelectItem[];
+      if (shape) {
+        selectItems = this.compileShape(shape, resolvedName, tableAlias);
+      } else {
+        selectItems = this.compileImplicitShape(typeDef, tableAlias);
+      }
+
+      return { selectItems, fromClause };
+    }
   }
 
   private compileShape(
@@ -1547,15 +1758,13 @@ export class EdgeQLCompiler {
           );
         }
         const getFieldArg = funcCall.args[1].value;
-        const getField =
-          getFieldArg.kind === "Literal" && typeof getFieldArg.value === "string"
-            ? getFieldArg.value
-            : "epoch";
+        const getField = getFieldArg.kind === "Literal" &&
+            typeof getFieldArg.value === "string"
+          ? getFieldArg.value
+          : "epoch";
         return {
           kind: "RawSQLExpression" as const,
-          sql: `EXTRACT(${getField} FROM ${
-            this.renderSqlExpr(args[0])
-          })`,
+          sql: `EXTRACT(${getField} FROM ${this.renderSqlExpr(args[0])})`,
         };
       }
 
@@ -1589,9 +1798,7 @@ export class EdgeQLCompiler {
         }
         return {
           kind: "RawSQLExpression" as const,
-          sql: `(${
-            this.renderSqlExpr(args[0])
-          })[${
+          sql: `(${this.renderSqlExpr(args[0])})[${
             this.renderSqlExpr(args[1])
           } + 1]`,
         };
@@ -1620,9 +1827,7 @@ export class EdgeQLCompiler {
         }
         return {
           kind: "RawSQLExpression" as const,
-          sql: `DISTINCT ${
-            this.renderSqlExpr(args[0])
-          }`,
+          sql: `DISTINCT ${this.renderSqlExpr(args[0])}`,
         };
 
       case "exists":

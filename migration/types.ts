@@ -117,6 +117,18 @@ export interface DropRewriteOperation extends TypeOperation {
   events: ("insert" | "update")[];
 }
 
+// Alias operations
+export interface CreateAliasOperation extends MigrationOperation {
+  kind: "CreateAlias";
+  aliasName: string;
+  expression: string;
+}
+
+export interface DropAliasOperation extends MigrationOperation {
+  kind: "DropAlias";
+  aliasName: string;
+}
+
 // DDL operations
 export interface CreateTableOperation extends MigrationOperation {
   kind: "CreateTable";
@@ -449,5 +461,25 @@ export function createDropRewriteOperation(
     kind: "DropRewrite",
     propertyName,
     events,
+  };
+}
+
+export function createAliasOperation(
+  aliasName: string,
+  expression: string,
+): CreateAliasOperation {
+  return {
+    kind: "CreateAlias",
+    aliasName,
+    expression,
+  };
+}
+
+export function dropAliasOperation(
+  aliasName: string,
+): DropAliasOperation {
+  return {
+    kind: "DropAlias",
+    aliasName,
   };
 }

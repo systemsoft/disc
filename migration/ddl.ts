@@ -70,6 +70,18 @@ export class DDLGenerator {
         return this.generateRollbackDropIndex(
           operation as Types.DropIndexOperation,
         );
+      case "CreateAlias":
+        return [
+          `-- Rollback: Alias "${
+            (operation as Types.CreateAliasOperation).aliasName
+          }" was compile-time only (no DDL to rollback)`,
+        ];
+      case "DropAlias":
+        return [
+          `-- Rollback: Alias "${
+            (operation as Types.DropAliasOperation).aliasName
+          }" was compile-time only (no DDL to rollback)`,
+        ];
       default:
         throw new Error(`Unsupported rollback operation: ${operation.kind}`);
     }
@@ -97,6 +109,18 @@ export class DDLGenerator {
         );
       case "DropIndex":
         return this.generateDropIndex(operation as Types.DropIndexOperation);
+      case "CreateAlias":
+        return [
+          `-- Alias "${
+            (operation as Types.CreateAliasOperation).aliasName
+          }" is a compile-time expression alias (no DDL required)`,
+        ];
+      case "DropAlias":
+        return [
+          `-- Alias "${
+            (operation as Types.DropAliasOperation).aliasName
+          }" removed (no DDL required, was compile-time only)`,
+        ];
       default:
         throw new Error(`Unsupported operation: ${operation.kind}`);
     }

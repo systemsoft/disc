@@ -14,6 +14,7 @@ import { SDLParser } from "../schema/parser.ts";
 import { Module, SDLConverter } from "../schema/converter.ts";
 import {
   AccessPolicy as SDLAccessPolicy,
+  AliasDeclaration,
   Constraint as SDLConstraint,
   Expression,
   ScalarTypeDeclaration,
@@ -23,6 +24,7 @@ import {
 import { adaptAccessPolicies } from "../access/policy-adapter.ts";
 import { getBuiltinFunctions } from "../compiler/builtin-functions.ts";
 import {
+  AliasDef,
   LinkDef,
   PropertyConstraint,
   PropertyDef,
@@ -92,8 +94,28 @@ function stringifyExpression(expr: Expression): string {
     case "Literal":
       if (typeof expr.value === "string") return `'${expr.value}'`;
       return String(expr.value);
-    case "PathExpression":
+    case "PathExpression": {
+      // EdgeQL expression tokens (from parseEdgeQLExpression) are stored as
+      // individual tokens in the path array.  Detect them by checking whether
+      // the first token is a query keyword and join with spaces instead of
+      // dots so the expression round-trips correctly through the EdgeQL parser.
+      const edgeqlKeywords = new Set([
+        "select",
+        "insert",
+        "update",
+        "delete",
+        "with",
+        "for",
+        "group",
+      ]);
+      if (
+        expr.path.length > 0 &&
+        edgeqlKeywords.has(expr.path[0].toLowerCase())
+      ) {
+        return expr.path.join(" ");
+      }
       return expr.path.join(".");
+    }
     case "FunctionCall":
       return `${expr.name.parts.join("::")}(${
         expr.args.map(stringifyExpression).join(", ")
@@ -193,10 +215,53 @@ export class SchemaManager {
    */
   modulesToSchema(modules: Module[]): Schema {
     const types = new Map<string, TypeDef>();
+    const aliases = new Map<string, AliasDef>();
     const converter = new SDLConverter();
 
     for (const module of modules) {
       for (const item of module.items) {
+        // Handle alias declarations
+        if (item.kind === "AliasDeclaration") {
+          const aliasDecl = item as AliasDeclaration;
+          const aliasName = aliasDecl.name.value;
+          const expression = stringifyExpression(aliasDecl.using);
+
+          // Attempt to detect targetType from the expression.
+          // If the expression is a PathExpression starting with a type name,
+          // or a select/filter over a type, extract that type name.
+          let targetType: string | undefined;
+          if (aliasDecl.using.kind === "PathExpression") {
+            // e.g., alias := User  or  alias := User.posts
+            const firstSegment = aliasDecl.using.path[0];
+            if (firstSegment && /^[A-Z]/.test(firstSegment)) {
+              targetType = firstSegment;
+            }
+          } else if (aliasDecl.using.kind === "FunctionCall") {
+            // Could be a select-like function, check first arg
+            if (aliasDecl.using.args.length > 0) {
+              const firstArg = aliasDecl.using.args[0];
+              if (
+                firstArg.kind === "PathExpression" &&
+                firstArg.path[0] &&
+                /^[A-Z]/.test(firstArg.path[0])
+              ) {
+                targetType = firstArg.path[0];
+              }
+            }
+          }
+
+          const aliasDef: AliasDef = {
+            name: aliasName,
+            expression,
+          };
+          if (targetType) {
+            aliasDef.targetType = targetType;
+          }
+
+          aliases.set(aliasName, aliasDef);
+          continue;
+        }
+
         // Handle scalar enum types
         if (item.kind === "ScalarTypeDeclaration") {
           const scalarDecl = item as ScalarTypeDeclaration;
@@ -441,10 +506,14 @@ export class SchemaManager {
       }
     }
 
-    return {
+    const schema: Schema = {
       types,
       functions: getBuiltinFunctions(),
     };
+    if (aliases.size > 0) {
+      schema.aliases = aliases;
+    }
+    return schema;
   }
 
   /**

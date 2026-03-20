@@ -43,6 +43,43 @@ export class SchemaDiffer {
       }
     }
 
+    // Diff aliases
+    const oldAliases = this.extractAliases(oldSchema);
+    const newAliases = this.extractAliases(newSchema);
+
+    // Added aliases
+    for (const [aliasName, aliasDef] of newAliases) {
+      if (!oldAliases.has(aliasName)) {
+        operations.push(
+          Types.createAliasOperation(
+            aliasName,
+            this.extractExpressionString(aliasDef.using),
+          ),
+        );
+      }
+    }
+
+    // Removed aliases
+    for (const [aliasName] of oldAliases) {
+      if (!newAliases.has(aliasName)) {
+        operations.push(Types.dropAliasOperation(aliasName));
+      }
+    }
+
+    // Modified aliases — drop old + add new (aliases can't be altered in place)
+    for (const [aliasName, newAliasDef] of newAliases) {
+      const oldAliasDef = oldAliases.get(aliasName);
+      if (oldAliasDef) {
+        const oldExpr = this.extractExpressionString(oldAliasDef.using);
+        const newExpr = this.extractExpressionString(newAliasDef.using);
+
+        if (oldExpr !== newExpr) {
+          operations.push(Types.dropAliasOperation(aliasName));
+          operations.push(Types.createAliasOperation(aliasName, newExpr));
+        }
+      }
+    }
+
     return operations;
   }
 
@@ -58,6 +95,22 @@ export class SchemaDiffer {
     }
 
     return types;
+  }
+
+  private extractAliases(
+    modules: Module[],
+  ): Map<string, AST.AliasDeclaration> {
+    const aliases = new Map<string, AST.AliasDeclaration>();
+
+    for (const module of modules) {
+      for (const item of module.items) {
+        if (item.kind === "AliasDeclaration") {
+          aliases.set(item.name.value, item);
+        }
+      }
+    }
+
+    return aliases;
   }
 
   createTypeOperation(
