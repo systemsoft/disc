@@ -189,19 +189,19 @@ cd ui && bun run build
 
 | Variable                      | Purpose                              | Default |
 | ----------------------------- | ------------------------------------ | ------- |
-| `DISC_RATE_LIMIT_RPM`        | Requests per minute per IP           | 60      |
-| `DISC_RATE_LIMIT_BURST`      | Burst allowance                      | 10      |
-| `DISC_LOG_LEVEL`             | Log level (DEBUG, INFO, WARN, ERROR) | INFO    |
-| `DISC_LOG_FORMAT`            | Log format (json, text)              | json    |
-| `DISC_TLS_CERT`             | TLS certificate file path            | —       |
-| `DISC_TLS_KEY`              | TLS private key file path            | —       |
-| `DISC_TLS_REDIRECT`         | Enable HTTP→HTTPS redirect           | false   |
-| `DISC_ENABLE_METRICS`       | Enable /metrics endpoint             | false   |
-| `DISC_CACHE_MAX_SIZE`       | Query cache max entries              | 1000    |
-| `DISC_SLOW_QUERY_MS`        | Slow query log threshold (ms)        | 1000    |
-| `DISC_ENABLE_ACCESS_POLICIES`| Enable object-level access policies  | false   |
-| `DISC_PG_AUTO`              | Auto-start PG for tests              | —       |
-| `DISC_PG_TEST_URL`          | External PG URL for tests            | —       |
+| `DISC_RATE_LIMIT_RPM`         | Requests per minute per IP           | 60      |
+| `DISC_RATE_LIMIT_BURST`       | Burst allowance                      | 10      |
+| `DISC_LOG_LEVEL`              | Log level (DEBUG, INFO, WARN, ERROR) | INFO    |
+| `DISC_LOG_FORMAT`             | Log format (json, text)              | json    |
+| `DISC_TLS_CERT`               | TLS certificate file path            | —       |
+| `DISC_TLS_KEY`                | TLS private key file path            | —       |
+| `DISC_TLS_REDIRECT`           | Enable HTTP→HTTPS redirect           | false   |
+| `DISC_ENABLE_METRICS`         | Enable /metrics endpoint             | false   |
+| `DISC_CACHE_MAX_SIZE`         | Query cache max entries              | 1000    |
+| `DISC_SLOW_QUERY_MS`          | Slow query log threshold (ms)        | 1000    |
+| `DISC_ENABLE_ACCESS_POLICIES` | Enable object-level access policies  | false   |
+| `DISC_PG_AUTO`                | Auto-start PG for tests              | —       |
+| `DISC_PG_TEST_URL`            | External PG URL for tests            | —       |
 
 ## Success Metrics
 
