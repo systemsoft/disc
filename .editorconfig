@@ -1,18 +1,16 @@
 root = true
 
 [*]
-trim_trailing_whitespace = true
-insert_final_newline = true
-
-[*.{py,pyx,pxd,pxi,h}]
-indent_size = 4
-indent_style = space
-
-[*.yml]
+charset = utf-8
+end_of_line = lf
 indent_size = 2
 indent_style = space
+insert_final_newline = true
+trim_trailing_whitespace = true
 
-[edb_stat_statements/*.{c,h,l,y,pl,pm}]
-indent_style = tab
-indent_size = tab
-tab_width = 4
+[*.md]
+trim_trailing_whitespace = false
+
+# Match diffs, avoid to trim trailing whitespace
+[*.{diff,patch}]
+trim_trailing_whitespace = false

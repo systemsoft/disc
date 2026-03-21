@@ -1,16 +1,14 @@
-# Disc
+![](banner.png)
 
-> "Your data's identity disc."
-
-A schema-first, TypeScript-native database built on Deno. Disc is a fork of [Gel](https://geldata.com) (formerly EdgeDB), reimplemented in TypeScript/Deno while preserving EdgeQL, SDL schemas, and PostgreSQL as the storage engine.
+A schema-first, TypeScript-native database built on Deno. Disc is a fork of [Gel](https://geldata.com) (formerly EdgeDB), reimplemented in TypeScript/Deno while preserving EdgeQL, SDL schemas, and PostgreSQL as the storage engine.
 
 ## Why Disc?
 
-- **Single-language stack** — TypeScript from schema to query to server
-- **Deno-native** — leverages Deno's built-in TypeScript, permissions model, and standard library
-- **Bundled PostgreSQL** — `disc init` just works; users never install or manage Postgres directly
-- **EdgeQL preserved** — the query language is the best part of Gel, so it stays
-- **Schema-first** — SDL drives database schema, TypeScript types, and access policies
+- **Single-language stack** — TypeScript from schema to query to server
+- **Deno-native** — leverages Deno's built-in TypeScript, permissions model, and standard library
+- **Bundled PostgreSQL** — `disc init` just works; users never install or manage Postgres directly
+- **EdgeQL preserved** — the query language is the best part of Gel, so it stays
+- **Schema-first** — SDL drives database schema, TypeScript types, and access policies
 
 ## Quick Start
 
@@ -164,7 +162,7 @@ disc pg upgrade --target-version 17.0  # Upgrade PostgreSQL
 
 ## External PostgreSQL
 
-For production deployments or users who prefer to manage their own Postgres:
+For production deployments or users who prefer to manage their own Postgres:
 
 ```bash
 disc init --backend-dsn "postgres://user:pass@host:5432/disc"
@@ -197,8 +195,7 @@ disc deploy --format compose        # Generate docker-compose.yml
 disc deploy --format docker         # Generate Dockerfile
 ```
 
-See [Production Deployment Guide](docs/production-deployment.md) for full details
-including TLS setup, connection pool tuning, health checks, monitoring, and more.
+See [Production Deployment Guide](docs/production-deployment.md) for full details including TLS setup, connection pool tuning, health checks, monitoring, and more.
 
 ## Development
 
@@ -217,7 +214,7 @@ deno lint
 deno task dev
 ```
 
-See [CLAUDE.md](./CLAUDE.md) for detailed architecture documentation and contribution guidelines.
+See [CLAUDE.md](./CLAUDE.md) for detailed architecture documentation and contribution guidelines.
 
 ## License
 
