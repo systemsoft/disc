@@ -157,7 +157,7 @@ Deno.test("Types - CodegenConfig interface defaults", () => {
   // Test full config
   const fullConfig: Types.CodegenConfig = {
     outputDir: "./generated",
-    schemaSource: "./schema.esdl",
+    schemaSource: "./schema.disc",
     target: "both",
     typePrefix: "",
     interfaceSuffix: "",

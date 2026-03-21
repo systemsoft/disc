@@ -678,11 +678,11 @@ Deno.test({
         "Person table should have its own 'age' column",
       );
 
-      // Insert person with name='Alice' (5 chars) -- should succeed
+      // Insert person with name='Ada' (5 chars) -- should succeed
       await execRawSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, name, age) VALUES (gen_random_uuid(), $1, $2)`,
-        ["Alice", 30],
+        ["Ada", 30],
       );
 
       // Insert person with name that is 60 chars -- should FAIL (inherited constraint)

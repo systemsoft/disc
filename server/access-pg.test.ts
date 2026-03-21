@@ -182,9 +182,9 @@ Deno.test({
 
       await pool.query(
         `INSERT INTO ${TABLE} (id, name) VALUES
-          ('${uuid1}', 'Alice'),
-          ('${uuid2}', 'Bob'),
-          ('${uuid3}', 'Charlie')`,
+          ('${uuid1}', 'Ada'),
+          ('${uuid2}', 'Billie'),
+          ('${uuid3}', 'Cher')`,
       );
 
       // Build policy: allow select using (.id = global current_user)
@@ -195,7 +195,7 @@ Deno.test({
         right: { kind: "AccessGlobal", name: "current_user" },
       });
 
-      // Compile with userId = uuid1 (Alice)
+      // Compile with userId = uuid1 (Ada)
       const compiled = compileWithAccess(
         "select AccessUser { name }",
         schema,
@@ -210,12 +210,12 @@ Deno.test({
       // The SQL should contain a WHERE clause filtering by the user's id
       const result = await pool.query(compiled.sql);
 
-      assertEquals(result.rowCount, 1, "Should return exactly 1 row (Alice)");
+      assertEquals(result.rowCount, 1, "Should return exactly 1 row (Ada)");
 
       const row = result.rows[0];
       const data = row.jsonb_build_object ?? row;
       const name = data.name ?? Object.values(data)[0];
-      assertEquals(name, "Alice", "Returned row should be Alice");
+      assertEquals(name, "Ada", "Returned row should be Ada");
 
       await manager.close();
     } finally {
@@ -246,8 +246,8 @@ Deno.test({
       // Insert data
       await pool.query(
         `INSERT INTO ${TABLE} (id, name) VALUES
-          (gen_random_uuid(), 'Alice'),
-          (gen_random_uuid(), 'Bob')`,
+          (gen_random_uuid(), 'Ada'),
+          (gen_random_uuid(), 'Billie')`,
       );
 
       // Build policy: allow select using (.id = global current_user)
@@ -383,8 +383,8 @@ Deno.test({
 
       await pool.query(
         `INSERT INTO ${TABLE} (id, name, status) VALUES
-          ('${uuid1}', 'Alice', 'active'),
-          ('${uuid2}', 'Bob', 'active')`,
+          ('${uuid1}', 'Ada', 'active'),
+          ('${uuid2}', 'Billie', 'active')`,
       );
 
       // Build policy: allow update using (.id = global current_user)
@@ -401,7 +401,7 @@ Deno.test({
         },
       );
 
-      // Compile UPDATE with userId = uuid1 (Alice)
+      // Compile UPDATE with userId = uuid1 (Ada)
       const compiled = compileWithAccess(
         'update UpdatableUser set { status := "inactive" }',
         schema,
@@ -416,23 +416,23 @@ Deno.test({
       // Execute the update
       await pool.query(compiled.sql);
 
-      // Verify: Alice should be 'inactive', Bob should remain 'active'
-      const aliceResult = await pool.query(
+      // Verify: Ada should be 'inactive', Billie should remain 'active'
+      const adaResult = await pool.query(
         `SELECT status FROM ${TABLE} WHERE id = '${uuid1}'`,
       );
       assertEquals(
-        aliceResult.rows[0].status,
+        adaResult.rows[0].status,
         "inactive",
-        "Alice should be inactive",
+        "Ada should be inactive",
       );
 
-      const bobResult = await pool.query(
+      const billieResult = await pool.query(
         `SELECT status FROM ${TABLE} WHERE id = '${uuid2}'`,
       );
       assertEquals(
-        bobResult.rows[0].status,
+        billieResult.rows[0].status,
         "active",
-        "Bob should remain active",
+        "Billie should remain active",
       );
 
       await manager.close();
@@ -466,8 +466,8 @@ Deno.test({
 
       await pool.query(
         `INSERT INTO ${TABLE} (id, name) VALUES
-          ('${uuid1}', 'Alice'),
-          ('${uuid2}', 'Bob')`,
+          ('${uuid1}', 'Ada'),
+          ('${uuid2}', 'Billie')`,
       );
 
       // Build policy: allow delete using (.id = global current_user)
@@ -484,7 +484,7 @@ Deno.test({
         },
       );
 
-      // Compile DELETE with userId = uuid1 (Alice)
+      // Compile DELETE with userId = uuid1 (Ada)
       const compiled = compileWithAccess(
         "delete DeletableUser",
         schema,
@@ -499,7 +499,7 @@ Deno.test({
       // Execute the delete
       await pool.query(compiled.sql);
 
-      // Verify: Alice should be gone, Bob should remain
+      // Verify: Ada should be gone, Billie should remain
       const remaining = await pool.query(
         `SELECT name FROM ${TABLE} ORDER BY name`,
       );
@@ -508,7 +508,7 @@ Deno.test({
         1,
         "Should have exactly 1 row remaining",
       );
-      assertEquals(remaining.rows[0].name, "Bob", "Bob should remain");
+      assertEquals(remaining.rows[0].name, "Billie", "Billie should remain");
 
       await manager.close();
     } finally {
@@ -546,9 +546,9 @@ Deno.test({
 
       await pool.query(
         `INSERT INTO ${TABLE} (id, name) VALUES
-          ('${uuid1}', 'Alice'),
+          ('${uuid1}', 'Ada'),
           ('${uuid2}', ''),
-          ('${uuid3}', 'Charlie')`,
+          ('${uuid3}', 'Cher')`,
       );
 
       // Build policy: allow select using (.id = global current_user AND .name != '')
@@ -577,8 +577,8 @@ Deno.test({
         },
       );
 
-      // Query as Alice (uuid1, name='Alice' != '') -> should pass both conditions
-      const compiledAlice = compileWithAccess(
+      // Query as Ada (uuid1, name='Ada' != '') -> should pass both conditions
+      const compiledAda = compileWithAccess(
         "select AndUser { name }",
         schema,
         [policy],
@@ -587,14 +587,14 @@ Deno.test({
       );
 
       assertEquals(
-        compiledAlice.ok,
+        compiledAda.ok,
         true,
-        "Compilation for Alice should succeed",
+        "Compilation for Ada should succeed",
       );
-      if (!compiledAlice.ok) return;
+      if (!compiledAda.ok) return;
 
-      const aliceResult = await pool.query(compiledAlice.sql);
-      assertEquals(aliceResult.rowCount, 1, "Alice should see exactly 1 row");
+      const adaResult = await pool.query(compiledAda.sql);
+      assertEquals(adaResult.rowCount, 1, "Ada should see exactly 1 row");
 
       // Query as uuid2 (name='') -> id matches but name='' fails the AND
       const compiledEmpty = compileWithAccess(
@@ -652,9 +652,9 @@ Deno.test({
 
       await pool.query(
         `INSERT INTO ${TABLE} (id, name, role) VALUES
-          ('${uuid1}', 'Alice', 'admin'),
-          ('${uuid2}', 'Bob', 'user'),
-          ('${uuid3}', 'Charlie', 'admin')`,
+          ('${uuid1}', 'Ada', 'admin'),
+          ('${uuid2}', 'Billie', 'user'),
+          ('${uuid3}', 'Cher', 'admin')`,
       );
 
       // Build policy: allow select using (.role = global current_role OR .id = global current_user)
@@ -683,11 +683,11 @@ Deno.test({
         },
       );
 
-      // Query as Bob (uuid2) with role='user'
-      // Bob should see: himself (id match) + nobody else with role='user'
-      // Actually: .role = 'user' matches Bob, .id = uuid2 also matches Bob.
-      // Neither condition matches Alice or Charlie.
-      const compiledBob = compileWithAccess(
+      // Query as Billie (uuid2) with role='user'
+      // Billie should see: himself (id match) + nobody else with role='user'
+      // Actually: .role = 'user' matches Billie, .id = uuid2 also matches Billie.
+      // Neither condition matches Ada or Cher.
+      const compiledBillie = compileWithAccess(
         "select OrUser { name }",
         schema,
         [policy],
@@ -695,18 +695,18 @@ Deno.test({
         { userId: uuid2, userRole: "user" },
       );
 
-      assertEquals(compiledBob.ok, true, "Compilation for Bob should succeed");
-      if (!compiledBob.ok) return;
+      assertEquals(compiledBillie.ok, true, "Compilation for Billie should succeed");
+      if (!compiledBillie.ok) return;
 
-      const bobResult = await pool.query(compiledBob.sql);
+      const billieResult = await pool.query(compiledBillie.sql);
       assertEquals(
-        bobResult.rowCount,
+        billieResult.rowCount,
         1,
-        "Bob should see exactly 1 row (himself)",
+        "Billie should see exactly 1 row (himself)",
       );
 
-      // Query as Bob (uuid2) with role='admin'
-      // Bob should see: Alice (admin), Charlie (admin), and himself (id match)
+      // Query as Billie (uuid2) with role='admin'
+      // Billie should see: Ada (admin), Cher (admin), and himself (id match)
       const compiledAdmin = compileWithAccess(
         "select OrUser { name }",
         schema,
@@ -726,7 +726,7 @@ Deno.test({
       assertEquals(
         adminResult.rowCount,
         3,
-        "Admin role + Bob's id should see all 3 rows",
+        "Admin role + Billie's id should see all 3 rows",
       );
 
       await manager.close();
@@ -762,9 +762,9 @@ Deno.test({
 
       await pool.query(
         `INSERT INTO ${TABLE} (id, name, role) VALUES
-          ('${uuid1}', 'Alice', 'admin'),
-          ('${uuid2}', 'Bob', 'editor'),
-          ('${uuid3}', 'Charlie', 'viewer')`,
+          ('${uuid1}', 'Ada', 'admin'),
+          ('${uuid2}', 'Billie', 'editor'),
+          ('${uuid3}', 'Cher', 'viewer')`,
       );
 
       // Policy 1: allow select using (.id = global current_user)
@@ -795,10 +795,10 @@ Deno.test({
         },
       );
 
-      // Query as Charlie (uuid3) with role='admin'
-      // owner_select: .id = uuid3 -> matches Charlie
-      // role_select: .role = 'admin' -> matches Alice
-      // Permissive OR: should see both Alice and Charlie
+      // Query as Cher (uuid3) with role='admin'
+      // owner_select: .id = uuid3 -> matches Cher
+      // role_select: .role = 'admin' -> matches Ada
+      // Permissive OR: should see both Ada and Cher
       const compiled = compileWithAccess(
         "select MultiPolicyUser { name }",
         schema,
@@ -814,7 +814,7 @@ Deno.test({
       assertEquals(
         result.rowCount,
         2,
-        "Should return 2 rows (Alice via role, Charlie via ownership)",
+        "Should return 2 rows (Ada via role, Cher via ownership)",
       );
 
       // Extract names and verify
@@ -826,7 +826,7 @@ Deno.test({
           return data.name;
         })
         .sort();
-      assertEquals(names, ["Alice", "Charlie"], "Should see Alice and Charlie");
+      assertEquals(names, ["Ada", "Cher"], "Should see Ada and Cher");
 
       await manager.close();
     } finally {
@@ -856,8 +856,8 @@ Deno.test({
 
       await pool.query(
         `INSERT INTO ${TABLE} (id, name) VALUES
-          (gen_random_uuid(), 'Alice'),
-          (gen_random_uuid(), 'Bob')`,
+          (gen_random_uuid(), 'Ada'),
+          (gen_random_uuid(), 'Billie')`,
       );
 
       // Policy 1: allow select (unconditional, no using expression)
@@ -938,8 +938,8 @@ Deno.test({
 
       await pool.query(
         `INSERT INTO ${TABLE_A} (id, name, team) VALUES
-          ('${uuid1}', 'Alice', 'engineering'),
-          ('${uuid2}', 'Bob', 'marketing')`,
+          ('${uuid1}', 'Ada', 'engineering'),
+          ('${uuid2}', 'Billie', 'marketing')`,
       );
 
       await pool.query(
@@ -979,11 +979,11 @@ Deno.test({
       );
 
       const context: AccessContext = {
-        userId: uuid1, // Alice
-        userRole: "engineering", // Alice's team
+        userId: uuid1, // Ada
+        userRole: "engineering", // Ada's team
       };
 
-      // Query TeamMember — should return only Alice (owner filter)
+      // Query TeamMember — should return only Ada (owner filter)
       const compiledMembers = compileWithAccess(
         "select TeamMember { name }",
         schema,
@@ -1003,7 +1003,7 @@ Deno.test({
       assertEquals(
         memberResult.rowCount,
         1,
-        "Should see only 1 TeamMember (Alice)",
+        "Should see only 1 TeamMember (Ada)",
       );
 
       // Query TeamDoc — should return 2 engineering docs

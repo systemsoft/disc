@@ -127,8 +127,8 @@ Deno.test("EdgeQL Parser - Computed Properties", () => {
 Deno.test("EdgeQL Parser - INSERT Query", () => {
   const source = `
     INSERT User {
-      name := "Alice",
-      email := "alice@example.com"
+      name := "Ada",
+      email := "ada@example.com"
     }
   `;
 
@@ -145,12 +145,12 @@ Deno.test("EdgeQL Parser - INSERT Query", () => {
 Deno.test("EdgeQL Parser - INSERT with UNLESS CONFLICT", () => {
   const source = `
     INSERT User {
-      name := "Bob",
-      email := "bob@example.com"
+      name := "Billie",
+      email := "billie@example.com"
     }
     UNLESS CONFLICT ON .email
     ELSE (
-      UPDATE User SET { name := "Bob" }
+      UPDATE User SET { name := "Billie" }
     )
   `;
 
@@ -203,7 +203,7 @@ Deno.test("EdgeQL Parser - DELETE Query", () => {
 
 Deno.test("EdgeQL Parser - FOR Query", () => {
   const source = `
-    FOR name IN {"Alice", "Bob", "Charlie"}
+    FOR name IN {"Ada", "Billie", "Cher"}
     UNION (
       INSERT User { name := name }
     )
@@ -222,7 +222,7 @@ Deno.test("EdgeQL Parser - FOR Query", () => {
 
 Deno.test("EdgeQL Parser - WITH Block", () => {
   const source = `
-    WITH 
+    WITH
       active_users := (SELECT User FILTER .active = true),
       total := count(active_users)
     SELECT active_users { name }
@@ -383,7 +383,7 @@ Deno.test("EdgeQL Parser - Array and Set Literals", () => {
 
 Deno.test("EdgeQL Parser - Tuple Expression", () => {
   const source = `
-    SELECT ("Alice", 25, true)
+    SELECT ("Ada", 25, true)
   `;
 
   const parser = new EdgeQLParser(source);
@@ -397,7 +397,7 @@ Deno.test("EdgeQL Parser - Tuple Expression", () => {
 
 Deno.test("EdgeQL Parser - Named Tuple", () => {
   const source = `
-    SELECT (name := "Alice", age := 25)
+    SELECT (name := "Ada", age := 25)
   `;
 
   const parser = new EdgeQLParser(source);

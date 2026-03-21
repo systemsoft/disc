@@ -281,7 +281,7 @@ Deno.test({
 
       // INSERT a BlogPost row
       const insertSql = compileEdgeQL(
-        'INSERT BlogPost { author_name := "Alice", title := "Test Post", body := "Some body text" }',
+        'INSERT BlogPost { author_name := "Ada", title := "Test Post", body := "Some body text" }',
         schema,
       );
       await pool.query(insertSql);
@@ -319,8 +319,8 @@ Deno.test({
           authFirstRow;
       assertEquals(
         (authData as Record<string, unknown>).author_name,
-        "Alice",
-        "author_name should be 'Alice' when queried through Authored",
+        "Ada",
+        "author_name should be 'Ada' when queried through Authored",
       );
 
       // Verify the __type__ discriminator is 'BlogPost' in the underlying table
@@ -379,14 +379,14 @@ Deno.test({
 
       // INSERT an Article
       const insertArticleSql = compileEdgeQL(
-        'INSERT Article { author_name := "Bob", headline := "Breaking News" }',
+        'INSERT Article { author_name := "Billie", headline := "Breaking News" }',
         schema,
       );
       await pool.query(insertArticleSql);
 
       // INSERT a Review
       const insertReviewSql = compileEdgeQL(
-        'INSERT Review { author_name := "Carol", rating := 5, comment := "Excellent!" }',
+        'INSERT Review { author_name := "Cher", rating := 5, comment := "Excellent!" }',
         schema,
       );
       await pool.query(insertReviewSql);
@@ -417,8 +417,8 @@ Deno.test({
       );
       assertEquals(
         article.author_name,
-        "Bob",
-        "Article author_name (inherited) should be 'Bob'",
+        "Billie",
+        "Article author_name (inherited) should be 'Billie'",
       );
       assertExists(
         article.created_at,
@@ -455,8 +455,8 @@ Deno.test({
       );
       assertEquals(
         review.author_name,
-        "Carol",
-        "Review author_name (inherited) should be 'Carol'",
+        "Cher",
+        "Review author_name (inherited) should be 'Cher'",
       );
       assertExists(
         review.created_at,

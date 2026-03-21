@@ -20,7 +20,7 @@ Deno.test("Complex query integration - parse and compile select with filter", ()
   const compiler = new ComplexQueryCompiler(schema);
 
   // Parse a simple SELECT query with filter
-  const edgeql = `SELECT User { name, email } FILTER .name = 'Alice'`;
+  const edgeql = `SELECT User { name, email } FILTER .name = 'Ada'`;
   const parser = new EdgeQLParser(edgeql);
   const ast = parser.parse();
 
@@ -66,7 +66,7 @@ Deno.test("Complex query integration - parse and compile insert", () => {
   const schema = Context.createTestSchema();
   const compiler = new ComplexQueryCompiler(schema);
 
-  const edgeql = `INSERT User { name := 'Bob', email := 'bob@example.com' }`;
+  const edgeql = `INSERT User { name := 'Billie', email := 'billie@example.com' }`;
   const parser = new EdgeQLParser(edgeql);
   const ast = parser.parse();
 
@@ -90,7 +90,7 @@ Deno.test("Complex query integration - parse and compile update", () => {
   const compiler = new ComplexQueryCompiler(schema);
 
   const edgeql =
-    `UPDATE User FILTER .email = 'bob@example.com' SET { name := 'Robert' }`;
+    `UPDATE User FILTER .email = 'billie@example.com' SET { name := 'Robert' }`;
   const parser = new EdgeQLParser(edgeql);
   const ast = parser.parse();
 
@@ -114,7 +114,7 @@ Deno.test("Complex query integration - parse and compile delete", () => {
   const schema = Context.createTestSchema();
   const compiler = new ComplexQueryCompiler(schema);
 
-  const edgeql = `DELETE User FILTER .email = 'bob@example.com'`;
+  const edgeql = `DELETE User FILTER .email = 'billie@example.com'`;
   const parser = new EdgeQLParser(edgeql);
   const ast = parser.parse();
 

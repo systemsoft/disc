@@ -18,9 +18,9 @@ const BASE_URL = `http://${TEST_HOST}:${TEST_PORT}`;
 
 const SAMPLE_QUERIES = {
   validSelect: "select User { name, email }",
-  validInsert: "insert User { name := 'Alice', email := 'alice@example.com' }",
+  validInsert: "insert User { name := 'Ada', email := 'ada@example.com' }",
   validUpdate:
-    "update User filter .id = <uuid>$id set { name := 'Alice Updated' }",
+    "update User filter .id = <uuid>$id set { name := 'Ada Updated' }",
   validDelete: "delete User filter .id = <uuid>$id",
   invalidSyntax: "select User { name email }", // Missing comma
   emptyQuery: "",

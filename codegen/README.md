@@ -53,7 +53,7 @@ disc codegen --output ./src   # Custom output directory
 ```typescript
 interface CodegenConfig {
   outputDir: string; // output directory (default: "./generated")
-  schemaSource: string; // SDL schema file path (default: "./schema.esdl")
+  schemaSource: string; // SDL schema file path (default: "./schema.disc")
   target: "client" | "server" | "both"; // generation target (default: "client")
   typePrefix?: string; // prefix for generated type names
   interfaceSuffix?: string; // suffix for generated interface names

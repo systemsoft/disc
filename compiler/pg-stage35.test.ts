@@ -562,8 +562,8 @@ Deno.test({
       await execRawSQL(
         dsn,
         `INSERT INTO person (id, name) VALUES
-          ('11111111-1111-1111-1111-111111111111', 'Alice'),
-          ('22222222-2222-2222-2222-222222222222', 'Bob')`,
+          ('11111111-1111-1111-1111-111111111111', 'Ada'),
+          ('22222222-2222-2222-2222-222222222222', 'Billie')`,
       );
 
       await execRawSQL(
@@ -605,8 +605,8 @@ Deno.test({
       );
 
       assertEquals(rows.length, 1);
-      assertEquals(rows[0].source_name, "Alice");
-      assertEquals(rows[0].target_name, "Bob");
+      assertEquals(rows[0].source_name, "Ada");
+      assertEquals(rows[0].target_name, "Billie");
       assertEquals(Number(rows[0].strength), 0.95);
     } finally {
       await dropTables(dsn, junctionTable, "person");

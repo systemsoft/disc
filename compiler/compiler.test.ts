@@ -335,8 +335,8 @@ Deno.test("SQL Code Generator - String Escaping", () => {
 Deno.test("SQL Compiler - INSERT Query", () => {
   const source = `
     INSERT User {
-      name := "Alice",
-      email := "alice@example.com"
+      name := "Ada",
+      email := "ada@example.com"
     }
   `;
 
@@ -345,16 +345,16 @@ Deno.test("SQL Compiler - INSERT Query", () => {
   assertEquals(sql.includes("INSERT INTO"), true);
   assertEquals(sql.includes("users"), true);
   assertEquals(sql.includes("name, email"), true);
-  assertEquals(sql.includes("'Alice'"), true);
-  assertEquals(sql.includes("'alice@example.com'"), true);
+  assertEquals(sql.includes("'Ada'"), true);
+  assertEquals(sql.includes("'ada@example.com'"), true);
   assertEquals(sql.includes("RETURNING"), true);
 });
 
 Deno.test("SQL Compiler - INSERT with UNLESS CONFLICT", () => {
   const source = `
     INSERT User {
-      name := "Bob",
-      email := "bob@example.com"
+      name := "Billie",
+      email := "billie@example.com"
     }
     UNLESS CONFLICT ON .email
   `;
@@ -369,9 +369,9 @@ Deno.test("SQL Compiler - INSERT with UNLESS CONFLICT", () => {
 Deno.test("SQL Compiler - UPDATE Query", () => {
   const source = `
     UPDATE User
-    FILTER .email = "alice@example.com"
+    FILTER .email = "ada@example.com"
     SET {
-      name := "Alice Smith"
+      name := "Ada Smith"
     }
   `;
 
@@ -380,9 +380,9 @@ Deno.test("SQL Compiler - UPDATE Query", () => {
   assertEquals(sql.includes("UPDATE"), true);
   assertEquals(sql.includes("users"), true);
   assertEquals(sql.includes("SET"), true);
-  assertEquals(sql.includes("name = 'Alice Smith'"), true);
+  assertEquals(sql.includes("name = 'Ada Smith'"), true);
   assertEquals(sql.includes("WHERE"), true);
-  assertEquals(sql.includes("email = 'alice@example.com'"), true);
+  assertEquals(sql.includes("email = 'ada@example.com'"), true);
   assertEquals(sql.includes("RETURNING"), true);
 });
 
@@ -451,7 +451,7 @@ Deno.test("SQL Compiler - GROUP BY with FILTER produces HAVING", () => {
 
 Deno.test("SQL Compiler - FOR with set literal multi-element", () => {
   const source = `
-    FOR name IN {"Alice", "Bob"}
+    FOR name IN {"Ada", "Billie"}
     UNION (
       INSERT User {
         name := name,
@@ -463,15 +463,15 @@ Deno.test("SQL Compiler - FOR with set literal multi-element", () => {
 
   // Multi-element FOR INSERTs merge into a single multi-row INSERT
   assertEquals(sql.includes("INSERT INTO"), true);
-  assertEquals(sql.includes("'Alice'"), true);
-  assertEquals(sql.includes("'Bob'"), true);
+  assertEquals(sql.includes("'Ada'"), true);
+  assertEquals(sql.includes("'Billie'"), true);
   // Should NOT use UNION ALL (invalid for INSERT statements)
   assertEquals(sql.includes("UNION ALL"), false);
 });
 
 Deno.test("SQL Compiler - FOR with single-element set", () => {
   const source = `
-    FOR name IN {"Alice"}
+    FOR name IN {"Ada"}
     UNION (
       INSERT User {
         name := name,
@@ -484,7 +484,7 @@ Deno.test("SQL Compiler - FOR with single-element set", () => {
   // Single element should not produce UNION ALL
   assertEquals(sql.includes("UNION ALL"), false);
   assertEquals(sql.includes("INSERT INTO"), true);
-  assertEquals(sql.includes("'Alice'"), true);
+  assertEquals(sql.includes("'Ada'"), true);
 });
 
 Deno.test("SQL Compiler - FOR with subquery iterator produces LATERAL", () => {

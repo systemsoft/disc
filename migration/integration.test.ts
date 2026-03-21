@@ -23,7 +23,7 @@ const RUN_PG = canRunPgTests();
 function createIntegrationTestConfig(): Types.MigrationConfig {
   return {
     migrationsDir: "./migrations",
-    schemaFile: "./test.esdl",
+    schemaFile: "./test.disc",
     databaseUrl: "postgresql://localhost:5432/test_integration",
     dryRun: true,
     autoApprove: false,

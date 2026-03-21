@@ -158,7 +158,7 @@ Orchestrates schema diffing, DDL generation, and migration execution.
 ```typescript
 const engine = new MigrationEngine({
   migrationsDir: "./migrations",
-  schemaFile: "./schema.esdl",
+  schemaFile: "./schema.disc",
   databaseUrl: "postgresql://...",
   dryRun: false,
   autoApprove: true,
@@ -322,12 +322,12 @@ await tracker.close();
 ## CLI Integration
 
 ```bash
-disc migrate                  # Generate and apply migrations
-disc migrate --create         # Generate migration plan without applying
-disc migrate --dry-run        # Show what would be executed
+disc migrate             # Generate and apply migrations
+disc migrate --create    # Generate migration plan without applying
+disc migrate --dry-run   # Show what would be executed
 ```
 
-The CLI reads `.esdl` schema files, calls `SchemaManager.applySchema()` or `SchemaManager.planSchema()`, and reports results. The `--dry-run` flag sets `dryRun: true` in the migration config, which logs DDL statements without executing them.
+The CLI reads `.disc` schema files, calls `SchemaManager.applySchema()` or `SchemaManager.planSchema()`, and reports results. The `--dry-run` flag sets `dryRun: true` in the migration config, which logs DDL statements without executing them.
 
 ## Migration ID Format
 

@@ -158,7 +158,7 @@ Deno.test({
       await execSQL(
         dsn,
         `
-        INSERT INTO ${userTable} (name) VALUES ('Alice');
+        INSERT INTO ${userTable} (name) VALUES ('Ada');
       `,
       );
 
@@ -170,7 +170,7 @@ Deno.test({
 
       assertEquals(rows.length, 1, "Should have exactly 1 audit_log entry");
       assertEquals(rows[0].action, "INSERT", "Action should be INSERT");
-      assertEquals(rows[0].target_name, "Alice", "Target name should be Alice");
+      assertEquals(rows[0].target_name, "Ada", "Target name should be Ada");
     } finally {
       await cleanup(dsn, auditTable, userTable);
     }
@@ -243,7 +243,7 @@ Deno.test({
       await execSQL(
         dsn,
         `
-        INSERT INTO ${userTable} (name) VALUES ('Bob');
+        INSERT INTO ${userTable} (name) VALUES ('Billie');
       `,
       );
 
@@ -262,7 +262,7 @@ Deno.test({
       await execSQL(
         dsn,
         `
-        UPDATE ${userTable} SET name = 'Bobby' WHERE name = 'Bob';
+        UPDATE ${userTable} SET name = 'Billieby' WHERE name = 'Billie';
       `,
       );
 
@@ -276,7 +276,7 @@ Deno.test({
       assertEquals(rows[0].action, "UPDATE", "Action should be UPDATE");
       assertEquals(
         rows[0].target_name,
-        "Bobby",
+        "Billieby",
         "Target name should be the updated value",
       );
     } finally {
@@ -357,7 +357,7 @@ Deno.test({
       await execSQL(
         dsn,
         `
-        INSERT INTO ${userTable} (name) VALUES ('Charlie');
+        INSERT INTO ${userTable} (name) VALUES ('Cher');
       `,
       );
 
@@ -365,7 +365,7 @@ Deno.test({
       await execSQL(
         dsn,
         `
-        DELETE FROM ${userTable} WHERE name = 'Charlie';
+        DELETE FROM ${userTable} WHERE name = 'Cher';
       `,
       );
 
@@ -385,7 +385,7 @@ Deno.test({
       assertEquals(auditRows[0].action, "DELETE", "Action should be DELETE");
       assertEquals(
         auditRows[0].target_name,
-        "Charlie",
+        "Cher",
         "Target name should be the deleted row's name",
       );
 

@@ -123,12 +123,12 @@ Deno.test("Schema Compilation - SELECT with FILTER", () => {
     schema,
     `
     SELECT User
-    FILTER .name = "Alice"
+    FILTER .name = "Ada"
   `,
   );
   assertStringIncludes(sql, "where");
   assertStringIncludes(sql, "name");
-  assertStringIncludes(sql, "'alice'");
+  assertStringIncludes(sql, "'ada'");
 });
 
 Deno.test("Schema Compilation - SELECT with ORDER BY, LIMIT, OFFSET", () => {
@@ -165,15 +165,15 @@ Deno.test("Schema Compilation - INSERT User", () => {
     schema,
     `
     INSERT User {
-      name := "Bob",
-      email := "bob@test.com"
+      name := "Billie",
+      email := "billie@test.com"
     }
   `,
   );
   assertStringIncludes(sql, "insert into");
   assertStringIncludes(sql, "user");
-  assertStringIncludes(sql, "'bob'");
-  assertStringIncludes(sql, "'bob@test.com'");
+  assertStringIncludes(sql, "'billie'");
+  assertStringIncludes(sql, "'billie@test.com'");
   assertStringIncludes(sql, "returning");
 });
 
@@ -182,7 +182,7 @@ Deno.test("Schema Compilation - UPDATE User", () => {
     schema,
     `
     UPDATE User
-    FILTER .name = "Alice"
+    FILTER .name = "Ada"
     SET {
       name := "Alicia"
     }
@@ -193,7 +193,7 @@ Deno.test("Schema Compilation - UPDATE User", () => {
   assertStringIncludes(sql, "set");
   assertStringIncludes(sql, "'alicia'");
   assertStringIncludes(sql, "where");
-  assertStringIncludes(sql, "'alice'");
+  assertStringIncludes(sql, "'ada'");
   assertStringIncludes(sql, "returning");
 });
 
@@ -202,13 +202,13 @@ Deno.test("Schema Compilation - DELETE User", () => {
     schema,
     `
     DELETE User
-    FILTER .name = "Alice"
+    FILTER .name = "Ada"
   `,
   );
   assertStringIncludes(sql, "delete from");
   assertStringIncludes(sql, "user");
   assertStringIncludes(sql, "where");
-  assertStringIncludes(sql, "'alice'");
+  assertStringIncludes(sql, "'ada'");
   assertStringIncludes(sql, "returning");
 });
 

@@ -14,7 +14,7 @@ function createTestConfig(
 ): Types.MigrationConfig {
   return {
     migrationsDir: "./migrations",
-    schemaFile: "./schema.esdl",
+    schemaFile: "./schema.disc",
     databaseUrl: "postgresql://localhost:5432/test",
     dryRun: true,
     autoApprove: false,

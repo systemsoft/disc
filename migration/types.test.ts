@@ -9,7 +9,7 @@ import { Result } from "../lib/result.ts";
 Deno.test("MigrationConfig - default values", () => {
   const config: Types.MigrationConfig = {
     migrationsDir: "./migrations",
-    schemaFile: "./schema.esdl",
+    schemaFile: "./schema.disc",
     databaseUrl: "postgresql://localhost:5432/disc_dev",
     dryRun: false,
     autoApprove: false,

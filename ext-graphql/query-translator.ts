@@ -466,11 +466,11 @@ function formatEdgeQLValue(value: unknown): string {
  *   -> SELECT User { name } LIMIT 10 OFFSET 0
  *
  * Mutation patterns:
- * - mutation { createUser(input: { name: "Alice" }) { id } }
- *   -> INSERT User { name := "Alice" }
+ * - mutation { createUser(input: { name: "Ada" }) { id } }
+ *   -> INSERT User { name := "Ada" }
  *
- * - mutation { updateUser(id: "123", input: { name: "Bob" }) { id } }
- *   -> UPDATE User FILTER .id = <uuid>"123" SET { name := "Bob" }
+ * - mutation { updateUser(id: "123", input: { name: "Billie" }) { id } }
+ *   -> UPDATE User FILTER .id = <uuid>"123" SET { name := "Billie" }
  *
  * - mutation { deleteUser(id: "123") }
  *   -> DELETE User FILTER .id = <uuid>"123"

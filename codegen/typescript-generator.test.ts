@@ -129,7 +129,7 @@ function createSchemaWithoutEdgeQLType(): Context.Schema {
 function createDefaultConfig(): Types.CodegenConfig {
   return {
     outputDir: "./generated",
-    schemaSource: "./schema.esdl",
+    schemaSource: "./schema.disc",
     target: "client",
     typePrefix: "",
     interfaceSuffix: "",

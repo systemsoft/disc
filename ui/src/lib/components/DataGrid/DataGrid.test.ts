@@ -18,8 +18,8 @@ describe("DataGrid", () => {
     },
     {
       id: "3",
-      name: "Bob Johnson",
-      email: "bob@example.com",
+      name: "Billie Johnson",
+      email: "billie@example.com",
       created_at: "2024-01-03",
     },
   ];
@@ -53,14 +53,14 @@ describe("DataGrid", () => {
     // Check if data is sorted
     const cells = screen.getAllByRole("cell");
     const names = cells.filter((_, i) => i % 4 === 1).map((c) => c.textContent);
-    expect(names).toEqual(["Bob Johnson", "Jane Smith", "John Doe"]);
+    expect(names).toEqual(["Billie Johnson", "Jane Smith", "John Doe"]);
 
     // Click again for reverse sort
     await fireEvent.click(nameHeader);
     const reversedNames = cells.filter((_, i) => i % 4 === 1).map((c) =>
       c.textContent
     );
-    expect(reversedNames).toEqual(["John Doe", "Jane Smith", "Bob Johnson"]);
+    expect(reversedNames).toEqual(["John Doe", "Jane Smith", "Billie Johnson"]);
   });
 
   it("supports row selection", async () => {
@@ -179,7 +179,7 @@ describe("DataGrid", () => {
 
     expect(screen.getByText("Jane Smith")).toBeInTheDocument();
     expect(screen.queryByText("John Doe")).not.toBeInTheDocument();
-    expect(screen.queryByText("Bob Johnson")).not.toBeInTheDocument();
+    expect(screen.queryByText("Billie Johnson")).not.toBeInTheDocument();
   });
 
   it("exports data when export button is clicked", async () => {

@@ -135,9 +135,9 @@ Deno.test({
       // Insert test data: 2 active, 1 inactive
       await pool.query(
         `INSERT INTO ${TEST_TABLE} (id, name, email, active) VALUES
-          (gen_random_uuid(), 'Alice', 'alice@test.com', true),
-          (gen_random_uuid(), 'Bob', 'bob@test.com', false),
-          (gen_random_uuid(), 'Charlie', 'charlie@test.com', true)`,
+          (gen_random_uuid(), 'Ada', 'ada@test.com', true),
+          (gen_random_uuid(), 'Billie', 'billie@test.com', false),
+          (gen_random_uuid(), 'Cher', 'cher@test.com', true)`,
       );
 
       // Compile and execute alias query with shape
@@ -183,26 +183,26 @@ Deno.test({
       // Insert test data
       await pool.query(
         `INSERT INTO ${TEST_TABLE} (id, name, email, active) VALUES
-          (gen_random_uuid(), 'Alice', 'alice@test.com', true),
-          (gen_random_uuid(), 'Bob', 'bob@test.com', false),
-          (gen_random_uuid(), 'Charlie', 'charlie@test.com', true)`,
+          (gen_random_uuid(), 'Ada', 'ada@test.com', true),
+          (gen_random_uuid(), 'Billie', 'billie@test.com', false),
+          (gen_random_uuid(), 'Cher', 'cher@test.com', true)`,
       );
 
       // Compile and execute alias query with additional filter
       const sql = compileEdgeQL(
-        'select ActiveAccounts { name } filter .name = "Alice"',
+        'select ActiveAccounts { name } filter .name = "Ada"',
         schema,
       );
       const result = await pool.query(sql);
 
-      // Should return only Alice (active AND name = "Alice")
+      // Should return only Ada (active AND name = "Ada")
       assertEquals(
         result.rowCount,
         1,
-        "Should return exactly 1 account (Alice)",
+        "Should return exactly 1 account (Ada)",
       );
 
-      // Verify it's Alice
+      // Verify it's Ada
       const row = result.rows[0];
       const rowData = row.jsonb_build_object ?? row;
       const name = rowData.name ??
@@ -238,8 +238,8 @@ Deno.test({
       // Insert test data
       await pool.query(
         `INSERT INTO ${TEST_TABLE} (id, name, email, active) VALUES
-          (gen_random_uuid(), 'Alice', 'alice@test.com', true),
-          (gen_random_uuid(), 'Bob', 'bob@test.com', false)`,
+          (gen_random_uuid(), 'Ada', 'ada@test.com', true),
+          (gen_random_uuid(), 'Billie', 'billie@test.com', false)`,
       );
 
       // Compile and execute type alias query
@@ -290,9 +290,9 @@ Deno.test({
       // Insert test data: 2 active, 1 inactive
       await pool.query(
         `INSERT INTO ${TEST_TABLE} (id, name, email, active) VALUES
-          (gen_random_uuid(), 'Alice', 'alice@test.com', true),
-          (gen_random_uuid(), 'Bob', 'bob@test.com', false),
-          (gen_random_uuid(), 'Charlie', 'charlie@test.com', true)`,
+          (gen_random_uuid(), 'Ada', 'ada@test.com', true),
+          (gen_random_uuid(), 'Billie', 'billie@test.com', false),
+          (gen_random_uuid(), 'Cher', 'cher@test.com', true)`,
       );
 
       // Test ActiveAccounts alias (should return 2)

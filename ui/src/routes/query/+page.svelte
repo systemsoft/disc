@@ -1,57 +1,57 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  
+
   interface QueryResult {
     columns: string[];
     rows: any[][];
     executionTime: number;
   }
-  
+
   let queryText = 'SELECT User {\n  name,\n  email,\n  posts: {\n    title\n  }\n}';
   let queryResult: QueryResult | null = null;
   let isExecuting = false;
   let errorMessage = '';
   let savedQueries: Array<{name: string, query: string}> = [];
   let queryHistory: string[] = [];
-  
+
   onMount(() => {
     // Load saved queries from localStorage
     const saved = localStorage.getItem('discSavedQueries');
     if (saved) {
       savedQueries = JSON.parse(saved);
     }
-    
+
     const history = localStorage.getItem('discQueryHistory');
     if (history) {
       queryHistory = JSON.parse(history);
     }
   });
-  
+
   async function executeQuery() {
     if (!queryText.trim()) return;
-    
+
     isExecuting = true;
     errorMessage = '';
-    
+
     // Add to history
     queryHistory = [queryText, ...queryHistory.filter(q => q !== queryText)].slice(0, 20);
     localStorage.setItem('discQueryHistory', JSON.stringify(queryHistory));
-    
+
     // Simulate query execution
     setTimeout(() => {
       queryResult = {
         columns: ['id', 'name', 'email', 'posts'],
         rows: [
-          ['u1', 'Alice', 'alice@example.com', '[2 posts]'],
-          ['u2', 'Bob', 'bob@example.com', '[0 posts]'],
-          ['u3', 'Charlie', 'charlie@example.com', '[5 posts]']
+          ['u1', 'Ada', 'ada@example.com', '[2 posts]'],
+          ['u2', 'Billie', 'billie@example.com', '[0 posts]'],
+          ['u3', 'Cher', 'cher@example.com', '[5 posts]']
         ],
         executionTime: 23
       };
       isExecuting = false;
     }, 1000);
   }
-  
+
   function saveQuery() {
     const name = prompt('Enter a name for this query:');
     if (name) {
@@ -59,11 +59,11 @@
       localStorage.setItem('discSavedQueries', JSON.stringify(savedQueries));
     }
   }
-  
+
   function loadQuery(query: string) {
     queryText = query;
   }
-  
+
   function formatQuery() {
     // Simple formatting - in production would use proper parser
     queryText = queryText
@@ -72,7 +72,7 @@
       .replace(/\}/g, '\n}')
       .replace(/,/g, ',\n  ');
   }
-  
+
   function clearResults() {
     queryResult = null;
     errorMessage = '';
@@ -94,14 +94,14 @@
       </button>
     </div>
   </div>
-  
+
   <div class="editor-container">
     <div class="editor-sidebar">
       <div class="sidebar-section">
         <h3>Saved Queries</h3>
         <div class="query-list">
           {#each savedQueries as saved}
-            <button 
+            <button
               class="query-item"
               on:click={() => loadQuery(saved.query)}
             >
@@ -113,12 +113,12 @@
           {/if}
         </div>
       </div>
-      
+
       <div class="sidebar-section">
         <h3>History</h3>
         <div class="query-list">
           {#each queryHistory.slice(0, 5) as query}
-            <button 
+            <button
               class="query-item history-item"
               on:click={() => loadQuery(query)}
             >
@@ -131,7 +131,7 @@
         </div>
       </div>
     </div>
-    
+
     <div class="editor-main">
       <div class="code-editor">
         <div class="line-numbers">
@@ -146,14 +146,14 @@
           spellcheck="false"
         />
       </div>
-      
+
       {#if errorMessage}
         <div class="error-message">
           <span class="error-icon">⚠</span>
           {errorMessage}
         </div>
       {/if}
-      
+
       {#if queryResult}
         <div class="query-results">
           <div class="results-header">
@@ -163,7 +163,7 @@
             </span>
             <button class="button" on:click={clearResults}>Clear</button>
           </div>
-          
+
           <div class="results-table">
             <table>
               <thead>
@@ -192,7 +192,7 @@
 
 <style lang="scss">
   @import '../../styles/variables.scss';
-  
+
   .query-editor {
     display: flex;
     flex-direction: column;
@@ -200,54 +200,54 @@
     max-width: 1400px;
     margin: 0 auto;
   }
-  
+
   .editor-toolbar {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: $grid-unit * 3;
-    
+
     h1 {
       font-size: 1.5rem;
     }
-    
+
     .toolbar-actions {
       display: flex;
       gap: $grid-unit;
     }
   }
-  
+
   .editor-container {
     display: flex;
     gap: $grid-unit * 3;
     flex: 1;
     overflow: hidden;
   }
-  
+
   .editor-sidebar {
     width: 250px;
     display: flex;
     flex-direction: column;
     gap: $grid-unit * 3;
-    
+
     .sidebar-section {
       background: $color-surface;
       border: 1px solid $color-border;
       border-radius: $border-radius;
       padding: $grid-unit * 2;
-      
+
       h3 {
         font-size: 0.875rem;
         margin-bottom: $grid-unit * 2;
       }
     }
-    
+
     .query-list {
       display: flex;
       flex-direction: column;
       gap: $grid-unit * 0.5;
     }
-    
+
     .query-item {
       padding: $grid-unit;
       background: $color-background;
@@ -259,12 +259,12 @@
       text-align: left;
       cursor: pointer;
       transition: all $transition-fast;
-      
+
       &:hover {
         border-color: $color-primary;
         background: $color-surface-hover;
       }
-      
+
       &.history-item {
         code {
           color: $color-info;
@@ -272,7 +272,7 @@
         }
       }
     }
-    
+
     .empty-text {
       padding: $grid-unit * 2;
       text-align: center;
@@ -280,7 +280,7 @@
       font-size: 0.75rem;
     }
   }
-  
+
   .editor-main {
     flex: 1;
     display: flex;
@@ -288,7 +288,7 @@
     gap: $grid-unit * 3;
     overflow-y: auto;
   }
-  
+
   .code-editor {
     display: flex;
     background: $color-surface;
@@ -297,7 +297,7 @@
     overflow: hidden;
     min-height: 300px;
     position: relative;
-    
+
     .line-numbers {
       padding: $grid-unit * 2;
       background: $color-background-dark;
@@ -309,14 +309,14 @@
       color: $color-text-dim;
       line-height: 1.5em;
       user-select: none;
-      
+
       span {
         text-align: right;
         padding-right: $grid-unit;
         min-width: 30px;
       }
     }
-    
+
     .query-input {
       flex: 1;
       padding: $grid-unit * 2;
@@ -327,17 +327,17 @@
       font-size: 0.875rem;
       line-height: 1.5em;
       resize: none;
-      
+
       &:focus {
         outline: none;
       }
-      
+
       &::selection {
         background: rgba($color-primary, 0.3);
       }
     }
   }
-  
+
   .error-message {
     display: flex;
     align-items: center;
@@ -349,52 +349,52 @@
     color: $color-danger;
     font-family: $font-mono;
     font-size: 0.875rem;
-    
+
     .error-icon {
       font-size: 1.25rem;
     }
   }
-  
+
   .query-results {
     background: $color-surface;
     border: 1px solid $color-border;
     border-radius: $border-radius;
     overflow: hidden;
-    
+
     .results-header {
       display: flex;
       align-items: center;
       gap: $grid-unit * 2;
       padding: $grid-unit * 2;
       border-bottom: 1px solid $color-border;
-      
+
       h3 {
         font-size: 1rem;
         flex: 1;
       }
-      
+
       .execution-time {
         font-family: $font-mono;
         font-size: 0.75rem;
         color: $color-success;
       }
     }
-    
+
     .results-table {
       overflow-x: auto;
-      
+
       table {
         width: 100%;
         border-collapse: collapse;
         font-family: $font-mono;
         font-size: 0.875rem;
-        
+
         th, td {
           padding: $grid-unit * 1.5;
           text-align: left;
           border-bottom: 1px solid $color-border;
         }
-        
+
         th {
           background: $color-background-dark;
           color: $color-primary;
@@ -402,11 +402,11 @@
           text-transform: uppercase;
           letter-spacing: 0.05em;
         }
-        
+
         tr:hover td {
           background: $color-surface-hover;
         }
-        
+
         tbody tr:last-child td {
           border-bottom: none;
         }

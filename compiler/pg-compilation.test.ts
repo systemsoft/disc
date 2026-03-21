@@ -409,9 +409,9 @@ Deno.test({
       // Seed data: 2 departments
       await pool.query(`
         INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
-          (gen_random_uuid(), 'Alice', 'eng', 100000, true),
-          (gen_random_uuid(), 'Bob', 'eng', 120000, true),
-          (gen_random_uuid(), 'Carol', 'sales', 90000, true)
+          (gen_random_uuid(), 'Ada', 'eng', 100000, true),
+          (gen_random_uuid(), 'Billie', 'eng', 120000, true),
+          (gen_random_uuid(), 'Cher', 'sales', 90000, true)
       `);
 
       const sql = compileEdgeQL("GROUP TestEmployee BY .department", schema);
@@ -445,12 +445,12 @@ Deno.test({
       // Seed data: eng has 3, sales has 2, ops has 1
       await pool.query(`
         INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
-          (gen_random_uuid(), 'Alice', 'eng', 100000, true),
-          (gen_random_uuid(), 'Bob', 'eng', 120000, true),
-          (gen_random_uuid(), 'Carol', 'eng', 110000, true),
-          (gen_random_uuid(), 'Dave', 'sales', 90000, true),
+          (gen_random_uuid(), 'Ada', 'eng', 100000, true),
+          (gen_random_uuid(), 'Billie', 'eng', 120000, true),
+          (gen_random_uuid(), 'Cher', 'eng', 110000, true),
+          (gen_random_uuid(), 'Daena', 'sales', 90000, true),
           (gen_random_uuid(), 'Eve', 'sales', 95000, true),
-          (gen_random_uuid(), 'Frank', 'ops', 80000, true)
+          (gen_random_uuid(), 'Farah', 'ops', 80000, true)
       `);
 
       // GROUP BY .department FILTER count(TestEmployee) > 2
@@ -656,12 +656,12 @@ Deno.test({
       // Seed data
       await pool.query(`
         INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
-          (gen_random_uuid(), 'Alice', 'eng', 100000, true),
-          (gen_random_uuid(), 'Bob', 'eng', 120000, true),
-          (gen_random_uuid(), 'Carol', 'sales', 90000, true)
+          (gen_random_uuid(), 'Ada', 'eng', 100000, true),
+          (gen_random_uuid(), 'Billie', 'eng', 120000, true),
+          (gen_random_uuid(), 'Cher', 'sales', 90000, true)
       `);
 
-      // contains(.name, "li") should match "Alice"
+      // contains(.name, "li") should match "Ada"
       const containsSql = compileEdgeQL(
         'select TestEmployee { name } filter contains(.name, "li")',
         schema,
@@ -670,10 +670,10 @@ Deno.test({
       assertEquals(
         containsResult.rowCount,
         1,
-        "contains() should match only Alice",
+        "contains() should match only Ada",
       );
 
-      // find(.name, "ob") != -1 should match "Bob"
+      // find(.name, "ob") != -1 should match "Billie"
       const findSql = compileEdgeQL(
         'select TestEmployee { name } filter find(.name, "ob") != -1',
         schema,
@@ -682,7 +682,7 @@ Deno.test({
       assertEquals(
         findResult.rowCount,
         1,
-        "find() != -1 should match only Bob",
+        "find() != -1 should match only Billie",
       );
 
       await manager.close();
@@ -776,9 +776,9 @@ Deno.test({
       // Seed data with distinct departments
       await pool.query(`
         INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
-          (gen_random_uuid(), 'Alice', 'eng', 100000, true),
-          (gen_random_uuid(), 'Bob', 'sales', 120000, true),
-          (gen_random_uuid(), 'Carol', 'ops', 90000, true)
+          (gen_random_uuid(), 'Ada', 'eng', 100000, true),
+          (gen_random_uuid(), 'Billie', 'sales', 120000, true),
+          (gen_random_uuid(), 'Cher', 'ops', 90000, true)
       `);
 
       // Compile a FOR with subquery iterator
@@ -831,21 +831,21 @@ Deno.test({
       // Seed 10 rows with distinct names that sort alphabetically
       await pool.query(`
         INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
-          (gen_random_uuid(), 'Alice', 'eng', 100000, true),
-          (gen_random_uuid(), 'Bob', 'eng', 110000, true),
-          (gen_random_uuid(), 'Carol', 'sales', 120000, true),
-          (gen_random_uuid(), 'Dave', 'eng', 130000, true),
+          (gen_random_uuid(), 'Ada', 'eng', 100000, true),
+          (gen_random_uuid(), 'Billie', 'eng', 110000, true),
+          (gen_random_uuid(), 'Cher', 'sales', 120000, true),
+          (gen_random_uuid(), 'Daena', 'eng', 130000, true),
           (gen_random_uuid(), 'Eve', 'ops', 140000, true),
-          (gen_random_uuid(), 'Frank', 'sales', 150000, true),
+          (gen_random_uuid(), 'Farah', 'sales', 150000, true),
           (gen_random_uuid(), 'Grace', 'eng', 160000, true),
-          (gen_random_uuid(), 'Hank', 'ops', 170000, true),
+          (gen_random_uuid(), 'Hope', 'ops', 170000, true),
           (gen_random_uuid(), 'Iris', 'sales', 180000, true),
-          (gen_random_uuid(), 'Jack', 'eng', 190000, true)
+          (gen_random_uuid(), 'Jessie', 'eng', 190000, true)
       `);
 
       // Compile EdgeQL: ORDER BY .name OFFSET 3 LIMIT 3
-      // Alphabetical order: Alice, Bob, Carol, Dave, Eve, Frank, Grace, Hank, Iris, Jack
-      // OFFSET 3 skips Alice, Bob, Carol -> returns Dave, Eve, Frank
+      // Alphabetical order: Ada, Billie, Cher, Daena, Eve, Farah, Grace, Hope, Iris, Jessie
+      // OFFSET 3 skips Ada, Billie, Cher -> returns Daena, Eve, Farah
       const sql = compileEdgeQL(
         "SELECT TestEmployee { name } ORDER BY .name OFFSET 3 LIMIT 3",
         schema,
@@ -873,8 +873,8 @@ Deno.test({
 
       assertEquals(
         names.sort(),
-        ["Dave", "Eve", "Frank"],
-        "OFFSET 3 LIMIT 3 should return Dave, Eve, Frank (alphabetically 4th-6th)",
+        ["Daena", "Eve", "Farah"],
+        "OFFSET 3 LIMIT 3 should return Daena, Eve, Farah (alphabetically 4th-6th)",
       );
 
       await manager.close();
@@ -904,17 +904,17 @@ Deno.test({
       // Seed data across multiple departments
       await pool.query(`
         INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
-          (gen_random_uuid(), 'Alice', 'eng', 100000, true),
-          (gen_random_uuid(), 'Bob', 'eng', 120000, true),
-          (gen_random_uuid(), 'Carol', 'sales', 90000, false),
-          (gen_random_uuid(), 'Dave', 'ops', 80000, true),
+          (gen_random_uuid(), 'Ada', 'eng', 100000, true),
+          (gen_random_uuid(), 'Billie', 'eng', 120000, true),
+          (gen_random_uuid(), 'Cher', 'sales', 90000, false),
+          (gen_random_uuid(), 'Daena', 'ops', 80000, true),
           (gen_random_uuid(), 'Eve', 'sales', 95000, true)
       `);
 
       // Use a subquery to get departments of active employees, then filter
       // by that set. The subquery selects departments where active = true.
-      // eng (Alice, Bob), ops (Dave), sales (Eve) are active departments.
-      // Carol (sales, inactive) should still appear because sales has at
+      // eng (Ada, Billie), ops (Daena), sales (Eve) are active departments.
+      // Cher (sales, inactive) should still appear because sales has at
       // least one active employee (Eve).
       const sql = compileEdgeQL(
         `SELECT TestEmployee { name, department }
@@ -965,10 +965,10 @@ Deno.test({
       // Seed data: mix of active and inactive employees
       await pool.query(`
         INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
-          (gen_random_uuid(), 'Alice', 'eng', 100000, true),
-          (gen_random_uuid(), 'Bob', 'eng', 120000, false),
-          (gen_random_uuid(), 'Carol', 'sales', 90000, true),
-          (gen_random_uuid(), 'Dave', 'ops', 80000, false)
+          (gen_random_uuid(), 'Ada', 'eng', 100000, true),
+          (gen_random_uuid(), 'Billie', 'eng', 120000, false),
+          (gen_random_uuid(), 'Cher', 'sales', 90000, true),
+          (gen_random_uuid(), 'Daena', 'ops', 80000, false)
       `);
 
       // Compile: WITH active_emps := (SELECT ... FILTER .active = true)
@@ -992,7 +992,7 @@ Deno.test({
       assertEquals(
         result.rowCount,
         2,
-        "Should return exactly 2 active employees (Alice, Carol)",
+        "Should return exactly 2 active employees (Ada, Cher)",
       );
 
       // Extract names and verify
@@ -1002,8 +1002,8 @@ Deno.test({
       });
       assertEquals(
         names.sort(),
-        ["Alice", "Carol"],
-        "Active employees should be Alice and Carol",
+        ["Ada", "Cher"],
+        "Active employees should be Ada and Cher",
       );
 
       await manager.close();
@@ -1028,9 +1028,9 @@ Deno.test({
       // Seed data with varying salaries
       await pool.query(`
         INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
-          (gen_random_uuid(), 'Alice', 'eng', 50000, true),
-          (gen_random_uuid(), 'Bob', 'eng', 100000, true),
-          (gen_random_uuid(), 'Carol', 'eng', 150000, true)
+          (gen_random_uuid(), 'Ada', 'eng', 50000, true),
+          (gen_random_uuid(), 'Billie', 'eng', 100000, true),
+          (gen_random_uuid(), 'Cher', 'eng', 150000, true)
       `);
 
       // Use WITH to pre-compute a filtered set, then select from it
@@ -1045,7 +1045,7 @@ Deno.test({
       assertEquals(
         result.rowCount,
         2,
-        "Should return 2 high earners (Bob=100k, Carol=150k)",
+        "Should return 2 high earners (Billie=100k, Cher=150k)",
       );
 
       const names = result.rows.map((row: Record<string, unknown>) => {
@@ -1054,8 +1054,8 @@ Deno.test({
       });
       assertEquals(
         names.sort(),
-        ["Bob", "Carol"],
-        "High earners should be Bob and Carol",
+        ["Billie", "Cher"],
+        "High earners should be Billie and Cher",
       );
 
       await manager.close();
@@ -1084,17 +1084,17 @@ Deno.test({
       // Seed data: mix of active/inactive across departments
       await pool.query(`
         INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
-          (gen_random_uuid(), 'Alice', 'eng', 100000, true),
-          (gen_random_uuid(), 'Bob', 'eng', 120000, false),
-          (gen_random_uuid(), 'Carol', 'sales', 90000, true),
-          (gen_random_uuid(), 'Dave', 'eng', 110000, true),
+          (gen_random_uuid(), 'Ada', 'eng', 100000, true),
+          (gen_random_uuid(), 'Billie', 'eng', 120000, false),
+          (gen_random_uuid(), 'Cher', 'sales', 90000, true),
+          (gen_random_uuid(), 'Daena', 'eng', 110000, true),
           (gen_random_uuid(), 'Eve', 'sales', 95000, false)
       `);
 
       // INTERSECT: active employees INTERSECT eng employees
-      // Active: Alice (eng), Carol (sales), Dave (eng)
-      // Eng: Alice (eng), Bob (eng), Dave (eng)
-      // Intersection: Alice (eng, active), Dave (eng, active)
+      // Active: Ada (eng), Cher (sales), Daena (eng)
+      // Eng: Ada (eng), Billie (eng), Daena (eng)
+      // Intersection: Ada (eng, active), Daena (eng, active)
       const sql = compileEdgeQL(
         `SELECT TestEmployee { name } FILTER .active = true
          INTERSECT
@@ -1111,7 +1111,7 @@ Deno.test({
 
       const result = await pool.query(sql);
 
-      // Should return 2 rows: Alice and Dave (active AND eng)
+      // Should return 2 rows: Ada and Daena (active AND eng)
       assertEquals(
         result.rowCount,
         2,
@@ -1124,8 +1124,8 @@ Deno.test({
       });
       assertEquals(
         names.sort(),
-        ["Alice", "Dave"],
-        "INTERSECT should return Alice and Dave",
+        ["Ada", "Daena"],
+        "INTERSECT should return Ada and Daena",
       );
 
       await manager.close();
@@ -1155,10 +1155,10 @@ Deno.test({
       // Seed data: employees across departments with different salaries
       await pool.query(`
         INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
-          (gen_random_uuid(), 'Alice', 'eng', 120000, true),
-          (gen_random_uuid(), 'Bob', 'eng', 100000, true),
-          (gen_random_uuid(), 'Carol', 'eng', 110000, true),
-          (gen_random_uuid(), 'Dave', 'sales', 90000, true),
+          (gen_random_uuid(), 'Ada', 'eng', 120000, true),
+          (gen_random_uuid(), 'Billie', 'eng', 100000, true),
+          (gen_random_uuid(), 'Cher', 'eng', 110000, true),
+          (gen_random_uuid(), 'Daena', 'sales', 90000, true),
           (gen_random_uuid(), 'Eve', 'sales', 95000, true)
       `);
 
@@ -1204,22 +1204,22 @@ Deno.test({
         return data as Record<string, unknown>;
       });
 
-      // eng department: Alice (120k) = rank 1, Carol (110k) = rank 2, Bob (100k) = rank 3
+      // eng department: Ada (120k) = rank 1, Cher (110k) = rank 2, Billie (100k) = rank 3
       const engRows = rows.filter((r) =>
-        r.name === "Alice" || r.name === "Bob" || r.name === "Carol"
+        r.name === "Ada" || r.name === "Billie" || r.name === "Cher"
       );
       assertEquals(engRows.length, 3, "Should have 3 eng employees");
 
-      // Find Alice's rank (should be 1 — highest salary in eng)
-      const aliceRow = rows.find((r) => r.name === "Alice");
-      assertExists(aliceRow, "Alice should exist");
+      // Find Ada's rank (should be 1 — highest salary in eng)
+      const adaRow = rows.find((r) => r.name === "Ada");
+      assertExists(adaRow, "Ada should exist");
       assertEquals(
-        Number(aliceRow.dept_rank),
+        Number(adaRow.dept_rank),
         1,
-        "Alice should be rank 1 in eng (highest salary)",
+        "Ada should be rank 1 in eng (highest salary)",
       );
 
-      // sales department: Eve (95k) = rank 1, Dave (90k) = rank 2
+      // sales department: Eve (95k) = rank 1, Daena (90k) = rank 2
       const eveRow = rows.find((r) => r.name === "Eve");
       assertExists(eveRow, "Eve should exist");
       assertEquals(
@@ -1251,9 +1251,9 @@ Deno.test({
       // Seed data: 3 employees with known salaries
       await pool.query(`
         INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
-          (gen_random_uuid(), 'Alice', 'eng', 100, true),
-          (gen_random_uuid(), 'Bob', 'eng', 200, true),
-          (gen_random_uuid(), 'Carol', 'eng', 300, true)
+          (gen_random_uuid(), 'Ada', 'eng', 100, true),
+          (gen_random_uuid(), 'Billie', 'eng', 200, true),
+          (gen_random_uuid(), 'Cher', 'eng', 300, true)
       `);
 
       // sum(.salary) OVER (ORDER BY .name) produces a running total
@@ -1277,30 +1277,30 @@ Deno.test({
         return data as Record<string, unknown>;
       });
 
-      // Alphabetical order: Alice (100), Bob (200), Carol (300)
-      // Running totals: Alice=100, Bob=300, Carol=600
-      const aliceRow = rows.find((r) => r.name === "Alice");
-      assertExists(aliceRow, "Alice should exist");
+      // Alphabetical order: Ada (100), Billie (200), Cher (300)
+      // Running totals: Ada=100, Billie=300, Cher=600
+      const adaRow = rows.find((r) => r.name === "Ada");
+      assertExists(adaRow, "Ada should exist");
       assertEquals(
-        Number(aliceRow.running_total),
+        Number(adaRow.running_total),
         100,
-        "Alice running total should be 100",
+        "Ada running total should be 100",
       );
 
-      const bobRow = rows.find((r) => r.name === "Bob");
-      assertExists(bobRow, "Bob should exist");
+      const billieRow = rows.find((r) => r.name === "Billie");
+      assertExists(billieRow, "Billie should exist");
       assertEquals(
-        Number(bobRow.running_total),
+        Number(billieRow.running_total),
         300,
-        "Bob running total should be 300",
+        "Billie running total should be 300",
       );
 
-      const carolRow = rows.find((r) => r.name === "Carol");
-      assertExists(carolRow, "Carol should exist");
+      const cherRow = rows.find((r) => r.name === "Cher");
+      assertExists(cherRow, "Cher should exist");
       assertEquals(
-        Number(carolRow.running_total),
+        Number(cherRow.running_total),
         600,
-        "Carol running total should be 600",
+        "Cher running total should be 600",
       );
 
       await manager.close();
@@ -1325,17 +1325,17 @@ Deno.test({
       // Seed data: mix of active/inactive across departments
       await pool.query(`
         INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
-          (gen_random_uuid(), 'Alice', 'eng', 100000, true),
-          (gen_random_uuid(), 'Bob', 'eng', 120000, false),
-          (gen_random_uuid(), 'Carol', 'sales', 90000, true),
-          (gen_random_uuid(), 'Dave', 'eng', 110000, true),
+          (gen_random_uuid(), 'Ada', 'eng', 100000, true),
+          (gen_random_uuid(), 'Billie', 'eng', 120000, false),
+          (gen_random_uuid(), 'Cher', 'sales', 90000, true),
+          (gen_random_uuid(), 'Daena', 'eng', 110000, true),
           (gen_random_uuid(), 'Eve', 'sales', 95000, false)
       `);
 
       // EXCEPT: active employees EXCEPT eng employees
-      // Active: Alice (eng), Carol (sales), Dave (eng)
-      // Eng: Alice (eng), Bob (eng), Dave (eng)
-      // Except: Carol (active but not eng)
+      // Active: Ada (eng), Cher (sales), Daena (eng)
+      // Eng: Ada (eng), Billie (eng), Daena (eng)
+      // Except: Cher (active but not eng)
       const sql = compileEdgeQL(
         `SELECT TestEmployee { name } FILTER .active = true
          EXCEPT
@@ -1352,7 +1352,7 @@ Deno.test({
 
       const result = await pool.query(sql);
 
-      // Should return 1 row: Carol (active but NOT eng)
+      // Should return 1 row: Cher (active but NOT eng)
       assertEquals(
         result.rowCount,
         1,
@@ -1365,8 +1365,8 @@ Deno.test({
       });
       assertEquals(
         names,
-        ["Carol"],
-        "EXCEPT should return only Carol",
+        ["Cher"],
+        "EXCEPT should return only Cher",
       );
 
       await manager.close();
@@ -1396,10 +1396,10 @@ Deno.test({
       // Seed data: mix of active and inactive employees
       await pool.query(`
         INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
-          (gen_random_uuid(), 'Alice', 'eng', 100000, true),
-          (gen_random_uuid(), 'Bob', 'eng', 120000, false),
-          (gen_random_uuid(), 'Carol', 'sales', 90000, true),
-          (gen_random_uuid(), 'Dave', 'ops', 80000, true),
+          (gen_random_uuid(), 'Ada', 'eng', 100000, true),
+          (gen_random_uuid(), 'Billie', 'eng', 120000, false),
+          (gen_random_uuid(), 'Cher', 'sales', 90000, true),
+          (gen_random_uuid(), 'Daena', 'ops', 80000, true),
           (gen_random_uuid(), 'Eve', 'sales', 95000, false)
       `);
 
@@ -1420,7 +1420,7 @@ Deno.test({
 
       const result = await pool.query(sql);
 
-      // Should return only active employees: Alice, Carol, Dave
+      // Should return only active employees: Ada, Cher, Daena
       assertEquals(
         result.rowCount,
         3,
@@ -1433,8 +1433,8 @@ Deno.test({
       });
       assertEquals(
         names.sort(),
-        ["Alice", "Carol", "Dave"],
-        "CTE should return Alice, Carol, and Dave (active employees)",
+        ["Ada", "Cher", "Daena"],
+        "CTE should return Ada, Cher, and Daena (active employees)",
       );
 
       await manager.close();
@@ -1460,10 +1460,10 @@ Deno.test({
       // Seed data: employees with varying salaries
       await pool.query(`
         INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
-          (gen_random_uuid(), 'Alice', 'eng', 60000, true),
-          (gen_random_uuid(), 'Bob', 'eng', 80000, true),
-          (gen_random_uuid(), 'Carol', 'sales', 90000, true),
-          (gen_random_uuid(), 'Dave', 'ops', 40000, true),
+          (gen_random_uuid(), 'Ada', 'eng', 60000, true),
+          (gen_random_uuid(), 'Billie', 'eng', 80000, true),
+          (gen_random_uuid(), 'Cher', 'sales', 90000, true),
+          (gen_random_uuid(), 'Daena', 'ops', 40000, true),
           (gen_random_uuid(), 'Eve', 'sales', 70000, true)
       `);
 
@@ -1481,7 +1481,7 @@ Deno.test({
 
       const result = await pool.query(cteSQL);
 
-      // Employees with salary > 50000: Alice (60k), Bob (80k), Carol (90k), Eve (70k)
+      // Employees with salary > 50000: Ada (60k), Billie (80k), Cher (90k), Eve (70k)
       assertEquals(
         Number(result.rows[0].total_count),
         4,
@@ -1491,8 +1491,8 @@ Deno.test({
       const names = result.rows[0].names as string[];
       assertEquals(
         names.sort(),
-        ["Alice", "Bob", "Carol", "Eve"],
-        "CTE multi-reference should list Alice, Bob, Carol, Eve",
+        ["Ada", "Billie", "Cher", "Eve"],
+        "CTE multi-reference should list Ada, Billie, Cher, Eve",
       );
 
       await manager.close();
@@ -1522,26 +1522,26 @@ Deno.test({
       // Seed 4 employees with distinct salaries
       await pool.query(`
         INSERT INTO ${EMPLOYEE_TABLE} (id, name, department, salary, active) VALUES
-          (gen_random_uuid(), 'Alice', 'eng', 100, true),
-          (gen_random_uuid(), 'Bob', 'eng', 200, true),
-          (gen_random_uuid(), 'Carol', 'eng', 300, true),
-          (gen_random_uuid(), 'Dave', 'eng', 400, true)
+          (gen_random_uuid(), 'Ada', 'eng', 100, true),
+          (gen_random_uuid(), 'Billie', 'eng', 200, true),
+          (gen_random_uuid(), 'Cher', 'eng', 300, true),
+          (gen_random_uuid(), 'Daena', 'eng', 400, true)
       `);
 
       // Frame exclusion: running sum of all preceding rows EXCLUDING the
       // current row.
       //
-      // Alphabetical order: Alice(100), Bob(200), Carol(300), Dave(400)
+      // Alphabetical order: Ada(100), Billie(200), Cher(300), Daena(400)
       //
       // ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW gives a frame that
       // includes every row from the start up to and including the current row.
       // EXCLUDE CURRENT ROW removes the current row from that frame.
       //
       // Expected running_sum values:
-      //   Alice: frame is {Alice} minus Alice → empty → NULL
-      //   Bob:   frame is {Alice, Bob} minus Bob → {Alice} → 100
-      //   Carol: frame is {Alice, Bob, Carol} minus Carol → {Alice, Bob} → 300
-      //   Dave:  frame is {Alice, Bob, Carol, Dave} minus Dave → {Alice, Bob, Carol} → 600
+      //   Ada: frame is {Ada} minus Ada → empty → NULL
+      //   Billie:   frame is {Ada, Billie} minus Billie → {Ada} → 100
+      //   Cher: frame is {Ada, Billie, Cher} minus Cher → {Ada, Billie} → 300
+      //   Daena:  frame is {Ada, Billie, Cher, Daena} minus Daena → {Ada, Billie, Cher} → 600
       const result = await pool.query(`
         SELECT
           name,
@@ -1557,44 +1557,44 @@ Deno.test({
 
       assertEquals(result.rowCount, 4, "Should return 4 rows");
 
-      // Alice: no preceding rows after excluding self → NULL
+      // Ada: no preceding rows after excluding self → NULL
       assertEquals(
         result.rows[0].name,
-        "Alice",
-        "First row should be Alice",
+        "Ada",
+        "First row should be Ada",
       );
       assertEquals(
         result.rows[0].running_sum,
         null,
-        "Alice running_sum should be NULL (no other rows in frame)",
+        "Ada running_sum should be NULL (no other rows in frame)",
       );
 
-      // Bob: only Alice in frame → 100
-      assertEquals(result.rows[1].name, "Bob", "Second row should be Bob");
+      // Billie: only Ada in frame → 100
+      assertEquals(result.rows[1].name, "Billie", "Second row should be Billie");
       assertEquals(
         Number(result.rows[1].running_sum),
         100,
-        "Bob running_sum should be 100 (Alice only)",
+        "Billie running_sum should be 100 (Ada only)",
       );
 
-      // Carol: Alice + Bob in frame → 300
+      // Cher: Ada + Billie in frame → 300
       assertEquals(
         result.rows[2].name,
-        "Carol",
-        "Third row should be Carol",
+        "Cher",
+        "Third row should be Cher",
       );
       assertEquals(
         Number(result.rows[2].running_sum),
         300,
-        "Carol running_sum should be 300 (Alice + Bob)",
+        "Cher running_sum should be 300 (Ada + Billie)",
       );
 
-      // Dave: Alice + Bob + Carol in frame → 600
-      assertEquals(result.rows[3].name, "Dave", "Fourth row should be Dave");
+      // Daena: Ada + Billie + Cher in frame → 600
+      assertEquals(result.rows[3].name, "Daena", "Fourth row should be Daena");
       assertEquals(
         Number(result.rows[3].running_sum),
         600,
-        "Dave running_sum should be 600 (Alice + Bob + Carol)",
+        "Daena running_sum should be 600 (Ada + Billie + Cher)",
       );
 
       await manager.close();

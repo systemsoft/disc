@@ -128,42 +128,42 @@ Deno.test({
       );
 
       // Insert test data
-      const aliceId = crypto.randomUUID();
-      const bobId = crypto.randomUUID();
+      const adaId = crypto.randomUUID();
+      const billieId = crypto.randomUUID();
       const mathId = crypto.randomUUID();
       const scienceId = crypto.randomUUID();
 
       await pool.query(
-        `INSERT INTO ${STUDENT_TABLE} (id, name) VALUES ($1, 'Alice'), ($2, 'Bob')`,
-        [aliceId, bobId],
+        `INSERT INTO ${STUDENT_TABLE} (id, name) VALUES ($1, 'Ada'), ($2, 'Billie')`,
+        [adaId, billieId],
       );
       await pool.query(
         `INSERT INTO ${COURSE_TABLE} (id, title) VALUES ($1, 'Math'), ($2, 'Science')`,
         [mathId, scienceId],
       );
 
-      // Link: Alice -> Math, Science; Bob -> Math
+      // Link: Ada -> Math, Science; Billie -> Math
       await pool.query(
         `INSERT INTO ${JUNCTION_TABLE} (source_id, target_id) VALUES ($1, $2), ($1, $3), ($4, $2)`,
-        [aliceId, mathId, scienceId, bobId],
+        [adaId, mathId, scienceId, billieId],
       );
 
       // Compile and run: SELECT TestStudent { name, courses: { title } }
-      // filtering for Alice
+      // filtering for Ada
       const sql = compileEdgeQL(
-        `SELECT TestStudent { name, courses: { title } } FILTER .name = "Alice"`,
+        `SELECT TestStudent { name, courses: { title } } FILTER .name = "Ada"`,
         schema,
       );
 
       const result = await pool.query(sql);
-      assertEquals(result.rows.length, 1, "Should return 1 row for Alice");
+      assertEquals(result.rows.length, 1, "Should return 1 row for Ada");
 
       const row = result.rows[0];
       const data = typeof row.jsonb_build_object === "string"
         ? JSON.parse(row.jsonb_build_object)
         : row.jsonb_build_object;
 
-      assertEquals(data.name, "Alice");
+      assertEquals(data.name, "Ada");
       assertExists(data.courses, "Should have courses field");
 
       const courseTitles = data.courses
@@ -201,13 +201,13 @@ Deno.test({
       const { schema } = await applySchema(pool, STUDENT_COURSE_SDL);
 
       // Insert test data
-      const aliceId = crypto.randomUUID();
-      const bobId = crypto.randomUUID();
+      const adaId = crypto.randomUUID();
+      const billieId = crypto.randomUUID();
       const mathId = crypto.randomUUID();
 
       await pool.query(
-        `INSERT INTO ${STUDENT_TABLE} (id, name) VALUES ($1, 'Alice'), ($2, 'Bob')`,
-        [aliceId, bobId],
+        `INSERT INTO ${STUDENT_TABLE} (id, name) VALUES ($1, 'Ada'), ($2, 'Billie')`,
+        [adaId, billieId],
       );
       await pool.query(
         `INSERT INTO ${COURSE_TABLE} (id, title) VALUES ($1, 'Math')`,
@@ -227,12 +227,12 @@ Deno.test({
         // Reciprocal uses test_student_courses with swapped columns
         await pool.query(
           `INSERT INTO ${JUNCTION_TABLE} (source_id, target_id) VALUES ($1, $2), ($3, $2)`,
-          [aliceId, mathId, bobId],
+          [adaId, mathId, billieId],
         );
       } else {
         await pool.query(
           `INSERT INTO ${courseJunction} (source_id, target_id) VALUES ($1, $2), ($1, $3)`,
-          [mathId, aliceId, bobId],
+          [mathId, adaId, billieId],
         );
       }
 
@@ -256,7 +256,7 @@ Deno.test({
       const studentNames = data.students
         .map((s: { name: string }) => s.name)
         .sort();
-      assertEquals(studentNames, ["Alice", "Bob"]);
+      assertEquals(studentNames, ["Ada", "Billie"]);
     } finally {
       await cleanup(pool, [
         JUNCTION_TABLE,

@@ -55,7 +55,7 @@ export class CLICommands {
    * Handle migration commands (create and apply)
    */
   async migrate(args: CLIArgs): Promise<void> {
-    const schemaFile = args.schema || "./dbschema/default.esdl";
+    const schemaFile = args.schema || "./dbschema/default.disc";
     const dryRun = args["dry-run"] || false;
     const databaseUrl = args["backend-dsn"] ||
       Deno.env.get("DATABASE_URL") ||
@@ -151,7 +151,7 @@ export class CLICommands {
 
       // Try to load the project schema from SDL
       const schema = await this.readSchemaAsCompilerSchema(
-        "./dbschema/default.esdl",
+        "./dbschema/default.disc",
       );
 
       if (schema) {

@@ -138,11 +138,11 @@ Deno.test("scram - full SCRAM-SHA-256 flow succeeds with correct password", asyn
 
   // 1. Client builds first message
   const { message: clientFirstMsg, clientFirstMessageBare } =
-    buildClientFirstMessage("alice", clientNonce);
+    buildClientFirstMessage("ada", clientNonce);
 
   // 2. Server parses client-first
   const parsed = parseClientFirstMessage(clientFirstMsg);
-  assertEquals(parsed.username, "alice");
+  assertEquals(parsed.username, "ada");
   assertEquals(parsed.clientNonce, clientNonce);
 
   // 3. Server generates server-first
@@ -167,7 +167,7 @@ Deno.test("scram - full SCRAM-SHA-256 flow succeeds with correct password", asyn
 
   // 6. Server verifies client-final
   const state: ScramServerState = {
-    username: "alice",
+    username: "ada",
     clientNonce: parsed.clientNonce,
     serverNonce,
     salt,
@@ -194,7 +194,7 @@ Deno.test("scram - full SCRAM flow fails with wrong password", async () => {
 
   // Client builds first message
   const { message: clientFirstMsg, clientFirstMessageBare } =
-    buildClientFirstMessage("bob", clientNonce);
+    buildClientFirstMessage("billie", clientNonce);
 
   // Server parses
   const parsed = parseClientFirstMessage(clientFirstMsg);
@@ -225,7 +225,7 @@ Deno.test("scram - full SCRAM flow fails with wrong password", async () => {
 
   // Server verifies — should fail
   const state: ScramServerState = {
-    username: "bob",
+    username: "billie",
     clientNonce: parsed.clientNonce,
     serverNonce,
     salt,
@@ -249,7 +249,7 @@ Deno.test("scram - verifyClientFinalMessage rejects tampered nonce", async () =>
   const clientNonce = "nonce-tamper-test";
 
   const { message: clientFirstMsg, clientFirstMessageBare } =
-    buildClientFirstMessage("carol", clientNonce);
+    buildClientFirstMessage("cher", clientNonce);
   const parsed = parseClientFirstMessage(clientFirstMsg);
 
   const salt = textEncoder.encode("salt-tamper-test");
@@ -272,7 +272,7 @@ Deno.test("scram - verifyClientFinalMessage rejects tampered nonce", async () =>
 
   // Use a state with a different serverNonce (simulating nonce tampering)
   const state: ScramServerState = {
-    username: "carol",
+    username: "cher",
     clientNonce: parsed.clientNonce,
     serverNonce: serverNonce + "tampered",
     salt,

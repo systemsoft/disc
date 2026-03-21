@@ -73,7 +73,7 @@ Deno.test("CLI - codegen command arguments", () => {
   const args = parseArgs([
     "codegen",
     "--schema",
-    "custom.esdl",
+    "custom.disc",
     "--output",
     "./generated",
     "--target",
@@ -86,7 +86,7 @@ Deno.test("CLI - codegen command arguments", () => {
   });
 
   assertEquals(args._[0], "codegen");
-  assertEquals(args.schema, "custom.esdl");
+  assertEquals(args.schema, "custom.disc");
   assertEquals(args.output, "./generated");
   assertEquals(args.target, "both");
   assertEquals(args["no-queries"], true);
@@ -101,7 +101,7 @@ Deno.test("CLI - migrate command arguments", () => {
     "--dry-run",
     "--auto-approve",
     "--schema",
-    "test.esdl",
+    "test.disc",
   ], {
     boolean: ["create", "dry-run", "auto-approve"],
     string: ["schema"],
@@ -111,7 +111,7 @@ Deno.test("CLI - migrate command arguments", () => {
   assertEquals(args.create, true);
   assertEquals(args["dry-run"], true);
   assertEquals(args["auto-approve"], true);
-  assertEquals(args.schema, "test.esdl");
+  assertEquals(args.schema, "test.disc");
 });
 
 Deno.test("CLI - serve command arguments", () => {
@@ -151,7 +151,7 @@ Deno.test("readSchemaFile - existing file", async () => {
 });
 
 Deno.test("readSchemaFile - nonexistent file", async () => {
-  const nonExistentPath = "/does/not/exist/schema.esdl";
+  const nonExistentPath = "/does/not/exist/schema.disc";
 
   // Test that attempting to read a nonexistent file handles errors gracefully
   await assertRejects(
@@ -183,11 +183,11 @@ Deno.test("CLI - default configuration values", () => {
   // Test that defaults are applied correctly
   const outputDir = args.output || "./generated";
   const target = args.target || "client";
-  const schemaFile = args.schema || "./schema.esdl";
+  const schemaFile = args.schema || "./schema.disc";
 
   assertEquals(outputDir, "./generated");
   assertEquals(target, "client");
-  assertEquals(schemaFile, "./schema.esdl");
+  assertEquals(schemaFile, "./schema.disc");
 });
 
 // Test boolean flag combinations
@@ -216,7 +216,7 @@ Deno.test("CLI - migration config construction", () => {
     env.set("DATABASE_URL", "postgresql://localhost:5432/test_disc");
 
     const args = {
-      schema: "./test.esdl",
+      schema: "./test.disc",
       "dry-run": true,
       "auto-approve": false,
     };
@@ -224,7 +224,7 @@ Deno.test("CLI - migration config construction", () => {
     // Simulate migration config construction
     const config = {
       migrationsDir: "./migrations",
-      schemaFile: args.schema || "./schema.esdl",
+      schemaFile: args.schema || "./schema.disc",
       databaseUrl: Deno.env.get("DATABASE_URL") ||
         "postgresql://localhost:5432/disc_dev",
       dryRun: args["dry-run"] || false,
@@ -233,7 +233,7 @@ Deno.test("CLI - migration config construction", () => {
       rollbackOnError: true,
     };
 
-    assertEquals(config.schemaFile, "./test.esdl");
+    assertEquals(config.schemaFile, "./test.disc");
     assertEquals(config.databaseUrl, "postgresql://localhost:5432/test_disc");
     assertEquals(config.dryRun, true);
     assertEquals(config.autoApprove, false);
@@ -282,7 +282,7 @@ Deno.test("CLI - alias flag handling", () => {
     "-t",
     "both",
     "-s",
-    "custom.esdl",
+    "custom.disc",
   ], {
     string: ["output", "target", "schema"],
     alias: {
@@ -294,5 +294,5 @@ Deno.test("CLI - alias flag handling", () => {
 
   assertEquals(args.output, "./out");
   assertEquals(args.target, "both");
-  assertEquals(args.schema, "custom.esdl");
+  assertEquals(args.schema, "custom.disc");
 });

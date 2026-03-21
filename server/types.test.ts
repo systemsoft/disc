@@ -100,8 +100,8 @@ Deno.test("QueryResponse - success case", () => {
     data: [
       {
         id: "550e8400-e29b-41d4-a716-446655440000",
-        name: "Alice Smith",
-        email: "alice@example.com",
+        name: "Ada Smith",
+        email: "ada@example.com",
       },
     ],
     extensions: {
@@ -112,7 +112,7 @@ Deno.test("QueryResponse - success case", () => {
   };
 
   assertEquals(Array.isArray(response.data), true);
-  assertEquals(response.data?.[0].name, "Alice Smith");
+  assertEquals(response.data?.[0].name, "Ada Smith");
   assertEquals(response.extensions?.durationMs, 42);
   assertEquals(response.extensions?.cacheHit, false);
   assertEquals(response.errors, undefined);
@@ -324,8 +324,8 @@ Deno.test("Transaction - statement tracking", () => {
     startedAt: new Date(),
     statements: [
       "begin",
-      "insert User { name := 'Alice' }",
-      "select User { name } filter .name = 'Alice'",
+      "insert User { name := 'Ada' }",
+      "select User { name } filter .name = 'Ada'",
       "commit",
     ],
   };

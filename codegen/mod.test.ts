@@ -678,14 +678,14 @@ Deno.test("Codegen - discoverSchemaFiles falls back to .gel", async () => {
   }
 });
 
-Deno.test("Codegen - discoverSchemaFiles falls back to .esdl", async () => {
+Deno.test("Codegen - discoverSchemaFiles falls back to .disc", async () => {
   const tempDir = await createTempDir();
   try {
-    await Deno.writeTextFile(`${tempDir}/schema.esdl`, "module default {}");
+    await Deno.writeTextFile(`${tempDir}/schema.disc`, "module default {}");
 
     const files = await Codegen.discoverSchemaFiles(tempDir);
     assertEquals(files.length, 1);
-    assertStringIncludes(files[0], ".esdl");
+    assertStringIncludes(files[0], ".disc");
   } finally {
     await cleanupTempDir(tempDir);
   }

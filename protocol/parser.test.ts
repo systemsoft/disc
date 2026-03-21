@@ -154,8 +154,8 @@ Deno.test("ProtocolParser - parse Data message", () => {
     type: Types.MessageType.Data,
     length: 0,
     dataElements: [
-      { data: encoder.encode('{"id": 1, "name": "Alice"}') },
-      { data: encoder.encode('{"id": 2, "name": "Bob"}') },
+      { data: encoder.encode('{"id": 1, "name": "Ada"}') },
+      { data: encoder.encode('{"id": 2, "name": "Billie"}') },
     ],
   };
 
@@ -169,11 +169,11 @@ Deno.test("ProtocolParser - parse Data message", () => {
   const decoder = new TextDecoder();
   assertEquals(
     decoder.decode(parsed?.dataElements[0].data),
-    '{"id": 1, "name": "Alice"}',
+    '{"id": 1, "name": "Ada"}',
   );
   assertEquals(
     decoder.decode(parsed?.dataElements[1].data),
-    '{"id": 2, "name": "Bob"}',
+    '{"id": 2, "name": "Billie"}',
   );
 });
 

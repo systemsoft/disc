@@ -21,7 +21,7 @@ import {
 function createMockMigrateConfig(args: any): any {
   return {
     migrationsDir: "./migrations",
-    schemaFile: args.schema || "./schema.esdl",
+    schemaFile: args.schema || "./schema.disc",
     databaseUrl: Deno.env.get("DATABASE_URL") ||
       "postgresql://localhost:5432/disc_dev",
     dryRun: args["dry-run"] || false,
@@ -279,7 +279,7 @@ Deno.test("CLI Commands - error handling for invalid schema", async () => {
   const tempDir = await createTempDir();
 
   try {
-    const invalidSchemaPath = `${tempDir}/nonexistent.esdl`;
+    const invalidSchemaPath = `${tempDir}/nonexistent.disc`;
 
     // Mock error handling for missing schema file
     const schemaExists = await Deno.stat(invalidSchemaPath).then(() => true)

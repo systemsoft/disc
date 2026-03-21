@@ -220,12 +220,12 @@ Deno.test("GraphQL query translation - list query with first/offset produces LIM
 Deno.test("GraphQL query translation - create mutation produces INSERT", () => {
   const schema = createTestSchema();
   const parsed = parseGraphQLQuery(
-    'mutation { createUser(input: {name: "Alice", email: "alice@example.com"}) { id } }',
+    'mutation { createUser(input: {name: "Ada", email: "ada@example.com"}) { id } }',
   );
   const result = translateToEdgeQL(parsed, schema);
   assertEquals(
     result.edgeql,
-    'INSERT User {name := "Alice", email := "alice@example.com"}',
+    'INSERT User {name := "Ada", email := "ada@example.com"}',
   );
 });
 
@@ -234,12 +234,12 @@ Deno.test("GraphQL query translation - create mutation produces INSERT", () => {
 Deno.test("GraphQL query translation - update mutation produces UPDATE SET", () => {
   const schema = createTestSchema();
   const parsed = parseGraphQLQuery(
-    'mutation { updateUser(id: "abc-123", input: {name: "Bob"}) { id } }',
+    'mutation { updateUser(id: "abc-123", input: {name: "Billie"}) { id } }',
   );
   const result = translateToEdgeQL(parsed, schema);
   assertEquals(
     result.edgeql,
-    'UPDATE User FILTER .id = <uuid>"abc-123" SET {name := "Bob"}',
+    'UPDATE User FILTER .id = <uuid>"abc-123" SET {name := "Billie"}',
   );
 });
 
@@ -331,12 +331,12 @@ Deno.test("GraphQL parser - parse nested selections", () => {
 
 Deno.test("GraphQL parser - parse mutation", () => {
   const parsed = parseGraphQLQuery(
-    'mutation { createUser(input: {name: "Alice"}) { id } }',
+    'mutation { createUser(input: {name: "Ada"}) { id } }',
   );
   assertEquals(parsed.type, "mutation");
   assertEquals(parsed.selections[0].fieldName, "createUser");
   const input = parsed.selections[0].arguments.input as Record<string, unknown>;
-  assertEquals(input.name, "Alice");
+  assertEquals(input.name, "Ada");
 });
 
 // ── GraphQL Parser: Test 23 ─────────────────────────────────────────────

@@ -207,15 +207,15 @@ export class SubscriptionHandler {
       return [
         {
           id: "user_001",
-          name: "Alice Johnson",
-          email: "alice@example.com",
+          name: "Ada Johnson",
+          email: "ada@example.com",
           status: "online",
           last_seen: new Date().toISOString(),
         },
         {
           id: "user_002",
-          name: "Bob Smith",
-          email: "bob@example.com",
+          name: "Billie Smith",
+          email: "billie@example.com",
           status: "offline",
           last_seen: new Date(Date.now() - 300000).toISOString(),
         },
@@ -226,7 +226,7 @@ export class SubscriptionHandler {
           id: "post_001",
           title: "Welcome to Disc Database",
           content: "This is the first post in our new database!",
-          author: "Alice Johnson",
+          author: "Ada Johnson",
           createdAt: new Date().toISOString(),
         },
       ];
@@ -242,7 +242,7 @@ export class SubscriptionHandler {
   private generate_mock_update(query: string): any {
     if (query.includes("User")) {
       const updates = [
-        { type: "user_online", userId: "user_003", name: "Charlie Wilson" },
+        { type: "user_online", userId: "user_003", name: "Cher Wilson" },
         { type: "user_offline", userId: "user_002" },
         {
           type: "user_updated",

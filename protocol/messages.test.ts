@@ -461,14 +461,14 @@ Deno.test("Data message - single element", () => {
   const encoder = new TextEncoder();
   const msg: DataMsg = {
     kind: "Data",
-    data: [encoder.encode('{"name":"Alice"}')],
+    data: [encoder.encode('{"name":"Ada"}')],
   };
 
   const result = roundTripServer(msg) as DataMsg;
   assertEquals(result.kind, "Data");
   assertEquals(result.data.length, 1);
   const decoder = new TextDecoder();
-  assertEquals(decoder.decode(result.data[0]), '{"name":"Alice"}');
+  assertEquals(decoder.decode(result.data[0]), '{"name":"Ada"}');
 });
 
 Deno.test("Data message - multiple elements", () => {

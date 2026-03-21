@@ -182,11 +182,11 @@ Deno.test(
       ws.simulateMessage({
         id: handle.id,
         type: "data",
-        payload: { name: "Alice" },
+        payload: { name: "Ada" },
       });
 
       assertEquals(received.length, 1);
-      assertEquals(received[0], { name: "Alice" });
+      assertEquals(received[0], { name: "Ada" });
     } finally {
       restore();
     }

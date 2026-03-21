@@ -29,7 +29,7 @@
 
       recentQueries = [
         'SELECT User { name, email }',
-        'INSERT User { name := "Alice" }',
+        'INSERT User { name := "Ada" }',
         'SELECT Post { title, author: { name } }'
       ];
     }, 500);

@@ -58,9 +58,9 @@ async function setupTestTable(dsn: string): Promise<void> {
     await client.queryArray(`
       INSERT INTO ${TEST_TABLE} (name, email, active)
       VALUES
-        ('Alice', 'alice@example.com', true),
-        ('Bob', 'bob@example.com', true),
-        ('Charlie', 'charlie@example.com', false)
+        ('Ada', 'ada@example.com', true),
+        ('Billie', 'billie@example.com', true),
+        ('Cher', 'cher@example.com', false)
     `);
   } finally {
     await client.end();
@@ -142,9 +142,9 @@ Deno.test({
       );
 
       assertEquals(result.rowCount, 3);
-      assertEquals(result.rows[0].name, "Alice");
-      assertEquals(result.rows[1].name, "Bob");
-      assertEquals(result.rows[2].name, "Charlie");
+      assertEquals(result.rows[0].name, "Ada");
+      assertEquals(result.rows[1].name, "Billie");
+      assertEquals(result.rows[2].name, "Cher");
     } finally {
       await pool.close();
       await teardownTestTable(dsn);
@@ -206,14 +206,14 @@ Deno.test({
     try {
       const result = await pool.query(
         `UPDATE ${TEST_TABLE} SET active = false WHERE name = $1 RETURNING id, name, active`,
-        ["Alice"],
+        ["Ada"],
       );
 
       assertEquals(result.rowCount, 1);
-      assertEquals(result.rows[0].name, "Alice");
+      assertEquals(result.rows[0].name, "Ada");
       assertEquals(result.rows[0].active, false);
 
-      // Verify via independent count: only Bob remains active
+      // Verify via independent count: only Billie remains active
       const activeCount = await countRows(dsn, "active = true");
       assertEquals(activeCount, 1);
     } finally {
@@ -241,11 +241,11 @@ Deno.test({
     try {
       const result = await pool.query(
         `DELETE FROM ${TEST_TABLE} WHERE name = $1 RETURNING id, name`,
-        ["Charlie"],
+        ["Cher"],
       );
 
       assertEquals(result.rowCount, 1);
-      assertEquals(result.rows[0].name, "Charlie");
+      assertEquals(result.rows[0].name, "Cher");
 
       // Verify via independent count
       const total = await countRows(dsn);
@@ -476,8 +476,8 @@ Deno.test({
       );
 
       assertEquals(result.rowCount, 2);
-      assertEquals(result.rows[0].name, "Alice");
-      assertEquals(result.rows[1].name, "Bob");
+      assertEquals(result.rows[0].name, "Ada");
+      assertEquals(result.rows[1].name, "Billie");
     } finally {
       await pool.close();
       await teardownTestTable(dsn);
@@ -623,9 +623,9 @@ Deno.test({
       );
 
       assertEquals(result.rowCount, 3);
-      assertEquals(result.rows[0].name, "Alice");
+      assertEquals(result.rows[0].name, "Ada");
       assertEquals(result.rows[0].active, true);
-      assertEquals(result.rows[2].name, "Charlie");
+      assertEquals(result.rows[2].name, "Cher");
       assertEquals(result.rows[2].active, false);
     } finally {
       await pool.close();

@@ -110,7 +110,7 @@ Deno.test(
     const tempDir = await createTempDir();
 
     try {
-      const schemaFile = `${tempDir}/widget.esdl`;
+      const schemaFile = `${tempDir}/widget.disc`;
       await Deno.writeTextFile(
         schemaFile,
         `module default {
@@ -152,7 +152,7 @@ Deno.test(
     try {
       const commands = new CLICommands();
       const readSchemaFile = getPrivateMethod(commands, "readSchemaFile");
-      const result = await readSchemaFile("/tmp/nonexistent-schema-file.esdl");
+      const result = await readSchemaFile("/tmp/nonexistent-schema-file.disc");
 
       assertEquals(
         result,
@@ -176,7 +176,7 @@ Deno.test(
     const tempDir = await createTempDir();
 
     try {
-      const schemaFile = `${tempDir}/bad.esdl`;
+      const schemaFile = `${tempDir}/bad.disc`;
       await Deno.writeTextFile(
         schemaFile,
         "this is not valid SDL at all!!!",
@@ -209,7 +209,7 @@ Deno.test(
     const tempDir = await createTempDir();
 
     try {
-      const schemaFile = `${tempDir}/gadget.esdl`;
+      const schemaFile = `${tempDir}/gadget.disc`;
       await Deno.writeTextFile(
         schemaFile,
         `module default {
@@ -277,7 +277,7 @@ Deno.test(
         commands,
         "readSchemaAsCompilerSchema",
       );
-      const result = await readSchema("/tmp/nonexistent-schema-file.esdl");
+      const result = await readSchema("/tmp/nonexistent-schema-file.disc");
 
       assertEquals(
         result,
@@ -301,7 +301,7 @@ Deno.test(
     const tempDir = await createTempDir();
 
     try {
-      const schemaFile = `${tempDir}/widget.esdl`;
+      const schemaFile = `${tempDir}/widget.disc`;
       const outputDir = `${tempDir}/generated`;
 
       await Deno.writeTextFile(
@@ -410,7 +410,7 @@ Deno.test(
     const tempDir = await createTempDir();
 
     try {
-      const schemaFile = `${tempDir}/schema.esdl`;
+      const schemaFile = `${tempDir}/schema.disc`;
       await Deno.writeTextFile(
         schemaFile,
         `module default {
@@ -456,7 +456,7 @@ Deno.test(
     const tempDir = await createTempDir();
 
     try {
-      const schemaFile = `${tempDir}/schema.esdl`;
+      const schemaFile = `${tempDir}/schema.disc`;
       await Deno.writeTextFile(
         schemaFile,
         `module default {

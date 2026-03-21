@@ -535,7 +535,7 @@ Deno.test({
       await execSQL(
         dsn,
         `INSERT INTO "user" (id, name, email, age, bio, tags) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)`,
-        ["Alice", "alice@example.com", 30, "A developer", "{typescript,deno}"],
+        ["Ada", "ada@example.com", 30, "A developer", "{typescript,deno}"],
       );
 
       // Verify the row was inserted
@@ -546,8 +546,8 @@ Deno.test({
         `SELECT name, email, age FROM "user"`,
       );
       assertEquals(users.length, 1, "Should have 1 user");
-      assertEquals(users[0].name, "Alice");
-      assertEquals(users[0].email, "alice@example.com");
+      assertEquals(users[0].name, "Ada");
+      assertEquals(users[0].email, "ada@example.com");
 
       // Violate max_len_value(100) on name (inherited from Named)
       const longName = "x".repeat(101);
@@ -573,7 +573,7 @@ Deno.test({
         await execSQL(
           dsn,
           `INSERT INTO "user" (id, name, email, age) VALUES (gen_random_uuid(), $1, $2, $3)`,
-          ["Bob", "bob@example.com", -1],
+          ["Billie", "billie@example.com", -1],
         );
       } catch {
         ageMinViolated = true;
@@ -590,7 +590,7 @@ Deno.test({
         await execSQL(
           dsn,
           `INSERT INTO "user" (id, name, email, age) VALUES (gen_random_uuid(), $1, $2, $3)`,
-          ["Charlie", "charlie@example.com", 200],
+          ["Cher", "cher@example.com", 200],
         );
       } catch {
         ageMaxViolated = true;
@@ -607,7 +607,7 @@ Deno.test({
         await execSQL(
           dsn,
           `INSERT INTO "user" (id, name, email) VALUES (gen_random_uuid(), $1, $2)`,
-          ["Duplicate", "alice@example.com"],
+          ["Duplicate", "ada@example.com"],
         );
       } catch {
         emailDuplicated = true;
@@ -688,7 +688,7 @@ Deno.test({
       await execSQL(
         dsn,
         `INSERT INTO "user" (id, name, email) VALUES (gen_random_uuid(), $1, $2)`,
-        ["Alice", "alice@test.com"],
+        ["Ada", "ada@test.com"],
       );
 
       // Verify created_at was auto-set
@@ -718,7 +718,7 @@ Deno.test({
       await execSQL(
         dsn,
         `UPDATE "user" SET bio = $1 WHERE name = $2`,
-        ["Updated bio", "Alice"],
+        ["Updated bio", "Ada"],
       );
 
       const updateRows = await queryRows<{

@@ -37,7 +37,7 @@ export class WatchCommand {
   async execute(options: WatchOptions): Promise<void> {
     console.log("🔍 Watching schema files for changes...");
 
-    const schemaFile = options.schemaFile || "./schema.esdl";
+    const schemaFile = options.schemaFile || "./schema.disc";
     const outputDir = options.outputDir || "./generated";
     const delayMs = options.delayMs || 1000;
 
@@ -108,7 +108,7 @@ export class WatchCommand {
         if (!this.isWatching) break;
 
         // Check if this is our schema file
-        const changedFile = event.paths.find((path) => path.endsWith(".esdl"));
+        const changedFile = event.paths.find((path) => path.endsWith(".disc"));
         if (!changedFile) continue;
 
         const changeEvent: FileChangeEvent = {
@@ -241,7 +241,7 @@ export class WatchCommand {
         dryRun: dryRun,
         autoApprove: false,
         migrationsDir: "./migrations",
-        schemaFile: "./schema.esdl",
+        schemaFile: "./schema.disc",
         backupBeforeMigration: false,
         rollbackOnError: true,
       };

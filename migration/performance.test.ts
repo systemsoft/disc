@@ -25,7 +25,7 @@ const RUN_PG = canRunPgTests();
 function createPerformanceTestConfig(): Types.MigrationConfig {
   return {
     migrationsDir: "./migrations",
-    schemaFile: "./perf_test.esdl",
+    schemaFile: "./perf_test.disc",
     databaseUrl: "postgresql://localhost:5432/test_performance",
     dryRun: true,
     autoApprove: false,

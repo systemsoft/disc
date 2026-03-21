@@ -36,7 +36,7 @@ Deno.test("CLI Workflow - Complete project initialization", async () => {
     assert(projectExists, "Project directory should be created");
 
     // Verify essential files exist
-    const schemaExists = await Deno.stat(`${projectDir}/schema.esdl`).then(() =>
+    const schemaExists = await Deno.stat(`${projectDir}/schema.disc`).then(() =>
       true
     ).catch(() => false);
     const configExists = await Deno.stat(`${projectDir}/deno.json`).then(() =>
@@ -63,7 +63,7 @@ Deno.test("CLI Workflow - Migration planning and execution", async () => {
     env.set("DATABASE_URL", "postgresql://localhost:5432/test_disc");
 
     // Create a test schema file
-    const schemaFile = `${tempDir}/schema.esdl`;
+    const schemaFile = `${tempDir}/schema.disc`;
     await Deno.writeTextFile(
       schemaFile,
       `module default {
@@ -106,7 +106,7 @@ Deno.test("CLI Workflow - Code generation", async () => {
 
   try {
     // Create test schema and output directory
-    const schemaFile = `${tempDir}/schema.esdl`;
+    const schemaFile = `${tempDir}/schema.disc`;
     const outputDir = `${tempDir}/generated`;
 
     await Deno.writeTextFile(
@@ -198,7 +198,7 @@ Deno.test("CLI Workflow - Watch command setup", async () => {
   const tempDir = await createTempDir();
 
   try {
-    const schemaFile = `${tempDir}/schema.esdl`;
+    const schemaFile = `${tempDir}/schema.disc`;
     const outputDir = `${tempDir}/generated`;
 
     // Create schema file
@@ -220,7 +220,7 @@ Deno.test("CLI Workflow - Watch command setup", async () => {
 
     // This would start file watching in real usage
     // For test, we just validate the configuration
-    assert(watchOptions.schemaFile.includes("schema.esdl"));
+    assert(watchOptions.schemaFile.includes("schema.disc"));
     assert(watchOptions.outputDir.includes("generated"));
     assertEquals(watchOptions.delayMs, 500);
   } finally {
@@ -234,7 +234,7 @@ Deno.test("CLI Workflow - Error handling for missing files", async () => {
   const tempDir = await createTempDir();
 
   try {
-    const nonExistentSchema = `${tempDir}/missing.esdl`;
+    const nonExistentSchema = `${tempDir}/missing.disc`;
 
     // Test migration with missing schema file
     try {

@@ -31,7 +31,7 @@ async function mockInitCommand(
   const projectDir = `${targetDir}/${projectName}`;
   await Deno.mkdir(projectDir, { recursive: true });
 
-  // Create schema.esdl based on template
+  // Create schema.disc based on template
   let schemaContent = "";
   switch (template) {
     case "minimal":
@@ -83,7 +83,7 @@ async function mockInitCommand(
       break;
   }
 
-  await Deno.writeTextFile(`${projectDir}/schema.esdl`, schemaContent);
+  await Deno.writeTextFile(`${projectDir}/schema.disc`, schemaContent);
 
   // Create deno.json
   const denoConfig = {
@@ -183,14 +183,14 @@ A Disc database project.
 ## Available Commands
 
 - \`deno task serve\` - Start the Disc server
-- \`deno task migrate\` - Apply schema migrations  
+- \`deno task migrate\` - Apply schema migrations
 - \`deno task codegen\` - Generate TypeScript types
 - \`deno task dev\` - Watch for schema changes
 - \`deno task shell\` - Open EdgeQL REPL
 
 ## Schema
 
-Your schema is defined in \`schema.esdl\`. Edit this file to modify your database structure.
+Your schema is defined in \`schema.disc\`. Edit this file to modify your database structure.
 
 ## Environment
 
@@ -226,7 +226,7 @@ Deno.test("CLI Init - basic project initialization", async () => {
     const projectDir = `${tempDir}/${projectName}`;
 
     // Verify all expected files were created
-    const schemaExists = await Deno.stat(`${projectDir}/schema.esdl`).then(() =>
+    const schemaExists = await Deno.stat(`${projectDir}/schema.disc`).then(() =>
       true
     ).catch(() => false);
     const configExists = await Deno.stat(`${projectDir}/deno.json`).then(() =>
@@ -255,7 +255,7 @@ Deno.test("CLI Init - basic project initialization", async () => {
     assert(migrationsExists, "Migrations directory should be created");
 
     // Verify schema content (basic template)
-    const schemaContent = await Deno.readTextFile(`${projectDir}/schema.esdl`);
+    const schemaContent = await Deno.readTextFile(`${projectDir}/schema.disc`);
     assertStringIncludes(schemaContent, "type User");
     assertStringIncludes(schemaContent, "required email: str");
 
@@ -302,7 +302,7 @@ Deno.test("CLI Init - minimal template", async () => {
     });
 
     const projectDir = `${tempDir}/${projectName}`;
-    const schemaContent = await Deno.readTextFile(`${projectDir}/schema.esdl`);
+    const schemaContent = await Deno.readTextFile(`${projectDir}/schema.disc`);
 
     // Minimal template should have empty module
     assertStringIncludes(schemaContent, "module default");
@@ -328,7 +328,7 @@ Deno.test("CLI Init - full template", async () => {
     });
 
     const projectDir = `${tempDir}/${projectName}`;
-    const schemaContent = await Deno.readTextFile(`${projectDir}/schema.esdl`);
+    const schemaContent = await Deno.readTextFile(`${projectDir}/schema.disc`);
 
     // Full template should have multiple types
     assertStringIncludes(schemaContent, "type User");
@@ -422,7 +422,7 @@ Deno.test("CLI Init - force overwrite existing directory", async () => {
     });
 
     // Verify new files were created
-    const schemaExists = await Deno.stat(`${projectDir}/schema.esdl`).then(() =>
+    const schemaExists = await Deno.stat(`${projectDir}/schema.disc`).then(() =>
       true
     ).catch(() => false);
     assert(schemaExists, "New schema should be created");

@@ -152,17 +152,17 @@ Deno.test({
       // Insert test data
       const insertResult = await pool.query(
         `INSERT INTO ${TEST_TABLE} (id, name, email, active) VALUES
-          (gen_random_uuid(), 'Alice', 'alice@test.com', true),
-          (gen_random_uuid(), 'Bob', 'bob@test.com', false)
+          (gen_random_uuid(), 'Ada', 'ada@test.com', true),
+          (gen_random_uuid(), 'Billie', 'billie@test.com', false)
         RETURNING id, name`,
       );
 
-      // Get Alice's UUID
-      const aliceRow = insertResult.rows.find(
-        (r: Record<string, unknown>) => r.name === "Alice",
+      // Get Ada's UUID
+      const adaRow = insertResult.rows.find(
+        (r: Record<string, unknown>) => r.name === "Ada",
       ) as Record<string, unknown>;
-      assertExists(aliceRow, "Alice should be inserted");
-      const aliceId = aliceRow.id as string;
+      assertExists(adaRow, "Ada should be inserted");
+      const adaId = adaRow.id as string;
 
       // Compile the query: SELECT TestAccount { name } FILTER .id = global current_user_id
       const sql = compileEdgeQL(
@@ -173,12 +173,12 @@ Deno.test({
       // Execute in a transaction to ensure set_config and query use the same connection
       const result = await pool.transaction(async (conn) => {
         await conn.query(
-          `SELECT set_config('disc.global_default__current_user_id', '${aliceId}', true)`,
+          `SELECT set_config('disc.global_default__current_user_id', '${adaId}', true)`,
         );
         return await conn.query(sql);
       });
 
-      // Should return exactly 1 row (Alice)
+      // Should return exactly 1 row (Ada)
       assertEquals(result.rowCount, 1, "Should return exactly 1 matching row");
 
       await cleanup(pool, manager);
@@ -238,15 +238,15 @@ Deno.test({
       // Insert a test account
       const insertResult = await pool.query(
         `INSERT INTO ${TEST_TABLE} (id, name, email, active) VALUES
-          (gen_random_uuid(), 'Alice', 'alice@test.com', true)
+          (gen_random_uuid(), 'Ada', 'ada@test.com', true)
         RETURNING id`,
       );
-      const aliceId = (insertResult.rows[0] as Record<string, unknown>)
+      const adaId = (insertResult.rows[0] as Record<string, unknown>)
         .id as string;
 
       // Compile SET GLOBAL
       const setGlobalSql = compileEdgeQL(
-        `set global current_user_id := <uuid>'${aliceId}'`,
+        `set global current_user_id := <uuid>'${adaId}'`,
         schema,
       );
 
@@ -341,18 +341,18 @@ Deno.test({
       // Insert test data
       const insertResult = await pool.query(
         `INSERT INTO ${TEST_TABLE} (id, name, email, active) VALUES
-          (gen_random_uuid(), 'Alice', 'alice@test.com', true),
-          (gen_random_uuid(), 'Bob', 'bob@test.com', true),
-          (gen_random_uuid(), 'Charlie', 'charlie@test.com', true)
+          (gen_random_uuid(), 'Ada', 'ada@test.com', true),
+          (gen_random_uuid(), 'Billie', 'billie@test.com', true),
+          (gen_random_uuid(), 'Cher', 'cher@test.com', true)
         RETURNING id, name`,
       );
 
-      // Get Bob's UUID
-      const bobRow = insertResult.rows.find(
-        (r: Record<string, unknown>) => r.name === "Bob",
+      // Get Billie's UUID
+      const billieRow = insertResult.rows.find(
+        (r: Record<string, unknown>) => r.name === "Billie",
       ) as Record<string, unknown>;
-      assertExists(bobRow, "Bob should be inserted");
-      const bobId = bobRow.id as string;
+      assertExists(billieRow, "Billie should be inserted");
+      const billieId = billieRow.id as string;
 
       // This simulates an access policy filter: only return the row matching
       // the current user's ID. In real usage, the access policy evaluator
@@ -362,22 +362,22 @@ Deno.test({
         schema,
       );
 
-      // Execute with global set to Bob's ID, using transaction for same connection
+      // Execute with global set to Billie's ID, using transaction for same connection
       const result = await pool.transaction(async (conn) => {
         await conn.query(
-          `SELECT set_config('disc.global_default__current_user_id', '${bobId}', true)`,
+          `SELECT set_config('disc.global_default__current_user_id', '${billieId}', true)`,
         );
         return await conn.query(sql);
       });
 
-      // Should return exactly 1 row (Bob)
+      // Should return exactly 1 row (Billie)
       assertEquals(
         result.rowCount,
         1,
         "Access policy filter should return exactly 1 row",
       );
 
-      // Verify it's Bob
+      // Verify it's Billie
       const row = result.rows[0] as Record<string, unknown>;
       const rowData = row.jsonb_build_object ?? row;
       const name = (rowData as Record<string, unknown>).name ??

@@ -91,16 +91,16 @@ const auth = new AuthManager(client, {
 ```typescript
 // Register a new user
 const response = await auth.register({
-  email: "alice@example.com",
+  email: "ada@example.com",
   password: "secure-password",
-  username: "alice", // optional
+  username: "ada", // optional
   metadata: { role: "admin" }, // optional
 });
 // response.user, response.token, response.session
 
 // Login with email or username
 const loginResponse = await auth.login({
-  email: "alice@example.com",
+  email: "ada@example.com",
   password: "secure-password",
 });
 
@@ -137,7 +137,7 @@ Execute multiple queries atomically using a callback pattern. The transaction au
 const result = await client.transaction(async (tx) => {
   const user = await tx.query<User>(
     "insert User { name := <str>$name, email := <str>$email }",
-    { name: "Bob", email: "bob@example.com" },
+    { name: "Billie", email: "billie@example.com" },
   );
 
   await tx.query(

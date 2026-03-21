@@ -282,7 +282,7 @@ Deno.test("CLI Shell - query timing", () => {
     console.log("⏱️  Query timing is now ON");
     console.log("");
     console.log("disc> select User { name } limit 10;");
-    console.log('[{"name": "Alice"}, {"name": "Bob"}]');
+    console.log('[{"name": "Ada"}, {"name": "Billie"}]');
     console.log("⏱️  Time: 15.234ms");
     console.log("(2 rows)");
 
@@ -330,7 +330,7 @@ select User { name, email };
 insert Post {
   title := "Test Post",
   content := "Test content",
-  author := (select User filter .name = "Alice")
+  author := (select User filter .name = "Ada")
 };`;
 
     await Deno.writeTextFile(queryFile, queryContent);
@@ -340,7 +340,7 @@ insert Post {
     console.log("📖 Executing queries from file...");
     console.log("");
     console.log("Query 1: select User { name, email };");
-    console.log('[{"name": "Alice", "email": "alice@example.com"}]');
+    console.log('[{"name": "Ada", "email": "ada@example.com"}]');
     console.log("(1 row)");
     console.log("");
     console.log("Query 2: insert Post { ... };");
@@ -425,7 +425,7 @@ Deno.test("CLI Shell - multi-line query", () => {
     console.log("...> };");
     console.log("");
     console.log(
-      '[{"name": "Alice", "email": "alice@example.com", "posts": [{"title": "Hello World"}]}]',
+      '[{"name": "Ada", "email": "ada@example.com", "posts": [{"title": "Hello World"}]}]',
     );
     console.log("(1 row)");
 

@@ -119,14 +119,14 @@ Deno.test("Alias Compilation - alias with additional filter combines both filter
 
   const sql = compileWithSchema(
     schema,
-    'select ActiveUsers filter .name = "Alice"',
+    'select ActiveUsers filter .name = "Ada"',
   );
 
-  // Both the alias filter (active = true) and the outer filter (name = Alice) should be present
+  // Both the alias filter (active = true) and the outer filter (name = Ada) should be present
   assertStringIncludes(sql, "active");
   assertStringIncludes(sql, "true");
   assertStringIncludes(sql, "where");
-  assertStringIncludes(sql, "'alice'");
+  assertStringIncludes(sql, "'ada'");
 });
 
 // ---------------------------------------------------------------------------

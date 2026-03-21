@@ -92,7 +92,7 @@ EXAMPLES:
   disc shell                          # Open EdgeQL REPL
   disc codegen                        # Generate TypeScript types from ./dbschema/
   disc codegen --schema-dir ./schema  # Generate from custom schema directory
-  disc codegen --schema ./schema.esdl # Generate from single schema file
+  disc codegen --schema ./schema.disc # Generate from single schema file
   disc serve                          # Start Disc server with PostgreSQL
   disc pg log                           # View last 50 lines of PostgreSQL log
   disc pg log -f                        # Follow PostgreSQL log output

@@ -562,7 +562,7 @@ Deno.test("query-execution - Execute INSERT returns INSERT status", async () => 
 
   await sendMessage(
     conn,
-    executeMsg("insert User { name := 'Alice', email := 'alice@example.com' }"),
+    executeMsg("insert User { name := 'Ada', email := 'ada@example.com' }"),
   );
 
   // CommandDataDescription
@@ -620,7 +620,7 @@ Deno.test("query-execution - multiple queries in sequence maintain connection st
   // Query 2: INSERT
   await sendMessage(
     conn,
-    executeMsg("insert User { name := 'Bob', email := 'bob@example.com' }"),
+    executeMsg("insert User { name := 'Billie', email := 'billie@example.com' }"),
   );
   await readMessage(conn); // CommandDataDescription
   await readMessage(conn); // Data
@@ -636,7 +636,7 @@ Deno.test("query-execution - multiple queries in sequence maintain connection st
   // Query 3: DELETE
   await sendMessage(
     conn,
-    executeMsg("delete User filter .name = 'Bob'"),
+    executeMsg("delete User filter .name = 'Billie'"),
   );
   await readMessage(conn); // CommandDataDescription
   await readMessage(conn); // Data

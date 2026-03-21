@@ -78,12 +78,12 @@ Deno.test("transaction - query passes variables in request body", async () => {
 
 Deno.test("transaction - query returns data on success", async () => {
   const restore = mockFetch(() =>
-    new Response(JSON.stringify({ data: [{ name: "Alice" }] }))
+    new Response(JSON.stringify({ data: [{ name: "Ada" }] }))
   );
   try {
     const tx = makeTransaction();
     const result = await tx.query<{ name: string }[]>("select User { name }");
-    assertEquals(result, [{ name: "Alice" }]);
+    assertEquals(result, [{ name: "Ada" }]);
   } finally {
     restore();
   }

@@ -174,7 +174,7 @@ Deno.test({
       // Insert test data
       await pool.query(
         "INSERT INTO disc_gql_users (name, email) VALUES ($1, $2)",
-        ["Alice", "alice@example.com"],
+        ["Ada", "ada@example.com"],
       );
 
       // Translate a GraphQL query to EdgeQL
@@ -193,8 +193,8 @@ Deno.test({
       );
       assertEquals(pgResult.rows.length, 1);
       const data = pgResult.rows[0]["data"] as Record<string, string>;
-      assertEquals(data.name, "Alice");
-      assertEquals(data.email, "alice@example.com");
+      assertEquals(data.name, "Ada");
+      assertEquals(data.email, "ada@example.com");
     } finally {
       await resetTestDatabase(pool);
       await pool.close();
@@ -226,30 +226,30 @@ Deno.test({
       // Translate a create mutation to EdgeQL
       const schema = makeTestSchema();
       const parsed = parseGraphQLQuery(
-        'mutation { createUser(input: {name: "Bob", email: "bob@example.com"}) { id } }',
+        'mutation { createUser(input: {name: "Billie", email: "billie@example.com"}) { id } }',
       );
       const result = translateToEdgeQL(parsed, schema);
 
       // Verify EdgeQL is an INSERT
       assertEquals(
         result.edgeql,
-        'INSERT User {name := "Bob", email := "bob@example.com"}',
+        'INSERT User {name := "Billie", email := "billie@example.com"}',
       );
 
       // Execute the equivalent SQL INSERT
       await pool.query(
         "INSERT INTO disc_gql_users (name, email) VALUES ($1, $2)",
-        ["Bob", "bob@example.com"],
+        ["Billie", "billie@example.com"],
       );
 
       // Verify the record was created
       const pgResult = await pool.query(
         "SELECT name, email FROM disc_gql_users WHERE name = $1",
-        ["Bob"],
+        ["Billie"],
       );
       assertEquals(pgResult.rows.length, 1);
-      assertEquals(String(pgResult.rows[0]["name"]), "Bob");
-      assertEquals(String(pgResult.rows[0]["email"]), "bob@example.com");
+      assertEquals(String(pgResult.rows[0]["name"]), "Billie");
+      assertEquals(String(pgResult.rows[0]["email"]), "billie@example.com");
     } finally {
       await resetTestDatabase(pool);
       await pool.close();
@@ -330,7 +330,7 @@ Deno.test({
       // Insert test data
       const userResult = await pool.query(
         "INSERT INTO disc_gql_users (name, email) VALUES ($1, $2) RETURNING id",
-        ["Charlie", "charlie@example.com"],
+        ["Cher", "cher@example.com"],
       );
       const userId = userResult.rows[0]["id"];
 
@@ -367,7 +367,7 @@ Deno.test({
         name: string;
         posts: { title: string }[];
       };
-      assertEquals(data.name, "Charlie");
+      assertEquals(data.name, "Cher");
       assertEquals(data.posts.length, 1);
       assertEquals(data.posts[0].title, "Hello World");
     } finally {

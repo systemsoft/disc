@@ -89,7 +89,7 @@ Deno.test("EdgeQL Protocol - Query with Variables", async () => {
 
   const request = {
     query: "select User filter .name = <str>$name",
-    variables: { name: "Alice" },
+    variables: { name: "Ada" },
   };
 
   const context: Types.QueryContext = {
@@ -146,7 +146,7 @@ Deno.test("EdgeQL Protocol - Update Query", async () => {
   const handler = new EdgeQLProtocolHandler();
 
   const request = {
-    query: "update User filter .name = 'Alice' set { active := false }",
+    query: "update User filter .name = 'Ada' set { active := false }",
     variables: {},
   };
 
@@ -174,7 +174,7 @@ Deno.test("EdgeQL Protocol - Delete Query", async () => {
   const handler = new EdgeQLProtocolHandler();
 
   const request = {
-    query: "delete User filter .name = 'Bob'",
+    query: "delete User filter .name = 'Billie'",
     variables: {},
   };
 

@@ -89,17 +89,17 @@ Deno.test("Benchmark - Message building", () => {
     dataElements: [
       {
         data: new TextEncoder().encode(
-          '{"id": 1, "name": "Alice", "email": "alice@example.com"}',
+          '{"id": 1, "name": "Ada", "email": "ada@example.com"}',
         ),
       },
       {
         data: new TextEncoder().encode(
-          '{"id": 2, "name": "Bob", "email": "bob@example.com"}',
+          '{"id": 2, "name": "Billie", "email": "billie@example.com"}',
         ),
       },
       {
         data: new TextEncoder().encode(
-          '{"id": 3, "name": "Charlie", "email": "charlie@example.com"}',
+          '{"id": 3, "name": "Cher", "email": "cher@example.com"}',
         ),
       },
     ],

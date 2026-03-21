@@ -215,17 +215,17 @@ Deno.test("ComplexQueryCompiler - compiles insert query", () => {
   const schema = Context.createTestSchema();
   const compiler = new ComplexQueryCompiler(schema);
 
-  // INSERT User { name := 'Alice', email := 'alice@example.com' }
+  // INSERT User { name := 'Ada', email := 'ada@example.com' }
   const query: EdgeQLAST.InsertQuery = {
     kind: "InsertQuery",
     type: EdgeQLAST.createTypeName(["User"]),
     shape: EdgeQLAST.createShape([
       EdgeQLAST.createShapeElement(
-        EdgeQLAST.createLiteral("string", "Alice"),
+        EdgeQLAST.createLiteral("string", "Ada"),
         { name: EdgeQLAST.createIdentifier("name"), computable: true },
       ),
       EdgeQLAST.createShapeElement(
-        EdgeQLAST.createLiteral("string", "alice@example.com"),
+        EdgeQLAST.createLiteral("string", "ada@example.com"),
         { name: EdgeQLAST.createIdentifier("email"), computable: true },
       ),
     ]),
@@ -246,7 +246,7 @@ Deno.test("ComplexQueryCompiler - compiles delete query", () => {
   const schema = Context.createTestSchema();
   const compiler = new ComplexQueryCompiler(schema);
 
-  // DELETE User FILTER .email = 'alice@example.com'
+  // DELETE User FILTER .email = 'ada@example.com'
   const query: EdgeQLAST.DeleteQuery = {
     kind: "DeleteQuery",
     type: EdgeQLAST.createTypeName(["User"]),
@@ -257,7 +257,7 @@ Deno.test("ComplexQueryCompiler - compiles delete query", () => {
         type: "property",
         name: "email",
       }]),
-      EdgeQLAST.createLiteral("string", "alice@example.com"),
+      EdgeQLAST.createLiteral("string", "ada@example.com"),
     ),
   };
 

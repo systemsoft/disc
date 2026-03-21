@@ -23,7 +23,7 @@ export function generateTypeScript(
 ): Types.CodegenResult {
   const fullConfig: Types.CodegenConfig = {
     outputDir: config.outputDir || "./generated",
-    schemaSource: config.schemaSource || "./schema.esdl",
+    schemaSource: config.schemaSource || "./schema.disc",
     target: config.target || "client",
     typePrefix: config.typePrefix || "",
     interfaceSuffix: config.interfaceSuffix || "",
@@ -96,20 +96,19 @@ export async function discoverSchemaFiles(dir: string): Promise<string[]> {
 
   for (const ext of extensions) {
     const files: string[] = [];
+
     try {
       for await (const entry of Deno.readDir(dir)) {
-        if (entry.isFile && entry.name.endsWith(`.${ext}`)) {
+        if (entry.isFile && entry.name.endsWith(`.${ext}`))
           files.push(`${dir}/${entry.name}`);
-        }
       }
     } catch {
       // Directory doesn't exist or can't be read
       continue;
     }
 
-    if (files.length > 0) {
+    if (files.length > 0)
       return files.sort();
-    }
   }
 
   return [];
@@ -120,18 +119,17 @@ export async function discoverSchemaFiles(dir: string): Promise<string[]> {
  * Parses each file via SchemaManager, merges Module arrays,
  * then converts to a unified compiler Schema.
  */
-export async function loadMultiFileSchema(
-  files: string[],
-): Promise<Context.Schema> {
+export async function loadMultiFileSchema(files: string[]): Promise<Context.Schema> {
   const manager = new SchemaManager({});
   const allModules: Module[] = [];
 
   for (const file of files) {
     const source = await Deno.readTextFile(file);
     const result = manager.parseSDL(source);
-    if (!result.ok) {
+
+    if (!result.ok)
       throw new Error(`Failed to parse ${file}: ${result.error.message}`);
-    }
+
     allModules.push(...result.value);
   }
 

@@ -228,8 +228,8 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     return [
       {
         id: "user_001",
-        name: "Alice Johnson",
-        email: "alice@example.com",
+        name: "Ada Johnson",
+        email: "ada@example.com",
         createdAt: "2024-01-15T10:30:00Z",
         active: true,
         posts: [
@@ -244,8 +244,8 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       },
       {
         id: "user_002",
-        name: "Bob Smith",
-        email: "bob@example.com",
+        name: "Billie Smith",
+        email: "billie@example.com",
         createdAt: "2024-01-20T09:15:00Z",
         active: true,
         posts: [],
@@ -267,8 +267,8 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     return {
       updated: 1,
       id: "user_001",
-      name: "Alice Johnson Updated",
-      email: "alice.updated@example.com",
+      name: "Ada Johnson Updated",
+      email: "ada.updated@example.com",
       updatedAt: new Date().toISOString(),
     };
   }

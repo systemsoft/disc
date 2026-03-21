@@ -147,7 +147,7 @@ Deno.test("PgDatabaseAdapter - execute converts placeholders", async () => {
   const adapter = new PgDatabaseAdapter(fake as any);
 
   await adapter.execute("UPDATE users SET name = ? WHERE id = ?", [
-    "Alice",
+    "Ada",
     "123",
   ]);
 
@@ -156,7 +156,7 @@ Deno.test("PgDatabaseAdapter - execute converts placeholders", async () => {
     executeCall?.args[0],
     "UPDATE users SET name = $1 WHERE id = $2",
   );
-  assertEquals(executeCall?.args[1], ["Alice", "123"]);
+  assertEquals(executeCall?.args[1], ["Ada", "123"]);
 });
 
 Deno.test("PgDatabaseAdapter - query converts placeholders", async () => {

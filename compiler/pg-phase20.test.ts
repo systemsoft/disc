@@ -119,8 +119,8 @@ Deno.test({
       // Insert two people: one active, one inactive
       await pool.query(
         `INSERT INTO ${PERSON_TABLE} (id, name, active) VALUES
-          (gen_random_uuid(), 'Alice', true),
-          (gen_random_uuid(), 'Bob', false)`,
+          (gen_random_uuid(), 'Ada', true),
+          (gen_random_uuid(), 'Billie', false)`,
       );
 
       // Compile EdgeQL with IF/ELSE in a computed shape field
@@ -145,28 +145,28 @@ Deno.test({
         "Should return exactly 2 rows",
       );
 
-      // Extract results — rows are ordered by name (Alice, Bob)
+      // Extract results — rows are ordered by name (Ada, Billie)
       const rows = result.rows.map((row: Record<string, unknown>) => {
         const data = row.jsonb_build_object ?? row;
         return data as Record<string, unknown>;
       });
 
-      // Alice is active → status should be "active"
-      const aliceRow = rows.find((r) => r.name === "Alice");
-      assertExists(aliceRow, "Alice should exist in results");
+      // Ada is active → status should be "active"
+      const adaRow = rows.find((r) => r.name === "Ada");
+      assertExists(adaRow, "Ada should exist in results");
       assertEquals(
-        aliceRow.status,
+        adaRow.status,
         "active",
-        "Alice (active=true) should have status 'active'",
+        "Ada (active=true) should have status 'active'",
       );
 
-      // Bob is inactive → status should be "inactive"
-      const bobRow = rows.find((r) => r.name === "Bob");
-      assertExists(bobRow, "Bob should exist in results");
+      // Billie is inactive → status should be "inactive"
+      const billieRow = rows.find((r) => r.name === "Billie");
+      assertExists(billieRow, "Billie should exist in results");
       assertEquals(
-        bobRow.status,
+        billieRow.status,
         "inactive",
-        "Bob (active=false) should have status 'inactive'",
+        "Billie (active=false) should have status 'inactive'",
       );
 
       await manager.close();
@@ -421,37 +421,37 @@ Deno.test({
       // Insert an initial row via raw SQL
       await pool.query(
         `INSERT INTO ${ACCOUNT_TABLE} (id, email, name) VALUES
-          (gen_random_uuid(), 'alice@test.com', 'Alice')`,
+          (gen_random_uuid(), 'ada@test.com', 'Ada')`,
       );
 
       // Compile and execute an UPSERT: same email, different name
       const sql = compileEdgeQL(
         `INSERT TestAccount {
-          email := "alice@test.com",
-          name := "Alice"
+          email := "ada@test.com",
+          name := "Ada"
         } UNLESS CONFLICT ON .email
         ELSE (
-          UPDATE TestAccount SET { name := "Alice Updated" }
+          UPDATE TestAccount SET { name := "Ada Updated" }
         )`,
         schema,
       );
 
       await pool.query(sql);
 
-      // Verify via raw SQL: name should now be "Alice Updated"
+      // Verify via raw SQL: name should now be "Ada Updated"
       const verifyResult = await pool.query(
-        `SELECT name FROM ${ACCOUNT_TABLE} WHERE email = 'alice@test.com'`,
+        `SELECT name FROM ${ACCOUNT_TABLE} WHERE email = 'ada@test.com'`,
       );
 
       assertEquals(
         verifyResult.rowCount,
         1,
-        "Should still have exactly one row for alice@test.com",
+        "Should still have exactly one row for ada@test.com",
       );
       assertEquals(
         verifyResult.rows[0].name,
-        "Alice Updated",
-        "Name should be updated to 'Alice Updated' via UPSERT",
+        "Ada Updated",
+        "Name should be updated to 'Ada Updated' via UPSERT",
       );
 
       await manager.close();
@@ -481,35 +481,35 @@ Deno.test({
       // Insert an initial row via raw SQL
       await pool.query(
         `INSERT INTO ${ACCOUNT_TABLE} (id, email, name) VALUES
-          (gen_random_uuid(), 'bob@test.com', 'Bob')`,
+          (gen_random_uuid(), 'billie@test.com', 'Billie')`,
       );
 
       // Compile and execute an INSERT with UNLESS CONFLICT but no ELSE
       // (DO NOTHING semantics)
       const sql = compileEdgeQL(
         `INSERT TestAccount {
-          email := "bob@test.com",
-          name := "Bob New"
+          email := "billie@test.com",
+          name := "Billie New"
         } UNLESS CONFLICT ON .email`,
         schema,
       );
 
       await pool.query(sql);
 
-      // Verify via raw SQL: name should still be "Bob" (unchanged)
+      // Verify via raw SQL: name should still be "Billie" (unchanged)
       const verifyResult = await pool.query(
-        `SELECT name FROM ${ACCOUNT_TABLE} WHERE email = 'bob@test.com'`,
+        `SELECT name FROM ${ACCOUNT_TABLE} WHERE email = 'billie@test.com'`,
       );
 
       assertEquals(
         verifyResult.rowCount,
         1,
-        "Should still have exactly one row for bob@test.com",
+        "Should still have exactly one row for billie@test.com",
       );
       assertEquals(
         verifyResult.rows[0].name,
-        "Bob",
-        "Name should remain 'Bob' (DO NOTHING on conflict)",
+        "Billie",
+        "Name should remain 'Billie' (DO NOTHING on conflict)",
       );
 
       await manager.close();

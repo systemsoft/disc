@@ -30,7 +30,7 @@ export async function createTestSchema(
   dir: string,
   content: string,
 ): Promise<string> {
-  const schemaPath = join(dir, "schema.esdl");
+  const schemaPath = join(dir, "schema.disc");
   await Deno.writeTextFile(schemaPath, content);
   return schemaPath;
 }

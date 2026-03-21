@@ -12,11 +12,11 @@ const schema = createTestSchema();
 
 const queries: Record<string, string> = {
   "simple select": "SELECT User { name }",
-  "filtered select": "SELECT User { name, email } FILTER .name = 'Alice'",
+  "filtered select": "SELECT User { name, email } FILTER .name = 'Ada'",
   "nested shape": "SELECT User { name, posts: { title } }",
-  "insert": "INSERT User { name := 'Alice', email := 'alice@example.com' }",
-  "update": "UPDATE User FILTER .name = 'Alice' SET { name := 'Bob' }",
-  "delete": "DELETE User FILTER .name = 'Alice'",
+  "insert": "INSERT User { name := 'Ada', email := 'ada@example.com' }",
+  "update": "UPDATE User FILTER .name = 'Ada' SET { name := 'Billie' }",
+  "delete": "DELETE User FILTER .name = 'Ada'",
   "ordered limited": "SELECT User { name } ORDER BY .name DESC LIMIT 10",
 };
 

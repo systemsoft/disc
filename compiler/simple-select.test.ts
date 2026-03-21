@@ -148,7 +148,7 @@ Deno.test("Simple SELECT - Basic query", () => {
 });
 
 Deno.test("Simple SELECT - With filter", () => {
-  const edgeql = 'SELECT User FILTER .name = "Alice"';
+  const edgeql = 'SELECT User FILTER .name = "Ada"';
 
   // Parse
   const parser = new EdgeQLParser(edgeql);
@@ -172,7 +172,7 @@ Deno.test("Simple SELECT - With filter", () => {
   // Should have a WHERE clause
   assertEquals(sql.includes("WHERE"), true);
   assertEquals(sql.includes("name"), true);
-  assertEquals(sql.includes("Alice"), true);
+  assertEquals(sql.includes("Ada"), true);
 });
 
 Deno.test("Simple SELECT - With shape", () => {

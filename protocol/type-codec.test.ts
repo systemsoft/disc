@@ -437,7 +437,7 @@ Deno.test("encodeObjectValue - simple object", () => {
 
   const encoded = encodeObjectValue(
     shape,
-    { name: "Alice", age: 30 },
+    { name: "Ada", age: 30 },
     descriptorMap,
   );
 

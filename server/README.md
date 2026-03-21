@@ -65,7 +65,7 @@ Execute an EdgeQL query. Accepts JSON with `query`, optional `variables`, and op
 ```json
 {
   "query": "select User { name, email } filter .email = <str>$email",
-  "variables": { "email": "alice@example.com" }
+  "variables": { "email": "ada@example.com" }
 }
 ```
 
@@ -73,7 +73,7 @@ Execute an EdgeQL query. Accepts JSON with `query`, optional `variables`, and op
 
 ```json
 {
-  "data": [{ "name": "Alice", "email": "alice@example.com" }],
+  "data": [{ "name": "Ada", "email": "ada@example.com" }],
   "extensions": {
     "durationMs": 12,
     "parseMs": 1,

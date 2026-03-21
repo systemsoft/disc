@@ -23,11 +23,11 @@ function compileEdgeQL(source: string): string {
 Deno.test("UPSERT - simple upsert with single SET column", () => {
   const source = `
     INSERT User {
-      name := "Alice",
-      email := "alice@test.com"
+      name := "Ada",
+      email := "ada@test.com"
     }
     UNLESS CONFLICT ON .email
-    ELSE (UPDATE User SET { name := "Alice Updated" })
+    ELSE (UPDATE User SET { name := "Ada Updated" })
   `;
   const sql = compileEdgeQL(source);
 
@@ -52,7 +52,7 @@ Deno.test("UPSERT - simple upsert with single SET column", () => {
     "SQL should reference the name column in SET clause",
   );
   assertEquals(
-    sql.includes("'Alice Updated'"),
+    sql.includes("'Ada Updated'"),
     true,
     "SQL should contain the updated value",
   );
@@ -67,11 +67,11 @@ Deno.test("UPSERT - simple upsert with single SET column", () => {
 Deno.test("UPSERT - multi-column SET", () => {
   const source = `
     INSERT User {
-      name := "Bob",
-      email := "bob@test.com"
+      name := "Billie",
+      email := "billie@test.com"
     }
     UNLESS CONFLICT ON .email
-    ELSE (UPDATE User SET { name := "Bob Updated", active := true })
+    ELSE (UPDATE User SET { name := "Billie Updated", active := true })
   `;
   const sql = compileEdgeQL(source);
 
@@ -87,7 +87,7 @@ Deno.test("UPSERT - multi-column SET", () => {
   );
   // Both SET columns should appear in the SQL
   assertEquals(
-    sql.includes("'Bob Updated'"),
+    sql.includes("'Billie Updated'"),
     true,
     "SQL should contain the updated name value",
   );
@@ -177,11 +177,11 @@ Deno.test("UPSERT - DO NOTHING still works (regression)", () => {
 Deno.test("UPSERT - conflict target column is included", () => {
   const source = `
     INSERT User {
-      name := "Charlie",
-      email := "charlie@test.com"
+      name := "Cher",
+      email := "cher@test.com"
     }
     UNLESS CONFLICT ON .email
-    ELSE (UPDATE User SET { name := "Charlie Updated" })
+    ELSE (UPDATE User SET { name := "Cher Updated" })
   `;
   const sql = compileEdgeQL(source);
 

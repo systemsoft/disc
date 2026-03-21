@@ -142,7 +142,7 @@ Deno.test({
       await execRawSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, username) VALUES (gen_random_uuid(), $1)`,
-        ["alice"],
+        ["ada"],
       );
 
       // Insert a long string (25 chars) -- should fail with CHECK violation
@@ -456,11 +456,11 @@ Deno.test({
         `applySchema should succeed: ${result.ok ? "" : (result as any).error}`,
       );
 
-      // Insert valid data: username="alice" (5 chars), age=25 -- should succeed
+      // Insert valid data: username="ada" (5 chars), age=25 -- should succeed
       await execRawSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, username, age) VALUES (gen_random_uuid(), $1, $2)`,
-        ["alice", 25],
+        ["ada", 25],
       );
 
       // Insert invalid username: "ab" (2 chars, less than min 3) -- should fail
@@ -495,7 +495,7 @@ Deno.test({
         await execRawSQL(
           dsn,
           `INSERT INTO ${expectedTable} (id, username, age) VALUES (gen_random_uuid(), $1, $2)`,
-          ["bob", 200],
+          ["billie", 200],
         );
       } catch (error: unknown) {
         ageCheckViolated = true;

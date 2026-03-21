@@ -45,8 +45,8 @@ function buildJwt(exp: number): string {
 
 const MOCK_USER: AuthUser = {
   id: "user-1",
-  email: "alice@example.com",
-  username: "alice",
+  email: "ada@example.com",
+  username: "ada",
   createdAt: "2024-01-01T00:00:00Z",
   updatedAt: "2024-01-01T00:00:00Z",
   emailVerified: true,
@@ -84,10 +84,10 @@ Deno.test("auth - register returns AuthResponse and stores token", async () => {
     const client = new DiscClient();
     const auth = new AuthManager(client, { autoRefresh: false });
     const result = await auth.register({
-      email: "alice@example.com",
+      email: "ada@example.com",
       password: "secret",
     });
-    assertEquals(result.user.email, "alice@example.com");
+    assertEquals(result.user.email, "ada@example.com");
     assertEquals(client.getAuthToken(), authResponse.token);
   } finally {
     restore();
@@ -106,7 +106,7 @@ Deno.test("auth - login returns AuthResponse and stores token", async () => {
     const client = new DiscClient();
     const auth = new AuthManager(client, { autoRefresh: false });
     const result = await auth.login({
-      email: "alice@example.com",
+      email: "ada@example.com",
       password: "secret",
     });
     assertEquals(result.user.id, "user-1");
@@ -128,9 +128,9 @@ Deno.test("auth - login posts credentials to /auth/login", async () => {
   try {
     const client = new DiscClient();
     const auth = new AuthManager(client, { autoRefresh: false });
-    await auth.login({ email: "alice@example.com", password: "hunter2" });
-    assertEquals(capturedBody["email"], "alice@example.com");
-    assertEquals(capturedBody["password"], "hunter2");
+    await auth.login({ email: "ada@example.com", password: "batteryStaple" });
+    assertEquals(capturedBody["email"], "ada@example.com");
+    assertEquals(capturedBody["password"], "batteryStaple");
   } finally {
     restore();
   }
@@ -149,7 +149,7 @@ Deno.test("auth - logout clears token and user state", async () => {
   try {
     const client = new DiscClient();
     const auth = new AuthManager(client, { autoRefresh: false });
-    await auth.login({ email: "alice@example.com", password: "secret" });
+    await auth.login({ email: "ada@example.com", password: "secret" });
     assertEquals(auth.isAuthenticated(), true);
     await auth.logout();
     assertEquals(auth.isAuthenticated(), false);
@@ -182,7 +182,7 @@ Deno.test("auth - refreshTokens posts refresh token and updates client token", a
     const client = new DiscClient();
     // autoRefresh: false so neither login nor refreshTokens schedule timers
     const auth = new AuthManager(client, { autoRefresh: false });
-    await auth.login({ email: "alice@example.com", password: "secret" });
+    await auth.login({ email: "ada@example.com", password: "secret" });
     const result = await auth.refreshTokens();
     assertEquals(result.token, newToken);
     assertEquals(client.getAuthToken(), newToken);
@@ -220,9 +220,9 @@ Deno.test("auth - getProfile returns user and updates cache", async () => {
   try {
     const client = new DiscClient();
     const auth = new AuthManager(client, { autoRefresh: false });
-    await auth.login({ email: "alice@example.com", password: "secret" });
+    await auth.login({ email: "ada@example.com", password: "secret" });
     const user = await auth.getProfile();
-    assertEquals(user.email, "alice@example.com");
+    assertEquals(user.email, "ada@example.com");
     assertEquals(user.id, "user-1");
     // Cached user should be updated to server response
     assertEquals(auth.getUser()?.id, "user-1");
@@ -261,7 +261,7 @@ Deno.test("auth - updatePassword posts old and new password", async () => {
   try {
     const client = new DiscClient();
     const auth = new AuthManager(client, { autoRefresh: false });
-    await auth.login({ email: "alice@example.com", password: "old" });
+    await auth.login({ email: "ada@example.com", password: "old" });
     await auth.updatePassword("old", "new-secret");
     assertEquals(capturedBody["oldPassword"], "old");
     assertEquals(capturedBody["newPassword"], "new-secret");
@@ -301,7 +301,7 @@ Deno.test("auth - isAuthenticated is true after login", async () => {
   try {
     const client = new DiscClient();
     const auth = new AuthManager(client, { autoRefresh: false });
-    await auth.login({ email: "alice@example.com", password: "secret" });
+    await auth.login({ email: "ada@example.com", password: "secret" });
     assertEquals(auth.isAuthenticated(), true);
   } finally {
     restore();
@@ -321,7 +321,7 @@ Deno.test("auth - isAuthenticated is false after logout", async () => {
   try {
     const client = new DiscClient();
     const auth = new AuthManager(client, { autoRefresh: false });
-    await auth.login({ email: "alice@example.com", password: "secret" });
+    await auth.login({ email: "ada@example.com", password: "secret" });
     await auth.logout();
     assertEquals(auth.isAuthenticated(), false);
   } finally {
@@ -345,10 +345,10 @@ Deno.test("auth - getUser returns cached user after login", async () => {
   try {
     const client = new DiscClient();
     const auth = new AuthManager(client, { autoRefresh: false });
-    await auth.login({ email: "alice@example.com", password: "secret" });
+    await auth.login({ email: "ada@example.com", password: "secret" });
     const user = auth.getUser();
     assertEquals(user?.id, "user-1");
-    assertEquals(user?.email, "alice@example.com");
+    assertEquals(user?.email, "ada@example.com");
   } finally {
     restore();
   }
@@ -369,7 +369,7 @@ Deno.test("auth - auto-refresh schedules a timer after login", async () => {
     const client = new DiscClient();
     // autoRefresh enabled (default), refreshBuffer large so timer won't fire
     const auth = new AuthManager(client, { refreshBuffer: 3500 });
-    await auth.login({ email: "alice@example.com", password: "secret" });
+    await auth.login({ email: "ada@example.com", password: "secret" });
 
     // The timer should have been set — verify by checking internal state via
     // dispose(): if dispose() can clear it without error, the timer exists
@@ -401,7 +401,7 @@ Deno.test("auth - dispose clears refresh timer without error", async () => {
       autoRefresh: true,
       refreshBuffer: 3500,
     });
-    await auth.login({ email: "alice@example.com", password: "secret" });
+    await auth.login({ email: "ada@example.com", password: "secret" });
     // Calling dispose twice must be safe
     auth.dispose();
     auth.dispose();
@@ -422,11 +422,11 @@ Deno.test("auth - login with bad credentials throws DiscAuthError", async () => 
     const client = new DiscClient();
     const auth = new AuthManager(client, { autoRefresh: false });
     await assertRejects(
-      () => auth.login({ email: "alice@example.com", password: "wrong" }),
+      () => auth.login({ email: "ada@example.com", password: "wrong" }),
       DiscAuthError,
     );
     assertInstanceOf(
-      await auth.login({ email: "alice@example.com", password: "wrong" })
+      await auth.login({ email: "ada@example.com", password: "wrong" })
         .catch((e) => e),
       DiscAuthError,
     );
@@ -462,7 +462,7 @@ Deno.test("auth - register with existing email throws DiscAuthError", async () =
       await assertRejects(
         () =>
           auth.register({
-            email: "alice@example.com",
+            email: "ada@example.com",
             password: "secret",
           }),
         DiscAuthError,

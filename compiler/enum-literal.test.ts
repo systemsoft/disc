@@ -64,7 +64,7 @@ Deno.test("enum literal - in filter expression", () => {
 
 Deno.test("enum literal - in insert value", () => {
   const source =
-    `INSERT User { name := "Alice", email := "alice@example.com", status := Status.pending }`;
+    `INSERT User { name := "Ada", email := "ada@example.com", status := Status.pending }`;
 
   // The User type doesn't have a status property in createTestSchema,
   // so we need a schema with that property for a full INSERT test.

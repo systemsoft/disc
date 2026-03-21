@@ -585,16 +585,16 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
     return [
       {
         id: "01234567-89ab-cdef-0123-456789abcdef",
-        name: "Alice Johnson",
-        email: "alice@example.com",
+        name: "Ada Johnson",
+        email: "ada@example.com",
         createdAt: "2024-01-15T10:30:00Z",
         active: true,
         age: 29,
       },
       {
         id: "11234567-89ab-cdef-0123-456789abcdef",
-        name: "Bob Smith",
-        email: "bob@example.com",
+        name: "Billie Smith",
+        email: "billie@example.com",
         createdAt: "2024-01-20T09:15:00Z",
         active: true,
         age: 35,
@@ -616,8 +616,8 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
   private mockUpdateResults(): any {
     return {
       id: "01234567-89ab-cdef-0123-456789abcdef",
-      name: "Alice Johnson Updated",
-      email: "alice.updated@example.com",
+      name: "Ada Johnson Updated",
+      email: "ada.updated@example.com",
       createdAt: "2024-01-15T10:30:00Z",
       active: false,
       age: 30,

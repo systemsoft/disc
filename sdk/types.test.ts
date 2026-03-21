@@ -53,10 +53,10 @@ Deno.test("types - QueryRequest", () => {
 
 Deno.test("types - QueryResponse with data", () => {
   const res: QueryResponse<{ name: string }[]> = {
-    data: [{ name: "Alice" }],
+    data: [{ name: "Ada" }],
     extensions: { parseMs: 1, compileMs: 2, executeMs: 3, cacheHit: false },
   };
-  assertEquals(res.data?.[0].name, "Alice");
+  assertEquals(res.data?.[0].name, "Ada");
   assertEquals(res.errors, undefined);
 });
 
@@ -126,7 +126,7 @@ Deno.test("types - AuthUser", () => {
 Deno.test("types - LoginCredentials variants", () => {
   const byEmail: LoginCredentials = { email: "a@b.com", password: "pass" };
   const byUsername: LoginCredentials = {
-    username: "alice",
+    username: "ada",
     password: "pass",
   };
   assertExists(byEmail.email);
@@ -137,7 +137,7 @@ Deno.test("types - RegisterData", () => {
   const data: RegisterData = {
     email: "a@b.com",
     password: "secure123",
-    username: "alice",
+    username: "ada",
     metadata: { role: "admin" },
   };
   assertEquals(data.metadata?.role, "admin");

@@ -95,7 +95,7 @@ export class InitCommand {
     const databaseUrl = options.databaseUrl ||
       "postgresql://localhost:5432/disc_dev";
 
-    // Create schema.esdl
+    // Create schema.disc
     await this.createSchemaFile(projectDir, template);
 
     // Create deno.json
@@ -174,7 +174,7 @@ export class InitCommand {
         break;
     }
 
-    await Deno.writeTextFile(`${projectDir}/schema.esdl`, schemaContent);
+    await Deno.writeTextFile(`${projectDir}/schema.disc`, schemaContent);
   }
 
   private async createDenoConfig(
@@ -327,14 +327,14 @@ A Disc database project.
 ## Available Commands
 
 - \`deno task serve\` - Start the Disc server
-- \`deno task migrate\` - Apply schema migrations  
+- \`deno task migrate\` - Apply schema migrations
 - \`deno task codegen\` - Generate TypeScript types
 - \`deno task dev\` - Watch for schema changes
 - \`deno task shell\` - Open EdgeQL REPL
 
 ## Schema
 
-Your schema is defined in \`schema.esdl\`. Edit this file to modify your database structure.
+Your schema is defined in \`schema.disc\`. Edit this file to modify your database structure.
 
 ## Environment
 
