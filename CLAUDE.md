@@ -109,7 +109,7 @@ disc/
 ├── codegen/           # TypeScript client type generation
 ├── compiler/          # EdgeQL → SQL compilation
 ├── edgeql/            # EdgeQL lexer, parser, AST nodes
-├── lib/               # Shared utilities (errors, types, logging)
+├── lib/               # Shared utilities (errors, types, logging, project context)
 ├── migration/         # Schema diff engine and DDL generation
 ├── postgres/          # Bundled PostgreSQL binary management and lifecycle
 ├── schema/            # SDL lexer, parser, AST nodes, validation
@@ -203,6 +203,34 @@ When `--backend-dsn` is provided, Disc skips binary download and instance creati
 | Windows       | Pre-built from EDB installers or Docker fallback       |
 
 Binaries are checksummed and verified on download. Disc should maintain a manifest of supported PostgreSQL versions and their download URLs.
+
+## Project Context & Auto-Start
+
+Every CLI command resolves the project it belongs to via `lib/project-context.ts`. This module walks up from the current directory looking for `disc.toml` (like `git` finds `.git/`), parses it, and returns a `ProjectContext` with all connection parameters derived.
+
+### Key modules
+
+- **`lib/project-context.ts`** — `resolveProjectContext()` (sync, walks up for `disc.toml`), `resolveDsn()` (builds socket DSN or returns `backendDsn`), `isPgRunning()` (checks `postmaster.pid`).
+- **`postgres/ensure-running.ts`** — `ensurePgRunning(ctx)` (idempotent: discovers on-disk instances, starts if stopped, creates if missing).
+
+### DSN resolution order
+
+All CLI commands that need a database connection resolve the DSN in this order:
+
+1. `--backend-dsn` CLI flag
+2. `DATABASE_URL` environment variable
+3. `disc.toml` project context (`resolveDsn(ctx)`)
+4. Hardcoded fallback: `postgresql://localhost:5432/disc_dev`
+
+### Auto-start behavior
+
+Commands that need PostgreSQL (`serve`, `migrate`, `shell`, `start`) call `ensurePgRunning(ctx)` which:
+1. Discovers existing instances from `~/.disc/instances/` on disk
+2. If the instance exists and is running, returns immediately
+3. If the instance exists but is stopped, starts it via `pg_ctl`
+4. If no instance exists, creates one and starts it
+
+This is idempotent — calling when PG is already running is a no-op.
 
 ## Conversion Strategy
 

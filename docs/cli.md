@@ -926,14 +926,33 @@ Dry run complete. No changes were made.
 
 ---
 
-## Project Configuration
+## Project Context Resolution
 
-Disc determines the project name in the following order:
+Every CLI command automatically resolves the project it belongs to. No manual DSN configuration or flags are needed when working inside a project directory.
 
-1. The `name` field in `disc.toml` in the current directory
-2. The name of the current directory
+### How It Works
 
-The `disc.toml` file is created automatically by `disc init` when using bundled PostgreSQL:
+When you run any `disc` command, the CLI:
+
+1. Walks up from the current working directory looking for `disc.toml` (like `git` finds `.git/`).
+2. Parses `disc.toml` for the project name, database settings, and server configuration.
+3. Derives instance paths at `~/.disc/instances/{instance_name}/`.
+4. For commands that need PostgreSQL (`serve`, `migrate`, `shell`, `start`), auto-starts the managed instance if it is not already running.
+
+This means `disc serve`, `disc migrate`, and `disc shell` all work from any subdirectory of a project with zero configuration.
+
+### Resolution Priority (DSN)
+
+Commands resolve the database connection in this order:
+
+1. `--backend-dsn` CLI flag (explicit external PostgreSQL)
+2. `DATABASE_URL` environment variable
+3. `disc.toml` project context (managed socket DSN or `backend_dsn`)
+4. Hardcoded fallback: `postgresql://localhost:5432/disc_dev`
+
+### `disc.toml`
+
+The `disc.toml` file is created automatically by `disc init`:
 
 ```toml
 name = "my-project"
@@ -942,11 +961,23 @@ version = "0.1.0"
 [database]
 managed = true
 instance_name = "my-project"
+# backend_dsn = "postgresql://user:pass@host:5432/db"  # for external PG
 
 [server]
 host = "localhost"
 port = 5656
 ```
+
+| Section      | Key             | Default       | Description                                   |
+| ------------ | --------------- | ------------- | --------------------------------------------- |
+| *(top)*      | `name`          | *(required)*  | Project name                                  |
+| `[database]` | `managed`       | `true`        | Use bundled PostgreSQL                        |
+| `[database]` | `instance_name` | same as name  | Instance directory under `~/.disc/instances/` |
+| `[database]` | `backend_dsn`   | *(none)*      | External PostgreSQL connection string         |
+| `[server]`   | `host`          | `"localhost"` | Server bind host                              |
+| `[server]`   | `port`          | `5656`        | Server bind port                              |
+
+When no `disc.toml` is found, commands fall back to the current directory name as the project name.
 
 ---
 

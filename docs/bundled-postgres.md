@@ -72,7 +72,9 @@ Start the bundled PostgreSQL and the Disc server together:
 disc start
 ```
 
-This starts PostgreSQL via `pg_ctl start`, waits up to 60 seconds for the process to become ready, and then launches the Disc HTTP server. If PostgreSQL is already running, it is not restarted.
+This starts PostgreSQL via `pg_ctl start`, waits up to 60 seconds for the process to become ready, and then launches the Disc HTTP server. If PostgreSQL is already running, it is not restarted.
+
+Most commands (`serve`, `migrate`, `shell`, `start`) auto-start PostgreSQL when needed. You rarely need to run `disc start` explicitly -- just `disc serve` or `disc shell` from any subdirectory of your project and the CLI will locate `disc.toml`, resolve the instance, and start PostgreSQL if it is not already running.
 
 ### Stopping
 

@@ -76,6 +76,8 @@ Compiles to PostgreSQL SQL automatically.
 
 ## CLI Commands
 
+All commands auto-detect the project from `disc.toml` in the current (or parent) directory and auto-start PostgreSQL when needed. No manual DSN configuration required.
+
 ```bash
 disc init                      # Initialize a new Disc project
 disc start                     # Start the server and bundled PostgreSQL
