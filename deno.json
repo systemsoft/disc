@@ -68,7 +68,7 @@
     "docker:up": "docker compose up -d",
     "fmt": "deno fmt",
     "lint": "deno lint",
-    "serve": "deno run --allow-net --allow-read --allow-env server/main.ts",
+    "serve": "deno run --allow-net --allow-read --allow-env server/server.ts",
     "test": "deno test --allow-env --allow-net --allow-read --allow-write --no-check",
     "test:all": "DISC_PG_AUTO=1 deno test --allow-all --no-check --ignore=ui/",
     "test:pg": "DISC_PG_AUTO=1 deno test --allow-all --no-check --ignore=ui/"

@@ -24,6 +24,7 @@ coverage/
 .env.local
 
 # Build outputs
+/disc-project
 /dist
 /build
 /out
