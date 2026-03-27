@@ -1,4 +1,4 @@
-import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
+import { join } from "@std/path";
 import { PostgresInstance } from "./instance.ts";
 import { logger } from "./logger.ts";
 
@@ -7,6 +7,7 @@ export interface MonitorOptions {
   checkIntervalMs?: number;
   maxRestartAttempts?: number;
   restartDelayMs?: number;
+  startupGraceMs?: number;
 }
 
 export interface HealthStatus {
@@ -22,12 +23,14 @@ export class PostgresMonitor {
   private autoRestart: boolean;
   private checkInterval: number;
   private instance: PostgresInstance;
+  private isFirstCheck = true;
   private isMonitoring = false;
   private lastHealthStatus?: HealthStatus;
   private maxRestartAttempts: number;
   private monitorHandle?: number;
   private restartAttempts = 0;
   private restartDelayMs: number;
+  private startupGraceMs: number;
 
   constructor(instance: PostgresInstance, options: MonitorOptions = {}) {
     this.instance = instance;
@@ -35,6 +38,7 @@ export class PostgresMonitor {
     this.checkInterval = options.checkIntervalMs ?? 30000; // 30 seconds
     this.maxRestartAttempts = options.maxRestartAttempts ?? 3;
     this.restartDelayMs = options.restartDelayMs ?? 5000;
+    this.startupGraceMs = options.startupGraceMs ?? 2000;
   }
 
   async start(): Promise<void> {
@@ -44,7 +48,11 @@ export class PostgresMonitor {
     }
 
     this.isMonitoring = true;
+    this.isFirstCheck = true;
     logger.info("Starting PostgreSQL health monitor");
+
+    // Startup grace period — let PG finish initializing before first check
+    await new Promise((resolve) => setTimeout(resolve, this.startupGraceMs));
 
     // Initial health check
     await this.checkHealth();
@@ -87,39 +95,71 @@ export class PostgresMonitor {
     }
 
     try {
-      // Attempt to connect and run a simple query
-      const client = new Client(this.instance.dsn());
-      await client.connect();
+      const pgBinDir = this.instance.getPgBinDir();
 
-      const result = await client.queryObject<{
-        connections: number;
-        uptime: number;
-        version: string;
-      }>(`
-        SELECT 
-          (SELECT count(*) FROM pg_stat_activity)::int as connections,
-          EXTRACT(EPOCH FROM (now() - pg_postmaster_start_time()))::int as uptime,
-          version() as version
-      `);
+      if (!pgBinDir) {
+        // No PG binaries available — instance reports running, trust process check
+        this.lastHealthStatus = {
+          connections: 0,
+          healthy: true,
+          lastCheck: new Date(),
+          latencyMs: Date.now() - startTime,
+        };
+        this.restartAttempts = 0;
+        this.isFirstCheck = false;
+        return this.lastHealthStatus;
+      }
 
-      await client.end();
+      // Use pg_isready — works with Unix sockets natively
+      const pgIsReady = join(pgBinDir, "pg_isready");
+      const socketDir = this.instance.getSocketDir();
+      const port = this.instance.getPort();
 
+      // When port is 0, PG uses -p 5432 for the socket file name
+      const effectivePort = port === 0 ? 5432 : port;
+
+      const args: string[] = port === 0
+        ? ["-h", socketDir, "-p", String(effectivePort), "-U", "disc", "-q"]
+        : ["-h", "localhost", "-p", String(port), "-U", "disc", "-q"];
+
+      const cmd = new Deno.Command(pgIsReady, { args });
+      const output = await cmd.output();
       const latencyMs = Date.now() - startTime;
 
-      this.lastHealthStatus = {
-        connections: result.rows[0].connections,
-        healthy: true,
-        lastCheck: new Date(),
-        latencyMs,
-        uptime: result.rows[0].uptime,
-        version: result.rows[0].version,
-      };
+      if (output.success) {
+        this.lastHealthStatus = {
+          connections: 0,
+          healthy: true,
+          lastCheck: new Date(),
+          latencyMs,
+        };
+        this.restartAttempts = 0;
+        this.isFirstCheck = false;
+        return this.lastHealthStatus;
+      }
 
-      // Reset restart attempts on successful health check
-      this.restartAttempts = 0;
-
-      return this.lastHealthStatus;
+      // pg_isready returned non-zero: not accepting connections
+      const stderr = new TextDecoder().decode(output.stderr).trim();
+      throw new Error(
+        `pg_isready: not accepting connections${stderr ? ` (${stderr})` : ""}`,
+      );
     } catch (error) {
+      // On the first check, don't count toward restart attempts —
+      // PG may still be finishing startup even after pg_ctl -w returns.
+      if (this.isFirstCheck) {
+        logger.info(
+          `First health check failed (startup grace): ${error}`,
+        );
+        this.isFirstCheck = false;
+        this.lastHealthStatus = {
+          connections: 0,
+          healthy: false,
+          lastCheck: new Date(),
+          latencyMs: Date.now() - startTime,
+        };
+        return this.lastHealthStatus;
+      }
+
       logger.error(`Health check failed: ${error}`);
 
       this.lastHealthStatus = {
@@ -172,75 +212,104 @@ export class PostgresMonitor {
       return { error: "Instance not running" };
     }
 
-    const client = new Client(this.instance.dsn());
+    const pgBinDir = this.instance.getPgBinDir();
+    if (!pgBinDir) {
+      return { error: "PostgreSQL binaries not available" };
+    }
+
+    const psql = join(pgBinDir, "psql");
+    const socketDir = this.instance.getSocketDir();
+    const port = this.instance.getPort();
+    const effectivePort = port === 0 ? 5432 : port;
+
+    const connArgs = port === 0
+      ? ["-h", socketDir, "-p", String(effectivePort), "-U", "disc"]
+      : ["-h", "localhost", "-p", String(port), "-U", "disc"];
+
     try {
-      await client.connect();
+      const query = `
+        SELECT json_build_object(
+          'database_size', pg_size_pretty(pg_database_size(current_database())),
+          'connections_active', (SELECT count(*) FILTER (WHERE state = 'active') FROM pg_stat_activity WHERE datname = current_database()),
+          'connections_idle', (SELECT count(*) FILTER (WHERE state = 'idle') FROM pg_stat_activity WHERE datname = current_database()),
+          'connections_total', (SELECT count(*) FROM pg_stat_activity WHERE datname = current_database()),
+          'table_count', (SELECT count(*) FROM pg_class WHERE relkind = 'r'),
+          'tables_total_size', pg_size_pretty((SELECT COALESCE(SUM(pg_total_relation_size(c.oid)), 0)::bigint FROM pg_class c WHERE c.relkind = 'r'))
+        )::text;
+      `;
 
-      const [dbSize, tableStats, connectionStats] = await Promise.all([
-        client.queryObject<{ size: string }>(`
-          SELECT pg_size_pretty(pg_database_size(current_database())) as size
-        `),
-        client.queryObject<{ count: number; total_size: string }>(`
-          SELECT 
-            COUNT(*)::int as count,
-            pg_size_pretty(SUM(pg_total_relation_size(c.oid))::bigint) as total_size
-          FROM pg_class c
-          WHERE c.relkind = 'r'
-        `),
-        client.queryObject<{
-          active: number;
-          idle: number;
-          total: number;
-        }>(`
-          SELECT
-            COUNT(*) FILTER (WHERE state = 'active')::int as active,
-            COUNT(*) FILTER (WHERE state = 'idle')::int as idle,
-            COUNT(*)::int as total
-          FROM pg_stat_activity
-          WHERE datname = current_database()
-        `),
-      ]);
+      const cmd = new Deno.Command(psql, {
+        args: [...connArgs, "-d", "disc", "-t", "-A", "-c", query],
+      });
 
-      await client.end();
+      const output = await cmd.output();
+      if (!output.success) {
+        const stderr = new TextDecoder().decode(output.stderr).trim();
+        throw new Error(`psql query failed: ${stderr}`);
+      }
+
+      const jsonStr = new TextDecoder().decode(output.stdout).trim();
+      const data = JSON.parse(jsonStr);
 
       return {
-        connections: connectionStats.rows[0],
+        connections: {
+          active: data.connections_active,
+          idle: data.connections_idle,
+          total: data.connections_total,
+        },
         database: {
-          size: dbSize.rows[0].size,
+          size: data.database_size,
         },
         tables: {
-          count: tableStats.rows[0].count,
-          totalSize: tableStats.rows[0].total_size,
+          count: data.table_count,
+          totalSize: data.tables_total_size,
         },
       };
     } catch (error) {
-      await client.end().catch(() => {});
-      throw error;
+      throw new Error(`Failed to get metrics: ${error}`);
     }
   }
 
   async performMaintenance(): Promise<void> {
-    const client = new Client(this.instance.dsn());
+    const pgBinDir = this.instance.getPgBinDir();
+    if (!pgBinDir) {
+      throw new Error("PostgreSQL binaries not available for maintenance");
+    }
+
+    const psql = join(pgBinDir, "psql");
+    const socketDir = this.instance.getSocketDir();
+    const port = this.instance.getPort();
+    const effectivePort = port === 0 ? 5432 : port;
+
+    const connArgs = port === 0
+      ? ["-h", socketDir, "-p", String(effectivePort), "-U", "disc"]
+      : ["-h", "localhost", "-p", String(port), "-U", "disc"];
+
+    logger.info("Running PostgreSQL maintenance tasks...");
 
     try {
-      await client.connect();
+      // ANALYZE
+      const analyzeCmd = new Deno.Command(psql, {
+        args: [...connArgs, "-c", "ANALYZE"],
+      });
+      const analyzeOutput = await analyzeCmd.output();
+      if (!analyzeOutput.success) {
+        const stderr = new TextDecoder().decode(analyzeOutput.stderr).trim();
+        throw new Error(`ANALYZE failed: ${stderr}`);
+      }
 
-      logger.info("Running PostgreSQL maintenance tasks...");
-
-      // Analyze all tables to update statistics
-      await client.queryArray("ANALYZE");
-
-      // Clean up dead rows (VACUUM)
-      await client.queryArray("VACUUM");
-
-      // Reindex if needed (be careful with this in production)
-      // await client.queryArray("REINDEX DATABASE disc");
+      // VACUUM
+      const vacuumCmd = new Deno.Command(psql, {
+        args: [...connArgs, "-c", "VACUUM"],
+      });
+      const vacuumOutput = await vacuumCmd.output();
+      if (!vacuumOutput.success) {
+        const stderr = new TextDecoder().decode(vacuumOutput.stderr).trim();
+        throw new Error(`VACUUM failed: ${stderr}`);
+      }
 
       logger.info("Maintenance tasks completed");
-
-      await client.end();
     } catch (error) {
-      await client.end().catch(() => {});
       throw new Error(`Maintenance failed: ${error}`);
     }
   }

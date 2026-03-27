@@ -171,6 +171,43 @@ export class PostgresInstance {
     this.startedAt = new Date();
 
     logger.info(`PostgreSQL started with PID ${this.pid}`);
+
+    // Ensure the project database exists (initdb only creates the "disc" default db)
+    await this.ensureDatabase();
+  }
+
+  /**
+   * Create the project database if it doesn't already exist.
+   * After initdb, only the superuser db ("disc"), "postgres", and templates exist.
+   * The DSN references the instance name as the database, so we need to create it.
+   */
+  private async ensureDatabase(): Promise<void> {
+    const createdbPath = join(this.pgBinDir!, "createdb");
+    const effectivePort = this.port === 0 ? 5432 : this.port;
+
+    const connArgs = this.port === 0
+      ? ["-h", this.socketDir, "-p", String(effectivePort), "-U", "disc"]
+      : ["-h", "localhost", "-p", String(this.port), "-U", "disc"];
+
+    const cmd = new Deno.Command(createdbPath, {
+      args: [...connArgs, this.instanceName],
+    });
+
+    const output = await cmd.output();
+
+    if (output.success) {
+      logger.info(`Created database "${this.instanceName}"`);
+    } else {
+      const stderr = new TextDecoder().decode(output.stderr);
+      // "already exists" is expected on subsequent starts — not an error
+      if (stderr.includes("already exists")) {
+        logger.info(`Database "${this.instanceName}" already exists`);
+      } else {
+        logger.error(
+          `Failed to create database "${this.instanceName}": ${stderr}`,
+        );
+      }
+    }
   }
 
   async stop(): Promise<void> {
@@ -323,5 +360,13 @@ export class PostgresInstance {
 
   getPort(): number {
     return this.port;
+  }
+
+  getPgBinDir(): string | null {
+    return this.pgBinDir;
+  }
+
+  getSocketDir(): string {
+    return this.socketDir;
   }
 }

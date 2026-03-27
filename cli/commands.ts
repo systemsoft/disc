@@ -117,9 +117,7 @@ export class CLICommands {
       let instance = this.postgresManager.getInstance(projectName);
       if (!instance) {
         console.log("📋 Creating PostgreSQL instance...");
-        instance = await this.postgresManager.createInstance(projectName, {
-          port: 5432,
-        });
+        instance = await this.postgresManager.createInstance(projectName);
       }
 
       // Start the PostgreSQL instance with monitoring
@@ -344,7 +342,7 @@ export class CLICommands {
       if (!instance) {
         console.log("📋 Creating new PostgreSQL instance...");
         instance = await this.postgresManager.createInstance(projectName, {
-          port: args.port || 5432,
+          port: args.port || 0,
         });
       }
 

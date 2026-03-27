@@ -183,7 +183,7 @@ describe("AuthMiddleware", () => {
       const response = await optionalHandler(request);
 
       assertEquals(response.status, 200);
-      assertEquals(capturedContext, null);
+      assertEquals(capturedContext, undefined);
     });
   });
 

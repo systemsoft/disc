@@ -259,9 +259,7 @@ Thumbs.db
       console.log("📋 Creating PostgreSQL instance...");
 
       // Create the PostgreSQL instance
-      const instance = await this.postgresManager.createInstance(projectName, {
-        port: 5432, // Default PostgreSQL port
-      });
+      const instance = await this.postgresManager.createInstance(projectName);
 
       console.log("✅ PostgreSQL instance created");
       console.log(`📁 Data directory: ${instance.getDataDir()}`);
