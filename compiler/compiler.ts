@@ -470,7 +470,7 @@ export class EdgeQLCompiler {
       case "ConfigureQuery":
         return this.compileConfigureQuery(query as EdgeQLAST.ConfigureQuery);
       default:
-        throw new CompilationError(`Unsupported query type: ${query.kind}`);
+        throw new CompilationError(`Unsupported query type: ${(query as { kind: string }).kind}`);
     }
   }
 
@@ -2614,7 +2614,7 @@ export class EdgeQLCompiler {
         ]);
       } else {
         // Fall back to the regular compile path for non-type expressions
-        return this.compileSelectQuery(query);
+        return this.compileSelectQuery(query) as SQL.SelectStatement;
       }
 
       // Compile WHERE clause

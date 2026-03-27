@@ -48,7 +48,6 @@ export class HttpServer {
   private session_manager: SessionManager;
   private transaction_manager: TransactionManager;
   private subscription_handler: SubscriptionHandler;
-  private authProvider?: AuthProvider;
   private authMiddleware?: AuthMiddleware;
   private authRoutes?: AuthRoutes;
   private extensionRoutes: Map<string, ExtensionRoute[]>;
@@ -74,7 +73,6 @@ export class HttpServer {
   constructor(options: HttpServerOptions) {
     this.config = options.config;
     this.protocolHandler = options.protocolHandler;
-    this.authProvider = options.authProvider;
     this.authMiddleware = options.authMiddleware;
     this.authRoutes = options.authRoutes;
     this.extensionRoutes = options.extensionRoutes || new Map();
@@ -111,23 +109,21 @@ export class HttpServer {
       return this.handleRequest(request, info);
     };
 
-    const serveOptions: Deno.ServeOptions & {
-      cert?: string;
-      key?: string;
-    } = {
-      hostname: this.config.host,
-      port: this.config.port,
-      handler,
-    };
-
     if (this.config.tls) {
       const cert = await Deno.readTextFile(this.config.tls.certFile);
       const key = await Deno.readTextFile(this.config.tls.keyFile);
-      serveOptions.cert = cert;
-      serveOptions.key = key;
+      this.server = Deno.serve({
+        hostname: this.config.host,
+        port: this.config.port,
+        cert,
+        key,
+      }, handler);
+    } else {
+      this.server = Deno.serve({
+        hostname: this.config.host,
+        port: this.config.port,
+      }, handler);
     }
-
-    this.server = Deno.serve(serveOptions);
 
     // Start redirect server if TLS redirect is enabled
     if (this.config.tls?.redirect) {

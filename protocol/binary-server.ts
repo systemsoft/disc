@@ -37,7 +37,7 @@ import {
   type ScramServerState,
   verifyClientFinalMessage,
 } from "./scram.ts";
-import { encodeScalarValue } from "./type-codec.ts";
+
 import {
   CompilationError,
   ConnectionError,
@@ -285,7 +285,7 @@ export class BinaryConnection {
 
   constructor(
     private conn: Deno.TcpConn,
-    private schema: Schema,
+    private _schema: Schema,
     private password?: string,
   ) {}
 
@@ -325,7 +325,7 @@ export class BinaryConnection {
         if (payloadLength > 0) {
           const p = await this.readExact(payloadLength);
           if (!p) break;
-          payload = p;
+          payload = new Uint8Array(p);
         }
 
         // Decode and dispatch
@@ -881,8 +881,9 @@ export class BinaryConnection {
     outputDesc: { id: Uint8Array; data: Uint8Array };
   } {
     // For now, build empty/simple descriptors.
-    // A full implementation would parse the EdgeQL, compile it,
-    // and derive proper input/output type descriptors.
+    // A full implementation would parse the EdgeQL against this._schema,
+    // compile it, and derive proper input/output type descriptors.
+    void this._schema;
 
     // Empty input descriptor (no parameters)
     const emptyData = new Uint8Array(0);

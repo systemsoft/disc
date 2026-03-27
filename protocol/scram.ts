@@ -8,6 +8,14 @@
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
+/**
+ * Bridge Uint8Array<ArrayBufferLike> to Uint8Array<ArrayBuffer> for
+ * WebCrypto API calls. In Deno, Uint8Array is always backed by a plain
+ * ArrayBuffer, but TS 5.7+ generic Uint8Array types are stricter.
+ */
+const asBuf = (a: Uint8Array): Uint8Array<ArrayBuffer> =>
+  a as Uint8Array<ArrayBuffer>;
+
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
@@ -35,12 +43,12 @@ async function hmacSha256(
 ): Promise<Uint8Array> {
   const cryptoKey = await crypto.subtle.importKey(
     "raw",
-    key,
+    asBuf(key),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"],
   );
-  const sig = await crypto.subtle.sign("HMAC", cryptoKey, data);
+  const sig = await crypto.subtle.sign("HMAC", cryptoKey, asBuf(data));
   return new Uint8Array(sig);
 }
 
@@ -48,7 +56,7 @@ async function hmacSha256(
  * Compute SHA-256 digest.
  */
 async function sha256(data: Uint8Array): Promise<Uint8Array> {
-  const digest = await crypto.subtle.digest("SHA-256", data);
+  const digest = await crypto.subtle.digest("SHA-256", asBuf(data));
   return new Uint8Array(digest);
 }
 
@@ -63,7 +71,7 @@ async function hi(
 ): Promise<Uint8Array> {
   const key = await crypto.subtle.importKey(
     "raw",
-    password,
+    asBuf(password),
     "PBKDF2",
     false,
     ["deriveBits"],
@@ -72,7 +80,7 @@ async function hi(
     {
       name: "PBKDF2",
       hash: "SHA-256",
-      salt: salt,
+      salt: asBuf(salt),
       iterations: iterations,
     },
     key,
@@ -368,7 +376,7 @@ export async function buildClientFinalMessage(
   // Parse server-first-message to get combined nonce, salt, iterations
   const serverAttrs = serverFirstMessage.split(",");
   let combinedNonce = "";
-  let salt = new Uint8Array(0);
+  let salt: Uint8Array<ArrayBufferLike> = new Uint8Array(0);
   let iterations = 0;
 
   for (const attr of serverAttrs) {

@@ -934,7 +934,7 @@ export class SchemaDiffer {
           this.extractExpressionString(expr.test)
         } else ${this.extractExpressionString(expr.alternate)}`;
       default:
-        return String(expr.kind);
+        return String((expr as { kind: string }).kind);
     }
   }
 

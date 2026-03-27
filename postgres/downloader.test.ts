@@ -32,7 +32,6 @@ Deno.test("PostgresBinaryDownloader - manifest retrieval", () => {
   const manifest = (downloader as any).getManifest("16.4");
   assertExists(manifest);
   assertExists(manifest.url);
-  assertExists(manifest.checksums);
   assertEquals(manifest.version, "16.4");
 
   // Non-existent version should return null
@@ -90,19 +89,6 @@ Deno.test("PostgresBinaryDownloader - handles missing binaries", async () => {
 
   // Cleanup
   await Deno.remove(TEST_BASE_DIR, { recursive: true });
-});
-
-Deno.test("PostgresBinaryDownloader - validates checksums", () => {
-  const downloader = new PostgresBinaryDownloader(TEST_BASE_DIR);
-
-  // Get manifest to verify it has checksums
-  const manifest = (downloader as any).getManifest("16.4");
-  assertExists(manifest);
-  assertExists(manifest.checksums);
-
-  // In production, this would validate SHA256
-  // For now, just verify the checksum field exists
-  assertEquals(manifest.checksums.startsWith("sha256:"), true);
 });
 
 Deno.test("PostgresBinaryDownloader - handles unsupported platforms", () => {

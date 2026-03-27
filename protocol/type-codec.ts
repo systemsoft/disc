@@ -12,7 +12,7 @@
  * - bigint/decimal use PostgreSQL numeric wire format
  */
 
-import { BufferReader, BufferWriter } from "./buffer.ts";
+import { BufferWriter } from "./buffer.ts";
 import type { ObjectShapeDescriptor, TypeDescriptor } from "./typedesc.ts";
 import { DescriptorTag } from "./typedesc.ts";
 import { bytesToUuid } from "./types.ts";
@@ -477,7 +477,6 @@ function encodeBigInt(value: bigint): Uint8Array {
 function decodeBigInt(data: Uint8Array): bigint {
   const view = new DataView(data.buffer, data.byteOffset);
   const ndigits = view.getUint16(0, false);
-  const _weight = view.getInt16(2, false);
   const sign = view.getUint16(4, false);
   // dscale at offset 6 (not used for bigint)
 

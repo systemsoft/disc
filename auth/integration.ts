@@ -320,7 +320,7 @@ export class AuthRoutes {
       "name" in error &&
       (error as { name: unknown }).name === "AuthError"
     ) {
-      const authErr = error as {
+      const authErr = error as unknown as {
         code: string;
         message: string;
         status_code: number;

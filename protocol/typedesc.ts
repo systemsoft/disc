@@ -14,7 +14,7 @@
 import { BufferReader, BufferWriter } from "./buffer.ts";
 import { Cardinality } from "./enums.ts";
 import { bytesToUuid, uuidToBytes } from "./types.ts";
-import type { LinkDef, PropertyDef, TypeDef } from "../compiler/context.ts";
+import type { TypeDef } from "../compiler/context.ts";
 
 // ---------------------------------------------------------------------------
 // Descriptor tag constants
@@ -454,7 +454,10 @@ export function decodeTypeDescriptors(data: Uint8Array): TypeDescriptor[] {
 export async function generateDescriptorId(
   content: Uint8Array,
 ): Promise<Uint8Array> {
-  const hash = await crypto.subtle.digest("SHA-256", content);
+  const hash = await crypto.subtle.digest(
+    "SHA-256",
+    content as Uint8Array<ArrayBuffer>,
+  );
   return new Uint8Array(hash.slice(0, 16));
 }
 
