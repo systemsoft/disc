@@ -20,6 +20,8 @@ import { pgUpgradeCommand, PgUpgradeOptions } from "./pg-upgrade.ts";
 import { dbCommand } from "./db.ts";
 import { PostgresManager } from "../postgres/mod.ts";
 import { MigrationSquasher, SquashableMigration } from "../migration/squash.ts";
+import { resolveProjectContext, resolveDsn } from "../lib/project-context.ts";
+import { ensurePgRunning } from "../postgres/ensure-running.ts";
 
 export interface CLIArgs {
   [key: string]: any;
@@ -57,9 +59,18 @@ export class CLICommands {
   async migrate(args: CLIArgs): Promise<void> {
     const schemaFile = args.schema || "./dbschema/default.disc";
     const dryRun = args["dry-run"] || false;
+
+    // Resolve project context for DSN
+    const ctx = resolveProjectContext();
+
+    // Auto-start PG for live (non-dry-run) migrations on managed instances
+    if (ctx?.managed && !dryRun) {
+      await ensurePgRunning(ctx);
+    }
+
     const databaseUrl = args["backend-dsn"] ||
       Deno.env.get("DATABASE_URL") ||
-      "postgresql://localhost:5432/disc_dev";
+      (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc_dev");
 
     let pool: ConnectionPool | undefined;
     let manager: SchemaManager | undefined;
@@ -109,24 +120,21 @@ export class CLICommands {
     console.log("🚀 Starting Disc Database Server...");
 
     try {
-      // Start PostgreSQL instance first
-      const projectName = await this.getProjectName();
-      console.log(`📦 Starting PostgreSQL for project: ${projectName}`);
+      const ctx = resolveProjectContext();
 
-      // Check if instance exists, create if not
-      let instance = this.postgresManager.getInstance(projectName);
-      if (!instance) {
-        console.log("📋 Creating PostgreSQL instance...");
-        instance = await this.postgresManager.createInstance(projectName);
+      // Start PostgreSQL if managed
+      if (ctx?.managed) {
+        console.log(`📦 Starting PostgreSQL for project: ${ctx.projectName}`);
+        const { dsn, wasStarted } = await ensurePgRunning(ctx);
+        Deno.env.set("DATABASE_URL", dsn);
+        console.log(wasStarted ? "✅ PostgreSQL started" : "✅ PostgreSQL already running");
+        console.log(`📡 Connection: ${dsn}`);
+      } else if (ctx?.backendDsn) {
+        Deno.env.set("DATABASE_URL", ctx.backendDsn);
+        console.log(`📡 External database: ${ctx.backendDsn}`);
       }
 
-      // Start the PostgreSQL instance with monitoring
-      await this.postgresManager.startInstance(projectName, true);
-      console.log("✅ PostgreSQL started successfully");
-      console.log(`📡 Connection: ${instance.dsn()}`);
-
-      // Set DATABASE_URL for the server
-      Deno.env.set("DATABASE_URL", instance.dsn());
+      const instanceName = ctx?.instanceName;
 
       // Set auth env vars from CLI flags
       if (options.jwtSecret) {
@@ -194,8 +202,10 @@ export class CLICommands {
         Deno.addSignalListener(signal, async () => {
           console.log(`\n📡 Received ${signal}, shutting down gracefully...`);
           await server.stop();
-          await this.postgresManager.stopInstance(projectName);
-          console.log("✅ PostgreSQL stopped");
+          if (instanceName) {
+            await this.postgresManager.stopInstance(instanceName);
+            console.log("✅ PostgreSQL stopped");
+          }
           Deno.exit(0);
         });
       }
@@ -332,33 +342,38 @@ export class CLICommands {
    * Start PostgreSQL instance
    */
   async start(args: CLIArgs): Promise<void> {
-    const projectName = await this.getProjectName();
+    const ctx = resolveProjectContext();
+    const projectName = ctx?.projectName || Deno.cwd().split("/").pop() || "default";
     console.log(`🚀 Starting PostgreSQL for project: ${projectName}`);
 
     try {
-      // Check if instance exists
-      let instance = this.postgresManager.getInstance(projectName);
-
-      if (!instance) {
-        console.log("📋 Creating new PostgreSQL instance...");
-        instance = await this.postgresManager.createInstance(projectName, {
-          port: args.port || 0,
-        });
+      if (ctx?.managed) {
+        const { instance, dsn, wasStarted } = await ensurePgRunning(ctx);
+        const status = await instance.status();
+        console.log(wasStarted ? "✅ PostgreSQL started successfully" : "✅ PostgreSQL already running");
+        console.log(`📊 Status:`);
+        console.log(`   PID: ${status.pid || "N/A"}`);
+        console.log(`   Port: ${status.port || "Unix socket"}`);
+        console.log(`   Data: ${status.dataDir}`);
+        console.log(`   DSN: ${dsn}`);
+      } else {
+        // Fallback to old behavior for non-context projects
+        let instance = this.postgresManager.getInstance(projectName);
+        if (!instance) {
+          console.log("📋 Creating new PostgreSQL instance...");
+          instance = await this.postgresManager.createInstance(projectName, {
+            port: args.port || 0,
+          });
+        }
+        await this.postgresManager.startInstance(projectName, !args["no-monitor"]);
+        const status = await instance.status();
+        console.log("✅ PostgreSQL started successfully");
+        console.log(`📊 Status:`);
+        console.log(`   PID: ${status.pid || "N/A"}`);
+        console.log(`   Port: ${status.port || "Unix socket"}`);
+        console.log(`   Data: ${status.dataDir}`);
+        console.log(`   DSN: ${instance.dsn()}`);
       }
-
-      // Start the instance with monitoring
-      await this.postgresManager.startInstance(
-        projectName,
-        !args["no-monitor"],
-      );
-
-      const status = await instance.status();
-      console.log("✅ PostgreSQL started successfully");
-      console.log(`📊 Status:`);
-      console.log(`   PID: ${status.pid || "N/A"}`);
-      console.log(`   Port: ${status.port || "Unix socket"}`);
-      console.log(`   Data: ${status.dataDir}`);
-      console.log(`   DSN: ${instance.dsn()}`);
     } catch (error) {
       console.error(
         `❌ Failed to start PostgreSQL: ${(error as Error).message}`,
@@ -371,10 +386,13 @@ export class CLICommands {
    * Stop PostgreSQL instance
    */
   async stop(_args: CLIArgs): Promise<void> {
-    const projectName = await this.getProjectName();
+    const ctx = resolveProjectContext();
+    const projectName = ctx?.instanceName || Deno.cwd().split("/").pop() || "default";
     console.log(`🛑 Stopping PostgreSQL for project: ${projectName}`);
 
     try {
+      // Discover instances so manager knows about on-disk instances
+      await this.postgresManager.discoverInstances();
       await this.postgresManager.stopInstance(projectName);
       console.log("✅ PostgreSQL stopped successfully");
     } catch (error) {
@@ -389,10 +407,13 @@ export class CLICommands {
    * Show PostgreSQL status
    */
   async status(_args: CLIArgs): Promise<void> {
-    const projectName = await this.getProjectName();
+    const ctx = resolveProjectContext();
+    const projectName = ctx?.instanceName || Deno.cwd().split("/").pop() || "default";
     console.log(`📊 PostgreSQL Status for project: ${projectName}\n`);
 
     try {
+      // Discover instances so manager knows about on-disk instances
+      await this.postgresManager.discoverInstances();
       const status = await this.postgresManager.getInstanceStatus(projectName);
 
       if (!status) {
@@ -465,7 +486,7 @@ export class CLICommands {
    * Restart PostgreSQL instance
    */
   async restart(args: CLIArgs): Promise<void> {
-    const projectName = await this.getProjectName();
+    const projectName = this.getProjectName();
     console.log(`🔄 Restarting PostgreSQL for project: ${projectName}`);
 
     try {
@@ -520,9 +541,10 @@ export class CLICommands {
    * Create a new Disc-managed database
    */
   async dbCreate(name: string, args: CLIArgs): Promise<void> {
+    const ctx = resolveProjectContext();
     const databaseUrl = args["database-url"] ||
       Deno.env.get("DATABASE_URL") ||
-      "postgresql://localhost:5432/disc";
+      (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
     await dbCommand.create({ name, databaseUrl });
   }
 
@@ -530,9 +552,10 @@ export class CLICommands {
    * List all Disc-managed databases
    */
   async dbList(args: CLIArgs): Promise<void> {
+    const ctx = resolveProjectContext();
     const databaseUrl = args["database-url"] ||
       Deno.env.get("DATABASE_URL") ||
-      "postgresql://localhost:5432/disc";
+      (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
     await dbCommand.list({ databaseUrl });
   }
 
@@ -540,9 +563,10 @@ export class CLICommands {
    * Drop a Disc-managed database
    */
   async dbDrop(name: string, args: CLIArgs): Promise<void> {
+    const ctx = resolveProjectContext();
     const databaseUrl = args["database-url"] ||
       Deno.env.get("DATABASE_URL") ||
-      "postgresql://localhost:5432/disc";
+      (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
     await dbCommand.drop({
       name,
       databaseUrl,
@@ -859,23 +883,9 @@ export class CLICommands {
   /**
    * Get the project name from disc.toml or current directory
    */
-  private async getProjectName(): Promise<string> {
-    try {
-      // Try to read from disc.toml
-      const configFile = await Deno.readTextFile("disc.toml").catch(() => null);
-      if (configFile) {
-        // Simple extraction - in production use proper TOML parser
-        const match = configFile.match(/name\s*=\s*"([^"]+)"/);
-        if (match) return match[1];
-      }
-    } catch {
-      // Ignore errors
-    }
-
-    // Fall back to current directory name
-    const cwd = Deno.cwd();
-    const parts = cwd.split("/");
-    return parts[parts.length - 1] || "default";
+  private getProjectName(): string {
+    const ctx = resolveProjectContext();
+    return ctx?.projectName || Deno.cwd().split("/").pop() || "default";
   }
 
   /**

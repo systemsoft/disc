@@ -5,8 +5,8 @@
 
 import { TextLineStream } from "jsr:@std/streams@1.0.8/text-line-stream";
 import { DatabaseConnection } from "../lib/database.ts";
-import { PostgresManager } from "../postgres/manager.ts";
-import { join } from "@std/path";
+import { resolveProjectContext } from "../lib/project-context.ts";
+import { ensurePgRunning } from "../postgres/ensure-running.ts";
 
 export interface ShellOptions {
   host?: string;
@@ -28,7 +28,6 @@ export interface ShellSession {
 
 export class DiscShell {
   private db?: DatabaseConnection;
-  private postgresManager?: PostgresManager;
   private commandHistory: string[] = [];
   private multilineBuffer = "";
   private isMultiline = false;
@@ -91,62 +90,39 @@ export class DiscShell {
     port: number,
     database: string,
   ): Promise<void> {
-    // First try to connect directly
-    try {
-      this.db = new DatabaseConnection({
-        host,
-        port,
-        database,
-        user: Deno.env.get("DB_USER") || "disc",
-        password: Deno.env.get("DB_PASSWORD") || "",
-      });
+    // Try project context first (auto-discovery via disc.toml)
+    const ctx = resolveProjectContext();
+
+    if (ctx?.managed) {
+      const { dsn } = await ensurePgRunning(ctx);
+      this.db = new DatabaseConnection(dsn);
       await this.db.connect();
       if (this.session) {
         this.session.connected = true;
       }
-    } catch (_error) {
-      console.log(
-        "⚠️  Direct connection failed, checking for Disc-managed instance...",
-      );
+      return;
+    }
 
-      // Try to use Disc-managed PostgreSQL
-      const instancesDir = join(Deno.env.get("HOME")!, ".disc", "instances");
-      this.postgresManager = new PostgresManager(instancesDir);
-      await this.postgresManager.discoverInstances();
-
-      const instances = this.postgresManager.listInstances();
-      if (instances.includes(database)) {
-        // Instance exists, start it if needed
-        const status = await this.postgresManager.getInstanceStatus(database);
-        if (!status?.running) {
-          console.log("🚀 Starting Disc-managed PostgreSQL instance...");
-          await this.postgresManager.startInstance(database, false);
-        }
-
-        // Connect to the instance
-        const instance = this.postgresManager.getInstance(database);
-        if (instance) {
-          this.db = new DatabaseConnection(instance.dsn());
-          await this.db.connect();
-          if (this.session) {
-            this.session.connected = true;
-          }
-        }
-      } else {
-        // Create new instance
-        console.log("🏗️  Creating new Disc-managed PostgreSQL instance...");
-        await this.postgresManager.createInstance(database, {
-          port: port === 5656 ? 0 : port, // Use socket if default Disc port
-        });
-        await this.postgresManager.startInstance(database, false);
-
-        const instance = this.postgresManager.getInstance(database)!;
-        this.db = new DatabaseConnection(instance.dsn());
-        await this.db.connect();
-        if (this.session) {
-          this.session.connected = true;
-        }
+    if (ctx?.backendDsn) {
+      this.db = new DatabaseConnection(ctx.backendDsn);
+      await this.db.connect();
+      if (this.session) {
+        this.session.connected = true;
       }
+      return;
+    }
+
+    // Fallback: direct TCP connection with provided parameters
+    this.db = new DatabaseConnection({
+      host,
+      port,
+      database,
+      user: Deno.env.get("DB_USER") || "disc",
+      password: Deno.env.get("DB_PASSWORD") || "",
+    });
+    await this.db.connect();
+    if (this.session) {
+      this.session.connected = true;
     }
   }
 

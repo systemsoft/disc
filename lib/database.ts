@@ -21,6 +21,63 @@ export interface DatabaseConfig {
   retryDelay?: number;
 }
 
+interface ParsedConnection {
+  hostname: string;
+  port: number;
+  user: string;
+  password: string;
+  database: string;
+  host_type?: "socket" | "tcp";
+}
+
+/**
+ * Parse a PostgreSQL connection string, handling both TCP and Unix socket formats.
+ *
+ * TCP format:   postgresql://user:pass@host:port/database
+ * Socket format: postgresql://user@/database?host=/path/to/socket
+ *
+ * The socket format has no hostname between @ and /, which makes it
+ * invalid for JavaScript's URL parser. We detect and handle it manually.
+ */
+export function parseConnectionString(dsn: string): ParsedConnection {
+  // Detect Unix socket DSN: has ?host=/ and @/ (no hostname)
+  const hostParam = dsn.match(/[?&]host=([^&]+)/);
+  const isSocketDsn = hostParam && /^postgresql(s)?:\/\/[^@]*@\//.test(dsn);
+
+  if (isSocketDsn) {
+    // Manual parse for socket DSNs: postgresql://user(:pass)?@/database?host=/path
+    const afterScheme = dsn.replace(/^postgresql(s)?:\/\//, "");
+    const [authAndPath] = afterScheme.split("?");
+    const atIdx = authAndPath.indexOf("@");
+    const authPart = atIdx >= 0 ? authAndPath.slice(0, atIdx) : "";
+    const pathPart = atIdx >= 0 ? authAndPath.slice(atIdx + 1) : authAndPath;
+
+    const [userPart, passPart] = authPart.split(":");
+    const database = pathPart.startsWith("/")
+      ? pathPart.slice(1)
+      : pathPart || "postgres";
+
+    return {
+      hostname: hostParam[1],
+      port: 5432,
+      user: decodeURIComponent(userPart || "postgres"),
+      password: decodeURIComponent(passPart || ""),
+      database: decodeURIComponent(database),
+      host_type: "socket",
+    };
+  }
+
+  // Standard TCP DSN — safe for URL parser
+  const url = new URL(dsn);
+  return {
+    hostname: url.hostname || "localhost",
+    port: url.port ? parseInt(url.port) : 5432,
+    user: url.username || "postgres",
+    password: url.password || "",
+    database: url.pathname.slice(1) || "postgres",
+  };
+}
+
 export class DatabaseConnection {
   private client: Client;
   private config: DatabaseConfig;
@@ -38,14 +95,22 @@ export class DatabaseConnection {
 
   private getClientConfig() {
     if (this.config.connectionString) {
-      // Parse connection string
-      const url = new URL(this.config.connectionString);
+      const parsed = parseConnectionString(this.config.connectionString);
+      if (parsed.host_type === "socket") {
+        return {
+          hostname: parsed.hostname,
+          user: parsed.user,
+          password: parsed.password,
+          database: parsed.database,
+          host_type: "socket" as const,
+        };
+      }
       return {
-        hostname: url.hostname,
-        port: url.port ? parseInt(url.port) : 5432,
-        user: url.username || "postgres",
-        password: url.password || "",
-        database: url.pathname.slice(1) || "postgres",
+        hostname: parsed.hostname,
+        port: parsed.port,
+        user: parsed.user,
+        password: parsed.password,
+        database: parsed.database,
       };
     }
 
@@ -251,6 +316,11 @@ export function createDiscConnection(
  *   => "postgresql://user:pass@host:5432/other"
  */
 export function replaceDsnDatabase(dsn: string, dbName: string): string {
+  // Handle Unix socket DSNs that can't be parsed by new URL()
+  if (/^postgresql(s)?:\/\/[^@]*@\//.test(dsn)) {
+    // Replace the database name between @/ and ? (or end of string)
+    return dsn.replace(/(postgresql(s)?:\/\/[^@]*@\/)([^?]*)/, `$1${dbName}`);
+  }
   const url = new URL(dsn);
   url.pathname = `/${dbName}`;
   return url.toString();

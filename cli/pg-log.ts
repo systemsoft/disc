@@ -4,6 +4,7 @@
  */
 
 import { join } from "@std/path";
+import { resolveProjectContext } from "../lib/project-context.ts";
 
 export interface PgLogOptions {
   lines: number;
@@ -128,9 +129,8 @@ export class PgLogCommand {
    * Derive the project name from the current working directory.
    */
   private currentProjectName(): string {
-    const cwd = Deno.cwd();
-    const parts = cwd.split("/");
-    return parts[parts.length - 1];
+    const ctx = resolveProjectContext();
+    return ctx?.instanceName || Deno.cwd().split("/").pop() || "default";
   }
 }
 
