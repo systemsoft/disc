@@ -1,3 +1,9 @@
+// P1-25: migrating to @use + sass:color is blocked by Vite's SCSS
+// prependData pattern that injects @import into every Svelte file's
+// style block. Full migration requires moving variables to CSS
+// custom properties or refactoring the vite config to pass
+// additionalData as @use. Deferred — Sass 3.0 still emits these as
+// warnings.
 @import "./styles/variables.scss";
 
 // Reset and base styles

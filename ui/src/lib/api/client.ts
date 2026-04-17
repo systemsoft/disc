@@ -49,13 +49,88 @@ export interface ConnectionInfo {
 
 export class DiscAPIClient {
   private baseUrl: string;
-  private headers: HeadersInit;
+  private authToken: string | null = null;
+  private readonly TOKEN_STORAGE_KEY = "disc.auth.token";
 
   constructor(baseUrl = "") {
     this.baseUrl = baseUrl || "";
-    this.headers = {
+    // P1-24: hydrate token from localStorage so a refresh doesn't sign
+    // the user out. Browser-only — server-side SvelteKit guards with
+    // `typeof localStorage`.
+    if (typeof localStorage !== "undefined") {
+      this.authToken = localStorage.getItem(this.TOKEN_STORAGE_KEY);
+    }
+  }
+
+  /**
+   * Set the JWT auth token. Persisted to localStorage so it survives
+   * page reloads; pass `null` to clear (on logout). (P1-24)
+   */
+  setAuthToken(token: string | null): void {
+    this.authToken = token;
+    if (typeof localStorage !== "undefined") {
+      if (token) {
+        localStorage.setItem(this.TOKEN_STORAGE_KEY, token);
+      } else {
+        localStorage.removeItem(this.TOKEN_STORAGE_KEY);
+      }
+    }
+  }
+
+  /** Get current auth token (null if not authenticated). */
+  getAuthToken(): string | null {
+    return this.authToken;
+  }
+
+  /**
+   * Build request headers, injecting Authorization when a token is
+   * present. Used by every method below so adding a new endpoint
+   * can't accidentally skip auth. (P1-24)
+   */
+  private get headers(): HeadersInit {
+    const h: Record<string, string> = {
       "Content-Type": "application/json",
     };
+    if (this.authToken) {
+      h["Authorization"] = `Bearer ${this.authToken}`;
+    }
+    return h;
+  }
+
+  /**
+   * POST /auth/login — exchange credentials for a JWT and persist it.
+   * Returns null on failure (caller inspects). (P1-24)
+   */
+  async login(
+    email: string,
+    password: string,
+  ): Promise<{ token: string; refreshToken?: string } | null> {
+    try {
+      const res = await fetch(`${this.baseUrl}/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+      if (!res.ok) return null;
+      const body = await res.json() as {
+        token: string;
+        refreshToken?: string;
+      };
+      this.setAuthToken(body.token);
+      return body;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Clear the stored token. (P1-24) */
+  logout(): void {
+    this.setAuthToken(null);
+  }
+
+  /** Whether a token is set. Doesn't verify validity. */
+  isAuthenticated(): boolean {
+    return this.authToken !== null;
   }
 
   /**

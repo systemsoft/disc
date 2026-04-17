@@ -1,87 +1,33 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  
-  interface SchemaType {
-    name: string;
-    properties: Array<{
-      name: string;
-      type: string;
-      required: boolean;
-      multi: boolean;
-    }>;
-    links: Array<{
-      name: string;
-      target: string;
-      multi: boolean;
-    }>;
-  }
-  
+  import { discAPI, type SchemaType } from '$lib/api/client';
+
   let schemaTypes: SchemaType[] = [];
   let selectedType: SchemaType | null = null;
   let searchQuery = '';
-  
-  $: filteredTypes = schemaTypes.filter(type => 
+  let loadError: string | null = null;
+  let loading = true;
+
+  $: filteredTypes = schemaTypes.filter(type =>
     type.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
-  
-  onMount(() => {
-    // Simulate loading schema
-    schemaTypes = [
-      {
-        name: 'User',
-        properties: [
-          { name: 'id', type: 'uuid', required: true, multi: false },
-          { name: 'name', type: 'str', required: true, multi: false },
-          { name: 'email', type: 'str', required: true, multi: false },
-          { name: 'created_at', type: 'datetime', required: true, multi: false }
-        ],
-        links: [
-          { name: 'posts', target: 'Post', multi: true },
-          { name: 'profile', target: 'Profile', multi: false }
-        ]
-      },
-      {
-        name: 'Post',
-        properties: [
-          { name: 'id', type: 'uuid', required: true, multi: false },
-          { name: 'title', type: 'str', required: true, multi: false },
-          { name: 'body', type: 'str', required: true, multi: false },
-          { name: 'published', type: 'bool', required: false, multi: false },
-          { name: 'created_at', type: 'datetime', required: true, multi: false }
-        ],
-        links: [
-          { name: 'author', target: 'User', multi: false },
-          { name: 'tags', target: 'Tag', multi: true }
-        ]
-      },
-      {
-        name: 'Profile',
-        properties: [
-          { name: 'id', type: 'uuid', required: true, multi: false },
-          { name: 'bio', type: 'str', required: false, multi: false },
-          { name: 'avatar_url', type: 'str', required: false, multi: false }
-        ],
-        links: [
-          { name: 'user', target: 'User', multi: false }
-        ]
-      },
-      {
-        name: 'Tag',
-        properties: [
-          { name: 'id', type: 'uuid', required: true, multi: false },
-          { name: 'name', type: 'str', required: true, multi: false }
-        ],
-        links: [
-          { name: 'posts', target: 'Post', multi: true }
-        ]
+
+  // P1-23: call the real /api/schema endpoint instead of the mock
+  // fixture that shipped with the UI scaffold. Errors surface to the
+  // user; an empty schema is not an error.
+  onMount(async () => {
+    try {
+      schemaTypes = await discAPI.getSchema();
+      if (schemaTypes.length > 0) {
+        selectedType = schemaTypes[0];
       }
-    ];
-    
-    if (schemaTypes.length > 0) {
-      selectedType = schemaTypes[0];
+    } catch (err) {
+      loadError = err instanceof Error ? err.message : String(err);
+    } finally {
+      loading = false;
     }
   });
-  
+
   function selectType(type: SchemaType) {
     selectedType = type;
   }

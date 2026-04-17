@@ -66,4 +66,6 @@ thoughts/
 /ui/.svelte-kit/
 /ui/build/
 /ui/node_modules/
-/ui/bun.lock
+# NOTE: ui/bun.lock IS committed (P1-27) so CI and contributors get
+# deterministic installs. Only the transient build outputs above are
+# ignored.
