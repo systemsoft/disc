@@ -1,3 +1,4 @@
+// deno-lint-ignore-file
 /**
  * Production E2E: Server Lifecycle and Endpoint Behavior Tests
  *

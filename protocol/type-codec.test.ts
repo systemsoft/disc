@@ -6,7 +6,7 @@ import {
   assertAlmostEquals,
   assertEquals,
   assertThrows,
-} from "jsr:@std/assert";
+} from "@std/assert";
 import {
   decodeScalarValue,
   encodeObjectValue,

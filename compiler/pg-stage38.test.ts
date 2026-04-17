@@ -1,3 +1,4 @@
+// deno-lint-ignore-file
 /**
  * PostgreSQL End-to-End Tests for Stage 38: CONFIGURE Queries
  *

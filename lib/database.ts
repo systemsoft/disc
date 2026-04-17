@@ -27,6 +27,7 @@ interface ParsedConnection {
   user: string;
   password: string;
   database: string;
+  // deno-lint-ignore camelcase
   host_type?: "socket" | "tcp";
 }
 

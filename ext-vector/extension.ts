@@ -156,6 +156,7 @@ export class VectorExtension extends BaseExtension {
     ];
   }
 
+  // deno-lint-ignore require-await
   override async healthCheck(): Promise<
     { healthy: boolean; details?: string }
   > {

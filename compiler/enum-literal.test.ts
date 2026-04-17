@@ -1,3 +1,4 @@
+// deno-lint-ignore-file
 /**
  * Tests for enum literal compilation (e.g., Status.active → 'active'::status)
  */

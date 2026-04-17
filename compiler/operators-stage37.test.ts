@@ -1,3 +1,4 @@
+// deno-lint-ignore-file
 /**
  * Stage 37: Operators — Bitwise, Regex & EXPLAIN
  *

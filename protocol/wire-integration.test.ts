@@ -1,3 +1,4 @@
+// deno-lint-ignore-file
 /**
  * Phase 5: Wire-level integration tests for the binary protocol.
  *

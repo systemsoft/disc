@@ -1,3 +1,4 @@
+// deno-lint-ignore-file
 /**
  * Tests for Phase 4: Enhanced Query Execution
  *

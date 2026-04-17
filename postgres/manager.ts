@@ -158,6 +158,7 @@ export class PostgresManager {
     }
   }
 
+  // deno-lint-ignore require-await
   async upgradeInstance(name: string, targetVersion: string): Promise<void> {
     const managed = this.instances.get(name);
     if (!managed) {

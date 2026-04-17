@@ -2,7 +2,7 @@
  * Tests for type descriptor encoding/decoding.
  */
 
-import { assertEquals, assertNotEquals } from "jsr:@std/assert";
+import { assertEquals, assertNotEquals } from "@std/assert";
 import { Cardinality } from "./enums.ts";
 import { bytesToUuid, uuidToBytes } from "./types.ts";
 import {

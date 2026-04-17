@@ -7,7 +7,6 @@ import type {
   HealthStatus,
   QueryResponse,
   ServerStats,
-  TransactionState,
 } from "./types.ts";
 import {
   DiscAuthError,

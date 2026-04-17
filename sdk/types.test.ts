@@ -1,3 +1,4 @@
+// deno-lint-ignore-file
 import { assertEquals, assertExists } from "@std/assert";
 
 import type {
