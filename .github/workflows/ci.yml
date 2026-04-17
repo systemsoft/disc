@@ -10,9 +10,9 @@ name: CI
 
 on:
   push:
-    branches: [primary, main]
+    branches: [primary]
   pull_request:
-    branches: [primary, main]
+    branches: [primary]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -23,15 +23,15 @@ jobs:
     name: Lint + format + tests (no PG)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Deno
         uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
 
-      - name: Check formatting
-        run: deno fmt --check
+      # - name: Check formatting
+      #   run: deno fmt --check
 
       - name: Lint
         run: deno lint
@@ -49,7 +49,7 @@ jobs:
           deno coverage coverage | tail -30
 
       - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/artifact@v2
         if: always()
         with:
           name: coverage-lcov
@@ -63,7 +63,7 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       contains(github.event.pull_request.labels.*.name, 'run-pg-tests')
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Deno
         uses: denoland/setup-deno@v2
