@@ -15,6 +15,15 @@ export interface DiscClientConfig {
   retries?: number;
   /** Base delay between retries in milliseconds (default: 1000) */
   retryDelay?: number;
+  /**
+   * Optional logger for debugging. Called at `warn` on retry attempts
+   * and `error` on final failures — lets apps surface flaky networks
+   * without subclassing the client. (P2-20)
+   */
+  logger?: {
+    warn?(message: string, details?: Record<string, unknown>): void;
+    error?(message: string, details?: Record<string, unknown>): void;
+  };
 }
 
 // --- Query Types ---

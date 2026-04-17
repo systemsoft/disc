@@ -38,6 +38,8 @@ interface WaitQueueEntry {
   resolve: (conn: DatabaseConnection) => void;
   reject: (error: Error) => void;
   timeoutId: number;
+  /** Marked true when the entry times out; consumers skip it. (P2-28) */
+  cancelled: boolean;
 }
 
 interface PoolStatistics {
@@ -175,20 +177,25 @@ export class ConnectionPool {
       throw new Error("Connection pool wait queue is full");
     }
 
-    // Add to wait queue
+    // Add to wait queue. Timeout cancellation is O(1) via a shared
+    // `cancelled` flag on the entry — consumers (release / close) skip
+    // cancelled entries instead of splicing on every timeout. (P2-28)
     return new Promise((resolve, reject) => {
-      const timeoutId = setTimeout(() => {
-        const index = this.waitQueue.findIndex((entry) =>
-          entry.timeoutId === timeoutId
-        );
-        if (index !== -1) {
-          this.waitQueue.splice(index, 1);
+      const entry: WaitQueueEntry = {
+        resolve,
+        reject,
+        timeoutId: 0,
+        cancelled: false,
+      };
+      entry.timeoutId = setTimeout(() => {
+        if (!entry.cancelled) {
+          entry.cancelled = true;
           this.updateStats();
           reject(new Error("Connection pool timeout"));
         }
       }, this.config.connectionTimeout!);
 
-      this.waitQueue.push({ resolve, reject, timeoutId });
+      this.waitQueue.push(entry);
       this.updateStats();
     });
   }
@@ -210,9 +217,17 @@ export class ConnectionPool {
     this.stats.totalReleased++;
     this.activeCount--;
 
-    // Check if there are waiting requests
-    if (this.waitQueue.length > 0) {
-      const entry = this.waitQueue.shift()!;
+    // Hand the connection to the oldest non-cancelled waiter.
+    // Cancelled entries (timed out) are skipped in FIFO order. (P2-28)
+    let entry: WaitQueueEntry | undefined;
+    while (this.waitQueue.length > 0) {
+      const next = this.waitQueue.shift()!;
+      if (!next.cancelled) {
+        entry = next;
+        break;
+      }
+    }
+    if (entry) {
       clearTimeout(entry.timeoutId);
       pooled.inUse = true;
       pooled.acquiredAt = new Date();
@@ -305,10 +320,13 @@ export class ConnectionPool {
     }
     this.leakTimers.clear();
 
-    // Reject all waiting requests
+    // Reject all waiting requests. Cancelled entries already rejected
+    // themselves via the timeout — skip them. (P2-28)
     for (const entry of this.waitQueue) {
       clearTimeout(entry.timeoutId);
-      entry.reject(new Error("Connection pool is closing"));
+      if (!entry.cancelled) {
+        entry.reject(new Error("Connection pool is closing"));
+      }
     }
     this.waitQueue = [];
 

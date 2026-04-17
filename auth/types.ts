@@ -40,6 +40,12 @@ export interface AuthConfig {
   passwordRequireUppercase?: boolean;
   passwordRequireNumbers?: boolean;
   passwordRequireSpecial?: boolean;
+  /**
+   * Cap on simultaneously-active sessions per user. When set and the
+   * user already has N active sessions, creating a new session revokes
+   * the oldest. Defaults to unlimited. (P2-22)
+   */
+  maxSessionsPerUser?: number;
 }
 
 export interface LoginCredentials {

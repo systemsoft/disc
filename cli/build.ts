@@ -101,6 +101,15 @@ export class BuildCommand {
       outputPath,
     ];
 
+    // P2-35: bundle version.txt so VERSION resolution works at runtime.
+    // Without --lite, also embed the built UI so `disc ui` can serve
+    // assets without a separate deployment step. With --lite, skip the
+    // UI entirely — produces a smaller binary for headless deployments.
+    args.push("--include", "version.txt");
+    if (!options.lite) {
+      args.push("--include", "ui/build");
+    }
+
     if (options.platform) {
       const denoTarget = this.mapPlatform(options.platform);
       if (denoTarget) {

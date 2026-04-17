@@ -101,7 +101,7 @@ services:
     ports:
       - "5656:5656"
     environment:
-      DATABASE_URL: "postgresql://disc:disc@postgres:5432/${projectName}"
+      DATABASE_URL: "postgresql://disc:$\{POSTGRES_PASSWORD}@postgres:5432/${projectName}"
       DISC_HOST: "0.0.0.0"
       DISC_PORT: "5656"
     depends_on:
@@ -113,7 +113,10 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: disc
-      POSTGRES_PASSWORD: disc
+      # P2-36: NEVER deploy with the default literal "disc" password.
+      # Set POSTGRES_PASSWORD in .env.production (see 'disc deploy --format env')
+      # or override here before running docker compose up.
+      POSTGRES_PASSWORD: $\{POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: ${projectName}
     volumes:
       - pgdata:/var/lib/postgresql/data

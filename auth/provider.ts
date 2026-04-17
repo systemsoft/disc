@@ -5,6 +5,9 @@
 import * as bcrypt from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
 import { create, verify } from "https://deno.land/x/djwt@v3.0.2/mod.ts";
 import { DatabaseInterface } from "./database-interface.ts";
+import { getLogger } from "../lib/logger.ts";
+
+const authLogger = getLogger("auth");
 import {
   AuthConfig,
   AuthError,
@@ -220,6 +223,10 @@ export class AuthProvider implements IAuthProvider {
       // P1-35: generic error — don't leak whether the email exists.
       // Returning USER_NOT_FOUND vs INVALID_CREDENTIALS lets attackers
       // probe valid accounts.
+      this.auditEvent("login_failed", null, {
+        reason: "no_such_user",
+        email: credentials.email,
+      });
       throw new AuthError(
         "Invalid credentials",
         AuthErrorCode.INVALID_CREDENTIALS,
@@ -289,6 +296,7 @@ export class AuthProvider implements IAuthProvider {
       "UPDATE sessions SET revoked = TRUE WHERE id = ?",
       [sessionId],
     );
+    this.auditEvent("session_revoked", null, { sessionId, reason: "logout" });
   }
 
   async refresh(refreshToken: string): Promise<AuthResponse> {
@@ -578,18 +586,65 @@ export class AuthProvider implements IAuthProvider {
     );
   }
 
-  private async createSession(userId: string): Promise<Session> {
+  private async createSession(
+    userId: string,
+    meta?: { ipAddress?: string; userAgent?: string },
+  ): Promise<Session> {
     const sessionId = this.generateId();
     const expiresAt = new Date(Date.now() + this.config.sessionTimeout * 1000);
+
+    // P2-22: cap concurrent sessions per user. If maxSessionsPerUser is
+    // set and the user is already at the cap, revoke the oldest session
+    // before creating a new one. This bounds credential-stuffing blast
+    // radius without breaking legitimate multi-device use.
+    const maxSessions = this.config.maxSessionsPerUser;
+    if (typeof maxSessions === "number" && maxSessions > 0) {
+      const active = await this.db.query(
+        `SELECT id FROM sessions
+           WHERE user_id = ?
+             AND revoked = FALSE
+             AND expires_at > CURRENT_TIMESTAMP
+           ORDER BY created_at ASC`,
+        [userId],
+      );
+      if (active.rows.length >= maxSessions) {
+        const toRevoke = active.rows
+          .slice(0, active.rows.length - maxSessions + 1)
+          .map((row) => row.id);
+        for (const oldId of toRevoke) {
+          await this.db.execute(
+            "UPDATE sessions SET revoked = TRUE WHERE id = ?",
+            [oldId],
+          );
+        }
+      }
+    }
 
     await this.db.execute(
       `
       INSERT INTO sessions (
-        id, user_id, token, expires_at
-      ) VALUES (?, ?, ?, ?)
+        id, user_id, token, expires_at, ip_address, user_agent
+      ) VALUES (?, ?, ?, ?, ?, ?)
     `,
-      [sessionId, userId, "", expiresAt.toISOString()],
+      [
+        sessionId,
+        userId,
+        "",
+        expiresAt.toISOString(),
+        // P2-21: persist IP + User-Agent so anomaly detection downstream
+        // (and the audit log below) has something to work with. Missing
+        // metadata is stored as NULL.
+        meta?.ipAddress ?? null,
+        meta?.userAgent ?? null,
+      ],
     );
+
+    // P2-23: audit the creation. Best-effort — failures in the audit
+    // log must never break session creation.
+    this.auditEvent("session_created", userId, {
+      sessionId,
+      ipAddress: meta?.ipAddress,
+    });
 
     return {
       id: sessionId,
@@ -598,6 +653,27 @@ export class AuthProvider implements IAuthProvider {
       createdAt: new Date(),
       expiresAt: expiresAt,
     };
+  }
+
+  /**
+   * Structured audit event. Writes to the shared logger at info level with
+   * a stable `event=auth.<name>` prefix so log aggregators can filter on
+   * auth events. Best-effort: failures in logging never propagate. (P2-23)
+   */
+  private auditEvent(
+    event: string,
+    userId: string | null,
+    details: Record<string, unknown> = {},
+  ): void {
+    try {
+      authLogger.info(`auth.${event}`, {
+        event,
+        userId: userId ?? "anonymous",
+        ...details,
+      });
+    } catch {
+      // swallow
+    }
   }
 
   private async generateJWT(user: User): Promise<string> {

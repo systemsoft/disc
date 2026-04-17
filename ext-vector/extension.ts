@@ -23,8 +23,16 @@ export class VectorExtension extends BaseExtension {
 
   constructor(config?: VectorConfig) {
     super();
+    const dims = config?.defaultDimensions ?? 1536;
+    // P2-26: pgvector supports dims up to 16000 for hnsw/ivfflat; reject
+    // out-of-range at construction time instead of at DDL apply time.
+    if (!Number.isInteger(dims) || dims < 1 || dims > 16000) {
+      throw new Error(
+        `VectorExtension: defaultDimensions must be an integer in [1, 16000], got ${dims}`,
+      );
+    }
     this.config = {
-      defaultDimensions: config?.defaultDimensions ?? 1536,
+      defaultDimensions: dims,
       indexType: config?.indexType ?? "hnsw",
     };
   }

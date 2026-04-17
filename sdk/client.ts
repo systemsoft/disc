@@ -30,6 +30,7 @@ export class DiscClient {
   private retries: number;
   private retryDelay: number;
   private authToken?: string;
+  private logger?: DiscClientConfig["logger"];
 
   constructor(config?: DiscClientConfig) {
     this.baseUrl = (config?.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
@@ -37,6 +38,7 @@ export class DiscClient {
     this.customHeaders = config?.headers ?? {};
     this.retries = config?.retries ?? 0;
     this.retryDelay = config?.retryDelay ?? 1000;
+    this.logger = config?.logger;
   }
 
   /**
@@ -245,9 +247,17 @@ export class DiscClient {
         if (error instanceof DiscServerError) {
           lastError = error;
           if (attempt < this.retries) {
+            this.logger?.warn?.("retrying after server error", {
+              attempt: attempt + 1,
+              max: this.retries,
+              status: (error as { statusCode?: number }).statusCode,
+            });
             await this.delay(this.backoffDelay(attempt));
             continue;
           }
+          this.logger?.error?.("server error exhausted retries", {
+            status: error.status,
+          });
           throw error;
         }
 
