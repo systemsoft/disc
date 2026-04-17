@@ -51,3 +51,19 @@ coverage/
 # Continuous Claude cache (local only)
 .claude/cache/
 thoughts/
+
+# Compiled binaries at repo root (produced by `disc build` / `deno compile`)
+/disc
+/disc-linux
+/disc-darwin-*
+
+# Stray project scaffolds from interactive testing (see thoughts/shared/audits)
+/disc.toml
+/test-audit/
+/w07/
+
+# UI toolchain build output (Bun + Vite)
+/ui/.svelte-kit/
+/ui/build/
+/ui/node_modules/
+/ui/bun.lock
