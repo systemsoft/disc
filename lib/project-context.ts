@@ -70,10 +70,18 @@ function parseToml(source: string): TomlFields {
     const key = kvMatch[1];
     const rawValue = kvMatch[2].trim();
 
-    // Strip surrounding double quotes if present
-    const value = rawValue.startsWith('"') && rawValue.endsWith('"')
-      ? rawValue.slice(1, -1)
-      : rawValue;
+    // Strip surrounding double quotes if present and unescape the TOML
+    // basic-string escapes we care about: \" (literal quote) and \\
+    // (literal backslash). (P2-27)
+    let value: string;
+    if (rawValue.startsWith('"') && rawValue.endsWith('"')) {
+      value = rawValue
+        .slice(1, -1)
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, "\\");
+    } else {
+      value = rawValue;
+    }
 
     if (section === "") {
       if (key === "name") {

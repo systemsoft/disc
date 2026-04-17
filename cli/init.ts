@@ -25,8 +25,17 @@ export class InitCommand {
    * Initialize a new Disc project
    */
   async execute(options: InitOptions): Promise<void> {
+    // P2-16: accept both bare names (`my-app`) and path-style args
+    // (`./apps/my-app`, `/tmp/foo`) — matches `git init`, `npm create`,
+    // etc. The directory portion is split off and used as the parent;
+    // the basename becomes the project name and is validated normally.
+    const normalized = this.normalizeNameOrPath(options);
     console.log("🚀 Initializing new Disc project...");
-    console.log(`📁 Creating project: ${options.name}`);
+    console.log(`📁 Creating project: ${normalized.name}`);
+
+    // Override options with the normalized name + directory so the rest
+    // of the method uses a clean bare name.
+    options = { ...options, name: normalized.name, directory: normalized.directory };
 
     const projectDir = options.directory
       ? `${options.directory}/${options.name}`
@@ -84,6 +93,26 @@ export class InitCommand {
       );
       throw error;
     }
+  }
+
+  /**
+   * Split a user-supplied name/path into `{ name, directory }`. (P2-16)
+   * If the input contains a `/`, the last segment is the project name
+   * and everything before it is the parent directory (replacing any
+   * explicit `options.directory`). Bare names pass through unchanged.
+   */
+  private normalizeNameOrPath(
+    options: InitOptions,
+  ): { name: string; directory?: string } {
+    const raw = options.name;
+    if (!raw.includes("/")) {
+      return { name: raw, directory: options.directory };
+    }
+    const trimmed = raw.replace(/\/+$/, "");
+    const lastSlash = trimmed.lastIndexOf("/");
+    const directory = trimmed.substring(0, lastSlash) || "/";
+    const name = trimmed.substring(lastSlash + 1);
+    return { name, directory };
   }
 
   private isValidProjectName(name: string): boolean {

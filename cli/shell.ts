@@ -39,7 +39,13 @@ export class DiscShell {
 
     const host = options.host || "localhost";
     const port = options.port || 5656;
-    const database = options.database || "disc";
+    // P2-13: default to the project's instance name (from disc.toml) if
+    // available; the prior default "disc" was an artifact of the old
+    // hardcoded superuser db and mis-labeled what we actually connect to.
+    const ctx = resolveProjectContext();
+    const database = options.database ||
+      ctx?.instanceName ||
+      "disc";
 
     try {
       this.session = {
@@ -53,7 +59,7 @@ export class DiscShell {
 
       // Connect to database
       await this.connectToDatabase(host, port, database);
-      console.log(`📡 Connected to database: ${database}`);
+      console.log(`📡 Connected to database: ${this.session.database}`);
       console.log("");
 
       if (options.schemaFile) {

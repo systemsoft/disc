@@ -302,6 +302,27 @@ export class PostgresInstance {
   async status(): Promise<PostgresInstanceStatus> {
     const running = await this.isRunning();
 
+    // P2-15: recover startedAt from postmaster.pid when the instance was
+    // started by a previous process (our current run just discovered it).
+    // PG writes the start time as a Unix timestamp on line 3 of the
+    // postmaster.pid file.
+    if (running && this.startedAt === undefined) {
+      try {
+        const pidContent = await Deno.readTextFile(
+          join(this.dataDir, "postmaster.pid"),
+        );
+        const lines = pidContent.split("\n");
+        if (lines.length >= 3) {
+          const epoch = parseInt(lines[2], 10);
+          if (Number.isFinite(epoch) && epoch > 0) {
+            this.startedAt = new Date(epoch * 1000);
+          }
+        }
+      } catch {
+        // Best-effort — leave startedAt undefined if we can't read it.
+      }
+    }
+
     return {
       dataDir: this.dataDir,
       pid: this.pid,

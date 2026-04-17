@@ -405,6 +405,26 @@ export class SDLLexer {
       }
 
       if (escaped) {
+        // P2-03: Unicode escape \uXXXX — consume the next 4 hex digits.
+        if (ch === "u") {
+          this.advance(); // consume the 'u'
+          const hex = this.source.slice(this.pos, this.pos + 4);
+          if (!/^[0-9a-fA-F]{4}$/.test(hex)) {
+            throw new SyntaxError(
+              `Invalid \\u escape — expected 4 hex digits, got ${
+                JSON.stringify(hex)
+              }`,
+              {
+                location: { line: this.line, column: this.column, offset: this.pos },
+              },
+            );
+          }
+          parts.push(String.fromCodePoint(parseInt(hex, 16)));
+          for (let i = 0; i < 4; i++) this.advance();
+          escaped = false;
+          runStart = this.pos;
+          continue;
+        }
         parts.push(this.processEscape(ch));
         escaped = false;
         this.advance();
@@ -717,13 +737,24 @@ export class SDLLexer {
 
   private isIdentStart(ch: string | null): boolean {
     if (ch === null) return false;
-    return (ch >= "a" && ch <= "z") ||
+    // ASCII fast-path
+    if (
+      (ch >= "a" && ch <= "z") ||
       (ch >= "A" && ch <= "Z") ||
-      ch === "_";
+      ch === "_"
+    ) {
+      return true;
+    }
+    // P2-04: accept Unicode letters for identifiers (\p{L}). Keeps
+    // SDL writable in non-ASCII locales. Digits are still ASCII-only
+    // in the "start" position to avoid parser ambiguity with numbers.
+    return /\p{L}/u.test(ch);
   }
 
   private isIdentCont(ch: string | null): boolean {
     if (ch === null) return false;
-    return this.isIdentStart(ch) || this.isDigit(ch);
+    // P2-04: identifier continuation allows letters, digits, and
+    // Unicode marks (combining chars like accents).
+    return this.isIdentStart(ch) || this.isDigit(ch) || /\p{M}/u.test(ch);
   }
 }
