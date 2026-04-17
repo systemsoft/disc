@@ -65,10 +65,31 @@ export class PostgresInstance {
       logger.info(`Using pre-existing PostgreSQL binaries at ${this.pgBinDir}`);
     }
 
-    // Create necessary directories
-    await ensureDir(this.dataDir);
-    await ensureDir(this.socketDir);
-    await ensureDir(join(this.dataDir, "..", "logs"));
+    // P2-02: if any of these paths already exists but is a regular
+    // file instead of a directory, ensureDir's error message ("File
+    // exists") is opaque — surface the concrete path and what we
+    // expected so the user knows exactly what to fix.
+    for (const [label, dir] of [
+      ["data dir", this.dataDir],
+      ["socket dir", this.socketDir],
+      ["logs dir", join(this.dataDir, "..", "logs")],
+    ] as const) {
+      try {
+        const stat = await Deno.lstat(dir);
+        if (!stat.isDirectory) {
+          throw new Error(
+            `PostgreSQL ${label} path exists but is not a directory: ${dir}. Remove or rename it and retry.`,
+          );
+        }
+      } catch (err) {
+        if (!(err instanceof Deno.errors.NotFound)) {
+          // Non-NotFound errors re-throw; NotFound just means ensureDir
+          // will create it fresh below.
+          throw err;
+        }
+      }
+      await ensureDir(dir);
+    }
 
     // Check if data directory is already initialized
     const pgVersionFile = join(this.dataDir, "PG_VERSION");
@@ -196,30 +217,46 @@ export class PostgresInstance {
       ? ["-h", this.socketDir, "-p", String(effectivePort), "-U", "disc"]
       : ["-h", "localhost", "-p", String(this.port), "-U", "disc"];
 
-    const cmd = new Deno.Command(createdbPath, {
-      args: [...connArgs, this.instanceName],
-    });
+    // P2-01: createdb can fail transiently immediately after PG boots
+    // (the postmaster is accepting TCP but the catalog isn't ready yet).
+    // Retry up to 3 times with a short backoff before surfacing the
+    // error via P1-02's throw.
+    let lastStderr = "";
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const cmd = new Deno.Command(createdbPath, {
+        args: [...connArgs, this.instanceName],
+      });
+      const output = await cmd.output();
 
-    const output = await cmd.output();
+      if (output.success) {
+        logger.info(`Created database "${this.instanceName}"`);
+        return;
+      }
 
-    if (output.success) {
-      logger.info(`Created database "${this.instanceName}"`);
-      return;
+      lastStderr = new TextDecoder().decode(output.stderr);
+      // "already exists" is expected on subsequent starts — not an error.
+      if (lastStderr.includes("already exists")) {
+        logger.info(`Database "${this.instanceName}" already exists`);
+        return;
+      }
+
+      // Retry on the "starting up" / "not ready" shapes PG emits right
+      // after boot. Anything else is a real failure — throw now.
+      const transient = /starting up|server not yet accepting|could not connect/i
+        .test(lastStderr);
+      if (!transient || attempt === 2) {
+        break;
+      }
+      const delayMs = 150 * (attempt + 1);
+      logger.info(
+        `createdb transient failure (attempt ${attempt + 1}/3); retrying in ${delayMs}ms`,
+      );
+      await new Promise((r) => setTimeout(r, delayMs));
     }
 
-    const stderr = new TextDecoder().decode(output.stderr);
-    // "already exists" is expected on subsequent starts — not an error.
-    if (stderr.includes("already exists")) {
-      logger.info(`Database "${this.instanceName}" already exists`);
-      return;
-    }
-
-    // P1-02: previously this logged and returned silently, leaving the
-    // caller with a running PG but no usable database. The next query
-    // then failed with a cryptic "database does not exist". Propagating
-    // the error surfaces the problem immediately.
+    // P1-02: propagate on real failure.
     throw new Error(
-      `Failed to create database "${this.instanceName}": ${stderr.trim()}`,
+      `Failed to create database "${this.instanceName}": ${lastStderr.trim()}`,
     );
   }
 

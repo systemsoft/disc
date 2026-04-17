@@ -59,7 +59,10 @@ Deno.test("DeployCommand - systemd format generates valid disc.service", () => {
   assertStringIncludes(content, "[Service]");
   assertStringIncludes(content, "[Install]");
   assertStringIncludes(content, "After=network.target postgresql.service");
-  assertStringIncludes(content, "EnvironmentFile=/etc/disc/disc.env");
+  // P2-10: paths are parameterized via env vars with the old defaults
+  // as fallbacks, so the literal "/etc/disc/disc.env" appears inside
+  // the ${…:-default} expansion.
+  assertStringIncludes(content, "/etc/disc/disc.env");
   assertStringIncludes(content, "Restart=on-failure");
   assertStringIncludes(content, "ExecStart=");
   assertStringIncludes(content, "my-app");

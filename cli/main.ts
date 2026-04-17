@@ -75,6 +75,23 @@ OPTIONS:
   --squash-from <id>     Start of squash range (inclusive)
   --squash-to <id>       End of squash range (inclusive)
 
+FLAG SCOPE (P2-11 — run \`disc <command> --help\` for command-specific details):
+  Global:                    --help, --version
+  init:                      --template, --backend-dsn, --skip-postgres, --force, --directory
+  start/stop/restart/status: --no-monitor (start only), --foreground (start only)
+  migrate:                   --schema, --dry-run, --auto-approve, --create, --status,
+                             --rollback, --rollback-to, --squash, --squash-{from,to}, --backend-dsn
+  shell/serve:               --backend-dsn; serve adds --jwt-secret, --enable-auth,
+                             --enable-access-policies, --binary-port, --tls-cert, --tls-key
+  codegen:                   --schema, --schema-dir, --output, --target, --no-queries,
+                             --no-mutations, --no-client, --no-format, --js
+  watch:                     --schema, --output
+  build:                     --platform, --output, --lite
+  deploy:                    --format, --output
+  db create/list/drop:       --force (drop), --database-url
+  pg log:                    --follow, --lines, --level
+  pg upgrade:                --target-version, --dry-run
+
 EXAMPLES:
   disc init my-project                # Initialize new project with PostgreSQL
   disc init --skip-postgres           # Initialize without PostgreSQL

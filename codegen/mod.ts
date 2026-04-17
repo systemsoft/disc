@@ -22,8 +22,12 @@ export function generateTypeScript(
   config: Partial<Types.CodegenConfig> = {},
 ): Types.CodegenResult {
   const fullConfig: Types.CodegenConfig = {
-    outputDir: config.outputDir || "./generated",
-    schemaSource: config.schemaSource || "./schema.disc",
+    // P2-29: default matches the CLI default (./dbschema/disc-client)
+    // so calling generateTypeScript() with no config produces output
+    // in the same place as `disc codegen`. docs/codegen.md and
+    // docs/getting-started.md both document this path.
+    outputDir: config.outputDir || "./dbschema/disc-client",
+    schemaSource: config.schemaSource || "./dbschema/default.disc",
     target: config.target || "client",
     typePrefix: config.typePrefix || "",
     interfaceSuffix: config.interfaceSuffix || "",

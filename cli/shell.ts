@@ -432,6 +432,10 @@ export class DiscShell {
   }
 
   private async cleanup(): Promise<void> {
+    // P2-14: print a newline BEFORE close so any log lines that follow
+    // (pool shutdown, connection closed) don't collide with the last
+    // `disc>` prompt. Previously: "disc> {\"ts\":...Database closed\"}".
+    await Deno.stdout.write(new TextEncoder().encode("\n"));
     if (this.db) {
       await this.db.close();
     }

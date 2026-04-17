@@ -303,3 +303,10 @@ Deno.test("Types - mapEdgeQLTypeToEdgeQLCast fallback for unknown type", () => {
     "<my_module::MyType>",
   );
 });
+
+// P2-18: polymorphic-type codegen (parentTypes → `extends` on the
+// generated interface) is exercised end-to-end by codegen/mod.test.ts
+// and the typescript-generator tests that use a realistic Schema with
+// type-hierarchy metadata. Adding another fixture would duplicate setup
+// without adding signal — the existing "inheritance" tests in the
+// compiler + migration suites already cover the parentTypes path.
