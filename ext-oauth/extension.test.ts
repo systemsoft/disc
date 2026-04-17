@@ -272,32 +272,56 @@ Deno.test("OAuthExtension - getStateManager returns manager", () => {
   assertEquals(manager !== null, true);
 });
 
-Deno.test("OAuthExtension - state manager validates created states", () => {
+Deno.test("OAuthExtension - state manager validates created states", async () => {
   const ext = new OAuthExtension(makeConfig());
   const manager = ext.getStateManager();
-  const oauthState = manager.createState("google", "https://example.com/cb");
+  const oauthState = await manager.createState(
+    "google",
+    "https://example.com/cb",
+  );
   const validated = manager.validateState(oauthState.state);
   assertEquals(validated !== null, true);
   assertEquals(validated!.provider, "google");
 });
 
-Deno.test("OAuthExtension - state manager rejects states used twice (one-time use)", () => {
+Deno.test("OAuthExtension - state manager rejects states used twice (one-time use)", async () => {
   const ext = new OAuthExtension(makeConfig());
   const manager = ext.getStateManager();
-  const oauthState = manager.createState("google", "https://example.com/cb");
+  const oauthState = await manager.createState(
+    "google",
+    "https://example.com/cb",
+  );
   manager.validateState(oauthState.state);
   const second = manager.validateState(oauthState.state);
   assertEquals(second, null);
 });
 
-Deno.test("OAuthExtension - state manager rejects expired states", () => {
+Deno.test("OAuthExtension - state manager populates PKCE fields (P1-41)", async () => {
+  const ext = new OAuthExtension(makeConfig());
+  const manager = ext.getStateManager();
+  const oauthState = await manager.createState(
+    "google",
+    "https://example.com/cb",
+  );
+  // RFC 7636: verifier is 43-128 URL-safe chars; challenge is base64url
+  // of SHA-256(verifier) so it's exactly 43 chars.
+  assertEquals(typeof oauthState.codeVerifier, "string");
+  assertEquals(oauthState.codeVerifier!.length >= 43, true);
+  assertEquals(typeof oauthState.codeChallenge, "string");
+  assertEquals(oauthState.codeChallenge!.length, 43);
+});
+
+Deno.test("OAuthExtension - state manager rejects expired states", async () => {
   // 1 ms expiry so state expires immediately
   const ext = new OAuthExtension({
     providers: [googleProvider("cid", "csecret")],
     stateExpiryMs: 1,
   });
   const manager = ext.getStateManager();
-  const oauthState = manager.createState("google", "https://example.com/cb");
+  const oauthState = await manager.createState(
+    "google",
+    "https://example.com/cb",
+  );
   // Wait for expiry
   return new Promise<void>((resolve) => {
     setTimeout(() => {

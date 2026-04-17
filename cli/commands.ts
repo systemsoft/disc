@@ -122,10 +122,13 @@ export class CLICommands {
     try {
       const ctx = resolveProjectContext();
 
-      // Start PostgreSQL if managed
+      // Start PostgreSQL if managed. `disc serve` is a long-running process,
+      // so the health monitor is wanted here (restart PG on crash).
       if (ctx?.managed) {
         console.log(`📦 Starting PostgreSQL for project: ${ctx.projectName}`);
-        const { dsn, wasStarted } = await ensurePgRunning(ctx);
+        const { dsn, wasStarted } = await ensurePgRunning(ctx, {
+          withMonitor: true,
+        });
         Deno.env.set("DATABASE_URL", dsn);
         console.log(wasStarted ? "✅ PostgreSQL started" : "✅ PostgreSQL already running");
         console.log(`📡 Connection: ${dsn}`);
@@ -344,11 +347,20 @@ export class CLICommands {
   async start(args: CLIArgs): Promise<void> {
     const ctx = resolveProjectContext();
     const projectName = ctx?.projectName || Deno.cwd().split("/").pop() || "default";
+    // P1-17: default behavior matches `systemctl start` — PG is a
+    // pg_ctl-managed daemon, so `disc start` returns as soon as PG is up.
+    // The health monitor (which used to block the foreground via a
+    // setInterval) is only started when `--foreground` is passed.
+    const foreground = args.foreground === true;
+    const useMonitor = foreground && !args["no-monitor"];
+
     console.log(`🚀 Starting PostgreSQL for project: ${projectName}`);
 
     try {
       if (ctx?.managed) {
-        const { instance, dsn, wasStarted } = await ensurePgRunning(ctx);
+        const { instance, dsn, wasStarted } = await ensurePgRunning(ctx, {
+          withMonitor: useMonitor,
+        });
         const status = await instance.status();
         console.log(wasStarted ? "✅ PostgreSQL started successfully" : "✅ PostgreSQL already running");
         console.log(`📊 Status:`);
@@ -365,7 +377,7 @@ export class CLICommands {
             port: args.port || 0,
           });
         }
-        await this.postgresManager.startInstance(projectName, !args["no-monitor"]);
+        await this.postgresManager.startInstance(projectName, useMonitor);
         const status = await instance.status();
         console.log("✅ PostgreSQL started successfully");
         console.log(`📊 Status:`);
@@ -373,6 +385,12 @@ export class CLICommands {
         console.log(`   Port: ${status.port || "Unix socket"}`);
         console.log(`   Data: ${status.dataDir}`);
         console.log(`   DSN: ${instance.dsn()}`);
+      }
+
+      if (foreground) {
+        console.log(
+          `\n📡 Running in foreground (--foreground). Press Ctrl-C to stop the health monitor; PostgreSQL itself will keep running until \`disc stop\`.`,
+        );
       }
     } catch (error) {
       console.error(

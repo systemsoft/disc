@@ -144,10 +144,12 @@ Deno.test("DDL Generator - Generate Rollback SQL for DropProperty", () => {
 
   const rollbackSQL = generator.generateRollbackDDL([operation]);
 
-  assertEquals(rollbackSQL.length, 3);
-  // Should indicate that manual intervention is needed to recreate the column with proper type
+  // P1-10: rollback output now also includes a DO-block RAISE that fails
+  // the rollback loudly at apply-time rather than silently no-op'ing.
+  assertEquals(rollbackSQL.length, 4);
   assertStringIncludes(rollbackSQL[0], "-- MANUAL");
   assertStringIncludes(rollbackSQL[1], "ADD COLUMN active");
+  assertStringIncludes(rollbackSQL[3], "RAISE EXCEPTION");
 });
 
 Deno.test("DDL Generator - Generate Rollback SQL for AlterProperty", () => {

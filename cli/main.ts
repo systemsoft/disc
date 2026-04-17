@@ -112,6 +112,153 @@ EXAMPLES:
   disc db drop my_app --force                      # Drop database disc_my_app
 `;
 
+/**
+ * Per-subcommand help strings (P1-16). Keys may be single commands
+ * ("init") or 2-word sub-commands ("pg log", "db create"). Missing
+ * entries fall back to the global HELP_TEXT.
+ */
+const COMMAND_HELP: Record<string, string> = {
+  init: `Initialize a new Disc project
+
+USAGE:
+  disc init <project-name> [options]
+
+OPTIONS:
+  --template <t>        Template: basic | minimal | full (default: basic)
+  --backend-dsn <url>   Use external PostgreSQL (skip bundled PG setup)
+  --skip-postgres       Skip PostgreSQL setup entirely
+  --force               Overwrite existing directory
+
+EXAMPLES:
+  disc init my-app
+  disc init my-app --template full
+  disc init my-app --backend-dsn postgres://user:pass@host/db`,
+  start: `Start PostgreSQL for the current project
+
+USAGE:
+  disc start [options]
+
+OPTIONS:
+  --no-monitor          Disable PostgreSQL health monitoring`,
+  stop: `Stop PostgreSQL for the current project
+
+USAGE:
+  disc stop`,
+  migrate: `Generate and apply schema migrations
+
+USAGE:
+  disc migrate [options]
+
+OPTIONS:
+  -s, --schema <file>   Schema file (default: ./dbschema/default.disc)
+  --dry-run             Preview migration without executing
+  --auto-approve        Apply without interactive confirmation
+  --create              Create migration file without applying
+  --status              Show applied / pending migration summary
+  --rollback            Rollback the most recent migration (requires --force)
+  --rollback-to <id>    Rollback all migrations after the given ID
+  --squash              Squash migrations into a single migration
+  --backend-dsn <url>   Connect to external PostgreSQL instead of bundled`,
+  shell: `Open an interactive EdgeQL REPL
+
+USAGE:
+  disc shell [options]
+
+OPTIONS:
+  --backend-dsn <url>   Connect to external PostgreSQL`,
+  codegen: `Generate TypeScript types + client from your schema
+
+USAGE:
+  disc codegen [options]
+
+OPTIONS:
+  -s, --schema <file>   Single-file schema (default: ./dbschema/default.disc)
+  --schema-dir <dir>    Multi-file schema directory (default: ./dbschema)
+  -o, --output <dir>    Output directory (default: ./dbschema/disc-client)
+  -t, --target <type>   Output target: client | server | both
+  --no-queries          Skip query-builder generation
+  --no-mutations        Skip mutation method generation
+  --no-client           Skip client library generation
+  --no-format           Skip output formatting`,
+  serve: `Start the Disc HTTP/WebSocket server
+
+USAGE:
+  disc serve [options]
+
+OPTIONS:
+  --backend-dsn <url>       External PostgreSQL DSN
+  --jwt-secret <key>        JWT signing secret (enables auth)
+  --enable-auth             Enable authentication system
+  --enable-access-policies  Enable row-level access policy enforcement
+  --binary-port <port>      Enable binary wire protocol on this port
+  --tls-cert <path>         Path to TLS certificate
+  --tls-key <path>          Path to TLS private key`,
+  build: `Compile Disc into a self-contained native binary
+
+USAGE:
+  disc build [options]
+
+OPTIONS:
+  --platform <p>        Target: linux-x64 | linux-arm64 | darwin-x64 | darwin-arm64
+  -o, --output <path>   Output binary path
+  --lite                Skip bundling UI assets (smaller binary)`,
+  deploy: `Generate deployment artifacts for a given format
+
+USAGE:
+  disc deploy --format <fmt> [options]
+
+OPTIONS:
+  --format <fmt>        One of: docker | compose | systemd | env
+  -o, --output <dir>    Output directory (default: ./)`,
+  watch: `Watch schema files and auto-run migrate + codegen on change
+
+USAGE:
+  disc watch [options]
+
+OPTIONS:
+  -s, --schema <file>   Schema to watch (default: ./dbschema/default.disc)
+  -o, --output <dir>    Codegen output dir (default: ./generated)`,
+  ui: `Open the admin UI in your browser
+
+USAGE:
+  disc ui
+
+Requires the UI to be built first (cd ui && bun install && bun run build).`,
+  status: `Show PostgreSQL status for the current project
+
+USAGE:
+  disc status`,
+  "pg log": `View PostgreSQL logs for the current project
+
+USAGE:
+  disc pg log [options]
+
+OPTIONS:
+  -f, --follow          Follow log output
+  --lines <n>           Number of lines to show (default: 50)
+  --level <lvl>         Filter by level: ERROR | WARNING | LOG | FATAL | PANIC`,
+  "pg upgrade": `Upgrade the bundled PostgreSQL version
+
+USAGE:
+  disc pg upgrade --target-version <version>
+
+OPTIONS:
+  --target-version <v>  Target PostgreSQL version (e.g. 17.0)
+  --dry-run             Preview upgrade plan`,
+  "db create": `Create a Disc-managed database
+
+USAGE:
+  disc db create <name> [--database-url <url>]`,
+  "db list": `List Disc-managed databases
+
+USAGE:
+  disc db list [--database-url <url>]`,
+  "db drop": `Drop a Disc-managed database
+
+USAGE:
+  disc db drop <name> --force [--database-url <url>]`,
+};
+
 async function main() {
   const args = parseArgs(Deno.args, {
     boolean: [
@@ -128,6 +275,7 @@ async function main() {
       "non-interactive",
       "skip-postgres",
       "no-monitor",
+      "foreground",
       "enable-auth",
       "enable-access-policies",
       "follow",
@@ -177,7 +325,7 @@ async function main() {
     },
   }) as CLIArgs;
 
-  if (args.help || args._.length === 0) {
+  if (args._.length === 0) {
     console.log(HELP_TEXT);
     return;
   }
@@ -188,6 +336,20 @@ async function main() {
   }
 
   const command = String(args._[0]);
+
+  // P1-16: `disc <command> --help` prints command-specific help instead of
+  // the global help text. Falls back to global when no per-command entry.
+  if (args.help) {
+    const sub = args._[1] ? String(args._[1]) : undefined;
+    const key = sub ? `${command} ${sub}` : command;
+    const specific = COMMAND_HELP[key] ?? COMMAND_HELP[command];
+    if (specific) {
+      console.log(specific);
+      return;
+    }
+    console.log(HELP_TEXT);
+    return;
+  }
 
   try {
     switch (command) {

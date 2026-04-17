@@ -573,12 +573,13 @@ export class TypeScriptGenerator {
 
     const multiModule = this.isMultiModule();
 
-    // Import from SDK instead of generating inline client
+    // Import from SDK. The default (../sdk/mod.ts) works when codegen runs
+    // inside the Disc repo; downstream projects override via config. (P1-21)
+    const sdkBase = this.config.sdkImportBase ?? "../sdk/mod.ts";
     content +=
-      `import { DiscClient as BaseClient, type DiscClientConfig } from "../sdk/mod.ts";\n`;
-    content += `export type { DiscClientConfig } from "../sdk/mod.ts";\n`;
-    content +=
-      `export { AuthManager, SubscriptionClient } from "../sdk/mod.ts";\n`;
+      `import { DiscClient as BaseClient, type DiscClientConfig } from "${sdkBase}";\n`;
+    content += `export type { DiscClientConfig } from "${sdkBase}";\n`;
+    content += `export { AuthManager, SubscriptionClient } from "${sdkBase}";\n`;
     content += `import * as Queries from "./queries.ts";\n\n`;
 
     // Typed client class extending SDK client with query builders

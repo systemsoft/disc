@@ -1420,13 +1420,18 @@ export class DDLGenerator {
   private generateRollbackDropType(
     operation: Types.DropTypeOperation,
   ): string[] {
-    // To rollback DropType, we would need to recreate the table
-    // This requires the original schema information which we don't have
+    // P1-10: DropType rollback is fundamentally impossible without the
+    // pre-drop schema snapshot (which we don't persist). Emit a SQL-level
+    // DO block so an accidental `disc migrate --rollback` fails loudly
+    // instead of silently "succeeding" with comment-only DDL.
     const tableName = this.typeNameToTableName(operation.typeName);
     return [
       `-- MANUAL ROLLBACK REQUIRED: Recreate table '${tableName}'`,
       `-- The original table structure was lost when it was dropped.`,
       `-- Please restore from backup or recreate the table manually.`,
+      `DO $$ BEGIN
+  RAISE EXCEPTION 'Cannot auto-rollback DropType for "${tableName}" — restore from backup or edit this migration to provide CREATE TABLE DDL.';
+END $$;`,
     ];
   }
 
@@ -1543,14 +1548,18 @@ export class DDLGenerator {
     tableName: string,
     operation: Types.DropPropertyOperation,
   ): string[] {
-    // To rollback DropProperty, we would need to add the column back
-    // This requires the original column definition which we don't have
+    // P1-10: DropProperty rollback can't restore data without a backup.
+    // The RAISE EXCEPTION ensures a dry-run or automated rollback fails
+    // loudly instead of silently no-op'ing.
     return [
       `-- MANUAL ROLLBACK REQUIRED: Add column '${operation.propertyName}' back to table '${tableName}'`,
       `-- ALTER TABLE ${this.escapeIdentifier(tableName)} ADD COLUMN ${
         this.escapeIdentifier(operation.propertyName)
       } <TYPE> <CONSTRAINTS>;`,
       `-- Please determine the correct type and constraints from backup or documentation.`,
+      `DO $$ BEGIN
+  RAISE EXCEPTION 'Cannot auto-rollback DropProperty "${tableName}.${operation.propertyName}" — original column definition and data not preserved.';
+END $$;`,
     ];
   }
 

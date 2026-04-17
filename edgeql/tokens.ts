@@ -73,6 +73,7 @@ export enum TokenType {
   THEN = "THEN",
   WHEN = "WHEN",
   CASE = "CASE",
+  END = "END",
 
   // Cardinality
   REQUIRED = "REQUIRED",
@@ -239,6 +240,7 @@ export const KEYWORDS = new Map<string, TokenType>([
   ["then", TokenType.THEN],
   ["when", TokenType.WHEN],
   ["case", TokenType.CASE],
+  ["end", TokenType.END],
 
   // Cardinality
   ["required", TokenType.REQUIRED],

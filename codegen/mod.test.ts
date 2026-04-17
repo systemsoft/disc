@@ -124,7 +124,7 @@ Deno.test("Codegen - writeGeneratedFiles creates files", async () => {
       outputDir: "generated",
     });
 
-    await Codegen.writeGeneratedFiles(result, tempDir);
+    await Codegen.writeGeneratedFiles(result, tempDir, { runFmt: false });
 
     // Check that files were created
     for (const file of result.files) {
@@ -149,7 +149,7 @@ Deno.test("Codegen - writeGeneratedFiles creates output directory", async () => 
       outputDir: "custom-dir",
     });
 
-    await Codegen.writeGeneratedFiles(result, tempDir);
+    await Codegen.writeGeneratedFiles(result, tempDir, { runFmt: false });
 
     // Check that output directory was created
     const outputDir = join(tempDir, "custom-dir");

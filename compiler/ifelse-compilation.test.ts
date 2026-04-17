@@ -130,3 +130,37 @@ Deno.test("IF/ELSE - in filter expression", () => {
   );
   assertEquals(sql.includes("END"), true, "SQL should contain END");
 });
+
+// P1-05 — multi-branch CASE/WHEN
+Deno.test("CASE/WHEN — multi-branch searched CASE compiles to multi-WHEN SQL", () => {
+  const source =
+    `SELECT case when 1 = 1 then "a" when 2 = 2 then "b" else "c" end`;
+  const sql = compileEdgeQL(source);
+  assertEquals(sql.includes("CASE"), true);
+  const whenCount = (sql.match(/WHEN/g) ?? []).length;
+  assertEquals(whenCount >= 2, true, `expected ≥2 WHEN clauses, got ${sql}`);
+  assertEquals(sql.includes("ELSE"), true);
+  assertEquals(sql.includes("'a'"), true);
+  assertEquals(sql.includes("'b'"), true);
+  assertEquals(sql.includes("'c'"), true);
+  assertEquals(sql.includes("END"), true);
+});
+
+Deno.test("CASE/WHEN — single WHEN without ELSE is valid", () => {
+  const source = `SELECT case when true then 42 end`;
+  const sql = compileEdgeQL(source);
+  assertEquals(sql.includes("CASE"), true);
+  assertEquals(sql.includes("WHEN"), true);
+  assertEquals(sql.includes("42"), true);
+  assertEquals(sql.includes("END"), true);
+});
+
+Deno.test("CASE/WHEN — empty CASE (no WHEN clauses) throws", () => {
+  let threw = false;
+  try {
+    compileEdgeQL(`SELECT case end`);
+  } catch (_) {
+    threw = true;
+  }
+  assertEquals(threw, true, "CASE with zero WHEN branches must raise");
+});

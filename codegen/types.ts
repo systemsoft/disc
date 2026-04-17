@@ -13,6 +13,15 @@ export interface CodegenConfig {
   includeMutations: boolean;
   includeClient: boolean;
   formatOutput: boolean;
+  /**
+   * Base module specifier for the Disc SDK re-exports emitted into the
+   * generated client. Defaults to `"../sdk/mod.ts"` (the in-repo path used
+   * when codegen is invoked from within the Disc repo). Projects depending
+   * on a published Disc via JSR should set this to e.g. `"jsr:@disc/db/sdk"`
+   * or a local path that resolves from the generated output directory.
+   * (P1-21)
+   */
+  sdkImportBase?: string;
 }
 
 export interface TypeDefinition {

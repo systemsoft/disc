@@ -43,7 +43,12 @@ export function generateTypeScript(
 export async function writeGeneratedFiles(
   result: Types.CodegenResult,
   basePath: string = ".",
+  options: { runFmt?: boolean } = {},
 ): Promise<void> {
+  // Default: run `deno fmt` over the written files so downstream code
+  // matches project conventions. Tests that round-trip content verbatim
+  // can pass { runFmt: false }. (P1-22)
+  const runFmt = options.runFmt ?? true;
   // Collect unique directories from file paths
   const dirs = new Set<string>();
   for (const file of result.files) {
@@ -66,12 +71,39 @@ export async function writeGeneratedFiles(
   }
 
   // Write each file
+  const writtenPaths: string[] = [];
   for (const file of result.files) {
     const fullPath = file.path.startsWith("/")
       ? file.path
       : `${basePath}/${file.path}`;
     await Deno.writeTextFile(fullPath, file.content);
+    writtenPaths.push(fullPath);
     log.info("Generated file", { path: fullPath });
+  }
+
+  // P1-22: run `deno fmt` over the written files so generated code matches
+  // the project's formatting conventions instead of just stripping blank
+  // lines. Best-effort — if deno isn't on PATH or fmt fails, log and
+  // continue; the content is still written.
+  if (runFmt && writtenPaths.length > 0) {
+    try {
+      const cmd = new Deno.Command("deno", {
+        args: ["fmt", "--quiet", ...writtenPaths],
+        stdout: "null",
+        stderr: "piped",
+      });
+      const output = await cmd.output();
+      if (!output.success) {
+        const stderr = new TextDecoder().decode(output.stderr).trim();
+        log.warn("deno fmt reported issues (generated files still written)", {
+          stderr,
+        });
+      }
+    } catch (error) {
+      log.warn("deno fmt not available — generated files unformatted", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   // Report warnings and errors

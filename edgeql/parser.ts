@@ -688,6 +688,40 @@ export class EdgeQLParser {
     return expr;
   }
 
+  /**
+   * Parse the searched-CASE body. Caller has already consumed the CASE
+   * keyword. Grammar:
+   *     when <expr> then <expr>  (one or more)
+   *     [ else <expr> ]
+   *     end
+   * (P1-05)
+   */
+  private parseCaseExpression(): AST.CaseExpression {
+    const whenClauses: Array<
+      { condition: AST.Expression; result: AST.Expression }
+    > = [];
+
+    while (this.match(TokenType.WHEN)) {
+      const condition = this.parseExpression();
+      this.consume(TokenType.THEN, "Expected 'THEN' after CASE WHEN condition");
+      const result = this.parseExpression();
+      whenClauses.push({ condition, result });
+    }
+
+    if (whenClauses.length === 0) {
+      throw this.error("CASE expression requires at least one WHEN clause");
+    }
+
+    let elseResult: AST.Expression | undefined;
+    if (this.match(TokenType.ELSE)) {
+      elseResult = this.parseExpression();
+    }
+
+    this.consume(TokenType.END, "Expected 'END' to close CASE expression");
+
+    return { kind: "CaseExpression", whenClauses, elseResult };
+  }
+
   private parseOrExpression(): AST.Expression {
     let expr = this.parseAndExpression();
 
@@ -1192,6 +1226,11 @@ export class EdgeQLParser {
   }
 
   private parsePrimaryExpression(): AST.Expression {
+    // CASE ... WHEN ... THEN ... ELSE ... END (P1-05)
+    if (this.match(TokenType.CASE)) {
+      return this.parseCaseExpression();
+    }
+
     // Literals
     if (this.check(TokenType.STRING)) {
       const value = this.advance().value;

@@ -188,6 +188,7 @@ export type Expression =
   | BinaryOp
   | UnaryOp
   | IfElse
+  | CaseExpression
   | SetExpr
   | ArrayExpr
   | TupleExpr
@@ -332,6 +333,17 @@ export interface IfElse extends EdgeQLNode {
   condition: Expression;
   then: Expression;
   else: Expression;
+}
+
+/**
+ * Multi-branch CASE expression (P1-05). `case when c1 then v1 when c2 then v2
+ * ... else v end`. Searched form only — simple `case subject when ...` is not
+ * yet supported (fold via equality comparisons in each when-clause).
+ */
+export interface CaseExpression extends EdgeQLNode {
+  kind: "CaseExpression";
+  whenClauses: Array<{ condition: Expression; result: Expression }>;
+  elseResult?: Expression;
 }
 
 // Set expression

@@ -113,27 +113,49 @@ export class AuthManager {
   }
 
   /**
+   * In-flight refresh promise used to serialize concurrent refresh
+   * attempts (P1-32). Without this, two callers racing `refreshTokens()`
+   * would each POST /auth/refresh; the second call consumes a refresh
+   * token that was already used by the first, forcing a re-login.
+   */
+  private refreshInFlight: Promise<AuthTokens> | null = null;
+
+  /**
    * Refresh the access token using the stored refresh token.
-   * Updates the stored tokens and reschedules auto-refresh.
+   *
+   * Serialized: if a refresh is already in flight, concurrent callers
+   * await the same promise rather than issuing duplicate requests.
+   *
    * Throws DiscAuthError if no refresh token is available.
    */
-  async refreshTokens(): Promise<AuthTokens> {
-    if (!this.tokens?.refreshToken) {
-      throw new DiscAuthError("No refresh token available");
+  refreshTokens(): Promise<AuthTokens> {
+    if (this.refreshInFlight) {
+      return this.refreshInFlight;
     }
 
-    const response = await this.client.fetch("/auth/refresh", {
-      method: "POST",
-      body: JSON.stringify({ refreshToken: this.tokens.refreshToken }),
+    const run = async (): Promise<AuthTokens> => {
+      if (!this.tokens?.refreshToken) {
+        throw new DiscAuthError("No refresh token available");
+      }
+
+      const response = await this.client.fetch("/auth/refresh", {
+        method: "POST",
+        body: JSON.stringify({ refreshToken: this.tokens.refreshToken }),
+      });
+
+      const newTokens = await response.json() as AuthTokens;
+      this.tokens = newTokens;
+      this.client.setAuthToken(newTokens.token);
+      if (this.autoRefresh) {
+        this.scheduleRefresh(newTokens.token);
+      }
+      return newTokens;
+    };
+
+    this.refreshInFlight = run().finally(() => {
+      this.refreshInFlight = null;
     });
-
-    const newTokens = await response.json() as AuthTokens;
-    this.tokens = newTokens;
-    this.client.setAuthToken(newTokens.token);
-    if (this.autoRefresh) {
-      this.scheduleRefresh(newTokens.token);
-    }
-    return newTokens;
+    return this.refreshInFlight;
   }
 
   /**

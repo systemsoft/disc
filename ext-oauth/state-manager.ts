@@ -1,7 +1,14 @@
 /**
- * OAuth state management with cryptographic nonce
+ * OAuth state management with cryptographic nonce + PKCE code verifier.
+ *
+ * Current implementation stores state in-memory. A restart invalidates
+ * every in-flight OAuth handshake — acceptable for single-node dev use
+ * but not for load-balanced or restart-heavy deployments. (P1-41: the
+ * production-grade replacement is a DB-backed store keyed by `state`
+ * with the same API; this module is intentionally swappable via DI.)
  */
 
+import { encodeBase64Url } from "@std/encoding/base64url";
 import type { OAuthState } from "./types.ts";
 
 export class OAuthStateManager {
@@ -12,9 +19,24 @@ export class OAuthStateManager {
     this.defaultExpiryMs = expiryMs;
   }
 
-  createState(provider: string, redirectUri: string): OAuthState {
+  async createState(
+    provider: string,
+    redirectUri: string,
+  ): Promise<OAuthState> {
     const state = crypto.randomUUID();
     const now = Date.now();
+
+    // P1-41: generate a PKCE code_verifier + S256 code_challenge. 32
+    // random bytes → 43-char URL-safe string (well inside RFC 7636's
+    // 43-128 range). The challenge is SHA-256 of the verifier ASCII.
+    const verifierBytes = new Uint8Array(32);
+    crypto.getRandomValues(verifierBytes);
+    const codeVerifier = encodeBase64Url(verifierBytes);
+    const challengeDigest = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(codeVerifier),
+    );
+    const codeChallenge = encodeBase64Url(new Uint8Array(challengeDigest));
 
     const oauthState: OAuthState = {
       createdAt: now,
@@ -22,6 +44,8 @@ export class OAuthStateManager {
       provider,
       redirectUri,
       state,
+      codeVerifier,
+      codeChallenge,
     };
 
     this.states.set(state, oauthState);

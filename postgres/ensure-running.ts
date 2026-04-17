@@ -20,12 +20,18 @@ export interface EnsureResult {
  */
 export async function ensurePgRunning(
   ctx: ProjectContext,
+  options: { withMonitor?: boolean } = {},
 ): Promise<EnsureResult> {
   if (!ctx.managed) {
     throw new Error(
       "Not a managed instance — use backendDsn directly",
     );
   }
+
+  // P1-17: default to NO monitor so the CLI can return after `disc start`
+  // instead of blocking the event loop. Foreground / serve paths still
+  // pass withMonitor: true to get crash-restart behavior.
+  const withMonitor = options.withMonitor ?? false;
 
   const manager = new PostgresManager();
 
@@ -46,7 +52,7 @@ export async function ensurePgRunning(
     }
 
     // Instance exists on disk but is not running — start it.
-    await manager.startInstance(ctx.instanceName, true);
+    await manager.startInstance(ctx.instanceName, withMonitor);
     instance = manager.getInstance(ctx.instanceName)!;
 
     return {
@@ -62,7 +68,7 @@ export async function ensurePgRunning(
     socketDir: ctx.socketDir,
   });
 
-  await manager.startInstance(ctx.instanceName, true);
+  await manager.startInstance(ctx.instanceName, withMonitor);
   instance = manager.getInstance(ctx.instanceName)!;
 
   return {

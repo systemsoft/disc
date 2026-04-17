@@ -1343,6 +1343,10 @@ export class EdgeQLCompiler {
         return this.compileSubqueryExpression(expr);
       case "IfElse":
         return this.compileIfElse(expr as EdgeQLAST.IfElse);
+      case "CaseExpression":
+        return this.compileCaseExpression(
+          expr as EdgeQLAST.CaseExpression,
+        );
       case "ArrayExpr":
         return this.compileArrayExpr(expr as EdgeQLAST.ArrayExpr);
       case "TupleExpr":
@@ -2955,6 +2959,24 @@ export class EdgeQLCompiler {
       [SQL.createWhenClause(condition, thenExpr)],
       elseExpr,
     );
+  }
+
+  /**
+   * Compile a multi-branch CASE expression (P1-05). Maps 1:1 to SQL CASE.
+   */
+  private compileCaseExpression(
+    caseExpr: EdgeQLAST.CaseExpression,
+  ): SQL.CaseExpression {
+    const whens = caseExpr.whenClauses.map((clause) =>
+      SQL.createWhenClause(
+        this.compileExpression(clause.condition),
+        this.compileExpression(clause.result),
+      )
+    );
+    const elseExpr = caseExpr.elseResult
+      ? this.compileExpression(caseExpr.elseResult)
+      : undefined;
+    return SQL.createCaseExpression(whens, elseExpr);
   }
 
   private compileArrayExpr(arrayExpr: EdgeQLAST.ArrayExpr): SQL.SQLExpression {

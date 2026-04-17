@@ -245,6 +245,28 @@ The server supports two protocol handler implementations:
 
 When `rateLimitRpm` is set, a token-bucket rate limiter enforces per-IP request limits. Excess requests receive `429 Too Many Requests` with a `Retry-After: 60` header.
 
+## Query & Compilation Caches
+
+The protocol handler keeps two LRU caches:
+
+- **Parse cache** — keyed by `(query text)`. Stable across users and sessions.
+- **Compilation cache** — keyed by `(query text, access-context hash)`. The
+  access-context hash folds in `userId` and session-global state, so **every
+  unique user/role combination gets its own cache entry** when access policies
+  are enabled (`enableAccessPolicies: true`). This is correct — the compiled
+  SQL differs per user — but it means cache cardinality scales with your
+  active-user count, not with your distinct-query count. (P1-13)
+
+Sizing guidance:
+
+| Scenario | Suggested `cacheMaxSize` |
+|---------|--------------------------|
+| Public site, no auth policies | 500–2 000 (query count only) |
+| Internal dashboard, ≤100 users, policies on | 5 000–10 000 |
+| Public site, auth + per-user policies | size with the user base in mind, or disable access policies |
+
+`DISC_CACHE_MAX_SIZE` sets the bound. `/stats` exposes live hit/miss/eviction rates.
+
 ## TLS
 
 Configure TLS by providing certificate and key file paths:

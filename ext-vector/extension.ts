@@ -35,6 +35,31 @@ export class VectorExtension extends BaseExtension {
       dimensions: this.config.defaultDimensions,
       indexType: this.config.indexType,
     });
+
+    // P1-40: verify pgvector actually loaded. CREATE EXTENSION IF NOT
+    // EXISTS runs in getDatabaseSetup() but can silently fail if the
+    // extension isn't installed on the PG server — leaving us in a state
+    // where the compiler hooks emit <=> / <-> operators that PG then
+    // rejects at query time. Fail fast at init instead.
+    if (context.pool) {
+      try {
+        const result = await context.pool.query(
+          "SELECT 1 FROM pg_extension WHERE extname = 'vector'",
+        );
+        if (!result.rows || result.rows.length === 0) {
+          this.setState("failed");
+          throw new Error(
+            "pgvector extension is not installed on the PostgreSQL server. Install it (e.g. `apt install postgresql-16-pgvector` or `brew install pgvector`) before enabling ext-vector.",
+          );
+        }
+      } catch (error) {
+        // If the SELECT itself failed (connection issue), surface the
+        // error — don't silently claim ready.
+        this.setState("failed");
+        throw error;
+      }
+    }
+
     this.setState("ready");
   }
 

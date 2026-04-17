@@ -42,6 +42,19 @@ export class DiscClient {
   /**
    * Execute an EdgeQL query. Returns the data directly.
    * Throws DiscQueryError if the server returns query errors.
+   *
+   * **Type safety note (P1-28)**: the generic `T` is an *unchecked cast*.
+   * The SDK does not validate that the server's response actually matches
+   * `T` — a typo in your query or a schema change upstream will surface as
+   * runtime surprises, not compile-time errors. Prefer the generated
+   * typed client (`disc codegen`) where table/column names are verified
+   * against your SDL, or wrap `query<T>()` in a Zod/Valibot parser.
+   *
+   * **Serialization note (P1-29)**: server responses come back as JSON.
+   * - `datetime` columns arrive as ISO-8601 strings, not `Date` instances.
+   * - `int64` / `bigint` arrive as strings (numeric precision > 2^53).
+   * - `bytes` arrive as base64 strings.
+   * Parse these at the call site if you need richer types.
    */
   async query<T = unknown>(
     query: string,

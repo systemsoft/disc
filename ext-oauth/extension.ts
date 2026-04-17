@@ -127,7 +127,7 @@ export class OAuthExtension extends BaseExtension {
     return this.providers.get(name);
   }
 
-  private handleAuthorize(
+  private async handleAuthorize(
     _request: Request,
     provider: OAuthProviderConfig,
   ): Promise<Response> {
@@ -135,7 +135,7 @@ export class OAuthExtension extends BaseExtension {
       this.config.defaultRedirectUri ??
       "";
 
-    const oauthState = this.stateManager.createState(
+    const oauthState = await this.stateManager.createState(
       provider.name,
       redirectUri,
     );
@@ -147,6 +147,15 @@ export class OAuthExtension extends BaseExtension {
       scope: provider.scopes.join(" "),
       state: oauthState.state,
     });
+
+    // P1-41: include PKCE challenge in the authorize redirect. Providers
+    // that support S256 (Google, GitHub, Apple, all modern OAuth 2.1
+    // providers) will require the matching code_verifier at token
+    // exchange. Fallback silently if state-manager didn't populate them.
+    if (oauthState.codeChallenge) {
+      params.set("code_challenge", oauthState.codeChallenge);
+      params.set("code_challenge_method", "S256");
+    }
 
     const authorizeUrl = `${provider.authorizeUrl}?${params.toString()}`;
 
