@@ -132,6 +132,13 @@ export class PostgresInstance {
       await this.init();
     }
 
+    // P1-01: clean up stale Unix socket files from crashed / SIGKILL'd PG
+    // instances. Postgres refuses to bind if a file with the socket name
+    // already exists, so without this the user gets
+    //     "could not create lock file: File exists"
+    // and has to `rm ~/.disc/instances/<name>/socket/.s.PGSQL.5432*` manually.
+    await this.cleanupStaleSocket();
+
     logger.info(`Starting PostgreSQL instance: ${this.instanceName}`);
 
     const pgCtlPath = join(this.pgBinDir!, "pg_ctl");
@@ -197,17 +204,23 @@ export class PostgresInstance {
 
     if (output.success) {
       logger.info(`Created database "${this.instanceName}"`);
-    } else {
-      const stderr = new TextDecoder().decode(output.stderr);
-      // "already exists" is expected on subsequent starts — not an error
-      if (stderr.includes("already exists")) {
-        logger.info(`Database "${this.instanceName}" already exists`);
-      } else {
-        logger.error(
-          `Failed to create database "${this.instanceName}": ${stderr}`,
-        );
-      }
+      return;
     }
+
+    const stderr = new TextDecoder().decode(output.stderr);
+    // "already exists" is expected on subsequent starts — not an error.
+    if (stderr.includes("already exists")) {
+      logger.info(`Database "${this.instanceName}" already exists`);
+      return;
+    }
+
+    // P1-02: previously this logged and returned silently, leaving the
+    // caller with a running PG but no usable database. The next query
+    // then failed with a cryptic "database does not exist". Propagating
+    // the error surfaces the problem immediately.
+    throw new Error(
+      `Failed to create database "${this.instanceName}": ${stderr.trim()}`,
+    );
   }
 
   async stop(): Promise<void> {
@@ -298,6 +311,23 @@ export class PostgresInstance {
       startedAt: this.startedAt,
       version: this.postgresVersion,
     };
+  }
+
+  /**
+   * Remove stale Unix-domain socket files left behind by a crashed PG.
+   * Only runs when isRunning() already returned false, so there's no risk of
+   * tearing down a live socket. (P1-01)
+   */
+  private async cleanupStaleSocket(): Promise<void> {
+    try {
+      for await (const entry of Deno.readDir(this.socketDir)) {
+        if (entry.name.startsWith(".s.PGSQL.")) {
+          await Deno.remove(join(this.socketDir, entry.name)).catch(() => {});
+        }
+      }
+    } catch {
+      // socketDir may not exist yet — ensureDir covers the happy path.
+    }
   }
 
   private async isRunning(): Promise<boolean> {

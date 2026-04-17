@@ -67,6 +67,34 @@ Deno.test("ConnectionPool - initializes minimum connections", async () => {
   }
 });
 
+Deno.test("ConnectionPool - initialize is idempotent (no duplicate connections or timers)", async () => {
+  const pool = new ConnectionPool({
+    connectionString: "postgresql://test@localhost/test",
+    minConnections: 2,
+    maxConnections: 10,
+  });
+
+  const originalConnect = DatabaseConnection.prototype.connect;
+  let connectCount = 0;
+  DatabaseConnection.prototype.connect = function () {
+    connectCount++;
+    return Promise.resolve();
+  };
+
+  try {
+    await pool.initialize();
+    await pool.initialize(); // second call must be a no-op
+    await pool.initialize(); // and a third
+    // Would-be duplicate connections and timers are the reason disc migrate
+    // used to hang on exit (cleanupIntervalId leak).
+    assertEquals(connectCount, 2);
+    assertEquals(pool.getPoolSize(), 2);
+  } finally {
+    DatabaseConnection.prototype.connect = originalConnect;
+    await pool.close();
+  }
+});
+
 Deno.test("ConnectionPool - acquires and releases connections", async () => {
   const pool = new ConnectionPool({
     connectionString: "postgresql://test@localhost/test",

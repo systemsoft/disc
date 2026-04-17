@@ -119,10 +119,13 @@ export const DEFAULT_TYPE_MAPPINGS: TypeMapping[] = [
     arrayType: "number[]",
   },
   {
+    // P1-20: `int64` values can exceed JS `Number.MAX_SAFE_INTEGER` (2^53-1).
+    // Generating `number` lost precision silently on large values. `bigint`
+    // is lossless and matches how PG drivers surface int8.
     edgeqlType: "int64",
-    typescriptType: "number",
-    nullableType: "number | null",
-    arrayType: "number[]",
+    typescriptType: "bigint",
+    nullableType: "bigint | null",
+    arrayType: "bigint[]",
   },
   {
     edgeqlType: "float32",

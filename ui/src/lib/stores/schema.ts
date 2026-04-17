@@ -1,4 +1,4 @@
-import { derived, writable } from "svelte/store";
+import { derived, get, writable } from "svelte/store";
 import type { SchemaType } from "$lib/api/client";
 import { discAPI } from "$lib/api/client";
 
@@ -41,12 +41,17 @@ export async function loadSchema() {
   }
 }
 
-// Select a type by name
+// Select a type by name.
+//
+// P1-26: previously this called schemaTypes.subscribe(...)() — which is
+// idiomatic Svelte only when the returned unsubscribe function is captured
+// and later called. Invoking the outer IIFE just tossed the unsubscribe
+// away so every call leaked a listener. `get()` reads the current value
+// without subscribing.
 export function selectTypeByName(name: string) {
-  schemaTypes.subscribe((types) => {
-    const type = types.find((t) => t.name === name);
-    if (type) {
-      selectedType.set(type);
-    }
-  })();
+  const types = get(schemaTypes);
+  const type = types.find((t) => t.name === name);
+  if (type) {
+    selectedType.set(type);
+  }
 }

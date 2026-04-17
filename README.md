@@ -174,11 +174,21 @@ disc init --backend-dsn "postgres://user:pass@host:5432/disc"
 
 ### Native Binary
 
+The canonical build path is the `disc build` CLI command (wraps `deno compile`
+with the correct flags and cross-compile targets):
+
 ```bash
 disc build                          # Build for current platform
 disc build --platform linux-x64     # Cross-compile for Linux
 disc build --platform linux-arm64   # Cross-compile for Linux ARM
 ```
+
+For release automation, the equivalent `deno task` aliases (`build:darwin-arm64`,
+`build:linux-x64`, etc.) call `disc build` under the hood. The `justfile` targets
+are retained for hands-on development but are not part of the release pipeline.
+
+Version is read from `version.txt` at startup; ChronVer-style dates are bumped
+by `just version`.
 
 ### Docker
 

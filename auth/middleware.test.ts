@@ -68,13 +68,15 @@ describe("AuthMiddleware", () => {
       assertEquals(context.userId, testUserId);
     });
 
-    it("should extract token from query parameter", async () => {
+    it("should NOT extract token from query parameter (P0-04)", async () => {
+      // Tokens in query strings leak into browser history, access logs, and
+      // Referer headers. The middleware now intentionally ignores them —
+      // callers must use the Authorization header or auth_token cookie.
       const request = new Request(`http://localhost/test?token=${testToken}`);
 
       const context = await middleware.authenticate(request);
 
-      assertExists(context);
-      assertEquals(context.userId, testUserId);
+      assertEquals(context, null);
     });
 
     it("should return null for missing token", async () => {
@@ -248,6 +250,39 @@ describe("AuthMiddleware", () => {
       const response = await corsHandler(request);
 
       assertEquals(response.headers.get("Access-Control-Allow-Origin"), null);
+    });
+
+    it("default CORS denies all origins until opted in (P0-06)", async () => {
+      const request = new Request("http://localhost/api/test", {
+        headers: { "Origin": "http://anything.com" },
+      });
+      const handler = (_req: Request) => new Response("ok");
+      // no options — defaults
+      const corsHandler = middleware.withCORS(handler);
+      const response = await corsHandler(request);
+      assertEquals(
+        response.headers.get("Access-Control-Allow-Origin"),
+        null,
+        "Default CORS config must not echo any Origin header",
+      );
+    });
+
+    it("CORS refuses '*' + credentials: true combination (P0-06)", () => {
+      const handler = (_req: Request) => new Response("ok");
+      let threw = false;
+      try {
+        middleware.withCORS(handler, {
+          origins: ["*"],
+          credentials: true,
+        });
+      } catch (_) {
+        threw = true;
+      }
+      assertEquals(
+        threw,
+        true,
+        "The insecure wildcard+credentials combination must be rejected",
+      );
     });
   });
 });

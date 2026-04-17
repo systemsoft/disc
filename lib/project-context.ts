@@ -170,6 +170,14 @@ export function resolveProjectContext(cwd?: string): ProjectContext | null {
   const fields = parseToml(source);
 
   const projectName = fields.name ?? "";
+  // P1-15: reject an empty `name` in disc.toml — downstream path construction
+  // (`~/.disc/instances/<name>/`) silently produced malformed paths when the
+  // key was missing or blank.
+  if (!projectName) {
+    throw new Error(
+      `disc.toml at ${tomlPath} is missing the required 'name' field`,
+    );
+  }
   const instanceName = fields.instanceName ?? projectName;
   const managed = fields.managed !== undefined
     ? fields.managed.toLowerCase() === "true"

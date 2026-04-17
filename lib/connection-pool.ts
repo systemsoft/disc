@@ -90,6 +90,13 @@ export class ConnectionPool {
   }
 
   async initialize(): Promise<void> {
+    // Idempotent: re-initializing an already-started pool would leak a second
+    // cleanup interval (only the latest id is tracked in close()) and
+    // duplicate the initial connections — causing disc migrate to hang on exit.
+    if (this.cleanupIntervalId !== undefined || this.connections.size > 0) {
+      return;
+    }
+
     logger.info(
       `Initializing connection pool with min=${this.config.minConnections}, max=${this.config.maxConnections}`,
     );

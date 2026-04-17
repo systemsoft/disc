@@ -18,8 +18,8 @@ export interface InitOptions {
 export class InitCommand {
   private postgresManager: PostgresManager;
 
-  constructor() {
-    this.postgresManager = new PostgresManager();
+  constructor(postgresManager?: PostgresManager) {
+    this.postgresManager = postgresManager ?? new PostgresManager();
   }
   /**
    * Initialize a new Disc project
@@ -55,7 +55,8 @@ export class InitCommand {
       // Create project directory
       await Deno.mkdir(projectDir, { recursive: true });
 
-      // Create files based on template
+      // Create files based on template (including disc.toml so the project is
+      // always resumable even if PG setup fails on this run)
       await this.createProjectFiles(projectDir, options);
 
       // Initialize PostgreSQL unless skipped or external DSN provided
@@ -78,6 +79,9 @@ export class InitCommand {
       console.error(
         `❌ Failed to initialize project: ${(error as Error).message}`,
       );
+      console.log(
+        `💡 Project files were created at ${projectDir}; re-run 'disc start' from inside the project to finish PostgreSQL setup.`,
+      );
       throw error;
     }
   }
@@ -92,23 +96,24 @@ export class InitCommand {
     options: InitOptions,
   ): Promise<void> {
     const template = options.template || "basic";
-    const databaseUrl = options.databaseUrl ||
-      "postgresql://localhost:5432/disc_dev";
 
-    // Create schema.disc
+    // Create dbschema/default.disc
     await this.createSchemaFile(projectDir, template);
+
+    // Create disc.toml (always — so project is resumable even if PG setup fails)
+    await this.createDiscToml(projectDir, options);
 
     // Create deno.json
     await this.createDenoConfig(projectDir, options.name);
 
-    // Create .env
-    await this.createEnvFile(projectDir, databaseUrl);
+    // Create .env (socket DSN for managed, backend DSN when provided)
+    await this.createEnvFile(projectDir, options);
 
     // Create .gitignore
     await this.createGitignore(projectDir);
 
     // Create README.md
-    await this.createReadme(projectDir, options.name);
+    await this.createReadme(projectDir, options);
 
     // Create mod.ts
     await this.createModuleFile(projectDir, options.name);
@@ -116,6 +121,38 @@ export class InitCommand {
     // Create migrations directory
     await Deno.mkdir(`${projectDir}/migrations`, { recursive: true });
     await Deno.writeTextFile(`${projectDir}/migrations/.gitkeep`, "");
+  }
+
+  private async createDiscToml(
+    projectDir: string,
+    options: InitOptions,
+  ): Promise<void> {
+    const projectName = options.name;
+    const lines: string[] = [
+      `# Disc Project Configuration`,
+      `name = "${projectName}"`,
+      `version = "0.1.0"`,
+      ``,
+      `[database]`,
+    ];
+
+    if (options.backendDsn) {
+      lines.push(
+        `# External PostgreSQL — disc does not manage the instance lifecycle`,
+        `managed = false`,
+        `backend_dsn = "${options.backendDsn}"`,
+      );
+    } else {
+      lines.push(
+        `# Managed PostgreSQL instance`,
+        `managed = true`,
+        `instance_name = "${projectName}"`,
+      );
+    }
+
+    lines.push(``, `[server]`, `port = 5656`, `host = "localhost"`, ``);
+
+    await Deno.writeTextFile(`${projectDir}/disc.toml`, lines.join("\n"));
   }
 
   private async createSchemaFile(
@@ -174,21 +211,26 @@ export class InitCommand {
         break;
     }
 
-    await Deno.writeTextFile(`${projectDir}/schema.disc`, schemaContent);
+    await Deno.mkdir(`${projectDir}/dbschema`, { recursive: true });
+    await Deno.writeTextFile(
+      `${projectDir}/dbschema/default.disc`,
+      schemaContent,
+    );
   }
 
   private async createDenoConfig(
     projectDir: string,
     projectName: string,
   ): Promise<void> {
+    // The tasks wrap the `disc` CLI, which must be installed and on $PATH.
+    // When there is no generated client yet, mod.ts is a no-op stub; once
+    // `disc codegen` runs it populates dbschema/disc-client/ which the app
+    // can import directly.
     const denoConfig = {
       name: projectName,
       version: "0.1.0",
       exports: {
         ".": "./mod.ts",
-      },
-      imports: {
-        "@disc/db": "jsr:@disc/db@*",
       },
       tasks: {
         "serve": "disc serve",
@@ -207,16 +249,24 @@ export class InitCommand {
 
   private async createEnvFile(
     projectDir: string,
-    databaseUrl: string,
+    options: InitOptions,
   ): Promise<void> {
-    const envContent = `# Disc Database Configuration
-DATABASE_URL=${databaseUrl}
-DISC_PORT=5656
-DISC_HOST=localhost
+    // For managed PG, the DSN is derived at runtime from disc.toml (socket
+    // path depends on $HOME/$DISC_HOME). We keep .env focused on app config
+    // and only write DATABASE_URL when the user explicitly asked for an
+    // external DSN. Document the override as a comment in the managed case.
+    const header = "# Disc Database Configuration";
+    const appConfig = "DISC_PORT=5656\nDISC_HOST=localhost\n\n" +
+      "# Development settings\nNODE_ENV=development\n";
 
-# Development settings
-NODE_ENV=development
-`;
+    let envContent: string;
+    if (options.backendDsn) {
+      envContent = `${header}\nDATABASE_URL=${options.backendDsn}\n${appConfig}`;
+    } else {
+      envContent =
+        `${header}\n# Managed PostgreSQL — the DSN is resolved from disc.toml.\n` +
+        `# Set DATABASE_URL here only to override with an external database.\n${appConfig}`;
+    }
 
     await Deno.writeTextFile(`${projectDir}/.env`, envContent);
   }
@@ -255,46 +305,30 @@ Thumbs.db
   }
 
   private async initializePostgres(projectName: string): Promise<void> {
-    try {
-      console.log("📋 Creating PostgreSQL instance...");
+    // disc.toml is written up-front in createProjectFiles; if this step fails,
+    // the scaffold is still recoverable by re-running `disc start`.
+    console.log("📋 Creating PostgreSQL instance...");
 
-      // Create the PostgreSQL instance
-      const instance = await this.postgresManager.createInstance(projectName);
+    const instance = await this.postgresManager.createInstance(projectName);
 
-      console.log("✅ PostgreSQL instance created");
-      console.log(`📁 Data directory: ${instance.getDataDir()}`);
-      console.log(`🔗 Connection: ${instance.dsn()}`);
-
-      // Create disc.toml with project configuration
-      const configContent = `# Disc Project Configuration
-name = "${projectName}"
-version = "0.1.0"
-
-[database]
-# Managed PostgreSQL instance
-managed = true
-instance_name = "${projectName}"
-
-[server]
-port = 5656
-host = "localhost"
-`;
-
-      await Deno.writeTextFile("disc.toml", configContent);
-      console.log("📄 Created disc.toml configuration");
-    } catch (error) {
-      console.error(`⚠️  PostgreSQL setup failed: ${(error as Error).message}`);
-      console.log(
-        "💡 You can set up PostgreSQL manually later with 'disc start'",
-      );
-    }
+    console.log("✅ PostgreSQL instance created");
+    console.log(`📁 Data directory: ${instance.getDataDir()}`);
+    console.log(`🔗 Connection: ${instance.dsn()}`);
   }
 
   private async createReadme(
     projectDir: string,
-    projectName: string,
+    options: InitOptions,
   ): Promise<void> {
-    const dbName = projectName.replace(/-/g, "_") + "_dev";
+    const projectName = options.name;
+
+    const startStep = options.backendDsn
+      ? `1. **Point at your PostgreSQL** (already configured in \`disc.toml\`):
+   Your backend DSN: \`${options.backendDsn}\``
+      : `1. **Start the bundled PostgreSQL**:
+   \`\`\`bash
+   disc start
+   \`\`\``;
 
     const readmeContent = `# ${projectName}
 
@@ -302,41 +336,43 @@ A Disc database project.
 
 ## Getting Started
 
-1. **Setup database**:
-   \`\`\`bash
-   createdb ${dbName}
-   \`\`\`
+${startStep}
 
-2. **Apply schema**:
+2. **Apply the schema**:
    \`\`\`bash
    disc migrate
    \`\`\`
 
-3. **Generate types**:
+3. **Generate TypeScript types**:
    \`\`\`bash
    disc codegen
    \`\`\`
 
-4. **Start server**:
+4. **Start the Disc server**:
    \`\`\`bash
    disc serve
    \`\`\`
 
 ## Available Commands
 
-- \`deno task serve\` - Start the Disc server
-- \`deno task migrate\` - Apply schema migrations
-- \`deno task codegen\` - Generate TypeScript types
-- \`deno task dev\` - Watch for schema changes
-- \`deno task shell\` - Open EdgeQL REPL
+- \`deno task serve\` — Start the Disc server
+- \`deno task migrate\` — Apply schema migrations
+- \`deno task codegen\` — Generate TypeScript types
+- \`deno task dev\` — Watch for schema changes
+- \`deno task shell\` — Open EdgeQL REPL
+
+These tasks require the \`disc\` binary on your \`$PATH\`.
 
 ## Schema
 
-Your schema is defined in \`schema.disc\`. Edit this file to modify your database structure.
+Your schema is defined in \`dbschema/default.disc\`. Edit this file to modify
+your database structure. Additional \`.disc\` files in \`dbschema/\` are
+auto-discovered.
 
-## Environment
+## Configuration
 
-Copy \`.env\` to \`.env.local\` and adjust settings for your environment.
+- \`disc.toml\` — project and database configuration (committed)
+- \`.env\` — environment overrides (copy to \`.env.local\` for local tweaks)
 `;
 
     await Deno.writeTextFile(`${projectDir}/README.md`, readmeContent);
@@ -346,8 +382,13 @@ Copy \`.env\` to \`.env.local\` and adjust settings for your environment.
     projectDir: string,
     projectName: string,
   ): Promise<void> {
+    // Placeholder entry point. After `disc codegen` runs, the typical pattern
+    // is to re-export from the generated client:
+    //   export * from "./dbschema/disc-client/mod.ts";
     const modContent = `// Main module for ${projectName}
-export * from "@disc/db";
+// Run \`disc codegen\` to generate a TypeScript client at
+// ./dbschema/disc-client/, then import from it here.
+export {};
 `;
 
     await Deno.writeTextFile(`${projectDir}/mod.ts`, modContent);

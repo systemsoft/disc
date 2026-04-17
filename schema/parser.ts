@@ -20,8 +20,6 @@ export class SDLParser {
     const declarations: AST.Declaration[] = [];
 
     while (!this.isAtEnd()) {
-      if (this.check(TokenType.EOF)) break;
-
       const decl = this.parseTopLevelDeclaration();
       if (decl) {
         declarations.push(decl);
@@ -40,7 +38,7 @@ export class SDLParser {
       // Do nothing
     }
 
-    if (this.check(TokenType.EOF) || this.check(TokenType.RBRACE)) {
+    if (this.isAtEnd() || this.check(TokenType.RBRACE)) {
       return null;
     }
 
@@ -164,7 +162,9 @@ export class SDLParser {
         } else if (this.match(TokenType.ANNOTATION)) {
           annotations.push(this.parseAnnotation());
         } else {
-          this.advance(); // Skip unknown tokens
+          throw this.error(
+            `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in block body — did you mean a constraint, annotation, or member declaration?`,
+          );
         }
       }
       this.consume(TokenType.RBRACE, "Expected '}' after scalar type body");
@@ -242,7 +242,9 @@ export class SDLParser {
             "Expected ';' after readonly value",
           );
         } else {
-          this.advance(); // Skip unknown tokens
+          throw this.error(
+            `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in block body — did you mean a constraint, annotation, or member declaration?`,
+          );
         }
       }
       this.consume(TokenType.RBRACE, "Expected '}' after global body");
@@ -333,7 +335,9 @@ export class SDLParser {
         } else if (this.match(TokenType.ANNOTATION)) {
           annotations.push(this.parseAnnotation());
         } else {
-          this.advance(); // Skip unknown tokens
+          throw this.error(
+            `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in block body — did you mean a constraint, annotation, or member declaration?`,
+          );
         }
       }
 
@@ -493,7 +497,9 @@ export class SDLParser {
         } else if (this.match(TokenType.REWRITE)) {
           rewrites.push(this.parseRewriteDeclaration());
         } else {
-          this.advance(); // Skip unknown tokens
+          throw this.error(
+            `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in block body — did you mean a constraint, annotation, or member declaration?`,
+          );
         }
       }
 
@@ -611,7 +617,9 @@ export class SDLParser {
           }
           this.consume(TokenType.SEMICOLON, "Expected ';' after delete policy");
         } else {
-          this.advance(); // Skip unknown tokens
+          throw this.error(
+            `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in block body — did you mean a constraint, annotation, or member declaration?`,
+          );
         }
       }
 
@@ -691,7 +699,9 @@ export class SDLParser {
             this.consume(TokenType.SEMICOLON, "Expected ';' after errmessage");
           }
         } else {
-          this.advance(); // Skip unknown tokens
+          throw this.error(
+            `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in block body — did you mean a constraint, annotation, or member declaration?`,
+          );
         }
       }
 
@@ -735,7 +745,9 @@ export class SDLParser {
         if (this.match(TokenType.ANNOTATION)) {
           annotations.push(this.parseAnnotation());
         } else {
-          this.advance(); // Skip unknown tokens
+          throw this.error(
+            `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in block body — did you mean a constraint, annotation, or member declaration?`,
+          );
         }
       }
 

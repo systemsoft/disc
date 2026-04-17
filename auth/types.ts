@@ -71,6 +71,14 @@ export interface AuthResponse {
   session: Session;
   token: string;
   refreshToken?: string;
+  /**
+   * Plaintext email verification token. Only populated on `register()` when
+   * `requireEmailVerification: true`. The DB stores only the hash — the
+   * plaintext must be delivered to the user out-of-band (typically by the
+   * caller emailing it). After register() returns, the plaintext cannot be
+   * recovered. (P0-03)
+   */
+  verificationToken?: string;
 }
 
 export interface PasswordValidationResult {

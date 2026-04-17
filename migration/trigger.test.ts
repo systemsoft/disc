@@ -933,3 +933,38 @@ Deno.test("End-to-end - adding trigger to existing type produces ALTER with corr
   assertStringIncludes(createTrig!, "BEFORE INSERT");
   assertStringIncludes(createTrig!, "FOR EACH STATEMENT");
 });
+
+// Regression lock-in for P0-12 from the Phase 3 audit.
+// The schema audit claimed triggers were dropped in SDL→Module IR conversion.
+// They aren't: converter keeps raw AST declarations, differ.extractTriggers()
+// reads them back out. This test locks in the full SDL → convert → diff → DDL
+// pipeline so a future converter refactor can't silently drop triggers.
+Deno.test("Triggers survive SDL → converter → differ → DDL pipeline", async () => {
+  const { SDLParser } = await import("../schema/parser.ts");
+  const { SDLConverter } = await import("../schema/converter.ts");
+
+  const sdl = `module default {
+  type Post {
+    required title: str;
+    trigger log_insert after insert for each do (
+      log_action(__action__)
+    );
+  };
+};`;
+
+  const ast = new SDLParser(sdl).parse();
+  const modules = new SDLConverter().convertToModules(ast);
+
+  const ops = new SchemaDiffer().diff([], modules);
+  const ddl = new DDLGenerator().generateDDL(ops);
+
+  const triggerDdl = ddl.filter((s) =>
+    /CREATE TRIGGER|CREATE OR REPLACE FUNCTION.*TRIGGER/i.test(s)
+  );
+  assertEquals(
+    triggerDdl.length >= 2,
+    true,
+    "Expected at least one CREATE FUNCTION + one CREATE TRIGGER from SDL pipeline",
+  );
+  assertStringIncludes(triggerDdl.join("\n"), "AFTER INSERT");
+});

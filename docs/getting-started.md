@@ -294,9 +294,9 @@ This reads all `.disc` files in `./dbschema/` (or `schema.disc` in the project r
 ```
 dbschema/disc-client/
   index.ts            # Re-exports and client factory
-  interfaces.ts       # TypeScript interfaces for each type
-  query-builders.ts   # Type-safe query builder functions
-  mutations.ts        # Insert, update, delete helpers
+  client.ts           # DiscClient class
+  queries.ts          # Type-safe query builder functions
+  types.ts            # TypeScript interfaces for each type
 ```
 
 ### Codegen Options
@@ -320,7 +320,7 @@ For more details, see the [Codegen guide](codegen.md).
 Import the SDK and run queries programmatically:
 
 ```typescript
-import { createClient } from "@disc/db/sdk";
+import { createClient } from "disc/sdk/mod.ts";
 
 const client = createClient({
   baseUrl: "http://localhost:5656"

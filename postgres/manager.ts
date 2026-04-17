@@ -129,6 +129,10 @@ export class PostgresManager {
         socketDir: join(instanceDir, "socket"),
       });
 
+      // Resolve pgBinDir (needed by start/stop/status) without re-running
+      // initdb — init() short-circuits on the existing PG_VERSION file.
+      await instance.init();
+
       this.instances.set(name, {
         instance,
         name,

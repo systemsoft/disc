@@ -705,3 +705,83 @@ Deno.test("binary-server - server stop closes all connections", async () => {
 
   conn.close();
 });
+
+// ---------------------------------------------------------------------------
+// P0-08: DoS — oversized message allocation must be rejected before allocation
+// ---------------------------------------------------------------------------
+
+Deno.test("binary-server - rejects oversized messages with ErrorResponse (P0-08)", async () => {
+  const server = new BinaryProtocolServer({
+    port: 0,
+    schema: createSchema(),
+  });
+  await server.start();
+
+  const conn = await Deno.connect({
+    hostname: "127.0.0.1",
+    port: server.port,
+  });
+
+  // Fabricate a header whose length field claims a 1 GB payload. A vulnerable
+  // server would allocate a 1 GB Uint8Array before reading any bytes. Our
+  // guard must notice this before allocation and respond with an error.
+  const header = new Uint8Array(5);
+  header[0] = 0x50; // arbitrary mtype
+  const oversize = 1_000_000_000; // ~1 GB payload
+  new DataView(header.buffer).setUint32(1, oversize + 4, false);
+  await conn.write(header);
+
+  // Expect an ErrorResponse, not a crash or silent hang
+  const raw = await readMessage(conn);
+  assertNotEquals(raw, null);
+  const msg = decode(raw!);
+  assertEquals(msg.kind, "ErrorResponse");
+  if (msg.kind === "ErrorResponse") {
+    assertEquals(msg.errorCode, 0x03000000); // ProtocolError
+  }
+
+  conn.close();
+  await server.stop();
+});
+
+// ---------------------------------------------------------------------------
+// P0-09: Prepared statement cache must be bounded (LRU eviction)
+// ---------------------------------------------------------------------------
+
+Deno.test("binary-server - BinaryConnection stmt cache is bounded (P0-09)", async () => {
+  // We can't easily drive 1000+ queries through the server without a full
+  // schema, so exercise the cache directly via the BinaryConnection.
+  const { BinaryConnection, MAX_STATEMENT_CACHE_SIZE } = await import(
+    "./binary-server.ts"
+  );
+  const fakeConn = {
+    close() {},
+    read() {
+      return Promise.resolve(null);
+    },
+    write() {
+      return Promise.resolve(0);
+    },
+  };
+  // deno-lint-ignore no-explicit-any
+  const bc = new BinaryConnection(fakeConn as any, createSchema());
+
+  // Fill past the cap to force eviction
+  const cap = MAX_STATEMENT_CACHE_SIZE;
+  for (let i = 0; i < cap + 10; i++) {
+    // @ts-expect-error private field access in test
+    bc.stmtCache.set(`query_${i}`, {
+      inputTypedescId: ZERO_UUID,
+      outputTypedescId: ZERO_UUID,
+      inputDescriptor: new Uint8Array(0),
+      outputDescriptor: new Uint8Array(0),
+      cardinality: Cardinality.MANY,
+    });
+  }
+
+  assertEquals(
+    bc.getCacheSize() <= cap,
+    true,
+    `Cache must stay within ${cap} entries after inserting ${cap + 10}`,
+  );
+});

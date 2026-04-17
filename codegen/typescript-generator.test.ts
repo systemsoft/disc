@@ -198,10 +198,11 @@ Deno.test("TypeScriptGenerator - mapEdgeQLTypeToTypeScript backward compat with 
     Types.mapEdgeQLTypeToTypeScript("timestamp", true, false),
     "Date",
   );
-  // "bigint" SQL type maps to "int64" EdgeQL which maps to "number"
+  // "bigint" SQL type maps to "int64" EdgeQL which maps to "bigint" (P1-20:
+  // `number` would silently lose precision above 2^53-1).
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("bigint", true, false),
-    "number",
+    "bigint",
   );
 });
 

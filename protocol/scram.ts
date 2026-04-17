@@ -28,7 +28,24 @@ export interface ScramServerState {
   iterations: number;
   clientFirstMessageBare: string;
   serverFirstMessage: string;
+  /**
+   * gs2-header as sent by the client (e.g. "n,," for no channel binding).
+   * Stored at handshake time so verifyClientFinalMessage can check that the
+   * client's `c=` attribute in the final message echoes the same header —
+   * preventing a MITM from downgrading channel binding silently.
+   */
+  gs2Header: string;
 }
+
+/**
+ * Minimum SCRAM-SHA-256 iteration count we accept.
+ *
+ * RFC 7677 specifies 4096 as the default and NIST SP 800-63B §5.1.1.2 requires
+ * "at least 1000". 2048 was the floor in older clients; modern advice is 4096+.
+ * Calling deriveKeys with fewer iterations is rejected so that a misconfigured
+ * config file or legacy override cannot accidentally weaken auth.
+ */
+export const MIN_SCRAM_ITERATIONS = 4096;
 
 // ---------------------------------------------------------------------------
 // Crypto helpers (all using Web Crypto API)
@@ -280,6 +297,14 @@ export async function verifyClientFinalMessage(
     return { valid: false, serverSignature: "" };
   }
 
+  // Verify channel binding echoes the gs2-header from the client-first-message.
+  // RFC 5802 §7 requires c=base64(gs2-header). Accepting any `c=` value allows
+  // a MITM to tamper with the gs2-cbind-flag without detection.
+  const expectedChannelBinding = toBase64(textEncoder.encode(state.gs2Header));
+  if (channelBinding !== expectedChannelBinding) {
+    return { valid: false, serverSignature: "" };
+  }
+
   // client-final-message-without-proof: everything before ",p="
   const proofIdx = str.lastIndexOf(",p=");
   if (proofIdx === -1) {
@@ -326,6 +351,11 @@ export async function deriveKeys(
   salt: Uint8Array,
   iterations: number,
 ): Promise<{ storedKey: Uint8Array; serverKey: Uint8Array }> {
+  if (iterations < MIN_SCRAM_ITERATIONS) {
+    throw new Error(
+      `SCRAM iteration count ${iterations} is below the minimum of ${MIN_SCRAM_ITERATIONS}`,
+    );
+  }
   const passwordBytes = textEncoder.encode(password);
   const saltedPassword = await hi(passwordBytes, salt, iterations);
 

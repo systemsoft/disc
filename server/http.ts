@@ -177,6 +177,10 @@ export class HttpServer {
     // Dispose subscription handler timers
     this.subscription_handler.dispose();
 
+    // Dispose auth-route rate limiter (see auth/integration.ts — each
+    // AuthRoutes owns its own per-IP limiter for login/register/reset).
+    this.authRoutes?.dispose();
+
     if (this.redirect_server) {
       await this.redirect_server.shutdown();
     }
@@ -279,21 +283,21 @@ export class HttpServer {
       // Route handling
       switch (url.pathname) {
         case "/":
-          return this.handle_root();
+          return this.handle_root(request);
         case "/query":
           return await this.handle_query(request, info, requestId);
         case "/health":
-          return await this.handle_health();
+          return await this.handle_health(request);
         case "/health/live":
-          return this.handle_health_live();
+          return this.handle_health_live(request);
         case "/health/ready":
-          return await this.handle_health_ready();
+          return await this.handle_health_ready(request);
         case "/stats":
-          return this.handle_stats();
+          return this.handle_stats(request);
         case "/metrics":
-          return this.handle_metrics();
+          return this.handle_metrics(request);
         default:
-          return this.create_error_response("Not Found", 404);
+          return this.create_error_response("Not Found", 404, request);
       }
     } catch (error) {
       this.stats.failed_requests++;
@@ -301,7 +305,7 @@ export class HttpServer {
         requestId,
         error: error instanceof Error ? error.message : String(error),
       });
-      return this.create_error_response("Internal Server Error", 500);
+      return this.create_error_response("Internal Server Error", 500, request);
     } finally {
       const duration = Date.now() - startTime;
       this.stats.total_duration_ms += duration;
@@ -309,7 +313,7 @@ export class HttpServer {
     }
   }
 
-  private handle_root(): Response {
+  private handle_root(request?: Request): Response {
     const endpoints: Record<string, any> = {
       query: "/query",
       health: "/health",
@@ -363,7 +367,7 @@ export class HttpServer {
     };
 
     return new Response(JSON.stringify(info, null, 2), {
-      headers: this.get_default_headers("application/json"),
+      headers: this.get_default_headers("application/json", request),
     });
   }
 
@@ -373,18 +377,42 @@ export class HttpServer {
     requestId: string,
   ): Promise<Response> {
     if (request.method !== "POST") {
-      return this.create_error_response("Method Not Allowed", 405);
+      return this.create_error_response("Method Not Allowed", 405, request);
+    }
+
+    // P1-12: cap request body size BEFORE reading it into memory. Without
+    // this a malicious client can stream multi-gigabyte payloads and OOM
+    // the server.
+    const MAX_QUERY_BODY_BYTES = this.config.maxRequestBodyBytes ??
+      4 * 1024 * 1024; // 4 MiB default
+    const contentLengthHeader = request.headers.get("content-length");
+    if (contentLengthHeader !== null) {
+      const declared = Number(contentLengthHeader);
+      if (Number.isFinite(declared) && declared > MAX_QUERY_BODY_BYTES) {
+        return this.create_error_response(
+          `Request body exceeds maximum of ${MAX_QUERY_BODY_BYTES} bytes`,
+          413,
+          request,
+        );
+      }
     }
 
     try {
       // Parse request body
       const body = await request.text();
+      if (body.length > MAX_QUERY_BODY_BYTES) {
+        return this.create_error_response(
+          `Request body exceeds maximum of ${MAX_QUERY_BODY_BYTES} bytes`,
+          413,
+          request,
+        );
+      }
       let queryRequest: Types.QueryRequest;
 
       try {
         queryRequest = JSON.parse(body);
       } catch {
-        return this.create_error_response("Invalid JSON", 400);
+        return this.create_error_response("Invalid JSON", 400, request);
       }
 
       // Validate request
@@ -551,17 +579,17 @@ export class HttpServer {
     }
   }
 
-  private handle_health_live(): Response {
+  private handle_health_live(request?: Request): Response {
     return new Response(
       JSON.stringify({ status: "alive" }),
       {
         status: 200,
-        headers: this.get_default_headers("application/json"),
+        headers: this.get_default_headers("application/json", request),
       },
     );
   }
 
-  private async handle_health_ready(): Promise<Response> {
+  private async handle_health_ready(request?: Request): Promise<Response> {
     if (this.protocolHandler.checkHealth) {
       const health = await this.protocolHandler.checkHealth();
       const httpStatus = health.status === "unhealthy" ? 503 : 200;
@@ -570,7 +598,7 @@ export class HttpServer {
         JSON.stringify({ status: health.status }),
         {
           status: httpStatus,
-          headers: this.get_default_headers("application/json"),
+          headers: this.get_default_headers("application/json", request),
         },
       );
     }
@@ -580,12 +608,12 @@ export class HttpServer {
       JSON.stringify({ status: "healthy" }),
       {
         status: 200,
-        headers: this.get_default_headers("application/json"),
+        headers: this.get_default_headers("application/json", request),
       },
     );
   }
 
-  private async handle_health(): Promise<Response> {
+  private async handle_health(request?: Request): Promise<Response> {
     // Gather extension health if available
     let extensionHealth:
       | Record<string, { healthy: boolean; details?: string }>
@@ -613,7 +641,7 @@ export class HttpServer {
 
       return new Response(JSON.stringify(body, null, 2), {
         status: httpStatus,
-        headers: this.get_default_headers("application/json"),
+        headers: this.get_default_headers("application/json", request),
       });
     }
 
@@ -631,11 +659,11 @@ export class HttpServer {
     }
 
     return new Response(JSON.stringify(body, null, 2), {
-      headers: this.get_default_headers("application/json"),
+      headers: this.get_default_headers("application/json", request),
     });
   }
 
-  private handle_stats(): Response {
+  private handle_stats(request?: Request): Response {
     const subscriptionStats = this.subscription_handler
       .get_subscription_stats();
 
@@ -664,13 +692,13 @@ export class HttpServer {
     };
 
     return new Response(JSON.stringify(stats, null, 2), {
-      headers: this.get_default_headers("application/json"),
+      headers: this.get_default_headers("application/json", request),
     });
   }
 
-  private handle_metrics(): Response {
+  private handle_metrics(request?: Request): Response {
     if (!this.config.enableMetrics) {
-      return this.create_error_response("Not Found", 404);
+      return this.create_error_response("Not Found", 404, request);
     }
 
     const handlerStats = this.protocolHandler.getStats?.();
@@ -692,11 +720,16 @@ export class HttpServer {
     };
 
     const body = renderMetrics(source);
-    return new Response(body, {
-      headers: new Headers({
-        "Content-Type": "text/plain; version=0.0.4; charset=utf-8",
-      }),
+    const headers = new Headers({
+      "Content-Type": "text/plain; version=0.0.4; charset=utf-8",
     });
+    if (this.config.enableCors) {
+      const origin = this.resolve_allowed_origin(request);
+      if (origin !== null) {
+        headers.set("Access-Control-Allow-Origin", origin);
+      }
+    }
+    return new Response(body, { headers });
   }
 
   private handle_preflight(request: Request): Response {
@@ -704,8 +737,14 @@ export class HttpServer {
       return this.create_error_response("CORS not enabled", 405);
     }
 
+    const allowedOrigin = this.get_cors_origin(request);
+    if (allowedOrigin === null) {
+      // Origin not in allowlist — reject preflight instead of falsely allowing
+      return new Response(null, { status: 403 });
+    }
+
     const headers = new Headers();
-    headers.set("Access-Control-Allow-Origin", this.get_cors_origin(request));
+    headers.set("Access-Control-Allow-Origin", allowedOrigin);
     headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
     headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
     headers.set("Access-Control-Max-Age", "86400");
@@ -962,37 +1001,65 @@ export class HttpServer {
     }
   }
 
-  private get_default_headers(contentType: string): Headers {
+  private get_default_headers(contentType: string, request?: Request): Headers {
     const headers = new Headers();
     headers.set("Content-Type", contentType);
 
     if (this.config.enableCors) {
-      headers.set("Access-Control-Allow-Origin", "*"); // TODO: Use config origins
-      headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-      headers.set(
-        "Access-Control-Allow-Headers",
-        "Content-Type, Authorization",
-      );
+      const origin = this.resolve_allowed_origin(request);
+      // When corsOrigins is configured (restrictive mode) and the request's
+      // Origin isn't in the allowlist, don't emit CORS headers — the browser
+      // will block the response, which is the correct behavior.
+      if (origin !== null) {
+        headers.set("Access-Control-Allow-Origin", origin);
+        headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+        headers.set(
+          "Access-Control-Allow-Headers",
+          "Content-Type, Authorization",
+        );
+      }
     }
 
     return headers;
   }
 
-  private get_cors_origin(request: Request): string {
-    const origin = request.headers.get("origin");
-    if (!origin) return "*";
+  /**
+   * Resolve the `Access-Control-Allow-Origin` header value.
+   *
+   * - If `corsOrigins` is configured: echo the request Origin only when it
+   *   appears in the allowlist; otherwise return `null` (no CORS header).
+   * - If `corsOrigins` is not configured: permissive `"*"` for local dev.
+   *
+   * Returns `null` when no CORS header should be emitted.
+   */
+  private resolve_allowed_origin(request?: Request): string | null {
+    const allowlist = this.config.corsOrigins;
 
-    if (this.config.corsOrigins && this.config.corsOrigins.includes(origin)) {
-      return origin;
+    // Restrictive mode: origin must be in the allowlist
+    if (allowlist && allowlist.length > 0) {
+      const origin = request?.headers.get("origin");
+      if (origin && allowlist.includes(origin)) {
+        return origin;
+      }
+      return null;
     }
 
+    // Permissive mode (dev default): wildcard
     return "*";
   }
 
-  private create_error_response(message: string, status: number): Response {
+  private get_cors_origin(request: Request): string | null {
+    return this.resolve_allowed_origin(request);
+  }
+
+  private create_error_response(
+    message: string,
+    status: number,
+    request?: Request,
+  ): Response {
     return new Response(JSON.stringify({ error: message }), {
       status,
-      headers: this.get_default_headers("application/json"),
+      headers: this.get_default_headers("application/json", request),
     });
   }
 

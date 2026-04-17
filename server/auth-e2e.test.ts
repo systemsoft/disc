@@ -228,9 +228,11 @@ Deno.test({
           password: "wrong",
         }),
       });
-      assertEquals(loginRes.status, 404);
+      // P1-35: nonexistent email returns the same generic 401/INVALID_CREDENTIALS
+      // as a wrong-password case to prevent email enumeration.
+      assertEquals(loginRes.status, 401);
       const body = await loginRes.json();
-      assertEquals(body.code, "USER_NOT_FOUND");
+      assertEquals(body.code, "INVALID_CREDENTIALS");
     } finally {
       await server.stop();
       await db.close();

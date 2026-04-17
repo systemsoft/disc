@@ -2958,6 +2958,24 @@ export class EdgeQLCompiler {
   }
 
   private compileArrayExpr(arrayExpr: EdgeQLAST.ArrayExpr): SQL.SQLExpression {
+    // P1-07: validate that all literal elements share the same JS type.
+    // `[1, 'two']` used to compile to `ARRAY[1, 'two']` which PostgreSQL
+    // then rejected at runtime with a cryptic coercion error. Catching the
+    // homogeneity violation at compile time points the user at the right
+    // source line.
+    const literalKinds = new Set<string>();
+    for (const el of arrayExpr.elements) {
+      if (el.kind === "Literal") {
+        literalKinds.add(typeof (el as { value: unknown }).value);
+      }
+    }
+    if (literalKinds.size > 1) {
+      throw new CompilationError(
+        `Array literal has mixed element types: ${
+          [...literalKinds].sort().join(", ")
+        }. Arrays must be homogeneous.`,
+      );
+    }
     const elements = arrayExpr.elements.map((el) => this.compileExpression(el));
     return SQL.createFunctionCall("ARRAY", elements);
   }

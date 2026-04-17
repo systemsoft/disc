@@ -35,10 +35,10 @@ Deno.test("CLI Workflow - Complete project initialization", async () => {
     );
     assert(projectExists, "Project directory should be created");
 
-    // Verify essential files exist
-    const schemaExists = await Deno.stat(`${projectDir}/schema.disc`).then(() =>
-      true
-    ).catch(() => false);
+    // Verify essential files exist (canonical schema path: dbschema/default.disc)
+    const schemaExists = await Deno.stat(
+      `${projectDir}/dbschema/default.disc`,
+    ).then(() => true).catch(() => false);
     const configExists = await Deno.stat(`${projectDir}/deno.json`).then(() =>
       true
     ).catch(() => false);

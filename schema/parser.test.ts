@@ -116,7 +116,7 @@ Deno.test("SDL Parser - Module Declaration", () => {
       type User {
         required name: str;
       };
-      
+
       type Post {
         required title: str;
         required author: User;
@@ -134,6 +134,74 @@ Deno.test("SDL Parser - Module Declaration", () => {
     assertEquals(moduleDecl.name.parts[0], "default");
     assertEquals(moduleDecl.declarations.length, 2);
   }
+});
+
+Deno.test("SDL Parser - Module with trailing semicolon (README syntax)", () => {
+  // This is the exact form shown in README.md and CLAUDE.md
+  const source = `module default {
+  type User {
+    required name: str;
+    required email: str {
+      constraint exclusive;
+    };
+  };
+};`;
+
+  const parser = new SDLParser(source);
+  const ast = parser.parse();
+
+  assertEquals(ast.declarations.length, 1);
+  const moduleDecl = ast.declarations[0];
+  assertEquals(moduleDecl.kind, "ModuleDeclaration");
+  if (moduleDecl.kind === "ModuleDeclaration") {
+    assertEquals(moduleDecl.declarations.length, 1);
+  }
+});
+
+Deno.test("SDL Parser - Top-level type with trailing semicolon", () => {
+  // A standalone type followed by a trailing semi at file end
+  const source = `type Person {
+    required name: str;
+  };`;
+
+  const parser = new SDLParser(source);
+  const ast = parser.parse();
+
+  assertEquals(ast.declarations.length, 1);
+  assertEquals(ast.declarations[0].kind, "TypeDeclaration");
+});
+
+Deno.test("SDL Parser - rejects typo in property body (no silent skip) (P1-04)", () => {
+  const source = `
+    module default {
+      type User {
+        required name: str {
+          typo_here;
+        };
+      }
+    }
+  `;
+  let threw = false;
+  try {
+    new SDLParser(source).parse();
+  } catch (_) {
+    threw = true;
+  }
+  assertEquals(
+    threw,
+    true,
+    "Unknown token in a property body must produce a syntax error",
+  );
+});
+
+Deno.test("SDL Parser - Multiple trailing semicolons at end of file", () => {
+  const source = `module default {
+    type A { required x: str; };
+  };;;`;
+
+  const parser = new SDLParser(source);
+  const ast = parser.parse();
+  assertEquals(ast.declarations.length, 1);
 });
 
 Deno.test("SDL Parser - Type Extension", () => {

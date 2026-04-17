@@ -471,7 +471,8 @@ export class CLICommands {
       const isBuilt = await uiServer.isBuilt();
       if (!isBuilt) {
         console.error("❌ UI not built. Please run:");
-        console.error("   cd ui && npm install && npm run build");
+        // P1-18: UI tooling uses Bun, not npm.
+        console.error("   cd ui && bun install && bun run build");
         return;
       }
 

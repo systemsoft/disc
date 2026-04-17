@@ -78,7 +78,21 @@ let cleanupRegistered = false;
  * Returns the path if both `initdb` and `pg_ctl` exist inside it, otherwise
  * `undefined`.
  */
+// P1-47: cache the result so repeated tests don't fork `which pg_ctl`.
+// Cleared automatically at test-process exit; explicit null means
+// "we tried once and failed" so subsequent calls short-circuit too.
+let cachedPgBinDir: string | undefined | null = undefined;
+
 export function findPgBinDir(): string | undefined {
+  if (cachedPgBinDir !== undefined) {
+    return cachedPgBinDir ?? undefined;
+  }
+  const result = findPgBinDirUncached();
+  cachedPgBinDir = result ?? null;
+  return result;
+}
+
+function findPgBinDirUncached(): string | undefined {
   // 1. Explicit env var
   const envPath = Deno.env.get("DISC_PG_BINARY_PATH");
   if (envPath && hasPgBinaries(envPath)) {

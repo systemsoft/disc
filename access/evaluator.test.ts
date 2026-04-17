@@ -313,13 +313,14 @@ Deno.test("AccessEvaluator - built-in globals still work with backward compatibi
     sessionData: { foo: "bar" },
   };
 
-  // current_user SQL generation
+  // current_user SQL generation (E'…' escape-literal form, safe against
+  // standard_conforming_strings=off)
   const userExpr = { kind: "AccessGlobal" as const, name: "current_user" };
-  assertEquals(evaluator.expressionToSQL(userExpr, context), "'user-123'");
+  assertEquals(evaluator.expressionToSQL(userExpr, context), "E'user-123'");
 
   // current_role SQL generation
   const roleExpr = { kind: "AccessGlobal" as const, name: "current_role" };
-  assertEquals(evaluator.expressionToSQL(roleExpr, context), "'admin'");
+  assertEquals(evaluator.expressionToSQL(roleExpr, context), "E'admin'");
 
   // current_session SQL generation
   const sessionExpr = {
@@ -351,4 +352,65 @@ Deno.test("AccessEvaluator - built-in globals still work with backward compatibi
   // Without userId, condition should fail
   const noUser: AccessContext = {};
   assertEquals(evaluator.evaluate("Resource", "select", noUser).allowed, false);
+});
+
+// ---------------------------------------------------------------------------
+// P0-01 / P0-02: SQL injection via context.userId / context.userRole / globals
+// ---------------------------------------------------------------------------
+
+Deno.test("AccessEvaluator - expressionToSQL escapes single quotes in userId", () => {
+  const evaluator = new AccessEvaluator(createTestConfig());
+  const sql = evaluator.expressionToSQL(
+    { kind: "AccessGlobal", name: "current_user" },
+    { userId: "admin'; DROP TABLE users; --" },
+  );
+  // The unescaped attack substring must not leak through.
+  assertEquals(
+    sql.includes("DROP TABLE users"),
+    true,
+    "input literally contains the phrase, but it must be INSIDE a quoted E'…' literal",
+  );
+  // The first character of the injection — the single quote — must be
+  // doubled, so the SQL stays inside a single string literal.
+  assertEquals(sql.includes("admin''; DROP TABLE users; --"), true);
+  // And the result must use the E'…' escape-literal form.
+  assertEquals(sql.startsWith("E'"), true);
+});
+
+Deno.test("AccessEvaluator - expressionToSQL escapes backslashes in userId", () => {
+  const evaluator = new AccessEvaluator(createTestConfig());
+  const sql = evaluator.expressionToSQL(
+    { kind: "AccessGlobal", name: "current_user" },
+    { userId: "evil\\'; DROP TABLE x; --" },
+  );
+  // Backslash must be doubled — defends against standard_conforming_strings=off
+  assertEquals(
+    sql.includes("evil\\\\"),
+    true,
+    `Expected doubled backslash in ${sql}`,
+  );
+});
+
+Deno.test("AccessEvaluator - expressionToSQL escapes userRole the same way", () => {
+  const evaluator = new AccessEvaluator(createTestConfig());
+  const sql = evaluator.expressionToSQL(
+    { kind: "AccessGlobal", name: "current_role" },
+    { userRole: "admin'--" },
+  );
+  assertEquals(sql.startsWith("E'"), true);
+  assertEquals(sql.includes("admin''--"), true);
+});
+
+Deno.test("AccessEvaluator - custom global with unsafe name is rejected", () => {
+  const evaluator = new AccessEvaluator(createTestConfig());
+  let threw = false;
+  try {
+    evaluator.expressionToSQL(
+      { kind: "AccessGlobal", name: "evil'); DROP TABLE x; --" },
+      {},
+    );
+  } catch (_) {
+    threw = true;
+  }
+  assertEquals(threw, true, "Unsafe global identifier must throw");
 });

@@ -18,6 +18,7 @@ import type {
   AccessLogicalNode,
 } from "./ast.ts";
 import { ValidationError } from "../lib/errors.ts";
+import { assertSafeIdentifier, sqlStringLiteral } from "../lib/sql-escape.ts";
 
 export class AccessEvaluator {
   private config: AccessConfig;
@@ -388,21 +389,27 @@ export class AccessEvaluator {
     switch (expr.kind) {
       case "AccessLiteral": {
         if (expr.type === "string") {
-          return `'${String(expr.value).replace(/'/g, "''")}'`;
+          return sqlStringLiteral(String(expr.value));
         }
 
         return String(expr.value);
       }
 
       case "AccessGlobal": {
-        // Built-in globals use direct value injection
+        // Built-in globals use direct value injection. User-derived context
+        // values are escaped via sqlStringLiteral (E'...' syntax) to close
+        // the SQL-injection vector flagged by the Phase 3 access audit
+        // (P0-01 / P0-02): a userId like `admin'; DROP TABLE users; --`
+        // previously concatenated verbatim into the generated WHERE clause.
         switch (expr.name) {
           case "current_user": {
-            return context.userId ? `'${context.userId}'` : "NULL";
+            return context.userId ? sqlStringLiteral(context.userId) : "NULL";
           }
 
           case "current_role": {
-            return context.userRole ? `'${context.userRole}'` : "NULL";
+            return context.userRole
+              ? sqlStringLiteral(context.userRole)
+              : "NULL";
           }
 
           case "current_session": {
@@ -410,7 +417,11 @@ export class AccessEvaluator {
           }
 
           default: {
-            // Custom globals use PG current_setting mechanism
+            // Custom globals use PG current_setting mechanism. The global
+            // name came from SDL and is validated to be a safe identifier
+            // before being composed into the setting key — avoids an
+            // injection via `current_setting('global default::…')`.
+            assertSafeIdentifier(expr.name, "AccessGlobal");
             return `current_setting('global default::${expr.name}', true)`;
           }
         }

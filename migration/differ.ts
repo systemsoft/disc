@@ -616,6 +616,47 @@ export class SchemaDiffer {
       }
     }
 
+    // Compare computed expression
+    if (oldProp.computed !== newProp.computed) {
+      changes.push({
+        kind: "ChangeComputed",
+        oldValue: oldProp.computed,
+        newValue: newProp.computed,
+      });
+    }
+
+    // Compare annotations (added/removed/changed)
+    const oldAnns = oldProp.annotations ?? {};
+    const newAnns = newProp.annotations ?? {};
+    const annNames = new Set([
+      ...Object.keys(oldAnns),
+      ...Object.keys(newAnns),
+    ]);
+    for (const name of annNames) {
+      const oldVal = oldAnns[name];
+      const newVal = newAnns[name];
+      if (oldVal === undefined && newVal !== undefined) {
+        changes.push({
+          kind: "AddAnnotation",
+          annotationName: name,
+          newValue: newVal,
+        });
+      } else if (oldVal !== undefined && newVal === undefined) {
+        changes.push({
+          kind: "DropAnnotation",
+          annotationName: name,
+          oldValue: oldVal,
+        });
+      } else if (oldVal !== newVal) {
+        changes.push({
+          kind: "ChangeAnnotation",
+          annotationName: name,
+          oldValue: oldVal,
+          newValue: newVal,
+        });
+      }
+    }
+
     return changes;
   }
 
@@ -898,8 +939,7 @@ export class SchemaDiffer {
     if (expr.kind === "Literal") {
       return expr.value;
     }
-    // For now, return string representation of complex expressions
-    return expr.kind;
+    return this.extractExpressionString(expr);
   }
 
   /**

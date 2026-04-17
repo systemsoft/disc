@@ -125,7 +125,7 @@ Deno.test("DDL Generator - Generate Rollback SQL for AddProperty", () => {
   const rollbackSQL = generator.generateRollbackDDL([operation]);
 
   assertEquals(rollbackSQL.length, 1);
-  assertStringIncludes(rollbackSQL[0], "ALTER TABLE user");
+  assertStringIncludes(rollbackSQL[0], `ALTER TABLE "user"`);
   assertStringIncludes(rollbackSQL[0], "DROP COLUMN IF EXISTS active");
 });
 

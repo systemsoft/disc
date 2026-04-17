@@ -239,8 +239,14 @@ export interface PropertyChange {
     | "ChangeRequired"
     | "ChangeMulti"
     | "ChangeDefault"
+    | "ChangeComputed"
     | "AddConstraint"
-    | "DropConstraint";
+    | "DropConstraint"
+    | "AddAnnotation"
+    | "DropAnnotation"
+    | "ChangeAnnotation";
+  /** Annotation name (only set for AddAnnotation/DropAnnotation/ChangeAnnotation) */
+  annotationName?: string;
   oldValue?: any;
   newValue?: any;
 }

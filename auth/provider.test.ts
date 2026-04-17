@@ -164,16 +164,18 @@ describe("AuthProvider", () => {
       );
     });
 
-    it("should reject non-existent user", async () => {
+    it("should reject non-existent user with generic error (P1-35)", async () => {
       const credentials: LoginCredentials = {
         email: "nonexistent@example.com",
         password: "AnyPassword123!",
       };
 
+      // P1-35: to prevent email enumeration, missing users produce the
+      // same INVALID_CREDENTIALS error as wrong-password cases.
       await assertRejects(
         () => provider.login(credentials),
         Error,
-        AuthErrorCode.USER_NOT_FOUND,
+        AuthErrorCode.INVALID_CREDENTIALS,
       );
     });
 
@@ -433,15 +435,13 @@ describe("AuthProvider", () => {
       assertExists(user);
       assertEquals(user.emailVerified, false);
 
-      // Get verification token (normally sent via email)
-      const result = await db.query(
-        "SELECT verification_token FROM users WHERE id = ?",
-        [response.user.id],
-      );
-      const verificationToken = result.rows[0].verification_token;
+      // The plaintext verification token is returned once from register()
+      // (caller is expected to email it). The DB holds only the hash, so
+      // we can no longer fetch the plaintext back from SELECT.
+      assertExists(response.verificationToken);
 
       // Verify email
-      await verifyProvider.verifyEmail(verificationToken);
+      await verifyProvider.verifyEmail(response.verificationToken!);
 
       // Check user is now verified
       const verifiedUser = await verifyProvider.getUser(response.user.id);

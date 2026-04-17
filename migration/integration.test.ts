@@ -104,9 +104,7 @@ module default {
       constraint min_len_value(5);
     };
     required content: str;
-    required author: User {
-      onTargetDelete := DeleteAction.CASCADE;
-    };
+    required author: User;
     published: bool {
       default := false;
     };

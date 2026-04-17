@@ -22,6 +22,12 @@ export interface ServerConfig {
   databaseUrl: string;
   maxConnections: number;
   requestTimeout: number;
+  /**
+   * Max `POST /query` request body size in bytes. Requests larger than
+   * this are rejected with 413 before the body is read into memory. (P1-12)
+   * Defaults to 4 MiB when unset.
+   */
+  maxRequestBodyBytes?: number;
   enableCors: boolean;
   corsOrigins?: string[];
   enableWebsockets: boolean;

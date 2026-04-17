@@ -12,6 +12,7 @@ import * as Context from "../compiler/context.ts";
 import { dirname } from "@std/path";
 import { ensureDir } from "@std/fs";
 import * as Types from "../migration/types.ts";
+import { SchemaManager } from "../migration/schema-manager.ts";
 
 export interface WatchOptions {
   schemaFile?: string;
@@ -37,7 +38,7 @@ export class WatchCommand {
   async execute(options: WatchOptions): Promise<void> {
     console.log("🔍 Watching schema files for changes...");
 
-    const schemaFile = options.schemaFile || "./schema.disc";
+    const schemaFile = options.schemaFile || "./dbschema/default.disc";
     const outputDir = options.outputDir || "./generated";
     const delayMs = options.delayMs || 1000;
 
@@ -182,9 +183,10 @@ export class WatchCommand {
         console.log("✅ No migration needed");
       }
 
-      // Always regenerate types for development
+      // Always regenerate types for development, using the real parsed
+      // modules rather than the dummy test schema. (P1-19)
       console.log("🔧 Regenerating TypeScript types...");
-      await this.runCodegen(outputDir);
+      await this.runCodegen(outputDir, modules);
 
       // Update last hash
       this.lastSchemaHash = currentHash;
@@ -192,7 +194,17 @@ export class WatchCommand {
       console.log("✅ Schema processing complete");
       console.log("");
     } catch (error) {
-      console.error(`❌ Schema processing failed: ${(error as Error).message}`);
+      // P1-14: detect the "file was deleted mid-watch" case and print a
+      // specific message so the user knows why we stopped working.
+      if (error instanceof Deno.errors.NotFound) {
+        console.error(
+          `⚠️  Schema file disappeared: ${schemaFile}. Restore it or run 'disc watch' again to pick up a different path.`,
+        );
+      } else {
+        console.error(
+          `❌ Schema processing failed: ${(error as Error).message}`,
+        );
+      }
       console.log("");
     }
   }
@@ -241,7 +253,7 @@ export class WatchCommand {
         dryRun: dryRun,
         autoApprove: false,
         migrationsDir: "./migrations",
-        schemaFile: "./schema.disc",
+        schemaFile: "./dbschema/default.disc",
         backupBeforeMigration: false,
         rollbackOnError: true,
       };
@@ -322,13 +334,23 @@ export class WatchCommand {
 
   private async runCodegen(
     outputDir: string,
+    modules?: Module[],
   ): Promise<void> {
     try {
       // Create output directory
       await ensureDir(outputDir);
 
-      // Use the test schema for now - in production, would parse the actual schema
-      const schema = Context.createTestSchema();
+      // Prefer the real parsed modules (P1-19). Fall back to the built-in
+      // test schema only when the caller didn't have modules — e.g. during
+      // startup before the first file-change event.
+      let schema;
+      if (modules && modules.length > 0) {
+        const manager = new SchemaManager({ dryRun: true });
+        await manager.initialize();
+        schema = manager.modulesToSchema(modules);
+      } else {
+        schema = Context.createTestSchema();
+      }
       const result = generateTypeScript(schema, {
         outputDir: outputDir,
       });

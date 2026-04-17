@@ -348,8 +348,7 @@ disc codegen --no-queries --no-mutations
 dbschema/disc-client/
   client.ts           # DiscClient class
   index.ts            # Client entry point
-  mutations.ts        # Insert/update/delete helpers
-  query-builders.ts   # Type-safe query builders
+  queries.ts          # Type-safe query builder functions
   types.ts            # TypeScript type definitions
 ```
 
@@ -358,7 +357,7 @@ dbschema/disc-client/
 ```typescript
 import { DiscClient } from "./dbschema/disc-client/index.ts";
 
-const client = new DiscClient({ host: "localhost", port: 5656 });
+const client = new DiscClient({ baseUrl: "http://localhost:5656" });
 const users = await client.user.select();
 ```
 

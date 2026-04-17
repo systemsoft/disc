@@ -228,7 +228,7 @@ Deno.test("DDL Generator - Create Type", () => {
   assertEquals(statements.length > 0, true);
   const createTableSQL = statements[0];
 
-  assertStringIncludes(createTableSQL, "CREATE TABLE user");
+  assertStringIncludes(createTableSQL, `CREATE TABLE "user"`);
   assertStringIncludes(createTableSQL, "id UUID PRIMARY KEY");
   assertStringIncludes(createTableSQL, "name TEXT NOT NULL");
   assertStringIncludes(createTableSQL, "email TEXT NOT NULL");
@@ -258,7 +258,7 @@ Deno.test("DDL Generator - Add Property", () => {
   const statements = generator.generateDDL([operation]);
 
   assertEquals(statements.length, 1);
-  assertStringIncludes(statements[0], "ALTER TABLE user");
+  assertStringIncludes(statements[0], `ALTER TABLE "user"`);
   assertStringIncludes(statements[0], "ADD COLUMN active");
   assertStringIncludes(statements[0], "BOOLEAN NULL");
   assertStringIncludes(statements[0], "DEFAULT TRUE");

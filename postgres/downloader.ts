@@ -8,11 +8,16 @@ export interface BinaryManifest {
   version: string;
 }
 
+// P1-03: use zonkyio's embedded-postgres-binaries for darwin-arm64 — they
+// ship a native ARM64 build. The EnterpriseDB "osx-binaries.zip" used
+// previously for both Mac targets is x86_64 only, so ARM Macs ended up
+// running PG under Rosetta. x86 Mac still uses EDB because zonky ships
+// txz only for ARM on macOS.
 const POSTGRES_VERSIONS = {
   "16.4": {
     "darwin-arm64": {
       url:
-        "https://get.enterprisedb.com/postgresql/postgresql-16.4-1-osx-binaries.zip",
+        "https://github.com/zonkyio/embedded-postgres-binaries/releases/download/v16.4.0/postgres-darwin-arm_64v8.txz",
     },
     "darwin-x64": {
       url:
@@ -30,7 +35,7 @@ const POSTGRES_VERSIONS = {
   "17.0": {
     "darwin-arm64": {
       url:
-        "https://get.enterprisedb.com/postgresql/postgresql-17.0-1-osx-binaries.zip",
+        "https://github.com/zonkyio/embedded-postgres-binaries/releases/download/v17.0.0/postgres-darwin-arm_64v8.txz",
     },
     "darwin-x64": {
       url:

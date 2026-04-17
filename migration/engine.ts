@@ -652,6 +652,10 @@ export class MigrationEngine {
     const runner = new DataMigrationRunner();
     const migrationsDir = this.config.migrationsDir;
 
+    // No migrationsDir configured → no data migrations to discover.
+    // (SchemaManager-driven flows intentionally leave this blank.)
+    if (!migrationsDir) return;
+
     try {
       const dataMigrations = await runner.discoverMigrations(migrationsDir);
       const matching = runner.findMatchingDataMigration(

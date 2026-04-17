@@ -5,7 +5,7 @@
  * and should NOT produce database columns.
  */
 
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { DDLGenerator } from "./ddl.ts";
 import { SchemaDiffer } from "./differ.ts";
 import * as Types from "./types.ts";
@@ -355,4 +355,312 @@ Deno.test("Schema Differ - computed property produces no DDL column in end-to-en
 
   // Computed property should NOT appear
   assertEquals(createTableSql.includes("total"), false);
+});
+
+Deno.test("Schema Differ - datetime_current() default produces DEFAULT NOW()", () => {
+  const differ = new SchemaDiffer();
+  const generator = new DDLGenerator();
+
+  const schema: Module[] = [
+    {
+      name: "default",
+      items: [
+        {
+          kind: "TypeDeclaration",
+          name: { kind: "Identifier", value: "Event" },
+          members: [
+            {
+              kind: "PropertyDeclaration",
+              name: { kind: "Identifier", value: "createdAt" },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["datetime"] },
+              },
+              required: false,
+              multi: false,
+              default: {
+                kind: "FunctionCall",
+                name: { kind: "QualifiedName", parts: ["datetime_current"] },
+                args: [],
+              },
+            },
+          ],
+        },
+      ],
+    },
+  ];
+
+  const operations = differ.diff([], schema);
+  const ddl = generator.generateDDL(operations);
+  const createTableSql = ddl[0];
+
+  assertStringIncludes(createTableSql, "DEFAULT NOW()");
+  assertEquals(
+    createTableSql.includes("'FunctionCall'"),
+    false,
+    "Default must not render AST node kind as literal string",
+  );
+});
+
+Deno.test("DDL Generator - reserved PG keywords in type names are quoted", () => {
+  const differ = new SchemaDiffer();
+  const generator = new DDLGenerator();
+
+  // 'User' lowercases to 'user' which is a reserved SQL/PG keyword.
+  // Prior to the fix, CREATE TABLE user (...) produced a syntax error.
+  const schema: Module[] = [
+    {
+      name: "default",
+      items: [
+        {
+          kind: "TypeDeclaration",
+          name: { kind: "Identifier", value: "User" },
+          members: [
+            {
+              kind: "PropertyDeclaration",
+              name: { kind: "Identifier", value: "name" },
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
+              required: true,
+              multi: false,
+            },
+          ],
+        },
+      ],
+    },
+  ];
+
+  const operations = differ.diff([], schema);
+  const ddl = generator.generateDDL(operations);
+  const createTableSql = ddl[0];
+
+  assertStringIncludes(createTableSql, `CREATE TABLE "user"`);
+  assertEquals(
+    /CREATE TABLE user\s/.test(createTableSql),
+    false,
+    "Bare unquoted 'user' table name causes a PG syntax error",
+  );
+});
+
+Deno.test("Schema Differ - detects changed computed expression", () => {
+  const differ = new SchemaDiffer();
+
+  const oldSchema: Module[] = [{
+    name: "default",
+    items: [{
+      kind: "TypeDeclaration",
+      name: { kind: "Identifier", value: "Product" },
+      members: [
+        {
+          kind: "PropertyDeclaration",
+          name: { kind: "Identifier", value: "price" },
+          type: {
+            kind: "TypeRef",
+            name: { kind: "QualifiedName", parts: ["float64"] },
+          },
+          required: true,
+          multi: false,
+        },
+        {
+          kind: "PropertyDeclaration",
+          name: { kind: "Identifier", value: "total" },
+          type: {
+            kind: "TypeRef",
+            name: { kind: "QualifiedName", parts: ["float64"] },
+          },
+          required: false,
+          multi: false,
+          computed: {
+            kind: "BinaryOp",
+            op: "*",
+            left: { kind: "PathExpression", path: [".price"] },
+            right: { kind: "Literal", value: 1 },
+          },
+        },
+      ],
+    }],
+  }];
+
+  // Same schema but total = price * 2 instead of price * 1
+  const newSchema: Module[] = [{
+    name: "default",
+    items: [{
+      kind: "TypeDeclaration",
+      name: { kind: "Identifier", value: "Product" },
+      members: [
+        oldSchema[0].items[0].kind === "TypeDeclaration"
+          ? oldSchema[0].items[0].members[0]
+          : (() => {
+            throw new Error("unreachable");
+          })(),
+        {
+          kind: "PropertyDeclaration",
+          name: { kind: "Identifier", value: "total" },
+          type: {
+            kind: "TypeRef",
+            name: { kind: "QualifiedName", parts: ["float64"] },
+          },
+          required: false,
+          multi: false,
+          computed: {
+            kind: "BinaryOp",
+            op: "*",
+            left: { kind: "PathExpression", path: [".price"] },
+            right: { kind: "Literal", value: 2 },
+          },
+        },
+      ],
+    }],
+  }];
+
+  const ops = differ.diff(oldSchema, newSchema);
+  const alterOp = ops.find((o) =>
+    o.kind === "AlterType" &&
+    (o as Types.AlterTypeOperation).typeName === "Product"
+  ) as Types.AlterTypeOperation | undefined;
+
+  assertEquals(
+    alterOp !== undefined,
+    true,
+    "Changing a computed expression must produce an AlterType operation",
+  );
+  const propChange = alterOp?.operations.find((o) =>
+    o.kind === "AlterProperty"
+  ) as Types.AlterPropertyOperation | undefined;
+  assertEquals(
+    propChange !== undefined,
+    true,
+    "AlterType must contain an AlterProperty for the computed change",
+  );
+  const changeKinds = propChange?.changes.map((c) => c.kind) ?? [];
+  assert(
+    changeKinds.includes("ChangeComputed"),
+    `Expected ChangeComputed in ${JSON.stringify(changeKinds)}`,
+  );
+});
+
+Deno.test("Schema Differ - detects added annotation", () => {
+  const differ = new SchemaDiffer();
+
+  const makeSchema = (annotations: Record<string, string>): Module[] => [{
+    name: "default",
+    items: [{
+      kind: "TypeDeclaration",
+      name: { kind: "Identifier", value: "User" },
+      members: [{
+        kind: "PropertyDeclaration",
+        name: { kind: "Identifier", value: "name" },
+        type: {
+          kind: "TypeRef",
+          name: { kind: "QualifiedName", parts: ["str"] },
+        },
+        required: true,
+        multi: false,
+        annotations: Object.entries(annotations).map(([key, value]) => ({
+          kind: "Annotation" as const,
+          name: { kind: "QualifiedName" as const, parts: [key] },
+          value: { kind: "Literal" as const, value },
+        })),
+      }],
+    }],
+  }];
+
+  const oldSchema = makeSchema({});
+  const newSchema = makeSchema({ description: "The user's full name" });
+
+  const ops = differ.diff(oldSchema, newSchema);
+  const alterOp = ops.find((o) => o.kind === "AlterType") as
+    | Types.AlterTypeOperation
+    | undefined;
+  assertEquals(
+    alterOp !== undefined,
+    true,
+    "Adding an annotation must produce an AlterType operation",
+  );
+  const propChange = alterOp?.operations.find((o) =>
+    o.kind === "AlterProperty"
+  ) as Types.AlterPropertyOperation | undefined;
+  const changeKinds = propChange?.changes.map((c) => c.kind) ?? [];
+  assert(
+    changeKinds.includes("AddAnnotation") ||
+      changeKinds.includes("ChangeAnnotation"),
+    `Expected AddAnnotation/ChangeAnnotation in ${JSON.stringify(changeKinds)}`,
+  );
+});
+
+Deno.test("Schema Differ - detects removed annotation", () => {
+  const differ = new SchemaDiffer();
+
+  const makeSchema = (annotations: Record<string, string>): Module[] => [{
+    name: "default",
+    items: [{
+      kind: "TypeDeclaration",
+      name: { kind: "Identifier", value: "User" },
+      members: [{
+        kind: "PropertyDeclaration",
+        name: { kind: "Identifier", value: "name" },
+        type: {
+          kind: "TypeRef",
+          name: { kind: "QualifiedName", parts: ["str"] },
+        },
+        required: true,
+        multi: false,
+        annotations: Object.entries(annotations).map(([key, value]) => ({
+          kind: "Annotation" as const,
+          name: { kind: "QualifiedName" as const, parts: [key] },
+          value: { kind: "Literal" as const, value },
+        })),
+      }],
+    }],
+  }];
+
+  const oldSchema = makeSchema({ description: "orig" });
+  const newSchema = makeSchema({});
+
+  const ops = differ.diff(oldSchema, newSchema);
+  const alterOp = ops.find((o) => o.kind === "AlterType") as
+    | Types.AlterTypeOperation
+    | undefined;
+  const propChange = alterOp?.operations.find((o) =>
+    o.kind === "AlterProperty"
+  ) as Types.AlterPropertyOperation | undefined;
+  const changeKinds = propChange?.changes.map((c) => c.kind) ?? [];
+  assert(
+    changeKinds.includes("DropAnnotation"),
+    `Expected DropAnnotation in ${JSON.stringify(changeKinds)}`,
+  );
+});
+
+Deno.test("DDL Generator - reserved PG keyword column names are quoted", () => {
+  const differ = new SchemaDiffer();
+  const generator = new DDLGenerator();
+
+  const schema: Module[] = [
+    {
+      name: "default",
+      items: [
+        {
+          kind: "TypeDeclaration",
+          name: { kind: "Identifier", value: "Session" },
+          members: [
+            {
+              kind: "PropertyDeclaration",
+              name: { kind: "Identifier", value: "user" }, // reserved
+              type: {
+                kind: "TypeRef",
+                name: { kind: "QualifiedName", parts: ["str"] },
+              },
+              required: true,
+              multi: false,
+            },
+          ],
+        },
+      ],
+    },
+  ];
+
+  const ddl = generator.generateDDL(differ.diff([], schema));
+  assertStringIncludes(ddl[0], `"user"`);
 });

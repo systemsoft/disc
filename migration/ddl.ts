@@ -4,6 +4,31 @@
 
 import * as Types from "./types.ts";
 
+// PostgreSQL 16 reserved keywords that cannot appear unquoted as identifiers.
+// Source: https://www.postgresql.org/docs/16/sql-keywords-appendix.html
+// (columns marked "reserved" and "reserved (can be function or type)"). We use
+// the superset because both categories fail in table/column positions.
+const RESERVED_PG_KEYWORDS = new Set<string>([
+  "all", "analyse", "analyze", "and", "any", "array", "as", "asc",
+  "asymmetric", "authorization", "binary", "both", "case", "cast", "check",
+  "collate", "collation", "column", "concurrently", "constraint", "create",
+  "cross", "current_catalog", "current_date", "current_role",
+  "current_schema", "current_time", "current_timestamp", "current_user",
+  "default", "deferrable", "desc", "distinct", "do", "else", "end", "except",
+  "false", "fetch", "for", "foreign", "freeze", "from", "full", "grant",
+  "group", "having", "ilike", "in", "initially", "inner", "intersect",
+  "into", "is", "isnull", "join", "lateral", "leading", "left", "like",
+  "limit", "localtime", "localtimestamp", "natural", "not", "notnull",
+  "null", "offset", "on", "only", "or", "order", "outer", "overlaps",
+  "placing", "primary", "references", "returning", "right", "select",
+  "session_user", "similar", "some", "symmetric", "system_user", "table",
+  "tablesample", "then", "to", "trailing", "true", "union", "unique", "user",
+  "using", "variadic", "verbose", "when", "where", "window", "with",
+  // Common non-standard additions that still conflict unquoted:
+  "add", "alter", "cascade", "drop", "index", "key", "restrict", "update",
+  "delete", "insert",
+]);
+
 export class DDLGenerator {
   /** Tracks junction tables already emitted in this DDL batch to avoid duplicates */
   private createdJunctionTables = new Set<string>();
@@ -474,7 +499,12 @@ export class DDLGenerator {
     tableName: string,
     operation: Types.DropPropertyOperation,
   ): string[] {
+    // P1-09: prefix destructive DROP COLUMN with a SQL comment so migration
+    // history and logs flag the data-loss step. Production callers should
+    // require explicit approval (see MigrationEngine.applyMigrations
+    // `autoApprove: false` path).
     return [
+      `-- WARNING: DROP COLUMN is destructive — data in ${tableName}.${operation.propertyName} will be lost on apply`,
       `ALTER TABLE ${this.escapeIdentifier(tableName)} DROP COLUMN IF EXISTS ${
         this.escapeIdentifier(operation.propertyName)
       };`,
@@ -1170,56 +1200,11 @@ export class DDLGenerator {
   }
 
   private escapeIdentifier(identifier: string): string {
-    // Check if identifier is a reserved keyword
-    const reservedKeywords = new Set([
-      "order",
-      "select",
-      "from",
-      "where",
-      "insert",
-      "update",
-      "delete",
-      "join",
-      "inner",
-      "left",
-      "right",
-      "full",
-      "on",
-      "as",
-      "and",
-      "or",
-      "not",
-      "group",
-      "having",
-      "limit",
-      "offset",
-      "distinct",
-      "case",
-      "when",
-      "then",
-      "else",
-      "end",
-      "null",
-      "true",
-      "false",
-      "table",
-      "column",
-      "constraint",
-      "primary",
-      "key",
-      "foreign",
-      "references",
-      "unique",
-      "index",
-      "create",
-      "drop",
-      "alter",
-      "add",
-      "default",
-      "check",
-      "cascade",
-      "restrict",
-    ]);
+    // PostgreSQL reserved keywords — identifiers that cannot appear unquoted
+    // in a column/table position. Derived from the "reserved (can't be
+    // function or type)" column of Table C.1 in the Postgres 16 docs, plus
+    // common footguns from SQL:2023.
+    const reservedKeywords = RESERVED_PG_KEYWORDS;
 
     if (reservedKeywords.has(identifier.toLowerCase())) {
       return `"${identifier.replace(/"/g, '""')}"`;

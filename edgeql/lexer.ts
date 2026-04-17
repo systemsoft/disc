@@ -61,6 +61,15 @@ export class EdgeQLLexer {
       return null;
     }
 
+    // Triple-quoted string literals (""" or ''' for multi-line strings).
+    // Must be checked BEFORE plain string literals. (P1-06)
+    if (
+      (ch === '"' && this.peekAhead(1) === '"' && this.peekAhead(2) === '"') ||
+      (ch === "'" && this.peekAhead(1) === "'" && this.peekAhead(2) === "'")
+    ) {
+      return this.scanTripleQuotedString(ch);
+    }
+
     // String literals (single and double quotes)
     if (ch === '"' || ch === "'") {
       return this.scanString(ch);
@@ -602,6 +611,51 @@ export class EdgeQLLexer {
           location: { line: startLine, column: startColumn, offset: startPos },
         });
     }
+  }
+
+  /**
+   * Scan a triple-quoted string (""" or ''').
+   *
+   * Content is taken verbatim (no escape processing — like Python raw triple
+   * strings) up to the closing triple quote of the same kind. Newlines are
+   * preserved; this is the preferred form for multi-line query literals.
+   * (P1-06)
+   */
+  private scanTripleQuotedString(quote: string): Token {
+    const startPos = this.pos;
+    const startLine = this.line;
+    const startColumn = this.column;
+
+    this.advance(); // Skip 3 opening quotes
+    this.advance();
+    this.advance();
+
+    const contentStart = this.pos;
+
+    while (this.pos < this.source.length) {
+      const ch = this.peek();
+      if (
+        ch === quote && this.peekAhead(1) === quote &&
+        this.peekAhead(2) === quote
+      ) {
+        const content = this.source.slice(contentStart, this.pos);
+        this.advance();
+        this.advance();
+        this.advance();
+        return createToken(
+          TokenType.STRING,
+          content,
+          startLine,
+          startColumn,
+          startPos,
+        );
+      }
+      this.advance();
+    }
+
+    throw new SyntaxError(`Unterminated triple-quoted string literal`, {
+      location: { line: startLine, column: startColumn, offset: startPos },
+    });
   }
 
   private scanString(quote: string): Token {

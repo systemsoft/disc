@@ -39,9 +39,28 @@ export class ExtensionRegistry {
     return Array.from(this.extensions.values());
   }
 
-  async initializeAll(context: ExtensionContext): Promise<void> {
+  /**
+   * Initialize every registered extension in dependency-topological order.
+   *
+   * @param context      Shared initialization context (pool, logger, etc.)
+   * @param options      Failure-handling policy:
+   *   - `strict` (default) — stop at the first failure and re-throw.
+   *   - `continue`         — log the failure, mark the extension failed,
+   *     and proceed with the rest. Good for non-critical extensions
+   *     (e.g. vector search missing pgvector) that shouldn't tank the
+   *     whole server. (P1-39)
+   *
+   * Returns the names of extensions that failed to initialize (empty in
+   * strict mode since the first failure throws).
+   */
+  async initializeAll(
+    context: ExtensionContext,
+    options: { onError?: "strict" | "continue" } = {},
+  ): Promise<string[]> {
+    const onError = options.onError ?? "strict";
     const sorted = this.topologicalSort();
     this.initOrder = sorted;
+    const failed: string[] = [];
 
     for (const name of sorted) {
       const ext = this.extensions.get(name)!;
@@ -56,13 +75,20 @@ export class ExtensionRegistry {
         await ext.initialize(context);
         log.info(`Extension initialized: ${name}`);
       } catch (error) {
-        if (error instanceof ExtensionInitError) {
-          throw error;
-        }
         const message = error instanceof Error ? error.message : String(error);
-        throw new ExtensionInitError(name, message);
+        const initError = error instanceof ExtensionInitError
+          ? error
+          : new ExtensionInitError(name, message);
+        if (onError === "strict") {
+          throw initError;
+        }
+        log.error(`Extension failed to initialize (continuing): ${name}`, {
+          error: message,
+        });
+        failed.push(name);
       }
     }
+    return failed;
   }
 
   async shutdownAll(): Promise<void> {

@@ -66,20 +66,42 @@ export class SubscriptionClient {
   /**
    * Connect to the Disc WebSocket server.
    * Resolves when the connection is open, rejects on error.
+   *
+   * @param connectTimeoutMs  Max milliseconds to wait for the open event.
+   *   Without this, a silently-dropped TCP handshake makes connect() hang
+   *   forever. Default: 30_000. (P1-31)
    */
-  connect(): Promise<void> {
+  connect(connectTimeoutMs = 30_000): Promise<void> {
     return new Promise<void>((resolve, reject) => {
       const wsUrl = toWebSocketUrl(this.baseUrl);
 
       const socket = new WebSocket(wsUrl);
       this.socket = socket;
 
+      const timeoutId = setTimeout(() => {
+        // Abort the half-open connection and reject the promise. onclose /
+        // onerror may fire later — handleClose is a no-op once the caller
+        // has resolved/rejected, so this is safe.
+        try {
+          socket.close();
+        } catch {
+          // ignore
+        }
+        reject(
+          new DiscConnectionError(
+            `WebSocket connect timed out after ${connectTimeoutMs}ms: ${wsUrl}`,
+          ),
+        );
+      }, connectTimeoutMs);
+
       socket.onopen = () => {
+        clearTimeout(timeoutId);
         this.reconnectAttempt = 0;
         resolve();
       };
 
       socket.onerror = (event) => {
+        clearTimeout(timeoutId);
         reject(
           new DiscConnectionError(
             `WebSocket connection failed: ${wsUrl}`,
@@ -93,6 +115,7 @@ export class SubscriptionClient {
       };
 
       socket.onclose = (event: CloseEvent) => {
+        clearTimeout(timeoutId);
         this.handleClose(event.code);
       };
     });

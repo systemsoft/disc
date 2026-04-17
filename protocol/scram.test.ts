@@ -174,6 +174,7 @@ Deno.test("scram - full SCRAM-SHA-256 flow succeeds with correct password", asyn
     iterations,
     clientFirstMessageBare: parsed.clientFirstMessageBare,
     serverFirstMessage,
+    gs2Header: parsed.gs2Header,
   };
 
   const result = await verifyClientFinalMessage(
@@ -232,6 +233,7 @@ Deno.test("scram - full SCRAM flow fails with wrong password", async () => {
     iterations,
     clientFirstMessageBare: parsed.clientFirstMessageBare,
     serverFirstMessage,
+    gs2Header: parsed.gs2Header,
   };
 
   const result = await verifyClientFinalMessage(
@@ -279,6 +281,7 @@ Deno.test("scram - verifyClientFinalMessage rejects tampered nonce", async () =>
     iterations,
     clientFirstMessageBare: parsed.clientFirstMessageBare,
     serverFirstMessage,
+    gs2Header: parsed.gs2Header,
   };
 
   const result = await verifyClientFinalMessage(
@@ -302,6 +305,7 @@ Deno.test("scram - verifyClientFinalMessage rejects empty proof", async () => {
     iterations: 4096,
     clientFirstMessageBare: "n=test,r=cn",
     serverFirstMessage: "r=cnsn,s=AAAA,i=4096",
+    gs2Header: "n,,",
   };
 
   const result = await verifyClientFinalMessage(
@@ -341,4 +345,101 @@ Deno.test("scram - buildClientFirstMessage produces correct format", () => {
   const str = textDecoder.decode(message);
   assertEquals(str, "n,,n=user,r=abc123");
   assertEquals(clientFirstMessageBare, "n=user,r=abc123");
+});
+
+// ---------------------------------------------------------------------------
+// P0-10: iteration count floor
+// ---------------------------------------------------------------------------
+
+Deno.test("scram - deriveKeys rejects iteration counts below MIN_SCRAM_ITERATIONS (P0-10)", async () => {
+  const { MIN_SCRAM_ITERATIONS } = await import("./scram.ts");
+  const salt = textEncoder.encode("0123456789abcdef");
+
+  // Below the floor must throw
+  let threw = false;
+  try {
+    await deriveKeys("password", salt, 1);
+  } catch (_) {
+    threw = true;
+  }
+  assertEquals(threw, true, `deriveKeys(1) must throw`);
+
+  threw = false;
+  try {
+    await deriveKeys("password", salt, MIN_SCRAM_ITERATIONS - 1);
+  } catch (_) {
+    threw = true;
+  }
+  assertEquals(threw, true, `deriveKeys(min-1) must throw`);
+
+  // At the floor succeeds
+  const ok = await deriveKeys("password", salt, MIN_SCRAM_ITERATIONS);
+  assertNotEquals(ok.storedKey.length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// P0-11: channel-binding validation
+// ---------------------------------------------------------------------------
+
+Deno.test("scram - verifyClientFinalMessage rejects mismatched channel binding (P0-11)", async () => {
+  const password = "correctpassword";
+  const clientNonce = "client-nonce-xyz";
+
+  // Client and server complete the first round normally
+  const { clientFirstMessageBare } = buildClientFirstMessage(
+    "carol",
+    clientNonce,
+  );
+  const salt = textEncoder.encode("some-16b-salt!!!");
+  const iterations = 4096;
+  const { serverNonce, serverFirstMessage } = generateServerFirstMessage(
+    clientNonce,
+    salt,
+    iterations,
+  );
+  const { storedKey, serverKey } = await deriveKeys(password, salt, iterations);
+
+  // Build a normal client-final-message for the honest gs2 header "n,,"
+  const honestFinal = await buildClientFinalMessage(
+    password,
+    clientNonce,
+    clientFirstMessageBare,
+    serverFirstMessage,
+  );
+
+  // Tamper: swap the honest c=biws for a different (valid-looking) value
+  const str = textDecoder.decode(honestFinal);
+  const tampered = textEncoder.encode(str.replace("c=biws", "c=eSws")); // base64("y,,")
+
+  const state: ScramServerState = {
+    username: "carol",
+    clientNonce,
+    serverNonce,
+    salt,
+    iterations,
+    clientFirstMessageBare,
+    serverFirstMessage,
+    gs2Header: "n,,", // server recorded this from the honest first message
+  };
+
+  const tamperedResult = await verifyClientFinalMessage(
+    tampered,
+    state,
+    storedKey,
+    serverKey,
+  );
+  assertEquals(
+    tamperedResult.valid,
+    false,
+    "Mismatched channel binding must fail verification",
+  );
+
+  // Sanity: honest message still verifies
+  const honestResult = await verifyClientFinalMessage(
+    honestFinal,
+    state,
+    storedKey,
+    serverKey,
+  );
+  assertEquals(honestResult.valid, true);
 });

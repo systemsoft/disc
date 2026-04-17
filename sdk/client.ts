@@ -232,7 +232,7 @@ export class DiscClient {
         if (error instanceof DiscServerError) {
           lastError = error;
           if (attempt < this.retries) {
-            await this.delay(this.retryDelay * (attempt + 1));
+            await this.delay(this.backoffDelay(attempt));
             continue;
           }
           throw error;
@@ -255,7 +255,7 @@ export class DiscClient {
             error,
           );
           if (attempt < this.retries) {
-            await this.delay(this.retryDelay * (attempt + 1));
+            await this.delay(this.backoffDelay(attempt));
             continue;
           }
           throw lastError;
@@ -281,6 +281,22 @@ export class DiscClient {
 
   private delay(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * Exponential backoff with ±25% jitter. Prevents thundering herd when
+   * many clients retry in lockstep after a shared outage. (P1-30)
+   *
+   *   attempt=0 → ~retryDelay * 2^0 = retryDelay
+   *   attempt=1 → ~retryDelay * 2^1
+   *   attempt=2 → ~retryDelay * 2^2
+   *
+   * Each result is multiplied by a random factor in [0.75, 1.25].
+   */
+  private backoffDelay(attempt: number): number {
+    const base = this.retryDelay * Math.pow(2, attempt);
+    const jitter = 0.75 + Math.random() * 0.5;
+    return Math.round(base * jitter);
   }
 }
 

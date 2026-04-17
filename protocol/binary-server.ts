@@ -49,6 +49,27 @@ import {
   SyntaxError,
   ValidationError,
 } from "../lib/errors.ts";
+import { QueryCache } from "../lib/query-cache.ts";
+
+/**
+ * Maximum size (in bytes) of a single wire-protocol message payload.
+ *
+ * Gel's reference server caps protocol messages at the same ~16 MB boundary.
+ * Without this cap, a hostile or misbehaving client can send a 4 GB length
+ * prefix and force the server to allocate a multi-gigabyte buffer before any
+ * validation runs. The server will return an error and close the connection
+ * when this limit is exceeded.
+ */
+export const MAX_MESSAGE_SIZE = 16 * 1024 * 1024; // 16 MiB
+
+/**
+ * Maximum number of cached prepared statements per connection.
+ *
+ * Each cache entry holds a parsed plan plus descriptors; an unbounded cache
+ * lets a single connection push memory use toward OOM by issuing many unique
+ * queries. LRU eviction keeps the working set bounded.
+ */
+export const MAX_STATEMENT_CACHE_SIZE = 1000;
 
 // ---------------------------------------------------------------------------
 // Gel protocol error codes
@@ -56,6 +77,7 @@ import {
 
 export const GEL_ERROR_CODES = {
   InternalServerError: 0x01000000,
+  ProtocolError: 0x03000000,
   QueryError: 0x04000000,
   InvalidSyntaxError: 0x04010000,
   EdgeQLSyntaxError: 0x04010100,
@@ -280,8 +302,8 @@ export class BinaryConnection {
     config: new Map(),
   };
 
-  // Phase 4.2: Prepared statement cache
-  private stmtCache = new Map<string, CachedStatement>();
+  // Phase 4.2: Prepared statement cache (LRU, capped per-connection)
+  private stmtCache = new QueryCache<CachedStatement>(MAX_STATEMENT_CACHE_SIZE);
 
   constructor(
     private conn: Deno.TcpConn,
@@ -296,7 +318,7 @@ export class BinaryConnection {
 
   /** Get the prepared statement cache size (for testing). */
   getCacheSize(): number {
-    return this.stmtCache.size;
+    return this.stmtCache.stats().size;
   }
 
   /**
@@ -319,6 +341,19 @@ export class BinaryConnection {
         );
         const messageLength = view.getUint32(1, false);
         const payloadLength = messageLength - 4;
+
+        // Reject oversized / malformed messages BEFORE allocating the buffer.
+        // A hostile client can otherwise send a 4 GB length prefix and force
+        // the server to allocate a multi-gigabyte Uint8Array.
+        if (payloadLength < 0 || payloadLength > MAX_MESSAGE_SIZE) {
+          if (!this.closed) {
+            await this.sendErrorWithCode(
+              `Message size ${payloadLength} bytes exceeds maximum of ${MAX_MESSAGE_SIZE}`,
+              GEL_ERROR_CODES.ProtocolError,
+            );
+          }
+          break; // Close the connection — payload framing is unrecoverable
+        }
 
         // Read payload
         let payload = new Uint8Array(0);
@@ -454,6 +489,7 @@ export class BinaryConnection {
         iterations,
         clientFirstMessageBare: "",
         serverFirstMessage: "",
+        gs2Header: "",
       };
 
       // Send AuthenticationRequiredSASL
@@ -498,6 +534,7 @@ export class BinaryConnection {
       this.scramState.serverNonce = serverNonce;
       this.scramState.clientFirstMessageBare = parsed.clientFirstMessageBare;
       this.scramState.serverFirstMessage = serverFirstMessage;
+      this.scramState.gs2Header = parsed.gs2Header;
 
       // Send AuthenticationSASLContinue with server-first-message
       const encoder = new TextEncoder();

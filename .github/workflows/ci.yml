@@ -1,0 +1,65 @@
+# Minimal CI pipeline (P1-46).
+#
+# Runs lint + format check + the non-PG test suite on every push and PR.
+# The PG-integration suite (DISC_PG_AUTO=1) is gated on a label to keep
+# default CI fast — it downloads PostgreSQL binaries and takes several
+# minutes. Re-enable by running the `ci-pg` workflow manually or add the
+# `run-pg-tests` label to a PR.
+
+name: CI
+
+on:
+  push:
+    branches: [primary, main]
+  pull_request:
+    branches: [primary, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-test:
+    name: Lint + format + tests (no PG)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Check formatting
+        run: deno fmt --check
+
+      - name: Lint
+        run: deno lint
+
+      - name: Tests (no PG)
+        run: |
+          deno test --allow-all --no-check \
+            schema/ compiler/ migration/ cli/ lib/ postgres/ \
+            server/ protocol/ auth/ access/ extensions/ sdk/
+
+  pg-tests:
+    name: PG integration tests
+    runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'run-pg-tests')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Install PostgreSQL client binaries
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client postgresql
+
+      - name: Run PG integration tests
+        env:
+          DISC_PG_AUTO: "1"
+        run: deno task test:pg

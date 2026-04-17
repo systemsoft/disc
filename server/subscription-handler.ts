@@ -23,6 +23,12 @@ export class SubscriptionHandler {
   private options: Required<SubscriptionOptions>;
   private heartbeat_id: number | undefined;
   private pending_timeouts = new Set<number>();
+  /**
+   * Per-subscription timeouts so stop_subscription() can cancel the
+   * in-flight update timer. Before this, pending_timeouts was cleared only
+   * on dispose() — churned subscriptions leaked a timer each. (P1-11)
+   */
+  private subscription_timeouts = new Map<string, Set<number>>();
 
   constructor(options: SubscriptionOptions = {}) {
     this.options = {
@@ -98,6 +104,16 @@ export class SubscriptionHandler {
     subscription.status = "stopped";
     this.subscriptions.delete(subscriptionId);
 
+    // Cancel any pending timers for this subscription (P1-11).
+    const subTimers = this.subscription_timeouts.get(subscriptionId);
+    if (subTimers) {
+      for (const id of subTimers) {
+        clearTimeout(id);
+        this.pending_timeouts.delete(id);
+      }
+      this.subscription_timeouts.delete(subscriptionId);
+    }
+
     const connectionSubs = this.connection_subscriptions.get(
       subscription.connectionId,
     );
@@ -153,6 +169,16 @@ export class SubscriptionHandler {
     this.send_data(subscription.websocket, subscription.id, initialData);
 
     // Start periodic updates (for demonstration/mock purposes)
+    const trackTimer = (id: number) => {
+      this.pending_timeouts.add(id);
+      let subTimers = this.subscription_timeouts.get(subscription.id);
+      if (!subTimers) {
+        subTimers = new Set();
+        this.subscription_timeouts.set(subscription.id, subTimers);
+      }
+      subTimers.add(id);
+    };
+
     const sendUpdate = () => {
       if (subscription.status !== "active") return;
 
@@ -162,12 +188,12 @@ export class SubscriptionHandler {
       // Schedule next update (simulate real-time data)
       if (subscription.status === "active") {
         const id = setTimeout(sendUpdate, 5000 + Math.random() * 5000);
-        this.pending_timeouts.add(id);
+        trackTimer(id);
       }
     };
 
     const id = setTimeout(sendUpdate, 5000);
-    this.pending_timeouts.add(id);
+    trackTimer(id);
   }
 
   private validate_subscription_query(query: string): Types.QueryError[] {

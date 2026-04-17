@@ -38,6 +38,10 @@ export class RateLimiter {
     this.cleanup_timer = setInterval(() => {
       this.cleanup_stale();
     }, CLEANUP_INTERVAL_MS);
+    // Unref the timer so it doesn't keep Deno's event loop alive. Without
+    // this the process (and test runners) would hang waiting for the
+    // interval to fire even after the limiter is otherwise idle.
+    Deno.unrefTimer(this.cleanup_timer);
   }
 
   allow(clientIp: string): boolean {

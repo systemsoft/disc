@@ -89,11 +89,13 @@ export class Logger {
       output(JSON.stringify(entry));
     } else {
       // Text format: TIMESTAMP [LEVEL] [module] message key=value
+      // P1-42: quote values that would break logfmt parsing (spaces, equals,
+      // quotes). Previously `key=multi word` merged into adjacent pairs.
       const kvPairs = Object.entries(entry)
         .filter(
           ([k]) => !["timestamp", "level", "module", "message"].includes(k),
         )
-        .map(([k, v]) => `${k}=${v}`)
+        .map(([k, v]) => `${k}=${formatLogValue(v)}`)
         .join(" ");
       const line = `${entry.timestamp} [${level}] [${this.module}] ${message}${
         kvPairs ? " " + kvPairs : ""
@@ -105,4 +107,20 @@ export class Logger {
 
 export function getLogger(module: string): Logger {
   return new Logger(module);
+}
+
+/**
+ * Serialize a logfmt value. Bare tokens (no spaces/quotes/equals) are emitted
+ * verbatim. Anything else gets JSON-string-quoted, which matches the logfmt
+ * spec and keeps logs parseable by common tools (lnav, grafana loki, etc.).
+ */
+function formatLogValue(v: unknown): string {
+  if (v === null || v === undefined) return String(v);
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  const s = typeof v === "string" ? v : JSON.stringify(v);
+  // Needs quoting if it contains whitespace, a literal quote, or an `=`.
+  if (/[\s"=]/.test(s)) {
+    return JSON.stringify(s);
+  }
+  return s;
 }

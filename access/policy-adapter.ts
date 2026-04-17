@@ -123,6 +123,18 @@ function collectGlobals(
  * - `sdl.condition`   → `runtime.using` (always, for SQL WHERE generation)
  * - `sdl.condition`   → `runtime.condition` ONLY if no column references;
  *   otherwise a minimal global-presence guard is extracted
+ *
+ * Note on withCheck (P1-37): the runtime `AccessPolicy` type supports a
+ * `withCheck` expression for INSERT/UPDATE validation, but the SDL parser
+ * doesn't surface it yet — `schema/ast.ts` AccessPolicy has `condition`
+ * only. When SDL adds a `with check (...)` clause the adapter will need to
+ * mirror it here; until then there is nothing to translate.
+ *
+ * Note on deny policies (P1-38): deny policies currently compile to a
+ * coarse gate (if the policy matches and the action is denied, reject the
+ * whole request) rather than per-row filtering. This mirrors Gel's
+ * documented behavior as of 5.x — row-level deny would require JOIN-style
+ * policy composition that isn't implemented.
  */
 export function adaptAccessPolicies(
   objectType: string,

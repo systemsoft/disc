@@ -152,6 +152,10 @@ export class AuthProvider implements IAuthProvider {
     const verificationToken = this.config.requireEmailVerification
       ? this.generateToken()
       : null;
+    // Store only the hash; plaintext is returned to the caller for emailing.
+    const verificationTokenHash = verificationToken
+      ? await this.hashToken(verificationToken)
+      : null;
 
     await this.db.execute(
       `
@@ -167,7 +171,7 @@ export class AuthProvider implements IAuthProvider {
         passwordHash,
         !this.config.requireEmailVerification,
         data.metadata ? JSON.stringify(data.metadata) : null,
-        verificationToken,
+        verificationTokenHash,
       ],
     );
 
@@ -198,6 +202,8 @@ export class AuthProvider implements IAuthProvider {
       session,
       token,
       refreshToken: refreshToken,
+      // Plaintext for the caller to email; DB has the hash.
+      ...(verificationToken ? { verificationToken } : {}),
     };
   }
 
@@ -211,10 +217,13 @@ export class AuthProvider implements IAuthProvider {
     const result = await this.db.query(query, [param]);
 
     if (result.rows.length === 0) {
+      // P1-35: generic error — don't leak whether the email exists.
+      // Returning USER_NOT_FOUND vs INVALID_CREDENTIALS lets attackers
+      // probe valid accounts.
       throw new AuthError(
-        "User not found",
-        AuthErrorCode.USER_NOT_FOUND,
-        404,
+        "Invalid credentials",
+        AuthErrorCode.INVALID_CREDENTIALS,
+        401,
       );
     }
 
@@ -348,9 +357,15 @@ export class AuthProvider implements IAuthProvider {
       const rawPayload = await verify(token, this.cryptoKey);
       const payload = rawPayload as unknown as TokenPayload;
 
-      // Check if session exists and is not revoked
+      // Check session: exists, not revoked, AND server-side expires_at is in
+      // the future (P1-33 — previously only the JWT exp claim was checked,
+      // so a stolen token remained usable until its JWT exp regardless of
+      // server-side revocation timing).
       const result = await this.db.query(
-        "SELECT id FROM sessions WHERE token = ? AND revoked = FALSE",
+        `SELECT id FROM sessions
+           WHERE token = ?
+             AND revoked = FALSE
+             AND expires_at > CURRENT_TIMESTAMP`,
         [token],
       );
 
@@ -362,7 +377,8 @@ export class AuthProvider implements IAuthProvider {
         );
       }
 
-      // Check expiration
+      // Check JWT expiration (separate from server-side expires_at —
+      // clients may have a shorter JWT lifetime than the session record).
       if (payload.exp && payload.exp <= Math.floor(Date.now() / 1000)) {
         throw new AuthError(
           "Token expired",
@@ -370,6 +386,13 @@ export class AuthProvider implements IAuthProvider {
           401,
         );
       }
+
+      // Stamp last_activity so inactivity-based reaping can work.
+      // Best-effort — verification succeeds even if this UPDATE fails.
+      await this.db.execute(
+        "UPDATE sessions SET last_activity = CURRENT_TIMESTAMP WHERE id = ?",
+        [result.rows[0].id],
+      ).catch(() => {});
 
       return payload;
     } catch (error) {
@@ -463,29 +486,32 @@ export class AuthProvider implements IAuthProvider {
     );
 
     if (result.rows.length === 0) {
-      throw new AuthError(
-        "User not found",
-        AuthErrorCode.USER_NOT_FOUND,
-        404,
-      );
+      // P1-35: don't leak whether the email is registered. Return a
+      // non-plaintext sentinel — callers treat a non-empty return as
+      // "we'll email you if the account exists", matching standard practice.
+      return "";
     }
 
     const userId = result.rows[0].id;
     const resetToken = this.generateToken();
+    const resetTokenHash = await this.hashToken(resetToken);
     const expires = new Date(Date.now() + 3600000); // 1 hour
 
     await this.db.execute(
       "UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE id = ?",
-      [resetToken, expires.toISOString(), userId],
+      [resetTokenHash, expires.toISOString(), userId],
     );
 
+    // Return plaintext to caller (they send it via email); only the hash
+    // is in the DB. (P0-03)
     return resetToken;
   }
 
   async resetPassword(resetToken: string, newPassword: string): Promise<void> {
+    const resetTokenHash = await this.hashToken(resetToken);
     const result = await this.db.query(
       "SELECT id FROM users WHERE reset_token = ? AND reset_token_expires > CURRENT_TIMESTAMP",
-      [resetToken],
+      [resetTokenHash],
     );
 
     if (result.rows.length === 0) {
@@ -524,9 +550,10 @@ export class AuthProvider implements IAuthProvider {
   }
 
   async verifyEmail(verificationToken: string): Promise<void> {
+    const verificationTokenHash = await this.hashToken(verificationToken);
     const result = await this.db.query(
       "SELECT id FROM users WHERE verification_token = ?",
-      [verificationToken],
+      [verificationTokenHash],
     );
 
     if (result.rows.length === 0) {
@@ -540,7 +567,7 @@ export class AuthProvider implements IAuthProvider {
     await this.db.execute(
       `UPDATE users SET email_verified = TRUE, verification_token = NULL,
        updated_at = CURRENT_TIMESTAMP WHERE verification_token = ?`,
-      [verificationToken],
+      [verificationTokenHash],
     );
   }
 
@@ -654,6 +681,23 @@ export class AuthProvider implements IAuthProvider {
     const bytes = new Uint8Array(32);
     crypto.getRandomValues(bytes);
     return Array.from(bytes)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+  }
+
+  /**
+   * Hash a reset/verification token before storing it.
+   *
+   * Tokens are 32 random bytes (256 bits) → high-entropy, so SHA-256 suffices
+   * (unlike passwords, we don't need a slow hash). Storing only the hash
+   * ensures that a DB leak can't be used to reset other users' passwords
+   * or bypass email verification — the attacker would need the original
+   * plaintext token, which was only sent to the user's email. (P0-03)
+   */
+  private async hashToken(plaintext: string): Promise<string> {
+    const bytes = new TextEncoder().encode(plaintext);
+    const digest = await crypto.subtle.digest("SHA-256", bytes);
+    return Array.from(new Uint8Array(digest))
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
   }

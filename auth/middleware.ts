@@ -94,7 +94,10 @@ export class AuthMiddleware {
       );
       response.headers.set(
         "Content-Security-Policy",
-        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';",
+        // P1-34: removed script-src 'unsafe-inline'. Inline scripts must use
+        // a nonce or be moved into external files. Style inline is retained
+        // until the admin UI ships nonce-based CSS.
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';",
       );
 
       return response;
@@ -102,16 +105,31 @@ export class AuthMiddleware {
   }
 
   /**
-   * Handle CORS
+   * Handle CORS.
+   *
+   * Secure-by-default: callers must opt in to CORS by specifying `origins`
+   * explicitly. The `"*"` + `credentials: true` combination is refused (the
+   * browser rejects it anyway; callers almost never want it and it's a
+   * common footgun). (P0-06)
    */
   withCORS(handler: RequestHandler, options: CORSOptions = {}): RequestHandler {
     const {
-      origins = ["*"],
+      origins = [], // default deny — caller must opt in
       methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
       headers = ["Content-Type", "Authorization"],
-      credentials = true,
+      credentials = false, // default no-credentials — safer cross-origin default
       maxAge = 86400,
     } = options;
+
+    if (credentials && origins.includes("*")) {
+      throw new Error(
+        "CORS misconfiguration: credentials=true is incompatible with origins:['*']. " +
+          "Specify explicit allowed origins when sharing credentials.",
+      );
+    }
+
+    const isAllowed = (origin: string | null): origin is string =>
+      !!origin && (origins.includes("*") || origins.includes(origin));
 
     return async (request: Request, context?: AuthContext) => {
       const origin = request.headers.get("Origin");
@@ -120,7 +138,7 @@ export class AuthMiddleware {
       if (request.method === "OPTIONS") {
         const response = new Response(null, { status: 204 });
 
-        if (origin && (origins.includes("*") || origins.includes(origin))) {
+        if (isAllowed(origin)) {
           response.headers.set("Access-Control-Allow-Origin", origin);
           response.headers.set(
             "Access-Control-Allow-Methods",
@@ -142,7 +160,7 @@ export class AuthMiddleware {
       // Handle actual request
       const response = await handler(request, context);
 
-      if (origin && (origins.includes("*") || origins.includes(origin))) {
+      if (isAllowed(origin)) {
         response.headers.set("Access-Control-Allow-Origin", origin);
         if (credentials) {
           response.headers.set("Access-Control-Allow-Credentials", "true");
@@ -154,7 +172,16 @@ export class AuthMiddleware {
   }
 
   /**
-   * Extract token from request
+   * Extract token from request.
+   *
+   * Accepts the token from:
+   *   - `Authorization: Bearer …` header (recommended)
+   *   - `auth_token` HttpOnly cookie (session-based clients)
+   *
+   * Tokens MUST NOT be accepted via URL query string — they leak into
+   * browser history, HTTP access logs, Referer headers, and third-party
+   * analytics. If a caller needs to pass a token in the URL they should
+   * migrate to the Authorization header instead (P0-04).
    */
   private extractToken(request: Request): string | null {
     // Check Authorization header
@@ -167,13 +194,6 @@ export class AuthMiddleware {
     const cookies = this.parseCookies(request.headers.get("Cookie") || "");
     if (cookies.auth_token) {
       return cookies.auth_token;
-    }
-
-    // Check query parameter
-    const url = new URL(request.url);
-    const token = url.searchParams.get("token");
-    if (token) {
-      return token;
     }
 
     return null;
