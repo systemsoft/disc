@@ -1,0 +1,108 @@
+# Release automation (P3-06).
+#
+# Triggered on tag push (v*) — builds native binaries for the 4 supported
+# platforms, computes SHA-256 checksums, and attaches everything to a
+# GitHub release. The version is read from version.txt (ChronVer); the
+# git tag is the source of truth for "what should this release be named".
+#
+# To cut a release:
+#   1. `just version` (bumps version.txt to today's date)
+#   2. `git commit -am "Release $(cat version.txt)"`
+#   3. `git tag v$(cat version.txt)`
+#   4. `git push --tags`
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (e.g. v2026.04.17)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    strategy:
+      matrix:
+        include:
+          - platform: linux-x64
+            runner: ubuntu-latest
+            artifact: disc-linux-x64
+          - platform: linux-arm64
+            runner: ubuntu-latest
+            artifact: disc-linux-arm64
+          - platform: darwin-x64
+            runner: macos-13
+            artifact: disc-darwin-x64
+          - platform: darwin-arm64
+            runner: macos-14
+            artifact: disc-darwin-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Build UI (needed for bundled binary)
+        working-directory: ui
+        run: |
+          curl -fsSL https://bun.sh/install | bash
+          export BUN_INSTALL="$HOME/.bun"
+          export PATH="$BUN_INSTALL/bin:$PATH"
+          bun install
+          bun run build
+
+      - name: Build binary
+        run: |
+          deno run --allow-all --no-check cli/main.ts build \
+            --platform ${{ matrix.platform }} \
+            --output ${{ matrix.artifact }}
+
+      - name: Checksum
+        run: shasum -a 256 ${{ matrix.artifact }} > ${{ matrix.artifact }}.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            ${{ matrix.artifact }}
+            ${{ matrix.artifact }}.sha256
+
+  publish:
+    name: Publish GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release
+
+      - name: Consolidate checksums
+        run: |
+          find release -name '*.sha256' -exec cat {} \; > release/CHECKSUMS.txt
+          cat release/CHECKSUMS.txt
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          files: |
+            release/**/disc-*
+            release/CHECKSUMS.txt
+          generate_release_notes: true
+          draft: false
+          prerelease: false

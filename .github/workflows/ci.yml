@@ -36,11 +36,25 @@ jobs:
       - name: Lint
         run: deno lint
 
-      - name: Tests (no PG)
+      - name: Tests (no PG) with coverage
+        # P3-05: collect coverage on every push/PR so regressions in test
+        # breadth are visible in CI logs. `deno coverage` prints a summary
+        # to stdout; the raw data lives in ./coverage for any consumer
+        # (e.g. codecov action can ingest the lcov output) to attach.
         run: |
-          deno test --allow-all --no-check \
+          deno test --allow-all --no-check --coverage=coverage \
             schema/ compiler/ migration/ cli/ lib/ postgres/ \
             server/ protocol/ auth/ access/ extensions/ sdk/
+          deno coverage coverage --lcov --output=coverage/lcov.info
+          deno coverage coverage | tail -30
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-lcov
+          path: coverage/lcov.info
+          retention-days: 14
 
   pg-tests:
     name: PG integration tests

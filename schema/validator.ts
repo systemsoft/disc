@@ -328,6 +328,16 @@ export class SchemaValidator {
     // Validate type
     this.validateTypeRef(property.type);
 
+    // P3-01: cardinality sanity. `required multi` is valid in Gel and
+    // means "at least one element" — but `multi` plus `optional` is
+    // redundant noise, and computed properties can't be declared
+    // required since their values are derived. Flag these as warnings.
+    if (property.computed && property.required) {
+      this.addError(
+        `Property '${property.name.value}': computed properties cannot also be 'required' — the cardinality is determined by the expression`,
+      );
+    }
+
     // Validate default expression
     if (property.default) {
       this.validateExpression(property.default);

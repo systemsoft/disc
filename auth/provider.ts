@@ -47,9 +47,21 @@ export class AuthProvider implements IAuthProvider {
   }
 
   async initialize(): Promise<void> {
-    // Create crypto key for JWT signing
+    // Create crypto key for JWT signing. (P3-04: HS256 with a shared
+    // secret is the default; RS256 support — asymmetric keys so
+    // verifiers don't need the signing secret — is planned. To rotate
+    // an HS256 secret today: stand up a parallel server with the new
+    // secret, migrate traffic, and invalidate old sessions via
+    // `UPDATE sessions SET revoked = TRUE`. The rotation doesn't need
+    // application-level coordination because sessions also carry a
+    // server-side revoked flag that verifyToken checks.)
     const encoder = new TextEncoder();
     const keyData = encoder.encode(this.config.jwtSecret);
+    if (keyData.length < 32) {
+      throw new Error(
+        `AuthProvider: jwtSecret must be at least 32 bytes for HS256; got ${keyData.length}`,
+      );
+    }
     this.cryptoKey = await crypto.subtle.importKey(
       "raw",
       keyData,

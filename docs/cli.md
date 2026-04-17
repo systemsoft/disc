@@ -317,6 +317,7 @@ disc codegen [options]
 | `--no-mutations`      | Skip mutation method generation               | `false`                  |
 | `--no-client`         | Skip client library generation                | `false`                  |
 | `--no-format`         | Skip output formatting                        | `false`                  |
+| `--js`                | *Reserved:* generate JavaScript output        | `false` (not implemented yet — tracked in backlog) |
 
 **Examples:**
 

@@ -16,7 +16,8 @@ import { TestDatabase } from "../auth/test-database.ts";
 import { HttpServer } from "./http.ts";
 
 const TEST_HOST = "127.0.0.1";
-const TEST_JWT_SECRET = "e2e-test-secret-key";
+// 32+ bytes required by AuthProvider (P3-04 hardening).
+const TEST_JWT_SECRET = "e2e-test-secret-key-with-enough-entropy-32b";
 
 function getRandomPort(): number {
   return 30000 + Math.floor(Math.random() * 5000);
