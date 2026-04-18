@@ -21,11 +21,16 @@ Deno.test("CLI Workflow - Complete project initialization", async () => {
     // Simulate full init workflow
     const projectName = "test-workflow-project";
 
-    // Test init command
+    // Test init command. `skipPostgres` avoids downloading the bundled
+    // PG binary from the internet — CI has no outbound access to the
+    // zonky/EDB mirrors, and this test only asserts the project files are
+    // created. All other workflow tests in this file follow the same
+    // convention.
     await commands.init({
       name: projectName,
       template: "basic",
       directory: tempDir,
+      skipPostgres: true,
     });
 
     // Verify project directory was created
