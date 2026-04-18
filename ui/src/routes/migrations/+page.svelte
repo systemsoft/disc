@@ -1,97 +1,113 @@
 <script lang="ts">
-  let migrations = [
-    { id: 'm001', name: 'initial_schema', applied_at: '2024-01-15 10:30:00', status: 'applied' },
-    { id: 'm002', name: 'add_user_profile', applied_at: '2024-01-16 14:20:00', status: 'applied' },
-    { id: 'm003', name: 'add_posts_table', applied_at: '2024-01-17 09:15:00', status: 'applied' },
-    { id: 'm004', name: 'add_tags_system', applied_at: null, status: 'pending' }
+  // P1-23: the Disc HTTP server doesn't expose a migrations endpoint
+  // (only EdgeQL `/query` and schema introspection are reachable). Until
+  // a `/migrations` route lands, this page renders a clear, honest state
+  // pointing the user at the CLI commands that *do* show migration history.
+  // Replacing it with mock data would be worse than admitting the gap.
+  const cliCommands: Array<{ cmd: string; desc: string }> = [
+    { cmd: 'disc migrate --status', desc: 'Show applied + pending migrations' },
+    { cmd: 'disc migrate --create', desc: 'Generate a migration without applying it' },
+    { cmd: 'disc migrate', desc: 'Apply all pending migrations' },
   ];
 </script>
 
 <div class="migrations">
-  <h1>Migration History</h1>
-  
-  <div class="migrations-list">
-    {#each migrations as migration}
-      <div class="migration-item" class:pending={migration.status === 'pending'}>
-        <div class="migration-header">
-          <span class="migration-id">{migration.id}</span>
-          <span class="migration-name">{migration.name}</span>
-          <span class="migration-status" class:applied={migration.status === 'applied'}>
-            {migration.status}
-          </span>
-        </div>
-        {#if migration.applied_at}
-          <div class="migration-date">Applied: {migration.applied_at}</div>
-        {/if}
-      </div>
-    {/each}
+  <header>
+    <h1>Migration History</h1>
+  </header>
+
+  <div class="notice">
+    <h3>Not yet wired</h3>
+    <p>
+      The Disc HTTP server doesn't expose a migrations endpoint yet, so
+      the UI can't list migration history. Use the CLI in the meantime:
+    </p>
+
+    <ul class="cli-list">
+      {#each cliCommands as { cmd, desc }}
+        <li>
+          <code>{cmd}</code>
+          <span>{desc}</span>
+        </li>
+      {/each}
+    </ul>
+
+    <p class="footnote">
+      Tracking issue: see <code>FIX_BACKLOG.md</code> &mdash; outside the
+      audit-remediation scope. Adding a server route to expose
+      <code>disc_migrations</code> over HTTP would unblock this page.
+    </p>
   </div>
 </div>
 
 <style lang="scss">
   @import '../../styles/variables.scss';
-  
+
   .migrations {
-    max-width: 1400px;
+    max-width: 1000px;
     margin: 0 auto;
+
+    header {
+      margin-bottom: $grid-unit * 3;
+    }
   }
-  
-  .migrations-list {
+
+  .notice {
     background: $color-surface;
     border: 1px solid $color-border;
     border-radius: $border-radius;
-    padding: $grid-unit * 2;
-  }
-  
-  .migration-item {
-    padding: $grid-unit * 2;
-    background: $color-background;
-    border: 1px solid $color-border;
-    border-radius: $border-radius;
-    margin-bottom: $grid-unit;
-    
-    &.pending {
-      opacity: 0.6;
-      border-style: dashed;
+    padding: $grid-unit * 4;
+
+    h3 {
+      font-size: 1rem;
+      margin-bottom: $grid-unit * 2;
+      color: $color-warning;
     }
-    
-    .migration-header {
-      display: flex;
-      align-items: center;
-      gap: $grid-unit * 2;
+
+    p {
+      color: $color-text;
       font-family: $font-mono;
       font-size: 0.875rem;
-      
-      .migration-id {
-        color: $color-primary;
-        font-weight: bold;
+      margin-bottom: $grid-unit * 2;
+      line-height: 1.5;
+    }
+  }
+
+  .cli-list {
+    list-style: none;
+    padding: 0;
+    margin: $grid-unit * 2 0;
+    display: flex;
+    flex-direction: column;
+    gap: $grid-unit;
+
+    li {
+      display: flex;
+      gap: $grid-unit * 2;
+      padding: $grid-unit * 1.5;
+      background: $color-background-dark;
+      border: 1px solid $color-border;
+      border-radius: $border-radius;
+      align-items: center;
+
+      code {
+        color: $color-info;
+        font-family: $font-mono;
+        font-size: 0.875rem;
+        min-width: 240px;
       }
-      
-      .migration-name {
-        flex: 1;
-        color: $color-text;
-      }
-      
-      .migration-status {
-        padding: 2px 8px;
-        border-radius: $border-radius;
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        background: rgba($color-warning, 0.2);
-        color: $color-warning;
-        
-        &.applied {
-          background: rgba($color-success, 0.2);
-          color: $color-success;
-        }
+
+      span {
+        color: $color-text-dim;
+        font-family: $font-mono;
+        font-size: 0.8rem;
       }
     }
-    
-    .migration-date {
-      margin-top: $grid-unit;
-      font-family: $font-mono;
-      font-size: 0.75rem;
-      color: $color-text-dim;
-    }
+  }
+
+  .footnote {
+    color: $color-text-dim !important;
+    font-size: 0.75rem !important;
+    margin-top: $grid-unit * 3;
   }
 </style>

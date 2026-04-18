@@ -1,36 +1,27 @@
 import { derived, get, writable } from "svelte/store";
-import type { SchemaType } from "$lib/api/client";
+import type { SchemaTypeDescription } from "$lib/api/client";
 import { discAPI } from "$lib/api/client";
 
-// Store for all schema types
-export const schemaTypes = writable<SchemaType[]>([]);
-
-// Store for selected type
-export const selectedType = writable<SchemaType | null>(null);
-
-// Loading state
+export const schemaTypes = writable<SchemaTypeDescription[]>([]);
+export const selectedType = writable<SchemaTypeDescription | null>(null);
 export const schemaLoading = writable(false);
-
-// Error state
 export const schemaError = writable<string | null>(null);
 
-// Derived store for type names
 export const typeNames = derived(
   schemaTypes,
   ($schemaTypes) => $schemaTypes.map((t) => t.name).sort(),
 );
 
-// Load schema from server
 export async function loadSchema() {
   schemaLoading.set(true);
   schemaError.set(null);
 
   try {
-    const types = await discAPI.getSchema();
-    schemaTypes.set(types);
+    const description = await discAPI.getSchema();
+    schemaTypes.set(description.types);
 
-    if (types.length > 0) {
-      selectedType.set(types[0]);
+    if (description.types.length > 0) {
+      selectedType.set(description.types[0]);
     }
   } catch (error) {
     schemaError.set(

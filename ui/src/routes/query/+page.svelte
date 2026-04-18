@@ -1,21 +1,31 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { discAPI } from '$lib/api/client';
 
-  interface QueryResult {
+  // P1-23: query editor wired to real /query endpoint. Result rendering
+  // adapts to whatever EdgeQL returns: an array of rows is rendered as a
+  // table (columns derived from the first row's keys); anything else falls
+  // back to a JSON pretty-print so scalar/single-object results are still
+  // readable.
+  interface TableResult {
     columns: string[];
+    kind: 'table';
     rows: any[][];
-    executionTime: number;
   }
+  interface JsonResult {
+    kind: 'json';
+    text: string;
+  }
+  type DisplayResult = (TableResult | JsonResult) & { executionTime: number };
 
-  let queryText = 'SELECT User {\n  name,\n  email,\n  posts: {\n    title\n  }\n}';
-  let queryResult: QueryResult | null = null;
+  let queryText = 'select User { name, email };';
+  let queryResult: DisplayResult | null = null;
   let isExecuting = false;
   let errorMessage = '';
   let savedQueries: Array<{name: string, query: string}> = [];
   let queryHistory: string[] = [];
 
   onMount(() => {
-    // Load saved queries from localStorage
     const saved = localStorage.getItem('discSavedQueries');
     if (saved) {
       savedQueries = JSON.parse(saved);
@@ -27,29 +37,45 @@
     }
   });
 
+  function shapeResult(data: any, executionTime: number): DisplayResult {
+    if (Array.isArray(data) && data.length > 0 && typeof data[0] === 'object' && data[0] !== null) {
+      const columns = Array.from(
+        data.reduce((set: Set<string>, row: any) => {
+          for (const k of Object.keys(row)) set.add(k);
+          return set;
+        }, new Set<string>())
+      );
+      const rows = data.map((row: any) =>
+        columns.map((c) => {
+          const v = row[c];
+          if (v === null || v === undefined) return '';
+          if (typeof v === 'object') return JSON.stringify(v);
+          return v;
+        })
+      );
+      return { kind: 'table', columns, rows, executionTime };
+    }
+    return { kind: 'json', text: JSON.stringify(data, null, 2), executionTime };
+  }
+
   async function executeQuery() {
     if (!queryText.trim()) return;
 
     isExecuting = true;
     errorMessage = '';
 
-    // Add to history
     queryHistory = [queryText, ...queryHistory.filter(q => q !== queryText)].slice(0, 20);
     localStorage.setItem('discQueryHistory', JSON.stringify(queryHistory));
 
-    // Simulate query execution
-    setTimeout(() => {
-      queryResult = {
-        columns: ['id', 'name', 'email', 'posts'],
-        rows: [
-          ['u1', 'Ada', 'ada@example.com', '[2 posts]'],
-          ['u2', 'Billie', 'billie@example.com', '[0 posts]'],
-          ['u3', 'Cher', 'cher@example.com', '[5 posts]']
-        ],
-        executionTime: 23
-      };
-      isExecuting = false;
-    }, 1000);
+    const result = await discAPI.executeQuery(queryText);
+    isExecuting = false;
+
+    if (result.error) {
+      errorMessage = result.error;
+      queryResult = null;
+      return;
+    }
+    queryResult = shapeResult(result.data, Math.round(result.durationMs));
   }
 
   function saveQuery() {
@@ -164,26 +190,30 @@
             <button class="button" on:click={clearResults}>Clear</button>
           </div>
 
-          <div class="results-table">
-            <table>
-              <thead>
-                <tr>
-                  {#each queryResult.columns as column}
-                    <th>{column}</th>
-                  {/each}
-                </tr>
-              </thead>
-              <tbody>
-                {#each queryResult.rows as row}
+          {#if queryResult.kind === 'table'}
+            <div class="results-table">
+              <table>
+                <thead>
                   <tr>
-                    {#each row as cell}
-                      <td>{cell}</td>
+                    {#each queryResult.columns as column}
+                      <th>{column}</th>
                     {/each}
                   </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {#each queryResult.rows as row}
+                    <tr>
+                      {#each row as cell}
+                        <td>{cell}</td>
+                      {/each}
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          {:else}
+            <pre class="results-json">{queryResult.text}</pre>
+          {/if}
         </div>
       {/if}
     </div>
@@ -378,6 +408,17 @@
         font-size: 0.75rem;
         color: $color-success;
       }
+    }
+
+    .results-json {
+      margin: 0;
+      padding: $grid-unit * 2;
+      background: $color-background-dark;
+      color: $color-info;
+      font-family: $font-mono;
+      font-size: 0.875rem;
+      max-height: 400px;
+      overflow: auto;
     }
 
     .results-table {

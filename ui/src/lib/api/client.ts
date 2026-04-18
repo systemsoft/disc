@@ -1,59 +1,112 @@
 /**
  * API Client for Disc Server Communication
+ *
+ * Targets the real Disc HTTP surface exposed by `server/http.ts`:
+ *   POST /query        — execute EdgeQL
+ *   GET  /schema       — full SchemaDescription
+ *   GET  /schema/types — TypeDescription[]
+ *   GET  /health       — server + extension health
+ *   GET  /stats        — connection / query / transaction stats
+ *   POST /auth/login   — JWT exchange
+ *
+ * The vite dev server proxies `/api/*` -> `http://localhost:5656/*`
+ * (no rewrite), so the client uses the bare server paths directly.
  */
+export interface SchemaPropertyDescription {
+  annotations: Record<string, string>;
+  computed: boolean;
+  constraints: string[];
+  hasDefault: boolean;
+  name: string;
+  readonly: boolean;
+  required: boolean;
+  type: string;
+}
+
+export interface SchemaLinkDescription {
+  annotations: Record<string, string>;
+  cardinality: "single" | "multi";
+  name: string;
+  readonly: boolean;
+  required: boolean;
+  target: string;
+}
+
+export interface SchemaTypeDescription {
+  abstract: boolean;
+  accessPolicies: string[];
+  annotations: Record<string, string>;
+  indexes: string[];
+  links: SchemaLinkDescription[];
+  module: string;
+  name: string;
+  parentTypes: string[];
+  properties: SchemaPropertyDescription[];
+}
+
+export interface SchemaFunctionDescription {
+  name: string;
+  params: string[];
+  returnType: string;
+}
+
+export interface SchemaDescription {
+  functions: SchemaFunctionDescription[];
+  modules: string[];
+  types: SchemaTypeDescription[];
+}
+
+export interface QueryError {
+  extensions?: Record<string, any>;
+  locations?: Array<{ column: number; line: number }>;
+  message: string;
+  path?: Array<string | number>;
+}
+
+export interface QueryResponse {
+  data?: any;
+  errors?: QueryError[];
+  extensions?: Record<string, any>;
+}
 
 export interface QueryResult {
-  data: any[];
-  columns?: string[];
-  executionTime: number;
+  data: any;
+  durationMs: number;
   error?: string;
 }
 
-export interface SchemaType {
-  name: string;
-  module: string;
-  properties: Array<{
-    name: string;
-    type: string;
-    required: boolean;
-    multi: boolean;
-    readonly?: boolean;
-    default?: any;
-  }>;
-  links: Array<{
-    name: string;
-    target: string;
-    multi: boolean;
-    required: boolean;
-  }>;
-  constraints?: Array<{
-    type: string;
-    expression?: string;
-  }>;
+export interface ServerHealth {
+  status: string;
+  timestamp: string;
+  uptimeMs: number;
+  connections?: any;
+  memory?: any;
+  extensions?: Record<string, { details?: string; healthy: boolean }>;
 }
 
-export interface Migration {
-  id: string;
-  name: string;
-  appliedAt: string;
-  checksum: string;
-  sql?: string;
+export interface ServerStats {
+  connections: any;
+  queries: { avgDurationMs: number; failed: number; successful: number; total: number };
+  transactions: any;
+  uptimeMs: number;
+  memoryUsage?: any;
 }
 
 export interface ConnectionInfo {
-  version: string;
+  activeConnections: number;
   connected: boolean;
   database: string;
-  activeConnections: number;
+  uptimeMs: number;
+  version: string;
 }
 
 export class DiscAPIClient {
-  private baseUrl: string;
   private authToken: string | null = null;
+  private baseUrl: string;
   private readonly TOKEN_STORAGE_KEY = "disc.auth.token";
 
-  constructor(baseUrl = "") {
-    this.baseUrl = baseUrl || "";
+  constructor(baseUrl = "/api") {
+    this.baseUrl = baseUrl;
     // P1-24: hydrate token from localStorage so a refresh doesn't sign
     // the user out. Browser-only — server-side SvelteKit guards with
     // `typeof localStorage`.
@@ -82,11 +135,7 @@ export class DiscAPIClient {
     return this.authToken;
   }
 
-  /**
-   * Build request headers, injecting Authorization when a token is
-   * present. Used by every method below so adding a new endpoint
-   * can't accidentally skip auth. (P1-24)
-   */
+  /** Build request headers, injecting Authorization when a token is set. */
   private get headers(): HeadersInit {
     const h: Record<string, string> = {
       "Content-Type": "application/json",
@@ -97,10 +146,7 @@ export class DiscAPIClient {
     return h;
   }
 
-  /**
-   * POST /auth/login — exchange credentials for a JWT and persist it.
-   * Returns null on failure (caller inspects). (P1-24)
-   */
+  /** POST /auth/login — exchange credentials for a JWT and persist it. */
   async login(
     email: string,
     password: string,
@@ -123,79 +169,71 @@ export class DiscAPIClient {
     }
   }
 
-  /** Clear the stored token. (P1-24) */
   logout(): void {
     this.setAuthToken(null);
   }
 
-  /** Whether a token is set. Doesn't verify validity. */
   isAuthenticated(): boolean {
     return this.authToken !== null;
   }
 
-  /**
-   * Execute an EdgeQL query
-   */
+  /** Execute an EdgeQL query. Wraps the raw QueryResponse into a UI-shaped result. */
   async executeQuery(
     query: string,
     variables?: Record<string, any>,
   ): Promise<QueryResult> {
+    const startedAt = performance.now();
     try {
-      const response = await fetch(`${this.baseUrl}/api/query`, {
+      const response = await fetch(`${this.baseUrl}/query`, {
         method: "POST",
         headers: this.headers,
         body: JSON.stringify({ query, variables }),
       });
 
-      if (!response.ok) {
-        throw new Error(`Query failed: ${response.statusText}`);
+      const body = await response.json() as QueryResponse;
+      const durationMs = performance.now() - startedAt;
+
+      if (!response.ok || (body.errors && body.errors.length > 0)) {
+        const message = body.errors?.[0]?.message ?? response.statusText ??
+          `Query failed (HTTP ${response.status})`;
+        return { data: null, durationMs, error: message };
       }
 
-      return await response.json();
+      return { data: body.data, durationMs };
     } catch (error) {
       return {
-        data: [],
-        executionTime: 0,
+        data: null,
+        durationMs: performance.now() - startedAt,
         error: error instanceof Error ? error.message : "Unknown error",
       };
     }
   }
 
-  /**
-   * Get schema information
-   */
-  async getSchema(): Promise<SchemaType[]> {
+  /** GET /schema — full SchemaDescription. */
+  async getSchema(): Promise<SchemaDescription> {
+    const empty: SchemaDescription = { functions: [], modules: [], types: [] };
     try {
-      const response = await fetch(`${this.baseUrl}/api/schema`, {
+      const response = await fetch(`${this.baseUrl}/schema`, {
         headers: this.headers,
       });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch schema: ${response.statusText}`);
-      }
-
-      return await response.json();
+      if (!response.ok) return empty;
+      return await response.json() as SchemaDescription;
     } catch (error) {
       // deno-lint-ignore no-console
       console.error("Failed to fetch schema:", error);
-      return [];
+      return empty;
     }
   }
 
-  /**
-   * Get specific type information
-   */
-  async getType(typeName: string): Promise<SchemaType | null> {
+  /** GET /schema/types/:name — single type description. */
+  async getType(typeName: string): Promise<SchemaTypeDescription | null> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/schema/${typeName}`, {
-        headers: this.headers,
-      });
-
-      if (!response.ok) {
-        return null;
-      }
-
-      return await response.json();
+      const response = await fetch(
+        `${this.baseUrl}/schema/types/${encodeURIComponent(typeName)}`,
+        { headers: this.headers },
+      );
+      if (!response.ok) return null;
+      return await response.json() as SchemaTypeDescription;
     } catch (error) {
       // deno-lint-ignore no-console
       console.error(`Failed to fetch type ${typeName}:`, error);
@@ -203,204 +241,31 @@ export class DiscAPIClient {
     }
   }
 
-  /**
-   * Get data for a specific type
-   */
-  async getData(typeName: string, options?: {
-    limit?: number;
-    offset?: number;
-    filter?: Record<string, any>;
-    orderBy?: string;
-  }): Promise<QueryResult> {
+  /** GET /health — used by the connection-info card and as a smoke check. */
+  async getHealth(): Promise<ServerHealth | null> {
     try {
-      const params = new URLSearchParams();
-      if (options?.limit) params.set("limit", options.limit.toString());
-      if (options?.offset) params.set("offset", options.offset.toString());
-      if (options?.filter) params.set("filter", JSON.stringify(options.filter));
-      if (options?.orderBy) params.set("orderBy", options.orderBy);
-
-      const response = await fetch(
-        `${this.baseUrl}/api/data/${typeName}?${params}`,
-        { headers: this.headers },
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch data: ${response.statusText}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      return {
-        data: [],
-        executionTime: 0,
-        error: error instanceof Error ? error.message : "Unknown error",
-      };
-    }
-  }
-
-  /**
-   * Insert new object
-   */
-  async insertObject(
-    typeName: string,
-    data: Record<string, any>,
-  ): Promise<QueryResult> {
-    try {
-      const response = await fetch(`${this.baseUrl}/api/data/${typeName}`, {
-        method: "POST",
-        headers: this.headers,
-        body: JSON.stringify(data),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to insert object: ${response.statusText}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      return {
-        data: [],
-        executionTime: 0,
-        error: error instanceof Error ? error.message : "Unknown error",
-      };
-    }
-  }
-
-  /**
-   * Update object
-   */
-  async updateObject(
-    typeName: string,
-    id: string,
-    data: Record<string, any>,
-  ): Promise<QueryResult> {
-    try {
-      const response = await fetch(
-        `${this.baseUrl}/api/data/${typeName}/${id}`,
-        {
-          method: "PATCH",
-          headers: this.headers,
-          body: JSON.stringify(data),
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to update object: ${response.statusText}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      return {
-        data: [],
-        executionTime: 0,
-        error: error instanceof Error ? error.message : "Unknown error",
-      };
-    }
-  }
-
-  /**
-   * Delete object
-   */
-  async deleteObject(typeName: string, id: string): Promise<QueryResult> {
-    try {
-      const response = await fetch(
-        `${this.baseUrl}/api/data/${typeName}/${id}`,
-        {
-          method: "DELETE",
-          headers: this.headers,
-        },
-      );
-
-      if (!response.ok) {
-        throw new Error(`Failed to delete object: ${response.statusText}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      return {
-        data: [],
-        executionTime: 0,
-        error: error instanceof Error ? error.message : "Unknown error",
-      };
-    }
-  }
-
-  /**
-   * Get migration history
-   */
-  async getMigrations(): Promise<Migration[]> {
-    try {
-      const response = await fetch(`${this.baseUrl}/api/migrations`, {
+      const response = await fetch(`${this.baseUrl}/health`, {
         headers: this.headers,
       });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch migrations: ${response.statusText}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      // deno-lint-ignore no-console
-      console.error("Failed to fetch migrations:", error);
-      return [];
+      if (!response.ok) return null;
+      return await response.json() as ServerHealth;
+    } catch {
+      return null;
     }
   }
 
-  /**
-   * Get connection information
-   */
-  async getConnectionInfo(): Promise<ConnectionInfo> {
+  /** GET /stats — used by the connection-info card. */
+  async getStats(): Promise<ServerStats | null> {
     try {
-      const response = await fetch(`${this.baseUrl}/api/connection`, {
+      const response = await fetch(`${this.baseUrl}/stats`, {
         headers: this.headers,
       });
-
-      if (!response.ok) {
-        throw new Error(
-          `Failed to fetch connection info: ${response.statusText}`,
-        );
-      }
-
-      return await response.json();
-    } catch (_error) {
-      return {
-        version: "unknown",
-        connected: false,
-        database: "unknown",
-        activeConnections: 0,
-      };
-    }
-  }
-
-  /**
-   * Execute REPL command
-   */
-  async executeREPL(command: string): Promise<{
-    result: any;
-    error?: string;
-    executionTime: number;
-  }> {
-    try {
-      const response = await fetch(`${this.baseUrl}/api/repl`, {
-        method: "POST",
-        headers: this.headers,
-        body: JSON.stringify({ command }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`REPL command failed: ${response.statusText}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      return {
-        result: null,
-        error: error instanceof Error ? error.message : "Unknown error",
-        executionTime: 0,
-      };
+      if (!response.ok) return null;
+      return await response.json() as ServerStats;
+    } catch {
+      return null;
     }
   }
 }
 
-// Create default instance
 export const discAPI = new DiscAPIClient();

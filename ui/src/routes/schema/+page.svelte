@@ -1,9 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { discAPI, type SchemaType } from '$lib/api/client';
+  import { discAPI, type SchemaTypeDescription } from '$lib/api/client';
 
-  let schemaTypes: SchemaType[] = [];
-  let selectedType: SchemaType | null = null;
+  let schemaTypes: SchemaTypeDescription[] = [];
+  let selectedType: SchemaTypeDescription | null = null;
   let searchQuery = '';
   let loadError: string | null = null;
   let loading = true;
@@ -12,12 +12,13 @@
     type.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // P1-23: call the real /api/schema endpoint instead of the mock
-  // fixture that shipped with the UI scaffold. Errors surface to the
-  // user; an empty schema is not an error.
+  // P1-23: call the real /schema endpoint instead of the mock fixture
+  // that shipped with the UI scaffold. The server returns SchemaDescription;
+  // we render its `types` list. An empty schema is not an error.
   onMount(async () => {
     try {
-      schemaTypes = await discAPI.getSchema();
+      const description = await discAPI.getSchema();
+      schemaTypes = description.types;
       if (schemaTypes.length > 0) {
         selectedType = schemaTypes[0];
       }
@@ -28,7 +29,7 @@
     }
   });
 
-  function selectType(type: SchemaType) {
+  function selectType(type: SchemaTypeDescription) {
     selectedType = type;
   }
 </script>
@@ -84,8 +85,11 @@
                   {#if prop.required}
                     <span class="flag required">required</span>
                   {/if}
-                  {#if prop.multi}
-                    <span class="flag multi">multi</span>
+                  {#if prop.readonly}
+                    <span class="flag">readonly</span>
+                  {/if}
+                  {#if prop.computed}
+                    <span class="flag">computed</span>
                   {/if}
                 </div>
               </div>
@@ -102,8 +106,11 @@
                   <span class="link-name">{link.name}</span>
                   <span class="link-arrow">→</span>
                   <span class="link-target">{link.target}</span>
-                  {#if link.multi}
+                  {#if link.cardinality === 'multi'}
                     <span class="flag multi">multi</span>
+                  {/if}
+                  {#if link.required}
+                    <span class="flag required">required</span>
                   {/if}
                 </div>
               {/each}
