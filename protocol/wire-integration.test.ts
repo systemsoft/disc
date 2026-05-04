@@ -181,10 +181,16 @@ async function performNoAuthHandshake(
 /**
  * Read through a full Execute response: CommandDataDescription, Data,
  * CommandComplete, ReadyForCommand. Returns all four messages.
+ *
+ * Sends a Sync to flush the server before reading: per the Gel protocol
+ * the server only emits ReadyForCommand in response to Sync, not as
+ * part of the Execute response itself. Real clients always pair Execute
+ * with Sync.
  */
 async function readExecuteResponse(
   conn: Deno.TcpConn,
 ): Promise<ServerMessage[]> {
+  await sendMessage(conn, { kind: "Sync" });
   const msgs: ServerMessage[] = [];
   for (let i = 0; i < 4; i++) {
     const raw = await readMessage(conn);

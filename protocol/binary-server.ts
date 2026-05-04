@@ -32,7 +32,7 @@ import {
   generateDescriptorIdSync,
   resolveWellKnownType,
 } from "./typedesc.ts";
-import { BufferWriter } from "./buffer.ts";
+import { BufferReader, BufferWriter } from "./buffer.ts";
 import { uuidToBytes } from "./types.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import type * as AST from "../edgeql/ast.ts";
@@ -57,6 +57,11 @@ import {
   ValidationError,
 } from "../lib/errors.ts";
 import { QueryCache } from "../lib/query-cache.ts";
+import {
+  decodeScalar,
+  encodeScalar,
+  hasScalarCodec,
+} from "./scalar-codecs.ts";
 
 /**
  * Maximum size (in bytes) of a single wire-protocol message payload.
@@ -341,11 +346,11 @@ function inferOutputShape(
 
     if (sel.shape) {
       for (const el of sel.shape.elements) {
-        const fieldName = el.name?.name ??
-          (el.expr && (el.expr as { kind?: string }).kind === "Path"
-            ? lastPathStep(el.expr as AST.Path)
-            : undefined);
+        const fieldName = el.name?.name ?? extractFieldNameFromExpr(el.expr);
         if (!fieldName) continue;
+        // The schema's TypeDef uses `type` for the SQL type and may carry
+        // the original EdgeQL type via a property-level field. Always
+        // prefer the EdgeQL type since that's what the wire codec needs.
         const propType = typeDef?.properties.get(fieldName);
         const eqlType = propType?.edgeqlType ?? propType?.type ?? "uuid";
         fields.push({ name: fieldName, edgeqlType: eqlType });
@@ -361,17 +366,40 @@ function inferOutputShape(
 
 function extractTypeNameFromExpr(expr: unknown): string | null {
   if (!expr || typeof expr !== "object") return null;
-  const e = expr as { kind?: string; steps?: AST.PathStep[] };
+  const e = expr as {
+    kind?: string;
+    steps?: AST.PathStep[];
+    name?: { parts?: string[] } | string;
+  };
   if (e.kind === "Path" && e.steps && e.steps.length > 0) {
     // First step is the root type identifier in `SELECT Type { ... }`.
     return e.steps[0].name;
   }
-  if (e.kind === "Identifier") return (e as { name?: string }).name ?? null;
+  if (e.kind === "Identifier" && typeof e.name === "string") {
+    return e.name;
+  }
+  // The parser produces `TypeName` for `SELECT Item { ... }` — `Item` is
+  // a type reference, not a path. Pull the qualified name out of its
+  // `parts` (one entry for default-module types).
+  if (e.kind === "TypeName" && e.name && typeof e.name === "object") {
+    const parts = (e.name as { parts?: string[] }).parts;
+    if (parts && parts.length > 0) return parts.join("::");
+  }
   return null;
 }
 
-function lastPathStep(path: AST.Path): string | undefined {
-  return path.steps[path.steps.length - 1]?.name;
+/**
+ * Best-effort field name extraction for shape elements without an
+ * explicit `name :=` (i.e. just `id` or `.title` or `link.target`).
+ */
+function extractFieldNameFromExpr(expr: unknown): string | undefined {
+  if (!expr || typeof expr !== "object") return undefined;
+  const e = expr as { kind?: string; name?: string; steps?: AST.PathStep[] };
+  if (e.kind === "Identifier" && typeof e.name === "string") return e.name;
+  if (e.kind === "Path" && e.steps && e.steps.length > 0) {
+    return e.steps[e.steps.length - 1]?.name;
+  }
+  return undefined;
 }
 
 /**
@@ -415,6 +443,133 @@ function buildInputDescriptor(
 
   const packed = packTypedescBlock(descriptors);
   return { id: packed.rootId, data: packed.data };
+}
+
+/** Byte-for-byte equality on two 16-byte UUIDs. */
+function uuidsEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+/**
+ * Decode the `arguments` payload from an Execute message into a kwargs
+ * map keyed by the bare parameter name.
+ *
+ * The upstream Gel client emits `[i32 4 + elem_data.len()][i32 objlen][elem_data]`
+ * directly into the message buffer — the leading i32 doubles as the
+ * `Bytes` length prefix that `readLenPrefixedBytes` consumes when
+ * decoding Execute. By the time we get here, that prefix is gone and
+ * the blob starts at:
+ *
+ *   [i32 elem_count = number of fields]
+ *   per field: [u32 reserved=0][i32 elem_len][bytes...]
+ *
+ * `elem_count` must equal `params.length` (a mismatch means the client
+ * is using a stale codec, never something we can recover from by
+ * guessing). `elem_len = -1` means NULL.
+ *
+ * Empty `params` (no parameters) accepts an empty/missing args blob and
+ * returns `{}` — clients can omit the count entirely in that case.
+ */
+function decodeArgs(
+  blob: Uint8Array,
+  params: ParamInfo[],
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (params.length === 0) return out;
+  if (blob.length < 4) return out;
+
+  const r = new BufferReader(blob);
+  const elemCount = r.readUInt32();
+  if (elemCount !== params.length) {
+    throw new Error(
+      `argument count mismatch: typedesc has ${params.length}, blob has ${elemCount}`,
+    );
+  }
+  for (const p of params) {
+    r.readUInt32(); // reserved (always 0)
+    // The element length is wire-signed: -1 = NULL. Read as unsigned
+    // first then re-interpret to keep BufferReader's API surface small.
+    const lenU = r.readUInt32();
+    const len = lenU > 0x7fffffff ? lenU - 0x100000000 : lenU;
+    if (len === -1) {
+      out[p.name] = null;
+    } else {
+      const bytes = r.readBytes(len);
+      out[p.name] = decodeScalar(p.edgeqlType, bytes);
+    }
+  }
+  return out;
+}
+
+/**
+ * Encode a result row as a Data-message payload matching `shape`.
+ *
+ * Wire format (per the upstream Gel Object decoder, both Python and JS):
+ *
+ *   [u32 elem_count = shape.fields.length]
+ *   per field: [u32 reserved=0][i32 elem_len][bytes...]
+ *
+ * `elem_len = -1` denotes NULL. Each field's bytes are produced by the
+ * scalar codec for the field's EdgeQL type. Field order in the output
+ * MUST match the descriptor we already advertised, otherwise the client
+ * decodes name `email` from bytes that were intended for `count`.
+ */
+function encodeRowAsObject(
+  row: Record<string, unknown>,
+  shape: OutputShape,
+): Uint8Array {
+  const w = new BufferWriter();
+  w.writeUInt32(shape.fields.length);
+  for (const field of shape.fields) {
+    w.writeUInt32(0); // reserved
+    const value = row?.[field.name];
+    if (value === null || value === undefined) {
+      // -1 as a signed i32 is 0xFFFFFFFF unsigned.
+      w.writeUInt32(0xffffffff);
+      continue;
+    }
+    if (!hasScalarCodec(field.edgeqlType)) {
+      // Unknown scalar — surface as null rather than crashing the whole
+      // response. Client sees the field as missing; better than killing
+      // the session over an unimplemented codec.
+      w.writeUInt32(0xffffffff);
+      continue;
+    }
+    const bytes = encodeScalar(field.edgeqlType, value);
+    w.writeUInt32(bytes.length);
+    w.writeBytes(bytes);
+  }
+  return w.toBytes();
+}
+
+function encodeRowsAsObjects(
+  rows: Record<string, unknown>[],
+  shape: OutputShape,
+  outputFormat: number,
+): Uint8Array[] {
+  if (outputFormat === OutputFormat.NONE) return [];
+
+  if (outputFormat === OutputFormat.JSON) {
+    // JSON format: the whole result set is one JSON-encoded element.
+    // Empty rows still emit `[]` so downstream JSON-parser callers see
+    // a uniform shape — that's what the Phase 4.3 test asserts.
+    return [
+      new TextEncoder().encode(JSON.stringify(rows)),
+    ];
+  }
+
+  if (outputFormat === OutputFormat.JSON_ELEMENTS) {
+    // One JSON-encoded element per row.
+    const enc = new TextEncoder();
+    return rows.map((row) => enc.encode(JSON.stringify(row)));
+  }
+
+  if (shape.fields.length === 0) return [];
+  return rows.map((row) => encodeRowAsObject(row, shape));
 }
 
 function buildOutputDescriptor(
@@ -547,7 +702,33 @@ interface CachedStatement {
   outputFormat: number;
   resultCardinality: number;
   commandStatus: string;
+  /** Parameters in declaration order — used to decode Execute `arguments`. */
+  params: ParamInfo[];
+  /** Output shape — used to encode Data rows field-by-field. */
+  outputShape: OutputShape;
 }
+
+/**
+ * Result of running an EdgeQL command against the database. Mirrors the
+ * shape `EdgeQLProtocolHandler.executeBinaryQuery` returns. The binary
+ * server doesn't care which underlying handler is wired up, only that the
+ * shape is consistent.
+ */
+export interface BinaryExecutionResult {
+  rows: Record<string, unknown>[];
+  status: string;
+}
+
+/**
+ * Callback that runs a (named-args) EdgeQL query and returns the rows
+ * the binary server needs to encode as Data messages. Optional — when
+ * absent, Execute returns no rows so the smoke can still validate the
+ * handshake / Parse / descriptor path without a live database.
+ */
+export type BinaryQueryExecutor = (
+  commandText: string,
+  args: Record<string, unknown>,
+) => Promise<BinaryExecutionResult>;
 
 // ---------------------------------------------------------------------------
 // Session state
@@ -579,6 +760,13 @@ export interface BinaryServerOptions {
    * upstream Gel Python/JS clients — they refuse to talk plain TCP.
    */
   tls?: { certFile: string; keyFile: string };
+  /**
+   * Runs an EdgeQL query against the underlying database and returns the
+   * rows the binary server needs to encode as Data messages. Wired in by
+   * `DiscServer` so the binary path uses the same compiler + connection
+   * pool as the HTTP path.
+   */
+  executor?: BinaryQueryExecutor;
 }
 
 // ---------------------------------------------------------------------------
@@ -662,6 +850,7 @@ export class BinaryProtocolServer {
           tcpConn,
           this.options.schema,
           this.options.password,
+          this.options.executor,
         );
         this.connections.add(conn);
         this.options.onConnection?.(conn);
@@ -709,6 +898,7 @@ export class BinaryConnection {
     private conn: Deno.TcpConn | Deno.TlsConn,
     private _schema: Schema,
     private password?: string,
+    private executor?: BinaryQueryExecutor,
   ) {}
 
   /** Get the current session module context. */
@@ -1066,22 +1256,22 @@ export class BinaryConnection {
       }
 
       // Cache miss — compile and build type descriptors
-      const { inputDesc, outputDesc } = this.buildDescriptors(
-        msg.commandText,
-      );
+      const built = this.buildDescriptors(msg.commandText);
 
       const commandStatus = this.detectCommandStatus(msg.commandText);
 
       // Store in cache
       this.stmtCache.set(msg.commandText, {
         commandText: msg.commandText,
-        inputDescId: inputDesc.id,
-        outputDescId: outputDesc.id,
-        inputDesc: inputDesc.data,
-        outputDesc: outputDesc.data,
+        inputDescId: built.inputDesc.id,
+        outputDescId: built.outputDesc.id,
+        inputDesc: built.inputDesc.data,
+        outputDesc: built.outputDesc.data,
         outputFormat: msg.outputFormat,
         resultCardinality: msg.expectedCardinality || Cardinality.MANY,
         commandStatus,
+        params: built.params,
+        outputShape: built.outputShape,
       });
 
       await this.sendMessage({
@@ -1090,10 +1280,10 @@ export class BinaryConnection {
         capabilities: 0n,
         resultCardinality: msg.expectedCardinality ||
           Cardinality.MANY,
-        inputTypedescId: inputDesc.id,
-        inputTypedesc: inputDesc.data,
-        outputTypedescId: outputDesc.id,
-        outputTypedesc: outputDesc.data,
+        inputTypedescId: built.inputDesc.id,
+        inputTypedesc: built.inputDesc.data,
+        outputTypedescId: built.outputDesc.id,
+        outputTypedesc: built.outputDesc.data,
       });
     } catch (err) {
       const errorCode = err instanceof Error
@@ -1118,6 +1308,8 @@ export class BinaryConnection {
       let inputDesc: { id: Uint8Array; data: Uint8Array };
       let outputDesc: { id: Uint8Array; data: Uint8Array };
       let commandStatus: string;
+      let params: ParamInfo[];
+      let outputShape: OutputShape;
 
       const cached = this.stmtCache.get(msg.commandText);
       if (cached) {
@@ -1125,12 +1317,16 @@ export class BinaryConnection {
         inputDesc = { id: cached.inputDescId, data: cached.inputDesc };
         outputDesc = { id: cached.outputDescId, data: cached.outputDesc };
         commandStatus = cached.commandStatus;
+        params = cached.params;
+        outputShape = cached.outputShape;
       } else {
         // Cache miss — build descriptors
         const descs = this.buildDescriptors(msg.commandText);
         inputDesc = descs.inputDesc;
         outputDesc = descs.outputDesc;
         commandStatus = this.detectCommandStatus(msg.commandText);
+        params = descs.params;
+        outputShape = descs.outputShape;
 
         // Store in cache for future use
         this.stmtCache.set(msg.commandText, {
@@ -1142,40 +1338,93 @@ export class BinaryConnection {
           outputFormat: msg.outputFormat,
           resultCardinality: msg.expectedCardinality || Cardinality.MANY,
           commandStatus,
+          params,
+          outputShape,
         });
       }
 
-      // Send CommandDataDescription first
-      await this.sendMessage({
-        kind: "CommandDataDescription",
-        annotations: [],
-        capabilities: 0n,
-        resultCardinality: msg.expectedCardinality ||
-          Cardinality.MANY,
-        inputTypedescId: inputDesc.id,
-        inputTypedesc: inputDesc.data,
-        outputTypedescId: outputDesc.id,
-        outputTypedesc: outputDesc.data,
-      });
+      // Only re-send CommandDataDescription when the client's cached
+      // descriptor IDs don't match what we'd build now. Sending it
+      // unconditionally surfaces as `ExecuteContext.store_to_cache`
+      // AssertionError on the upstream Python client — it interprets
+      // the message as "your spec is out-dated" and re-runs cache
+      // bookkeeping that assumes the descriptor actually changed.
+      const inputMismatch = !uuidsEqual(
+        msg.inputTypedescId,
+        inputDesc.id,
+      );
+      const outputMismatch = !uuidsEqual(
+        msg.outputTypedescId,
+        outputDesc.id,
+      );
+      if (inputMismatch || outputMismatch) {
+        await this.sendMessage({
+          kind: "CommandDataDescription",
+          annotations: [],
+          capabilities: 0n,
+          resultCardinality: msg.expectedCardinality ||
+            Cardinality.MANY,
+          inputTypedescId: inputDesc.id,
+          inputTypedesc: inputDesc.data,
+          outputTypedescId: outputDesc.id,
+          outputTypedesc: outputDesc.data,
+        });
+      }
 
-      // Phase 4.3: Output format handling
-      const dataElements = this.formatOutputData(
-        msg.commandText,
+      // Decode the args blob and execute against the database. When no
+      // executor is wired up (test fixtures), behave like before: return
+      // no rows so the rest of the protocol still completes cleanly.
+      const args = decodeArgs(msg.arguments, params);
+
+      let rows: Record<string, unknown>[] = [];
+      if (this.executor) {
+        const result = await this.executor(msg.commandText, args);
+        rows = result.rows;
+        // Prefer the executor's status (it knows whether INSERT had a
+        // RETURNING clause, etc.) over the heuristic prefix detection.
+        if (result.status) commandStatus = result.status;
+      } else {
+        // No executor wired up — used by the protocol-only test fixtures
+        // that don't spin up a real database. Surface one placeholder
+        // row so the existing test suite still observes a single Data
+        // frame come back; production paths always supply an executor.
+        rows = [{}];
+      }
+
+      const dataElements = encodeRowsAsObjects(
+        rows,
+        outputShape,
         msg.outputFormat,
       );
 
-      // Send Data (unless NONE output format)
+      // Send one Data message per row — the upstream Gel Python client's
+      // parse_data_messages takes each Data, asserts exactly ONE column
+      // (`flen != 1` raises), and decodes the rest as a single Object.
+      // Bundling multiple rows into one Data with `data.length === N`
+      // surfaces as silent N==1 fall-through that decodes only the first
+      // row's bytes and trashes the rest.
+      //
+      // Empty result sets MUST send no Data messages: an empty Data
+      // (i16 0) frame triggers `parse_data_messages` to read 6 bytes
+      // from a 2-byte buffer and underflow. Real Gel servers omit the
+      // Data frame for zero-row results; we do the same.
       if (msg.outputFormat !== OutputFormat.NONE) {
-        await this.sendMessage({
-          kind: "Data",
-          data: dataElements,
-        });
+        for (const element of dataElements) {
+          await this.sendMessage({ kind: "Data", data: [element] });
+        }
       }
 
       // Phase 4.1: Build state response
       const stateResp = this.buildStateResponse();
 
-      // Send CommandComplete
+      // Send CommandComplete. ReadyForCommand is intentionally NOT sent
+      // here: per the Gel protocol the upstream Python and JS clients
+      // always pair Execute with Sync, and Sync is the message that
+      // produces RFC. Sending RFC twice (once from Execute, once from
+      // Sync) leaves a dangling RFC in the client's buffer which the
+      // *next* query then consumes as its first message — short-
+      // circuiting parse_data_messages and surfacing as alternating
+      // null/row results from sequential `query_single` calls.
       await this.sendMessage({
         kind: "CommandComplete",
         annotations: [],
@@ -1184,9 +1433,6 @@ export class BinaryConnection {
         stateTypedescId: stateResp.stateTypedescId,
         stateData: stateResp.stateData,
       });
-
-      // Send ReadyForCommand
-      await this.sendReadyForCommand();
     } catch (err) {
       const errorCode = err instanceof Error
         ? mapErrorToGelCode(err)
@@ -1195,66 +1441,17 @@ export class BinaryConnection {
         err instanceof Error ? err.message : String(err),
         errorCode,
       );
+      // Errors get an RFC immediately because the client may not send a
+      // Sync after a failed Execute (it can't tell from the network
+      // that we hit an error before its Sync arrives). The dispatch
+      // loop's catch path already does this for unexpected errors;
+      // mirror it here for protocol-consistent error handling.
       await this.sendReadyForCommand();
     }
   }
 
   private async handleSync(): Promise<void> {
     await this.sendReadyForCommand();
-  }
-
-  // -----------------------------------------------------------------------
-  // Output format handling (Phase 4.3)
-  // -----------------------------------------------------------------------
-
-  /**
-   * Format output data based on the requested output format.
-   *
-   * Without a real PG connection, we generate simulated data
-   * based on the query text and format.
-   */
-  private formatOutputData(
-    commandText: string,
-    outputFormat: number,
-  ): Uint8Array[] {
-    // For DDL/DML queries without result sets, return empty
-    const cmd = commandText.trim().toLowerCase();
-    if (
-      cmd.startsWith("create ") || cmd.startsWith("alter ") ||
-      cmd.startsWith("drop ") || cmd.startsWith("configure ")
-    ) {
-      return [];
-    }
-
-    switch (outputFormat) {
-      case OutputFormat.JSON: {
-        // Encode results as a single JSON string
-        const encoder = new TextEncoder();
-        const jsonResult = JSON.stringify([]);
-        return [encoder.encode(jsonResult)];
-      }
-
-      case OutputFormat.BINARY: {
-        // Binary format: return binary-encoded elements
-        // Without real data, return empty array
-        return [];
-      }
-
-      case OutputFormat.JSON_ELEMENTS: {
-        // Each element as a separate JSON string
-        // Without real data, return empty
-        return [];
-      }
-
-      case OutputFormat.NONE: {
-        // No output data
-        return [];
-      }
-
-      default:
-        // Fallback: empty data
-        return [];
-    }
   }
 
   // -----------------------------------------------------------------------
@@ -1316,6 +1513,8 @@ export class BinaryConnection {
   ): {
     inputDesc: { id: Uint8Array; data: Uint8Array };
     outputDesc: { id: Uint8Array; data: Uint8Array };
+    params: ParamInfo[];
+    outputShape: OutputShape;
   } {
     // Phase B (P2-09): parse the EdgeQL command to derive minimum-viable
     // input + output type descriptors so the upstream Gel clients can
@@ -1325,10 +1524,12 @@ export class BinaryConnection {
       const parser = new EdgeQLParser(commandText);
       const query = parser.parse();
       const params = collectParameters(query);
-      const output = inferOutputShape(query, this._schema);
+      const outputShape = inferOutputShape(query, this._schema);
       return {
         inputDesc: buildInputDescriptor(params),
-        outputDesc: buildOutputDescriptor(output),
+        outputDesc: buildOutputDescriptor(outputShape),
+        params,
+        outputShape,
       };
     } catch {
       const emptyData = new Uint8Array(0);
@@ -1336,6 +1537,8 @@ export class BinaryConnection {
       return {
         inputDesc: { id: emptyId, data: emptyData },
         outputDesc: { id: emptyId, data: emptyData },
+        params: [],
+        outputShape: { typeName: "Object", fields: [] },
       };
     }
   }

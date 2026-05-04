@@ -122,12 +122,52 @@ export interface CompilerOptions {
   accessContext?: AccessContext;
 }
 
+/**
+ * Walk a query AST and assign each named parameter a 1-indexed position
+ * in first-seen order. Numeric parameters (`$0`, `$1`, ...) are skipped
+ * because they bring their own index from the source. Used by `compile()`
+ * when the caller doesn't pre-supply a map.
+ */
+export function buildParameterIndex(node: unknown): Map<string, number> {
+  const out = new Map<string, number>();
+
+  function visit(n: unknown): void {
+    if (!n || typeof n !== "object") return;
+    const obj = n as { kind?: string; name?: string };
+    if (obj.kind === "Parameter" && typeof obj.name === "string") {
+      const bare = obj.name.startsWith("$") ? obj.name.slice(1) : obj.name;
+      // Numeric parameters keep their source-supplied index.
+      if (Number.isNaN(parseInt(bare, 10)) && !out.has(bare)) {
+        out.set(bare, out.size + 1);
+      }
+    }
+    for (const v of Object.values(obj as Record<string, unknown>)) {
+      if (Array.isArray(v)) {
+        for (const item of v) visit(item);
+      } else if (v && typeof v === "object") {
+        visit(v);
+      }
+    }
+  }
+
+  visit(node);
+  return out;
+}
+
 export class EdgeQLCompiler {
   private ctx: Context.CompilationContext;
   private accessEvaluator?: AccessEvaluator;
   private accessInjector?: AccessSQLInjector;
   private accessContext: AccessContext;
   private enableAccessControl: boolean;
+  /**
+   * Maps each named EdgeQL parameter (without leading `$`) to its 1-indexed
+   * position in the bound-values array. Populated at the start of compile()
+   * by walking the AST in first-seen order, so PG `$N` placeholders line up
+   * with the values the binary protocol layer (and any other caller passing
+   * `parameterMap`) supplies in that same order.
+   */
+  private parameterIndex: Map<string, number> = new Map();
 
   constructor(schema: Context.Schema, options?: CompilerOptions) {
     this.ctx = Context.createContext(schema);
@@ -166,8 +206,19 @@ export class EdgeQLCompiler {
     this.accessContext = context;
   }
 
-  compile(query: EdgeQLAST.Query): Result<SQL.SQLStatement, CompilationError> {
+  compile(
+    query: EdgeQLAST.Query,
+    options?: { parameterMap?: Map<string, number> },
+  ): Result<SQL.SQLStatement, CompilationError> {
     try {
+      // Establish a stable name → 1-indexed-position map for $name parameters
+      // so compileParameter can resolve each reference to a unique `$N`.
+      // Caller can pre-supply the map (binary protocol does this so the
+      // index lines up with the input typedesc element order); otherwise we
+      // walk the AST in first-seen order to derive one.
+      this.parameterIndex = options?.parameterMap ??
+        buildParameterIndex(query);
+
       let statement = this.compileQuery(query);
 
       // Apply access control if enabled
@@ -2174,9 +2225,29 @@ export class EdgeQLCompiler {
   }
 
   private compileParameter(param: EdgeQLAST.Parameter): SQL.SQLExpression {
-    // Parameters are placeholders that will be filled in at execution time
-    // Use parameter name as index for now (could be improved with proper parameter indexing)
-    return SQL.createParameterReference(parseInt(param.name) || 1);
+    // The lexer keeps the leading `$` on the name. Strip it so callers can
+    // key the parameter map by the bare identifier (matches the wire-level
+    // `kwargs` shape both upstream Gel clients use).
+    const bare = param.name.startsWith("$") ? param.name.slice(1) : param.name;
+
+    // Numeric positional parameters (`$0`, `$1`, ...) keep their literal
+    // index. Without this, parseInt fails for purely-numeric names that
+    // happen to also exist in `parameterIndex` and we'd shift positions.
+    const numeric = parseInt(bare, 10);
+    if (!Number.isNaN(numeric)) {
+      // EdgeQL `$0` is the first positional argument; PG `$1` is the first
+      // bind value. Bump by 1 to keep the two coordinate systems aligned.
+      return SQL.createParameterReference(numeric + 1);
+    }
+
+    const idx = this.parameterIndex.get(bare);
+    if (idx !== undefined) return SQL.createParameterReference(idx);
+
+    // No map entry — fall back to length+1 so successive unmapped names get
+    // distinct indices instead of all collapsing onto $1 (the prior bug).
+    const next = this.parameterIndex.size + 1;
+    this.parameterIndex.set(bare, next);
+    return SQL.createParameterReference(next);
   }
 
   private compileTypeCast(cast: EdgeQLAST.TypeCast): SQL.SQLExpression {

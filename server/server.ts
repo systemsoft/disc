@@ -261,6 +261,24 @@ export class DiscServer {
       if (this.config.binaryPort !== undefined) {
         const handlerSchema = (this.protocolHandler as any).schema ||
           { types: new Map(), functions: new Map() };
+        // Bind a stable executor that delegates to whatever protocol
+        // handler is currently configured. Calling `.bind` here so the
+        // closure captures the EdgeQL handler's `this`, since some
+        // handlers (e.g. SimpleEdgeQLProtocolHandler) may not expose
+        // executeBinaryQuery — see fallback below.
+        const handler = this.protocolHandler as {
+          executeBinaryQuery?: (
+            commandText: string,
+            args: Record<string, unknown>,
+          ) => Promise<{
+            rows: Record<string, unknown>[];
+            status: string;
+          }>;
+        };
+        const executor = handler.executeBinaryQuery
+          ? handler.executeBinaryQuery.bind(this.protocolHandler)
+          : undefined;
+
         this.binaryServer = new BinaryProtocolServer({
           hostname: this.config.host === "localhost"
             ? "127.0.0.1"
@@ -269,6 +287,7 @@ export class DiscServer {
           schema: handlerSchema,
           password: this.binaryPassword,
           tls: this.binaryTls,
+          executor,
         });
         this.binaryServer.start();
         logger.info(

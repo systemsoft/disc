@@ -94,6 +94,16 @@ async function sendMessage(
     const n = await conn.write(bytes.subarray(offset));
     offset += n;
   }
+  // Auto-send Sync after Execute. Real Gel clients always pair the two
+  // (Execute does the work, Sync produces ReadyForCommand) and the
+  // existing tests assert RFC arrives, so the helper bakes it in.
+  if (msg.kind === "Execute") {
+    const syncBytes = encodeClientMessage({ kind: "Sync" });
+    let so = 0;
+    while (so < syncBytes.length) {
+      so += await conn.write(syncBytes.subarray(so));
+    }
+  }
 }
 
 /**
@@ -458,7 +468,7 @@ Deno.test("binary-server - Execute simple query returns Data + CommandComplete +
   });
   await performNoAuthHandshake(conn);
 
-  // Send Execute
+  // Send Execute (the helper auto-pairs it with Sync — see sendMessage).
   await sendMessage(conn, executeMsg("select User { name }"));
 
   // Read CommandDataDescription
@@ -479,7 +489,7 @@ Deno.test("binary-server - Execute simple query returns Data + CommandComplete +
     assertEquals(complete.status, "SELECT");
   }
 
-  // Read ReadyForCommand
+  // Read ReadyForCommand (in response to Sync)
   const rawReady = await readMessage(conn);
   const ready = decode(rawReady!);
   assertEquals(ready.kind, "ReadyForCommand");

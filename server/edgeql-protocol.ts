@@ -818,6 +818,90 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     }
   }
 
+  /**
+   * Direct entry point for the Gel binary wire-protocol layer.
+   *
+   * Skips the QueryRequest/QueryResponse/AuthContext shape (which is a
+   * poor fit for the binary path) and runs parse → compile → execute
+   * against the same compiler and pool the HTTP handler uses. The
+   * returned rows are already in the same shape executeSQL produces:
+   *   - SELECT  → unwrapped jsonb_build_object objects, one per row
+   *   - INSERT  → single RETURNING row mapped back to camelCase
+   *   - UPDATE  → single RETURNING row mapped back to camelCase
+   *   - DELETE  → empty rows; status reports the deleted count
+   *
+   * `args` is keyed by the bare parameter name (no leading `$`). The
+   * compiler's parameterIndex (built from the same AST) decides the
+   * positional ordering for the bind values, so we marshal `args` into
+   * an array using that same map. Without this the historical
+   * `Object.values(args)` ordering was incidental and could collide.
+   */
+  async executeBinaryQuery(
+    commandText: string,
+    args: Record<string, unknown>,
+  ): Promise<{ rows: Record<string, unknown>[]; status: string }> {
+    const parser = new EdgeQL.EdgeQLParser(commandText);
+    const ast = parser.parse();
+
+    const parameterIndex = Compiler.buildParameterIndex(ast);
+
+    const compileResult = this.compiler.compile(ast, { parameterMap: parameterIndex });
+    if (!compileResult.ok) {
+      throw new DatabaseExecutionError(
+        compileResult.error.message,
+        commandText,
+        compileResult.error,
+      );
+    }
+    const sql = this.generateSQLString(compileResult.value);
+
+    const positionalValues: unknown[] = new Array(parameterIndex.size);
+    for (const [name, idx] of parameterIndex) {
+      positionalValues[idx - 1] = args[name];
+    }
+
+    const status = this.detectStatusFromAst(ast);
+
+    if (!this.pool) {
+      // Mirrors executeSQL's "no pool" branch — rare in real flow but
+      // present for tests/dry-run.
+      return { rows: [], status };
+    }
+
+    const result = await this.pool.query(sql, positionalValues);
+
+    if (status === "SELECT") {
+      return { rows: this.unwrapJsonbRows(result.rows), status };
+    }
+    if (status === "INSERT" || status === "UPDATE") {
+      const row = result.rows[0];
+      if (row && typeof row === "object") {
+        const mapped = this.mapMutationResponseToSchema(row, ast);
+        return { rows: [mapped as Record<string, unknown>], status };
+      }
+      return { rows: [], status };
+    }
+    if (status === "DELETE") {
+      return { rows: [], status };
+    }
+    return { rows: result.rows ?? [], status };
+  }
+
+  private detectStatusFromAst(ast: EdgeQL.Query): string {
+    switch (ast.kind) {
+      case "SelectQuery":
+        return "SELECT";
+      case "InsertQuery":
+        return "INSERT";
+      case "UpdateQuery":
+        return "UPDATE";
+      case "DeleteQuery":
+        return "DELETE";
+      default:
+        return "SELECT";
+    }
+  }
+
   // Initialize pool if not already done
   async initialize(): Promise<void> {
     if (this.pool) {

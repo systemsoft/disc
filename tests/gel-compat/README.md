@@ -68,7 +68,7 @@ appears in the workflow log is a real validation win.
 
 ## Known compat gaps (current state)
 
-Four protocol gaps closed so far:
+Five protocol gaps closed; the smoke is green for both clients.
 
 1. **`system_config` ParameterStatus** — disc now emits a typedesc-prefixed
    NamedTuple `(session_idle_timeout: duration)`.
@@ -81,26 +81,30 @@ Four protocol gaps closed so far:
    and emits valid v2 `CTYPE_BASE_SCALAR` + `CTYPE_SHAPE` descriptors
    (using position-referenced subcodecs as v2 requires). Names are
    stripped of the leading `$` since clients pass kwargs without it.
-
-After (4), both clients complete the full Parse/Execute round-trip:
-arguments encode correctly, disc executes the query, Data messages come
-back. **Remaining gap:**
-
-5. **Data message payload doesn't match the advertised typedesc.**
-   Symptom: Python `gel.errors.ClientError: unable to decode data to
-   Python objects`; JS `Cannot decode Object: ...`. Disc's response path
-   currently emits results as a single JSON blob (via PG's
-   `jsonb_build_object`), but the binary protocol typedesc says "Object
-   with field-by-field binary encoding." The two sides must agree.
-   - Fix path A: change disc's response builder to emit per-field binary
-     values matching the codec (i32 elem-count, per-field
-     `[u32 reserved][i32 len][bytes]` using each field's scalar codec).
-   - Fix path B: emit a typedesc that says "the whole result is one
-     `std::json` field" and have the client decode JSON. Less work but
-     loses the per-field shape that callers expect.
+5. **Data message payload — fix path A applied.** disc now decodes the
+   client's argument blob using the input typedesc, runs the query
+   through the same compiler + connection pool the HTTP path uses, and
+   re-encodes each result row as a Gel binary Object payload
+   (`[u32 elem-count][per-field: u32 reserved][i32 len][bytes]`) using
+   per-scalar codecs in `protocol/scalar-codecs.ts`. Three subtle
+   landmines were fixed alongside:
+     - **Compiler param indexing.** `compileParameter` mapped every
+       named parameter (`$name`, `$count`) to `$1` because
+       `parseInt("$name") || 1` collapses to 1. The compiler now walks
+       the query AST in first-seen order and assigns each name a
+       distinct PG positional index, with the binary executor passing
+       the same map so bind values line up.
+     - **One Data per row, not one Data with N elements.** The Python
+       client's `parse_data_messages` skips exactly 6 bytes per Data
+       message and decodes the rest as a single Object — bundling rows
+       silently truncates results to one. JS has the same shape.
+     - **Execute does NOT send ReadyForCommand.** RFC is the response
+       to Sync. Sending it from both `handleExecute` and `handleSync`
+       (real clients always pair Execute + Sync) leaves a stale RFC in
+       the buffer that the next query consumes as its first message,
+       short-circuiting the read loop and surfacing as alternating
+       null/row results from sequential `query_single` calls.
    - Reference: `tests/gel-compat/node/node_modules/gel/dist/codecs/object.js:128`
      for the JS Object decode loop;
      `tests/gel-compat/python/.venv/lib/python*/site-packages/gel/protocol/codecs/object.pyx:152`
      for the Python equivalent.
-
-When (5) lands, INSERT/UPDATE/DELETE and SELECT-by-id should flip green.

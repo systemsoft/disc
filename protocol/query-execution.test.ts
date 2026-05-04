@@ -103,6 +103,17 @@ async function sendMessage(
     const n = await conn.write(bytes.subarray(offset));
     offset += n;
   }
+  // Per the Gel protocol, Execute is always paired with Sync — Sync is
+  // what produces ReadyForCommand. Auto-send Sync for these tests so
+  // each `sendMessage(executeMsg(...))` call sees the same response
+  // sequence (CDD + Data + CC + RFC) the tests already assert.
+  if (msg.kind === "Execute") {
+    const syncBytes = encodeClientMessage({ kind: "Sync" });
+    let so = 0;
+    while (so < syncBytes.length) {
+      so += await conn.write(syncBytes.subarray(so));
+    }
+  }
 }
 
 function clientHandshake(): ClientMessage {
