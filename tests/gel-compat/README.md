@@ -33,6 +33,10 @@ For each language:
 4. `UPDATE Item FILTER .id = <uuid>$id SET { count := <int32>$new }` + re-select
 5. `SELECT Item { id, name, count }` (multi-row)
 6. `DELETE Item FILTER .id = <uuid>$id`
+7. `querySingle` on empty result returns null/None (Cardinality.AT_MOST_ONE)
+8. Scalar codec roundtrips for `str`, `int32`, `int64`, `bool`, `float64`,
+   `uuid`, `datetime` via `SELECT <T>$x` — currently `xfail`/`skip` pending
+   gap #6 below.
 
 ## What's deliberately out of scope
 
@@ -62,13 +66,15 @@ or only the Node side and the script still exits 0 on the side that ran.
 
 The `gel-compat` job in `.github/workflows/ci.yml` runs `run.sh` on
 ubuntu-latest with PostgreSQL cached the same way the e2e job does.
-Now that all five known compat gaps are closed and the smoke is green
-locally on both clients, the job is no longer `continue-on-error` —
-regressions fail CI like any other job.
+The five gaps documented below as "closed" are stable green; the
+suite has now grown to include scalar-codec roundtrip tests
+documenting an open gap #6 — those are `xfail`/`skip` so the run
+stays green and CI flags any non-gap-6 regression.
 
 ## Known compat gaps (current state)
 
-Five protocol gaps closed; the smoke is green for both clients.
+Five protocol gaps closed; one open. Smoke is green for both clients
+because the open gap's tests are marked `xfail` (Python) / `skip` (Node).
 
 1. **`system_config` ParameterStatus** — disc now emits a typedesc-prefixed
    NamedTuple `(session_idle_timeout: duration)`.
@@ -108,3 +114,29 @@ Five protocol gaps closed; the smoke is green for both clients.
      for the JS Object decode loop;
      `tests/gel-compat/python/.venv/lib/python*/site-packages/gel/protocol/codecs/object.pyx:152`
      for the Python equivalent.
+
+6. **Scalar-only SELECT shape mismatch — OPEN.** `SELECT <bool>$x`,
+   `SELECT <int64>$x`, etc. — any query whose top-level result is a
+   plain scalar expression (no `Item { … }` shape) — comes back as
+   `Object{id := None}` (Python) / `{ id: null }` (Node) instead of
+   the scalar value. Symptom: every test in `python/test_scalars.py`
+   and `node/test_scalars.mjs` fails identically with the same
+   `Object{id}` shape regardless of the cast type.
+
+   Root cause (suspected): disc's `buildDescriptors` always emits a
+   `CTYPE_SHAPE` (Object) even when the EdgeQL AST's top-level
+   expression resolves to a bare scalar. The `Data` payload then
+   gets framed as an Object too. We need to detect bare-scalar
+   output in the AST walker and emit a `CTYPE_BASE_SCALAR` typedesc
+   (no Object wrapper), and have the row-encoder write the raw scalar
+   bytes (still `[u32 reserved][i32 len][bytes]` framing) without the
+   Object element-count prefix.
+
+   Files: `protocol/binary-server.ts` `buildDescriptors`;
+   `protocol/scalar-codecs.ts` already has the per-scalar encoders;
+   `compiler/compiler.ts` for shape detection on the AST.
+
+   Tests are marked `xfail(strict=True)` in Python and `{ skip }` in
+   Node so the suite stays green; closing the gap will flip Python
+   tests to XPASS (which fails the run with `strict=True`, forcing
+   a marker removal).

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test_crud.mjs"
+    "test": "node --test test_crud.mjs test_scalars.mjs"
   },
   "dependencies": {
     "gel": "^2.0.0"
