@@ -29,6 +29,8 @@ import {
   TransactionState,
 } from "./enums.ts";
 import { generateDescriptorIdSync } from "./typedesc.ts";
+import { BufferWriter } from "./buffer.ts";
+import { uuidToBytes } from "./types.ts";
 import type { Schema } from "../compiler/context.ts";
 import {
   deriveKeys,
@@ -70,6 +72,113 @@ export const MAX_MESSAGE_SIZE = 16 * 1024 * 1024; // 16 MiB
  * queries. LRU eviction keeps the working set bounded.
  */
 export const MAX_STATEMENT_CACHE_SIZE = 1000;
+
+// ---------------------------------------------------------------------------
+// system_config ParameterStatus encoder
+// ---------------------------------------------------------------------------
+
+/**
+ * Encode a `system_config` ParameterStatus value that the upstream Gel
+ * Python and JS clients can decode.
+ *
+ * Both clients require this message at handshake-time and will crash on its
+ * absence (Python reads `system_config.session_idle_timeout` directly with
+ * no None check; JS only falls back to defaults for some settings).
+ *
+ * Wire format (protocol v2):
+ *   [u32  totalLen + 16]
+ *   [16   namedTupleId]
+ *   [bytes  typedesc list — each descriptor length-prefixed (u32)]
+ *     desc 0: BASE_SCALAR  std::duration   ([u8 t=2][16 tid])
+ *     desc 1: NAMED_TUPLE  ([u8 t=5][16 tid][u32 nameLen][bytes name]
+ *                           [u8 isShape=0][u16 ancestorCount=0]
+ *                           [u16 els][per el: u32 nameLen, bytes name, u16 pos])
+ *   [u32  valueLen]
+ *   [bytes value]
+ *     [u32 els=1]
+ *     per el: [u32 reserved=0][i32 elemLen=16][i64 us][i32 days=0][i32 months=0]
+ *
+ * The value is hard-coded to the upstream Gel default of 60 seconds idle
+ * timeout (60_000_000 microseconds) — disc does not yet surface a
+ * configurable session_idle_timeout setting.
+ */
+function encodeSystemConfigValue(): Uint8Array {
+  const DURATION_TID = uuidToBytes(
+    "00000000-0000-0000-0000-00000000010e",
+  );
+  const TYPE_NAME = "cfg::AbstractConfig";
+  const FIELD_NAME = "session_idle_timeout";
+  const SESSION_IDLE_TIMEOUT_US = 60_000_000n; // 60 seconds
+
+  // -- Descriptor 0: BASE_SCALAR (std::duration)
+  const desc0 = new BufferWriter();
+  desc0.writeUInt8(2); // t = CTYPE_BASE_SCALAR
+  desc0.writeUUID(DURATION_TID);
+
+  // -- Descriptor 1: NAMED_TUPLE
+  // First we need its UUID — derive deterministically from a unique seed
+  // so the client can cache the codec across connections.
+  const idSeed = new TextEncoder().encode(
+    `disc:system_config:${TYPE_NAME}:${FIELD_NAME}`,
+  );
+  const namedTupleTid = generateDescriptorIdSync(idSeed);
+
+  const desc1 = new BufferWriter();
+  desc1.writeUInt8(5); // t = CTYPE_NAMEDTUPLE
+  desc1.writeUUID(namedTupleTid);
+  desc1.writeString(TYPE_NAME); // u32-length-prefixed
+  desc1.writeUInt8(0); // is_shape = false
+  desc1.writeUInt16(0); // ancestor_count
+  desc1.writeUInt16(1); // els
+  desc1.writeString(FIELD_NAME);
+  desc1.writeUInt16(0); // pos = 0 (refers to desc0)
+
+  // Concatenate length-prefixed descriptors into the typedesc block
+  const typedesc = new BufferWriter();
+  typedesc.writeLenPrefixedBytes(desc0.toBytes());
+  typedesc.writeLenPrefixedBytes(desc1.toBytes());
+  const typedescBytes = typedesc.toBytes();
+
+  // -- Value: NamedTuple with one field (session_idle_timeout)
+  const value = new BufferWriter();
+  value.writeUInt32(1); // els
+  value.writeUInt32(0); // reserved
+  value.writeUInt32(16); // elemLen
+  value.writeUInt64(SESSION_IDLE_TIMEOUT_US);
+  value.writeUInt32(0); // days
+  value.writeUInt32(0); // months
+  const valueBytes = value.toBytes();
+
+  // -- Wrap: [u32 typedescLen+16][UUID][typedesc][u32 valueLen][value]
+  const out = new BufferWriter();
+  out.writeUInt32(typedescBytes.length + 16);
+  out.writeUUID(namedTupleTid);
+  out.writeBytes(typedescBytes);
+  out.writeUInt32(valueBytes.length);
+  out.writeBytes(valueBytes);
+  return out.toBytes();
+}
+
+/**
+ * Build the typedesc bytes + UUID for an empty connection-state codec.
+ * Wired into the AuthOK sequence as a StateDataDescription so the upstream
+ * Gel clients can encode connection state on Parse/Execute.
+ *
+ * The typedesc block is one length-prefixed CTYPE_INPUT_SHAPE descriptor:
+ *   [u32 descLen=19][u8 t=8][16 tid][u16 els=0]
+ */
+function buildEmptyStateDescriptor(): { tid: Uint8Array; typedesc: Uint8Array } {
+  const tid = generateDescriptorIdSync(
+    new TextEncoder().encode("disc:state:empty:v1"),
+  );
+  const desc = new BufferWriter();
+  desc.writeUInt8(8); // CTYPE_INPUT_SHAPE
+  desc.writeUUID(tid);
+  desc.writeUInt16(0); // els
+  const block = new BufferWriter();
+  block.writeLenPrefixedBytes(desc.toBytes());
+  return { tid, typedesc: block.toBytes() };
+}
 
 // ---------------------------------------------------------------------------
 // Gel protocol error codes
@@ -326,7 +435,7 @@ export class BinaryConnection {
   private stmtCache = new QueryCache<CachedStatement>(MAX_STATEMENT_CACHE_SIZE);
 
   constructor(
-    private conn: Deno.TcpConn,
+    private conn: Deno.TcpConn | Deno.TlsConn,
     private _schema: Schema,
     private password?: string,
   ) {}
@@ -975,20 +1084,34 @@ export class BinaryConnection {
 
     // ParameterStatus messages.
     //
-    // Only `suggested_pool_concurrency` is sent. `system_config` is omitted
-    // pending proper typedesc encoding — the upstream clients decode it as
-    // a typedesc-prefixed record `[Int32 len][UUID][typedesc][Int32 padding]
-    // [encoded data]`. Sending the previous JSON `"{}"` triggered a buffer
-    // overread on JS clients. Omitting it instead lets the JS client through
-    // (it falls back to defaults), but the Python client still requires
-    // `system_config.session_idle_timeout` to exist — so Python compat is
-    // gated on encoding system_config properly. See tests/gel-compat/README.md
-    // for the open compatibility-gap list.
+    // Two settings are advertised: `suggested_pool_concurrency` (UTF-8 int)
+    // and `system_config` (typedesc-prefixed record). The Python client
+    // crashes outright on a missing system_config — it reads
+    // `system_config.session_idle_timeout` with no None check. The JS client
+    // tolerates absence but errors on malformed shape. See
+    // encodeSystemConfigValue() above for the wire layout.
     const encoder = new TextEncoder();
     await this.sendMessage({
       kind: "ParameterStatus",
       name: encoder.encode("suggested_pool_concurrency"),
       value: encoder.encode("4"),
+    });
+    await this.sendMessage({
+      kind: "ParameterStatus",
+      name: encoder.encode("system_config"),
+      value: encodeSystemConfigValue(),
+    });
+
+    // StateDataDescription — required by the upstream Gel clients before
+    // they will encode connection state on Parse/Execute. Without it, the
+    // Python client hits `assert self.state_codec is not None` mid-query.
+    // We advertise an empty SparseObject (CTYPE_INPUT_SHAPE, 0 fields)
+    // since disc doesn't yet expose modules/globals/aliases over the wire.
+    const emptyState = buildEmptyStateDescriptor();
+    await this.sendMessage({
+      kind: "StateDataDescription",
+      typedescId: emptyState.tid,
+      typedesc: emptyState.typedesc,
     });
 
     // Mark ready

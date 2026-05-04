@@ -194,7 +194,10 @@ Deno.test("Parse message - round-trip", () => {
   assertEquals(result.stateData, new Uint8Array([7, 8, 9]));
 });
 
-Deno.test("Parse message - SQL input language", () => {
+Deno.test("Parse message - SQL input language (not on v2 wire)", () => {
+  // inputLanguage was added in protocol v3.0; disc speaks v2.0 so the
+  // field is not encoded/decoded over the wire. The decoded value is
+  // always EDGEQL regardless of what the caller put on the typed message.
   const msg: ParseMsg = {
     kind: "Parse",
     annotations: [],
@@ -210,7 +213,7 @@ Deno.test("Parse message - SQL input language", () => {
   };
 
   const result = roundTripClient(msg) as ParseMsg;
-  assertEquals(result.inputLanguage, InputLanguage.SQL);
+  assertEquals(result.inputLanguage, InputLanguage.EDGEQL);
   assertEquals(result.outputFormat, OutputFormat.BINARY);
   assertEquals(result.expectedCardinality, Cardinality.ONE);
 });

@@ -68,29 +68,35 @@ appears in the workflow log is a real validation win.
 
 ## Known compat gaps (current state)
 
-The harness landed in working order: TLS+ALPN, handshake, and SCRAM
-optional-skip all work end-to-end against both upstream clients. Two
-gaps remain before any CRUD test goes green:
+Three protocol gaps have been closed since the harness first ran:
 
-1. **`system_config` ParameterStatus is omitted.** Upstream clients decode
-   it as a typedesc-prefixed record (UUID + typedesc + encoded data). Disc
-   does not yet generate that encoding. The JS client falls back to
-   defaults when the message is absent and continues. The Python client
-   reads `system_config.session_idle_timeout` directly without a None
-   check and crashes — so Python smoke is fully gated on this.
-   - Fix: generate a NamedTuple typedesc with at least `session_idle_timeout`
-     (duration), encode with the existing typedesc + duration codecs in
-     `protocol/typedesc.ts` and `protocol/type-codec.ts`, send as
-     `ParameterStatus { name: "system_config", value: <encoded> }`.
+1. **`system_config` ParameterStatus** — disc now emits a typedesc-prefixed
+   NamedTuple `(session_idle_timeout: duration)`. Both clients decode it
+   and access `.session_idle_timeout` without a NoneType crash.
+2. **`StateDataDescription` message** — disc now emits an empty
+   SparseObject state codec right after the ParameterStatus block. Without
+   it, the Python client `assert self.state_codec is not None` fired
+   mid-query inside `encode_parse_params`.
+3. **Protocol v2 vs v3 field shift** — `inputLanguage` is a v3.0+ field;
+   disc speaks v2.0 but was reading/writing it on Parse/Execute. Removing
+   it from the wire format fixed a cascading 1-byte misalignment that
+   surfaced as the infamous `Buffer underflow: need 14921 bytes at
+   position 33` on the client.
 
-2. **Server-side message parser hits "Buffer underflow" on real client
-   Execute messages.** The internal wire-integration tests pass, so this
-   is a difference between disc's own constructed Execute frames and the
-   ones the upstream JS client sends. Likely an off-by-N in field decoding
-   or a header field disc isn't expecting. Surface symptom: client
-   receives `InternalServerError: Buffer underflow: need <N> bytes at
-   position <p>, but only <m> bytes remain` on first non-handshake query.
-   - Reproducer: bash `tests/gel-compat/run.sh` → first JS test (INSERT).
+After these fixes both clients complete handshake, send Parse + Execute,
+and disc replies with `CommandDataDescription` + `Data`. **Remaining gap:**
 
-When a fix lands for either gap, the corresponding tests in this suite
-flip to green automatically — that's the point of the harness.
+4. **Disc emits empty input/output type descriptors in
+   CommandDataDescription.** Symptom: Python `RuntimeError: cannot not
+   build codec; empty type desc`; JS `InternalClientError: could not
+   build a codec`. The compiler tracks result shape but the binary
+   protocol layer doesn't translate that into v2 typedesc bytes.
+   - Fix: in `protocol/binary-server.ts` near the `prepareDescriptors`
+     helper, walk the EdgeQL query's compiled output type and emit a
+     CTYPE_OBJECT (=10) shape with one element per field; for queries
+     with parameters, emit a CTYPE_INPUT_SHAPE (=8). The wire shape both
+     clients expect is in
+     `tests/gel-compat/python/.venv/lib/python*/site-packages/gel/protocol/codecs/codecs.pyx:209-249`
+     and `tests/gel-compat/node/node_modules/gel/dist/codecs/registry.js:132-164`.
+
+When this lands the CRUD smoke flips fully green.

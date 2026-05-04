@@ -222,6 +222,17 @@ export interface LogMessageMsg {
   annotations: Annotation[];
 }
 
+/**
+ * StateDataDescription — server tells the client how to encode/decode the
+ * connection-state input shape. Required by both the upstream Gel Python
+ * and JS clients before they will encode connection state on Parse/Execute.
+ */
+export interface StateDataDescriptionMsg {
+  kind: "StateDataDescription";
+  typedescId: Uint8Array;
+  typedesc: Uint8Array;
+}
+
 export type ServerMessage =
   | ServerHandshakeMsg
   | AuthenticationOKMsg
@@ -235,7 +246,8 @@ export type ServerMessage =
   | ErrorResponseMsg
   | ParameterStatusMsg
   | ServerKeyDataMsg
-  | LogMessageMsg;
+  | LogMessageMsg
+  | StateDataDescriptionMsg;
 
 // ---------------------------------------------------------------------------
 // Annotation helpers (shared encode/decode)
@@ -343,12 +355,13 @@ function encodeSASLResponse(
 }
 
 function encodeParse(msg: ParseMsg): Uint8Array {
+  // inputLanguage is a v3.0+ field — disc speaks v2.0 so it is omitted
+  // from the wire format. Kept on the typed message for ergonomics.
   const w = new BufferWriter();
   writeAnnotations(w, msg.annotations);
   w.writeUInt64(msg.allowedCapabilities);
   w.writeUInt64(msg.compilationFlags);
   w.writeUInt64(msg.implicitLimit);
-  w.writeUInt8(msg.inputLanguage);
   w.writeUInt8(msg.outputFormat);
   w.writeUInt8(msg.expectedCardinality);
   w.writeString(msg.commandText);
@@ -358,12 +371,12 @@ function encodeParse(msg: ParseMsg): Uint8Array {
 }
 
 function encodeExecute(msg: ExecuteMsg): Uint8Array {
+  // inputLanguage is a v3.0+ field — disc speaks v2.0 so it is omitted.
   const w = new BufferWriter();
   writeAnnotations(w, msg.annotations);
   w.writeUInt64(msg.allowedCapabilities);
   w.writeUInt64(msg.compilationFlags);
   w.writeUInt64(msg.implicitLimit);
-  w.writeUInt8(msg.inputLanguage);
   w.writeUInt8(msg.outputFormat);
   w.writeUInt8(msg.expectedCardinality);
   w.writeString(msg.commandText);
@@ -449,11 +462,13 @@ function decodeSASLResponse(
 }
 
 function decodeParse(r: BufferReader): ParseMsg {
+  // inputLanguage is a v3.0+ field — disc speaks v2.0 so it is not on the
+  // wire. Default to EDGEQL for the typed shape.
   const annotations = readAnnotations(r);
   const allowedCapabilities = r.readUInt64();
   const compilationFlags = r.readUInt64();
   const implicitLimit = r.readUInt64();
-  const inputLanguage = r.readUInt8();
+  const inputLanguage = InputLanguage.EDGEQL;
   const outputFormat = r.readUInt8();
   const expectedCardinality = r.readUInt8();
   const commandText = r.readString();
@@ -475,11 +490,16 @@ function decodeParse(r: BufferReader): ParseMsg {
 }
 
 function decodeExecute(r: BufferReader): ExecuteMsg {
+  // The `inputLanguage` field was added in protocol v3.0; v2.0 clients
+  // (which is what disc currently handshakes as) do not send it. Including
+  // it in the read order shifts every subsequent field by one byte and
+  // causes the rest of the message to be misinterpreted, surfacing as a
+  // huge bogus length on the next length-prefixed read.
   const annotations = readAnnotations(r);
   const allowedCapabilities = r.readUInt64();
   const compilationFlags = r.readUInt64();
   const implicitLimit = r.readUInt64();
-  const inputLanguage = r.readUInt8();
+  const inputLanguage = InputLanguage.EDGEQL;
   const outputFormat = r.readUInt8();
   const expectedCardinality = r.readUInt8();
   const commandText = r.readString();
@@ -671,6 +691,15 @@ function encodeLogMessage(msg: LogMessageMsg): Uint8Array {
   return wrapMessage(ServerMessageType.LogMessage, w.toBytes());
 }
 
+function encodeStateDataDescription(
+  msg: StateDataDescriptionMsg,
+): Uint8Array {
+  const w = new BufferWriter();
+  w.writeUUID(msg.typedescId);
+  w.writeLenPrefixedBytes(msg.typedesc);
+  return wrapMessage(ServerMessageType.StateDataDescription, w.toBytes());
+}
+
 /** Encode any ServerMessage into a wire-format Uint8Array. */
 export function encodeServerMessage(msg: ServerMessage): Uint8Array {
   switch (msg.kind) {
@@ -700,6 +729,8 @@ export function encodeServerMessage(msg: ServerMessage): Uint8Array {
       return encodeServerKeyData(msg);
     case "LogMessage":
       return encodeLogMessage(msg);
+    case "StateDataDescription":
+      return encodeStateDataDescription(msg);
   }
 }
 
@@ -834,6 +865,14 @@ function decodeLogMessage(r: BufferReader): LogMessageMsg {
   return { kind: "LogMessage", severity, code, text, annotations };
 }
 
+function decodeStateDataDescription(
+  r: BufferReader,
+): StateDataDescriptionMsg {
+  const typedescId = r.readUUID();
+  const typedesc = r.readLenPrefixedBytes();
+  return { kind: "StateDataDescription", typedescId, typedesc };
+}
+
 /**
  * Decode a server message from its mtype byte and raw payload bytes.
  * The caller is responsible for reading the mtype (1 byte) and
@@ -865,6 +904,8 @@ export function decodeServerMessage(
       return decodeServerKeyData(r);
     case ServerMessageType.LogMessage:
       return decodeLogMessage(r);
+    case ServerMessageType.StateDataDescription:
+      return decodeStateDataDescription(r);
     default:
       throw new Error(
         `Unknown server message type: 0x${mtype.toString(16)}`,

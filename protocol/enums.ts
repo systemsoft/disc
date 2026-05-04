@@ -37,6 +37,7 @@ export const ServerMessageType = {
   ParameterStatus: 0x53, // 'S'
   ServerKeyData: 0x4b, // 'K'
   LogMessage: 0x4c, // 'L'
+  StateDataDescription: 0x73, // 's'
 } as const;
 
 export type ServerMessageType =

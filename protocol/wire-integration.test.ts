@@ -169,9 +169,8 @@ async function performNoAuthHandshake(
   // ServerKeyData
   const raw3 = await readMessage(conn);
   if (raw3) messages.push(decode(raw3));
-  // 1x ParameterStatus + ReadyForCommand. system_config is omitted
-  // pending typedesc encoding (see tests/gel-compat).
-  for (let i = 0; i < 2; i++) {
+  // 2x ParameterStatus + StateDataDescription + ReadyForCommand
+  for (let i = 0; i < 4; i++) {
     const raw = await readMessage(conn);
     if (raw) messages.push(decode(raw));
   }
@@ -414,9 +413,10 @@ Deno.test("wire-integration - full SCRAM auth flow then Execute succeeds", async
   const rawKey = await readMessage(conn);
   assertEquals(decode(rawKey!).kind, "ServerKeyData");
 
-  // Read ParameterStatus + ReadyForCommand (system_config omitted pending
-  // typedesc encoding — see tests/gel-compat).
+  // Read 2x ParameterStatus + StateDataDescription + ReadyForCommand
   await readMessage(conn); // ParameterStatus (suggested_pool_concurrency)
+  await readMessage(conn); // ParameterStatus (system_config)
+  await readMessage(conn); // StateDataDescription
   const rawReady = await readMessage(conn);
   assertEquals(decode(rawReady!).kind, "ReadyForCommand");
 
