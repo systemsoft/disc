@@ -1,66 +1,100 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { discAPI } from '$lib/api/client';
 
+  // P1-23: dashboard wired to real /stats, /schema, /migrations endpoints.
+  // "Total objects" was previously a fictional stat — there's no efficient
+  // server-side count across every type. Replaced with "Migrations applied"
+  // which has a dedicated endpoint and is actually useful at a glance.
+  // Recent queries are read from `discQueryHistory` localStorage (shared
+  // with the query editor route) since there's no server-side query log.
   interface Stats {
     types: number;
-    objects: number;
+    migrations: number;
     connections: number;
     queries: number;
   }
 
   let stats: Stats = {
     types: 0,
-    objects: 0,
+    migrations: 0,
     connections: 0,
     queries: 0
   };
 
   let recentQueries: string[] = [];
+  let isLoading = true;
+  let errorMessage = '';
 
   onMount(async () => {
-    // Simulate loading stats
-    setTimeout(() => {
-      stats = {
-        types: 12,
-        objects: 1847,
-        connections: 3,
-        queries: 156
-      };
+    if (typeof localStorage !== 'undefined') {
+      const history = localStorage.getItem('discQueryHistory');
+      if (history) {
+        try {
+          const parsed = JSON.parse(history);
+          if (Array.isArray(parsed)) {
+            recentQueries = parsed.slice(0, 5);
+          }
+        } catch {
+          // Ignore malformed history
+        }
+      }
+    }
 
-      recentQueries = [
-        'SELECT User { name, email }',
-        'INSERT User { name := "Ada" }',
-        'SELECT Post { title, author: { name } }'
-      ];
-    }, 500);
+    try {
+      const [serverStats, schema, migrations] = await Promise.all([
+        discAPI.getStats(),
+        discAPI.getSchema(),
+        discAPI.getMigrations()
+      ]);
+
+      stats = {
+        types: schema?.types?.length ?? 0,
+        migrations: migrations?.length ?? 0,
+        connections: serverStats?.connections?.active ?? 0,
+        queries: serverStats?.queries?.total ?? 0
+      };
+    } catch (error) {
+      errorMessage =
+        error instanceof Error ? error.message : 'Failed to load dashboard';
+    } finally {
+      isLoading = false;
+    }
   });
 </script>
 
 <div class="dashboard">
   <h1>Database Overview</h1>
 
-  <div class="stats-grid">
+  {#if errorMessage}
+    <div class="error-banner" role="alert">
+      <span class="error-icon">⚠</span>
+      <span>Could not load stats: {errorMessage}</span>
+    </div>
+  {/if}
+
+  <div class="stats-grid" class:is-loading={isLoading}>
     <div class="stat-card">
-      <div class="stat-value">{stats.types}</div>
+      <div class="stat-value">{isLoading ? '—' : stats.types}</div>
       <div class="stat-label">Schema Types</div>
       <div class="stat-icon">◈</div>
     </div>
 
     <div class="stat-card">
-      <div class="stat-value">{stats.objects.toLocaleString()}</div>
-      <div class="stat-label">Total Objects</div>
+      <div class="stat-value">{isLoading ? '—' : stats.migrations}</div>
+      <div class="stat-label">Migrations Applied</div>
       <div class="stat-icon">▦</div>
     </div>
 
     <div class="stat-card">
-      <div class="stat-value">{stats.connections}</div>
+      <div class="stat-value">{isLoading ? '—' : stats.connections}</div>
       <div class="stat-label">Active Connections</div>
       <div class="stat-icon">⟗</div>
     </div>
 
     <div class="stat-card">
-      <div class="stat-value">{stats.queries}</div>
-      <div class="stat-label">Queries Today</div>
+      <div class="stat-value">{isLoading ? '—' : stats.queries.toLocaleString()}</div>
+      <div class="stat-label">Queries (lifetime)</div>
       <div class="stat-icon">⟩</div>
     </div>
   </div>
@@ -115,11 +149,33 @@
     margin-bottom: calc(var(--grid-unit) * 4);
   }
 
+  .error-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--grid-unit);
+    padding: calc(var(--grid-unit) * 2);
+    margin-bottom: calc(var(--grid-unit) * 3);
+    background: var(--color-surface);
+    border: 1px solid var(--color-error, #ff4444);
+    border-radius: var(--border-radius);
+    font-family: var(--font-mono);
+    font-size: 0.875rem;
+    color: var(--color-error, #ff4444);
+
+    .error-icon {
+      font-size: 1.25rem;
+    }
+  }
+
   .stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
     gap: calc(var(--grid-unit) * 3);
     margin-bottom: calc(var(--grid-unit) * 6);
+
+    &.is-loading .stat-value {
+      opacity: 0.4;
+    }
   }
 
   .stat-card {
