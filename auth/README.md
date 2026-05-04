@@ -131,6 +131,28 @@ interface AuthConfig {
 }
 ```
 
+### Disabling new sign-ups (gh/geldata#7482)
+
+Set `allow_registration: false` to refuse all new account creation
+while leaving every other auth path intact. Existing users keep
+logging in, refreshing tokens, resetting passwords, and changing
+their own passwords; only `POST /auth/register` (and direct
+`provider.register()` calls) reject with `REGISTRATION_DISABLED` /
+HTTP 403.
+
+Typical use cases:
+
+- **Closed beta / invite-only**: ship the server with `false`, create
+  initial accounts via direct DB seeding or a one-shot admin tool.
+- **Maintenance freeze**: flip to `false` during incident response or
+  data migrations to prevent new accounts entering an inconsistent
+  state.
+
+Note: this gate only covers the password-registration path. OAuth
+sign-in via `ext-oauth` does not currently create user records (the
+callback is a stub awaiting integration); when that wiring lands it
+will need its own per-provider opt-out at the OAuth-config layer.
+
 ### JWT signing algorithms (P3-04)
 
 The provider supports two algorithms:
