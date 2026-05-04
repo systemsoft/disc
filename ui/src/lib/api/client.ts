@@ -100,6 +100,21 @@ export interface ConnectionInfo {
   version: string;
 }
 
+export interface MigrationHistoryEntry {
+  appliedAt: string;
+  createdAt: string;
+  dataMigration: boolean;
+  description: string;
+  durationMs: number;
+  id: string;
+  name: string;
+  schemaHash: string;
+}
+
+export interface MigrationsResponse {
+  migrations: MigrationHistoryEntry[];
+}
+
 export class DiscAPIClient {
   private authToken: string | null = null;
   private baseUrl: string;
@@ -251,6 +266,22 @@ export class DiscAPIClient {
       return await response.json() as ServerHealth;
     } catch {
       return null;
+    }
+  }
+
+  /** GET /migrations — applied migration history from disc_migrations. */
+  async getMigrations(): Promise<MigrationHistoryEntry[]> {
+    try {
+      const response = await fetch(`${this.baseUrl}/migrations`, {
+        headers: this.headers,
+      });
+      if (!response.ok) return [];
+      const body = await response.json() as MigrationsResponse;
+      return body.migrations ?? [];
+    } catch (error) {
+      // deno-lint-ignore no-console
+      console.error("Failed to fetch migrations:", error);
+      return [];
     }
   }
 

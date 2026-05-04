@@ -283,6 +283,25 @@ export class DiscServer {
           const handler = this.protocolHandler as any;
           return handler.schema || { types: new Map(), functions: new Map() };
         },
+        migrationsProvider: async () => {
+          // Build a transient MigrationTracker against the protocol
+          // handler's pool. Throws if no pool is available (e.g. dry-run).
+          const handler = this.protocolHandler as any;
+          const pool = handler.pool;
+          if (!pool) {
+            throw new Error("No connection pool available");
+          }
+          const { MigrationTracker } = await import(
+            "../migration/tracker.ts"
+          );
+          const tracker = new MigrationTracker(pool);
+          await tracker.initialize();
+          const result = await tracker.getMigrationHistory();
+          if (!result.ok) {
+            throw new Error(result.error.message);
+          }
+          return result.value;
+        },
       });
 
       // Register signal handlers for graceful shutdown

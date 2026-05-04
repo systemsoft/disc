@@ -26,6 +26,10 @@ import {
   handleGetSchemaType,
   handleGetSchemaTypes,
 } from "./schema-endpoint.ts";
+import {
+  handleGetMigrations,
+  type MigrationsProvider,
+} from "./migrations-endpoint.ts";
 
 export interface HttpServerOptions {
   config: Types.ServerConfig;
@@ -39,6 +43,7 @@ export interface HttpServerOptions {
   >;
   databaseRegistry?: DatabaseRegistry;
   schemaProvider?: SchemaProvider;
+  migrationsProvider?: MigrationsProvider;
 }
 
 export class HttpServer {
@@ -56,6 +61,7 @@ export class HttpServer {
   >;
   private databaseRegistry?: DatabaseRegistry;
   private schemaProvider?: SchemaProvider;
+  private migrationsProvider?: MigrationsProvider;
   private rate_limiter?: RateLimiter;
   private server?: Deno.HttpServer<Deno.NetAddr>;
   private redirect_server?: Deno.HttpServer<Deno.NetAddr>;
@@ -79,6 +85,7 @@ export class HttpServer {
     this.extensionHealthGetter = options.extensionHealthGetter;
     this.databaseRegistry = options.databaseRegistry;
     this.schemaProvider = options.schemaProvider;
+    this.migrationsProvider = options.migrationsProvider;
     this.connection_manager = new ConnectionManager();
     this.session_manager = new SessionManager();
     this.transaction_manager = new TransactionManager();
@@ -296,6 +303,8 @@ export class HttpServer {
           return this.handle_stats(request);
         case "/metrics":
           return this.handle_metrics(request);
+        case "/migrations":
+          return await this.handle_migrations(request);
         default:
           return this.create_error_response("Not Found", 404, request);
       }
@@ -964,6 +973,20 @@ export class HttpServer {
     }
 
     return this.create_error_response("Not Found", 404);
+  }
+
+  private async handle_migrations(_request: Request): Promise<Response> {
+    if (!this.migrationsProvider) {
+      return this.create_error_response(
+        "Migration history not configured",
+        404,
+      );
+    }
+
+    return await handleGetMigrations({
+      migrationsProvider: this.migrationsProvider,
+      defaultHeaders: () => this.get_default_headers("application/json"),
+    });
   }
 
   private async handle_auth_route(

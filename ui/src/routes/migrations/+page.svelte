@@ -1,113 +1,176 @@
 <script lang="ts">
-  // P1-23: the Disc HTTP server doesn't expose a migrations endpoint
-  // (only EdgeQL `/query` and schema introspection are reachable). Until
-  // a `/migrations` route lands, this page renders a clear, honest state
-  // pointing the user at the CLI commands that *do* show migration history.
-  // Replacing it with mock data would be worse than admitting the gap.
-  const cliCommands: Array<{ cmd: string; desc: string }> = [
-    { cmd: 'disc migrate --status', desc: 'Show applied + pending migrations' },
-    { cmd: 'disc migrate --create', desc: 'Generate a migration without applying it' },
-    { cmd: 'disc migrate', desc: 'Apply all pending migrations' },
-  ];
+  import { onMount } from 'svelte';
+  import { discAPI, type MigrationHistoryEntry } from '$lib/api/client';
+
+  let migrations: MigrationHistoryEntry[] = [];
+  let loading = true;
+  let loadError: string | null = null;
+
+  async function reload() {
+    loading = true;
+    loadError = null;
+    try {
+      migrations = await discAPI.getMigrations();
+    } catch (err) {
+      loadError = err instanceof Error ? err.message : String(err);
+    } finally {
+      loading = false;
+    }
+  }
+
+  onMount(reload);
+
+  function formatDate(value: string): string {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return value;
+    return d.toLocaleString();
+  }
+
+  function formatDuration(ms: number): string {
+    if (ms == null) return '';
+    if (ms < 1000) return `${ms}ms`;
+    return `${(ms / 1000).toFixed(2)}s`;
+  }
 </script>
 
 <div class="migrations">
-  <header>
+  <header class="page-header">
     <h1>Migration History</h1>
+    <button class="button" on:click={reload} disabled={loading}>
+      {loading ? 'Loading…' : 'Refresh'}
+    </button>
   </header>
 
-  <div class="notice">
-    <h3>Not yet wired</h3>
-    <p>
-      The Disc HTTP server doesn't expose a migrations endpoint yet, so
-      the UI can't list migration history. Use the CLI in the meantime:
-    </p>
+  {#if loadError}
+    <div class="error-banner">{loadError}</div>
+  {/if}
 
-    <ul class="cli-list">
-      {#each cliCommands as { cmd, desc }}
-        <li>
-          <code>{cmd}</code>
-          <span>{desc}</span>
-        </li>
-      {/each}
-    </ul>
+  {#if !loading && migrations.length === 0 && !loadError}
+    <div class="empty">
+      <h3>No migrations applied yet</h3>
+      <p>
+        When the schema is applied (via <code>disc serve</code> auto-migrate
+        on a fresh database, or <code>disc migrate</code> manually) the
+        history will appear here.
+      </p>
+    </div>
+  {/if}
 
-    <p class="footnote">
-      Tracking issue: see <code>FIX_BACKLOG.md</code> &mdash; outside the
-      audit-remediation scope. Adding a server route to expose
-      <code>disc_migrations</code> over HTTP would unblock this page.
-    </p>
-  </div>
+  {#if migrations.length > 0}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Applied</th>
+            <th>Name</th>
+            <th>ID</th>
+            <th>Description</th>
+            <th>Duration</th>
+            <th>Schema Hash</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each migrations as m}
+            <tr>
+              <td>{formatDate(m.appliedAt)}</td>
+              <td>{m.name}</td>
+              <td><code>{m.id}</code></td>
+              <td>{m.description}</td>
+              <td>{formatDuration(m.durationMs)}</td>
+              <td><code>{m.schemaHash}</code></td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+    </div>
+  {/if}
 </div>
 
 <style lang="scss">
   @import '../../styles/variables.scss';
 
   .migrations {
-    max-width: 1000px;
+    max-width: 1400px;
     margin: 0 auto;
-
-    header {
-      margin-bottom: $grid-unit * 3;
-    }
+    display: flex;
+    flex-direction: column;
+    gap: $grid-unit * 2;
   }
 
-  .notice {
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .error-banner {
+    padding: $grid-unit * 1.5 $grid-unit * 2;
+    background: rgba($color-danger, 0.1);
+    border: 1px solid $color-danger;
+    border-radius: $border-radius;
+    color: $color-danger;
+    font-family: $font-mono;
+    font-size: 0.875rem;
+  }
+
+  .empty {
     background: $color-surface;
     border: 1px solid $color-border;
     border-radius: $border-radius;
     padding: $grid-unit * 4;
+    text-align: center;
 
     h3 {
       font-size: 1rem;
       margin-bottom: $grid-unit * 2;
-      color: $color-warning;
     }
 
     p {
-      color: $color-text;
+      color: $color-text-dim;
       font-family: $font-mono;
       font-size: 0.875rem;
-      margin-bottom: $grid-unit * 2;
       line-height: 1.5;
     }
-  }
 
-  .cli-list {
-    list-style: none;
-    padding: 0;
-    margin: $grid-unit * 2 0;
-    display: flex;
-    flex-direction: column;
-    gap: $grid-unit;
-
-    li {
-      display: flex;
-      gap: $grid-unit * 2;
-      padding: $grid-unit * 1.5;
-      background: $color-background-dark;
-      border: 1px solid $color-border;
-      border-radius: $border-radius;
-      align-items: center;
-
-      code {
-        color: $color-info;
-        font-family: $font-mono;
-        font-size: 0.875rem;
-        min-width: 240px;
-      }
-
-      span {
-        color: $color-text-dim;
-        font-family: $font-mono;
-        font-size: 0.8rem;
-      }
+    code {
+      color: $color-info;
     }
   }
 
-  .footnote {
-    color: $color-text-dim !important;
-    font-size: 0.75rem !important;
-    margin-top: $grid-unit * 3;
+  .table-wrap {
+    overflow: auto;
+    background: $color-surface;
+    border: 1px solid $color-border;
+    border-radius: $border-radius;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: $font-mono;
+    font-size: 0.875rem;
+
+    th, td {
+      padding: $grid-unit * 1.5;
+      text-align: left;
+      border-bottom: 1px solid $color-border;
+      white-space: nowrap;
+    }
+
+    th {
+      background: $color-background-dark;
+      color: $color-primary;
+      position: sticky;
+      top: 0;
+    }
+
+    tbody tr:last-child td { border-bottom: none; }
+    tr:hover td { background: $color-surface-hover; }
+
+    code {
+      color: $color-info;
+      font-size: 0.75rem;
+    }
   }
 </style>
