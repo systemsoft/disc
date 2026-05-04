@@ -1,0 +1,12 @@
+{
+  "name": "disc-gel-compat-node",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test_crud.mjs"
+  },
+  "dependencies": {
+    "gel": "^2.0.0"
+  }
+}

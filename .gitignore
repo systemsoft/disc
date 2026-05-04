@@ -74,3 +74,13 @@ thoughts/
 /ui/test-results/
 /ui/playwright-report/
 /ui/blob-report/
+
+# Gel-compat smoke (P2-09) — generated cert + transient install dirs
+/tests/gel-compat/.tls/
+/tests/gel-compat/disc-serve.pid
+/tests/gel-compat/python/.venv/
+/tests/gel-compat/node/node_modules/
+/tests/gel-compat/node/package-lock.json
+
+# Python cache
+__pycache__/

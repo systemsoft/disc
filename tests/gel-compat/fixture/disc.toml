@@ -1,0 +1,9 @@
+name = "disc-gel-compat"
+
+[instance]
+managed = true
+name = "disc-gel-compat"
+
+[server]
+port = 5757
+# Binary protocol port is set on the CLI via --binary-port (see run.sh).

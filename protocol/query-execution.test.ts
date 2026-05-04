@@ -174,7 +174,9 @@ async function performNoAuthHandshake(
   const raw3 = await readMessage(conn);
   if (raw3) messages.push(decode(raw3));
 
-  for (let i = 0; i < 3; i++) {
+  // 1x ParameterStatus + ReadyForCommand. system_config is omitted pending
+  // typedesc encoding (see tests/gel-compat).
+  for (let i = 0; i < 2; i++) {
     const raw = await readMessage(conn);
     if (raw) messages.push(decode(raw));
   }

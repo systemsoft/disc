@@ -193,6 +193,12 @@ export interface BinaryServerOptions {
   password?: string;
   onConnection?: (conn: BinaryConnection) => void;
   onDisconnect?: (conn: BinaryConnection) => void;
+  /**
+   * When provided, the server upgrades each accepted connection to TLS and
+   * advertises ALPN "edgedb-binary". Required for compatibility with the
+   * upstream Gel Python/JS clients — they refuse to talk plain TCP.
+   */
+  tls?: { certFile: string; keyFile: string };
 }
 
 // ---------------------------------------------------------------------------
@@ -200,7 +206,7 @@ export interface BinaryServerOptions {
 // ---------------------------------------------------------------------------
 
 export class BinaryProtocolServer {
-  private listener?: Deno.TcpListener;
+  private listener?: Deno.TcpListener | Deno.TlsListener;
   private connections = new Set<BinaryConnection>();
   private _port = 0;
   private running = false;
@@ -208,15 +214,29 @@ export class BinaryProtocolServer {
   constructor(private options: BinaryServerOptions) {}
 
   /**
-   * Start listening for TCP connections.
+   * Start listening for TCP (optionally TLS) connections.
    * If options.port is 0, the OS assigns an ephemeral port.
    */
   start(): void {
-    this.listener = Deno.listen({
-      hostname: this.options.hostname ?? "127.0.0.1",
-      port: this.options.port,
-      transport: "tcp",
-    });
+    const hostname = this.options.hostname ?? "127.0.0.1";
+    if (this.options.tls) {
+      // Gel clients require ALPN "edgedb-binary" after the TLS handshake.
+      const cert = Deno.readTextFileSync(this.options.tls.certFile);
+      const key = Deno.readTextFileSync(this.options.tls.keyFile);
+      this.listener = Deno.listenTls({
+        hostname,
+        port: this.options.port,
+        cert,
+        key,
+        alpnProtocols: ["edgedb-binary"],
+      });
+    } else {
+      this.listener = Deno.listen({
+        hostname,
+        port: this.options.port,
+        transport: "tcp",
+      });
+    }
     this._port = (this.listener.addr as Deno.NetAddr).port;
     this.running = true;
     this.acceptLoop();
@@ -953,17 +973,22 @@ export class BinaryConnection {
       data: keyData,
     });
 
-    // ParameterStatus messages
+    // ParameterStatus messages.
+    //
+    // Only `suggested_pool_concurrency` is sent. `system_config` is omitted
+    // pending proper typedesc encoding — the upstream clients decode it as
+    // a typedesc-prefixed record `[Int32 len][UUID][typedesc][Int32 padding]
+    // [encoded data]`. Sending the previous JSON `"{}"` triggered a buffer
+    // overread on JS clients. Omitting it instead lets the JS client through
+    // (it falls back to defaults), but the Python client still requires
+    // `system_config.session_idle_timeout` to exist — so Python compat is
+    // gated on encoding system_config properly. See tests/gel-compat/README.md
+    // for the open compatibility-gap list.
     const encoder = new TextEncoder();
     await this.sendMessage({
       kind: "ParameterStatus",
       name: encoder.encode("suggested_pool_concurrency"),
       value: encoder.encode("4"),
-    });
-    await this.sendMessage({
-      kind: "ParameterStatus",
-      name: encoder.encode("system_config"),
-      value: encoder.encode("{}"),
     });
 
     // Mark ready

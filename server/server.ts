@@ -99,6 +99,13 @@ export interface DiscServerOptions extends Partial<Types.ServerConfig> {
    * Only used when binaryPort is set. If undefined, no auth is required.
    */
   binaryPassword?: string;
+
+  /**
+   * Cert + key files for the binary protocol's TLS layer. Required for
+   * upstream Gel client compatibility — the Python and JS clients refuse
+   * plain TCP and require ALPN "edgedb-binary".
+   */
+  binaryTls?: { certFile: string; keyFile: string };
 }
 
 export class DiscServer {
@@ -114,6 +121,7 @@ export class DiscServer {
   private databaseRegistry?: DatabaseRegistry;
   private binaryServer?: BinaryProtocolServer;
   private binaryPassword?: string;
+  private binaryTls?: { certFile: string; keyFile: string };
   private stopping = false;
   private signal_handler?: () => void;
 
@@ -154,6 +162,7 @@ export class DiscServer {
 
     this.postgresInstance = config.postgresInstance;
     this.binaryPassword = config.binaryPassword;
+    this.binaryTls = config.binaryTls;
 
     // Initialize extension registry and register extensions from options
     this.extensionRegistry = new ExtensionRegistry();
@@ -259,6 +268,7 @@ export class DiscServer {
           port: this.config.binaryPort,
           schema: handlerSchema,
           password: this.binaryPassword,
+          tls: this.binaryTls,
         });
         this.binaryServer.start();
         logger.info(
@@ -539,6 +549,13 @@ export function createServerFromEnv(
       redirect: Deno.env.get("DISC_TLS_REDIRECT") === "true",
       redirectPort: parseInt(Deno.env.get("DISC_TLS_REDIRECT_PORT") || "80"),
     };
+  }
+
+  // Binary protocol TLS — required for upstream Gel client compatibility.
+  const binaryTlsCert = Deno.env.get("DISC_BINARY_TLS_CERT");
+  const binaryTlsKey = Deno.env.get("DISC_BINARY_TLS_KEY");
+  if (binaryTlsCert && binaryTlsKey) {
+    config.binaryTls = { certFile: binaryTlsCert, keyFile: binaryTlsKey };
   }
 
   return new DiscServer(config);

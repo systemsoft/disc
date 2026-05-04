@@ -177,9 +177,11 @@ async function performNoAuthHandshake(
   const raw3 = await readMessage(conn);
   if (raw3) messages.push(decode(raw3));
 
-  // Read ParameterStatus messages + ReadyForCommand
-  // We expect 2 ParameterStatus then 1 ReadyForCommand
-  for (let i = 0; i < 3; i++) {
+  // Read ParameterStatus messages + ReadyForCommand. Disc currently emits
+  // one ParameterStatus (suggested_pool_concurrency) and then ReadyForCommand;
+  // the system_config message is omitted pending proper typedesc encoding
+  // (tracked under tests/gel-compat for upstream client compat).
+  for (let i = 0; i < 2; i++) {
     const raw = await readMessage(conn);
     if (raw) messages.push(decode(raw));
   }
@@ -236,12 +238,11 @@ Deno.test("binary-server - no-auth handshake returns correct sequence", async ()
   }
 
   assertEquals(messages[3].kind, "ParameterStatus");
-  assertEquals(messages[4].kind, "ParameterStatus");
 
-  assertEquals(messages[5].kind, "ReadyForCommand");
-  if (messages[5].kind === "ReadyForCommand") {
+  assertEquals(messages[4].kind, "ReadyForCommand");
+  if (messages[4].kind === "ReadyForCommand") {
     assertEquals(
-      messages[5].transactionState,
+      messages[4].transactionState,
       TransactionState.NOT_IN_TRANSACTION,
     );
   }
@@ -333,11 +334,11 @@ Deno.test("binary-server - auth handshake with SCRAM-SHA-256", async () => {
   const keyData = decode(rawKey!);
   assertEquals(keyData.kind, "ServerKeyData");
 
-  // 10. Read ParameterStatus messages + ReadyForCommand
+  // 10. Read ParameterStatus + ReadyForCommand. Disc emits one
+  // ParameterStatus (suggested_pool_concurrency); system_config is
+  // omitted pending typedesc encoding (see tests/gel-compat).
   const rawPS1 = await readMessage(conn);
   assertEquals(decode(rawPS1!).kind, "ParameterStatus");
-  const rawPS2 = await readMessage(conn);
-  assertEquals(decode(rawPS2!).kind, "ParameterStatus");
   const rawReady = await readMessage(conn);
   const ready = decode(rawReady!);
   assertEquals(ready.kind, "ReadyForCommand");

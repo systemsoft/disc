@@ -129,3 +129,49 @@ jobs:
         env:
           DISC_PG_AUTO: "1"
         run: deno task test:pg
+
+  gel-compat:
+    name: Gel client compatibility (P2-09)
+    runs-on: ubuntu-latest
+    # Soft-fail while compat gaps are being closed (see
+    # tests/gel-compat/README.md → "Known compat gaps"). The workflow log
+    # surfaces which clients/queries pass; PRs are not blocked.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: tests/gel-compat/python/requirements.txt
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: tests/gel-compat/node/package.json
+
+      - name: Cache bundled PostgreSQL
+        uses: actions/cache@v4
+        with:
+          path: ~/.disc/postgres
+          key: ${{ runner.os }}-disc-pg-16.4
+
+      - name: Run Gel client compatibility smoke
+        run: bash tests/gel-compat/run.sh
+
+      - name: Upload disc serve log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gel-compat-disc-log
+          path: tests/gel-compat/disc-serve.log
+          retention-days: 7
