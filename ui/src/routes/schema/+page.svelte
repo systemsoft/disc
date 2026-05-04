@@ -128,11 +128,10 @@
 </div>
 
 <style lang="scss">
-  @import '../../styles/variables.scss';
-  
+  @use "../../styles/mixins" as *;
   .schema-browser {
     display: flex;
-    gap: $grid-unit * 3;
+    gap: calc(var(--grid-unit) * 3);
     height: calc(100vh - 120px);
     max-width: 1400px;
     margin: 0 auto;
@@ -140,20 +139,20 @@
   
   .schema-sidebar {
     width: 300px;
-    background: $color-surface;
-    border: 1px solid $color-border;
-    border-radius: $border-radius;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
     display: flex;
     flex-direction: column;
     overflow: hidden;
     
     .sidebar-header {
-      padding: $grid-unit * 2;
-      border-bottom: 1px solid $color-border;
+      padding: calc(var(--grid-unit) * 2);
+      border-bottom: 1px solid var(--color-border);
       
       h2 {
         font-size: 1rem;
-        margin-bottom: $grid-unit * 2;
+        margin-bottom: calc(var(--grid-unit) * 2);
       }
       
       .search-input {
@@ -164,28 +163,28 @@
     .type-list {
       flex: 1;
       overflow-y: auto;
-      padding: $grid-unit;
+      padding: var(--grid-unit);
     }
     
     .type-item {
       display: flex;
       align-items: center;
-      gap: $grid-unit;
+      gap: var(--grid-unit);
       width: 100%;
-      padding: $grid-unit * 1.5;
+      padding: calc(var(--grid-unit) * 1.5);
       background: transparent;
       border: 1px solid transparent;
-      border-radius: $border-radius;
-      color: $color-text;
-      font-family: $font-mono;
+      border-radius: var(--border-radius);
+      color: var(--color-text);
+      font-family: var(--font-mono);
       font-size: 0.875rem;
       text-align: left;
       cursor: pointer;
-      transition: all $transition-fast;
-      margin-bottom: $grid-unit * 0.5;
+      transition: all var(--transition-fast);
+      margin-bottom: calc(var(--grid-unit) * 0.5);
       
       .type-icon {
-        color: $color-primary;
+        color: var(--color-primary);
         opacity: 0.5;
       }
       
@@ -195,21 +194,21 @@
       
       .type-count {
         padding: 2px 6px;
-        background: $color-background;
-        border-radius: $border-radius;
+        background: var(--color-background);
+        border-radius: var(--border-radius);
         font-size: 0.75rem;
-        color: $color-text-dim;
+        color: var(--color-text-dim);
       }
       
       &:hover {
-        background: $color-surface-hover;
-        border-color: $color-border;
+        background: var(--color-surface-hover);
+        border-color: var(--color-border);
       }
       
       &.active {
-        background: rgba($color-primary, 0.1);
-        border-color: $color-primary;
-        @include glow($color-primary, 0.2);
+        background: rgb(var(--color-primary-rgb) / 0.1);
+        border-color: var(--color-primary);
+        @include glow(var(--color-primary-rgb), 0.2);
         
         .type-icon {
           opacity: 1;
@@ -220,17 +219,17 @@
   
   .schema-details {
     flex: 1;
-    background: $color-surface;
-    border: 1px solid $color-border;
-    border-radius: $border-radius;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
     overflow-y: auto;
     
     .type-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: $grid-unit * 3;
-      border-bottom: 1px solid $color-border;
+      padding: calc(var(--grid-unit) * 3);
+      border-bottom: 1px solid var(--color-border);
       
       h1 {
         font-size: 1.5rem;
@@ -238,41 +237,41 @@
       
       .type-actions {
         display: flex;
-        gap: $grid-unit;
+        gap: var(--grid-unit);
       }
     }
     
     .type-sections {
-      padding: $grid-unit * 3;
+      padding: calc(var(--grid-unit) * 3);
     }
     
     section {
-      margin-bottom: $grid-unit * 4;
+      margin-bottom: calc(var(--grid-unit) * 4);
       
       h3 {
         font-size: 1rem;
-        margin-bottom: $grid-unit * 2;
-        color: $color-secondary;
-        @include neon-text($color-secondary);
+        margin-bottom: calc(var(--grid-unit) * 2);
+        color: var(--color-secondary);
+        @include neon-text(var(--color-secondary-rgb));
       }
     }
     
     .properties-list,
     .links-list {
-      background: $color-background;
-      border: 1px solid $color-border;
-      border-radius: $border-radius;
-      padding: $grid-unit * 2;
+      background: var(--color-background);
+      border: 1px solid var(--color-border);
+      border-radius: var(--border-radius);
+      padding: calc(var(--grid-unit) * 2);
     }
     
     .property-item,
     .link-item {
       display: flex;
       align-items: center;
-      gap: $grid-unit * 2;
-      padding: $grid-unit * 1.5;
-      border-bottom: 1px solid $color-border;
-      font-family: $font-mono;
+      gap: calc(var(--grid-unit) * 2);
+      padding: calc(var(--grid-unit) * 1.5);
+      border-bottom: 1px solid var(--color-border);
+      font-family: var(--font-mono);
       font-size: 0.875rem;
       
       &:last-child {
@@ -282,41 +281,41 @@
     
     .property-name,
     .link-name {
-      color: $color-info;
+      color: var(--color-info);
       min-width: 150px;
     }
     
     .property-type,
     .link-target {
-      color: $color-success;
+      color: var(--color-success);
     }
     
     .link-arrow {
-      color: $color-text-dim;
+      color: var(--color-text-dim);
     }
     
     .property-flags {
       display: flex;
-      gap: $grid-unit;
+      gap: var(--grid-unit);
       margin-left: auto;
     }
     
     .flag {
       padding: 2px 8px;
-      border-radius: $border-radius;
+      border-radius: var(--border-radius);
       font-size: 0.75rem;
       text-transform: uppercase;
       
       &.required {
-        background: rgba($color-danger, 0.2);
-        color: $color-danger;
-        border: 1px solid rgba($color-danger, 0.3);
+        background: rgb(var(--color-danger-rgb) / 0.2);
+        color: var(--color-danger);
+        border: 1px solid rgb(var(--color-danger-rgb) / 0.3);
       }
       
       &.multi {
-        background: rgba($color-info, 0.2);
-        color: $color-info;
-        border: 1px solid rgba($color-info, 0.3);
+        background: rgb(var(--color-info-rgb) / 0.2);
+        color: var(--color-info);
+        border: 1px solid rgb(var(--color-info-rgb) / 0.3);
       }
     }
     
@@ -326,17 +325,17 @@
       align-items: center;
       justify-content: center;
       height: 100%;
-      color: $color-text-dim;
+      color: var(--color-text-dim);
       
       .empty-icon {
         font-size: 4rem;
-        color: $color-primary;
+        color: var(--color-primary);
         opacity: 0.2;
-        margin-bottom: $grid-unit * 2;
+        margin-bottom: calc(var(--grid-unit) * 2);
       }
       
       p {
-        font-family: $font-mono;
+        font-family: var(--font-mono);
         font-size: 0.875rem;
         text-transform: uppercase;
         letter-spacing: 0.05em;

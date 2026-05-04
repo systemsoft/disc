@@ -1,10 +1,8 @@
-// P1-25: migrating to @use + sass:color is blocked by Vite's SCSS
-// prependData pattern that injects @import into every Svelte file's
-// style block. Full migration requires moving variables to CSS
-// custom properties or refactoring the vite config to pass
-// additionalData as @use. Deferred — Sass 3.0 still emits these as
-// warnings.
-@import "./styles/variables.scss";
+// P1-25: design tokens are now CSS custom properties (see styles/tokens.css)
+// imported once here for global :root scope. Sass mixins live in
+// styles/_mixins.scss and must be `@use`d per file that needs them.
+@use "./styles/mixins" as *;
+@import "./styles/tokens.css";
 
 // Reset and base styles
 * {
@@ -20,9 +18,9 @@ html {
 
 body {
   height: 100%;
-  font-family: $font-base;
-  background: $color-background;
-  color: $color-text;
+  font-family: var(--font-base);
+  background: var(--color-background);
+  color: var(--color-text);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -45,46 +43,35 @@ body {
 
 // Typography
 h1, h2, h3, h4, h5, h6 {
-  font-family: $font-display;
+  font-family: var(--font-display);
   font-weight: 500;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  @include neon-text($color-primary);
+  @include neon-text(var(--color-primary-rgb));
 }
 
-h1 {
-  font-size: 2rem;
-}
-h2 {
-  font-size: 1.5rem;
-}
-h3 {
-  font-size: 1.25rem;
-}
-h4 {
-  font-size: 1rem;
-}
-h5 {
-  font-size: 0.875rem;
-}
-h6 {
-  font-size: 0.75rem;
-}
+h1 { font-size: 2rem; }
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.25rem; }
+h4 { font-size: 1rem; }
+h5 { font-size: 0.875rem; }
+h6 { font-size: 0.75rem; }
 
 code, pre {
-  font-family: $font-mono;
+  font-family: var(--font-mono);
   font-size: 0.875rem;
 }
 
 // Links
 a {
-  color: $color-primary;
+  color: var(--color-primary);
   text-decoration: none;
-  transition: color $transition-fast;
+  transition: color var(--transition-fast);
 
   &:hover {
-    color: lighten($color-primary, 10%);
-    text-shadow: 0 0 10px rgba($color-primary, 0.8);
+    // `lighten($color, 10%)` replaced with `color-mix` toward white.
+    color: color-mix(in srgb, var(--color-primary) 90%, white);
+    text-shadow: 0 0 10px rgb(var(--color-primary-rgb) / 0.8);
   }
 }
 
@@ -93,18 +80,18 @@ button, .button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: $grid-unit * 1.5 $grid-unit * 3;
-  font-family: $font-mono;
+  padding: var(--space-1-5) var(--space-3);
+  font-family: var(--font-mono);
   font-size: 0.875rem;
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   background: transparent;
-  color: $color-primary;
-  border: 1px solid $color-primary;
-  border-radius: $border-radius;
+  color: var(--color-primary);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--border-radius);
   cursor: pointer;
-  transition: all $transition-fast;
+  transition: all var(--transition-fast);
   position: relative;
   overflow: hidden;
 
@@ -115,19 +102,19 @@ button, .button {
     left: 50%;
     width: 0;
     height: 0;
-    background: rgba($color-primary, 0.2);
+    background: rgb(var(--color-primary-rgb) / 0.2);
     border-radius: 50%;
     transform: translate(-50%, -50%);
-    transition: width $transition-base, height $transition-base;
+    transition: width var(--transition-base), height var(--transition-base);
   }
 
   &:hover {
-    @include glow($color-primary, 0.5);
+    @include glow(var(--color-primary-rgb), 0.5);
 
     &::before {
       width: 100%;
       height: 100%;
-      border-radius: $border-radius;
+      border-radius: var(--border-radius);
     }
   }
 
@@ -141,43 +128,43 @@ button, .button {
   }
 
   &.primary {
-    background: $color-primary;
-    color: $color-background;
+    background: var(--color-primary);
+    color: var(--color-background);
 
     &:hover {
-      background: lighten($color-primary, 10%);
+      background: color-mix(in srgb, var(--color-primary) 90%, white);
     }
   }
 
   &.danger {
-    color: $color-danger;
-    border-color: $color-danger;
+    color: var(--color-danger);
+    border-color: var(--color-danger);
 
     &:hover {
-      @include glow($color-danger, 0.5);
+      @include glow(var(--color-danger-rgb), 0.5);
     }
   }
 }
 
 // Forms
 input, textarea, select {
-  padding: $grid-unit * 1.5;
-  font-family: $font-mono;
+  padding: var(--space-1-5);
+  font-family: var(--font-mono);
   font-size: 0.875rem;
-  background: $color-surface;
-  color: $color-text;
-  border: 1px solid $color-border;
-  border-radius: $border-radius;
-  transition: all $transition-fast;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius);
+  transition: all var(--transition-fast);
 
   &:focus {
     outline: none;
-    border-color: $color-primary;
-    @include glow($color-primary, 0.3);
+    border-color: var(--color-primary);
+    @include glow(var(--color-primary-rgb), 0.3);
   }
 
   &::placeholder {
-    color: $color-text-dim;
+    color: var(--color-text-dim);
   }
 }
 
@@ -188,15 +175,15 @@ input, textarea, select {
 }
 
 ::-webkit-scrollbar-track {
-  background: $color-background-dark;
+  background: var(--color-background-dark);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: $color-border;
-  border-radius: $border-radius;
+  background: var(--color-border);
+  border-radius: var(--border-radius);
 
   &:hover {
-    background: $color-primary;
+    background: var(--color-primary);
   }
 }
 
@@ -205,23 +192,23 @@ input, textarea, select {
   width: 100%;
   max-width: 1400px;
   margin: 0 auto;
-  padding: 0 $grid-unit * 2;
+  padding: 0 var(--space-2);
 }
 
 .grid {
   display: grid;
-  gap: $grid-unit * 2;
+  gap: var(--space-2);
 }
 
 .flex {
   display: flex;
-  gap: $grid-unit * 2;
+  gap: var(--space-2);
 }
 
 .text-dim {
-  color: $color-text-dim;
+  color: var(--color-text-dim);
 }
 
 .text-mono {
-  font-family: $font-mono;
+  font-family: var(--font-mono);
 }

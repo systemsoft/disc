@@ -1,0 +1,33 @@
+// Sass mixins for the Disc UI.
+//
+// These survived the P1-25 CSS-custom-property migration because the
+// patterns they encode (multi-channel box-shadow, grid line backgrounds,
+// neon text glow) compose well with mixin syntax and benefit from the
+// `--color-<name>-rgb` triples in tokens.css to produce translucent
+// variants without Sass color functions.
+//
+// Usage: `@use "src/styles/mixins" as *;` at the top of any SCSS partial
+// that needs `@include glow(...)`, `@include neon-text(...)`, or
+// `@include grid-lines(...)`.
+
+@mixin glow($color-rgb: var(--color-primary-rgb), $intensity: 1) {
+  box-shadow:
+    0 0 calc(#{$intensity} * var(--glow-radius)) rgb($color-rgb / 0.5),
+    inset 0 0 calc(#{$intensity} * 0.5 * var(--glow-radius)) rgb($color-rgb / 0.3);
+  border-color: rgb($color-rgb);
+}
+
+@mixin neon-text($color-rgb: var(--color-primary-rgb)) {
+  color: rgb($color-rgb);
+  text-shadow:
+    0 0 10px rgb($color-rgb / 0.8),
+    0 0 20px rgb($color-rgb / 0.6),
+    0 0 30px rgb($color-rgb / 0.4);
+}
+
+@mixin grid-lines() {
+  background-image:
+    linear-gradient(rgb(var(--color-primary-rgb) / 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--color-primary-rgb) / 0.05) 1px, transparent 1px);
+  background-size: calc(var(--grid-unit) * 4) calc(var(--grid-unit) * 4);
+}

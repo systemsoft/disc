@@ -105,61 +105,60 @@
 </div>
 
 <style lang="scss">
-  @import '../styles/variables.scss';
-
+  @use "../styles/mixins" as *;
   .dashboard {
     max-width: 1400px;
     margin: 0 auto;
   }
 
   h1 {
-    margin-bottom: $grid-unit * 4;
+    margin-bottom: calc(var(--grid-unit) * 4);
   }
 
   .stats-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: $grid-unit * 3;
-    margin-bottom: $grid-unit * 6;
+    gap: calc(var(--grid-unit) * 3);
+    margin-bottom: calc(var(--grid-unit) * 6);
   }
 
   .stat-card {
     position: relative;
-    padding: $grid-unit * 3;
-    background: $color-surface;
-    border: 1px solid $color-border;
-    border-radius: $border-radius;
+    padding: calc(var(--grid-unit) * 3);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
     overflow: hidden;
-    transition: all $transition-fast;
+    transition: all var(--transition-fast);
 
     &:hover {
-      border-color: $color-primary;
-      @include glow($color-primary, 0.2);
+      border-color: var(--color-primary);
+      @include glow(var(--color-primary-rgb), 0.2);
     }
 
     .stat-value {
-      font-family: $font-display;
+      font-family: var(--font-display);
       font-size: 2.5rem;
       font-weight: 700;
-      color: $color-primary;
-      @include neon-text($color-primary);
+      color: var(--color-primary);
+      @include neon-text(var(--color-primary-rgb));
     }
 
     .stat-label {
-      font-family: $font-mono;
+      font-family: var(--font-mono);
       font-size: 0.875rem;
-      color: $color-text-dim;
+      color: var(--color-text-dim);
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      margin-top: $grid-unit;
+      margin-top: var(--grid-unit);
     }
 
     .stat-icon {
       position: absolute;
-      top: $grid-unit * 2;
-      right: $grid-unit * 2;
+      top: calc(var(--grid-unit) * 2);
+      right: calc(var(--grid-unit) * 2);
       font-size: 3rem;
-      color: $color-primary;
+      color: var(--color-primary);
       opacity: 0.2;
     }
   }
@@ -167,52 +166,52 @@
   .content-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: $grid-unit * 3;
+    gap: calc(var(--grid-unit) * 3);
   }
 
   section {
     h2 {
       font-size: 1.25rem;
-      margin-bottom: $grid-unit * 2;
+      margin-bottom: calc(var(--grid-unit) * 2);
     }
   }
 
   .recent-queries {
     .query-list {
-      background: $color-surface;
-      border: 1px solid $color-border;
-      border-radius: $border-radius;
-      padding: $grid-unit * 2;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--border-radius);
+      padding: calc(var(--grid-unit) * 2);
     }
 
     .query-item {
-      padding: $grid-unit * 1.5;
-      background: $color-background;
-      border: 1px solid $color-border;
-      border-radius: $border-radius;
-      margin-bottom: $grid-unit;
-      transition: all $transition-fast;
+      padding: calc(var(--grid-unit) * 1.5);
+      background: var(--color-background);
+      border: 1px solid var(--color-border);
+      border-radius: var(--border-radius);
+      margin-bottom: var(--grid-unit);
+      transition: all var(--transition-fast);
 
       &:last-child {
         margin-bottom: 0;
       }
 
       &:hover {
-        border-color: $color-primary;
-        background: $color-surface-hover;
+        border-color: var(--color-primary);
+        background: var(--color-surface-hover);
       }
 
       code {
-        color: $color-info;
+        color: var(--color-info);
         font-size: 0.875rem;
       }
     }
 
     .empty-state {
-      padding: $grid-unit * 4;
+      padding: calc(var(--grid-unit) * 4);
       text-align: center;
-      color: $color-text-dim;
-      font-family: $font-mono;
+      color: var(--color-text-dim);
+      font-family: var(--font-mono);
     }
   }
 
@@ -220,7 +219,7 @@
     .action-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: $grid-unit * 2;
+      gap: calc(var(--grid-unit) * 2);
     }
 
     .action-card {
@@ -228,17 +227,17 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: $grid-unit * 3;
-      background: $color-surface;
-      border: 1px solid $color-border;
-      border-radius: $border-radius;
-      transition: all $transition-fast;
+      padding: calc(var(--grid-unit) * 3);
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--border-radius);
+      transition: all var(--transition-fast);
       text-decoration: none;
 
       &:hover {
-        border-color: $color-primary;
-        background: $color-surface-hover;
-        @include glow($color-primary, 0.3);
+        border-color: var(--color-primary);
+        background: var(--color-surface-hover);
+        @include glow(var(--color-primary-rgb), 0.3);
 
         .action-icon {
           transform: scale(1.1);
@@ -247,15 +246,15 @@
 
       .action-icon {
         font-size: 2.5rem;
-        color: $color-primary;
-        margin-bottom: $grid-unit;
-        transition: transform $transition-fast;
+        color: var(--color-primary);
+        margin-bottom: var(--grid-unit);
+        transition: transform var(--transition-fast);
       }
 
       .action-label {
-        font-family: $font-mono;
+        font-family: var(--font-mono);
         font-size: 0.875rem;
-        color: $color-text;
+        color: var(--color-text);
         text-transform: uppercase;
         letter-spacing: 0.05em;
       }

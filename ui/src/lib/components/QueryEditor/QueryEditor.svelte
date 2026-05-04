@@ -260,44 +260,45 @@
 </div>
 
 <style lang="scss">
+  @use "../../../styles/mixins" as *;
   @import '../../styles/component-base.scss';
 
   .query-editor-container {
     display: flex;
-    gap: $grid-unit * 2;
+    gap: calc(var(--grid-unit) * 2);
     height: 100%;
   }
 
   .tabs-bar {
     display: flex;
-    gap: $grid-unit;
-    padding: $grid-unit;
-    background: $color-surface;
-    border-bottom: 1px solid $color-border;
+    gap: var(--grid-unit);
+    padding: var(--grid-unit);
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
 
     .tab {
       display: flex;
       align-items: center;
-      gap: $grid-unit;
-      padding: $grid-unit $grid-unit * 2;
+      gap: var(--grid-unit);
+      padding: var(--grid-unit) calc(var(--grid-unit) * 2);
       background: transparent;
       border: 1px solid transparent;
-      border-radius: $border-radius $border-radius 0 0;
-      color: $color-text-dim;
-      font-family: $font-mono;
+      border-radius: var(--border-radius) var(--border-radius) 0 0;
+      color: var(--color-text-dim);
+      font-family: var(--font-mono);
       font-size: 0.875rem;
-      transition: all $transition-fast;
+      transition: all var(--transition-fast);
 
       &:hover {
-        background: rgba($color-primary, 0.05);
-        color: $color-text;
+        background: rgb(var(--color-primary-rgb) / 0.05);
+        color: var(--color-text);
       }
 
       &.active {
-        background: $color-background;
-        color: $color-primary;
-        border-color: $color-border;
-        border-bottom-color: $color-background;
+        background: var(--color-background);
+        color: var(--color-primary);
+        border-color: var(--color-border);
+        border-bottom-color: var(--color-background);
       }
 
       .close-tab {
@@ -307,33 +308,33 @@
         line-height: 14px;
         text-align: center;
         border-radius: 50%;
-        transition: all $transition-fast;
+        transition: all var(--transition-fast);
 
         &:hover {
-          background: rgba($color-danger, 0.2);
-          color: $color-danger;
+          background: rgb(var(--color-danger-rgb) / 0.2);
+          color: var(--color-danger);
         }
       }
     }
 
     .add-tab {
-      padding: $grid-unit;
+      padding: var(--grid-unit);
       width: 32px;
       height: 32px;
       display: flex;
       align-items: center;
       justify-content: center;
       background: transparent;
-      border: 1px dashed $color-border;
-      border-radius: $border-radius;
-      color: $color-text-dim;
+      border: 1px dashed var(--color-border);
+      border-radius: var(--border-radius);
+      color: var(--color-text-dim);
       font-size: 1.25rem;
-      transition: all $transition-fast;
+      transition: all var(--transition-fast);
 
       &:hover {
-        border-color: $color-primary;
-        color: $color-primary;
-        background: rgba($color-primary, 0.05);
+        border-color: var(--color-primary);
+        color: var(--color-primary);
+        background: rgb(var(--color-primary-rgb) / 0.05);
       }
     }
   }
@@ -347,24 +348,24 @@
 
   .query-editor {
     flex: 1;
-    border: 1px solid $color-border;
-    border-radius: $border-radius;
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
     overflow: hidden;
-    background: $color-surface;
+    background: var(--color-surface);
 
     :global(.cm-editor) {
       height: 100%;
 
       &.cm-focused {
         outline: none;
-        box-shadow: 0 0 0 1px $color-primary;
+        box-shadow: 0 0 0 1px var(--color-primary);
       }
     }
 
     :global(.cm-content) {
-      font-family: $font-mono;
+      font-family: var(--font-mono);
       font-size: 0.875rem;
-      padding: $grid-unit * 2;
+      padding: calc(var(--grid-unit) * 2);
     }
 
     :global(.cm-line) {
@@ -372,10 +373,10 @@
     }
 
     :global(.cm-autocomplete) {
-      background: $color-surface;
-      border: 1px solid $color-border;
-      border-radius: $border-radius;
-      font-family: $font-mono;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--border-radius);
+      font-family: var(--font-mono);
       font-size: 0.875rem;
     }
   }
@@ -383,33 +384,33 @@
   .editor-toolbar {
     display: flex;
     align-items: center;
-    gap: $grid-unit * 2;
-    padding: $grid-unit * 2;
-    background: $color-surface;
-    border: 1px solid $color-border;
+    gap: calc(var(--grid-unit) * 2);
+    padding: calc(var(--grid-unit) * 2);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
     border-top: none;
-    border-radius: 0 0 $border-radius $border-radius;
+    border-radius: 0 0 var(--border-radius) var(--border-radius);
 
     .execute-btn,
     .format-btn {
       display: flex;
       align-items: center;
-      gap: $grid-unit;
-      padding: $grid-unit $grid-unit * 2;
-      border: 1px solid $color-border;
-      border-radius: $border-radius;
-      font-family: $font-mono;
+      gap: var(--grid-unit);
+      padding: var(--grid-unit) calc(var(--grid-unit) * 2);
+      border: 1px solid var(--color-border);
+      border-radius: var(--border-radius);
+      font-family: var(--font-mono);
       font-size: 0.875rem;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      transition: all $transition-fast;
+      transition: all var(--transition-fast);
 
       &:hover:not(:disabled) {
-        border-color: $color-primary;
-        color: $color-primary;
-        background: rgba($color-primary, 0.1);
-        @include glow($color-primary, 0.2);
+        border-color: var(--color-primary);
+        color: var(--color-primary);
+        background: rgb(var(--color-primary-rgb) / 0.1);
+        @include glow(var(--color-primary-rgb), 0.2);
       }
 
       &:disabled {
@@ -419,9 +420,9 @@
     }
 
     .execute-btn {
-      background: rgba($color-success, 0.1);
-      border-color: rgba($color-success, 0.3);
-      color: $color-success;
+      background: rgb(var(--color-success-rgb) / 0.1);
+      border-color: rgb(var(--color-success-rgb) / 0.3);
+      color: var(--color-success);
 
       .play-icon {
         font-size: 0.75rem;
@@ -433,24 +434,24 @@
     }
 
     .format-btn {
-      color: $color-info;
-      border-color: rgba($color-info, 0.3);
+      color: var(--color-info);
+      border-color: rgb(var(--color-info-rgb) / 0.3);
     }
 
     .toolbar-info {
       display: flex;
       align-items: center;
-      gap: $grid-unit * 2;
+      gap: calc(var(--grid-unit) * 2);
       margin-left: auto;
-      font-family: $font-mono;
+      font-family: var(--font-mono);
       font-size: 0.75rem;
-      color: $color-text-dim;
+      color: var(--color-text-dim);
 
       .execution-time {
-        color: $color-success;
+        color: var(--color-success);
         padding: 4px 8px;
-        background: rgba($color-success, 0.1);
-        border-radius: $border-radius;
+        background: rgb(var(--color-success-rgb) / 0.1);
+        border-radius: var(--border-radius);
       }
     }
   }
@@ -458,14 +459,14 @@
   .error-message {
     display: flex;
     align-items: center;
-    gap: $grid-unit;
-    margin-top: $grid-unit;
-    padding: $grid-unit * 2;
-    background: rgba($color-danger, 0.1);
-    border: 1px solid rgba($color-danger, 0.3);
-    border-radius: $border-radius;
-    color: $color-danger;
-    font-family: $font-mono;
+    gap: var(--grid-unit);
+    margin-top: var(--grid-unit);
+    padding: calc(var(--grid-unit) * 2);
+    background: rgb(var(--color-danger-rgb) / 0.1);
+    border: 1px solid rgb(var(--color-danger-rgb) / 0.3);
+    border-radius: var(--border-radius);
+    color: var(--color-danger);
+    font-family: var(--font-mono);
     font-size: 0.875rem;
 
     .error-icon {
@@ -475,53 +476,53 @@
 
   .history-panel {
     width: 300px;
-    padding: $grid-unit * 2;
-    background: $color-surface;
-    border: 1px solid $color-border;
-    border-radius: $border-radius;
+    padding: calc(var(--grid-unit) * 2);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
     overflow-y: auto;
 
     .history-title {
-      margin: 0 0 $grid-unit * 2;
-      font-family: $font-mono;
+      margin: 0 0 calc(var(--grid-unit) * 2);
+      font-family: var(--font-mono);
       font-size: 0.875rem;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.1em;
-      color: $color-text-dim;
+      color: var(--color-text-dim);
     }
 
     .history-list {
       display: flex;
       flex-direction: column;
-      gap: $grid-unit;
+      gap: var(--grid-unit);
     }
 
     .history-item {
       display: flex;
-      gap: $grid-unit;
+      gap: var(--grid-unit);
       width: 100%;
-      padding: $grid-unit;
+      padding: var(--grid-unit);
       text-align: left;
-      background: $color-background;
-      border: 1px solid $color-border;
-      border-radius: $border-radius;
-      transition: all $transition-fast;
+      background: var(--color-background);
+      border: 1px solid var(--color-border);
+      border-radius: var(--border-radius);
+      transition: all var(--transition-fast);
 
       &:hover {
-        border-color: $color-primary;
-        background: rgba($color-primary, 0.05);
+        border-color: var(--color-primary);
+        background: rgb(var(--color-primary-rgb) / 0.05);
       }
 
       .history-status {
         font-size: 1rem;
 
         &.success {
-          color: $color-success;
+          color: var(--color-success);
         }
 
         &.failed {
-          color: $color-danger;
+          color: var(--color-danger);
         }
       }
 
@@ -531,9 +532,9 @@
       }
 
       .history-query {
-        font-family: $font-mono;
+        font-family: var(--font-mono);
         font-size: 0.75rem;
-        color: $color-text;
+        color: var(--color-text);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -541,7 +542,7 @@
 
       .history-time {
         font-size: 0.625rem;
-        color: $color-text-dim;
+        color: var(--color-text-dim);
         margin-top: 4px;
       }
     }

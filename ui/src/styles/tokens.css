@@ -1,0 +1,78 @@
+/*
+ * Disc UI design tokens — CSS custom properties.
+ *
+ * Source of truth for the TRON-inspired visual system. Imported once
+ * in app.scss so :root applies globally; SCSS partials reference
+ * `var(--name)` directly and no longer rely on Vite's `additionalData`
+ * to inject Sass variables into every <style> block (P1-25).
+ *
+ * Each color is defined twice:
+ *   --color-X        : the canonical hex form (use for `color`, `background`, etc.)
+ *   --color-X-rgb    : the same value as a space-separated RGB triple,
+ *                      consumed via `rgb(var(--color-X-rgb) / 0.5)` to
+ *                      get translucent variants without Sass.
+ */
+
+:root {
+  /* TRON-inspired surfaces */
+  --color-background: #0a0e1b;
+  --color-background-rgb: 10 14 27;
+  --color-background-dark: #040609;
+  --color-background-dark-rgb: 4 6 9;
+  --color-surface: #0f1420;
+  --color-surface-rgb: 15 20 32;
+  --color-surface-hover: #141a2a;
+  --color-surface-hover-rgb: 20 26 42;
+  --color-border: #1a2235;
+  --color-border-rgb: 26 34 53;
+
+  /* Luminous accents */
+  --color-primary: #00d9ff;
+  --color-primary-rgb: 0 217 255;
+  --color-secondary: #ff9f00;
+  --color-secondary-rgb: 255 159 0;
+  --color-success: #00ff88;
+  --color-success-rgb: 0 255 136;
+  --color-warning: #ffbb00;
+  --color-warning-rgb: 255 187 0;
+  --color-danger: #ff0055;
+  --color-danger-rgb: 255 0 85;
+  --color-info: #6699ff;
+  --color-info-rgb: 102 153 255;
+
+  /* Text */
+  --color-text: #e4e8f0;
+  --color-text-rgb: 228 232 240;
+  --color-text-dim: #8892a8;
+  --color-text-dim-rgb: 136 146 168;
+  --color-text-bright: #ffffff;
+
+  /* Grid + spacing (8px base) */
+  --grid-unit: 8px;
+  --space-half: 4px;
+  --space-1: 8px;
+  --space-1-5: 12px;
+  --space-2: 16px;
+  --space-3: 24px;
+  --space-4: 32px;
+  --border-radius: 2px;
+  --glow-radius: 8px;
+
+  /* Typography */
+  --font-mono: "Space Mono", "Courier New", monospace;
+  --font-display: "Orbitron", "Arial Black", sans-serif;
+  --font-base: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+  /* Z-index */
+  --z-base: 0;
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-modal: 300;
+  --z-popover: 400;
+  --z-tooltip: 500;
+
+  /* Animations */
+  --transition-fast: 150ms ease-out;
+  --transition-base: 250ms ease-out;
+  --transition-slow: 350ms ease-out;
+}

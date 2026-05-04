@@ -88,14 +88,12 @@
 </div>
 
 <style lang="scss">
-  @import '../../styles/variables.scss';
-
   .migrations {
     max-width: 1400px;
     margin: 0 auto;
     display: flex;
     flex-direction: column;
-    gap: $grid-unit * 2;
+    gap: calc(var(--grid-unit) * 2);
   }
 
   .page-header {
@@ -105,71 +103,71 @@
   }
 
   .error-banner {
-    padding: $grid-unit * 1.5 $grid-unit * 2;
-    background: rgba($color-danger, 0.1);
-    border: 1px solid $color-danger;
-    border-radius: $border-radius;
-    color: $color-danger;
-    font-family: $font-mono;
+    padding: calc(var(--grid-unit) * 1.5) calc(var(--grid-unit) * 2);
+    background: rgb(var(--color-danger-rgb) / 0.1);
+    border: 1px solid var(--color-danger);
+    border-radius: var(--border-radius);
+    color: var(--color-danger);
+    font-family: var(--font-mono);
     font-size: 0.875rem;
   }
 
   .empty {
-    background: $color-surface;
-    border: 1px solid $color-border;
-    border-radius: $border-radius;
-    padding: $grid-unit * 4;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    padding: calc(var(--grid-unit) * 4);
     text-align: center;
 
     h3 {
       font-size: 1rem;
-      margin-bottom: $grid-unit * 2;
+      margin-bottom: calc(var(--grid-unit) * 2);
     }
 
     p {
-      color: $color-text-dim;
-      font-family: $font-mono;
+      color: var(--color-text-dim);
+      font-family: var(--font-mono);
       font-size: 0.875rem;
       line-height: 1.5;
     }
 
     code {
-      color: $color-info;
+      color: var(--color-info);
     }
   }
 
   .table-wrap {
     overflow: auto;
-    background: $color-surface;
-    border: 1px solid $color-border;
-    border-radius: $border-radius;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
   }
 
   table {
     width: 100%;
     border-collapse: collapse;
-    font-family: $font-mono;
+    font-family: var(--font-mono);
     font-size: 0.875rem;
 
     th, td {
-      padding: $grid-unit * 1.5;
+      padding: calc(var(--grid-unit) * 1.5);
       text-align: left;
-      border-bottom: 1px solid $color-border;
+      border-bottom: 1px solid var(--color-border);
       white-space: nowrap;
     }
 
     th {
-      background: $color-background-dark;
-      color: $color-primary;
+      background: var(--color-background-dark);
+      color: var(--color-primary);
       position: sticky;
       top: 0;
     }
 
     tbody tr:last-child td { border-bottom: none; }
-    tr:hover td { background: $color-surface-hover; }
+    tr:hover td { background: var(--color-surface-hover); }
 
     code {
-      color: $color-info;
+      color: var(--color-info);
       font-size: 0.75rem;
     }
   }

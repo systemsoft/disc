@@ -319,12 +319,13 @@
 </div>
 
 <style lang="scss">
+  @use "../../../styles/mixins" as *;
   @import '../../styles/component-base.scss';
   
   .data-grid-container {
     display: flex;
     flex-direction: column;
-    gap: $grid-unit * 2;
+    gap: calc(var(--grid-unit) * 2);
     height: 100%;
   }
   
@@ -332,7 +333,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: $grid-unit * 2;
+    gap: calc(var(--grid-unit) * 2);
     
     .search-box {
       position: relative;
@@ -341,49 +342,49 @@
       
       .search-input {
         width: 100%;
-        padding: $grid-unit $grid-unit * 5 $grid-unit $grid-unit * 2;
-        background: $color-surface;
-        border: 1px solid $color-border;
-        border-radius: $border-radius;
-        color: $color-text;
-        font-family: $font-mono;
+        padding: var(--grid-unit) calc(var(--grid-unit) * 5) var(--grid-unit) calc(var(--grid-unit) * 2);
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--border-radius);
+        color: var(--color-text);
+        font-family: var(--font-mono);
         font-size: 0.875rem;
         
         &:focus {
-          border-color: $color-primary;
-          @include glow($color-primary, 0.3);
+          border-color: var(--color-primary);
+          @include glow(var(--color-primary-rgb), 0.3);
         }
       }
       
       .search-icon {
         position: absolute;
-        right: $grid-unit * 2;
+        right: calc(var(--grid-unit) * 2);
         top: 50%;
         transform: translateY(-50%);
-        color: $color-primary;
+        color: var(--color-primary);
       }
     }
     
     .export-btn {
       display: flex;
       align-items: center;
-      gap: $grid-unit;
-      padding: $grid-unit $grid-unit * 2;
-      background: rgba($color-info, 0.1);
-      border: 1px solid rgba($color-info, 0.3);
-      border-radius: $border-radius;
-      color: $color-info;
-      font-family: $font-mono;
+      gap: var(--grid-unit);
+      padding: var(--grid-unit) calc(var(--grid-unit) * 2);
+      background: rgb(var(--color-info-rgb) / 0.1);
+      border: 1px solid rgb(var(--color-info-rgb) / 0.3);
+      border-radius: var(--border-radius);
+      color: var(--color-info);
+      font-family: var(--font-mono);
       font-size: 0.875rem;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       cursor: pointer;
-      transition: all $transition-fast;
+      transition: all var(--transition-fast);
       
       &:hover {
-        background: rgba($color-info, 0.2);
-        @include glow($color-info, 0.3);
+        background: rgb(var(--color-info-rgb) / 0.2);
+        @include glow(var(--color-info-rgb), 0.3);
       }
     }
   }
@@ -391,84 +392,84 @@
   .grid-wrapper {
     flex: 1;
     overflow: auto;
-    background: $color-surface;
-    border: 1px solid $color-border;
-    border-radius: $border-radius;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
   }
   
   .data-grid {
     width: 100%;
     border-collapse: collapse;
-    font-family: $font-mono;
+    font-family: var(--font-mono);
     font-size: 0.875rem;
     
     thead {
       position: sticky;
       top: 0;
-      background: $color-surface;
+      background: var(--color-surface);
       z-index: 10;
       
       th {
-        padding: $grid-unit * 2;
+        padding: calc(var(--grid-unit) * 2);
         text-align: left;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.05em;
-        color: $color-text-dim;
-        border-bottom: 2px solid $color-border;
+        color: var(--color-text-dim);
+        border-bottom: 2px solid var(--color-border);
         user-select: none;
         
         &.sortable {
           cursor: pointer;
-          transition: all $transition-fast;
+          transition: all var(--transition-fast);
           
           &:hover {
-            background: rgba($color-primary, 0.05);
-            color: $color-text;
+            background: rgb(var(--color-primary-rgb) / 0.05);
+            color: var(--color-text);
           }
         }
         
         &.sorted {
-          color: $color-primary;
-          background: rgba($color-primary, 0.05);
+          color: var(--color-primary);
+          background: rgb(var(--color-primary-rgb) / 0.05);
         }
         
         .header-content {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          gap: $grid-unit;
+          gap: var(--grid-unit);
           
           .sort-icon {
             font-size: 0.75rem;
             opacity: 0.5;
-            transition: opacity $transition-fast;
+            transition: opacity var(--transition-fast);
           }
         }
         
         &.sorted .sort-icon {
           opacity: 1;
-          color: $color-primary;
+          color: var(--color-primary);
         }
       }
     }
     
     tbody {
       tr {
-        border-bottom: 1px solid rgba($color-border, 0.5);
-        transition: background $transition-fast;
+        border-bottom: 1px solid rgb(var(--color-border-rgb) / 0.5);
+        transition: background var(--transition-fast);
         
         &.hover {
-          background: rgba($color-primary, 0.05);
+          background: rgb(var(--color-primary-rgb) / 0.05);
         }
         
         &.selected {
-          background: rgba($color-primary, 0.1);
+          background: rgb(var(--color-primary-rgb) / 0.1);
         }
         
         td {
-          padding: $grid-unit * 1.5 $grid-unit * 2;
-          color: $color-text;
+          padding: calc(var(--grid-unit) * 1.5) calc(var(--grid-unit) * 2);
+          color: var(--color-text);
           position: relative;
           
           &.editing {
@@ -490,16 +491,16 @@
   
   .edit-input {
     width: 100%;
-    padding: $grid-unit * 1.5 $grid-unit * 2;
-    background: $color-background;
-    border: 2px solid $color-primary;
-    color: $color-text;
+    padding: calc(var(--grid-unit) * 1.5) calc(var(--grid-unit) * 2);
+    background: var(--color-background);
+    border: 2px solid var(--color-primary);
+    color: var(--color-text);
     font-family: inherit;
     font-size: inherit;
     
     &:focus {
       outline: none;
-      @include glow($color-primary, 0.5);
+      @include glow(var(--color-primary-rgb), 0.5);
     }
   }
   
@@ -509,15 +510,15 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: $grid-unit * 2;
-    padding: $grid-unit * 8;
-    color: $color-text-dim;
-    font-family: $font-mono;
+    gap: calc(var(--grid-unit) * 2);
+    padding: calc(var(--grid-unit) * 8);
+    color: var(--color-text-dim);
+    font-family: var(--font-mono);
     
     .spinner,
     .empty-icon {
       font-size: 3rem;
-      color: $color-primary;
+      color: var(--color-primary);
       opacity: 0.5;
     }
     
@@ -530,30 +531,30 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: $grid-unit * 2;
-    padding: $grid-unit * 2;
-    background: $color-surface;
-    border: 1px solid $color-border;
-    border-radius: $border-radius;
+    gap: calc(var(--grid-unit) * 2);
+    padding: calc(var(--grid-unit) * 2);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
     
     .pagination-btn {
-      padding: $grid-unit;
+      padding: var(--grid-unit);
       width: 32px;
       height: 32px;
       display: flex;
       align-items: center;
       justify-content: center;
       background: transparent;
-      border: 1px solid $color-border;
-      border-radius: $border-radius;
-      color: $color-primary;
+      border: 1px solid var(--color-border);
+      border-radius: var(--border-radius);
+      color: var(--color-primary);
       cursor: pointer;
-      transition: all $transition-fast;
+      transition: all var(--transition-fast);
       
       &:hover:not(:disabled) {
-        background: rgba($color-primary, 0.1);
-        border-color: $color-primary;
-        @include glow($color-primary, 0.3);
+        background: rgb(var(--color-primary-rgb) / 0.1);
+        border-color: var(--color-primary);
+        @include glow(var(--color-primary-rgb), 0.3);
       }
       
       &:disabled {
@@ -563,9 +564,9 @@
     }
     
     .page-info {
-      font-family: $font-mono;
+      font-family: var(--font-mono);
       font-size: 0.875rem;
-      color: $color-text-dim;
+      color: var(--color-text-dim);
     }
   }
   

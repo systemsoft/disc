@@ -2,13 +2,10 @@ import { defineConfig } from "vite";
 import { sveltekit } from "@sveltejs/kit/vite";
 
 export default defineConfig({
-  css: {
-    preprocessorOptions: {
-      scss: {
-        additionalData: '@import "src/styles/variables.scss";',
-      },
-    },
-  },
+  // P1-25: design tokens moved to ui/src/styles/tokens.css and imported
+  // once in app.scss; per-file SCSS partials read CSS custom properties
+  // directly. The previous `additionalData` injection of variables.scss
+  // is no longer needed.
   plugins: [sveltekit()],
   server: {
     port: 5173,

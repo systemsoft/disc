@@ -393,14 +393,12 @@
 </div>
 
 <style lang="scss">
-  @import '../../styles/variables.scss';
-
   .data-viewer {
     max-width: 1400px;
     margin: 0 auto;
     display: flex;
     flex-direction: column;
-    gap: $grid-unit * 2;
+    gap: calc(var(--grid-unit) * 2);
   }
 
   .viewer-header {
@@ -411,73 +409,73 @@
     .controls {
       display: flex;
       align-items: center;
-      gap: $grid-unit * 2;
-      font-family: $font-mono;
+      gap: calc(var(--grid-unit) * 2);
+      font-family: var(--font-mono);
       font-size: 0.875rem;
 
       input[type='number'] {
         width: 80px;
-        margin-left: $grid-unit;
+        margin-left: var(--grid-unit);
       }
     }
   }
 
   .error-banner {
-    padding: $grid-unit * 1.5 $grid-unit * 2;
-    background: rgba($color-danger, 0.1);
-    border: 1px solid $color-danger;
-    border-radius: $border-radius;
-    color: $color-danger;
-    font-family: $font-mono;
+    padding: calc(var(--grid-unit) * 1.5) calc(var(--grid-unit) * 2);
+    background: rgb(var(--color-danger-rgb) / 0.1);
+    border: 1px solid var(--color-danger);
+    border-radius: var(--border-radius);
+    color: var(--color-danger);
+    font-family: var(--font-mono);
     font-size: 0.875rem;
   }
 
   .viewer-body {
     display: flex;
-    gap: $grid-unit * 3;
+    gap: calc(var(--grid-unit) * 3);
     min-height: 60vh;
   }
 
   .type-list {
     width: 260px;
-    background: $color-surface;
-    border: 1px solid $color-border;
-    border-radius: $border-radius;
-    padding: $grid-unit * 2;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    padding: calc(var(--grid-unit) * 2);
     display: flex;
     flex-direction: column;
-    gap: $grid-unit * 0.5;
+    gap: calc(var(--grid-unit) * 0.5);
 
     h3 {
       font-size: 0.875rem;
-      margin-bottom: $grid-unit;
+      margin-bottom: var(--grid-unit);
     }
 
     .type-item {
-      padding: $grid-unit;
-      background: $color-background;
-      border: 1px solid $color-border;
-      border-radius: $border-radius;
-      color: $color-text;
-      font-family: $font-mono;
+      padding: var(--grid-unit);
+      background: var(--color-background);
+      border: 1px solid var(--color-border);
+      border-radius: var(--border-radius);
+      color: var(--color-text);
+      font-family: var(--font-mono);
       font-size: 0.75rem;
       text-align: left;
       cursor: pointer;
-      transition: all $transition-fast;
+      transition: all var(--transition-fast);
 
       &:hover {
-        border-color: $color-primary;
-        background: $color-surface-hover;
+        border-color: var(--color-primary);
+        background: var(--color-surface-hover);
       }
       &.active {
-        border-color: $color-primary;
-        background: rgba($color-primary, 0.1);
+        border-color: var(--color-primary);
+        background: rgb(var(--color-primary-rgb) / 0.1);
       }
     }
 
     .empty {
-      padding: $grid-unit * 2;
-      color: $color-text-dim;
+      padding: calc(var(--grid-unit) * 2);
+      color: var(--color-text-dim);
       font-size: 0.75rem;
       text-align: center;
     }
@@ -485,14 +483,14 @@
 
   .rows-pane {
     flex: 1;
-    background: $color-surface;
-    border: 1px solid $color-border;
-    border-radius: $border-radius;
-    padding: $grid-unit * 2;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
+    padding: calc(var(--grid-unit) * 2);
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    gap: $grid-unit * 2;
+    gap: calc(var(--grid-unit) * 2);
 
     h3 {
       font-size: 1rem;
@@ -500,96 +498,96 @@
 
     h4 {
       font-size: 0.875rem;
-      margin-bottom: $grid-unit;
+      margin-bottom: var(--grid-unit);
     }
   }
 
   .insert-form {
-    background: $color-background-dark;
-    border: 1px solid $color-primary;
-    border-radius: $border-radius;
-    padding: $grid-unit * 2;
+    background: var(--color-background-dark);
+    border: 1px solid var(--color-primary);
+    border-radius: var(--border-radius);
+    padding: calc(var(--grid-unit) * 2);
     display: flex;
     flex-direction: column;
-    gap: $grid-unit;
+    gap: var(--grid-unit);
 
     label {
       display: flex;
       flex-direction: column;
-      gap: $grid-unit * 0.5;
-      font-family: $font-mono;
+      gap: calc(var(--grid-unit) * 0.5);
+      font-family: var(--font-mono);
       font-size: 0.75rem;
-      color: $color-text;
+      color: var(--color-text);
 
       input {
-        font-family: $font-mono;
+        font-family: var(--font-mono);
         font-size: 0.875rem;
-        padding: $grid-unit;
-        background: $color-background;
-        border: 1px solid $color-border;
-        border-radius: $border-radius;
-        color: $color-text;
+        padding: var(--grid-unit);
+        background: var(--color-background);
+        border: 1px solid var(--color-border);
+        border-radius: var(--border-radius);
+        color: var(--color-text);
       }
     }
 
     .type-tag {
       display: inline-block;
-      margin-left: $grid-unit;
-      color: $color-text-dim;
+      margin-left: var(--grid-unit);
+      color: var(--color-text-dim);
       font-size: 0.7rem;
     }
 
     .form-actions {
       display: flex;
-      gap: $grid-unit;
-      margin-top: $grid-unit;
+      gap: var(--grid-unit);
+      margin-top: var(--grid-unit);
     }
   }
 
   .table-wrap {
     overflow: auto;
-    border: 1px solid $color-border;
-    border-radius: $border-radius;
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
   }
 
   table {
     width: 100%;
     border-collapse: collapse;
-    font-family: $font-mono;
+    font-family: var(--font-mono);
     font-size: 0.875rem;
 
     th, td {
-      padding: $grid-unit * 1.5;
+      padding: calc(var(--grid-unit) * 1.5);
       text-align: left;
-      border-bottom: 1px solid $color-border;
+      border-bottom: 1px solid var(--color-border);
       white-space: nowrap;
     }
     th {
-      background: $color-background-dark;
-      color: $color-primary;
+      background: var(--color-background-dark);
+      color: var(--color-primary);
       position: sticky;
       top: 0;
     }
     tbody tr:last-child td { border-bottom: none; }
-    tr:hover td { background: $color-surface-hover; }
+    tr:hover td { background: var(--color-surface-hover); }
 
     .editing td {
-      background: rgba($color-primary, 0.05);
+      background: rgb(var(--color-primary-rgb) / 0.05);
     }
 
     code {
-      color: $color-info;
+      color: var(--color-info);
       font-size: 0.75rem;
     }
 
     input[type='text'] {
-      font-family: $font-mono;
+      font-family: var(--font-mono);
       font-size: 0.875rem;
-      padding: $grid-unit * 0.5;
-      background: $color-background;
-      border: 1px solid $color-border;
-      border-radius: $border-radius;
-      color: $color-text;
+      padding: calc(var(--grid-unit) * 0.5);
+      background: var(--color-background);
+      border: 1px solid var(--color-border);
+      border-radius: var(--border-radius);
+      color: var(--color-text);
       width: 100%;
       min-width: 120px;
     }
@@ -597,31 +595,31 @@
 
   .actions-col {
     display: flex;
-    gap: $grid-unit * 0.5;
+    gap: calc(var(--grid-unit) * 0.5);
     white-space: nowrap;
   }
 
   :global(.button-small) {
     font-size: 0.75rem !important;
-    padding: $grid-unit * 0.5 $grid-unit !important;
+    padding: calc(var(--grid-unit) * 0.5) var(--grid-unit) !important;
   }
 
   :global(.button-secondary) {
-    background: $color-background !important;
-    color: $color-text !important;
+    background: var(--color-background) !important;
+    color: var(--color-text) !important;
   }
 
   :global(.button-danger) {
-    background: rgba($color-danger, 0.1) !important;
-    color: $color-danger !important;
-    border-color: $color-danger !important;
+    background: rgb(var(--color-danger-rgb) / 0.1) !important;
+    color: var(--color-danger) !important;
+    border-color: var(--color-danger) !important;
   }
 
   .empty {
-    padding: $grid-unit * 4;
+    padding: calc(var(--grid-unit) * 4);
     text-align: center;
-    color: $color-text-dim;
-    font-family: $font-mono;
+    color: var(--color-text-dim);
+    font-family: var(--font-mono);
     font-size: 0.875rem;
   }
 </style>

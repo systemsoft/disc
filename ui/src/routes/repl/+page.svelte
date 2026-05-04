@@ -149,8 +149,6 @@
 </div>
 
 <style lang="scss">
-  @import '../../styles/variables.scss';
-
   .repl {
     max-width: 1400px;
     margin: 0 auto;
@@ -159,14 +157,14 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: $grid-unit * 2;
+      margin-bottom: calc(var(--grid-unit) * 2);
     }
   }
 
   .repl-container {
-    background: $color-surface;
-    border: 1px solid $color-border;
-    border-radius: $border-radius;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
     height: calc(100vh - 250px);
     display: flex;
     flex-direction: column;
@@ -175,57 +173,57 @@
   .repl-history {
     flex: 1;
     overflow-y: auto;
-    padding: $grid-unit * 2;
-    font-family: $font-mono;
+    padding: calc(var(--grid-unit) * 2);
+    font-family: var(--font-mono);
     font-size: 0.875rem;
 
     .history-item {
-      margin-bottom: $grid-unit * 2;
+      margin-bottom: calc(var(--grid-unit) * 2);
 
       .command {
-        color: $color-info;
-        margin-bottom: $grid-unit;
+        color: var(--color-info);
+        margin-bottom: var(--grid-unit);
       }
 
       .result {
         margin: 0;
-        padding-left: $grid-unit * 2;
-        color: $color-success;
+        padding-left: calc(var(--grid-unit) * 2);
+        color: var(--color-success);
         white-space: pre-wrap;
         word-break: break-word;
       }
 
       .error {
-        padding-left: $grid-unit * 2;
-        color: $color-danger;
+        padding-left: calc(var(--grid-unit) * 2);
+        color: var(--color-danger);
       }
 
       .duration {
-        padding-left: $grid-unit * 2;
-        color: $color-text-dim;
+        padding-left: calc(var(--grid-unit) * 2);
+        color: var(--color-text-dim);
         font-size: 0.7rem;
-        margin-top: $grid-unit * 0.5;
+        margin-top: calc(var(--grid-unit) * 0.5);
       }
     }
 
     .empty {
-      color: $color-text-dim;
+      color: var(--color-text-dim);
       text-align: center;
-      padding: $grid-unit * 4;
+      padding: calc(var(--grid-unit) * 4);
     }
   }
 
   .repl-input {
     display: flex;
     align-items: center;
-    gap: $grid-unit;
-    padding: $grid-unit * 2;
-    border-top: 1px solid $color-border;
-    background: $color-background-dark;
+    gap: var(--grid-unit);
+    padding: calc(var(--grid-unit) * 2);
+    border-top: 1px solid var(--color-border);
+    background: var(--color-background-dark);
 
     .prompt {
-      color: $color-primary;
-      font-family: $font-mono;
+      color: var(--color-primary);
+      font-family: var(--font-mono);
       font-weight: bold;
     }
 
@@ -233,8 +231,8 @@
       flex: 1;
       background: transparent;
       border: none;
-      color: $color-text;
-      font-family: $font-mono;
+      color: var(--color-text);
+      font-family: var(--font-mono);
       font-size: 0.875rem;
 
       &:focus { outline: none; }
@@ -242,8 +240,8 @@
     }
 
     .spinner {
-      color: $color-text-dim;
-      font-family: $font-mono;
+      color: var(--color-text-dim);
+      font-family: var(--font-mono);
     }
   }
 </style>

@@ -151,58 +151,59 @@
 </div>
 
 <style lang="scss">
+  @use "../../../styles/mixins" as *;
   @import '../../styles/component-base.scss';
 
   .search-container {
-    margin-bottom: $grid-unit * 2;
+    margin-bottom: calc(var(--grid-unit) * 2);
     position: relative;
 
     .search-input {
       width: 100%;
-      padding: $grid-unit $grid-unit * 5 $grid-unit $grid-unit * 2;
-      background: $color-surface;
-      border: 1px solid $color-border;
-      border-radius: $border-radius;
-      color: $color-text;
-      font-family: $font-mono;
+      padding: var(--grid-unit) calc(var(--grid-unit) * 5) var(--grid-unit) calc(var(--grid-unit) * 2);
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--border-radius);
+      color: var(--color-text);
+      font-family: var(--font-mono);
       font-size: 0.875rem;
-      transition: all $transition-fast;
+      transition: all var(--transition-fast);
 
       &:focus {
         outline: none;
-        border-color: $color-primary;
-        @include glow($color-primary, 0.3);
+        border-color: var(--color-primary);
+        @include glow(var(--color-primary-rgb), 0.3);
       }
 
       &::placeholder {
-        color: $color-text-dim;
+        color: var(--color-text-dim);
       }
     }
 
     .search-icon {
       position: absolute;
-      right: $grid-unit * 2;
+      right: calc(var(--grid-unit) * 2);
       top: 50%;
       transform: translateY(-50%);
-      color: $color-primary;
+      color: var(--color-primary);
       font-size: 1.25rem;
     }
   }
 
   .schema-tree {
-    font-family: $font-mono;
+    font-family: var(--font-mono);
     font-size: 0.875rem;
   }
 
   .module-node {
-    margin-bottom: $grid-unit * 2;
+    margin-bottom: calc(var(--grid-unit) * 2);
 
     .module-header {
       display: flex;
       align-items: center;
-      gap: $grid-unit;
-      padding: $grid-unit;
-      color: $color-secondary;
+      gap: var(--grid-unit);
+      padding: var(--grid-unit);
+      color: var(--color-secondary);
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.1em;
@@ -214,47 +215,47 @@
   }
 
   .types-container {
-    padding-left: $grid-unit * 3;
+    padding-left: calc(var(--grid-unit) * 3);
   }
 
   .type-node {
-    margin-bottom: $grid-unit;
+    margin-bottom: var(--grid-unit);
 
     .type-header {
       display: flex;
       align-items: center;
-      gap: $grid-unit;
+      gap: var(--grid-unit);
       width: 100%;
-      padding: $grid-unit;
+      padding: var(--grid-unit);
       background: transparent;
       border: 1px solid transparent;
-      border-radius: $border-radius;
-      color: $color-text-dim;
+      border-radius: var(--border-radius);
+      color: var(--color-text-dim);
       text-align: left;
       cursor: pointer;
-      transition: all $transition-fast;
+      transition: all var(--transition-fast);
 
       &:hover {
-        background: rgba($color-primary, 0.05);
-        color: $color-text;
-        border-color: rgba($color-primary, 0.2);
+        background: rgb(var(--color-primary-rgb) / 0.05);
+        color: var(--color-text);
+        border-color: rgb(var(--color-primary-rgb) / 0.2);
       }
 
       &.selected {
-        background: rgba($color-primary, 0.1);
-        color: $color-primary;
-        border-color: $color-primary;
-        @include glow($color-primary, 0.2);
+        background: rgb(var(--color-primary-rgb) / 0.1);
+        color: var(--color-primary);
+        border-color: var(--color-primary);
+        @include glow(var(--color-primary-rgb), 0.2);
       }
 
       .expand-icon {
         width: 12px;
         font-size: 0.625rem;
-        transition: transform $transition-fast;
+        transition: transform var(--transition-fast);
       }
 
       .type-icon {
-        color: $color-primary;
+        color: var(--color-primary);
       }
 
       .type-name {
@@ -268,71 +269,71 @@
   }
 
   .type-details {
-    margin-left: $grid-unit * 4;
-    padding: $grid-unit;
-    border-left: 1px solid rgba($color-primary, 0.2);
+    margin-left: calc(var(--grid-unit) * 4);
+    padding: var(--grid-unit);
+    border-left: 1px solid rgb(var(--color-primary-rgb) / 0.2);
   }
 
   .section-label {
-    color: $color-text-dim;
+    color: var(--color-text-dim);
     font-size: 0.75rem;
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    margin-bottom: $grid-unit;
+    margin-bottom: var(--grid-unit);
     opacity: 0.7;
   }
 
   .properties-section,
   .links-section {
-    margin-bottom: $grid-unit * 2;
+    margin-bottom: calc(var(--grid-unit) * 2);
   }
 
   .property-item,
   .link-item {
     display: flex;
     align-items: center;
-    gap: $grid-unit;
-    padding: $grid-unit / 2 $grid-unit;
-    margin-bottom: $grid-unit / 2;
-    border-radius: $border-radius;
-    transition: background $transition-fast;
+    gap: var(--grid-unit);
+    padding: var(--grid-unit) / 2 var(--grid-unit);
+    margin-bottom: var(--grid-unit) / 2;
+    border-radius: var(--border-radius);
+    transition: background var(--transition-fast);
 
     &:hover {
-      background: rgba($color-primary, 0.05);
+      background: rgb(var(--color-primary-rgb) / 0.05);
     }
 
     .property-icon,
     .link-icon {
-      color: $color-info;
+      color: var(--color-info);
       font-size: 0.875rem;
     }
 
     .property-name,
     .link-name {
-      color: $color-text;
+      color: var(--color-text);
       font-weight: 500;
     }
 
     .property-type {
-      color: $color-success;
+      color: var(--color-success);
       font-size: 0.75rem;
       padding: 2px 6px;
-      background: rgba($color-success, 0.1);
-      border-radius: $border-radius;
+      background: rgb(var(--color-success-rgb) / 0.1);
+      border-radius: var(--border-radius);
     }
 
     .link-arrow {
-      color: $color-text-dim;
+      color: var(--color-text-dim);
       font-size: 0.875rem;
     }
 
     .link-target {
-      color: $color-info;
+      color: var(--color-info);
       font-weight: 500;
     }
 
     .link-cardinality {
-      color: $color-text-dim;
+      color: var(--color-text-dim);
       font-size: 0.75rem;
     }
 
@@ -342,23 +343,23 @@
       font-size: 0.625rem;
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      border-radius: $border-radius;
+      border-radius: var(--border-radius);
 
       &.required {
-        color: $color-warning;
-        background: rgba($color-warning, 0.1);
-        border: 1px solid rgba($color-warning, 0.3);
+        color: var(--color-warning);
+        background: rgb(var(--color-warning-rgb) / 0.1);
+        border: 1px solid rgb(var(--color-warning-rgb) / 0.3);
       }
 
       &.constraint {
-        color: $color-info;
-        background: rgba($color-info, 0.1);
-        border: 1px solid rgba($color-info, 0.3);
+        color: var(--color-info);
+        background: rgb(var(--color-info-rgb) / 0.1);
+        border: 1px solid rgb(var(--color-info-rgb) / 0.3);
       }
     }
 
     .property-default {
-      color: $color-secondary;
+      color: var(--color-secondary);
       cursor: help;
     }
   }

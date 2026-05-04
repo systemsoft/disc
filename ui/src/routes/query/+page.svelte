@@ -221,8 +221,6 @@
 </div>
 
 <style lang="scss">
-  @import '../../styles/variables.scss';
-
   .query-editor {
     display: flex;
     flex-direction: column;
@@ -235,7 +233,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: $grid-unit * 3;
+    margin-bottom: calc(var(--grid-unit) * 3);
 
     h1 {
       font-size: 1.5rem;
@@ -243,13 +241,13 @@
 
     .toolbar-actions {
       display: flex;
-      gap: $grid-unit;
+      gap: var(--grid-unit);
     }
   }
 
   .editor-container {
     display: flex;
-    gap: $grid-unit * 3;
+    gap: calc(var(--grid-unit) * 3);
     flex: 1;
     overflow: hidden;
   }
@@ -258,55 +256,55 @@
     width: 250px;
     display: flex;
     flex-direction: column;
-    gap: $grid-unit * 3;
+    gap: calc(var(--grid-unit) * 3);
 
     .sidebar-section {
-      background: $color-surface;
-      border: 1px solid $color-border;
-      border-radius: $border-radius;
-      padding: $grid-unit * 2;
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--border-radius);
+      padding: calc(var(--grid-unit) * 2);
 
       h3 {
         font-size: 0.875rem;
-        margin-bottom: $grid-unit * 2;
+        margin-bottom: calc(var(--grid-unit) * 2);
       }
     }
 
     .query-list {
       display: flex;
       flex-direction: column;
-      gap: $grid-unit * 0.5;
+      gap: calc(var(--grid-unit) * 0.5);
     }
 
     .query-item {
-      padding: $grid-unit;
-      background: $color-background;
-      border: 1px solid $color-border;
-      border-radius: $border-radius;
-      color: $color-text;
-      font-family: $font-mono;
+      padding: var(--grid-unit);
+      background: var(--color-background);
+      border: 1px solid var(--color-border);
+      border-radius: var(--border-radius);
+      color: var(--color-text);
+      font-family: var(--font-mono);
       font-size: 0.75rem;
       text-align: left;
       cursor: pointer;
-      transition: all $transition-fast;
+      transition: all var(--transition-fast);
 
       &:hover {
-        border-color: $color-primary;
-        background: $color-surface-hover;
+        border-color: var(--color-primary);
+        background: var(--color-surface-hover);
       }
 
       &.history-item {
         code {
-          color: $color-info;
+          color: var(--color-info);
           font-size: 0.7rem;
         }
       }
     }
 
     .empty-text {
-      padding: $grid-unit * 2;
+      padding: calc(var(--grid-unit) * 2);
       text-align: center;
-      color: $color-text-dim;
+      color: var(--color-text-dim);
       font-size: 0.75rem;
     }
   }
@@ -315,45 +313,45 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    gap: $grid-unit * 3;
+    gap: calc(var(--grid-unit) * 3);
     overflow-y: auto;
   }
 
   .code-editor {
     display: flex;
-    background: $color-surface;
-    border: 1px solid $color-border;
-    border-radius: $border-radius;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
     overflow: hidden;
     min-height: 300px;
     position: relative;
 
     .line-numbers {
-      padding: $grid-unit * 2;
-      background: $color-background-dark;
-      border-right: 1px solid $color-border;
+      padding: calc(var(--grid-unit) * 2);
+      background: var(--color-background-dark);
+      border-right: 1px solid var(--color-border);
       display: flex;
       flex-direction: column;
-      font-family: $font-mono;
+      font-family: var(--font-mono);
       font-size: 0.875rem;
-      color: $color-text-dim;
+      color: var(--color-text-dim);
       line-height: 1.5em;
       user-select: none;
 
       span {
         text-align: right;
-        padding-right: $grid-unit;
+        padding-right: var(--grid-unit);
         min-width: 30px;
       }
     }
 
     .query-input {
       flex: 1;
-      padding: $grid-unit * 2;
+      padding: calc(var(--grid-unit) * 2);
       background: transparent;
       border: none;
-      color: $color-info;
-      font-family: $font-mono;
+      color: var(--color-info);
+      font-family: var(--font-mono);
       font-size: 0.875rem;
       line-height: 1.5em;
       resize: none;
@@ -363,7 +361,7 @@
       }
 
       &::selection {
-        background: rgba($color-primary, 0.3);
+        background: rgb(var(--color-primary-rgb) / 0.3);
       }
     }
   }
@@ -371,13 +369,13 @@
   .error-message {
     display: flex;
     align-items: center;
-    gap: $grid-unit;
-    padding: $grid-unit * 2;
-    background: rgba($color-danger, 0.1);
-    border: 1px solid $color-danger;
-    border-radius: $border-radius;
-    color: $color-danger;
-    font-family: $font-mono;
+    gap: var(--grid-unit);
+    padding: calc(var(--grid-unit) * 2);
+    background: rgb(var(--color-danger-rgb) / 0.1);
+    border: 1px solid var(--color-danger);
+    border-radius: var(--border-radius);
+    color: var(--color-danger);
+    font-family: var(--font-mono);
     font-size: 0.875rem;
 
     .error-icon {
@@ -386,17 +384,17 @@
   }
 
   .query-results {
-    background: $color-surface;
-    border: 1px solid $color-border;
-    border-radius: $border-radius;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
     overflow: hidden;
 
     .results-header {
       display: flex;
       align-items: center;
-      gap: $grid-unit * 2;
-      padding: $grid-unit * 2;
-      border-bottom: 1px solid $color-border;
+      gap: calc(var(--grid-unit) * 2);
+      padding: calc(var(--grid-unit) * 2);
+      border-bottom: 1px solid var(--color-border);
 
       h3 {
         font-size: 1rem;
@@ -404,18 +402,18 @@
       }
 
       .execution-time {
-        font-family: $font-mono;
+        font-family: var(--font-mono);
         font-size: 0.75rem;
-        color: $color-success;
+        color: var(--color-success);
       }
     }
 
     .results-json {
       margin: 0;
-      padding: $grid-unit * 2;
-      background: $color-background-dark;
-      color: $color-info;
-      font-family: $font-mono;
+      padding: calc(var(--grid-unit) * 2);
+      background: var(--color-background-dark);
+      color: var(--color-info);
+      font-family: var(--font-mono);
       font-size: 0.875rem;
       max-height: 400px;
       overflow: auto;
@@ -427,25 +425,25 @@
       table {
         width: 100%;
         border-collapse: collapse;
-        font-family: $font-mono;
+        font-family: var(--font-mono);
         font-size: 0.875rem;
 
         th, td {
-          padding: $grid-unit * 1.5;
+          padding: calc(var(--grid-unit) * 1.5);
           text-align: left;
-          border-bottom: 1px solid $color-border;
+          border-bottom: 1px solid var(--color-border);
         }
 
         th {
-          background: $color-background-dark;
-          color: $color-primary;
+          background: var(--color-background-dark);
+          color: var(--color-primary);
           font-weight: 500;
           text-transform: uppercase;
           letter-spacing: 0.05em;
         }
 
         tr:hover td {
-          background: $color-surface-hover;
+          background: var(--color-surface-hover);
         }
 
         tbody tr:last-child td {

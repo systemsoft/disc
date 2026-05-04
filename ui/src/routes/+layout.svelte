@@ -58,8 +58,7 @@
 </div>
 
 <style lang="scss">
-  @import '../styles/variables.scss';
-  
+  @use "../styles/mixins" as *;
   .app-layout {
     display: flex;
     flex-direction: column;
@@ -71,10 +70,10 @@
   .app-header {
     display: flex;
     align-items: center;
-    gap: $grid-unit * 4;
-    padding: $grid-unit * 2;
-    background: $color-surface;
-    border-bottom: 1px solid $color-border;
+    gap: calc(var(--grid-unit) * 4);
+    padding: calc(var(--grid-unit) * 2);
+    background: var(--color-surface);
+    border-bottom: 1px solid var(--color-border);
     position: relative;
     
     &::after {
@@ -86,8 +85,8 @@
       height: 2px;
       background: linear-gradient(90deg, 
         transparent,
-        $color-primary 20%,
-        $color-primary 80%,
+        var(--color-primary) 20%,
+        var(--color-primary) 80%,
         transparent
       );
       opacity: 0.5;
@@ -97,57 +96,57 @@
   .logo {
     display: flex;
     align-items: center;
-    gap: $grid-unit;
-    font-family: $font-display;
+    gap: var(--grid-unit);
+    font-family: var(--font-display);
     font-size: 1.5rem;
     font-weight: 900;
     letter-spacing: 0.1em;
     
     .logo-icon {
-      color: $color-primary;
+      color: var(--color-primary);
       font-size: 2rem;
       animation: pulse 2s ease-in-out infinite;
     }
     
     .logo-text {
-      @include neon-text($color-primary);
+      @include neon-text(var(--color-primary-rgb));
     }
   }
   
   .main-nav {
     display: flex;
-    gap: $grid-unit;
+    gap: var(--grid-unit);
     flex: 1;
     
     .nav-item {
       display: flex;
       align-items: center;
-      gap: $grid-unit;
-      padding: $grid-unit $grid-unit * 2;
-      color: $color-text-dim;
-      font-family: $font-mono;
+      gap: var(--grid-unit);
+      padding: var(--grid-unit) calc(var(--grid-unit) * 2);
+      color: var(--color-text-dim);
+      font-family: var(--font-mono);
       font-size: 0.875rem;
       text-transform: uppercase;
       letter-spacing: 0.05em;
       border: 1px solid transparent;
-      border-radius: $border-radius;
-      transition: all $transition-fast;
+      border-radius: var(--border-radius);
+      transition: all var(--transition-fast);
       
       .nav-icon {
         font-size: 1.25rem;
       }
       
       &:hover {
-        color: $color-primary;
-        background: rgba($color-primary, 0.1);
-        border-color: rgba($color-primary, 0.3);
+        color: var(--color-primary);
+        background: rgb(var(--color-primary-rgb) / 0.1);
+        border-color: rgb(var(--color-primary-rgb) / 0.3);
       }
       
       &.active {
-        color: $color-primary;
-        background: rgba($color-primary, 0.15);
-        border-color: $color-primary;
-        @include glow($color-primary, 0.3);
+        color: var(--color-primary);
+        background: rgb(var(--color-primary-rgb) / 0.15);
+        border-color: var(--color-primary);
+        @include glow(var(--color-primary-rgb), 0.3);
       }
     }
   }
@@ -155,30 +154,30 @@
   .connection-status {
     display: flex;
     align-items: center;
-    gap: $grid-unit;
-    padding: $grid-unit $grid-unit * 2;
-    font-family: $font-mono;
+    gap: var(--grid-unit);
+    padding: var(--grid-unit) calc(var(--grid-unit) * 2);
+    font-family: var(--font-mono);
     font-size: 0.75rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    color: $color-text-dim;
-    border: 1px solid $color-border;
-    border-radius: $border-radius;
+    color: var(--color-text-dim);
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
     
     .status-dot {
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      background: $color-warning;
+      background: var(--color-warning);
       animation: pulse 2s ease-in-out infinite;
     }
     
     &.connected {
-      color: $color-success;
-      border-color: rgba($color-success, 0.3);
+      color: var(--color-success);
+      border-color: rgb(var(--color-success-rgb) / 0.3);
       
       .status-dot {
-        background: $color-success;
+        background: var(--color-success);
       }
     }
   }
@@ -187,7 +186,7 @@
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: $grid-unit * 3;
+    padding: calc(var(--grid-unit) * 3);
     position: relative;
   }
   
