@@ -506,3 +506,106 @@ Deno.test("SDL Parser - Complex Expression", () => {
     }
   }
 });
+
+// ---------------------------------------------------------------------------
+// Error recovery (P2-06): parseWithRecovery() collects every error and skips
+// the malformed declaration instead of bailing on the first one.
+// ---------------------------------------------------------------------------
+
+Deno.test("SDL Parser - parseWithRecovery: clean source has zero errors", () => {
+  const source = `
+    type A { required name: str; }
+    type B { required label: str; }
+  `;
+
+  const { document, errors } = new SDLParser(source).parseWithRecovery();
+  assertEquals(errors.length, 0);
+  assertEquals(document.declarations.length, 2);
+});
+
+Deno.test("SDL Parser - parseWithRecovery: collects multiple errors in one pass", () => {
+  // Three top-level declarations; the middle one has a garbage token in
+  // its body. Recovery should yield the first and third declarations and
+  // record one error for the bad one.
+  const source = `
+    type Good1 { required name: str; }
+    type Bad { @@@ }
+    type Good2 { required label: str; }
+  `;
+
+  const { document, errors } = new SDLParser(source).parseWithRecovery();
+
+  // The garbage token kills the Bad declaration; recovery picks up at
+  // `type Good2` and parses it.
+  assertEquals(
+    document.declarations.length >= 2,
+    true,
+    `expected at least 2 declarations, got ${document.declarations.length}`,
+  );
+  assertEquals(
+    errors.length >= 1,
+    true,
+    `expected at least 1 error, got ${errors.length}`,
+  );
+  // Good1 + Good2 must both be present in the recovered document.
+  const names = document.declarations.flatMap((d) =>
+    d.kind === "TypeDeclaration" ? [d.name.value] : []
+  );
+  assertEquals(names.includes("Good1"), true);
+  assertEquals(names.includes("Good2"), true);
+});
+
+Deno.test("SDL Parser - parseWithRecovery: recovers across multiple bad blocks", () => {
+  // Two malformed declarations interleaved with two clean ones. Use only
+  // lexable input — `???` would fail at lex time, before recovery can run.
+  const source = `
+    type Ok1 { required a: str; }
+    type Bad1 { @@@ }
+    type Ok2 { required b: str; }
+    type Bad2 { 123 garbage }
+    type Ok3 { required c: str; }
+  `;
+
+  const { document, errors } = new SDLParser(source).parseWithRecovery();
+
+  const names = document.declarations.flatMap((d) =>
+    d.kind === "TypeDeclaration" ? [d.name.value] : []
+  );
+  for (const expected of ["Ok1", "Ok2", "Ok3"]) {
+    assertEquals(
+      names.includes(expected),
+      true,
+      `Expected '${expected}' in recovered names, got ${JSON.stringify(names)}`,
+    );
+  }
+  assertEquals(
+    errors.length >= 2,
+    true,
+    `expected at least 2 errors, got ${errors.length}`,
+  );
+});
+
+Deno.test("SDL Parser - parseWithRecovery: never throws on malformed input", () => {
+  // The original `parse()` contract throws — verify recovery's contract
+  // is always to return a result object, never bubble.
+  const sources = [
+    "@@@",
+    "type",
+    "type X {",
+    "scalar type",
+    "module foo {",
+  ];
+  for (const src of sources) {
+    const { errors } = new SDLParser(src).parseWithRecovery();
+    assertEquals(
+      errors.length > 0,
+      true,
+      `expected ${JSON.stringify(src)} to produce errors`,
+    );
+  }
+});
+
+Deno.test("SDL Parser - parse() still throws on first error (backward compat)", () => {
+  const source = `type Bad { @@@ }`;
+  assertThrows(() => new SDLParser(source).parse(), SyntaxError);
+});

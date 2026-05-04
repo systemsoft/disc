@@ -10,6 +10,9 @@ import * as AST from "./ast.ts";
 export class SDLParser {
   private tokens: Token[];
   private current = 0;
+  // Errors collected during a recovery pass. Empty when the parser is
+  // running in throw-on-first-error mode (the default `parse()` path).
+  private collectedErrors: SyntaxError[] = [];
 
   constructor(source: string) {
     const lexer = new SDLLexer(source);
@@ -27,6 +30,95 @@ export class SDLParser {
     }
 
     return { kind: "SDLDocument", declarations };
+  }
+
+  /**
+   * Parse with panic-mode error recovery (P2-06).
+   *
+   * Instead of throwing on the first syntax error, this method collects
+   * every top-level declaration that parses cleanly, records errors for
+   * the rest, and synchronizes to the next plausible top-level keyword
+   * before continuing. The returned `document` may have skipped one or
+   * more declarations but is otherwise structurally valid; `errors` is
+   * the full list (in source order) for the IDE / linter to display.
+   *
+   * Recovery is coarse-grained — an error inside a type body bails out
+   * of the entire type, not just the bad member. That's the standard
+   * trade-off for a recursive-descent parser without explicit recovery
+   * grammar; finer-grained recovery is future work.
+   */
+  parseWithRecovery(): {
+    document: AST.SDLDocument;
+    errors: SyntaxError[];
+  } {
+    this.collectedErrors = [];
+    const declarations: AST.Declaration[] = [];
+
+    while (!this.isAtEnd()) {
+      const startPos = this.current;
+      try {
+        const decl = this.parseTopLevelDeclaration();
+        if (decl) {
+          declarations.push(decl);
+        }
+      } catch (err) {
+        if (err instanceof SyntaxError) {
+          this.collectedErrors.push(err);
+        } else {
+          throw err;
+        }
+        this.synchronize();
+      }
+      // Loop guard: parseTopLevelDeclaration can legitimately return null
+      // and not advance (e.g. when synchronize lands on a closing RBRACE
+      // that the top-level skip-list also stops on). Force-advance one
+      // token in that case so we never spin.
+      if (this.current === startPos && !this.isAtEnd()) {
+        this.advance();
+      }
+    }
+
+    return {
+      document: { kind: "SDLDocument", declarations },
+      errors: this.collectedErrors,
+    };
+  }
+
+  /**
+   * Advance tokens until we hit something that plausibly starts a new
+   * top-level declaration (or a closing brace, which lets the enclosing
+   * block recover). Used after a syntax error to skip the malformed
+   * declaration and keep parsing.
+   */
+  private synchronize(): void {
+    const STARTS = new Set<TokenType>([
+      TokenType.MODULE,
+      TokenType.TYPE,
+      TokenType.SCALAR,
+      TokenType.ALIAS,
+      TokenType.FUNCTION,
+      TokenType.GLOBAL,
+      TokenType.LINK,
+      TokenType.ANNOTATION,
+      TokenType.ABSTRACT,
+    ]);
+
+    while (!this.isAtEnd()) {
+      // Stop just past a semicolon — the previous statement is over.
+      if (this.peek().type === TokenType.SEMICOLON) {
+        this.advance();
+        return;
+      }
+      // Stop AT a top-level keyword or closing brace so the caller can
+      // start fresh on it.
+      if (
+        STARTS.has(this.peek().type) ||
+        this.peek().type === TokenType.RBRACE
+      ) {
+        return;
+      }
+      this.advance();
+    }
   }
 
   private parseTopLevelDeclaration(): AST.Declaration | null {
