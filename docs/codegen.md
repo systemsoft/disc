@@ -12,7 +12,7 @@ Related documentation: [Schema](schema.md) | [Client SDK](client-sdk.md) | [Edg
 disc codegen
 ```
 
-Reads schema files from `dbschema/` (looks for `.disc` files first, then `.gel`, then `.esdl`), generates TypeScript files, and writes them to `./generated/`.
+Reads schema files from `dbschema/` (looks for `.disc` files first, then `.gel`, then `.esdl`), generates TypeScript files, and writes them to `./dbschema/disc-client/` by default. Pass `--output <dir>` to write elsewhere.
 
 ### Custom Output Directory
 
@@ -33,7 +33,7 @@ const schema: Schema = /* parsed from SDL via SchemaManager */;
 const result = generateTypeScript(schema, {
   includeClient: true,
   includeQueryBuilders: true,
-  outputDir: "./generated",
+  outputDir: "./dbschema/disc-client",
   target: "client"
 });
 
@@ -50,7 +50,7 @@ if (result.errors.length > 0) {
 Codegen produces four files:
 
 ```
-generated/
+dbschema/disc-client/
   client.ts    # Typed DiscClient extending the SDK base client
   index.ts     # Barrel file re-exporting everything
   queries.ts   # Query builder classes (one per object type)
@@ -487,7 +487,7 @@ export class DiscClient extends BaseClient {
 Usage:
 
 ```typescript
-import { DiscClient } from "./generated/index.ts";
+import { DiscClient } from "./dbschema/disc-client/index.ts";
 
 const client = new DiscClient({ dsn: "disc://localhost:5656/mydb" });
 
@@ -611,7 +611,7 @@ interface CodegenConfig {
   includeMutations: boolean;     // Generate mutation helpers
   includeQueryBuilders: boolean; // Generate query builder classes
   interfaceSuffix?: string;      // Suffix for generated interface names
-  outputDir: string;             // Output directory (default: "./generated")
+  outputDir: string;             // Output directory (default: "./dbschema/disc-client")
   schemaDir?: string;            // Directory to scan for schema files
   schemaSource: string;          // SDL schema file path (default: "./schema.disc")
   target: "client" | "server" | "both"; // Generation target

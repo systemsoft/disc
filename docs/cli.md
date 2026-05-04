@@ -284,6 +284,10 @@ disc shell --schema ./dbschema/default.disc
 | `\history`      | Show command history                         |
 | `\clear`        | Clear the screen                             |
 
+> The same table appears in [`docs/getting-started.md`](getting-started.md#shell-commands).
+> Keep them in sync — column widths included — so a `git diff`
+> instantly flags drift.
+
 **Multiline queries:** Queries that do not end with a semicolon are treated as multiline input. The prompt changes to `...` until a semicolon terminates the query.
 
 ```

@@ -267,17 +267,21 @@ Type `\q` to exit the shell. For full query language documentation, see the [Edg
 
 The shell supports several backslash commands:
 
-| Command              | Description                                  |
-| -------------------- | -------------------------------------------- |
-| `\?` or `\help`      | Show help                                    |
-| `\q` or `\quit`      | Quit shell                                   |
-| `\d`                 | List tables                                  |
-| `\dt`                | List tables with details (size, description) |
-| `\c <database>`      | Connect to a different database              |
-| `\i <file>`          | Execute queries from a file                  |
-| `\timing`            | Toggle query timing display                  |
-| `\history`           | Show command history                         |
-| `\clear`             | Clear the screen                             |
+| Command         | Description                                  |
+| --------------- | -------------------------------------------- |
+| `\?` or `\help` | Show help                                    |
+| `\q` or `\quit` | Quit shell                                   |
+| `\d`            | List tables                                  |
+| `\dt`           | List tables with details (size, description) |
+| `\c <database>` | Connect to a different database              |
+| `\i <file>`     | Execute queries from a file                  |
+| `\timing`       | Toggle query timing display                  |
+| `\history`      | Show command history                         |
+| `\clear`        | Clear the screen                             |
+
+> The same table appears in [`docs/cli.md`](cli.md#disc-shell). Keep
+> them in sync — column widths included — so a `git diff` instantly
+> flags drift.
 
 ---
 
