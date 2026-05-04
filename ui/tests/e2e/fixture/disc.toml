@@ -1,0 +1,8 @@
+name = "disc-ui-e2e"
+
+[instance]
+managed = true
+name = "disc-ui-e2e"
+
+[server]
+port = 5656

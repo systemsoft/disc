@@ -69,3 +69,8 @@ thoughts/
 # NOTE: ui/bun.lock IS committed (P1-27) so CI and contributors get
 # deterministic installs. Only the transient build outputs above are
 # ignored.
+
+# Playwright test artifacts (traces, videos, screenshots)
+/ui/test-results/
+/ui/playwright-report/
+/ui/blob-report/

@@ -1,0 +1,9 @@
+module default {
+  type Item {
+    required name: str;
+    required count: int32;
+    createdAt: datetime {
+      default := datetime_current();
+    };
+  };
+};
