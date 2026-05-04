@@ -82,6 +82,28 @@ test.describe("Data viewer — read", () => {
     await expect(page.getByText("No rows match")).toBeVisible();
   });
 
+  test("datetime exact-match filter expands a bare YYYY-MM-DD to a one-day range", async ({
+    page,
+  }) => {
+    await gotoData(page);
+    await expect(page.locator("tbody tr")).toHaveCount(3);
+
+    // The createdAt column has placeholder ">=2026-01-01" — date input
+    // sits between count and name in column order (id, count, createdAt,
+    // name) so it's the second .. placeholder input.
+    const dtFilter = page
+      .locator('tr.filter-row input[placeholder*=">=2026"]')
+      .first();
+    // Today's seed rows are timestamped "now"; a bare YYYY-MM-DD for
+    // today should match all 3, NOT zero (which is what `.col = <datetime>'today'`
+    // would have given since exact equality requires full timestamp).
+    const today = new Date().toISOString().slice(0, 10);
+    await dtFilter.fill(today);
+    await dtFilter.press("Enter");
+
+    await expect(page.locator("tbody tr")).toHaveCount(3);
+  });
+
   test("Clear button resets filters and reloads", async ({ page }) => {
     await gotoData(page);
     // Sanity: beforeEach inserted 3 rows, the page should show all of them

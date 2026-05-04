@@ -133,7 +133,28 @@
         }
         case 'datetime': {
           // Datetime range: `>=2026-01-01`, `<2026-06-01T00:00:00`,
-          // or `2026-01-01..2026-12-31`. Bare value → exact equality.
+          // or `2026-01-01..2026-12-31`.
+          //
+          // Bare-date special case: a typed value of just `YYYY-MM-DD`
+          // (no time component) means "match anything on that day", not
+          // exact equality at midnight UTC. Otherwise exact-match would
+          // never match a stored timestamptz like `2026-05-04T00:35:49`,
+          // which is hostile UX.
+          const r = parseRange(raw);
+          const isDateOnly = (v: string) =>
+            /^\d{4}-\d{2}-\d{2}$/.test(v.trim());
+          if (r.op === '=' && isDateOnly(r.a)) {
+            const day = r.a.trim();
+            // Compute next day with date-only math; the cast happens at
+            // emission time so we don't need a timezone-aware library.
+            const next = new Date(day + 'T00:00:00Z');
+            next.setUTCDate(next.getUTCDate() + 1);
+            const tomorrow = next.toISOString().slice(0, 10);
+            parts.push(
+              `(.${p.name} >= <datetime>'${day}' and .${p.name} < <datetime>'${tomorrow}')`,
+            );
+            break;
+          }
           const clause = rangeClause(
             p.name,
             raw,
