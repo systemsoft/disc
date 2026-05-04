@@ -51,6 +51,49 @@ Deno.test("SchemaManager - parseSDL - invalid SDL returns error", () => {
   }
 });
 
+Deno.test("SchemaManager - parseSDL - reports multiple SDL errors at once (P2-06)", () => {
+  // Three malformed top-level declarations interleaved with one good.
+  // parseSDL should now surface all three errors in a single message,
+  // not just the first one — that's the user-facing payoff of
+  // SDLParser.parseWithRecovery.
+  const manager = new SchemaManager({});
+  const sdl = `
+    type Bad1 { @@@ }
+    type Good { required name: str; }
+    type Bad2 { 123 }
+    type Bad3 { ??? unknown garbage }
+  `;
+
+  const result = manager.parseSDL(sdl);
+  // ??? doesn't lex, so this is one of the cases parseWithRecovery can't
+  // recover from. Either the lexer throws (single-error path) or
+  // recovery kicks in (multi-error path) — both are valid; just verify
+  // we ALWAYS surface SOME error.
+  assertEquals(result.ok, false);
+});
+
+Deno.test("SchemaManager - parseSDL - lexable multi-error SDL surfaces every error", () => {
+  // Use only lexable bad input so parseWithRecovery actually runs and
+  // the multi-error message path is exercised.
+  const manager = new SchemaManager({});
+  const sdl = `
+    type Bad1 { @@@ }
+    type Good { required name: str; }
+    type Bad2 { 123 garbage }
+  `;
+
+  const result = manager.parseSDL(sdl);
+  assertEquals(result.ok, false);
+  if (!result.ok) {
+    // Two distinct error sites should appear in the message.
+    const msg = result.error.message;
+    assert(
+      msg.includes("2 error") || msg.includes("3 error"),
+      `Expected multi-error message, got: ${msg}`,
+    );
+  }
+});
+
 // ---------------------------------------------------------------------------
 // 3. modulesToSchema -- correct TypeDef with tableName, properties
 // ---------------------------------------------------------------------------

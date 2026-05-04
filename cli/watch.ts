@@ -158,10 +158,32 @@ export class WatchCommand {
     console.log("🔄 Processing schema changes...");
 
     try {
-      // Parse current schema
+      // Parse current schema with error recovery so all SDL syntax errors
+      // surface in one go — `parse()` would bail on the first one and the
+      // user would have to fix-save-fix-save in a hot loop. (P2-06)
       const schemaContent = await Deno.readTextFile(schemaFile);
       const parser = new SDLParser(schemaContent);
-      const ast = parser.parse();
+      const { document: ast, errors } = parser.parseWithRecovery();
+      if (errors.length > 0) {
+        console.log(
+          `⚠️  ${errors.length} SDL syntax error${
+            errors.length === 1 ? "" : "s"
+          }:`,
+        );
+        for (const e of errors) {
+          console.log(`   • ${e.message}`);
+        }
+        console.log("");
+        // If the parser couldn't recover anything, bail; otherwise carry
+        // on with the partial AST so codegen/migration plan can still run
+        // against whatever did parse cleanly.
+        if (ast.declarations.length === 0) return;
+        console.log(
+          `   (Continuing with the ${ast.declarations.length} declaration${
+            ast.declarations.length === 1 ? "" : "s"
+          } that did parse.)\n`,
+        );
+      }
       const converter = new SDLConverter();
       const modules = converter.convertToModules(ast);
       const currentHash = this.hashSchema(modules);

@@ -278,8 +278,22 @@ export class SchemaManager {
    */
   parseSDL(source: string): Result<Module[], MigrationError> {
     try {
+      // P2-06: parse with error recovery so all SDL syntax errors surface
+      // in a single MigrationError message instead of just the first one.
+      // Callers that previously matched on the first-error string will
+      // still find their error in the multi-line list.
       const parser = new SDLParser(source);
-      const document = parser.parse();
+      const { document, errors } = parser.parseWithRecovery();
+      if (errors.length > 0) {
+        const lines = errors.map((e) => `  • ${e.message}`).join("\n");
+        return Err(
+          new MigrationError(
+            `Failed to parse SDL (${errors.length} error${
+              errors.length === 1 ? "" : "s"
+            }):\n${lines}`,
+          ),
+        );
+      }
       const converter = new SDLConverter();
       const modules = converter.convertToModules(document);
       return Ok(modules);
