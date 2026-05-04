@@ -24,38 +24,62 @@ import {
 } from "./types.ts";
 
 /**
- * Defaults applied to every optional `AuthConfig` field. Typed as
- * `Omit<Required<AuthConfig>, "jwtSecret">` so adding a new optional
- * field to `AuthConfig` is a compile error until it's defaulted here —
- * the field-by-field merge that previously dropped `maxSessionsPerUser`
- * silently can no longer recur.
+ * Conditional config fields whose presence depends on `jwtAlgorithm`:
+ *  - HS256 needs `jwtSecret`
+ *  - RS256 needs `jwtPrivateKey` + `jwtPublicKey`
+ * They're excluded from the defaults map (no sensible default) and
+ * validated at runtime in `initialize()`.
  */
-const AUTH_CONFIG_DEFAULTS: Omit<Required<AuthConfig>, "jwtSecret"> = {
-  jwtIssuer: "disc",
-  jwtAudience: "disc-api",
-  tokenExpiry: 3600, // 1 hour
-  refreshTokenExpiry: 604800, // 7 days
-  bcryptRounds: 12,
-  sessionTimeout: 3600,
-  allowRegistration: true,
-  requireEmailVerification: false,
-  passwordMinLength: 8,
-  passwordRequireUppercase: false,
-  passwordRequireNumbers: false,
-  passwordRequireSpecial: false,
-  // 0 disables the cap (unlimited sessions).
-  maxSessionsPerUser: 0,
-};
+type ConditionalAuthFields = "jwtSecret" | "jwtPrivateKey" | "jwtPublicKey";
+
+/**
+ * Resolved config after defaults merge — every non-conditional field is
+ * required (so the constructor can rely on it without fallbacks), while
+ * the algorithm-specific keys remain optional and are checked in
+ * `initialize()`.
+ */
+type ResolvedAuthConfig =
+  & Required<Omit<AuthConfig, ConditionalAuthFields>>
+  & Pick<AuthConfig, ConditionalAuthFields>;
+
+/**
+ * Defaults applied to every non-conditional `AuthConfig` field. Typed as
+ * `Omit<Required<AuthConfig>, ConditionalAuthFields>` so adding a new
+ * optional field to `AuthConfig` is a compile error until it's defaulted
+ * here — the field-by-field merge that previously dropped
+ * `maxSessionsPerUser` silently can no longer recur.
+ */
+const AUTH_CONFIG_DEFAULTS: Omit<Required<AuthConfig>, ConditionalAuthFields> =
+  {
+    jwtAlgorithm: "HS256",
+    jwtIssuer: "disc",
+    jwtAudience: "disc-api",
+    tokenExpiry: 3600, // 1 hour
+    refreshTokenExpiry: 604800, // 7 days
+    bcryptRounds: 12,
+    sessionTimeout: 3600,
+    allowRegistration: true,
+    requireEmailVerification: false,
+    passwordMinLength: 8,
+    passwordRequireUppercase: false,
+    passwordRequireNumbers: false,
+    passwordRequireSpecial: false,
+    // 0 disables the cap (unlimited sessions).
+    maxSessionsPerUser: 0,
+  };
 
 export class AuthProvider implements IAuthProvider {
-  private config: Required<AuthConfig>;
+  private config: ResolvedAuthConfig;
   private db: DatabaseInterface;
-  private cryptoKey?: CryptoKey;
+  // Separate sign / verify keys: same CryptoKey under HS256, distinct
+  // RSA private / public CryptoKeys under RS256.
+  private signKey?: CryptoKey;
+  private verifyKey?: CryptoKey;
 
   constructor(config: AuthConfig, db: DatabaseInterface) {
     // Merge defaults with user config, dropping `undefined` values from
     // `config` so an explicitly-undefined optional doesn't shadow the
-    // default. Required-typed result enforces that every field is set.
+    // default.
     const overrides: Partial<AuthConfig> = {};
     for (const [key, value] of Object.entries(config)) {
       if (value !== undefined) {
@@ -65,33 +89,31 @@ export class AuthProvider implements IAuthProvider {
     this.config = {
       ...AUTH_CONFIG_DEFAULTS,
       ...overrides,
-    } as Required<AuthConfig>;
+    } as ResolvedAuthConfig;
     this.db = db;
   }
 
   async initialize(): Promise<void> {
-    // Create crypto key for JWT signing. (P3-04: HS256 with a shared
-    // secret is the default; RS256 support — asymmetric keys so
-    // verifiers don't need the signing secret — is planned. To rotate
-    // an HS256 secret today: stand up a parallel server with the new
-    // secret, migrate traffic, and invalidate old sessions via
-    // `UPDATE sessions SET revoked = TRUE`. The rotation doesn't need
-    // application-level coordination because sessions also carry a
-    // server-side revoked flag that verifyToken checks.)
-    const encoder = new TextEncoder();
-    const keyData = encoder.encode(this.config.jwtSecret);
-    if (keyData.length < 32) {
-      throw new Error(
-        `AuthProvider: jwtSecret must be at least 32 bytes for HS256; got ${keyData.length}`,
+    // P3-04: HS256 (shared secret) is the default; RS256 (asymmetric
+    // keys, so verifiers don't need the signing secret) is opt-in via
+    // `jwtAlgorithm: "RS256"`. To rotate an HS256 secret: stand up a
+    // parallel server with the new secret, migrate traffic, and revoke
+    // old sessions via `UPDATE sessions SET revoked = TRUE`. RS256
+    // rotation works the same way at the verifier layer — distribute
+    // the new public key first, then start signing with the new
+    // private key, then revoke.
+    if (this.config.jwtAlgorithm === "RS256") {
+      const { signKey, verifyKey } = await importRsaKeys(
+        this.config.jwtPrivateKey,
+        this.config.jwtPublicKey,
       );
+      this.signKey = signKey;
+      this.verifyKey = verifyKey;
+    } else {
+      const hmacKey = await importHmacKey(this.config.jwtSecret);
+      this.signKey = hmacKey;
+      this.verifyKey = hmacKey;
     }
-    this.cryptoKey = await crypto.subtle.importKey(
-      "raw",
-      keyData,
-      { name: "HMAC", hash: "SHA-256" },
-      true,
-      ["sign", "verify"],
-    );
 
     // Create tables if they don't exist
     await this.createTables();
@@ -436,13 +458,13 @@ export class AuthProvider implements IAuthProvider {
   }
 
   async verifyToken(token: string): Promise<TokenPayload> {
-    if (!this.cryptoKey) {
+    if (!this.verifyKey) {
       throw new Error("Auth provider not initialized");
     }
 
     try {
       // Verify JWT
-      const rawPayload = await verify(token, this.cryptoKey);
+      const rawPayload = await verify(token, this.verifyKey);
       const payload = rawPayload as unknown as TokenPayload;
 
       // Check session: exists, not revoked, AND server-side expires_at is in
@@ -789,8 +811,12 @@ export class AuthProvider implements IAuthProvider {
   }
 
   private async generateJWT(user: User): Promise<string> {
-    if (!this.cryptoKey) {
-      throw new Error("Auth provider not initialized");
+    if (!this.signKey) {
+      throw new Error(
+        this.config.jwtAlgorithm === "RS256"
+          ? "Auth provider configured for verify-only (no jwtPrivateKey) — cannot mint tokens"
+          : "Auth provider not initialized",
+      );
     }
 
     const now = Math.floor(Date.now() / 1000);
@@ -806,9 +832,9 @@ export class AuthProvider implements IAuthProvider {
     };
 
     return await create(
-      { alg: "HS256", typ: "JWT" },
+      { alg: this.config.jwtAlgorithm, typ: "JWT" },
       payload as any,
-      this.cryptoKey,
+      this.signKey,
     );
   }
 
@@ -889,4 +915,98 @@ export class AuthProvider implements IAuthProvider {
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
   }
+}
+
+/**
+ * Import an HS256 HMAC key from a shared secret. Enforces a 32-byte
+ * minimum (RFC 7518 §3.2 recommends ≥ key-length bits, i.e. 256 for
+ * SHA-256) so weak secrets are caught at startup, not at first verify.
+ */
+async function importHmacKey(secret: string | undefined): Promise<CryptoKey> {
+  if (!secret) {
+    throw new Error(
+      "AuthProvider: jwtSecret is required when jwtAlgorithm is HS256",
+    );
+  }
+  const keyData = new TextEncoder().encode(secret);
+  if (keyData.length < 32) {
+    throw new Error(
+      `AuthProvider: jwtSecret must be at least 32 bytes for HS256; got ${keyData.length}`,
+    );
+  }
+  return await crypto.subtle.importKey(
+    "raw",
+    keyData,
+    { name: "HMAC", hash: "SHA-256" },
+    true,
+    ["sign", "verify"],
+  );
+}
+
+/**
+ * Import an RS256 sign/verify pair from PEM-encoded keys. Private key
+ * must be PKCS#8 (`BEGIN PRIVATE KEY`); public key must be SPKI
+ * (`BEGIN PUBLIC KEY`). RFC 7518 §3.3 mandates ≥ 2048-bit modulus —
+ * not enforced here because Web Crypto doesn't expose modulus length
+ * post-import; document the requirement and trust the operator.
+ */
+async function importRsaKeys(
+  privateKeyPem: string | undefined,
+  publicKeyPem: string | undefined,
+): Promise<{ signKey: CryptoKey; verifyKey: CryptoKey }> {
+  if (!publicKeyPem) {
+    throw new Error(
+      "AuthProvider: jwtPublicKey is required when jwtAlgorithm is RS256",
+    );
+  }
+  if (!privateKeyPem) {
+    throw new Error(
+      "AuthProvider: jwtPrivateKey is required when jwtAlgorithm is RS256 (verify-only deployments are not yet supported)",
+    );
+  }
+
+  const algorithm = { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" } as const;
+
+  const signKey = await crypto.subtle.importKey(
+    "pkcs8",
+    pemToBytes(privateKeyPem, "PRIVATE KEY"),
+    algorithm,
+    false,
+    ["sign"],
+  );
+  const verifyKey = await crypto.subtle.importKey(
+    "spki",
+    pemToBytes(publicKeyPem, "PUBLIC KEY"),
+    algorithm,
+    true,
+    ["verify"],
+  );
+
+  return { signKey, verifyKey };
+}
+
+/**
+ * Strip PEM armor (`-----BEGIN <label>-----` / `-----END <label>-----`)
+ * and base64-decode the body to raw DER bytes. Throws on a missing or
+ * mismatched label — operators see the issue at startup instead of
+ * `crypto.subtle.importKey` returning the opaque "data is not valid".
+ */
+function pemToBytes(pem: string, expectedLabel: string): Uint8Array {
+  const begin = `-----BEGIN ${expectedLabel}-----`;
+  const end = `-----END ${expectedLabel}-----`;
+  const startIdx = pem.indexOf(begin);
+  const endIdx = pem.indexOf(end);
+  if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) {
+    throw new Error(
+      `AuthProvider: PEM key missing '${begin}' / '${end}' armor — got ${
+        pem.slice(0, 30)
+      }…`,
+    );
+  }
+  const body = pem.slice(startIdx + begin.length, endIdx)
+    .replace(/[\r\n\s]+/g, "");
+  const binary = atob(body);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
 }

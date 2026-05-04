@@ -27,7 +27,30 @@ export interface Session {
 }
 
 export interface AuthConfig {
-  jwtSecret: string;
+  /**
+   * JWT signing algorithm. Default `"HS256"` (shared secret). Use
+   * `"RS256"` to sign with an RSA private key and let verifiers hold
+   * only the public key — useful when downstream services need to
+   * verify tokens without the ability to mint them. (P3-04)
+   */
+  jwtAlgorithm?: "HS256" | "RS256";
+  /**
+   * HS256 shared secret. Required when `jwtAlgorithm` is `"HS256"`
+   * (the default); ignored under `"RS256"`. Must be at least 32 bytes.
+   */
+  jwtSecret?: string;
+  /**
+   * PEM-encoded RSA private key (PKCS#8). Required when
+   * `jwtAlgorithm` is `"RS256"`. Used only by token-minting servers;
+   * verify-only deployments can omit it provided they never call
+   * `register()`/`login()`/`refresh()`.
+   */
+  jwtPrivateKey?: string;
+  /**
+   * PEM-encoded RSA public key (SPKI). Required when `jwtAlgorithm`
+   * is `"RS256"`. Used to verify tokens.
+   */
+  jwtPublicKey?: string;
   jwtIssuer?: string;
   jwtAudience?: string;
   tokenExpiry?: number; // seconds

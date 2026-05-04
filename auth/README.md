@@ -114,9 +114,12 @@ const routes = {
 interface AuthConfig {
   allow_registration?: boolean; // Optional: Allow new registrations (default: true)
   bcrypt_rounds?: number; // Optional: bcrypt rounds (default: 12)
+  jwt_algorithm?: "HS256" | "RS256"; // Optional: signing algorithm (default: "HS256")
   jwt_audience?: string; // Optional: JWT audience
   jwt_issuer?: string; // Optional: JWT issuer
-  jwt_secret: string; // Required: JWT signing secret
+  jwt_secret?: string; // Required under HS256: JWT signing secret (≥ 32 bytes)
+  jwt_private_key?: string; // Required under RS256: PEM-encoded PKCS#8 RSA private key
+  jwt_public_key?: string; // Required under RS256: PEM-encoded SPKI RSA public key
   password_min_length?: number; // Optional: Min password length (default: 8)
   password_require_numbers?: boolean; // Optional: Require numbers
   password_require_special?: boolean; // Optional: Require special characters
@@ -127,6 +130,55 @@ interface AuthConfig {
   token_expiry?: number; // Optional: Token expiry in seconds (default: 3600)
 }
 ```
+
+### JWT signing algorithms (P3-04)
+
+The provider supports two algorithms:
+
+- **HS256** (default) — symmetric HMAC over a shared secret. Simplest
+  to operate; every component that mints OR verifies tokens must hold
+  the secret. Set `jwt_secret` to a string of at least 32 bytes.
+
+- **RS256** — RSA signature with separate keys. Mint with the private
+  key, verify with the public key. Use this when downstream services
+  need to verify Disc-issued tokens without the ability to forge new
+  ones. Set `jwt_algorithm: "RS256"` and provide both PEM-encoded
+  keys:
+
+  ```
+  -----BEGIN PRIVATE KEY-----   ← PKCS#8 (jwt_private_key)
+  ...
+  -----END PRIVATE KEY-----
+
+  -----BEGIN PUBLIC KEY-----    ← SPKI (jwt_public_key)
+  ...
+  -----END PUBLIC KEY-----
+  ```
+
+  Generate a fresh pair (RFC 7518 §3.3 mandates ≥ 2048-bit modulus):
+
+  ```bash
+  openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 \
+    -out jwt-private.pem
+  openssl pkey -in jwt-private.pem -pubout -out jwt-public.pem
+  ```
+
+#### Key rotation
+
+Tokens carry their session ID; sessions carry a server-side `revoked`
+flag that `verifyToken()` checks on every request. To rotate either
+algorithm's keys:
+
+1. Stand up a parallel server with the new key/secret.
+2. Migrate traffic. New tokens are signed with the new key.
+3. Revoke outstanding sessions: `UPDATE sessions SET revoked = TRUE`.
+   Existing tokens fail at the session-check step regardless of
+   their signature, so old keys can be retired immediately.
+
+For RS256 specifically, you can also distribute a new public key to
+verifiers ahead of switching the signing private key — verifiers
+holding both old and new public keys keeps a smooth window. Disc
+itself only holds one public key at a time today.
 
 ## API Endpoints
 
