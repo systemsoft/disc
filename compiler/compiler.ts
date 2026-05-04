@@ -2192,8 +2192,24 @@ export class EdgeQLCompiler {
     if (path.steps.length === 1) {
       const step = path.steps[0];
       if (step.type === "property") {
-        // Simple property reference - resolve to current table's column
-        // For now, assume we're in the context of the current table
+        // Single-step path like `.createdAt`. The EdgeQL property name
+        // (camelCase) doesn't necessarily match the SQL column name
+        // (snake_case). Resolve the active table alias's TypeDef and
+        // map property → columnName so unquoted identifiers round-trip
+        // correctly through PostgreSQL.
+        for (const ta of this.ctx.currentScope.aliases.values()) {
+          const td = Context.resolveTypeName(this.ctx, ta.type);
+          const prop = td?.properties.get(step.name);
+          if (prop?.columnName) {
+            return SQL.createColumnReference(prop.columnName, ta.alias);
+          }
+          const link = td?.links.get(step.name);
+          if (link?.columnName) {
+            return SQL.createColumnReference(link.columnName, ta.alias);
+          }
+        }
+        // Fallback: emit the step name verbatim. Pre-existing behavior
+        // for paths whose owning type isn't in the alias scope yet.
         return SQL.createColumnReference(step.name);
       }
     }
