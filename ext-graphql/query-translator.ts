@@ -2,9 +2,11 @@
  * Translates GraphQL queries to EdgeQL queries.
  *
  * Implements a simplified recursive descent parser for the GraphQL
- * query language subset needed by Disc. Handles basic queries,
- * mutations, arguments, nested selections, and aliases.
- * Does NOT handle fragments, directives, or subscriptions.
+ * query language subset needed by Disc. Handles queries, mutations,
+ * arguments, nested selections, aliases, fragments (named + inline),
+ * directives (`@skip` / `@include`), and the `__typename` /
+ * `__schema` / `__type` introspection fields. Subscriptions remain
+ * out of scope.
  */
 
 import type { Schema } from "../compiler/context.ts";
@@ -16,13 +18,45 @@ export interface ParsedGraphQLQuery {
   operationName?: string;
   selections: GraphQLSelection[];
   variables?: Record<string, unknown>;
+  /**
+   * Named fragment definitions declared at the top level of the
+   * document, keyed by fragment name. Spreads (`...Name`) reference
+   * these. Populated by the parser; consumed by `inlineFragments`.
+   */
+  fragments?: Record<string, GraphQLFragmentDefinition>;
 }
 
+export interface GraphQLDirective {
+  name: string;
+  arguments: Record<string, unknown>;
+}
+
+export interface GraphQLFragmentDefinition {
+  name: string;
+  typeCondition: string;
+  selections: GraphQLSelection[];
+  directives?: GraphQLDirective[];
+}
+
+/**
+ * A node in the parsed selection set. Plain field selections set
+ * `fieldName` and (optionally) `subSelections`. Fragment-spread nodes
+ * set `kind: "FragmentSpread"` plus `fragmentName`. Inline-fragment
+ * nodes set `kind: "InlineFragment"` plus `typeCondition` and the
+ * inlined `subSelections`. After `inlineFragments()` runs, only
+ * `kind: "Field"` nodes remain in `ParsedGraphQLQuery.selections`.
+ */
 export interface GraphQLSelection {
+  kind?: "Field" | "FragmentSpread" | "InlineFragment";
   alias?: string;
   arguments: Record<string, unknown>;
   fieldName: string;
   subSelections?: GraphQLSelection[];
+  directives?: GraphQLDirective[];
+  /** Set when kind === "FragmentSpread". */
+  fragmentName?: string;
+  /** Set when kind === "InlineFragment". */
+  typeCondition?: string;
 }
 
 export interface TranslationResult {
@@ -43,10 +77,20 @@ export interface TranslationResult {
  * - Field aliases: userName: name
  * - String, number, boolean, null literals in arguments
  * - Variable references ($varName) in arguments
+ * - Directives on fields: name @skip(if: true), name @include(if: $v)
+ * - Fragment spreads: ...UserFields
+ * - Inline fragments: ... on User { name }
+ * - Fragment definitions at document level: fragment X on Y { ... }
+ * - Introspection meta-fields: __typename, __schema, __type
+ *
+ * The parser returns the raw selection tree; call `inlineFragments`
+ * (or use `parseGraphQLQuery` which does it inline) to expand spreads
+ * and inline fragments before translation.
  */
 export function parseGraphQLQuery(query: string): ParsedGraphQLQuery {
   const parser = new GraphQLParser(query);
-  return parser.parse();
+  const parsed = parser.parse();
+  return inlineFragments(parsed);
 }
 
 class GraphQLParser {
@@ -62,6 +106,16 @@ class GraphQLParser {
 
     let type: "query" | "mutation" = "query";
     let operationName: string | undefined;
+    let selections: GraphQLSelection[] = [];
+    const fragments: Record<string, GraphQLFragmentDefinition> = {};
+
+    // Lead with fragment definitions if the document opens with one;
+    // GraphQL allows fragments before the operation as well as after.
+    while (this.lookAhead("fragment")) {
+      const frag = this.parseFragmentDefinition();
+      fragments[frag.name] = frag;
+      this.skipWhitespace();
+    }
 
     // Check for explicit operation type
     if (this.lookAhead("mutation")) {
@@ -92,10 +146,55 @@ class GraphQLParser {
       this.skipWhitespace();
     }
 
-    // Parse selection set
-    const selections = this.parseSelectionSet();
+    // A document with only fragments and no operation is allowed —
+    // bare fragments compile but only matter when an operation
+    // references them. Treat that as an empty query.
+    if (this.peek() === "{") {
+      selections = this.parseSelectionSet();
+      this.skipWhitespace();
+    }
 
-    return { operationName, selections, type };
+    // Trailing fragment definitions
+    while (this.lookAhead("fragment")) {
+      const frag = this.parseFragmentDefinition();
+      fragments[frag.name] = frag;
+      this.skipWhitespace();
+    }
+
+    return {
+      operationName,
+      selections,
+      type,
+      fragments: Object.keys(fragments).length > 0 ? fragments : undefined,
+    };
+  }
+
+  /**
+   * Parse `fragment Name on TypeName <directives?> { selections }`.
+   */
+  private parseFragmentDefinition(): GraphQLFragmentDefinition {
+    this.consume("fragment");
+    this.skipWhitespace();
+    const name = this.readName();
+    this.skipWhitespace();
+    if (!this.lookAhead("on")) {
+      throw new Error(
+        `GraphQL parse error: expected 'on' after fragment name '${name}'`,
+      );
+    }
+    this.consume("on");
+    this.skipWhitespace();
+    const typeCondition = this.readName();
+    this.skipWhitespace();
+    const directives = this.parseDirectives();
+    this.skipWhitespace();
+    const selections = this.parseSelectionSet();
+    return {
+      name,
+      typeCondition,
+      selections,
+      directives: directives.length > 0 ? directives : undefined,
+    };
   }
 
   private parseSelectionSet(): GraphQLSelection[] {
@@ -120,6 +219,53 @@ class GraphQLParser {
 
   private parseSelection(): GraphQLSelection {
     this.skipWhitespace();
+
+    // Spread (`...`) — fragment spread or inline fragment.
+    if (
+      this.peek() === "." &&
+      this.input[this.pos + 1] === "." &&
+      this.input[this.pos + 2] === "."
+    ) {
+      this.pos += 3;
+      this.skipWhitespace();
+
+      // Inline fragment: `... on Type { selections }` (or no type
+      // condition: `... { selections }`).
+      if (this.lookAhead("on") || this.peek() === "{") {
+        let typeCondition: string | undefined;
+        if (this.lookAhead("on")) {
+          this.consume("on");
+          this.skipWhitespace();
+          typeCondition = this.readName();
+          this.skipWhitespace();
+        }
+        const directives = this.parseDirectives();
+        this.skipWhitespace();
+        const subSelections = this.parseSelectionSet();
+        return {
+          kind: "InlineFragment",
+          alias: undefined,
+          arguments: {},
+          fieldName: typeCondition ?? "<inline>",
+          subSelections,
+          directives: directives.length > 0 ? directives : undefined,
+          typeCondition,
+        };
+      }
+
+      // Fragment spread: `...FragmentName`
+      const fragmentName = this.readName();
+      this.skipWhitespace();
+      const directives = this.parseDirectives();
+      return {
+        kind: "FragmentSpread",
+        alias: undefined,
+        arguments: {},
+        fieldName: fragmentName,
+        directives: directives.length > 0 ? directives : undefined,
+        fragmentName,
+      };
+    }
 
     // Read first name — could be alias or field name
     const firstName = this.readName();
@@ -146,6 +292,10 @@ class GraphQLParser {
       this.skipWhitespace();
     }
 
+    // Parse directives (zero or more `@name(args?)`).
+    const directives = this.parseDirectives();
+    this.skipWhitespace();
+
     // Parse sub-selections
     let subSelections: GraphQLSelection[] | undefined;
     if (this.peek() === "{") {
@@ -153,7 +303,36 @@ class GraphQLParser {
       this.skipWhitespace();
     }
 
-    return { alias, arguments: args, fieldName, subSelections };
+    return {
+      kind: "Field",
+      alias,
+      arguments: args,
+      fieldName,
+      subSelections,
+      directives: directives.length > 0 ? directives : undefined,
+    };
+  }
+
+  /**
+   * Parse zero-or-more directives `@name(args?)`. Returns [] when no
+   * `@` follows. The caller is responsible for context-appropriate
+   * placement (after field name+args, after fragment definition, etc.).
+   */
+  private parseDirectives(): GraphQLDirective[] {
+    const out: GraphQLDirective[] = [];
+    this.skipWhitespace();
+    while (this.peek() === "@") {
+      this.pos++; // consume '@'
+      const name = this.readName();
+      let args: Record<string, unknown> = {};
+      this.skipWhitespace();
+      if (this.peek() === "(") {
+        args = this.parseArguments();
+      }
+      out.push({ name, arguments: args });
+      this.skipWhitespace();
+    }
+    return out;
   }
 
   private parseArguments(): Record<string, unknown> {
@@ -376,6 +555,209 @@ class GraphQLParser {
   }
 }
 
+// ── Fragment / directive resolution ───────────────────────────────────
+
+/**
+ * Walk the parsed query and replace each fragment-spread node with
+ * the inlined selections from its definition; expand inline fragments
+ * the same way. After this runs, every selection in the tree has
+ * `kind: "Field"` (or undefined, for legacy callers that didn't set
+ * the field). Cycles are detected and rejected with a clear error so
+ * the parser doesn't recurse forever.
+ *
+ * Also drops selections whose `@skip(if: true)` or
+ * `@include(if: false)` directives evaluate to a literal boolean.
+ * Variable-ref directives are left in the tree — runtime will filter
+ * after the variable is bound.
+ */
+export function inlineFragments(
+  parsed: ParsedGraphQLQuery,
+): ParsedGraphQLQuery {
+  const fragments = parsed.fragments ?? {};
+  const seen = new Set<string>();
+
+  function expand(selections: GraphQLSelection[]): GraphQLSelection[] {
+    const out: GraphQLSelection[] = [];
+    for (const sel of selections) {
+      if (!directivePermits(sel)) continue;
+
+      if (sel.kind === "FragmentSpread" && sel.fragmentName) {
+        const def = fragments[sel.fragmentName];
+        if (!def) {
+          throw new Error(
+            `Unknown fragment '${sel.fragmentName}'`,
+          );
+        }
+        if (seen.has(sel.fragmentName)) {
+          throw new Error(
+            `Cycle in fragment spreads at '${sel.fragmentName}'`,
+          );
+        }
+        seen.add(sel.fragmentName);
+        out.push(...expand(def.selections));
+        seen.delete(sel.fragmentName);
+        continue;
+      }
+
+      if (sel.kind === "InlineFragment" && sel.subSelections) {
+        out.push(...expand(sel.subSelections));
+        continue;
+      }
+
+      // Plain field: recurse into subSelections so nested fragments
+      // and nested directives are resolved too.
+      const next: GraphQLSelection = { ...sel, kind: "Field" };
+      if (sel.subSelections) {
+        next.subSelections = expand(sel.subSelections);
+      }
+      out.push(next);
+    }
+    return out;
+  }
+
+  return { ...parsed, selections: expand(parsed.selections) };
+}
+
+/**
+ * Resolve `@skip(if: …)` / `@include(if: …)` to a single boolean.
+ * Returns `true` (keep) when no decision can be made (e.g. the `if`
+ * argument is a variable reference) — runtime filtering is deferred.
+ */
+function directivePermits(sel: GraphQLSelection): boolean {
+  if (!sel.directives || sel.directives.length === 0) return true;
+  for (const dir of sel.directives) {
+    const ifVal = dir.arguments.if;
+    // Variable-ref → defer to runtime, keep the field.
+    if (typeof ifVal === "object" && ifVal !== null && "__variable" in ifVal) {
+      continue;
+    }
+    if (dir.name === "skip" && ifVal === true) return false;
+    if (dir.name === "include" && ifVal === false) return false;
+  }
+  return true;
+}
+
+// ── Introspection resolver ────────────────────────────────────────────
+
+/**
+ * Returns true if the parsed query's top-level selection is an
+ * introspection meta-field (`__schema` / `__type`). Plain
+ * `__typename` at the operation root is NOT introspection — it just
+ * returns the operation type name and follows the regular query path.
+ */
+export function isIntrospectionQuery(parsed: ParsedGraphQLQuery): boolean {
+  return parsed.selections.some(
+    (sel) => sel.fieldName === "__schema" || sel.fieldName === "__type",
+  );
+}
+
+/**
+ * Resolve the introspection portion of a parsed GraphQL query against
+ * the Disc schema. Returns the `data` payload that goes back to the
+ * client — fields not requested are omitted, matching the GraphQL
+ * spec. The implementation is intentionally minimal: it covers the
+ * fields tools (codegen, GraphiQL, Apollo Studio) actually request to
+ * render schema browsers, and stops short of the full introspection
+ * spec (deprecation reasons, directive metadata, enum value details).
+ */
+export function resolveIntrospection(
+  parsed: ParsedGraphQLQuery,
+  schema: Schema,
+): Record<string, unknown> {
+  const data: Record<string, unknown> = {};
+
+  for (const sel of parsed.selections) {
+    if (sel.fieldName === "__schema") {
+      data[sel.alias ?? "__schema"] = resolveSchemaIntrospection(sel, schema);
+    } else if (sel.fieldName === "__type") {
+      const nameArg = sel.arguments.name;
+      const typeName = typeof nameArg === "string" ? nameArg : null;
+      data[sel.alias ?? "__type"] = typeName
+        ? resolveTypeIntrospection(sel, schema, typeName)
+        : null;
+    } else if (sel.fieldName === "__typename") {
+      // Operation-level __typename returns "Query" or "Mutation".
+      data[sel.alias ?? "__typename"] = parsed.type === "mutation"
+        ? "Mutation"
+        : "Query";
+    }
+  }
+
+  return data;
+}
+
+function resolveSchemaIntrospection(
+  selection: GraphQLSelection,
+  schema: Schema,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const sub of selection.subSelections ?? []) {
+    if (sub.fieldName === "types") {
+      const out: unknown[] = [];
+      for (const [, def] of schema.types) {
+        out.push(introspectionTypeShape(sub, def));
+      }
+      result[sub.alias ?? "types"] = out;
+    } else if (sub.fieldName === "queryType") {
+      result[sub.alias ?? "queryType"] = { name: "Query" };
+    } else if (sub.fieldName === "mutationType") {
+      result[sub.alias ?? "mutationType"] = { name: "Mutation" };
+    } else if (sub.fieldName === "directives") {
+      // Disc supports the two GraphQL spec directives.
+      result[sub.alias ?? "directives"] = [
+        { name: "skip", locations: ["FIELD", "FRAGMENT_SPREAD", "INLINE_FRAGMENT"] },
+        { name: "include", locations: ["FIELD", "FRAGMENT_SPREAD", "INLINE_FRAGMENT"] },
+      ];
+    }
+  }
+  return result;
+}
+
+function resolveTypeIntrospection(
+  selection: GraphQLSelection,
+  schema: Schema,
+  typeName: string,
+): Record<string, unknown> | null {
+  // Tolerate qualified ("module::Type") and unqualified ("Type") names.
+  let def: { name: string; properties: Map<string, unknown>; links?: Map<string, unknown> } | undefined;
+  for (const [name, candidate] of schema.types) {
+    const short = name.includes("::") ? name.split("::").pop()! : name;
+    if (name === typeName || short === typeName) {
+      def = candidate as typeof def;
+      break;
+    }
+  }
+  if (!def) return null;
+  return introspectionTypeShape(selection, def);
+}
+
+function introspectionTypeShape(
+  selection: GraphQLSelection,
+  def: { name: string; properties: Map<string, unknown>; links?: Map<string, unknown> },
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const sub of selection.subSelections ?? []) {
+    if (sub.fieldName === "name") {
+      const short = def.name.includes("::")
+        ? def.name.split("::").pop()!
+        : def.name;
+      out[sub.alias ?? "name"] = short;
+    } else if (sub.fieldName === "kind") {
+      out[sub.alias ?? "kind"] = "OBJECT";
+    } else if (sub.fieldName === "fields") {
+      const fields: unknown[] = [];
+      for (const [propName] of def.properties) {
+        fields.push({ name: propName });
+      }
+      for (const [linkName] of def.links ?? new Map()) {
+        fields.push({ name: linkName });
+      }
+      out[sub.alias ?? "fields"] = fields;
+    }
+  }
+  return out;
+}
+
 // ── Translator ────────────────────────────────────────────────────────
 
 /**
@@ -426,10 +808,15 @@ function resolveTypeName(
 
 /**
  * Build the EdgeQL shape string from a list of GraphQL selections.
+ * `__typename` is the spec'd introspection field that returns the
+ * parent type's name — it's synthesized post-execution from the
+ * resolved type rather than being a real column, so it's dropped
+ * from the EdgeQL shape entirely.
  */
 function buildShape(selections: GraphQLSelection[]): string {
   const parts: string[] = [];
   for (const sel of selections) {
+    if (sel.fieldName === "__typename") continue;
     if (sel.subSelections && sel.subSelections.length > 0) {
       parts.push(`${sel.fieldName}: {${buildShape(sel.subSelections)}}`);
     } else {

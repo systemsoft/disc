@@ -516,3 +516,173 @@ Deno.test("GraphQLExtension - rejects queries exceeding max depth", async () => 
   const body = await response.json();
   assertStringIncludes(body.errors[0].message, "exceeds maximum allowed depth");
 });
+
+// ── P2-24: directives, fragments, introspection ───────────────────────
+
+import {
+  isIntrospectionQuery,
+  resolveIntrospection,
+} from "./query-translator.ts";
+
+Deno.test("GraphQL parser - parses fragment spreads", () => {
+  const parsed = parseGraphQLQuery(`
+    query {
+      user(id: "1") { ...UserFields }
+    }
+    fragment UserFields on User { id, email }
+  `);
+  // After inlineFragments, the spread is replaced with the field
+  // selections from the fragment definition.
+  assertEquals(parsed.selections.length, 1);
+  const subs = parsed.selections[0].subSelections!;
+  assertEquals(subs.length, 2);
+  assertEquals(subs[0].fieldName, "id");
+  assertEquals(subs[1].fieldName, "email");
+});
+
+Deno.test("GraphQL parser - parses inline fragments", () => {
+  const parsed = parseGraphQLQuery(`
+    { user(id: "1") {
+        ... on User { id, email }
+        name
+    } }
+  `);
+  const subs = parsed.selections[0].subSelections!;
+  // Inline fragment expanded inline + bare `name` field → 3 fields.
+  assertEquals(subs.length, 3);
+  assertEquals(subs[0].fieldName, "id");
+  assertEquals(subs[1].fieldName, "email");
+  assertEquals(subs[2].fieldName, "name");
+});
+
+Deno.test("GraphQL parser - rejects unknown fragment spread", () => {
+  let threw = false;
+  try {
+    parseGraphQLQuery(`{ user(id: "1") { ...DoesNotExist } }`);
+  } catch (err) {
+    threw = true;
+    assertStringIncludes(
+      (err as Error).message,
+      "Unknown fragment 'DoesNotExist'",
+    );
+  }
+  assertEquals(threw, true);
+});
+
+Deno.test("GraphQL parser - detects fragment cycles", () => {
+  let threw = false;
+  try {
+    parseGraphQLQuery(`
+      query { user(id: "1") { ...A } }
+      fragment A on User { ...B }
+      fragment B on User { ...A }
+    `);
+  } catch (err) {
+    threw = true;
+    assertStringIncludes((err as Error).message, "Cycle in fragment spreads");
+  }
+  assertEquals(threw, true);
+});
+
+Deno.test("GraphQL parser - parses field directives", () => {
+  // Use a parser-only check (no inlining) since directives with literal
+  // booleans get filtered during inlineFragments. Here we keep a variable
+  // ref so the field survives and we can inspect the directive metadata.
+  const parsed = parseGraphQLQuery(
+    `query Q($v: Boolean!) { user(id: "1") { name @include(if: $v) } }`,
+  );
+  const sub = parsed.selections[0].subSelections![0];
+  assertEquals(sub.fieldName, "name");
+  assertEquals(sub.directives?.[0].name, "include");
+});
+
+Deno.test("GraphQL parser - @skip(if: true) drops the field", () => {
+  const parsed = parseGraphQLQuery(
+    `{ user(id: "1") { id, name @skip(if: true), email } }`,
+  );
+  const subs = parsed.selections[0].subSelections!;
+  // `name` was dropped; `id` and `email` remain in source order.
+  assertEquals(subs.map((s) => s.fieldName), ["id", "email"]);
+});
+
+Deno.test("GraphQL parser - @include(if: false) drops the field", () => {
+  const parsed = parseGraphQLQuery(
+    `{ user(id: "1") { id, premiumOnly @include(if: false) } }`,
+  );
+  const subs = parsed.selections[0].subSelections!;
+  assertEquals(subs.map((s) => s.fieldName), ["id"]);
+});
+
+Deno.test("GraphQL translator - __typename is dropped from EdgeQL shape", () => {
+  const schema = createTestSchema();
+  const parsed = parseGraphQLQuery(
+    `{ user(id: "11111111-1111-1111-1111-111111111111") { __typename, name } }`,
+  );
+  const result = translateToEdgeQL(parsed, schema);
+  // `__typename` is synthetic — it should not leak into the EdgeQL shape.
+  assertEquals(result.edgeql.includes("__typename"), false);
+  assertStringIncludes(result.edgeql, "name");
+});
+
+Deno.test("GraphQL introspection - isIntrospectionQuery detects __schema/__type", () => {
+  const parsedSchema = parseGraphQLQuery(`{ __schema { types { name } } }`);
+  assertEquals(isIntrospectionQuery(parsedSchema), true);
+
+  const parsedType = parseGraphQLQuery(`{ __type(name: "User") { name } }`);
+  assertEquals(isIntrospectionQuery(parsedType), true);
+
+  const parsedRegular = parseGraphQLQuery(`{ user(id: "1") { name } }`);
+  assertEquals(isIntrospectionQuery(parsedRegular), false);
+});
+
+Deno.test("GraphQL introspection - __schema returns type list", () => {
+  const schema = createTestSchema();
+  const parsed = parseGraphQLQuery(`{ __schema { types { name } } }`);
+  const data = resolveIntrospection(parsed, schema) as {
+    __schema: { types: Array<{ name: string }> };
+  };
+  assertEquals(Array.isArray(data.__schema.types), true);
+  // The test schema includes a User type — verify it's surfaced.
+  const typeNames = data.__schema.types.map((t) => t.name);
+  assertEquals(typeNames.includes("User"), true);
+});
+
+Deno.test("GraphQL introspection - __type(name: 'User') returns its fields", () => {
+  const schema = createTestSchema();
+  const parsed = parseGraphQLQuery(
+    `{ __type(name: "User") { name fields { name } } }`,
+  );
+  const data = resolveIntrospection(parsed, schema) as {
+    __type: { name: string; fields: Array<{ name: string }> };
+  };
+  assertEquals(data.__type.name, "User");
+  assertEquals(data.__type.fields.length > 0, true);
+});
+
+Deno.test("GraphQL introspection - __type returns null for unknown type", () => {
+  const schema = createTestSchema();
+  const parsed = parseGraphQLQuery(
+    `{ __type(name: "DoesNotExist") { name } }`,
+  );
+  const data = resolveIntrospection(parsed, schema) as { __type: unknown };
+  assertEquals(data.__type, null);
+});
+
+Deno.test("GraphQLExtension - POST /graphql short-circuits __schema introspection", async () => {
+  const ext = new GraphQLExtension();
+  await ext.initialize(makeContext());
+  const handler = ext.getRoutes()[0].handler;
+  const response = await handler(
+    makeRequest("/graphql", "POST", {
+      query: `{ __schema { types { name } } }`,
+    }),
+  );
+  assertEquals(response.status, 200);
+  const body = await response.json() as {
+    data: { __schema: { types: Array<{ name: string }> } };
+  };
+  assertEquals(Array.isArray(body.data.__schema.types), true);
+  // Crucially, the response should NOT carry __edgeql — introspection
+  // is answered directly from the cached schema.
+  assertEquals("__edgeql" in body.data, false);
+});

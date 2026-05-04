@@ -18,7 +18,12 @@ import type {
 } from "../extensions/types.ts";
 import type { Schema } from "../compiler/context.ts";
 import { generateGraphQLSchema } from "./schema-generator.ts";
-import { parseGraphQLQuery, translateToEdgeQL } from "./query-translator.ts";
+import {
+  isIntrospectionQuery,
+  parseGraphQLQuery,
+  resolveIntrospection,
+  translateToEdgeQL,
+} from "./query-translator.ts";
 import type { GraphQLConfig, GraphQLResponse } from "./types.ts";
 
 export class GraphQLExtension extends BaseExtension {
@@ -123,6 +128,16 @@ export class GraphQLExtension extends BaseExtension {
 
       // Parse GraphQL
       const parsed = parseGraphQLQuery(body.query);
+
+      // Introspection (`__schema` / `__type`) is answered directly from
+      // the cached schema — no EdgeQL translation, no DB roundtrip.
+      // Tools like GraphiQL and codegen issue these on every connect to
+      // render the schema browser, so the short-circuit matters for
+      // perceived snappiness, not just correctness.
+      if (isIntrospectionQuery(parsed)) {
+        const introData = resolveIntrospection(parsed, this.schema);
+        return this.jsonResponse({ data: introData }, 200);
+      }
 
       // Translate to EdgeQL
       const result = translateToEdgeQL(parsed, this.schema);
