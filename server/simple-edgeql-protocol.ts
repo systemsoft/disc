@@ -1,6 +1,18 @@
 /**
- * Simplified EdgeQL Protocol Handler for Integration Demo
- * Works around type compatibility issues while demonstrating integration concepts
+ * Simplified EdgeQL Protocol Handler — test/dev fixture, NOT for serving real queries.
+ *
+ * This handler ships a hand-rolled "simulated" SQL compiler that
+ * intentionally omits FROM/LIMIT/ORDER and most expression kinds.
+ * It exists for two narrow uses:
+ *   1. Unit tests for pool wiring + error propagation that don't care
+ *      about the SQL string itself (see error-propagation.test.ts,
+ *      pg-integration.test.ts, tls.test.ts).
+ *   2. The dev-mode mock-data fallback when no DB is configured.
+ *
+ * The default protocol path in `disc serve` is `EdgeQLProtocolHandler`
+ * (the real compiler). Set `DISC_PROTOCOL=simple` to opt into this
+ * handler — but expect broken queries beyond `select Type` for non-
+ * default modules.
  */
 
 import * as Types from "./types.ts";
@@ -295,9 +307,12 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       sql += "*";
     }
 
-    // Handle FROM clause (simplified)
+    // Handle FROM clause (simplified). For qualified names like
+    // `default::Item`, the type is the trailing part — `parts[0]` would
+    // resolve to the module name and silently miss the lookup.
     if (ast.expr.kind === "TypeName") {
-      const typeName = ast.expr.name.parts[0];
+      const parts = ast.expr.name.parts;
+      const typeName = parts[parts.length - 1];
       const typeDef = this.schema.types.get(typeName);
       if (typeDef) {
         sql += ` FROM ${typeDef.tableName}`;
@@ -313,7 +328,8 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
   }
 
   private compileInsertQuery(ast: EdgeQL.InsertQuery): string {
-    const typeName = ast.type.name.parts[0];
+    const parts = ast.type.name.parts;
+    const typeName = parts[parts.length - 1];
     const typeDef = this.schema.types.get(typeName);
 
     if (!typeDef) {
@@ -346,7 +362,8 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
   }
 
   private compileUpdateQuery(ast: EdgeQL.UpdateQuery): string {
-    const typeName = ast.type.name.parts[0];
+    const parts = ast.type.name.parts;
+    const typeName = parts[parts.length - 1];
     const typeDef = this.schema.types.get(typeName);
 
     if (!typeDef) {
@@ -379,7 +396,8 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
   }
 
   private compileDeleteQuery(ast: EdgeQL.DeleteQuery): string {
-    const typeName = ast.type.name.parts[0];
+    const parts = ast.type.name.parts;
+    const typeName = parts[parts.length - 1];
     const typeDef = this.schema.types.get(typeName);
 
     if (!typeDef) {
