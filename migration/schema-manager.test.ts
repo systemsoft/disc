@@ -188,6 +188,44 @@ Deno.test("SchemaManager - modulesToSchema - implicit id property added", () => 
 });
 
 // ---------------------------------------------------------------------------
+// 6b. modulesToSchema -- camelCase property name → snake_case columnName
+// ---------------------------------------------------------------------------
+Deno.test("SchemaManager - modulesToSchema - camelCase property name → snake_case columnName", () => {
+  // The EdgeQL compiler emits SQL using PropertyDef.columnName. If this
+  // diverges from the actual table column written by the DDL generator,
+  // queries fail with "column does not exist". Both sides must agree on
+  // the snake_case form.
+  const manager = new SchemaManager({});
+  const sdl = `
+    type Item {
+      required name: str;
+      createdAt: datetime;
+      lastModifiedBy: str;
+      already_snake: str;
+    }
+  `;
+
+  const parseResult = manager.parseSDL(sdl);
+  assertEquals(parseResult.ok, true);
+  if (!parseResult.ok) return;
+
+  const schema = manager.modulesToSchema(parseResult.value);
+  const itemType = schema.types.get("Item");
+
+  assert(itemType !== undefined, "Expected an 'Item' TypeDef");
+  assertEquals(itemType.properties.get("createdAt")?.columnName, "created_at");
+  assertEquals(
+    itemType.properties.get("lastModifiedBy")?.columnName,
+    "last_modified_by",
+  );
+  assertEquals(
+    itemType.properties.get("already_snake")?.columnName,
+    "already_snake",
+    "snake_case input should be idempotent",
+  );
+});
+
+// ---------------------------------------------------------------------------
 // 7. getSchema returns null before any load
 // ---------------------------------------------------------------------------
 Deno.test("SchemaManager - getSchema - returns null before any load", () => {

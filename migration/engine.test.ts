@@ -234,6 +234,62 @@ Deno.test("DDL Generator - Create Type", () => {
   assertStringIncludes(createTableSQL, "email TEXT NOT NULL");
 });
 
+Deno.test("DDL Generator - camelCase property → snake_case column", () => {
+  // Regression: PostgreSQL lowercases unquoted identifiers, so emitting
+  // `"createdAt"` (quoted) breaks unquoted lookups from the EdgeQL compiler.
+  // CLAUDE.md requires snake_case for all SQL identifiers.
+  const generator = new DDLGenerator();
+  const operation: Types.CreateTypeOperation = {
+    kind: "CreateType",
+    typeName: "Item",
+    properties: [
+      {
+        name: "createdAt",
+        type: "datetime",
+        required: false,
+        multi: false,
+        constraints: [],
+        annotations: {},
+      },
+      {
+        name: "lastModifiedBy",
+        type: "str",
+        required: false,
+        multi: false,
+        constraints: [],
+        annotations: {},
+      },
+      {
+        name: "already_snake",
+        type: "str",
+        required: false,
+        multi: false,
+        constraints: [],
+        annotations: {},
+      },
+    ],
+    links: [],
+  };
+
+  const statements = generator.generateDDL([operation]);
+  const createTableSQL = statements[0];
+
+  assertStringIncludes(createTableSQL, "created_at");
+  assertStringIncludes(createTableSQL, "last_modified_by");
+  assertStringIncludes(createTableSQL, "already_snake");
+  // Negative assertions: the camelCase forms must NOT survive into DDL.
+  assertEquals(
+    createTableSQL.includes(`"createdAt"`),
+    false,
+    "createdAt should be converted to snake_case, not quoted as-is",
+  );
+  assertEquals(
+    createTableSQL.includes(`"lastModifiedBy"`),
+    false,
+    "lastModifiedBy should be converted to snake_case, not quoted as-is",
+  );
+});
+
 Deno.test("DDL Generator - Add Property", () => {
   const generator = new DDLGenerator();
   const operation: Types.AlterTypeOperation = {
