@@ -50,7 +50,7 @@ clean:
 
 # run project for local development
 dev:
-  deno run --watch --allow-net --allow-read --allow-write --allow-env cli/main.ts development
+  deno run --allow-env --allow-net --allow-read --allow-write --watch cli/main.ts development
 
 release: version clean build
   @echo "[INFO] Release versioned and built"
