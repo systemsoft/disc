@@ -786,3 +786,72 @@ Deno.test("EdgeQL Parser - WITH mixed recursive and non-recursive", () => {
     assertEquals(ast.bindings[1].recursive, undefined);
   }
 });
+
+// Error recovery (P2-06): parseWithRecovery() collects every error and skips
+// to the next plausible statement boundary instead of throwing on the first.
+
+Deno.test("EdgeQL Parser - parseWithRecovery: clean source has zero errors", () => {
+  const source = `SELECT User; SELECT Post`;
+
+  const { queries, errors } = new EdgeQLParser(source).parseWithRecovery();
+
+  assertEquals(errors.length, 0);
+  assertEquals(queries.length, 2);
+});
+
+Deno.test("EdgeQL Parser - parseWithRecovery: collects multiple errors in one pass", () => {
+  // Three statements: bad / good / bad. The first and third use lex-valid
+  // tokens that don't form a valid query (top-level WHERE, INSERT-without-
+  // type), so the parser errors but the lexer doesn't throw. Recovery
+  // should yield one good query (`SELECT User`) plus at least two errors.
+  const source = `WHERE x; SELECT User; INSERT FROM`;
+
+  const { queries, errors } = new EdgeQLParser(source).parseWithRecovery();
+
+  assertEquals(queries.length, 1);
+  assertEquals(queries[0].kind, "SelectQuery");
+  // At least one error per malformed statement; sub-clause errors may
+  // multiply, so check >= 2 rather than ===.
+  assertEquals(errors.length >= 2, true);
+});
+
+Deno.test("EdgeQL Parser - parseWithRecovery: never throws on grammar-malformed input", () => {
+  // Lex-valid but parse-invalid sources. Lexer-level recovery is out of
+  // scope for P2-06 — the lexer throws on stray punctuation, and that's
+  // a separate concern handled by callers wrapping the constructor.
+  const sources = [
+    "",
+    ";;;",
+    "SELECT FROM WHERE",
+    "INSERT 123",
+    "UPDATE FROM",
+    "SELECT User; WHERE bad; SELECT Post",
+  ];
+
+  for (const src of sources) {
+    // Contract: doesn't throw. Empty / whitespace-only input may have
+    // zero errors and zero queries — both are valid outcomes.
+    const { errors, queries } = new EdgeQLParser(src).parseWithRecovery();
+    void errors;
+    void queries;
+  }
+});
+
+Deno.test("EdgeQL Parser - parseWithRecovery: recovers across malformed → good", () => {
+  // The first statement is bogus; recovery should land on `SELECT Post`
+  // and produce a clean query for it.
+  const source = `WHERE wat; SELECT Post`;
+
+  const { queries, errors } = new EdgeQLParser(source).parseWithRecovery();
+
+  assertEquals(errors.length >= 1, true);
+  assertEquals(queries.length, 1);
+  assertEquals(queries[0].kind, "SelectQuery");
+});
+
+Deno.test("EdgeQL Parser - parse() still throws on first error (backward compat)", () => {
+  assertThrows(
+    () => new EdgeQLParser("SELECT @@@").parse(),
+    SyntaxError,
+  );
+});

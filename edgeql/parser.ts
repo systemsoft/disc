@@ -27,6 +27,108 @@ export class EdgeQLParser {
     return query;
   }
 
+  /**
+   * Parse with panic-mode error recovery (P2-06). Mirrors the SDL
+   * parser's `parseWithRecovery`: the parser collects every query that
+   * parses cleanly, records errors for the rest, and synchronizes to
+   * the next plausible statement boundary (semicolon or top-level
+   * query keyword) before continuing.
+   *
+   * Recovery is coarse-grained — an error inside a query bails out of
+   * the whole query, not just the bad clause. That's the standard
+   * trade-off for a recursive-descent parser without explicit recovery
+   * grammar; finer-grained recovery is future work.
+   *
+   * The legacy throw-on-first-error `parse()` path is unchanged so
+   * single-query call sites (the binary protocol, the HTTP handler)
+   * keep their existing semantics. Use this method when you want to
+   * surface every error in one pass — IDE / linter / multi-statement
+   * REPL scenarios.
+   */
+  parseWithRecovery(): {
+    queries: AST.Query[];
+    errors: SyntaxError[];
+  } {
+    const queries: AST.Query[] = [];
+    const errors: SyntaxError[] = [];
+
+    while (!this.isAtEnd()) {
+      // Skip leading separators between statements so a `;` after a
+      // good query doesn't get reported as "expected query statement".
+      while (this.match(TokenType.SEMICOLON)) {
+        // no-op
+      }
+      if (this.isAtEnd()) break;
+
+      const startPos = this.current;
+      try {
+        const query = this.parseQuery();
+        queries.push(query);
+        // Statements are semicolon-terminated. Tolerate a missing
+        // trailing semicolon at EOF (matches `parse()`'s tolerance).
+        if (!this.isAtEnd()) {
+          if (this.check(TokenType.SEMICOLON)) {
+            this.advance();
+          } else {
+            // Not at a separator — record the error and synchronize so
+            // the next statement gets a fresh start.
+            errors.push(this.error("Expected ';' between statements"));
+            this.synchronize();
+          }
+        }
+      } catch (err) {
+        if (err instanceof SyntaxError) {
+          errors.push(err);
+        } else {
+          throw err;
+        }
+        this.synchronize();
+      }
+
+      // Loop guard: if neither parseQuery nor synchronize advanced the
+      // cursor (e.g. on a token the synchronize set already stops at),
+      // force-advance one token so we never spin.
+      if (this.current === startPos && !this.isAtEnd()) {
+        this.advance();
+      }
+    }
+
+    return { queries, errors };
+  }
+
+  /**
+   * Skip tokens until the cursor is on something that plausibly starts
+   * a new statement: a semicolon (advance past it) or a top-level query
+   * keyword (stop on it). Used after a syntax error to drop the rest of
+   * the malformed statement and resume parsing from a clean boundary.
+   */
+  private synchronize(): void {
+    const STARTS = new Set<TokenType>([
+      TokenType.SELECT,
+      TokenType.INSERT,
+      TokenType.UPDATE,
+      TokenType.DELETE,
+      TokenType.FOR,
+      TokenType.WITH,
+      TokenType.GROUP,
+      TokenType.DESCRIBE,
+      TokenType.EXPLAIN,
+      TokenType.CONFIGURE,
+      TokenType.SET,
+    ]);
+
+    while (!this.isAtEnd()) {
+      if (this.peek().type === TokenType.SEMICOLON) {
+        this.advance();
+        return;
+      }
+      if (STARTS.has(this.peek().type)) {
+        return;
+      }
+      this.advance();
+    }
+  }
+
   private parseQuery(): AST.Query {
     let query: AST.Query;
 
