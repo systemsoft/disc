@@ -10,6 +10,10 @@
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { MigrationError } from "../lib/errors.ts";
 import { Err, Ok, Result } from "../lib/result.ts";
+import {
+  propNameToColumnName,
+  typeNameToTableName,
+} from "../lib/identifiers.ts";
 import { SDLParser } from "../schema/parser.ts";
 import { Module, SDLConverter } from "../schema/converter.ts";
 import {
@@ -101,34 +105,6 @@ const SDL_TO_SQL_TYPE_MAP: Record<string, string> = {
   "multirange<cal::local_datetime>": "tsmultirange",
 };
 
-/**
- * Convert a PascalCase type name to a snake_case table name
- *
- * Examples:
- *   User -> user
- *   BlogPost -> blog_post
- *   HTTPRequest -> http_request
- */
-function typeNameToTableName(typeName: string): string {
-  return typeName
-    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
-    .replace(/([a-z\d])([A-Z])/g, "$1_$2")
-    .toLowerCase();
-}
-
-/**
- * Convert an SDL property identifier (camelCase) to a SQL column name
- * (snake_case). Idempotent for already-snake-case input. Mirrors the
- * helper of the same name in `migration/ddl.ts` — they must agree so
- * that the EdgeQL compiler's column references and the DDL generator's
- * column declarations point at the same physical PostgreSQL identifier.
- */
-function propNameToColumnName(propName: string): string {
-  return propName
-    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
-    .replace(/([a-z\d])([A-Z])/g, "$1_$2")
-    .toLowerCase();
-}
 
 /**
  * Map an SDL type name to a SQL column type

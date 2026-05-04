@@ -3,6 +3,10 @@
  */
 
 import * as Types from "./types.ts";
+import {
+  propNameToColumnName,
+  typeNameToTableName,
+} from "../lib/identifiers.ts";
 
 // PostgreSQL 16 reserved keywords that cannot appear unquoted as identifiers.
 // Source: https://www.postgresql.org/docs/16/sql-keywords-appendix.html
@@ -181,7 +185,7 @@ export class DDLGenerator {
 
   private generateCreateType(operation: Types.CreateTypeOperation): string[] {
     const statements: string[] = [];
-    const tableName = this.typeNameToTableName(operation.typeName);
+    const tableName = typeNameToTableName(operation.typeName);
 
     // Generate column definitions from properties
     const columns: Types.ColumnDefinition[] = [
@@ -217,7 +221,7 @@ export class DDLGenerator {
       if (property.computed) continue;
 
       columns.push({
-        name: this.propNameToColumnName(property.name),
+        name: propNameToColumnName(property.name),
         type: this.mapEdgeQLTypeToPostgreSQL(property.type),
         nullable: !property.required,
         primaryKey: false,
@@ -239,7 +243,7 @@ export class DDLGenerator {
           primaryKey: false,
           unique: false,
           references: {
-            table: this.typeNameToTableName(link.target),
+            table: typeNameToTableName(link.target),
             column: "id",
             onDelete: link.onTargetDelete || "RESTRICT",
           },
@@ -265,7 +269,7 @@ export class DDLGenerator {
         // already covers the "user_groups" relationship). Only applies when
         // source != target to avoid incorrectly deduplicating self-referencing
         // multi-links (e.g., User.friends and User.enemies).
-        const targetTable = this.typeNameToTableName(link.target);
+        const targetTable = typeNameToTableName(link.target);
         if (tableName !== targetTable) {
           const reverseKey = `${targetTable}→${tableName}`;
           if (this.createdJunctionTables.has(reverseKey)) {
@@ -379,7 +383,7 @@ export class DDLGenerator {
   }
 
   private generateDropType(operation: Types.DropTypeOperation): string[] {
-    const tableName = this.typeNameToTableName(operation.typeName);
+    const tableName = typeNameToTableName(operation.typeName);
     return [
       `DROP TABLE IF EXISTS ${this.escapeIdentifier(tableName)} CASCADE;`,
     ];
@@ -387,7 +391,7 @@ export class DDLGenerator {
 
   private generateAlterType(operation: Types.AlterTypeOperation): string[] {
     const statements: string[] = [];
-    const tableName = this.typeNameToTableName(operation.typeName);
+    const tableName = typeNameToTableName(operation.typeName);
 
     for (const typeOp of operation.operations) {
       statements.push(...this.generateTypeOperationDDL(tableName, typeOp));
@@ -483,7 +487,7 @@ export class DDLGenerator {
 
     const statements = [
       `ALTER TABLE ${this.escapeIdentifier(tableName)} ADD COLUMN ${
-        this.escapeIdentifier(this.propNameToColumnName(property.name))
+        this.escapeIdentifier(propNameToColumnName(property.name))
       } ${columnType} ${nullable}${defaultClause};`,
     ];
 
@@ -503,7 +507,7 @@ export class DDLGenerator {
     // history and logs flag the data-loss step. Production callers should
     // require explicit approval (see MigrationEngine.applyMigrations
     // `autoApprove: false` path).
-    const colName = this.propNameToColumnName(operation.propertyName);
+    const colName = propNameToColumnName(operation.propertyName);
     return [
       `-- WARNING: DROP COLUMN is destructive — data in ${tableName}.${colName} will be lost on apply`,
       `ALTER TABLE ${this.escapeIdentifier(tableName)} DROP COLUMN IF EXISTS ${
@@ -517,7 +521,7 @@ export class DDLGenerator {
     operation: Types.AlterPropertyOperation,
   ): string[] {
     const statements: string[] = [];
-    const colName = this.propNameToColumnName(operation.propertyName);
+    const colName = propNameToColumnName(operation.propertyName);
     const columnName = this.escapeIdentifier(colName);
     const tableRef = this.escapeIdentifier(tableName);
 
@@ -618,7 +622,7 @@ export class DDLGenerator {
     if (link.multi) {
       // Multi-valued link - create junction table
       const junctionTableName = `${tableName}_${link.name}`;
-      const targetTable = this.typeNameToTableName(link.target);
+      const targetTable = typeNameToTableName(link.target);
 
       // Skip if already created or reciprocal exists
       if (this.createdJunctionTables.has(junctionTableName)) {
@@ -674,7 +678,7 @@ export class DDLGenerator {
       // Single-valued link - add foreign key column
       const columnName = `${link.name}_id`;
       const nullable = link.required ? "NOT NULL" : "NULL";
-      const targetTable = this.typeNameToTableName(link.target);
+      const targetTable = typeNameToTableName(link.target);
 
       statements.push(
         `ALTER TABLE ${this.escapeIdentifier(tableName)} ADD COLUMN ${
@@ -994,7 +998,7 @@ export class DDLGenerator {
     const statements: string[] = [];
 
     for (const property of properties) {
-      const colName = this.propNameToColumnName(property.name);
+      const colName = propNameToColumnName(property.name);
       for (const constraint of property.constraints) {
         const checkExpr = this.constraintToCheckExpression(
           colName,
@@ -1095,26 +1099,6 @@ export class DDLGenerator {
     return null;
   }
 
-  private typeNameToTableName(typeName: string): string {
-    // Convert PascalCase type names to snake_case table names
-    return typeName
-      .replace(/([A-Z])/g, "_$1")
-      .toLowerCase()
-      .replace(/^_/, "");
-  }
-
-  /**
-   * Convert an SDL property identifier (camelCase) to a SQL column name
-   * (snake_case). Idempotent for already-snake-case input. Honors the
-   * project rule that all SQL identifiers must be snake_case so unquoted
-   * lookups round-trip correctly through PostgreSQL.
-   */
-  private propNameToColumnName(propName: string): string {
-    return propName
-      .replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
-      .replace(/([a-z\d])([A-Z])/g, "$1_$2")
-      .toLowerCase();
-  }
 
   private mapEdgeQLTypeToPostgreSQL(edgeqlType: string): string {
     const typeMap: Record<string, string> = {
@@ -1294,7 +1278,7 @@ export class DDLGenerator {
     tableName: string,
     link: Types.LinkDefinition,
   ): string[] {
-    const targetTable = this.typeNameToTableName(link.target);
+    const targetTable = typeNameToTableName(link.target);
     const fnName = `disc_source_delete_${tableName}_${link.name}`;
     const triggerName = `trg_source_delete_${tableName}_${link.name}`;
 
@@ -1364,7 +1348,7 @@ export class DDLGenerator {
     propertyName: string,
     rewrite: Types.RewriteDefinition,
   ): string[] {
-    const colName = this.propNameToColumnName(propertyName);
+    const colName = propNameToColumnName(propertyName);
     const fnName = `${tableName}__${colName}__rewrite_fn`;
     const triggerName = `${tableName}__${colName}__rewrite`;
 
@@ -1396,7 +1380,7 @@ export class DDLGenerator {
     propertyName: string,
     _events: ("insert" | "update")[],
   ): string[] {
-    const colName = this.propNameToColumnName(propertyName);
+    const colName = propNameToColumnName(propertyName);
     const triggerName = `${tableName}__${colName}__rewrite`;
     const fnName = `${tableName}__${colName}__rewrite_fn`;
 
@@ -1429,7 +1413,7 @@ export class DDLGenerator {
     operation: Types.CreateTypeOperation,
   ): string[] {
     // To rollback CreateType, we drop the table
-    const tableName = this.typeNameToTableName(operation.typeName);
+    const tableName = typeNameToTableName(operation.typeName);
     return [
       `DROP TABLE IF EXISTS ${this.escapeIdentifier(tableName)} CASCADE;`,
     ];
@@ -1442,7 +1426,7 @@ export class DDLGenerator {
     // pre-drop schema snapshot (which we don't persist). Emit a SQL-level
     // DO block so an accidental `disc migrate --rollback` fails loudly
     // instead of silently "succeeding" with comment-only DDL.
-    const tableName = this.typeNameToTableName(operation.typeName);
+    const tableName = typeNameToTableName(operation.typeName);
     return [
       `-- MANUAL ROLLBACK REQUIRED: Recreate table '${tableName}'`,
       `-- The original table structure was lost when it was dropped.`,
@@ -1457,7 +1441,7 @@ END $$;`,
     operation: Types.AlterTypeOperation,
   ): string[] {
     const statements: string[] = [];
-    const tableName = this.typeNameToTableName(operation.typeName);
+    const tableName = typeNameToTableName(operation.typeName);
 
     // Process type operations in reverse order
     for (const typeOp of operation.operations.reverse()) {
