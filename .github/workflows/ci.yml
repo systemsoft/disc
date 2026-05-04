@@ -133,10 +133,6 @@ jobs:
   gel-compat:
     name: Gel client compatibility (P2-09)
     runs-on: ubuntu-latest
-    # Soft-fail while compat gaps are being closed (see
-    # tests/gel-compat/README.md → "Known compat gaps"). The workflow log
-    # surfaces which clients/queries pass; PRs are not blocked.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v6
 

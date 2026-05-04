@@ -62,9 +62,9 @@ or only the Node side and the script still exits 0 on the side that ran.
 
 The `gel-compat` job in `.github/workflows/ci.yml` runs `run.sh` on
 ubuntu-latest with PostgreSQL cached the same way the e2e job does.
-The job is `continue-on-error: true` while compatibility gaps are being
-worked through (see "Known compat gaps" below). Each green test that
-appears in the workflow log is a real validation win.
+Now that all five known compat gaps are closed and the smoke is green
+locally on both clients, the job is no longer `continue-on-error` —
+regressions fail CI like any other job.
 
 ## Known compat gaps (current state)
 
