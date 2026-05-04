@@ -614,6 +614,12 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         // (e.g., SELECT '<json>'::jsonb). No special handling needed —
         // the result passes through PG normally.
         return (expr as SQL.RawSQLExpression).sql;
+      case "CastExpression": {
+        const castExpr = expr as SQL.CastExpression;
+        return `CAST(${
+          this.generateExpression(castExpr.expression)
+        } AS ${castExpr.targetType})`;
+      }
       default:
         return "NULL";
     }
