@@ -1,3 +1,8 @@
+// deno-lint-ignore-file no-process-global
+// Playwright runs this config in Node, not Deno — `process.env` is
+// the canonical way to read CI env there. The lint rule still scans
+// every TS file in the repo, so silence it for this one.
+
 import { defineConfig, devices } from "@playwright/test";
 
 /**

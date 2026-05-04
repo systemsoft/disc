@@ -56,6 +56,58 @@ jobs:
           path: coverage/lcov.info
           retention-days: 14
 
+  e2e-tests:
+    name: UI E2E tests (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install UI dependencies
+        run: cd ui && bun install --frozen-lockfile
+
+      # Cache Playwright browser binaries (~92 MB chromium-headless-shell)
+      # keyed on the bun.lock content so cache invalidates when the
+      # @playwright/test version bumps.
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('ui/bun.lock') }}
+
+      - name: Install Playwright chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: cd ui && bunx playwright install chromium --with-deps
+
+      # Cache the bundled PostgreSQL binary that `disc serve` downloads
+      # on first run. Keyed on the version baked into postgres/downloader.ts.
+      - name: Cache bundled PostgreSQL
+        uses: actions/cache@v4
+        with:
+          path: ~/.disc/postgres
+          key: ${{ runner.os }}-disc-pg-16.4
+
+      - name: Run E2E tests
+        run: cd ui && bun run test:e2e
+
+      - name: Upload Playwright traces on failure
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces
+          path: ui/test-results/
+          retention-days: 7
+
   pg-tests:
     name: PG integration tests
     runs-on: ubuntu-latest
