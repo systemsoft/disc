@@ -31,6 +31,12 @@
   let editError: string | null = null;
   let editSubmitting = false;
 
+  // Sort + filter state. Sort cycles through asc → desc → off per column;
+  // filters compose with `and` and use type-aware EdgeQL (`ilike` for
+  // strings, `=` for numerics/bools/uuids, cast literals for uuid/datetime).
+  let sortBy: { col: string; dir: 'asc' | 'desc' } | null = null;
+  let filters: Record<string, string> = {};
+
   onMount(async () => {
     try {
       const description = await discAPI.getSchema();
@@ -49,7 +55,83 @@
     selectedType = type;
     cancelInsert();
     cancelEdit();
+    // Filters and sort are per-type; reset when switching.
+    sortBy = null;
+    filters = {};
     await loadRows();
+  }
+
+  function escSql(v: string): string {
+    return v.replace(/'/g, "\\'");
+  }
+
+  /** Build per-column EdgeQL filter clauses based on the prop type. */
+  function buildFilterClause(type: SchemaTypeDescription): string {
+    const parts: string[] = [];
+    for (const p of type.properties) {
+      const raw = (filters[p.name] ?? '').trim();
+      if (!raw) continue;
+      switch (p.type) {
+        case 'str':
+          parts.push(`.${p.name} ilike '%${escSql(raw)}%'`);
+          break;
+        case 'int16':
+        case 'int32':
+        case 'int64':
+        case 'float32':
+        case 'float64':
+        case 'decimal':
+          if (!Number.isNaN(Number(raw))) {
+            parts.push(`.${p.name} = ${raw}`);
+          }
+          break;
+        case 'bool':
+          if (raw === 'true' || raw === 'false') {
+            parts.push(`.${p.name} = ${raw}`);
+          }
+          break;
+        case 'uuid':
+          parts.push(`.${p.name} = <uuid>'${escSql(raw)}'`);
+          break;
+        case 'datetime':
+          parts.push(`.${p.name} = <datetime>'${escSql(raw)}'`);
+          break;
+        default:
+          parts.push(`.${p.name} = '${escSql(raw)}'`);
+      }
+    }
+    return parts.length > 0 ? ` filter ${parts.join(' and ')}` : '';
+  }
+
+  function buildOrderClause(): string {
+    if (!sortBy) return '';
+    return ` order by .${sortBy.col} ${sortBy.dir}`;
+  }
+
+  function toggleSort(col: string) {
+    if (!selectedType) return;
+    // Sortable only if it's a property column (skip the link `: { id }` slots).
+    const isLink = !selectedType.properties.some((p) => p.name === col);
+    if (isLink) return;
+    if (!sortBy || sortBy.col !== col) {
+      sortBy = { col, dir: 'asc' };
+    } else if (sortBy.dir === 'asc') {
+      sortBy = { col, dir: 'desc' };
+    } else {
+      sortBy = null;
+    }
+    loadRows();
+  }
+
+  function sortIndicator(col: string): string {
+    if (!sortBy || sortBy.col !== col) return '';
+    return sortBy.dir === 'asc' ? ' ↑' : ' ↓';
+  }
+
+  function clearFilters() {
+    if (Object.values(filters).every((v) => !v)) return;
+    filters = {};
+    loadRows();
   }
 
   /** Properties that should appear as columns and be writable (excludes computed). */
@@ -68,7 +150,11 @@
       ? ['id', ...propNames.filter((n) => n !== 'id')]
       : ['id', ...propNames];
     const fields = [...orderedProps, ...linkNames.map((n) => `${n}: { id }`)];
-    const query = `select ${type.module}::${type.name} { ${fields.join(', ')} } limit ${limit};`;
+    const query =
+      `select ${type.module}::${type.name} { ${fields.join(', ')} }` +
+      buildFilterClause(type) +
+      buildOrderClause() +
+      ` limit ${limit};`;
     return { query, cols: [...orderedProps, ...linkNames] };
   }
 
@@ -249,6 +335,15 @@
       >
         + New
       </button>
+      <button
+        class="button button-secondary"
+        on:click={clearFilters}
+        disabled={!selectedType ||
+          (Object.values(filters).every((v) => !v) && !sortBy)}
+        title="Clear all column filters and sort"
+      >
+        Clear
+      </button>
     </div>
   </header>
 
@@ -306,18 +401,65 @@
           </form>
         {/if}
 
-        {#if rows.length > 0}
-          <div class="table-wrap">
-            <table>
-              <thead>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                {#each columns as col}
+                  {@const propType =
+                    selectedType.properties.find((p) => p.name === col)}
+                  {@const isSortable = propType !== undefined}
+                  <th
+                    class:sortable={isSortable}
+                    class:active-sort={sortBy?.col === col}
+                    on:click={() => isSortable && toggleSort(col)}
+                    title={isSortable ? 'Click to sort' : ''}
+                  >
+                    {col}{sortIndicator(col)}
+                  </th>
+                {/each}
+                <th class="actions-col">Actions</th>
+              </tr>
+              <tr class="filter-row">
+                {#each columns as col}
+                  {@const prop =
+                    selectedType.properties.find((p) => p.name === col)}
+                  <th>
+                    {#if prop && prop.type === 'bool'}
+                      <select
+                        bind:value={filters[col]}
+                        on:change={loadRows}
+                      >
+                        <option value="">—</option>
+                        <option value="true">true</option>
+                        <option value="false">false</option>
+                      </select>
+                    {:else if prop}
+                      <input
+                        type="text"
+                        placeholder={prop.type === 'str'
+                          ? 'contains…'
+                          : prop.type}
+                        bind:value={filters[col]}
+                        on:keydown={(e) => e.key === 'Enter' && loadRows()}
+                        on:blur={loadRows}
+                      />
+                    {/if}
+                  </th>
+                {/each}
+                <th class="actions-col"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {#if rows.length === 0 && !loading && !loadError}
                 <tr>
-                  {#each columns as col}
-                    <th>{col}</th>
-                  {/each}
-                  <th class="actions-col">Actions</th>
+                  <td colspan={columns.length + 1} class="empty-row">
+                    {Object.values(filters).some((v) => v)
+                      ? 'No rows match the current filters.'
+                      : 'No rows.'}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
+              {/if}
                 {#each rows as row}
                   {#if editingId === row.id}
                     <tr class="editing">
@@ -378,13 +520,10 @@
                       </td>
                     </tr>
                   {/if}
-                {/each}
-              </tbody>
-            </table>
-          </div>
-        {:else if !loading && !loadError}
-          <div class="empty">No rows.</div>
-        {/if}
+              {/each}
+            </tbody>
+          </table>
+        </div>
       {:else}
         <div class="empty">Select a type to view its data.</div>
       {/if}
@@ -567,7 +706,56 @@
       color: var(--color-primary);
       position: sticky;
       top: 0;
+      user-select: none;
+
+      &.sortable {
+        cursor: pointer;
+
+        &:hover {
+          background: var(--color-surface-hover);
+        }
+      }
+
+      &.active-sort {
+        color: var(--color-secondary);
+      }
     }
+
+    .filter-row th {
+      top: calc(2rem + var(--grid-unit));
+      padding: calc(var(--grid-unit) * 0.75);
+      background: var(--color-surface);
+
+      input, select {
+        width: 100%;
+        min-width: 100px;
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        padding: calc(var(--grid-unit) * 0.5);
+        background: var(--color-background);
+        border: 1px solid var(--color-border);
+        border-radius: var(--border-radius);
+        color: var(--color-text);
+
+        &::placeholder {
+          color: var(--color-text-dim);
+          font-style: italic;
+        }
+
+        &:focus {
+          outline: none;
+          border-color: var(--color-primary);
+        }
+      }
+    }
+
+    .empty-row {
+      padding: calc(var(--grid-unit) * 4);
+      text-align: center;
+      color: var(--color-text-dim);
+      font-style: italic;
+    }
+
     tbody tr:last-child td { border-bottom: none; }
     tr:hover td { background: var(--color-surface-hover); }
 
