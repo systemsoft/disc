@@ -300,7 +300,12 @@ export class TestDatabase implements DatabaseInterface {
       return table;
     }
 
-    const whereClause = whereMatch[1].trim();
+    // Collapse all whitespace runs to single spaces. Without this,
+    // multi-line WHERE clauses like `\n  AND col = ?` don't match the
+    // " and " keyword in splitByKeyword (which expects space-padded
+    // boolean operators), and the entire WHERE is evaluated as a single
+    // condition — so the filter quietly returns nothing.
+    const whereClause = whereMatch[1].replace(/\s+/g, " ").trim();
 
     // Track parameter index as a mutable reference
     const paramRef = { index: 0 };

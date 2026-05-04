@@ -8,6 +8,7 @@ import {
   RegisterData,
 } from "./types.ts";
 import { TestDatabase } from "./test-database.ts";
+import { configureLogging } from "../lib/logger.ts";
 
 describe("AuthProvider", () => {
   let provider: AuthProvider;
@@ -472,6 +473,149 @@ describe("AuthProvider", () => {
         Error,
         AuthErrorCode.EMAIL_NOT_VERIFIED,
       );
+    });
+  });
+
+  describe("Session metadata (P2-21)", () => {
+    it("persists ip_address and user_agent on register", async () => {
+      const response = await provider.register({
+        email: "ip@example.com",
+        password: "GoodPass123!",
+        meta: { ipAddress: "203.0.113.7", userAgent: "test-agent/1.0" },
+      });
+
+      const sessions = await db.query(
+        "SELECT ip_address, user_agent FROM sessions WHERE id = ?",
+        [response.session.id],
+      );
+      assertEquals(sessions.rows[0].ip_address, "203.0.113.7");
+      assertEquals(sessions.rows[0].user_agent, "test-agent/1.0");
+    });
+
+    it("persists meta on login", async () => {
+      await provider.register({
+        email: "loginmeta@example.com",
+        password: "GoodPass123!",
+      });
+      const response = await provider.login({
+        email: "loginmeta@example.com",
+        password: "GoodPass123!",
+        meta: { ipAddress: "198.51.100.4", userAgent: "ua-2" },
+      });
+
+      const sessions = await db.query(
+        "SELECT ip_address, user_agent FROM sessions WHERE id = ?",
+        [response.session.id],
+      );
+      assertEquals(sessions.rows[0].ip_address, "198.51.100.4");
+      assertEquals(sessions.rows[0].user_agent, "ua-2");
+    });
+
+    it("carries new meta forward across refresh", async () => {
+      const reg = await provider.register({
+        email: "refreshmeta@example.com",
+        password: "GoodPass123!",
+        meta: { ipAddress: "203.0.113.1", userAgent: "ua-old" },
+      });
+
+      const refreshed = await provider.refresh(reg.refreshToken!, {
+        ipAddress: "203.0.113.99",
+        userAgent: "ua-new",
+      });
+
+      const sessions = await db.query(
+        "SELECT ip_address, user_agent FROM sessions WHERE id = ?",
+        [refreshed.session.id],
+      );
+      assertEquals(sessions.rows[0].ip_address, "203.0.113.99");
+      assertEquals(sessions.rows[0].user_agent, "ua-new");
+    });
+  });
+
+  describe("Concurrent session limit (P2-22)", () => {
+    it("emits an audit event with reason=max_sessions_per_user when cap is hit", async () => {
+      // We rely on the audit log signal (which fires from the cap path
+      // in createSession) rather than the post-cap session-table state,
+      // because the in-memory TestDatabase doesn't sort/filter on
+      // expires_at the way real Postgres does — and the cap revokes
+      // whichever sessions the SELECT returns. The audit emission proves
+      // the cap path executed; the live integration tests against real
+      // PG (auth/pg-integration.test.ts) cover end-to-end correctness.
+      const events: Array<Record<string, unknown>> = [];
+      configureLogging({
+        output: (line) => {
+          try {
+            const entry = JSON.parse(line);
+            if (entry.module === "auth") events.push(entry);
+          } catch {
+            // ignore non-JSON
+          }
+        },
+      });
+
+      try {
+        const cappedProvider = new AuthProvider(
+          { ...testConfig, maxSessionsPerUser: 1 },
+          db as any,
+        );
+        await cappedProvider.initialize();
+
+        await cappedProvider.register({
+          email: "cap@example.com",
+          password: "GoodPass123!",
+        });
+        await cappedProvider.login({
+          email: "cap@example.com",
+          password: "GoodPass123!",
+        });
+
+        const capRevocations = events.filter(
+          (e) =>
+            e.event === "session_revoked" &&
+            e.reason === "max_sessions_per_user",
+        );
+        assertEquals(
+          capRevocations.length >= 1,
+          true,
+          "expected at least one auth.session_revoked event with reason=max_sessions_per_user",
+        );
+      } finally {
+        configureLogging({ output: undefined });
+      }
+    });
+  });
+
+  describe("Audit hooks (P2-23)", () => {
+    it("emits auth.login_succeeded and auth.registered events", async () => {
+      const events: Array<Record<string, unknown>> = [];
+      configureLogging({
+        output: (line) => {
+          try {
+            const entry = JSON.parse(line);
+            if (entry.module === "auth") events.push(entry);
+          } catch {
+            // ignore non-JSON
+          }
+        },
+      });
+
+      try {
+        await provider.register({
+          email: "audit@example.com",
+          password: "GoodPass123!",
+        });
+        await provider.login({
+          email: "audit@example.com",
+          password: "GoodPass123!",
+        });
+
+        const eventNames = events.map((e) => e.event);
+        assertEquals(eventNames.includes("registered"), true);
+        assertEquals(eventNames.includes("login_succeeded"), true);
+        assertEquals(eventNames.includes("session_created"), true);
+      } finally {
+        configureLogging({ output: undefined });
+      }
     });
   });
 });

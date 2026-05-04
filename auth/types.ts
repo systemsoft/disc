@@ -48,10 +48,23 @@ export interface AuthConfig {
   maxSessionsPerUser?: number;
 }
 
+/**
+ * Per-request metadata captured from the HTTP layer and stored on the
+ * resulting session row. Drives anomaly detection on `refresh()` (a new
+ * IP/User-Agent for the same user emits an `auth.session_refreshed_from_new_ip`
+ * audit event) and audit-trail enrichment for the standard auth events.
+ * (P2-21)
+ */
+export interface RequestMeta {
+  ipAddress?: string;
+  userAgent?: string;
+}
+
 export interface LoginCredentials {
   email?: string;
   username?: string;
   password: string;
+  meta?: RequestMeta;
 }
 
 export interface RegisterData {
@@ -59,6 +72,7 @@ export interface RegisterData {
   password: string;
   username?: string;
   metadata?: Record<string, any>;
+  meta?: RequestMeta;
 }
 
 export interface TokenPayload {
@@ -96,7 +110,7 @@ export interface AuthProvider {
   login(credentials: LoginCredentials): Promise<AuthResponse>;
   register(data: RegisterData): Promise<AuthResponse>;
   logout(sessionId: string): Promise<void>;
-  refresh(refreshToken: string): Promise<AuthResponse>;
+  refresh(refreshToken: string, meta?: RequestMeta): Promise<AuthResponse>;
   verifyToken(token: string): Promise<TokenPayload>;
   getUser(userId: string): Promise<User | null>;
   updatePassword(

@@ -55,6 +55,24 @@ function extractClientIp(request: Request): string {
   return "anonymous";
 }
 
+/**
+ * Build a `RequestMeta` payload for a session-creating call. Returns a
+ * concrete IP only when one was actually provided in headers (the
+ * "anonymous" bucket extractClientIp uses for rate-limiting would
+ * pollute the audit log if persisted as the session's IP).
+ * (P2-21)
+ */
+function extractRequestMeta(
+  request: Request,
+): { ipAddress?: string; userAgent?: string } {
+  const ip = extractClientIp(request);
+  const ua = request.headers.get("user-agent") ?? undefined;
+  return {
+    ipAddress: ip === "anonymous" ? undefined : ip,
+    userAgent: ua,
+  };
+}
+
 export interface AuthIntegration {
   provider: AuthProvider;
   middleware: AuthMiddleware;
@@ -123,6 +141,7 @@ export class AuthRoutes {
           password: body.password,
           username: body.username,
           metadata: body.metadata,
+          meta: extractRequestMeta(request),
         };
 
         const response = await this.provider.register(data);
@@ -150,6 +169,7 @@ export class AuthRoutes {
           email: body.email,
           username: body.username,
           password: body.password,
+          meta: extractRequestMeta(request),
         };
 
         const response = await this.provider.login(credentials);
@@ -232,7 +252,10 @@ export class AuthRoutes {
           );
         }
 
-        const response = await this.provider.refresh(refreshToken);
+        const response = await this.provider.refresh(
+          refreshToken,
+          extractRequestMeta(request),
+        );
 
         return new Response(JSON.stringify(response), {
           status: 200,

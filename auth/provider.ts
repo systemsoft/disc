@@ -17,6 +17,7 @@ import {
   LoginCredentials,
   PasswordValidationResult,
   RegisterData,
+  RequestMeta,
   Session,
   TokenPayload,
   User,
@@ -42,6 +43,9 @@ export class AuthProvider implements IAuthProvider {
       passwordRequireUppercase: config.passwordRequireUppercase ?? false,
       passwordRequireNumbers: config.passwordRequireNumbers ?? false,
       passwordRequireSpecial: config.passwordRequireSpecial ?? false,
+      // 0 disables the cap. Default 0 (unlimited) preserves prior
+      // behavior for callers that don't set the field.
+      maxSessionsPerUser: config.maxSessionsPerUser ?? 0,
     };
     this.db = db;
   }
@@ -197,7 +201,7 @@ export class AuthProvider implements IAuthProvider {
     }
 
     // Create session
-    const session = await this.createSession(userId);
+    const session = await this.createSession(userId, data.meta);
 
     // Generate tokens
     const token = await this.generateJWT(user);
@@ -211,6 +215,12 @@ export class AuthProvider implements IAuthProvider {
 
     session.token = token;
     session.refreshToken = refreshToken;
+
+    this.auditEvent("registered", userId, {
+      sessionId: session.id,
+      ipAddress: data.meta?.ipAddress,
+      requireEmailVerification: this.config.requireEmailVerification,
+    });
 
     return {
       user: this.sanitizeUser(user),
@@ -280,7 +290,7 @@ export class AuthProvider implements IAuthProvider {
     }
 
     // Create session
-    const session = await this.createSession(user.id);
+    const session = await this.createSession(user.id, credentials.meta);
 
     // Generate tokens
     const token = await this.generateJWT(user);
@@ -294,6 +304,11 @@ export class AuthProvider implements IAuthProvider {
 
     session.token = token;
     session.refreshToken = refreshToken;
+
+    this.auditEvent("login_succeeded", user.id, {
+      sessionId: session.id,
+      ipAddress: credentials.meta?.ipAddress,
+    });
 
     return {
       user: this.sanitizeUser(user),
@@ -311,12 +326,16 @@ export class AuthProvider implements IAuthProvider {
     this.auditEvent("session_revoked", null, { sessionId, reason: "logout" });
   }
 
-  async refresh(refreshToken: string): Promise<AuthResponse> {
-    // Find session by refresh token
-    // Use explicit columns with aliases to avoid duplicate field names
-    // (both sessions and users have id, createdAt)
+  async refresh(
+    refreshToken: string,
+    meta?: RequestMeta,
+  ): Promise<AuthResponse> {
+    // Find session by refresh token. Pull `ip_address` and `user_agent`
+    // alongside the rest so we can flag a refresh from a new origin.
     const result = await this.db.query(
       `SELECT s.id AS session_id, s.user_id, s.refresh_token, s.revoked,
+              s.ip_address AS prev_ip_address,
+              s.user_agent AS prev_user_agent,
               u.id, u.email, u.username, u.password_hash,
               u.created_at, u.updated_at, u.email_verified, u.active, u.metadata
        FROM sessions s
@@ -336,6 +355,28 @@ export class AuthProvider implements IAuthProvider {
     const row = result.rows[0];
     const user = this.rowToUser(row);
     const oldSessionId = row.session_id;
+    const prevIp: string | null = row.prev_ip_address ?? null;
+    const prevUa: string | null = row.prev_user_agent ?? null;
+
+    // Anomaly signal: a refresh that arrives from a different IP or User-
+    // Agent than the prior session row hints at token theft. We don't
+    // block — that would break legitimate mobile-to-wifi handoffs — but
+    // we surface a structured audit event so operators can correlate.
+    // (P2-21)
+    if (meta?.ipAddress && prevIp && meta.ipAddress !== prevIp) {
+      this.auditEvent("session_refreshed_from_new_ip", user.id, {
+        sessionId: oldSessionId,
+        previousIp: prevIp,
+        currentIp: meta.ipAddress,
+      });
+    }
+    if (meta?.userAgent && prevUa && meta.userAgent !== prevUa) {
+      this.auditEvent("session_refreshed_from_new_user_agent", user.id, {
+        sessionId: oldSessionId,
+        previousUserAgent: prevUa,
+        currentUserAgent: meta.userAgent,
+      });
+    }
 
     // Revoke old session
     await this.db.execute(
@@ -343,8 +384,10 @@ export class AuthProvider implements IAuthProvider {
       [oldSessionId],
     );
 
-    // Create new session
-    const session = await this.createSession(user.id);
+    // Create new session — carry forward the new request's IP/UA so the
+    // *next* refresh can compare against the most recent origin, not
+    // the one from registration.
+    const session = await this.createSession(user.id, meta);
 
     // Generate new tokens
     const token = await this.generateJWT(user);
@@ -358,6 +401,12 @@ export class AuthProvider implements IAuthProvider {
 
     session.token = token;
     session.refreshToken = newRefreshToken;
+
+    this.auditEvent("session_refreshed", user.id, {
+      sessionId: session.id,
+      previousSessionId: oldSessionId,
+      ipAddress: meta?.ipAddress,
+    });
 
     return {
       user: this.sanitizeUser(user),
@@ -417,6 +466,12 @@ export class AuthProvider implements IAuthProvider {
       return payload;
     } catch (error) {
       if (error instanceof AuthError) {
+        // Audit the structured failure so a stream of SESSION_EXPIRED /
+        // TOKEN_EXPIRED events is visible to operators alongside the
+        // other auth-event audit log.
+        this.auditEvent("token_verification_failed", null, {
+          code: error.code,
+        });
         throw error;
       }
       // Check if the djwt library threw an expiration error
@@ -424,12 +479,18 @@ export class AuthProvider implements IAuthProvider {
         ? error.message.toLowerCase()
         : "";
       if (errorMsg.includes("expired") || errorMsg.includes("exp")) {
+        this.auditEvent("token_verification_failed", null, {
+          code: AuthErrorCode.TOKEN_EXPIRED,
+        });
         throw new AuthError(
           "Token expired",
           AuthErrorCode.TOKEN_EXPIRED,
           401,
         );
       }
+      this.auditEvent("token_verification_failed", null, {
+        code: AuthErrorCode.INVALID_TOKEN,
+      });
       throw new AuthError(
         "Invalid token",
         AuthErrorCode.INVALID_TOKEN,
@@ -495,6 +556,8 @@ export class AuthProvider implements IAuthProvider {
       [newPasswordHash, userId],
     );
 
+    this.auditEvent("password_updated", userId);
+
     // Revoke all sessions
     await this.revokeAllSessions(userId);
   }
@@ -509,6 +572,11 @@ export class AuthProvider implements IAuthProvider {
       // P1-35: don't leak whether the email is registered. Return a
       // non-plaintext sentinel — callers treat a non-empty return as
       // "we'll email you if the account exists", matching standard practice.
+      // Audit the no-op so brute-force probing is still visible — the
+      // event explicitly records `userId: null`.
+      this.auditEvent("password_reset_requested", null, {
+        result: "no_such_user",
+      });
       return "";
     }
 
@@ -521,6 +589,8 @@ export class AuthProvider implements IAuthProvider {
       "UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE id = ?",
       [resetTokenHash, expires.toISOString(), userId],
     );
+
+    this.auditEvent("password_reset_requested", userId);
 
     // Return plaintext to caller (they send it via email); only the hash
     // is in the DB. (P0-03)
@@ -565,6 +635,8 @@ export class AuthProvider implements IAuthProvider {
       [passwordHash, userId],
     );
 
+    this.auditEvent("password_reset", userId);
+
     // Revoke all sessions
     await this.revokeAllSessions(userId);
   }
@@ -584,11 +656,15 @@ export class AuthProvider implements IAuthProvider {
       );
     }
 
+    const userId = result.rows[0].id;
+
     await this.db.execute(
       `UPDATE users SET email_verified = TRUE, verification_token = NULL,
        updated_at = CURRENT_TIMESTAMP WHERE verification_token = ?`,
       [verificationTokenHash],
     );
+
+    this.auditEvent("email_verified", userId);
   }
 
   async revokeAllSessions(userId: string): Promise<void> {
@@ -596,6 +672,7 @@ export class AuthProvider implements IAuthProvider {
       "UPDATE sessions SET revoked = TRUE WHERE user_id = ?",
       [userId],
     );
+    this.auditEvent("sessions_revoked_all", userId);
   }
 
   private async createSession(
@@ -628,6 +705,10 @@ export class AuthProvider implements IAuthProvider {
             "UPDATE sessions SET revoked = TRUE WHERE id = ?",
             [oldId],
           );
+          this.auditEvent("session_revoked", userId, {
+            sessionId: oldId,
+            reason: "max_sessions_per_user",
+          });
         }
       }
     }
