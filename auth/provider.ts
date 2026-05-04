@@ -75,6 +75,13 @@ export class AuthProvider implements IAuthProvider {
   // RSA private / public CryptoKeys under RS256.
   private signKey?: CryptoKey;
   private verifyKey?: CryptoKey;
+  // Pre-computed bcrypt hash used by `login()` to equalize response time
+  // when the supplied email/username doesn't exist. Without this, an
+  // attacker can enumerate valid accounts by stopwatch — wrong-password
+  // takes ~100ms (bcrypt.compare), no-such-user returns in ~1ms.
+  // Hashed once at init using the configured cost so the dummy compare
+  // takes the same time as a real one. (gh/geldata#9137)
+  private dummyPasswordHash?: string;
 
   constructor(config: AuthConfig, db: DatabaseInterface) {
     // Merge defaults with user config, dropping `undefined` values from
@@ -114,6 +121,15 @@ export class AuthProvider implements IAuthProvider {
       this.signKey = hmacKey;
       this.verifyKey = hmacKey;
     }
+
+    // Pre-compute the dummy hash for login-timing equalization. Done
+    // here (not in the constructor) because bcrypt.hash returns a
+    // promise. (gh/geldata#9137)
+    const dummySalt = await bcrypt.genSalt(this.config.bcryptRounds);
+    this.dummyPasswordHash = await bcrypt.hash(
+      "disc-timing-mitigation-not-a-real-password",
+      dummySalt,
+    );
 
     // Create tables if they don't exist
     await this.createTables();
@@ -284,8 +300,10 @@ export class AuthProvider implements IAuthProvider {
 
     if (result.rows.length === 0) {
       // P1-35: generic error — don't leak whether the email exists.
-      // Returning USER_NOT_FOUND vs INVALID_CREDENTIALS lets attackers
-      // probe valid accounts.
+      // gh/geldata#9137: also burn ~one bcrypt round against the dummy
+      // hash so an attacker can't distinguish "no such user" (fast
+      // DB-only) from "wrong password" (slow bcrypt) by stopwatch.
+      await this.runDummyCompare(credentials.password);
       this.auditEvent("login_failed", null, {
         reason: "no_such_user",
         email: credentials.email,
@@ -299,8 +317,10 @@ export class AuthProvider implements IAuthProvider {
 
     const user = this.rowToUser(result.rows[0]);
 
-    // Check if user is active
+    // Check if user is active. Burn a dummy compare so the timing
+    // matches the wrong-password path. (gh/geldata#9137)
     if (!user.active) {
+      await this.runDummyCompare(credentials.password);
       throw new AuthError(
         "User account is inactive",
         AuthErrorCode.USER_INACTIVE,
@@ -308,8 +328,9 @@ export class AuthProvider implements IAuthProvider {
       );
     }
 
-    // Check email verification
+    // Check email verification (same timing rationale).
     if (this.config.requireEmailVerification && !user.emailVerified) {
+      await this.runDummyCompare(credentials.password);
       throw new AuthError(
         "Email not verified",
         AuthErrorCode.EMAIL_NOT_VERIFIED,
@@ -885,6 +906,20 @@ export class AuthProvider implements IAuthProvider {
   private sanitizeUser(user: User): Omit<User, "passwordHash"> {
     const { passwordHash: _passwordHash, ...sanitized } = user;
     return sanitized;
+  }
+
+  /**
+   * Run `bcrypt.compare` against the pre-computed dummy hash. Used by
+   * `login()` on every short-circuit path (no such user, inactive,
+   * unverified) so an attacker can't distinguish those from a real
+   * wrong-password attempt by response time. (gh/geldata#9137)
+   *
+   * The result is intentionally discarded — we don't care whether
+   * dummy compare matches; we only care that bcrypt did the work.
+   */
+  private async runDummyCompare(input: string): Promise<void> {
+    if (!this.dummyPasswordHash) return;
+    await bcrypt.compare(input, this.dummyPasswordHash);
   }
 
   private generateId(): string {

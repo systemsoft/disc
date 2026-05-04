@@ -180,6 +180,43 @@ describe("AuthProvider", () => {
       );
     });
 
+    it("should not leak account existence by timing (gh/geldata#9137)", async () => {
+      // P1-35 made wrong-password and no-such-user return the same error
+      // *message*. This test guards the matching *time*: without the
+      // dummy bcrypt compare on the no-user path, an attacker could
+      // distinguish the two by stopwatch (DB-only is ~1ms, bcrypt is
+      // ~50ms+). Bounds are generous to keep CI stable.
+      const wrongPassword: LoginCredentials = {
+        email: "login@example.com",
+        password: "WrongPassword",
+      };
+      const noSuchUser: LoginCredentials = {
+        email: "definitely-not-a-real-user@example.com",
+        password: "AnyPassword123!",
+      };
+
+      // Warm up — first bcrypt call after init is sometimes slower.
+      await provider.login(wrongPassword).catch(() => {});
+
+      const t0 = performance.now();
+      await provider.login(wrongPassword).catch(() => {});
+      const wrongPasswordMs = performance.now() - t0;
+
+      const t1 = performance.now();
+      await provider.login(noSuchUser).catch(() => {});
+      const noSuchUserMs = performance.now() - t1;
+
+      // The no-user path should be at least 30% of the wrong-password
+      // path. Without the mitigation it would be ~1% (DB query only).
+      // The actual ratio in practice is ~95%; this loose bound just
+      // catches a regression where the mitigation goes missing.
+      const ratio = noSuchUserMs / wrongPasswordMs;
+      assert(
+        ratio > 0.3,
+        `timing ratio ${ratio.toFixed(2)} (no-user ${noSuchUserMs.toFixed(1)}ms vs wrong-pw ${wrongPasswordMs.toFixed(1)}ms) — dummy compare missing?`,
+      );
+    });
+
     it("should reject inactive users", async () => {
       // Deactivate user
       await db.execute(
