@@ -217,7 +217,7 @@ export class DDLGenerator {
       if (property.computed) continue;
 
       columns.push({
-        name: property.name,
+        name: this.propNameToColumnName(property.name),
         type: this.mapEdgeQLTypeToPostgreSQL(property.type),
         nullable: !property.required,
         primaryKey: false,
@@ -483,7 +483,7 @@ export class DDLGenerator {
 
     const statements = [
       `ALTER TABLE ${this.escapeIdentifier(tableName)} ADD COLUMN ${
-        this.escapeIdentifier(property.name)
+        this.escapeIdentifier(this.propNameToColumnName(property.name))
       } ${columnType} ${nullable}${defaultClause};`,
     ];
 
@@ -503,10 +503,11 @@ export class DDLGenerator {
     // history and logs flag the data-loss step. Production callers should
     // require explicit approval (see MigrationEngine.applyMigrations
     // `autoApprove: false` path).
+    const colName = this.propNameToColumnName(operation.propertyName);
     return [
-      `-- WARNING: DROP COLUMN is destructive — data in ${tableName}.${operation.propertyName} will be lost on apply`,
+      `-- WARNING: DROP COLUMN is destructive — data in ${tableName}.${colName} will be lost on apply`,
       `ALTER TABLE ${this.escapeIdentifier(tableName)} DROP COLUMN IF EXISTS ${
-        this.escapeIdentifier(operation.propertyName)
+        this.escapeIdentifier(colName)
       };`,
     ];
   }
@@ -516,7 +517,8 @@ export class DDLGenerator {
     operation: Types.AlterPropertyOperation,
   ): string[] {
     const statements: string[] = [];
-    const columnName = this.escapeIdentifier(operation.propertyName);
+    const colName = this.propNameToColumnName(operation.propertyName);
+    const columnName = this.escapeIdentifier(colName);
     const tableRef = this.escapeIdentifier(tableName);
 
     for (const change of operation.changes) {
@@ -554,7 +556,7 @@ export class DDLGenerator {
           break;
         case "AddConstraint": {
           const checkExpr = this.constraintToCheckExpression(
-            operation.propertyName,
+            colName,
             change.newValue,
           );
           if (checkExpr) {
@@ -992,16 +994,17 @@ export class DDLGenerator {
     const statements: string[] = [];
 
     for (const property of properties) {
+      const colName = this.propNameToColumnName(property.name);
       for (const constraint of property.constraints) {
         const checkExpr = this.constraintToCheckExpression(
-          property.name,
+          colName,
           constraint,
         );
 
         if (checkExpr) {
           const safeName = constraint.replace(/[^a-zA-Z0-9_]/g, "_");
           const constraintName =
-            `chk_${tableName}_${property.name}_${safeName}`;
+            `chk_${tableName}_${colName}_${safeName}`;
 
           statements.push(
             `ALTER TABLE ${this.escapeIdentifier(tableName)} ADD CONSTRAINT ${
@@ -1098,6 +1101,19 @@ export class DDLGenerator {
       .replace(/([A-Z])/g, "_$1")
       .toLowerCase()
       .replace(/^_/, "");
+  }
+
+  /**
+   * Convert an SDL property identifier (camelCase) to a SQL column name
+   * (snake_case). Idempotent for already-snake-case input. Honors the
+   * project rule that all SQL identifiers must be snake_case so unquoted
+   * lookups round-trip correctly through PostgreSQL.
+   */
+  private propNameToColumnName(propName: string): string {
+    return propName
+      .replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
+      .replace(/([a-z\d])([A-Z])/g, "$1_$2")
+      .toLowerCase();
   }
 
   private mapEdgeQLTypeToPostgreSQL(edgeqlType: string): string {
@@ -1348,8 +1364,9 @@ export class DDLGenerator {
     propertyName: string,
     rewrite: Types.RewriteDefinition,
   ): string[] {
-    const fnName = `${tableName}__${propertyName}__rewrite_fn`;
-    const triggerName = `${tableName}__${propertyName}__rewrite`;
+    const colName = this.propNameToColumnName(propertyName);
+    const fnName = `${tableName}__${colName}__rewrite_fn`;
+    const triggerName = `${tableName}__${colName}__rewrite`;
 
     // Compile the rewrite body expression with variable substitutions
     const compiledExpr = this.compileRewriteExpression(rewrite.body);
@@ -1361,7 +1378,7 @@ export class DDLGenerator {
       `CREATE OR REPLACE FUNCTION ${
         this.escapeIdentifier(fnName)
       }() RETURNS TRIGGER AS $$ BEGIN NEW.${
-        this.escapeIdentifier(propertyName)
+        this.escapeIdentifier(colName)
       } := ${compiledExpr}; RETURN NEW; END; $$ LANGUAGE plpgsql;`,
       `CREATE TRIGGER ${
         this.escapeIdentifier(triggerName)
@@ -1379,8 +1396,9 @@ export class DDLGenerator {
     propertyName: string,
     _events: ("insert" | "update")[],
   ): string[] {
-    const triggerName = `${tableName}__${propertyName}__rewrite`;
-    const fnName = `${tableName}__${propertyName}__rewrite_fn`;
+    const colName = this.propNameToColumnName(propertyName);
+    const triggerName = `${tableName}__${colName}__rewrite`;
+    const fnName = `${tableName}__${colName}__rewrite_fn`;
 
     return [
       `DROP TRIGGER IF EXISTS ${this.escapeIdentifier(triggerName)} ON ${

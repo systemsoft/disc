@@ -288,6 +288,13 @@ export function resolveTypeName(
     // 3. Default module
     typeDef = ctx.schema.types.get(`default::${name}`);
     if (typeDef) return typeDef;
+  } else if (name.startsWith("default::")) {
+    // 4. Strip the default:: prefix — types in the default module are stored
+    // under their bare name (see migration/schema-manager.ts:621), so a
+    // query like `select default::Item` must fall back to looking up `Item`
+    // when the qualified key isn't present.
+    typeDef = ctx.schema.types.get(name.slice("default::".length));
+    if (typeDef) return typeDef;
   }
 
   return undefined;

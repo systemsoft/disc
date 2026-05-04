@@ -571,9 +571,12 @@ export class EdgeQLCompiler {
       // (e.g., "other::Foo") even though the query used "Foo".
       const resolvedName = typeDef.name;
 
+      // Use the bare resolved name for the alias key, not the raw input —
+      // `default::Item` would otherwise leak `::` into a SQL alias and
+      // produce a syntax error.
       const tableAlias = Context.addTableAlias(
         this.ctx,
-        typeName.toLowerCase(),
+        resolvedName.toLowerCase(),
         typeDef.tableName,
         resolvedName,
       );

@@ -493,7 +493,11 @@ export function createServerFromEnv(
     rateLimitBurst: parseInt(Deno.env.get("DISC_RATE_LIMIT_BURST") || "0") ||
       undefined,
     postgresInstance,
-    protocol: Deno.env.get("DISC_PROTOCOL") === "full" ? "full" : "simple",
+    // Default to the full EdgeQL compiler. The "simple" path is a hand-rolled
+    // stub that omits FROM/LIMIT/ORDER and bypasses the real compiler — kept
+    // around for tests that assert against simulated SQL strings, but not
+    // suitable for serving real queries. Set DISC_PROTOCOL=simple to opt in.
+    protocol: Deno.env.get("DISC_PROTOCOL") === "simple" ? "simple" : "full",
     schema,
     extensions,
   };

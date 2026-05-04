@@ -117,6 +117,20 @@ function typeNameToTableName(typeName: string): string {
 }
 
 /**
+ * Convert an SDL property identifier (camelCase) to a SQL column name
+ * (snake_case). Idempotent for already-snake-case input. Mirrors the
+ * helper of the same name in `migration/ddl.ts` — they must agree so
+ * that the EdgeQL compiler's column references and the DDL generator's
+ * column declarations point at the same physical PostgreSQL identifier.
+ */
+function propNameToColumnName(propName: string): string {
+  return propName
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
+    .replace(/([a-z\d])([A-Z])/g, "$1_$2")
+    .toLowerCase();
+}
+
+/**
  * Map an SDL type name to a SQL column type
  */
 function sdlTypeToSqlType(sdlType: string): string {
@@ -487,7 +501,7 @@ export class SchemaManager {
             type: sqlType,
             required: propDecl.required ?? false,
             multi: propDecl.multi ?? false,
-            columnName: propName,
+            columnName: propNameToColumnName(propName),
             edgeqlType: sdlTypeName,
             readonly: propDecl.readonly ?? false,
             hasDefault: propDecl.default !== undefined,

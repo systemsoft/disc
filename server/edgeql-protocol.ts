@@ -640,6 +640,26 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
    * look up the pool from the registry. Otherwise, fall back to the handler's
    * own pool.
    */
+  /**
+   * Unwrap rows whose only column is the literal SQL function name
+   * `jsonb_build_object` — an artifact of how the EdgeQL→SQL compiler
+   * projects shape expressions. Rows that have any other shape are
+   * returned unchanged.
+   */
+  private unwrapJsonbRows(rows: any[]): any[] {
+    if (!Array.isArray(rows) || rows.length === 0) return rows;
+    return rows.map((row) => {
+      if (
+        row && typeof row === "object" && !Array.isArray(row) &&
+        Object.keys(row).length === 1 &&
+        Object.prototype.hasOwnProperty.call(row, "jsonb_build_object")
+      ) {
+        return row.jsonb_build_object;
+      }
+      return row;
+    });
+  }
+
   private resolvePool(context: Types.QueryContext): ConnectionPool | undefined {
     const registry = this.options.databaseRegistry;
     if (registry && context.session.database) {
@@ -695,7 +715,11 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         const normalizedSQL = sql.toLowerCase().trim();
 
         if (normalizedSQL.includes("select")) {
-          return { data: result.rows };
+          // The compiler emits `SELECT jsonb_build_object(...)` for shape
+          // expressions, which surfaces as rows of `{jsonb_build_object: {...}}`.
+          // Unwrap that single-column wrapper so callers see clean object
+          // shapes — UI/SDK consumers expect `row.id` to work directly.
+          return { data: this.unwrapJsonbRows(result.rows) };
         } else if (
           normalizedSQL.includes("insert") &&
           normalizedSQL.includes("returning")
