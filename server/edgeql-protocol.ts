@@ -7,6 +7,7 @@ import * as EdgeQL from "../edgeql/mod.ts";
 import * as Compiler from "../compiler/compiler.ts";
 import * as Context from "../compiler/context.ts";
 import * as SQL from "../compiler/sql.ts";
+import { SQLCodeGenerator } from "../compiler/codegen.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { DatabaseExecutionError, QueryTimeoutError } from "../lib/errors.ts";
 import type { DatabaseRegistry } from "./database-registry.ts";
@@ -297,9 +298,19 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         });
       }
 
+      // Mutation responses come back from `RETURNING *` as raw PG rows
+      // with snake_case column names. Map them back through the schema's
+      // PropertyDef to give callers the camelCase property shape they
+      // see for SELECTs — otherwise `row.created_at` vs `row.createdAt`
+      // varies by query type, which is hostile to clients.
+      const mappedData = this.mapMutationResponseToSchema(
+        result.data,
+        parsedAST,
+      );
+
       // Return successful response
       const response: Types.QueryResponse = {
-        data: result.data,
+        data: mappedData,
         extensions: {
           durationMs,
           parseMs,
@@ -418,226 +429,17 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     }
   }
 
+  /**
+   * Convert a SQL AST to a PG-ready string by delegating to the shared
+   * SQLCodeGenerator. The handler used to maintain its own hand-rolled
+   * generator that silently returned "NULL" for any expression kind it
+   * didn't enumerate (CastExpression, CaseExpression, AggregateExpression,
+   * JsonbAccessExpression, etc.) — every one of those was a latent bug
+   * waiting to surface as `WHERE id = NULL`. Delegating to the canonical
+   * generator removes the entire class.
+   */
   private generateSQLString(sqlAST: SQL.SQLStatement): string {
-    // Convert the SQL AST to a string
-    // This is a simplified implementation - a full version would handle proper formatting
-
-    switch (sqlAST.kind) {
-      case "SelectStatement":
-        return this.generateSelectSQL(sqlAST);
-      case "InsertStatement":
-        return this.generateInsertSQL(sqlAST);
-      case "UpdateStatement":
-        return this.generateUpdateSQL(sqlAST);
-      case "DeleteStatement":
-        return this.generateDeleteSQL(sqlAST);
-      case "RawSQLStatement":
-        return (sqlAST as SQL.RawSQLStatement).sql;
-      default:
-        throw new Error(`Unsupported SQL statement type: ${sqlAST.kind}`);
-    }
-  }
-
-  private generateSelectSQL(stmt: SQL.SelectStatement): string {
-    let sql = "SELECT ";
-
-    // SELECT clause
-    if (stmt.select.distinct) {
-      sql += "DISTINCT ";
-    }
-
-    const selectItems = stmt.select.columns.map((item) =>
-      this.generateSelectItem(item)
-    ).join(", ");
-    sql += selectItems;
-
-    // FROM clause
-    if (stmt.from && stmt.from.tables.length > 0) {
-      sql += " FROM ";
-      const tables = stmt.from.tables.map((table) =>
-        this.generateTableReference(table)
-      ).join(", ");
-      sql += tables;
-    }
-
-    // WHERE clause
-    if (stmt.where) {
-      sql += " WHERE " + this.generateExpression(stmt.where.condition);
-    }
-
-    // ORDER BY clause
-    if (stmt.orderBy) {
-      sql += " ORDER BY ";
-      const orderItems = stmt.orderBy.items.map((item) =>
-        `${this.generateExpression(item.expression)} ${item.direction || "ASC"}`
-      ).join(", ");
-      sql += orderItems;
-    }
-
-    // LIMIT clause
-    if (stmt.limit) {
-      sql += " LIMIT " + this.generateExpression(stmt.limit.count);
-    }
-
-    // OFFSET clause
-    if (stmt.offset) {
-      sql += " OFFSET " + this.generateExpression(stmt.offset.count);
-    }
-
-    return sql;
-  }
-
-  private generateInsertSQL(stmt: SQL.InsertStatement): string {
-    let sql = `INSERT INTO ${stmt.table}`;
-
-    if (stmt.columns.length > 0) {
-      sql += ` (${stmt.columns.join(", ")})`;
-    }
-
-    if (stmt.values.length > 0) {
-      sql += " VALUES ";
-      const valueRows = stmt.values.map((row) =>
-        `(${row.map((expr) => this.generateExpression(expr)).join(", ")})`
-      ).join(", ");
-      sql += valueRows;
-    }
-
-    if (stmt.onConflict) {
-      sql += " ON CONFLICT";
-      if (stmt.onConflict.target) {
-        sql += ` (${stmt.onConflict.target.join(", ")})`;
-      }
-      sql += ` ${stmt.onConflict.action}`;
-    }
-
-    if (stmt.returning) {
-      sql += " RETURNING ";
-      const returningItems = stmt.returning.map((item) =>
-        this.generateSelectItem(item)
-      ).join(", ");
-      sql += returningItems;
-    }
-
-    return sql;
-  }
-
-  private generateUpdateSQL(stmt: SQL.UpdateStatement): string {
-    let sql = `UPDATE ${stmt.table} SET `;
-
-    const setClauses = stmt.set.map((setClause) =>
-      `${setClause.column} = ${this.generateExpression(setClause.value)}`
-    ).join(", ");
-    sql += setClauses;
-
-    if (stmt.where) {
-      sql += " WHERE " + this.generateExpression(stmt.where.condition);
-    }
-
-    if (stmt.returning) {
-      sql += " RETURNING ";
-      const returningItems = stmt.returning.map((item) =>
-        this.generateSelectItem(item)
-      ).join(", ");
-      sql += returningItems;
-    }
-
-    return sql;
-  }
-
-  private generateDeleteSQL(stmt: SQL.DeleteStatement): string {
-    let sql = `DELETE FROM ${stmt.table}`;
-
-    if (stmt.where) {
-      sql += " WHERE " + this.generateExpression(stmt.where.condition);
-    }
-
-    if (stmt.returning) {
-      sql += " RETURNING ";
-      const returningItems = stmt.returning.map((item) =>
-        this.generateSelectItem(item)
-      ).join(", ");
-      sql += returningItems;
-    }
-
-    return sql;
-  }
-
-  private generateSelectItem(item: SQL.SelectItem): string {
-    let sql = this.generateExpression(item.expression);
-
-    if (item.alias) {
-      sql += ` AS ${item.alias}`;
-    }
-
-    return sql;
-  }
-
-  private generateTableReference(table: SQL.TableReference): string {
-    let sql = table.name;
-
-    if (table.alias) {
-      sql += ` AS ${table.alias}`;
-    }
-
-    return sql;
-  }
-
-  private generateExpression(expr: SQL.SQLExpression): string {
-    switch (expr.kind) {
-      case "LiteralExpression":
-        return this.generateLiteral(expr);
-      case "ColumnReference":
-        return expr.table ? `${expr.table}.${expr.column}` : expr.column;
-      case "BinaryExpression":
-        return `(${this.generateExpression(expr.left)} ${expr.operator} ${
-          this.generateExpression(expr.right)
-        })`;
-      case "UnaryExpression":
-        return `${expr.operator} ${this.generateExpression(expr.operand)}`;
-      case "FunctionCall": {
-        const args = expr.args.map((arg) => this.generateExpression(arg)).join(
-          ", ",
-        );
-        return `${expr.name}(${args})`;
-      }
-      case "JsonBuildObject": {
-        const fields = expr.fields.map((field) =>
-          `'${field.key}', ${this.generateExpression(field.value)}`
-        ).join(", ");
-        return `jsonb_build_object(${fields})`;
-      }
-      case "ParameterReference":
-        return `$${expr.index}`;
-      case "RawSQLExpression":
-        // Raw SQL is injected as-is. Used by DESCRIBE TYPE/SCHEMA which
-        // embed compile-time-resolved JSON as a SQL string literal
-        // (e.g., SELECT '<json>'::jsonb). No special handling needed —
-        // the result passes through PG normally.
-        return (expr as SQL.RawSQLExpression).sql;
-      case "CastExpression": {
-        const castExpr = expr as SQL.CastExpression;
-        return `CAST(${
-          this.generateExpression(castExpr.expression)
-        } AS ${castExpr.targetType})`;
-      }
-      default:
-        return "NULL";
-    }
-  }
-
-  private generateLiteral(literal: SQL.LiteralExpression): string {
-    switch (literal.type) {
-      case "string":
-        return `'${String(literal.value).replace(/'/g, "''")}'`;
-      case "number":
-        return String(literal.value);
-      case "boolean":
-        return literal.value ? "TRUE" : "FALSE";
-      case "null":
-        return "NULL";
-      default:
-        return "NULL";
-    }
+    return new SQLCodeGenerator().generate(sqlAST);
   }
 
   /**
@@ -646,6 +448,46 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
    * look up the pool from the registry. Otherwise, fall back to the handler's
    * own pool.
    */
+  /**
+   * Rename snake_case PG column keys back to camelCase property names
+   * for INSERT/UPDATE responses. SELECT shapes are already camelCase
+   * because the compiler emits `jsonb_build_object('camelCase', col)`
+   * pairs; mutations bypass that and return raw `RETURNING *` rows.
+   *
+   * Returns the input unchanged when the AST isn't an insert/update,
+   * when the type isn't in the schema, or when data isn't an object
+   * (e.g. `{ deleted: 1 }` or `{ success: true }` placeholders).
+   */
+  private mapMutationResponseToSchema(
+    data: any,
+    ast: EdgeQL.Query | undefined,
+  ): any {
+    if (!ast) return data;
+    if (ast.kind !== "InsertQuery" && ast.kind !== "UpdateQuery") return data;
+    if (!data || typeof data !== "object" || Array.isArray(data)) return data;
+
+    const typeName = ast.type.name.parts.join("::");
+    const typeDef = Context.resolveTypeName(
+      { schema: this.schema } as any,
+      typeName,
+    );
+    if (!typeDef) return data;
+
+    const colToProp = new Map<string, string>();
+    for (const [propName, prop] of typeDef.properties) {
+      if (prop.columnName) colToProp.set(prop.columnName, propName);
+    }
+    for (const [linkName, link] of typeDef.links) {
+      if (link.columnName) colToProp.set(link.columnName, linkName);
+    }
+
+    const out: Record<string, any> = {};
+    for (const [k, v] of Object.entries(data)) {
+      out[colToProp.get(k) ?? k] = v;
+    }
+    return out;
+  }
+
   /**
    * Unwrap rows whose only column is the literal SQL function name
    * `jsonb_build_object` — an artifact of how the EdgeQL→SQL compiler
