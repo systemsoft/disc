@@ -123,6 +123,15 @@ export interface TypeDef {
   annotations?: Record<string, string>;
   /** Module this type belongs to (e.g., "default", "payment") */
   module?: string;
+  /** Indexes declared on this type (e.g., `index on (.name)`) */
+  indexes?: IndexDef[];
+}
+
+export interface IndexDef {
+  /** Optional named index — e.g., `index name_idx on (.name)` */
+  name?: string;
+  /** Stringified index expression — e.g., ".name" or "(.firstName, .lastName)" */
+  expression: string;
 }
 
 export interface PropertyConstraint {

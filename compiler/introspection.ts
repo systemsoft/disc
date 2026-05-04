@@ -149,6 +149,15 @@ function buildTypeDescription(typeDef: TypeDef): TypeDescription {
     }
   }
 
+  const indexes: string[] = [];
+  if (typeDef.indexes) {
+    for (const idx of typeDef.indexes) {
+      // Format as `name: expression` when named, else just the
+      // expression — matches the convention SDL uses textually.
+      indexes.push(idx.name ? `${idx.name}: ${idx.expression}` : idx.expression);
+    }
+  }
+
   return {
     name: typeDef.name,
     module,
@@ -157,7 +166,7 @@ function buildTypeDescription(typeDef: TypeDef): TypeDescription {
     properties,
     links,
     accessPolicies,
-    indexes: [],
+    indexes,
     annotations: typeDef.annotations ?? {},
   };
 }

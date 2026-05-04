@@ -35,6 +35,7 @@ import {
   AbstractAnnotationDef,
   AliasDef,
   GlobalDef,
+  IndexDef,
   LinkDef,
   PropertyConstraint,
   PropertyDef,
@@ -160,7 +161,7 @@ function stringifyExpression(expr: Expression): string {
       return String(expr.value);
     case "PathExpression": {
       // EdgeQL expression tokens (from parseEdgeQLExpression) are stored as
-      // individual tokens in the path array.  Detect them by checking whether
+      // individual tokens in the path array. Detect them by checking whether
       // the first token is a query keyword and join with spaces instead of
       // dots so the expression round-trips correctly through the EdgeQL parser.
       const edgeqlKeywords = new Set([
@@ -177,6 +178,14 @@ function stringifyExpression(expr: Expression): string {
         edgeqlKeywords.has(expr.path[0].toLowerCase())
       ) {
         return expr.path.join(" ");
+      }
+      // The SDL parser's parsePath emits `["", "name"]` style arrays where
+      // separator dots and identifier tokens are interleaved (e.g. `.name`
+      // → `[".", "name"]`). Joining with another `.` would double-up to
+      // `..name`. Concatenate without a separator so the dots that the
+      // tokenizer already captured stand in as the separators.
+      if (expr.path.some((p) => p === ".")) {
+        return expr.path.join("");
       }
       return expr.path.join(".");
     }
@@ -547,6 +556,18 @@ export class SchemaManager {
           ? adaptAccessPolicies(typeName, sdlPolicies)
           : undefined;
 
+        // Extract indexes from the type declaration. SDL `index on (.foo)`
+        // surfaces here as `AST.Index` members; we stringify the `on`
+        // expression via the existing helper so the EdgeQL compiler and
+        // introspection endpoint can both render them.
+        const indexDecls = converter.extractIndexes(typeDecl);
+        const indexes: IndexDef[] | undefined = indexDecls.length > 0
+          ? indexDecls.map((idx) => ({
+            name: idx.name?.value,
+            expression: stringifyExpression(idx.on),
+          }))
+          : undefined;
+
         // Extract triggers from the type declaration
         const triggerDecls = typeDecl.members.filter(
           (m): m is TriggerDeclaration => m.kind === "TriggerDeclaration",
@@ -584,6 +605,7 @@ export class SchemaManager {
           accessPolicies,
           triggers,
           annotations: typeAnnotations,
+          indexes,
         };
 
         if (isAbstract) {
