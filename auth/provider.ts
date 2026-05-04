@@ -631,7 +631,7 @@ export class AuthProvider implements IAuthProvider {
 
   async resetPasswordRequest(email: string): Promise<string> {
     const result = await this.db.query(
-      "SELECT id FROM users WHERE email = ?",
+      "SELECT id, email_verified FROM users WHERE email = ?",
       [email],
     );
 
@@ -648,6 +648,22 @@ export class AuthProvider implements IAuthProvider {
     }
 
     const userId = result.rows[0].id;
+
+    // gh/geldata#6502: when verification is mandatory, an unverified
+    // account is by definition unreachable — anyone holding the typo'd
+    // email could otherwise complete the reset and seize the account.
+    // Same silent-return shape as no-such-user so callers can't tell
+    // verified-vs-unverified by response.
+    if (
+      this.config.requireEmailVerification &&
+      !result.rows[0].email_verified
+    ) {
+      this.auditEvent("password_reset_requested", userId, {
+        result: "unverified_account_blocked",
+      });
+      return "";
+    }
+
     const resetToken = this.generateToken();
     const resetTokenHash = await this.hashToken(resetToken);
     const expires = new Date(Date.now() + 3600000); // 1 hour

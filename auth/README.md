@@ -131,6 +131,23 @@ interface AuthConfig {
 }
 ```
 
+### Password reset + email verification (gh/geldata#6502)
+
+When `require_email_verification: true` is set, password resets are
+**refused for unverified accounts**. The endpoint returns the same
+empty-string sentinel as for an unknown email — callers can't
+distinguish verified-vs-unverified accounts from the response — and
+audits the block as `unverified_account_blocked`.
+
+Why: an unverified account by definition belongs to whoever owns the
+email used at registration. If a user typo'd their address (e.g.
+`alice@gmial.com`) and someone owns the typo, that someone could
+otherwise complete the reset and seize the account. Reset is only
+useful once email control has been demonstrated via verification.
+
+When `require_email_verification: false`, the reset flow is open to
+all accounts (no behavior change from prior versions).
+
 ### Disabling new sign-ups (gh/geldata#7482)
 
 Set `allow_registration: false` to refuse all new account creation

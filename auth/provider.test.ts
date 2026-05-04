@@ -453,6 +453,60 @@ describe("AuthProvider", () => {
         AuthErrorCode.INVALID_TOKEN,
       );
     });
+
+    it("blocks reset for unverified accounts when verification required (gh/geldata#6502)", async () => {
+      const verifyProvider = new AuthProvider(
+        { ...testConfig, requireEmailVerification: true },
+        db,
+      );
+      await verifyProvider.initialize();
+      await verifyProvider.register({
+        email: "unverified@example.com",
+        password: "ValidPass123!",
+      });
+
+      // Indistinguishable from no-such-user — both return "" silently.
+      const result = await verifyProvider.resetPasswordRequest(
+        "unverified@example.com",
+      );
+      assertEquals(result, "");
+    });
+
+    it("allows reset for verified accounts when verification required", async () => {
+      const verifyProvider = new AuthProvider(
+        { ...testConfig, requireEmailVerification: true },
+        db,
+      );
+      await verifyProvider.initialize();
+      await verifyProvider.register({
+        email: "verified@example.com",
+        password: "ValidPass123!",
+      });
+      // Manually mark verified — we're testing the reset path, not the
+      // verification flow itself.
+      await db.execute(
+        "UPDATE users SET email_verified = TRUE WHERE email = ?",
+        ["verified@example.com"],
+      );
+
+      const result = await verifyProvider.resetPasswordRequest(
+        "verified@example.com",
+      );
+      assert(result.length > 0);
+    });
+
+    it("allows reset for unverified accounts when verification is OFF", async () => {
+      // testConfig doesn't set requireEmailVerification, so it's false.
+      // Even unverified users can reset — same as today.
+      await provider.register({
+        email: "freeform@example.com",
+        password: "ValidPass123!",
+      });
+      const result = await provider.resetPasswordRequest(
+        "freeform@example.com",
+      );
+      assert(result.length > 0);
+    });
   });
 
   describe("Email Verification", () => {
