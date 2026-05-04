@@ -48,6 +48,31 @@ test.describe("Data viewer — read", () => {
     await expect(page.getByRole("cell", { name: "Light cycle" })).toBeVisible();
   });
 
+  test("filters numeric column with range syntax (>=N, a..b)", async ({ page }) => {
+    await page.goto("/ui/data");
+    await expect(page.locator("tbody tr")).toHaveCount(3);
+
+    // The count column has placeholder ">=10, <5, 10..20".
+    const countFilter = page
+      .locator('tr.filter-row input[placeholder*=".."]')
+      .first();
+
+    await countFilter.fill(">=2");
+    await countFilter.press("Enter");
+    // Light cycle (2) and Recognizer (3) match — Disc identity disc (1) does not.
+    await expect(page.locator("tbody tr")).toHaveCount(2);
+
+    await countFilter.fill("2..3");
+    await countFilter.press("Enter");
+    await expect(page.locator("tbody tr")).toHaveCount(2);
+
+    await countFilter.fill(">10");
+    await countFilter.press("Enter");
+    await expect(page.locator("tbody tr")).toHaveCount(1);
+    // The lone row in this scenario is the empty-state placeholder.
+    await expect(page.getByText("No rows match")).toBeVisible();
+  });
+
   test("Clear button resets filters and reloads", async ({ page }) => {
     await page.goto("/ui/data");
     const filterRow = page.locator("tr.filter-row");

@@ -65,6 +65,32 @@
     return v.replace(/'/g, "\\'");
   }
 
+  type RangeOp = '=' | '>=' | '<=' | '>' | '<' | '..';
+  /** Parse range syntax: `>=v`, `<=v`, `>v`, `<v`, `a..b`, or bare `v`. */
+  function parseRange(raw: string): { op: RangeOp; a: string; b?: string } {
+    const range = raw.match(/^\s*(.+?)\s*\.\.\s*(.+?)\s*$/);
+    if (range) return { op: '..', a: range[1], b: range[2] };
+    const m = raw.match(/^\s*(>=|<=|>|<)\s*(.+)$/);
+    if (m) return { op: m[1] as RangeOp, a: m[2].trim() };
+    return { op: '=', a: raw.trim() };
+  }
+
+  /** EdgeQL clause for a single numeric/datetime column with optional range syntax. */
+  function rangeClause(
+    propName: string,
+    raw: string,
+    cast: (v: string) => string,
+    validate: (v: string) => boolean,
+  ): string | null {
+    const r = parseRange(raw);
+    if (!validate(r.a)) return null;
+    if (r.op === '..') {
+      if (!r.b || !validate(r.b)) return null;
+      return `(.${propName} >= ${cast(r.a)} and .${propName} <= ${cast(r.b)})`;
+    }
+    return `.${propName} ${r.op} ${cast(r.a)}`;
+  }
+
   /** Build per-column EdgeQL filter clauses based on the prop type. */
   function buildFilterClause(type: SchemaTypeDescription): string {
     const parts: string[] = [];
@@ -80,22 +106,43 @@
         case 'int64':
         case 'float32':
         case 'float64':
-        case 'decimal':
-          if (!Number.isNaN(Number(raw))) {
-            parts.push(`.${p.name} = ${raw}`);
-          }
+        case 'decimal': {
+          // Numeric range: `>=10`, `<5`, `10..20`, or exact `42`.
+          const clause = rangeClause(
+            p.name,
+            raw,
+            (v) => v,
+            (v) => !Number.isNaN(Number(v)),
+          );
+          if (clause) parts.push(clause);
           break;
+        }
         case 'bool':
           if (raw === 'true' || raw === 'false') {
             parts.push(`.${p.name} = ${raw}`);
           }
           break;
-        case 'uuid':
-          parts.push(`.${p.name} = <uuid>'${escSql(raw)}'`);
+        case 'uuid': {
+          // Range doesn't make sense for uuid; only exact match is supported.
+          // EdgeQL doesn't currently support `<str>.id like ...` for prefix
+          // search, so partial uuids are rejected at filter time.
+          if (/^[0-9a-fA-F-]{36}$/.test(raw)) {
+            parts.push(`.${p.name} = <uuid>'${escSql(raw)}'`);
+          }
           break;
-        case 'datetime':
-          parts.push(`.${p.name} = <datetime>'${escSql(raw)}'`);
+        }
+        case 'datetime': {
+          // Datetime range: `>=2026-01-01`, `<2026-06-01T00:00:00`,
+          // or `2026-01-01..2026-12-31`. Bare value → exact equality.
+          const clause = rangeClause(
+            p.name,
+            raw,
+            (v) => `<datetime>'${escSql(v)}'`,
+            (v) => v.length > 0,
+          );
+          if (clause) parts.push(clause);
           break;
+        }
         default:
           parts.push(`.${p.name} = '${escSql(raw)}'`);
       }
@@ -132,6 +179,45 @@
     if (Object.values(filters).every((v) => !v)) return;
     filters = {};
     loadRows();
+  }
+
+  function filterPlaceholder(type: string): string {
+    switch (type) {
+      case 'str':
+        return 'contains…';
+      case 'int16':
+      case 'int32':
+      case 'int64':
+      case 'float32':
+      case 'float64':
+      case 'decimal':
+        return '>=10, <5, 10..20';
+      case 'datetime':
+        return '>=2026-01-01';
+      case 'uuid':
+        return 'full uuid';
+      default:
+        return type;
+    }
+  }
+
+  function filterTitle(type: string): string {
+    switch (type) {
+      case 'str':
+        return 'Case-insensitive substring match (ilike)';
+      case 'int16':
+      case 'int32':
+      case 'int64':
+      case 'float32':
+      case 'float64':
+      case 'decimal':
+      case 'datetime':
+        return 'Range syntax: >=v, <=v, >v, <v, a..b — bare value = exact match';
+      case 'uuid':
+        return 'Exact match only — full 36-character UUID';
+      default:
+        return 'Exact match';
+    }
   }
 
   /** Properties that should appear as columns and be writable (excludes computed). */
@@ -437,9 +523,8 @@
                     {:else if prop}
                       <input
                         type="text"
-                        placeholder={prop.type === 'str'
-                          ? 'contains…'
-                          : prop.type}
+                        placeholder={filterPlaceholder(prop.type)}
+                        title={filterTitle(prop.type)}
                         bind:value={filters[col]}
                         on:keydown={(e) => e.key === 'Enter' && loadRows()}
                         on:blur={loadRows}
