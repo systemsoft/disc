@@ -254,9 +254,11 @@ describe("AuthProvider", () => {
     });
 
     it("should reject expired tokens", async () => {
-      // Create provider with very short expiry
+      // gh/geldata#7006: validator now rejects tokenExpiry ≤ 0; use 1
+      // (the minimum) and wait past it. Adds ~1.1s but matches what an
+      // operator could actually configure.
       const shortExpiryProvider = new AuthProvider(
-        { ...testConfig, tokenExpiry: 0 },
+        { ...testConfig, tokenExpiry: 1 },
         db,
       );
       await shortExpiryProvider.initialize();
@@ -268,8 +270,8 @@ describe("AuthProvider", () => {
 
       const response = await shortExpiryProvider.register(registerData);
 
-      // Wait a moment for token to expire
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      // Wait past the 1-second exp so the JWT is genuinely expired.
+      await new Promise((resolve) => setTimeout(resolve, 1100));
 
       await assertRejects(
         () => shortExpiryProvider.verifyToken(response.token),

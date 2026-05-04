@@ -101,6 +101,11 @@ export class AuthProvider implements IAuthProvider {
   }
 
   async initialize(): Promise<void> {
+    // gh/geldata#7006: validate every config value up-front so a misconfig
+    // surfaces at boot with a clear error, not as an opaque bcrypt /
+    // JWT crash on the first auth request.
+    validateAuthConfig(this.config);
+
     // P3-04: HS256 (shared secret) is the default; RS256 (asymmetric
     // keys, so verifiers don't need the signing secret) is opt-in via
     // `jwtAlgorithm: "RS256"`. To rotate an HS256 secret: stand up a
@@ -949,6 +954,104 @@ export class AuthProvider implements IAuthProvider {
     return Array.from(new Uint8Array(digest))
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
+  }
+}
+
+/**
+ * Validate every numeric / enum field in `AuthConfig` so a bad config
+ * fails at `initialize()` rather than at the first auth request. Each
+ * error message points to the offending field plus the allowed range,
+ * so an operator can fix the config without reading the source.
+ *
+ * Algorithm-specific keys (`jwtSecret`, `jwtPrivateKey`, `jwtPublicKey`)
+ * are still validated downstream by `importHmacKey` / `importRsaKeys`,
+ * since those have richer per-algorithm semantics. (gh/geldata#7006)
+ */
+function validateAuthConfig(config: ResolvedAuthConfig): void {
+  // bcrypt rejects rounds outside [4, 31]; the practical upper bound
+  // (rounds=15 is already ~1s/hash on commodity hardware) is what we
+  // enforce — beyond that, registration becomes a DoS amplifier.
+  if (
+    !Number.isInteger(config.bcryptRounds) ||
+    config.bcryptRounds < 4 ||
+    config.bcryptRounds > 15
+  ) {
+    throw new Error(
+      `AuthProvider: bcryptRounds must be an integer in [4, 15]; got ${config.bcryptRounds}`,
+    );
+  }
+
+  if (config.tokenExpiry <= 0 || !Number.isFinite(config.tokenExpiry)) {
+    throw new Error(
+      `AuthProvider: tokenExpiry must be a positive number of seconds; got ${config.tokenExpiry}`,
+    );
+  }
+
+  if (
+    config.refreshTokenExpiry <= 0 ||
+    !Number.isFinite(config.refreshTokenExpiry)
+  ) {
+    throw new Error(
+      `AuthProvider: refreshTokenExpiry must be a positive number of seconds; got ${config.refreshTokenExpiry}`,
+    );
+  }
+
+  if (config.refreshTokenExpiry < config.tokenExpiry) {
+    throw new Error(
+      `AuthProvider: refreshTokenExpiry (${config.refreshTokenExpiry}s) must be ≥ tokenExpiry (${config.tokenExpiry}s) — refresh tokens shorter than access tokens defeat the purpose`,
+    );
+  }
+
+  if (config.sessionTimeout <= 0 || !Number.isFinite(config.sessionTimeout)) {
+    throw new Error(
+      `AuthProvider: sessionTimeout must be a positive number of seconds; got ${config.sessionTimeout}`,
+    );
+  }
+
+  if (
+    !Number.isInteger(config.passwordMinLength) ||
+    config.passwordMinLength < 1
+  ) {
+    throw new Error(
+      `AuthProvider: passwordMinLength must be a positive integer; got ${config.passwordMinLength}`,
+    );
+  }
+
+  if (
+    !Number.isInteger(config.maxSessionsPerUser) ||
+    config.maxSessionsPerUser < 0
+  ) {
+    throw new Error(
+      `AuthProvider: maxSessionsPerUser must be a non-negative integer (0 disables the cap); got ${config.maxSessionsPerUser}`,
+    );
+  }
+
+  // jwtAlgorithm is type-checked at compile time, but TypeScript's
+  // type narrowing doesn't survive untrusted JSON config.
+  if (
+    config.jwtAlgorithm !== "HS256" &&
+    config.jwtAlgorithm !== "RS256"
+  ) {
+    throw new Error(
+      `AuthProvider: jwtAlgorithm must be "HS256" or "RS256"; got ${
+        JSON.stringify(config.jwtAlgorithm)
+      }`,
+    );
+  }
+
+  if (typeof config.jwtIssuer !== "string" || config.jwtIssuer.length === 0) {
+    throw new Error(
+      "AuthProvider: jwtIssuer must be a non-empty string",
+    );
+  }
+
+  if (
+    typeof config.jwtAudience !== "string" ||
+    config.jwtAudience.length === 0
+  ) {
+    throw new Error(
+      "AuthProvider: jwtAudience must be a non-empty string",
+    );
   }
 }
 
