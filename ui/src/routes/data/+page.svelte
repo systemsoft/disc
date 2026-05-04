@@ -35,13 +35,18 @@
   }
 
   function buildSelect(type: SchemaTypeDescription): { query: string; cols: string[] } {
+    // Schema introspection includes `id` in properties[], so don't prepend
+    // it again — duplicate fields make the compiler emit invalid SQL.
     const propNames = type.properties.map((p) => p.name);
     const linkNames = type.links
       .filter((l) => l.cardinality === 'single')
       .map((l) => l.name);
-    const fields = ['id', ...propNames, ...linkNames.map((n) => `${n}: { id }`)];
+    const orderedProps = propNames.includes('id')
+      ? ['id', ...propNames.filter((n) => n !== 'id')]
+      : ['id', ...propNames];
+    const fields = [...orderedProps, ...linkNames.map((n) => `${n}: { id }`)];
     const query = `select ${type.module}::${type.name} { ${fields.join(', ')} } limit ${limit};`;
-    return { query, cols: ['id', ...propNames, ...linkNames] };
+    return { query, cols: [...orderedProps, ...linkNames] };
   }
 
   async function loadRows() {
