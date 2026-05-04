@@ -28,9 +28,14 @@ import {
   PROTOCOL_MINOR_VERSION,
   TransactionState,
 } from "./enums.ts";
-import { generateDescriptorIdSync } from "./typedesc.ts";
+import {
+  generateDescriptorIdSync,
+  resolveWellKnownType,
+} from "./typedesc.ts";
 import { BufferWriter } from "./buffer.ts";
 import { uuidToBytes } from "./types.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
+import type * as AST from "../edgeql/ast.ts";
 import type { Schema } from "../compiler/context.ts";
 import {
   deriveKeys,
@@ -178,6 +183,272 @@ function buildEmptyStateDescriptor(): { tid: Uint8Array; typedesc: Uint8Array } 
   const block = new BufferWriter();
   block.writeLenPrefixedBytes(desc.toBytes());
   return { tid, typedesc: block.toBytes() };
+}
+
+// ---------------------------------------------------------------------------
+// v2 typedesc encoders for CommandDataDescription
+// ---------------------------------------------------------------------------
+//
+// Protocol v2 references inner codecs by **position** in the descriptor list
+// (not by UUID). The wire shapes the upstream Gel clients expect:
+//
+//   CTYPE_BASE_SCALAR (=2): [u8 t][16 tid]
+//   CTYPE_INPUT_SHAPE (=8): [u8 t][16 tid][u16 els]
+//                           per el: [u32 flags][u8 cardinality]
+//                                   [u32 nameLen][bytes name][u16 pos]
+//   CTYPE_SHAPE       (=1): [u8 t][16 tid][u8 isCompound=0][u16 ephemeral=0]
+//                           [u16 els]
+//                           per el: [u32 flags][u8 cardinality]
+//                                   [u32 nameLen][bytes name][u16 pos]
+//                                   [u16 sourceTypePos]
+//
+// Each descriptor in the typedesc block is itself u32-length-prefixed.
+
+interface ShapeElementV2 {
+  name: string;
+  /** index into the descriptor list of this field's type codec */
+  pos: number;
+  cardinality: number;
+}
+
+function encodeBaseScalarV2(tid: Uint8Array): Uint8Array {
+  const w = new BufferWriter();
+  w.writeUInt8(2);
+  w.writeUUID(tid);
+  return w.toBytes();
+}
+
+function encodeShapeV2(
+  tid: Uint8Array,
+  elements: ShapeElementV2[],
+): Uint8Array {
+  const w = new BufferWriter();
+  w.writeUInt8(1);
+  w.writeUUID(tid);
+  w.writeUInt8(0); // is_compound
+  w.writeUInt16(0); // ephemeral_free_objects
+  w.writeUInt16(elements.length);
+  for (const el of elements) {
+    w.writeUInt32(0); // flags
+    w.writeUInt8(el.cardinality);
+    w.writeString(el.name);
+    w.writeUInt16(el.pos);
+    w.writeUInt16(0); // source_type_pos
+  }
+  return w.toBytes();
+}
+
+/**
+ * Concatenate per-descriptor length-prefixed bytes into a typedesc block.
+ * Returns the block plus the last descriptor's UUID (the "root" id that
+ * gets sent in the CommandDataDescription header).
+ */
+function packTypedescBlock(
+  descriptors: Array<{ id: Uint8Array; bytes: Uint8Array }>,
+): { data: Uint8Array; rootId: Uint8Array } {
+  const w = new BufferWriter();
+  for (const d of descriptors) {
+    w.writeLenPrefixedBytes(d.bytes);
+  }
+  const rootId = descriptors[descriptors.length - 1].id;
+  return { data: w.toBytes(), rootId };
+}
+
+interface ParamInfo {
+  name: string;
+  edgeqlType: string;
+}
+
+interface OutputField {
+  name: string;
+  edgeqlType: string;
+}
+
+interface OutputShape {
+  typeName: string;
+  fields: OutputField[];
+}
+
+/**
+ * Walk an AST and collect every `<TypeName>$paramName` cast as a parameter.
+ * Returns parameters in first-seen order (deduplicated by name).
+ */
+function collectParameters(node: unknown): ParamInfo[] {
+  const seen = new Set<string>();
+  const out: ParamInfo[] = [];
+
+  function visit(n: unknown): void {
+    if (!n || typeof n !== "object") return;
+    const obj = n as { kind?: string; type?: AST.TypeName; expr?: unknown };
+    if (
+      obj.kind === "TypeCast" &&
+      obj.expr &&
+      typeof obj.expr === "object" &&
+      (obj.expr as { kind?: string }).kind === "Parameter"
+    ) {
+      const param = obj.expr as AST.Parameter;
+      const tn = obj.type;
+      // The lexer keeps the leading `$` on parameter names. Strip it
+      // before exposing on the wire — clients pass kwargs without `$`.
+      const bare = param.name.startsWith("$") ? param.name.slice(1) : param.name;
+      if (tn?.name?.parts?.length && !seen.has(bare)) {
+        seen.add(bare);
+        out.push({
+          name: bare,
+          edgeqlType: tn.name.parts[tn.name.parts.length - 1],
+        });
+      }
+    }
+    for (const value of Object.values(obj as Record<string, unknown>)) {
+      if (Array.isArray(value)) {
+        for (const item of value) visit(item);
+      } else if (value && typeof value === "object") {
+        visit(value);
+      }
+    }
+  }
+  visit(node);
+  return out;
+}
+
+/**
+ * Derive the output shape from a parsed query. Phase B keeps this simple:
+ *
+ *   - INSERT/UPDATE/DELETE → just the implicit `id: uuid` field.
+ *   - SELECT with explicit shape → walk shape elements, look up scalar
+ *     property types in the schema; default unknown fields to uuid.
+ *   - SELECT without shape → `{id: uuid}`.
+ */
+function inferOutputShape(
+  query: unknown,
+  schema?: { types?: Map<string, { properties: Map<string, { edgeqlType?: string; type: string }> }> },
+): OutputShape {
+  const idField: OutputField = { name: "id", edgeqlType: "uuid" };
+  if (!query || typeof query !== "object") {
+    return { typeName: "Object", fields: [idField] };
+  }
+  const q = query as { kind?: string };
+
+  if (q.kind === "InsertQuery" || q.kind === "UpdateQuery" || q.kind === "DeleteQuery") {
+    return { typeName: "Object", fields: [idField] };
+  }
+
+  if (q.kind === "SelectQuery") {
+    const sel = q as AST.SelectQuery;
+    const typeName = extractTypeNameFromExpr(sel.expr) ?? "Object";
+    const fields: OutputField[] = [];
+    const typeDef = schema?.types?.get(typeName);
+
+    if (sel.shape) {
+      for (const el of sel.shape.elements) {
+        const fieldName = el.name?.name ??
+          (el.expr && (el.expr as { kind?: string }).kind === "Path"
+            ? lastPathStep(el.expr as AST.Path)
+            : undefined);
+        if (!fieldName) continue;
+        const propType = typeDef?.properties.get(fieldName);
+        const eqlType = propType?.edgeqlType ?? propType?.type ?? "uuid";
+        fields.push({ name: fieldName, edgeqlType: eqlType });
+      }
+    }
+
+    if (fields.length === 0) fields.push(idField);
+    return { typeName, fields };
+  }
+
+  return { typeName: "Object", fields: [idField] };
+}
+
+function extractTypeNameFromExpr(expr: unknown): string | null {
+  if (!expr || typeof expr !== "object") return null;
+  const e = expr as { kind?: string; steps?: AST.PathStep[] };
+  if (e.kind === "Path" && e.steps && e.steps.length > 0) {
+    // First step is the root type identifier in `SELECT Type { ... }`.
+    return e.steps[0].name;
+  }
+  if (e.kind === "Identifier") return (e as { name?: string }).name ?? null;
+  return null;
+}
+
+function lastPathStep(path: AST.Path): string | undefined {
+  return path.steps[path.steps.length - 1]?.name;
+}
+
+/**
+ * Build a CTYPE_INPUT_SHAPE descriptor list for the parameters. For each
+ * unique scalar type emit a CTYPE_BASE_SCALAR descriptor first; the input
+ * shape references those by position.
+ */
+function buildInputDescriptor(
+  params: ParamInfo[],
+): { id: Uint8Array; data: Uint8Array } {
+  const descriptors: Array<{ id: Uint8Array; bytes: Uint8Array }> = [];
+  const scalarPos = new Map<string, number>();
+
+  function ensureScalar(eqlType: string): number {
+    let pos = scalarPos.get(eqlType);
+    if (pos !== undefined) return pos;
+    const tid = resolveWellKnownType(eqlType) ??
+      resolveWellKnownType("uuid")!;
+    pos = descriptors.length;
+    descriptors.push({ id: tid, bytes: encodeBaseScalarV2(tid) });
+    scalarPos.set(eqlType, pos);
+    return pos;
+  }
+
+  const elements: ShapeElementV2[] = params.map((p) => ({
+    name: p.name,
+    pos: ensureScalar(p.edgeqlType),
+    cardinality: 0x41, // ONE
+  }));
+
+  const tid = generateDescriptorIdSync(
+    new TextEncoder().encode(
+      `disc:input:${params.map((p) => p.name + ":" + p.edgeqlType).join(",")}`,
+    ),
+  );
+  // Use CTYPE_SHAPE (not CTYPE_INPUT_SHAPE) for query parameters: the
+  // Python client raises NotImplementedError on encode_args when the
+  // codec is sparse, and CTYPE_INPUT_SHAPE → SparseObjectCodec. Also
+  // used when there are no params, so the client gets a non-empty codec.
+  descriptors.push({ id: tid, bytes: encodeShapeV2(tid, elements) });
+
+  const packed = packTypedescBlock(descriptors);
+  return { id: packed.rootId, data: packed.data };
+}
+
+function buildOutputDescriptor(
+  shape: OutputShape,
+): { id: Uint8Array; data: Uint8Array } {
+  const descriptors: Array<{ id: Uint8Array; bytes: Uint8Array }> = [];
+  const scalarPos = new Map<string, number>();
+
+  function ensureScalar(eqlType: string): number {
+    let pos = scalarPos.get(eqlType);
+    if (pos !== undefined) return pos;
+    const tid = resolveWellKnownType(eqlType) ??
+      resolveWellKnownType("uuid")!;
+    pos = descriptors.length;
+    descriptors.push({ id: tid, bytes: encodeBaseScalarV2(tid) });
+    scalarPos.set(eqlType, pos);
+    return pos;
+  }
+
+  const elements: ShapeElementV2[] = shape.fields.map((f) => ({
+    name: f.name,
+    pos: ensureScalar(f.edgeqlType),
+    cardinality: 0x41, // ONE
+  }));
+
+  const tid = generateDescriptorIdSync(
+    new TextEncoder().encode(
+      `disc:output:${shape.typeName}:${shape.fields.map((f) => f.name + ":" + f.edgeqlType).join(",")}`,
+    ),
+  );
+  descriptors.push({ id: tid, bytes: encodeShapeV2(tid, elements) });
+
+  const packed = packTypedescBlock(descriptors);
+  return { id: packed.rootId, data: packed.data };
 }
 
 // ---------------------------------------------------------------------------
@@ -1041,29 +1312,32 @@ export class BinaryConnection {
   // -----------------------------------------------------------------------
 
   private buildDescriptors(
-    _commandText: string,
+    commandText: string,
   ): {
     inputDesc: { id: Uint8Array; data: Uint8Array };
     outputDesc: { id: Uint8Array; data: Uint8Array };
   } {
-    // For now, build empty/simple descriptors.
-    // A full implementation would parse the EdgeQL against this._schema,
-    // compile it, and derive proper input/output type descriptors.
-    void this._schema;
-
-    // Empty input descriptor (no parameters)
-    const emptyData = new Uint8Array(0);
-    const emptyId = generateDescriptorIdSync(emptyData);
-
-    // Try to extract a type name from the command and build
-    // output descriptors from the schema. For now, use empty.
-    const outputData = emptyData;
-    const outputId = emptyId;
-
-    return {
-      inputDesc: { id: emptyId, data: emptyData },
-      outputDesc: { id: outputId, data: outputData },
-    };
+    // Phase B (P2-09): parse the EdgeQL command to derive minimum-viable
+    // input + output type descriptors so the upstream Gel clients can
+    // build codecs and round-trip values. Falls back to empty shapes on
+    // parse error so query execution can surface a real error.
+    try {
+      const parser = new EdgeQLParser(commandText);
+      const query = parser.parse();
+      const params = collectParameters(query);
+      const output = inferOutputShape(query, this._schema);
+      return {
+        inputDesc: buildInputDescriptor(params),
+        outputDesc: buildOutputDescriptor(output),
+      };
+    } catch {
+      const emptyData = new Uint8Array(0);
+      const emptyId = generateDescriptorIdSync(emptyData);
+      return {
+        inputDesc: { id: emptyId, data: emptyData },
+        outputDesc: { id: emptyId, data: emptyData },
+      };
+    }
   }
 
   // -----------------------------------------------------------------------

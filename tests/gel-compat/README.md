@@ -68,35 +68,39 @@ appears in the workflow log is a real validation win.
 
 ## Known compat gaps (current state)
 
-Three protocol gaps have been closed since the harness first ran:
+Four protocol gaps closed so far:
 
 1. **`system_config` ParameterStatus** — disc now emits a typedesc-prefixed
-   NamedTuple `(session_idle_timeout: duration)`. Both clients decode it
-   and access `.session_idle_timeout` without a NoneType crash.
-2. **`StateDataDescription` message** — disc now emits an empty
-   SparseObject state codec right after the ParameterStatus block. Without
-   it, the Python client `assert self.state_codec is not None` fired
-   mid-query inside `encode_parse_params`.
-3. **Protocol v2 vs v3 field shift** — `inputLanguage` is a v3.0+ field;
-   disc speaks v2.0 but was reading/writing it on Parse/Execute. Removing
-   it from the wire format fixed a cascading 1-byte misalignment that
-   surfaced as the infamous `Buffer underflow: need 14921 bytes at
-   position 33` on the client.
+   NamedTuple `(session_idle_timeout: duration)`.
+2. **`StateDataDescription` message** — disc now emits an empty SparseObject
+   state codec at handshake.
+3. **Protocol v2 vs v3 field shift** — `inputLanguage` removed from
+   Parse/Execute wire format (v3.0+ field; disc speaks v2.0).
+4. **CommandDataDescription typedesc bytes** — disc now parses each query
+   with the EdgeQL parser, walks the AST for parameters and output shape,
+   and emits valid v2 `CTYPE_BASE_SCALAR` + `CTYPE_SHAPE` descriptors
+   (using position-referenced subcodecs as v2 requires). Names are
+   stripped of the leading `$` since clients pass kwargs without it.
 
-After these fixes both clients complete handshake, send Parse + Execute,
-and disc replies with `CommandDataDescription` + `Data`. **Remaining gap:**
+After (4), both clients complete the full Parse/Execute round-trip:
+arguments encode correctly, disc executes the query, Data messages come
+back. **Remaining gap:**
 
-4. **Disc emits empty input/output type descriptors in
-   CommandDataDescription.** Symptom: Python `RuntimeError: cannot not
-   build codec; empty type desc`; JS `InternalClientError: could not
-   build a codec`. The compiler tracks result shape but the binary
-   protocol layer doesn't translate that into v2 typedesc bytes.
-   - Fix: in `protocol/binary-server.ts` near the `prepareDescriptors`
-     helper, walk the EdgeQL query's compiled output type and emit a
-     CTYPE_OBJECT (=10) shape with one element per field; for queries
-     with parameters, emit a CTYPE_INPUT_SHAPE (=8). The wire shape both
-     clients expect is in
-     `tests/gel-compat/python/.venv/lib/python*/site-packages/gel/protocol/codecs/codecs.pyx:209-249`
-     and `tests/gel-compat/node/node_modules/gel/dist/codecs/registry.js:132-164`.
+5. **Data message payload doesn't match the advertised typedesc.**
+   Symptom: Python `gel.errors.ClientError: unable to decode data to
+   Python objects`; JS `Cannot decode Object: ...`. Disc's response path
+   currently emits results as a single JSON blob (via PG's
+   `jsonb_build_object`), but the binary protocol typedesc says "Object
+   with field-by-field binary encoding." The two sides must agree.
+   - Fix path A: change disc's response builder to emit per-field binary
+     values matching the codec (i32 elem-count, per-field
+     `[u32 reserved][i32 len][bytes]` using each field's scalar codec).
+   - Fix path B: emit a typedesc that says "the whole result is one
+     `std::json` field" and have the client decode JSON. Less work but
+     loses the per-field shape that callers expect.
+   - Reference: `tests/gel-compat/node/node_modules/gel/dist/codecs/object.js:128`
+     for the JS Object decode loop;
+     `tests/gel-compat/python/.venv/lib/python*/site-packages/gel/protocol/codecs/object.pyx:152`
+     for the Python equivalent.
 
-When this lands the CRUD smoke flips fully green.
+When (5) lands, INSERT/UPDATE/DELETE and SELECT-by-id should flip green.
