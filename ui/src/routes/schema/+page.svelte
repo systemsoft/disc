@@ -32,6 +32,12 @@
   function selectType(type: SchemaTypeDescription) {
     selectedType = type;
   }
+
+  function annotationEntries(
+    a: Record<string, string> | undefined,
+  ): Array<[string, string]> {
+    return a ? Object.entries(a) : [];
+  }
 </script>
 
 <div class="schema-browser">
@@ -67,36 +73,58 @@
     {#if selectedType}
       <div class="type-header">
         <h1>{selectedType.name}</h1>
-        <div class="type-actions">
-          <button class="button">View Data</button>
-          <button class="button">Query Builder</button>
+        <div class="type-meta">
+          {#if selectedType.module}
+            <span class="meta-tag">module: {selectedType.module}</span>
+          {/if}
+          {#if selectedType.abstract}
+            <span class="meta-tag abstract">abstract</span>
+          {/if}
+          {#if selectedType.parentTypes.length > 0}
+            <span class="meta-tag">extends {selectedType.parentTypes.join(', ')}</span>
+          {/if}
         </div>
       </div>
-      
+
       <div class="type-sections">
         <section class="properties-section">
           <h3>Properties</h3>
           <div class="properties-list">
             {#each selectedType.properties as prop}
               <div class="property-item">
-                <span class="property-name">{prop.name}</span>
-                <span class="property-type">{prop.type}</span>
-                <div class="property-flags">
-                  {#if prop.required}
-                    <span class="flag required">required</span>
-                  {/if}
-                  {#if prop.readonly}
-                    <span class="flag">readonly</span>
-                  {/if}
-                  {#if prop.computed}
-                    <span class="flag">computed</span>
-                  {/if}
+                <div class="property-row">
+                  <span class="property-name">{prop.name}</span>
+                  <span class="property-type">{prop.type}</span>
+                  <div class="property-flags">
+                    {#if prop.required}
+                      <span class="flag required">required</span>
+                    {/if}
+                    {#if prop.readonly}
+                      <span class="flag">readonly</span>
+                    {/if}
+                    {#if prop.computed}
+                      <span class="flag">computed</span>
+                    {/if}
+                    {#if prop.hasDefault}
+                      <span class="flag">default</span>
+                    {/if}
+                  </div>
                 </div>
+                {#if prop.constraints && prop.constraints.length > 0}
+                  <div class="constraint-list">
+                    {#each prop.constraints as c}
+                      <code class="constraint">{c}</code>
+                    {/each}
+                  </div>
+                {/if}
+                {#each annotationEntries(prop.annotations) as [k, v]}
+                  <div class="annotation"><code>@{k}</code>: {v}</div>
+                {/each}
               </div>
             {/each}
           </div>
         </section>
-        
+
         {#if selectedType.links.length > 0}
           <section class="links-section">
             <h3>Links</h3>
@@ -112,11 +140,55 @@
                   {#if link.required}
                     <span class="flag required">required</span>
                   {/if}
+                  {#if link.readonly}
+                    <span class="flag">readonly</span>
+                  {/if}
                 </div>
               {/each}
             </div>
           </section>
         {/if}
+
+        {#if selectedType.indexes.length > 0}
+          <section class="indexes-section">
+            <h3>Indexes</h3>
+            <div class="entry-list">
+              {#each selectedType.indexes as idx}
+                <code class="index-expr">{idx}</code>
+              {/each}
+            </div>
+          </section>
+        {/if}
+
+        {#if selectedType.accessPolicies.length > 0}
+          <section class="policies-section">
+            <h3>Access Policies</h3>
+            <div class="entry-list">
+              {#each selectedType.accessPolicies as policy}
+                <code class="policy-expr">{policy}</code>
+              {/each}
+            </div>
+          </section>
+        {/if}
+
+        {#if annotationEntries(selectedType.annotations).length > 0}
+          <section class="annotations-section">
+            <h3>Annotations</h3>
+            <div class="entry-list">
+              {#each annotationEntries(selectedType.annotations) as [k, v]}
+                <div class="annotation"><code>@{k}</code>: {v}</div>
+              {/each}
+            </div>
+          </section>
+        {/if}
+      </div>
+    {:else if loading}
+      <div class="empty-state">
+        <p>Loading…</p>
+      </div>
+    {:else if loadError}
+      <div class="empty-state error">
+        <p>{loadError}</p>
       </div>
     {:else}
       <div class="empty-state">
@@ -230,14 +302,30 @@
       align-items: center;
       padding: calc(var(--grid-unit) * 3);
       border-bottom: 1px solid var(--color-border);
-      
+
       h1 {
         font-size: 1.5rem;
       }
-      
-      .type-actions {
+
+      .type-meta {
         display: flex;
         gap: var(--grid-unit);
+        flex-wrap: wrap;
+      }
+
+      .meta-tag {
+        padding: 4px 10px;
+        background: var(--color-background);
+        border: 1px solid var(--color-border);
+        border-radius: var(--border-radius);
+        color: var(--color-text-dim);
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+
+        &.abstract {
+          color: var(--color-warning);
+          border-color: rgb(var(--color-warning-rgb) / 0.4);
+        }
       }
     }
     
@@ -266,17 +354,81 @@
     
     .property-item,
     .link-item {
-      display: flex;
-      align-items: center;
-      gap: calc(var(--grid-unit) * 2);
       padding: calc(var(--grid-unit) * 1.5);
       border-bottom: 1px solid var(--color-border);
       font-family: var(--font-mono);
       font-size: 0.875rem;
-      
+
       &:last-child {
         border-bottom: none;
       }
+    }
+
+    .link-item {
+      display: flex;
+      align-items: center;
+      gap: calc(var(--grid-unit) * 2);
+    }
+
+    .property-row {
+      display: flex;
+      align-items: center;
+      gap: calc(var(--grid-unit) * 2);
+    }
+
+    .constraint-list {
+      display: flex;
+      gap: calc(var(--grid-unit) * 0.75);
+      flex-wrap: wrap;
+      margin-top: calc(var(--grid-unit) * 0.5);
+      margin-left: 150px;
+    }
+
+    .constraint {
+      padding: 1px 6px;
+      background: rgb(var(--color-warning-rgb) / 0.1);
+      border: 1px solid rgb(var(--color-warning-rgb) / 0.3);
+      border-radius: var(--border-radius);
+      color: var(--color-warning);
+      font-size: 0.7rem;
+    }
+
+    .annotation {
+      margin-top: calc(var(--grid-unit) * 0.5);
+      margin-left: 150px;
+      color: var(--color-text-dim);
+      font-size: 0.75rem;
+
+      code {
+        color: var(--color-info);
+      }
+    }
+
+    .entry-list {
+      background: var(--color-background);
+      border: 1px solid var(--color-border);
+      border-radius: var(--border-radius);
+      padding: calc(var(--grid-unit) * 2);
+      display: flex;
+      flex-direction: column;
+      gap: var(--grid-unit);
+    }
+
+    .index-expr,
+    .policy-expr {
+      display: block;
+      padding: calc(var(--grid-unit) * 1.5);
+      background: var(--color-surface);
+      border-left: 2px solid var(--color-secondary);
+      border-radius: var(--border-radius);
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: var(--color-text);
+      white-space: pre-wrap;
+    }
+
+    .policy-expr {
+      border-left-color: var(--color-info);
     }
     
     .property-name,

@@ -1,9 +1,15 @@
 module default {
   type Item {
-    required name: str;
-    required count: int32;
+    required name: str {
+      constraint exclusive;
+      constraint max_len_value(100);
+    };
+    required count: int32 {
+      constraint min_value(0);
+    };
     createdAt: datetime {
       default := datetime_current();
     };
+    index on (.name);
   };
 };
