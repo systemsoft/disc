@@ -69,6 +69,54 @@ Deno.test("CLI - version flag parsing", () => {
   assertEquals(args.version, true);
 });
 
+// P2-12: end-to-end check that `disc --version` (no subcommand) prints
+// the version and exits — does NOT fall through to the help text branch.
+Deno.test("CLI - `disc --version` prints version, not help", async () => {
+  const cmd = new Deno.Command(Deno.execPath(), {
+    args: [
+      "run",
+      "--allow-net",
+      "--allow-read",
+      "--allow-write",
+      "--allow-env",
+      "--allow-run",
+      "cli/main.ts",
+      "--version",
+    ],
+    stdout: "piped",
+    stderr: "piped",
+  });
+  const { code, stdout } = await cmd.output();
+  const out = new TextDecoder().decode(stdout);
+  assertEquals(code, 0);
+  assertEquals(out.startsWith("Disc Database v"), true, out);
+  // Help text starts with a leading newline + "Disc Database CLI v…\n\nUSAGE:".
+  // If we ever fell through to help, this `USAGE` substring would appear.
+  assertEquals(out.includes("USAGE:"), false, out);
+});
+
+Deno.test("CLI - `disc -v` short flag prints version", async () => {
+  const cmd = new Deno.Command(Deno.execPath(), {
+    args: [
+      "run",
+      "--allow-net",
+      "--allow-read",
+      "--allow-write",
+      "--allow-env",
+      "--allow-run",
+      "cli/main.ts",
+      "-v",
+    ],
+    stdout: "piped",
+    stderr: "piped",
+  });
+  const { code, stdout } = await cmd.output();
+  const out = new TextDecoder().decode(stdout);
+  assertEquals(code, 0);
+  assertEquals(out.startsWith("Disc Database v"), true, out);
+  assertEquals(out.includes("USAGE:"), false, out);
+});
+
 Deno.test("CLI - codegen command arguments", () => {
   const args = parseArgs([
     "codegen",

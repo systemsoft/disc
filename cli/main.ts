@@ -342,13 +342,16 @@ async function main() {
     },
   }) as CLIArgs;
 
-  if (args._.length === 0) {
-    console.log(HELP_TEXT);
+  // P2-12: --version takes precedence over empty positional args. Without
+  // this ordering, `disc --version` (no subcommand) falls into the "no args
+  // → print help" branch and the version flag never fires.
+  if (args.version) {
+    console.log(`Disc Database v${VERSION}`);
     return;
   }
 
-  if (args.version) {
-    console.log(`Disc Database v${VERSION}`);
+  if (args._.length === 0) {
+    console.log(HELP_TEXT);
     return;
   }
 
