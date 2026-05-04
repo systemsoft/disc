@@ -23,30 +23,49 @@ import {
   User,
 } from "./types.ts";
 
+/**
+ * Defaults applied to every optional `AuthConfig` field. Typed as
+ * `Omit<Required<AuthConfig>, "jwtSecret">` so adding a new optional
+ * field to `AuthConfig` is a compile error until it's defaulted here —
+ * the field-by-field merge that previously dropped `maxSessionsPerUser`
+ * silently can no longer recur.
+ */
+const AUTH_CONFIG_DEFAULTS: Omit<Required<AuthConfig>, "jwtSecret"> = {
+  jwtIssuer: "disc",
+  jwtAudience: "disc-api",
+  tokenExpiry: 3600, // 1 hour
+  refreshTokenExpiry: 604800, // 7 days
+  bcryptRounds: 12,
+  sessionTimeout: 3600,
+  allowRegistration: true,
+  requireEmailVerification: false,
+  passwordMinLength: 8,
+  passwordRequireUppercase: false,
+  passwordRequireNumbers: false,
+  passwordRequireSpecial: false,
+  // 0 disables the cap (unlimited sessions).
+  maxSessionsPerUser: 0,
+};
+
 export class AuthProvider implements IAuthProvider {
   private config: Required<AuthConfig>;
   private db: DatabaseInterface;
   private cryptoKey?: CryptoKey;
 
   constructor(config: AuthConfig, db: DatabaseInterface) {
+    // Merge defaults with user config, dropping `undefined` values from
+    // `config` so an explicitly-undefined optional doesn't shadow the
+    // default. Required-typed result enforces that every field is set.
+    const overrides: Partial<AuthConfig> = {};
+    for (const [key, value] of Object.entries(config)) {
+      if (value !== undefined) {
+        (overrides as Record<string, unknown>)[key] = value;
+      }
+    }
     this.config = {
-      jwtSecret: config.jwtSecret,
-      jwtIssuer: config.jwtIssuer || "disc",
-      jwtAudience: config.jwtAudience || "disc-api",
-      tokenExpiry: config.tokenExpiry ?? 3600, // 1 hour
-      refreshTokenExpiry: config.refreshTokenExpiry ?? 604800, // 7 days
-      bcryptRounds: config.bcryptRounds ?? 12,
-      sessionTimeout: config.sessionTimeout ?? 3600,
-      allowRegistration: config.allowRegistration ?? true,
-      requireEmailVerification: config.requireEmailVerification ?? false,
-      passwordMinLength: config.passwordMinLength || 8,
-      passwordRequireUppercase: config.passwordRequireUppercase ?? false,
-      passwordRequireNumbers: config.passwordRequireNumbers ?? false,
-      passwordRequireSpecial: config.passwordRequireSpecial ?? false,
-      // 0 disables the cap. Default 0 (unlimited) preserves prior
-      // behavior for callers that don't set the field.
-      maxSessionsPerUser: config.maxSessionsPerUser ?? 0,
-    };
+      ...AUTH_CONFIG_DEFAULTS,
+      ...overrides,
+    } as Required<AuthConfig>;
     this.db = db;
   }
 

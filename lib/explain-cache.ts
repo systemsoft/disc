@@ -31,6 +31,18 @@ interface CacheEntry {
   inserted_at: number;
 }
 
+/**
+ * Defaults applied to every `ExplainCacheConfig` field. Typed as
+ * `Required<ExplainCacheConfig>` so adding a new field to the interface
+ * is a compile error until it's defaulted here. Mirrors the same pattern
+ * used in `auth/provider.ts` to avoid silent missing-field bugs.
+ */
+const EXPLAIN_CACHE_DEFAULTS: Required<ExplainCacheConfig> = {
+  ttl_ms: 300_000, // 5 minutes
+  max_size: 500,
+  nowFn: Date.now,
+};
+
 export class ExplainCache {
   private entries = new Map<string, CacheEntry>();
   private config: Required<ExplainCacheConfig>;
@@ -42,10 +54,15 @@ export class ExplainCache {
   };
 
   constructor(config: Partial<ExplainCacheConfig> = {}) {
+    const overrides: Partial<ExplainCacheConfig> = {};
+    for (const [key, value] of Object.entries(config)) {
+      if (value !== undefined) {
+        (overrides as Record<string, unknown>)[key] = value;
+      }
+    }
     this.config = {
-      ttl_ms: config.ttl_ms ?? 300_000,
-      max_size: config.max_size ?? 500,
-      nowFn: config.nowFn ?? Date.now,
+      ...EXPLAIN_CACHE_DEFAULTS,
+      ...overrides,
     };
   }
 
