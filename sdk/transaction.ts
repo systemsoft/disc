@@ -2,8 +2,14 @@
  * Transaction — Execute multiple queries atomically
  */
 
-import type { QueryResponse, TransactionState } from "./types.ts";
+import type {
+  QueryOptions,
+  QueryResponse,
+  QueryValidator,
+  TransactionState,
+} from "./types.ts";
 import { DiscQueryError, DiscTransactionError } from "./errors.ts";
+import { applyValidator } from "./validation.ts";
 
 import type { DiscClient } from "./client.ts";
 
@@ -20,10 +26,14 @@ export class Transaction {
   /**
    * Execute a query within this transaction.
    * Returns the data directly, throws on errors.
+   *
+   * Pass `options.validate` for runtime shape checking — see
+   * `DiscClient.query` for the full validator contract (P1-28).
    */
   async query<T = unknown>(
     query: string,
     variables?: Record<string, unknown>,
+    options?: QueryOptions<T>,
   ): Promise<T> {
     this.assertActive();
 
@@ -41,6 +51,13 @@ export class Transaction {
 
     if (result.errors && result.errors.length > 0) {
       throw new DiscQueryError(result.errors);
+    }
+
+    if (options?.validate) {
+      return await applyValidator(
+        options.validate as QueryValidator<T>,
+        result.data,
+      );
     }
 
     return result.data as T;

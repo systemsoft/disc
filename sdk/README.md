@@ -36,7 +36,8 @@ const client = createClient({
 ### Querying
 
 ```typescript
-// Returns data directly, throws DiscQueryError on server errors
+// Returns data directly, throws DiscQueryError on server errors.
+// NOTE: the <User[]> generic is an unchecked cast — see "Runtime validation".
 const users = await client.query<User[]>("select User { name, email }");
 
 // Returns the full response envelope (data, errors, extensions)
@@ -46,6 +47,45 @@ if (response.errors) {
 }
 console.log(response.extensions?.parseMs);
 ```
+
+### Runtime validation
+
+`query<T>()` and `tx.query<T>()` accept an `options.validate` argument that
+runs against `response.data` before returning. It accepts either a plain
+function (`(value) => T`) or any [Standard Schema](https://standardschema.dev)
+— Zod 3.24+, Valibot, ArkType, Effect Schema, etc. all conform without
+adapters. On rejection a `DiscValidationError` is thrown with structured
+issues.
+
+```typescript
+import { z } from "zod";
+
+const User = z.object({ name: z.string(), email: z.string().email() });
+
+// Standard Schema — works with Zod, Valibot, ArkType, Effect Schema, …
+const user = await client.query(
+  "select User { name, email } limit 1",
+  undefined,
+  { validate: User },
+);
+
+// Plain function — useful for cheap shape checks or transforms
+const ids = await client.query(
+  "select User.id",
+  undefined,
+  {
+    validate: (v) => {
+      if (!Array.isArray(v)) throw new Error("expected array");
+      return v as string[];
+    },
+  },
+);
+```
+
+If you omit `validate`, the SDK falls back to the legacy unchecked cast
+(fast, but typos and upstream schema drift surface at runtime). For
+codegen-driven type safety where the *query itself* is checked against
+your SDL, run `disc codegen`.
 
 ### Health and Stats
 

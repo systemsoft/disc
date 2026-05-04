@@ -2,7 +2,7 @@
  * SDK Error Hierarchy — Client-side error classes
  */
 
-import type { QueryError } from "./types.ts";
+import type { QueryError, StandardSchemaIssue } from "./types.ts";
 
 /** Error codes that map to server-side error conditions */
 export enum DiscErrorCode {
@@ -22,6 +22,8 @@ export enum DiscErrorCode {
   PROTOCOL_ERROR = "PROTOCOL_ERROR",
   /** Server returned 5xx */
   SERVER_ERROR = "SERVER_ERROR",
+  /** Response data failed user-supplied runtime validation */
+  VALIDATION_ERROR = "VALIDATION_ERROR",
 }
 
 /** Base error class for all SDK errors */
@@ -109,6 +111,29 @@ export class DiscProtocolError extends DiscClientError {
     super(message, DiscErrorCode.PROTOCOL_ERROR);
     this.name = "DiscProtocolError";
     this.statusCode = statusCode;
+  }
+}
+
+/**
+ * Thrown when a user-supplied validator (passed via `query<T>(…, { validate })`)
+ * rejects the server response. Preserves Standard Schema issues so callers can
+ * surface field-level diagnostics. (P1-28)
+ */
+export class DiscValidationError extends DiscClientError {
+  readonly issues: ReadonlyArray<StandardSchemaIssue>;
+  override readonly cause?: Error;
+
+  constructor(
+    issues: ReadonlyArray<StandardSchemaIssue>,
+    cause?: Error,
+  ) {
+    const summary = issues.length === 1
+      ? issues[0].message
+      : `${issues.length} validation issues: ${issues[0]?.message ?? ""}`;
+    super(summary, DiscErrorCode.VALIDATION_ERROR);
+    this.name = "DiscValidationError";
+    this.issues = issues;
+    this.cause = cause;
   }
 }
 

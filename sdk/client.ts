@@ -5,7 +5,9 @@
 import type {
   DiscClientConfig,
   HealthStatus,
+  QueryOptions,
   QueryResponse,
+  QueryValidator,
   ServerStats,
 } from "./types.ts";
 import {
@@ -17,6 +19,7 @@ import {
   DiscServerError,
   DiscTimeoutError,
 } from "./errors.ts";
+import { applyValidator } from "./validation.ts";
 import { Transaction } from "./transaction.ts";
 
 const DEFAULT_BASE_URL = "http://localhost:5656";
@@ -42,14 +45,27 @@ export class DiscClient {
 
   /**
    * Execute an EdgeQL query. Returns the data directly.
-   * Throws DiscQueryError if the server returns query errors.
+   * Throws `DiscQueryError` if the server returns query errors, or
+   * `DiscValidationError` when an `options.validate` validator rejects
+   * the response.
    *
-   * **Type safety note (P1-28)**: the generic `T` is an *unchecked cast*.
-   * The SDK does not validate that the server's response actually matches
-   * `T` — a typo in your query or a schema change upstream will surface as
-   * runtime surprises, not compile-time errors. Prefer the generated
-   * typed client (`disc codegen`) where table/column names are verified
-   * against your SDL, or wrap `query<T>()` in a Zod/Valibot parser.
+   * **Type safety (P1-28)**: by default the generic `T` is an *unchecked cast*.
+   * Pass `options.validate` to enforce the shape at runtime — either a plain
+   * `(data) => T` function or any Standard Schema (Zod 3.24+, Valibot,
+   * ArkType, Effect Schema, …):
+   *
+   * ```ts
+   * import { z } from "zod";
+   * const User = z.object({ name: z.string() });
+   * const u = await client.query("select User { name } limit 1",
+   *   undefined,
+   *   { validate: User });
+   * ```
+   *
+   * Without a validator, the cast survives so existing callers keep working
+   * — but typos in your query or upstream schema drift will surface as
+   * runtime surprises rather than compile-time errors. For codegen-driven
+   * type safety, run `disc codegen`.
    *
    * **Serialization note (P1-29)**: server responses come back as JSON.
    * - `datetime` columns arrive as ISO-8601 strings, not `Date` instances.
@@ -60,11 +76,19 @@ export class DiscClient {
   async query<T = unknown>(
     query: string,
     variables?: Record<string, unknown>,
+    options?: QueryOptions<T>,
   ): Promise<T> {
     const response = await this.queryRaw<T>(query, variables);
 
     if (response.errors && response.errors.length > 0) {
       throw new DiscQueryError(response.errors);
+    }
+
+    if (options?.validate) {
+      return await applyValidator(
+        options.validate as QueryValidator<T>,
+        response.data,
+      );
     }
 
     return response.data as T;

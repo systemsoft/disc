@@ -26,6 +26,58 @@ export interface DiscClientConfig {
   };
 }
 
+// --- Validation (P1-28) ---
+
+/**
+ * Minimal subset of the Standard Schema v1 interface
+ * (https://standardschema.dev). Lets `client.query<T>()` accept a
+ * Zod / Valibot / ArkType / Effect schema directly without pulling
+ * any of those libraries as dependencies.
+ *
+ * We only inline the bits we need at the call site — `~standard.validate`
+ * — and treat the rest as opaque.
+ */
+export interface StandardSchemaV1<Output = unknown> {
+  readonly "~standard": {
+    readonly version: 1;
+    readonly vendor: string;
+    validate(
+      value: unknown,
+    ):
+      | StandardSchemaResult<Output>
+      | Promise<StandardSchemaResult<Output>>;
+  };
+}
+
+export type StandardSchemaResult<Output> =
+  | { value: Output; issues?: undefined }
+  | { issues: ReadonlyArray<StandardSchemaIssue> };
+
+export interface StandardSchemaIssue {
+  readonly message: string;
+  readonly path?: ReadonlyArray<PropertyKey | { key: PropertyKey }>;
+}
+
+/**
+ * Validator passed via `query<T>(eql, vars, { validate })`. Either:
+ *  - a plain function that returns `T` or throws, or
+ *  - any Standard Schema (Zod 3.24+, Valibot, ArkType, Effect Schema, …).
+ *
+ * If omitted, `query<T>()` retains its legacy cast behavior — fast but
+ * unchecked.
+ */
+export type QueryValidator<T> =
+  | ((value: unknown) => T)
+  | StandardSchemaV1<T>;
+
+export interface QueryOptions<T = unknown> {
+  /**
+   * Runtime validator applied to `response.data` before returning.
+   * Throws `DiscValidationError` if the value does not match.
+   */
+  validate?: QueryValidator<T>;
+}
+
 // --- Query Types ---
 
 export interface QueryRequest {

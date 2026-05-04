@@ -31,6 +31,7 @@ export {
   DiscServerError,
   DiscTimeoutError,
   DiscTransactionError,
+  DiscValidationError,
 } from "./errors.ts";
 
 // Types
@@ -46,10 +47,15 @@ export type {
   LoginCredentials,
   QueryError,
   QueryExtensions,
+  QueryOptions,
   QueryRequest,
   QueryResponse,
+  QueryValidator,
   RegisterData,
   ServerStats,
+  StandardSchemaIssue,
+  StandardSchemaResult,
+  StandardSchemaV1,
   SubscriptionCallbacks,
   SubscriptionClientConfig,
   SubscriptionHandle,
