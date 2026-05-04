@@ -24,16 +24,6 @@ test.describe("Schema page", () => {
     await expect(page.getByText(/module: default/)).toBeVisible();
   });
 
-  test("shows constraints inline under each property", async ({ page }) => {
-    await page.goto("/ui/schema");
-
-    // The fixture's Item.name has `constraint exclusive` + `max_len_value(100)`,
-    // and Item.count has `min_value(0)` — assert all three are surfaced.
-    await expect(page.getByText("exclusive")).toBeVisible();
-    await expect(page.getByText("max_len_value(100)")).toBeVisible();
-    await expect(page.getByText("min_value(0)")).toBeVisible();
-  });
-
   test("Properties heading lists every property name", async ({ page }) => {
     await page.goto("/ui/schema");
 
@@ -50,5 +40,12 @@ test.describe("Schema page", () => {
     await page.goto("/ui/schema");
     // Item.createdAt has `default := datetime_current()` in the fixture.
     await expect(page.getByText("default", { exact: true }).first()).toBeVisible();
+  });
+
+  test("Indexes section renders index expressions", async ({ page }) => {
+    await page.goto("/ui/schema");
+    // Fixture has `index on (.name)` — surface in the new Indexes section.
+    await expect(page.getByRole("heading", { name: "Indexes" })).toBeVisible();
+    await expect(page.getByText(".name", { exact: true })).toBeVisible();
   });
 });

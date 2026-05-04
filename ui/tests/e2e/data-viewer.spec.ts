@@ -9,8 +9,17 @@ test.describe("Data viewer — read", () => {
     await insertItem("Recognizer", 3);
   });
 
-  test("renders type list and rows for default::Item", async ({ page }) => {
+  // Each test starts with a hard reload via about:blank → target URL so
+  // tests don't inherit filter/sort state from a previous test (Vite HMR
+  // preserves Svelte component instances across same-URL navigations,
+  // which would otherwise carry stale filter values into the next test).
+  async function gotoData(page: import("@playwright/test").Page) {
+    await page.goto("about:blank");
     await page.goto("/ui/data");
+  }
+
+  test("renders type list and rows for default::Item", async ({ page }) => {
+    await gotoData(page);
 
     // Type list shows the seeded type.
     await expect(page.getByRole("button", { name: "default::Item" })).toBeVisible();
@@ -23,7 +32,7 @@ test.describe("Data viewer — read", () => {
   });
 
   test("sorts by clicking a property column header", async ({ page }) => {
-    await page.goto("/ui/data");
+    await gotoData(page);
     await expect(page.locator("tbody tr")).toHaveCount(3);
 
     // Click the count column header → asc → first row should be count=1.
@@ -36,7 +45,7 @@ test.describe("Data viewer — read", () => {
   });
 
   test("filters by string column with ilike substring match", async ({ page }) => {
-    await page.goto("/ui/data");
+    await gotoData(page);
     await expect(page.locator("tbody tr")).toHaveCount(3);
 
     const filterRow = page.locator("tr.filter-row");
@@ -49,7 +58,7 @@ test.describe("Data viewer — read", () => {
   });
 
   test("filters numeric column with range syntax (>=N, a..b)", async ({ page }) => {
-    await page.goto("/ui/data");
+    await gotoData(page);
     await expect(page.locator("tbody tr")).toHaveCount(3);
 
     // The count column has placeholder ">=10, <5, 10..20".
@@ -74,7 +83,12 @@ test.describe("Data viewer — read", () => {
   });
 
   test("Clear button resets filters and reloads", async ({ page }) => {
-    await page.goto("/ui/data");
+    await gotoData(page);
+    // Sanity: beforeEach inserted 3 rows, the page should show all of them
+    // before we touch the filter. If a prior test leaked filter state across
+    // the page navigation this catches it cleanly with a 3 vs N message.
+    await expect(page.locator("tbody tr")).toHaveCount(3);
+
     const filterRow = page.locator("tr.filter-row");
     const nameFilter = filterRow.locator('input[placeholder="contains…"]').first();
     await nameFilter.fill("cycle");
