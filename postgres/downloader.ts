@@ -8,47 +8,31 @@ export interface BinaryManifest {
   version: string;
 }
 
-// P1-03: use zonkyio's embedded-postgres-binaries for darwin-arm64 — they
-// ship a native ARM64 build. The EnterpriseDB "osx-binaries.zip" used
-// previously for both Mac targets is x86_64 only, so ARM Macs ended up
-// running PG under Rosetta. x86 Mac still uses EDB because zonky ships
-// txz only for ARM on macOS.
+// Zonky publishes embedded-postgres binaries to Maven Central, not GitHub
+// Releases (their `v*.0` tags ship zero assets). Each artifact is a `.jar`
+// (a zip) containing a single nested `postgres-<platform>.txz`. We download
+// the JAR, unzip to find the inner archive, then extract it normally.
+// Native arm64 builds keep ARM Macs off Rosetta (P1-03).
+const ZONKY_BASE =
+  "https://repo1.maven.org/maven2/io/zonky/test/postgres";
+
+function zonkyJar(platformSlug: string, version: string): string {
+  const artifact = `embedded-postgres-binaries-${platformSlug}`;
+  return `${ZONKY_BASE}/${artifact}/${version}/${artifact}-${version}.jar`;
+}
+
 const POSTGRES_VERSIONS = {
   "16.4": {
-    "darwin-arm64": {
-      url:
-        "https://github.com/zonkyio/embedded-postgres-binaries/releases/download/v16.4.0/postgres-darwin-arm_64v8.txz",
-    },
-    "darwin-x64": {
-      url:
-        "https://get.enterprisedb.com/postgresql/postgresql-16.4-1-osx-binaries.zip",
-    },
-    "linux-arm64": {
-      url:
-        "https://github.com/zonkyio/embedded-postgres-binaries/releases/download/v16.4.0/postgres-linux-arm_64.txz",
-    },
-    "linux-x64": {
-      url:
-        "https://github.com/zonkyio/embedded-postgres-binaries/releases/download/v16.4.0/postgres-linux-x86_64.txz",
-    },
+    "darwin-arm64": { url: zonkyJar("darwin-arm64v8", "16.4.0") },
+    "darwin-x64": { url: zonkyJar("darwin-amd64", "16.4.0") },
+    "linux-arm64": { url: zonkyJar("linux-arm64v8", "16.4.0") },
+    "linux-x64": { url: zonkyJar("linux-amd64", "16.4.0") },
   },
   "17.0": {
-    "darwin-arm64": {
-      url:
-        "https://github.com/zonkyio/embedded-postgres-binaries/releases/download/v17.0.0/postgres-darwin-arm_64v8.txz",
-    },
-    "darwin-x64": {
-      url:
-        "https://get.enterprisedb.com/postgresql/postgresql-17.0-1-osx-binaries.zip",
-    },
-    "linux-arm64": {
-      url:
-        "https://github.com/zonkyio/embedded-postgres-binaries/releases/download/v17.0.0/postgres-linux-arm_64.txz",
-    },
-    "linux-x64": {
-      url:
-        "https://github.com/zonkyio/embedded-postgres-binaries/releases/download/v17.0.0/postgres-linux-x86_64.txz",
-    },
+    "darwin-arm64": { url: zonkyJar("darwin-arm64v8", "17.0.0") },
+    "darwin-x64": { url: zonkyJar("darwin-amd64", "17.0.0") },
+    "linux-arm64": { url: zonkyJar("linux-arm64v8", "17.0.0") },
+    "linux-x64": { url: zonkyJar("linux-amd64", "17.0.0") },
   },
 };
 
@@ -120,9 +104,11 @@ export class PostgresBinaryDownloader {
             ? ".tar.gz"
             : urlPath.endsWith(".zip")
               ? ".zip"
-              : urlPath.endsWith(".tar")
-                ? ".tar"
-                : ".archive";
+              : urlPath.endsWith(".jar")
+                ? ".jar"
+                : urlPath.endsWith(".tar")
+                  ? ".tar"
+                  : ".archive";
     const archivePath = join(versionDir, `postgres${archiveExt}`);
     const data = new Uint8Array(await response.arrayBuffer());
     await Deno.writeFile(archivePath, data);
@@ -204,6 +190,41 @@ export class PostgresBinaryDownloader {
     targetDir: string,
   ): Promise<void> {
     const filename = archivePath.toLowerCase();
+
+    // Zonky's Maven JARs wrap the actual binary archive. Unzip into a
+    // staging dir, find the inner postgres-*.txz, then recurse.
+    if (filename.endsWith(".jar")) {
+      const stagingDir = await Deno.makeTempDir({ prefix: "disc-jar-" });
+      try {
+        const unzip = await new Deno.Command("unzip", {
+          args: ["-q", "-o", archivePath, "-d", stagingDir],
+          stdout: "piped",
+          stderr: "piped",
+        }).output();
+        if (!unzip.success) {
+          const stderr = new TextDecoder().decode(unzip.stderr);
+          throw new Error(`Failed to extract JAR: ${stderr}`);
+        }
+
+        let inner: string | null = null;
+        for await (const entry of Deno.readDir(stagingDir)) {
+          if (
+            entry.isFile &&
+            /\.(txz|tar\.xz|tgz|tar\.gz|tar)$/i.test(entry.name)
+          ) {
+            inner = join(stagingDir, entry.name);
+            break;
+          }
+        }
+        if (!inner) {
+          throw new Error(`No inner archive found inside JAR: ${archivePath}`);
+        }
+        await this.extractArchive(inner, targetDir);
+      } finally {
+        await Deno.remove(stagingDir, { recursive: true });
+      }
+      return;
+    }
 
     // Determine archive type and appropriate extraction command
     let extractCmd: Deno.Command;
