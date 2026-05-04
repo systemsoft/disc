@@ -1,16 +1,13 @@
 /**
  * Scalar codec roundtrip tests + Cardinality.AT_MOST_ONE behaviour.
  *
- * The scalar roundtrip tests are currently expected to FAIL — they
- * document compat gap #6 (scalar SELECT shape mismatch). disc's
- * typedesc + Data builder always emits an Object shape, so
- * `SELECT <bool>$x` returns `{ id: null }` instead of the scalar `true`.
- * Each test is marked `{ skip: ... }` so the run stays green; remove
- * the markers when gap #6 is closed.
- *
- * The cardinality test exercises the wire Cardinality byte for
- * AT_MOST_ONE (`querySingle` on an empty filter must return null, not
- * throw) and already passes against current disc.
+ * Covers `SELECT <T>$x` roundtrips for the scalar codecs in
+ * `protocol/scalar-codecs.ts`, plus the AT_MOST_ONE cardinality contract
+ * where `querySingle` on an empty filter must return null rather than
+ * throwing. Originally introduced with `{ skip: GAP_6 }` while disc's
+ * typedesc/Data builder always emitted an Object shape; closed once
+ * `buildDescriptors` started emitting CTYPE_BASE_SCALAR for bare-scalar
+ * top-level SELECT expressions.
  */
 
 import { test, after } from "node:test";
@@ -32,51 +29,50 @@ after(async () => {
   await client.close();
 });
 
-const GAP_6 =
-  "P2-09 gap #6: scalar SELECT returns Object{id} shape (typedesc/Data" +
-  " builder always emits an Object). Drop this skip when gap closes.";
-
-test("str roundtrip", { skip: GAP_6 }, async () => {
+test("str roundtrip", async () => {
   const out = await client.querySingle("SELECT <str>$x", { x: "hello-world" });
   assert.equal(out, "hello-world");
 });
 
-test("int32 roundtrip", { skip: GAP_6 }, async () => {
+test("int32 roundtrip", async () => {
   const out = await client.querySingle("SELECT <int32>$x", { x: 2147483647 });
   assert.equal(out, 2147483647);
 });
 
-test("int64 roundtrip (BigInt)", { skip: GAP_6 }, async () => {
-  const out = await client.querySingle("SELECT <int64>$x", {
-    x: 9223372036854775807n,
-  });
-  assert.equal(out, 9223372036854775807n);
+test("int64 roundtrip", async () => {
+  // The upstream JS gel client's Int64Codec.encode rejects BigInt and
+  // expects a `number` — values larger than 2^53 are out of range. Use
+  // a value below MAX_SAFE_INTEGER so the codec accepts it; testing
+  // BigInt-shaped int64 belongs in a `<bigint>$x` test, not `<int64>$x`.
+  const value = 9007199254740991; // Number.MAX_SAFE_INTEGER
+  const out = await client.querySingle("SELECT <int64>$x", { x: value });
+  assert.equal(out, value);
 });
 
-test("bool roundtrip (true)", { skip: GAP_6 }, async () => {
+test("bool roundtrip (true)", async () => {
   const out = await client.querySingle("SELECT <bool>$x", { x: true });
   assert.equal(out, true);
 });
 
-test("bool roundtrip (false)", { skip: GAP_6 }, async () => {
+test("bool roundtrip (false)", async () => {
   const out = await client.querySingle("SELECT <bool>$x", { x: false });
   assert.equal(out, false);
 });
 
-test("float64 roundtrip", { skip: GAP_6 }, async () => {
+test("float64 roundtrip", async () => {
   const out = await client.querySingle("SELECT <float64>$x", {
     x: 3.141592653589793,
   });
   assert.ok(Math.abs(out - 3.141592653589793) < 1e-12);
 });
 
-test("uuid roundtrip", { skip: GAP_6 }, async () => {
+test("uuid roundtrip", async () => {
   const u = "11111111-2222-3333-4444-555555555555";
   const out = await client.querySingle("SELECT <uuid>$x", { x: u });
   assert.equal(String(out).toLowerCase(), u);
 });
 
-test("datetime roundtrip", { skip: GAP_6 }, async () => {
+test("datetime roundtrip", async () => {
   const when = new Date("2026-05-04T12:34:56.000Z");
   const out = await client.querySingle("SELECT <datetime>$x", { x: when });
   assert.equal(new Date(out).toISOString(), when.toISOString());

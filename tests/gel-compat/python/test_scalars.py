@@ -1,17 +1,13 @@
 """
-Scalar codec roundtrip tests + Cardinality.ONE behaviour.
+Scalar codec roundtrip tests + Cardinality.AT_MOST_ONE behaviour.
 
-The scalar roundtrip tests are currently expected to FAIL — they
-document compat gap #6 (scalar SELECT shape mismatch). disc's typedesc
-+ Data builder always emits an Object shape, so `SELECT <bool>$x`
-returns `Object{id := None}` instead of the scalar `True`. Each test
-is `xfail(strict=True)` so that when the gap is closed, the run will
-flip to XPASS and force us to remove the marker — a forced refresh of
-the known-good baseline.
-
-The cardinality test exercises the wire Cardinality byte for AT_MOST_ONE
-(`querySingle` on an empty filter must return None, not raise) and
-already passes against current disc.
+These tests cover scalar `SELECT <T>$x` roundtrips for the codecs in
+`protocol/scalar-codecs.ts`, plus the AT_MOST_ONE cardinality contract
+where `querySingle` on an empty filter must return None rather than
+raising. Originally introduced as `xfail` while gap #6 (scalar-only
+SELECT returning an Object{id} shape) was open; closed once
+`buildDescriptors` started emitting CTYPE_BASE_SCALAR for bare-scalar
+top-level SELECT expressions.
 """
 
 import datetime as dt
@@ -20,12 +16,6 @@ import uuid
 
 import gel
 import pytest
-
-GAP_6 = (
-    "P2-09 gap #6: scalar-only SELECT returns an Object{id} shape; "
-    "disc's typedesc/Data builder doesn't emit a bare scalar codec. "
-    "Will flip to XPASS once the gap is closed."
-)
 
 
 @pytest.fixture(scope="module")
@@ -43,48 +33,40 @@ def client():
     c.close()
 
 
-@pytest.mark.xfail(strict=True, reason=GAP_6)
 def test_str_roundtrip(client):
     out = client.query_single("SELECT <str>$x", x="hello-world")
     assert out == "hello-world"
 
 
-@pytest.mark.xfail(strict=True, reason=GAP_6)
 def test_int32_roundtrip(client):
     out = client.query_single("SELECT <int32>$x", x=2147483647)
     assert out == 2147483647
 
 
-@pytest.mark.xfail(strict=True, reason=GAP_6)
 def test_int64_roundtrip(client):
     out = client.query_single("SELECT <int64>$x", x=9223372036854775807)
     assert out == 9223372036854775807
 
 
-@pytest.mark.xfail(strict=True, reason=GAP_6)
 def test_bool_roundtrip_true(client):
     assert client.query_single("SELECT <bool>$x", x=True) is True
 
 
-@pytest.mark.xfail(strict=True, reason=GAP_6)
 def test_bool_roundtrip_false(client):
     assert client.query_single("SELECT <bool>$x", x=False) is False
 
 
-@pytest.mark.xfail(strict=True, reason=GAP_6)
 def test_float64_roundtrip(client):
     out = client.query_single("SELECT <float64>$x", x=3.141592653589793)
     assert out == pytest.approx(3.141592653589793)
 
 
-@pytest.mark.xfail(strict=True, reason=GAP_6)
 def test_uuid_roundtrip(client):
     u = uuid.uuid4()
     out = client.query_single("SELECT <uuid>$x", x=u)
     assert uuid.UUID(str(out)) == u
 
 
-@pytest.mark.xfail(strict=True, reason=GAP_6)
 def test_datetime_roundtrip(client):
     when = dt.datetime(2026, 5, 4, 12, 34, 56, tzinfo=dt.timezone.utc)
     out = client.query_single("SELECT <datetime>$x", x=when)

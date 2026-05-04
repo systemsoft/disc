@@ -272,6 +272,57 @@ interface OutputField {
 interface OutputShape {
   typeName: string;
   fields: OutputField[];
+  /**
+   * When true, the result is a bare scalar (no Object wrapper). `fields`
+   * has exactly one entry whose `edgeqlType` is the scalar type — the
+   * field name is irrelevant because no shape is advertised on the wire.
+   * Drives `buildOutputDescriptor` to emit a single `CTYPE_BASE_SCALAR`
+   * and `encodeRowAsObject` to write raw scalar bytes (no element-count
+   * prefix, no per-field reserved/length wrapper).
+   */
+  isScalar?: boolean;
+}
+
+/**
+ * Detect whether an expression resolves to a bare scalar at the top level
+ * of a SELECT (i.e., the SELECT body is just `<bool>$x` or `42` or a
+ * scalar function call, not a `SELECT Type { ... }` shape). Used by
+ * `inferOutputShape` to decide between Object and BaseScalar typedesc.
+ *
+ * Returns the EdgeQL scalar type name (e.g., "bool", "int64") or null
+ * if the expression isn't a known bare scalar form.
+ */
+function detectBareScalarType(expr: unknown): string | null {
+  if (!expr || typeof expr !== "object") return null;
+  const e = expr as { kind?: string };
+
+  if (e.kind === "TypeCast") {
+    const cast = expr as AST.TypeCast;
+    const parts = cast.type?.name?.parts;
+    if (parts && parts.length > 0) {
+      return parts[parts.length - 1];
+    }
+  }
+
+  if (e.kind === "Literal") {
+    const lit = expr as AST.Literal;
+    switch (lit.type) {
+      case "string":
+        return "str";
+      case "integer":
+        return "int64";
+      case "float":
+        return "float64";
+      case "boolean":
+        return "bool";
+      case "uuid":
+        return "uuid";
+      case "bytes":
+        return "bytes";
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -340,6 +391,23 @@ function inferOutputShape(
 
   if (q.kind === "SelectQuery") {
     const sel = q as AST.SelectQuery;
+
+    // Bare-scalar SELECT (`SELECT <bool>$x`, `SELECT 42`, …): emit a
+    // BaseScalar shape so the descriptor doesn't wrap the value in an
+    // Object{id} on the wire. Only triggers when there's no shape and
+    // no filter against an Object type — `SELECT Item FILTER ...` still
+    // wants the Object path even with no shape.
+    if (!sel.shape) {
+      const scalar = detectBareScalarType(sel.expr);
+      if (scalar !== null) {
+        return {
+          typeName: scalar,
+          fields: [{ name: "_value", edgeqlType: scalar }],
+          isScalar: true,
+        };
+      }
+    }
+
     const typeName = extractTypeNameFromExpr(sel.expr) ?? "Object";
     const fields: OutputField[] = [];
     const typeDef = schema?.types?.get(typeName);
@@ -518,6 +586,36 @@ function decodeArgs(
  * MUST match the descriptor we already advertised, otherwise the client
  * decodes name `email` from bytes that were intended for `count`.
  */
+function encodeRowAsScalar(
+  row: Record<string, unknown>,
+  shape: OutputShape,
+): Uint8Array {
+  // Bare-scalar Data payload: no Object framing, no element-count prefix,
+  // no per-field reserved/length wrapper — just the raw scalar bytes.
+  // The Data message's per-element u32 length already delimits this blob.
+  const eqlType = shape.fields[0].edgeqlType;
+  // Pull the single value out of the executor row by ordinal: the row
+  // looks like `{ bool: true }` for `SELECT $1::boolean` (PG names the
+  // column after the cast type), `{ ?column?: ... }` for unaliased
+  // expressions, etc. Always one column for a bare-scalar SELECT.
+  let value: unknown = null;
+  if (row && typeof row === "object") {
+    const values = Object.values(row);
+    if (values.length > 0) value = values[0];
+  }
+  if (value === null || value === undefined) {
+    // Empty result set is handled by the caller (no Data frames sent).
+    // A NULL inside a single-row scalar SELECT shouldn't happen for a
+    // cast over a non-null parameter; surface as zero-length bytes so
+    // the client sees a "missing" element rather than a crash.
+    return new Uint8Array(0);
+  }
+  if (!hasScalarCodec(eqlType)) {
+    return new Uint8Array(0);
+  }
+  return encodeScalar(eqlType, value);
+}
+
 function encodeRowAsObject(
   row: Record<string, unknown>,
   shape: OutputShape,
@@ -569,12 +667,29 @@ function encodeRowsAsObjects(
   }
 
   if (shape.fields.length === 0) return [];
+  if (shape.isScalar) {
+    return rows.map((row) => encodeRowAsScalar(row, shape));
+  }
   return rows.map((row) => encodeRowAsObject(row, shape));
 }
 
 function buildOutputDescriptor(
   shape: OutputShape,
 ): { id: Uint8Array; data: Uint8Array } {
+  // Bare-scalar SELECT: emit a single CTYPE_BASE_SCALAR descriptor and
+  // use its tid as the root. No CTYPE_SHAPE wrapper — both upstream Gel
+  // clients special-case scalar codecs by descriptor type, and wrapping
+  // the scalar in an Object surfaces as `Object{id := None}` regardless
+  // of what bytes we put in the Data payload.
+  if (shape.isScalar) {
+    const eqlType = shape.fields[0].edgeqlType;
+    const tid = resolveWellKnownType(eqlType) ??
+      resolveWellKnownType("uuid")!;
+    const descriptor = { id: tid, bytes: encodeBaseScalarV2(tid) };
+    const packed = packTypedescBlock([descriptor]);
+    return { id: packed.rootId, data: packed.data };
+  }
+
   const descriptors: Array<{ id: Uint8Array; bytes: Uint8Array }> = [];
   const scalarPos = new Map<string, number>();
 
