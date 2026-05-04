@@ -1,5 +1,6 @@
 import { ensureDir } from "@std/fs";
 import { join } from "@std/path";
+import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
 import { PostgresBinaryDownloader } from "./downloader.ts";
 import { PostgresConfig } from "./config.ts";
 import { logger } from "./logger.ts";
@@ -208,56 +209,82 @@ export class PostgresInstance {
    * Create the project database if it doesn't already exist.
    * After initdb, only the superuser db ("disc"), "postgres", and templates exist.
    * The DSN references the instance name as the database, so we need to create it.
+   *
+   * Uses a direct libpq connection rather than the `createdb` CLI: zonky's
+   * embedded-postgres builds (used on Linux + ARM Mac) ship only `postgres`,
+   * `initdb`, and `pg_ctl` in `bin/` — no client utilities.
    */
   private async ensureDatabase(): Promise<void> {
-    const createdbPath = join(this.pgBinDir!, "createdb");
-    const effectivePort = this.port === 0 ? 5432 : this.port;
-
-    const connArgs = this.port === 0
-      ? ["-h", this.socketDir, "-p", String(effectivePort), "-U", "disc"]
-      : ["-h", "localhost", "-p", String(this.port), "-U", "disc"];
-
-    // P2-01: createdb can fail transiently immediately after PG boots
-    // (the postmaster is accepting TCP but the catalog isn't ready yet).
-    // Retry up to 3 times with a short backoff before surfacing the
-    // error via P1-02's throw.
-    let lastStderr = "";
+    // P2-01: PG can take a moment after boot before catalogs are ready.
+    // Retry the connect+CREATE on transient failures.
+    let lastErr: unknown = null;
     for (let attempt = 0; attempt < 3; attempt++) {
-      const cmd = new Deno.Command(createdbPath, {
-        args: [...connArgs, this.instanceName],
-      });
-      const output = await cmd.output();
-
-      if (output.success) {
+      const admin = new Client(this.adminClientConfig());
+      try {
+        await admin.connect();
+        const exists = await admin.queryObject<{ exists: boolean }>(
+          `SELECT 1 AS exists FROM pg_database WHERE datname = $1`,
+          [this.instanceName],
+        );
+        if (exists.rowCount && exists.rowCount > 0) {
+          logger.info(`Database "${this.instanceName}" already exists`);
+          return;
+        }
+        // Identifier is the instance name; assertSafeIdentifier is enforced
+        // upstream (cli/init.ts validates the project name).
+        await admin.queryArray(`CREATE DATABASE "${this.instanceName}"`);
         logger.info(`Created database "${this.instanceName}"`);
         return;
+      } catch (err) {
+        lastErr = err;
+        const msg = err instanceof Error ? err.message : String(err);
+        // "already exists" race when concurrent starts collide.
+        if (/already exists/i.test(msg)) {
+          logger.info(`Database "${this.instanceName}" already exists`);
+          return;
+        }
+        const transient = /starting up|not yet accepting|could not connect|ECONNREFUSED/i
+          .test(msg);
+        if (!transient || attempt === 2) break;
+        const delayMs = 150 * (attempt + 1);
+        logger.info(
+          `ensureDatabase transient failure (attempt ${attempt + 1}/3); retrying in ${delayMs}ms`,
+        );
+        await new Promise((r) => setTimeout(r, delayMs));
+      } finally {
+        try {
+          await admin.end();
+        } catch {
+          // Already closed — ignore.
+        }
       }
-
-      lastStderr = new TextDecoder().decode(output.stderr);
-      // "already exists" is expected on subsequent starts — not an error.
-      if (lastStderr.includes("already exists")) {
-        logger.info(`Database "${this.instanceName}" already exists`);
-        return;
-      }
-
-      // Retry on the "starting up" / "not ready" shapes PG emits right
-      // after boot. Anything else is a real failure — throw now.
-      const transient = /starting up|server not yet accepting|could not connect/i
-        .test(lastStderr);
-      if (!transient || attempt === 2) {
-        break;
-      }
-      const delayMs = 150 * (attempt + 1);
-      logger.info(
-        `createdb transient failure (attempt ${attempt + 1}/3); retrying in ${delayMs}ms`,
-      );
-      await new Promise((r) => setTimeout(r, delayMs));
     }
 
-    // P1-02: propagate on real failure.
+    const detail = lastErr instanceof Error ? lastErr.message : String(lastErr);
     throw new Error(
-      `Failed to create database "${this.instanceName}": ${lastStderr.trim()}`,
+      `Failed to create database "${this.instanceName}": ${detail}`,
     );
+  }
+
+  private adminClientConfig() {
+    // Connect to the always-present `postgres` admin db. Use the unix socket
+    // when port=0, TCP otherwise.
+    if (this.port === 0) {
+      return {
+        database: "postgres",
+        host_type: "socket" as const,
+        hostname: this.socketDir,
+        port: 5432,
+        user: "disc",
+      };
+    }
+    return {
+      database: "postgres",
+      host_type: "tcp" as const,
+      hostname: "localhost",
+      port: this.port,
+      user: "disc",
+    };
   }
 
   async stop(): Promise<void> {
