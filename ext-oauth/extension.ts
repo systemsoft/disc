@@ -12,6 +12,7 @@ import type {
 import { ExtensionConfigError } from "../extensions/errors.ts";
 import type { OAuthConfig, OAuthProviderConfig } from "./types.ts";
 import { OAuthStateManager } from "./state-manager.ts";
+import { matchRedirectUri } from "./redirect-matcher.ts";
 
 export class OAuthExtension extends BaseExtension {
   readonly metadata: ExtensionMetadata = {
@@ -128,12 +129,49 @@ export class OAuthExtension extends BaseExtension {
   }
 
   private async handleAuthorize(
-    _request: Request,
+    request: Request,
     provider: OAuthProviderConfig,
   ): Promise<Response> {
-    const redirectUri = provider.redirectUri ??
-      this.config.defaultRedirectUri ??
-      "";
+    // gh/geldata#7468: when `allowedRedirectUris` is configured, accept a
+    // caller-supplied `?redirect_uri=…` query param after validating it
+    // against the allowlist. Without an allowlist, callers can't override
+    // the configured fixed URI — preserves the prior behavior and keeps
+    // single-tenant deployments simple.
+    const url = new URL(request.url);
+    const callerSuppliedUri = url.searchParams.get("redirect_uri");
+    const allowlist = provider.allowedRedirectUris ?? [];
+
+    let redirectUri: string;
+    if (callerSuppliedUri && allowlist.length > 0) {
+      if (!matchRedirectUri(callerSuppliedUri, allowlist)) {
+        return new Response(
+          JSON.stringify({ error: "redirect_uri not in allowlist" }),
+          {
+            headers: { "Content-Type": "application/json" },
+            status: 400,
+          },
+        );
+      }
+      redirectUri = callerSuppliedUri;
+    } else if (callerSuppliedUri && allowlist.length === 0) {
+      // Allowlist not configured — refuse caller-supplied URIs outright
+      // rather than silently ignoring them and using the fixed URI
+      // (silent fallback would mask a misconfiguration).
+      return new Response(
+        JSON.stringify({
+          error:
+            "redirect_uri override not permitted — provider has no allowedRedirectUris",
+        }),
+        {
+          headers: { "Content-Type": "application/json" },
+          status: 400,
+        },
+      );
+    } else {
+      redirectUri = provider.redirectUri ??
+        this.config.defaultRedirectUri ??
+        "";
+    }
 
     const oauthState = await this.stateManager.createState(
       provider.name,

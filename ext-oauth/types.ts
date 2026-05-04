@@ -10,7 +10,25 @@ export interface OAuthProviderConfig {
   tokenUrl: string;
   userInfoUrl: string;
   scopes: string[];
+  /**
+   * Fixed callback URI used when no per-request override is supplied
+   * and `allowedRedirectUris` is empty/unset. The OAuth provider
+   * (Google, GitHub, …) must have this exact value registered in its
+   * console.
+   */
   redirectUri?: string;
+  /**
+   * Allowlist of caller-supplied `redirect_uri` query params accepted
+   * by `/authorize/<provider>?redirect_uri=…`. Each entry is a literal
+   * URI or a wildcard pattern; a single `*` in the host position
+   * matches exactly one DNS label, e.g. `https://*.example.com/cb`
+   * matches `https://app.example.com/cb` but NOT
+   * `https://a.b.example.com/cb` or `https://example.com/cb`.
+   * Scheme, port, and path must match exactly. Useful for
+   * multi-tenant deployments where every tenant gets a subdomain.
+   * (gh/geldata#7468)
+   */
+  allowedRedirectUris?: string[];
 }
 
 export interface OAuthConfig {
