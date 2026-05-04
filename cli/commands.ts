@@ -159,9 +159,8 @@ export class CLICommands {
       }
 
       // Try to load the project schema from SDL
-      const schema = await this.readSchemaAsCompilerSchema(
-        "./dbschema/default.disc",
-      );
+      const schemaFile = "./dbschema/default.disc";
+      const schema = await this.readSchemaAsCompilerSchema(schemaFile);
 
       if (schema) {
         const objectTypeCount = Array.from(schema.types.values()).filter(
@@ -170,8 +169,34 @@ export class CLICommands {
         console.log(
           `  Loaded schema with ${objectTypeCount} object types`,
         );
+
+        // Auto-migrate on dev (managed PG only). External DSN is treated as
+        // user-managed; auto-applying DDL there could surprise an operator,
+        // so we only do it for the bundled instance. The migrate engine is
+        // a no-op if the live schema already matches the SDL.
+        if (ctx?.managed) {
+          await this.autoMigrateOnServe(schemaFile);
+        } else {
+          console.log(
+            "  💡 External DSN — run 'disc migrate' to apply schema changes.",
+          );
+        }
       } else {
-        console.log("  No schema file found, using default test schema");
+        console.log(
+          "  ⚠️  No schema file found at ./dbschema/default.disc.",
+        );
+        console.log(
+          "     Falling back to in-memory test schema. Queries against",
+        );
+        console.log(
+          "     User/Post/Status will fail because no tables exist in",
+        );
+        console.log(
+          "     PostgreSQL. Run 'disc init' or create a schema file and",
+        );
+        console.log(
+          "     'disc migrate' before issuing queries.",
+        );
       }
 
       // Log auth status
@@ -802,6 +827,72 @@ export class CLICommands {
 
     console.log("\nMigration created successfully");
     console.log("Run 'disc migrate' to apply the migration");
+  }
+
+  /**
+   * Auto-apply migrations during `disc serve` against a managed (bundled)
+   * PostgreSQL instance — but only on a fresh database with no prior
+   * migrations recorded. This is the "first-run convenience" path: it
+   * makes a fresh `disc init` → `disc serve` pair produce a working
+   * server with tables ready to query. Subsequent schema changes go
+   * through `disc migrate` as normal, since the migrator can't cheaply
+   * reconstruct prior schema state from `disc_migrations` here.
+   *
+   * Logs a warning and continues — never blocks serve startup — because
+   * a missing-table situation is recoverable but a server that refuses
+   * to start is not.
+   */
+  private async autoMigrateOnServe(schemaFile: string): Promise<void> {
+    let sdlSource: string;
+    try {
+      sdlSource = await Deno.readTextFile(schemaFile);
+    } catch {
+      return;
+    }
+
+    const databaseUrl = Deno.env.get("DATABASE_URL");
+    if (!databaseUrl) return;
+
+    const pool = new ConnectionPool({ connectionString: databaseUrl });
+    let manager: SchemaManager | undefined;
+    try {
+      await pool.initialize();
+      manager = new SchemaManager({ pool, dryRun: false });
+      await manager.initialize();
+
+      const status = await manager.getMigrationStatus();
+      if (status.ok && status.value.applied > 0) {
+        console.log(
+          "  💡 Existing migrations detected — run 'disc migrate' to apply schema changes.",
+        );
+        return;
+      }
+
+      const result = await manager.applySchema(sdlSource);
+      if (!result.ok) {
+        console.log(
+          `  ⚠️  Auto-migrate failed: ${result.error.message}. Run 'disc migrate' manually.`,
+        );
+        return;
+      }
+      const applied = result.value.length;
+      if (applied === 0) {
+        console.log("  ✅ Schema up to date");
+      } else {
+        console.log(
+          `  ✅ Auto-applied ${applied} migration${applied === 1 ? "" : "s"}`,
+        );
+      }
+    } catch (error) {
+      console.log(
+        `  ⚠️  Auto-migrate error: ${
+          (error as Error).message
+        }. Run 'disc migrate' manually.`,
+      );
+    } finally {
+      if (manager) await manager.close();
+      await pool.close();
+    }
   }
 
   private async applyMigrations(
