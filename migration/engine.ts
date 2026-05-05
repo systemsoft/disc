@@ -535,6 +535,69 @@ export class MigrationEngine {
   }
 
   /**
+   * Scan a forward-direction migration plan for operations that delete
+   * data or schema definitions. The CLI uses this to refuse `disc migrate`
+   * unless the operator passes `--unsafe`. Rollback already has its own
+   * gate via `validateRollbackSafety`; this is the matching forward
+   * gate. (gh/geldata#1838)
+   *
+   * Returns the list of unsafe operations with human-readable reasons.
+   * Empty list means the plan is safe to apply unattended.
+   */
+  classifyUnsafeOperations(
+    plan: Types.MigrationPlan,
+  ): ReadonlyArray<{ operation: string; reason: string }> {
+    const unsafe: { operation: string; reason: string }[] = [];
+
+    for (const migration of plan.migrations) {
+      for (const op of migration.operations) {
+        switch (op.kind) {
+          case "DropType": {
+            const drop = op as Types.DropTypeOperation;
+            unsafe.push({
+              operation: `DropType ${drop.typeName}`,
+              reason:
+                "drops the table and all rows; data is unrecoverable from migration history alone",
+            });
+            break;
+          }
+          case "DropTable": {
+            const drop = op as Types.DropTableOperation;
+            unsafe.push({
+              operation: `DropTable ${drop.tableName}`,
+              reason: "drops the table and all rows",
+            });
+            break;
+          }
+          case "AlterType": {
+            const alter = op as Types.AlterTypeOperation;
+            for (const sub of alter.operations) {
+              if (sub.kind === "DropProperty") {
+                const drop = sub as Types.DropPropertyOperation;
+                unsafe.push({
+                  operation:
+                    `AlterType ${alter.typeName} → DropProperty ${drop.propertyName}`,
+                  reason: "drops a column and all values stored in it",
+                });
+              } else if (sub.kind === "DropLink") {
+                const dropLink = sub as Types.DropLinkOperation;
+                unsafe.push({
+                  operation:
+                    `AlterType ${alter.typeName} → DropLink ${dropLink.linkName}`,
+                  reason: "drops a relationship and all foreign-key data",
+                });
+              }
+            }
+            break;
+          }
+        }
+      }
+    }
+
+    return unsafe;
+  }
+
+  /**
    * Create a checkpoint before migration
    */
   createMigrationCheckpoint(

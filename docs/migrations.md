@@ -544,6 +544,52 @@ const rollbackSQL = engine.generateRollbackSQL(migration);
 const safety = engine.validateRollbackSafety(plan.value);
 ```
 
+## Resolving Merge Conflicts (gh/geldata#6085)
+
+Migrations are timestamped files in `dbschema/migrations/`, which means
+two developers working on parallel branches can each generate a migration
+on top of the same parent. When the second branch merges in, both
+migrations exist but may target the same schema state — Disc has no way
+to know which one ran first, and applying them out of order produces an
+inconsistent schema.
+
+**Recognizing the conflict.** After merging, run `disc migrate --dry-run`.
+Symptoms: two (or more) migration files in `dbschema/migrations/` whose
+timestamps weren't generated together; a diff that re-runs already-
+applied DDL; a checksum-mismatch error from the migration tracker
+(P1-08).
+
+**The fix: regenerate the later migration.** This works for any conflict
+where the migrations don't actually touch the same fields:
+
+1. On `main` (the branch that landed first): confirm migrations are
+   committed and the database reflects them.
+2. On your branch: delete your locally-generated migration file from
+   `dbschema/migrations/`. *Don't* touch the `disc_migrations` tracking
+   table — it was never applied to `main`'s DB.
+3. Pull `main` into your branch.
+4. Run `disc migrate --create` again. Disc diffs your schema against
+   `main`'s now-applied state and produces a fresh migration with a
+   newer timestamp that stacks cleanly.
+5. `disc migrate --dry-run` to confirm the regenerated file only
+   contains your branch's intended operations.
+6. Commit and push.
+
+**When the migrations *do* overlap.** If both branches added the same
+property, the regenerated migration is empty (no diff) — your changes
+already landed via `main`. Just delete the stale file. If both branches
+changed the *same* field in different ways (one renamed `created_at` →
+`createdAt`, the other changed its type), it's a true conflict: pick
+one intent and discard the other, or hand-write a migration that
+reconciles both. Disc can't auto-merge intent.
+
+**Avoiding the situation.** Run `disc migrate --create` as the *last*
+step before pushing — after pulling `main`. Treat `dbschema/migrations/`
+like `package-lock.json` in PR review: any new file should be obviously
+rebased on current `main`. Squash long chains
+(`disc migrate --squash`) periodically so individual conflicts have
+less surface area.
+
 ## Best Practices
 
 ### Always Preview in Production

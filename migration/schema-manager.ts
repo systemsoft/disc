@@ -760,6 +760,7 @@ export class SchemaManager {
    */
   async applySchema(
     sdlSource: string,
+    options?: { allowUnsafe?: boolean },
   ): Promise<Result<Types.MigrationResult[], MigrationError>> {
     // Parse SDL
     const parseResult = this.parseSDL(sdlSource);
@@ -786,6 +787,24 @@ export class SchemaManager {
       return planResult;
     }
     const plan = planResult.value;
+
+    // gh/geldata#1838: refuse data-destroying ops by default. Callers
+    // pass `{ allowUnsafe: true }` to bypass — the CLI exposes this via
+    // `--unsafe`. Dry-run still surfaces the unsafe list (caller renders
+    // it) but doesn't refuse, since dry-run mutates nothing.
+    if (!options?.allowUnsafe && !this.dryRun) {
+      const unsafe = this.engine.classifyUnsafeOperations(plan);
+      if (unsafe.length > 0) {
+        const lines = unsafe.map((u) => `  - ${u.operation}: ${u.reason}`);
+        return Err(
+          new MigrationError(
+            `Migration contains ${unsafe.length} unsafe operation(s):\n${
+              lines.join("\n")
+            }\n\nPass { allowUnsafe: true } (or --unsafe at the CLI) to apply anyway.`,
+          ),
+        );
+      }
+    }
 
     // If dryRun, skip execution
     if (this.dryRun) {

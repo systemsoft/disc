@@ -98,7 +98,12 @@ export class CLICommands {
       } else if (args.create) {
         await this.createMigration(manager, schemaFile);
       } else {
-        await this.applyMigrations(manager, schemaFile, dryRun);
+        await this.applyMigrations(
+          manager,
+          schemaFile,
+          dryRun,
+          args.unsafe === true,
+        );
       }
     } catch (error) {
       console.error(`Migration failed: ${(error as Error).message}`);
@@ -899,6 +904,7 @@ export class CLICommands {
     manager: SchemaManager,
     schemaFile: string,
     dryRun: boolean,
+    allowUnsafe = false,
   ): Promise<void> {
     console.log("Applying migrations...");
 
@@ -951,8 +957,12 @@ export class CLICommands {
 
       console.log("\nNo changes applied (dry-run mode)");
     } else {
-      // Live execution: applySchema handles parse + diff + execute
-      const applyResult = await manager.applySchema(sdlSource);
+      // Live execution: applySchema handles parse + diff + execute. Pass
+      // through `allowUnsafe` so `--unsafe` callers aren't blocked by
+      // the destructive-op gate (gh/geldata#1838).
+      const applyResult = await manager.applySchema(sdlSource, {
+        allowUnsafe,
+      });
 
       if (!applyResult.ok) {
         console.error(

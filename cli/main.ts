@@ -74,13 +74,17 @@ OPTIONS:
   --squash               Squash multiple migrations into one
   --squash-from <id>     Start of squash range (inclusive)
   --squash-to <id>       End of squash range (inclusive)
+  --unsafe               Permit data-destroying migrations (DropType, DropTable,
+                         DropProperty, DropLink). Off by default — refused with a
+                         summary of the unsafe operations.
 
 FLAG SCOPE (P2-11 — run \`disc <command> --help\` for command-specific details):
   Global:                    --help, --version
   init:                      --template, --backend-dsn, --skip-postgres, --force, --directory
   start/stop/restart/status: --no-monitor (start only), --foreground (start only)
   migrate:                   --schema, --dry-run, --auto-approve, --create, --status,
-                             --rollback, --rollback-to, --squash, --squash-{from,to}, --backend-dsn
+                             --rollback, --rollback-to, --squash, --squash-{from,to},
+                             --unsafe, --backend-dsn
   shell/serve:               --backend-dsn; serve adds --jwt-secret, --enable-auth,
                              --enable-access-policies, --binary-port, --tls-cert, --tls-key
   codegen:                   --schema, --schema-dir, --output, --target, --no-queries,
