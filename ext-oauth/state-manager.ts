@@ -22,6 +22,7 @@ export class OAuthStateManager {
   async createState(
     provider: string,
     redirectUri: string,
+    metadata?: Record<string, unknown>,
   ): Promise<OAuthState> {
     const state = crypto.randomUUID();
     const now = Date.now();
@@ -46,6 +47,7 @@ export class OAuthStateManager {
       state,
       codeVerifier,
       codeChallenge,
+      metadata,
     };
 
     this.states.set(state, oauthState);

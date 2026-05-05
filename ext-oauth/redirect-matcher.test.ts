@@ -239,7 +239,8 @@ describe("OAuthExtension - allowedRedirectUris (gh/geldata#7468)", () => {
 
     assertEquals(response.status, 400);
     const body = await response.json();
-    assertEquals(body.error, "redirect_uri not in allowlist");
+    // gh/geldata#8950: structured error shape replaces flat string.
+    assertEquals(body.error.code, "redirect_uri_not_allowed");
   });
 
   it("rejects caller override when no allowlist is configured", async () => {

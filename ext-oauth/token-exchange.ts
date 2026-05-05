@@ -14,6 +14,7 @@ export async function exchangeCodeForToken(
   provider: OAuthProviderConfig,
   code: string,
   redirectUri: string,
+  codeVerifier?: string,
 ): Promise<TokenResponse> {
   const body = new URLSearchParams({
     client_id: provider.clientId,
@@ -22,6 +23,12 @@ export async function exchangeCodeForToken(
     grant_type: "authorization_code",
     redirect_uri: redirectUri,
   });
+  // P1-41: PKCE code_verifier is required by providers that received
+  // a code_challenge in the authorize redirect. Forward it when the
+  // state-manager populated one.
+  if (codeVerifier) {
+    body.set("code_verifier", codeVerifier);
+  }
 
   const response = await fetch(provider.tokenUrl, {
     body: body.toString(),

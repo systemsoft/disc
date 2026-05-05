@@ -215,7 +215,9 @@ Deno.test("OAuthExtension - callback returns 400 when state is missing", async (
   assertEquals(response.status, 400);
 });
 
-Deno.test("OAuthExtension - callback returns 400 for invalid state", async () => {
+Deno.test("OAuthExtension - callback returns invalid_state error code", async () => {
+  // gh/geldata#8950: structured error shape `{error: {code, message}}`
+  // replaces the prior flat `{error: "string"}`.
   const ext = new OAuthExtension(makeConfig());
   const routes = ext.getRoutes();
   const route = routes.find((r) => r.path === "/callback/google")!;
@@ -223,11 +225,13 @@ Deno.test("OAuthExtension - callback returns 400 for invalid state", async () =>
     makeRequest("/callback/google?code=auth-code&state=invalid-state"),
   );
   assertEquals(response.status, 400);
-  const body = await response.json() as { error: string };
-  assertEquals(body.error, "Invalid or expired state");
+  const body = await response.json() as {
+    error: { code: string; message: string };
+  };
+  assertEquals(body.error.code, "invalid_state");
 });
 
-Deno.test("OAuthExtension - callback returns 400 with error query param", async () => {
+Deno.test("OAuthExtension - callback forwards provider error in details", async () => {
   const ext = new OAuthExtension(makeConfig());
   const routes = ext.getRoutes();
   const route = routes.find((r) => r.path === "/callback/google")!;
@@ -235,33 +239,194 @@ Deno.test("OAuthExtension - callback returns 400 with error query param", async 
     makeRequest("/callback/google?error=access_denied"),
   );
   assertEquals(response.status, 400);
-  const body = await response.json() as { error: string };
-  assertEquals(body.error.includes("access_denied"), true);
+  const body = await response.json() as {
+    error: { code: string; details?: string };
+  };
+  assertEquals(body.error.code, "oauth_provider_error");
+  assertEquals(body.error.details, "access_denied");
 });
 
-Deno.test("OAuthExtension - callback succeeds with valid state and code", async () => {
+Deno.test("OAuthExtension - callback completes token exchange + userinfo (gh/geldata#7557)", async () => {
+  // Mock fetch so the callback actually completes against a stub
+  // OAuth provider. Verifies that gh/geldata#7557 wired token exchange
+  // and userinfo fetching into the callback (it was a stub previously).
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = ((url: string | URL | Request) => {
+    const u = typeof url === "string"
+      ? url
+      : url instanceof URL
+      ? url.toString()
+      : url.url;
+    if (u.includes("oauth2.googleapis.com/token")) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            access_token: "test-access-token",
+            token_type: "Bearer",
+            expires_in: 3600,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    }
+    if (u.includes("googleapis.com/oauth2/v3/userinfo")) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            sub: "google-user-123",
+            email: "ada@example.com",
+            name: "Ada Lovelace",
+            picture: "https://example.com/ada.jpg",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        ),
+      );
+    }
+    return Promise.resolve(new Response("not found", { status: 404 }));
+  }) as typeof fetch;
+
+  try {
+    const ext = new OAuthExtension(makeConfig());
+    const authRoutes = ext.getRoutes();
+    const authRoute = authRoutes.find((r) => r.path === "/authorize/google")!;
+    const authResp = await authRoute.handler(makeRequest("/authorize/google"));
+    const authBody = await authResp.json() as { state: string };
+
+    const cbRoute = authRoutes.find((r) => r.path === "/callback/google")!;
+    const response = await cbRoute.handler(
+      makeRequest(`/callback/google?code=real-code&state=${authBody.state}`),
+    );
+    assertEquals(response.status, 200);
+    const body = await response.json() as {
+      provider: string;
+      token: { accessToken: string; tokenType: string };
+      user: { id: string; email: string; name: string; avatarUrl: string };
+    };
+    assertEquals(body.provider, "google");
+    assertEquals(body.token.accessToken, "test-access-token");
+    assertEquals(body.user.id, "google-user-123");
+    assertEquals(body.user.email, "ada@example.com");
+    assertEquals(body.user.name, "Ada Lovelace");
+    assertEquals(body.user.avatarUrl, "https://example.com/ada.jpg");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("OAuthExtension - metadata round-trips through authorize → callback (gh/geldata#8841)", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = ((url: string | URL | Request) => {
+    const u = typeof url === "string"
+      ? url
+      : url instanceof URL
+      ? url.toString()
+      : url.url;
+    if (u.includes("token")) {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({ access_token: "tok", token_type: "Bearer" }),
+        ),
+      );
+    }
+    return Promise.resolve(
+      new Response(JSON.stringify({ sub: "u1", email: "e@x.com" })),
+    );
+  }) as typeof fetch;
+
+  try {
+    const ext = new OAuthExtension(makeConfig());
+    const authRoutes = ext.getRoutes();
+    const authRoute = authRoutes.find((r) => r.path === "/authorize/google")!;
+    const meta = encodeURIComponent(
+      JSON.stringify({ next: "/dashboard", csrf: "abc" }),
+    );
+    const authResp = await authRoute.handler(
+      makeRequest(`/authorize/google?metadata=${meta}`),
+    );
+    const authBody = await authResp.json() as { state: string };
+
+    const cbRoute = authRoutes.find((r) => r.path === "/callback/google")!;
+    const response = await cbRoute.handler(
+      makeRequest(`/callback/google?code=c&state=${authBody.state}`),
+    );
+    const body = await response.json() as {
+      metadata: { next: string; csrf: string };
+    };
+    assertEquals(body.metadata.next, "/dashboard");
+    assertEquals(body.metadata.csrf, "abc");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test("OAuthExtension - rejects oversized metadata (gh/geldata#8841)", async () => {
   const ext = new OAuthExtension(makeConfig());
-  // Obtain a real state token via the authorize route
   const authRoutes = ext.getRoutes();
   const authRoute = authRoutes.find((r) => r.path === "/authorize/google")!;
-  const authResp = await authRoute.handler(makeRequest("/authorize/google"));
-  const authBody = await authResp.json() as { state: string };
-
-  const cbRoute = authRoutes.find((r) => r.path === "/callback/google")!;
-  const response = await cbRoute.handler(
-    makeRequest(
-      `/callback/google?code=real-code&state=${authBody.state}`,
-    ),
+  // 3 KB blob — exceeds the 2 KB cap.
+  const huge = encodeURIComponent(JSON.stringify({ blob: "x".repeat(3000) }));
+  const response = await authRoute.handler(
+    makeRequest(`/authorize/google?metadata=${huge}`),
   );
-  assertEquals(response.status, 200);
-  const body = await response.json() as {
-    message: string;
-    code: string;
-    provider: string;
-  };
-  assertEquals(body.message, "OAuth callback received");
-  assertEquals(body.code, "real-code");
-  assertEquals(body.provider, "google");
+  assertEquals(response.status, 400);
+  const body = await response.json() as { error: { code: string } };
+  assertEquals(body.error.code, "metadata_too_large");
+});
+
+Deno.test("OAuthExtension - rejects malformed metadata (gh/geldata#8841)", async () => {
+  const ext = new OAuthExtension(makeConfig());
+  const authRoutes = ext.getRoutes();
+  const authRoute = authRoutes.find((r) => r.path === "/authorize/google")!;
+  const response = await authRoute.handler(
+    makeRequest("/authorize/google?metadata=not-json"),
+  );
+  assertEquals(response.status, 400);
+  const body = await response.json() as { error: { code: string } };
+  assertEquals(body.error.code, "metadata_invalid");
+});
+
+Deno.test("OAuthExtension - rejects metadata that is JSON but not an object", async () => {
+  const ext = new OAuthExtension(makeConfig());
+  const authRoutes = ext.getRoutes();
+  const authRoute = authRoutes.find((r) => r.path === "/authorize/google")!;
+  const arr = encodeURIComponent("[1,2,3]");
+  const response = await authRoute.handler(
+    makeRequest(`/authorize/google?metadata=${arr}`),
+  );
+  assertEquals(response.status, 400);
+  const body = await response.json() as { error: { code: string } };
+  assertEquals(body.error.code, "metadata_invalid");
+});
+
+Deno.test("OAuthExtension - callback maps token-exchange failure to structured error", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (() =>
+    Promise.resolve(
+      new Response("Bad client_secret", {
+        status: 400,
+        headers: { "Content-Type": "text/plain" },
+      }),
+    )) as typeof fetch;
+
+  try {
+    const ext = new OAuthExtension(makeConfig());
+    const authRoutes = ext.getRoutes();
+    const authRoute = authRoutes.find((r) => r.path === "/authorize/google")!;
+    const authResp = await authRoute.handler(makeRequest("/authorize/google"));
+    const authBody = await authResp.json() as { state: string };
+
+    const cbRoute = authRoutes.find((r) => r.path === "/callback/google")!;
+    const response = await cbRoute.handler(
+      makeRequest(`/callback/google?code=c&state=${authBody.state}`),
+    );
+    assertEquals(response.status, 502);
+    const body = await response.json() as {
+      error: { code: string; details?: string };
+    };
+    assertEquals(body.error.code, "token_exchange_failed");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 // ── State manager ─────────────────────────────────────────────────────

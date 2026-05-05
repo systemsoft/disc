@@ -63,4 +63,36 @@ export interface OAuthState {
    * `code_challenge` in the initial authorize redirect.
    */
   codeChallenge?: string;
+  /**
+   * Caller-supplied opaque blob carried through the OAuth handshake.
+   * The authorize endpoint accepts it as a JSON-encoded `metadata`
+   * query param; the callback returns it verbatim in the response.
+   * Most common use: a `next` URL the calling app redirects to after
+   * the OAuth flow completes. Capped at 2 KB JSON to keep the in-memory
+   * state map bounded. (gh/geldata#8841)
+   */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Structured error returned by `/authorize` and `/callback` failure
+ * paths. `code` is stable for programmatic handling; `message` is
+ * user-facing; `details` is operator-facing and may include the
+ * upstream provider's error string. (gh/geldata#8950)
+ */
+export interface OAuthErrorResponse {
+  error: {
+    code:
+      | "missing_parameter"
+      | "invalid_state"
+      | "redirect_uri_not_allowed"
+      | "redirect_uri_override_disabled"
+      | "metadata_too_large"
+      | "metadata_invalid"
+      | "oauth_provider_error"
+      | "token_exchange_failed"
+      | "userinfo_failed";
+    message: string;
+    details?: string;
+  };
 }
