@@ -11,7 +11,13 @@ import { isPolymorphicType } from "../compiler/context.ts";
  * Built-in annotation names that do not require an explicit
  * `abstract annotation` declaration in the schema.
  */
-const BUILTIN_ANNOTATIONS = new Set(["description", "title", "deprecated"]);
+const BUILTIN_ANNOTATIONS = new Set([
+  "description",
+  "title",
+  "deprecated",
+  "secret",
+  "std::secret",
+]);
 
 interface ValidationContext {
   types: Map<string, AST.TypeDeclaration | AST.ScalarTypeDeclaration>;

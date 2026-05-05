@@ -28,6 +28,12 @@ export interface PropertyDescription {
   computed: boolean;
   constraints: string[];
   annotations: Record<string, string>;
+  /**
+   * True when marked with `@secret := true` (or qualified `std::secret`).
+   * SDK and UI consumers use this to mask values in introspection output
+   * and admin views without string-matching the annotations map.
+   */
+  secret: boolean;
 }
 
 export interface LinkDescription {
@@ -37,6 +43,7 @@ export interface LinkDescription {
   required: boolean;
   readonly: boolean;
   annotations: Record<string, string>;
+  secret: boolean;
 }
 
 export interface TypeDescription {
@@ -49,6 +56,7 @@ export interface TypeDescription {
   accessPolicies: string[];
   indexes: string[];
   annotations: Record<string, string>;
+  secret: boolean;
 }
 
 export interface FunctionDescription {
@@ -127,6 +135,18 @@ export function describeSchema(schema: Schema): SchemaDescription {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+function isSecretAnnotation(
+  annotations: Record<string, string> | undefined,
+): boolean {
+  if (!annotations) return false;
+  const raw = annotations["secret"] ?? annotations["std::secret"];
+  if (raw === undefined) return false;
+  // SchemaManager preserves SDL string literal quotes (e.g. `'true'`),
+  // while synthetic test fixtures pass raw `"true"`. Accept both.
+  const stripped = raw.replace(/^['"]|['"]$/g, "");
+  return stripped === "true";
+}
+
 function buildTypeDescription(typeDef: TypeDef): TypeDescription {
   const module = extractModule(typeDef.name);
 
@@ -168,6 +188,7 @@ function buildTypeDescription(typeDef: TypeDef): TypeDescription {
     accessPolicies,
     indexes,
     annotations: typeDef.annotations ?? {},
+    secret: isSecretAnnotation(typeDef.annotations),
   };
 }
 
@@ -192,6 +213,7 @@ function buildPropertyDescription(prop: PropertyDef): PropertyDescription {
     computed: prop.computed ?? false,
     constraints,
     annotations: prop.annotations ?? {},
+    secret: isSecretAnnotation(prop.annotations),
   };
 }
 
@@ -203,6 +225,7 @@ function buildLinkDescription(link: LinkDef): LinkDescription {
     required: link.required,
     readonly: false,
     annotations: link.annotations ?? {},
+    secret: isSecretAnnotation(link.annotations),
   };
 }
 
