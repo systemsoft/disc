@@ -28,7 +28,8 @@ export type WebhookEvent =
   | IdentityAuthenticatedEvent
   | EmailVerificationRequestedEvent
   | EmailVerifiedEvent
-  | PasswordResetRequestedEvent;
+  | PasswordResetRequestedEvent
+  | MagicLinkRequestedEvent;
 
 export interface BaseWebhookEvent {
   eventId: string;
@@ -67,6 +68,17 @@ export interface PasswordResetRequestedEvent extends BaseWebhookEvent {
    * for a separate email service to receive it.
    */
   resetToken: string;
+}
+
+export interface MagicLinkRequestedEvent extends BaseWebhookEvent {
+  eventType: "MagicLinkRequested";
+  /**
+   * Plaintext magic-link token. Same delivery rationale as
+   * `verificationToken` and `resetToken`: cannot be recovered after
+   * `requestMagicLink()` returns, so webhooks are how a separate
+   * email-sender learns about it. (gh/geldata#8186)
+   */
+  magicLinkToken: string;
 }
 
 export type WebhookEventType = WebhookEvent["eventType"];

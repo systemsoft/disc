@@ -415,6 +415,95 @@ export class AuthRoutes {
     };
   }
 
+  // ── Magic-link routes (gh/geldata#8186) ────────────────────────────
+
+  /**
+   * Request a passwordless login token. Public route, rate-limited the
+   * same as login. Body: `{ email: "..." }`. Response is always 200
+   * even when the email doesn't exist — the plaintext token is in the
+   * response body but is unusable in the no-such-user case (the row
+   * was never persisted). This shape is intentional: it lets the
+   * caller do the email-delivery and keeps the timing identical to
+   * the happy path. Apps that want to email server-side should listen
+   * for the `MagicLinkRequested` webhook instead.
+   */
+  requestMagicLink(): (request: Request) => Promise<Response> {
+    return async (request: Request) => {
+      const limited = this.checkRateLimit(request);
+      if (limited) return limited;
+      try {
+        const body = await request.json();
+        if (!body.email) {
+          return new Response(
+            JSON.stringify({
+              error: "email is required",
+              code: "MISSING_EMAIL",
+            }),
+            {
+              status: 400,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+        const token = await this.provider.requestMagicLink(
+          String(body.email),
+          extractRequestMeta(request),
+        );
+        // The HTTP response body intentionally returns the token — it's
+        // the same pattern reset/verify use today, and lets local-dev
+        // flows skip the webhook detour. Production deployments should
+        // consume the `MagicLinkRequested` webhook and email out-of-band.
+        return new Response(
+          JSON.stringify({ success: true, magicLinkToken: token }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      } catch (error) {
+        return this.handleError(error);
+      }
+    };
+  }
+
+  /**
+   * Redeem a magic-link token. Public route, rate-limited. Body:
+   * `{ token: "..." }`. Returns either an `AuthResponse` (full session)
+   * or an `MfaChallenge` when the user has TOTP enrolled — same shape
+   * union as `login()`.
+   */
+  consumeMagicLink(): (request: Request) => Promise<Response> {
+    return async (request: Request) => {
+      const limited = this.checkRateLimit(request);
+      if (limited) return limited;
+      try {
+        const body = await request.json();
+        if (!body.token) {
+          return new Response(
+            JSON.stringify({
+              error: "token is required",
+              code: "MISSING_TOKEN",
+            }),
+            {
+              status: 400,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+        const result = await this.provider.consumeMagicLink(
+          String(body.token),
+          extractRequestMeta(request),
+        );
+        return new Response(JSON.stringify(result), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch (error) {
+        return this.handleError(error);
+      }
+    };
+  }
+
   // ── MFA / TOTP routes (gh/geldata#8186) ────────────────────────────
 
   /**

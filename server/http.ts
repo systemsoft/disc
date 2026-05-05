@@ -537,6 +537,8 @@ export class HttpServer {
         mfa_totp_confirm: "/auth/mfa/totp/confirm",
         mfa_totp_disable: "/auth/mfa/totp/disable",
         mfa_totp_login: "/auth/mfa/totp/login",
+        magic_link_request: "/auth/magic-link/request",
+        magic_link_consume: "/auth/magic-link/consume",
       };
     }
 
@@ -1230,6 +1232,10 @@ export class HttpServer {
         return await this.authRoutes.disableTOTP()(request);
       case "mfa/totp/login":
         return await this.authRoutes.loginWithTOTP()(request);
+      case "magic-link/request":
+        return await this.authRoutes.requestMagicLink()(request);
+      case "magic-link/consume":
+        return await this.authRoutes.consumeMagicLink()(request);
       default:
         return this.create_error_response("Unknown auth endpoint", 404);
     }

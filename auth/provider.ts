@@ -225,6 +225,22 @@ export class AuthProvider implements IAuthProvider {
       )
     `);
 
+    // Magic-link tokens (gh/geldata#8186) — one row per outstanding
+    // request. Stored hashed (parallel to reset/verify tokens, P0-03);
+    // the plaintext is delivered to the user once via email and never
+    // reproducible. Single-use: `consumed_at` set on redemption.
+    await this.db.execute(`
+      CREATE TABLE IF NOT EXISTS magic_link_tokens (
+        token_hash TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        expires_at TIMESTAMP NOT NULL,
+        consumed_at TIMESTAMP,
+        ip_address TEXT,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+
     // MFA TOTP table (gh/geldata#8186) — one row per user when TOTP
     // is enrolled. `confirmed_at` distinguishes pending enrollments
     // (user scanned the QR but hasn't proven they can read codes from
@@ -307,6 +323,12 @@ export class AuthProvider implements IAuthProvider {
     );
     await this.db.execute(
       `CREATE INDEX IF NOT EXISTS idx_mfa_challenges_expires_at ON mfa_challenges(expires_at)`,
+    );
+    await this.db.execute(
+      `CREATE INDEX IF NOT EXISTS idx_magic_link_user_id ON magic_link_tokens(user_id)`,
+    );
+    await this.db.execute(
+      `CREATE INDEX IF NOT EXISTS idx_magic_link_expires_at ON magic_link_tokens(expires_at)`,
     );
   }
 
@@ -1477,6 +1499,137 @@ export class AuthProvider implements IAuthProvider {
       challengeToken: plaintext,
       factors: ["totp"],
     };
+  }
+
+  // ── Magic links (gh/geldata#8186) ──────────────────────────────────
+
+  /**
+   * Mint a passwordless login token for the user with this email and
+   * return the plaintext. Caller is expected to deliver it via email
+   * (the link target redeems via `consumeMagicLink`). Tokens expire in
+   * 15 minutes by default.
+   *
+   * Anti-enumeration: when no user matches, the call still succeeds and
+   * returns a plaintext token — the token is never persisted, so it
+   * can never be redeemed. This keeps the success/failure timing and
+   * response shape identical to the happy path. (Same rationale as
+   * P1-35 generic-error handling on login.)
+   */
+  async requestMagicLink(
+    email: string,
+    meta?: RequestMeta,
+  ): Promise<string> {
+    const plaintext = this.generateToken();
+    const result = await this.db.query(
+      "SELECT id, active, is_anonymous FROM users WHERE email = ?",
+      [email],
+    );
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 min
+    if (
+      result.rows.length > 0 &&
+      result.rows[0].active &&
+      !result.rows[0].is_anonymous
+    ) {
+      const tokenHash = await this.hashToken(plaintext);
+      await this.db.execute(
+        `INSERT INTO magic_link_tokens (token_hash, user_id, expires_at, ip_address)
+         VALUES (?, ?, ?, ?)`,
+        [
+          tokenHash,
+          result.rows[0].id,
+          expiresAt.toISOString(),
+          meta?.ipAddress ?? null,
+        ],
+      );
+      this.auditEvent("magic_link_requested", result.rows[0].id, {
+        ipAddress: meta?.ipAddress,
+      });
+      this.fireWebhook({
+        eventType: "MagicLinkRequested",
+        eventId: newEventId(),
+        timestamp: newEventTimestamp(),
+        identityId: result.rows[0].id,
+        magicLinkToken: plaintext,
+      });
+    } else {
+      this.auditEvent("magic_link_requested", null, {
+        result: "no_such_user",
+        email,
+        ipAddress: meta?.ipAddress,
+      });
+    }
+    return plaintext;
+  }
+
+  /**
+   * Redeem a magic-link token and complete login. Single-use — the
+   * row's `consumed_at` is set on success. If the user has TOTP
+   * enrolled, returns an `MfaChallenge` instead of a session, matching
+   * the password-login flow (gh/geldata#8186 Phase A): magic-link
+   * proves "user has the email", TOTP proves "user has the device".
+   */
+  async consumeMagicLink(
+    token: string,
+    meta?: RequestMeta,
+  ): Promise<LoginResult> {
+    const tokenHash = await this.hashToken(token);
+    const result = await this.db.query(
+      `SELECT user_id, expires_at, consumed_at
+       FROM magic_link_tokens
+       WHERE token_hash = ?`,
+      [tokenHash],
+    );
+    if (result.rows.length === 0) {
+      throw new AuthError(
+        "Invalid or expired magic link",
+        AuthErrorCode.INVALID_TOKEN,
+        401,
+      );
+    }
+    const row = result.rows[0];
+    if (row.consumed_at) {
+      throw new AuthError(
+        "Magic link already used",
+        AuthErrorCode.INVALID_TOKEN,
+        401,
+      );
+    }
+    if (new Date(row.expires_at).getTime() < Date.now()) {
+      throw new AuthError(
+        "Magic link expired",
+        AuthErrorCode.TOKEN_EXPIRED,
+        401,
+      );
+    }
+
+    // Burn the link before issuing anything. Even if the MFA challenge
+    // step fails, the link is single-use — the user requests a new one.
+    await this.db.execute(
+      "UPDATE magic_link_tokens SET consumed_at = CURRENT_TIMESTAMP WHERE token_hash = ?",
+      [tokenHash],
+    );
+
+    const user = await this.getUser(row.user_id);
+    if (!user || !user.active || user.isAnonymous) {
+      throw new AuthError(
+        "User not found",
+        AuthErrorCode.USER_NOT_FOUND,
+        404,
+      );
+    }
+
+    if (await this.hasConfirmedTOTP(user.id)) {
+      const challenge = await this.issueMfaChallenge(user.id);
+      this.auditEvent("magic_link_mfa_challenge_issued", user.id, {
+        ipAddress: meta?.ipAddress,
+      });
+      return challenge;
+    }
+
+    this.auditEvent("magic_link_consumed", user.id, {
+      ipAddress: meta?.ipAddress,
+    });
+    return await this.completeLogin(user, meta);
   }
 
   private async createSession(

@@ -219,6 +219,50 @@ verifiers ahead of switching the signing private key — verifiers
 holding both old and new public keys keeps a smooth window. Disc
 itself only holds one public key at a time today.
 
+### Magic-link login (gh/geldata#8186)
+
+Passwordless login via email. The user types their email; the server
+mints a single-use token, hashes it, and returns the plaintext for
+the caller to email out (or relay via the `MagicLinkRequested`
+webhook). When the user clicks the link, the redeem step mints a
+session — or returns an `MfaChallenge` if the user has TOTP enrolled.
+
+```ts
+// Step 1: user types email.
+const token = await provider.requestMagicLink("u@example.com");
+// Send the link `https://app.example.com/magic?token=${token}` via email.
+
+// Step 2: user clicks the link, the app calls:
+const result = await provider.consumeMagicLink(token);
+if ("mfaRequired" in result) {
+  // User has TOTP — redeem the challenge with `loginWithTOTP`.
+} else {
+  // Full session.
+}
+```
+
+**HTTP routes** (both public, both rate-limited the same as login):
+
+| Method | Path                        | Body                  |
+|--------|-----------------------------|-----------------------|
+| POST   | `/auth/magic-link/request`  | `{ "email": "..." }`  |
+| POST   | `/auth/magic-link/consume`  | `{ "token": "..." }`  |
+
+**Anti-enumeration:** `requestMagicLink` always returns a plaintext
+token, even when no user matches the email — the token just isn't
+persisted, so it can't be redeemed. Same response shape, same timing.
+Same rationale as P1-35's generic-error login handling.
+
+**Single-use + TTL:** tokens are stored hashed (parallel to reset /
+verify / MFA-challenge tokens), expire in 15 minutes, and `consumed_at`
+is set on the first redeem — even when the redeem returns an MFA
+challenge instead of a session, so the link itself can't be replayed
+mid-MFA.
+
+**Webhooks:** the `MagicLinkRequested` event carries the plaintext
+token and is the production-recommended delivery path. Consume it from
+your email service rather than the HTTP response body.
+
 ### TOTP MFA (gh/geldata#8186)
 
 Two-factor authentication via RFC 6238 TOTP. Compatible with Google
