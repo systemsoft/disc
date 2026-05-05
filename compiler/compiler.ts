@@ -18,20 +18,7 @@ import {
 } from "../access/mod.ts";
 import { describeSchema, describeType } from "./introspection.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
-
-/** Maps Gel/Disc config keys to PostgreSQL GUC parameter names */
-const CONFIGURE_KEY_MAP: Record<string, string> = {
-  "query_execution_timeout": "statement_timeout",
-  "listen_addresses": "listen_addresses",
-  "shared_buffers": "shared_buffers",
-  "work_mem": "work_mem",
-  "maintenance_work_mem": "maintenance_work_mem",
-  "effective_cache_size": "effective_cache_size",
-  "max_connections": "max_connections",
-  "log_min_duration_statement": "log_min_duration_statement",
-  "idle_in_transaction_session_timeout": "idle_in_transaction_session_timeout",
-  "lock_timeout": "lock_timeout",
-};
+import { getConfigRegistry, lookupConfigKey } from "./config-registry.ts";
 
 /** Maps EdgeQL type names to PostgreSQL type names */
 function edgeqlTypeToPgType(edgeqlType: string): string {
@@ -1666,8 +1653,11 @@ export class EdgeQLCompiler {
     const functionName = funcCall.name.parts.join("_");
     const qualifiedName = funcCall.name.parts.join("::");
 
-    // Check for schema:: introspection functions
-    if (qualifiedName.startsWith("schema::")) {
+    // Check for schema:: / cfg:: introspection functions
+    if (
+      qualifiedName.startsWith("schema::") ||
+      qualifiedName.startsWith("cfg::")
+    ) {
       return this.compileIntrospectionFunction(qualifiedName, funcCall);
     }
 
@@ -3377,7 +3367,7 @@ export class EdgeQLCompiler {
   private compileConfigureQuery(
     query: EdgeQLAST.ConfigureQuery,
   ): SQL.RawSQLStatement {
-    const pgKey = CONFIGURE_KEY_MAP[query.key] ?? query.key;
+    const pgKey = lookupConfigKey(query.key)?.pgName ?? query.key;
 
     if (query.action === "RESET") {
       if (query.scope === "SESSION") {
@@ -3468,6 +3458,15 @@ export class EdgeQLCompiler {
         const description = describeSchema(this.ctx.schema);
         const funcNames = description.functions.map((f) => f.name);
         json = JSON.stringify(funcNames);
+        break;
+      }
+
+      case "cfg::describe_settings": {
+        // #5988 + #6444: registry of CONFIGURE-able keys with secret flag.
+        // Values are not included here — querying current values requires
+        // a SQL roundtrip (SHOW or disc_config select), which a separate
+        // admin endpoint will handle while applying maskIfSecret().
+        json = JSON.stringify(getConfigRegistry());
         break;
       }
 

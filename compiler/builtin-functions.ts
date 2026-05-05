@@ -644,6 +644,12 @@ export function getBuiltinFunctions(): Map<string, FunctionDef> {
       returnType: "json",
       introspection: true,
     }],
+    ["cfg::describe_settings", {
+      name: "cfg::describe_settings",
+      args: [],
+      returnType: "json",
+      introspection: true,
+    }],
 
     // Range & Multirange functions
     ["range", {
