@@ -316,6 +316,44 @@ export class HttpServer {
   }
 
   /**
+   * Hot-reload setters for config knobs that are safe to mutate while the
+   * server is running. Each request reads the current `this.config` value,
+   * so a plain field-mutation here takes effect on the very next request.
+   * Used by `DiscServer.reloadConfig()` (gh/geldata#4278).
+   */
+  updateRequestTimeout(ms: number): void {
+    this.config.requestTimeout = ms;
+    log.info("config reload: requestTimeout updated", { value: ms });
+  }
+
+  updateCorsEnabled(enabled: boolean): void {
+    this.config.enableCors = enabled;
+    log.info("config reload: enableCors updated", { value: enabled });
+  }
+
+  updateCorsAllowedOrigins(origins: string[] | undefined): void {
+    this.config.corsOrigins = origins;
+    log.info("config reload: corsOrigins updated", {
+      value: origins ?? null,
+    });
+  }
+
+  updateSlowQueryThreshold(ms: number): void {
+    this.config.slowQueryThresholdMs = ms;
+    log.info("config reload: slowQueryThresholdMs updated", { value: ms });
+  }
+
+  updateExplainCacheTtl(ms: number): void {
+    // The actual EXPLAIN cache lives on the protocol handler. The HTTP
+    // server doesn't read this value directly, but we mirror it on
+    // `this.config` so /stats and similar surfaces see the new value.
+    // The protocol handler is updated separately by the caller.
+    (this.config as Types.ServerConfig & { explainCacheTtlMs?: number })
+      .explainCacheTtlMs = ms;
+    log.info("config reload: explainCacheTtlMs updated", { value: ms });
+  }
+
+  /**
    * Drain in-flight requests by setting the shutting_down flag and polling
    * until all requests complete or the timeout expires.
    */

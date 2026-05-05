@@ -124,6 +124,9 @@ export class DiscServer {
   private binaryTls?: { certFile: string; keyFile: string };
   private stopping = false;
   private signal_handler?: () => void;
+  private sighup_handler?: () => void;
+  private last_log_level?: "DEBUG" | "INFO" | "WARN" | "ERROR";
+  private last_log_format?: "json" | "text";
 
   constructor(config: DiscServerOptions = {}) {
     // If a PostgresInstance is provided, derive databaseUrl from its DSN
@@ -341,6 +344,33 @@ export class DiscServer {
       Deno.addSignalListener("SIGINT", this.signal_handler);
       Deno.addSignalListener("SIGTERM", this.signal_handler);
 
+      // SIGHUP is POSIX-only — Deno's signal API throws on Windows for
+      // unsupported signals. Skip registration there and log a hint.
+      if (Deno.build.os !== "windows") {
+        this.sighup_handler = () => {
+          // Don't await — signal handlers must return quickly. The reload
+          // runs as its own task; errors are caught + logged inside.
+          // (gh/geldata#4278)
+          void this.reloadConfig().catch((err) => {
+            logger.error(
+              `SIGHUP config reload failed: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          });
+        };
+        Deno.addSignalListener("SIGHUP", this.sighup_handler);
+        logger.info(
+          "SIGHUP handler registered; send SIGHUP to reload safe-to-change config without restart",
+        );
+      } else {
+        logger.info("SIGHUP config reload is not available on Windows; restart required for config changes");
+      }
+
+      // Capture the logging config that was active when the server
+      // started — used by reloadConfig() to detect changes.
+      const initialLogging = readLoggingEnv();
+      this.last_log_level = initialLogging.level;
+      this.last_log_format = initialLogging.format;
+
       // Start the server (blocks until server.finished)
       await this.httpServer.start();
     } catch (error) {
@@ -367,6 +397,15 @@ export class DiscServer {
         // Ignore errors from removing listeners (e.g. in test environments)
       }
       this.signal_handler = undefined;
+    }
+
+    if (this.sighup_handler) {
+      try {
+        Deno.removeSignalListener("SIGHUP", this.sighup_handler);
+      } catch {
+        // Ignore errors from removing listeners (e.g. in test environments)
+      }
+      this.sighup_handler = undefined;
     }
 
     // Stop binary protocol server
@@ -450,8 +489,190 @@ export class DiscServer {
     logger.info("Authentication system initialized");
   }
 
+  /**
+   * Re-read environment variables and apply hot-reloadable config
+   * changes in place. Triggered by SIGHUP, but also callable directly
+   * (for tests, admin endpoints, etc.). (gh/geldata#4278)
+   *
+   * Safe-to-reload fields are applied immediately and take effect on
+   * the next request:
+   *   - requestTimeout (DISC_REQUEST_TIMEOUT)
+   *   - enableCors (DISC_ENABLE_CORS)
+   *   - corsOrigins (DISC_CORS_ORIGINS)
+   *   - slowQueryThresholdMs (DISC_SLOW_QUERY_MS)
+   *   - explainCacheTtlMs (DISC_EXPLAIN_CACHE_TTL)
+   *   - log level / format (DISC_LOG_LEVEL, DISC_LOG_FORMAT)
+   *   - TLS cert/key (re-read from on-disk files via reloadTls())
+   *
+   * Unsafe fields (host, port, databaseUrl, jwtSecret, enableAuth,
+   * enableAccessPolicies, enableWebsockets, enableMetrics,
+   * maxConnections, cacheMaxSize) trigger a warn and are otherwise
+   * ignored — restart required.
+   */
+  async reloadConfig(): Promise<void> {
+    logger.info("SIGHUP received: reloading config from environment");
+
+    const next = buildEnvOptions(
+      this.postgresInstance,
+      undefined,
+      undefined,
+    );
+    const cur = this.config;
+
+    let applied = 0;
+    let ignored = 0;
+
+    const noteApplied = (field: string, oldVal: unknown, newVal: unknown): void => {
+      logger.info(`config reload: ${field}: ${String(oldVal)} -> ${String(newVal)}`);
+      applied++;
+    };
+    const noteIgnored = (field: string, oldVal: unknown, newVal: unknown): void => {
+      logger.warn(
+        `config reload: ${field} changed (${String(oldVal)} -> ${String(newVal)}) but cannot be hot-reloaded — restart required`,
+      );
+      ignored++;
+    };
+
+    // ── Safe-to-reload fields ───────────────────────────────────────
+    if (next.requestTimeout !== undefined && next.requestTimeout !== cur.requestTimeout) {
+      noteApplied("requestTimeout", cur.requestTimeout, next.requestTimeout);
+      cur.requestTimeout = next.requestTimeout;
+      this.httpServer?.updateRequestTimeout(next.requestTimeout);
+    }
+
+    if (next.enableCors !== undefined && next.enableCors !== cur.enableCors) {
+      noteApplied("enableCors", cur.enableCors, next.enableCors);
+      cur.enableCors = next.enableCors;
+      this.httpServer?.updateCorsEnabled(next.enableCors);
+    }
+
+    if (!arraysEqual(next.corsOrigins, cur.corsOrigins)) {
+      noteApplied(
+        "corsOrigins",
+        cur.corsOrigins?.join(",") ?? "(none)",
+        next.corsOrigins?.join(",") ?? "(none)",
+      );
+      cur.corsOrigins = next.corsOrigins;
+      this.httpServer?.updateCorsAllowedOrigins(next.corsOrigins);
+    }
+
+    if (
+      next.slowQueryThresholdMs !== undefined &&
+      next.slowQueryThresholdMs !== cur.slowQueryThresholdMs
+    ) {
+      noteApplied(
+        "slowQueryThresholdMs",
+        cur.slowQueryThresholdMs,
+        next.slowQueryThresholdMs,
+      );
+      cur.slowQueryThresholdMs = next.slowQueryThresholdMs;
+      this.httpServer?.updateSlowQueryThreshold(next.slowQueryThresholdMs);
+    }
+
+    const curExplain = (cur as Types.ServerConfig & { explainCacheTtlMs?: number })
+      .explainCacheTtlMs;
+    if (
+      next.explainCacheTtlMs !== undefined &&
+      next.explainCacheTtlMs !== curExplain
+    ) {
+      noteApplied("explainCacheTtlMs", curExplain, next.explainCacheTtlMs);
+      const ttl = next.explainCacheTtlMs;
+      (cur as Types.ServerConfig & { explainCacheTtlMs?: number }).explainCacheTtlMs = ttl;
+      this.httpServer?.updateExplainCacheTtl(ttl);
+    }
+
+    // Logging — reconfigure the global logger if either knob changed.
+    const nextLogging = readLoggingEnv();
+    if (
+      nextLogging.level !== this.last_log_level ||
+      nextLogging.format !== this.last_log_format
+    ) {
+      noteApplied(
+        "logLevel/format",
+        `${this.last_log_level}/${this.last_log_format}`,
+        `${nextLogging.level}/${nextLogging.format}`,
+      );
+      configureLogging({ format: nextLogging.format, level: nextLogging.level });
+      this.last_log_level = nextLogging.level;
+      this.last_log_format = nextLogging.format;
+    }
+
+    // ── Unsafe-to-reload fields ─────────────────────────────────────
+    if (next.host !== undefined && next.host !== cur.host) {
+      noteIgnored("host", cur.host, next.host);
+    }
+    if (next.port !== undefined && next.port !== cur.port) {
+      noteIgnored("port", cur.port, next.port);
+    }
+    if (next.databaseUrl !== undefined && next.databaseUrl !== cur.databaseUrl) {
+      noteIgnored("databaseUrl", "(redacted)", "(redacted)");
+    }
+    if (next.jwtSecret !== undefined && next.jwtSecret !== cur.jwtSecret) {
+      noteIgnored("jwtSecret", "(redacted)", "(redacted)");
+    }
+    if (next.enableAuth !== undefined && next.enableAuth !== cur.enableAuth) {
+      noteIgnored("enableAuth", cur.enableAuth, next.enableAuth);
+    }
+    if (
+      next.enableAccessPolicies !== undefined &&
+      next.enableAccessPolicies !== cur.enableAccessPolicies
+    ) {
+      noteIgnored(
+        "enableAccessPolicies",
+        cur.enableAccessPolicies,
+        next.enableAccessPolicies,
+      );
+    }
+    if (
+      next.enableWebsockets !== undefined &&
+      next.enableWebsockets !== cur.enableWebsockets
+    ) {
+      noteIgnored("enableWebsockets", cur.enableWebsockets, next.enableWebsockets);
+    }
+    if (next.enableMetrics !== undefined && next.enableMetrics !== cur.enableMetrics) {
+      noteIgnored("enableMetrics", cur.enableMetrics, next.enableMetrics);
+    }
+    if (
+      next.maxConnections !== undefined &&
+      next.maxConnections !== cur.maxConnections
+    ) {
+      noteIgnored("maxConnections", cur.maxConnections, next.maxConnections);
+    }
+    // cacheMaxSize: the LRU caches live on the protocol handler and were
+    // sized at construction time. Resizing in place would require pruning
+    // entries to fit a smaller cap and re-keying the eviction list — not
+    // trivial. TODO: expose a `resize(n)` on the cache and wire here.
+    if (next.cacheMaxSize !== undefined && next.cacheMaxSize !== cur.cacheMaxSize) {
+      noteIgnored("cacheMaxSize", cur.cacheMaxSize, next.cacheMaxSize);
+    }
+
+    // ── TLS cert/key on-disk reload ────────────────────────────────
+    // Even when no config field changed, the cert files themselves may
+    // have been rotated. reloadTls() re-reads from disk and swaps the
+    // listener. Skip silently if TLS isn't configured or the HTTP
+    // server isn't running yet.
+    if (cur.tls && this.httpServer) {
+      try {
+        await this.httpServer.reloadTls();
+        logger.info("config reload: TLS listener reloaded from on-disk cert/key");
+      } catch (err) {
+        logger.error(
+          `config reload: TLS reload failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    logger.info(
+      `SIGHUP reload complete: ${applied} applied, ${ignored} ignored (unsafe)`,
+    );
+  }
+
   get_config(): Types.ServerConfig {
     return { ...this.config };
+  }
+
+  getHttpServer(): HttpServer | undefined {
+    return this.httpServer;
   }
 
   get_postgres_instance(): PostgresInstance | undefined {
@@ -483,6 +704,21 @@ export class DiscServer {
   }
 }
 
+/**
+ * Order-sensitive equality for two optional string arrays. `undefined`
+ * and `[]` are treated as equal — both mean "no allowlist set".
+ */
+function arraysEqual(a?: string[], b?: string[]): boolean {
+  const la = a?.length ?? 0;
+  const lb = b?.length ?? 0;
+  if (la !== lb) return false;
+  if (la === 0) return true;
+  for (let i = 0; i < la; i++) {
+    if (a![i] !== b![i]) return false;
+  }
+  return true;
+}
+
 export function createDefaultConfig(): Types.ServerConfig {
   return {
     host: "localhost",
@@ -497,23 +733,18 @@ export function createDefaultConfig(): Types.ServerConfig {
 }
 
 /**
- * Create a DiscServer from environment variables.
- * Optionally accepts a PostgresInstance for bundled PG mode,
- * a parsed Schema, and a list of extensions to register.
+ * Build a `DiscServerOptions` snapshot from environment variables.
+ *
+ * Factored out of `createServerFromEnv` so SIGHUP-triggered reloads can
+ * re-derive the same shape without re-running the side effects (logging
+ * config, server construction). Pure function — does not mutate global
+ * state. (gh/geldata#4278)
  */
-export function createServerFromEnv(
+export function buildEnvOptions(
   postgresInstance?: PostgresInstance,
   schema?: Schema,
   extensions?: Extension[],
-): DiscServer {
-  // Configure structured logging from env vars
-  const logLevel = (Deno.env.get("DISC_LOG_LEVEL") || "INFO").toUpperCase();
-  const logFormat = Deno.env.get("DISC_LOG_FORMAT") || "json";
-  configureLogging({
-    level: logLevel as "DEBUG" | "INFO" | "WARN" | "ERROR",
-    format: logFormat as "json" | "text",
-  });
-
+): DiscServerOptions {
   const enableAuth = Deno.env.get("DISC_ENABLE_AUTH");
   const enableAccessPolicies = Deno.env.get("DISC_ENABLE_ACCESS_POLICIES");
   const config: DiscServerOptions = {
@@ -554,9 +785,7 @@ export function createServerFromEnv(
   // Parse CORS origins if provided
   const corsOriginsEnv = Deno.env.get("DISC_CORS_ORIGINS");
   if (corsOriginsEnv) {
-    config.corsOrigins = corsOriginsEnv.split(",").map((origin) =>
-      origin.trim()
-    );
+    config.corsOrigins = corsOriginsEnv.split(",").map((origin) => origin.trim());
   }
 
   // Parse TLS config if provided
@@ -578,6 +807,38 @@ export function createServerFromEnv(
     config.binaryTls = { certFile: binaryTlsCert, keyFile: binaryTlsKey };
   }
 
+  return config;
+}
+
+/**
+ * Read logging-related env vars. Returned separately because logging is
+ * configured globally at process scope, not per-server.
+ */
+function readLoggingEnv(): { format: "json" | "text"; level: "DEBUG" | "INFO" | "WARN" | "ERROR" } {
+  const level = (Deno.env.get("DISC_LOG_LEVEL") || "INFO").toUpperCase() as
+    | "DEBUG"
+    | "INFO"
+    | "WARN"
+    | "ERROR";
+  const format = (Deno.env.get("DISC_LOG_FORMAT") || "json") as "json" | "text";
+  return { format, level };
+}
+
+/**
+ * Create a DiscServer from environment variables.
+ * Optionally accepts a PostgresInstance for bundled PG mode,
+ * a parsed Schema, and a list of extensions to register.
+ */
+export function createServerFromEnv(
+  postgresInstance?: PostgresInstance,
+  schema?: Schema,
+  extensions?: Extension[],
+): DiscServer {
+  // Configure structured logging from env vars
+  const { format, level } = readLoggingEnv();
+  configureLogging({ format, level });
+
+  const config = buildEnvOptions(postgresInstance, schema, extensions);
   return new DiscServer(config);
 }
 

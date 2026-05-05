@@ -234,6 +234,16 @@ Connect via WebSocket upgrade on the server URL. Messages are JSON objects with 
 
 Signal handlers for `SIGINT` and `SIGTERM` trigger graceful shutdown.
 
+## SIGHUP Config Reload
+
+Send `SIGHUP` to the running disc process to reload safe-to-change config from environment variables without dropping connections (`kill -HUP <pid>`). The reload runs asynchronously off the signal handler; in-flight requests finish on the old config and the next request sees the new values. (gh/geldata#4278)
+
+**Hot-reloadable env vars:** `DISC_REQUEST_TIMEOUT`, `DISC_ENABLE_CORS`, `DISC_CORS_ORIGINS`, `DISC_SLOW_QUERY_MS`, `DISC_EXPLAIN_CACHE_TTL`, `DISC_LOG_LEVEL`, `DISC_LOG_FORMAT`. TLS cert/key files are also re-read from disk if `tls` is configured — useful after a certbot/cert-manager renewal.
+
+**Restart-required env vars** (changes are logged with a warn and otherwise ignored): `DISC_HOST`, `DISC_PORT`, `DATABASE_URL`, `DISC_JWT_SECRET`, `DISC_ENABLE_AUTH`, `DISC_ENABLE_ACCESS_POLICIES`, `DISC_ENABLE_WEBSOCKETS`, `DISC_ENABLE_METRICS`, `DISC_MAX_CONNECTIONS`, `DISC_CACHE_MAX_SIZE`.
+
+SIGHUP is POSIX-only — Windows builds log a startup message that hot-reload is unavailable and require a restart for any config change. You can also call `server.reloadConfig()` programmatically from tests or admin endpoints.
+
 ## Protocol Handlers
 
 The server supports two protocol handler implementations:
