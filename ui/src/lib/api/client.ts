@@ -20,6 +20,8 @@ export interface SchemaPropertyDescription {
   name: string;
   readonly: boolean;
   required: boolean;
+  /** Marked with `@secret := true` — UI must mask the value. */
+  secret: boolean;
   type: string;
 }
 
@@ -29,6 +31,7 @@ export interface SchemaLinkDescription {
   name: string;
   readonly: boolean;
   required: boolean;
+  secret: boolean;
   target: string;
 }
 
@@ -42,6 +45,7 @@ export interface SchemaTypeDescription {
   name: string;
   parentTypes: string[];
   properties: SchemaPropertyDescription[];
+  secret: boolean;
 }
 
 export interface SchemaFunctionDescription {
@@ -113,6 +117,21 @@ export interface MigrationHistoryEntry {
 
 export interface MigrationsResponse {
   migrations: MigrationHistoryEntry[];
+}
+
+export interface ConfigKeyDef {
+  defaultScope: "session" | "database" | "instance" | "system";
+  defaultValue?: string | number | boolean;
+  description?: string;
+  edgeqlType: "str" | "int" | "bool" | "duration" | "memory" | "float";
+  name: string;
+  pgName: string;
+  /** When true, the UI must mask the current value (`••••••`) and refuse to display it. */
+  secret: boolean;
+}
+
+export interface ConfigResponse {
+  keys: ConfigKeyDef[];
 }
 
 export class DiscAPIClient {
@@ -281,6 +300,27 @@ export class DiscAPIClient {
     } catch (error) {
       // deno-lint-ignore no-console
       console.error("Failed to fetch migrations:", error);
+      return [];
+    }
+  }
+
+  /**
+   * GET /config — registry of CONFIGURE-able settings with metadata
+   * including the `secret` flag. Values are not included; the UI must
+   * mask any field where `secret === true` before showing a value
+   * obtained elsewhere. (#5988 + #6444)
+   */
+  async getConfig(): Promise<ConfigKeyDef[]> {
+    try {
+      const response = await fetch(`${this.baseUrl}/config`, {
+        headers: this.headers,
+      });
+      if (!response.ok) return [];
+      const body = await response.json() as ConfigResponse;
+      return body.keys ?? [];
+    } catch (error) {
+      // deno-lint-ignore no-console
+      console.error("Failed to fetch config:", error);
       return [];
     }
   }

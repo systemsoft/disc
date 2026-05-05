@@ -30,6 +30,7 @@ import {
   handleGetMigrations,
   type MigrationsProvider,
 } from "./migrations-endpoint.ts";
+import { handleGetConfig } from "./config-endpoint.ts";
 
 export interface HttpServerOptions {
   config: Types.ServerConfig;
@@ -474,6 +475,10 @@ export class HttpServer {
           return this.handle_metrics(request);
         case "/migrations":
           return await this.handle_migrations(request);
+        case "/config":
+          return handleGetConfig({
+            defaultHeaders: () => this.get_default_headers("application/json"),
+          });
         default:
           return this.create_error_response("Not Found", 404, request);
       }
@@ -620,6 +625,8 @@ export class HttpServer {
         type: "/schema/types/:name",
       };
     }
+
+    endpoints.config = "/config";
 
     if (this.extensionRoutes.size > 0) {
       const extEndpoints: Record<string, string[]> = {};
