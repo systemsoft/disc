@@ -78,7 +78,7 @@ OPTIONS:
                          DropProperty, DropLink). Off by default — refused with a
                          summary of the unsafe operations.
 
-FLAG SCOPE (P2-11 — run \`disc <command> --help\` for command-specific details):
+FLAG SCOPE (run \`disc <command> --help\` for command-specific details):
   Global:                    --help, --version
   init:                      --template, --backend-dsn, --skip-postgres, --force, --directory
   start/stop/restart/status: --no-monitor (start only), --foreground (start only)

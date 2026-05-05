@@ -113,9 +113,9 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: disc
-      # P2-36: NEVER deploy with the default literal "disc" password.
-      # Set POSTGRES_PASSWORD in .env.production (see 'disc deploy --format env')
-      # or override here before running docker compose up.
+      # NEVER deploy with a hardcoded password. Set POSTGRES_PASSWORD
+      # in .env.production (see 'disc deploy --format env') or override
+      # here before running docker compose up.
       POSTGRES_PASSWORD: $\{POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       POSTGRES_DB: ${projectName}
     volumes:
@@ -157,9 +157,9 @@ User=\${DISC_USER:-disc}
 Group=\${DISC_GROUP:-disc}
 WorkingDirectory=\${DISC_HOME:-/opt/disc}
 EnvironmentFile=\${DISC_ENV_FILE:-/etc/disc/disc.env}
-# P2-10: Two ways to run — prefer the compiled binary for production
-# (no Deno dependency), fall back to the source path for dev installs.
-# Override DISC_EXEC to point at a custom path, e.g.
+# Two ways to run — prefer the compiled binary for production (no Deno
+# dependency), fall back to the source path for dev installs. Override
+# DISC_EXEC to point at a custom path, e.g.
 #   DISC_EXEC=/opt/disc/disc              # native binary
 #   DISC_EXEC=/usr/bin/deno run ...       # custom deno invocation
 ExecStart=\${DISC_EXEC:-/opt/disc/disc serve}
