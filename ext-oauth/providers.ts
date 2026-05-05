@@ -56,6 +56,112 @@ export function appleProvider(
   };
 }
 
+/**
+ * X (formerly Twitter) OAuth 2.0 with PKCE. The existing extension
+ * already attaches `code_challenge`/`code_challenge_method=S256`, which
+ * X requires. (gh/geldata#6728)
+ */
+export function twitterProvider(
+  clientId: string,
+  clientSecret: string,
+  redirectUri?: string,
+): OAuthProviderConfig {
+  return {
+    name: "twitter",
+    clientId,
+    clientSecret,
+    authorizeUrl: "https://twitter.com/i/oauth2/authorize",
+    tokenUrl: "https://api.twitter.com/2/oauth2/token",
+    userInfoUrl: "https://api.twitter.com/2/users/me",
+    scopes: ["tweet.read", "users.read"],
+    redirectUri,
+  };
+}
+
+/**
+ * Facebook Login (Graph API). The default `userInfoUrl` requests `id`,
+ * `name`, and `email` — Facebook's `/me` endpoint requires explicit
+ * `fields=` to return anything beyond the id. (gh/geldata#6727)
+ */
+export function facebookProvider(
+  clientId: string,
+  clientSecret: string,
+  redirectUri?: string,
+): OAuthProviderConfig {
+  return {
+    name: "facebook",
+    clientId,
+    clientSecret,
+    authorizeUrl: "https://www.facebook.com/v18.0/dialog/oauth",
+    tokenUrl: "https://graph.facebook.com/v18.0/oauth/access_token",
+    userInfoUrl: "https://graph.facebook.com/me?fields=id,name,email",
+    scopes: ["email", "public_profile"],
+    redirectUri,
+  };
+}
+
+/**
+ * LinkedIn (Sign In with LinkedIn — OIDC profile). Uses the OIDC
+ * userinfo endpoint, not the legacy `/v2/me`, so `email_verified` and
+ * standard claims work. (gh/geldata#6726)
+ */
+export function linkedinProvider(
+  clientId: string,
+  clientSecret: string,
+  redirectUri?: string,
+): OAuthProviderConfig {
+  return {
+    name: "linkedin",
+    clientId,
+    clientSecret,
+    authorizeUrl: "https://www.linkedin.com/oauth/v2/authorization",
+    tokenUrl: "https://www.linkedin.com/oauth/v2/accessToken",
+    userInfoUrl: "https://api.linkedin.com/v2/userinfo",
+    scopes: ["openid", "profile", "email"],
+    redirectUri,
+  };
+}
+
+export interface KeycloakProviderOptions {
+  /** Keycloak base URL, e.g. `https://kc.example.com`. No trailing slash. */
+  baseUrl: string;
+  /** Realm name (Keycloak namespaces every config under a realm). */
+  realm: string;
+  clientId: string;
+  clientSecret: string;
+  redirectUri?: string;
+  allowedRedirectUris?: string[];
+  /** Override scopes. Defaults to `["openid", "email", "profile"]`. */
+  scopes?: string[];
+  /** Override the `/authorize/<name>` segment. Defaults to `keycloak`. */
+  name?: string;
+}
+
+/**
+ * Keycloak OAuth/OIDC provider. Keycloak realms have predictable
+ * endpoint paths so this factory constructs them synchronously without
+ * a discovery round-trip — use `createOidcProvider({issuerUrl: ...})`
+ * if you'd prefer to fetch `.well-known/openid-configuration`.
+ * (gh/geldata#7370)
+ */
+export function keycloakProvider(
+  opts: KeycloakProviderOptions,
+): OAuthProviderConfig {
+  const base = opts.baseUrl.replace(/\/+$/, "");
+  const realmBase = `${base}/realms/${opts.realm}/protocol/openid-connect`;
+  return {
+    allowedRedirectUris: opts.allowedRedirectUris,
+    authorizeUrl: `${realmBase}/auth`,
+    clientId: opts.clientId,
+    clientSecret: opts.clientSecret,
+    name: opts.name ?? "keycloak",
+    redirectUri: opts.redirectUri,
+    scopes: opts.scopes ?? ["openid", "email", "profile"],
+    tokenUrl: `${realmBase}/token`,
+    userInfoUrl: `${realmBase}/userinfo`,
+  };
+}
+
 // ── Generic OpenID Connect ────────────────────────────────────────────
 //
 // Ports geldata/gel#7510 (resolves geldata/gel#7415 + #6908 — Zitadel,

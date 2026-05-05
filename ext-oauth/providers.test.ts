@@ -6,9 +6,13 @@ import { assertEquals, assertRejects } from "@std/assert";
 import {
   appleProvider,
   createOidcProvider,
+  facebookProvider,
   genericOidcProvider,
   githubProvider,
   googleProvider,
+  keycloakProvider,
+  linkedinProvider,
+  twitterProvider,
 } from "./providers.ts";
 
 // ── googleProvider ────────────────────────────────────────────────────
@@ -110,6 +114,136 @@ Deno.test("appleProvider - includes name and email scopes", () => {
 Deno.test("appleProvider - sets optional redirectUri when provided", () => {
   const p = appleProvider("cid", "csecret", "https://example.com/callback");
   assertEquals(p.redirectUri, "https://example.com/callback");
+});
+
+// ── twitterProvider (gh/geldata#6728) ──────────────────────────────────
+
+Deno.test("twitterProvider - returns correct name", () => {
+  const p = twitterProvider("cid", "csecret");
+  assertEquals(p.name, "twitter");
+});
+
+Deno.test("twitterProvider - returns correct authorize, token, and userinfo URLs", () => {
+  const p = twitterProvider("cid", "csecret");
+  assertEquals(p.authorizeUrl, "https://twitter.com/i/oauth2/authorize");
+  assertEquals(p.tokenUrl, "https://api.twitter.com/2/oauth2/token");
+  assertEquals(p.userInfoUrl, "https://api.twitter.com/2/users/me");
+});
+
+Deno.test("twitterProvider - includes tweet.read and users.read scopes", () => {
+  const p = twitterProvider("cid", "csecret");
+  assertEquals(p.scopes.includes("tweet.read"), true);
+  assertEquals(p.scopes.includes("users.read"), true);
+});
+
+Deno.test("twitterProvider - sets optional redirectUri when provided", () => {
+  const p = twitterProvider("cid", "csecret", "https://example.com/cb");
+  assertEquals(p.redirectUri, "https://example.com/cb");
+});
+
+// ── facebookProvider (gh/geldata#6727) ─────────────────────────────────
+
+Deno.test("facebookProvider - returns correct name", () => {
+  const p = facebookProvider("cid", "csecret");
+  assertEquals(p.name, "facebook");
+});
+
+Deno.test("facebookProvider - returns correct authorize, token, and userinfo URLs", () => {
+  const p = facebookProvider("cid", "csecret");
+  assertEquals(p.authorizeUrl, "https://www.facebook.com/v18.0/dialog/oauth");
+  assertEquals(p.tokenUrl, "https://graph.facebook.com/v18.0/oauth/access_token");
+  assertEquals(p.userInfoUrl, "https://graph.facebook.com/me?fields=id,name,email");
+});
+
+Deno.test("facebookProvider - includes email and public_profile scopes", () => {
+  const p = facebookProvider("cid", "csecret");
+  assertEquals(p.scopes.includes("email"), true);
+  assertEquals(p.scopes.includes("public_profile"), true);
+});
+
+// ── linkedinProvider (gh/geldata#6726) ─────────────────────────────────
+
+Deno.test("linkedinProvider - returns correct name", () => {
+  const p = linkedinProvider("cid", "csecret");
+  assertEquals(p.name, "linkedin");
+});
+
+Deno.test("linkedinProvider - returns correct authorize, token, and userinfo URLs", () => {
+  const p = linkedinProvider("cid", "csecret");
+  assertEquals(p.authorizeUrl, "https://www.linkedin.com/oauth/v2/authorization");
+  assertEquals(p.tokenUrl, "https://www.linkedin.com/oauth/v2/accessToken");
+  assertEquals(p.userInfoUrl, "https://api.linkedin.com/v2/userinfo");
+});
+
+Deno.test("linkedinProvider - uses OIDC scopes (openid+profile+email)", () => {
+  const p = linkedinProvider("cid", "csecret");
+  assertEquals(p.scopes, ["openid", "profile", "email"]);
+});
+
+// ── keycloakProvider (gh/geldata#7370) ─────────────────────────────────
+
+Deno.test("keycloakProvider - constructs realm-scoped endpoints", () => {
+  const p = keycloakProvider({
+    baseUrl: "https://kc.example.com",
+    realm: "myrealm",
+    clientId: "cid",
+    clientSecret: "csecret",
+  });
+  assertEquals(p.authorizeUrl, "https://kc.example.com/realms/myrealm/protocol/openid-connect/auth");
+  assertEquals(p.tokenUrl, "https://kc.example.com/realms/myrealm/protocol/openid-connect/token");
+  assertEquals(p.userInfoUrl, "https://kc.example.com/realms/myrealm/protocol/openid-connect/userinfo");
+});
+
+Deno.test("keycloakProvider - default name is keycloak", () => {
+  const p = keycloakProvider({
+    baseUrl: "https://kc.example.com",
+    realm: "myrealm",
+    clientId: "cid",
+    clientSecret: "csecret",
+  });
+  assertEquals(p.name, "keycloak");
+});
+
+Deno.test("keycloakProvider - honors custom name override (multi-realm deployments)", () => {
+  const p = keycloakProvider({
+    baseUrl: "https://kc.example.com",
+    realm: "tenant-a",
+    clientId: "cid",
+    clientSecret: "csecret",
+    name: "kc-tenant-a",
+  });
+  assertEquals(p.name, "kc-tenant-a");
+});
+
+Deno.test("keycloakProvider - strips trailing slash from baseUrl", () => {
+  const p = keycloakProvider({
+    baseUrl: "https://kc.example.com/",
+    realm: "r",
+    clientId: "cid",
+    clientSecret: "csecret",
+  });
+  assertEquals(p.authorizeUrl, "https://kc.example.com/realms/r/protocol/openid-connect/auth");
+});
+
+Deno.test("keycloakProvider - defaults scopes to openid+email+profile", () => {
+  const p = keycloakProvider({
+    baseUrl: "https://kc.example.com",
+    realm: "r",
+    clientId: "cid",
+    clientSecret: "csecret",
+  });
+  assertEquals(p.scopes, ["openid", "email", "profile"]);
+});
+
+Deno.test("keycloakProvider - forwards allowedRedirectUris", () => {
+  const p = keycloakProvider({
+    baseUrl: "https://kc.example.com",
+    realm: "r",
+    clientId: "cid",
+    clientSecret: "csecret",
+    allowedRedirectUris: ["https://*.tenant.com/cb"],
+  });
+  assertEquals(p.allowedRedirectUris, ["https://*.tenant.com/cb"]);
 });
 
 // ── genericOidcProvider ───────────────────────────────────────────────
