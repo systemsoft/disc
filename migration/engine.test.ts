@@ -184,9 +184,7 @@ Deno.test("Schema Differ - Add Property", () => {
   // Should find: alter User (add active property) and create Post type
   assertEquals(operations.length, 2);
 
-  const alterOp = operations.find((op) =>
-    op.kind === "AlterType"
-  ) as Types.AlterTypeOperation;
+  const alterOp = operations.find((op) => op.kind === "AlterType") as Types.AlterTypeOperation;
   assertEquals(alterOp.typeName, "User");
   assertEquals(alterOp.operations.length, 1);
   assertEquals(alterOp.operations[0].kind, "AddProperty");
@@ -429,9 +427,7 @@ Deno.test("Migration Engine - Generate DDL", () => {
       const statements = ddlResult.value;
       assertEquals(statements.length > 0, true);
 
-      const hasCreateTable = statements.some((stmt) =>
-        stmt.includes("CREATE TABLE")
-      );
+      const hasCreateTable = statements.some((stmt) => stmt.includes("CREATE TABLE"));
       assertEquals(hasCreateTable, true);
     }
   }
@@ -615,4 +611,142 @@ Deno.test("DDL Generator - Identifier Escaping", () => {
   // Reserved keywords should be quoted
   assertStringIncludes(createTable, '"order"');
   assertStringIncludes(createTable, '"select"');
+});
+
+// gh/geldata#7490: per-step progress hooks for the migration engine
+// ------------------------------------------------------------------
+// These tests use the same `dryRun: true` config so `executeStatements`
+// short-circuits and we can run on a stub-free in-memory engine.
+
+function makeTwoMigrationPlan(engine: MigrationEngine): Types.MigrationPlan {
+  // Plan an initial migration, then synthesize a second migration in the
+  // same plan so we can assert per-migration ordering.
+  const planResult = engine.planMigration(null, createTestSchema());
+  if (!planResult.ok) {
+    throw new Error("planMigration failed in test setup");
+  }
+  const first = planResult.value.migrations[0];
+  const second: Types.Migration = {
+    id: "m20260101000000_second",
+    name: "second_migration",
+    description: "Second migration for progress test",
+    createdAt: new Date(),
+    schemaHash: "second-hash",
+    operations: first.operations, // reuse — DDL is dry-run
+  };
+  return {
+    migrations: [first, second],
+    targetSchemaHash: "second-hash",
+    operationsCount: first.operations.length + second.operations.length,
+  };
+}
+
+Deno.test("Migration Engine - executeMigration emits progress events in order", async () => {
+  const events: Types.MigrationProgressEvent[] = [];
+  const engine = new MigrationEngine({
+    ...config,
+    dryRun: true,
+    onProgress: (e) => events.push(e),
+  });
+
+  const plan = makeTwoMigrationPlan(engine);
+  const result = await engine.executeMigration(plan);
+
+  assertEquals(result.ok, true);
+
+  const kinds = events.map((e) => e.kind);
+  // First event must be plan-started, last must be plan-completed
+  assertEquals(kinds[0], "plan-started");
+  assertEquals(kinds[kinds.length - 1], "plan-completed");
+
+  // For two migrations with non-empty DDL we expect:
+  //   plan-started,
+  //   migration-started, ddl-executing, migration-completed,
+  //   migration-started, ddl-executing, migration-completed,
+  //   plan-completed
+  assertEquals(
+    kinds.filter((k) => k === "migration-started").length,
+    2,
+  );
+  assertEquals(
+    kinds.filter((k) => k === "migration-completed").length,
+    2,
+  );
+  assertEquals(
+    kinds.filter((k) => k === "ddl-executing").length,
+    2,
+  );
+
+  // plan-started carries the right totals
+  const planStarted = events[0] as Extract<
+    Types.MigrationProgressEvent,
+    { kind: "plan-started" }
+  >;
+  assertEquals(planStarted.totalMigrations, 2);
+  assertEquals(planStarted.totalOperations, plan.operationsCount);
+
+  // First migration-started event has index 1 of total 2
+  const firstStart = events.find((e) => e.kind === "migration-started") as
+    | Extract<Types.MigrationProgressEvent, { kind: "migration-started" }>
+    | undefined;
+  assertEquals(firstStart?.index, 1);
+  assertEquals(firstStart?.total, 2);
+});
+
+Deno.test("Migration Engine - listener throws are swallowed", async () => {
+  const engine = new MigrationEngine({
+    ...config,
+    dryRun: true,
+    onProgress: () => {
+      throw new Error("listener boom");
+    },
+  });
+
+  const planResult = engine.planMigration(null, createTestSchema());
+  assertEquals(planResult.ok, true);
+  if (!planResult.ok) return;
+
+  // Migration must succeed despite the listener throwing on every call.
+  const result = await engine.executeMigration(planResult.value);
+  assertEquals(result.ok, true);
+  if (result.ok) {
+    assertEquals(result.value.length, 1);
+    assertEquals(result.value[0].success, true);
+  }
+});
+
+Deno.test("Migration Engine - executeMigrationWithRollback emits failed event with rollbackAttempted", async () => {
+  const events: Types.MigrationProgressEvent[] = [];
+  const engine = new MigrationEngine({
+    ...config,
+    dryRun: true,
+    rollbackOnError: true,
+    onProgress: (e) => events.push(e),
+  });
+
+  // Build a plan whose forward DDL generation throws. The engine's
+  // rollback path uses generateRollbackDDL (a separate method) so it
+  // still produces SQL — that's enough for `rollbackAttempted: true`.
+  const planResult = engine.planMigration(null, createTestSchema());
+  assertEquals(planResult.ok, true);
+  if (!planResult.ok) return;
+
+  // deno-lint-ignore no-explicit-any
+  const generator = (engine as any).ddlGenerator as DDLGenerator;
+  generator.generateDDL = (_ops: Types.MigrationOperation[]) => {
+    throw new Error("simulated DDL failure");
+  };
+
+  const result = await engine.executeMigrationWithRollback(planResult.value);
+  assertEquals(result.ok, false);
+
+  const failed = events.find((e) => e.kind === "migration-failed") as
+    | Extract<Types.MigrationProgressEvent, { kind: "migration-failed" }>
+    | undefined;
+  assertEquals(failed !== undefined, true);
+  // rollbackOnError is true and rollback SQL was generated → attempted.
+  assertEquals(failed?.rollbackAttempted, true);
+
+  // plan-failed must be the terminal event
+  assertEquals(events[events.length - 1].kind, "plan-failed");
 });

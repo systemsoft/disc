@@ -10,10 +10,7 @@
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { MigrationError } from "../lib/errors.ts";
 import { Err, Ok, Result } from "../lib/result.ts";
-import {
-  propNameToColumnName,
-  typeNameToTableName,
-} from "../lib/identifiers.ts";
+import { propNameToColumnName, typeNameToTableName } from "../lib/identifiers.ts";
 import { SDLParser } from "../schema/parser.ts";
 import { Module, SDLConverter } from "../schema/converter.ts";
 import {
@@ -106,7 +103,6 @@ const SDL_TO_SQL_TYPE_MAP: Record<string, string> = {
   "multirange<cal::local_datetime>": "tsmultirange",
 };
 
-
 /**
  * Map an SDL type name to a SQL column type
  */
@@ -190,25 +186,17 @@ function stringifyExpression(expr: Expression): string {
       return expr.path.join(".");
     }
     case "FunctionCall":
-      return `${expr.name.parts.join("::")}(${
-        expr.args.map(stringifyExpression).join(", ")
-      })`;
+      return `${expr.name.parts.join("::")}(${expr.args.map(stringifyExpression).join(", ")})`;
     case "BinaryOp":
-      return `${stringifyExpression(expr.left)} ${expr.op} ${
-        stringifyExpression(expr.right)
-      }`;
+      return `${stringifyExpression(expr.left)} ${expr.op} ${stringifyExpression(expr.right)}`;
     case "UnaryOp":
       return `${expr.op} ${stringifyExpression(expr.operand)}`;
     case "TypeCast":
-      return `<${expr.type.name.parts.join("::")}>${
-        stringifyExpression(expr.expr)
-      }`;
+      return `<${expr.type.name.parts.join("::")}>${stringifyExpression(expr.expr)}`;
     case "Parameter":
       return `$${expr.name}`;
     case "ConditionalExpression":
-      return `${stringifyExpression(expr.consequent)} if ${
-        stringifyExpression(expr.test)
-      } else ${stringifyExpression(expr.alternate)}`;
+      return `${stringifyExpression(expr.consequent)} if ${stringifyExpression(expr.test)} else ${stringifyExpression(expr.alternate)}`;
     default:
       return String((expr as { value?: unknown }).value ?? "");
   }
@@ -254,6 +242,12 @@ export interface SchemaManagerOptions {
   pool?: ConnectionPool;
   dryRun?: boolean;
   onSchemaChange?: (schema: Schema) => void;
+  /**
+   * Optional progress listener forwarded to the underlying MigrationEngine.
+   * Receives per-step events for plan/migration/DDL execution.
+   * (gh/geldata#7490)
+   */
+  onProgress?: Types.MigrationProgressListener;
 }
 
 export class SchemaManager {
@@ -263,11 +257,13 @@ export class SchemaManager {
   private currentModules: Module[] | null = null;
   private currentSchema: Schema | null = null;
   private onSchemaChange?: (schema: Schema) => void;
+  private onProgress?: Types.MigrationProgressListener;
 
   constructor(options: SchemaManagerOptions) {
     this.pool = options.pool;
     this.dryRun = options.dryRun ?? false;
     this.onSchemaChange = options.onSchemaChange;
+    this.onProgress = options.onProgress;
   }
 
   /**
@@ -288,9 +284,7 @@ export class SchemaManager {
         const lines = errors.map((e) => `  • ${e.message}`).join("\n");
         return Err(
           new MigrationError(
-            `Failed to parse SDL (${errors.length} error${
-              errors.length === 1 ? "" : "s"
-            }):\n${lines}`,
+            `Failed to parse SDL (${errors.length} error${errors.length === 1 ? "" : "s"}):\n${lines}`,
           ),
         );
       }
@@ -300,9 +294,7 @@ export class SchemaManager {
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to parse SDL: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `Failed to parse SDL: ${error instanceof Error ? error.message : String(error)}`,
         ),
       );
     }
@@ -387,9 +379,7 @@ export class SchemaManager {
             aliasDef.targetType = targetType;
           }
 
-          const aliasKey = module.name === "default"
-            ? aliasName
-            : `${module.name}::${aliasName}`;
+          const aliasKey = module.name === "default" ? aliasName : `${module.name}::${aliasName}`;
           aliases.set(aliasKey, aliasDef);
           continue;
         }
@@ -429,14 +419,10 @@ export class SchemaManager {
 
           // Detect enum scalars: scalar type Status extending enum<...>
           // The extending TypeRef name will be "enum" if the parser captured it
-          const isEnum = scalarDecl.extending?.some((ext) =>
-            ext.name.parts[0] === "enum"
-          ) ?? false;
+          const isEnum = scalarDecl.extending?.some((ext) => ext.name.parts[0] === "enum") ?? false;
 
           if (isEnum) {
-            const enumKey = module.name === "default"
-              ? scalarName
-              : `${module.name}::${scalarName}`;
+            const enumKey = module.name === "default" ? scalarName : `${module.name}::${scalarName}`;
             types.set(enumKey, {
               name: scalarName,
               kind: "enum",
@@ -483,13 +469,12 @@ export class SchemaManager {
           );
 
           // Extract rewrites from the property declaration
-          const rewrites: RewriteDef[] | undefined =
-            propDecl.rewrites && propDecl.rewrites.length > 0
-              ? propDecl.rewrites.map((r) => ({
-                events: [...r.events],
-                body: r.using,
-              }))
-              : undefined;
+          const rewrites: RewriteDef[] | undefined = propDecl.rewrites && propDecl.rewrites.length > 0
+            ? propDecl.rewrites.map((r) => ({
+              events: [...r.events],
+              body: r.using,
+            }))
+            : undefined;
 
           const propAnnotations = extractAnnotationMap(
             propDecl.annotations,
@@ -566,9 +551,7 @@ export class SchemaManager {
         const sdlPolicies = typeDecl.members.filter(
           (m): m is SDLAccessPolicy => m.kind === "AccessPolicy",
         );
-        const accessPolicies = sdlPolicies.length > 0
-          ? adaptAccessPolicies(typeName, sdlPolicies)
-          : undefined;
+        const accessPolicies = sdlPolicies.length > 0 ? adaptAccessPolicies(typeName, sdlPolicies) : undefined;
 
         // Extract indexes from the type declaration. SDL `index on (.foo)`
         // surfaces here as `AST.Index` members; we stringify the `on`
@@ -630,9 +613,7 @@ export class SchemaManager {
         }
 
         typeDef.module = module.name;
-        const typeKey = module.name === "default"
-          ? typeName
-          : `${module.name}::${typeName}`;
+        const typeKey = module.name === "default" ? typeName : `${module.name}::${typeName}`;
         types.set(typeKey, typeDef);
       }
     }
@@ -1058,6 +1039,7 @@ export class SchemaManager {
       "backupBeforeMigration": false,
       "rollbackOnError": true,
       "connectionPool": this.pool,
+      "onProgress": this.onProgress,
     };
 
     this.engine = new MigrationEngine(config);

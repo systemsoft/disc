@@ -337,6 +337,28 @@ export interface MigrationResult {
   rollbackSql?: string[];
 }
 
+/**
+ * Per-step progress events emitted during migration execution.
+ * Subscribe via `MigrationConfig.onProgress`. (gh/geldata#7490)
+ *
+ * Event ordering: `plan-started` → for each migration:
+ *   `migration-started` → `ddl-executing` (if non-empty DDL) →
+ *   `data-migration-running` (if a matching data migration exists) →
+ *   `migration-completed` (or `migration-failed`)
+ * → `plan-completed` (or `plan-failed`).
+ */
+export type MigrationProgressEvent =
+  | { kind: "plan-started"; totalMigrations: number; totalOperations: number }
+  | { kind: "migration-started"; migrationId: string; name: string; index: number; total: number }
+  | { kind: "ddl-executing"; migrationId: string; statementCount: number }
+  | { kind: "data-migration-running"; migrationId: string }
+  | { kind: "migration-completed"; migrationId: string; durationMs: number }
+  | { kind: "migration-failed"; migrationId: string; error: string; durationMs: number; rollbackAttempted: boolean }
+  | { kind: "plan-completed"; migrationCount: number; durationMs: number }
+  | { kind: "plan-failed"; error: string; durationMs: number };
+
+export type MigrationProgressListener = (event: MigrationProgressEvent) => void;
+
 // Migration configuration
 export interface MigrationConfig {
   migrationsDir: string;
@@ -347,6 +369,12 @@ export interface MigrationConfig {
   backupBeforeMigration: boolean;
   rollbackOnError: boolean;
   connectionPool?: ConnectionPool;
+  /**
+   * Optional progress callback. Errors thrown by the listener are
+   * caught and logged at warn level — listener bugs must never break
+   * a migration. (gh/geldata#7490)
+   */
+  onProgress?: MigrationProgressListener;
 }
 
 export interface MigrationCheckpoint {
