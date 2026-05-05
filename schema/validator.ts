@@ -566,6 +566,9 @@ export class SchemaValidator {
     if (policy.condition) {
       this.validateExpression(policy.condition);
     }
+    if (policy.withCheck) {
+      this.validateExpression(policy.withCheck);
+    }
 
     // Validate actions
     for (const action of policy.actions) {

@@ -363,6 +363,80 @@ Deno.test("SDL Parser - Access Policy", () => {
   }
 });
 
+Deno.test("SDL Parser - Access Policy with `with check` clause (P1-37)", () => {
+  const source = `
+    type Document {
+      required title: str;
+      required status: str;
+      required owner: User;
+
+      access policy owner_writes_only {
+        allow select, insert, update;
+        using (global current_user ?= .owner);
+        with check (.status = "draft");
+      };
+    }
+  `;
+
+  const parser = new SDLParser(source);
+  const ast = parser.parse();
+
+  const typeDecl = ast.declarations[0];
+  assertEquals(typeDecl.kind, "TypeDeclaration");
+  if (typeDecl.kind === "TypeDeclaration") {
+    const policy = typeDecl.members.find((m) => m.kind === "AccessPolicy");
+    assertEquals(policy?.kind, "AccessPolicy");
+    if (policy?.kind === "AccessPolicy") {
+      assertEquals(policy.name.value, "owner_writes_only");
+      assertEquals(policy.condition !== undefined, true);
+      assertEquals(
+        policy.withCheck !== undefined,
+        true,
+        "with check expression must be parsed onto policy.withCheck",
+      );
+    }
+  }
+});
+
+Deno.test("SDL Parser - Access Policy without `with check` leaves withCheck undefined", () => {
+  const source = `
+    type Document {
+      required title: str;
+      access policy admin_all {
+        allow all;
+      };
+    }
+  `;
+
+  const parser = new SDLParser(source);
+  const ast = parser.parse();
+  const typeDecl = ast.declarations[0];
+  if (typeDecl.kind === "TypeDeclaration") {
+    const policy = typeDecl.members.find((m) => m.kind === "AccessPolicy");
+    if (policy?.kind === "AccessPolicy") {
+      assertEquals(policy.withCheck, undefined);
+    }
+  }
+});
+
+Deno.test("SDL Parser - `with` without `check` raises a clear error", () => {
+  const source = `
+    type Document {
+      access policy bad {
+        allow all;
+        with (.x = 1);
+      };
+    }
+  `;
+  let threw = false;
+  try {
+    new SDLParser(source).parse();
+  } catch (_) {
+    threw = true;
+  }
+  assertEquals(threw, true);
+});
+
 Deno.test("SDL Parser - Function Declaration", () => {
   const source = `
     function get_user_by_email(email: str) -> User

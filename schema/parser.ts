@@ -871,6 +871,7 @@ export class SDLParser {
 
     const actions: AST.AccessAction[] = [];
     let condition: AST.Expression | undefined;
+    let withCheck: AST.Expression | undefined;
     const annotations: AST.Annotation[] = [];
 
     this.consume(TokenType.LBRACE, "Expected '{' after policy name");
@@ -886,11 +887,21 @@ export class SDLParser {
         condition = this.parseExpression();
         this.consume(TokenType.RPAREN, "Expected ')' after expression");
         this.consume(TokenType.SEMICOLON, "Expected ';' after using clause");
+      } else if (this.match(TokenType.WITH)) {
+        // `with check (<expr>);` — INSERT/UPDATE post-condition. (P1-37)
+        this.consume(TokenType.CHECK, "Expected 'check' after 'with'");
+        this.consume(TokenType.LPAREN, "Expected '(' after 'with check'");
+        withCheck = this.parseExpression();
+        this.consume(TokenType.RPAREN, "Expected ')' after expression");
+        this.consume(
+          TokenType.SEMICOLON,
+          "Expected ';' after with check clause",
+        );
       } else if (this.match(TokenType.ANNOTATION)) {
         annotations.push(this.parseAnnotation());
       } else {
         throw this.error(
-          `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in access policy body — did you mean 'allow', 'deny', 'using', or 'annotation'?`,
+          `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in access policy body — did you mean 'allow', 'deny', 'using', 'with check', or 'annotation'?`,
         );
       }
     }
@@ -903,6 +914,7 @@ export class SDLParser {
       actions,
       condition,
     };
+    if (withCheck !== undefined) policy.withCheck = withCheck;
     if (annotations.length > 0) policy.annotations = annotations;
 
     return policy;

@@ -124,11 +124,10 @@ function collectGlobals(
  * - `sdl.condition`   → `runtime.condition` ONLY if no column references;
  *   otherwise a minimal global-presence guard is extracted
  *
- * Note on withCheck (P1-37): the runtime `AccessPolicy` type supports a
- * `withCheck` expression for INSERT/UPDATE validation, but the SDL parser
- * doesn't surface it yet — `schema/ast.ts` AccessPolicy has `condition`
- * only. When SDL adds a `with check (...)` clause the adapter will need to
- * mirror it here; until then there is nothing to translate.
+ * Note on withCheck (P1-37): the SDL parser surfaces `with check (...)` as
+ * `sdl.withCheck`; this adapter forwards the converted expression to
+ * `runtime.withCheck`, which the SQL injector emits as a row-level CHECK
+ * constraint on INSERT/UPDATE.
  *
  * Note on deny policies (P1-38): deny policies currently compile to a
  * coarse gate (if the policy matches and the action is denied, reject the
@@ -159,6 +158,10 @@ export function adaptAccessPolicies(
         // Pure context expression — safe for in-memory evaluation.
         policy.condition = converted;
       }
+    }
+
+    if (sdl.withCheck !== undefined) {
+      policy.withCheck = convertExpression(sdl.withCheck);
     }
 
     return policy;

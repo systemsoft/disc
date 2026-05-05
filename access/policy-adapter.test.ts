@@ -350,3 +350,59 @@ Deno.test("policy-adapter: policy with multiple actions", () => {
   assertEquals(result[0].actions[1].allow, false);
   assertEquals(result[0].actions[1].operations, ["delete"]);
 });
+
+// ---------------------------------------------------------------------------
+// Test 8: with check expression is forwarded to runtime.withCheck (P1-37)
+// ---------------------------------------------------------------------------
+
+Deno.test("policy-adapter: with check expression is forwarded to runtime.withCheck (P1-37)", () => {
+  // .status = "draft"
+  const checkExpr = {
+    kind: "BinaryOp" as const,
+    op: "=",
+    left: {
+      kind: "PathExpression" as const,
+      path: [".", "status"],
+    },
+    right: {
+      kind: "Literal" as const,
+      value: "draft",
+      type: "string" as const,
+    },
+  };
+
+  const sdlPolicy: SDLAccessPolicy = {
+    kind: "AccessPolicy",
+    name: createIdentifier("draft_writes_only"),
+    actions: [
+      {
+        kind: "AccessAction",
+        allow: true,
+        operations: ["insert", "update"],
+      },
+    ],
+    withCheck: checkExpr,
+  };
+
+  const result = adaptAccessPolicies("Post", [sdlPolicy]);
+
+  assertEquals(result.length, 1);
+  assertEquals(result[0].withCheck !== undefined, true);
+  assertEquals(result[0].withCheck!.kind, "AccessComparison");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  assertEquals((result[0].withCheck as any).left.kind, "AccessPath");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  assertEquals((result[0].withCheck as any).left.path, ["status"]);
+});
+
+Deno.test("policy-adapter: omitted with check leaves runtime.withCheck undefined", () => {
+  const sdlPolicy: SDLAccessPolicy = {
+    kind: "AccessPolicy",
+    name: createIdentifier("plain"),
+    actions: [
+      { kind: "AccessAction", allow: true, operations: ["select"] },
+    ],
+  };
+  const result = adaptAccessPolicies("Post", [sdlPolicy]);
+  assertEquals(result[0].withCheck, undefined);
+});

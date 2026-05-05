@@ -463,7 +463,7 @@ The following features are not yet implemented:
 - **PostgreSQL RLS passthrough** -- policies are currently enforced at the application level via SQL injection. Native PostgreSQL RLS policy generation is implemented (`AccessSQLInjector.generateRLSPolicies()`) but not yet wired into the migration engine.
 - **Policy composition across inheritance** -- policies on abstract types are not yet automatically inherited by concrete subtypes.
 - **Audit logging** -- the `enableAudit` config flag is accepted but audit logging is not yet implemented.
-- **WITH CHECK on INSERT/UPDATE** -- `withCheck` expressions in policies are parsed but not yet enforced for insert and update validation.
+- **WITH CHECK on INSERT/UPDATE** -- `with check (...)` clauses are parsed by the SDL grammar (`schema/parser.ts`), forwarded to the runtime policy (`access/policy-adapter.ts`), and emitted as `WITH CHECK` on the generated PostgreSQL RLS policy (`access/sql-injector.ts`). Native RLS enforcement requires the migration-engine RLS wiring listed above.
 
 ---
 

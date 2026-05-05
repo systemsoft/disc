@@ -197,6 +197,12 @@ export interface AccessPolicy extends SDLNode {
   name: Identifier;
   actions: AccessAction[];
   condition?: Expression;
+  /**
+   * Optional `with check (...)` expression. When present, runs as an
+   * INSERT/UPDATE post-condition: the candidate row must satisfy the
+   * expression after the write or the operation is rejected. (P1-37)
+   */
+  withCheck?: Expression;
   annotations?: Annotation[];
 }
 
