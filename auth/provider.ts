@@ -225,6 +225,22 @@ export class AuthProvider implements IAuthProvider {
       )
     `);
 
+    // Recovery codes (gh/geldata#8186) — single-use codes the user
+    // saves at MFA setup time and uses to bypass TOTP if they lose
+    // their device. Stored hashed (SHA-256, parallel to other token
+    // hashing in this module). Plain `used_at` marker rather than
+    // deletion so we can audit "this user burned a recovery code at
+    // T" without keeping a separate event table in line.
+    await this.db.execute(`
+      CREATE TABLE IF NOT EXISTS recovery_codes (
+        code_hash TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        used_at TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+
     // Magic-link tokens (gh/geldata#8186) — one row per outstanding
     // request. Stored hashed (parallel to reset/verify tokens, P0-03);
     // the plaintext is delivered to the user once via email and never
@@ -329,6 +345,9 @@ export class AuthProvider implements IAuthProvider {
     );
     await this.db.execute(
       `CREATE INDEX IF NOT EXISTS idx_magic_link_expires_at ON magic_link_tokens(expires_at)`,
+    );
+    await this.db.execute(
+      `CREATE INDEX IF NOT EXISTS idx_recovery_codes_user_id ON recovery_codes(user_id)`,
     );
   }
 
@@ -1632,6 +1651,170 @@ export class AuthProvider implements IAuthProvider {
     return await this.completeLogin(user, meta);
   }
 
+  // ── Recovery codes (gh/geldata#8186) ───────────────────────────────
+
+  /**
+   * (Re)generate a fresh batch of recovery codes for the user. Returns
+   * the plaintext array — this is the *only* time the user can see
+   * them; they're stored hashed. Calling this again invalidates every
+   * previous code (including unused ones), matching the standard
+   * "regenerate codes" UX where the user clicks the button after
+   * losing their old printout.
+   *
+   * Default count is 8, mirroring what GitHub / GitLab / Google use.
+   */
+  async generateRecoveryCodes(
+    userId: string,
+    count = 8,
+  ): Promise<string[]> {
+    const userResult = await this.db.query(
+      "SELECT id FROM users WHERE id = ?",
+      [userId],
+    );
+    if (userResult.rows.length === 0) {
+      throw new AuthError(
+        "User not found",
+        AuthErrorCode.USER_NOT_FOUND,
+        404,
+      );
+    }
+    if (count < 1 || count > 50) {
+      throw new AuthError(
+        "count must be between 1 and 50",
+        AuthErrorCode.INVALID_OPERATION,
+        400,
+      );
+    }
+
+    // Wipe any existing codes — `generateRecoveryCodes` always means
+    // "issue a new set", never "append to the existing set".
+    await this.db.execute(
+      "DELETE FROM recovery_codes WHERE user_id = ?",
+      [userId],
+    );
+
+    const plaintext: string[] = [];
+    for (let i = 0; i < count; i++) {
+      const code = generateRecoveryCode();
+      plaintext.push(code);
+      const hash = await this.hashToken(code);
+      await this.db.execute(
+        "INSERT INTO recovery_codes (code_hash, user_id) VALUES (?, ?)",
+        [hash, userId],
+      );
+    }
+
+    this.auditEvent("recovery_codes_generated", userId, { count });
+    return plaintext;
+  }
+
+  /** How many recovery codes does the user have left to burn? */
+  async recoveryCodesRemaining(userId: string): Promise<number> {
+    const result = await this.db.query(
+      "SELECT code_hash FROM recovery_codes WHERE user_id = ? AND used_at IS NULL",
+      [userId],
+    );
+    return result.rows.length;
+  }
+
+  /**
+   * Burn a recovery code. Used by `loginWithRecoveryCode` and exposed
+   * publicly for callers who want to verify outside the login flow
+   * (e.g. step-up auth before account-deletion). Returns true on
+   * successful consumption, false on bad / already-used code.
+   *
+   * Constant-time-ish: looks up the hash, which is by primary key, so
+   * present-vs-absent is a B-tree lookup either way.
+   */
+  async consumeRecoveryCode(
+    userId: string,
+    code: string,
+  ): Promise<boolean> {
+    const hash = await this.hashToken(normalizeRecoveryCode(code));
+    const result = await this.db.query(
+      "SELECT user_id, used_at FROM recovery_codes WHERE code_hash = ?",
+      [hash],
+    );
+    if (result.rows.length === 0) return false;
+    const row = result.rows[0];
+    if (row.user_id !== userId) return false;
+    if (row.used_at) return false;
+    await this.db.execute(
+      "UPDATE recovery_codes SET used_at = CURRENT_TIMESTAMP WHERE code_hash = ?",
+      [hash],
+    );
+    this.auditEvent("recovery_code_consumed", userId);
+    return true;
+  }
+
+  /**
+   * Complete an MFA-gated login by submitting a recovery code instead
+   * of a TOTP code. Same challenge-token shape as `loginWithTOTP`. On
+   * success, burns the code and the challenge.
+   */
+  async loginWithRecoveryCode(
+    challengeToken: string,
+    code: string,
+    meta?: RequestMeta,
+  ): Promise<AuthResponse> {
+    const tokenHash = await this.hashToken(challengeToken);
+    const result = await this.db.query(
+      `SELECT user_id, expires_at, consumed_at
+       FROM mfa_challenges
+       WHERE token_hash = ?`,
+      [tokenHash],
+    );
+    if (result.rows.length === 0) {
+      throw new AuthError(
+        "Invalid or expired MFA challenge",
+        AuthErrorCode.INVALID_TOKEN,
+        401,
+      );
+    }
+    const row = result.rows[0];
+    if (row.consumed_at) {
+      throw new AuthError(
+        "MFA challenge already used",
+        AuthErrorCode.INVALID_TOKEN,
+        401,
+      );
+    }
+    if (new Date(row.expires_at).getTime() < Date.now()) {
+      throw new AuthError(
+        "MFA challenge expired",
+        AuthErrorCode.TOKEN_EXPIRED,
+        401,
+      );
+    }
+
+    const burned = await this.consumeRecoveryCode(row.user_id, code);
+    if (!burned) {
+      this.auditEvent("login_recovery_code_failed", row.user_id, {
+        ipAddress: meta?.ipAddress,
+      });
+      throw new AuthError(
+        "Invalid recovery code",
+        AuthErrorCode.INVALID_CREDENTIALS,
+        401,
+      );
+    }
+
+    await this.db.execute(
+      "UPDATE mfa_challenges SET consumed_at = CURRENT_TIMESTAMP WHERE token_hash = ?",
+      [tokenHash],
+    );
+
+    const user = await this.getUser(row.user_id);
+    if (!user) {
+      throw new AuthError(
+        "User not found",
+        AuthErrorCode.USER_NOT_FOUND,
+        404,
+      );
+    }
+    return await this.completeLogin(user, meta);
+  }
+
   private async createSession(
     userId: string,
     meta?: { ipAddress?: string; userAgent?: string },
@@ -1864,6 +2047,39 @@ export class AuthProvider implements IAuthProvider {
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
   }
+}
+
+// ── Recovery-code helpers (gh/geldata#8186) ───────────────────────────
+
+// Crockford-ish base32: alphanum minus visually-confusing 0/O, 1/I/L,
+// and U (which the original spec drops to avoid accidental profanity).
+// 25 codes in the alphabet × 10 chars = ~58 bits of entropy. Plenty
+// for codes also gated by a 5-min MFA challenge window.
+const RECOVERY_ALPHABET = "23456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+/**
+ * Generate one human-readable recovery code formatted as
+ * `XXXXX-XXXXX` (10 chars, dash for legibility on a printed card).
+ */
+function generateRecoveryCode(): string {
+  const buf = new Uint8Array(10);
+  crypto.getRandomValues(buf);
+  let raw = "";
+  for (let i = 0; i < buf.length; i++) {
+    raw += RECOVERY_ALPHABET[buf[i] % RECOVERY_ALPHABET.length];
+  }
+  return `${raw.slice(0, 5)}-${raw.slice(5)}`;
+}
+
+/**
+ * Normalize user input: uppercase, strip every non-alphanumeric char
+ * (so `xxxxx-xxxxx`, `XXXXX XXXXX`, `xxxxxxxxxx` all match the same
+ * stored hash). Then re-insert the dash so the hash input is canonical.
+ */
+function normalizeRecoveryCode(input: string): string {
+  const cleaned = input.toUpperCase().replace(/[^0-9A-Z]/g, "");
+  if (cleaned.length !== 10) return input; // let the lookup fail
+  return `${cleaned.slice(0, 5)}-${cleaned.slice(5)}`;
 }
 
 /**

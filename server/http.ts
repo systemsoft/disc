@@ -539,6 +539,8 @@ export class HttpServer {
         mfa_totp_login: "/auth/mfa/totp/login",
         magic_link_request: "/auth/magic-link/request",
         magic_link_consume: "/auth/magic-link/consume",
+        recovery_codes_generate: "/auth/mfa/recovery-codes/generate",
+        recovery_codes_login: "/auth/mfa/recovery-codes/login",
       };
     }
 
@@ -1236,6 +1238,10 @@ export class HttpServer {
         return await this.authRoutes.requestMagicLink()(request);
       case "magic-link/consume":
         return await this.authRoutes.consumeMagicLink()(request);
+      case "mfa/recovery-codes/generate":
+        return await this.authRoutes.generateRecoveryCodes()(request);
+      case "mfa/recovery-codes/login":
+        return await this.authRoutes.loginWithRecoveryCode()(request);
       default:
         return this.create_error_response("Unknown auth endpoint", 404);
     }

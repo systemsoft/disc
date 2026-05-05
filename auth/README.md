@@ -219,6 +219,56 @@ verifiers ahead of switching the signing private key — verifiers
 holding both old and new public keys keeps a smooth window. Disc
 itself only holds one public key at a time today.
 
+### Recovery codes (gh/geldata#8186)
+
+One-time-use codes the user saves at MFA setup, used to bypass TOTP
+when they lose their authenticator device. Format: `XXXXX-XXXXX`
+(10 chars from a 30-char Crockford-ish alphabet that drops visually
+ambiguous letters like 0/O, 1/I/L). 8 codes per batch by default.
+
+```ts
+// Generate (or regenerate). Show the plaintext to the user ONCE —
+// stored hashed, never recoverable. Calling this again invalidates
+// every previous code.
+const codes = await provider.generateRecoveryCodes(userId);
+// codes = ["X7K3M-Q2NPR", "F8GHC-VWXYJ", ...]
+
+// Burn one outside the login flow (e.g. step-up auth):
+const ok = await provider.consumeRecoveryCode(userId, "X7K3M-Q2NPR");
+
+// How many are left?
+const left = await provider.recoveryCodesRemaining(userId);
+
+// In the login flow, when MFA is required:
+const challenge = await provider.login({ email, password });
+if ("mfaRequired" in challenge) {
+  // User can use a TOTP code OR a recovery code.
+  const auth = await provider.loginWithRecoveryCode(
+    challenge.challengeToken,
+    "X7K3M-Q2NPR",
+  );
+}
+```
+
+**HTTP routes:**
+
+| Method | Path                                | Body                                         |
+|--------|-------------------------------------|----------------------------------------------|
+| POST   | `/auth/mfa/recovery-codes/generate` | `{ "count"?: 8 }` (auth-gated)              |
+| POST   | `/auth/mfa/recovery-codes/login`    | `{ "challengeToken": "...", "code": "..." }` |
+
+**Design notes:**
+- Codes are stored SHA-256 hashed (the same scheme reset/verify tokens
+  use — full-length high-entropy inputs don't need bcrypt's slow hash).
+- Input normalization strips dashes/spaces and uppercases, so users can
+  type `xxxxx xxxxx`, `XXXXXXXXXX`, or `XXXXX-XXXXX` — all match.
+- A code's hash is also keyed by `user_id` at lookup time, so a code
+  leaked from one user can't be replayed against another.
+- Burning a code via `loginWithRecoveryCode` also burns the MFA
+  challenge — single-use both ways.
+- `generateRecoveryCodes` always wipes the previous batch first; this
+  matches the standard "regenerate codes" UX.
+
 ### Magic-link login (gh/geldata#8186)
 
 Passwordless login via email. The user types their email; the server

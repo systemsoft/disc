@@ -415,6 +415,82 @@ export class AuthRoutes {
     };
   }
 
+  // ── Recovery-code routes (gh/geldata#8186) ─────────────────────────
+
+  /**
+   * (Re)generate recovery codes for the authenticated user. Returns
+   * the plaintext array — this is the *only* time it's surfaced; show
+   * it to the user once and warn them to save it. Calling this again
+   * invalidates every previous code.
+   */
+  generateRecoveryCodes(): RequestHandler {
+    return this.middleware.requireAuth(
+      async (request: Request, context?: AuthContext) => {
+        try {
+          const body = await request.clone().json().catch(() => ({}));
+          const count = typeof body.count === "number"
+            ? body.count
+            : undefined;
+          const codes = await this.provider.generateRecoveryCodes(
+            context!.userId,
+            count,
+          );
+          const remaining = await this.provider.recoveryCodesRemaining(
+            context!.userId,
+          );
+          return new Response(
+            JSON.stringify({ codes, remaining }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        } catch (error) {
+          return this.handleError(error);
+        }
+      },
+    );
+  }
+
+  /**
+   * Complete an MFA-gated login by submitting a recovery code instead
+   * of a TOTP code. Public (the user can't have a session yet),
+   * rate-limited the same as login. Body:
+   *   { challengeToken: "...", code: "XXXXX-XXXXX" }
+   */
+  loginWithRecoveryCode(): (request: Request) => Promise<Response> {
+    return async (request: Request) => {
+      const limited = this.checkRateLimit(request);
+      if (limited) return limited;
+      try {
+        const body = await request.json();
+        if (!body.challengeToken || !body.code) {
+          return new Response(
+            JSON.stringify({
+              error: "challengeToken and code are required",
+              code: "MISSING_CREDENTIALS",
+            }),
+            {
+              status: 400,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+        const response = await this.provider.loginWithRecoveryCode(
+          String(body.challengeToken),
+          String(body.code),
+          extractRequestMeta(request),
+        );
+        return new Response(JSON.stringify(response), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch (error) {
+        return this.handleError(error);
+      }
+    };
+  }
+
   // ── Magic-link routes (gh/geldata#8186) ────────────────────────────
 
   /**
