@@ -4,6 +4,7 @@
  */
 
 import { SchemaManager } from "../migration/schema-manager.ts";
+import type { MigrationProgressEvent, MigrationProgressListener } from "../migration/types.ts";
 import type { Module } from "../schema/converter.ts";
 import { createServerFromEnv } from "../server/server.ts";
 import * as Codegen from "../codegen/mod.ts";
@@ -20,7 +21,7 @@ import { pgUpgradeCommand, PgUpgradeOptions } from "./pg-upgrade.ts";
 import { dbCommand } from "./db.ts";
 import { PostgresManager } from "../postgres/mod.ts";
 import { MigrationSquasher, SquashableMigration } from "../migration/squash.ts";
-import { resolveProjectContext, resolveDsn } from "../lib/project-context.ts";
+import { resolveDsn, resolveProjectContext } from "../lib/project-context.ts";
 import { ensurePgRunning } from "../postgres/ensure-running.ts";
 
 export interface CLIArgs {
@@ -75,6 +76,13 @@ export class CLICommands {
     let pool: ConnectionPool | undefined;
     let manager: SchemaManager | undefined;
 
+    // gh/geldata#7490: wire a progress listener into the SchemaManager so
+    // migrate runs surface per-step progress on stdout. Suppressed via
+    // `--quiet` and never emitted in dry-run (the dry-run path doesn't
+    // execute migrations anyway).
+    const quiet = args.quiet === true;
+    const onProgress = (!quiet && !dryRun) ? this.makeMigrateProgressListener() : undefined;
+
     try {
       if (dryRun) {
         // Dry-run mode: no pool needed, no PostgreSQL connection required
@@ -85,7 +93,7 @@ export class CLICommands {
         pool = new ConnectionPool({ connectionString: databaseUrl });
         await pool.initialize();
 
-        manager = new SchemaManager({ pool, dryRun: false });
+        manager = new SchemaManager({ pool, dryRun: false, onProgress });
         await manager.initialize();
       }
 
@@ -103,6 +111,7 @@ export class CLICommands {
           schemaFile,
           dryRun,
           args.unsafe === true,
+          quiet,
         );
       }
     } catch (error) {
@@ -216,9 +225,7 @@ export class CLICommands {
       }
 
       // Create server from environment variables, passing schema if available
-      const server = schema
-        ? createServerFromEnv(undefined, schema)
-        : createServerFromEnv();
+      const server = schema ? createServerFromEnv(undefined, schema) : createServerFromEnv();
 
       // Override with CLI arguments if provided
       const config = server.get_config();
@@ -294,9 +301,7 @@ export class CLICommands {
 
         if (files.length > 0) {
           console.log(
-            `📖 Discovered ${files.length} schema file(s): ${
-              files.map((f) => f.split("/").pop()).join(", ")
-            }`,
+            `📖 Discovered ${files.length} schema file(s): ${files.map((f) => f.split("/").pop()).join(", ")}`,
           );
           schema = await Codegen.loadMultiFileSchema(files);
           const typeNames = Array.from(schema.types.keys()).join(", ");
@@ -488,9 +493,7 @@ export class CLICommands {
           console.log(`   Connections: ${status.health.connections}`);
           console.log(`   Latency: ${status.health.latencyMs}ms`);
           console.log(
-            `   Uptime: ${
-              Math.floor((status.health.uptime || 0) / 60)
-            } minutes`,
+            `   Uptime: ${Math.floor((status.health.uptime || 0) / 60)} minutes`,
           );
         }
       }
@@ -620,6 +623,70 @@ export class CLICommands {
       name,
       databaseUrl,
       force: args.force || false,
+    });
+  }
+
+  /**
+   * Drop and recreate a Disc-managed database (wipe to known-empty state).
+   */
+  async dbWipe(name: string, args: CLIArgs): Promise<void> {
+    const ctx = resolveProjectContext();
+    if (ctx?.managed) {
+      await ensurePgRunning(ctx);
+    }
+    const databaseUrl = args["database-url"] ||
+      Deno.env.get("DATABASE_URL") ||
+      (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
+    await dbCommand.wipe({
+      databaseUrl,
+      force: args.force || false,
+      name,
+    });
+  }
+
+  /**
+   * Dump a Disc-managed database to stdout or a file.
+   */
+  async dbDump(name: string, args: CLIArgs): Promise<void> {
+    const ctx = resolveProjectContext();
+    if (ctx?.managed) {
+      await ensurePgRunning(ctx);
+    }
+    const databaseUrl = args["database-url"] ||
+      Deno.env.get("DATABASE_URL") ||
+      (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
+
+    const fmtRaw = args.format ? String(args.format) : "plain";
+    if (fmtRaw !== "plain" && fmtRaw !== "custom") {
+      throw new Error(
+        `Invalid --format "${fmtRaw}". Valid values: plain, custom.`,
+      );
+    }
+
+    await dbCommand.dump({
+      databaseUrl,
+      format: fmtRaw,
+      name,
+      output: args.output,
+    });
+  }
+
+  /**
+   * Restore a Disc-managed database from stdin or a file.
+   */
+  async dbRestore(name: string, args: CLIArgs): Promise<void> {
+    const ctx = resolveProjectContext();
+    if (ctx?.managed) {
+      await ensurePgRunning(ctx);
+    }
+    const databaseUrl = args["database-url"] ||
+      Deno.env.get("DATABASE_URL") ||
+      (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
+    await dbCommand.restore({
+      clean: args.clean || false,
+      databaseUrl,
+      input: args.input,
+      name,
     });
   }
 
@@ -890,9 +957,7 @@ export class CLICommands {
       }
     } catch (error) {
       console.log(
-        `  ⚠️  Auto-migrate error: ${
-          (error as Error).message
-        }. Run 'disc migrate' manually.`,
+        `  ⚠️  Auto-migrate error: ${(error as Error).message}. Run 'disc migrate' manually.`,
       );
     } finally {
       if (manager) await manager.close();
@@ -900,13 +965,70 @@ export class CLICommands {
     }
   }
 
+  /**
+   * Build a stdout-printing progress listener for the migrate command.
+   * Lines mirror the format documented in gh/geldata#7490 — one line per
+   * step, with the migration index and a duration on completion.
+   */
+  private makeMigrateProgressListener(): MigrationProgressListener {
+    const startedAt = new Map<string, number>();
+    return (event: MigrationProgressEvent): void => {
+      switch (event.kind) {
+        case "plan-started":
+          if (event.totalMigrations === 0) return;
+          console.log(
+            `> Planning ${event.totalMigrations} migration${event.totalMigrations === 1 ? "" : "s"} (${event.totalOperations} operation${
+              event.totalOperations === 1 ? "" : "s"
+            })…`,
+          );
+          return;
+        case "migration-started":
+          startedAt.set(event.migrationId, Date.now());
+          console.log(
+            `[${event.index}/${event.total}] ${event.name} …`,
+          );
+          return;
+        case "ddl-executing":
+          console.log(
+            `    applying ${event.statementCount} DDL statement${event.statementCount === 1 ? "" : "s"} …`,
+          );
+          return;
+        case "data-migration-running":
+          console.log(`    applying data migration …`);
+          return;
+        case "migration-completed":
+          console.log(
+            `    ✓ done in ${event.durationMs}ms`,
+          );
+          return;
+        case "migration-failed":
+          console.error(
+            `    ✗ failed: ${event.error} (after ${event.durationMs}ms${event.rollbackAttempted ? ", rollback attempted" : ""})`,
+          );
+          return;
+        case "plan-completed":
+          if (event.migrationCount === 0) return;
+          console.log(
+            `✓ Applied ${event.migrationCount} migration${event.migrationCount === 1 ? "" : "s"} in ${event.durationMs}ms`,
+          );
+          return;
+        case "plan-failed":
+          console.error(`✗ Migration plan failed in ${event.durationMs}ms`);
+          return;
+      }
+    };
+  }
+
   private async applyMigrations(
     manager: SchemaManager,
     schemaFile: string,
     dryRun: boolean,
     allowUnsafe = false,
+    quiet = false,
   ): Promise<void> {
-    console.log("Applying migrations...");
+    if (!quiet && dryRun) {
+      console.log("Applying migrations...");
+    }
 
     // Read SDL source from schema file
     let sdlSource: string;
@@ -960,6 +1082,11 @@ export class CLICommands {
       // Live execution: applySchema handles parse + diff + execute. Pass
       // through `allowUnsafe` so `--unsafe` callers aren't blocked by
       // the destructive-op gate (gh/geldata#1838).
+      //
+      // Per-migration progress is rendered by the progress listener wired
+      // in `migrate()` (gh/geldata#7490). The legacy "Migration Results"
+      // block was removed — the listener prints `[i/N] name … done in Xms`
+      // and a final `✓ Applied N migrations in Yms` summary.
       const applyResult = await manager.applySchema(sdlSource, {
         allowUnsafe,
       });
@@ -973,29 +1100,9 @@ export class CLICommands {
 
       const results = applyResult.value;
 
-      if (results.length === 0) {
+      if (results.length === 0 && !quiet) {
         console.log("No migrations to apply - schema is up to date");
         return;
-      }
-
-      console.log("\nMigration Results:");
-
-      results.forEach((result, i) => {
-        const status = result.success ? "Success" : "Failed";
-        console.log(`  ${i + 1}. Migration ${result.migrationId}: ${status}`);
-        console.log(`     Duration: ${result.durationMs}ms`);
-        console.log(`     Applied: ${result.appliedAt.toISOString()}`);
-
-        if (result.error) {
-          console.log(`     Error: ${result.error}`);
-        }
-      });
-
-      const allSucceeded = results.every((r) => r.success);
-      if (allSucceeded) {
-        console.log("\nAll migrations applied successfully!");
-      } else {
-        console.error("\nSome migrations failed. Review the errors above.");
       }
     }
   }

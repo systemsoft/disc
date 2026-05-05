@@ -39,6 +39,9 @@ ${inverse("  COMMANDS ")}
   db create ${gray(".".repeat(16))} Create a new Disc-managed database
   db list ${gray(".".repeat(18))} List all Disc-managed databases
   db drop ${gray(".".repeat(18))} Drop a Disc-managed database (requires ${bgBrightRed(brightWhite("--force"))})
+  db wipe ${gray(".".repeat(18))} Drop and recreate a database (requires ${bgBrightRed(brightWhite("--force"))})
+  db dump ${gray(".".repeat(18))} Dump a database to stdout or a file
+  db restore ${gray(".".repeat(15))} Restore a database from stdin or a file
   pg log ${gray(".".repeat(19))} View PostgreSQL logs
   pg upgrade ${gray(".".repeat(15))} Upgrade PostgreSQL version
 
@@ -101,6 +104,8 @@ ${inverse("  FLAG SCOPE ")} (run \`disc <command> --help\` for command-specific 
   build ${gray(".".repeat(20))} --platform, --output, --lite
   deploy ${gray(".".repeat(19))} --format, --output
   db create/list/drop ${gray(".".repeat(6))} --force (drop), --database-url
+  db wipe/dump/restore ${gray(".".repeat(5))} --force (wipe), --output (dump), --format (dump),
+                             --input (restore), --clean (restore), --database-url
   pg log ${gray(".".repeat(19))} --follow, --lines, --level
   pg upgrade ${gray(".".repeat(15))} --target-version, --dry-run
 
@@ -207,6 +212,21 @@ ${inverse("  EXAMPLES ")}
 
   ${gray("# Drop database disc_my_app")}
   disc db drop my_app --force
+
+  ${gray("# Wipe database disc_my_app to known-empty state")}
+  disc db wipe my_app --force
+
+  ${gray("# Dump database to stdout (plain SQL)")}
+  disc db dump my_app > backup.sql
+
+  ${gray("# Dump in custom (compressed) format")}
+  disc db dump my_app --format custom --output backup.dump
+
+  ${gray("# Restore from a dump file")}
+  disc db restore my_app --input backup.sql
+
+  ${gray("# Restore from stdin into a clean database")}
+  cat backup.sql | disc db restore my_app --clean
 `;
 
 /**
@@ -399,7 +419,35 @@ ${inverse("  USAGE ")}
 
 ${inverse("  USAGE ")}
 
-  disc db drop ${gray("<name>")} --force ${gray("[--database-url <url>]")}`
+  disc db drop ${gray("<name>")} --force ${gray("[--database-url <url>]")}`,
+  "db wipe": `
+  Drop and recreate a Disc-managed database (wipe to empty)
+
+${inverse("  USAGE ")}
+
+  disc db wipe ${gray("<name>")} --force ${gray("[--database-url <url>]")}`,
+  "db dump": `
+  Dump a Disc-managed database to stdout or a file
+
+${inverse("  USAGE ")}
+
+  disc db dump ${gray("<name> [--output <path>] [--format plain|custom] [--database-url <url>]")}
+
+${inverse("  OPTIONS ")}
+
+  -o, --output ${gray("<path>")} ${gray(".".repeat(6))} Output file path (default: stdout)
+  --format ${gray("<fmt>")} ${gray(".".repeat(11))} Dump format: ${bgBrightYellow("plain")} (default) or ${bgBrightYellow("custom")}`,
+  "db restore": `
+  Restore a Disc-managed database from stdin or a file
+
+${inverse("  USAGE ")}
+
+  disc db restore ${gray("<name> [--input <path>] [--clean] [--database-url <url>]")}
+
+${inverse("  OPTIONS ")}
+
+  --input ${gray("<path>")} ${gray(".".repeat(11))} Input file path (default: stdin). Auto-detects plain vs custom format.
+  --clean ${gray(".".repeat(18))} Wipe target db before restoring (drop + recreate)`
 };
 
 async function main() {
@@ -427,6 +475,7 @@ async function main() {
       "rollback",
       "squash",
       "js",
+      "clean",
     ],
     string: [
       "port",
@@ -455,6 +504,7 @@ async function main() {
       "squash-to",
       "binary-port",
       "schema-dir",
+      "input",
     ],
     alias: {
       h: "help",
@@ -692,9 +742,45 @@ async function main() {
             break;
           }
 
+          case "wipe": {
+            const wipeName = String(args._[2] || "");
+
+            if (!wipeName) {
+              console.error("Error: database name is required. Usage: disc db wipe <name> --force");
+              Deno.exit(1);
+            }
+
+            await commands.dbWipe(wipeName, args);
+            break;
+          }
+
+          case "dump": {
+            const dumpName = String(args._[2] || "");
+
+            if (!dumpName) {
+              console.error("Error: database name is required. Usage: disc db dump <name> [--output <path>] [--format plain|custom]");
+              Deno.exit(1);
+            }
+
+            await commands.dbDump(dumpName, args);
+            break;
+          }
+
+          case "restore": {
+            const restoreName = String(args._[2] || "");
+
+            if (!restoreName) {
+              console.error("Error: database name is required. Usage: disc db restore <name> [--input <path>] [--clean]");
+              Deno.exit(1);
+            }
+
+            await commands.dbRestore(restoreName, args);
+            break;
+          }
+
           default: {
             console.error(`Unknown db subcommand: ${dbSubcommand}`);
-            console.log("Available: db create, db list, db drop");
+            console.log("Available: db create, db list, db drop, db wipe, db dump, db restore");
 
             Deno.exit(1);
           }
