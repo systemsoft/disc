@@ -55,7 +55,7 @@ export class VectorExtension extends BaseExtension {
           "SELECT 1 FROM pg_extension WHERE extname = 'vector'",
         );
         if (!result.rows || result.rows.length === 0) {
-          this.setState("failed");
+          this.setState("error");
           throw new Error(
             "pgvector extension is not installed on the PostgreSQL server. Install it (e.g. `apt install postgresql-16-pgvector` or `brew install pgvector`) before enabling ext-vector.",
           );
@@ -63,7 +63,7 @@ export class VectorExtension extends BaseExtension {
       } catch (error) {
         // If the SELECT itself failed (connection issue), surface the
         // error — don't silently claim ready.
-        this.setState("failed");
+        this.setState("error");
         throw error;
       }
     }
