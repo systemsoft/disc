@@ -22,10 +22,33 @@ export interface ExtensionMetadata {
   dependencies?: string[];
 }
 
+/**
+ * Auth context passed to extension route handlers when the request
+ * carried a valid JWT (or when permissive mode populated one).
+ * Structurally compatible with `auth/middleware.ts:AuthContext`
+ * (which extends `TokenPayload`) but kept loose here so the
+ * extensions layer doesn't need to import from `auth/`.
+ * (gh/geldata#6345)
+ */
+export interface ExtensionAuthContext {
+  userId: string;
+  sub: string;
+  email: string;
+  username?: string;
+  iat: number;
+  exp: number;
+  iss?: string;
+  aud?: string;
+  jti?: string;
+}
+
 export interface ExtensionRoute {
   method: "GET" | "POST" | "PUT" | "DELETE" | "PATCH";
   path: string;
-  handler: (request: Request) => Promise<Response>;
+  handler: (
+    request: Request,
+    authContext?: ExtensionAuthContext,
+  ) => Promise<Response>;
 }
 
 export interface ExtensionMiddleware {

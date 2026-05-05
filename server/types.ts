@@ -35,6 +35,28 @@ export interface ServerConfig {
   enableAuth?: boolean;
   enableAccessPolicies?: boolean;
   authConfig?: AuthServerConfig;
+  /**
+   * When true, all data-plane HTTP routes (`/query`, `/schema*`,
+   * `/migrations`, `/stats`, `/metrics`, `/ext/*`) require a valid
+   * `Authorization: Bearer <JWT>` header. Auth-flow routes (`/auth/*`)
+   * and health/liveness probes (`/health*`) remain public regardless.
+   * Defaults to `false` for backwards compatibility — existing callers
+   * keep their permissive behavior unless they opt in. When enabled
+   * without an `authMiddleware`, requests are rejected with 503 to
+   * fail loud rather than silently bypass. (gh/geldata#6345, ports
+   * geldata/gel#6352)
+   */
+  requireAuth?: boolean;
+  /**
+   * When true, the server runs in read-only mode: queries that would
+   * write to the database (INSERT/UPDATE/DELETE/CONFIGURE
+   * DATABASE|INSTANCE|SYSTEM) are rejected with a `READ_ONLY_MODE`
+   * error. Schema migrations are also blocked. Useful for maintenance
+   * windows, staged failovers, and scaling read replicas without code
+   * changes. Defaults to `false`. (gh/geldata#5524, ports
+   * geldata/gel#5543)
+   */
+  readOnly?: boolean;
   enableExplain?: boolean;
   dryRun?: boolean;
   cacheMaxSize?: number;
@@ -48,6 +70,23 @@ export interface ServerConfig {
     keyFile: string;
     redirect?: boolean;
     redirectPort?: number;
+    /**
+     * When true, watch `certFile` and `keyFile` and reload them in
+     * place when they change on disk — typically after a certbot /
+     * cert-manager renewal. The reload sequence drains in-flight
+     * requests, shuts the old listener, and starts a new one on the
+     * same port; expect a sub-second blip in connection accepts but
+     * no full restart. Defaults to `false`. (gh/geldata#4277,
+     * ports geldata/gel#4297)
+     */
+    reload?: boolean;
+    /**
+     * Debounce window (ms) for collapsing burst filesystem events
+     * during cert rotation. Renewal tools commonly write key+cert
+     * back-to-back; a short window keeps the reload to one swap.
+     * Defaults to 500ms.
+     */
+    reloadDebounceMs?: number;
   };
   extensions?: Extension[];
   databases?: Record<string, string>;

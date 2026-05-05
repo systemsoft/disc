@@ -4,6 +4,7 @@
 
 import * as Types from "./types.ts";
 import * as EdgeQL from "../edgeql/mod.ts";
+import { isWriteQuery } from "../edgeql/query-capabilities.ts";
 import * as Compiler from "../compiler/compiler.ts";
 import * as Context from "../compiler/context.ts";
 import * as SQL from "../compiler/sql.ts";
@@ -36,6 +37,13 @@ export interface EdgeQLExecutionOptions {
   slowQueryThresholdMs?: number;
   requestTimeout?: number;
   databaseRegistry?: DatabaseRegistry;
+  /**
+   * When true, reject queries that would write (INSERT/UPDATE/DELETE/
+   * CONFIGURE DATABASE|INSTANCE|SYSTEM) with a `READ_ONLY_MODE` error.
+   * Read queries proceed normally. (gh/geldata#5524, ports
+   * geldata/gel#5543)
+   */
+  readOnly?: boolean;
 }
 
 interface CachedCompilation {
@@ -187,6 +195,23 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         }
 
         parsedAST = ast;
+
+        // Read-only-mode gate. Refuse writes after parse but before
+        // compile + execute so the rejection is cheap and uniform
+        // across SimpleEdgeQL and the full handler.
+        // (gh/geldata#5524, ports geldata/gel#5543)
+        if (this.options.readOnly && isWriteQuery(ast)) {
+          return {
+            errors: [{
+              message:
+                "the server is currently in read-only mode; this query would write to the database",
+              extensions: {
+                code: "READ_ONLY_MODE",
+                queryKind: ast.kind,
+              },
+            }],
+          };
+        }
 
         // Set access context before compilation (affects generated SQL)
         if (this.options.enableAccessPolicies && context.auth) {

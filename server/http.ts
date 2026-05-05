@@ -65,6 +65,11 @@ export class HttpServer {
   private rate_limiter?: RateLimiter;
   private server?: Deno.HttpServer<Deno.NetAddr>;
   private redirect_server?: Deno.HttpServer<Deno.NetAddr>;
+  private tls_watcher?: import("./tls-reload.ts").TlsCertWatcher;
+  private request_handler?: (
+    request: Request,
+    info: Deno.ServeHandlerInfo,
+  ) => Response | Promise<Response>;
   private cleanup_interval_ids: number[] = [];
   private startTime: Date;
   private in_flight_requests = 0;
@@ -115,6 +120,7 @@ export class HttpServer {
     ): Response | Promise<Response> => {
       return this.handleRequest(request, info);
     };
+    this.request_handler = handler;
 
     if (this.config.tls) {
       const cert = await Deno.readTextFile(this.config.tls.certFile);
@@ -125,6 +131,20 @@ export class HttpServer {
         cert,
         key,
       }, handler);
+
+      // Start file-watch-driven TLS hot-reload when opted in.
+      // (gh/geldata#4277, ports geldata/gel#4297)
+      if (this.config.tls.reload) {
+        const { TlsCertWatcher } = await import("./tls-reload.ts");
+        this.tls_watcher = new TlsCertWatcher({
+          certFile: this.config.tls.certFile,
+          keyFile: this.config.tls.keyFile,
+          debounceMs: this.config.tls.reloadDebounceMs,
+          onReload: (newCert, newKey) =>
+            this.swapTlsListener(newCert, newKey),
+        });
+        this.tls_watcher.start();
+      }
     } else {
       this.server = Deno.serve({
         hostname: this.config.host,
@@ -188,6 +208,12 @@ export class HttpServer {
     // AuthRoutes owns its own per-IP limiter for login/register/reset).
     this.authRoutes?.dispose();
 
+    // Stop the TLS file watcher before tearing down the listener.
+    if (this.tls_watcher) {
+      await this.tls_watcher.stop();
+      this.tls_watcher = undefined;
+    }
+
     if (this.redirect_server) {
       await this.redirect_server.shutdown();
     }
@@ -196,6 +222,88 @@ export class HttpServer {
       log.info("Stopping Disc server");
       await this.server.shutdown();
       log.info("Server stopped");
+    }
+  }
+
+  /**
+   * Hot-reload TLS by swapping the active listener for a new one
+   * configured with the given cert + key. The old listener is shut
+   * down (drains in-flight requests) and a new one is started on the
+   * same host:port. Brief blip in connection accepts is expected; the
+   * trade-off avoids needing a custom TLS-handshake layer to swap
+   * `SSL_CTX` in place.
+   *
+   * If construction of the new listener throws (malformed cert, bad
+   * key/cert pair, port collision), we log critical and **keep the old
+   * listener running** — losing TLS reload is bad but losing the
+   * server entirely is worse. (gh/geldata#4277, ports geldata/gel#4297)
+   *
+   * Public so operators can also trigger a reload programmatically
+   * (for tests, admin endpoints, etc.).
+   */
+  async reloadTls(): Promise<void> {
+    if (!this.config.tls) {
+      throw new Error("reloadTls called but TLS is not configured");
+    }
+    const cert = await Deno.readTextFile(this.config.tls.certFile);
+    const key = await Deno.readTextFile(this.config.tls.keyFile);
+    await this.swapTlsListener(cert, key);
+  }
+
+  private async swapTlsListener(cert: string, key: string): Promise<void> {
+    if (!this.config.tls || !this.request_handler) {
+      log.warn("swapTlsListener invoked before server start; ignoring");
+      return;
+    }
+
+    const oldServer = this.server;
+    let newServer: Deno.HttpServer<Deno.NetAddr> | undefined;
+
+    try {
+      // Drain old listener first — Deno can't bind two TLS listeners
+      // to the same port simultaneously without SO_REUSEPORT.
+      log.info("TLS hot-reload: draining old listener");
+      if (oldServer) {
+        await oldServer.shutdown();
+      }
+
+      newServer = Deno.serve({
+        hostname: this.config.host,
+        port: this.config.port,
+        cert,
+        key,
+      }, this.request_handler);
+
+      this.server = newServer;
+      log.info("TLS hot-reload: new listener up", {
+        host: this.config.host,
+        port: this.config.port,
+      });
+    } catch (err) {
+      log.error(
+        "TLS hot-reload failed; old listener has already been drained",
+        { error: err instanceof Error ? err.message : String(err) },
+      );
+      // Best-effort recovery: try to restart with the *previous* cert
+      // we know was valid.
+      try {
+        const fallbackCert = await Deno.readTextFile(this.config.tls.certFile);
+        const fallbackKey = await Deno.readTextFile(this.config.tls.keyFile);
+        this.server = Deno.serve({
+          hostname: this.config.host,
+          port: this.config.port,
+          cert: fallbackCert,
+          key: fallbackKey,
+        }, this.request_handler);
+        log.warn("TLS hot-reload: recovered listener with on-disk cert/key");
+      } catch (recoveryErr) {
+        log.error("TLS hot-reload: recovery failed; server is now down", {
+          error: recoveryErr instanceof Error
+            ? recoveryErr.message
+            : String(recoveryErr),
+        });
+        throw recoveryErr;
+      }
     }
   }
 
@@ -272,9 +380,19 @@ export class HttpServer {
       // Handle regular HTTP requests
       const url = new URL(request.url);
 
+      // Auth gate. When `config.requireAuth` is enabled, protected
+      // routes need a valid `Authorization: Bearer <JWT>` header before
+      // the route handler runs. Returns a 401/503 response on failure
+      // or `null` when the request may proceed. (gh/geldata#6345)
+      const authResult = await this.gateAuth(request, url);
+      if (authResult instanceof Response) {
+        return authResult;
+      }
+      const authedContext = authResult; // AuthContext | null
+
       // Extension route handling
       if (url.pathname.startsWith("/ext/")) {
-        return await this.handleExtensionRoute(request, url);
+        return await this.handleExtensionRoute(request, url, authedContext);
       }
 
       // Auth route handling
@@ -320,6 +438,72 @@ export class HttpServer {
       this.stats.total_duration_ms += duration;
       this.in_flight_requests--;
     }
+  }
+
+  /**
+   * Public-route allowlist. These paths are reachable without a JWT
+   * even when `config.requireAuth` is enabled — they're either part of
+   * the auth flow itself (you can't log in with a token you don't have
+   * yet) or unauthenticated by design (health probes for orchestrators).
+   * (gh/geldata#6345, ports geldata/gel#6352)
+   */
+  private isPublicRoute(pathname: string): boolean {
+    if (pathname === "/") return true;
+    if (pathname.startsWith("/auth/")) return true;
+    if (pathname === "/health" || pathname.startsWith("/health/")) return true;
+    return false;
+  }
+
+  /**
+   * Authenticate the request when `config.requireAuth` is on. Returns
+   * `null` to indicate "proceed without an attached context" (public
+   * route or auth disabled), an `AuthContext` when the JWT verified,
+   * or a 401/503 `Response` to short-circuit the dispatcher.
+   *
+   * 503 (not 401) when `requireAuth=true` but no `authMiddleware` is
+   * wired — that's a misconfig that would otherwise let traffic
+   * through. Fail loud.
+   */
+  private async gateAuth(
+    request: Request,
+    url: URL,
+  ): Promise<import("../auth/middleware.ts").AuthContext | null | Response> {
+    if (!this.config.requireAuth) {
+      // Permissive mode — populate context if we can, but don't reject.
+      if (!this.authMiddleware) return null;
+      return await this.authMiddleware.authenticate(request);
+    }
+
+    if (this.isPublicRoute(url.pathname)) return null;
+
+    if (!this.authMiddleware) {
+      log.error(
+        "requireAuth=true but no authMiddleware configured — rejecting request",
+        { path: url.pathname },
+      );
+      return new Response(
+        JSON.stringify({
+          error: "Authentication required but auth provider not configured",
+        }),
+        {
+          status: 503,
+          headers: this.get_default_headers("application/json"),
+        },
+      );
+    }
+
+    const ctx = await this.authMiddleware.authenticate(request);
+    if (!ctx) {
+      const headers = this.get_default_headers("application/json");
+      // RFC 6750 §3 — return a WWW-Authenticate challenge so clients
+      // know which scheme to retry with.
+      headers.set("WWW-Authenticate", 'Bearer realm="disc"');
+      return new Response(
+        JSON.stringify({ error: "Authentication required" }),
+        { status: 401, headers },
+      );
+    }
+    return ctx;
   }
 
   private handle_root(request?: Request): Response {
@@ -906,6 +1090,7 @@ export class HttpServer {
   private async handleExtensionRoute(
     request: Request,
     url: URL,
+    authContext?: import("../auth/middleware.ts").AuthContext | null,
   ): Promise<Response> {
     // Parse /ext/<name>/<path>
     const parts = url.pathname.slice(5).split("/"); // strip "/ext/"
@@ -928,7 +1113,9 @@ export class HttpServer {
     }
 
     try {
-      return await route.handler(request);
+      // gh/geldata#6345 — forward auth context so extensions (graphql,
+      // custom-functions, …) can enforce per-route authorization.
+      return await route.handler(request, authContext ?? undefined);
     } catch (error) {
       log.error("Extension route error", {
         extension: extName,

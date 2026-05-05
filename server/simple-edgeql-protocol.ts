@@ -18,6 +18,7 @@
 import * as Types from "./types.ts";
 import type { HealthStatus } from "./types.ts";
 import * as EdgeQL from "../edgeql/mod.ts";
+import { isWriteQuery } from "../edgeql/query-capabilities.ts";
 import * as Context from "../compiler/context.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { DatabaseExecutionError } from "../lib/errors.ts";
@@ -34,6 +35,12 @@ export interface SimpleEdgeQLOptions {
   connectionPool?: ConnectionPool;
   enableAccessPolicies?: boolean;
   databaseRegistry?: DatabaseRegistry;
+  /**
+   * When true, reject writes (INSERT/UPDATE/DELETE/CONFIGURE
+   * DATABASE|INSTANCE|SYSTEM) with a `READ_ONLY_MODE` error.
+   * (gh/geldata#5524, ports geldata/gel#5543)
+   */
+  readOnly?: boolean;
 }
 
 export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
@@ -87,6 +94,20 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
             extensions: {
               code: "PARSE_ERROR",
               phase: "parsing",
+            },
+          }],
+        };
+      }
+
+      // Read-only-mode gate. (gh/geldata#5524, ports geldata/gel#5543)
+      if (this.options.readOnly && isWriteQuery(parseResult.ast)) {
+        return {
+          errors: [{
+            message:
+              "the server is currently in read-only mode; this query would write to the database",
+            extensions: {
+              code: "READ_ONLY_MODE",
+              queryKind: parseResult.ast.kind,
             },
           }],
         };

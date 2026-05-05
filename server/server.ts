@@ -182,6 +182,7 @@ export class DiscServer {
       enableAccessPolicies: config.enableAccessPolicies,
       cacheMaxSize: config.cacheMaxSize,
       slowQueryThresholdMs: config.slowQueryThresholdMs,
+      readOnly: config.readOnly ?? false,
     };
 
     if (config.protocol === "full") {

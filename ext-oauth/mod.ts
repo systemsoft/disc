@@ -11,5 +11,17 @@ export type {
 
 export { OAuthExtension } from "./extension.ts";
 export { OAuthStateManager } from "./state-manager.ts";
-export { appleProvider, githubProvider, googleProvider } from "./providers.ts";
+export {
+  appleProvider,
+  createOidcProvider,
+  genericOidcProvider,
+  githubProvider,
+  googleProvider,
+} from "./providers.ts";
+export type { OidcProviderOptions } from "./providers.ts";
+export {
+  buildDiscoveryUrl,
+  fetchOidcDiscovery,
+  type OidcDiscoveryDoc,
+} from "./discovery.ts";
 export { exchangeCodeForToken, fetchUserInfo } from "./token-exchange.ts";

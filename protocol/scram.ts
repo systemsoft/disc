@@ -169,6 +169,17 @@ function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
   return diff === 0;
 }
 
+/**
+ * Constant-time comparison of two strings. Encodes both as UTF-8 then
+ * delegates to `constantTimeEqual`. The length check leaks length, which
+ * is acceptable here — server- and client-nonce sizes are fixed by the
+ * protocol, and channel-binding values are derived from a public
+ * gs2-header. (gh/geldata#9137)
+ */
+function constantTimeEqualStr(a: string, b: string): boolean {
+  return constantTimeEqual(textEncoder.encode(a), textEncoder.encode(b));
+}
+
 // ---------------------------------------------------------------------------
 // Public API — Server-side functions
 // ---------------------------------------------------------------------------
@@ -291,17 +302,21 @@ export async function verifyClientFinalMessage(
     return { valid: false, serverSignature: "" };
   }
 
-  // Verify nonce: must be clientNonce + serverNonce
+  // Verify nonce: must be clientNonce + serverNonce. Constant-time to
+  // close the byte-by-byte timing leak on the server-nonce portion.
+  // (gh/geldata#9137)
   const expectedNonce = state.clientNonce + state.serverNonce;
-  if (nonce !== expectedNonce) {
+  if (!constantTimeEqualStr(nonce, expectedNonce)) {
     return { valid: false, serverSignature: "" };
   }
 
   // Verify channel binding echoes the gs2-header from the client-first-message.
   // RFC 5802 §7 requires c=base64(gs2-header). Accepting any `c=` value allows
-  // a MITM to tamper with the gs2-cbind-flag without detection.
+  // a MITM to tamper with the gs2-cbind-flag without detection. Constant-time
+  // for consistency with the nonce check, even though gs2-header is public.
+  // (gh/geldata#9137)
   const expectedChannelBinding = toBase64(textEncoder.encode(state.gs2Header));
-  if (channelBinding !== expectedChannelBinding) {
+  if (!constantTimeEqualStr(channelBinding, expectedChannelBinding)) {
     return { valid: false, serverSignature: "" };
   }
 
