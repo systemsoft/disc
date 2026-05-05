@@ -7,6 +7,7 @@ import { MigrationError } from "../lib/errors.ts";
 import * as Types from "./types.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { logger } from "../postgres/logger.ts";
+import { bootstrapStdlib } from "../lib/stdlib-sql.ts";
 
 export class MigrationTracker {
   private pool: ConnectionPool;
@@ -100,6 +101,12 @@ export class MigrationTracker {
           migration_state JSONB NOT NULL
         );
       `);
+
+      // gh/geldata#5065: install pgcrypto + register std::* crypto
+      // wrapper functions. Idempotent (CREATE OR REPLACE / IF NOT
+      // EXISTS) so re-runs across boots are no-ops. Failures are
+      // warn-logged inside bootstrapStdlib and don't fail tracker init.
+      await bootstrapStdlib(this.pool);
 
       this.initialized = true;
       return Ok(void 0);

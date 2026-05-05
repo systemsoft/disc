@@ -2113,9 +2113,12 @@ export class EdgeQLCompiler {
         };
     }
 
-    // Standard 1:1 function name mapping
+    // Standard 1:1 function name mapping. The registry is keyed by the
+    // underscore-joined form (`std_md5`); fall back to the qualified
+    // form (`std::md5`) for entries that prefer the user-facing key.
     let sqlName = functionName;
-    const funcDef = this.ctx.schema.functions.get(functionName);
+    const funcDef = this.ctx.schema.functions.get(functionName) ??
+      this.ctx.schema.functions.get(qualifiedName);
     if (funcDef?.windowOnly) {
       throw new CompilationError(
         `Function '${functionName}' requires an OVER clause`,

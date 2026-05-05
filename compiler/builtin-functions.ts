@@ -753,6 +753,79 @@ export function getBuiltinFunctions(): Map<string, FunctionDef> {
       returnType: "float64",
     }],
 
+    // ── Cryptography (gh/geldata#5065) ─────────────────────────────────
+    //
+    // SHA-2 / MD5 use PostgreSQL built-ins (PG 11+ ships sha224/256/384/
+    // 512 in core; md5 has always been there). SHA-1 and HMAC require
+    // pgcrypto, which Disc auto-installs in MigrationTracker.initialize()
+    // — see migration/tracker.ts. encode() / decode() for hex/base64 are
+    // also core built-ins.
+
+    // Registry keyed by EdgeQL-form name (`std::md5`); the compiler
+    // falls back to the qualified form when the underscore form misses.
+    // SQL-side wrappers with single-underscore names (`std_md5`,
+    // `std_sha1`, `std_hex_encode`, etc.) are created in
+    // lib/stdlib-sql.ts so a missing sqlName still resolves to a real
+    // PG function: the compiler emits `std_md5(...)` from `std::md5`'s
+    // parts.join("_") form.
+    ["std::md5", {
+      name: "std::md5",
+      args: [{ name: "msg", type: "bytes", required: true }],
+      returnType: "bytes",
+      // Wrapper exists because md5(bytea) returns text in PG; the
+      // wrapper re-encodes to bytea so EdgeQL's bytes return type holds.
+    }],
+    ["std::sha1", {
+      name: "std::sha1",
+      args: [{ name: "msg", type: "bytes", required: true }],
+      returnType: "bytes",
+      // pgcrypto: digest(msg, 'sha1') — wrapped in std_sha1.
+    }],
+    ["std::sha256", {
+      name: "std::sha256",
+      args: [{ name: "msg", type: "bytes", required: true }],
+      returnType: "bytes",
+      sqlName: "SHA256",
+    }],
+    ["std::sha512", {
+      name: "std::sha512",
+      args: [{ name: "msg", type: "bytes", required: true }],
+      returnType: "bytes",
+      sqlName: "SHA512",
+    }],
+    ["std::hmac", {
+      name: "std::hmac",
+      args: [
+        { name: "msg", type: "bytes", required: true },
+        { name: "key", type: "bytes", required: true },
+        { name: "algo", type: "str", required: true },
+      ],
+      returnType: "bytes",
+      // pgcrypto hmac(bytea, bytea, text). Algo is one of
+      // 'md5','sha1','sha224','sha256','sha384','sha512'.
+      sqlName: "HMAC",
+    }],
+    ["std::hex_encode", {
+      name: "std::hex_encode",
+      args: [{ name: "data", type: "bytes", required: true }],
+      returnType: "str",
+    }],
+    ["std::hex_decode", {
+      name: "std::hex_decode",
+      args: [{ name: "data", type: "str", required: true }],
+      returnType: "bytes",
+    }],
+    ["std::base64_encode", {
+      name: "std::base64_encode",
+      args: [{ name: "data", type: "bytes", required: true }],
+      returnType: "str",
+    }],
+    ["std::base64_decode", {
+      name: "std::base64_decode",
+      args: [{ name: "data", type: "str", required: true }],
+      returnType: "bytes",
+    }],
+
     // Full-text search functions (ext::fts)
     ["fts::search", {
       name: "fts::search",
