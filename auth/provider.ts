@@ -22,6 +22,13 @@ import {
   TokenPayload,
   User,
 } from "./types.ts";
+import {
+  newEventId,
+  newEventTimestamp,
+  type WebhookEvent,
+  WebhookSender,
+  type WebhookSenderOptions,
+} from "./webhooks.ts";
 
 /**
  * Conditional config fields whose presence depends on `jwtAlgorithm`:
@@ -66,6 +73,7 @@ const AUTH_CONFIG_DEFAULTS: Omit<Required<AuthConfig>, ConditionalAuthFields> =
     passwordRequireSpecial: false,
     // 0 disables the cap (unlimited sessions).
     maxSessionsPerUser: 0,
+    webhooks: [],
   };
 
 export class AuthProvider implements IAuthProvider {
@@ -82,8 +90,16 @@ export class AuthProvider implements IAuthProvider {
   // Hashed once at init using the configured cost so the dummy compare
   // takes the same time as a real one. (gh/geldata#9137)
   private dummyPasswordHash?: string;
+  // Auth lifecycle webhook dispatcher. Always present; when no
+  // subscriptions are configured, `dispatch()` is a no-op.
+  // (gh/geldata#7484, ports geldata/gel#7813)
+  private webhookSender: WebhookSender;
 
-  constructor(config: AuthConfig, db: DatabaseInterface) {
+  constructor(
+    config: AuthConfig,
+    db: DatabaseInterface,
+    webhookOptions: WebhookSenderOptions = {},
+  ) {
     // Merge defaults with user config, dropping `undefined` values from
     // `config` so an explicitly-undefined optional doesn't shadow the
     // default.
@@ -98,6 +114,10 @@ export class AuthProvider implements IAuthProvider {
       ...overrides,
     } as ResolvedAuthConfig;
     this.db = db;
+    this.webhookSender = new WebhookSender(
+      this.config.webhooks ?? [],
+      webhookOptions,
+    );
   }
 
   async initialize(): Promise<void> {
@@ -141,7 +161,13 @@ export class AuthProvider implements IAuthProvider {
   }
 
   private async createTables(): Promise<void> {
-    // Users table
+    // Users table.
+    //
+    // `is_anonymous` (gh/geldata#8750): guest identities live in the
+    // same row but synth their email + password_hash to keep the
+    // existing NOT NULL invariants. `loginAnonymous()` mints them;
+    // `upgradeAnonymous()` flips them into full users by replacing
+    // email + password_hash and toggling the flag.
     await this.db.execute(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
@@ -152,12 +178,27 @@ export class AuthProvider implements IAuthProvider {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         email_verified BOOLEAN DEFAULT FALSE,
         active BOOLEAN DEFAULT TRUE,
+        is_anonymous BOOLEAN DEFAULT FALSE,
         metadata TEXT,
         verification_token TEXT,
         reset_token TEXT,
         reset_token_expires TIMESTAMP
       )
     `);
+
+    // Idempotent column addition for instances that pre-date the
+    // anonymous-identity feature. Both Postgres and SQLite-style
+    // backends accept `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` in
+    // recent versions; if a backend rejects this, the catch keeps
+    // initialize() going (the feature simply won't work).
+    try {
+      await this.db.execute(
+        `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_anonymous BOOLEAN DEFAULT FALSE`,
+      );
+    } catch {
+      // pre-existing column, or backend doesn't support IF NOT EXISTS
+      // for ADD COLUMN; either case is fine here.
+    }
 
     // Sessions table
     await this.db.execute(`
@@ -284,12 +325,223 @@ export class AuthProvider implements IAuthProvider {
       requireEmailVerification: this.config.requireEmailVerification,
     });
 
+    // Webhook: a new identity exists. Fire before EmailVerificationRequested
+    // so receivers see them in causal order.
+    // (gh/geldata#7484, ports geldata/gel#7813)
+    this.fireWebhook({
+      eventType: "IdentityCreated",
+      eventId: newEventId(),
+      timestamp: newEventTimestamp(),
+      identityId: userId,
+    });
+
+    if (verificationToken) {
+      this.fireWebhook({
+        eventType: "EmailVerificationRequested",
+        eventId: newEventId(),
+        timestamp: newEventTimestamp(),
+        identityId: userId,
+        verificationToken,
+      });
+    }
+
     return {
       user: this.sanitizeUser(user),
       session,
       token,
       refreshToken: refreshToken,
       // Plaintext for the caller to email; DB has the hash.
+      ...(verificationToken ? { verificationToken } : {}),
+    };
+  }
+
+  /**
+   * Mint a fresh anonymous (guest) identity and an authenticated
+   * session for it. The user row exists but cannot sign in via
+   * `login()` — the `email` and `password_hash` fields are synthetic.
+   * Callers typically store the returned token in an HTTP-only cookie
+   * and later call `upgradeAnonymous()` once the user signs up for
+   * a full account. (gh/geldata#8750)
+   */
+  async loginAnonymous(meta?: RequestMeta): Promise<AuthResponse> {
+    const userId = this.generateId();
+    // Synthetic email + password to preserve NOT NULL invariants
+    // without forcing a schema migration. The email's TLD `.invalid`
+    // (RFC 6761) prevents collision with real addresses; the password
+    // hash is derived from a high-entropy random string that is
+    // immediately forgotten so the row can never be signed into.
+    const syntheticEmail = `anonymous-${userId}@disc.invalid`;
+    const syntheticSecret = this.generateToken();
+    const salt = await bcrypt.genSalt(this.config.bcryptRounds);
+    const syntheticHash = await bcrypt.hash(syntheticSecret, salt);
+
+    await this.db.execute(
+      `
+      INSERT INTO users (
+        id, email, username, password_hash, email_verified, is_anonymous
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `,
+      [userId, syntheticEmail, null, syntheticHash, false, true],
+    );
+
+    const user = await this.getUser(userId);
+    if (!user) {
+      throw new Error("Failed to create anonymous identity");
+    }
+
+    const session = await this.createSession(userId, meta);
+    const token = await this.generateJWT(user);
+    const refreshToken = this.generateToken();
+    await this.db.execute(
+      "UPDATE sessions SET token = ?, refresh_token = ? WHERE id = ?",
+      [token, refreshToken, session.id],
+    );
+    session.token = token;
+    session.refreshToken = refreshToken;
+
+    this.auditEvent("registered_anonymous", userId, {
+      sessionId: session.id,
+      ipAddress: meta?.ipAddress,
+    });
+
+    this.fireWebhook({
+      eventType: "IdentityCreated",
+      eventId: newEventId(),
+      timestamp: newEventTimestamp(),
+      identityId: userId,
+    });
+
+    return {
+      user: this.sanitizeUser(user),
+      session,
+      token,
+      refreshToken,
+    };
+  }
+
+  /**
+   * Promote a previously-anonymous identity to a full user. Replaces
+   * the synthetic email + password_hash with real credentials, flips
+   * `is_anonymous` to false, and reuses the existing user id so
+   * downstream rows that reference it (carts, drafts, etc.) keep
+   * working. The caller's app code is responsible for any cross-row
+   * "merge with existing user" logic — this call only mutates the
+   * single anonymous row in place. (gh/geldata#8750)
+   *
+   * Throws if the id doesn't exist or already belongs to a non-anonymous
+   * identity.
+   */
+  async upgradeAnonymous(
+    anonymousUserId: string,
+    data: RegisterData,
+  ): Promise<AuthResponse> {
+    // Validate password before doing any work.
+    const passwordValidation = this.validatePassword(data.password);
+    if (!passwordValidation.valid) {
+      throw new AuthError(
+        passwordValidation.errors.join(", "),
+        AuthErrorCode.PASSWORD_TOO_WEAK,
+        400,
+      );
+    }
+
+    const lookup = await this.db.query(
+      "SELECT id, is_anonymous FROM users WHERE id = ?",
+      [anonymousUserId],
+    );
+    if (lookup.rows.length === 0) {
+      throw new AuthError(
+        "Anonymous identity not found",
+        AuthErrorCode.USER_NOT_FOUND,
+        404,
+      );
+    }
+    if (!lookup.rows[0].is_anonymous) {
+      throw new AuthError(
+        "User is not an anonymous identity",
+        AuthErrorCode.INVALID_OPERATION,
+        400,
+      );
+    }
+
+    // Refuse if the target email is already taken by someone else.
+    const existing = await this.db.query(
+      "SELECT id FROM users WHERE (email = ? OR (username = ? AND username IS NOT NULL)) AND id != ?",
+      [data.email, data.username || null, anonymousUserId],
+    );
+    if (existing.rows.length > 0) {
+      throw new AuthError(
+        "User already exists",
+        AuthErrorCode.USER_ALREADY_EXISTS,
+        409,
+      );
+    }
+
+    const salt = await bcrypt.genSalt(this.config.bcryptRounds);
+    const passwordHash = await bcrypt.hash(data.password, salt);
+    const verificationToken = this.config.requireEmailVerification
+      ? this.generateToken()
+      : null;
+    const verificationTokenHash = verificationToken
+      ? await this.hashToken(verificationToken)
+      : null;
+
+    await this.db.execute(
+      `
+      UPDATE users
+         SET email = ?, username = ?, password_hash = ?,
+             email_verified = ?, metadata = ?, verification_token = ?,
+             is_anonymous = FALSE, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?
+    `,
+      [
+        data.email,
+        data.username || null,
+        passwordHash,
+        !this.config.requireEmailVerification,
+        data.metadata ? JSON.stringify(data.metadata) : null,
+        verificationTokenHash,
+        anonymousUserId,
+      ],
+    );
+
+    const user = await this.getUser(anonymousUserId);
+    if (!user) {
+      throw new Error("User vanished after upgrade");
+    }
+
+    // Mint fresh tokens; the old session keeps working but the new
+    // identity gets a fresh JWT reflecting the real email.
+    const session = await this.createSession(user.id, data.meta);
+    const token = await this.generateJWT(user);
+    const refreshToken = this.generateToken();
+    await this.db.execute(
+      "UPDATE sessions SET token = ?, refresh_token = ? WHERE id = ?",
+      [token, refreshToken, session.id],
+    );
+    session.token = token;
+    session.refreshToken = refreshToken;
+
+    this.auditEvent("upgraded_anonymous", user.id, {
+      sessionId: session.id,
+      ipAddress: data.meta?.ipAddress,
+    });
+
+    if (verificationToken) {
+      this.fireWebhook({
+        eventType: "EmailVerificationRequested",
+        eventId: newEventId(),
+        timestamp: newEventTimestamp(),
+        identityId: user.id,
+        verificationToken,
+      });
+    }
+
+    return {
+      user: this.sanitizeUser(user),
+      session,
+      token,
+      refreshToken,
       ...(verificationToken ? { verificationToken } : {}),
     };
   }
@@ -330,6 +582,18 @@ export class AuthProvider implements IAuthProvider {
         "User account is inactive",
         AuthErrorCode.USER_INACTIVE,
         403,
+      );
+    }
+
+    // Anonymous identities don't have a real password. Reject in the
+    // same shape as wrong-credentials (no leak of identity kind),
+    // burning a dummy compare for timing parity. (gh/geldata#8750)
+    if (user.isAnonymous) {
+      await this.runDummyCompare(credentials.password);
+      throw new AuthError(
+        "Invalid credentials",
+        AuthErrorCode.INVALID_CREDENTIALS,
+        401,
       );
     }
 
@@ -375,6 +639,13 @@ export class AuthProvider implements IAuthProvider {
     this.auditEvent("login_succeeded", user.id, {
       sessionId: session.id,
       ipAddress: credentials.meta?.ipAddress,
+    });
+
+    this.fireWebhook({
+      eventType: "IdentityAuthenticated",
+      eventId: newEventId(),
+      timestamp: newEventTimestamp(),
+      identityId: user.id,
     });
 
     return {
@@ -675,6 +946,14 @@ export class AuthProvider implements IAuthProvider {
 
     this.auditEvent("password_reset_requested", userId);
 
+    this.fireWebhook({
+      eventType: "PasswordResetRequested",
+      eventId: newEventId(),
+      timestamp: newEventTimestamp(),
+      identityId: userId,
+      resetToken,
+    });
+
     // Return plaintext to caller (they send it via email); only the hash
     // is in the DB. (P0-03)
     return resetToken;
@@ -748,6 +1027,13 @@ export class AuthProvider implements IAuthProvider {
     );
 
     this.auditEvent("email_verified", userId);
+
+    this.fireWebhook({
+      eventType: "EmailVerified",
+      eventId: newEventId(),
+      timestamp: newEventTimestamp(),
+      identityId: userId,
+    });
   }
 
   async revokeAllSessions(userId: string): Promise<void> {
@@ -852,6 +1138,20 @@ export class AuthProvider implements IAuthProvider {
     }
   }
 
+  /**
+   * Fire a lifecycle webhook. Wraps `webhookSender.dispatch()` with
+   * logging-only error handling — webhook failures must never surface
+   * to the auth caller. (gh/geldata#7484, ports geldata/gel#7813)
+   */
+  private fireWebhook(event: WebhookEvent): void {
+    void this.webhookSender.dispatch(event).catch((err) => {
+      authLogger.warn("webhook dispatch errored", {
+        eventType: event.eventType,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    });
+  }
+
   private async generateJWT(user: User): Promise<string> {
     if (!this.signKey) {
       throw new Error(
@@ -921,6 +1221,9 @@ export class AuthProvider implements IAuthProvider {
       emailVerified: Boolean(row.email_verified),
       active: Boolean(row.active),
       metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+      isAnonymous: row.is_anonymous === undefined
+        ? false
+        : Boolean(row.is_anonymous),
     };
   }
 

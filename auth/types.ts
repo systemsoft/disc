@@ -12,6 +12,14 @@ export interface User {
   emailVerified: boolean;
   active: boolean;
   metadata?: Record<string, any>;
+  /**
+   * True for guest identities created via `AuthProvider.loginAnonymous()`.
+   * The `email` and `passwordHash` are synthetic placeholders for an
+   * anonymous user — they exist to satisfy NOT NULL constraints but
+   * neither is usable for sign-in. Flipped to `false` by
+   * `upgradeAnonymous()`. (gh/geldata#8750)
+   */
+  isAnonymous?: boolean;
 }
 
 export interface Session {
@@ -69,6 +77,14 @@ export interface AuthConfig {
    * the oldest. Defaults to unlimited. (P2-22)
    */
   maxSessionsPerUser?: number;
+  /**
+   * Webhook subscriptions for auth lifecycle events. Each entry is
+   * delivered fire-and-forget after the relevant event happens
+   * (sign-up, login, password reset, email verification). HMAC-SHA256
+   * signing is supported per-subscription via `secret`.
+   * (gh/geldata#7484, ports geldata/gel#7813)
+   */
+  webhooks?: import("./webhooks.ts").WebhookConfig[];
 }
 
 /**
@@ -170,4 +186,9 @@ export enum AuthErrorCode {
   REGISTRATION_DISABLED = "REGISTRATION_DISABLED",
   INVALID_REFRESH_TOKEN = "INVALID_REFRESH_TOKEN",
   USER_INACTIVE = "USER_INACTIVE",
+  /**
+   * Operation invalid for the user's current state — e.g. trying to
+   * upgrade a user that's already a full identity. (gh/geldata#8750)
+   */
+  INVALID_OPERATION = "INVALID_OPERATION",
 }
