@@ -36,23 +36,38 @@ export interface AuthRoutesOptions {
    * - Pass `null` to disable rate limiting (not recommended in production).
    */
   rateLimiter?: RateLimiter | null;
+  /**
+   * When true, trust `X-Forwarded-For` / `X-Real-IP` headers for the
+   * client IP used in rate limiting and audit logs. Set to `true` only
+   * when this server is provably behind a reverse proxy that strips and
+   * resets these headers from clients — otherwise an attacker can spoof
+   * their IP to evade rate limits. Defaults to `false`. (gh/geldata#5030)
+   */
+  trustProxy?: boolean;
 }
 
 /**
- * Extract a client IP for rate-limiting purposes. Prefers X-Forwarded-For
- * (common behind proxies/load balancers), falls back to X-Real-IP, then to
- * a stable "anonymous" bucket so the limiter still degrades gracefully when
- * no IP header is available.
+ * Extract a client IP for rate-limiting purposes. Honors
+ * `X-Forwarded-For` / `X-Real-IP` only when `trustProxy` is on (the
+ * server is configured to be behind a known reverse proxy). Falls back
+ * to a stable "anonymous" bucket so the limiter still degrades
+ * gracefully when no IP is available — the `info` parameter (TCP peer)
+ * isn't plumbed to AuthRoutes today, so direct-deploy scenarios use the
+ * shared bucket.
  */
-function extractClientIp(request: Request): string {
-  const xff = request.headers.get("x-forwarded-for");
-  if (xff) {
-    // "client, proxy1, proxy2" — take the left-most entry
-    const first = xff.split(",")[0].trim();
-    if (first) return first;
+function extractClientIp(request: Request, trustProxy: boolean): string {
+  if (trustProxy) {
+    const xff = request.headers.get("x-forwarded-for");
+    if (xff) {
+      const first = xff.split(",")[0].trim();
+      if (first) return first;
+    }
+    const realIp = request.headers.get("x-real-ip");
+    if (realIp) {
+      const trimmed = realIp.trim();
+      if (trimmed) return trimmed;
+    }
   }
-  const realIp = request.headers.get("x-real-ip");
-  if (realIp) return realIp.trim();
   return "anonymous";
 }
 
@@ -65,8 +80,9 @@ function extractClientIp(request: Request): string {
  */
 function extractRequestMeta(
   request: Request,
+  trustProxy: boolean,
 ): { ipAddress?: string; userAgent?: string } {
-  const ip = extractClientIp(request);
+  const ip = extractClientIp(request, trustProxy);
   const ua = request.headers.get("user-agent") ?? undefined;
   return {
     ipAddress: ip === "anonymous" ? undefined : ip,
@@ -82,6 +98,7 @@ export interface AuthIntegration {
 
 export class AuthRoutes {
   private rateLimiter: RateLimiter | null;
+  private trustProxy: boolean;
 
   constructor(
     private provider: AuthProvider,
@@ -95,6 +112,7 @@ export class AuthRoutes {
       this.rateLimiter = options.rateLimiter ??
         new RateLimiter(DEFAULT_AUTH_RATE_LIMIT);
     }
+    this.trustProxy = options.trustProxy ?? false;
   }
 
   /**
@@ -104,7 +122,7 @@ export class AuthRoutes {
    */
   private checkRateLimit(request: Request): Response | null {
     if (!this.rateLimiter) return null;
-    const ip = extractClientIp(request);
+    const ip = extractClientIp(request, this.trustProxy);
     if (this.rateLimiter.allow(ip)) return null;
     return new Response(
       JSON.stringify({
@@ -161,7 +179,7 @@ export class AuthRoutes {
       );
     }
 
-    const meta = extractRequestMeta(request);
+    const meta = extractRequestMeta(request, this.trustProxy);
     const result = await verifier.verify(token, meta.ipAddress);
     if (!result.success) {
       log.warn("captcha verification failed", {
@@ -205,7 +223,7 @@ export class AuthRoutes {
           password: body.password,
           username: body.username,
           metadata: body.metadata,
-          meta: extractRequestMeta(request),
+          meta: extractRequestMeta(request, this.trustProxy),
         };
 
         const response = await this.provider.register(data);
@@ -235,7 +253,7 @@ export class AuthRoutes {
           email: body.email,
           username: body.username,
           password: body.password,
-          meta: extractRequestMeta(request),
+          meta: extractRequestMeta(request, this.trustProxy),
         };
 
         const response = await this.provider.login(credentials);
@@ -320,7 +338,7 @@ export class AuthRoutes {
 
         const response = await this.provider.refresh(
           refreshToken,
-          extractRequestMeta(request),
+          extractRequestMeta(request, this.trustProxy),
         );
 
         return new Response(JSON.stringify(response), {
@@ -567,7 +585,7 @@ export class AuthRoutes {
         const body = await request.json();
         const result = await this.provider.finishWebAuthnLogin(
           body,
-          extractRequestMeta(request),
+          extractRequestMeta(request, this.trustProxy),
         );
         return new Response(JSON.stringify(result), {
           status: 200,
@@ -693,7 +711,7 @@ export class AuthRoutes {
         const response = await this.provider.loginWithRecoveryCode(
           String(body.challengeToken),
           String(body.code),
-          extractRequestMeta(request),
+          extractRequestMeta(request, this.trustProxy),
         );
         return new Response(JSON.stringify(response), {
           status: 200,
@@ -739,7 +757,7 @@ export class AuthRoutes {
         }
         const token = await this.provider.requestMagicLink(
           String(body.email),
-          extractRequestMeta(request),
+          extractRequestMeta(request, this.trustProxy),
         );
         // The HTTP response body intentionally returns the token — it's
         // the same pattern reset/verify use today, and lets local-dev
@@ -784,7 +802,7 @@ export class AuthRoutes {
         }
         const result = await this.provider.consumeMagicLink(
           String(body.token),
-          extractRequestMeta(request),
+          extractRequestMeta(request, this.trustProxy),
         );
         return new Response(JSON.stringify(result), {
           status: 200,
@@ -830,7 +848,7 @@ export class AuthRoutes {
         }
         const code = await this.provider.requestMagicCode(
           String(body.email),
-          extractRequestMeta(request),
+          extractRequestMeta(request, this.trustProxy),
         );
         return new Response(
           JSON.stringify({ success: true, magicCode: code }),
@@ -873,7 +891,7 @@ export class AuthRoutes {
         const result = await this.provider.verifyMagicCode(
           String(body.email),
           String(body.code),
-          extractRequestMeta(request),
+          extractRequestMeta(request, this.trustProxy),
         );
         return new Response(JSON.stringify(result), {
           status: 200,
@@ -988,7 +1006,7 @@ export class AuthRoutes {
         const response = await this.provider.loginWithTOTP(
           String(body.challengeToken),
           String(body.code),
-          extractRequestMeta(request),
+          extractRequestMeta(request, this.trustProxy),
         );
         return new Response(JSON.stringify(response), {
           status: 200,
@@ -1013,7 +1031,7 @@ export class AuthRoutes {
       if (limited) return limited;
       try {
         const response = await this.provider.loginAnonymous(
-          extractRequestMeta(request),
+          extractRequestMeta(request, this.trustProxy),
         );
         return new Response(JSON.stringify(response), {
           status: 201,
@@ -1043,7 +1061,7 @@ export class AuthRoutes {
             password: body.password,
             username: body.username,
             metadata: body.metadata,
-            meta: extractRequestMeta(request),
+            meta: extractRequestMeta(request, this.trustProxy),
           };
           if (!data.email || !data.password) {
             return new Response(

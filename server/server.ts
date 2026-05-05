@@ -484,7 +484,9 @@ export class DiscServer {
 
     // Create middleware and routes
     this.authMiddleware = new AuthMiddleware(this.authProvider);
-    this.authRoutes = new AuthRoutes(this.authProvider, this.authMiddleware);
+    this.authRoutes = new AuthRoutes(this.authProvider, this.authMiddleware, {
+      trustProxy: this.config.trustProxy,
+    });
 
     logger.info("Authentication system initialized");
   }

@@ -78,8 +78,13 @@ Deno.test("AuthRoutes - login is rate-limited after burst is exhausted (P0-05)",
 
 Deno.test("AuthRoutes - rate limit keyed by IP (different IPs independent)", async () => {
   const limiter = new RateLimiter({ requestsPerMinute: 60, burstSize: 1 });
+  // trustProxy=true: this test simulates the realistic deployment where
+  // a reverse proxy sets X-Forwarded-For. Without trustProxy, the secure
+  // default ignores client-supplied XFF (gh/geldata#5030) and all
+  // requests collapse into the shared "anonymous" rate-limit bucket.
   const routes = new AuthRoutes(stubProvider, stubMiddleware, {
     rateLimiter: limiter,
+    trustProxy: true,
   });
   const handler = routes.login();
 

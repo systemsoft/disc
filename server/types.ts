@@ -63,6 +63,15 @@ export interface ServerConfig {
    * Defaults to 86400 (24h). (gh/geldata#6655)
    */
   corsMaxAge?: number;
+  /**
+   * When true, trust `X-Forwarded-For`, `X-Real-IP`, and
+   * `X-Forwarded-Proto` headers — set this only when Disc sits behind
+   * a reverse proxy that strips and resets these headers from clients.
+   * Trusting them unconditionally lets a directly-reachable attacker
+   * spoof their IP (rate-limit evasion) and downgrade scheme checks.
+   * Defaults to `false`. (gh/geldata#5030)
+   */
+  trustProxy?: boolean;
   enableWebsockets: boolean;
   jwtSecret?: string;
   enableAuth?: boolean;
