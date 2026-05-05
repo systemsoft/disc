@@ -358,6 +358,49 @@ Deno.test({
       // Should be in reverse chronological order
       assertEquals(historyResult.value[0].name, "add_posts");
       assertEquals(historyResult.value[1].name, "create_users");
+
+      // gh/geldata#8773: each row gets a monotonic appliedOrder, assigned
+      // at insert time as MAX(applied_order) + 1. The two migrations
+      // recorded above must come back as 1 and 2.
+      assertEquals(historyResult.value[1].appliedOrder, 1);
+      assertEquals(historyResult.value[0].appliedOrder, 2);
+    }
+
+    await tracker.close();
+  },
+});
+
+Deno.test({
+  name: "Migration Tracker - appliedOrder is monotonic across many inserts (gh/geldata#8773)",
+  ignore: !RUN_PG,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    await cleanupTestTables(dsn);
+    const tracker = new MigrationTracker(dsn);
+    await tracker.initialize();
+
+    for (let i = 0; i < 7; i++) {
+      const migration = {
+        ...createTestMigration(),
+        id: `m-order-${i}`,
+        name: `step_${i}`,
+      };
+      const result = {
+        ...createTestMigrationResult(),
+        migrationId: migration.id,
+        appliedAt: new Date(`2024-01-01T10:${String(i).padStart(2, "0")}:00Z`),
+      };
+      await tracker.recordMigration(migration, result);
+    }
+
+    const historyResult = await tracker.getMigrationHistory();
+    assertEquals(historyResult.ok, true);
+    if (historyResult.ok) {
+      // History returned in DESC order; reverse to assert ascending order.
+      const ordered = [...historyResult.value].reverse();
+      for (let i = 0; i < ordered.length; i++) {
+        assertEquals(ordered[i].appliedOrder, i + 1);
+      }
     }
 
     await tracker.close();

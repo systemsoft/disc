@@ -394,6 +394,15 @@ export interface MigrationHistoryEntry {
   durationMs: number;
   createdAt: Date;
   dataMigration: boolean;
+  /**
+   * Monotonic application order. Set at insert time as
+   * `MAX(applied_order) + 1` inside a single transaction so concurrent
+   * applies can't share a number. Useful for branching workflows where
+   * `applied_at` timestamps don't reflect logical order (e.g. a
+   * migration squashed on one branch then re-applied on another).
+   * (gh/geldata#8773)
+   */
+  appliedOrder: number;
 }
 
 // Helper functions for creating operations

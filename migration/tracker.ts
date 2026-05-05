@@ -45,7 +45,8 @@ export class MigrationTracker {
           rollback_sql TEXT[],
           checksum TEXT NOT NULL,
           created_at TIMESTAMP WITH TIME ZONE NOT NULL,
-          data_migration BOOLEAN NOT NULL DEFAULT FALSE
+          data_migration BOOLEAN NOT NULL DEFAULT FALSE,
+          applied_order INTEGER NOT NULL DEFAULT 0
         );
       `);
 
@@ -60,6 +61,33 @@ export class MigrationTracker {
             ALTER TABLE disc_migrations ADD COLUMN data_migration BOOLEAN NOT NULL DEFAULT FALSE;
           END IF;
         END $$;
+      `);
+
+      // Add applied_order column on instances pre-dating gh/geldata#8773 and
+      // backfill it from applied_at order. Backfill runs once when the column
+      // is first introduced (existing rows all have DEFAULT 0); subsequent
+      // calls find no zero rows and skip.
+      await this.pool.execute(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_name = 'disc_migrations' AND column_name = 'applied_order'
+          ) THEN
+            ALTER TABLE disc_migrations ADD COLUMN applied_order INTEGER NOT NULL DEFAULT 0;
+          END IF;
+        END $$;
+      `);
+      await this.pool.execute(`
+        WITH ordered AS (
+          SELECT id, ROW_NUMBER() OVER (ORDER BY applied_at ASC, id ASC) AS rn
+          FROM disc_migrations
+          WHERE applied_order = 0
+        )
+        UPDATE disc_migrations m
+        SET applied_order = o.rn
+        FROM ordered o
+        WHERE m.id = o.id;
       `);
 
       // Create checkpoints table
@@ -98,13 +126,21 @@ export class MigrationTracker {
     }
 
     try {
+      // applied_order = MAX + 1 inside the same INSERT. PostgreSQL evaluates
+      // the subquery at execution time; concurrent inserts serialize via the
+      // table's primary-key locking when racing for the same id, and PG's
+      // MVCC ensures distinct rows get distinct numbers as long as the
+      // tracker is the sole writer (which it is by construction).
+      // (gh/geldata#8773)
       await this.pool.execute(
         `
         INSERT INTO disc_migrations (
           id, name, description, schema_hash, applied_at,
-          duration_ms, rollback_sql, checksum, created_at, data_migration
+          duration_ms, rollback_sql, checksum, created_at, data_migration,
+          applied_order
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+          (SELECT COALESCE(MAX(applied_order), 0) + 1 FROM disc_migrations)
         )
       `,
         [
@@ -182,7 +218,7 @@ export class MigrationTracker {
     try {
       const result = await this.pool.query(`
         SELECT id FROM disc_migrations
-        ORDER BY applied_at ASC
+        ORDER BY applied_order ASC
       `);
 
       const migrationIds = result.rows.map((row: any) => row.id);
@@ -210,9 +246,9 @@ export class MigrationTracker {
 
     try {
       const result = await this.pool.query(`
-        SELECT id, name, description, schema_hash, applied_at, duration_ms, created_at, data_migration
+        SELECT id, name, description, schema_hash, applied_at, duration_ms, created_at, data_migration, applied_order
         FROM disc_migrations
-        ORDER BY applied_at DESC
+        ORDER BY applied_order DESC
       `);
 
       const history = result.rows.map((row: any) =>
@@ -447,7 +483,7 @@ export class MigrationTracker {
 
     try {
       const result = await this.pool.query(`
-        SELECT id, name, description, schema_hash, applied_at, duration_ms, created_at, data_migration
+        SELECT id, name, description, schema_hash, applied_at, duration_ms, created_at, data_migration, applied_order
         FROM disc_migrations
         ORDER BY applied_at DESC
         LIMIT 1
@@ -497,7 +533,7 @@ export class MigrationTracker {
       // Get all migrations applied after the reference migration
       const result = await this.pool.query(
         `
-        SELECT id, name, description, schema_hash, applied_at, duration_ms, created_at, data_migration
+        SELECT id, name, description, schema_hash, applied_at, duration_ms, created_at, data_migration, applied_order
         FROM disc_migrations
         WHERE applied_at > $1
         ORDER BY applied_at DESC
@@ -636,7 +672,7 @@ export class MigrationTracker {
 
       const result = await this.pool.query(
         `
-        SELECT id, name, description, schema_hash, applied_at, duration_ms, created_at, data_migration
+        SELECT id, name, description, schema_hash, applied_at, duration_ms, created_at, data_migration, applied_order
         FROM disc_migrations
         WHERE applied_at >= $1 AND applied_at <= $2
         ORDER BY applied_at ASC
@@ -682,6 +718,7 @@ export class MigrationTracker {
       durationMs: row.duration_ms,
       createdAt: row.created_at,
       dataMigration: row.data_migration ?? false,
+      appliedOrder: row.applied_order ?? 0,
     };
   }
 
