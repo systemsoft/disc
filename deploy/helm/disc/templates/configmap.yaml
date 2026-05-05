@@ -1,0 +1,39 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "disc.fullname" . }}
+  labels:
+    {{- include "disc.labels" . | nindent 4 }}
+data:
+  # Connection / runtime
+  DISC_HOST: "0.0.0.0"
+  DISC_PORT: "5656"
+  DISC_LOG_LEVEL: {{ .Values.runtime.logLevel | quote }}
+  DISC_LOG_FORMAT: {{ .Values.runtime.logFormat | quote }}
+  DISC_REQUEST_TIMEOUT: {{ .Values.runtime.requestTimeoutMs | quote }}
+  DISC_MAX_CONNECTIONS: {{ .Values.runtime.maxConnections | quote }}
+  DISC_CACHE_MAX_SIZE: {{ .Values.runtime.cacheMaxSize | quote }}
+  DISC_EXPLAIN_CACHE_TTL: {{ .Values.runtime.explainCacheTtlMs | quote }}
+  DISC_SLOW_QUERY_MS: {{ .Values.runtime.slowQueryMs | quote }}
+  DISC_ENABLE_WEBSOCKETS: {{ .Values.runtime.enableWebsockets | quote }}
+  DISC_RATE_LIMIT_RPM: {{ .Values.runtime.rateLimitRpm | quote }}
+  DISC_RATE_LIMIT_BURST: {{ .Values.runtime.rateLimitBurst | quote }}
+
+  # CORS
+  DISC_ENABLE_CORS: {{ .Values.cors.enabled | quote }}
+  {{- if .Values.cors.allowedOrigins }}
+  DISC_CORS_ORIGINS: {{ .Values.cors.allowedOrigins | quote }}
+  {{- end }}
+
+  # Auth
+  DISC_ENABLE_AUTH: {{ .Values.auth.enabled | quote }}
+  DISC_ENABLE_ACCESS_POLICIES: {{ .Values.auth.enableAccessPolicies | quote }}
+
+  # Metrics
+  DISC_ENABLE_METRICS: {{ .Values.metrics.enabled | quote }}
+
+  {{- if .Values.tls.enabled }}
+  # TLS — paths inside the container, populated from the mounted Secret.
+  DISC_TLS_CERT: {{ printf "%s/tls.crt" .Values.tls.mountPath | quote }}
+  DISC_TLS_KEY: {{ printf "%s/tls.key" .Values.tls.mountPath | quote }}
+  {{- end }}

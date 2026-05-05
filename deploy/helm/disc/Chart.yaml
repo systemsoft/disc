@@ -1,0 +1,19 @@
+apiVersion: v2
+name: disc
+description: Disc — TypeScript-native, schema-first database (Gel/EdgeDB fork on Deno + Postgres)
+type: application
+version: 0.1.0
+appVersion: "2026.05.04"
+home: https://github.com/systemsoft/disc
+sources:
+  - https://github.com/systemsoft/disc
+keywords:
+  - database
+  - postgresql
+  - edgeql
+  - graphql
+  - typescript
+maintainers:
+  - name: systemSOFT
+    url: https://github.com/systemsoft
+icon: https://raw.githubusercontent.com/systemsoft/disc/main/banner.png

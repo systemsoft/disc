@@ -1,0 +1,360 @@
+# =============================================================================
+# Disc Helm chart — default values
+# =============================================================================
+# Every option below is documented inline. Override anything you need with
+# `--set key=value` or by passing your own `-f my-values.yaml`.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Container image
+# ---------------------------------------------------------------------------
+image:
+  # Container image repository for the Disc server.
+  repository: ghcr.io/systemsoft/disc
+  # Image tag. When empty, defaults to the chart's appVersion.
+  tag: ""
+  # Image pull policy. One of: Always, IfNotPresent, Never.
+  pullPolicy: IfNotPresent
+  # Image-pull secret references (e.g. for private registries).
+  pullSecrets: []
+  # - name: my-registry-secret
+
+# ---------------------------------------------------------------------------
+# Replication / naming
+# ---------------------------------------------------------------------------
+# Default replica count. 2+ is HA-friendly; drop to 1 for dev clusters.
+replicaCount: 2
+
+# Override the chart name (default: disc).
+nameOverride: ""
+# Override the full release name (default: <release>-<chart>).
+fullnameOverride: ""
+
+# ---------------------------------------------------------------------------
+# Pod / container metadata and security
+# ---------------------------------------------------------------------------
+# Extra annotations to attach to every Disc pod.
+podAnnotations: {}
+# Extra labels to attach to every Disc pod.
+podLabels: {}
+
+# Pod-level securityContext. Defaults run as a non-root, fixed-UID user.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile:
+    type: RuntimeDefault
+
+# Container-level securityContext. Defaults are hardened.
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  capabilities:
+    drop:
+      - ALL
+
+# ---------------------------------------------------------------------------
+# ServiceAccount
+# ---------------------------------------------------------------------------
+serviceAccount:
+  # Whether the chart should create a ServiceAccount.
+  create: true
+  # Annotations on the created ServiceAccount (e.g. for IRSA / Workload Identity).
+  annotations: {}
+  # Override the ServiceAccount name. When empty, the chart picks a sensible default.
+  name: ""
+
+# ---------------------------------------------------------------------------
+# Service
+# ---------------------------------------------------------------------------
+service:
+  # Kubernetes Service type. ClusterIP is right for most users; pair with Ingress.
+  type: ClusterIP
+  # Port exposed by the Service. Must match Disc's HTTP port.
+  port: 5656
+  # Annotations on the Service object.
+  annotations: {}
+
+# ---------------------------------------------------------------------------
+# Ingress (optional)
+# ---------------------------------------------------------------------------
+# Most users will put their own gateway in front of Disc. Disabled by default.
+# To enable cert-manager, add e.g.
+#   annotations:
+#     cert-manager.io/cluster-issuer: letsencrypt-prod
+ingress:
+  # Toggle creation of an Ingress resource.
+  enabled: false
+  # IngressClass to use (e.g. "nginx", "traefik").
+  className: ""
+  # Annotations to attach to the Ingress.
+  annotations: {}
+  # Hosts and path rules.
+  hosts:
+    - host: disc.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  # TLS configuration. Each entry references a Secret holding tls.crt / tls.key.
+  tls: []
+  # - secretName: disc-tls
+  #   hosts:
+  #     - disc.example.com
+
+# ---------------------------------------------------------------------------
+# Resource requests / limits
+# ---------------------------------------------------------------------------
+resources:
+  # Pod-level resource requests. Drives the scheduler's placement decisions.
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  # Pod-level resource limits. Tune up for production workloads.
+  limits:
+    cpu: 1000m
+    memory: 1Gi
+
+# ---------------------------------------------------------------------------
+# Scheduling
+# ---------------------------------------------------------------------------
+# Pin to specific node labels. Empty = no constraint.
+nodeSelector: {}
+# Tolerations to allow scheduling on tainted nodes.
+tolerations: []
+# Pod (anti-)affinity rules. Empty = no preference.
+affinity: {}
+# topologySpreadConstraints to spread replicas across zones / nodes.
+topologySpreadConstraints: []
+
+# ---------------------------------------------------------------------------
+# PodDisruptionBudget
+# ---------------------------------------------------------------------------
+pdb:
+  # Create a PodDisruptionBudget to keep at least minAvailable replicas up
+  # during voluntary disruptions (drains, upgrades).
+  enabled: true
+  # Minimum replicas that must remain available. Use either minAvailable or maxUnavailable.
+  minAvailable: 1
+  # maxUnavailable: 1
+
+# ---------------------------------------------------------------------------
+# HorizontalPodAutoscaler
+# ---------------------------------------------------------------------------
+autoscaling:
+  # Toggle the HPA. When enabled, replicaCount becomes the floor.
+  enabled: false
+  # Minimum replicas the HPA will scale down to.
+  minReplicas: 2
+  # Maximum replicas the HPA will scale up to.
+  maxReplicas: 10
+  # Target CPU utilization (% of requests) before scaling up.
+  targetCPUUtilizationPercentage: 70
+  # Target memory utilization (% of requests) before scaling up.
+  targetMemoryUtilizationPercentage: 80
+
+# ---------------------------------------------------------------------------
+# Metrics / Prometheus
+# ---------------------------------------------------------------------------
+metrics:
+  # When true, sets DISC_ENABLE_METRICS=true so /metrics serves Prometheus output.
+  enabled: false
+  serviceMonitor:
+    # Create a Prometheus Operator ServiceMonitor pointing at /metrics.
+    # Requires the Prometheus Operator CRDs to be installed in the cluster.
+    enabled: false
+    # Namespace to create the ServiceMonitor in. Empty = release namespace.
+    namespace: ""
+    # Scrape interval.
+    interval: 30s
+    # Scrape timeout.
+    scrapeTimeout: 10s
+    # Extra labels (used for selector matching by your Prometheus).
+    labels: {}
+
+# ---------------------------------------------------------------------------
+# NetworkPolicy
+# ---------------------------------------------------------------------------
+networkPolicy:
+  # Toggle the NetworkPolicy that locks ingress traffic down by default.
+  enabled: false
+  # Allow ingress from pods in these namespaces (matched by name label).
+  ingressFromNamespaces: []
+  # - monitoring
+  # - frontend
+  # Allow ingress from pods matching these podSelectors in the same namespace.
+  ingressFromPods: []
+  # - matchLabels:
+  #     app: my-api
+
+# ---------------------------------------------------------------------------
+# Probes
+# ---------------------------------------------------------------------------
+# Liveness probe — restarts the container if it stops responding.
+livenessProbe:
+  httpGet:
+    path: /health/live
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 30
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# Readiness probe — gates the Service endpoint.
+readinessProbe:
+  httpGet:
+    path: /health/ready
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# Startup probe — gives cold-start migrations time to complete.
+startupProbe:
+  httpGet:
+    path: /health
+    port: http
+  periodSeconds: 5
+  timeoutSeconds: 3
+  # 30 * 5 = 150 seconds total grace before the container is killed.
+  failureThreshold: 30
+
+# ---------------------------------------------------------------------------
+# Database (external PostgreSQL)
+# ---------------------------------------------------------------------------
+# Disc this chart deploys is stateless and expects an external PostgreSQL 16+.
+# Provide the connection string either as a literal (chart creates a Secret)
+# or by referencing an existing Secret you manage out-of-band.
+database:
+  external:
+    # Literal DATABASE_URL. Stored in a chart-managed Secret when secrets.create=true.
+    # Format: postgres://user:pass@host:5432/dbname
+    url: ""
+    # Reference an existing Secret instead of providing the URL inline.
+    # When set, takes precedence over `url`.
+    urlSecretRef:
+      name: ""
+      key: "DATABASE_URL"
+
+# ---------------------------------------------------------------------------
+# Auth
+# ---------------------------------------------------------------------------
+# NOTE on OAuth / SMTP / captcha: as of appVersion 2026.05.04 these are
+# configured at SDK-instantiation time in user code, not via env vars. To wire
+# them in a Kubernetes deployment, mount your config as a file via
+# `extraVolumes` / `extraVolumeMounts` and read it from your bootstrap script.
+# Future versions may expose DISC_OAUTH_* / DISC_SMTP_* env vars directly.
+auth:
+  # Enable Disc's auth subsystem (sets DISC_ENABLE_AUTH=true).
+  enabled: true
+  # Literal JWT signing secret. When blank AND secrets.create=true, the chart
+  # generates a 32-char random secret and persists it in the chart Secret.
+  jwtSecret: ""
+  # Reference an existing Secret holding the JWT signing key.
+  # When set, takes precedence over `jwtSecret`.
+  jwtSecretRef:
+    name: ""
+    key: "DISC_JWT_SECRET"
+  # Enforce object-level access policies (sets DISC_ENABLE_ACCESS_POLICIES=true).
+  enableAccessPolicies: true
+
+# ---------------------------------------------------------------------------
+# TLS (in-pod termination)
+# ---------------------------------------------------------------------------
+# When enabled, mounts a TLS Secret at /tls/ and points DISC_TLS_CERT/KEY
+# at the mounted files. For Ingress-terminated TLS, leave this disabled and
+# configure ingress.tls instead.
+tls:
+  # Toggle in-pod TLS termination.
+  enabled: false
+  # Name of an existing Secret with `tls.crt` and `tls.key` keys.
+  certSecret: ""
+  # Mount path inside the container.
+  mountPath: /tls
+
+# ---------------------------------------------------------------------------
+# CORS
+# ---------------------------------------------------------------------------
+cors:
+  # Enable CORS handling (DISC_ENABLE_CORS).
+  enabled: true
+  # Comma-separated allowed origins. Empty = allow any (be careful in prod).
+  allowedOrigins: ""
+
+# ---------------------------------------------------------------------------
+# Runtime knobs
+# ---------------------------------------------------------------------------
+runtime:
+  # Per-request timeout in milliseconds (DISC_REQUEST_TIMEOUT).
+  requestTimeoutMs: 30000
+  # Postgres connection pool cap (DISC_MAX_CONNECTIONS).
+  maxConnections: 100
+  # Compiled-query LRU cache size (DISC_CACHE_MAX_SIZE).
+  cacheMaxSize: 1000
+  # EXPLAIN cache TTL in milliseconds (DISC_EXPLAIN_CACHE_TTL).
+  explainCacheTtlMs: 300000
+  # Slow-query threshold in milliseconds (DISC_SLOW_QUERY_MS).
+  slowQueryMs: 1000
+  # Log level: DEBUG | INFO | WARN | ERROR (DISC_LOG_LEVEL).
+  logLevel: INFO
+  # Log format: json | text (DISC_LOG_FORMAT). json plays nicely with stack collectors.
+  logFormat: json
+  # Enable WebSocket protocol upgrades (DISC_ENABLE_WEBSOCKETS).
+  enableWebsockets: true
+  # Rate limit: requests per minute. 0 disables (DISC_RATE_LIMIT_RPM).
+  rateLimitRpm: 0
+  # Rate limit: burst size. 0 disables (DISC_RATE_LIMIT_BURST).
+  rateLimitBurst: 0
+
+# ---------------------------------------------------------------------------
+# Secret management
+# ---------------------------------------------------------------------------
+secrets:
+  # When true, the chart creates a Secret holding DATABASE_URL and DISC_JWT_SECRET
+  # (when those are provided as literals). Set to false if you manage all
+  # secrets out-of-band and reference them via *.SecretRef fields.
+  create: true
+
+# ---------------------------------------------------------------------------
+# Escape hatches
+# ---------------------------------------------------------------------------
+# Raw extra env vars passed straight through to the container.
+# Use this for the OAuth/SMTP/captcha config you wire via your own config file.
+extraEnv: []
+# - name: MY_VAR
+#   value: "hello"
+# - name: MY_SECRET
+#   valueFrom:
+#     secretKeyRef:
+#       name: my-secret
+#       key: token
+
+# Raw envFrom entries (for batched ConfigMap/Secret mounts).
+extraEnvFrom: []
+# - configMapRef:
+#     name: my-extra-config
+# - secretRef:
+#     name: my-extra-secrets
+
+# Extra volumes mounted on the pod.
+extraVolumes: []
+# - name: oauth-config
+#   secret:
+#     secretName: my-oauth-config
+
+# Extra volume mounts on the container.
+extraVolumeMounts: []
+# - name: oauth-config
+#   mountPath: /etc/disc/oauth
+#   readOnly: true
+
+# ---------------------------------------------------------------------------
+# Lifecycle
+# ---------------------------------------------------------------------------
+# Matches the server's shutdownDrainTimeout. Increase if long-running queries
+# are expected during rollouts.
+terminationGracePeriodSeconds: 30

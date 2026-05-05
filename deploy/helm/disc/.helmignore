@@ -1,0 +1,26 @@
+# Patterns to ignore when building Helm packages.
+# Operates on the chart's root.
+.DS_Store
+.git/
+.gitignore
+.bzr/
+.hg/
+.hgignore
+.svn/
+*.swp
+*.bak
+*.tmp
+*.orig
+*~
+.project
+.idea/
+*.tmproj
+.vscode/
+# OWNERS, CI, and local dev cruft
+OWNERS
+.github/
+.gitlab-ci.yml
+.circleci/
+ci/
+# Ignore unit test files in chart development
+tests/__snapshots__/
