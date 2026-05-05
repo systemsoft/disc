@@ -43,6 +43,7 @@ ${inverse("  COMMANDS ")}
   db dump ${gray(".".repeat(18))} Dump a database to stdout or a file
   db restore ${gray(".".repeat(15))} Restore a database from stdin or a file
   schema export ${gray(".".repeat(12))} Export the current schema as a single SDL file
+  schema introspect ${gray(".".repeat(8))} Generate SDL from an existing PostgreSQL database
   pg log ${gray(".".repeat(19))} View PostgreSQL logs
   pg upgrade ${gray(".".repeat(15))} Upgrade PostgreSQL version
 
@@ -460,6 +461,18 @@ ${inverse("  OPTIONS ")}
 
   --schema ${gray("<file>")} ${gray(".".repeat(10))} Single SDL file to load (skips multi-file discovery)
   --schema-dir ${gray("<dir>")} ${gray(".".repeat(7))} Directory to discover .disc files in (default: ./dbschema)
+  -o, --output ${gray("<path>")} ${gray(".".repeat(6))} Output file path (default: stdout)`,
+  "schema introspect": `
+  Generate SDL from an existing PostgreSQL database
+
+${inverse("  USAGE ")}
+
+  disc schema introspect ${gray("--database-url <dsn> [--schemas <a,b>] [--output <path>]")}
+
+${inverse("  OPTIONS ")}
+
+  --database-url ${gray("<dsn>")} ${gray(".".repeat(5))} Postgres connection string (or via DATABASE_URL env)
+  --schemas ${gray("<list>")} ${gray(".".repeat(9))} Comma-separated PG schemas to introspect (default: ${bgBrightYellow("public")})
   -o, --output ${gray("<path>")} ${gray(".".repeat(6))} Output file path (default: stdout)`
 };
 
@@ -616,9 +629,18 @@ async function main() {
             break;
           }
 
+          case "introspect": {
+            await commands.schemaIntrospect({
+              "database-url": args["database-url"],
+              schemas: args.schemas,
+              output: args.output,
+            });
+            break;
+          }
+
           default: {
             console.error(`Unknown schema subcommand: ${schemaSubcommand}`);
-            console.log("Available: schema export");
+            console.log("Available: schema export, schema introspect");
             Deno.exit(1);
           }
         }

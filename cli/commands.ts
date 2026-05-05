@@ -11,6 +11,9 @@ import * as Codegen from "../codegen/mod.ts";
 import * as Context from "../compiler/context.ts";
 import type { Schema } from "../compiler/context.ts";
 import { serializeSchema } from "../compiler/sdl-serializer.ts";
+import { buildSchemaFromIntrospection } from "../compiler/pg-introspect.ts";
+import { introspectDatabase } from "../compiler/pg-introspect-queries.ts";
+import { DatabaseConnection } from "../lib/database.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { initCommand, InitOptions } from "./init.ts";
 import { shellCommand, ShellOptions } from "./shell.ts";
@@ -303,6 +306,49 @@ export class CLICommands {
     }
 
     const sdl = serializeSchema(schema);
+
+    if (outputPath) {
+      await Deno.writeTextFile(outputPath, sdl);
+    } else {
+      console.log(sdl);
+    }
+  }
+
+  /**
+   * Introspect an existing PostgreSQL database and emit SDL describing
+   * its schema. Useful for porting an existing PG-backed app to Disc.
+   * (gh/geldata#3452)
+   */
+  async schemaIntrospect(
+    args: {
+      "database-url"?: string;
+      schemas?: string;
+      output?: string;
+    },
+  ): Promise<void> {
+    const dsn = args["database-url"] ??
+      Deno.env.get("DATABASE_URL");
+    if (!dsn) {
+      console.error(
+        "❌ --database-url is required (or set DATABASE_URL env var)",
+      );
+      return;
+    }
+    const schemas = args.schemas
+      ? args.schemas.split(",").map((s) => s.trim()).filter(Boolean)
+      : undefined;
+    const outputPath = args.output;
+
+    const db = new DatabaseConnection(dsn);
+    let sdl: string;
+    try {
+      await db.connect();
+      const data = await introspectDatabase(db, { schemas });
+      const schema = buildSchemaFromIntrospection(data);
+      sdl = serializeSchema(schema);
+    } finally {
+      await db.close();
+    }
 
     if (outputPath) {
       await Deno.writeTextFile(outputPath, sdl);
