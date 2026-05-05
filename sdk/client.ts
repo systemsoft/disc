@@ -20,6 +20,7 @@ import {
   DiscTimeoutError,
 } from "./errors.ts";
 import { applyValidator } from "./validation.ts";
+import { reviveResponse } from "./codecs.ts";
 import { Transaction } from "./transaction.ts";
 
 const DEFAULT_BASE_URL = "http://localhost:5656";
@@ -67,11 +68,13 @@ export class DiscClient {
    * runtime surprises rather than compile-time errors. For codegen-driven
    * type safety, run `disc codegen`.
    *
-   * **Serialization note (P1-29)**: server responses come back as JSON.
-   * - `datetime` columns arrive as ISO-8601 strings, not `Date` instances.
-   * - `int64` / `bigint` arrive as strings (numeric precision > 2^53).
-   * - `bytes` arrive as base64 strings.
-   * Parse these at the call site if you need richer types.
+   * **Serialization (P1-29)**: server responses come back as JSON, so
+   * `datetime` arrives as ISO-8601 strings, `int64` / `bigint` as numeric
+   * strings, and `bytes` as base64. Pass `{ revive: true }` to auto-convert
+   * `Date` and `bigint` (conservative — only ISO-8601 with a time component
+   * and numbers outside `Number.MAX_SAFE_INTEGER`), or import per-field
+   * helpers from `disc/sdk/codecs.ts` (`parseDateTime`, `parseInt64`,
+   * `parseBytes`). Validators see revived values when both options are set.
    */
   async query<T = unknown>(
     query: string,
@@ -84,14 +87,20 @@ export class DiscClient {
       throw new DiscQueryError(response.errors);
     }
 
+    let data: unknown = response.data;
+    if (options?.revive) {
+      const reviveOpts = options.revive === true ? undefined : options.revive;
+      data = reviveResponse(data, reviveOpts);
+    }
+
     if (options?.validate) {
       return await applyValidator(
         options.validate as QueryValidator<T>,
-        response.data,
+        data,
       );
     }
 
-    return response.data as T;
+    return data as T;
   }
 
   /**

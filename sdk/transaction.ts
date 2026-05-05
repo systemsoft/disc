@@ -10,6 +10,7 @@ import type {
 } from "./types.ts";
 import { DiscQueryError, DiscTransactionError } from "./errors.ts";
 import { applyValidator } from "./validation.ts";
+import { reviveResponse } from "./codecs.ts";
 
 import type { DiscClient } from "./client.ts";
 
@@ -53,14 +54,20 @@ export class Transaction {
       throw new DiscQueryError(result.errors);
     }
 
+    let data: unknown = result.data;
+    if (options?.revive) {
+      const reviveOpts = options.revive === true ? undefined : options.revive;
+      data = reviveResponse(data, reviveOpts);
+    }
+
     if (options?.validate) {
       return await applyValidator(
         options.validate as QueryValidator<T>,
-        result.data,
+        data,
       );
     }
 
-    return result.data as T;
+    return data as T;
   }
 
   /** Commit the transaction */

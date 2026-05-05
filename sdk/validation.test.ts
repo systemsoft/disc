@@ -211,6 +211,74 @@ Deno.test("client.query - omitted validator preserves cast behavior", async () =
   }
 });
 
+// --- revive option (P1-29) ---
+
+Deno.test("client.query - revive: true converts ISO datetime to Date", async () => {
+  const restore = mockFetch(() =>
+    new Response(JSON.stringify({
+      data: { created_at: "2026-05-05T12:00:00Z", name: "Ada" },
+    }))
+  );
+  try {
+    const client = new DiscClient();
+    const u = await client.query<{ created_at: Date; name: string }>(
+      "select User { created_at, name }",
+      undefined,
+      { revive: true },
+    );
+    assertInstanceOf(u.created_at, Date);
+    assertEquals(u.created_at.toISOString(), "2026-05-05T12:00:00.000Z");
+    assertEquals(u.name, "Ada");
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("client.query - revive runs before validator (validator sees Date)", async () => {
+  const restore = mockFetch(() =>
+    new Response(JSON.stringify({
+      data: { created_at: "2026-05-05T12:00:00Z" },
+    }))
+  );
+  try {
+    const client = new DiscClient();
+    const out = await client.query<{ created_at: Date }>(
+      "select User { created_at }",
+      undefined,
+      {
+        revive: true,
+        validate: (v: unknown) => {
+          const obj = v as { created_at: unknown };
+          if (!(obj.created_at instanceof Date)) {
+            throw new Error("validator did not see Date");
+          }
+          return v as { created_at: Date };
+        },
+      },
+    );
+    assertInstanceOf(out.created_at, Date);
+  } finally {
+    restore();
+  }
+});
+
+Deno.test("client.query - omitted revive leaves strings alone", async () => {
+  const restore = mockFetch(() =>
+    new Response(JSON.stringify({
+      data: { created_at: "2026-05-05T12:00:00Z" },
+    }))
+  );
+  try {
+    const client = new DiscClient();
+    const u = await client.query<{ created_at: string }>(
+      "select User { created_at }",
+    );
+    assertEquals(typeof u.created_at, "string");
+  } finally {
+    restore();
+  }
+});
+
 // --- transaction.query<T>() integration ---
 
 Deno.test("transaction.query - validator runs and rejects", async () => {

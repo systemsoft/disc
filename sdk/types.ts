@@ -76,6 +76,13 @@ export interface QueryOptions<T = unknown> {
    * Throws `DiscValidationError` if the value does not match.
    */
   validate?: QueryValidator<T>;
+  /**
+   * Revive `Date` and `bigint` values from their JSON wire representations
+   * (ISO-8601 strings and numeric strings outside the safe-integer range).
+   * Pass `true` for default behavior or an object to opt into a subset.
+   * Runs *before* `validate` so validators see real `Date` / `bigint`. (P1-29)
+   */
+  revive?: boolean | import("./codecs.ts").ReviveOptions;
 }
 
 // --- Query Types ---

@@ -7,6 +7,16 @@
 // Core client
 export { createClient, DiscClient } from "./client.ts";
 
+// Wire-format codecs (P1-29)
+export {
+  encodeBytes,
+  parseBytes,
+  parseDateTime,
+  parseInt64,
+  reviveResponse,
+} from "./codecs.ts";
+export type { ReviveOptions } from "./codecs.ts";
+
 // Authentication
 export { AuthManager } from "./auth.ts";
 
