@@ -311,6 +311,23 @@ The extension registers three HTTP routes:
 | GET    | `/ext/graphql/graphql`        | GraphQL playground UI            |
 | GET    | `/ext/graphql/graphql/schema` | Return the generated GraphQL SDL |
 
+### Rate limiting (gh/geldata#718)
+
+GraphQL endpoints inherit the server's HTTP-level rate limiter — the
+same per-client-IP, per-minute gate that applies to `/query` and every
+other route. Configure via `rateLimitRpm` / `rateLimitBurst` on the
+server config; the limiter runs *before* extension routing in
+`server/http.ts`, so any flood targeting `/ext/graphql/*` is rejected
+with `429 Rate limit exceeded` exactly like an EdgeQL flood would be.
+
+Disc does **not** currently apply per-query-complexity weighting (deep
+nested queries count the same as `{ __typename }`). The `maxDepth`
+config above caps recursion depth as a coarse safety net, but a
+proper cost-based limiter — counting nested fields, list multipliers,
+and aliased duplicates — is future work and would require introducing
+a query-cost analyzer in `query-translator.ts`. File an issue if you
+hit a real DoS pattern this misses.
+
 ### Schema Generation
 
 The extension automatically maps your SDL types to GraphQL types:

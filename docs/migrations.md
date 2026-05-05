@@ -22,6 +22,19 @@ Each migration gets an auto-generated ID following the format `m<timestamp>_<ran
 
 ## Basic Workflow
 
+> **Note (gh/geldata#3465):** `disc migrate` is a single-step command —
+> it diffs the schema against the DB's last applied state, plans the
+> DDL, and executes it in one pass. There is no separate "create the
+> migration first, apply it second" step. Tools that ship file-based
+> migrations (Gel, Rails, etc.) often require both; Disc tracks applied
+> migrations in the `disc_migrations` table and replans from the schema
+> every run, so a file-creation step has no purpose.
+>
+> `disc migrate --create` is a *preview* — it prints the planned
+> migration and generated DDL to stdout without executing or writing
+> any file. Use it like `--dry-run` to see the impact of your changes
+> before applying.
+
 The typical development cycle is:
 
 1. Edit your `.disc` schema file.
@@ -546,49 +559,58 @@ const safety = engine.validateRollbackSafety(plan.value);
 
 ## Resolving Merge Conflicts (gh/geldata#6085)
 
-Migrations are timestamped files in `dbschema/migrations/`, which means
-two developers working on parallel branches can each generate a migration
-on top of the same parent. When the second branch merges in, both
-migrations exist but may target the same schema state — Disc has no way
-to know which one ran first, and applying them out of order produces an
-inconsistent schema.
+Disc tracks applied migrations in the `disc_migrations` database table,
+not as files on disk — there is no `dbschema/migrations/` for schema
+migrations to write to (data-migration `.data.ts` files are the
+exception; see [Data Migrations](#data-migrations)). This makes the
+merge-conflict story simpler than tools that ship file-based
+migrations: the only thing in your repo that two developers might
+both edit is the schema source (`dbschema/default.disc`) itself.
 
-**Recognizing the conflict.** After merging, run `disc migrate --dry-run`.
-Symptoms: two (or more) migration files in `dbschema/migrations/` whose
-timestamps weren't generated together; a diff that re-runs already-
-applied DDL; a checksum-mismatch error from the migration tracker
-(P1-08).
+**The git-level conflict.** When two branches change the same SDL
+file, you get a normal git merge conflict in `dbschema/default.disc`.
+Resolve it like any other source conflict — keep both additions, pick
+one rename, hand-merge type definitions — and commit the resolved
+schema.
 
-**The fix: regenerate the later migration.** This works for any conflict
-where the migrations don't actually touch the same fields:
+**The DDL-level reconciliation.** After the schema is merged, run:
 
-1. On `main` (the branch that landed first): confirm migrations are
-   committed and the database reflects them.
-2. On your branch: delete your locally-generated migration file from
-   `dbschema/migrations/`. *Don't* touch the `disc_migrations` tracking
-   table — it was never applied to `main`'s DB.
-3. Pull `main` into your branch.
-4. Run `disc migrate --create` again. Disc diffs your schema against
-   `main`'s now-applied state and produces a fresh migration with a
-   newer timestamp that stacks cleanly.
-5. `disc migrate --dry-run` to confirm the regenerated file only
-   contains your branch's intended operations.
-6. Commit and push.
+```bash
+disc migrate --dry-run
+```
 
-**When the migrations *do* overlap.** If both branches added the same
-property, the regenerated migration is empty (no diff) — your changes
-already landed via `main`. Just delete the stale file. If both branches
-changed the *same* field in different ways (one renamed `created_at` →
-`createdAt`, the other changed its type), it's a true conflict: pick
-one intent and discard the other, or hand-write a migration that
-reconciles both. Disc can't auto-merge intent.
+The schema differ compares your merged schema against the DB's last
+applied state and plans the DDL needed to bring the DB up to date.
+Because Disc replans from the schema each run (rather than replaying a
+stack of migration files), the order in which the two branches landed
+their changes in any given database is irrelevant — the differ will
+always emit the right delta.
 
-**Avoiding the situation.** Run `disc migrate --create` as the *last*
-step before pushing — after pulling `main`. Treat `dbschema/migrations/`
-like `package-lock.json` in PR review: any new file should be obviously
-rebased on current `main`. Squash long chains
-(`disc migrate --squash`) periodically so individual conflicts have
-less surface area.
+**True intent conflicts.** If both branches changed the *same* field
+in incompatible ways (one renamed `created_at` → `createdAt`, the
+other changed its type), that's a conflict no auto-merger can fix.
+Resolve at the SDL level: pick one intent, discard or harmonize the
+other, then `disc migrate --dry-run` to verify the resulting plan
+matches your intention.
+
+**Multi-environment reconciliation.** The above assumes the merge
+target is a single dev database tracked by `disc_migrations`. If two
+production environments diverged because each was advanced by a
+different branch's migrations, reconcile by:
+
+1. Picking one as the canonical state.
+2. Pointing both schemas (and the schemas in version control) at the
+   same merged SDL.
+3. Running `disc migrate --dry-run` against each environment to see
+   the per-DB delta.
+4. Applying with `disc migrate` (and `--unsafe` if any environment
+   needs destructive ops to converge).
+
+**Avoiding the situation.** Treat `dbschema/*.disc` like
+`package-lock.json` in PR review: any change deserves a careful look
+at what `disc migrate --dry-run` would emit. Squash long migration
+chains (`disc migrate --squash`) periodically so historical state is
+compact and easier to reason about.
 
 ## Best Practices
 
