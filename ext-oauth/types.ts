@@ -29,6 +29,19 @@ export interface OAuthProviderConfig {
    * (gh/geldata#7468)
    */
   allowedRedirectUris?: string[];
+  /**
+   * Extra params to append to the authorize URL. Use cases:
+   *   - Google: `{ access_type: "offline", prompt: "consent" }` to get
+   *     a refresh token + force the consent screen on every login.
+   *   - Microsoft Entra: `{ prompt: "select_account" }`.
+   *   - Any provider: `{ login_hint: "user@example.com" }`.
+   *
+   * Reserved param names (`client_id`, `redirect_uri`, `response_type`,
+   * `scope`, `state`, `code_challenge`, `code_challenge_method`) are
+   * rejected at construction since overriding them would break the flow.
+   * (gh/geldata#7752)
+   */
+  extraAuthorizeParams?: Record<string, string>;
 }
 
 export interface OAuthConfig {

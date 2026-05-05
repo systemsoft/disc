@@ -193,6 +193,62 @@ Deno.test("OAuthExtension - authorize URL includes scope param", async () => {
   assertEquals(parsed.searchParams.has("scope"), true);
 });
 
+// ── extraAuthorizeParams (gh/geldata#7752) ────────────────────────────
+
+Deno.test("OAuthExtension - extraAuthorizeParams appended to authorize URL", async () => {
+  const provider = googleProvider("cid", "csecret", "https://example.com/cb");
+  provider.extraAuthorizeParams = { access_type: "offline", prompt: "consent" };
+  const ext = new OAuthExtension({ providers: [provider] });
+  const routes = ext.getRoutes();
+  const route = routes.find((r) => r.path === "/authorize/google")!;
+  const response = await route.handler(makeRequest("/authorize/google"));
+  const body = await response.json() as { url: string };
+  const parsed = new URL(body.url);
+  assertEquals(parsed.searchParams.get("access_type"), "offline");
+  assertEquals(parsed.searchParams.get("prompt"), "consent");
+});
+
+Deno.test("OAuthExtension - extraAuthorizeParams cannot override reserved client_id", () => {
+  const provider = googleProvider("cid", "csecret", "https://example.com/cb");
+  provider.extraAuthorizeParams = { client_id: "evil" };
+  assertThrows(
+    () => new OAuthExtension({ providers: [provider] }),
+    ExtensionConfigError,
+    "client_id",
+  );
+});
+
+Deno.test("OAuthExtension - extraAuthorizeParams cannot override reserved state", () => {
+  const provider = googleProvider("cid", "csecret", "https://example.com/cb");
+  provider.extraAuthorizeParams = { state: "evil" };
+  assertThrows(
+    () => new OAuthExtension({ providers: [provider] }),
+    ExtensionConfigError,
+    "state",
+  );
+});
+
+Deno.test("OAuthExtension - extraAuthorizeParams cannot override code_challenge", () => {
+  const provider = googleProvider("cid", "csecret", "https://example.com/cb");
+  provider.extraAuthorizeParams = { code_challenge: "evil" };
+  assertThrows(
+    () => new OAuthExtension({ providers: [provider] }),
+    ExtensionConfigError,
+    "code_challenge",
+  );
+});
+
+Deno.test("OAuthExtension - extraAuthorizeParams omitted leaves authorize URL unchanged", async () => {
+  const ext = new OAuthExtension(makeConfig());
+  const routes = ext.getRoutes();
+  const route = routes.find((r) => r.path === "/authorize/google")!;
+  const response = await route.handler(makeRequest("/authorize/google"));
+  const body = await response.json() as { url: string };
+  const parsed = new URL(body.url);
+  assertEquals(parsed.searchParams.has("access_type"), false);
+  assertEquals(parsed.searchParams.has("prompt"), false);
+});
+
 // ── Callback handler ──────────────────────────────────────────────────
 
 Deno.test("OAuthExtension - callback returns 400 when code is missing", async () => {

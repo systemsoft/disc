@@ -21,6 +21,29 @@ import { exchangeCodeForToken, fetchUserInfo } from "./token-exchange.ts";
 
 const MAX_METADATA_BYTES = 2048;
 
+const RESERVED_AUTHORIZE_PARAMS = new Set([
+  "client_id",
+  "redirect_uri",
+  "response_type",
+  "scope",
+  "state",
+  "code_challenge",
+  "code_challenge_method",
+]);
+
+function validateExtraAuthorizeParams(provider: OAuthProviderConfig): void {
+  const extras = provider.extraAuthorizeParams;
+  if (!extras) return;
+  for (const key of Object.keys(extras)) {
+    if (RESERVED_AUTHORIZE_PARAMS.has(key)) {
+      throw new ExtensionConfigError(
+        "oauth",
+        `provider "${provider.name}" extraAuthorizeParams cannot override reserved param "${key}"`,
+      );
+    }
+  }
+}
+
 function jsonError(
   code: OAuthErrorResponse["error"]["code"],
   message: string,
@@ -60,6 +83,7 @@ export class OAuthExtension extends BaseExtension {
     this.stateManager = new OAuthStateManager(config.stateExpiryMs);
 
     for (const provider of config.providers) {
+      validateExtraAuthorizeParams(provider);
       this.providers.set(provider.name, provider);
     }
   }
@@ -241,6 +265,15 @@ export class OAuthExtension extends BaseExtension {
     if (oauthState.codeChallenge) {
       params.set("code_challenge", oauthState.codeChallenge);
       params.set("code_challenge_method", "S256");
+    }
+
+    // gh/geldata#7752: provider-specific authorize knobs (e.g. Google's
+    // access_type=offline + prompt=consent for refresh tokens). Reserved
+    // names were rejected at construction; what's left is safe to append.
+    if (provider.extraAuthorizeParams) {
+      for (const [key, value] of Object.entries(provider.extraAuthorizeParams)) {
+        params.set(key, value);
+      }
     }
 
     const authorizeUrl = `${provider.authorizeUrl}?${params.toString()}`;
