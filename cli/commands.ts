@@ -10,6 +10,7 @@ import { createServerFromEnv } from "../server/server.ts";
 import * as Codegen from "../codegen/mod.ts";
 import * as Context from "../compiler/context.ts";
 import type { Schema } from "../compiler/context.ts";
+import { serializeSchema } from "../compiler/sdl-serializer.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { initCommand, InitOptions } from "./init.ts";
 import { shellCommand, ShellOptions } from "./shell.ts";
@@ -268,6 +269,48 @@ export class CLICommands {
   /**
    * Generate TypeScript types from schema
    */
+  /**
+   * Export the current applied schema as SDL text. Reads the same way
+   * `codegen` does (single file via `--schema`, or directory discovery
+   * via `--schema-dir`), serializes the resulting Schema, and writes
+   * to the path given by `--output` (or stdout when absent).
+   * (gh/geldata#702, #7469)
+   */
+  async schemaExport(
+    args: { schema?: string; "schema-dir"?: string; output?: string },
+  ): Promise<void> {
+    const schemaFile = args.schema;
+    const schemaDir = args["schema-dir"] ?? "./dbschema";
+    const outputPath = args.output;
+
+    let schema: Schema | null = null;
+
+    if (schemaFile) {
+      schema = await this.readSchemaAsCompilerSchema(schemaFile);
+      if (!schema) {
+        console.error(`❌ Schema not found or failed to parse: ${schemaFile}`);
+        return;
+      }
+    } else {
+      const files = await Codegen.discoverSchemaFiles(schemaDir);
+      if (files.length === 0) {
+        console.error(
+          `❌ No schema files found in ${schemaDir}. Pass --schema <file> or --schema-dir <dir>.`,
+        );
+        return;
+      }
+      schema = await Codegen.loadMultiFileSchema(files);
+    }
+
+    const sdl = serializeSchema(schema);
+
+    if (outputPath) {
+      await Deno.writeTextFile(outputPath, sdl);
+    } else {
+      console.log(sdl);
+    }
+  }
+
   async codegen(args: CLIArgs): Promise<void> {
     console.log("🚀 Generating TypeScript types...");
 

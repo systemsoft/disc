@@ -42,6 +42,7 @@ ${inverse("  COMMANDS ")}
   db wipe ${gray(".".repeat(18))} Drop and recreate a database (requires ${bgBrightRed(brightWhite("--force"))})
   db dump ${gray(".".repeat(18))} Dump a database to stdout or a file
   db restore ${gray(".".repeat(15))} Restore a database from stdin or a file
+  schema export ${gray(".".repeat(12))} Export the current schema as a single SDL file
   pg log ${gray(".".repeat(19))} View PostgreSQL logs
   pg upgrade ${gray(".".repeat(15))} Upgrade PostgreSQL version
 
@@ -447,7 +448,19 @@ ${inverse("  USAGE ")}
 ${inverse("  OPTIONS ")}
 
   --input ${gray("<path>")} ${gray(".".repeat(11))} Input file path (default: stdin). Auto-detects plain vs custom format.
-  --clean ${gray(".".repeat(18))} Wipe target db before restoring (drop + recreate)`
+  --clean ${gray(".".repeat(18))} Wipe target db before restoring (drop + recreate)`,
+  "schema export": `
+  Export the current schema as a single SDL file
+
+${inverse("  USAGE ")}
+
+  disc schema export ${gray("[--schema <file>] [--schema-dir <dir>] [--output <path>]")}
+
+${inverse("  OPTIONS ")}
+
+  --schema ${gray("<file>")} ${gray(".".repeat(10))} Single SDL file to load (skips multi-file discovery)
+  --schema-dir ${gray("<dir>")} ${gray(".".repeat(7))} Directory to discover .disc files in (default: ./dbschema)
+  -o, --output ${gray("<path>")} ${gray(".".repeat(6))} Output file path (default: stdout)`
 };
 
 async function main() {
@@ -587,6 +600,29 @@ async function main() {
 
       case "codegen": {
         await commands.codegen(args);
+        break;
+      }
+
+      case "schema": {
+        const schemaSubcommand = String(args._[1] || "");
+
+        switch (schemaSubcommand) {
+          case "export": {
+            await commands.schemaExport({
+              schema: args.schema,
+              "schema-dir": args["schema-dir"],
+              output: args.output,
+            });
+            break;
+          }
+
+          default: {
+            console.error(`Unknown schema subcommand: ${schemaSubcommand}`);
+            console.log("Available: schema export");
+            Deno.exit(1);
+          }
+        }
+
         break;
       }
 
