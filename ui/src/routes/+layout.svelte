@@ -14,6 +14,7 @@
     { path: '/ui/query', label: 'Query', icon: '⟩' },
     { path: '/ui/repl', label: 'REPL', icon: '›_' },
     { path: '/ui/migrations', label: 'Migrations', icon: '⟲' },
+    { path: '/ui/config', label: 'Config', icon: '⚙' },
   ];
   
   let connectionStatus = 'connecting';
