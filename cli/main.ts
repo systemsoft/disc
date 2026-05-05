@@ -5,279 +5,401 @@
  * Disc CLI - Command-line interface for Disc database
  */
 
+import { bgBrightRed, brightWhite, bgBrightYellow, gray, inverse } from "@std/fmt/colors";
 import { parseArgs } from "@std/cli/parse-args";
-import { VERSION } from "../mod.ts";
+
 import { CLIArgs, commands } from "./commands.ts";
+import { VERSION } from "../mod.ts";
 
 const HELP_TEXT = `
-Disc Database CLI v${VERSION}
+█▀▀▀▄ █ ▄▀▀▀▀ ▄▀▀▀▀ v${VERSION}
+█   █ █ ▀▀▀▀█ █     https://disc.sh
+▀▀▀▀  ▀ ▀▀▀▀   ▀▀▀▀
+╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱╱
 
-USAGE:
-  disc <command> [options]
+${inverse("  USAGE ")}
 
-COMMANDS:
-  init          Initialize a new Disc project
-  start         Start PostgreSQL instance
-  stop          Stop PostgreSQL instance
-  restart       Restart PostgreSQL instance
-  status        Show PostgreSQL status
-  migrate       Generate and apply migrations
-  shell         Open interactive EdgeQL REPL
-  codegen       Generate TypeScript types from schema
-  serve         Start the Disc server (includes PostgreSQL)
-  ui            Open admin UI in browser
-  watch         Watch schema files and auto-migrate in dev
-  build         Compile Disc into a self-contained binary
-  deploy        Generate deployment artifacts (Dockerfile, compose, systemd, env)
-  db create      Create a new Disc-managed database
-  db list        List all Disc-managed databases
-  db drop        Drop a Disc-managed database (requires --force)
-  pg log         View PostgreSQL logs
-  pg upgrade     Upgrade PostgreSQL version
+  disc ${gray("<command> [options]")}
 
-OPTIONS:
-  -h, --help           Show this help message
-  -v, --version        Show version information
-  -s, --schema <file>  Schema file path (single-file mode)
-  --schema-dir <dir>   Schema directory for multi-file discovery (default: ./dbschema)
-  -c, --config <file>  Configuration file path
-  -o, --output <dir>   Output directory for codegen (default: ./dbschema/disc-client)
-  -t, --target <type>  Codegen target: client|server|both (default: client)
-  --js                 Generate JavaScript output (future use)
-  --dry-run            Show what would be done without executing
-  --auto-approve       Skip confirmation prompts
-  --create             Create migration without applying
-  --no-queries         Skip query builder generation
-  --no-mutations       Skip mutation method generation
-  --no-client          Skip client library generation
-  --no-format          Skip output formatting
-  --database-url <url> PostgreSQL connection URL for db commands
-  --backend-dsn <url>  Use external PostgreSQL (skip bundled)
-  --skip-postgres      Skip PostgreSQL setup in init
-  --no-monitor         Disable PostgreSQL health monitoring
-  --jwt-secret <key>   JWT signing secret for authentication
-  --enable-auth        Enable authentication system (requires --jwt-secret)
-  --enable-access-policies  Enable access policy enforcement (requires --enable-auth)
-  --binary-port <port> Start binary wire protocol server on this port
-  --tls-cert <path>    Path to TLS certificate file
-  --tls-key <path>     Path to TLS private key file
-  -f, --follow           Follow log output (pg log)
-  --lines <n>            Number of log lines to show (default: 50)
-  --level <level>        Filter logs by level (ERROR, WARNING, LOG, FATAL, PANIC)
-  --target-version <v>   Target PostgreSQL version for upgrade
-  --platform <platform>  Target platform for build (linux-x64, linux-arm64, darwin-x64, darwin-arm64)
-  --lite                 Skip UI assets in build (future use)
-  --format <format>      Deploy format: docker, compose, systemd, env
-  --status               Show migration status (applied count, latest migration)
-  --rollback             Rollback the most recent migration (requires --force)
-  --rollback-to <id>     Rollback all migrations after the specified ID (requires --force)
-  --squash               Squash multiple migrations into one
-  --squash-from <id>     Start of squash range (inclusive)
-  --squash-to <id>       End of squash range (inclusive)
-  --unsafe               Permit data-destroying migrations (DropType, DropTable,
-                         DropProperty, DropLink). Off by default — refused with a
-                         summary of the unsafe operations.
+${inverse("  COMMANDS ")}
 
-FLAG SCOPE (run \`disc <command> --help\` for command-specific details):
-  Global:                    --help, --version
-  init:                      --template, --backend-dsn, --skip-postgres, --force, --directory
-  start/stop/restart/status: --no-monitor (start only), --foreground (start only)
-  migrate:                   --schema, --dry-run, --auto-approve, --create, --status,
+  init ${gray(".".repeat(21))} Initialize a new Disc project
+  start ${gray(".".repeat(20))} Start PostgreSQL instance
+  stop ${gray(".".repeat(21))} Stop PostgreSQL instance
+  restart ${gray(".".repeat(18))} Restart PostgreSQL instance
+  status ${gray(".".repeat(19))} Show PostgreSQL status
+  migrate ${gray(".".repeat(18))} Generate and apply migrations
+  shell ${gray(".".repeat(20))} Open interactive EdgeQL REPL
+  codegen ${gray(".".repeat(18))} Generate TypeScript types from schema
+  serve ${gray(".".repeat(20))} Start the Disc server (includes PostgreSQL)
+  ui ${gray(".".repeat(23))} Open admin UI in browser
+  watch ${gray(".".repeat(20))} Watch schema files and auto-migrate in dev
+  build ${gray(".".repeat(20))} Compile Disc into a self-contained binary
+  deploy ${gray(".".repeat(19))} Generate deployment artifacts (Dockerfile, compose, systemd, env)
+  db create ${gray(".".repeat(16))} Create a new Disc-managed database
+  db list ${gray(".".repeat(18))} List all Disc-managed databases
+  db drop ${gray(".".repeat(18))} Drop a Disc-managed database (requires ${bgBrightRed(brightWhite("--force"))})
+  pg log ${gray(".".repeat(19))} View PostgreSQL logs
+  pg upgrade ${gray(".".repeat(15))} Upgrade PostgreSQL version
+
+${inverse("  OPTIONS ")}
+
+  -h, --help ${gray(".".repeat(15))} Show this help message
+  -v, --version ${gray(".".repeat(12))} Show version information
+  -s, --schema ${gray("<file>")} ${gray(".".repeat(6))} Schema file path (single-file mode)
+  --schema-dir ${gray("<dir>")} ${gray(".".repeat(7))} Schema directory for multi-file discovery (default: ${bgBrightYellow("./dbschema")})
+  -c, --config ${gray("<file>")} ${gray(".".repeat(6))} Configuration file path
+  -o, --output ${gray("<dir>")} ${gray(".".repeat(7))} Output directory for codegen (default: ${bgBrightYellow("./dbschema/disc-client")})
+  -t, --target ${gray("<type>")} ${gray(".".repeat(6))} Codegen target: client|server|both (default: ${bgBrightYellow("client")})
+  --js ${gray(".".repeat(21))} Generate JavaScript output (future use)
+  --dry-run ${gray(".".repeat(16))} Show what would be done without executing
+  --auto-approve ${gray(".".repeat(11))} Skip confirmation prompts
+  --create ${gray(".".repeat(17))} Create migration without applying
+  --no-queries ${gray(".".repeat(13))} Skip query builder generation
+  --no-mutations ${gray(".".repeat(11))} Skip mutation method generation
+  --no-client ${gray(".".repeat(14))} Skip client library generation
+  --no-format ${gray(".".repeat(14))} Skip output formatting
+  --database-url ${gray("<url>")} ${gray(".".repeat(5))} PostgreSQL connection URL for db commands
+  --backend-dsn ${gray("<url>")} ${gray(".".repeat(6))} Use external PostgreSQL (skip bundled)
+  --skip-postgres ${gray(".".repeat(10))} Skip PostgreSQL setup in init
+  --no-monitor ${gray(".".repeat(13))} Disable PostgreSQL health monitoring
+  --jwt-secret ${gray("<key>")} ${gray(".".repeat(7))} JWT signing secret for authentication
+  --enable-auth ${gray(".".repeat(12))} Enable authentication system (requires ${bgBrightYellow("--jwt-secret")})
+  --enable-access-policies ${gray(".")} Enable access policy enforcement (requires ${bgBrightYellow("--enable-auth")})
+  --binary-port ${gray("<port>")} ${gray(".".repeat(5))} Start binary wire protocol server on this port
+  --tls-cert ${gray("<path>")} ${gray(".".repeat(8))} Path to TLS certificate file
+  --tls-key ${gray("<path>")} ${gray(".".repeat(9))} Path to TLS private key file
+  -f, --follow ${gray(".".repeat(13))} Follow log output (pg log)
+  --lines ${gray("<n>")} ${gray(".".repeat(14))} Number of log lines to show (default: ${bgBrightYellow("50")})
+  --level ${gray("<level>")} ${gray(".".repeat(10))} Filter logs by level (ERROR, WARNING, LOG, FATAL, PANIC)
+  --target-version ${gray("<v>")} ${gray(".".repeat(5))} Target PostgreSQL version for upgrade
+  --platform ${gray("<platform>")} ${gray(".".repeat(4))} Target platform for build (linux-x64, linux-arm64, darwin-x64, darwin-arm64)
+  --lite ${gray(".".repeat(19))} Skip UI assets in build (future use)
+  --format ${gray("<format>")} ${gray(".".repeat(8))} Deploy format: docker, compose, systemd, env
+  --status ${gray(".".repeat(17))} Show migration status (applied count, latest migration)
+  --rollback ${gray(".".repeat(15))} Rollback the most recent migration (requires ${bgBrightRed(brightWhite("--force"))})
+  --rollback-to ${gray("<id>")} ${gray(".".repeat(7))} Rollback all migrations after the specified ID (requires ${bgBrightRed(brightWhite("--force"))})
+  --squash ${gray(".".repeat(17))} Squash multiple migrations into one
+  --squash-from ${gray("<id>")} ${gray(".".repeat(7))} Start of squash range (inclusive)
+  --squash-to ${gray("<id>")} ${gray(".".repeat(9))} End of squash range (inclusive)
+  --unsafe ${gray(".".repeat(17))} Permit data-destroying migrations (DropType, DropTable, DropProperty, DropLink).
+                             Off by default, refused with a summary of the unsafe operations.
+
+${inverse("  FLAG SCOPE ")} (run \`disc <command> --help\` for command-specific details)
+
+  Global ${gray(".".repeat(19))} --help, --version
+  init ${gray(".".repeat(21))} --template, --backend-dsn, --skip-postgres, --force, --directory
+  start/stop/restart/status  --no-monitor (start only), --foreground (start only)
+  migrate ${gray(".".repeat(18))} --schema, --dry-run, --auto-approve, --create, --status,
                              --rollback, --rollback-to, --squash, --squash-{from,to},
                              --unsafe, --backend-dsn
-  shell/serve:               --backend-dsn; serve adds --jwt-secret, --enable-auth,
+  shell/serve ${gray(".".repeat(14))} --backend-dsn; serve adds --jwt-secret, --enable-auth,
                              --enable-access-policies, --binary-port, --tls-cert, --tls-key
-  codegen:                   --schema, --schema-dir, --output, --target, --no-queries,
+  codegen ${gray(".".repeat(18))} --schema, --schema-dir, --output, --target, --no-queries,
                              --no-mutations, --no-client, --no-format, --js
-  watch:                     --schema, --output
-  build:                     --platform, --output, --lite
-  deploy:                    --format, --output
-  db create/list/drop:       --force (drop), --database-url
-  pg log:                    --follow, --lines, --level
-  pg upgrade:                --target-version, --dry-run
+  watch ${gray(".".repeat(20))} --schema, --output
+  build ${gray(".".repeat(20))} --platform, --output, --lite
+  deploy ${gray(".".repeat(19))} --format, --output
+  db create/list/drop ${gray(".".repeat(6))} --force (drop), --database-url
+  pg log ${gray(".".repeat(19))} --follow, --lines, --level
+  pg upgrade ${gray(".".repeat(15))} --target-version, --dry-run
 
-EXAMPLES:
-  disc init my-project                # Initialize new project with PostgreSQL
-  disc init --skip-postgres           # Initialize without PostgreSQL
-  disc start                          # Start PostgreSQL instance
-  disc stop                           # Stop PostgreSQL instance
-  disc status                         # Show PostgreSQL status
-  disc migrate --create               # Create migration without applying
-  disc migrate --dry-run              # Preview migration changes
-  disc migrate --auto-approve         # Apply migration without prompts
-  disc migrate --status               # Show migration status
-  disc migrate --rollback --force     # Rollback the most recent migration
-  disc migrate --rollback-to m20240101T100000_abc123 --force  # Rollback to a specific migration
-  disc migrate --squash                            # Squash all migrations
-  disc migrate --squash --squash-from m001 --squash-to m005  # Squash a range
-  disc shell                          # Open EdgeQL REPL
-  disc codegen                        # Generate TypeScript types from ./dbschema/
-  disc codegen --schema-dir ./schema  # Generate from custom schema directory
-  disc codegen --schema ./schema.disc # Generate from single schema file
-  disc serve                          # Start Disc server with PostgreSQL
-  disc pg log                           # View last 50 lines of PostgreSQL log
-  disc pg log -f                        # Follow PostgreSQL log output
-  disc pg log --level ERROR             # Show only ERROR level log lines
-  disc pg upgrade --target-version 17.0 # Upgrade PostgreSQL to version 17.0
-  disc pg upgrade --target-version 17.0 --dry-run  # Preview upgrade plan
-  disc build                                       # Build binary for current platform
-  disc build --platform linux-x64                  # Cross-compile for Linux x64
-  disc build --output ./my-disc                    # Custom output path
-  disc deploy --format docker                      # Generate Dockerfile
-  disc deploy --format compose                     # Generate docker-compose.yml
-  disc deploy --format systemd                     # Generate systemd service unit
-  disc deploy --format env                         # Generate .env.production template
-  disc deploy --format docker --output ./infra     # Custom output directory
-  disc db create my_app                            # Create database disc_my_app
-  disc db list                                     # List all Disc-managed databases
-  disc db drop my_app --force                      # Drop database disc_my_app
+${inverse("  EXAMPLES ")}
+
+  ${gray("# Initialize new project with PostgreSQL")}
+  disc init my-project
+
+  ${gray("# Initialize without PostgreSQL")}
+  disc init --skip-postgres
+
+  ${gray("# Start PostgreSQL instance")}
+  disc start
+
+  ${gray("# Stop PostgreSQL instance")}
+  disc stop
+
+  ${gray("# Show PostgreSQL status")}
+  disc status
+
+  ${gray("# Create migration without applying")}
+  disc migrate --create
+
+  ${gray("# Preview migration changes")}
+  disc migrate --dry-run
+
+  ${gray("# Apply migration without prompts")}
+  disc migrate --auto-approve
+
+  ${gray("# Show migration status")}
+  disc migrate --status
+
+  ${gray("# Rollback the most recent migration")}
+  disc migrate --rollback --force
+
+  ${gray("# Rollback to a specific migration")}
+  disc migrate --rollback-to m20240101T100000_abc123 --force
+
+  ${gray("# Squash all migrations")}
+  disc migrate --squash
+
+  ${gray("# Squash a range")}
+  disc migrate --squash --squash-from m001 --squash-to m005
+
+  ${gray("# Open EdgeQL REPL")}
+  disc shell
+
+  ${gray("# Generate TypeScript types from ./dbschema/")}
+  disc codegen
+
+  ${gray("# Generate from custom schema directory")}
+  disc codegen --schema-dir ./schema
+
+  ${gray("# Generate from single schema file")}
+  disc codegen --schema ./schema.disc
+
+  ${gray("# Start Disc server with PostgreSQL")}
+  disc serve
+
+  ${gray("# View last 50 lines of PostgreSQL log")}
+  disc pg log
+
+  ${gray("# Follow PostgreSQL log output")}
+  disc pg log -f
+
+  ${gray("# Show only ERROR level log lines")}
+  disc pg log --level ERROR
+
+  ${gray("# Upgrade PostgreSQL to version 17.0")}
+  disc pg upgrade --target-version 17.0
+
+  ${gray("# Preview upgrade plan")}
+  disc pg upgrade --target-version 17.0 --dry-run
+
+  ${gray("# Build binary for current platform")}
+  disc build
+
+  ${gray("# Cross-compile for Linux x64")}
+  disc build --platform linux-x64
+
+  ${gray("# Custom output path")}
+  disc build --output ./my-disc
+
+  ${gray("# Generate Dockerfile")}
+  disc deploy --format docker
+
+  ${gray("# Generate docker-compose.yml")}
+  disc deploy --format compose
+
+  ${gray("# Generate systemd service unit")}
+  disc deploy --format systemd
+
+  ${gray("# Generate .env.production template")}
+  disc deploy --format env
+
+  ${gray("# Custom output directory")}
+  disc deploy --format docker --output ./infra
+
+  ${gray("# Create database disc_my_app")}
+  disc db create my_app
+
+  ${gray("# List all Disc-managed databases")}
+  disc db list
+
+  ${gray("# Drop database disc_my_app")}
+  disc db drop my_app --force
 `;
 
 /**
- * Per-subcommand help strings (P1-16). Keys may be single commands
- * ("init") or 2-word sub-commands ("pg log", "db create"). Missing
- * entries fall back to the global HELP_TEXT.
+ * Per-subcommand help strings. Keys may be single commands
+ * ("init") or 2-word sub-commands ("pg log", "db create").
+ * Missing entries fall back to the global HELP_TEXT.
  */
 const COMMAND_HELP: Record<string, string> = {
-  init: `Initialize a new Disc project
+  init: `
+  Initialize a new Disc project
 
-USAGE:
-  disc init <project-name> [options]
+${inverse("  USAGE ")}
 
-OPTIONS:
-  --template <t>        Template: basic | minimal | full (default: basic)
-  --backend-dsn <url>   Use external PostgreSQL (skip bundled PG setup)
-  --skip-postgres       Skip PostgreSQL setup entirely
-  --force               Overwrite existing directory
+  disc init ${gray("<project-name> [options]")}
 
-EXAMPLES:
+${inverse("  OPTIONS ")}
+
+  --template ${gray("<t>")} ${gray(".".repeat(11))} Template: basic | minimal | full (default: ${bgBrightYellow("basic")})
+  --backend-dsn ${gray("<url>")} ${gray(".".repeat(6))} Use external PostgreSQL (skip bundled PG setup)
+  --skip-postgres ${gray(".".repeat(10))} Skip PostgreSQL setup entirely
+  --force ${gray(".".repeat(18))} Overwrite existing directory
+
+${inverse("  EXAMPLES ")}
+
   disc init my-app
   disc init my-app --template full
   disc init my-app --backend-dsn postgres://user:pass@host/db`,
-  start: `Start PostgreSQL for the current project
+  start: `
+  Start PostgreSQL for the current project
 
-USAGE:
-  disc start [options]
+${inverse("  USAGE ")}
 
-OPTIONS:
-  --no-monitor          Disable PostgreSQL health monitoring`,
-  stop: `Stop PostgreSQL for the current project
+  disc start ${gray("[options]")}
 
-USAGE:
+${inverse("  OPTIONS ")}
+
+  --no-monitor ${gray(".".repeat(13))} Disable PostgreSQL health monitoring`,
+  stop: `
+  Stop PostgreSQL for the current project
+
+${inverse("  USAGE ")}
+
   disc stop`,
-  migrate: `Generate and apply schema migrations
+  migrate: `
+  Generate and apply schema migrations
 
-USAGE:
-  disc migrate [options]
+${inverse("  USAGE ")}
 
-OPTIONS:
-  -s, --schema <file>   Schema file (default: ./dbschema/default.disc)
-  --dry-run             Preview migration without executing
-  --auto-approve        Apply without interactive confirmation
-  --create              Create migration file without applying
-  --status              Show applied / pending migration summary
-  --rollback            Rollback the most recent migration (requires --force)
-  --rollback-to <id>    Rollback all migrations after the given ID
-  --squash              Squash migrations into a single migration
-  --backend-dsn <url>   Connect to external PostgreSQL instead of bundled`,
-  shell: `Open an interactive EdgeQL REPL
+  disc migrate ${gray("[options]")}
 
-USAGE:
-  disc shell [options]
+${inverse("  OPTIONS ")}
 
-OPTIONS:
-  --backend-dsn <url>   Connect to external PostgreSQL`,
-  codegen: `Generate TypeScript types + client from your schema
+  -s, --schema ${gray("<file>")} ${gray(".".repeat(6))} Schema file (default: ${bgBrightYellow("./dbschema/default.disc")})
+  --dry-run ${gray(".".repeat(16))} Preview migration without executing
+  --auto-approve ${gray(".".repeat(11))} Apply without interactive confirmation
+  --create ${gray(".".repeat(17))} Create migration file without applying
+  --status ${gray(".".repeat(17))} Show applied / pending migration summary
+  --rollback ${gray(".".repeat(15))} Rollback the most recent migration (requires ${bgBrightRed(brightWhite("--force"))})
+  --rollback-to ${gray("<id>")} ${gray(".".repeat(7))} Rollback all migrations after the given ID
+  --squash ${gray(".".repeat(17))} Squash migrations into a single migration
+  --backend-dsn ${gray("<url>")} ${gray(".".repeat(6))} Connect to external PostgreSQL instead of bundled`,
+  shell: `
+  Open an interactive EdgeQL REPL
 
-USAGE:
-  disc codegen [options]
+${inverse("  USAGE ")}
 
-OPTIONS:
-  -s, --schema <file>   Single-file schema (default: ./dbschema/default.disc)
-  --schema-dir <dir>    Multi-file schema directory (default: ./dbschema)
-  -o, --output <dir>    Output directory (default: ./dbschema/disc-client)
-  -t, --target <type>   Output target: client | server | both
-  --no-queries          Skip query-builder generation
-  --no-mutations        Skip mutation method generation
-  --no-client           Skip client library generation
-  --no-format           Skip output formatting`,
-  serve: `Start the Disc HTTP/WebSocket server
+  disc shell ${gray("[options]")}
 
-USAGE:
-  disc serve [options]
+${inverse("  OPTIONS ")}
 
-OPTIONS:
-  --backend-dsn <url>       External PostgreSQL DSN
-  --jwt-secret <key>        JWT signing secret (enables auth)
-  --enable-auth             Enable authentication system
-  --enable-access-policies  Enable row-level access policy enforcement
-  --binary-port <port>      Enable binary wire protocol on this port
-  --tls-cert <path>         Path to TLS certificate
-  --tls-key <path>          Path to TLS private key`,
-  build: `Compile Disc into a self-contained native binary
+  --backend-dsn ${gray("<url>")} ${gray(".".repeat(6))} Connect to external PostgreSQL`,
+  codegen: `
+  Generate TypeScript types + client from your schema
 
-USAGE:
-  disc build [options]
+${inverse("  USAGE ")}
 
-OPTIONS:
-  --platform <p>        Target: linux-x64 | linux-arm64 | darwin-x64 | darwin-arm64
-  -o, --output <path>   Output binary path
-  --lite                Skip bundling UI assets (smaller binary)`,
-  deploy: `Generate deployment artifacts for a given format
+  disc codegen ${gray("[options]")}
 
-USAGE:
-  disc deploy --format <fmt> [options]
+${inverse("  OPTIONS ")}
 
-OPTIONS:
-  --format <fmt>        One of: docker | compose | systemd | env
-  -o, --output <dir>    Output directory (default: ./)`,
-  watch: `Watch schema files and auto-run migrate + codegen on change
+  -o, --output ${gray("<dir>")} ${gray(".".repeat(7))} Output directory (default: ${bgBrightYellow("./dbschema/disc-client")})
+  -s, --schema ${gray("<file>")} ${gray(".".repeat(6))} Single-file schema (default: ${bgBrightYellow("./dbschema/default.disc")})
+  --schema-dir ${gray("<dir>")} ${gray(".".repeat(7))} Multi-file schema directory (default: ${bgBrightYellow("./dbschema")})
+  -t, --target ${gray("<type>")} ${gray(".".repeat(6))} Output target: client | server | both
+  --no-client ${gray(".".repeat(14))} Skip client library generation
+  --no-format ${gray(".".repeat(14))} Skip output formatting
+  --no-mutations ${gray(".".repeat(11))} Skip mutation method generation
+  --no-queries ${gray(".".repeat(14))}Skip query-builder generation`,
+  serve: `
+  Start the Disc HTTP/WebSocket server
 
-USAGE:
-  disc watch [options]
+${inverse("  USAGE ")}
 
-OPTIONS:
-  -s, --schema <file>   Schema to watch (default: ./dbschema/default.disc)
-  -o, --output <dir>    Codegen output dir (default: ./generated)`,
-  ui: `Open the admin UI in your browser
+  disc serve ${gray("[options]")}
 
-USAGE:
+${inverse("  OPTIONS ")}
+
+  --backend-dsn ${gray("<url>")} ${gray(".".repeat(6))} External PostgreSQL DSN
+  --binary-port ${gray("<port>")} ${gray(".".repeat(5))} Enable binary wire protocol on this port
+  --enable-auth ${gray(".".repeat(12))} Enable authentication system
+  --enable-access-policies ${gray(".")} Enable row-level access policy enforcement
+  --jwt-secret ${gray("<key>")} ${gray(".".repeat(7))} JWT signing secret (enables auth)
+  --tls-cert ${gray("<path>")} ${gray(".".repeat(8))} Path to TLS certificate
+  --tls-key ${gray("<path>")} ${gray(".".repeat(9))} Path to TLS private key`,
+  build: `
+  Compile Disc into a self-contained native binary
+
+${inverse("  USAGE ")}
+
+  disc build ${gray("[options]")}
+
+${inverse("  OPTIONS ")}
+
+  --lite ${gray(".".repeat(19))} Skip bundling UI assets (smaller binary)
+  -o, --output ${gray("<path>")} ${gray(".".repeat(6))} Output binary path
+  --platform ${gray("<p>")} ${gray(".".repeat(11))} Target: linux-x64 | linux-arm64 | darwin-x64 | darwin-arm64`,
+  deploy: `
+  Generate deployment artifacts for a given format
+
+${inverse("  USAGE ")}
+
+  disc deploy ${gray("--format <fmt> [options]")}
+
+${inverse("  OPTIONS ")}
+
+  --format ${gray("<fmt>")} ${gray(".".repeat(11))} One of: docker | compose | systemd | env
+  -o, --output ${gray("<dir>")} ${gray(".".repeat(7))} Output directory (default: ${bgBrightYellow("./")})`,
+  watch: `
+  Watch schema files and auto-run migrate + codegen on change
+
+${inverse("  USAGE ")}
+
+  disc watch ${gray("[options]")}
+
+${inverse("  OPTIONS ")}
+
+  -o, --output ${gray("<dir>")} ${gray(".".repeat(7))} Codegen output dir (default: ${bgBrightYellow("./generated")})
+  -s, --schema ${gray("<file>")} ${gray(".".repeat(6))} Schema to watch (default: ${bgBrightYellow("./dbschema/default.disc")})`,
+  ui: `
+  Open the admin UI in your browser
+
+${inverse("  USAGE ")}
+
   disc ui
 
 Requires the UI to be built first (cd ui && bun install && bun run build).`,
-  status: `Show PostgreSQL status for the current project
+  status: `
+  Show PostgreSQL status for the current project
 
-USAGE:
+${inverse("  USAGE ")}
+
   disc status`,
-  "pg log": `View PostgreSQL logs for the current project
+  "pg log": `
+  View PostgreSQL logs for the current project
 
-USAGE:
-  disc pg log [options]
+${inverse("  USAGE ")}
 
-OPTIONS:
-  -f, --follow          Follow log output
-  --lines <n>           Number of lines to show (default: 50)
-  --level <lvl>         Filter by level: ERROR | WARNING | LOG | FATAL | PANIC`,
-  "pg upgrade": `Upgrade the bundled PostgreSQL version
+  disc pg log ${gray("[options]")}
 
-USAGE:
-  disc pg upgrade --target-version <version>
+${inverse("  OPTIONS ")}
 
-OPTIONS:
-  --target-version <v>  Target PostgreSQL version (e.g. 17.0)
-  --dry-run             Preview upgrade plan`,
-  "db create": `Create a Disc-managed database
+  -f, --follow ${gray(".".repeat(13))} Follow log output
+  --level ${gray("<lvl>")} ${gray(".".repeat(12))} Filter by level: ERROR | WARNING | LOG | FATAL | PANIC
+  --lines ${gray("<n>")} ${gray(".".repeat(14))} Number of lines to show (default: ${bgBrightYellow("50")})`,
+  "pg upgrade": `
+  Upgrade the bundled PostgreSQL version
 
-USAGE:
-  disc db create <name> [--database-url <url>]`,
-  "db list": `List Disc-managed databases
+${inverse("  USAGE ")}
 
-USAGE:
-  disc db list [--database-url <url>]`,
-  "db drop": `Drop a Disc-managed database
+  disc pg upgrade --target-version ${gray("<version>")}
 
-USAGE:
-  disc db drop <name> --force [--database-url <url>]`,
+${inverse("  OPTIONS ")}
+
+  --target-version ${gray("<v>")} ${gray(".".repeat(5))} Target PostgreSQL version (e.g. 17.0)
+  --dry-run ${gray(".".repeat(16))} Preview upgrade plan`,
+  "db create": `
+  Create a Disc-managed database
+
+${inverse("  USAGE ")}
+
+  disc db create ${gray("<name> [--database-url <url>]")}`,
+  "db list": `
+  List Disc-managed databases
+
+${inverse("  USAGE ")}
+
+  disc db list ${gray("[--database-url <url>]")}`,
+  "db drop": `
+  Drop a Disc-managed database
+
+${inverse("  USAGE ")}
+
+  disc db drop ${gray("<name>")} --force ${gray("[--database-url <url>]")}`
 };
 
 async function main() {
@@ -346,9 +468,9 @@ async function main() {
     },
   }) as CLIArgs;
 
-  // P2-12: --version takes precedence over empty positional args. Without
-  // this ordering, `disc --version` (no subcommand) falls into the "no args
-  // → print help" branch and the version flag never fires.
+  /*** --version takes precedence over empty positional args. Without
+       this ordering, `disc --version` (no subcommand) falls into the "no args
+       → print help" branch and the version flag never fires. ***/
   if (args.version) {
     console.log(`Disc Database v${VERSION}`);
     return;
@@ -361,16 +483,18 @@ async function main() {
 
   const command = String(args._[0]);
 
-  // P1-16: `disc <command> --help` prints command-specific help instead of
-  // the global help text. Falls back to global when no per-command entry.
+  /*** `disc <command> --help` prints command-specific help instead of
+       the global help text. Falls back to global when no per-command entry. ***/
   if (args.help) {
     const sub = args._[1] ? String(args._[1]) : undefined;
     const key = sub ? `${command} ${sub}` : command;
     const specific = COMMAND_HELP[key] ?? COMMAND_HELP[command];
+
     if (specific) {
       console.log(specific);
       return;
     }
+
     console.log(HELP_TEXT);
     return;
   }
@@ -379,15 +503,17 @@ async function main() {
     switch (command) {
       case "init": {
         const name = args.name || String(args._[1] || "disc-project");
+
         await commands.init({
-          name,
-          template: args.template as "basic" | "minimal" | "full" || "basic",
-          databaseUrl: args["database-url"],
-          force: args.force,
-          directory: args.directory,
           backendDsn: args["backend-dsn"],
+          databaseUrl: args["database-url"],
+          directory: args.directory,
+          force: args.force,
+          name,
           skipPostgres: args["skip-postgres"],
+          template: args.template as "basic" | "minimal" | "full" || "basic"
         });
+
         break;
       }
 
@@ -398,13 +524,14 @@ async function main() {
 
       case "shell": {
         await commands.shell({
-          host: args.host,
-          port: args.port ? parseInt(args.port) : undefined,
           database: args.database,
-          schemaFile: args.schema,
-          nonInteractive: args["non-interactive"],
           execute: args.execute,
+          host: args.host,
+          nonInteractive: args["non-interactive"],
+          port: args.port ? parseInt(args.port) : undefined,
+          schemaFile: args.schema
         });
+
         break;
       }
 
@@ -415,27 +542,29 @@ async function main() {
 
       case "serve": {
         await commands.serve({
-          port: args.port ? parseInt(args.port) : undefined,
-          host: args.host,
+          binaryPort: args["binary-port"] ?
+            parseInt(args["binary-port"]) :
+            undefined,
           config: args.config,
-          jwtSecret: args["jwt-secret"],
-          enableAuth: args["enable-auth"],
           enableAccessPolicies: args["enable-access-policies"],
+          enableAuth: args["enable-auth"],
+          host: args.host,
+          jwtSecret: args["jwt-secret"],
+          port: args.port ? parseInt(args.port) : undefined,
           tlsCert: args["tls-cert"],
-          tlsKey: args["tls-key"],
-          binaryPort: args["binary-port"]
-            ? parseInt(args["binary-port"])
-            : undefined,
+          tlsKey: args["tls-key"]
         });
+
         break;
       }
 
       case "watch": {
         await commands.watch({
-          schemaFile: args.schema,
-          outputDir: args.output,
           delayMs: 1000,
+          outputDir: args.output,
+          schemaFile: args.schema
         });
+
         break;
       }
 
@@ -466,99 +595,118 @@ async function main() {
 
       case "build": {
         await commands.build({
-          platform: args.platform,
-          output: args.output,
           lite: args.lite,
+          output: args.output,
+          platform: args.platform
         });
+
         break;
       }
 
       case "deploy": {
         if (!args.format) {
-          console.error(
-            "Error: --format is required for deploy. Valid formats: docker, compose, systemd, env",
-          );
+          console.error("Error: --format is required for deploy. Valid formats: docker, compose, systemd, env");
           Deno.exit(1);
         }
+
         await commands.deploy({
           format: args.format,
-          output: args.output,
+          output: args.output
         });
+
         break;
       }
 
       case "pg": {
         const subcommand = String(args._[1] || "");
+
         switch (subcommand) {
-          case "log":
+          case "log": {
             await commands.pgLog({
-              lines: args.lines ? parseInt(String(args.lines)) : 50,
               follow: args.follow || false,
               level: args.level,
-              project: args.name,
+              lines: args.lines ? parseInt(String(args.lines)) : 50,
+              project: args.name
             });
+
             break;
-          case "upgrade":
+          }
+
+          case "upgrade": {
             if (!args["target-version"]) {
-              console.error(
-                "Error: --target-version is required for pg upgrade",
-              );
+              console.error("Error: --target-version is required for pg upgrade");
               Deno.exit(1);
             }
+
             await commands.pgUpgrade({
-              targetVersion: args["target-version"],
-              dryRun: args["dry-run"] || false,
               backup: true,
+              dryRun: args["dry-run"] || false,
               project: args.name,
+              targetVersion: args["target-version"]
             });
+
             break;
-          default:
+          }
+
+          default: {
             console.error(`Unknown pg subcommand: ${subcommand}`);
             console.log("Available: pg log, pg upgrade");
+
             Deno.exit(1);
+          }
         }
+
         break;
       }
 
       case "db": {
         const dbSubcommand = String(args._[1] || "");
+
         switch (dbSubcommand) {
           case "create": {
             const dbName = String(args._[2] || "");
+
             if (!dbName) {
-              console.error(
-                "Error: database name is required. Usage: disc db create <name>",
-              );
+              console.error("Error: database name is required. Usage: disc db create <name>");
               Deno.exit(1);
             }
+
             await commands.dbCreate(dbName, args);
             break;
           }
-          case "list":
+
+          case "list": {
             await commands.dbList(args);
             break;
+          }
+
           case "drop": {
             const dropName = String(args._[2] || "");
+
             if (!dropName) {
-              console.error(
-                "Error: database name is required. Usage: disc db drop <name> --force",
-              );
+              console.error("Error: database name is required. Usage: disc db drop <name> --force");
               Deno.exit(1);
             }
+
             await commands.dbDrop(dropName, args);
             break;
           }
-          default:
+
+          default: {
             console.error(`Unknown db subcommand: ${dbSubcommand}`);
             console.log("Available: db create, db list, db drop");
+
             Deno.exit(1);
+          }
         }
+
         break;
       }
 
       default: {
         console.error(`Unknown command: ${command}`);
         console.log(HELP_TEXT);
+
         Deno.exit(1);
       }
     }
@@ -568,8 +716,5 @@ async function main() {
   }
 }
 
-// Legacy functions removed - now handled by commands.ts
-
-if (import.meta.main) {
+if (import.meta.main)
   await main();
-}
