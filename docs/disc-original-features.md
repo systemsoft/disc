@@ -1,0 +1,148 @@
+# Disc-Original Features
+
+Things Disc would build that Gel doesn't have and isn't planning. Each is a deliberate departure — features that justify Disc as a fork rather than a port.
+
+> **Status:** Proposal. Not yet committed work. Each item below has rough scoping but no design doc, no scheduled milestone. Use this as the seed list for picking next-up direction once the upstream-parity work is done (see `future-triage.md`).
+
+---
+
+## 1. Codegen-free TypeScript query builder
+
+**The problem.** Gel's TypeScript client requires running `npx @gel/generate edgeql-js` after every schema change to produce a typed query builder. The generated module is a build artifact: it needs to be checked in, regenerated, kept in sync. In a Deno-native stack this is friction that doesn't need to exist.
+
+**The bet.** Because Disc is TypeScript end-to-end and runs on Deno (which compiles TS at import time), the query builder can be a runtime module that reads the live schema and returns a structurally-typed builder. No codegen step. Schema changes are reflected in the next module reload.
+
+**Sketch.**
+
+```typescript
+import { connect } from "jsr:@disc/client";
+import schema from "./schema.disc" with { type: "disc-schema" };
+
+const db = await connect({ schema });
+
+// Builder is typed from `schema` at compile time via TS conditional types,
+// not from a generated file:
+const users = await db.User.select({
+  email: true,
+  posts: { title: true }
+}).filter(u => u.email.eq("user@example.com"));
+```
+
+**What Gel has instead.** A `@gel/generate` codegen package that emits a static `./dbschema/edgeql-js/` directory.
+
+**Effort.** L. Requires a TS module loader for `.disc` files (Deno custom loader API), a type-level translator from SDL AST to TypeScript types, and a runtime builder DSL. The type-level work is the hard part.
+
+---
+
+## 2. Schema-derived REST surface (auto-generated)
+
+**The problem.** Gel exposes EdgeQL over HTTP and GraphQL via `ext::graphql`, but it doesn't generate a conventional REST surface. Many integrations (n8n, Zapier, mobile apps with locked-down clients, anything that wants OpenAPI) assume REST.
+
+**The bet.** Every object type in a Disc schema has obvious REST mappings:
+- `GET /api/User` → list with filter/order/limit query params
+- `GET /api/User/:id` → single object
+- `POST /api/User` → insert
+- `PATCH /api/User/:id` → update
+- `DELETE /api/User/:id` → delete
+- `GET /api/User/:id/posts` → linked collection
+
+Disc auto-generates these from the schema, runs them through the same access-policy and auth pipeline as EdgeQL queries, and emits a matching OpenAPI spec at `/api/openapi.json`.
+
+**Customization.** SDL annotations gate which types are exposed and which fields are returned in default shapes:
+
+```
+type User {
+  required email: str { @rest::hidden };
+  required name: str;
+  multi posts: Post { @rest::expand };
+}
+```
+
+**What Gel has instead.** GraphQL via extension. EdgeQL over HTTP for raw queries. No OpenAPI emission, no REST conventions.
+
+**Effort.** M. The compiler already generates SQL for arbitrary EdgeQL — REST handlers are a thin layer of `route → EdgeQL string → existing pipeline`. The hard part is the OpenAPI generator and the SDL annotation grammar.
+
+---
+
+## 3. Visual differentiators in the admin UI (TRON-themed, Gel-UI doesn't have them)
+
+The existing admin UI plan in `docs/admin-ui.md` already covers schema browser, data viewer, query editor, and REPL. These match Gel-UI feature-for-feature. The bets here are features Gel-UI does **not** have:
+
+### 3a. Live schema diff
+Watch `.disc` files in real time. Show the unsaved-but-edited schema next to the current applied schema, with a visual diff (added types in green grid, removed in red, modified with side-by-side property lists). Click "apply" to generate and run the migration in-line.
+
+Gel-UI shows applied schema only; you switch to your editor and CLI to make changes.
+
+### 3b. Visual query builder (drag-and-drop, not autocomplete)
+Drag types onto a canvas, drop fields into a result shape, draw filters as visual nodes. Generate EdgeQL underneath. The point isn't to replace text EdgeQL — it's to teach EdgeQL to people who don't know it yet, and to let non-developers build read-only queries for dashboards.
+
+Gel-UI has a text editor with autocomplete. No visual builder.
+
+### 3c. Live data subscriptions in the browser
+Query results update in real time when underlying rows change (server pushes diffs over WebSocket). Useful for the data viewer ("watch this table") and for query results during development.
+
+Gel has subscriptions in the SDK but Gel-UI doesn't surface them.
+
+### 3d. Identity-disc visualization
+The TRON metaphor taken seriously: a visualization of an object's outgoing and incoming links rendered as a literal disc — the object at the center, link types as luminous radii, linked objects orbiting. Click a linked object to recenter on it. This is closer to a graph database UI than a relational one, but the data is already there in Disc's schema.
+
+**Effort.** M each, parallelizable. 3a depends on a server endpoint that streams schema-diff events. 3c depends on the existing live-query plumbing. 3d is mostly Svelte + a graph layout library; no backend work.
+
+---
+
+## 4. Single-binary distribution (server + UI + Postgres)
+
+**The problem.** Self-hosting Gel involves: install Gel server, install PostgreSQL separately (or use a managed one), point Gel at it, install Gel-UI separately if you want the admin UI, configure all three to talk to each other.
+
+**The bet.** Disc ships **one binary** that contains:
+- The Disc server (already built via `deno compile`)
+- The compiled SvelteKit UI as embedded assets
+- The PostgreSQL binary for the target platform
+
+Running `./disc` on a fresh machine gives you a fully working database server with admin UI on `:3000`, no installation steps. Like Caddy. Like SQLite. Like Tailscale's `tailscaled`.
+
+**What's already done.** `deno compile` produces a server binary; UI bundling into the binary is a P2 item per `CLAUDE.md`; bundled-Postgres lifecycle management is shipped (`postgres/`).
+
+**What's missing.** Embedding the Postgres binary itself rather than downloading it on first run. Trade-off: binary size goes from ~85MB to ~300MB, but the deployment story becomes "scp the binary and run it."
+
+**Effort.** S. The pieces exist — this is a build-system change.
+
+---
+
+## 5. Deno-permission-aware access policies
+
+**The problem.** Database access policies (Gel's `access policy`, Postgres's RLS) gate row visibility based on application-defined identity. They can't see runtime trust: an extension running with full filesystem access has the same access-policy treatment as one running sandboxed.
+
+**The bet.** Because Disc runs on Deno, every running piece of code already has a runtime permission set (`--allow-net`, `--allow-read=...`, etc.). Access policies can reference these permissions:
+
+```
+type SecretConfig {
+  required value: str;
+  access policy admin_only allow select using (
+    global current_user.is_admin
+    and runtime::has_permission("read:secrets")
+  );
+}
+```
+
+The `runtime::has_permission(...)` builtin is true only if the calling Deno worker was launched with the corresponding `--allow-*` flag. An extension that accidentally tries to read `SecretConfig` without the right permissions gets an empty result — even if the application-level user is an admin.
+
+This composes with existing access policies. It's a defense-in-depth layer for the case where application code is compromised but the runtime sandbox is not.
+
+**What Gel has instead.** Application-level identity only. No runtime-permission check, because the Python/Rust runtime doesn't have a structured permission model.
+
+**Effort.** M. Need: a `runtime::has_permission()` builtin in the access-policy evaluator, a way to propagate the calling worker's permission set into the query session, and SDL grammar for the new function. The composability is the interesting part — applies to existing access policies without redesign.
+
+---
+
+## How these get picked
+
+Each item is independently scopeable. The natural ordering by **how much it justifies Disc-as-a-fork**:
+
+1. **#4 single-binary** — biggest UX delta for self-hosters, smallest engineering cost.
+2. **#2 REST surface** — broadest integration story, modest cost.
+3. **#1 codegen-free builder** — biggest DX delta for application developers, but most type-system work.
+4. **#3 admin-UI differentiators** — best demo material; can be staged 3a → 3c → 3d → 3b.
+5. **#5 Deno-perm policies** — most novel, narrowest applicability.
+
+None of these are scheduled. When `future-triage.md`'s BUILD column runs out (or sooner if one of these is more compelling than what's left upstream), pick from here.
