@@ -125,6 +125,31 @@ const decision = evaluator.evaluate("User", "select", context);
 - Any `deny` rule immediately denies
 - More secure but requires comprehensive policy coverage
 
+### Deny semantics: coarse gate, not row-level filter (P1-38)
+
+`deny` rules apply at the **action level**, not the **row level**. When
+a `deny` rule matches the request's operation (e.g. `deny delete;`),
+the evaluator rejects the entire request — it does not filter individual
+rows out of a candidate set the way `allow ... using (...)` does.
+
+Concretely:
+
+```esdl
+access policy no_delete
+  deny delete;            # rejects ALL deletes on this type, full stop
+
+access policy hide_drafts
+  allow select
+  using (.published);     # filters: only published rows are visible
+```
+
+Need per-row deny ("everyone can read except rows where X")? Express it
+as the inverse `allow ... using (NOT X)` and let the permissive-mode
+fallthrough do the rest. Native row-level deny would require JOIN-style
+policy composition that disc doesn't implement and Gel itself documents
+as out of scope for 5.x. The adapter source comment at
+`access/policy-adapter.ts:133-137` is the authoritative spec.
+
 ## Testing
 
 ```bash
