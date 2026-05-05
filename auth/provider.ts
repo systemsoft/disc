@@ -24,6 +24,10 @@ import {
   TokenPayload,
   type TotpEnrollment,
   User,
+  type WebAuthnLoginFinish,
+  type WebAuthnLoginOptions,
+  type WebAuthnRegistrationFinish,
+  type WebAuthnRegistrationOptions,
 } from "./types.ts";
 import {
   newEventId,
@@ -37,6 +41,7 @@ import {
   generateSecret as generateTotpSecret,
   verifyTOTP,
 } from "./totp.ts";
+import * as webAuthn from "./webauthn.ts";
 
 /**
  * Conditional config fields whose presence depends on `jwtAlgorithm`:
@@ -45,7 +50,11 @@ import {
  * They're excluded from the defaults map (no sensible default) and
  * validated at runtime in `initialize()`.
  */
-type ConditionalAuthFields = "jwtSecret" | "jwtPrivateKey" | "jwtPublicKey";
+type ConditionalAuthFields =
+  | "jwtSecret"
+  | "jwtPrivateKey"
+  | "jwtPublicKey"
+  | "webauthn";
 
 /**
  * Resolved config after defaults merge — every non-conditional field is
@@ -225,6 +234,42 @@ export class AuthProvider implements IAuthProvider {
       )
     `);
 
+    // WebAuthn credentials (gh/geldata#6725) — one row per registered
+    // passkey. `credential_id` is base64url; `public_key_jwk` is the
+    // JSON form of the COSE key (we re-import on each verify). Counter
+    // is monotonic per-credential — the authenticator increments it on
+    // every signature so we can detect cloned credentials.
+    await this.db.execute(`
+      CREATE TABLE IF NOT EXISTS webauthn_credentials (
+        credential_id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        public_key_jwk TEXT NOT NULL,
+        alg INTEGER NOT NULL,
+        counter INTEGER NOT NULL DEFAULT 0,
+        name TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_used_at TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+
+    // WebAuthn ceremony challenges (gh/geldata#6725) — short-lived,
+    // single-use. `purpose` distinguishes register vs login because the
+    // verification path treats them differently. `user_id` is null for
+    // login challenges that don't bind to a known user yet (we look up
+    // by credential id on finish).
+    await this.db.execute(`
+      CREATE TABLE IF NOT EXISTS webauthn_challenges (
+        id TEXT PRIMARY KEY,
+        challenge TEXT NOT NULL,
+        purpose TEXT NOT NULL,
+        user_id TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        expires_at TIMESTAMP NOT NULL,
+        consumed_at TIMESTAMP
+      )
+    `);
+
     // Recovery codes (gh/geldata#8186) — single-use codes the user
     // saves at MFA setup time and uses to bypass TOTP if they lose
     // their device. Stored hashed (SHA-256, parallel to other token
@@ -348,6 +393,12 @@ export class AuthProvider implements IAuthProvider {
     );
     await this.db.execute(
       `CREATE INDEX IF NOT EXISTS idx_recovery_codes_user_id ON recovery_codes(user_id)`,
+    );
+    await this.db.execute(
+      `CREATE INDEX IF NOT EXISTS idx_webauthn_credentials_user_id ON webauthn_credentials(user_id)`,
+    );
+    await this.db.execute(
+      `CREATE INDEX IF NOT EXISTS idx_webauthn_challenges_expires_at ON webauthn_challenges(expires_at)`,
     );
   }
 
@@ -1815,6 +1866,450 @@ export class AuthProvider implements IAuthProvider {
     return await this.completeLogin(user, meta);
   }
 
+  // ── WebAuthn / passkeys (gh/geldata#6725) ──────────────────────────
+
+  /**
+   * Begin the WebAuthn registration ceremony. Mints a fresh challenge,
+   * persists it (with `purpose = "register"` and a 5-min expiry), and
+   * returns the `PublicKeyCredentialCreationOptions` payload that the
+   * caller hands to `navigator.credentials.create({ publicKey })`.
+   *
+   * `userId` is required because passkeys are user-scoped; pre-existing
+   * credentials are listed under `excludeCredentials` so the
+   * authenticator refuses to re-register the same key.
+   */
+  async beginWebAuthnRegistration(
+    userId: string,
+  ): Promise<WebAuthnRegistrationOptions> {
+    if (!this.config.webauthn) {
+      throw new AuthError(
+        "WebAuthn not configured (set AuthConfig.webauthn)",
+        AuthErrorCode.INVALID_OPERATION,
+        500,
+      );
+    }
+    const userResult = await this.db.query(
+      "SELECT id, email, username FROM users WHERE id = ?",
+      [userId],
+    );
+    if (userResult.rows.length === 0) {
+      throw new AuthError(
+        "User not found",
+        AuthErrorCode.USER_NOT_FOUND,
+        404,
+      );
+    }
+    const user = userResult.rows[0];
+    const challenge = randomBytes(32);
+    const challengeId = this.generateId();
+    await this.db.execute(
+      `INSERT INTO webauthn_challenges (id, challenge, purpose, user_id, expires_at)
+       VALUES (?, ?, ?, ?, ?)`,
+      [
+        challengeId,
+        webAuthn.base64UrlEncode(challenge),
+        "register",
+        userId,
+        new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      ],
+    );
+    const existing = await this.db.query(
+      "SELECT credential_id FROM webauthn_credentials WHERE user_id = ?",
+      [userId],
+    );
+    this.auditEvent("webauthn_registration_started", userId);
+    return {
+      challengeId,
+      publicKey: {
+        rp: {
+          id: this.config.webauthn.rpId,
+          name: this.config.webauthn.rpName,
+        },
+        user: {
+          id: user.id,
+          name: user.email,
+          displayName: user.username || user.email,
+        },
+        challenge: webAuthn.base64UrlEncode(challenge),
+        pubKeyCredParams: [{ type: "public-key", alg: webAuthn.COSE_ALG_ES256 }],
+        timeout: 60000,
+        attestation: "none",
+        excludeCredentials: existing.rows.map((r) => ({
+          id: r.credential_id,
+          type: "public-key" as const,
+        })),
+      },
+    };
+  }
+
+  /**
+   * Finish registration: parse the attestation object, verify the
+   * client data, and persist the credential. The challenge row is
+   * burned even on success (single-use) and on every error path that
+   * read it.
+   */
+  async finishWebAuthnRegistration(
+    finish: WebAuthnRegistrationFinish,
+  ): Promise<{ credentialId: string }> {
+    if (!this.config.webauthn) {
+      throw new AuthError(
+        "WebAuthn not configured",
+        AuthErrorCode.INVALID_OPERATION,
+        500,
+      );
+    }
+    const challenge = await this.consumeWebAuthnChallenge(
+      finish.challengeId,
+      "register",
+    );
+    if (!challenge.user_id) {
+      throw new AuthError(
+        "Registration challenge has no user binding",
+        AuthErrorCode.INVALID_TOKEN,
+        401,
+      );
+    }
+
+    const attestationBytes = webAuthn.base64UrlDecode(finish.attestationObject);
+    const clientDataBytes = webAuthn.base64UrlDecode(finish.clientDataJSON);
+
+    webAuthn.verifyClientData({
+      clientDataJSON: clientDataBytes,
+      expectedChallenge: webAuthn.base64UrlDecode(challenge.challenge),
+      expectedOrigin: this.config.webauthn.origin,
+      expectedType: "webauthn.create",
+    });
+
+    const parsed = webAuthn.parseAttestationObject(attestationBytes);
+    const expectedRpHash = await webAuthn.hashRpId(this.config.webauthn.rpId);
+    if (!byteArraysEqual(parsed.rpIdHash, expectedRpHash)) {
+      throw new AuthError(
+        "WebAuthn rpIdHash mismatch",
+        AuthErrorCode.INVALID_TOKEN,
+        401,
+      );
+    }
+    if (parsed.fmt !== "none" && parsed.fmt !== "packed") {
+      throw new AuthError(
+        `Unsupported attestation format: ${parsed.fmt}`,
+        AuthErrorCode.INVALID_OPERATION,
+        400,
+      );
+    }
+
+    const credentialIdB64 = webAuthn.base64UrlEncode(parsed.credentialId);
+    if (credentialIdB64 !== finish.credentialId) {
+      throw new AuthError(
+        "credentialId mismatch between client and authenticatorData",
+        AuthErrorCode.INVALID_TOKEN,
+        401,
+      );
+    }
+
+    await this.db.execute(
+      `INSERT INTO webauthn_credentials
+        (credential_id, user_id, public_key_jwk, alg, counter, name)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        credentialIdB64,
+        challenge.user_id,
+        JSON.stringify(parsed.publicKey.jwk),
+        parsed.publicKey.alg,
+        parsed.counter,
+        finish.name ?? null,
+      ],
+    );
+    this.auditEvent("webauthn_registered", challenge.user_id, {
+      credentialId: credentialIdB64,
+    });
+    return { credentialId: credentialIdB64 };
+  }
+
+  /**
+   * Begin the WebAuthn login ceremony. If `email` is provided we look
+   * up the user's credentials to scope `allowCredentials`; otherwise
+   * we issue an unscoped challenge (discoverable-credential / username-
+   * less flows).
+   */
+  async beginWebAuthnLogin(email?: string): Promise<WebAuthnLoginOptions> {
+    if (!this.config.webauthn) {
+      throw new AuthError(
+        "WebAuthn not configured",
+        AuthErrorCode.INVALID_OPERATION,
+        500,
+      );
+    }
+    const challenge = randomBytes(32);
+    const challengeId = this.generateId();
+
+    let userId: string | null = null;
+    let allowCredentials: Array<{ id: string; type: "public-key" }> = [];
+    if (email) {
+      const userResult = await this.db.query(
+        "SELECT id FROM users WHERE email = ? AND active = ?",
+        [email, true],
+      );
+      if (userResult.rows.length > 0) {
+        userId = userResult.rows[0].id;
+        const creds = await this.db.query(
+          "SELECT credential_id FROM webauthn_credentials WHERE user_id = ?",
+          [userId],
+        );
+        allowCredentials = creds.rows.map((r) => ({
+          id: r.credential_id,
+          type: "public-key" as const,
+        }));
+      }
+    }
+
+    await this.db.execute(
+      `INSERT INTO webauthn_challenges (id, challenge, purpose, user_id, expires_at)
+       VALUES (?, ?, ?, ?, ?)`,
+      [
+        challengeId,
+        webAuthn.base64UrlEncode(challenge),
+        "login",
+        userId,
+        new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      ],
+    );
+
+    return {
+      challengeId,
+      publicKey: {
+        rpId: this.config.webauthn.rpId,
+        challenge: webAuthn.base64UrlEncode(challenge),
+        timeout: 60000,
+        allowCredentials: allowCredentials.length > 0
+          ? allowCredentials
+          : undefined,
+        userVerification: "preferred",
+      },
+    };
+  }
+
+  /**
+   * Finish login: verify the assertion signature, validate counter
+   * monotonicity (cloning detection), and either issue a session or —
+   * if the user has TOTP confirmed — return an MfaChallenge so the
+   * second factor still gates them. (Phase A composition.)
+   */
+  async finishWebAuthnLogin(
+    finish: WebAuthnLoginFinish,
+    meta?: RequestMeta,
+  ): Promise<LoginResult> {
+    if (!this.config.webauthn) {
+      throw new AuthError(
+        "WebAuthn not configured",
+        AuthErrorCode.INVALID_OPERATION,
+        500,
+      );
+    }
+    const challenge = await this.consumeWebAuthnChallenge(
+      finish.challengeId,
+      "login",
+    );
+
+    const credResult = await this.db.query(
+      `SELECT user_id, public_key_jwk, alg, counter
+       FROM webauthn_credentials WHERE credential_id = ?`,
+      [finish.credentialId],
+    );
+    if (credResult.rows.length === 0) {
+      throw new AuthError(
+        "Unknown credential",
+        AuthErrorCode.INVALID_TOKEN,
+        401,
+      );
+    }
+    const cred = credResult.rows[0];
+
+    // If begin() bound a userId, the credential must belong to them.
+    if (challenge.user_id && cred.user_id !== challenge.user_id) {
+      throw new AuthError(
+        "Credential does not belong to the challenged user",
+        AuthErrorCode.INVALID_TOKEN,
+        401,
+      );
+    }
+
+    const authData = webAuthn.base64UrlDecode(finish.authenticatorData);
+    const clientDataJSON = webAuthn.base64UrlDecode(finish.clientDataJSON);
+    const signature = webAuthn.base64UrlDecode(finish.signature);
+
+    webAuthn.verifyClientData({
+      clientDataJSON,
+      expectedChallenge: webAuthn.base64UrlDecode(challenge.challenge),
+      expectedOrigin: this.config.webauthn.origin,
+      expectedType: "webauthn.get",
+    });
+
+    const parsed = webAuthn.parseAuthenticatorData(authData);
+    const expectedRpHash = await webAuthn.hashRpId(this.config.webauthn.rpId);
+    if (!byteArraysEqual(parsed.rpIdHash, expectedRpHash)) {
+      throw new AuthError(
+        "WebAuthn rpIdHash mismatch",
+        AuthErrorCode.INVALID_TOKEN,
+        401,
+      );
+    }
+
+    const verified = await webAuthn.verifyAssertionSignature({
+      publicKey: {
+        alg: cred.alg,
+        jwk: JSON.parse(cred.public_key_jwk),
+      },
+      authData,
+      clientDataJSON,
+      signature,
+    });
+    if (!verified) {
+      this.auditEvent("webauthn_signature_failed", cred.user_id, {
+        ipAddress: meta?.ipAddress,
+      });
+      throw new AuthError(
+        "WebAuthn signature did not verify",
+        AuthErrorCode.INVALID_CREDENTIALS,
+        401,
+      );
+    }
+
+    // Counter monotonicity (cloning detection per W3C §6.1.1). A
+    // counter of 0 from the authenticator means the device doesn't
+    // implement counters — accept it but never bump the stored value.
+    if (parsed.counter !== 0) {
+      if (parsed.counter <= cred.counter) {
+        this.auditEvent("webauthn_counter_regression", cred.user_id, {
+          stored: cred.counter,
+          received: parsed.counter,
+        });
+        throw new AuthError(
+          "WebAuthn counter regression — possible cloned credential",
+          AuthErrorCode.INVALID_TOKEN,
+          401,
+        );
+      }
+      await this.db.execute(
+        `UPDATE webauthn_credentials
+         SET counter = ?, last_used_at = CURRENT_TIMESTAMP
+         WHERE credential_id = ?`,
+        [parsed.counter, finish.credentialId],
+      );
+    } else {
+      await this.db.execute(
+        `UPDATE webauthn_credentials
+         SET last_used_at = CURRENT_TIMESTAMP
+         WHERE credential_id = ?`,
+        [finish.credentialId],
+      );
+    }
+
+    const user = await this.getUser(cred.user_id);
+    if (!user || !user.active || user.isAnonymous) {
+      throw new AuthError(
+        "User not found",
+        AuthErrorCode.USER_NOT_FOUND,
+        404,
+      );
+    }
+
+    if (await this.hasConfirmedTOTP(user.id)) {
+      const challengeOut = await this.issueMfaChallenge(user.id);
+      this.auditEvent("webauthn_mfa_challenge_issued", user.id, {
+        ipAddress: meta?.ipAddress,
+      });
+      return challengeOut;
+    }
+
+    this.auditEvent("webauthn_login_succeeded", user.id, {
+      ipAddress: meta?.ipAddress,
+    });
+    return await this.completeLogin(user, meta);
+  }
+
+  /** Remove a passkey from the user's account. */
+  async deleteWebAuthnCredential(
+    userId: string,
+    credentialId: string,
+  ): Promise<void> {
+    await this.db.execute(
+      "DELETE FROM webauthn_credentials WHERE user_id = ? AND credential_id = ?",
+      [userId, credentialId],
+    );
+    this.auditEvent("webauthn_credential_deleted", userId, { credentialId });
+  }
+
+  /** List the user's registered passkeys. */
+  async listWebAuthnCredentials(userId: string): Promise<Array<{
+    credentialId: string;
+    name: string | null;
+    createdAt: string;
+    lastUsedAt: string | null;
+  }>> {
+    const result = await this.db.query(
+      `SELECT credential_id, name, created_at, last_used_at
+       FROM webauthn_credentials
+       WHERE user_id = ?
+       ORDER BY created_at DESC`,
+      [userId],
+    );
+    return result.rows.map((r) => ({
+      credentialId: r.credential_id,
+      name: r.name ?? null,
+      createdAt: String(r.created_at),
+      lastUsedAt: r.last_used_at ? String(r.last_used_at) : null,
+    }));
+  }
+
+  /**
+   * Fetch + validate (and burn) a WebAuthn ceremony challenge. Throws
+   * on missing / consumed / expired / wrong-purpose.
+   */
+  private async consumeWebAuthnChallenge(
+    challengeId: string,
+    purpose: "register" | "login",
+  ): Promise<{ challenge: string; user_id: string | null }> {
+    const result = await this.db.query(
+      `SELECT challenge, purpose, user_id, expires_at, consumed_at
+       FROM webauthn_challenges WHERE id = ?`,
+      [challengeId],
+    );
+    if (result.rows.length === 0) {
+      throw new AuthError(
+        "Unknown WebAuthn challenge",
+        AuthErrorCode.INVALID_TOKEN,
+        401,
+      );
+    }
+    const row = result.rows[0];
+    if (row.consumed_at) {
+      throw new AuthError(
+        "WebAuthn challenge already used",
+        AuthErrorCode.INVALID_TOKEN,
+        401,
+      );
+    }
+    if (row.purpose !== purpose) {
+      throw new AuthError(
+        "WebAuthn challenge purpose mismatch",
+        AuthErrorCode.INVALID_TOKEN,
+        401,
+      );
+    }
+    if (new Date(row.expires_at).getTime() < Date.now()) {
+      throw new AuthError(
+        "WebAuthn challenge expired",
+        AuthErrorCode.TOKEN_EXPIRED,
+        401,
+      );
+    }
+    await this.db.execute(
+      "UPDATE webauthn_challenges SET consumed_at = CURRENT_TIMESTAMP WHERE id = ?",
+      [challengeId],
+    );
+    return { challenge: row.challenge, user_id: row.user_id ?? null };
+  }
+
   private async createSession(
     userId: string,
     meta?: { ipAddress?: string; userAgent?: string },
@@ -2047,6 +2542,21 @@ export class AuthProvider implements IAuthProvider {
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
   }
+}
+
+// ── WebAuthn helpers (gh/geldata#6725) ────────────────────────────────
+
+function randomBytes(n: number): Uint8Array {
+  const out = new Uint8Array(n);
+  crypto.getRandomValues(out);
+  return out;
+}
+
+function byteArraysEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  return diff === 0;
 }
 
 // ── Recovery-code helpers (gh/geldata#8186) ───────────────────────────

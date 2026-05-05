@@ -415,6 +415,154 @@ export class AuthRoutes {
     };
   }
 
+  // ── WebAuthn routes (gh/geldata#6725) ──────────────────────────────
+
+  /**
+   * Begin a WebAuthn registration ceremony for the authenticated user.
+   * Returns `PublicKeyCredentialCreationOptions` to hand to
+   * `navigator.credentials.create({ publicKey })`.
+   */
+  beginWebAuthnRegistration(): RequestHandler {
+    return this.middleware.requireAuth(
+      async (_request: Request, context?: AuthContext) => {
+        try {
+          const opts = await this.provider.beginWebAuthnRegistration(
+            context!.userId,
+          );
+          return new Response(JSON.stringify(opts), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        } catch (error) {
+          return this.handleError(error);
+        }
+      },
+    );
+  }
+
+  /**
+   * Finish a WebAuthn registration ceremony. Body is the
+   * `WebAuthnRegistrationFinish` object — the caller assembles it
+   * from the `PublicKeyCredential` returned by the browser.
+   */
+  finishWebAuthnRegistration(): RequestHandler {
+    return this.middleware.requireAuth(
+      async (request: Request, _context?: AuthContext) => {
+        try {
+          const body = await request.json();
+          const result = await this.provider.finishWebAuthnRegistration(body);
+          return new Response(JSON.stringify(result), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        } catch (error) {
+          return this.handleError(error);
+        }
+      },
+    );
+  }
+
+  /**
+   * Begin a WebAuthn login ceremony. Public + rate-limited. Body may
+   * include `email` to scope `allowCredentials`; omit for
+   * username-less / discoverable-credential flows.
+   */
+  beginWebAuthnLogin(): (request: Request) => Promise<Response> {
+    return async (request: Request) => {
+      const limited = this.checkRateLimit(request);
+      if (limited) return limited;
+      try {
+        const body = await request.clone().json().catch(() => ({}));
+        const opts = await this.provider.beginWebAuthnLogin(
+          body.email ? String(body.email) : undefined,
+        );
+        return new Response(JSON.stringify(opts), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch (error) {
+        return this.handleError(error);
+      }
+    };
+  }
+
+  /**
+   * Finish a WebAuthn login ceremony. Public + rate-limited. Returns
+   * `LoginResult` — full session unless the user has TOTP enrolled,
+   * in which case an `MfaChallenge` is issued.
+   */
+  finishWebAuthnLogin(): (request: Request) => Promise<Response> {
+    return async (request: Request) => {
+      const limited = this.checkRateLimit(request);
+      if (limited) return limited;
+      try {
+        const body = await request.json();
+        const result = await this.provider.finishWebAuthnLogin(
+          body,
+          extractRequestMeta(request),
+        );
+        return new Response(JSON.stringify(result), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch (error) {
+        return this.handleError(error);
+      }
+    };
+  }
+
+  /** List the authenticated user's registered passkeys. */
+  listWebAuthnCredentials(): RequestHandler {
+    return this.middleware.requireAuth(
+      async (_request: Request, context?: AuthContext) => {
+        try {
+          const list = await this.provider.listWebAuthnCredentials(
+            context!.userId,
+          );
+          return new Response(JSON.stringify({ credentials: list }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        } catch (error) {
+          return this.handleError(error);
+        }
+      },
+    );
+  }
+
+  /** Remove a passkey. Body: `{ credentialId: "..." }`. */
+  deleteWebAuthnCredential(): RequestHandler {
+    return this.middleware.requireAuth(
+      async (request: Request, context?: AuthContext) => {
+        try {
+          const body = await request.json();
+          if (!body.credentialId) {
+            return new Response(
+              JSON.stringify({
+                error: "credentialId is required",
+                code: "MISSING_CREDENTIAL_ID",
+              }),
+              {
+                status: 400,
+                headers: { "Content-Type": "application/json" },
+              },
+            );
+          }
+          await this.provider.deleteWebAuthnCredential(
+            context!.userId,
+            String(body.credentialId),
+          );
+          return new Response(JSON.stringify({ success: true }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        } catch (error) {
+          return this.handleError(error);
+        }
+      },
+    );
+  }
+
   // ── Recovery-code routes (gh/geldata#8186) ─────────────────────────
 
   /**

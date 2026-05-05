@@ -541,6 +541,12 @@ export class HttpServer {
         magic_link_consume: "/auth/magic-link/consume",
         recovery_codes_generate: "/auth/mfa/recovery-codes/generate",
         recovery_codes_login: "/auth/mfa/recovery-codes/login",
+        webauthn_register_begin: "/auth/webauthn/register/begin",
+        webauthn_register_finish: "/auth/webauthn/register/finish",
+        webauthn_login_begin: "/auth/webauthn/login/begin",
+        webauthn_login_finish: "/auth/webauthn/login/finish",
+        webauthn_credentials: "/auth/webauthn/credentials",
+        webauthn_credentials_delete: "/auth/webauthn/credentials/delete",
       };
     }
 
@@ -1242,6 +1248,18 @@ export class HttpServer {
         return await this.authRoutes.generateRecoveryCodes()(request);
       case "mfa/recovery-codes/login":
         return await this.authRoutes.loginWithRecoveryCode()(request);
+      case "webauthn/register/begin":
+        return await this.authRoutes.beginWebAuthnRegistration()(request);
+      case "webauthn/register/finish":
+        return await this.authRoutes.finishWebAuthnRegistration()(request);
+      case "webauthn/login/begin":
+        return await this.authRoutes.beginWebAuthnLogin()(request);
+      case "webauthn/login/finish":
+        return await this.authRoutes.finishWebAuthnLogin()(request);
+      case "webauthn/credentials":
+        return await this.authRoutes.listWebAuthnCredentials()(request);
+      case "webauthn/credentials/delete":
+        return await this.authRoutes.deleteWebAuthnCredential()(request);
       default:
         return this.create_error_response("Unknown auth endpoint", 404);
     }

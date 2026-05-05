@@ -219,6 +219,99 @@ verifiers ahead of switching the signing private key — verifiers
 holding both old and new public keys keeps a smooth window. Disc
 itself only holds one public key at a time today.
 
+### WebAuthn / passkeys (gh/geldata#6725)
+
+Hardware-backed passwordless login using the W3C WebAuthn standard.
+Compatible with Apple/Google passkeys, YubiKeys, Windows Hello, etc.
+
+**Scope this iteration:** ES256 only (covers all browser-native
+passkeys + most YubiKey configurations). Attestation formats `"none"`
+and `"packed"` accepted; the others (Apple, Android-key, TPM,
+fido-u2f) are out of scope until someone needs to enforce specific
+authenticator brands. RS256 / EdDSA likewise deferred — they're rare
+in the browser-passkey ecosystem.
+
+**Configuration:**
+
+```ts
+const provider = new AuthProvider({
+  jwtSecret: "...",
+  webauthn: {
+    rpId: "example.com",        // apex domain credentials are scoped to
+    rpName: "Example App",       // shown in browser prompts
+    origin: "https://example.com" // expected clientData.origin
+  },
+}, db);
+```
+
+Without the `webauthn` block, all WebAuthn provider methods throw
+`AuthError(INVALID_OPERATION)` — so apps that don't want passkeys
+just leave it off.
+
+**Registration ceremony:**
+
+```ts
+// 1. Authenticated user starts registration. Server mints a challenge.
+const opts = await provider.beginWebAuthnRegistration(userId);
+// Send `opts.publicKey` to the browser; the SDK calls
+// navigator.credentials.create({ publicKey: opts.publicKey }).
+
+// 2. Browser returns a PublicKeyCredential. Caller assembles:
+await provider.finishWebAuthnRegistration({
+  challengeId: opts.challengeId,
+  credentialId: cred.id,                                    // base64url
+  attestationObject: base64url(cred.response.attestationObject),
+  clientDataJSON: base64url(cred.response.clientDataJSON),
+  name: "My iPhone",                                         // optional
+});
+```
+
+**Login ceremony:**
+
+```ts
+// 1. Server mints a challenge, optionally scoped by email.
+const opts = await provider.beginWebAuthnLogin("u@example.com");
+// 2. Browser signs with the authenticator. Caller assembles:
+const result = await provider.finishWebAuthnLogin({
+  challengeId: opts.challengeId,
+  credentialId: cred.id,
+  authenticatorData: base64url(cred.response.authenticatorData),
+  clientDataJSON: base64url(cred.response.clientDataJSON),
+  signature: base64url(cred.response.signature),
+});
+if ("mfaRequired" in result) {
+  // User has TOTP enrolled — passkey + TOTP combine.
+  await provider.loginWithTOTP(result.challengeToken, code);
+}
+```
+
+**HTTP routes** (login routes public + rate-limited; rest auth-gated):
+
+| Method | Path                                  | Body                     |
+|--------|---------------------------------------|--------------------------|
+| POST   | `/auth/webauthn/register/begin`       | (none)                   |
+| POST   | `/auth/webauthn/register/finish`      | `WebAuthnRegistrationFinish` |
+| POST   | `/auth/webauthn/login/begin`          | `{ "email"?: "..." }`    |
+| POST   | `/auth/webauthn/login/finish`         | `WebAuthnLoginFinish`    |
+| GET    | `/auth/webauthn/credentials`          | (none)                   |
+| POST   | `/auth/webauthn/credentials/delete`   | `{ "credentialId": "..." }` |
+
+**Security notes:**
+- Challenges are stored server-side (keyed by `challengeId`), 5-min
+  TTL, single-use. Burned on every error path that read them — no
+  replay even mid-failure.
+- Counter monotonicity is enforced on every login. A counter that
+  *decreased* triggers `INVALID_TOKEN` and a `webauthn_counter_regression`
+  audit event — that's how WebAuthn detects cloned credentials. Counter
+  of 0 (some authenticators don't implement counters) is allowed but
+  never bumps stored state.
+- `clientData.origin` and `authenticatorData.rpIdHash` are checked
+  against the configured `webauthn.{origin, rpId}` — credentials minted
+  for one domain can't authenticate against another.
+- credentialId from the client must match the one inside
+  `attestationObject.authData` — defends against the client lying about
+  which key was used.
+
 ### Recovery codes (gh/geldata#8186)
 
 One-time-use codes the user saves at MFA setup, used to bypass TOTP

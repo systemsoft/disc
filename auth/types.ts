@@ -85,6 +85,14 @@ export interface AuthConfig {
    * (gh/geldata#7484, ports geldata/gel#7813)
    */
   webhooks?: import("./webhooks.ts").WebhookConfig[];
+  /**
+   * WebAuthn / passkey relying-party config. When omitted, the
+   * `beginWebAuthnRegistration` / `finishWebAuthnRegistration` /
+   * `beginWebAuthnLogin` / `finishWebAuthnLogin` methods all throw —
+   * apps that don't want passkeys simply leave this off.
+   * (gh/geldata#6725)
+   */
+  webauthn?: WebAuthnConfig;
 }
 
 /**
@@ -177,6 +185,80 @@ export type LoginResult = AuthResponse | MfaChallenge;
 export interface TotpEnrollment {
   secret: string;
   otpauthUri: string;
+}
+
+/**
+ * Public-credential-creation options for the WebAuthn registration
+ * ceremony, plus our own `challengeId` so we can correlate `finish`
+ * with `begin` without trusting client-supplied state. Caller hands
+ * `publicKey` straight to `navigator.credentials.create({ publicKey })`.
+ * (gh/geldata#6725)
+ */
+export interface WebAuthnRegistrationOptions {
+  challengeId: string;
+  publicKey: {
+    rp: { id: string; name: string };
+    user: { id: string; name: string; displayName: string };
+    challenge: string; // base64url
+    pubKeyCredParams: Array<{ type: "public-key"; alg: number }>;
+    timeout?: number;
+    attestation?: "none";
+    excludeCredentials?: Array<{ id: string; type: "public-key" }>;
+  };
+}
+
+/**
+ * Public-credential-request options for the WebAuthn authentication
+ * ceremony. `allowCredentials` is populated when we know which user is
+ * logging in (i.e. they typed an email first); empty for discoverable
+ * credentials. (gh/geldata#6725)
+ */
+export interface WebAuthnLoginOptions {
+  challengeId: string;
+  publicKey: {
+    rpId: string;
+    challenge: string;
+    timeout?: number;
+    allowCredentials?: Array<{ id: string; type: "public-key" }>;
+    userVerification?: "required" | "preferred" | "discouraged";
+  };
+}
+
+export interface WebAuthnRegistrationFinish {
+  challengeId: string;
+  /** base64url; from `credential.id`. */
+  credentialId: string;
+  /** base64url(attestationObject) from the AuthenticatorAttestationResponse. */
+  attestationObject: string;
+  /** base64url(clientDataJSON). */
+  clientDataJSON: string;
+  /** Optional human-readable label set by the user ("My iPhone"). */
+  name?: string;
+}
+
+export interface WebAuthnLoginFinish {
+  challengeId: string;
+  /** base64url; from `credential.id`. */
+  credentialId: string;
+  /** base64url(authenticatorData). */
+  authenticatorData: string;
+  /** base64url(clientDataJSON). */
+  clientDataJSON: string;
+  /** base64url(signature). */
+  signature: string;
+}
+
+/**
+ * Server config for the WebAuthn ceremonies. `rpId` is the apex domain
+ * the credentials are scoped to (must match `window.location.host`'s
+ * effective domain). `origin` is what the browser sets in
+ * `clientDataJSON.origin` — typically `https://${rpId}` but can include
+ * a port for development.
+ */
+export interface WebAuthnConfig {
+  rpId: string;
+  rpName: string;
+  origin: string;
 }
 
 export interface PasswordValidationResult {
