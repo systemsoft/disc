@@ -531,6 +531,8 @@ export class HttpServer {
         reset: "/auth/reset",
         reset_confirm: "/auth/reset/confirm",
         verify: "/auth/verify",
+        anonymous: "/auth/anonymous",
+        upgrade: "/auth/upgrade",
       };
     }
 
@@ -1206,6 +1208,10 @@ export class HttpServer {
         return await this.authRoutes.resetPassword()(request);
       case "verify":
         return await this.authRoutes.verifyEmail()(request);
+      case "anonymous":
+        return await this.authRoutes.loginAnonymous()(request);
+      case "upgrade":
+        return await this.authRoutes.upgradeAnonymous()(request);
       default:
         return this.create_error_response("Unknown auth endpoint", 404);
     }

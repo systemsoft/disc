@@ -416,6 +416,78 @@ export class AuthRoutes {
   }
 
   /**
+   * Mint an anonymous (guest) identity. (gh/geldata#8750)
+   *
+   * Returns the same `AuthResponse` shape as `register()` / `login()` so
+   * clients can store the token in the same place. Rate-limited the same
+   * as login to keep abusers from creating thousands of guest rows.
+   */
+  loginAnonymous(): (request: Request) => Promise<Response> {
+    return async (request: Request) => {
+      const limited = this.checkRateLimit(request);
+      if (limited) return limited;
+      try {
+        const response = await this.provider.loginAnonymous(
+          extractRequestMeta(request),
+        );
+        return new Response(JSON.stringify(response), {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch (error) {
+        return this.handleError(error);
+      }
+    };
+  }
+
+  /**
+   * Promote the currently-authenticated anonymous identity into a full
+   * user. Body must include `email` + `password` (and may include
+   * `username` / `metadata`). The user id is preserved so downstream
+   * rows that reference it stay attached. (gh/geldata#8750)
+   */
+  upgradeAnonymous(): RequestHandler {
+    return this.middleware.requireAuth(
+      async (request: Request, context?: AuthContext) => {
+        const limited = this.checkRateLimit(request);
+        if (limited) return limited;
+        try {
+          const body = await request.json();
+          const data: RegisterData = {
+            email: body.email,
+            password: body.password,
+            username: body.username,
+            metadata: body.metadata,
+            meta: extractRequestMeta(request),
+          };
+          if (!data.email || !data.password) {
+            return new Response(
+              JSON.stringify({
+                error: "email and password are required",
+                code: "MISSING_CREDENTIALS",
+              }),
+              {
+                status: 400,
+                headers: { "Content-Type": "application/json" },
+              },
+            );
+          }
+          const response = await this.provider.upgradeAnonymous(
+            context!.userId,
+            data,
+          );
+          return new Response(JSON.stringify(response), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        } catch (error) {
+          return this.handleError(error);
+        }
+      },
+    );
+  }
+
+  /**
    * Verify email
    */
   verifyEmail(): (request: Request) => Promise<Response> {
