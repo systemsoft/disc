@@ -279,7 +279,7 @@ export class DiscClient {
             continue;
           }
           this.logger?.error?.("server error exhausted retries", {
-            status: error.status,
+            status: error.statusCode,
           });
           throw error;
         }

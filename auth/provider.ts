@@ -1145,7 +1145,10 @@ async function importRsaKeys(
  * mismatched label — operators see the issue at startup instead of
  * `crypto.subtle.importKey` returning the opaque "data is not valid".
  */
-function pemToBytes(pem: string, expectedLabel: string): Uint8Array {
+function pemToBytes(
+  pem: string,
+  expectedLabel: string,
+): Uint8Array<ArrayBuffer> {
   const begin = `-----BEGIN ${expectedLabel}-----`;
   const end = `-----END ${expectedLabel}-----`;
   const startIdx = pem.indexOf(begin);
@@ -1160,7 +1163,12 @@ function pemToBytes(pem: string, expectedLabel: string): Uint8Array {
   const body = pem.slice(startIdx + begin.length, endIdx)
     .replace(/[\r\n\s]+/g, "");
   const binary = atob(body);
-  const bytes = new Uint8Array(binary.length);
+  // Allocate a fresh ArrayBuffer (not ArrayBufferLike) so the returned
+  // Uint8Array satisfies WebCrypto's `BufferSource` parameter — Deno's
+  // strict TypeScript lib rejects the default `new Uint8Array(N)`
+  // because its inferred buffer type widens to ArrayBufferLike.
+  const buffer = new ArrayBuffer(binary.length);
+  const bytes = new Uint8Array(buffer);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return bytes;
 }
