@@ -889,7 +889,9 @@ export class SDLParser {
       } else if (this.match(TokenType.ANNOTATION)) {
         annotations.push(this.parseAnnotation());
       } else {
-        this.advance(); // Skip unknown tokens
+        throw this.error(
+          `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in access policy body — did you mean 'allow', 'deny', 'using', or 'annotation'?`,
+        );
       }
     }
 

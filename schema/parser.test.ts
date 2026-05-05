@@ -194,6 +194,31 @@ Deno.test("SDL Parser - rejects typo in property body (no silent skip) (P1-04)",
   );
 });
 
+Deno.test("SDL Parser - rejects typo in access policy body (no silent skip) (P1-04)", () => {
+  const source = `
+    module default {
+      type User {
+        required name: str;
+        access policy admin_all {
+          allow all;
+          typo_here;
+        }
+      }
+    }
+  `;
+  let threw = false;
+  try {
+    new SDLParser(source).parse();
+  } catch (_) {
+    threw = true;
+  }
+  assertEquals(
+    threw,
+    true,
+    "Unknown token in an access policy body must produce a syntax error",
+  );
+});
+
 Deno.test("SDL Parser - Multiple trailing semicolons at end of file", () => {
   const source = `module default {
     type A { required x: str; };
