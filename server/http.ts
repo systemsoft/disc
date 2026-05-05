@@ -533,6 +533,10 @@ export class HttpServer {
         verify: "/auth/verify",
         anonymous: "/auth/anonymous",
         upgrade: "/auth/upgrade",
+        mfa_totp_enroll: "/auth/mfa/totp/enroll",
+        mfa_totp_confirm: "/auth/mfa/totp/confirm",
+        mfa_totp_disable: "/auth/mfa/totp/disable",
+        mfa_totp_login: "/auth/mfa/totp/login",
       };
     }
 
@@ -1218,6 +1222,14 @@ export class HttpServer {
         return await this.authRoutes.loginAnonymous()(request);
       case "upgrade":
         return await this.authRoutes.upgradeAnonymous()(request);
+      case "mfa/totp/enroll":
+        return await this.authRoutes.enrollTOTP()(request);
+      case "mfa/totp/confirm":
+        return await this.authRoutes.confirmTOTP()(request);
+      case "mfa/totp/disable":
+        return await this.authRoutes.disableTOTP()(request);
+      case "mfa/totp/login":
+        return await this.authRoutes.loginWithTOTP()(request);
       default:
         return this.create_error_response("Unknown auth endpoint", 404);
     }

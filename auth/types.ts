@@ -149,13 +149,43 @@ export interface AuthResponse {
   verificationToken?: string;
 }
 
+/**
+ * MFA challenge returned from `login()` when the user has TOTP enrolled.
+ * The caller has already proven knowledge of the password — they now
+ * need to prove possession of the second factor. The challenge token is
+ * short-lived (default 5 min) and single-use. (gh/geldata#8186)
+ */
+export interface MfaChallenge {
+  mfaRequired: true;
+  challengeToken: string;
+  /** Which factor types the user has enrolled. */
+  factors: Array<"totp">;
+}
+
+/**
+ * Result of `login()` — either a full authenticated session or an MFA
+ * challenge that the caller must complete via `loginWithTOTP()`.
+ */
+export type LoginResult = AuthResponse | MfaChallenge;
+
+/**
+ * Returned from `enrollTOTP()` so callers can render the QR code and
+ * keep the secret around for `confirmTOTP()`. The secret is base32 —
+ * authenticator apps consume it directly, and the URI is what's
+ * normally encoded into a QR.
+ */
+export interface TotpEnrollment {
+  secret: string;
+  otpauthUri: string;
+}
+
 export interface PasswordValidationResult {
   valid: boolean;
   errors: string[];
 }
 
 export interface AuthProvider {
-  login(credentials: LoginCredentials): Promise<AuthResponse>;
+  login(credentials: LoginCredentials): Promise<LoginResult>;
   register(data: RegisterData): Promise<AuthResponse>;
   logout(sessionId: string): Promise<void>;
   refresh(refreshToken: string, meta?: RequestMeta): Promise<AuthResponse>;

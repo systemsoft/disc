@@ -219,6 +219,57 @@ verifiers ahead of switching the signing private key — verifiers
 holding both old and new public keys keeps a smooth window. Disc
 itself only holds one public key at a time today.
 
+### TOTP MFA (gh/geldata#8186)
+
+Two-factor authentication via RFC 6238 TOTP. Compatible with Google
+Authenticator, 1Password, Authy, etc. Defaults to SHA-1 / 30-second
+step / 6-digit codes — what every authenticator app expects.
+
+**Enrollment** is a two-step ceremony to make sure the user actually
+captured the secret before we start gating their logins on it:
+
+```ts
+// Step 1: caller is logged in. Mint a fresh secret + QR-friendly URI.
+const { secret, otpauthUri } = await provider.enrollTOTP(userId);
+// Render `otpauthUri` as a QR code so the user scans it into their app.
+
+// Step 2: user types the 6-digit code their app shows.
+await provider.confirmTOTP(userId, "123456");
+// Now mfa_totp.confirmed_at is set. Future logins gate on the code.
+```
+
+**Login flow** with MFA:
+
+```ts
+const result = await provider.login({ email, password });
+if ("mfaRequired" in result) {
+  // Password was right, but TOTP is required. `result.challengeToken`
+  // is single-use, expires in 5 min. Prompt for the 6-digit code.
+  const auth = await provider.loginWithTOTP(result.challengeToken, code);
+} else {
+  // No MFA enrolled — `result` is a normal AuthResponse.
+}
+```
+
+**HTTP routes** (auth-gated except `/auth/mfa/totp/login`):
+
+| Method | Path                       | Body                                |
+|--------|----------------------------|-------------------------------------|
+| POST   | `/auth/mfa/totp/enroll`    | (none)                              |
+| POST   | `/auth/mfa/totp/confirm`   | `{ "code": "123456" }`              |
+| POST   | `/auth/mfa/totp/disable`   | (none)                              |
+| POST   | `/auth/mfa/totp/login`     | `{ "challengeToken": "...", "code": "123456" }` |
+
+**Design notes:**
+- Pending enrollments (no `confirmed_at`) do NOT gate login — protects
+  users from locking themselves out if they close the QR before scanning.
+- Re-enrolling rotates the secret; the previous QR becomes invalid.
+- Challenge tokens are stored hashed (parallel to reset/verify tokens).
+- The verify window is ±1 step (clock-drift tolerance per RFC 6238 §6).
+- Constant-time string compare in `auth/totp.ts:verifyTOTP` to close
+  timing side-channels per code slot.
+- A consumed challenge cannot be replayed even before its expiry.
+
 ### Roles & RBAC (gh/geldata#8177)
 
 Disc has a small role registry plus user→role assignments. Roles are

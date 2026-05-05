@@ -415,6 +415,121 @@ export class AuthRoutes {
     };
   }
 
+  // ── MFA / TOTP routes (gh/geldata#8186) ────────────────────────────
+
+  /**
+   * Begin TOTP enrollment for the authenticated user. Returns the
+   * base32 secret + an `otpauth://` URI suitable for rendering as a
+   * QR code. The user must scan the QR with their authenticator app
+   * and confirm via `POST /auth/mfa/totp/confirm`.
+   */
+  enrollTOTP(): RequestHandler {
+    return this.middleware.requireAuth(
+      async (_request: Request, context?: AuthContext) => {
+        try {
+          const enrollment = await this.provider.enrollTOTP(context!.userId);
+          return new Response(JSON.stringify(enrollment), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        } catch (error) {
+          return this.handleError(error);
+        }
+      },
+    );
+  }
+
+  /**
+   * Confirm a pending TOTP enrollment. Body: `{ code: "123456" }`.
+   * On success the user's TOTP is active — subsequent logins must
+   * include the second-factor step.
+   */
+  confirmTOTP(): RequestHandler {
+    return this.middleware.requireAuth(
+      async (request: Request, context?: AuthContext) => {
+        try {
+          const body = await request.json();
+          if (!body.code) {
+            return new Response(
+              JSON.stringify({ error: "code is required", code: "MISSING_CODE" }),
+              {
+                status: 400,
+                headers: { "Content-Type": "application/json" },
+              },
+            );
+          }
+          await this.provider.confirmTOTP(context!.userId, String(body.code));
+          return new Response(JSON.stringify({ success: true }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        } catch (error) {
+          return this.handleError(error);
+        }
+      },
+    );
+  }
+
+  /**
+   * Disable TOTP for the authenticated user. The route is auth-gated
+   * but operators who want a stronger gate (re-prompt for password)
+   * should layer that in their own handler.
+   */
+  disableTOTP(): RequestHandler {
+    return this.middleware.requireAuth(
+      async (_request: Request, context?: AuthContext) => {
+        try {
+          await this.provider.disableTOTP(context!.userId);
+          return new Response(JSON.stringify({ success: true }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        } catch (error) {
+          return this.handleError(error);
+        }
+      },
+    );
+  }
+
+  /**
+   * Complete an MFA-gated login. Public route (the user can't log in
+   * yet — that's the whole point). Body:
+   *   { challengeToken: "...", code: "123456" }
+   * Rate-limited the same as login.
+   */
+  loginWithTOTP(): (request: Request) => Promise<Response> {
+    return async (request: Request) => {
+      const limited = this.checkRateLimit(request);
+      if (limited) return limited;
+      try {
+        const body = await request.json();
+        if (!body.challengeToken || !body.code) {
+          return new Response(
+            JSON.stringify({
+              error: "challengeToken and code are required",
+              code: "MISSING_CREDENTIALS",
+            }),
+            {
+              status: 400,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+        const response = await this.provider.loginWithTOTP(
+          String(body.challengeToken),
+          String(body.code),
+          extractRequestMeta(request),
+        );
+        return new Response(JSON.stringify(response), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch (error) {
+        return this.handleError(error);
+      }
+    };
+  }
+
   /**
    * Mint an anonymous (guest) identity. (gh/geldata#8750)
    *

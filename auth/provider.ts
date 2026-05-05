@@ -15,11 +15,14 @@ import {
   AuthProvider as IAuthProvider,
   AuthResponse,
   LoginCredentials,
+  type LoginResult,
+  type MfaChallenge,
   PasswordValidationResult,
   RegisterData,
   RequestMeta,
   Session,
   TokenPayload,
+  type TotpEnrollment,
   User,
 } from "./types.ts";
 import {
@@ -29,6 +32,11 @@ import {
   WebhookSender,
   type WebhookSenderOptions,
 } from "./webhooks.ts";
+import {
+  buildOtpauthUri,
+  generateSecret as generateTotpSecret,
+  verifyTOTP,
+} from "./totp.ts";
 
 /**
  * Conditional config fields whose presence depends on `jwtAlgorithm`:
@@ -217,6 +225,38 @@ export class AuthProvider implements IAuthProvider {
       )
     `);
 
+    // MFA TOTP table (gh/geldata#8186) — one row per user when TOTP
+    // is enrolled. `confirmed_at` distinguishes pending enrollments
+    // (user scanned the QR but hasn't proven they can read codes from
+    // it) from active MFA. `secret` is base32 — we store it plaintext
+    // because PG-at-rest encryption is the operator's job and re-
+    // encrypting on every verify would gut performance.
+    await this.db.execute(`
+      CREATE TABLE IF NOT EXISTS mfa_totp (
+        user_id TEXT PRIMARY KEY,
+        secret TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        confirmed_at TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+
+    // MFA challenge table (gh/geldata#8186) — short-lived
+    // password-verified-but-MFA-pending tokens. The user has typed the
+    // right password; they now need to prove possession of the second
+    // factor. Tokens are stored hashed (parallel to reset/verify token
+    // handling at P0-03) and expire fast (default 5 min).
+    await this.db.execute(`
+      CREATE TABLE IF NOT EXISTS mfa_challenges (
+        token_hash TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        expires_at TIMESTAMP NOT NULL,
+        consumed_at TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+
     // Roles table — a small registry of named roles that users can be
     // assigned to. (gh/geldata#8177) Roles themselves carry only a name
     // and an optional description; permissions are encoded in access
@@ -261,6 +301,12 @@ export class AuthProvider implements IAuthProvider {
     );
     await this.db.execute(
       `CREATE INDEX IF NOT EXISTS idx_user_roles_role_name ON user_roles(role_name)`,
+    );
+    await this.db.execute(
+      `CREATE INDEX IF NOT EXISTS idx_mfa_challenges_user_id ON mfa_challenges(user_id)`,
+    );
+    await this.db.execute(
+      `CREATE INDEX IF NOT EXISTS idx_mfa_challenges_expires_at ON mfa_challenges(expires_at)`,
     );
   }
 
@@ -578,7 +624,7 @@ export class AuthProvider implements IAuthProvider {
     };
   }
 
-  async login(credentials: LoginCredentials): Promise<AuthResponse> {
+  async login(credentials: LoginCredentials): Promise<LoginResult> {
     // Find user by email or username
     const query = credentials.email
       ? "SELECT * FROM users WHERE email = ?"
@@ -652,25 +698,43 @@ export class AuthProvider implements IAuthProvider {
       );
     }
 
-    // Create session
-    const session = await this.createSession(user.id, credentials.meta);
+    // MFA gate (gh/geldata#8186): if the user has TOTP enrolled and
+    // confirmed, password alone is not enough — issue a short-lived
+    // challenge token and bail. The caller must complete the login via
+    // `loginWithTOTP(challengeToken, code)`.
+    if (await this.hasConfirmedTOTP(user.id)) {
+      const challenge = await this.issueMfaChallenge(user.id);
+      this.auditEvent("login_mfa_challenge_issued", user.id, {
+        ipAddress: credentials.meta?.ipAddress,
+      });
+      return challenge;
+    }
 
-    // Generate tokens
+    return await this.completeLogin(user, credentials.meta);
+  }
+
+  /**
+   * Internal: shared "create session + mint JWT + audit + webhook" path.
+   * Used by both the password-only `login()` and the MFA-completing
+   * `loginWithTOTP()` so they emit the same events and shape.
+   */
+  private async completeLogin(
+    user: User,
+    meta?: RequestMeta,
+  ): Promise<AuthResponse> {
+    const session = await this.createSession(user.id, meta);
     const token = await this.generateJWT(user);
     const refreshToken = this.generateToken();
-
-    // Update session with tokens
     await this.db.execute(
       "UPDATE sessions SET token = ?, refresh_token = ? WHERE id = ?",
       [token, refreshToken, session.id],
     );
-
     session.token = token;
     session.refreshToken = refreshToken;
 
     this.auditEvent("login_succeeded", user.id, {
       sessionId: session.id,
-      ipAddress: credentials.meta?.ipAddress,
+      ipAddress: meta?.ipAddress,
     });
 
     this.fireWebhook({
@@ -684,7 +748,7 @@ export class AuthProvider implements IAuthProvider {
       user: this.sanitizeUser(user),
       session,
       token,
-      refreshToken: refreshToken,
+      refreshToken,
     };
   }
 
@@ -1193,6 +1257,226 @@ export class AuthProvider implements IAuthProvider {
       [userId, roleName],
     );
     return result.rows.length > 0;
+  }
+
+  // ── MFA / TOTP (gh/geldata#8186) ───────────────────────────────────
+
+  /**
+   * Begin TOTP enrollment for a user. Generates a fresh base32 secret
+   * and stores it in `mfa_totp` with `confirmed_at = NULL` — until the
+   * user proves they can produce a valid code (via `confirmTOTP`), the
+   * secret is just sitting there and the login flow ignores it.
+   *
+   * Calling enroll twice resets the secret. The old QR code becomes
+   * invalid the moment a new secret is written; this is intentional —
+   * the user clicked "set up MFA" again, presumably because they lost
+   * the previous setup.
+   */
+  async enrollTOTP(userId: string): Promise<TotpEnrollment> {
+    const userResult = await this.db.query(
+      "SELECT id, email, username FROM users WHERE id = ?",
+      [userId],
+    );
+    if (userResult.rows.length === 0) {
+      throw new AuthError(
+        "User not found",
+        AuthErrorCode.USER_NOT_FOUND,
+        404,
+      );
+    }
+    const user = userResult.rows[0];
+    const secret = generateTotpSecret();
+
+    const existing = await this.db.query(
+      "SELECT user_id FROM mfa_totp WHERE user_id = ?",
+      [userId],
+    );
+    if (existing.rows.length > 0) {
+      await this.db.execute(
+        "UPDATE mfa_totp SET secret = ?, confirmed_at = NULL WHERE user_id = ?",
+        [secret, userId],
+      );
+    } else {
+      await this.db.execute(
+        "INSERT INTO mfa_totp (user_id, secret) VALUES (?, ?)",
+        [userId, secret],
+      );
+    }
+
+    const otpauthUri = buildOtpauthUri({
+      issuer: this.config.jwtIssuer || "Disc",
+      accountName: user.username || user.email,
+      secret,
+    });
+    this.auditEvent("totp_enrollment_started", userId);
+    return { secret, otpauthUri };
+  }
+
+  /**
+   * Complete TOTP enrollment by verifying that the user can read codes
+   * from their authenticator app. On success, marks the secret as
+   * confirmed — subsequent logins must include a TOTP code.
+   *
+   * Throws `INVALID_CREDENTIALS` (401) on a wrong code so probing the
+   * code space hits the same error shape as a wrong password.
+   */
+  async confirmTOTP(userId: string, code: string): Promise<void> {
+    const result = await this.db.query(
+      "SELECT secret FROM mfa_totp WHERE user_id = ?",
+      [userId],
+    );
+    if (result.rows.length === 0) {
+      throw new AuthError(
+        "TOTP not enrolled",
+        AuthErrorCode.INVALID_OPERATION,
+        400,
+      );
+    }
+    const offset = await verifyTOTP(result.rows[0].secret, code);
+    if (offset === null) {
+      this.auditEvent("totp_confirm_failed", userId);
+      throw new AuthError(
+        "Invalid TOTP code",
+        AuthErrorCode.INVALID_CREDENTIALS,
+        401,
+      );
+    }
+    await this.db.execute(
+      "UPDATE mfa_totp SET confirmed_at = CURRENT_TIMESTAMP WHERE user_id = ?",
+      [userId],
+    );
+    this.auditEvent("totp_confirmed", userId);
+  }
+
+  /**
+   * Disable TOTP for a user. The row is deleted, not just flagged —
+   * keeps a fresh `enrollTOTP()` from accidentally re-using a
+   * compromised secret. The caller is responsible for whatever
+   * authorization gate makes sense (typically: re-prompt for password).
+   */
+  async disableTOTP(userId: string): Promise<void> {
+    await this.db.execute(
+      "DELETE FROM mfa_totp WHERE user_id = ?",
+      [userId],
+    );
+    this.auditEvent("totp_disabled", userId);
+  }
+
+  /**
+   * Complete an MFA-gated login by submitting the TOTP code.
+   * `challengeToken` is the plaintext token returned from `login()`'s
+   * `MfaChallenge`. On success, returns a normal `AuthResponse`. On
+   * failure, the challenge stays valid (until expiry) so users can
+   * retry typos — but each individual code is rate-limited by the
+   * 30-second TOTP step plus the auth-route per-IP limiter.
+   */
+  async loginWithTOTP(
+    challengeToken: string,
+    code: string,
+    meta?: RequestMeta,
+  ): Promise<AuthResponse> {
+    const tokenHash = await this.hashToken(challengeToken);
+    const result = await this.db.query(
+      `SELECT user_id, expires_at, consumed_at
+       FROM mfa_challenges
+       WHERE token_hash = ?`,
+      [tokenHash],
+    );
+    if (result.rows.length === 0) {
+      throw new AuthError(
+        "Invalid or expired MFA challenge",
+        AuthErrorCode.INVALID_TOKEN,
+        401,
+      );
+    }
+    const row = result.rows[0];
+    if (row.consumed_at) {
+      throw new AuthError(
+        "MFA challenge already used",
+        AuthErrorCode.INVALID_TOKEN,
+        401,
+      );
+    }
+    const expiresAt = new Date(row.expires_at);
+    if (expiresAt.getTime() < Date.now()) {
+      throw new AuthError(
+        "MFA challenge expired",
+        AuthErrorCode.TOKEN_EXPIRED,
+        401,
+      );
+    }
+
+    const totp = await this.db.query(
+      "SELECT secret FROM mfa_totp WHERE user_id = ?",
+      [row.user_id],
+    );
+    if (totp.rows.length === 0) {
+      // User disabled MFA between password-step and code-step. Be
+      // conservative — fail closed rather than promote.
+      throw new AuthError(
+        "MFA not configured",
+        AuthErrorCode.INVALID_OPERATION,
+        400,
+      );
+    }
+    const offset = await verifyTOTP(totp.rows[0].secret, code);
+    if (offset === null) {
+      this.auditEvent("login_mfa_failed", row.user_id, {
+        ipAddress: meta?.ipAddress,
+      });
+      throw new AuthError(
+        "Invalid TOTP code",
+        AuthErrorCode.INVALID_CREDENTIALS,
+        401,
+      );
+    }
+
+    // Burn the challenge before issuing the session. A consumed_at
+    // marker keeps the row around for forensics but blocks reuse.
+    await this.db.execute(
+      "UPDATE mfa_challenges SET consumed_at = CURRENT_TIMESTAMP WHERE token_hash = ?",
+      [tokenHash],
+    );
+
+    const user = await this.getUser(row.user_id);
+    if (!user) {
+      throw new AuthError(
+        "User not found",
+        AuthErrorCode.USER_NOT_FOUND,
+        404,
+      );
+    }
+    return await this.completeLogin(user, meta);
+  }
+
+  /** Internal: does the user have a confirmed TOTP enrollment? */
+  private async hasConfirmedTOTP(userId: string): Promise<boolean> {
+    const result = await this.db.query(
+      "SELECT 1 FROM mfa_totp WHERE user_id = ? AND confirmed_at IS NOT NULL",
+      [userId],
+    );
+    return result.rows.length > 0;
+  }
+
+  /**
+   * Internal: mint a single-use MFA challenge token, store its hash,
+   * and return the plaintext bundled into an `MfaChallenge` for the
+   * caller to relay back via `loginWithTOTP`.
+   */
+  private async issueMfaChallenge(userId: string): Promise<MfaChallenge> {
+    const plaintext = this.generateToken();
+    const tokenHash = await this.hashToken(plaintext);
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 min
+    await this.db.execute(
+      `INSERT INTO mfa_challenges (token_hash, user_id, expires_at)
+       VALUES (?, ?, ?)`,
+      [tokenHash, userId, expiresAt.toISOString()],
+    );
+    return {
+      mfaRequired: true,
+      challengeToken: plaintext,
+      factors: ["totp"],
+    };
   }
 
   private async createSession(
