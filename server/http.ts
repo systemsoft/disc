@@ -44,6 +44,12 @@ export interface HttpServerOptions {
   databaseRegistry?: DatabaseRegistry;
   schemaProvider?: SchemaProvider;
   migrationsProvider?: MigrationsProvider;
+  /**
+   * File-storage manager backing the `/files/*` endpoints. Optional:
+   * apps that don't need uploads omit it and the routes return 404.
+   * (gh/geldata#3567)
+   */
+  fileManager?: import("../lib/file-storage/manager.ts").FileManager;
 }
 
 export class HttpServer {
@@ -55,6 +61,7 @@ export class HttpServer {
   private subscription_handler: SubscriptionHandler;
   private authMiddleware?: AuthMiddleware;
   private authRoutes?: AuthRoutes;
+  private fileManager?: import("../lib/file-storage/manager.ts").FileManager;
   private extensionRoutes: Map<string, ExtensionRoute[]>;
   private extensionHealthGetter?: () => Promise<
     Map<string, { healthy: boolean; details?: string }>
@@ -86,6 +93,7 @@ export class HttpServer {
     this.protocolHandler = options.protocolHandler;
     this.authMiddleware = options.authMiddleware;
     this.authRoutes = options.authRoutes;
+    this.fileManager = options.fileManager;
     this.extensionRoutes = options.extensionRoutes || new Map();
     this.extensionHealthGetter = options.extensionHealthGetter;
     this.databaseRegistry = options.databaseRegistry;
@@ -405,6 +413,11 @@ export class HttpServer {
         return this.handle_schema_route(url);
       }
 
+      // File-storage routes
+      if (url.pathname === "/files" || url.pathname.startsWith("/files/")) {
+        return await this.handle_files_route(request, url, authedContext);
+      }
+
       // Route handling
       switch (url.pathname) {
         case "/":
@@ -547,6 +560,16 @@ export class HttpServer {
         webauthn_login_finish: "/auth/webauthn/login/finish",
         webauthn_credentials: "/auth/webauthn/credentials",
         webauthn_credentials_delete: "/auth/webauthn/credentials/delete",
+      };
+    }
+
+    if (this.fileManager) {
+      endpoints.files = {
+        upload: "POST /files",
+        list: "GET /files",
+        get: "GET /files/:id",
+        meta: "GET /files/:id/meta",
+        delete: "DELETE /files/:id",
       };
     }
 
@@ -1145,6 +1168,130 @@ export class HttpServer {
         error: error instanceof Error ? error.message : String(error),
       });
       return this.create_error_response("Extension error", 500);
+    }
+  }
+
+  /**
+   * File-storage HTTP layer (gh/geldata#3567).
+   *
+   * Routes:
+   *   POST   /files                  upload (raw octet-stream body)
+   *   GET    /files                  list owner's files (JSON)
+   *   GET    /files/:id              download (binary)
+   *   GET    /files/:id/meta         metadata only (JSON)
+   *   DELETE /files/:id              delete (owner-only)
+   *
+   * All routes require auth — owner is `context.userId`. Apps that want
+   * unauthenticated reads should layer that on top with a custom route.
+   */
+  private async handle_files_route(
+    request: Request,
+    url: URL,
+    context: import("../auth/middleware.ts").AuthContext | null,
+  ): Promise<Response> {
+    if (!this.fileManager) {
+      return this.create_error_response("File storage not configured", 404);
+    }
+    if (!context?.userId) {
+      // gateAuth already enforces requireAuth when configured; this is
+      // the in-permissive-mode path. Files are sensitive enough that we
+      // refuse without a user even when the rest of the server is open.
+      return new Response(
+        JSON.stringify({ error: "Authentication required" }),
+        {
+          status: 401,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    const userId = context.userId;
+    const segments = url.pathname.split("/").filter(Boolean); // ["files", ...]
+    try {
+      if (segments.length === 1) {
+        // /files
+        if (request.method === "POST") {
+          const body = new Uint8Array(await request.arrayBuffer());
+          const meta = await this.fileManager.upload({
+            ownerUserId: userId,
+            name: request.headers.get("x-file-name") ?? undefined,
+            contentType: request.headers.get("content-type") ?? undefined,
+            body,
+          });
+          return new Response(JSON.stringify(meta), {
+            status: 201,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        if (request.method === "GET") {
+          const list = await this.fileManager.list(userId);
+          return new Response(JSON.stringify({ files: list }), {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        return this.create_error_response("Method not allowed", 405);
+      }
+
+      if (segments.length === 2) {
+        // /files/:id
+        const id = segments[1];
+        if (request.method === "GET") {
+          const { metadata, body } = await this.fileManager.read(id, userId);
+          return new Response(body as BodyInit, {
+            status: 200,
+            headers: {
+              "Content-Type": metadata.contentType,
+              "Content-Length": String(metadata.size),
+              ...(metadata.name
+                ? {
+                  "Content-Disposition": `inline; filename="${
+                    metadata.name.replace(/"/g, "")
+                  }"`,
+                }
+                : {}),
+            },
+          });
+        }
+        if (request.method === "DELETE") {
+          await this.fileManager.delete(id, userId);
+          return new Response(null, { status: 204 });
+        }
+        return this.create_error_response("Method not allowed", 405);
+      }
+
+      if (segments.length === 3 && segments[2] === "meta") {
+        // /files/:id/meta
+        if (request.method !== "GET") {
+          return this.create_error_response("Method not allowed", 405);
+        }
+        const meta = await this.fileManager.readMetadata(segments[1], userId);
+        return new Response(JSON.stringify(meta), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      return this.create_error_response("Unknown files route", 404);
+    } catch (err) {
+      const name = err instanceof Error ? err.name : "";
+      if (name === "FileNotFoundError") {
+        return this.create_error_response("File not found", 404);
+      }
+      if (name === "FileAccessDeniedError") {
+        return this.create_error_response("Access denied", 403);
+      }
+      if (name === "FileTooLargeError") {
+        return this.create_error_response(
+          err instanceof Error ? err.message : "File too large",
+          413,
+        );
+      }
+      log.error("Files route error", {
+        path: url.pathname,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return this.create_error_response("Internal error", 500);
     }
   }
 
