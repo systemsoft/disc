@@ -29,19 +29,12 @@ import {
   type WebAuthnRegistrationFinish,
   type WebAuthnRegistrationOptions,
 } from "./types.ts";
-import {
-  newEventId,
-  newEventTimestamp,
-  type WebhookEvent,
-  WebhookSender,
-  type WebhookSenderOptions,
-} from "./webhooks.ts";
-import {
-  buildOtpauthUri,
-  generateSecret as generateTotpSecret,
-  verifyTOTP,
-} from "./totp.ts";
+import { newEventId, newEventTimestamp, type WebhookEvent, WebhookSender, type WebhookSenderOptions } from "./webhooks.ts";
+import { type CaptchaVerifier, createCaptchaVerifier, type RemoteCaptchaVerifierOptions } from "./captcha.ts";
+import { buildOtpauthUri, generateSecret as generateTotpSecret, verifyTOTP } from "./totp.ts";
 import * as webAuthn from "./webauthn.ts";
+import { createMailer } from "../smtp/mailer.ts";
+import { EmailEventListener } from "./email-listener.ts";
 
 /**
  * Conditional config fields whose presence depends on `jwtAlgorithm`:
@@ -54,7 +47,11 @@ type ConditionalAuthFields =
   | "jwtSecret"
   | "jwtPrivateKey"
   | "jwtPublicKey"
-  | "webauthn";
+  | "webauthn"
+  | "smtp"
+  | "emailTemplates"
+  | "emailBaseUrl"
+  | "captcha";
 
 /**
  * Resolved config after defaults merge — every non-conditional field is
@@ -73,25 +70,24 @@ type ResolvedAuthConfig =
  * here — the field-by-field merge that previously dropped
  * `maxSessionsPerUser` silently can no longer recur.
  */
-const AUTH_CONFIG_DEFAULTS: Omit<Required<AuthConfig>, ConditionalAuthFields> =
-  {
-    jwtAlgorithm: "HS256",
-    jwtIssuer: "disc",
-    jwtAudience: "disc-api",
-    tokenExpiry: 3600, // 1 hour
-    refreshTokenExpiry: 604800, // 7 days
-    bcryptRounds: 12,
-    sessionTimeout: 3600,
-    allowRegistration: true,
-    requireEmailVerification: false,
-    passwordMinLength: 8,
-    passwordRequireUppercase: false,
-    passwordRequireNumbers: false,
-    passwordRequireSpecial: false,
-    // 0 disables the cap (unlimited sessions).
-    maxSessionsPerUser: 0,
-    webhooks: [],
-  };
+const AUTH_CONFIG_DEFAULTS: Omit<Required<AuthConfig>, ConditionalAuthFields> = {
+  jwtAlgorithm: "HS256",
+  jwtIssuer: "disc",
+  jwtAudience: "disc-api",
+  tokenExpiry: 3600, // 1 hour
+  refreshTokenExpiry: 604800, // 7 days
+  bcryptRounds: 12,
+  sessionTimeout: 3600,
+  allowRegistration: true,
+  requireEmailVerification: false,
+  passwordMinLength: 8,
+  passwordRequireUppercase: false,
+  passwordRequireNumbers: false,
+  passwordRequireSpecial: false,
+  // 0 disables the cap (unlimited sessions).
+  maxSessionsPerUser: 0,
+  webhooks: [],
+};
 
 export class AuthProvider implements IAuthProvider {
   private config: ResolvedAuthConfig;
@@ -111,11 +107,17 @@ export class AuthProvider implements IAuthProvider {
   // subscriptions are configured, `dispatch()` is a no-op.
   // (gh/geldata#7484, ports geldata/gel#7813)
   private webhookSender: WebhookSender;
+  // Pluggable captcha gate for public auth endpoints. Always present;
+  // when no `captcha` config is supplied, this is a `NoopCaptchaVerifier`
+  // that reports `isGated() === false` for every endpoint so route
+  // handlers can call it unconditionally. (gh/geldata#7341)
+  public readonly captchaVerifier: CaptchaVerifier;
 
   constructor(
     config: AuthConfig,
     db: DatabaseInterface,
     webhookOptions: WebhookSenderOptions = {},
+    captchaOptions: RemoteCaptchaVerifierOptions = {},
   ) {
     // Merge defaults with user config, dropping `undefined` values from
     // `config` so an explicitly-undefined optional doesn't shadow the
@@ -135,6 +137,53 @@ export class AuthProvider implements IAuthProvider {
       this.config.webhooks ?? [],
       webhookOptions,
     );
+    this.captchaVerifier = createCaptchaVerifier(
+      this.config.captcha,
+      captchaOptions,
+    );
+
+    // Wire the in-process SMTP email listener if either side of the
+    // pair is configured. `createMailer(undefined)` returns a
+    // `NoopMailer`, so setting just `emailBaseUrl` is enough to
+    // dry-run the wiring; production deployments set both.
+    // Refusing to register without `emailBaseUrl` is intentional —
+    // the templates can't construct usable links without it, so
+    // surface the misconfig at construction rather than hiding it
+    // until the first dispatch.
+    if (this.config.smtp || this.config.emailBaseUrl) {
+      if (!this.config.emailBaseUrl) {
+        authLogger.error(
+          "smtp configured without emailBaseUrl — refusing to register email listener (templates need a base URL to construct links)",
+        );
+      } else {
+        const mailer = createMailer(this.config.smtp);
+        const listener = new EmailEventListener({
+          baseUrl: this.config.emailBaseUrl,
+          mailer,
+          resolveRecipient: (identityId) => this.resolveEmailRecipient(identityId),
+          templates: this.config.emailTemplates,
+        });
+        this.webhookSender.addListener(listener.handle.bind(listener));
+      }
+    }
+  }
+
+  /**
+   * Map an `identityId` to the recipient email used by the SMTP
+   * email listener. Returns `null` for unknown ids and for anonymous
+   * identities (their email is a synthetic placeholder; messaging
+   * them would dead-letter at best). Used as the
+   * `resolveRecipient` callback on `EmailEventListener`.
+   */
+  private async resolveEmailRecipient(identityId: string): Promise<string | null> {
+    const result = await this.db.query(
+      "SELECT email, is_anonymous FROM users WHERE id = ?",
+      [identityId],
+    );
+    if (result.rows.length === 0) return null;
+    const row = result.rows[0];
+    if (row.is_anonymous) return null;
+    return typeof row.email === "string" && row.email.length > 0 ? row.email : null;
   }
 
   async initialize(): Promise<void> {
@@ -302,6 +351,26 @@ export class AuthProvider implements IAuthProvider {
       )
     `);
 
+    // Magic-code tokens (gh/geldata#7367) — passwordless email-delivered
+    // 6-digit codes, the SMS-friendly sibling of magic-link. Stored
+    // hashed; lookup is scoped by `user_id` to keep the 1M-possibility
+    // brute-force surface infeasible. `attempts` counts wrong-code
+    // submissions for the row; ≥5 marks the row consumed (locked out
+    // until the user requests a fresh code).
+    await this.db.execute(`
+      CREATE TABLE IF NOT EXISTS magic_code_tokens (
+        id TEXT PRIMARY KEY,
+        token_hash TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        expires_at TIMESTAMP NOT NULL,
+        consumed_at TIMESTAMP,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        ip_address TEXT,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+
     // MFA TOTP table (gh/geldata#8186) — one row per user when TOTP
     // is enrolled. `confirmed_at` distinguishes pending enrollments
     // (user scanned the QR but hasn't proven they can read codes from
@@ -392,6 +461,12 @@ export class AuthProvider implements IAuthProvider {
       `CREATE INDEX IF NOT EXISTS idx_magic_link_expires_at ON magic_link_tokens(expires_at)`,
     );
     await this.db.execute(
+      `CREATE INDEX IF NOT EXISTS idx_magic_code_user_id ON magic_code_tokens(user_id)`,
+    );
+    await this.db.execute(
+      `CREATE INDEX IF NOT EXISTS idx_magic_code_expires_at ON magic_code_tokens(expires_at)`,
+    );
+    await this.db.execute(
       `CREATE INDEX IF NOT EXISTS idx_recovery_codes_user_id ON recovery_codes(user_id)`,
     );
     await this.db.execute(
@@ -441,13 +516,9 @@ export class AuthProvider implements IAuthProvider {
 
     // Create user
     const userId = this.generateId();
-    const verificationToken = this.config.requireEmailVerification
-      ? this.generateToken()
-      : null;
+    const verificationToken = this.config.requireEmailVerification ? this.generateToken() : null;
     // Store only the hash; plaintext is returned to the caller for emailing.
-    const verificationTokenHash = verificationToken
-      ? await this.hashToken(verificationToken)
-      : null;
+    const verificationTokenHash = verificationToken ? await this.hashToken(verificationToken) : null;
 
     await this.db.execute(
       `
@@ -649,12 +720,8 @@ export class AuthProvider implements IAuthProvider {
 
     const salt = await bcrypt.genSalt(this.config.bcryptRounds);
     const passwordHash = await bcrypt.hash(data.password, salt);
-    const verificationToken = this.config.requireEmailVerification
-      ? this.generateToken()
-      : null;
-    const verificationTokenHash = verificationToken
-      ? await this.hashToken(verificationToken)
-      : null;
+    const verificationToken = this.config.requireEmailVerification ? this.generateToken() : null;
+    const verificationTokenHash = verificationToken ? await this.hashToken(verificationToken) : null;
 
     await this.db.execute(
       `
@@ -718,9 +785,7 @@ export class AuthProvider implements IAuthProvider {
 
   async login(credentials: LoginCredentials): Promise<LoginResult> {
     // Find user by email or username
-    const query = credentials.email
-      ? "SELECT * FROM users WHERE email = ?"
-      : "SELECT * FROM users WHERE username = ?";
+    const query = credentials.email ? "SELECT * FROM users WHERE email = ?" : "SELECT * FROM users WHERE username = ?";
     const param = credentials.email || credentials.username;
 
     const result = await this.db.query(query, [param]);
@@ -1001,9 +1066,7 @@ export class AuthProvider implements IAuthProvider {
         throw error;
       }
       // Check if the djwt library threw an expiration error
-      const errorMsg = error instanceof Error
-        ? error.message.toLowerCase()
-        : "";
+      const errorMsg = error instanceof Error ? error.message.toLowerCase() : "";
       if (errorMsg.includes("expired") || errorMsg.includes("exp")) {
         this.auditEvent("token_verification_failed", null, {
           code: AuthErrorCode.TOKEN_EXPIRED,
@@ -1702,6 +1765,227 @@ export class AuthProvider implements IAuthProvider {
     return await this.completeLogin(user, meta);
   }
 
+  // ── Magic codes (gh/geldata#7367) ──────────────────────────────────
+
+  /**
+   * Mint a passwordless 6-digit login code for the user with this
+   * email and return the plaintext. Caller is expected to deliver it
+   * via email/SMS (the user types it back into the app to log in via
+   * `verifyMagicCode`). Codes expire in 10 minutes by default —
+   * shorter than magic-link's 15 because human-typed codes shouldn't
+   * sit around in inboxes.
+   *
+   * Anti-enumeration: when no user matches, the call still succeeds
+   * and returns a plaintext code — the row is never persisted, so the
+   * code can never be redeemed. Same response-shape and timing posture
+   * as `requestMagicLink` and `login()` (gh/geldata#9137).
+   */
+  async requestMagicCode(
+    email: string,
+    meta?: RequestMeta,
+  ): Promise<string> {
+    const code = this.generateNumericCode(6);
+    const result = await this.db.query(
+      "SELECT id, active, is_anonymous FROM users WHERE email = ?",
+      [email],
+    );
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min
+    if (
+      result.rows.length > 0 &&
+      result.rows[0].active &&
+      !result.rows[0].is_anonymous
+    ) {
+      const tokenHash = await this.hashToken(code);
+      await this.db.execute(
+        `INSERT INTO magic_code_tokens (id, token_hash, user_id, expires_at, attempts, ip_address)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          this.generateId(),
+          tokenHash,
+          result.rows[0].id,
+          expiresAt.toISOString(),
+          0,
+          meta?.ipAddress ?? null,
+        ],
+      );
+      this.auditEvent("magic_code_requested", result.rows[0].id, {
+        ipAddress: meta?.ipAddress,
+      });
+      this.fireWebhook({
+        eventType: "MagicCodeRequested",
+        eventId: newEventId(),
+        timestamp: newEventTimestamp(),
+        identityId: result.rows[0].id,
+        magicCode: code,
+      });
+    } else {
+      this.auditEvent("magic_code_requested", null, {
+        result: "no_such_user",
+        email,
+        ipAddress: meta?.ipAddress,
+      });
+    }
+    return code;
+  }
+
+  /**
+   * Redeem a magic-code submission and complete login. Lookup is
+   * scoped by `email` (not just `token_hash`) because 6 digits = 1M
+   * possibilities — far smaller than magic-link's 32-byte token space.
+   * Combined with per-IP rate-limiting at the HTTP layer and the
+   * 5-attempt lockout below, brute-force is infeasible.
+   *
+   * Lockout: every wrong-code submission against a non-expired,
+   * non-consumed row increments `attempts`. When the counter reaches
+   * 5, the row is marked consumed (`consumed_at` set) — the user must
+   * request a fresh code. Each new `requestMagicCode` insert resets
+   * the counter trivially because it inserts a new row; old rows are
+   * simply ignored or expired.
+   *
+   * MFA: matches `consumeMagicLink` — if the user has TOTP enrolled,
+   * an `MfaChallenge` is returned instead of a session and the code
+   * is burned regardless. (gh/geldata#7367)
+   */
+  async verifyMagicCode(
+    email: string,
+    code: string,
+    meta?: RequestMeta,
+  ): Promise<LoginResult> {
+    const tokenHash = await this.hashToken(code);
+    const userResult = await this.db.query(
+      "SELECT id, active, is_anonymous FROM users WHERE email = ?",
+      [email],
+    );
+
+    // Anti-enumeration: do a dummy hash for unknown emails so the
+    // wall-clock posture matches the happy path. Same rationale as
+    // `runDummyCompare` for password login (P1-35 / gh/geldata#9137).
+    if (
+      userResult.rows.length === 0 ||
+      !userResult.rows[0].active ||
+      userResult.rows[0].is_anonymous
+    ) {
+      await this.hashToken(code);
+      throw new AuthError(
+        "Invalid or expired code",
+        AuthErrorCode.INVALID_TOKEN,
+        401,
+      );
+    }
+
+    const userId = userResult.rows[0].id;
+
+    // Look for the most recent matching code for this user. We scope
+    // by user_id rather than relying on token_hash alone — the 1M
+    // possibility space makes a global hash lookup an unacceptable
+    // brute-force surface.
+    const codeResult = await this.db.query(
+      `SELECT id, expires_at, consumed_at, attempts
+       FROM magic_code_tokens
+       WHERE user_id = ? AND token_hash = ?
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [userId, tokenHash],
+    );
+
+    if (codeResult.rows.length === 0) {
+      // Wrong code — find the most recent live row for this user and
+      // bump its attempt counter. Lockout after 5 by burning the row.
+      const liveResult = await this.db.query(
+        `SELECT id, attempts, expires_at
+         FROM magic_code_tokens
+         WHERE user_id = ? AND consumed_at IS NULL
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [userId],
+      );
+      if (
+        liveResult.rows.length > 0 &&
+        new Date(liveResult.rows[0].expires_at).getTime() > Date.now()
+      ) {
+        const newAttempts = Number(liveResult.rows[0].attempts) + 1;
+        if (newAttempts >= 5) {
+          await this.db.execute(
+            `UPDATE magic_code_tokens
+             SET attempts = ?, consumed_at = CURRENT_TIMESTAMP
+             WHERE id = ?`,
+            [newAttempts, liveResult.rows[0].id],
+          );
+          this.auditEvent("magic_code_lockout", userId, {
+            ipAddress: meta?.ipAddress,
+          });
+        } else {
+          await this.db.execute(
+            "UPDATE magic_code_tokens SET attempts = ? WHERE id = ?",
+            [newAttempts, liveResult.rows[0].id],
+          );
+        }
+      }
+      this.auditEvent("magic_code_invalid", userId, {
+        ipAddress: meta?.ipAddress,
+      });
+      throw new AuthError(
+        "Invalid or expired code",
+        AuthErrorCode.INVALID_TOKEN,
+        401,
+      );
+    }
+
+    const row = codeResult.rows[0];
+    if (row.consumed_at) {
+      this.auditEvent("magic_code_invalid", userId, {
+        ipAddress: meta?.ipAddress,
+        reason: "consumed",
+      });
+      throw new AuthError(
+        "Code already used",
+        AuthErrorCode.INVALID_TOKEN,
+        401,
+      );
+    }
+    if (new Date(row.expires_at).getTime() < Date.now()) {
+      this.auditEvent("magic_code_invalid", userId, {
+        ipAddress: meta?.ipAddress,
+        reason: "expired",
+      });
+      throw new AuthError(
+        "Code expired",
+        AuthErrorCode.TOKEN_EXPIRED,
+        401,
+      );
+    }
+
+    // Burn the code before issuing anything. Even if the MFA challenge
+    // step fails downstream, the code is single-use — the user
+    // requests a new one.
+    await this.db.execute(
+      "UPDATE magic_code_tokens SET consumed_at = CURRENT_TIMESTAMP WHERE id = ?",
+      [row.id],
+    );
+
+    const user = await this.getUser(userId);
+    if (!user || !user.active || user.isAnonymous) {
+      throw new AuthError(
+        "User not found",
+        AuthErrorCode.USER_NOT_FOUND,
+        404,
+      );
+    }
+
+    if (await this.hasConfirmedTOTP(user.id)) {
+      const challenge = await this.issueMfaChallenge(user.id);
+      this.auditEvent("magic_code_mfa_challenge_issued", user.id, {
+        ipAddress: meta?.ipAddress,
+      });
+      return challenge;
+    }
+
+    this.auditEvent("magic_code_consumed", user.id, {
+      ipAddress: meta?.ipAddress,
+    });
+    return await this.completeLogin(user, meta);
+  }
+
   // ── Recovery codes (gh/geldata#8186) ───────────────────────────────
 
   /**
@@ -2080,9 +2364,7 @@ export class AuthProvider implements IAuthProvider {
         rpId: this.config.webauthn.rpId,
         challenge: webAuthn.base64UrlEncode(challenge),
         timeout: 60000,
-        allowCredentials: allowCredentials.length > 0
-          ? allowCredentials
-          : undefined,
+        allowCredentials: allowCredentials.length > 0 ? allowCredentials : undefined,
         userVerification: "preferred",
       },
     };
@@ -2240,12 +2522,14 @@ export class AuthProvider implements IAuthProvider {
   }
 
   /** List the user's registered passkeys. */
-  async listWebAuthnCredentials(userId: string): Promise<Array<{
-    credentialId: string;
-    name: string | null;
-    createdAt: string;
-    lastUsedAt: string | null;
-  }>> {
+  async listWebAuthnCredentials(userId: string): Promise<
+    Array<{
+      credentialId: string;
+      name: string | null;
+      createdAt: string;
+      lastUsedAt: string | null;
+    }>
+  > {
     const result = await this.db.query(
       `SELECT credential_id, name, created_at, last_used_at
        FROM webauthn_credentials
@@ -2489,9 +2773,7 @@ export class AuthProvider implements IAuthProvider {
       emailVerified: Boolean(row.email_verified),
       active: Boolean(row.active),
       metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
-      isAnonymous: row.is_anonymous === undefined
-        ? false
-        : Boolean(row.is_anonymous),
+      isAnonymous: row.is_anonymous === undefined ? false : Boolean(row.is_anonymous),
     };
   }
 
@@ -2524,6 +2806,34 @@ export class AuthProvider implements IAuthProvider {
     return Array.from(bytes)
       .map((b) => b.toString(16).padStart(2, "0"))
       .join("");
+  }
+
+  /**
+   * Generate a uniformly-distributed zero-padded numeric code of the
+   * requested length. Implemented by drawing `Uint32` samples and
+   * rejecting any value above the largest multiple of `10^digits` that
+   * fits in `2^32`. A naive `% 10^digits` over `Uint32` has a small
+   * but real bias toward the lower buckets — for 6 digits the bias is
+   * tiny but it's free to do this correctly.
+   *
+   * Used by `requestMagicCode` (gh/geldata#7367); `digits` is at most
+   * 9 in practice (10^10 doesn't fit in `Uint32`).
+   */
+  private generateNumericCode(digits: number): string {
+    if (digits < 1 || digits > 9) {
+      throw new Error(`generateNumericCode: digits must be 1..9 (got ${digits})`);
+    }
+    const modulus = 10 ** digits;
+    // Largest multiple of `modulus` that fits in 2^32. Anything ≥ this
+    // threshold is rejected to keep the post-mod distribution uniform.
+    const limit = Math.floor(0x1_0000_0000 / modulus) * modulus;
+    const buf = new Uint32Array(1);
+    while (true) {
+      crypto.getRandomValues(buf);
+      if (buf[0] < limit) {
+        return String(buf[0] % modulus).padStart(digits, "0");
+      }
+    }
   }
 
   /**
@@ -2668,9 +2978,7 @@ function validateAuthConfig(config: ResolvedAuthConfig): void {
     config.jwtAlgorithm !== "RS256"
   ) {
     throw new Error(
-      `AuthProvider: jwtAlgorithm must be "HS256" or "RS256"; got ${
-        JSON.stringify(config.jwtAlgorithm)
-      }`,
+      `AuthProvider: jwtAlgorithm must be "HS256" or "RS256"; got ${JSON.stringify(config.jwtAlgorithm)}`,
     );
   }
 
@@ -2774,9 +3082,7 @@ function pemToBytes(
   const endIdx = pem.indexOf(end);
   if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) {
     throw new Error(
-      `AuthProvider: PEM key missing '${begin}' / '${end}' armor — got ${
-        pem.slice(0, 30)
-      }…`,
+      `AuthProvider: PEM key missing '${begin}' / '${end}' armor — got ${pem.slice(0, 30)}…`,
     );
   }
   const body = pem.slice(startIdx + begin.length, endIdx)

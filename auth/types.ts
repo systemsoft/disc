@@ -93,6 +93,36 @@ export interface AuthConfig {
    * (gh/geldata#6725)
    */
   webauthn?: WebAuthnConfig;
+  /**
+   * SMTP transport config. Optional — when omitted (and
+   * `emailBaseUrl` is set) Disc registers a `NoopMailer` so the
+   * email-listener wiring still runs and can be swapped for real
+   * SMTP later without code changes. (gh/geldata#8224)
+   */
+  smtp?: import("../smtp/types.ts").SmtpConfig;
+  /**
+   * Per-event email-template overrides. Default templates ship in
+   * `auth/email-templates.ts`; supply any of `verification`,
+   * `passwordReset`, `magicLink` to swap in your own renderer.
+   */
+  emailTemplates?: import("./email-templates.ts").EmailTemplateOverrides;
+  /**
+   * Base URL the built-in email templates use to construct
+   * verification / password-reset / magic-link URLs. Required to
+   * enable the SMTP email listener — without it, links would point
+   * nowhere. Setting `smtp` without `emailBaseUrl` is a misconfig
+   * that's surfaced at construction.
+   */
+  emailBaseUrl?: string;
+  /**
+   * Pluggable captcha gate (hCaptcha / Cloudflare Turnstile) for
+   * sensitive public auth endpoints. When set, the corresponding
+   * `AuthRoutes` handlers require a `captchaToken` field on the
+   * request body and verify it against the provider before any DB
+   * work runs. When omitted, captcha is disabled entirely.
+   * (gh/geldata#7341)
+   */
+  captcha?: import("./captcha.ts").CaptchaConfig;
 }
 
 /**

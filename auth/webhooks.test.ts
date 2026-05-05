@@ -4,10 +4,7 @@
  * Ports geldata/gel#7813 (gh/geldata#7484).
  */
 
-import {
-  assertEquals,
-  assertExists,
-} from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assertEquals, assertExists } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { AuthProvider } from "./provider.ts";
 import { TestDatabase } from "./test-database.ts";
 import { type WebhookConfig, WebhookSender } from "./webhooks.ts";
@@ -28,11 +25,7 @@ function makeCapture(): {
     input: string | URL | Request,
     init?: RequestInit,
   ) => {
-    const url = typeof input === "string"
-      ? input
-      : input instanceof URL
-      ? input.toString()
-      : input.url;
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     const headers: Record<string, string> = {};
     if (init?.headers instanceof Headers) {
       init.headers.forEach((v, k) => (headers[k.toLowerCase()] = v));
@@ -177,8 +170,7 @@ Deno.test("WebhookSender - omits signature header when no secret configured", as
 });
 
 Deno.test("WebhookSender - swallows fetch failures so caller is unaffected", async () => {
-  const failing: typeof fetch = (() =>
-    Promise.reject(new Error("network down"))) as typeof fetch;
+  const failing: typeof fetch = (() => Promise.reject(new Error("network down"))) as typeof fetch;
   const sender = new WebhookSender([
     { url: "http://x/", events: ["IdentityCreated"] },
   ], { fetchImpl: failing, synchronous: true });
@@ -190,6 +182,78 @@ Deno.test("WebhookSender - swallows fetch failures so caller is unaffected", asy
     timestamp: "2026-01-01T00:00:00.000Z",
     identityId: "u1",
   });
+});
+
+Deno.test("WebhookSender - addListener invokes listener on dispatch (synchronous)", async () => {
+  const { fetchImpl } = makeCapture();
+  const sender = new WebhookSender([], { fetchImpl, synchronous: true });
+
+  const seen: string[] = [];
+  sender.addListener((event) => {
+    seen.push(event.eventType);
+    return Promise.resolve();
+  });
+
+  await sender.dispatch({
+    eventType: "IdentityCreated",
+    eventId: "e1",
+    timestamp: "2026-01-01T00:00:00.000Z",
+    identityId: "u1",
+  });
+
+  assertEquals(seen, ["IdentityCreated"]);
+});
+
+Deno.test("WebhookSender - addListener receives every event regardless of WebhookConfig filters", async () => {
+  const { fetchImpl } = makeCapture();
+  const sender = new WebhookSender(
+    [{ url: "http://x/", events: ["IdentityCreated"] }], // listener should see more than this filter
+    { fetchImpl, synchronous: true },
+  );
+
+  const seen: string[] = [];
+  sender.addListener((event) => {
+    seen.push(event.eventType);
+    return Promise.resolve();
+  });
+
+  await sender.dispatch({
+    eventType: "IdentityCreated",
+    eventId: "e1",
+    timestamp: "2026-01-01T00:00:00.000Z",
+    identityId: "u1",
+  });
+  await sender.dispatch({
+    eventType: "IdentityAuthenticated",
+    eventId: "e2",
+    timestamp: "2026-01-01T00:00:00.000Z",
+    identityId: "u1",
+  });
+
+  assertEquals(seen.sort(), ["IdentityAuthenticated", "IdentityCreated"]);
+});
+
+Deno.test("WebhookSender - listener errors don't break HTTP webhook dispatch", async () => {
+  const { fetchImpl, calls } = makeCapture();
+  const sender = new WebhookSender(
+    [{ url: "http://x/", events: ["IdentityCreated"] }],
+    { fetchImpl, synchronous: true },
+  );
+
+  sender.addListener(() => {
+    throw new Error("listener boom");
+  });
+
+  // Must not throw — listener errors are caught by the sender.
+  await sender.dispatch({
+    eventType: "IdentityCreated",
+    eventId: "e1",
+    timestamp: "2026-01-01T00:00:00.000Z",
+    identityId: "u1",
+  });
+
+  // HTTP fan-out still happened.
+  assertEquals(calls.length, 1);
 });
 
 // ── AuthProvider integration tests ─────────────────────────────────────
@@ -264,9 +328,7 @@ Deno.test("AuthProvider - register with email verification also fires EmailVerif
     const types = calls.map((c) => JSON.parse(c.body).eventType).sort();
     assertEquals(types, ["EmailVerificationRequested", "IdentityCreated"]);
 
-    const verifyCall = calls.find((c) =>
-      JSON.parse(c.body).eventType === "EmailVerificationRequested"
-    );
+    const verifyCall = calls.find((c) => JSON.parse(c.body).eventType === "EmailVerificationRequested");
     assertExists(verifyCall);
     const verifyBody = JSON.parse(verifyCall.body);
     assertExists(verifyBody.verificationToken);
@@ -374,6 +436,53 @@ Deno.test("AuthProvider - resetPasswordRequest for unknown email fires no webhoo
 
   try {
     await provider.resetPasswordRequest("noone@test.com");
+    assertEquals(calls.length, 0);
+  } finally {
+    await db.close();
+  }
+});
+
+Deno.test("AuthProvider - requestMagicCode fires MagicCodeRequested webhook with code", async () => {
+  const { fetchImpl, calls } = makeCapture();
+  const { provider, db } = await makeProvider(
+    [{
+      url: "http://x/",
+      events: ["IdentityCreated", "MagicCodeRequested"],
+    }],
+    fetchImpl,
+  );
+
+  try {
+    await provider.register({
+      email: "grace@test.com",
+      password: "password123",
+    });
+    calls.length = 0;
+
+    const code = await provider.requestMagicCode("grace@test.com");
+    assertExists(code);
+
+    assertEquals(calls.length, 1);
+    const body = JSON.parse(calls[0].body);
+    assertEquals(body.eventType, "MagicCodeRequested");
+    assertEquals(body.magicCode, code);
+    assertExists(body.identityId);
+    assertExists(body.eventId);
+    assertExists(body.timestamp);
+  } finally {
+    await db.close();
+  }
+});
+
+Deno.test("AuthProvider - requestMagicCode for unknown email fires no webhook", async () => {
+  const { fetchImpl, calls } = makeCapture();
+  const { provider, db } = await makeProvider(
+    [{ url: "http://x/", events: ["MagicCodeRequested"] }],
+    fetchImpl,
+  );
+
+  try {
+    await provider.requestMagicCode("ghost@test.com");
     assertEquals(calls.length, 0);
   } finally {
     await db.close();

@@ -6,6 +6,7 @@ import { getLogger } from "../lib/logger.ts";
 import { AuthProvider } from "./provider.ts";
 import { AuthContext, AuthMiddleware, RequestHandler } from "./middleware.ts";
 import { AuthConfig, LoginCredentials, RegisterData } from "./types.ts";
+import type { CaptchaEndpoint } from "./captcha.ts";
 import { DatabaseConnection } from "../lib/database.ts";
 import { RateLimiter } from "../server/rate-limiter.ts";
 
@@ -121,6 +122,67 @@ export class AuthRoutes {
   }
 
   /**
+   * Reject requests that are missing or fail captcha verification on
+   * gated endpoints (gh/geldata#7341). Returns `null` when the
+   * verifier doesn't gate this endpoint, the token verifies, or no
+   * captcha is configured. Otherwise returns a 400/403 Response.
+   *
+   * Body-clone strategy: this method clones the request before
+   * reading JSON so the original body remains consumable by the route
+   * handler that follows. The handlers read `await request.json()`
+   * directly, and a Request body can only be read once.
+   */
+  private async checkCaptcha(
+    request: Request,
+    endpoint: CaptchaEndpoint,
+  ): Promise<Response | null> {
+    const verifier = this.provider.captchaVerifier;
+    if (!verifier.isGated(endpoint)) return null;
+
+    let token: unknown;
+    try {
+      const body = await request.clone().json();
+      token = body?.captchaToken;
+    } catch {
+      // Body wasn't JSON — treat as missing token.
+      token = undefined;
+    }
+
+    if (typeof token !== "string" || token.length === 0) {
+      return new Response(
+        JSON.stringify({
+          error: "Captcha required",
+          code: "CAPTCHA_REQUIRED",
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
+
+    const meta = extractRequestMeta(request);
+    const result = await verifier.verify(token, meta.ipAddress);
+    if (!result.success) {
+      log.warn("captcha verification failed", {
+        endpoint,
+        errorCodes: result.errorCodes,
+      });
+      return new Response(
+        JSON.stringify({
+          error: "Captcha verification failed",
+          code: "CAPTCHA_FAILED",
+        }),
+        {
+          status: 403,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
+    return null;
+  }
+
+  /**
    * Release rate limiter resources (call from dispose paths).
    */
   dispose(): void {
@@ -134,6 +196,8 @@ export class AuthRoutes {
     return async (request: Request) => {
       const limited = this.checkRateLimit(request);
       if (limited) return limited;
+      const captchaCheck = await this.checkCaptcha(request, "register");
+      if (captchaCheck) return captchaCheck;
       try {
         const body = await request.json();
         const data: RegisterData = {
@@ -163,6 +227,8 @@ export class AuthRoutes {
     return async (request: Request) => {
       const limited = this.checkRateLimit(request);
       if (limited) return limited;
+      const captchaCheck = await this.checkCaptcha(request, "login");
+      if (captchaCheck) return captchaCheck;
       try {
         const body = await request.json();
         const credentials: LoginCredentials = {
@@ -346,6 +412,8 @@ export class AuthRoutes {
     return async (request: Request) => {
       const limited = this.checkRateLimit(request);
       if (limited) return limited;
+      const captchaCheck = await this.checkCaptcha(request, "passwordReset");
+      if (captchaCheck) return captchaCheck;
       try {
         const body = await request.json();
         const { email } = body;
@@ -576,9 +644,7 @@ export class AuthRoutes {
       async (request: Request, context?: AuthContext) => {
         try {
           const body = await request.clone().json().catch(() => ({}));
-          const count = typeof body.count === "number"
-            ? body.count
-            : undefined;
+          const count = typeof body.count === "number" ? body.count : undefined;
           const codes = await this.provider.generateRecoveryCodes(
             context!.userId,
             count,
@@ -655,6 +721,8 @@ export class AuthRoutes {
     return async (request: Request) => {
       const limited = this.checkRateLimit(request);
       if (limited) return limited;
+      const captchaCheck = await this.checkCaptcha(request, "magicLink");
+      if (captchaCheck) return captchaCheck;
       try {
         const body = await request.json();
         if (!body.email) {
@@ -716,6 +784,95 @@ export class AuthRoutes {
         }
         const result = await this.provider.consumeMagicLink(
           String(body.token),
+          extractRequestMeta(request),
+        );
+        return new Response(JSON.stringify(result), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch (error) {
+        return this.handleError(error);
+      }
+    };
+  }
+
+  // ── Magic-code routes (gh/geldata#7367) ────────────────────────────
+
+  /**
+   * Request a passwordless 6-digit login code. Public route,
+   * rate-limited the same as login. Body: `{ email: "..." }`. Same
+   * anti-enumeration shape as `requestMagicLink`: response is always
+   * 200, code is in the body but unusable when the email doesn't
+   * match a real user (the row was never persisted). Production
+   * deployments should consume the `MagicCodeRequested` webhook and
+   * email out-of-band; the SMTP listener does this automatically when
+   * configured.
+   */
+  requestMagicCode(): (request: Request) => Promise<Response> {
+    return async (request: Request) => {
+      const limited = this.checkRateLimit(request);
+      if (limited) return limited;
+      const captchaCheck = await this.checkCaptcha(request, "magicCode");
+      if (captchaCheck) return captchaCheck;
+      try {
+        const body = await request.json();
+        if (!body.email) {
+          return new Response(
+            JSON.stringify({
+              error: "email is required",
+              code: "MISSING_EMAIL",
+            }),
+            {
+              status: 400,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+        const code = await this.provider.requestMagicCode(
+          String(body.email),
+          extractRequestMeta(request),
+        );
+        return new Response(
+          JSON.stringify({ success: true, magicCode: code }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          },
+        );
+      } catch (error) {
+        return this.handleError(error);
+      }
+    };
+  }
+
+  /**
+   * Verify a submitted magic code. Public route, rate-limited. Body:
+   * `{ email, code }`. Returns either an `AuthResponse` or an
+   * `MfaChallenge` (same union as `login()` and `consumeMagicLink`).
+   * Lookup is scoped by email — the code alone is too small (1M
+   * possibilities) to be safe as a global key.
+   */
+  verifyMagicCode(): (request: Request) => Promise<Response> {
+    return async (request: Request) => {
+      const limited = this.checkRateLimit(request);
+      if (limited) return limited;
+      try {
+        const body = await request.json();
+        if (!body.email || !body.code) {
+          return new Response(
+            JSON.stringify({
+              error: "email and code are required",
+              code: "MISSING_CREDENTIALS",
+            }),
+            {
+              status: 400,
+              headers: { "Content-Type": "application/json" },
+            },
+          );
+        }
+        const result = await this.provider.verifyMagicCode(
+          String(body.email),
+          String(body.code),
           extractRequestMeta(request),
         );
         return new Response(JSON.stringify(result), {

@@ -29,7 +29,8 @@ export type WebhookEvent =
   | EmailVerificationRequestedEvent
   | EmailVerifiedEvent
   | PasswordResetRequestedEvent
-  | MagicLinkRequestedEvent;
+  | MagicLinkRequestedEvent
+  | MagicCodeRequestedEvent;
 
 export interface BaseWebhookEvent {
   eventId: string;
@@ -81,6 +82,16 @@ export interface MagicLinkRequestedEvent extends BaseWebhookEvent {
   magicLinkToken: string;
 }
 
+export interface MagicCodeRequestedEvent extends BaseWebhookEvent {
+  eventType: "MagicCodeRequested";
+  /**
+   * Plaintext 6-digit code. Same delivery rationale as `magicLinkToken`:
+   * cannot be recovered after `requestMagicCode()` returns, so webhooks
+   * are how out-of-band email/SMS senders learn it. (gh/geldata#7367)
+   */
+  magicCode: string;
+}
+
 export type WebhookEventType = WebhookEvent["eventType"];
 
 /**
@@ -119,10 +130,22 @@ export interface WebhookSenderOptions {
   synchronous?: boolean;
 }
 
+/**
+ * In-process listener for auth events. Same fire-and-forget posture
+ * as HTTP webhooks — `WebhookSender.dispatch()` schedules listeners
+ * on a microtask in production mode, awaits them under
+ * `synchronous: true` for deterministic tests. Listeners are
+ * responsible for swallowing their own errors; `dispatch()` catches
+ * any that escape and logs at warn level so a buggy in-process
+ * subscriber can't take down the auth flow.
+ */
+export type WebhookListener = (event: WebhookEvent) => Promise<void> | void;
+
 export class WebhookSender {
   private subscriptions: WebhookConfig[];
   private fetchImpl: typeof fetch;
   private synchronous: boolean;
+  private listeners: WebhookListener[] = [];
 
   constructor(
     subscriptions: WebhookConfig[],
@@ -134,20 +157,35 @@ export class WebhookSender {
   }
 
   /**
-   * Dispatch a single event to every matching subscription. Returns a
-   * promise that resolves once *scheduling* is done — actual HTTP
-   * delivery happens on a microtask in production mode.
+   * Register an in-process listener that receives every dispatched
+   * event regardless of `WebhookConfig` filters (those gate HTTP
+   * subscriptions only — listeners are expected to filter for
+   * themselves). Used by the SMTP email subscriber and similar
+   * sidecars that want to react to auth events without standing up
+   * an HTTP receiver.
+   */
+  addListener(listener: WebhookListener): void {
+    this.listeners.push(listener);
+  }
+
+  /**
+   * Dispatch a single event to every matching subscription and every
+   * registered in-process listener. Returns a promise that resolves
+   * once *scheduling* is done — actual HTTP delivery and listener
+   * invocation happen on a microtask in production mode.
    */
   async dispatch(event: WebhookEvent): Promise<void> {
-    const matched = this.subscriptions.filter((s) =>
-      s.events.includes(event.eventType)
-    );
-    if (matched.length === 0) return;
+    const matched = this.subscriptions.filter((s) => s.events.includes(event.eventType));
+
+    if (matched.length === 0 && this.listeners.length === 0) return;
 
     if (this.synchronous) {
       // Tests: serialize so assertions can observe state after dispatch.
       for (const sub of matched) {
         await this.deliver(sub, event);
+      }
+      for (const listener of this.listeners) {
+        await this.runListener(listener, event);
       }
       return;
     }
@@ -157,6 +195,22 @@ export class WebhookSender {
     for (const sub of matched) {
       queueMicrotask(() => {
         void this.deliver(sub, event);
+      });
+    }
+    for (const listener of this.listeners) {
+      queueMicrotask(() => {
+        void this.runListener(listener, event);
+      });
+    }
+  }
+
+  private async runListener(listener: WebhookListener, event: WebhookEvent): Promise<void> {
+    try {
+      await listener(event);
+    } catch (err) {
+      log.warn("in-process listener errored", {
+        eventType: event.eventType,
+        error: err instanceof Error ? err.message : String(err),
       });
     }
   }
