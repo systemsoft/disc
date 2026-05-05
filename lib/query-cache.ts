@@ -124,11 +124,20 @@ export function makeCompilationCacheKey(
 }
 
 /**
- * Hash an access context (userId + userRole) into a deterministic string.
+ * Hash an access context for compilation-cache keying.
+ *
+ * P1-13: only `userRole` is included. Compiled SQL is parameterized on
+ * `$user_id` / `$current_user`, so the *shape* of the plan depends on
+ * which policies apply (a function of role), not on which concrete
+ * user is running it. Including userId would make every user a separate
+ * cache entry — cardinality explosion under any non-trivial multi-tenant
+ * load. Role-keyed entries are reused across all users with that role.
+ *
+ * `userId` is accepted but ignored to keep call sites stable.
  */
 export function hashAccessContext(
-  userId?: string,
+  _userId?: string,
   userRole?: string,
 ): string {
-  return hashString(`${userId || ""}|${userRole || ""}`);
+  return hashString(userRole || "");
 }

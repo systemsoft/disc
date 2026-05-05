@@ -143,9 +143,18 @@ Deno.test("hashAccessContext - deterministic", () => {
   assertEquals(a, b);
 });
 
-Deno.test("hashAccessContext - different users produce different hashes", () => {
+Deno.test("hashAccessContext - same role produces same hash regardless of user (P1-13)", () => {
+  // P1-13: userId must NOT contribute to the cache key — every user with
+  // the same role shares one compiled plan. Otherwise cardinality
+  // explodes under multi-tenant load.
   const a = hashAccessContext("user1", "admin");
   const b = hashAccessContext("user2", "admin");
+  assertEquals(a, b);
+});
+
+Deno.test("hashAccessContext - different roles produce different hashes (P1-13)", () => {
+  const a = hashAccessContext("user1", "admin");
+  const b = hashAccessContext("user1", "viewer");
   assertNotEquals(a, b);
 });
 

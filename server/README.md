@@ -250,20 +250,20 @@ When `rateLimitRpm` is set, a token-bucket rate limiter enforces per-IP request 
 The protocol handler keeps two LRU caches:
 
 - **Parse cache** — keyed by `(query text)`. Stable across users and sessions.
-- **Compilation cache** — keyed by `(query text, access-context hash)`. The
-  access-context hash folds in `userId` and session-global state, so **every
-  unique user/role combination gets its own cache entry** when access policies
-  are enabled (`enableAccessPolicies: true`). This is correct — the compiled
-  SQL differs per user — but it means cache cardinality scales with your
-  active-user count, not with your distinct-query count. (P1-13)
+- **Compilation cache** — keyed by `(query text, role hash)`. Compiled SQL is
+  parameterized on `$user_id` / `$current_user`, so the plan shape depends on
+  which policies apply (a function of role), not on the concrete user running
+  it. **All users with the same role share one cache entry per query.** (P1-13:
+  prior implementation included `userId` in the key, which caused cardinality
+  to scale with active-user count rather than role count.)
 
 Sizing guidance:
 
 | Scenario | Suggested `cacheMaxSize` |
 |---------|--------------------------|
 | Public site, no auth policies | 500–2 000 (query count only) |
-| Internal dashboard, ≤100 users, policies on | 5 000–10 000 |
-| Public site, auth + per-user policies | size with the user base in mind, or disable access policies |
+| Multi-role app (≤10 roles), policies on | (query count) × (role count) |
+| Per-user dynamic policies | not currently distinguished from role; revisit if added |
 
 `DISC_CACHE_MAX_SIZE` sets the bound. `/stats` exposes live hit/miss/eviction rates.
 
