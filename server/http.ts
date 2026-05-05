@@ -31,6 +31,11 @@ import {
   type MigrationsProvider,
 } from "./migrations-endpoint.ts";
 import { handleGetConfig } from "./config-endpoint.ts";
+import { matchCorsOrigin } from "./cors-matcher.ts";
+
+const DEFAULT_CORS_METHODS = ["GET", "POST", "OPTIONS"];
+const DEFAULT_CORS_HEADERS = ["Content-Type", "Authorization"];
+const DEFAULT_CORS_MAX_AGE = 86400;
 
 export interface HttpServerOptions {
   config: Types.ServerConfig;
@@ -1030,9 +1035,27 @@ export class HttpServer {
 
     const headers = new Headers();
     headers.set("Access-Control-Allow-Origin", allowedOrigin);
-    headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
-    headers.set("Access-Control-Max-Age", "86400");
+    headers.set(
+      "Access-Control-Allow-Methods",
+      (this.config.corsAllowedMethods ?? DEFAULT_CORS_METHODS).join(", "),
+    );
+    headers.set(
+      "Access-Control-Allow-Headers",
+      (this.config.corsAllowedHeaders ?? DEFAULT_CORS_HEADERS).join(", "),
+    );
+    if (this.config.corsExposeHeaders?.length) {
+      headers.set(
+        "Access-Control-Expose-Headers",
+        this.config.corsExposeHeaders.join(", "),
+      );
+    }
+    if (this.config.corsAllowCredentials && allowedOrigin !== "*") {
+      headers.set("Access-Control-Allow-Credentials", "true");
+    }
+    headers.set(
+      "Access-Control-Max-Age",
+      String(this.config.corsMaxAge ?? DEFAULT_CORS_MAX_AGE),
+    );
 
     return new Response(null, { status: 204, headers });
   }
@@ -1474,11 +1497,26 @@ export class HttpServer {
       // will block the response, which is the correct behavior.
       if (origin !== null) {
         headers.set("Access-Control-Allow-Origin", origin);
-        headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+        headers.set(
+          "Access-Control-Allow-Methods",
+          (this.config.corsAllowedMethods ?? DEFAULT_CORS_METHODS).join(", "),
+        );
         headers.set(
           "Access-Control-Allow-Headers",
-          "Content-Type, Authorization",
+          (this.config.corsAllowedHeaders ?? DEFAULT_CORS_HEADERS).join(", "),
         );
+        if (this.config.corsExposeHeaders?.length) {
+          headers.set(
+            "Access-Control-Expose-Headers",
+            this.config.corsExposeHeaders.join(", "),
+          );
+        }
+        // `Access-Control-Allow-Credentials: true` is forbidden with the
+        // wildcard origin per the CORS spec — only emit when an explicit
+        // allowlist resolved the request.
+        if (this.config.corsAllowCredentials && origin !== "*") {
+          headers.set("Access-Control-Allow-Credentials", "true");
+        }
       }
     }
 
@@ -1497,10 +1535,10 @@ export class HttpServer {
   private resolve_allowed_origin(request?: Request): string | null {
     const allowlist = this.config.corsOrigins;
 
-    // Restrictive mode: origin must be in the allowlist
+    // Restrictive mode: origin must match the allowlist (exact or wildcard)
     if (allowlist && allowlist.length > 0) {
       const origin = request?.headers.get("origin");
-      if (origin && allowlist.includes(origin)) {
+      if (origin && matchCorsOrigin(origin, allowlist)) {
         return origin;
       }
       return null;

@@ -29,7 +29,40 @@ export interface ServerConfig {
    */
   maxRequestBodyBytes?: number;
   enableCors: boolean;
+  /**
+   * Allowed origins. Entries may be exact origins (`https://app.example.com`)
+   * or single-label wildcard subdomains (`https://*.example.com`). When
+   * empty/unset and `enableCors` is true, the server runs in permissive mode
+   * (`Access-Control-Allow-Origin: *`) for local-dev backward compat.
+   * (gh/geldata#6655)
+   */
   corsOrigins?: string[];
+  /**
+   * HTTP methods listed in `Access-Control-Allow-Methods` for preflight.
+   * Defaults to `["GET", "POST", "OPTIONS"]`. (gh/geldata#6655)
+   */
+  corsAllowedMethods?: string[];
+  /**
+   * Request headers listed in `Access-Control-Allow-Headers` for preflight.
+   * Defaults to `["Content-Type", "Authorization"]`. (gh/geldata#6655)
+   */
+  corsAllowedHeaders?: string[];
+  /**
+   * Response headers exposed to the browser via
+   * `Access-Control-Expose-Headers`. Empty by default. (gh/geldata#6655)
+   */
+  corsExposeHeaders?: string[];
+  /**
+   * When true, emit `Access-Control-Allow-Credentials: true`. Forbidden
+   * with permissive `*` origin per the CORS spec — when this is on,
+   * `corsOrigins` MUST be a non-empty allowlist. (gh/geldata#6655)
+   */
+  corsAllowCredentials?: boolean;
+  /**
+   * Preflight cache duration emitted as `Access-Control-Max-Age`.
+   * Defaults to 86400 (24h). (gh/geldata#6655)
+   */
+  corsMaxAge?: number;
   enableWebsockets: boolean;
   jwtSecret?: string;
   enableAuth?: boolean;

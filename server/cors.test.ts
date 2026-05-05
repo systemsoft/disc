@@ -151,3 +151,132 @@ Deno.test("CORS — permissive mode (no corsOrigins set) keeps '*' for dev backw
     await cleanup();
   }
 });
+
+// =========================================================================
+// Wildcard subdomain matching (#6655)
+// =========================================================================
+
+Deno.test("CORS — wildcard `*.example.com` accepts one-label subdomain", async () => {
+  const { port, cleanup } = withCorsServer({
+    corsOrigins: ["https://*.example.com"],
+  });
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/health`, {
+      headers: { Origin: "https://tenant1.example.com" },
+    });
+    await res.body?.cancel();
+    assertEquals(
+      res.headers.get("Access-Control-Allow-Origin"),
+      "https://tenant1.example.com",
+    );
+  } finally {
+    await cleanup();
+  }
+});
+
+Deno.test("CORS — wildcard `*.example.com` rejects two-label subdomain", async () => {
+  const { port, cleanup } = withCorsServer({
+    corsOrigins: ["https://*.example.com"],
+  });
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/health`, {
+      headers: { Origin: "https://a.b.example.com" },
+    });
+    await res.body?.cancel();
+    assertEquals(res.headers.get("Access-Control-Allow-Origin"), null);
+  } finally {
+    await cleanup();
+  }
+});
+
+// =========================================================================
+// Configurable methods/headers/credentials/expose/max-age (#6655)
+// =========================================================================
+
+Deno.test("CORS — preflight uses configured methods + headers + max-age", async () => {
+  const { port, cleanup } = withCorsServer({
+    corsOrigins: ["https://app.example.com"],
+    corsAllowedMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    corsAllowedHeaders: ["Content-Type", "Authorization", "X-Tenant-Id"],
+    corsMaxAge: 600,
+  });
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/query`, {
+      method: "OPTIONS",
+      headers: {
+        Origin: "https://app.example.com",
+        "Access-Control-Request-Method": "PATCH",
+      },
+    });
+    await res.body?.cancel();
+    assertEquals(res.status, 204);
+    assertEquals(
+      res.headers.get("Access-Control-Allow-Methods"),
+      "GET, POST, PATCH, DELETE, OPTIONS",
+    );
+    assertEquals(
+      res.headers.get("Access-Control-Allow-Headers"),
+      "Content-Type, Authorization, X-Tenant-Id",
+    );
+    assertEquals(res.headers.get("Access-Control-Max-Age"), "600");
+  } finally {
+    await cleanup();
+  }
+});
+
+Deno.test("CORS — `corsAllowCredentials: true` emits credentials header for allowlisted origin", async () => {
+  const { port, cleanup } = withCorsServer({
+    corsOrigins: ["https://app.example.com"],
+    corsAllowCredentials: true,
+  });
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/health`, {
+      headers: { Origin: "https://app.example.com" },
+    });
+    await res.body?.cancel();
+    assertEquals(
+      res.headers.get("Access-Control-Allow-Credentials"),
+      "true",
+    );
+  } finally {
+    await cleanup();
+  }
+});
+
+Deno.test("CORS — credentials header NOT emitted with permissive `*` origin", async () => {
+  // Spec forbids `Access-Control-Allow-Credentials: true` together with
+  // `Access-Control-Allow-Origin: *`. The server must drop credentials.
+  const { port, cleanup } = withCorsServer({
+    corsAllowCredentials: true,
+    // no corsOrigins — permissive mode
+  });
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/health`, {
+      headers: { Origin: "https://any.example.com" },
+    });
+    await res.body?.cancel();
+    assertEquals(res.headers.get("Access-Control-Allow-Origin"), "*");
+    assertEquals(res.headers.get("Access-Control-Allow-Credentials"), null);
+  } finally {
+    await cleanup();
+  }
+});
+
+Deno.test("CORS — `corsExposeHeaders` emits expose-headers list", async () => {
+  const { port, cleanup } = withCorsServer({
+    corsOrigins: ["https://app.example.com"],
+    corsExposeHeaders: ["X-Request-Id", "X-Trace-Id"],
+  });
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/health`, {
+      headers: { Origin: "https://app.example.com" },
+    });
+    await res.body?.cancel();
+    assertEquals(
+      res.headers.get("Access-Control-Expose-Headers"),
+      "X-Request-Id, X-Trace-Id",
+    );
+  } finally {
+    await cleanup();
+  }
+});
