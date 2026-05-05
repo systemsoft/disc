@@ -219,6 +219,52 @@ verifiers ahead of switching the signing private key — verifiers
 holding both old and new public keys keeps a smooth window. Disc
 itself only holds one public key at a time today.
 
+### Roles & RBAC (gh/geldata#8177)
+
+Disc has a small role registry plus user→role assignments. Roles are
+named strings (`"admin"`, `"viewer"`, …) with optional descriptions;
+permissions are encoded in access policies via `has_role("admin")`
+and `current_role`, not stored per-role. This keeps the runtime model
+single-source — your SDL is the authoritative permission spec.
+
+**Programmatic API:**
+
+```ts
+await provider.createRole("admin", "Full access");
+await provider.createRole("viewer", "Read-only");
+
+await provider.assignRole(userId, "admin");
+await provider.revokeRole(userId, "admin");
+
+const roles = await provider.getUserRoles(userId);   // string[]
+const isAdmin = await provider.userHasRole(userId, "admin");
+const all = await provider.listRoles();
+await provider.deleteRole("viewer");                  // cascades to user_roles
+```
+
+`assignRole` is idempotent (granting a role twice is a no-op) and
+throws `AuthError(USER_NOT_FOUND)` / `AuthError(INVALID_OPERATION)`
+when the user or role doesn't exist. `revokeRole` is a no-op when the
+user didn't hold the role — the post-condition is "user does not have
+role X" regardless of starting state.
+
+**JWT plumbing:**
+
+`generateJWT` reads the user's roles at login time and includes them
+as the `roles` claim. `verifyToken` returns them on `TokenPayload.roles`,
+the auth middleware surfaces them on `AuthContext.roles`, and the
+server's query handler populates `Types.AuthContext.roles` from there.
+The access bridge maps `auth.roles[0]` → `userRole`, which the access
+evaluator and SQL injector both use for `has_role()` / `current_role`.
+
+**Snapshot semantics**: a token carries the roles that were active when
+it was *issued*. Roles assigned (or revoked) afterwards do not take
+effect on existing tokens — the user re-logs to pick up the change.
+This is intentional: it keeps tokens self-contained (no DB lookup per
+request to refresh role state) and matches how the compilation-cache
+key (P1-13) was designed (role-driven, not user-driven). For
+near-real-time revocation, combine with `revokeAllSessions(userId)`.
+
 ## API Endpoints
 
 ### POST /auth/register

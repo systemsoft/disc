@@ -661,12 +661,18 @@ export class HttpServer {
         const authResult = await this.authMiddleware.authenticate(request);
         if (authResult) {
           authContext.userId = authResult.userId;
+          // RBAC: roles come from the JWT claim populated by
+          // `AuthProvider.generateJWT` at login. (gh/geldata#8177)
+          if (authResult.roles && authResult.roles.length > 0) {
+            authContext.roles = authResult.roles;
+          }
           authContext.jwtClaims = {
             sub: authResult.sub,
             email: authResult.email,
             username: authResult.username,
             iss: authResult.iss,
             aud: authResult.aud,
+            roles: authResult.roles,
           };
         }
       }

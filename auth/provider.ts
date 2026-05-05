@@ -217,6 +217,32 @@ export class AuthProvider implements IAuthProvider {
       )
     `);
 
+    // Roles table — a small registry of named roles that users can be
+    // assigned to. (gh/geldata#8177) Roles themselves carry only a name
+    // and an optional description; permissions are encoded in access
+    // policies (`has_role("admin")`) rather than persisted per-role,
+    // matching disc's policy-driven model.
+    await this.db.execute(`
+      CREATE TABLE IF NOT EXISTS roles (
+        name TEXT PRIMARY KEY,
+        description TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // user_roles join — many-to-many. ON DELETE CASCADE on both sides so
+    // role removal and user deletion both clean up the assignments.
+    await this.db.execute(`
+      CREATE TABLE IF NOT EXISTS user_roles (
+        user_id TEXT NOT NULL,
+        role_name TEXT NOT NULL,
+        granted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, role_name),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (role_name) REFERENCES roles(name) ON DELETE CASCADE
+      )
+    `);
+
     // Indexes
     await this.db.execute(
       `CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)`,
@@ -229,6 +255,12 @@ export class AuthProvider implements IAuthProvider {
     );
     await this.db.execute(
       `CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`,
+    );
+    await this.db.execute(
+      `CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON user_roles(user_id)`,
+    );
+    await this.db.execute(
+      `CREATE INDEX IF NOT EXISTS idx_user_roles_role_name ON user_roles(role_name)`,
     );
   }
 
@@ -1044,6 +1076,125 @@ export class AuthProvider implements IAuthProvider {
     this.auditEvent("sessions_revoked_all", userId);
   }
 
+  // ── Roles & RBAC (gh/geldata#8177) ─────────────────────────────────
+
+  /**
+   * Register a new role in the role registry. Idempotent — if the role
+   * already exists with the same description, this is a no-op; if the
+   * description differs, the existing description is updated.
+   */
+  async createRole(name: string, description?: string): Promise<void> {
+    const existing = await this.db.query(
+      "SELECT name FROM roles WHERE name = ?",
+      [name],
+    );
+    if (existing.rows.length > 0) {
+      await this.db.execute(
+        "UPDATE roles SET description = ? WHERE name = ?",
+        [description ?? null, name],
+      );
+      return;
+    }
+    await this.db.execute(
+      "INSERT INTO roles (name, description) VALUES (?, ?)",
+      [name, description ?? null],
+    );
+    this.auditEvent("role_created", null, { role: name });
+  }
+
+  /**
+   * Remove a role from the registry. ON DELETE CASCADE clears any
+   * `user_roles` rows that referenced it.
+   */
+  async deleteRole(name: string): Promise<void> {
+    await this.db.execute("DELETE FROM roles WHERE name = ?", [name]);
+    this.auditEvent("role_deleted", null, { role: name });
+  }
+
+  /** List every registered role. */
+  async listRoles(): Promise<Array<{ name: string; description?: string }>> {
+    const result = await this.db.query(
+      "SELECT name, description FROM roles ORDER BY name",
+      [],
+    );
+    return result.rows.map((r) => ({
+      name: r.name,
+      description: r.description ?? undefined,
+    }));
+  }
+
+  /**
+   * Grant `roleName` to `userId`. Idempotent — granting a role twice
+   * does not create duplicate rows. Throws if the role doesn't exist
+   * or the user doesn't exist (so callers see a real error instead of
+   * a silent no-op).
+   */
+  async assignRole(userId: string, roleName: string): Promise<void> {
+    const role = await this.db.query(
+      "SELECT name FROM roles WHERE name = ?",
+      [roleName],
+    );
+    if (role.rows.length === 0) {
+      throw new AuthError(
+        `Role not found: ${roleName}`,
+        AuthErrorCode.INVALID_OPERATION,
+        404,
+      );
+    }
+    const user = await this.db.query(
+      "SELECT id FROM users WHERE id = ?",
+      [userId],
+    );
+    if (user.rows.length === 0) {
+      throw new AuthError(
+        "User not found",
+        AuthErrorCode.USER_NOT_FOUND,
+        404,
+      );
+    }
+    const existing = await this.db.query(
+      "SELECT user_id FROM user_roles WHERE user_id = ? AND role_name = ?",
+      [userId, roleName],
+    );
+    if (existing.rows.length > 0) return;
+    await this.db.execute(
+      "INSERT INTO user_roles (user_id, role_name) VALUES (?, ?)",
+      [userId, roleName],
+    );
+    this.auditEvent("role_assigned", userId, { role: roleName });
+  }
+
+  /**
+   * Revoke `roleName` from `userId`. No-op if the user doesn't have
+   * the role (matches the audit semantics — the post-condition is
+   * "user does not have role X" regardless of starting state).
+   */
+  async revokeRole(userId: string, roleName: string): Promise<void> {
+    await this.db.execute(
+      "DELETE FROM user_roles WHERE user_id = ? AND role_name = ?",
+      [userId, roleName],
+    );
+    this.auditEvent("role_revoked", userId, { role: roleName });
+  }
+
+  /** Return every role currently held by `userId`. */
+  async getUserRoles(userId: string): Promise<string[]> {
+    const result = await this.db.query(
+      "SELECT role_name FROM user_roles WHERE user_id = ? ORDER BY role_name",
+      [userId],
+    );
+    return result.rows.map((r) => r.role_name);
+  }
+
+  /** True iff `userId` has been granted `roleName`. */
+  async userHasRole(userId: string, roleName: string): Promise<boolean> {
+    const result = await this.db.query(
+      "SELECT 1 FROM user_roles WHERE user_id = ? AND role_name = ?",
+      [userId, roleName],
+    );
+    return result.rows.length > 0;
+  }
+
   private async createSession(
     userId: string,
     meta?: { ipAddress?: string; userAgent?: string },
@@ -1162,6 +1313,7 @@ export class AuthProvider implements IAuthProvider {
     }
 
     const now = Math.floor(Date.now() / 1000);
+    const roles = await this.getUserRoles(user.id);
     const payload: TokenPayload = {
       sub: user.id,
       email: user.email,
@@ -1172,6 +1324,7 @@ export class AuthProvider implements IAuthProvider {
       aud: this.config.jwtAudience,
       jti: this.generateId(),
     };
+    if (roles.length > 0) payload.roles = roles;
 
     return await create(
       { alg: this.config.jwtAlgorithm, typ: "JWT" },

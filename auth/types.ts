@@ -123,6 +123,15 @@ export interface TokenPayload {
   iss?: string; // issuer
   aud?: string; // audience
   jti?: string; // JWT ID for tracking
+  /**
+   * RBAC role names granted to this user at token-issue time. Restored
+   * by `verifyToken()` and surfaced on `AuthContext.roles` so access
+   * policies (`has_role()`, `current_role`) and the compilation cache
+   * key both see them. Snapshot semantics — roles assigned *after*
+   * the token was issued won't take effect until the user re-logs.
+   * (gh/geldata#8177)
+   */
+  roles?: string[];
 }
 
 export interface AuthResponse {
