@@ -286,4 +286,60 @@ describe("OAuthExtension - allowedRedirectUris (gh/geldata#7468)", () => {
       "https://default.example.com/cb",
     );
   });
+
+  // gh/geldata#6433: when an allowlist is configured, a matching
+  // caller-supplied redirect_uri is auto-allowed — no extra `allow=…`
+  // confirmation flag is required. The allowlist itself is the
+  // declarative permission. Pairs with the wildcard work in #7468.
+  it("auto-allows allowlisted exact-match URLs without an allow= flag", async () => {
+    const provider = {
+      ...googleProvider("cid", "csecret", "https://default.example.com/cb"),
+      allowedRedirectUris: ["https://app.example.com/cb"],
+    };
+    const ext = new OAuthExtension({ providers: [provider] });
+    await ext.initialize(makeContext());
+    const route = ext.getRoutes().find((r) => r.path === "/authorize/google")!;
+
+    // Note: no `allow=true` (or similar) anywhere in the request.
+    const response = await route.handler(
+      new Request(
+        "http://localhost/authorize/google?redirect_uri=https://app.example.com/cb",
+      ),
+    );
+
+    assertEquals(response.status, 200);
+    const body = await response.json();
+    const parsed = new URL(body.url);
+    assertEquals(
+      parsed.searchParams.get("redirect_uri"),
+      "https://app.example.com/cb",
+    );
+  });
+
+  // gh/geldata#6433 + #7468: wildcard allowlist entries auto-allow
+  // matching subdomains without an extra confirmation flag. Pins the
+  // already-implemented behaviour against future regressions.
+  it("auto-allows wildcard-matching URLs without an allow= flag", async () => {
+    const provider = {
+      ...googleProvider("cid", "csecret", "https://default.example.com/cb"),
+      allowedRedirectUris: ["https://*.example.com/cb"],
+    };
+    const ext = new OAuthExtension({ providers: [provider] });
+    await ext.initialize(makeContext());
+    const route = ext.getRoutes().find((r) => r.path === "/authorize/google")!;
+
+    const response = await route.handler(
+      new Request(
+        "http://localhost/authorize/google?redirect_uri=https://tenant-b.example.com/cb",
+      ),
+    );
+
+    assertEquals(response.status, 200);
+    const body = await response.json();
+    const parsed = new URL(body.url);
+    assertEquals(
+      parsed.searchParams.get("redirect_uri"),
+      "https://tenant-b.example.com/cb",
+    );
+  });
 });
