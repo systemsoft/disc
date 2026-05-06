@@ -1,5 +1,7 @@
 # EdgeQL Reference
 
+> Looking for a quick reference? See the [EdgeQL Cheat Sheet](edgeql-cheatsheet.md) for one-page copy-pasteable examples.
+
 EdgeQL is the query language for Disc. It compiles to PostgreSQL SQL under the hood, but provides a cleaner syntax for expressing queries against your schema. EdgeQL is set-oriented: every expression produces a set of values, and operations compose naturally over sets.
 
 ---
@@ -555,7 +557,7 @@ select -.price;
 
 | Operator | Description                         | Example               |
 | -------- | ----------------------------------- | --------------------- |
-| `=`      | Equal                               | `.name = "Ada"`     |
+| `=`      | Equal                               | `.name = "Ada"`       |
 | `!=`     | Not equal                           | `.status != "active"` |
 | `<`      | Less than                           | `.age < 18`           |
 | `>`      | Greater than                        | `.price > 100`        |
@@ -615,12 +617,13 @@ select Shape filter Shape is not Rectangle;
 
 ### Pattern Matching
 
-| Operator | Description                    | Example                 |
-| -------- | ------------------------------ | ----------------------- |
-| `like`   | Case-sensitive pattern match   | `.name like "A%"`       |
+| Operator | Description                    | Example               |
+| -------- | ------------------------------ | --------------------- |
+| `like`   | Case-sensitive pattern match   | `.name like "A%"`     |
 | `ilike`  | Case-insensitive pattern match | `.name ilike "%ada%"` |
 
 Pattern wildcards:
+
 - `%` matches any sequence of characters
 - `_` matches any single character
 
@@ -636,7 +639,7 @@ select User filter .name like "J_n";
 | -------- | ---------------------------------- | -------------------- |
 | `~`      | Regex match (case-sensitive)       | `.email ~ "^[a-z]"`  |
 | `!~`     | Regex not match (case-sensitive)   | `.name !~ "^test"`   |
-| `~*`     | Regex match (case-insensitive)     | `.name ~* "ada"`   |
+| `~*`     | Regex match (case-insensitive)     | `.name ~* "ada"`     |
 | `!~*`    | Regex not match (case-insensitive) | `.domain !~* "spam"` |
 
 ```edgeql
