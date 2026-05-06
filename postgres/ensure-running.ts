@@ -1,6 +1,8 @@
 import type { ProjectContext } from "../lib/project-context.ts";
 import type { PostgresInstance } from "./instance.ts";
 import { PostgresManager } from "./manager.ts";
+import { resolveEmbeddedPgBinDir } from "./embedded-pg.ts";
+import { EMBEDDED_PG_MANIFEST, EMBEDDED_PG_VERSION } from "./embedded-pg-manifest.ts";
 
 export interface EnsureResult {
   dsn: string;
@@ -63,8 +65,18 @@ export async function ensurePgRunning(
   }
 
   // No on-disk instance found — create a fresh one then start it.
+  // Bundle I: prefer the embedded PG distribution baked into the
+  // binary over the network downloader. When `EMBEDDED_PG_MANIFEST`
+  // is empty (the default for ad-hoc dev builds), this returns null
+  // and we fall through to the downloader's existing behavior.
+  const embeddedBinDir = await resolveEmbeddedPgBinDir({
+    manifestEntries: EMBEDDED_PG_MANIFEST,
+    version: EMBEDDED_PG_VERSION,
+  });
+
   instance = await manager.createInstance(ctx.instanceName, {
     dataDir: ctx.dataDir,
+    pgBinDir: embeddedBinDir ?? undefined,
     socketDir: ctx.socketDir,
   });
 

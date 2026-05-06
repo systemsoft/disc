@@ -1,5 +1,5 @@
 import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
-import { AVAILABLE_PLATFORMS, BuildCommand, generateUiManifest } from "./build.ts";
+import { AVAILABLE_PLATFORMS, BuildCommand, generateEmbeddedPgManifest, generateUiManifest } from "./build.ts";
 import { join } from "@std/path";
 
 Deno.test("BuildCommand - maps linux-x64 to x86_64-unknown-linux-gnu", () => {
@@ -88,6 +88,75 @@ Deno.test("generateUiManifest - throws when build dir is empty", async () => {
   } finally {
     await Deno.remove(tmp, { recursive: true });
   }
+});
+
+Deno.test("generateEmbeddedPgManifest - empty manifest when source dir absent", async () => {
+  const tmp = await Deno.makeTempDir({ prefix: "disc-embed-pg-empty-" });
+  try {
+    const generated = await generateEmbeddedPgManifest({
+      pgVersion: "16.4",
+      sourceDir: join(tmp, "does-not-exist"),
+    });
+    assertStringIncludes(generated, "EMBEDDED_PG_MANIFEST");
+    assertStringIncludes(generated, "[]");
+  } finally {
+    await Deno.remove(tmp, { recursive: true });
+  }
+});
+
+Deno.test("generateEmbeddedPgManifest - lists files with absolute sourceUrl + correct mode", async () => {
+  const tmp = await Deno.makeTempDir({ prefix: "disc-embed-pg-list-" });
+  try {
+    const sourceDir = join(tmp, "pg");
+    await Deno.mkdir(join(sourceDir, "bin"), { recursive: true });
+    await Deno.mkdir(join(sourceDir, "share"), { recursive: true });
+    await Deno.writeTextFile(join(sourceDir, "bin", "postgres"), "fake");
+    await Deno.writeTextFile(join(sourceDir, "share", "tz.txt"), "fake");
+
+    const generated = await generateEmbeddedPgManifest({
+      pgVersion: "16.4",
+      sourceDir,
+    });
+
+    assertStringIncludes(generated, '"bin/postgres"');
+    assertStringIncludes(generated, '"share/tz.txt"');
+    // bin/* gets executable mode
+    assertStringIncludes(generated, "0o755");
+    // non-bin gets 0o644
+    assertStringIncludes(generated, "0o644");
+    // sourceUrl uses file:// + abs path so deno compile --include resolves
+    assertStringIncludes(generated, `file://${sourceDir}/bin/postgres`);
+  } finally {
+    await Deno.remove(tmp, { recursive: true });
+  }
+});
+
+Deno.test("BuildCommand.buildCompileArgs - includes PG paths when supplied", () => {
+  const command = new BuildCommand();
+  const args = command.buildCompileArgs({}, [
+    "/abs/pg/bin/postgres",
+    "/abs/pg/lib/libpq.dylib",
+  ]);
+  assertEquals(args.includes("/abs/pg/bin/postgres"), true);
+  assertEquals(args.includes("/abs/pg/lib/libpq.dylib"), true);
+  // Each --include path is preceded by a literal "--include" arg.
+  for (const path of ["/abs/pg/bin/postgres", "/abs/pg/lib/libpq.dylib"]) {
+    const i = args.indexOf(path);
+    assertEquals(args[i - 1], "--include");
+  }
+});
+
+Deno.test("BuildCommand.buildCompileArgs - --no-check flag is set", () => {
+  const command = new BuildCommand();
+  const args = command.buildCompileArgs({});
+  assertEquals(args.includes("--no-check"), true);
+});
+
+Deno.test("BuildCommand.buildCompileArgs - --lite skips ui/build but PG paths still included", () => {
+  const command = new BuildCommand();
+  const args = command.buildCompileArgs({ lite: true }, ["/pg/bin/postgres"]);
+  assertEquals(args.includes("ui/build"), false);
+  assertEquals(args.includes("/pg/bin/postgres"), true);
 });
 
 Deno.test("generateUiManifest - emits sorted, posix-style paths even on backslashed inputs", async () => {
