@@ -10,6 +10,7 @@
   const navItems = [
     { path: '/ui', label: 'Dashboard', icon: '⊞' },
     { path: '/ui/schema', label: 'Schema', icon: '◈' },
+    { path: '/ui/admin/schema', label: 'Diff', icon: '⇄' },
     { path: '/ui/data', label: 'Data', icon: '▦' },
     { path: '/ui/query', label: 'Query', icon: '⟩' },
     { path: '/ui/repl', label: 'REPL', icon: '›_' },
