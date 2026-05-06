@@ -9,6 +9,7 @@ import { bgBrightRed, brightWhite, bgBrightYellow, gray, inverse } from "@std/fm
 import { parseArgs } from "@std/cli/parse-args";
 
 import { CLIArgs, commands } from "./commands.ts";
+import { adminCommand } from "./admin.ts";
 import { VERSION } from "../mod.ts";
 
 const HELP_TEXT = `
@@ -44,6 +45,10 @@ ${inverse("  COMMANDS ")}
   db restore ${gray(".".repeat(15))} Restore a database from stdin or a file
   schema export ${gray(".".repeat(12))} Export the current schema as a single SDL file
   schema introspect ${gray(".".repeat(8))} Generate SDL from an existing PostgreSQL database
+  admin create-superuser  Create a user and assign the superuser role
+  admin set-password ${gray(".".repeat(7))} Reset a user's password (admin override)
+  admin assign-role ${gray(".".repeat(8))} Assign a role to a user (creating it if needed)
+  admin list-roles ${gray(".".repeat(9))} List all defined roles
   pg log ${gray(".".repeat(19))} View PostgreSQL logs
   pg upgrade ${gray(".".repeat(15))} Upgrade PostgreSQL version
 
@@ -473,7 +478,51 @@ ${inverse("  OPTIONS ")}
 
   --database-url ${gray("<dsn>")} ${gray(".".repeat(5))} Postgres connection string (or via DATABASE_URL env)
   --schemas ${gray("<list>")} ${gray(".".repeat(9))} Comma-separated PG schemas to introspect (default: ${bgBrightYellow("public")})
-  -o, --output ${gray("<path>")} ${gray(".".repeat(6))} Output file path (default: stdout)`
+  -o, --output ${gray("<path>")} ${gray(".".repeat(6))} Output file path (default: stdout)`,
+  "admin create-superuser": `
+  Create a user and assign the superuser role
+
+${inverse("  USAGE ")}
+
+  disc admin create-superuser ${gray("<email> --password <pw> [--name <display>] [--role <role>]")}
+
+${inverse("  OPTIONS ")}
+
+  --database-url ${gray("<dsn>")} ${gray(".".repeat(5))} Postgres connection string (or via DATABASE_URL env)
+  --jwt-secret ${gray("<sec>")} ${gray(".".repeat(7))} JWT signing secret (≥32 bytes; or DISC_JWT_SECRET env)
+  --password ${gray("<pw>")} ${gray(".".repeat(10))} Initial password (must not be empty)
+  --name ${gray("<display>")} ${gray(".".repeat(8))} Display name (defaults to email's local part)
+  --role ${gray("<role>")} ${gray(".".repeat(11))} Role name to grant (default: ${bgBrightYellow("superuser")})`,
+  "admin set-password": `
+  Reset a user's password without their old one
+
+${inverse("  USAGE ")}
+
+  disc admin set-password ${gray("<email|id> --password <pw>")}
+
+${inverse("  OPTIONS ")}
+
+  --database-url ${gray("<dsn>")} ${gray(".".repeat(5))} Postgres connection string (or via DATABASE_URL env)
+  --jwt-secret ${gray("<sec>")} ${gray(".".repeat(7))} JWT signing secret (≥32 bytes; or DISC_JWT_SECRET env)
+  --password ${gray("<pw>")} ${gray(".".repeat(10))} New password (must not be empty)`,
+  "admin assign-role": `
+  Assign a role to a user, creating the role if needed
+
+${inverse("  USAGE ")}
+
+  disc admin assign-role ${gray("<email|id> <role> [--description <text>]")}
+
+${inverse("  OPTIONS ")}
+
+  --database-url ${gray("<dsn>")} ${gray(".".repeat(5))} Postgres connection string (or via DATABASE_URL env)
+  --jwt-secret ${gray("<sec>")} ${gray(".".repeat(7))} JWT signing secret (≥32 bytes; or DISC_JWT_SECRET env)
+  --description ${gray("<txt>")} ${gray(".".repeat(7))} Description if the role doesn't exist yet`,
+  "admin list-roles": `
+  List all defined roles with their descriptions
+
+${inverse("  USAGE ")}
+
+  disc admin list-roles ${gray("[--database-url <dsn>] [--jwt-secret <sec>]")}`
 };
 
 async function main() {
@@ -641,6 +690,61 @@ async function main() {
           default: {
             console.error(`Unknown schema subcommand: ${schemaSubcommand}`);
             console.log("Available: schema export, schema introspect");
+            Deno.exit(1);
+          }
+        }
+
+        break;
+      }
+
+      case "admin": {
+        const adminSub = String(args._[1] || "");
+        const baseOpts = {
+          "database-url": args["database-url"],
+          "jwt-secret": args["jwt-secret"],
+        };
+
+        switch (adminSub) {
+          case "create-superuser": {
+            await adminCommand.createSuperuser({
+              ...baseOpts,
+              email: String(args._[2] || ""),
+              password: args.password ?? "",
+              name: args.name,
+              role: args.role,
+            });
+            break;
+          }
+
+          case "set-password": {
+            await adminCommand.setPassword({
+              ...baseOpts,
+              user: String(args._[2] || ""),
+              password: args.password ?? "",
+            });
+            break;
+          }
+
+          case "assign-role": {
+            await adminCommand.assignRole({
+              ...baseOpts,
+              user: String(args._[2] || ""),
+              role: String(args._[3] || ""),
+              description: args.description,
+            });
+            break;
+          }
+
+          case "list-roles": {
+            await adminCommand.listRoles(baseOpts);
+            break;
+          }
+
+          default: {
+            console.error(`Unknown admin subcommand: ${adminSub}`);
+            console.log(
+              "Available: admin create-superuser, admin set-password, admin assign-role, admin list-roles",
+            );
             Deno.exit(1);
           }
         }

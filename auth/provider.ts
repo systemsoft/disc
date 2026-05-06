@@ -1101,6 +1101,68 @@ export class AuthProvider implements IAuthProvider {
     return this.rowToUser(result.rows[0]);
   }
 
+  /**
+   * Admin override for setting a user's password without their old one.
+   * Locates the user by id or email. Used by `disc admin set-password`.
+   * Same `validatePassword()` rules apply, and existing sessions are
+   * revoked so the rotated password takes effect everywhere.
+   * (gh/geldata#5383, #6454, #1119, #4209)
+   */
+  async adminSetPassword(
+    userIdOrEmail: string,
+    newPassword: string,
+  ): Promise<void> {
+    const passwordValidation = this.validatePassword(newPassword);
+    if (!passwordValidation.valid) {
+      throw new AuthError(
+        passwordValidation.errors.join(", "),
+        AuthErrorCode.PASSWORD_TOO_WEAK,
+        400,
+      );
+    }
+
+    // Look up by id or email (email is unique)
+    const lookup = await this.db.query(
+      "SELECT id FROM users WHERE id = ? OR email = ?",
+      [userIdOrEmail, userIdOrEmail],
+    );
+    if (lookup.rows.length === 0) {
+      throw new AuthError(
+        `User not found: ${userIdOrEmail}`,
+        AuthErrorCode.USER_NOT_FOUND,
+        404,
+      );
+    }
+    const userId = lookup.rows[0].id as string;
+
+    const newSalt = await bcrypt.genSalt(this.config.bcryptRounds);
+    const newPasswordHash = await bcrypt.hash(newPassword, newSalt);
+
+    await this.db.execute(
+      "UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+      [newPasswordHash, userId],
+    );
+
+    this.auditEvent("password_admin_set", userId);
+
+    // Revoke all sessions so the rotated password is the only valid one.
+    await this.revokeAllSessions(userId);
+  }
+
+  /**
+   * Locate a user by id or email and return the canonical id, or null
+   * when no match exists. Used by admin tooling to translate
+   * user-supplied selectors (often email) into the row id.
+   */
+  async resolveUserId(userIdOrEmail: string): Promise<string | null> {
+    const result = await this.db.query(
+      "SELECT id FROM users WHERE id = ? OR email = ?",
+      [userIdOrEmail, userIdOrEmail],
+    );
+    if (result.rows.length === 0) return null;
+    return result.rows[0].id as string;
+  }
+
   async updatePassword(
     userId: string,
     oldPassword: string,
