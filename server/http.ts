@@ -1485,6 +1485,7 @@ export class HttpServer {
         url,
         schemaFilePath: this.adminSchemaWatch.schemaFilePath,
         databaseUrl: this.config.databaseUrl,
+        appliedSdl: this.adminSchemaWatch.appliedSdlProvider(),
         onApplied: this.adminSchemaWatch.onApplied,
       });
     }

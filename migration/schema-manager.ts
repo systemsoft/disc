@@ -1028,6 +1028,26 @@ export class SchemaManager {
   }
 
   /**
+   * Prime the SchemaManager's "currently applied" baseline from an
+   * existing SDL string without running any migrations. Used by the
+   * live-schema-diff admin endpoint (Bundle K — Disc #3a) so a fresh
+   * SchemaManager instance per request can still produce a correct
+   * diff against the running server's schema.
+   *
+   * Returns Err if the baseline SDL fails to parse — callers should
+   * surface that as a server-side data-integrity issue.
+   */
+  loadBaseline(sdlSource: string): Result<void, MigrationError> {
+    const parseResult = this.parseSDL(sdlSource);
+    if (!parseResult.ok) {
+      return Err(parseResult.error);
+    }
+    this.currentModules = parseResult.value;
+    this.currentSchema = this.modulesToSchema(parseResult.value);
+    return Ok(undefined);
+  }
+
+  /**
    * Get the current compiler Schema, or null if no schema has been loaded.
    */
   getSchema(): Schema | null {

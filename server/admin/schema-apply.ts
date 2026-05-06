@@ -34,6 +34,14 @@ export interface SchemaApplyOptions {
   schemaFilePath: string;
   databaseUrl: string;
   /**
+   * SDL the server believes is currently applied. When provided, the
+   * SchemaManager is primed with this baseline so the diff that drives
+   * the unsafe-op gate compares against the running schema rather
+   * than starting from scratch (which would treat every drop as an
+   * "added type" and silently skip the gate).
+   */
+  appliedSdl?: string;
+  /**
    * Called with the new SDL when the apply succeeds, so the server can
    * update its cached `appliedSdl` for subsequent diff streams.
    */
@@ -101,6 +109,27 @@ export async function handleSchemaApply(
     await pool.initialize();
     manager = new SchemaManager({ pool, dryRun: false });
     await manager.initialize();
+
+    // Prime the manager's "currently applied" baseline so the
+    // unsafe-op gate compares against the running schema rather than
+    // starting from `null` (which would treat every drop as a new
+    // type-create — silently bypassing the gate). The CLI's `migrate`
+    // path doesn't need this because it discovers state through the
+    // MigrationTracker; we'd have to load the previous SDL from
+    // history to do the same and that's substantially more work for
+    // the same outcome.
+    if (options.appliedSdl !== undefined && options.appliedSdl.length > 0) {
+      const baselineResult = manager.loadBaseline(options.appliedSdl);
+      if (!baselineResult.ok) {
+        log.warn("schema-apply: applied-SDL baseline failed to parse", {
+          error: baselineResult.error.message,
+        });
+        // Don't fail the request — proceed with no baseline (treats
+        // everything as additive). The user can re-bake the server
+        // by restarting if they hit this; logging makes the issue
+        // discoverable.
+      }
+    }
 
     const applyResult = await manager.applySchema(onDiskSdl, {
       allowUnsafe: force,
