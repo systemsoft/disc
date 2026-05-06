@@ -30,7 +30,7 @@ Each migration gets an auto-generated ID following the format `m<timestamp>_<ran
 > migrations in the `disc_migrations` table and replans from the schema
 > every run, so a file-creation step has no purpose.
 >
-> `disc migrate --create` is a *preview* — it prints the planned
+> `disc migrate --create` is a _preview_ — it prints the planned
 > migration and generated DDL to stdout without executing or writing
 > any file. Use it like `--dry-run` to see the impact of your changes
 > before applying.
@@ -219,13 +219,175 @@ When `rollbackOnError` is enabled in the migration configuration (the default), 
 ```typescript
 const engine = new MigrationEngine({
   // ...
-  rollbackOnError: true
+  rollbackOnError: true,
 });
 
 // If any DDL statement fails, the engine automatically
 // executes the rollback SQL before returning the error.
 const result = await engine.executeMigrationWithRollback(plan);
 ```
+
+## Operation Classification: Safe / Unsafe / Ambiguous
+
+Disc classifies every migration operation into one of three categories (`migration/types.ts` `MigrationOperation.classification`):
+
+| Class       | Meaning                                                                                                                                                                                      | Gate behavior                        |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `safe`      | Additive, reversible, no data loss (e.g. `CreateType`, `AddProperty`, `AddConstraint` on a new column).                                                                                      | Applied without prompting.           |
+| `unsafe`    | Drops or destroys data (`DropType`, `DropProperty`, `RecreateScalar` for enum changes).                                                                                                      | Refused unless `--unsafe` is passed. |
+| `ambiguous` | Could be interpreted multiple ways and the differ can't pick — type narrowing without a cast, optional→required without a default, single↔multi cardinality flips, `AlterLink ChangeTarget`. | Refused unless `--unsafe` is passed. |
+
+The classifier (`migration/engine.ts` `classifyUnsafeOperations`) is non-interactive: Disc _labels_ the plan and refuses, rather than prompting. Non-CLI callers (the admin UI, programmatic invocations) get the same structured classification on `MigrationOperation.classification` and can render their own UX.
+
+To apply an unsafe plan from the CLI, acknowledge with `--unsafe`:
+
+```bash
+disc migrate --unsafe
+```
+
+For ambiguous operations, the right fix is usually to disambiguate at the SDL level (add a default, add an explicit cast, split the change into two migrations) rather than reach for `--unsafe`. The flag is the escape hatch, not the workflow.
+
+### Enum value removal — `RecreateScalar`
+
+PostgreSQL's `ALTER TYPE ... ADD VALUE` is safe and inside-transaction-friendly on PG 12+, so adding enum values is a `safe` op (`AddEnumValue`). Removing or reordering enum values isn't supported in PostgreSQL DDL — Disc emits a single `RecreateScalar` op that drops and recreates the type. That op is flagged `unsafe`, and the generated DDL emits a guard `DO` block that aborts when columns still reference the type:
+
+```sql
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE udt_name = 'disc_enum_status'
+  ) THEN
+    RAISE EXCEPTION 'Enum disc_enum_status still has dependent columns; '
+      'migrate the columns to a different type first';
+  END IF;
+END $$;
+
+DROP TYPE disc_enum_status;
+CREATE TYPE disc_enum_status AS ENUM ('open', 'closed', 'archived');
+```
+
+The guard is intentional: an operator who skips manually migrating the dependent columns gets a clear error rather than silent corruption. (`migration/ddl.ts` `generateRecreateScalar`, gh/geldata#2564 + #8517)
+
+## Production Migration Rollout
+
+Migrating a production database is a five-step ritual:
+
+1. **Plan in dry-run.** Before touching the prod DB, run the migration against a staging copy and inspect the generated DDL:
+
+   ```bash
+   DATABASE_URL="postgres://staging-user@staging-host/disc" disc migrate --dry-run
+   ```
+
+   Look for `DROP` statements, `ALTER COLUMN ... TYPE` (especially when the cast can fail), and any operation marked `unsafe` or `ambiguous`.
+
+2. **Apply to staging first.** Run the same migration without `--dry-run` against staging and exercise the application's hot paths against the new schema. Catch:
+   - Foreign-key violations from concurrent writes.
+   - Default-value mismatches on newly required columns.
+   - Index-creation hangs on large tables (PostgreSQL's `CREATE INDEX` takes an `ACCESS EXCLUSIVE` lock on the table; use `CREATE INDEX CONCURRENTLY` manually for hot tables, or split the migration).
+
+3. **Schedule the production window.** Disc serializes migrations on a per-database advisory lock (see [Advisory Lock + Lock Timeout](#advisory-lock--lock-timeout)) so a second `disc migrate` will queue rather than collide. Still, schedule away from peak traffic if the migration creates indexes or rewrites large tables.
+
+4. **Apply with `--auto-approve` and capture output.** In CI/CD pipelines:
+
+   ```bash
+   disc migrate --auto-approve 2>&1 | tee migration-$(date -u +%Y%m%dT%H%M%SZ).log
+   ```
+
+   Persist the log: it includes the migration ID, applied DDL, and duration — useful for post-mortems.
+
+5. **Verify.** After apply:
+
+   ```bash
+   disc migrate --status
+   curl -sf https://disc.example.com/health/ready
+   ```
+
+   The status output shows the migration ID and the new schema hash.
+
+### Rollback strategy in production
+
+Disc stores rollback SQL alongside every applied migration in the `disc_migrations` table. Rollback paths:
+
+- **Last migration was wrong:** `disc migrate --rollback --force` reverses the most recent migration using its stored rollback SQL.
+- **Need to revert further:** `disc migrate --rollback-to <id> --force` rolls back every migration applied after `<id>` in reverse chronological order. The target migration itself stays applied.
+- **Operation can't be auto-rolled-back:** If the rollback SQL contains a `MANUAL ROLLBACK REQUIRED` comment (e.g., a dropped table whose data is gone), restore from a database backup. Disc does not snapshot data — that's PostgreSQL's job (see [Bundled PostgreSQL → Backups](bundled-postgres.md)).
+
+Rollback is destructive — `--force` is required so you can't typo the command.
+
+> Disc ships migration rollback as a first-class CLI flag; upstream Gel tracks the same feature at [gh/geldata#4300](https://github.com/geldata/gel/issues/4300) and hasn't shipped it.
+
+### Advisory Lock + Lock Timeout
+
+Every `disc migrate` transaction starts with two pragmas to keep concurrent-traffic interactions safe (gh/geldata#6304):
+
+```sql
+SET LOCAL lock_timeout = '60000ms';
+SELECT pg_advisory_xact_lock(<MIGRATION_ADVISORY_LOCK_KEY>);
+```
+
+- `lock_timeout` makes DDL statements that contend with a long-running query fail fast (60s by default) instead of blocking indefinitely. Tunable via `MigrationConfig.lockTimeoutMs`; pass `0` to disable.
+- `pg_advisory_xact_lock` serializes concurrent `disc migrate` invocations against the same database. Tunable via `MigrationConfig.useAdvisoryLock` (default `true`).
+
+The advisory lock key is `MIGRATION_ADVISORY_LOCK_KEY` from `migration/types.ts` — a stable 64-bit constant derived from `"disc_migrations"` via FNV-1a. If you need to drop the lock by hand (e.g., after a crash), find it in `pg_locks WHERE locktype = 'advisory'`.
+
+### CI/CD pattern
+
+A typical pipeline shape:
+
+```yaml
+# .github/workflows/migrate.yml
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v1
+      - name: Plan against staging
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+        run: deno task cli migrate --dry-run
+      - name: Apply to staging
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+        run: deno task cli migrate --auto-approve
+      - name: Smoke test staging
+        run: ./scripts/smoke.sh ${{ secrets.STAGING_URL }}
+      - name: Apply to production
+        if: github.ref == 'refs/heads/main'
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+        run: deno task cli migrate --auto-approve
+```
+
+The dry-run step has no side effects on staging (planned but never applied). Add `--unsafe` only when the migration is intentionally destructive _and_ the previous step (smoke or backup) succeeded.
+
+### Pre-migration backup
+
+For any irreversible production migration, snapshot the database first:
+
+```bash
+pg_dump --format=custom --file=pre-migration-$(date -u +%Y%m%dT%H%M%SZ).dump \
+  "$DATABASE_URL"
+disc migrate --auto-approve
+```
+
+Restore via `pg_restore` if rollback isn't viable. See [CLI → disc db](cli.md#disc-db-create) for Disc-side database management.
+
+## Workflow: Create → Review → Apply → Rollback
+
+The migration commands compose into a coherent narrative; full reference for each lives in the [CLI documentation](cli.md#disc-migrate). Here's the lifecycle in one place:
+
+| Step     | Command                              | What it does                                                                             |
+| -------- | ------------------------------------ | ---------------------------------------------------------------------------------------- |
+| Create   | `disc migrate --create`              | Print the planned migration plan + DDL without executing or writing files. Preview only. |
+| Review   | `disc migrate --dry-run`             | Same plan, plus the post-apply schema state, against the live DB.                        |
+| Apply    | `disc migrate` (or `--auto-approve`) | Generate, execute, and record the migration in `disc_migrations`.                        |
+| Status   | `disc migrate --status`              | Show count of applied migrations and the latest ID/name/schema hash.                     |
+| Rollback | `disc migrate --rollback --force`    | Reverse the most recent migration via stored rollback SQL.                               |
+| Squash   | `disc migrate --squash`              | Combine accumulated migrations into one consolidated entry.                              |
+
+The full flag set (e.g., `--rollback-to`, `--squash-from`/`--squash-to`, `--unsafe`) is documented in [CLI → disc migrate](cli.md#disc-migrate). The narrative above maps each command back to a step in the production rollout — re-read that section before running anything against a production database.
 
 ## Data Migrations
 
@@ -491,8 +653,9 @@ if (ddl.ok) {
 ```typescript
 const validation = manager.validateMigration(plan.value);
 
-if (!validation.ok)
+if (!validation.ok) {
   console.error("Validation failed:", validation.error.message);
+}
 ```
 
 #### Rollback
@@ -586,7 +749,7 @@ stack of migration files), the order in which the two branches landed
 their changes in any given database is irrelevant — the differ will
 always emit the right delta.
 
-**True intent conflicts.** If both branches changed the *same* field
+**True intent conflicts.** If both branches changed the _same_ field
 in incompatible ways (one renamed `created_at` → `createdAt`, the
 other changed its type), that's a conflict no auto-merger can fix.
 Resolve at the SDL level: pick one intent, discard or harmonize the

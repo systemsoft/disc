@@ -101,20 +101,21 @@ disc migrate [options]
 
 **Options:**
 
-| Flag                  | Description                                                         | Default                                                          |
-| --------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `-s, --schema <file>` | Path to the schema file                                             | `./dbschema/default.disc`                                        |
-| `--dry-run`           | Show what would be done without executing                           | `false`                                                          |
-| `--auto-approve`      | Skip confirmation prompts                                           | `false`                                                          |
-| `--create`            | Create migration files without applying them                        | `false`                                                          |
-| `--status`            | Show migration status (applied count, latest migration)             | --                                                               |
-| `--rollback`          | Rollback the most recent migration (requires `--force`)             | --                                                               |
-| `--rollback-to <id>`  | Rollback all migrations after the specified ID (requires `--force`) | --                                                               |
-| `--squash`            | Squash multiple migrations into one                                 | --                                                               |
-| `--squash-from <id>`  | Start of the squash range (inclusive)                               | --                                                               |
-| `--squash-to <id>`    | End of the squash range (inclusive)                                 | --                                                               |
-| `--force`             | Required for destructive operations (rollback)                      | `false`                                                          |
-| `--backend-dsn <url>` | PostgreSQL connection URL                                           | `DATABASE_URL` env var or `postgresql://localhost:5432/disc_dev` |
+| Flag                  | Description                                                                                                  | Default                                                          |
+| --------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| `-s, --schema <file>` | Path to the schema file                                                                                      | `./dbschema/default.disc`                                        |
+| `--dry-run`           | Show what would be done without executing                                                                    | `false`                                                          |
+| `--auto-approve`      | Skip confirmation prompts                                                                                    | `false`                                                          |
+| `--create`            | Create migration files without applying them                                                                 | `false`                                                          |
+| `--status`            | Show migration status (applied count, latest migration)                                                      | --                                                               |
+| `--rollback`          | Rollback the most recent migration (requires `--force`)                                                      | --                                                               |
+| `--rollback-to <id>`  | Rollback all migrations after the specified ID (requires `--force`)                                          | --                                                               |
+| `--squash`            | Squash multiple migrations into one                                                                          | --                                                               |
+| `--squash-from <id>`  | Start of the squash range (inclusive)                                                                        | --                                                               |
+| `--squash-to <id>`    | End of the squash range (inclusive)                                                                          | --                                                               |
+| `--force`             | Required for destructive operations (rollback)                                                               | `false`                                                          |
+| `--unsafe`            | Permit unsafe/ambiguous operations (`DropType`, `DropProperty`, `RecreateScalar`, ambiguous classifications) | `false`                                                          |
+| `--backend-dsn <url>` | PostgreSQL connection URL                                                                                    | `DATABASE_URL` env var or `postgresql://localhost:5432/disc_dev` |
 
 **Examples:**
 
@@ -311,17 +312,17 @@ disc codegen [options]
 
 **Options:**
 
-| Flag                  | Description                                   | Default                  |
-| --------------------- | --------------------------------------------- | ------------------------ |
-| `-s, --schema <file>` | Single schema file path                       | --                       |
-| `--schema-dir <dir>`  | Schema directory for multi-file discovery     | `./dbschema`             |
-| `-o, --output <dir>`  | Output directory for generated code           | `./dbschema/disc-client` |
-| `-t, --target <type>` | Codegen target: `client`, `server`, or `both` | `client`                 |
-| `--no-queries`        | Skip query builder generation                 | `false`                  |
-| `--no-mutations`      | Skip mutation method generation               | `false`                  |
-| `--no-client`         | Skip client library generation                | `false`                  |
-| `--no-format`         | Skip output formatting                        | `false`                  |
-| `--js`                | *Reserved:* generate JavaScript output        | `false` (not implemented yet — tracked in backlog) |
+| Flag                  | Description                                   | Default                                            |
+| --------------------- | --------------------------------------------- | -------------------------------------------------- |
+| `-s, --schema <file>` | Single schema file path                       | --                                                 |
+| `--schema-dir <dir>`  | Schema directory for multi-file discovery     | `./dbschema`                                       |
+| `-o, --output <dir>`  | Output directory for generated code           | `./dbschema/disc-client`                           |
+| `-t, --target <type>` | Codegen target: `client`, `server`, or `both` | `client`                                           |
+| `--no-queries`        | Skip query builder generation                 | `false`                                            |
+| `--no-mutations`      | Skip mutation method generation               | `false`                                            |
+| `--no-client`         | Skip client library generation                | `false`                                            |
+| `--no-format`         | Skip output formatting                        | `false`                                            |
+| `--js`                | _Reserved:_ generate JavaScript output        | `false` (not implemented yet — tracked in backlog) |
 
 **Examples:**
 
@@ -983,25 +984,25 @@ port = 5656
 # rate_limit_rpm = 600
 ```
 
-| Section      | Key                       | Default       | Description                                                       |
-| ------------ | ------------------------- | ------------- | ----------------------------------------------------------------- |
-| *(top)*      | `name`                    | *(required)*  | Project name                                                      |
-| `[database]` | `managed`                 | `true`        | Use bundled PostgreSQL                                            |
-| `[database]` | `instance_name`           | same as name  | Instance directory under `~/.disc/instances/`                     |
-| `[database]` | `backend_dsn`             | *(none)*      | External PostgreSQL connection string                             |
-| `[server]`   | `host`                    | `"localhost"` | Server bind host                                                  |
-| `[server]`   | `port`                    | `5656`        | Server bind port                                                  |
-| `[server]`   | `require_auth`            | `false`       | Reject data-plane requests without a valid `Authorization` header |
-| `[server]`   | `read_only`               | `false`       | Reject INSERT/UPDATE/DELETE/CONFIGURE and migrations              |
-| `[server]`   | `enable_cors`             | `true`        | Emit CORS headers on HTTP responses                               |
-| `[server]`   | `cors_origins`            | *(any)*       | Allowlist of origins; entries may use `https://*.example.com`     |
-| `[server]`   | `cors_allow_credentials`  | `false`       | Emit `Access-Control-Allow-Credentials: true` (requires allowlist)|
-| `[server]`   | `trust_proxy`             | `false`       | Honor `X-Forwarded-For`/`X-Real-IP`/`X-Forwarded-Proto`           |
-| `[server]`   | `enable_websockets`       | `true`        | Accept WebSocket upgrades on the HTTP port                        |
-| `[server]`   | `enable_metrics`          | `false`       | Expose Prometheus metrics on `/metrics`                           |
-| `[server]`   | `max_request_body_bytes`  | `4194304`     | Reject `POST /query` bodies larger than this with 413             |
-| `[server]`   | `request_timeout`         | *(none)*      | Per-request timeout in ms                                         |
-| `[server]`   | `rate_limit_rpm`          | *(none)*      | Per-client rate limit in requests/minute                          |
+| Section      | Key                      | Default       | Description                                                        |
+| ------------ | ------------------------ | ------------- | ------------------------------------------------------------------ |
+| _(top)_      | `name`                   | _(required)_  | Project name                                                       |
+| `[database]` | `managed`                | `true`        | Use bundled PostgreSQL                                             |
+| `[database]` | `instance_name`          | same as name  | Instance directory under `~/.disc/instances/`                      |
+| `[database]` | `backend_dsn`            | _(none)_      | External PostgreSQL connection string                              |
+| `[server]`   | `host`                   | `"localhost"` | Server bind host                                                   |
+| `[server]`   | `port`                   | `5656`        | Server bind port                                                   |
+| `[server]`   | `require_auth`           | `false`       | Reject data-plane requests without a valid `Authorization` header  |
+| `[server]`   | `read_only`              | `false`       | Reject INSERT/UPDATE/DELETE/CONFIGURE and migrations               |
+| `[server]`   | `enable_cors`            | `true`        | Emit CORS headers on HTTP responses                                |
+| `[server]`   | `cors_origins`           | _(any)_       | Allowlist of origins; entries may use `https://*.example.com`      |
+| `[server]`   | `cors_allow_credentials` | `false`       | Emit `Access-Control-Allow-Credentials: true` (requires allowlist) |
+| `[server]`   | `trust_proxy`            | `false`       | Honor `X-Forwarded-For`/`X-Real-IP`/`X-Forwarded-Proto`            |
+| `[server]`   | `enable_websockets`      | `true`        | Accept WebSocket upgrades on the HTTP port                         |
+| `[server]`   | `enable_metrics`         | `false`       | Expose Prometheus metrics on `/metrics`                            |
+| `[server]`   | `max_request_body_bytes` | `4194304`     | Reject `POST /query` bodies larger than this with 413              |
+| `[server]`   | `request_timeout`        | _(none)_      | Per-request timeout in ms                                          |
+| `[server]`   | `rate_limit_rpm`         | _(none)_      | Per-client rate limit in requests/minute                           |
 
 When no `disc.toml` is found, commands fall back to the current directory name as the project name. CLI flags always win over `disc.toml`, which wins over environment variables.
 
