@@ -589,7 +589,188 @@ Disc persists migration state in two PostgreSQL tables, created automatically wh
 
 ## Programmatic API
 
-For advanced use cases, you can drive the migration system from TypeScript code instead of the CLI.
+For advanced use cases — tooling, custom CI flows, embedding Disc's
+migration engine inside another app, building an admin UI on top —
+you can drive the migration system from TypeScript code instead of
+the CLI. (gh/geldata#6094)
+
+### Lifecycle Overview
+
+The migration system is layered from highest-level (most batteries
+included) to lowest-level (most control):
+
+| Layer               | Best for                                                          | Module                        |
+| ------------------- | ----------------------------------------------------------------- | ----------------------------- |
+| `SchemaManager`     | Drive the full pipeline: parse SDL → diff → plan → DDL → execute  | `migration/schema-manager.ts` |
+| `MigrationEngine`   | Plan / execute / rollback against pre-built `Module[]` ASTs       | `migration/engine.ts`         |
+| `SchemaDiffer`      | Pure diff over two `Module[]` trees, no DB I/O                    | `migration/differ.ts`         |
+| `DDLGenerator`      | Pure DDL emission from `MigrationOperation[]`, no DB I/O          | `migration/ddl.ts`            |
+| `MigrationTracker`  | Read-write access to `disc_migrations` / checkpoint tables        | `migration/tracker.ts`        |
+| `MigrationSquasher` | Combine N applied migrations into one rolled-up form              | `migration/squash.ts`         |
+
+The high-level `SchemaManager` covers the common case; reach further
+down only when you need primitives the higher layer hides.
+
+### Connection Injection
+
+Every layer accepts a `ConnectionPool` from `disc/lib/connection-pool.ts`.
+The pool wraps a `pg`-compatible driver and exposes `withConnection()`,
+`withTransaction()`, plus pool stats. **You own the pool lifecycle** —
+the migration code never closes a pool you passed in. This makes it
+safe to share a single pool across both your app's query traffic and
+its migration runs.
+
+```typescript
+import { ConnectionPool } from "disc/lib/connection-pool.ts";
+
+const pool = new ConnectionPool({
+  connectionString: process.env.DATABASE_URL!,
+  max: 10,
+});
+await pool.initialize();
+
+// Pass into SchemaManager / MigrationEngine — they share, don't close
+const manager = new SchemaManager({ pool, dryRun: false });
+await manager.initialize();
+
+// …work…
+
+await manager.close(); // closes the manager's tracker only, NOT the pool
+await pool.close();    // app shuts down the pool when it's truly done
+```
+
+### Inspecting the Diff Before Applying
+
+The most common reason to drop down from the CLI is "I want to see what
+the differ produces before deciding to apply it." Two ways:
+
+```typescript
+// 1. Plan-only with full operation detail (no DB writes)
+const plan = manager.planSchema(sdlSource);
+if (plan.ok) {
+  for (const m of plan.value.migrations) {
+    for (const op of m.operations) {
+      // op.kind: "CreateType" | "DropProperty" | … | "RecreateScalar"
+      // op.classification: "safe" | "unsafe" | "ambiguous"
+      console.log(`${op.kind} (${op.classification ?? "safe"})`);
+    }
+  }
+}
+
+// 2. Generate the DDL but don't execute
+const ddl = manager.generateDDL(plan.value);
+if (ddl.ok) {
+  console.log(ddl.value.join("\n"));
+}
+```
+
+The `classification` field carries the same `safe | unsafe | ambiguous`
+labels the CLI's gate uses (see [Migration Classification](#migration-classification-safe-unsafe-ambiguous)).
+A programmatic caller can branch on it to either auto-apply, prompt
+the human, or refuse — whatever the surrounding tool needs.
+
+### Safe vs Unsafe Gates from Code
+
+The unsafe gate behaves the same way for programmatic callers as for
+the CLI. By default the gate refuses any plan containing an `unsafe`
+or `ambiguous` operation; opt in by setting `allowUnsafe` on the
+engine config (or by passing it through `SchemaManager.applySchema()`
+when supported by your version).
+
+For finer control, use `MigrationEngine` directly — it lets you
+inspect the operation list, classify ops yourself, and execute one
+migration at a time inside your own transaction.
+
+### Pure Diff (No DB)
+
+When all you have are two `Module[]` ASTs (e.g. you're testing the
+differ inside a unit test, or building a "preview the diff" UI on
+the schema editor):
+
+```typescript
+import { SchemaDiffer } from "disc/migration/differ.ts";
+
+const differ = new SchemaDiffer();
+const operations = differ.diff(oldModules, newModules);
+
+// operations: MigrationOperation[] — kind, classification, payload
+```
+
+`SchemaDiffer` does no I/O. The output is the same `MigrationOperation[]`
+the engine consumes; pass it to `DDLGenerator` for raw SQL or feed it
+back into `MigrationEngine` to apply.
+
+### Direct DDL Emission
+
+```typescript
+import { DDLGenerator } from "disc/migration/ddl.ts";
+
+const ddl = new DDLGenerator();
+const statements = ddl.generate(operations);
+// string[] — each entry is one DDL statement, ready for `pool.query(stmt)`
+```
+
+This is the layer the higher-level engine uses. No transaction
+wrapping is added — caller is responsible for `BEGIN` / `COMMIT` if
+they want the apply to be atomic.
+
+### Reading State
+
+```typescript
+import { MigrationTracker } from "disc/migration/tracker.ts";
+
+const tracker = new MigrationTracker(pool);
+await tracker.initialize();
+
+const applied = await tracker.getAppliedMigrations(); // Result<string[]>
+const history = await tracker.getMigrationHistory(); // Result<HistoryEntry[]>
+```
+
+The tracker creates `disc_migrations` and `disc_migration_checkpoints`
+on `initialize()` if they don't already exist — safe to call repeatedly.
+
+### Embedding in Another App
+
+A typical embed-in-an-app pattern looks like:
+
+```typescript
+import { ConnectionPool } from "disc/lib/connection-pool.ts";
+import { SchemaManager } from "disc/migration/schema-manager.ts";
+
+export async function migrate(opts: {
+  databaseUrl: string;
+  sdlSource: string;
+  dryRun?: boolean;
+}): Promise<{ migrationsApplied: number; durationMs: number }> {
+  const pool = new ConnectionPool({ connectionString: opts.databaseUrl });
+  await pool.initialize();
+
+  const manager = new SchemaManager({ pool, dryRun: opts.dryRun ?? false });
+  await manager.initialize();
+
+  try {
+    const start = Date.now();
+    const result = await manager.applySchema(opts.sdlSource);
+    if (!result.ok) {
+      throw new Error(`migrate failed: ${result.error.message}`);
+    }
+    return {
+      migrationsApplied: result.value.length,
+      durationMs: Date.now() - start,
+    };
+  } finally {
+    await manager.close();
+    await pool.close();
+  }
+}
+```
+
+The shape mirrors what the CLI does: call `applySchema()` once with
+your SDL, get back a list of applied migrations or a structured error.
+The Result-based API means programmatic callers never need to catch
+`MigrationError` exceptions for the common failure modes (gate refused,
+diff was empty, DB rejected a statement) — those all flow through
+`result.ok === false`.
 
 ### SchemaManager
 
