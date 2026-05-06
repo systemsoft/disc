@@ -21,6 +21,7 @@ export interface ServerOverrides {
   corsAllowCredentials?: boolean;
   corsOrigins?: string[];
   enableCors?: boolean;
+  enableDataWatch?: boolean;
   enableMetrics?: boolean;
   enableRest?: boolean;
   enableWebsockets?: boolean;
@@ -56,6 +57,7 @@ interface TomlFields {
   corsAllowCredentials?: string;
   corsOrigins?: string[];
   enableCors?: string;
+  enableDataWatch?: string;
   enableMetrics?: string;
   enableRest?: string;
   enableWebsockets?: string;
@@ -223,6 +225,8 @@ function parseToml(source: string): TomlFields {
         fields.enableMetrics = value;
       } else if (key === "enable_rest") {
         fields.enableRest = value;
+      } else if (key === "enable_data_watch") {
+        fields.enableDataWatch = value;
       } else if (key === "trust_proxy") {
         fields.trustProxy = value;
       } else if (key === "cors_allow_credentials") {
@@ -304,6 +308,11 @@ function buildServerOverrides(fields: TomlFields): ServerOverrides | undefined {
 
   const enableRest = parseBool(fields.enableRest);
   if (enableRest !== undefined) overrides.enableRest = enableRest;
+
+  const enableDataWatch = parseBool(fields.enableDataWatch);
+  if (enableDataWatch !== undefined) {
+    overrides.enableDataWatch = enableDataWatch;
+  }
 
   const trustProxy = parseBool(fields.trustProxy);
   if (trustProxy !== undefined) overrides.trustProxy = trustProxy;

@@ -111,6 +111,15 @@ export interface ServerConfig {
    * (Bundle J — Disc-original feature #2)
    */
   enableRest?: boolean;
+  /**
+   * When true, expose the live data-subscription endpoint
+   * `GET /admin/data-watch?tables=…` and bootstrap the change-log
+   * triggers. Powers the admin UI's live data viewer. Defaults to
+   * `true`. Disable via `disc.toml` `enable_data_watch = false` or
+   * the `DISC_ENABLE_DATA_WATCH=false` environment variable.
+   * (Bundle L — Disc-original feature #3c)
+   */
+  enableDataWatch?: boolean;
   cacheMaxSize?: number;
   shutdownDrainTimeout?: number;
   slowQueryThresholdMs?: number;

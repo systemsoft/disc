@@ -136,6 +136,15 @@ export class DiscServer {
   private auth_db?: DatabaseConnection;
   private extensionRegistry: ExtensionRegistry;
   private databaseRegistry?: DatabaseRegistry;
+  /**
+   * Live data-subscription registry (Bundle L — Disc-original feature
+   * #3c). Owns the change-log polling loop + per-subscriber debounce.
+   * Initialized after the protocol handler's pool is ready, then
+   * passed into HttpServer.
+   */
+  private dataWatchRegistry?: import(
+    "./admin/data-watch-registry.ts"
+  ).DataWatchRegistry;
   private binaryServer?: BinaryProtocolServer;
   private binaryPassword?: string;
   private binaryTls?: { certFile: string; keyFile: string };
@@ -183,6 +192,8 @@ export class DiscServer {
       requireAuth: config.requireAuth,
       readOnly: config.readOnly,
       trustProxy: config.trustProxy,
+      enableRest: config.enableRest,
+      enableDataWatch: config.enableDataWatch,
       tls: config.tls,
       databases: config.databases,
       enableMultiDatabase: config.enableMultiDatabase,
@@ -254,6 +265,14 @@ export class DiscServer {
       if (this.protocolHandler.initialize) {
         await this.protocolHandler.initialize();
         logger.info("Protocol handler initialized (connection pool ready)");
+      }
+
+      // Bootstrap live data-subscription infrastructure (Bundle L).
+      // The pool is owned by the protocol handler; we reuse it so we
+      // don't open yet another connection. Failures here are
+      // non-fatal — the live-watch endpoint just stays unavailable.
+      if (this.config.enableDataWatch !== false) {
+        await this.initializeDataWatch();
       }
 
       // Initialize database registry for multi-database support
@@ -365,6 +384,7 @@ export class DiscServer {
             },
           }
           : undefined,
+        dataWatchRegistry: this.dataWatchRegistry,
         schemaProvider: () => {
           // Access the handler's current schema (may be updated at runtime)
           const handler = this.protocolHandler as any;
@@ -479,6 +499,13 @@ export class DiscServer {
       await this.httpServer.stop();
     }
 
+    // Stop data-watch registry (clears polling timer + subscribers).
+    if (this.dataWatchRegistry) {
+      this.dataWatchRegistry.stop();
+      this.dataWatchRegistry = undefined;
+      logger.info("Data-watch registry stopped");
+    }
+
     // Shut down extensions
     if (this.extensionRegistry.size > 0) {
       await this.extensionRegistry.shutdownAll();
@@ -504,6 +531,52 @@ export class DiscServer {
     }
 
     logger.info("Server stopped successfully");
+  }
+
+  /**
+   * Bootstrap the live data-subscription infrastructure (Bundle L).
+   *
+   * Steps:
+   *   1. Pull the connection pool from the protocol handler.
+   *   2. Run `bootstrapDataWatch()` to ensure the change-log table,
+   *      function, and triggers exist on every Disc-managed table.
+   *   3. Construct + start a `DataWatchRegistry` against the pool.
+   *
+   * Failures are non-fatal. If bootstrap throws (e.g. permissions
+   * issue, extension blocking), we log and skip the live-watch
+   * registry — the endpoint just won't be mounted on HttpServer.
+   */
+  private async initializeDataWatch(): Promise<void> {
+    const handler = this.protocolHandler as unknown as {
+      pool?: import("../lib/connection-pool.ts").ConnectionPool;
+    };
+    if (!handler.pool) {
+      logger.info(
+        "data-watch: skipped — protocol handler has no connection pool",
+      );
+      return;
+    }
+    try {
+      const { bootstrapDataWatch } = await import(
+        "./admin/data-watch-ddl.ts"
+      );
+      const { DataWatchRegistry } = await import(
+        "./admin/data-watch-registry.ts"
+      );
+      const result = await bootstrapDataWatch({ pool: handler.pool });
+      this.dataWatchRegistry = new DataWatchRegistry({ pool: handler.pool });
+      await this.dataWatchRegistry.start();
+      logger.info(
+        `data-watch: ready (${result.wiredTables.length} table(s) wired)`,
+      );
+    } catch (err) {
+      this.dataWatchRegistry = undefined;
+      logger.warn(
+        `data-watch: bootstrap failed; live data subscriptions disabled — ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+    }
   }
 
   private async initializeAuth(): Promise<void> {
@@ -874,6 +947,12 @@ export function buildEnvOptions(
   // via env or `disc.toml` `enable_rest = false` in the server section.
   const enableRest = parseBoolEnv("DISC_ENABLE_REST");
   if (enableRest !== undefined) config.enableRest = enableRest;
+
+  // Live data subscriptions (Bundle L). Defaults to true; opt-out via
+  // `DISC_ENABLE_DATA_WATCH=false` or `disc.toml` `enable_data_watch
+  // = false`.
+  const enableDataWatch = parseBoolEnv("DISC_ENABLE_DATA_WATCH");
+  if (enableDataWatch !== undefined) config.enableDataWatch = enableDataWatch;
 
   // Parse TLS config if provided.
   // `DISC_TLS_CERT` / `DISC_TLS_KEY` accept on-disk paths.

@@ -27,6 +27,8 @@ import { dispatchRest } from "./rest/router.ts";
 import { renderOpenApiSpec } from "./rest/openapi.ts";
 import { handleSchemaWatch } from "./admin/schema-watch.ts";
 import { handleSchemaApply } from "./admin/schema-apply.ts";
+import { handleDataWatch } from "./admin/data-watch.ts";
+import type { DataWatchRegistry } from "./admin/data-watch-registry.ts";
 
 const DEFAULT_CORS_METHODS = ["GET", "POST", "OPTIONS"];
 const DEFAULT_CORS_HEADERS = ["Content-Type", "Authorization"];
@@ -63,6 +65,13 @@ export interface HttpServerOptions {
     appliedSdlProvider: () => string;
     onApplied?: (newSdl: string) => void;
   };
+  /**
+   * Live data-subscription registry (Bundle L — Disc-original feature
+   * #3c). When set, the HTTP server mounts:
+   *   GET /admin/data-watch?tables=…  — SSE invalidation stream
+   * Disabled when `config.enableDataWatch === false`. Omitted → 404.
+   */
+  dataWatchRegistry?: DataWatchRegistry;
 }
 
 export class HttpServer {
@@ -83,6 +92,7 @@ export class HttpServer {
   private schemaProvider?: SchemaProvider;
   private migrationsProvider?: MigrationsProvider;
   private adminSchemaWatch?: HttpServerOptions["adminSchemaWatch"];
+  private dataWatchRegistry?: DataWatchRegistry;
   private rate_limiter?: RateLimiter;
   private uiAssetHandler: UiAssetHandler;
   private server?: Deno.HttpServer<Deno.NetAddr>;
@@ -122,6 +132,7 @@ export class HttpServer {
     this.schemaProvider = options.schemaProvider;
     this.migrationsProvider = options.migrationsProvider;
     this.adminSchemaWatch = options.adminSchemaWatch;
+    this.dataWatchRegistry = options.dataWatchRegistry;
     this.connection_manager = new ConnectionManager();
     this.session_manager = new SessionManager();
     this.transaction_manager = new TransactionManager();
@@ -522,6 +533,24 @@ export class HttpServer {
           url,
           authedContext,
         );
+      }
+
+      // Live data-subscription endpoint (Bundle L — Disc-original
+      // feature #3c). Read-only SSE stream of `invalidate` events;
+      // mounted only when a registry was wired (DiscServer
+      // bootstraps it after PG is ready).
+      if (
+        this.config.enableDataWatch !== false &&
+        this.dataWatchRegistry &&
+        url.pathname === "/admin/data-watch"
+      ) {
+        if (request.method !== "GET") {
+          return this.create_error_response("Method Not Allowed", 405);
+        }
+        return handleDataWatch({
+          registry: this.dataWatchRegistry,
+          url,
+        });
       }
 
       // Schema-derived REST surface (Bundle J — Disc-original feature #2).
