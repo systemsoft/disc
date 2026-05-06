@@ -4,9 +4,13 @@
  */
 
 import { TextLineStream } from "jsr:@std/streams@1.0.8/text-line-stream";
+import type { Schema } from "../compiler/context.ts";
+import { discoverSchemaFiles, loadMultiFileSchema } from "../codegen/mod.ts";
 import { DatabaseConnection } from "../lib/database.ts";
 import { resolveProjectContext } from "../lib/project-context.ts";
+import { SchemaManager } from "../migration/schema-manager.ts";
 import { ensurePgRunning } from "../postgres/ensure-running.ts";
+import { describeAllTypes, describeType } from "./describe.ts";
 
 export interface ShellOptions {
   host?: string;
@@ -32,6 +36,13 @@ export class DiscShell {
   private multilineBuffer = "";
   private isMultiline = false;
   private session: ShellSession | null = null;
+  /**
+   * Schema loaded for the `\d` meta-command. Populated either from an
+   * explicit `--schema` file or by auto-discovering `dbschema/` in the
+   * resolved project context. Stays null when no schema can be located,
+   * in which case `\d` falls back to listing PostgreSQL tables.
+   */
+  private schema?: Schema;
 
   async run(options: ShellOptions = {}): Promise<void> {
     console.log("🎯 Disc Interactive Shell");
@@ -64,6 +75,12 @@ export class DiscShell {
 
       if (options.schemaFile) {
         await this.loadSchema(options.schemaFile);
+      } else {
+        // Auto-discover the project's schema (./dbschema by default) so
+        // `\d` can describe types without the user passing --schema.
+        // Failure here is non-fatal: the REPL still works, `\d` just
+        // falls back to listing PG tables.
+        await this.autoLoadSchema();
       }
 
       if (options.execute) {
@@ -145,12 +162,38 @@ export class DiscShell {
       }
 
       const schemaContent = await Deno.readTextFile(schemaFile);
-      // In a real implementation, this would parse and apply the schema
-      console.log(`✅ Schema loaded (${schemaContent.length} bytes)`);
+      const manager = new SchemaManager({});
+      const parseResult = manager.parseSDL(schemaContent);
+      if (!parseResult.ok) {
+        console.log(`⚠️  Schema parse failed: ${parseResult.error.message}`);
+        return;
+      }
+      this.schema = manager.modulesToSchema(parseResult.value);
+      const typeCount = this.schema.types.size;
+      console.log(`✅ Schema loaded: ${typeCount} type(s) available`);
       console.log("");
     } catch (error) {
       console.error(`❌ Failed to load schema: ${(error as Error).message}`);
       throw error;
+    }
+  }
+
+  /**
+   * Best-effort discovery of the project's schema directory so `\d`
+   * can describe types out of the box. Walks `./dbschema` (or the
+   * project root's dbschema) for `.disc`/`.gel`/`.esdl` files. Silent
+   * on every failure path — `\d` just won't have schema data, which
+   * is the same as the pre-discovery behaviour.
+   */
+  private async autoLoadSchema(): Promise<void> {
+    try {
+      const ctx = resolveProjectContext();
+      const dir = ctx ? `${ctx.projectRoot}/dbschema` : "./dbschema";
+      const files = await discoverSchemaFiles(dir);
+      if (files.length === 0) return;
+      this.schema = await loadMultiFileSchema(files);
+    } catch {
+      // Non-fatal — `\d` falls back to listTables() when schema is missing.
     }
   }
 
@@ -243,7 +286,15 @@ export class DiscShell {
         break;
 
       case "\\d":
-        await this.listTables();
+        // psql convention: `\d` lists every type, `\d <Type>` describes
+        // a single type with its full schema metadata. Falls back to a
+        // PG-table listing when no schema is loaded so the REPL still
+        // gives the user something useful in a fresh database.
+        if (parts[1]) {
+          this.describeTypeByName(parts[1]);
+        } else {
+          await this.listTypes();
+        }
         break;
 
       case "\\dt":
@@ -334,6 +385,39 @@ export class DiscShell {
     }
   }
 
+  /**
+   * `\d` (no args): show every Disc type known to the loaded schema.
+   * Falls back to listing PostgreSQL tables when no schema is available.
+   */
+  private async listTypes(): Promise<void> {
+    if (this.schema && this.schema.types.size > 0) {
+      console.log(describeAllTypes(this.schema));
+      return;
+    }
+    // No schema in scope — show PG tables so the user still gets something.
+    await this.listTables();
+  }
+
+  /**
+   * `\d <Type>`: render a verbose description of a single type. Reports
+   * a clear error when the type can't be found.
+   */
+  private describeTypeByName(name: string): void {
+    if (!this.schema || this.schema.types.size === 0) {
+      console.log(
+        "⚠️  No schema loaded. Pass --schema <file> or run from a project " +
+          "with a dbschema/ directory.",
+      );
+      return;
+    }
+    const out = describeType(this.schema, name);
+    if (!out) {
+      console.log(`Type not found: ${name}`);
+      return;
+    }
+    console.log(out);
+  }
+
   private async listTables(detailed = false): Promise<void> {
     if (!this.db) {
       console.error("❌ Not connected to database");
@@ -420,15 +504,16 @@ export class DiscShell {
 
   private showHelp(): void {
     console.log("Available commands:");
-    console.log("  \\?        Show help");
-    console.log("  \\q        Quit shell");
-    console.log("  \\d        List tables");
-    console.log("  \\dt       List tables (detailed)");
-    console.log("  \\c <db>   Connect to database");
-    console.log("  \\i <file> Execute file");
-    console.log("  \\timing   Toggle query timing");
-    console.log("  \\history  Show command history");
-    console.log("  \\clear    Clear screen");
+    console.log("  \\?          Show help");
+    console.log("  \\q          Quit shell");
+    console.log("  \\d          List all schema types");
+    console.log("  \\d <Type>   Describe one type in full detail");
+    console.log("  \\dt         List tables (detailed)");
+    console.log("  \\c <db>     Connect to database");
+    console.log("  \\i <file>   Execute file");
+    console.log("  \\timing     Toggle query timing");
+    console.log("  \\history    Show command history");
+    console.log("  \\clear      Clear screen");
   }
 
   private async cleanup(): Promise<void> {
