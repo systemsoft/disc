@@ -818,3 +818,116 @@ Deno.test("SDL Parser - accepts `optional multi` cardinality (gh/geldata#4406)",
     }
   }
 });
+
+// ---------------------------------------------------------------------------
+// Bundle J — Schema-derived REST surface (Disc-original feature #2)
+//
+// `rest::hidden` and `rest::expand` annotations gate exposure and shape of
+// the auto-generated REST routes. They parse as ordinary qualified-name
+// annotations; the validator allows them without an explicit
+// `abstract annotation` declaration. Unknown `rest::*` annotations still
+// fail validation cleanly.
+// ---------------------------------------------------------------------------
+
+Deno.test("SDL Parser - Property accepts rest::hidden annotation", () => {
+  const source = `
+    type User {
+      required email: str {
+        annotation rest::hidden;
+      };
+      required name: str;
+    }
+  `;
+
+  const parser = new SDLParser(source);
+  const ast = parser.parse();
+  const typeDecl = ast.declarations[0];
+  if (typeDecl.kind !== "TypeDeclaration") {
+    throw new Error("expected TypeDeclaration");
+  }
+  const email = typeDecl.members[0];
+  if (email.kind !== "PropertyDeclaration") {
+    throw new Error("expected PropertyDeclaration for email");
+  }
+  assertEquals(email.annotations?.length, 1);
+  assertEquals(email.annotations?.[0].name.parts, ["rest", "hidden"]);
+});
+
+Deno.test("SDL Parser - Link accepts rest::expand annotation", () => {
+  const source = `
+    type User {
+      multi link posts -> Post {
+        annotation rest::expand;
+      };
+    }
+  `;
+
+  const parser = new SDLParser(source);
+  const ast = parser.parse();
+  const typeDecl = ast.declarations[0];
+  if (typeDecl.kind !== "TypeDeclaration") {
+    throw new Error("expected TypeDeclaration");
+  }
+  const posts = typeDecl.members[0];
+  if (posts.kind !== "LinkDeclaration") {
+    throw new Error("expected LinkDeclaration for posts");
+  }
+  assertEquals(posts.annotations?.length, 1);
+  assertEquals(posts.annotations?.[0].name.parts, ["rest", "expand"]);
+});
+
+Deno.test("SDL Validator - rest::hidden is allowed without abstract declaration", () => {
+  const source = `
+    type User {
+      required email: str {
+        annotation rest::hidden;
+      };
+      required name: str;
+    }
+  `;
+
+  const parser = new SDLParser(source);
+  const ast = parser.parse();
+  const result = new SchemaValidator().validate(ast);
+  assertEquals(result.ok, true, JSON.stringify(result.errors ?? []));
+});
+
+Deno.test("SDL Validator - rest::expand is allowed without abstract declaration", () => {
+  const source = `
+    type Post {
+      required title: str;
+    }
+    type User {
+      multi link posts -> Post {
+        annotation rest::expand;
+      };
+    }
+  `;
+
+  const parser = new SDLParser(source);
+  const ast = parser.parse();
+  const result = new SchemaValidator().validate(ast);
+  assertEquals(result.ok, true, JSON.stringify(result.errors ?? []));
+});
+
+Deno.test("SDL Validator - rejects unknown rest::* annotation", () => {
+  const source = `
+    type User {
+      required email: str {
+        annotation rest::madeupknob;
+      };
+    }
+  `;
+
+  const parser = new SDLParser(source);
+  const ast = parser.parse();
+  const result = new SchemaValidator().validate(ast);
+  assertEquals(result.ok, false);
+  // Error message references the annotation name so callers can find it.
+  const flat = (result.errors ?? []).map((e) => e.message).join("\n");
+  if (!flat.includes("rest::madeupknob")) {
+    throw new Error(
+      `expected validation error mentioning 'rest::madeupknob', got: ${flat}`,
+    );
+  }
+});

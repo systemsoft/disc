@@ -10,6 +10,12 @@ import { isPolymorphicType } from "../compiler/context.ts";
 /**
  * Built-in annotation names that do not require an explicit
  * `abstract annotation` declaration in the schema.
+ *
+ * `rest::hidden` and `rest::expand` gate the schema-derived REST surface
+ * (Disc-original feature #2): `rest::hidden` excludes a property/link
+ * from the default GET shape; `rest::expand` inlines a linked collection
+ * rather than emitting a hyperlink. Other `rest::*` names are rejected
+ * here so typos surface at validation time. (Bundle J)
  */
 const BUILTIN_ANNOTATIONS = new Set([
   "description",
@@ -17,6 +23,8 @@ const BUILTIN_ANNOTATIONS = new Set([
   "deprecated",
   "secret",
   "std::secret",
+  "rest::hidden",
+  "rest::expand",
 ]);
 
 interface ValidationContext {
