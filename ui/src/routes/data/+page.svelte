@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import {
     discAPI,
     type SchemaTypeDescription,
@@ -18,6 +18,69 @@
   let limit = 50;
   let loading = false;
   let loadError: string | null = null;
+
+  // Live-watch state (Bundle L — Disc-original feature #3c). When
+  // `liveOn` is true we open an EventSource to /admin/data-watch and
+  // refetch on every invalidate. The brief border-pulse shows when an
+  // invalidate just landed so users can tell the table updated even
+  // when row counts didn't change.
+  let liveOn = false;
+  let liveSource: EventSource | null = null;
+  let livePulse = false;
+  let livePulseTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Convert a PascalCase type name to snake_case (matches lib/identifiers.ts). */
+  function typeNameToTableName(name: string): string {
+    return name
+      .replace(/([A-Z]+)([A-Z][a-z])/g, '$1_$2')
+      .replace(/([a-z\d])([A-Z])/g, '$1_$2')
+      .toLowerCase();
+  }
+
+  function teardownLive() {
+    if (liveSource) {
+      liveSource.close();
+      liveSource = null;
+    }
+    if (livePulseTimer) {
+      clearTimeout(livePulseTimer);
+      livePulseTimer = null;
+    }
+    livePulse = false;
+  }
+
+  function startLive(type: SchemaTypeDescription) {
+    teardownLive();
+    if (!liveOn) return;
+    const tableName = typeNameToTableName(type.name);
+    liveSource = new EventSource(`/admin/data-watch?tables=${tableName}`);
+    liveSource.addEventListener('invalidate', () => {
+      // Pulse the border green for one frame, then refetch.
+      livePulse = true;
+      if (livePulseTimer) clearTimeout(livePulseTimer);
+      livePulseTimer = setTimeout(() => {
+        livePulse = false;
+      }, 600);
+      void loadRows();
+    });
+    liveSource.addEventListener('error', () => {
+      // Don't tear down — EventSource auto-reconnects. The pulse will
+      // resume when the connection comes back.
+    });
+  }
+
+  function toggleLive() {
+    liveOn = !liveOn;
+    if (liveOn && selectedType) {
+      startLive(selectedType);
+    } else {
+      teardownLive();
+    }
+  }
+
+  onDestroy(() => {
+    teardownLive();
+  });
 
   // Insert state
   let inserting = false;
@@ -58,6 +121,8 @@
     // Filters and sort are per-type; reset when switching.
     sortBy = null;
     filters = {};
+    // Re-bind live-watch to the newly-selected type's table.
+    if (liveOn) startLive(type);
     await loadRows();
   }
 
@@ -451,6 +516,15 @@
       >
         Clear
       </button>
+      <button
+        class="button"
+        class:button-live-on={liveOn}
+        on:click={toggleLive}
+        disabled={!selectedType}
+        title="When on, the table re-fetches automatically as the underlying rows change."
+      >
+        {liveOn ? '● Live' : '○ Live'}
+      </button>
     </div>
   </header>
 
@@ -475,7 +549,7 @@
       {/if}
     </aside>
 
-    <section class="rows-pane">
+    <section class="rows-pane" class:live-pulse={livePulse}>
       {#if selectedType}
         <h3>{selectedType.module}::{selectedType.name}</h3>
 
@@ -736,6 +810,7 @@
     display: flex;
     flex-direction: column;
     gap: calc(var(--grid-unit) * 2);
+    transition: border-color 200ms ease-out, box-shadow 200ms ease-out;
 
     h3 {
       font-size: 1rem;
@@ -745,6 +820,17 @@
       font-size: 0.875rem;
       margin-bottom: var(--grid-unit);
     }
+
+    &.live-pulse {
+      // TRON-aesthetic pulse — green ring on invalidate, fades over 600ms.
+      border-color: var(--color-grid-line, #00d2ff);
+      box-shadow: 0 0 12px rgba(0, 210, 255, 0.4);
+    }
+  }
+
+  :global(.button-live-on) {
+    background: var(--color-grid-line, #00d2ff);
+    color: var(--color-bg, #000);
   }
 
   .insert-form {
