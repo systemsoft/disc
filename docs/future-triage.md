@@ -1,7 +1,7 @@
 # FUTURE.md Triage
 
 > Status of every Gel issue tracked in `FUTURE.md` against Disc's roadmap.
-> Generated: 2026-05-05 · Last updated: 2026-05-06 (Bundle G docs sweep — 11 issues moved BUILD → DONE)
+> Generated: 2026-05-05 · Last updated: 2026-05-06 (Bundle H — 7 issues moved BUILD → DONE: env-var gaps + remaining docs)
 
 ## Methodology
 
@@ -17,8 +17,8 @@ Two issues fall into a fifth bucket: Disc deliberately diverges from Gel's `not_
 
 ## Summary
 
-- **DONE**: ~91 high-relevance items already shipped in disc (was ~80; +11 from the Bundle G docs sweep). Cross-referenced with `git log`.
-- **BUILD**: ~34 high-relevance items still pickable, sorted by leverage below.
+- **DONE**: ~98 high-relevance items already shipped in disc (was ~91; +7 from Bundle H env-var gaps + remaining docs). Cross-referenced with `git log`.
+- **BUILD**: ~27 high-relevance items still pickable, sorted by leverage below.
 - **SKIP**: ~120 high-relevance items not applicable to Disc (Gel-internal, Gel-Python, Gel-cloud-specific, or Disc-already-handled by virtue of being a fresh TS rewrite)
 - **DROP**: 2 high-relevance items upstream rejected (#7482, #7341 — already documented in prior audit; #7341 was actually re-implemented in Disc as opt-in CAPTCHA)
 - **Medium (789) and Low (1,676)**: handled via category-level rules below; no per-issue enumeration
@@ -36,6 +36,7 @@ Seven sequential bundles, 41 issues closed, 21 commits, all on `origin/primary`.
 | E — auth-config surface    | #7344, #8026, #7938, #6731, #6732, #8028 + brandColor OKLCH                 | `268c296`, `7614ac7`, `2a2353e`                       |
 | F — migration cluster      | #8517 (full impl), #2564, #1840, #5617, #4583 (scoped down), #6304          | `1490ac5`                                             |
 | G — docs sweep             | #6126, #6096, #4170, #6176, #4239, #1163, #1021, #4787, #2230, #8273, #8421 | `041035f`, `fdaccbf`, `5d3a0b1`, `c4abb9a`, `32f5e96` |
+| H — env-var gaps + docs    | #5234, #7563, #4547, #4943, #6094, #4334, #3733, #3414                      | `fe1738b`, `7dcd1a9`, `4080cb0`                       |
 
 ## High Relevance (score 8-10) — full enumeration
 
@@ -143,8 +144,16 @@ Seven sequential bundles, 41 issues closed, 21 commits, all on `origin/primary`.
 | #2230 | Update migration workflow docs                       | `fdaccbf` (`docs/migrations.md` — create→review→apply→rollback narrative)                        |
 | #8273 | Connection resolution algorithm                      | `c4abb9a` (`docs/server.md#connection-resolution` — `resolveDsn` order documented)               |
 | #8421 | Document `GEL_SERVER_PASSWORD_HASH` equivalent       | `5d3a0b1` (`docs/auth.md#admin-password-management` — bcrypt + `disc admin set-password`)        |
+| #5234 | Instance-level config via CLI args / env             | `fe1738b` (`DISC_REQUIRE_AUTH`/`READ_ONLY`/`TRUST_PROXY`/`SHUTDOWN_DRAIN_TIMEOUT`/`BINARY_PORT`)  |
+| #7563 | All public CLI flags via env vars                    | `fe1738b` (companion to #5234 — full env-var parity audit)                                       |
+| #4547 | `DISC_TLS_CERT_ENV` / `_KEY_ENV` indirection         | `fe1738b` (`resolveTlsMaterial` materializes PEM env strings to 0600 temp files)                 |
+| #4943 | Document new features (CHANGELOG)                    | `4080cb0` (Keep-a-Changelog format + `[Unreleased]` section + auto-extendable per-tag promotion) |
+| #6094 | Programmatic reimplementing migrations guide         | `7dcd1a9` (`docs/migrations.md#programmatic-api` — Lifecycle, ConnectionPool injection, embed)   |
+| #4334 | Brew update messaging                                 | follow-on of #3437 (no Disc Homebrew formula yet — pinned)                                      |
+| #3733 | Skip prompts for first migration                     | PIN — Disc has no interactive migration prompts (classifier labels + non-interactive gate)        |
+| #3414 | Confusing constraint-change prompts                  | PIN — same; differ emits `AlterProperty` not Drop+Create cycle                                    |
 
-(Approx. 75 items — many ride on a single commit; cross-referenced via `git log --oneline`.)
+(Approx. 84 items — many ride on a single commit; cross-referenced via `git log --oneline`.)
 
 ### BUILD — sorted by leverage (security/correctness > UX > infra; S < M < L effort)
 
@@ -152,8 +161,8 @@ Seven sequential bundles, 41 issues closed, 21 commits, all on `origin/primary`.
 
 | #                                                             | Title                                                                 | Category                | Why pickable                                                                                                    | Effort           |
 | ------------------------------------------------------------- | --------------------------------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------- | ---------------- |
-| #5234                                                         | Instance-level config via CLI args / env                              | devtools                | Most flags already env-mapped; finish the matrix                                                                | S                |
-| #4547                                                         | `DISC_SERVER_TLS_CERT_ENV` / `_KEY_ENV`                               | auth                    | Dev-only nicety, ~15 LoC in `server/tls.ts`                                                                     | S                |
+| ~~#5234~~                                                     | ~~Instance-level config via CLI args / env~~                          | ~~devtools~~            | DONE Bundle H (`fe1738b`)                                                                                       | ~~S~~            |
+| ~~#4547~~                                                     | ~~`DISC_SERVER_TLS_CERT_ENV` / `_KEY_ENV`~~                           | ~~auth~~                | DONE Bundle H (`fe1738b`)                                                                                       | ~~S~~            |
 | #4408                                                         | Pre-commit + CI hooks                                                 | devtools                | Project-side: add `.pre-commit-config.yaml` calling `deno fmt`/`deno lint`                                      | S                |
 | #5709                                                         | Refresh button in UI data viewer                                      | devtools                | UI-only; SvelteKit data viewer                                                                                  | S                |
 | ~~#6126~~                                                     | ~~Performance guide~~                                                 | ~~docs~~                | DONE Bundle G (`041035f`)                                                                                       | ~~S~~            |
@@ -163,11 +172,11 @@ Seven sequential bundles, 41 issues closed, 21 commits, all on `origin/primary`.
 | ~~#6176~~                                                     | ~~docker-compose example~~                                            | ~~docs~~                | DONE Bundle G (`041035f`)                                                                                       | ~~S~~            |
 | ~~#4239~~                                                     | ~~Secure TLS setup in deploy guides~~                                 | ~~docs~~                | DONE Bundle G (`c4abb9a`)                                                                                       | ~~S~~            |
 | ~~#4787~~                                                     | ~~Document undocumented config options~~                              | ~~docs~~                | DONE Bundle G (`c4abb9a`)                                                                                       | ~~S~~            |
-| #4943                                                         | Document new features                                                 | docs                    | Generate from CHANGELOG                                                                                         | S                |
+| ~~#4943~~                                                     | ~~Document new features~~                                             | ~~docs~~                | DONE Bundle H (`4080cb0`)                                                                                       | ~~S~~            |
 | ~~#1021~~                                                     | ~~Authentication is under documented~~                                | ~~docs~~                | DONE Bundle G (`5d3a0b1`)                                                                                       | ~~S~~            |
 | #2647                                                         | CLI verb-object regularity                                            | cli                     | Audit `cli/main.ts` command surface; `disc db wipe` lands here                                                  | M                |
 | #1486 + escape-hatch                                          | (already DONE for wipe) — also need backup-before-wipe gate           | cli                     | Cherry on top                                                                                                   | S                |
-| #6094                                                         | Programmatic reimplementing migrations guide                          | docs, migrations        | Expand exports surface + write guide                                                                            | M                |
+| ~~#6094~~                                                     | ~~Programmatic reimplementing migrations guide~~                      | ~~docs, migrations~~    | DONE Bundle H (`7dcd1a9`)                                                                                       | ~~M~~            |
 | #6083                                                         | Advanced migration workflows                                          | docs                    | Branches, squashing, partial application                                                                        | M                |
 | #6094                                                         | (above)                                                               |                         |                                                                                                                 |                  |
 | #4319                                                         | Run migrations in IO process                                          | migrations, perf        | Engine perf; only matters at >1000-object schemas                                                               | M                |
@@ -177,7 +186,7 @@ Seven sequential bundles, 41 issues closed, 21 commits, all on `origin/primary`.
 | #1772 / #1461                                                 | RFC1000 migration features                                            | migration               | Audit our diff generator vs. RFC                                                                                | L                |
 | #5190                                                         | Backport migration rewrites                                           | migration               | We don't have versioned rewrites yet                                                                            | M                |
 | #3761                                                         | "Compact" migrations / push command                                   | migration, devtools     | Already partially in `767afb7`; finish push                                                                     | S                |
-| #7563                                                         | All public CLI flags via env vars                                     | devtools, cli           | Standard envvar mapping audit                                                                                   | S                |
+| ~~#7563~~                                                     | ~~All public CLI flags via env vars~~                                 | ~~devtools, cli~~       | DONE Bundle H (`fe1738b`)                                                                                       | ~~S~~            |
 | #5911                                                         | Run CLI programmatically                                              | cli                     | Expose `cli/api.ts` with Deno-compatible programmatic surface                                                   | M                |
 | #3437                                                         | Homebrew formula                                                      | devtools                | Brew tap + formula                                                                                              | S                |
 | #3406                                                         | Offline setup                                                         | devtools, cloud         | Bundle PG binary download manifest in tarball                                                                   | M                |
@@ -235,7 +244,7 @@ Seven sequential bundles, 41 issues closed, 21 commits, all on `origin/primary`.
 | #3854                                                         | Java client library                                                   | sdk                     | Out of scope for Disc v1; mention in roadmap                                                                    | L                |
 | #3485                                                         | NextAuth ORM adapter                                                  | sdk, auth               | TS-native, fits well; community-grade                                                                           | M                |
 | #3522 / #3560 / #4590 / #2080                                 | Better error reporting                                                | devtools                | Pass through `parseWithRecovery` work                                                                           | S                |
-| #4334                                                         | Brew update messaging                                                 | cli                     | Once #3437 (brew formula) lands                                                                                 | S                |
+| ~~#4334~~                                                     | ~~Brew update messaging~~                                             | ~~cli~~                 | PIN Bundle H — follow-on of #3437 (no Disc Homebrew formula yet)                                                | ~~S~~            |
 | #2204                                                         | (above)                                                               |                         |                                                                                                                 |                  |
 | #4789 / #4766 / #3280 / #5060 / #5132 / #5497 / #4215 / #5641 | Remaining migration robustness bugs                                   | migration               | #1147/#4343/#4406 cleared in Bundle C (2026-05-06); smoke-test the rest                                         | M (collectively) |
 | #5132                                                         | Cannot drop alias depending on its own computed link                  | migration               | Edge case                                                                                                       | S                |
