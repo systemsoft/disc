@@ -2,7 +2,7 @@
 
 Things Disc would build that Gel doesn't have and isn't planning. Each is a deliberate departure — features that justify Disc as a fork rather than a port.
 
-> **Status:** Mixed. **Shipped: #4 single-binary distribution** (Bundle I, 2026-05-06) and **#2 schema-derived REST surface** (Bundle J, 2026-05-06). The remaining three are proposals — rough scoping but no design doc, no scheduled milestone. Use this as the seed list for picking next-up direction once the upstream-parity work is done (see `future-triage.md`).
+> **Status:** Mixed. **Shipped: #4 single-binary distribution** (Bundle I, 2026-05-06), **#2 schema-derived REST surface** (Bundle J, 2026-05-06), and **#3a live schema diff in admin UI** (Bundle K, 2026-05-06). The remaining items (3b/3c/3d UI differentiators, #1 codegen-free TS builder, #5 Deno-perm policies) are proposals — rough scoping but no design doc, no scheduled milestone. Use this as the seed list for picking next-up direction once the upstream-parity work is done (see `future-triage.md`).
 
 ---
 
@@ -71,11 +71,13 @@ type User {
 
 The existing admin UI plan in `docs/admin-ui.md` already covers schema browser, data viewer, query editor, and REPL. These match Gel-UI feature-for-feature. The bets here are features Gel-UI does **not** have:
 
-### 3a. Live schema diff
+### 3a. Live schema diff — **SHIPPED 2026-05-06**
+
+> **Status:** Shipped in Bundle K. Live behavior is documented in `docs/admin-ui.md` ("Live Schema Diff" section) and the source lives under `server/admin/schema-{diff,watch,apply}.ts` + `ui/src/routes/admin/schema/+page.svelte`.
 
 Watch `.disc` files in real time. Show the unsaved-but-edited schema next to the current applied schema, with a visual diff (added types in green grid, removed in red, modified with side-by-side property lists). Click "apply" to generate and run the migration in-line.
 
-Gel-UI shows applied schema only; you switch to your editor and CLI to make changes.
+Gel-UI shows applied schema only; you switch to your editor and CLI to make changes. Disc routes the watcher's events through SSE at `/admin/schema-watch` and exposes `POST /admin/schema-apply` which runs through the standard `MigrationEngine` so the lock-timeout pragma, advisory-lock serialization, and unsafe/ambiguous-op gate compose for free.
 
 ### 3b. Visual query builder (drag-and-drop, not autocomplete)
 
@@ -161,7 +163,7 @@ Each item is independently scopeable. The natural ordering by **how much it just
 1. ~~**#4 single-binary** — biggest UX delta for self-hosters, smallest engineering cost.~~ **Shipped 2026-05-06.**
 2. ~~**#2 REST surface** — broadest integration story, modest cost.~~ **Shipped 2026-05-06.**
 3. **#1 codegen-free builder** — biggest DX delta for application developers, but most type-system work.
-4. **#3 admin-UI differentiators** — best demo material; can be staged 3a → 3c → 3d → 3b.
+4. **#3 admin-UI differentiators** — best demo material; can be staged 3a → 3c → 3d → 3b. ~~**3a (live schema diff) shipped 2026-05-06.**~~ Remaining: 3b visual query builder, 3c live data subscriptions, 3d identity-disc visualization.
 5. **#5 Deno-perm policies** — most novel, narrowest applicability.
 
 When `future-triage.md`'s BUILD column runs out (or sooner if one of these is more compelling than what's left upstream), pick from here.

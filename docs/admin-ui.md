@@ -121,6 +121,77 @@ The REPL uses the same API endpoint (`/api/repl`) as the CLI shell, so behavior 
 
 ---
 
+## Live Schema Diff
+
+Navigate to **Diff** in the header bar, or go to `/ui/admin/schema`.
+
+The live schema diff watches your project's `dbschema/default.disc`
+file in real time and shows the difference between the **applied
+schema** (what the running server believes is in the database) and
+the **on-disk schema** (whatever the editor most recently saved).
+This is a Disc-original feature -- Gel's UI shows the applied schema
+only, so operators have to switch to their editor and CLI to make
+changes.
+
+**Connection status.** A status pip in the page header shows
+`connecting` (amber pulsing) → `live` (green) → `disconnected`
+(red). The page subscribes to a Server-Sent Events stream at
+`/admin/schema-watch`; if the connection drops, the pip turns red
+and a banner appears.
+
+**Diff layout.** When the schema is in sync, a single "Schema is in
+sync" banner appears. When changes exist, the page renders a grid
+of diff cards:
+
+- **Added types** appear with a green border and a `+ added` badge.
+  Each card lists the type's properties + links so you can review
+  the full surface before applying.
+- **Removed types** appear with a red border and a `− removed`
+  badge.
+- **Modified types** appear with a yellow border and a `~ modified`
+  badge. The card body groups changes by category: added properties
+  (green), removed properties (red), changed properties (yellow,
+  with a before → after triple), and the same three groups for
+  links.
+
+**Apply strip.** When the diff is non-empty, a horizontal strip
+appears above the grid showing total counts (`+N ~M −K`) and an
+**Apply Migration** button. Clicking it sends a `POST` to
+`/admin/schema-apply` which runs the migration through the same
+engine the CLI uses (`SchemaManager.applySchema`) -- you get the
+`lock_timeout` pragma, the advisory-lock serialization, and the
+classification gate without any extra plumbing.
+
+**Force toggle.** The classification gate refuses unsafe operations
+(drops, type recreations) and ambiguous operations (type narrowing
+without an explicit cast, optional → required without a default,
+single ↔ multi cardinality changes) by default. Tick the **Force
+(allow unsafe / ambiguous)** checkbox to opt in -- the request goes
+out with `?force=true` and the engine proceeds. This matches the
+CLI's `disc migrate --unsafe` semantics.
+
+**Parse errors.** If the on-disk SDL fails to parse mid-edit, the
+page surfaces every parse error with line numbers in a yellow
+banner instead of pretending the diff is "clean". The watcher
+keeps retrying so the page heals as soon as you save valid SDL.
+
+**Lifecycle.** The watcher uses `Deno.watchFs` on the SDL file's
+parent directory and coalesces filesystem events through a 250ms
+debounce -- a single editor save typically fires 3-4 raw events,
+which would otherwise trigger four redundant SSE frames. When the
+client closes the EventSource (page navigation, browser tab close),
+the watcher tears down automatically.
+
+**Auth.** The `/admin/schema-watch` and `/admin/schema-apply`
+routes are gated by the same auth gate as `/query`. When
+`requireAuth` is on (recommended for production), only requests
+with a valid `Authorization: Bearer <JWT>` header reach the
+handler. In permissive (default-dev) mode the routes are reachable
+without authentication -- pair `requireAuth=true` with a deployed
+admin UI.
+
+---
+
 ## Migration History
 
 Navigate to **Migrations** in the header bar, or go to `/ui/migrations`.
@@ -193,4 +264,4 @@ The admin UI uses a TRON-inspired dark theme with luminous accent lines, consist
 - **Smooth transitions** on hover and active states, with subtle glow effects on interactive borders.
 - **Connection status indicator** in the header with a pulsing dot that changes color based on server connectivity.
 
-The navigation bar runs horizontally across the top with icon-and-label entries for Dashboard, Schema, Data, Query, REPL, and Migrations.
+The navigation bar runs horizontally across the top with icon-and-label entries for Dashboard, Schema, Diff, Data, Query, REPL, and Migrations.

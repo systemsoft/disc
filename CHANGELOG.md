@@ -16,6 +16,24 @@ tag is cut.
 
 ### Added
 
+- **Live schema diff in the admin UI** (Disc-original feature #3a
+  from `docs/disc-original-features.md`). New SvelteKit page at
+  `/ui/admin/schema` subscribes to a Server-Sent Events stream at
+  `/admin/schema-watch` and renders the diff between the running
+  server's applied schema and whatever's currently in
+  `dbschema/default.disc`. The page shows added types in green,
+  removed in red, modified in yellow with a per-property breakdown
+  (added / removed / changed, with before → after on changes), plus
+  the same three groups for links. An "Apply Migration" button
+  POSTs to `/admin/schema-apply` which runs the migration through
+  the existing engine — `lock_timeout` pragma, `pg_advisory_xact_lock`
+  serialization, and the unsafe/ambiguous classification gate
+  compose for free. Default-refuses unsafe drops and ambiguous
+  type/cardinality changes; pass `?force=true` (UI checkbox) to opt
+  in. Watch loop coalesces `Deno.watchFs` events through a 250ms
+  debounce; SSE picked over WebSocket because the channel is
+  one-way. Gel's UI shows applied schema only — Disc keeps the
+  edit → diff → apply loop inside the admin UI.
 - **Schema-derived REST surface** (Disc-original feature #2 from
   `docs/disc-original-features.md`). Every non-abstract object type in
   the schema gets a conventional REST surface under `/api/<TypeName>`:
