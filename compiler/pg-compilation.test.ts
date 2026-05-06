@@ -661,7 +661,8 @@ Deno.test({
           (gen_random_uuid(), 'Cher', 'sales', 90000, true)
       `);
 
-      // contains(.name, "li") should match "Ada"
+      // contains(.name, "li") should match only "Billie"
+      // (Ada/Billie/Cher — "li" is a substring of Billie only)
       const containsSql = compileEdgeQL(
         'select TestEmployee { name } filter contains(.name, "li")',
         schema,
@@ -670,12 +671,12 @@ Deno.test({
       assertEquals(
         containsResult.rowCount,
         1,
-        "contains() should match only Ada",
+        "contains() should match only Billie",
       );
 
-      // find(.name, "ob") != -1 should match "Billie"
+      // find(.name, "il") != -1 should match only "Billie"
       const findSql = compileEdgeQL(
-        'select TestEmployee { name } filter find(.name, "ob") != -1',
+        'select TestEmployee { name } filter find(.name, "il") != -1',
         schema,
       );
       const findResult = await pool.query(findSql);

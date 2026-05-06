@@ -111,7 +111,13 @@ Deno.test({
       });
 
       const result = generator.generate();
-      const typesFile = result.files.find((f) => f.type === "types");
+      // The codegen tags the generated TypeScript file as `"types"` for
+      // single-module schemas and `"interfaces"` once any type carries
+      // an explicit `module` (which the SchemaManager always sets, even
+      // to `"default"`). Accept either label.
+      const typesFile = result.files.find(
+        (f) => f.type === "types" || f.type === "interfaces",
+      );
       assertExists(typesFile);
 
       // Verify JSDoc output contains annotation text

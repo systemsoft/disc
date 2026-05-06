@@ -336,19 +336,23 @@ Deno.test({
         `INSERT INTO ${expectedTable} (id, event_at) VALUES (gen_random_uuid(), '2024-06-15 14:30:00'::timestamp)`,
       );
 
+      // `timestamp without time zone` decodes through the deno-postgres
+      // driver as a JS Date in the *local* timezone, and converting via
+      // `toISOString()` would shift those naive wall-clock values into
+      // UTC (e.g. `14:30 PDT` → `21:30Z`). Round-trip through PG's
+      // own text formatter so the assertion is timezone-stable. (P2-X)
       const rows = await queryRawSQL(
         dsn,
-        `SELECT event_at FROM ${expectedTable} LIMIT 1`,
+        `SELECT to_char(event_at, 'YYYY-MM-DD HH24:MI:SS') AS event_at_text
+         FROM ${expectedTable} LIMIT 1`,
       );
       assertEquals(rows.length, 1, "Should have one row");
 
-      // Verify the timestamp value
-      const val = rows[0].event_at;
-      const tsStr = val instanceof Date ? val.toISOString() : String(val);
+      const tsStr = String(rows[0].event_at_text);
       assertEquals(
-        tsStr.includes("2024-06-15") && tsStr.includes("14:30:00"),
-        true,
-        `Round-tripped cal::local_datetime should contain '2024-06-15' and '14:30:00', got: ${tsStr}`,
+        tsStr,
+        "2024-06-15 14:30:00",
+        `Round-tripped cal::local_datetime should be '2024-06-15 14:30:00', got: ${tsStr}`,
       );
 
       await manager.close();
@@ -610,13 +614,17 @@ Deno.test({
         )`,
       );
 
-      // Select back and verify all values
+      // Select back and verify all values. Cast naive date/time/timestamp
+      // columns through `to_char` so the assertion is timezone-stable —
+      // otherwise the deno-postgres driver decodes through JS Date
+      // (UTC) and shifts wall-clock values when the host is in a
+      // non-UTC zone. (P2-X)
       const rows = await queryRawSQL(
         dsn,
         `SELECT
-          local_date_val,
-          local_time_val,
-          local_datetime_val,
+          to_char(local_date_val, 'YYYY-MM-DD') AS local_date_val_text,
+          to_char(local_time_val, 'HH24:MI:SS') AS local_time_val_text,
+          to_char(local_datetime_val, 'YYYY-MM-DD HH24:MI:SS') AS local_datetime_val_text,
           relative_dur_val,
           date_dur_val
         FROM ${expectedTable} LIMIT 1`,
@@ -625,32 +633,20 @@ Deno.test({
 
       const row = rows[0];
 
-      // Verify local_date_val
-      const dateVal = row.local_date_val;
-      const dateStr = dateVal instanceof Date
-        ? dateVal.toISOString().slice(0, 10)
-        : String(dateVal).slice(0, 10);
       assertEquals(
-        dateStr,
+        String(row.local_date_val_text),
         "2024-06-15",
-        `local_date_val should be '2024-06-15', got: ${dateStr}`,
+        `local_date_val should be '2024-06-15', got: ${row.local_date_val_text}`,
       );
-
-      // Verify local_time_val
-      const timeVal = String(row.local_time_val);
       assertEquals(
-        timeVal.startsWith("14:30:00"),
-        true,
-        `local_time_val should start with '14:30:00', got: ${timeVal}`,
+        String(row.local_time_val_text),
+        "14:30:00",
+        `local_time_val should be '14:30:00', got: ${row.local_time_val_text}`,
       );
-
-      // Verify local_datetime_val
-      const tsVal = row.local_datetime_val;
-      const tsStr = tsVal instanceof Date ? tsVal.toISOString() : String(tsVal);
       assertEquals(
-        tsStr.includes("2024-06-15") && tsStr.includes("14:30:00"),
-        true,
-        `local_datetime_val should contain '2024-06-15' and '14:30:00', got: ${tsStr}`,
+        String(row.local_datetime_val_text),
+        "2024-06-15 14:30:00",
+        `local_datetime_val should be '2024-06-15 14:30:00', got: ${row.local_datetime_val_text}`,
       );
 
       // Verify relative_dur_val

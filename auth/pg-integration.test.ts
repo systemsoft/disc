@@ -51,7 +51,7 @@ Deno.test({
 
     try {
       const provider = new AuthProvider(
-        { jwtSecret: "pg-test-secret" },
+        { jwtSecret: "pg-test-secret-must-be-at-least-32-bytes-long" },
         adapter,
       );
       await provider.initialize();
@@ -88,7 +88,7 @@ Deno.test({
 
     try {
       const provider = new AuthProvider(
-        { jwtSecret: "pg-test-secret" },
+        { jwtSecret: "pg-test-secret-must-be-at-least-32-bytes-long" },
         adapter,
       );
       await provider.initialize();
@@ -139,7 +139,7 @@ Deno.test({
 
     try {
       const provider = new AuthProvider(
-        { jwtSecret: "pg-test-secret" },
+        { jwtSecret: "pg-test-secret-must-be-at-least-32-bytes-long" },
         adapter,
       );
       await provider.initialize();
@@ -180,7 +180,7 @@ Deno.test({
 
     try {
       const provider = new AuthProvider(
-        { jwtSecret: "pg-test-secret" },
+        { jwtSecret: "pg-test-secret-must-be-at-least-32-bytes-long" },
         adapter,
       );
       await provider.initialize();
@@ -217,7 +217,7 @@ Deno.test({
 
     try {
       const provider = new AuthProvider(
-        { jwtSecret: "pg-test-secret" },
+        { jwtSecret: "pg-test-secret-must-be-at-least-32-bytes-long" },
         adapter,
       );
       await provider.initialize();
@@ -265,7 +265,7 @@ Deno.test({
 
     try {
       const provider = new AuthProvider(
-        { jwtSecret: "pg-test-secret" },
+        { jwtSecret: "pg-test-secret-must-be-at-least-32-bytes-long" },
         adapter,
       );
       await provider.initialize();
@@ -313,7 +313,7 @@ Deno.test({
 
     try {
       const provider = new AuthProvider(
-        { jwtSecret: "pg-test-secret" },
+        { jwtSecret: "pg-test-secret-must-be-at-least-32-bytes-long" },
         adapter,
       );
       await provider.initialize();
