@@ -140,6 +140,115 @@ Deno.test("LanguageServer - didChange re-publishes diagnostics for new text", as
   assertEquals(diags.length > 0, true, "expected diagnostics for broken doc");
 });
 
+Deno.test("LanguageServer - initialize advertises hover + completion capabilities", async () => {
+  const tx = new FakeTransport();
+  const srv = new LanguageServer((m) => tx.send(m));
+  await srv.handle({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "initialize",
+    params: { capabilities: {} },
+  });
+  const r = tx.outgoing.find((m) => "id" in m && m.id === 1);
+  const result = (r as { result: { capabilities: Record<string, unknown> } }).result;
+  assertEquals(result.capabilities.hoverProvider, true);
+  assertExists(result.capabilities.completionProvider);
+});
+
+Deno.test("LanguageServer - hover request returns markdown for known scalar", async () => {
+  const { srv, tx } = await newServer();
+  const text = `module default {
+  type T {
+    required name: str;
+  };
+}`;
+  await srv.handle({
+    jsonrpc: "2.0",
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: "file:///a.disc", languageId: "disc", version: 1, text },
+    },
+  });
+  tx.outgoing.length = 0;
+
+  // Position over `str` (line 2, column 19 — `    required name: str;`)
+  const strLineIdx = text.split("\n").findIndex((l) => l.includes(": str"));
+  const character = text.split("\n")[strLineIdx].indexOf("str");
+  await srv.handle({
+    jsonrpc: "2.0",
+    id: 42,
+    method: "textDocument/hover",
+    params: {
+      textDocument: { uri: "file:///a.disc" },
+      position: { line: strLineIdx, character },
+    },
+  });
+  const r = tx.outgoing.find((m) => "id" in m && m.id === 42);
+  assertExists(r);
+  const result = (r as { result: { contents: { value: string } } | null }).result;
+  assertExists(result);
+  assertEquals(result!.contents.value.includes("str"), true);
+});
+
+Deno.test("LanguageServer - completion returns SDL keywords + scalars", async () => {
+  const { srv, tx } = await newServer();
+  await srv.handle({
+    jsonrpc: "2.0",
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: {
+        uri: "file:///c.disc",
+        languageId: "disc",
+        version: 1,
+        text: "module default {\n}",
+      },
+    },
+  });
+  tx.outgoing.length = 0;
+  await srv.handle({
+    jsonrpc: "2.0",
+    id: 7,
+    method: "textDocument/completion",
+    params: {
+      textDocument: { uri: "file:///c.disc" },
+      position: { line: 1, character: 0 },
+    },
+  });
+  const r = tx.outgoing.find((m) => "id" in m && m.id === 7);
+  const result = (r as { result: { label: string }[] }).result;
+  const labels = new Set(result.map((i) => i.label));
+  assertEquals(labels.has("type"), true);
+  assertEquals(labels.has("str"), true);
+});
+
+Deno.test("LanguageServer - hover/completion on unknown document returns null/empty", async () => {
+  const { srv, tx } = await newServer();
+  tx.outgoing.length = 0;
+  await srv.handle({
+    jsonrpc: "2.0",
+    id: 50,
+    method: "textDocument/hover",
+    params: {
+      textDocument: { uri: "file:///nonexistent.disc" },
+      position: { line: 0, character: 0 },
+    },
+  });
+  const hover = tx.outgoing.find((m) => "id" in m && m.id === 50);
+  assertEquals((hover as { result: unknown }).result, null);
+
+  await srv.handle({
+    jsonrpc: "2.0",
+    id: 51,
+    method: "textDocument/completion",
+    params: {
+      textDocument: { uri: "file:///nonexistent.disc" },
+      position: { line: 0, character: 0 },
+    },
+  });
+  const compl = tx.outgoing.find((m) => "id" in m && m.id === 51);
+  assertEquals(((compl as { result: unknown }).result as unknown[]).length, 0);
+});
+
 Deno.test("LanguageServer - shutdown returns null result", async () => {
   const { srv, tx } = await newServer();
   tx.outgoing.length = 0;

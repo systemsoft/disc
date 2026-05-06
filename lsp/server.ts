@@ -14,6 +14,8 @@
  */
 
 import { analyzeDiscDocument } from "./diagnostics.ts";
+import { provideHover } from "./hover.ts";
+import { provideCompletion } from "./completion.ts";
 import {
   type RpcMessage,
   type RpcRequest,
@@ -26,6 +28,7 @@ import {
   type DocumentUri,
   type InitializeResult,
   type PublishDiagnosticsParams,
+  type TextDocumentPositionParams,
 } from "./protocol.ts";
 
 type Sender = (msg: RpcMessage) => void;
@@ -76,10 +79,34 @@ export class LanguageServer {
         const result: InitializeResult = {
           capabilities: {
             textDocumentSync: TextDocumentSyncKind.Full,
+            hoverProvider: true,
+            completionProvider: { triggerCharacters: [":", " ", ">"] },
           },
           serverInfo: { name: "disc-lsp", version: "0.1.0" },
         };
         this.respond(req.id, result);
+        return;
+      }
+
+      case "textDocument/hover": {
+        const params = req.params as TextDocumentPositionParams;
+        const doc = this.docs.get(params.textDocument.uri);
+        if (!doc) {
+          this.respond(req.id, null);
+          return;
+        }
+        this.respond(req.id, provideHover(doc.text, params.position));
+        return;
+      }
+
+      case "textDocument/completion": {
+        const params = req.params as TextDocumentPositionParams;
+        const doc = this.docs.get(params.textDocument.uri);
+        if (!doc) {
+          this.respond(req.id, []);
+          return;
+        }
+        this.respond(req.id, provideCompletion(doc.text, params.position));
         return;
       }
 
