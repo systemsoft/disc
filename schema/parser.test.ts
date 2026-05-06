@@ -753,3 +753,68 @@ Deno.test("SDL Parser - parse() still throws on first error (backward compat)", 
   const source = `type Bad { @@@ }`;
   assertThrows(() => new SDLParser(source).parse(), SyntaxError);
 });
+
+// gh/geldata#4406: explicit `optional` keyword on a property is the default
+// cardinality but Gel SDL allows it as a no-op qualifier. Disc accepts it
+// for round-trip compatibility with schemas where users have spelled out
+// the explicit form.
+Deno.test("SDL Parser - accepts explicit `optional` keyword (gh/geldata#4406)", () => {
+  const source = `
+    abstract type Node {
+      optional updatedAt: datetime {
+        readonly := true;
+      };
+      optional deletedAt: datetime;
+      required createdAt: datetime;
+    }
+  `;
+
+  const parser = new SDLParser(source);
+  const ast = parser.parse();
+  const typeDecl = ast.declarations[0];
+  assertEquals(typeDecl.kind, "TypeDeclaration");
+  if (typeDecl.kind === "TypeDeclaration") {
+    assertEquals(typeDecl.members.length, 3);
+    const updatedAt = typeDecl.members[0];
+    const deletedAt = typeDecl.members[1];
+    const createdAt = typeDecl.members[2];
+    if (updatedAt.kind === "PropertyDeclaration") {
+      assertEquals(updatedAt.required ?? false, false);
+    }
+    if (deletedAt.kind === "PropertyDeclaration") {
+      assertEquals(deletedAt.required ?? false, false);
+    }
+    if (createdAt.kind === "PropertyDeclaration") {
+      assertEquals(createdAt.required, true);
+    }
+  }
+});
+
+// `optional multi tags: str` is a common explicit-style declaration. Both
+// keywords must coexist (#4406 spec).
+Deno.test("SDL Parser - accepts `optional multi` cardinality (gh/geldata#4406)", () => {
+  const source = `
+    type User {
+      optional multi tags: str;
+      single name: str;
+    }
+  `;
+
+  const parser = new SDLParser(source);
+  const ast = parser.parse();
+  const typeDecl = ast.declarations[0];
+  if (typeDecl.kind === "TypeDeclaration") {
+    const tags = typeDecl.members[0];
+    if (tags.kind === "PropertyDeclaration") {
+      assertEquals(tags.name.value, "tags");
+      assertEquals(tags.required ?? false, false);
+      assertEquals(tags.multi, true);
+    }
+    const name = typeDecl.members[1];
+    if (name.kind === "PropertyDeclaration") {
+      assertEquals(name.name.value, "name");
+      assertEquals(name.required ?? false, false);
+      assertEquals(name.multi ?? false, false);
+    }
+  }
+});

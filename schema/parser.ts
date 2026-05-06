@@ -1166,6 +1166,21 @@ export class SDLParser {
         qualifiers.abstract = true;
       } else if (this.match(TokenType.OVERLOADED)) {
         qualifiers.overloaded = true;
+      } else if (
+        // `optional` is the default cardinality but Gel SDL allows the
+        // keyword explicitly (gh/geldata#4406). We accept it as a no-op
+        // so users can declare `optional foo: str` without the parser
+        // flagging it as a missing `:` on the property name.
+        this.check(TokenType.IDENT) && this.peek().value === "optional"
+      ) {
+        this.advance();
+        // Don't set qualifiers.required — absence is already optional.
+      } else if (
+        // `single` is the default cardinality (the cardinality opposite of
+        // `multi`). Same reasoning: accept as a no-op for explicit-style SDL.
+        this.check(TokenType.IDENT) && this.peek().value === "single"
+      ) {
+        this.advance();
       } else {
         break;
       }
