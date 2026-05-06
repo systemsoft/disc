@@ -22,7 +22,26 @@ export { createSubscriptionClient, SubscriptionClient } from "./subscription.ts"
 
 // Query builder (codegen-free, runtime DSL — Phase 1)
 export { and, createQueryBuilder, from, not, or, SelectChain } from "./query-builder.ts";
-export type { CompiledQuery, QueryBuilder, QueryRunner, Shape } from "./query-builder.ts";
+export type { CompiledQuery, QueryBuilder, QueryRunner, Shape, TypedFieldRef, TypedQueryBuilder, TypedRef, TypedSelectChain } from "./query-builder.ts";
+
+// Codegen-free schema declaration (Phase 2 — drives typed builder inference)
+export { defineSchema, t } from "./schema-types.ts";
+export type {
+  DiscSchema,
+  FieldMarker,
+  FieldType,
+  IsLink,
+  Link,
+  LinkCardinality,
+  LinkStub,
+  LinkTarget,
+  Optional,
+  ResolveSelected,
+  ResolveType,
+  Scalar,
+  SchemaSpec,
+  SelectShape,
+} from "./schema-types.ts";
 
 // Error hierarchy
 export {

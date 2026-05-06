@@ -13,6 +13,7 @@
  */
 
 import type { QueryOptions } from "./types.ts";
+import type { DiscSchema, FieldType, ResolveSelected, ResolveType, SchemaSpec, SelectShape } from "./schema-types.ts";
 
 /** Minimum surface a client must expose to be awaitable from the builder. */
 export interface QueryRunner {
@@ -301,15 +302,87 @@ export function from<T = unknown>(typeName: string): SelectChain<T> {
 /** Root proxy: `qb.User.select(...)` resolves to a SelectChain bound to the client. */
 export type QueryBuilder = Record<string, SelectChain>;
 
+// --- Typed builder (Phase 2 — driven by `defineSchema()`) ---
+
+/** Typed FieldRef — `eq()` etc. accept only the field's TS type. */
+export interface TypedFieldRef<T> {
+  eq(value: T): Expr;
+  neq(value: T): Expr;
+  lt(value: T): Expr;
+  lte(value: T): Expr;
+  gt(value: T): Expr;
+  gte(value: T): Expr;
+  exists(): Expr;
+  desc(): OrderSpec;
+  asc(): OrderSpec;
+}
+
+/** A typed reference handed to `filter()` / `orderBy()` predicates. */
+export type TypedRef<S extends SchemaSpec, K extends keyof S> = {
+  [F in keyof S[K]]: TypedFieldRef<FieldType<S, S[K][F]>>;
+};
+
 /**
- * Bind the builder to a client so chains are awaitable. The `client`
- * argument is duck-typed against `QueryRunner` — a real `DiscClient`
- * works, and so does any test fake that implements `query()`.
+ * The chain returned by `qb.User`. Methods narrow the awaited row type
+ * as the user composes the query. Backed at runtime by the same
+ * `SelectChain` class — type narrowing is intersection-based, not a
+ * different runtime class.
  */
-export function createQueryBuilder(client: QueryRunner): QueryBuilder {
+export type TypedSelectChain<
+  S extends SchemaSpec,
+  K extends keyof S,
+  Sel = ResolveType<S, S[K]>,
+> =
+  & Omit<SelectChain<Sel[]>, "select" | "filter" | "orderBy" | "limit" | "offset" | "first" | "then" | "run">
+  & {
+    select<Sh extends SelectShape<S, K>>(shape: Sh): TypedSelectChain<S, K, ResolveSelected<S, K, Sh>>;
+    filter(predicate: (ref: TypedRef<S, K>) => Expr): TypedSelectChain<S, K, Sel>;
+    orderBy(fn: (ref: TypedRef<S, K>) => OrderSpec | TypedFieldRef<unknown>): TypedSelectChain<S, K, Sel>;
+    limit(n: number): TypedSelectChain<S, K, Sel>;
+    offset(n: number): TypedSelectChain<S, K, Sel>;
+    first(options?: QueryOptions<Sel[]>): Promise<Sel | null>;
+    run(options?: QueryOptions<Sel[]>): Promise<Sel[]>;
+    then<TResult1 = Sel[], TResult2 = never>(
+      onfulfilled?: ((value: Sel[]) => TResult1 | PromiseLike<TResult1>) | null,
+      // deno-lint-ignore no-explicit-any
+      onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null,
+    ): Promise<TResult1 | TResult2>;
+  };
+
+/** Typed root proxy — one chain per type defined in the schema. */
+export type TypedQueryBuilder<S extends SchemaSpec> = {
+  [K in keyof S & string]: TypedSelectChain<S, K>;
+};
+
+/**
+ * Bind the builder to a client so chains are awaitable. With a schema,
+ * `qb.User.select(...)` is fully typed; without one, types stay
+ * permissive (useful for ad-hoc queries or test code).
+ *
+ * The `client` argument is duck-typed against `QueryRunner` — a real
+ * `DiscClient` works, and so does any test fake that implements
+ * `query()`.
+ */
+export function createQueryBuilder(client: QueryRunner): QueryBuilder;
+export function createQueryBuilder<S extends SchemaSpec>(
+  client: QueryRunner,
+  schema: DiscSchema<S>,
+): TypedQueryBuilder<S>;
+export function createQueryBuilder(
+  client: QueryRunner,
+  schema?: DiscSchema<SchemaSpec>,
+  // deno-lint-ignore no-explicit-any
+): any {
   return new Proxy({} as QueryBuilder, {
     get(_target, prop) {
       if (typeof prop !== "string") return undefined;
+      // When a schema is provided, refuse access to undeclared types
+      // at runtime — catches typos that would otherwise hit the server.
+      if (schema && !(prop in schema.spec)) {
+        throw new Error(
+          `Type ${JSON.stringify(prop)} is not defined in the schema. Available: ${Object.keys(schema.spec).join(", ")}`,
+        );
+      }
       return new SelectChain(prop, client);
     },
   });
