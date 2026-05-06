@@ -97,6 +97,64 @@ Set up automatic renewal:
 0 3 * * * certbot renew --quiet && systemctl restart disc
 ```
 
+### TLS Certificate Hot-Reload
+
+Disc can reload TLS certificates from disk without a process restart — useful for `certbot` / cert-manager renewals on long-running production servers (`server/tls-reload.ts`, gh/geldata#4277).
+
+Enable hot-reload via the `tls.reload` option:
+
+```typescript
+const server = new DiscServer({
+  tls: {
+    certFile: "/etc/letsencrypt/live/disc.example.com/fullchain.pem",
+    keyFile: "/etc/letsencrypt/live/disc.example.com/privkey.pem",
+    reload: true,
+    reloadDebounceMs: 500, // optional, default 500
+  },
+});
+```
+
+When enabled, Disc watches both files via `Deno.watchFs`. After a debounce window (`reloadDebounceMs`, default 500 ms) collapses the burst of events that renewal tools emit when they write the key and cert back-to-back, the server:
+
+1. Validates the new files have intact PEM envelopes.
+2. Drains in-flight requests on the existing TLS listener.
+3. Stops the old listener.
+4. Starts a new listener on the same port with the renewed cert.
+
+Expect a sub-second blip in connection accepts during the swap. New requests during the swap window queue at the OS socket level and proceed once the new listener binds. There is no full process restart, no in-flight request loss, and no cache flush.
+
+If the new cert fails cryptographic validation (mismatched key, expired, malformed), the server logs an error and keeps the old listener running — a half-rotation never lands.
+
+#### Cert-expiry Prometheus gauge
+
+When TLS is configured, Disc exports two Prometheus gauges (`server/tls-cert-info.ts`, gh/geldata#6205):
+
+| Metric                                      | Type  | Description                                        |
+| ------------------------------------------- | ----- | -------------------------------------------------- |
+| `disc_tls_certificate_expiration_time`      | gauge | Leaf certificate `notAfter` as Unix epoch seconds. |
+| `disc_tls_certificate_seconds_until_expiry` | gauge | Seconds until expiry. Negative means expired.      |
+
+Use the second one for alerting:
+
+```yaml
+# prometheus-alerts.yml
+groups:
+  - name: disc-tls
+    rules:
+      - alert: DiscTlsCertExpiringSoon
+        expr: disc_tls_certificate_seconds_until_expiry < 7 * 24 * 3600
+        for: 10m
+        annotations:
+          summary: "Disc TLS cert expires in less than 7 days"
+      - alert: DiscTlsCertExpired
+        expr: disc_tls_certificate_seconds_until_expiry < 0
+        for: 1m
+        annotations:
+          summary: "Disc TLS cert is expired"
+```
+
+The gauges refresh on initial bind and after every successful TLS hot-reload, so `certbot renew` followed by Disc swapping the cert in-place updates the metric without a Disc restart.
+
 ### Reverse Proxy TLS Termination (Recommended for Production)
 
 Terminate TLS at the load balancer or reverse proxy and forward plain HTTP to Disc.

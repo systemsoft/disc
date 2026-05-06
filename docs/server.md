@@ -45,7 +45,7 @@ const server = new DiscServer({
   jwtSecret: "my-secret-key",
   port: 5656,
   protocol: "full",
-  rateLimitRpm: 600
+  rateLimitRpm: 600,
 });
 
 await server.start();
@@ -142,11 +142,26 @@ All server configuration can be set via environment variables. The `createServer
 | ---------------------------- | ------- | ----------------------------- |
 | `DISC_ENABLE_MULTI_DATABASE` | `false` | Enable multi-database routing |
 
+#### Shutdown
+
+| Variable                      | Default | Description                                                                                                                                  |
+| ----------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DISC_SHUTDOWN_DRAIN_TIMEOUT` | `30000` | Max ms to wait for in-flight requests during graceful shutdown (currently config-only — passed via `DiscServerOptions.shutdownDrainTimeout`) |
+
 #### Binary Protocol
 
-| Variable           | Default | Description                                 |
-| ------------------ | ------- | ------------------------------------------- |
-| `DISC_BINARY_PORT` | (none)  | Port for the Gel-compatible binary protocol |
+| Variable               | Default | Description                                                                |
+| ---------------------- | ------- | -------------------------------------------------------------------------- |
+| `DISC_BINARY_PORT`     | (none)  | Port for the Gel-compatible binary protocol                                |
+| `DISC_BINARY_TLS_CERT` | (none)  | TLS certificate for the binary listener (required by upstream Gel clients) |
+| `DISC_BINARY_TLS_KEY`  | (none)  | TLS private key for the binary listener                                    |
+
+> Several `[server]` knobs (`require_auth`, `read_only`, `trust_proxy`,
+> `cors_allow_credentials`, `max_request_body_bytes`, etc.) are
+> currently project-local only — settable via `disc.toml`, not via
+> `DISC_*` environment variables. See [Project Context Resolution](cli.md#project-context-resolution)
+> for the full table. Secrets (JWT, TLS keys, bcrypt rounds) deliberately
+> stay env/CLI-only and never live in `disc.toml`.
 
 ### ServerConfig Reference
 
@@ -156,37 +171,84 @@ When constructing a `DiscServer` programmatically, you pass a `DiscServerOptions
 interface DiscServerOptions {
   binaryPassword?: string;
   binaryPort?: number;
-  cacheMaxSize?: number;           // default: 1000
+  cacheMaxSize?: number; // default: 1000
+  corsAllowedHeaders?: string[]; // preflight Access-Control-Allow-Headers
+  corsAllowedMethods?: string[]; // preflight Access-Control-Allow-Methods
+  corsAllowCredentials?: boolean; // emit Access-Control-Allow-Credentials
+  corsExposeHeaders?: string[]; // Access-Control-Expose-Headers
+  corsMaxAge?: number; // default: 86400 (24 h)
   corsOrigins?: string[];
   databases?: Record<string, string>;
-  databaseUrl?: string;            // default: "postgresql://localhost:5432/disc"
+  databaseUrl?: string; // default: "postgresql://localhost:5432/disc"
+  dryRun?: boolean; // skip write side-effects (test mode)
   enableAccessPolicies?: boolean;
   enableAuth?: boolean;
-  enableCors?: boolean;            // default: true
-  enableMetrics?: boolean;         // default: false
+  enableCors?: boolean; // default: true
+  enableExplain?: boolean; // EXPLAIN plan caching (full protocol only)
+  enableMetrics?: boolean; // default: false
   enableMultiDatabase?: boolean;
-  enableWebsockets?: boolean;      // default: true
+  enableWebsockets?: boolean; // default: true
   extensions?: Extension[];
-  host?: string;                   // default: "localhost"
+  host?: string; // default: "localhost"
   jwtSecret?: string;
-  maxConnections?: number;         // default: 100
-  port?: number;                   // default: 5656
+  maxConnections?: number; // default: 100
+  maxRequestBodyBytes?: number; // default: 4 MiB
+  port?: number; // default: 5656
   postgresInstance?: PostgresInstance;
-  protocol?: "simple" | "full";    // default: "simple"
+  protocol?: "simple" | "full"; // default: "full" (env override "simple")
   rateLimitBurst?: number;
   rateLimitRpm?: number;
-  requestTimeout?: number;         // default: 30000
+  readOnly?: boolean; // reject INSERT/UPDATE/DELETE/CONFIGURE
+  requestTimeout?: number; // default: 30000
+  requireAuth?: boolean; // gate data-plane on Authorization header
   schema?: Schema;
-  shutdownDrainTimeout?: number;   // default: 30000
-  slowQueryThresholdMs?: number;   // default: 1000
+  shutdownDrainTimeout?: number; // default: 30000
+  slowQueryThresholdMs?: number; // default: 1000
   tls?: {
     certFile: string;
     keyFile: string;
     redirect?: boolean;
     redirectPort?: number;
+    reload?: boolean; // hot-reload on file change
+    reloadDebounceMs?: number; // debounce window, default 500
   };
+  trustProxy?: boolean; // honor X-Forwarded-* headers
 }
 ```
+
+---
+
+---
+
+## Connection Resolution
+
+Every Disc server (and CLI command that needs a database connection) resolves the PostgreSQL DSN in this order, taking the first one that yields a value:
+
+1. **`--backend-dsn` CLI flag.** Explicit external PostgreSQL. Always wins.
+2. **`DATABASE_URL` environment variable.** Standard 12-factor.
+3. **`disc.toml` project context.** Walks up from `cwd` looking for `disc.toml` (like `git`); when found and `[database].managed = true`, builds a Unix-socket DSN against the managed instance. When `[database].backend_dsn = "..."` is set, returns that.
+4. **Hardcoded fallback:** `postgresql://localhost:5432/disc_dev`.
+
+The resolver lives in `lib/project-context.ts` (`resolveProjectContext` walks up; `resolveDsn` builds the connection string). For commands that auto-start the bundled PostgreSQL (`serve`, `migrate`, `shell`, `start`), `postgres/ensure-running.ts` (`ensurePgRunning`) takes the resolved context and discovers/starts/creates the instance as needed.
+
+### `disc.toml` keys vs env vars vs CLI flags
+
+| Setting       | CLI flag           | env var               | `disc.toml`                                                      |
+| ------------- | ------------------ | --------------------- | ---------------------------------------------------------------- |
+| Database URL  | `--backend-dsn`    | `DATABASE_URL`        | `[database] backend_dsn`                                         |
+| Managed PG    | (auto)             | (auto)                | `[database] managed = true`                                      |
+| Instance name | (auto from `name`) | (auto)                | `[database] instance_name`                                       |
+| Server host   | `--host`/`-H`      | `DISC_HOST`           | `[server] host`                                                  |
+| Server port   | `--port`           | `DISC_PORT`           | `[server] port`                                                  |
+| JWT secret    | `--jwt-secret`     | `DISC_JWT_SECRET`     | (env/CLI only — secret)                                          |
+| TLS cert/key  | `--tls-cert/key`   | `DISC_TLS_CERT/KEY`   | (env/CLI only — secret-adjacent)                                 |
+| Require auth  | (none)             | (none)                | `[server] require_auth`                                          |
+| Read-only     | (none)             | (none)                | `[server] read_only`                                             |
+| Trust proxy   | (none)             | (none)                | `[server] trust_proxy`                                           |
+| CORS knobs    | (none)             | `DISC_CORS_ORIGINS`   | `[server] enable_cors`, `cors_origins`, `cors_allow_credentials` |
+| Rate limit    | (none)             | `DISC_RATE_LIMIT_RPM` | `[server] rate_limit_rpm`                                        |
+
+CLI flags always win over env vars, which always win over `disc.toml`. Secrets (JWT, TLS keys) deliberately have no `disc.toml` representation — they belong in env / a secrets manager, not in a tracked file. See [CLI → Project Context Resolution](cli.md#project-context-resolution) for the full `disc.toml` reference.
 
 ---
 
@@ -246,11 +308,11 @@ Execute an EdgeQL query. This is the primary endpoint for all data operations.
 }
 ```
 
-| Field           | Type                       | Required | Description                        |
-| --------------- | -------------------------- | -------- | ---------------------------------- |
-| `operationName` | `string`                   | No       | Operation name (for multi-query)   |
-| `query`         | `string`                   | Yes      | EdgeQL query string                |
-| `variables`     | `Record<string, unknown>`  | No       | Query parameters                   |
+| Field           | Type                      | Required | Description                      |
+| --------------- | ------------------------- | -------- | -------------------------------- |
+| `operationName` | `string`                  | No       | Operation name (for multi-query) |
+| `query`         | `string`                  | Yes      | EdgeQL query string              |
+| `variables`     | `Record<string, unknown>` | No       | Query parameters                 |
 
 **Successful response (200):**
 
@@ -569,7 +631,7 @@ Start a subscription. The server sends `data` messages whenever results change.
     "query": "select User { email, name }",
     "variables": {}
   },
-  "type": "subscribe",
+  "type": "subscribe"
 }
 ```
 
@@ -654,7 +716,7 @@ Or programmatically:
 ```typescript
 const server = new DiscServer({
   binaryPassword: "secret",
-  binaryPort: 5657
+  binaryPort: 5657,
 });
 ```
 
@@ -682,7 +744,7 @@ Or programmatically:
 
 ```typescript
 const server = new DiscServer({
-  enableMultiDatabase: true
+  enableMultiDatabase: true,
 });
 ```
 
@@ -727,7 +789,7 @@ Or programmatically:
 ```typescript
 const server = new DiscServer({
   rateLimitBurst: 100,
-  rateLimitRpm: 600
+  rateLimitRpm: 600,
 });
 ```
 
@@ -759,7 +821,7 @@ Or programmatically:
 const server = new DiscServer({
   tls: {
     certFile: "/path/to/cert.pem",
-    keyFile: "/path/to/key.pem"
+    keyFile: "/path/to/key.pem",
   },
 });
 ```
@@ -783,7 +845,7 @@ const server = new DiscServer({
     certFile: "/path/to/cert.pem",
     keyFile: "/path/to/key.pem",
     redirect: true,
-    redirectPort: 80
+    redirectPort: 80,
   },
 });
 ```
@@ -818,7 +880,7 @@ Programmatically:
 
 ```typescript
 const server = new DiscServer({
-  shutdownDrainTimeout: 10000 // 10 seconds
+  shutdownDrainTimeout: 10000, // 10 seconds
 });
 ```
 
