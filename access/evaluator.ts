@@ -69,6 +69,10 @@ export class AccessEvaluator {
     // Evaluate each policy
     let hasAllow = false;
     let hasDeny = false;
+    // Track the first denying policy's custom errmessage so we can surface
+    // it on the AccessDecision (Gel #4095). Callers prefer this over the
+    // generic `reason` when raising an error.
+    let denialMessage: string | undefined;
 
     for (const policy of allPolicies) {
       appliedPolicies.push(policy.name);
@@ -85,11 +89,16 @@ export class AccessEvaluator {
       } else if (decision.denied) {
         hasDeny = true;
 
+        if (denialMessage === undefined && policy.errmessage !== undefined) {
+          denialMessage = policy.errmessage;
+        }
+
         if (this.config.mode === "restrictive") {
           // In restrictive mode, any deny immediately fails
           return {
             allowed: false,
             appliedPolicies,
+            denialMessage: policy.errmessage,
             reason: `Denied by policy: ${policy.name}`,
           };
         }
@@ -120,6 +129,7 @@ export class AccessEvaluator {
     return {
       allowed,
       appliedPolicies,
+      denialMessage: !allowed ? denialMessage : undefined,
       reason,
       sqlConditions: sqlConditions.length > 0 ? sqlConditions : undefined,
     };

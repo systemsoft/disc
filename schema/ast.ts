@@ -204,6 +204,12 @@ export interface AccessPolicy extends SDLNode {
    */
   withCheck?: Expression;
   annotations?: Annotation[];
+  /**
+   * Optional custom error message surfaced when this policy denies an
+   * operation. Set via `errmessage := '...';` in SDL. Falls back to a
+   * generic deny reason at runtime when omitted. (Gel #4095)
+   */
+  errmessage?: string;
 }
 
 export interface AccessAction extends SDLNode {

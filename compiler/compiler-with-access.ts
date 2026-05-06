@@ -133,7 +133,8 @@ export class EdgeQLCompilerWithAccess {
         );
         if (!decision.allowed) {
           throw new CompilationError(
-            `INSERT not allowed on ${objectType}: ${decision.reason}`,
+            decision.denialMessage ??
+              `INSERT not allowed on ${objectType}: ${decision.reason}`,
           );
         }
         return statement;

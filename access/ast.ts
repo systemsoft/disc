@@ -11,6 +11,12 @@ import { Span } from "../lib/types.ts";
  * Access policy AST node for schema-level policies
  */
 export interface AccessPolicyNode extends SDLNode {
+  /**
+   * Optional custom error message surfaced when this policy denies an
+   * operation. Set via `errmessage := '...';` in SDL. Falls back to a
+   * generic deny reason at runtime when omitted. (Gel #4095)
+   */
+  errmessage?: string;
   global?: boolean; // If global policy
   kind: "AccessPolicy";
   name: string;
@@ -115,6 +121,7 @@ export function createAccessPolicy(
   name: string,
   rules: AccessRuleNode[],
   options?: {
+    errmessage?: string;
     global?: boolean;
     objectType?: string;
     span?: Span;

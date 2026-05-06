@@ -419,6 +419,51 @@ Deno.test("SDL Parser - Access Policy without `with check` leaves withCheck unde
   }
 });
 
+Deno.test("SDL Parser - Access Policy with errmessage (Gel #4095)", () => {
+  const source = `
+    type Document {
+      required title: str;
+      access policy admin_only {
+        allow update;
+        errmessage := "Only admins can modify this record";
+      };
+    }
+  `;
+
+  const parser = new SDLParser(source);
+  const ast = parser.parse();
+  const typeDecl = ast.declarations[0];
+  assertEquals(typeDecl.kind, "TypeDeclaration");
+  if (typeDecl.kind === "TypeDeclaration") {
+    const policy = typeDecl.members.find((m) => m.kind === "AccessPolicy");
+    assertEquals(policy?.kind, "AccessPolicy");
+    if (policy?.kind === "AccessPolicy") {
+      assertEquals(policy.errmessage, "Only admins can modify this record");
+    }
+  }
+});
+
+Deno.test("SDL Parser - Access Policy without errmessage leaves it undefined", () => {
+  const source = `
+    type Document {
+      required title: str;
+      access policy admin_all {
+        allow all;
+      };
+    }
+  `;
+
+  const parser = new SDLParser(source);
+  const ast = parser.parse();
+  const typeDecl = ast.declarations[0];
+  if (typeDecl.kind === "TypeDeclaration") {
+    const policy = typeDecl.members.find((m) => m.kind === "AccessPolicy");
+    if (policy?.kind === "AccessPolicy") {
+      assertEquals(policy.errmessage, undefined);
+    }
+  }
+});
+
 Deno.test("SDL Parser - `with` without `check` raises a clear error", () => {
   const source = `
     type Document {

@@ -60,7 +60,8 @@ export class AccessSQLInjector {
 
     if (!decision.allowed) {
       throw new Error(
-        `INSERT not allowed on ${objectType}: ${decision.reason}`,
+        decision.denialMessage ??
+          `INSERT not allowed on ${objectType}: ${decision.reason}`,
       );
     }
 
@@ -83,7 +84,8 @@ export class AccessSQLInjector {
 
     if (!decision.allowed) {
       throw new Error(
-        `UPDATE not allowed on ${objectType}: ${decision.reason}`,
+        decision.denialMessage ??
+          `UPDATE not allowed on ${objectType}: ${decision.reason}`,
       );
     }
 
@@ -108,7 +110,8 @@ export class AccessSQLInjector {
 
     if (!decision.allowed) {
       throw new Error(
-        `DELETE not allowed on ${objectType}: ${decision.reason}`,
+        decision.denialMessage ??
+          `DELETE not allowed on ${objectType}: ${decision.reason}`,
       );
     }
 
@@ -176,7 +179,14 @@ export class AccessSQLInjector {
   }
 
   /**
-   * Create row-level security policies for PostgreSQL
+   * Create row-level security policies for PostgreSQL.
+   *
+   * Note (Gel #4095): PostgreSQL RLS filters rows but does not surface a
+   * custom denial message — a denied SELECT just returns zero rows, and a
+   * denied INSERT/UPDATE/DELETE raises a generic
+   * `new row violates row-level security policy` error. Custom
+   * `errmessage` values therefore only apply to queries that go through
+   * the application-level evaluator (compiler.ts and compiler-with-access.ts).
    */
   generateRLSPolicies(tableName: string, objectType: string): string[] {
     const policies = this.evaluator.getPolicies(objectType);

@@ -23,6 +23,12 @@ export interface AccessAction {
 export interface AccessPolicy {
   actions: AccessAction[];
   condition?: AccessExpressionNode;
+  /**
+   * Optional custom error message surfaced when this policy denies an
+   * operation. Falls back to a generic deny reason when omitted.
+   * (Gel #4095)
+   */
+  errmessage?: string;
   name: string;
   objectType: string;
   using?: AccessExpressionNode; // For row-level security
@@ -46,6 +52,12 @@ export interface AccessContext {
 export interface AccessDecision {
   allowed: boolean;
   appliedPolicies: string[];
+  /**
+   * Custom denial message taken from the denying policy's `errmessage`
+   * field, when present. Callers that turn a deny verdict into an error
+   * should prefer this over `reason`. (Gel #4095)
+   */
+  denialMessage?: string;
   reason?: string;
   sqlConditions?: string[]; // SQL WHERE clauses to apply
 }

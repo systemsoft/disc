@@ -215,6 +215,84 @@ Deno.test("AccessEvaluator - global policy applies to all types", () => {
   );
 });
 
+Deno.test("AccessEvaluator - deny in restrictive mode surfaces policy errmessage (Gel #4095)", () => {
+  const evaluator = new AccessEvaluator(
+    createTestConfig({ mode: "restrictive" }),
+  );
+
+  evaluator.registerPolicy({
+    name: "admin_only",
+    objectType: "Secret",
+    actions: [{ allow: false, operations: ["update"] }],
+    errmessage: "Only admins can modify this record",
+  });
+
+  const decision = evaluator.evaluate("Secret", "update", { userId: "u1" });
+
+  assertEquals(decision.allowed, false);
+  assertEquals(decision.denialMessage, "Only admins can modify this record");
+});
+
+Deno.test("AccessEvaluator - deny in permissive mode surfaces policy errmessage (Gel #4095)", () => {
+  const evaluator = new AccessEvaluator(
+    createTestConfig({ mode: "permissive" }),
+  );
+
+  evaluator.registerPolicy({
+    name: "allow_all",
+    objectType: "Doc",
+    actions: [{ allow: true, operations: ["all"] }],
+  });
+
+  evaluator.registerPolicy({
+    name: "no_delete",
+    objectType: "Doc",
+    actions: [{ allow: false, operations: ["delete"] }],
+    errmessage: "Documents are append-only and cannot be deleted",
+  });
+
+  const decision = evaluator.evaluate("Doc", "delete", { userId: "u1" });
+
+  assertEquals(decision.allowed, false);
+  assertEquals(
+    decision.denialMessage,
+    "Documents are append-only and cannot be deleted",
+  );
+});
+
+Deno.test("AccessEvaluator - allow verdict has no denialMessage", () => {
+  const evaluator = new AccessEvaluator(createTestConfig());
+
+  evaluator.registerPolicy({
+    name: "allow_select",
+    objectType: "User",
+    actions: [{ allow: true, operations: ["select"] }],
+    errmessage: "should not be surfaced",
+  });
+
+  const decision = evaluator.evaluate("User", "select", { userId: "u1" });
+
+  assertEquals(decision.allowed, true);
+  assertEquals(decision.denialMessage, undefined);
+});
+
+Deno.test("AccessEvaluator - deny without errmessage leaves denialMessage undefined", () => {
+  const evaluator = new AccessEvaluator(
+    createTestConfig({ mode: "restrictive" }),
+  );
+
+  evaluator.registerPolicy({
+    name: "deny_select",
+    objectType: "User",
+    actions: [{ allow: false, operations: ["select"] }],
+  });
+
+  const decision = evaluator.evaluate("User", "select", { userId: "u1" });
+
+  assertEquals(decision.allowed, false);
+  assertEquals(decision.denialMessage, undefined);
+});
+
 Deno.test("AccessEvaluator - getPolicies returns registered policies", () => {
   const evaluator = new AccessEvaluator(createTestConfig());
 

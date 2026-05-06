@@ -188,6 +188,39 @@ Deno.test("AccessPolicyParser - error on invalid operation", () => {
   );
 });
 
+Deno.test("AccessPolicyParser - parse policy with errmessage (Gel #4095)", () => {
+  const source = `
+    access policy admin_only for User {
+      allow update when current_role = "admin";
+      errmessage := "Only admins can modify this record";
+    }
+  `;
+
+  const lexer = new SDLLexer(source);
+  const tokens = lexer.tokenize();
+  const parser = new AccessPolicyParser(tokens, source);
+  const policy = parser.parseAccessPolicy();
+
+  assertEquals(policy.errmessage, "Only admins can modify this record");
+  assertEquals(policy.rules.length, 1);
+  assertEquals(policy.rules[0].action, "allow");
+});
+
+Deno.test("AccessPolicyParser - errmessage is undefined when not specified", () => {
+  const source = `
+    access policy plain_policy for User {
+      allow select;
+    }
+  `;
+
+  const lexer = new SDLLexer(source);
+  const tokens = lexer.tokenize();
+  const parser = new AccessPolicyParser(tokens, source);
+  const policy = parser.parseAccessPolicy();
+
+  assertEquals(policy.errmessage, undefined);
+});
+
 Deno.test("AccessPolicyParser - parse function calls in conditions", () => {
   const source = `
     access policy admin_only for SystemConfig {

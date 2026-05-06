@@ -48,6 +48,7 @@ export class AccessPolicyParser {
     this.expect("{");
 
     const rules: AccessRuleNode[] = [];
+    let errmessage: string | undefined;
     let using: AccessExpressionNode | undefined;
     let withCheck: AccessExpressionNode | undefined;
 
@@ -68,6 +69,11 @@ export class AccessPolicyParser {
         withCheck = this.parseExpression();
         this.expect(")");
         this.expect(";");
+      } else if (this.match("errmessage")) {
+        // `errmessage := 'custom denial reason';` (Gel #4095)
+        this.expect(":=");
+        errmessage = this.expectStringLiteral();
+        this.expect(";");
       } else {
         throw new SyntaxError(
           `Unexpected token in access policy: ${this.peek().value}`,
@@ -86,6 +92,7 @@ export class AccessPolicyParser {
     };
 
     return createAccessPolicy(name, rules, {
+      errmessage,
       objectType,
       span,
       using,
@@ -475,6 +482,20 @@ export class AccessPolicyParser {
     if (token.type !== TokenType.IDENT) {
       throw new SyntaxError(
         `Expected identifier but got '${token.value}'`,
+        { location: this.getLocation(token) },
+      );
+    }
+
+    this.advance();
+    return token.value;
+  }
+
+  private expectStringLiteral(): string {
+    const token = this.peek();
+
+    if (token.type !== TokenType.STRING) {
+      throw new SyntaxError(
+        `Expected string literal but got '${token.value}'`,
         { location: this.getLocation(token) },
       );
     }

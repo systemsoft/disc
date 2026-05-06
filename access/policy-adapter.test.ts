@@ -406,3 +406,36 @@ Deno.test("policy-adapter: omitted with check leaves runtime.withCheck undefined
   const result = adaptAccessPolicies("Post", [sdlPolicy]);
   assertEquals(result[0].withCheck, undefined);
 });
+
+// ---------------------------------------------------------------------------
+// errmessage forwarding (Gel #4095)
+// ---------------------------------------------------------------------------
+
+Deno.test("policy-adapter: errmessage is forwarded to runtime policy (Gel #4095)", () => {
+  const sdlPolicy: SDLAccessPolicy = {
+    kind: "AccessPolicy",
+    name: createIdentifier("admin_only"),
+    actions: [
+      { kind: "AccessAction", allow: false, operations: ["update"] },
+    ],
+    errmessage: "Only admins can modify this record",
+  };
+
+  const result = adaptAccessPolicies("Doc", [sdlPolicy]);
+
+  assertEquals(result[0].errmessage, "Only admins can modify this record");
+});
+
+Deno.test("policy-adapter: omitted errmessage leaves runtime.errmessage undefined", () => {
+  const sdlPolicy: SDLAccessPolicy = {
+    kind: "AccessPolicy",
+    name: createIdentifier("plain"),
+    actions: [
+      { kind: "AccessAction", allow: true, operations: ["select"] },
+    ],
+  };
+
+  const result = adaptAccessPolicies("Post", [sdlPolicy]);
+
+  assertEquals(result[0].errmessage, undefined);
+});

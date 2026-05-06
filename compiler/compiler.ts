@@ -324,7 +324,8 @@ export class EdgeQLCompiler {
         );
         if (!decision.allowed) {
           throw new CompilationError(
-            `INSERT not allowed on ${objectType}: ${decision.reason}`,
+            decision.denialMessage ??
+              `INSERT not allowed on ${objectType}: ${decision.reason}`,
           );
         }
         return statement;
@@ -339,7 +340,8 @@ export class EdgeQLCompiler {
         );
         if (!decision.allowed) {
           throw new CompilationError(
-            `UPDATE not allowed on ${objectType}: ${decision.reason}`,
+            decision.denialMessage ??
+              `UPDATE not allowed on ${objectType}: ${decision.reason}`,
           );
         }
 
@@ -389,7 +391,8 @@ export class EdgeQLCompiler {
         );
         if (!decision.allowed) {
           throw new CompilationError(
-            `DELETE not allowed on ${objectType}: ${decision.reason}`,
+            decision.denialMessage ??
+              `DELETE not allowed on ${objectType}: ${decision.reason}`,
           );
         }
 

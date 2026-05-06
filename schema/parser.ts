@@ -871,6 +871,7 @@ export class SDLParser {
 
     const actions: AST.AccessAction[] = [];
     let condition: AST.Expression | undefined;
+    let errmessage: string | undefined;
     let withCheck: AST.Expression | undefined;
     const annotations: AST.Annotation[] = [];
 
@@ -899,9 +900,18 @@ export class SDLParser {
         );
       } else if (this.match(TokenType.ANNOTATION)) {
         annotations.push(this.parseAnnotation());
+      } else if (
+        this.check(TokenType.IDENT) && this.peek().value === "errmessage"
+      ) {
+        // `errmessage := 'custom denial reason';` — surfaces when the policy
+        // denies an operation. Mirrors the constraint precedent. (Gel #4095)
+        this.advance();
+        this.consume(TokenType.ASSIGN, "Expected ':=' after 'errmessage'");
+        errmessage = this.parseStringLiteral();
+        this.consume(TokenType.SEMICOLON, "Expected ';' after errmessage");
       } else {
         throw this.error(
-          `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in access policy body — did you mean 'allow', 'deny', 'using', 'with check', or 'annotation'?`,
+          `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in access policy body — did you mean 'allow', 'deny', 'using', 'with check', 'errmessage', or 'annotation'?`,
         );
       }
     }
@@ -915,6 +925,7 @@ export class SDLParser {
       condition,
     };
     if (withCheck !== undefined) policy.withCheck = withCheck;
+    if (errmessage !== undefined) policy.errmessage = errmessage;
     if (annotations.length > 0) policy.annotations = annotations;
 
     return policy;

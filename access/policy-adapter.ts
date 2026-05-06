@@ -164,6 +164,13 @@ export function adaptAccessPolicies(
       policy.withCheck = convertExpression(sdl.withCheck);
     }
 
+    // Custom denial message (Gel #4095). Forwarded as-is; the evaluator
+    // surfaces it via AccessDecision.denialMessage and callers prefer it
+    // over the generic reason when raising an error.
+    if (sdl.errmessage !== undefined) {
+      policy.errmessage = sdl.errmessage;
+    }
+
     return policy;
   });
 }
