@@ -532,6 +532,39 @@ Deno.test("OAuthExtension - state manager populates PKCE fields (P1-41)", async 
   assertEquals(oauthState.codeChallenge!.length, 43);
 });
 
+// gh/geldata#7026: Disc uses RFC 7636 PKCE param names exclusively at
+// the upstream-provider hop. This pins the names so a regression that
+// switches to a short alias (`challenge`, `verifier`) trips the test.
+Deno.test("OAuthExtension - authorize URL uses RFC 7636 PKCE param names", async () => {
+  const ext = new OAuthExtension(makeConfig());
+  const route = ext.getRoutes().find((r) => r.path === "/authorize/google")!;
+  const response = await route.handler(makeRequest("/authorize/google"));
+  const body = await response.json() as { url: string };
+  const parsed = new URL(body.url);
+
+  assertEquals(parsed.searchParams.has("code_challenge"), true);
+  assertEquals(parsed.searchParams.get("code_challenge_method"), "S256");
+  // Short forms must NOT appear — they'd indicate a regression to a
+  // non-RFC name.
+  assertEquals(parsed.searchParams.has("challenge"), false);
+  assertEquals(parsed.searchParams.has("challenge_method"), false);
+});
+
+// gh/geldata#7596: code_challenge forwarded to upstream must be
+// unpadded. The state-manager already produces unpadded base64url
+// (43 chars for S256 by construction), so this test pins that no
+// trailing `=` ever sneaks into the authorize URL.
+Deno.test("OAuthExtension - authorize URL forwards unpadded code_challenge", async () => {
+  const ext = new OAuthExtension(makeConfig());
+  const route = ext.getRoutes().find((r) => r.path === "/authorize/google")!;
+  const response = await route.handler(makeRequest("/authorize/google"));
+  const body = await response.json() as { url: string };
+  const parsed = new URL(body.url);
+
+  const challenge = parsed.searchParams.get("code_challenge")!;
+  assertEquals(challenge.endsWith("="), false);
+});
+
 Deno.test("OAuthExtension - state manager rejects expired states", async () => {
   // 1 ms expiry so state expires immediately
   const ext = new OAuthExtension({

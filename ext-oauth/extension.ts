@@ -16,6 +16,7 @@ import type {
   OAuthProviderConfig,
 } from "./types.ts";
 import { OAuthStateManager } from "./state-manager.ts";
+import { normalizePkceParam } from "./pkce.ts";
 import { matchRedirectUri } from "./redirect-matcher.ts";
 import { exchangeCodeForToken, fetchUserInfo } from "./token-exchange.ts";
 
@@ -263,7 +264,15 @@ export class OAuthExtension extends BaseExtension {
     // providers) will require the matching code_verifier at token
     // exchange. Fallback silently if state-manager didn't populate them.
     if (oauthState.codeChallenge) {
-      params.set("code_challenge", oauthState.codeChallenge);
+      // gh/geldata#7596: strip RFC 7636-disallowed trailing `=`
+      // padding before sending the challenge upstream. The
+      // state-manager already produces unpadded output, so this is
+      // belt-and-suspenders against future code paths that might
+      // hand us a padded challenge.
+      params.set(
+        "code_challenge",
+        normalizePkceParam(oauthState.codeChallenge),
+      );
       params.set("code_challenge_method", "S256");
     }
 

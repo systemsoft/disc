@@ -2,6 +2,7 @@
  * OAuth token exchange and user info fetching
  */
 
+import { normalizePkceParam } from "./pkce.ts";
 import type { OAuthProviderConfig, OAuthUserInfo } from "./types.ts";
 
 export interface TokenResponse {
@@ -26,8 +27,12 @@ export async function exchangeCodeForToken(
   // P1-41: PKCE code_verifier is required by providers that received
   // a code_challenge in the authorize redirect. Forward it when the
   // state-manager populated one.
+  // gh/geldata#7596: strip RFC 7636-disallowed trailing `=` padding
+  // before forwarding. Some clients pad base64url; upstream providers
+  // that compare strictly will reject the padded form even though the
+  // underlying bytes match.
   if (codeVerifier) {
-    body.set("code_verifier", codeVerifier);
+    body.set("code_verifier", normalizePkceParam(codeVerifier));
   }
 
   const response = await fetch(provider.tokenUrl, {
