@@ -16,6 +16,16 @@ tag is cut.
 
 ### Added
 
+- **Single-binary distribution** (Disc-original feature #4 from
+  `docs/disc-original-features.md`). Compiled `disc` binary now
+  embeds the SvelteKit admin UI under `/ui` and the platform's
+  PostgreSQL distribution. On a fresh machine `./disc start` boots
+  the server, admin UI, and bundled Postgres with no install steps
+  and no network round-trip. PG is extracted on first run to
+  `<DISC_HOME>/embedded-postgres/<version>/` (idempotent via marker
+  file) and reused on subsequent starts. Opt out with
+  `DISC_BUILD_NO_BUNDLE_PG=1` for size-conscious headless builds.
+  Binary size: ~83 MB (UI only) → ~217 MB (UI + PG) on darwin-arm64.
 - Env-var equivalents for `DISC_SHUTDOWN_DRAIN_TIMEOUT`,
   `DISC_REQUIRE_AUTH`, `DISC_READ_ONLY`, `DISC_TRUST_PROXY`,
   `DISC_BINARY_PORT`, `DISC_BINARY_PASSWORD`, plus `DISC_TLS_*_ENV`

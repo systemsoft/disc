@@ -2,7 +2,7 @@
 
 Things Disc would build that Gel doesn't have and isn't planning. Each is a deliberate departure — features that justify Disc as a fork rather than a port.
 
-> **Status:** Proposal. Not yet committed work. Each item below has rough scoping but no design doc, no scheduled milestone. Use this as the seed list for picking next-up direction once the upstream-parity work is done (see `future-triage.md`).
+> **Status:** Mixed. **Shipped: #4 single-binary distribution** (Bundle I, 2026-05-06). The remaining four are proposals — rough scoping but no design doc, no scheduled milestone. Use this as the seed list for picking next-up direction once the upstream-parity work is done (see `future-triage.md`).
 
 ---
 
@@ -24,8 +24,8 @@ const db = await connect({ schema });
 // not from a generated file:
 const users = await db.User.select({
   email: true,
-  posts: { title: true }
-}).filter(u => u.email.eq("user@example.com"));
+  posts: { title: true },
+}).filter((u) => u.email.eq("user@example.com"));
 ```
 
 **What Gel has instead.** A `@gel/generate` codegen package that emits a static `./dbschema/edgeql-js/` directory.
@@ -39,6 +39,7 @@ const users = await db.User.select({
 **The problem.** Gel exposes EdgeQL over HTTP and GraphQL via `ext::graphql`, but it doesn't generate a conventional REST surface. Many integrations (n8n, Zapier, mobile apps with locked-down clients, anything that wants OpenAPI) assume REST.
 
 **The bet.** Every object type in a Disc schema has obvious REST mappings:
+
 - `GET /api/User` → list with filter/order/limit query params
 - `GET /api/User/:id` → single object
 - `POST /api/User` → insert
@@ -69,43 +70,59 @@ type User {
 The existing admin UI plan in `docs/admin-ui.md` already covers schema browser, data viewer, query editor, and REPL. These match Gel-UI feature-for-feature. The bets here are features Gel-UI does **not** have:
 
 ### 3a. Live schema diff
+
 Watch `.disc` files in real time. Show the unsaved-but-edited schema next to the current applied schema, with a visual diff (added types in green grid, removed in red, modified with side-by-side property lists). Click "apply" to generate and run the migration in-line.
 
 Gel-UI shows applied schema only; you switch to your editor and CLI to make changes.
 
 ### 3b. Visual query builder (drag-and-drop, not autocomplete)
+
 Drag types onto a canvas, drop fields into a result shape, draw filters as visual nodes. Generate EdgeQL underneath. The point isn't to replace text EdgeQL — it's to teach EdgeQL to people who don't know it yet, and to let non-developers build read-only queries for dashboards.
 
 Gel-UI has a text editor with autocomplete. No visual builder.
 
 ### 3c. Live data subscriptions in the browser
+
 Query results update in real time when underlying rows change (server pushes diffs over WebSocket). Useful for the data viewer ("watch this table") and for query results during development.
 
 Gel has subscriptions in the SDK but Gel-UI doesn't surface them.
 
 ### 3d. Identity-disc visualization
+
 The TRON metaphor taken seriously: a visualization of an object's outgoing and incoming links rendered as a literal disc — the object at the center, link types as luminous radii, linked objects orbiting. Click a linked object to recenter on it. This is closer to a graph database UI than a relational one, but the data is already there in Disc's schema.
 
 **Effort.** M each, parallelizable. 3a depends on a server endpoint that streams schema-diff events. 3c depends on the existing live-query plumbing. 3d is mostly Svelte + a graph layout library; no backend work.
 
 ---
 
-## 4. Single-binary distribution (server + UI + Postgres)
+## 4. Single-binary distribution (server + UI + Postgres) — **SHIPPED 2026-05-06**
+
+> **Status:** Shipped in Bundle I (commits [`fcebdb1`](../) UI embedding, Phase 2 PG embedding). The doc below is preserved as historical context; live behavior is documented in `docs/cli.md` (`disc build`) and `postgres/embedded-pg.ts`.
 
 **The problem.** Self-hosting Gel involves: install Gel server, install PostgreSQL separately (or use a managed one), point Gel at it, install Gel-UI separately if you want the admin UI, configure all three to talk to each other.
 
 **The bet.** Disc ships **one binary** that contains:
+
 - The Disc server (already built via `deno compile`)
 - The compiled SvelteKit UI as embedded assets
 - The PostgreSQL binary for the target platform
 
 Running `./disc` on a fresh machine gives you a fully working database server with admin UI on `:3000`, no installation steps. Like Caddy. Like SQLite. Like Tailscale's `tailscaled`.
 
-**What's already done.** `deno compile` produces a server binary; UI bundling into the binary is a P2 item per `CLAUDE.md`; bundled-Postgres lifecycle management is shipped (`postgres/`).
+**How it shipped.** `deno compile --include` embeds both the SvelteKit `ui/build/` directory and the cached PostgreSQL distribution under `<DISC_HOME>/postgres/<version>/`. At runtime:
 
-**What's missing.** Embedding the Postgres binary itself rather than downloading it on first run. Trade-off: binary size goes from ~85MB to ~300MB, but the deployment story becomes "scp the binary and run it."
+- `/ui` is served from the embedded asset manifest (`server/ui-asset-manifest.ts` + `server/ui-assets.ts`); `index.html` falls back for SPA routes.
+- `postgres/embedded-pg.ts` extracts PG to `<DISC_HOME>/embedded-postgres/<version>/` on first start (idempotent via marker file). After extraction, the existing `PostgresInstance.pgBinDir` plumbing skips the network downloader.
 
-**Effort.** S. The pieces exist — this is a build-system change.
+**Trade-offs documented as decisions.**
+
+- **Extract-on-first-run** rather than running PG from a virtual fs — PG is a native binary that needs a real `fd → on-disk` to fork from.
+- **Manifest auto-regenerated at build time** (`cli/build.ts:refreshEmbeddedPgManifest`) — the repo ships an empty default; running `disc build` rewrites the manifest in place from the build machine's local PG cache. Don't commit a regenerated manifest; the `file://` URLs are abs paths from the build machine.
+- **Opt-out via `DISC_BUILD_NO_BUNDLE_PG=1`** for size-conscious headless builds — falls back to the network downloader at runtime.
+
+**Binary size (darwin-arm64):** ~83 MB (UI only) → ~217 MB (UI + PG distribution).
+
+**Open follow-ups.** Reproducible cross-platform builds (the build machine's PG cache only has its own platform); a `dist/embedded-pg/<platform>/` staging step would let CI build all four platforms from one runner. Tracked in the ledger.
 
 ---
 
@@ -139,10 +156,10 @@ This composes with existing access policies. It's a defense-in-depth layer for t
 
 Each item is independently scopeable. The natural ordering by **how much it justifies Disc-as-a-fork**:
 
-1. **#4 single-binary** — biggest UX delta for self-hosters, smallest engineering cost.
+1. ~~**#4 single-binary** — biggest UX delta for self-hosters, smallest engineering cost.~~ **Shipped 2026-05-06.**
 2. **#2 REST surface** — broadest integration story, modest cost.
 3. **#1 codegen-free builder** — biggest DX delta for application developers, but most type-system work.
 4. **#3 admin-UI differentiators** — best demo material; can be staged 3a → 3c → 3d → 3b.
 5. **#5 Deno-perm policies** — most novel, narrowest applicability.
 
-None of these are scheduled. When `future-triage.md`'s BUILD column runs out (or sooner if one of these is more compelling than what's left upstream), pick from here.
+When `future-triage.md`'s BUILD column runs out (or sooner if one of these is more compelling than what's left upstream), pick from here.
