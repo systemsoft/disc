@@ -38,9 +38,7 @@ export abstract class DiscError extends Error {
 
       if (lines[lineNum]) {
         output += `\n\n${this.context.location.line} | ${lines[lineNum]}`;
-        output += `\n${
-          " ".repeat(String(this.context.location.line).length)
-        } | ${" ".repeat(this.context.location.column - 1)}^`;
+        output += `\n${" ".repeat(String(this.context.location.line).length)} | ${" ".repeat(this.context.location.column - 1)}^`;
       }
     }
 
@@ -82,9 +80,34 @@ export class ValidationError extends DiscError {
   }
 }
 
+/**
+ * URL appended to every `InternalError` message so users land on the
+ * correct issue tracker when they hit a server-side bug.
+ *
+ * Internal errors are always bugs in Disc itself — even when they're
+ * triggered by an unexpected PostgreSQL error code, the right fix is
+ * for Disc to translate that code into a more specific error class.
+ * Ports geldata/gel#930.
+ */
+export const INTERNAL_ERROR_ISSUE_URL = "https://github.com/systemsoft/disc/issues";
+
+/**
+ * Marker substring used to detect (and avoid duplicating) the
+ * file-an-issue hint when an `InternalError` is constructed from a
+ * message that was previously produced by another `InternalError`.
+ */
+const INTERNAL_ERROR_HINT_MARKER = "please file an issue at";
+
+function appendInternalErrorHint(message: string): string {
+  if (message.includes(INTERNAL_ERROR_HINT_MARKER)) {
+    return message;
+  }
+  return `${message} (this is a bug — ${INTERNAL_ERROR_HINT_MARKER} ${INTERNAL_ERROR_ISSUE_URL})`;
+}
+
 export class InternalError extends DiscError {
   constructor(message: string, context?: ErrorContext) {
-    super(message, context);
+    super(appendInternalErrorHint(message), context);
   }
 }
 
