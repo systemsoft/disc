@@ -249,6 +249,105 @@ Deno.test("LanguageServer - hover/completion on unknown document returns null/em
   assertEquals(((compl as { result: unknown }).result as unknown[]).length, 0);
 });
 
+Deno.test("LanguageServer - initialize advertises definition + documentSymbol capabilities", async () => {
+  const tx = new FakeTransport();
+  const srv = new LanguageServer((m) => tx.send(m));
+  await srv.handle({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "initialize",
+    params: { capabilities: {} },
+  });
+  const r = tx.outgoing.find((m) => "id" in m && m.id === 1);
+  const result = (r as { result: { capabilities: Record<string, unknown> } }).result;
+  assertEquals(result.capabilities.definitionProvider, true);
+  assertEquals(result.capabilities.documentSymbolProvider, true);
+});
+
+Deno.test("LanguageServer - definition jumps to declaration", async () => {
+  const { srv, tx } = await newServer();
+  const text = `module default {
+  type User {
+    required name: str;
+  };
+
+  type Post {
+    required link author -> User;
+  };
+}`;
+  await srv.handle({
+    jsonrpc: "2.0",
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: "file:///d.disc", languageId: "disc", version: 1, text },
+    },
+  });
+  tx.outgoing.length = 0;
+
+  // Position over the second `User` (the reference)
+  const lines = text.split("\n");
+  const refLine = lines.findIndex((l) => l.includes("-> User"));
+  const character = lines[refLine].indexOf("User");
+
+  await srv.handle({
+    jsonrpc: "2.0",
+    id: 33,
+    method: "textDocument/definition",
+    params: {
+      textDocument: { uri: "file:///d.disc" },
+      position: { line: refLine, character },
+    },
+  });
+  const r = tx.outgoing.find((m) => "id" in m && m.id === 33);
+  assertExists(r);
+  const result = (r as { result: { uri: string; range: { start: { line: number } } } | null }).result;
+  assertExists(result);
+  assertEquals(result!.uri, "file:///d.disc");
+  // Declaration is on the line containing `type User`
+  const declLine = lines.findIndex((l) => l.includes("type User"));
+  assertEquals(result!.range.start.line, declLine);
+});
+
+Deno.test("LanguageServer - documentSymbol returns the file outline", async () => {
+  const { srv, tx } = await newServer();
+  await srv.handle({
+    jsonrpc: "2.0",
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: {
+        uri: "file:///s.disc",
+        languageId: "disc",
+        version: 1,
+        text: `module default {
+  type User {
+    required name: str;
+    multi link posts -> Post;
+  };
+
+  type Post {
+    required title: str;
+  };
+}`,
+      },
+    },
+  });
+  tx.outgoing.length = 0;
+
+  await srv.handle({
+    jsonrpc: "2.0",
+    id: 44,
+    method: "textDocument/documentSymbol",
+    params: { textDocument: { uri: "file:///s.disc" } },
+  });
+  const r = tx.outgoing.find((m) => "id" in m && m.id === 44);
+  const result = (r as { result: { name: string; children?: { name: string }[] }[] }).result;
+  const names = result.map((s) => s.name).sort();
+  assertEquals(names, ["Post", "User"]);
+  const user = result.find((s) => s.name === "User")!;
+  const childNames = (user.children ?? []).map((c) => c.name).sort();
+  assertEquals(childNames, ["name", "posts"]);
+});
+
 Deno.test("LanguageServer - shutdown returns null result", async () => {
   const { srv, tx } = await newServer();
   tx.outgoing.length = 0;

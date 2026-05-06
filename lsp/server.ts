@@ -16,6 +16,8 @@
 import { analyzeDiscDocument } from "./diagnostics.ts";
 import { provideHover } from "./hover.ts";
 import { provideCompletion } from "./completion.ts";
+import { provideDefinition } from "./definition.ts";
+import { provideDocumentSymbols } from "./document-symbols.ts";
 import {
   type RpcMessage,
   type RpcRequest,
@@ -28,6 +30,7 @@ import {
   type DocumentUri,
   type InitializeResult,
   type PublishDiagnosticsParams,
+  type TextDocumentIdentifier,
   type TextDocumentPositionParams,
 } from "./protocol.ts";
 
@@ -81,6 +84,8 @@ export class LanguageServer {
             textDocumentSync: TextDocumentSyncKind.Full,
             hoverProvider: true,
             completionProvider: { triggerCharacters: [":", " ", ">"] },
+            definitionProvider: true,
+            documentSymbolProvider: true,
           },
           serverInfo: { name: "disc-lsp", version: "0.1.0" },
         };
@@ -107,6 +112,31 @@ export class LanguageServer {
           return;
         }
         this.respond(req.id, provideCompletion(doc.text, params.position));
+        return;
+      }
+
+      case "textDocument/definition": {
+        const params = req.params as TextDocumentPositionParams;
+        const doc = this.docs.get(params.textDocument.uri);
+        if (!doc) {
+          this.respond(req.id, null);
+          return;
+        }
+        this.respond(
+          req.id,
+          provideDefinition(doc.text, params.position, params.textDocument.uri),
+        );
+        return;
+      }
+
+      case "textDocument/documentSymbol": {
+        const params = req.params as { textDocument: TextDocumentIdentifier };
+        const doc = this.docs.get(params.textDocument.uri);
+        if (!doc) {
+          this.respond(req.id, []);
+          return;
+        }
+        this.respond(req.id, provideDocumentSymbols(doc.text));
         return;
       }
 
