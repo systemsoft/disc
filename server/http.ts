@@ -9,11 +9,7 @@ import type { MetricsSource } from "./metrics.ts";
 import { computeCertExpiry } from "./tls-cert-info.ts";
 
 const log = getLogger("http");
-import {
-  ConnectionManager,
-  SessionManager,
-  TransactionManager,
-} from "./connection.ts";
+import { ConnectionManager, SessionManager, TransactionManager } from "./connection.ts";
 import { RateLimiter } from "./rate-limiter.ts";
 import { SubscriptionHandler } from "./subscription-handler.ts";
 import type { AuthProvider } from "../auth/provider.ts";
@@ -22,17 +18,11 @@ import type { AuthRoutes } from "../auth/integration.ts";
 import type { ExtensionRoute } from "../extensions/types.ts";
 import type { DatabaseRegistry } from "./database-registry.ts";
 import type { SchemaProvider } from "./schema-endpoint.ts";
-import {
-  handleGetSchema,
-  handleGetSchemaType,
-  handleGetSchemaTypes,
-} from "./schema-endpoint.ts";
-import {
-  handleGetMigrations,
-  type MigrationsProvider,
-} from "./migrations-endpoint.ts";
+import { handleGetSchema, handleGetSchemaType, handleGetSchemaTypes } from "./schema-endpoint.ts";
+import { handleGetMigrations, type MigrationsProvider } from "./migrations-endpoint.ts";
 import { handleGetConfig } from "./config-endpoint.ts";
 import { matchCorsOrigin } from "./cors-matcher.ts";
+import { createUiAssetHandler, type UiAssetHandler } from "./ui-assets.ts";
 
 const DEFAULT_CORS_METHODS = ["GET", "POST", "OPTIONS"];
 const DEFAULT_CORS_HEADERS = ["Content-Type", "Authorization"];
@@ -77,6 +67,7 @@ export class HttpServer {
   private schemaProvider?: SchemaProvider;
   private migrationsProvider?: MigrationsProvider;
   private rate_limiter?: RateLimiter;
+  private uiAssetHandler: UiAssetHandler;
   private server?: Deno.HttpServer<Deno.NetAddr>;
   private redirect_server?: Deno.HttpServer<Deno.NetAddr>;
   private tls_watcher?: import("./tls-reload.ts").TlsCertWatcher;
@@ -117,6 +108,7 @@ export class HttpServer {
     this.session_manager = new SessionManager();
     this.transaction_manager = new TransactionManager();
     this.subscription_handler = new SubscriptionHandler();
+    this.uiAssetHandler = createUiAssetHandler();
     this.startTime = new Date();
 
     if (
@@ -163,8 +155,7 @@ export class HttpServer {
           certFile: this.config.tls.certFile,
           keyFile: this.config.tls.keyFile,
           debounceMs: this.config.tls.reloadDebounceMs,
-          onReload: (newCert, newKey) =>
-            this.swapTlsListener(newCert, newKey),
+          onReload: (newCert, newKey) => this.swapTlsListener(newCert, newKey),
         });
         this.tls_watcher.start();
       }
@@ -322,9 +313,7 @@ export class HttpServer {
         log.warn("TLS hot-reload: recovered listener with on-disk cert/key");
       } catch (recoveryErr) {
         log.error("TLS hot-reload: recovery failed; server is now down", {
-          error: recoveryErr instanceof Error
-            ? recoveryErr.message
-            : String(recoveryErr),
+          error: recoveryErr instanceof Error ? recoveryErr.message : String(recoveryErr),
         });
         throw recoveryErr;
       }
@@ -428,9 +417,7 @@ export class HttpServer {
 
     // Enforce rate limit before touching in-flight counter or stats
     if (this.rate_limiter) {
-      const clientIp = "hostname" in info.remoteAddr
-        ? info.remoteAddr.hostname
-        : "unknown";
+      const clientIp = "hostname" in info.remoteAddr ? info.remoteAddr.hostname : "unknown";
       if (!this.rate_limiter.allow(clientIp)) {
         const headers = this.get_default_headers("application/json");
         headers.set("Retry-After", "60");
@@ -494,6 +481,14 @@ export class HttpServer {
         return await this.handle_files_route(request, url, authedContext);
       }
 
+      // Admin UI assets (Bundle I — single-binary distribution).
+      // Embedded via `deno compile --include ui/build` and served from
+      // the static manifest. Falls back to `index.html` for SPA routes.
+      if (url.pathname === "/ui" || url.pathname.startsWith("/ui/")) {
+        const uiResponse = await this.uiAssetHandler(request);
+        if (uiResponse) return uiResponse;
+      }
+
       // Route handling
       switch (url.pathname) {
         case "/":
@@ -544,6 +539,11 @@ export class HttpServer {
     if (pathname === "/") return true;
     if (pathname.startsWith("/auth/")) return true;
     if (pathname === "/health" || pathname.startsWith("/health/")) return true;
+    // Admin UI assets are public; users sign in *through* the UI, so
+    // the bundle has to load before authentication. The UI's own
+    // network calls (e.g. /query, /schema) still go through gateAuth
+    // when `requireAuth` is on.
+    if (pathname === "/ui" || pathname.startsWith("/ui/")) return true;
     return false;
   }
 
@@ -668,9 +668,7 @@ export class HttpServer {
     if (this.extensionRoutes.size > 0) {
       const extEndpoints: Record<string, string[]> = {};
       for (const [name, routes] of this.extensionRoutes) {
-        extEndpoints[name] = routes.map((r) =>
-          `${r.method} /ext/${name}${r.path}`
-        );
+        extEndpoints[name] = routes.map((r) => `${r.method} /ext/${name}${r.path}`);
       }
       endpoints.extensions = extEndpoints;
     }
@@ -763,9 +761,7 @@ export class HttpServer {
       }
 
       // Create connection and session
-      const remoteAddr = "hostname" in info.remoteAddr
-        ? info.remoteAddr.hostname
-        : "unknown";
+      const remoteAddr = "hostname" in info.remoteAddr ? info.remoteAddr.hostname : "unknown";
       const connection = this.connection_manager.createConnection(
         "http",
         remoteAddr,
@@ -1000,9 +996,7 @@ export class HttpServer {
         total: this.stats.total_requests,
         successful: this.stats.successful_requests,
         failed: this.stats.failed_requests,
-        avgDurationMs: this.stats.total_requests > 0
-          ? this.stats.total_duration_ms / this.stats.total_requests
-          : 0,
+        avgDurationMs: this.stats.total_requests > 0 ? this.stats.total_duration_ms / this.stats.total_requests : 0,
       },
       transactions: this.transaction_manager.get_stats(),
       memoryUsage: this.get_memory_stats(),
@@ -1105,9 +1099,7 @@ export class HttpServer {
   ): Response {
     const { socket, response } = Deno.upgradeWebSocket(request);
 
-    const remoteAddr = "hostname" in info.remoteAddr
-      ? info.remoteAddr.hostname
-      : "unknown";
+    const remoteAddr = "hostname" in info.remoteAddr ? info.remoteAddr.hostname : "unknown";
     const connection = this.connection_manager.createConnection(
       "websocket",
       remoteAddr,
@@ -1179,9 +1171,7 @@ export class HttpServer {
             payload: response,
           }));
         } catch (error) {
-          const errorMessage = error instanceof Error
-            ? error.message
-            : "Unknown error";
+          const errorMessage = error instanceof Error ? error.message : "Unknown error";
           socket.send(JSON.stringify({
             type: "error",
             payload: { message: errorMessage },
@@ -1205,9 +1195,7 @@ export class HttpServer {
             socket,
           );
         } catch (error) {
-          const errorMessage = error instanceof Error
-            ? error.message
-            : "Unknown subscription error";
+          const errorMessage = error instanceof Error ? error.message : "Unknown subscription error";
           socket.send(JSON.stringify({
             type: "error",
             payload: { message: errorMessage },
@@ -1354,9 +1342,7 @@ export class HttpServer {
               "Content-Length": String(metadata.size),
               ...(metadata.name
                 ? {
-                  "Content-Disposition": `inline; filename="${
-                    metadata.name.replace(/"/g, "")
-                  }"`,
+                  "Content-Disposition": `inline; filename="${metadata.name.replace(/"/g, "")}"`,
                 }
                 : {}),
             },
