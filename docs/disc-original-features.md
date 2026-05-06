@@ -2,7 +2,7 @@
 
 Things Disc would build that Gel doesn't have and isn't planning. Each is a deliberate departure — features that justify Disc as a fork rather than a port.
 
-> **Status:** Mixed. **Shipped: #4 single-binary distribution** (Bundle I, 2026-05-06), **#2 schema-derived REST surface** (Bundle J, 2026-05-06), **#3a live schema diff in admin UI** (Bundle K, 2026-05-06), **#3c live data subscriptions in admin UI** (Bundle L, 2026-05-06), and **#1 codegen-free TypeScript query builder** (Bundle M, 2026-05-06). The remaining items (3b/3d UI differentiators, #5 Deno-perm policies) are proposals — rough scoping but no design doc, no scheduled milestone. Use this as the seed list for picking next-up direction once the upstream-parity work is done (see `future-triage.md`).
+> **Status:** Mixed. **Shipped: #4 single-binary distribution** (Bundle I, 2026-05-06), **#2 schema-derived REST surface** (Bundle J, 2026-05-06), **#3a live schema diff in admin UI** (Bundle K, 2026-05-06), **#3c live data subscriptions in admin UI** (Bundle L, 2026-05-06), **#1 codegen-free TypeScript query builder** (Bundle M, 2026-05-06), and **#3b visual query builder** (Bundle N, 2026-05-06). The remaining items (#3d identity-disc visualization, #5 Deno-perm policies) are proposals — rough scoping but no design doc, no scheduled milestone. Use this as the seed list for picking next-up direction once the upstream-parity work is done (see `future-triage.md`).
 
 ---
 
@@ -101,9 +101,13 @@ Watch `.disc` files in real time. Show the unsaved-but-edited schema next to the
 
 Gel-UI shows applied schema only; you switch to your editor and CLI to make changes. Disc routes the watcher's events through SSE at `/admin/schema-watch` and exposes `POST /admin/schema-apply` which runs through the standard `MigrationEngine` so the lock-timeout pragma, advisory-lock serialization, and unsafe/ambiguous-op gate compose for free.
 
-### 3b. Visual query builder (drag-and-drop, not autocomplete)
+### 3b. Visual query builder — **SHIPPED 2026-05-06**
 
-Drag types onto a canvas, drop fields into a result shape, draw filters as visual nodes. Generate EdgeQL underneath. The point isn't to replace text EdgeQL — it's to teach EdgeQL to people who don't know it yet, and to let non-developers build read-only queries for dashboards.
+> **Status:** Shipped in Bundle N. Live behavior is documented in `docs/admin-ui.md` ("Visual Query Builder" section); source lives at `ui/src/lib/query-builder-synth.ts` (pure EdgeQL synthesizer) + `ui/src/routes/query-builder/+page.svelte`.
+
+Pick a root type, check fields and links to include, add filter rows (field + operator + value, auto-typed by the field's SDL scalar), set order/limit/offset. The synthesized EdgeQL renders live in a side pane; hitting Run sends it through the same `/query` endpoint as the text editor.
+
+The original sketch called for a literal drag-and-drop canvas; we shipped a form-based UX instead. Rationale: the educational value (visual choices map visibly to EdgeQL) is delivered by either layout, but the form is ~10× faster to build and easier to use. The canvas pitch was aesthetic, not functional. The pure `synthesize()` core is decoupled from the form layout, so a canvas overlay can wrap it later without changes to EdgeQL emission if the form proves limiting.
 
 Gel-UI has a text editor with autocomplete. No visual builder.
 
@@ -191,7 +195,7 @@ Each item is independently scopeable. The natural ordering by **how much it just
 1. ~~**#4 single-binary** — biggest UX delta for self-hosters, smallest engineering cost.~~ **Shipped 2026-05-06.**
 2. ~~**#2 REST surface** — broadest integration story, modest cost.~~ **Shipped 2026-05-06.**
 3. ~~**#1 codegen-free builder** — biggest DX delta for application developers, but most type-system work.~~ **Shipped 2026-05-06.**
-4. **#3 admin-UI differentiators** — best demo material; can be staged 3a → 3c → 3d → 3b. ~~**3a (live schema diff) shipped 2026-05-06.**~~ ~~**3c (live data subscriptions) shipped 2026-05-06.**~~ Remaining: 3b visual query builder, 3d identity-disc visualization.
+4. **#3 admin-UI differentiators** — best demo material; can be staged 3a → 3c → 3d → 3b. ~~**3a (live schema diff) shipped 2026-05-06.**~~ ~~**3c (live data subscriptions) shipped 2026-05-06.**~~ ~~**3b (visual query builder) shipped 2026-05-06.**~~ Remaining: 3d identity-disc visualization.
 5. **#5 Deno-perm policies** — most novel, narrowest applicability.
 
 When `future-triage.md`'s BUILD column runs out (or sooner if one of these is more compelling than what's left upstream), pick from here.
