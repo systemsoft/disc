@@ -189,13 +189,11 @@ async function handleInsert(
     return errorJson(err instanceof Error ? err.message : String(err), 400);
   }
 
-  const shape = renderShape(opts.schema, typeDef);
-  // Wrap the insert in a SELECT so the inserted object comes back in the
-  // standard REST shape (default-shape projection of the new row). The
-  // EdgeQL form `select (insert T {...}) { shape... }` runs through the
-  // same pipeline as a plain insert.
-  const edgeql =
-    `select (insert ${typeDef.name} { ${assignments} }) ${shape}`;
+  // The compiler returns the inserted row's columns via `RETURNING *`,
+  // which the protocol handler maps back to the camelCase property
+  // shape. The result is one record; we forward it as the 201 body so
+  // clients have the server-assigned id.
+  const edgeql = `insert ${typeDef.name} { ${assignments} }`;
 
   const result = await runEdgeQL(opts, edgeql);
   if (result instanceof Response) return result;
@@ -225,9 +223,9 @@ async function handleUpdate(
     return errorJson("PATCH body must contain at least one field", 400);
   }
 
-  const shape = renderShape(opts.schema, typeDef);
-  const edgeql = `select (update ${typeDef.name} ` +
-    `filter .id = <uuid>${edgeqlString(id)} set { ${assignments} }) ${shape}`;
+  const edgeql =
+    `update ${typeDef.name} filter .id = <uuid>${edgeqlString(id)} ` +
+    `set { ${assignments} }`;
 
   const result = await runEdgeQL(opts, edgeql);
   if (result instanceof Response) return result;
