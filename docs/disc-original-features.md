@@ -2,35 +2,57 @@
 
 Things Disc would build that Gel doesn't have and isn't planning. Each is a deliberate departure — features that justify Disc as a fork rather than a port.
 
-> **Status:** Mixed. **Shipped: #4 single-binary distribution** (Bundle I, 2026-05-06), **#2 schema-derived REST surface** (Bundle J, 2026-05-06), **#3a live schema diff in admin UI** (Bundle K, 2026-05-06), and **#3c live data subscriptions in admin UI** (Bundle L, 2026-05-06). The remaining items (3b/3d UI differentiators, #1 codegen-free TS builder, #5 Deno-perm policies) are proposals — rough scoping but no design doc, no scheduled milestone. Use this as the seed list for picking next-up direction once the upstream-parity work is done (see `future-triage.md`).
+> **Status:** Mixed. **Shipped: #4 single-binary distribution** (Bundle I, 2026-05-06), **#2 schema-derived REST surface** (Bundle J, 2026-05-06), **#3a live schema diff in admin UI** (Bundle K, 2026-05-06), **#3c live data subscriptions in admin UI** (Bundle L, 2026-05-06), and **#1 codegen-free TypeScript query builder** (Bundle M, 2026-05-06). The remaining items (3b/3d UI differentiators, #5 Deno-perm policies) are proposals — rough scoping but no design doc, no scheduled milestone. Use this as the seed list for picking next-up direction once the upstream-parity work is done (see `future-triage.md`).
 
 ---
 
-## 1. Codegen-free TypeScript query builder
+## 1. Codegen-free TypeScript query builder — **SHIPPED 2026-05-06**
+
+> **Status:** Shipped in Bundle M. Live behavior is documented in `sdk/README.md` and the source lives at `sdk/query-builder.ts` + `sdk/schema-types.ts`. The doc below is preserved as historical context; the shipped design diverges from the original sketch in two ways noted at the bottom.
 
 **The problem.** Gel's TypeScript client requires running `npx @gel/generate edgeql-js` after every schema change to produce a typed query builder. The generated module is a build artifact: it needs to be checked in, regenerated, kept in sync. In a Deno-native stack this is friction that doesn't need to exist.
 
-**The bet.** Because Disc is TypeScript end-to-end and runs on Deno (which compiles TS at import time), the query builder can be a runtime module that reads the live schema and returns a structurally-typed builder. No codegen step. Schema changes are reflected in the next module reload.
+**The bet.** Because Disc is TypeScript end-to-end and runs on Deno (which compiles TS at import time), the query builder can be a runtime module that reads the live schema and returns a structurally-typed builder. No codegen-on-every-change. Schema changes flow through with no rebuild.
 
-**Sketch.**
+**How it shipped.**
 
 ```typescript
-import { connect } from "jsr:@disc/client";
-import schema from "./schema.disc" with { type: "disc-schema" };
+import { createClient, createQueryBuilder, defineSchema, t } from "jsr:@disc/db/sdk";
 
-const db = await connect({ schema });
+const schema = defineSchema({
+  User: {
+    email: t.str(),
+    name: t.str(),
+    bio: t.optional(t.str()),
+    posts: t.multi("Post"),
+  },
+  Post: {
+    title: t.str(),
+    body: t.str(),
+    author: t.single("User"),
+  },
+});
 
-// Builder is typed from `schema` at compile time via TS conditional types,
-// not from a generated file:
-const users = await db.User.select({
+const client = createClient();
+const qb = createQueryBuilder(client, schema);
+
+// Fully typed: rows is { email: string; posts: { title: string }[] }[]
+const users = await qb.User.select({
   email: true,
   posts: { title: true },
 }).filter((u) => u.email.eq("user@example.com"));
 ```
 
+The `t` namespace covers all primary scalars (`str`, `bool`, `int16/32/64`, `float32/64`, `bigint`, `datetime`, `bytes`, `uuid`, `json`), `t.optional(inner)` for nullable wrappers, and `t.single(target)` / `t.multi(target)` for links. The typed `createQueryBuilder<S>(client, schema)` overload narrows every chain method: `select<Sh>(shape)` returns a chain whose awaited row type is computed from the shape, and `filter`/`orderBy` predicates get typed FieldRefs so `u.email.eq(...)` only accepts `string`.
+
 **What Gel has instead.** A `@gel/generate` codegen package that emits a static `./dbschema/edgeql-js/` directory.
 
-**Effort.** L. Requires a TS module loader for `.disc` files (Deno custom loader API), a type-level translator from SDL AST to TypeScript types, and a runtime builder DSL. The type-level work is the hard part.
+**Two divergences from the original sketch.**
+
+1. **No `import "./schema.disc" with { type: "disc-schema" }` import.** That syntax depends on a Deno custom-MIME loader that doesn't exist in stable Deno. Schema-of-record stays in `.disc` (the SDL is what the server applies and what `disc migrate` diffs); the TS file is a thin re-declaration — either hand-written or generated once by `disc codegen` and committed. Either way, no codegen step on every change.
+2. **Phase 3 dropped — no template-literal SDL parsing.** The original "type the schema straight from the SDL string" idea hits TS recursion limits on real schemas, balloons compile times, and produces inscrutable error messages. The marker-based `defineSchema()` approach delivers full inference without the type-system fragility.
+
+**Effort.** L (as predicted). The type-level work was the hard part — the runtime DSL is a Proxy + EdgeQL string emitter (~270 LOC); the type machinery is `defineSchema()` markers + recursive mapped types in `ResolveSelected` / `SelectShape` / `TypedSelectChain`.
 
 ---
 
@@ -168,7 +190,7 @@ Each item is independently scopeable. The natural ordering by **how much it just
 
 1. ~~**#4 single-binary** — biggest UX delta for self-hosters, smallest engineering cost.~~ **Shipped 2026-05-06.**
 2. ~~**#2 REST surface** — broadest integration story, modest cost.~~ **Shipped 2026-05-06.**
-3. **#1 codegen-free builder** — biggest DX delta for application developers, but most type-system work.
+3. ~~**#1 codegen-free builder** — biggest DX delta for application developers, but most type-system work.~~ **Shipped 2026-05-06.**
 4. **#3 admin-UI differentiators** — best demo material; can be staged 3a → 3c → 3d → 3b. ~~**3a (live schema diff) shipped 2026-05-06.**~~ ~~**3c (live data subscriptions) shipped 2026-05-06.**~~ Remaining: 3b visual query builder, 3d identity-disc visualization.
 5. **#5 Deno-perm policies** — most novel, narrowest applicability.
 
