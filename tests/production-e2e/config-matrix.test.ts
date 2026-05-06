@@ -336,3 +336,126 @@ Deno.test(
     }
   },
 );
+
+Deno.test(
+  "Production E2E: DISC_SHUTDOWN_DRAIN_TIMEOUT flows through to config",
+  async () => {
+    const env = new EnvMock();
+    try {
+      env.set("DISC_SHUTDOWN_DRAIN_TIMEOUT", "12345");
+      const server = createServerFromEnv();
+      const config = (server as any).config;
+      assertEquals(config.shutdownDrainTimeout, 12345);
+    } finally {
+      env.restore();
+    }
+  },
+);
+
+Deno.test(
+  "Production E2E: DISC_REQUIRE_AUTH=true flows through",
+  async () => {
+    const env = new EnvMock();
+    try {
+      env.set("DISC_REQUIRE_AUTH", "true");
+      const server = createServerFromEnv();
+      const config = (server as any).config;
+      assertEquals(config.requireAuth, true);
+    } finally {
+      env.restore();
+    }
+  },
+);
+
+Deno.test(
+  "Production E2E: DISC_REQUIRE_AUTH=1 also accepted",
+  async () => {
+    const env = new EnvMock();
+    try {
+      env.set("DISC_REQUIRE_AUTH", "1");
+      const server = createServerFromEnv();
+      const config = (server as any).config;
+      assertEquals(config.requireAuth, true);
+    } finally {
+      env.restore();
+    }
+  },
+);
+
+Deno.test(
+  "Production E2E: DISC_READ_ONLY=yes flows through",
+  async () => {
+    const env = new EnvMock();
+    try {
+      env.set("DISC_READ_ONLY", "yes");
+      const server = createServerFromEnv();
+      const config = (server as any).config;
+      assertEquals(config.readOnly, true);
+    } finally {
+      env.restore();
+    }
+  },
+);
+
+Deno.test(
+  "Production E2E: DISC_TRUST_PROXY=false flows through",
+  async () => {
+    const env = new EnvMock();
+    try {
+      env.set("DISC_TRUST_PROXY", "false");
+      const server = createServerFromEnv();
+      const config = (server as any).config;
+      assertEquals(config.trustProxy, false);
+    } finally {
+      env.restore();
+    }
+  },
+);
+
+Deno.test(
+  "Production E2E: DISC_TLS_CERT_ENV indirection materializes PEM",
+  async () => {
+    const env = new EnvMock();
+    try {
+      env.set("MY_PEM_CERT", "-----BEGIN CERT-----\nfake\n-----END CERT-----");
+      env.set("MY_PEM_KEY", "-----BEGIN KEY-----\nfake\n-----END KEY-----");
+      env.set("DISC_TLS_CERT_ENV", "MY_PEM_CERT");
+      env.set("DISC_TLS_KEY_ENV", "MY_PEM_KEY");
+      const server = createServerFromEnv();
+      const config = (server as any).config;
+      assertExists(config.tls);
+      // Both should resolve to a temp file path containing the PEM contents
+      const certBody = await Deno.readTextFile(config.tls.certFile);
+      const keyBody = await Deno.readTextFile(config.tls.keyFile);
+      assertEquals(certBody.includes("-----BEGIN CERT-----"), true);
+      assertEquals(keyBody.includes("-----BEGIN KEY-----"), true);
+      // Cleanup the temp files we just wrote
+      try {
+        await Deno.remove(config.tls.certFile);
+        await Deno.remove(config.tls.keyFile);
+      } catch {
+        // ignore
+      }
+    } finally {
+      env.restore();
+    }
+  },
+);
+
+Deno.test(
+  "Production E2E: DISC_BINARY_PORT + DISC_BINARY_PASSWORD flow through",
+  async () => {
+    const env = new EnvMock();
+    try {
+      env.set("DISC_BINARY_PORT", "5657");
+      env.set("DISC_BINARY_PASSWORD", "scram-secret");
+      const server = createServerFromEnv();
+      const config = (server as any).config;
+      assertEquals(config.binaryPort, 5657);
+      // binaryPassword is private to the server; cross-check via getter
+      assertEquals((server as any).binaryPassword, "scram-secret");
+    } finally {
+      env.restore();
+    }
+  },
+);

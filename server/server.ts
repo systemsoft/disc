@@ -157,6 +157,9 @@ export class DiscServer {
       enableMetrics: config.enableMetrics,
       rateLimitRpm: config.rateLimitRpm,
       rateLimitBurst: config.rateLimitBurst,
+      requireAuth: config.requireAuth,
+      readOnly: config.readOnly,
+      trustProxy: config.trustProxy,
       tls: config.tls,
       databases: config.databases,
       enableMultiDatabase: config.enableMultiDatabase,
@@ -790,9 +793,40 @@ export function buildEnvOptions(
     config.corsOrigins = corsOriginsEnv.split(",").map((origin) => origin.trim());
   }
 
-  // Parse TLS config if provided
-  const tlsCert = Deno.env.get("DISC_TLS_CERT");
-  const tlsKey = Deno.env.get("DISC_TLS_KEY");
+  // Shutdown drain timeout. Documented in `docs/production-deployment.md`
+  // and `docs/server.md`; without this branch the env var was inert and
+  // the only way to set the drain window was the programmatic surface
+  // (`DiscServerOptions.shutdownDrainTimeout`). Closes Bundle G follow-up
+  // (gh/geldata#5234, #7563).
+  const drainTimeoutRaw = Deno.env.get("DISC_SHUTDOWN_DRAIN_TIMEOUT");
+  if (drainTimeoutRaw !== undefined) {
+    const parsed = parseInt(drainTimeoutRaw, 10);
+    if (Number.isFinite(parsed) && parsed >= 0) {
+      config.shutdownDrainTimeout = parsed;
+    }
+  }
+
+  // Boolean knobs previously gated on disc.toml's `[server]` section.
+  // Adding env-var equivalents completes the matrix documented in
+  // `docs/server.md#disc-toml-keys-vs-env-vars-vs-cli-flags`.
+  // (gh/geldata#5234, #7563).
+  const requireAuth = parseBoolEnv("DISC_REQUIRE_AUTH");
+  if (requireAuth !== undefined) config.requireAuth = requireAuth;
+
+  const readOnly = parseBoolEnv("DISC_READ_ONLY");
+  if (readOnly !== undefined) config.readOnly = readOnly;
+
+  const trustProxy = parseBoolEnv("DISC_TRUST_PROXY");
+  if (trustProxy !== undefined) config.trustProxy = trustProxy;
+
+  // Parse TLS config if provided.
+  // `DISC_TLS_CERT` / `DISC_TLS_KEY` accept on-disk paths.
+  // `DISC_TLS_CERT_ENV` / `DISC_TLS_KEY_ENV` name *another* env var holding
+  // the PEM-encoded contents — useful for platforms (Kubernetes secrets
+  // mounted as env, Fly.io, Render, …) where dropping a file on disk is
+  // awkward but injecting a string is easy. (gh/geldata#4547)
+  const tlsCert = resolveTlsMaterial("DISC_TLS_CERT", "DISC_TLS_CERT_ENV");
+  const tlsKey = resolveTlsMaterial("DISC_TLS_KEY", "DISC_TLS_KEY_ENV");
   if (tlsCert && tlsKey) {
     config.tls = {
       certFile: tlsCert,
@@ -803,13 +837,87 @@ export function buildEnvOptions(
   }
 
   // Binary protocol TLS — required for upstream Gel client compatibility.
-  const binaryTlsCert = Deno.env.get("DISC_BINARY_TLS_CERT");
-  const binaryTlsKey = Deno.env.get("DISC_BINARY_TLS_KEY");
+  const binaryTlsCert = resolveTlsMaterial(
+    "DISC_BINARY_TLS_CERT",
+    "DISC_BINARY_TLS_CERT_ENV",
+  );
+  const binaryTlsKey = resolveTlsMaterial(
+    "DISC_BINARY_TLS_KEY",
+    "DISC_BINARY_TLS_KEY_ENV",
+  );
   if (binaryTlsCert && binaryTlsKey) {
     config.binaryTls = { certFile: binaryTlsCert, keyFile: binaryTlsKey };
   }
 
+  // Binary protocol — port + SCRAM password.
+  const binaryPortRaw = Deno.env.get("DISC_BINARY_PORT");
+  if (binaryPortRaw !== undefined) {
+    const parsed = parseInt(binaryPortRaw, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      config.binaryPort = parsed;
+    }
+  }
+  const binaryPassword = Deno.env.get("DISC_BINARY_PASSWORD");
+  if (binaryPassword !== undefined) {
+    config.binaryPassword = binaryPassword;
+  }
+
   return config;
+}
+
+/**
+ * Parse a `DISC_*` boolean env var. Accepts `1`/`true`/`yes`
+ * (case-insensitive) as true and `0`/`false`/`no` as false. Anything
+ * else returns `undefined` so the underlying disc.toml or default
+ * value wins.
+ */
+function parseBoolEnv(key: string): boolean | undefined {
+  const raw = Deno.env.get(key);
+  if (raw === undefined || raw === "") return undefined;
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === "1" || normalized === "true" || normalized === "yes") {
+    return true;
+  }
+  if (normalized === "0" || normalized === "false" || normalized === "no") {
+    return false;
+  }
+  return undefined;
+}
+
+/**
+ * Resolve TLS material from one of two env-var forms:
+ *   1. `<pathKey>` — env var pointing at an on-disk file path
+ *   2. `<envKey>` — env var naming *another* env var that holds the
+ *      PEM contents. The intermediate name lets operators rotate the
+ *      secret-bearing variable without rebuilding the manifest.
+ *
+ * Returns the on-disk path when (1) is set; otherwise materializes the
+ * PEM contents at (2) into a temp file and returns its path. Returns
+ * `undefined` when neither is set.
+ *
+ * Temp files inherit OS permissions (mode 0600 on POSIX). Caller is
+ * the long-running server, so leaking these on shutdown is acceptable —
+ * the data was already in `process.env` and visible to anyone who can
+ * read /proc/<pid>/environ. (gh/geldata#4547)
+ */
+function resolveTlsMaterial(pathKey: string, envKey: string): string | undefined {
+  const direct = Deno.env.get(pathKey);
+  if (direct) return direct;
+  const indirectName = Deno.env.get(envKey);
+  if (!indirectName) return undefined;
+  const pem = Deno.env.get(indirectName);
+  if (!pem) return undefined;
+  const tempFile = Deno.makeTempFileSync({ prefix: "disc-tls-", suffix: ".pem" });
+  Deno.writeTextFileSync(tempFile, pem);
+  // Best-effort lock down the perms; failure is logged elsewhere.
+  try {
+    if (Deno.build.os !== "windows") {
+      Deno.chmodSync(tempFile, 0o600);
+    }
+  } catch {
+    // ignore
+  }
+  return tempFile;
 }
 
 /**

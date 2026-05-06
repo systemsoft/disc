@@ -85,28 +85,33 @@ All server configuration can be set via environment variables. The `createServer
 
 #### Authentication
 
-| Variable                      | Default | Description                                |
-| ----------------------------- | ------- | ------------------------------------------ |
-| `DISC_ENABLE_ACCESS_POLICIES` | (none)  | Enable SDL access policy enforcement       |
-| `DISC_ENABLE_AUTH`            | (auto)  | Explicit auth toggle (`true`/`false`)      |
-| `DISC_JWT_SECRET`             | (none)  | JWT signing secret. Enables auth when set. |
+| Variable                      | Default | Description                                                     |
+| ----------------------------- | ------- | --------------------------------------------------------------- |
+| `DISC_ENABLE_ACCESS_POLICIES` | (none)  | Enable SDL access policy enforcement                            |
+| `DISC_ENABLE_AUTH`            | (auto)  | Explicit auth toggle (`true`/`false`)                           |
+| `DISC_JWT_SECRET`             | (none)  | JWT signing secret. Enables auth when set.                      |
+| `DISC_REQUIRE_AUTH`           | `false` | Gate `/query`, `/schema*`, `/migrations`, `/stats`, `/metrics`. |
+| `DISC_READ_ONLY`              | `false` | Reject INSERT/UPDATE/DELETE/CONFIGURE at AST level.             |
 
 #### CORS
 
-| Variable                 | Default | Description                          |
-| ------------------------ | ------- | ------------------------------------ |
-| `DISC_CORS_ORIGINS`      | (none)  | Comma-separated allowed origins      |
-| `DISC_ENABLE_CORS`       | `true`  | Enable CORS headers on all responses |
-| `DISC_ENABLE_WEBSOCKETS` | `true`  | Enable WebSocket upgrade             |
+| Variable                 | Default | Description                                          |
+| ------------------------ | ------- | ---------------------------------------------------- |
+| `DISC_CORS_ORIGINS`      | (none)  | Comma-separated allowed origins                      |
+| `DISC_ENABLE_CORS`       | `true`  | Enable CORS headers on all responses                 |
+| `DISC_ENABLE_WEBSOCKETS` | `true`  | Enable WebSocket upgrade                             |
+| `DISC_TRUST_PROXY`       | `false` | Honor `X-Forwarded-{For,Proto}` from a known proxy   |
 
 #### TLS
 
-| Variable                 | Default | Description                         |
-| ------------------------ | ------- | ----------------------------------- |
-| `DISC_TLS_CERT`          | (none)  | Path to TLS certificate file        |
-| `DISC_TLS_KEY`           | (none)  | Path to TLS private key file        |
-| `DISC_TLS_REDIRECT`      | `false` | Redirect HTTP to HTTPS              |
-| `DISC_TLS_REDIRECT_PORT` | `80`    | Port for the HTTP redirect listener |
+| Variable                 | Default | Description                                                 |
+| ------------------------ | ------- | ----------------------------------------------------------- |
+| `DISC_TLS_CERT`          | (none)  | Path to TLS certificate file                                |
+| `DISC_TLS_CERT_ENV`      | (none)  | Name of an env var holding the PEM cert (used in lieu of a path; gh/geldata#4547) |
+| `DISC_TLS_KEY`           | (none)  | Path to TLS private key file                                |
+| `DISC_TLS_KEY_ENV`       | (none)  | Name of an env var holding the PEM key                      |
+| `DISC_TLS_REDIRECT`      | `false` | Redirect HTTP to HTTPS                                      |
+| `DISC_TLS_REDIRECT_PORT` | `80`    | Port for the HTTP redirect listener                         |
 
 #### Rate Limiting
 
@@ -144,24 +149,28 @@ All server configuration can be set via environment variables. The `createServer
 
 #### Shutdown
 
-| Variable                      | Default | Description                                                                                                                                  |
-| ----------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DISC_SHUTDOWN_DRAIN_TIMEOUT` | `30000` | Max ms to wait for in-flight requests during graceful shutdown (currently config-only — passed via `DiscServerOptions.shutdownDrainTimeout`) |
+| Variable                      | Default | Description                                                              |
+| ----------------------------- | ------- | ------------------------------------------------------------------------ |
+| `DISC_SHUTDOWN_DRAIN_TIMEOUT` | `30000` | Max ms to wait for in-flight requests during graceful shutdown.          |
 
 #### Binary Protocol
 
-| Variable               | Default | Description                                                                |
-| ---------------------- | ------- | -------------------------------------------------------------------------- |
-| `DISC_BINARY_PORT`     | (none)  | Port for the Gel-compatible binary protocol                                |
-| `DISC_BINARY_TLS_CERT` | (none)  | TLS certificate for the binary listener (required by upstream Gel clients) |
-| `DISC_BINARY_TLS_KEY`  | (none)  | TLS private key for the binary listener                                    |
+| Variable                   | Default | Description                                                                |
+| -------------------------- | ------- | -------------------------------------------------------------------------- |
+| `DISC_BINARY_PORT`         | (none)  | Port for the Gel-compatible binary protocol                                |
+| `DISC_BINARY_PASSWORD`     | (none)  | Password for SCRAM-SHA-256 auth on the binary listener                     |
+| `DISC_BINARY_TLS_CERT`     | (none)  | TLS certificate for the binary listener (required by upstream Gel clients) |
+| `DISC_BINARY_TLS_CERT_ENV` | (none)  | Name of an env var holding the PEM cert (gh/geldata#4547)                  |
+| `DISC_BINARY_TLS_KEY`      | (none)  | TLS private key for the binary listener                                    |
+| `DISC_BINARY_TLS_KEY_ENV`  | (none)  | Name of an env var holding the PEM key                                     |
 
-> Several `[server]` knobs (`require_auth`, `read_only`, `trust_proxy`,
-> `cors_allow_credentials`, `max_request_body_bytes`, etc.) are
-> currently project-local only — settable via `disc.toml`, not via
-> `DISC_*` environment variables. See [Project Context Resolution](cli.md#project-context-resolution)
-> for the full table. Secrets (JWT, TLS keys, bcrypt rounds) deliberately
-> stay env/CLI-only and never live in `disc.toml`.
+> The `[server]` knobs `corsAllowCredentials`, `corsAllowedHeaders`,
+> `corsAllowedMethods`, `corsExposeHeaders`, `corsMaxAge`, and
+> `maxRequestBodyBytes` remain `disc.toml`-only — they're project-level
+> defaults rather than per-deployment knobs. See [Project Context
+> Resolution](cli.md#project-context-resolution) for the full table.
+> Secrets (JWT, bcrypt rounds) stay env/CLI-only and never live in
+> `disc.toml`.
 
 ### ServerConfig Reference
 
@@ -233,20 +242,22 @@ The resolver lives in `lib/project-context.ts` (`resolveProjectContext` walks up
 
 ### `disc.toml` keys vs env vars vs CLI flags
 
-| Setting       | CLI flag           | env var               | `disc.toml`                                                      |
-| ------------- | ------------------ | --------------------- | ---------------------------------------------------------------- |
-| Database URL  | `--backend-dsn`    | `DATABASE_URL`        | `[database] backend_dsn`                                         |
-| Managed PG    | (auto)             | (auto)                | `[database] managed = true`                                      |
-| Instance name | (auto from `name`) | (auto)                | `[database] instance_name`                                       |
-| Server host   | `--host`/`-H`      | `DISC_HOST`           | `[server] host`                                                  |
-| Server port   | `--port`           | `DISC_PORT`           | `[server] port`                                                  |
-| JWT secret    | `--jwt-secret`     | `DISC_JWT_SECRET`     | (env/CLI only — secret)                                          |
-| TLS cert/key  | `--tls-cert/key`   | `DISC_TLS_CERT/KEY`   | (env/CLI only — secret-adjacent)                                 |
-| Require auth  | (none)             | (none)                | `[server] require_auth`                                          |
-| Read-only     | (none)             | (none)                | `[server] read_only`                                             |
-| Trust proxy   | (none)             | (none)                | `[server] trust_proxy`                                           |
-| CORS knobs    | (none)             | `DISC_CORS_ORIGINS`   | `[server] enable_cors`, `cors_origins`, `cors_allow_credentials` |
-| Rate limit    | (none)             | `DISC_RATE_LIMIT_RPM` | `[server] rate_limit_rpm`                                        |
+| Setting       | CLI flag           | env var                          | `disc.toml`                                                      |
+| ------------- | ------------------ | -------------------------------- | ---------------------------------------------------------------- |
+| Database URL  | `--backend-dsn`    | `DATABASE_URL`                   | `[database] backend_dsn`                                         |
+| Managed PG    | (auto)             | (auto)                           | `[database] managed = true`                                      |
+| Instance name | (auto from `name`) | (auto)                           | `[database] instance_name`                                       |
+| Server host   | `--host`/`-H`      | `DISC_HOST`                      | `[server] host`                                                  |
+| Server port   | `--port`           | `DISC_PORT`                      | `[server] port`                                                  |
+| JWT secret    | `--jwt-secret`     | `DISC_JWT_SECRET`                | (env/CLI only — secret)                                          |
+| TLS cert/key  | `--tls-cert/key`   | `DISC_TLS_CERT[_ENV]/KEY[_ENV]`  | (env/CLI only — secret-adjacent)                                 |
+| Require auth  | (none)             | `DISC_REQUIRE_AUTH`              | `[server] require_auth`                                          |
+| Read-only     | (none)             | `DISC_READ_ONLY`                 | `[server] read_only`                                             |
+| Trust proxy   | (none)             | `DISC_TRUST_PROXY`               | `[server] trust_proxy`                                           |
+| CORS knobs    | (none)             | `DISC_CORS_ORIGINS`              | `[server] enable_cors`, `cors_origins`, `cors_allow_credentials` |
+| Drain timeout | (none)             | `DISC_SHUTDOWN_DRAIN_TIMEOUT`    | (env/CLI only)                                                   |
+| Rate limit    | (none)             | `DISC_RATE_LIMIT_RPM`            | `[server] rate_limit_rpm`                                        |
+| Binary port   | `--binary-port`    | `DISC_BINARY_PORT`               | (env/CLI only)                                                   |
 
 CLI flags always win over env vars, which always win over `disc.toml`. Secrets (JWT, TLS keys) deliberately have no `disc.toml` representation — they belong in env / a secrets manager, not in a tracked file. See [CLI → Project Context Resolution](cli.md#project-context-resolution) for the full `disc.toml` reference.
 
