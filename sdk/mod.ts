@@ -8,13 +8,7 @@
 export { createClient, DiscClient } from "./client.ts";
 
 // Wire-format codecs (P1-29)
-export {
-  encodeBytes,
-  parseBytes,
-  parseDateTime,
-  parseInt64,
-  reviveResponse,
-} from "./codecs.ts";
+export { encodeBytes, parseBytes, parseDateTime, parseInt64, reviveResponse } from "./codecs.ts";
 export type { ReviveOptions } from "./codecs.ts";
 
 // Authentication
@@ -24,10 +18,11 @@ export { AuthManager } from "./auth.ts";
 export { Transaction } from "./transaction.ts";
 
 // Subscriptions
-export {
-  createSubscriptionClient,
-  SubscriptionClient,
-} from "./subscription.ts";
+export { createSubscriptionClient, SubscriptionClient } from "./subscription.ts";
+
+// Query builder (codegen-free, runtime DSL — Phase 1)
+export { and, createQueryBuilder, from, not, or, SelectChain } from "./query-builder.ts";
+export type { CompiledQuery, QueryBuilder, QueryRunner, Shape } from "./query-builder.ts";
 
 // Error hierarchy
 export {

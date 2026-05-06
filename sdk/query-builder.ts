@@ -1,0 +1,316 @@
+/**
+ * Codegen-free EdgeQL query builder (Disc-original feature #1, Phase 1).
+ *
+ * A runtime DSL that produces `{ query, variables }` pairs from a
+ * chainable builder. Types are intentionally permissive at this stage
+ * (Phase 1 = runtime); Phase 2 will add a `defineSchema()` companion
+ * that supplies inference without codegen.
+ *
+ * The builder never speaks to the network. `toEdgeQL()` returns a
+ * compiled fragment that the existing `client.query()` pipeline runs.
+ * That keeps access policies, read-only mode, the auth gate, and
+ * server-side validators on the same execution path as raw EdgeQL.
+ */
+
+import type { QueryOptions } from "./types.ts";
+
+/** Minimum surface a client must expose to be awaitable from the builder. */
+export interface QueryRunner {
+  query<T = unknown>(
+    query: string,
+    variables?: Record<string, unknown>,
+    options?: QueryOptions<T>,
+  ): Promise<T>;
+}
+
+/** Recursive shape spec: `true` to include, nested object to expand a link. */
+export interface Shape {
+  [key: string]: true | Shape;
+}
+
+/** A boolean expression node — the result of comparisons / `exists`. */
+type Expr =
+  | { kind: "binop"; op: string; field: string; value: unknown }
+  | { kind: "exists"; field: string }
+  | { kind: "and"; exprs: Expr[] }
+  | { kind: "or"; exprs: Expr[] }
+  | { kind: "not"; expr: Expr };
+
+/** Order specification — produced by `field.desc()` or by passing a bare FieldRef. */
+interface OrderSpec {
+  kind: "order";
+  field: string;
+  direction: "asc" | "desc";
+}
+
+/** Anything orderBy() can accept from a predicate. */
+type OrderTarget = FieldRef | OrderSpec;
+
+/** Shape of a TypeRef proxy — any property access yields a FieldRef. */
+type TypeRef = Record<string, FieldRef>;
+
+const IDENT_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
+function assertIdent(name: string, ctx: string): void {
+  if (!IDENT_RE.test(name)) {
+    throw new Error(`Invalid ${ctx}: ${JSON.stringify(name)}`);
+  }
+}
+
+/**
+ * One field on a TypeRef. Holds the SDL property name verbatim — the
+ * server's compiler converts to snake_case at SQL emission, not us.
+ */
+class FieldRef {
+  constructor(readonly name: string) {}
+
+  eq(value: unknown): Expr {
+    return { kind: "binop", op: "=", field: this.name, value };
+  }
+  neq(value: unknown): Expr {
+    return { kind: "binop", op: "!=", field: this.name, value };
+  }
+  lt(value: unknown): Expr {
+    return { kind: "binop", op: "<", field: this.name, value };
+  }
+  lte(value: unknown): Expr {
+    return { kind: "binop", op: "<=", field: this.name, value };
+  }
+  gt(value: unknown): Expr {
+    return { kind: "binop", op: ">", field: this.name, value };
+  }
+  gte(value: unknown): Expr {
+    return { kind: "binop", op: ">=", field: this.name, value };
+  }
+  exists(): Expr {
+    return { kind: "exists", field: this.name };
+  }
+  desc(): OrderSpec {
+    return { kind: "order", field: this.name, direction: "desc" };
+  }
+  asc(): OrderSpec {
+    return { kind: "order", field: this.name, direction: "asc" };
+  }
+}
+
+function makeTypeRef(): TypeRef {
+  return new Proxy({} as TypeRef, {
+    get(_target, prop) {
+      if (typeof prop !== "string") return undefined;
+      return new FieldRef(prop);
+    },
+  });
+}
+
+/** Infer the EdgeQL cast for a JS variable. Conservative — unknown types throw. */
+function inferCast(value: unknown): string {
+  if (typeof value === "string") return "str";
+  if (typeof value === "boolean") return "bool";
+  if (typeof value === "bigint") return "bigint";
+  if (typeof value === "number") {
+    return Number.isInteger(value) ? "int64" : "float64";
+  }
+  if (value instanceof Date) return "datetime";
+  if (value instanceof Uint8Array) return "bytes";
+  throw new Error(
+    `Cannot infer EdgeQL cast for filter value of type ${typeof value}`,
+  );
+}
+
+interface CompileCtx {
+  vars: Record<string, unknown>;
+  nextN: number;
+}
+
+function compileExpr(expr: Expr, ctx: CompileCtx): string {
+  switch (expr.kind) {
+    case "binop": {
+      const param = `p${ctx.nextN++}`;
+      ctx.vars[param] = expr.value;
+      return `.${expr.field} ${expr.op} <${inferCast(expr.value)}>$${param}`;
+    }
+    case "exists":
+      return `exists .${expr.field}`;
+    case "and":
+      return expr.exprs.map((e) => `(${compileExpr(e, ctx)})`).join(" and ");
+    case "or":
+      return expr.exprs.map((e) => `(${compileExpr(e, ctx)})`).join(" or ");
+    case "not":
+      return `not (${compileExpr(expr.expr, ctx)})`;
+  }
+}
+
+function compileShape(shape: Shape): string {
+  const parts: string[] = [];
+  for (const [key, value] of Object.entries(shape)) {
+    assertIdent(key, "shape field");
+    if (value === true) {
+      parts.push(key);
+    } else {
+      parts.push(`${key}: ${compileShape(value)}`);
+    }
+  }
+  return `{ ${parts.join(", ")} }`;
+}
+
+/** Compiled output of `toEdgeQL()` — fed straight to `client.query()`. */
+export interface CompiledQuery {
+  query: string;
+  variables: Record<string, unknown>;
+}
+
+/** Boolean-expression combinators (top-level, not on FieldRef). */
+export function and(...exprs: Expr[]): Expr {
+  return { kind: "and", exprs };
+}
+export function or(...exprs: Expr[]): Expr {
+  return { kind: "or", exprs };
+}
+export function not(expr: Expr): Expr {
+  return { kind: "not", expr };
+}
+
+/**
+ * The chainable builder returned by `from(Type)` or `qb.Type`. Every
+ * mutator returns the same instance for chaining. Awaiting the chain
+ * runs it via the attached client (if one was provided).
+ */
+export class SelectChain<T = unknown> implements PromiseLike<T> {
+  private readonly typeName: string;
+  private shape: Shape | null = null;
+  private filters: Expr[] = [];
+  private order: OrderSpec | null = null;
+  private limitN: number | null = null;
+  private offsetN: number | null = null;
+  private readonly client: QueryRunner | null;
+
+  constructor(typeName: string, client: QueryRunner | null = null) {
+    assertIdent(typeName, "type name");
+    this.typeName = typeName;
+    this.client = client;
+  }
+
+  select(shape: Shape): this {
+    // Validate keys eagerly so injection-shaped names fail fast, not at run time.
+    for (const key of Object.keys(shape)) assertIdent(key, "shape field");
+    this.shape = shape;
+    return this;
+  }
+
+  filter(predicate: (ref: TypeRef) => Expr): this {
+    this.filters.push(predicate(makeTypeRef()));
+    return this;
+  }
+
+  orderBy(fn: (ref: TypeRef) => OrderTarget): this {
+    const target = fn(makeTypeRef());
+    if (target instanceof FieldRef) {
+      this.order = { kind: "order", field: target.name, direction: "asc" };
+    } else {
+      this.order = target;
+    }
+    return this;
+  }
+
+  limit(n: number): this {
+    if (!Number.isInteger(n) || n < 0) {
+      throw new Error("limit() requires a non-negative integer");
+    }
+    this.limitN = n;
+    return this;
+  }
+
+  offset(n: number): this {
+    if (!Number.isInteger(n) || n < 0) {
+      throw new Error("offset() requires a non-negative integer");
+    }
+    this.offsetN = n;
+    return this;
+  }
+
+  toEdgeQL(): CompiledQuery {
+    const ctx: CompileCtx = { vars: {}, nextN: 0 };
+    const parts: string[] = [`select ${this.typeName}`];
+
+    if (this.shape) parts.push(compileShape(this.shape));
+
+    if (this.filters.length === 1) {
+      parts.push(`filter ${compileExpr(this.filters[0], ctx)}`);
+    } else if (this.filters.length > 1) {
+      const combined = this.filters
+        .map((e) => `(${compileExpr(e, ctx)})`)
+        .join(" and ");
+      parts.push(`filter ${combined}`);
+    }
+
+    if (this.order) {
+      const dir = this.order.direction === "desc" ? " desc" : "";
+      parts.push(`order by .${this.order.field}${dir}`);
+    }
+
+    if (this.limitN !== null) parts.push(`limit ${this.limitN}`);
+    if (this.offsetN !== null) parts.push(`offset ${this.offsetN}`);
+
+    return { query: parts.join(" "), variables: ctx.vars };
+  }
+
+  /** Run the query against the attached client. Throws if no client. */
+  async run<R = T>(options?: QueryOptions<R>): Promise<R> {
+    if (!this.client) {
+      throw new Error(
+        "SelectChain has no client attached — call toEdgeQL() and run it manually, or use createQueryBuilder(client).",
+      );
+    }
+    const compiled = this.toEdgeQL();
+    return await this.client.query<R>(
+      compiled.query,
+      compiled.variables,
+      options,
+    );
+  }
+
+  /**
+   * Run with `limit 1` and unwrap to a single row (or `null` if empty).
+   * Mutates `limitN` so subsequent `toEdgeQL()` reflects the limit.
+   */
+  async first<R = unknown>(options?: QueryOptions<R[]>): Promise<R | null> {
+    this.limitN = 1;
+    const arr = await this.run<R[]>(options);
+    return Array.isArray(arr) && arr.length > 0 ? arr[0] : null;
+  }
+
+  /** PromiseLike: `await chain` is sugar for `chain.run()`. */
+  // deno-lint-ignore no-explicit-any
+  then<TResult1 = T, TResult2 = never>(
+    onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2> {
+    return this.run().then(onfulfilled as never, onrejected);
+  }
+}
+
+/**
+ * Standalone factory — `from("User").select({...})` produces a chain
+ * with no client, useful for unit tests or hand-running the compiled
+ * fragment through any EdgeQL transport.
+ */
+export function from<T = unknown>(typeName: string): SelectChain<T> {
+  return new SelectChain<T>(typeName, null);
+}
+
+/** Root proxy: `qb.User.select(...)` resolves to a SelectChain bound to the client. */
+export type QueryBuilder = Record<string, SelectChain>;
+
+/**
+ * Bind the builder to a client so chains are awaitable. The `client`
+ * argument is duck-typed against `QueryRunner` — a real `DiscClient`
+ * works, and so does any test fake that implements `query()`.
+ */
+export function createQueryBuilder(client: QueryRunner): QueryBuilder {
+  return new Proxy({} as QueryBuilder, {
+    get(_target, prop) {
+      if (typeof prop !== "string") return undefined;
+      return new SelectChain(prop, client);
+    },
+  });
+}
