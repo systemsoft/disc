@@ -1,7 +1,7 @@
 # FUTURE.md Triage
 
 > Status of every Gel issue tracked in `FUTURE.md` against Disc's roadmap.
-> Generated: 2026-05-05
+> Generated: 2026-05-05 · Last updated: 2026-05-06 (5 BUILD bundles shipped, 25 issues moved to DONE)
 
 ## Methodology
 
@@ -17,11 +17,23 @@ Two issues fall into a fifth bucket: Disc deliberately diverges from Gel's `not_
 
 ## Summary
 
-- **DONE**: ~50 high-relevance items already shipped in disc (cross-referenced with `git log`)
-- **BUILD**: ~60 high-relevance items pickable, sorted by leverage below
+- **DONE**: ~75 high-relevance items already shipped in disc (was ~50; +25 from the 2026-05-06 BUILD-bundle sweep). Cross-referenced with `git log`.
+- **BUILD**: ~50 high-relevance items still pickable, sorted by leverage below. **Open gap: #8517 scalar/enum value diffing** (pinned-as-zero in `migration/gel-issues.test.ts` until extractTypes/diffType for scalars + CASCADE-aware ordering lands).
 - **SKIP**: ~120 high-relevance items not applicable to Disc (Gel-internal, Gel-Python, Gel-cloud-specific, or Disc-already-handled by virtue of being a fresh TS rewrite)
 - **DROP**: 2 high-relevance items upstream rejected (#7482, #7341 — already documented in prior audit; #7341 was actually re-implemented in Disc as opt-in CAPTCHA)
 - **Medium (789) and Low (1,676)**: handled via category-level rules below; no per-issue enumeration
+
+### 2026-05-06 BUILD-bundle sweep
+
+Five sequential bundles, 25 issues closed, 15 commits, all on `origin/primary`. Cross-check methodology validated: ~6 issues were already-correct in Disc (regression pins added), 1 was a real parser bug (#4406), the rest were genuine ports/feature additions.
+
+| Bundle | Issues closed | Commits |
+|--------|---------------|---------|
+| 1 — recommended next picks | #4095, #1218, #1030, #1325 | `087c57b`, `9f2adc8`, `43f2410`, `3f20adc` |
+| B — auth polish | #6503, #7275, #7596, #7026, #6433 | `6dcbc95`, `d9008e6`, `2253c39` |
+| C — migration sweep | #4406, #1147, #4343, #2071, #8517 (gap pinned) | `08e5533`, `0c71d97` |
+| D — observability + errors | #6205, #5405, #930, #6648 | `0038920`, `ae677c7`, `735e377` |
+| E — auth-config surface | #7344, #8026, #7938, #6731, #6732, #8028 + brandColor OKLCH | `268c296`, `7614ac7`, `2a2353e` |
 
 ## High Relevance (score 8-10) — full enumeration
 
@@ -74,26 +86,58 @@ Two issues fall into a fifth bucket: Disc deliberately diverges from Gel's `not_
 | #6085 | Migration merge conflicts guidance | `dcab128` (docs) |
 | #718 | GraphQL rate limiting | `8065541` (docs) |
 | #6094 | Programmatic migration tooling guide | `migration/` exports + docs |
+| #5988 | Mark config variables as `secret` | `2643898` (`@secret` annotation + first-class field) |
+| #6444 | Expose `secret` flag in introspection | `913e422` (`cfg::describe_settings()`) |
+| #6655 | Configurable CORS `Access-Control-Allow-Origin` | `e4f1e09` (CORS knobs + wildcard origin) |
+| #5755 | CORS in cloud | `e4f1e09` (same wildcard CORS work) |
+| #5030 | No-TLS for reverse-proxy mode | `63ccbd8` (`trustProxy` gate) |
+| #702 | Schema import/export | `9c150ec` + `46cdc44` (SDL serializer + `disc schema export`) |
+| #7469 | Single-file schema export | `46cdc44` |
+| #3452 | Schema generation from existing DB | `0764bf6` + `57f0c75` (`disc schema introspect`) |
+| #1129 | Explicit superuser CLI command | `8427899` (`disc admin create-superuser`) |
+| #5383 | Can't set password via `--admin` | `8427899` |
+| #6454 | Password CLI option/env doesn't work | `8427899` |
+| #1119 | Better error on `create role` | `8427899` |
+| #4209 | ISE on creating role w/ empty password | `8427899` |
+| #7411 | Language server features | `d5a0a85`/`3d74f85`/`fd16e28`/`b4c2ffc` (LSP through Phase 4) |
+| #655 | VSCode language server | same as #7411 |
+| #4095 | Custom error message on access policy denial | `087c57b` (`errmessage` clause) |
+| #1218 | Fix `\d` REPL meta-command | `9f2adc8` (full describer for types/properties/links/policies) |
+| #1030 | `-H` for hostname / `-h` for help | `43f2410` |
+| #1325 | Read configuration from local file | `3f20adc` (11 new `[server]` keys) |
+| #6503 | Resend verification reuses old PKCE | `6dcbc95` (new `resendVerification` method) |
+| #7275 | Return identity on email+password registration | `6dcbc95` |
+| #7596 | PKCE trailing `=` failure | `d9008e6` (`normalizePkceParam`) |
+| #7026 | Alias PKCE "challenge" param for RFC | `d9008e6` (already RFC-compliant; pin + shim) |
+| #6433 | Auto-allow configured `redirect_to` URLs | `2253c39` (already correct in `extension.ts:191-199`; pin tests) |
+| #4406 | Optional keyword on already-optional field | `08e5533` (parser accepts `optional`/`single`) |
+| #1147 | ISE during migration | `0c71d97` (already-handled; regression pin) |
+| #4343 | Cannot DROP CONSTRAINT | `0c71d97` (property-level works; type-level is divergence with Gel `not_planned`) |
+| #2071 | Migrations fail after dump/restore | `0c71d97` (PG-backed round-trip pin) |
+| #8517 | Cannot drop enum but only altering | `0c71d97` (pinned-as-zero; **open gap** — scalar/enum diffing not implemented) |
+| #6205 | Prometheus metric for TLS cert expiry | `0038920` (two gauges, ASN.1 walker, refreshes on TLS reload) |
+| #5405 | Prometheus gauge metrics report timestamps as values | `0038920` (Disc never adopted `_created` convention; danger-band pin) |
+| #930 | "Please file an issue" hint on ISE | `ae677c7` (idempotent `appendInternalErrorHint`) |
+| #6648 | Document error codes & meanings | `735e377` (`docs/error-codes.md`) |
+| #7344 | Get authenticated user data from OAuth | `268c296` (extended `OAuthUserInfo` with emailVerified/givenName/familyName/locale) |
+| #8026 | Custom OAuth callback URL | `268c296` (already done via `redirectUri` + `?redirect_uri=` allowlist) |
+| #7938 | Constraints on auth app config | `7614ac7` (strict validators in `auth/branding.ts`) |
+| #6731 | Set app name without built-in UI | `7614ac7` (first-class `AuthBrandingConfig` flows through templates) |
+| #6732 | (same as #6731) | `7614ac7` |
+| #8028 | Custom Magic Link URL | `7614ac7` (`magicLinkUrlTemplate` config field) |
 
-(Approx. 50 items — many ride on a single commit; cross-referenced via `git log --oneline`.)
+(Approx. 75 items — many ride on a single commit; cross-referenced via `git log --oneline`.)
 
 ### BUILD — sorted by leverage (security/correctness > UX > infra; S < M < L effort)
 
+> Items shipped in the 2026-05-06 sweep are now in DONE above. The list below has been pruned accordingly.
+
 | # | Title | Category | Why pickable | Effort |
 |---|-------|----------|--------------|--------|
-| #5988 | Mark config variables as `secret` | auth | Drives introspection-safe handling; needed once UI exposes config | S |
-| #6444 | Expose `secret` flag in introspection | auth, db | Pairs with #5988 — UI needs to mask secret fields | S |
-| #6655 | Configurable CORS `Access-Control-Allow-Origin` | auth, devtools | One-day server.ts patch; prerequisite for non-localhost UI use | S |
 | #5234 | Instance-level config via CLI args / env | devtools | Most flags already env-mapped; finish the matrix | S |
 | #4547 | `DISC_SERVER_TLS_CERT_ENV` / `_KEY_ENV` | auth | Dev-only nicety, ~15 LoC in `server/tls.ts` | S |
 | #4408 | Pre-commit + CI hooks | devtools | Project-side: add `.pre-commit-config.yaml` calling `deno fmt`/`deno lint` | S |
-| #6648 | Document error codes & meanings | sdk-client | Generate from `lib/errors.ts` enum + JSDoc | S |
-| #930 | "Please file an issue" hint on ISE | devtools | Wrap `InternalServerError` constructor | S |
-| #1218 | Fix `\d` REPL meta-command | cli | `cli/shell` — current introspection output is truncated | S |
-| #1325 | Read configuration from local file | devtools | `disc.toml` already exists; expose more keys | S |
 | #5709 | Refresh button in UI data viewer | devtools | UI-only; SvelteKit data viewer | S |
-| #6205 | Prometheus metric for TLS cert expiry | devtools | One gauge in `server/metrics.ts` | S |
-| #5405 | Prometheus gauge metrics report timestamps as values | devtools | Bug fix — verify our metrics don't have this | S |
 | #6126 | Performance guide | docs | Write up indexing + EXPLAIN once `disc analyze` lands | S |
 | #6096 | Production migration documentation | docs | Expand `docs/migrations.md` with rollback story | S |
 | #1163 | EdgeQL cheat sheet | docs | One-page reference; we already have parser tests as examples | S |
@@ -104,10 +148,7 @@ Two issues fall into a fifth bucket: Disc deliberately diverges from Gel's `not_
 | #4943 | Document new features | docs | Generate from CHANGELOG | S |
 | #1021 | Authentication is under documented | docs | Already partially in `docs/auth.md`; finish | S |
 | #2647 | CLI verb-object regularity | cli | Audit `cli/main.ts` command surface; `disc db wipe` lands here | M |
-| #1129 | Explicit superuser CLI command | cli, auth | `disc admin create-superuser` — wires into RBAC role registry | M |
 | #1486 + escape-hatch | (already DONE for wipe) — also need backup-before-wipe gate | cli | Cherry on top | S |
-| #1119 | Better error on `create role` | cli, auth | Hook into the RBAC API we shipped at `df92455` | S |
-| #1030 | `-H` for hostname / `-h` for help | cli | Standard ergonomics fix | S |
 | #6094 | Programmatic reimplementing migrations guide | docs, migrations | Expand exports surface + write guide | M |
 | #6083 | Advanced migration workflows | docs | Branches, squashing, partial application | M |
 | #6094 | (above) | | | |
@@ -120,54 +161,32 @@ Two issues fall into a fifth bucket: Disc deliberately diverges from Gel's `not_
 | #5617 | User-specified IDs in migrations | migration | Add data-migration helper API | M |
 | #1772 / #1461 | RFC1000 migration features | migration | Audit our diff generator vs. RFC | L |
 | #5190 | Backport migration rewrites | migration | We don't have versioned rewrites yet | M |
-| #2564 | Removing/reordering enum values | migration | We support add; need remove + reorder | M |
+| #2564 | Removing/reordering enum values | migration | We support add; need remove + reorder. Pairs with the #8517 gap. | M |
 | #4583 | `START MIGRATION REWRITE` | migration | Schema rewrite mode for major refactors | M |
-| #3452 | Schema generation from existing DB | migration, devtools | `disc introspect --output schema.esdl` — adoption lever | M |
-| #702 | Schema import/export | migration, cli | Compose with #3452 | S |
 | #3761 | "Compact" migrations / push command | migration, devtools | Already partially in `767afb7`; finish push | S |
-| #7469 | Single-file schema export | migration, devtools | Trivial wrapper over schema/AST → SDL printer | S |
 | #7563 | All public CLI flags via env vars | devtools, cli | Standard envvar mapping audit | S |
 | #5911 | Run CLI programmatically | cli | Expose `cli/api.ts` with Deno-compatible programmatic surface | M |
 | #3437 | Homebrew formula | devtools | Brew tap + formula | S |
 | #3406 | Offline setup | devtools, cloud | Bundle PG binary download manifest in tarball | M |
 | #4172 | SCRAM auth over HTTP-tunneled binary protocol | auth | Already have SCRAM; add HTTP tunnel mode | M |
-| #4095 | Custom error message on access policy denial | auth | `access/parser.ts` already parses messages; wire through | S |
 | #6432 | Access policy management features | auth, devtools | UI-side schema browser already shows them; add introspection API | M |
 | #6358 | Toggle `apply_access_policies` for GraphQL/HTTP | auth | Per-request override header | S |
 | #7525 | Authenticate `ext::auth` server endpoints | auth | Lock down `/auth/*` routes by default | S |
 | #3872 | Configurable TLS cipher suites/curves | auth | Deno's TLS config supports it; expose | S |
 | #7629 | Invisible link button in auth emails | auth | Update default email template CSS | S |
-| #7972 | Auth email button background color | auth | Same template fix | S |
-| #7938 | Constraints on auth app config | auth | Sanitize `appName`/`logo_url` etc. | S |
-| #6731 / #6732 | Set app name without built-in UI | auth | Config surface | S |
-| #6433 | Auto-allow configured `redirect_to` URLs | auth | Pair with #7468 work already done | S |
-| #8028 | Custom Magic Link URL | auth | Already have magic links; add URL template config | S |
-| #8026 | Custom OAuth callback URL | auth | Same | S |
-| #7344 | Get authenticated user data from OAuth | auth | Profile fetcher in `ext-oauth/providers.ts` — partly done | S |
+| #7972 | Auth email button background color | auth | Subsumed by Bundle E `brandColor`; verify CSS fall-through and pin | S |
 | #7196 | WebAuthn options without email | auth | Discoverable credentials / conditional UI | M |
-| #7275 | Return identity on email+password registration | auth | API contract change — small | S |
-| #6502 | (DONE) | | | |
-| #6503 | Resend verification reuses old PKCE | auth | Issue new challenge per send | S |
-| #7596 | PKCE trailing `=` failure | auth | Strip in `auth/pkce.ts` | S |
-| #7026 | Alias PKCE "challenge" param for RFC | auth | Backwards-compat aliases | S |
 | #7311 | Magic link UX: email not sent w/o signup | auth | Make registration implicit on magic link | S |
 | #7360 | Email+password: non-existing account UX | auth | Equalize timing (already done at `01bd379`); also fix UI message | S |
 | #7483 | Verify email cross-device | auth | Already works via token; document | S |
-| #4209 | ISE on creating role w/ empty password | auth | Validate at API layer | S |
-| #5383 | Can't set password via `--admin` | cli, auth | Wire `disc admin set-password` | S |
-| #6454 | Password CLI option/env doesn't work | auth, cli | Same area | S |
 | #7103 | Missing deletion policies in auth ext | auth, db | Cascade rules in our `auth/schema.ts` | S |
 | #8909 | In-place upgrades & auth update | auth, migration | Tied to #6697 | M |
 | #5504 | UNLESS CONFLICT misbehaves w/o select access | auth, db | Access-policy x conflict-resolution edge case | M |
 | #8811 | Audit stdlib for permissions | auth, db | Run through our std::* implementations | M |
-| #1147 | ISE during migration | migration | Generic — we'd handle by virtue of fresh impl, but verify | S |
-| #4406 | Optional keyword on already-optional field | migration | Idempotent migration pass | S |
-| #4343 | Cannot DROP CONSTRAINT | migration | Probably already works in our diff; add test | S |
 | #4215 | Migrate type of computed global | migration | Likely needs a code path | M |
-| #2071 | Migrations fail after dump/restore | migration | Round-trip test | S |
 | #2204 | Migrations not propagated to existing connections | migration | Schema-version bump notify | M |
 | #5641 | Complex schema → missing FROM-clause | migration, db | Smoke test & fix | M |
-| #8517 | Cannot drop enum but only altering | migration | Enum migration edge case | S |
+| **#8517** (gap) | Cannot drop enum but only altering | migration | **Pinned-as-zero in `migration/gel-issues.test.ts`** — actual fix needs `extractTypes`/`diffType` for scalars + CASCADE-aware ordering | M |
 | #7724 | Extension upgrades | migration | We have an extension model already | M |
 | #2292 | TLS for Postgres connections | db | Should already work via deno-pg; verify | S |
 | #3534 | Listen on multiple TCP ports | infra | Disc supports one HTTP + one binary; multi may not be needed | M |
@@ -176,7 +195,7 @@ Two issues fall into a fifth bucket: Disc deliberately diverges from Gel's `not_
 | #5505 / #6517 | Access policies slow performance | auth, perf | Profile our `access/evaluator.ts` once usage scales | M |
 | #1634 | Reduce cost of new connections | perf | Connection pooling already exists; warm-cache audit | M |
 | #4319 | (above) | | | |
-| #1325 / #2651 | "Named instance" DX confusion | cli, devtools | Naming review pass | S |
+| #2651 | "Named instance" DX confusion | cli, devtools | Naming review pass (#1325 cleared in Bundle 1, 2026-05-06) | S |
 | #5158 | Project init timeout | cli | Already much better in our impl; smoke test | S |
 | #5480 | ClientConnectionFailedError on certain networks | cli | DNS/IPv6 handling | S |
 | #9117 | gel-py command on Windows 11 | cli | Cross-platform CLI — verify we handle Windows correctly | M |
@@ -185,7 +204,6 @@ Two issues fall into a fifth bucket: Disc deliberately diverges from Gel's `not_
 | #8899 | `migration status` partial output | cli, migration | Format fix | S |
 | #8273 | Document connection resolution algorithm | docs, cli | We have `lib/project-context.ts`; document | S |
 | #8421 | Document `GEL_SERVER_PASSWORD_HASH` | docs, auth | We use bcrypt; document the env-var equivalent | S |
-| #6648 | Document error codes & meanings | docs | (above) | S |
 | #6119 / #5820 / #5819 | Document UI / UI button visibility | docs | UI documentation pass | S |
 | #6127 | Test guide | docs | We have tests; write the guide | S |
 | #6543 | New SDL loading strategy | migration, code-quality | Architecture-level cleanup | L |
@@ -195,13 +213,11 @@ Two issues fall into a fifth bucket: Disc deliberately diverges from Gel's `not_
 | #4901 | Docker latest tag mismatch | cloud | Fix our release CI tagging | S |
 | #5699 | Push images to GHCR | cloud, devtools | Already in GHCR? Verify | S |
 | #4806 | PR preview environments | cloud | Uffizzi-style; nice-to-have | M |
-| #5755 | CORS in cloud | cloud | Same issue as #6655 | S |
-| #5030 | No-TLS for reverse-proxy mode | cloud, auth | `serve --no-tls` flag for behind-LB deployments | S |
 | #6598 | Multi-tenant logging | cloud | Add tenant tag to log lines | M |
 | #2230 | Update migration workflow docs | docs, migration | Cross-link with our docs | S |
 | #7382 | Improved docs search | docs | Search infra; deferrable | M |
-| #7411 | Language server features | devtools, cli | LSP for `.esdl` — adoption lever | L |
 | #2401 | Doc complex mutations | docs | EdgeQL guide expansion | M |
+| (LSP Phase 5+) | EdgeQL embedded support, semantic tokens, formatting, cross-file refs | devtools | Phases 1–4 shipped via #7411/#655 (`d5a0a85`/`3d74f85`/`fd16e28`/`b4c2ffc`); Phase 5+ continues | M-L |
 | #3265 / #3366 / #2157 | Doc clean-ups | docs | Steady-state | S |
 | #1276 | Add Rust bindings to roadmap | docs, sdk | We have TS-only; defer Rust | S |
 | #4943 / #61 / #39 / #5097 | Roadmap & doc updates | docs | Steady-state | S |
@@ -210,7 +226,7 @@ Two issues fall into a fifth bucket: Disc deliberately diverges from Gel's `not_
 | #3522 / #3560 / #4590 / #2080 | Better error reporting | devtools | Pass through `parseWithRecovery` work | S |
 | #4334 | Brew update messaging | cli | Once #3437 (brew formula) lands | S |
 | #2204 | (above) | | | |
-| #1147 / #4789 / #4766 / #3280 / #5060 / #5132 / #5497 / #4343 / #4406 / #4215 / #5641 | Various migration robustness bugs | migration | Smoke-test our impl against the same input fixtures; most likely fine, but verify | M (collectively) |
+| #4789 / #4766 / #3280 / #5060 / #5132 / #5497 / #4215 / #5641 | Remaining migration robustness bugs | migration | #1147/#4343/#4406 cleared in Bundle C (2026-05-06); smoke-test the rest | M (collectively) |
 | #5132 | Cannot drop alias depending on its own computed link | migration | Edge case | S |
 | #1489 | Compile produced DDL before dumping | migration | Already in our pipeline; verify | S |
 | #4351 | `RESET SCHEMA TO initial` | migration | Stretch | M |
@@ -218,9 +234,8 @@ Two issues fall into a fifth bucket: Disc deliberately diverges from Gel's `not_
 | #2910 | Migration errors in CI | migration, devtools | Better non-TTY error output | S |
 | #2910 / #1840 / #1865 / #1772 | Various migration features | migration | Track via meta-issue | — |
 | #3208 | Migration creation fails despite no questions | migration | Likely edge case; add fixture | S |
-| #2647 / #4334 / #1218 / #1030 | CLI ergonomics | cli | Already partially done; close out | S |
+| #2647 / #4334 | CLI ergonomics — remaining | cli | #1218/#1030 cleared in Bundle 1 (2026-05-06); audit `cli/main.ts` verb-object regularity, brew update messaging | S |
 | #725 | Code quality automation | devtools | Already have lint+fmt+test; add coverage | S |
-| #655 | VSCode language server | devtools | Tied to #7411 | L |
 | #357 / #5097 / #61 / #39 | Where's the dockerfile / docs roadmap | docs | We have one; keep it current | S |
 | #1613 | Getting started doc | docs | We have `docs/getting-started.md`; verify | S |
 | #184 / #61 | Non-technical example schema | docs | Switch examples to a relatable domain | S |
