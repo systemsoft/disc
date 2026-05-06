@@ -101,6 +101,16 @@ export interface ServerConfig {
   readOnly?: boolean;
   enableExplain?: boolean;
   dryRun?: boolean;
+  /**
+   * When true, expose the schema-derived REST surface (Bundle J).
+   * Routes are mounted under `/api/<TypeName>` and pass through the
+   * standard EdgeQL → SQL → PG pipeline so access policies, read-only
+   * mode, and the auth gate compose without extra work. Defaults to
+   * `true`. Disable via `disc.toml` `enable_rest = false` or the
+   * `DISC_ENABLE_REST=false` environment variable.
+   * (Bundle J — Disc-original feature #2)
+   */
+  enableRest?: boolean;
   cacheMaxSize?: number;
   shutdownDrainTimeout?: number;
   slowQueryThresholdMs?: number;

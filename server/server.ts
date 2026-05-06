@@ -819,6 +819,11 @@ export function buildEnvOptions(
   const trustProxy = parseBoolEnv("DISC_TRUST_PROXY");
   if (trustProxy !== undefined) config.trustProxy = trustProxy;
 
+  // Schema-derived REST surface (Bundle J). Defaults to true; opt-out
+  // via env or `disc.toml` `enable_rest = false` in the server section.
+  const enableRest = parseBoolEnv("DISC_ENABLE_REST");
+  if (enableRest !== undefined) config.enableRest = enableRest;
+
   // Parse TLS config if provided.
   // `DISC_TLS_CERT` / `DISC_TLS_KEY` accept on-disk paths.
   // `DISC_TLS_CERT_ENV` / `DISC_TLS_KEY_ENV` name *another* env var holding

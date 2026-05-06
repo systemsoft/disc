@@ -23,6 +23,8 @@ import { handleGetMigrations, type MigrationsProvider } from "./migrations-endpo
 import { handleGetConfig } from "./config-endpoint.ts";
 import { matchCorsOrigin } from "./cors-matcher.ts";
 import { createUiAssetHandler, type UiAssetHandler } from "./ui-assets.ts";
+import { dispatchRest } from "./rest/router.ts";
+import { renderOpenApiSpec } from "./rest/openapi.ts";
 
 const DEFAULT_CORS_METHODS = ["GET", "POST", "OPTIONS"];
 const DEFAULT_CORS_HEADERS = ["Content-Type", "Authorization"];
@@ -487,6 +489,26 @@ export class HttpServer {
       if (url.pathname === "/ui" || url.pathname.startsWith("/ui/")) {
         const uiResponse = await this.uiAssetHandler(request);
         if (uiResponse) return uiResponse;
+      }
+
+      // Schema-derived REST surface (Bundle J — Disc-original feature #2).
+      // `/api/<Type>/...` routes lower to EdgeQL and run through the
+      // standard protocol pipeline so access policies, read-only mode,
+      // and the auth gate compose for free. Disabled when
+      // `config.enableRest === false`.
+      if (
+        this.config.enableRest !== false &&
+        (url.pathname === "/api" || url.pathname.startsWith("/api/"))
+      ) {
+        if (url.pathname === "/api/openapi.json") {
+          return this.handleOpenApi(request);
+        }
+        const restResponse = await this.handleRestRoute(
+          request,
+          requestId,
+          authedContext,
+        );
+        if (restResponse) return restResponse;
       }
 
       // Route handling
@@ -1388,6 +1410,82 @@ export class HttpServer {
       });
       return this.create_error_response("Internal error", 500);
     }
+  }
+
+  /**
+   * Schema-derived REST surface (Bundle J — Disc-original feature #2).
+   *
+   * Builds a `QueryContext` shaped like `/query` would, so access
+   * policies and the read-only-mode gate fire identically. Returns
+   * `null` when the path isn't a recognized REST route — the dispatcher
+   * then falls through to its existing 404 handling.
+   */
+  private async handleRestRoute(
+    request: Request,
+    requestId: string,
+    authContext: import("../auth/middleware.ts").AuthContext | null,
+  ): Promise<Response | null> {
+    if (!this.schemaProvider) {
+      return this.create_error_response(
+        "REST surface not available — no schema provider configured",
+        503,
+      );
+    }
+    const schema = this.schemaProvider();
+    const sessionAuth: Types.AuthContext = {
+      roles: authContext?.roles ?? [],
+      permissions: [],
+      userId: authContext?.userId,
+      jwtClaims: authContext
+        ? {
+          sub: authContext.sub,
+          email: authContext.email,
+          username: authContext.username,
+          iss: authContext.iss,
+          aud: authContext.aud,
+          roles: authContext.roles,
+        }
+        : undefined,
+    };
+    const session: Types.SessionContext = {
+      sessionId: requestId,
+      database: "disc",
+      createdAt: new Date(),
+      lastActivity: new Date(),
+      variables: {},
+    };
+    const context: Types.QueryContext = {
+      session,
+      auth: sessionAuth,
+      requestId,
+      startedAt: new Date(),
+    };
+    return await dispatchRest({
+      request,
+      schema,
+      protocolHandler: this.protocolHandler,
+      context,
+    });
+  }
+
+  private handleOpenApi(_request: Request): Response {
+    if (this.config.enableRest === false) {
+      return this.create_error_response("REST surface disabled", 404);
+    }
+    if (!this.schemaProvider) {
+      return this.create_error_response(
+        "REST surface not available — no schema provider configured",
+        503,
+      );
+    }
+    const schema = this.schemaProvider();
+    const spec = renderOpenApiSpec(schema, {
+      requireAuth: this.config.requireAuth === true,
+    });
+    return new Response(JSON.stringify(spec, null, 2), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
   private handle_schema_route(url: URL): Response {
