@@ -145,6 +145,46 @@ export class DDLGenerator {
             (operation as Types.DropGlobalOperation).name
           }" was compile-time only (no DDL to rollback)`,
         ];
+      case "CreateScalar": {
+        const op = operation as Types.CreateScalarOperation;
+        if (op.baseType !== "enum") {
+          return [
+            `-- Rollback: scalar ${op.module}::${op.scalarName} was compile-time only`,
+          ];
+        }
+        const typeName = this.enumTypeName(op.scalarName);
+        return [
+          `DROP TYPE IF EXISTS ${this.escapeIdentifier(typeName)};`,
+        ];
+      }
+      case "DropScalar": {
+        const op = operation as Types.DropScalarOperation;
+        return [
+          `-- MANUAL ROLLBACK REQUIRED: enum type ${op.module}::${op.scalarName} was dropped — original values lost`,
+          `-- Restore from backup or recreate the CREATE TYPE statement manually.`,
+        ];
+      }
+      case "AddEnumValue": {
+        const op = operation as Types.AddEnumValueOperation;
+        return [
+          `-- MANUAL ROLLBACK REQUIRED: PG has no DROP VALUE`,
+          `-- Removing '${op.value}' from enum '${op.scalarName}' requires recreating the type.`,
+          `-- See RecreateScalar for the cascade-aware path.`,
+        ];
+      }
+      case "RecreateScalar": {
+        const op = operation as Types.RecreateScalarOperation;
+        const typeName = this.enumTypeName(op.scalarName);
+        const escaped = this.escapeIdentifier(typeName);
+        const values = op.oldEnumValues
+          .map((v) => `'${v.replace(/'/g, "''")}'`)
+          .join(", ");
+        return [
+          `-- Rollback: restore previous enum values for ${typeName}`,
+          `DROP TYPE IF EXISTS ${escaped};`,
+          `CREATE TYPE ${escaped} AS ENUM (${values});`,
+        ];
+      }
       default:
         throw new Error(`Unsupported rollback operation: ${operation.kind}`);
     }
@@ -196,9 +236,125 @@ export class DDLGenerator {
           `-- drop global ${dropGlobalOp.module}::${dropGlobalOp.name} (compile-time only)`,
         ];
       }
+      case "CreateScalar":
+        return this.generateCreateScalar(operation as Types.CreateScalarOperation);
+      case "DropScalar":
+        return this.generateDropScalar(operation as Types.DropScalarOperation);
+      case "AddEnumValue":
+        return this.generateAddEnumValue(
+          operation as Types.AddEnumValueOperation,
+        );
+      case "RecreateScalar":
+        return this.generateRecreateScalar(
+          operation as Types.RecreateScalarOperation,
+        );
       default:
         throw new Error(`Unsupported operation: ${operation.kind}`);
     }
+  }
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Scalar / enum DDL (gh/geldata#8517, #2564)
+  // ──────────────────────────────────────────────────────────────────────
+
+  /**
+   * PG enum type name. Disc maps a Disc-side enum scalar to a PG type
+   * named by `enumTypeName(...)` so emitted DDL can reference it by a
+   * deterministic identifier. The `disc_enum_` prefix avoids colliding
+   * with any user-supplied PG type the operator might add via raw SQL.
+   */
+  private enumTypeName(scalarName: string): string {
+    return `disc_enum_${scalarName.toLowerCase()}`;
+  }
+
+  private generateCreateScalar(
+    operation: Types.CreateScalarOperation,
+  ): string[] {
+    if (operation.baseType !== "enum") {
+      // Non-enum scalars are compile-time only today (Disc maps them to
+      // the underlying PG type at column emission). No DDL needed.
+      return [
+        `-- scalar ${operation.module}::${operation.scalarName} extends ${operation.baseType} (compile-time only)`,
+      ];
+    }
+    const typeName = this.enumTypeName(operation.scalarName);
+    const values = (operation.enumValues ?? [])
+      .map((v) => `'${v.replace(/'/g, "''")}'`)
+      .join(", ");
+    return [
+      `CREATE TYPE ${this.escapeIdentifier(typeName)} AS ENUM (${values});`,
+    ];
+  }
+
+  private generateDropScalar(
+    operation: Types.DropScalarOperation,
+  ): string[] {
+    const typeName = this.enumTypeName(operation.scalarName);
+    return [
+      `-- WARNING: DROP TYPE removes the enum and is destructive if any column still references it`,
+      `DROP TYPE IF EXISTS ${this.escapeIdentifier(typeName)};`,
+    ];
+  }
+
+  private generateAddEnumValue(
+    operation: Types.AddEnumValueOperation,
+  ): string[] {
+    const typeName = this.enumTypeName(operation.scalarName);
+    const value = `'${operation.value.replace(/'/g, "''")}'`;
+    let placement = "";
+    if (operation.before) {
+      placement = ` BEFORE '${operation.before.replace(/'/g, "''")}'`;
+    } else if (operation.after) {
+      placement = ` AFTER '${operation.after.replace(/'/g, "''")}'`;
+    }
+    // PG ≥12 supports ADD VALUE inside a transaction. Disc bundles
+    // PG16+ so this is always safe (Zonky's distribution channel).
+    return [
+      `ALTER TYPE ${this.escapeIdentifier(typeName)} ADD VALUE IF NOT EXISTS ${value}${placement};`,
+    ];
+  }
+
+  /**
+   * Recreate-with-cascade: PG has no `DROP VALUE` or in-place reorder,
+   * so removing or reordering enum values requires destroying the type
+   * and rebuilding it. Any column referencing the type must be dropped
+   * first, then re-added with the new type. This emits a DO block that
+   * fails loudly so an operator who runs it without first migrating
+   * dependent columns gets a clear error rather than silent corruption.
+   *
+   * Disc's unsafe-gate refuses these without `--unsafe` (see
+   * `MigrationEngine.classifyUnsafeOperations`).
+   */
+  private generateRecreateScalar(
+    operation: Types.RecreateScalarOperation,
+  ): string[] {
+    const typeName = this.enumTypeName(operation.scalarName);
+    const escaped = this.escapeIdentifier(typeName);
+    const values = operation.enumValues
+      .map((v) => `'${v.replace(/'/g, "''")}'`)
+      .join(", ");
+    const reasonComment = operation.reason === "removed-values"
+      ? "Removing enum values requires recreating the type (PG has no DROP VALUE)"
+      : "Reordering enum values requires recreating the type (PG enum order is positional)";
+    return [
+      `-- WARNING: ${reasonComment}`,
+      `-- Any column referencing ${typeName} must be migrated through a temporary text column.`,
+      `-- The DO block below aborts if existing dependents would lose data; drop them first.`,
+      `DO $$
+DECLARE
+  dep_count int;
+BEGIN
+  SELECT COUNT(*) INTO dep_count
+  FROM pg_depend d
+  JOIN pg_attribute a ON a.attrelid = d.refobjid AND a.attnum = d.refobjsubid
+  WHERE d.objid = (SELECT oid FROM pg_type WHERE typname = '${typeName}');
+  IF dep_count > 0 THEN
+    RAISE EXCEPTION 'Cannot recreate enum type ${typeName}: % column dependent(s) still exist. Drop them first or migrate via a text column.', dep_count;
+  END IF;
+END $$;`,
+      `DROP TYPE IF EXISTS ${escaped};`,
+      `CREATE TYPE ${escaped} AS ENUM (${values});`,
+    ];
   }
 
   private generateCreateType(operation: Types.CreateTypeOperation): string[] {

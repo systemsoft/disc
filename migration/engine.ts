@@ -666,59 +666,202 @@ export class MigrationEngine {
    * data or schema definitions. The CLI uses this to refuse `disc migrate`
    * unless the operator passes `--unsafe`. Rollback already has its own
    * gate via `validateRollbackSafety`; this is the matching forward
-   * gate. (gh/geldata#1838)
+   * gate. (gh/geldata#1838, gh/geldata#1840, gh/geldata#2564)
    *
-   * Returns the list of unsafe operations with human-readable reasons.
-   * Empty list means the plan is safe to apply unattended.
+   * Each entry carries a `classification` mirroring
+   * `MigrationOperation.classification`:
+   *
+   *  - `"unsafe"`    — destructive (DropType, DropTable, DropProperty,
+   *                    DropLink, RecreateScalar, DropScalar).
+   *  - `"ambiguous"` — could be interpreted multiple ways
+   *                    (`ChangeType` without an explicit cast,
+   *                    `ChangeRequired` from optional → required without
+   *                    a default, `ChangeMulti`/`ChangeCardinality` link
+   *                    flips). The operator should clarify intent
+   *                    before applying.
+   *
+   * Returns the list of unsafe + ambiguous operations. Empty list means
+   * the plan is safe to apply unattended.
+   *
+   * The classifier also writes the verdict back onto each op via
+   * `op.classification`, so non-CLI callers can render their own UX
+   * (e.g. the admin UI) without re-running the gate.
    */
   classifyUnsafeOperations(
     plan: Types.MigrationPlan,
-  ): ReadonlyArray<{ operation: string; reason: string }> {
-    const unsafe: { operation: string; reason: string }[] = [];
+  ): ReadonlyArray<
+    {
+      operation: string;
+      reason: string;
+      classification: "unsafe" | "ambiguous";
+    }
+  > {
+    const flagged: {
+      operation: string;
+      reason: string;
+      classification: "unsafe" | "ambiguous";
+    }[] = [];
+
+    const flagUnsafe = (
+      op: Types.MigrationOperation,
+      label: string,
+      reason: string,
+    ) => {
+      op.classification = "unsafe";
+      flagged.push({ operation: label, reason, classification: "unsafe" });
+    };
+    const flagSafe = (op: Types.MigrationOperation) => {
+      if (!op.classification) op.classification = "safe";
+    };
 
     for (const migration of plan.migrations) {
       for (const op of migration.operations) {
         switch (op.kind) {
           case "DropType": {
             const drop = op as Types.DropTypeOperation;
-            unsafe.push({
-              operation: `DropType ${drop.typeName}`,
-              reason: "drops the table and all rows; data is unrecoverable from migration history alone",
-            });
+            flagUnsafe(
+              op,
+              `DropType ${drop.typeName}`,
+              "drops the table and all rows; data is unrecoverable from migration history alone",
+            );
             break;
           }
           case "DropTable": {
             const drop = op as Types.DropTableOperation;
-            unsafe.push({
-              operation: `DropTable ${drop.tableName}`,
-              reason: "drops the table and all rows",
-            });
+            flagUnsafe(
+              op,
+              `DropTable ${drop.tableName}`,
+              "drops the table and all rows",
+            );
+            break;
+          }
+          case "DropScalar": {
+            const drop = op as Types.DropScalarOperation;
+            flagUnsafe(
+              op,
+              `DropScalar ${drop.module}::${drop.scalarName}`,
+              "drops an enum/scalar type; any column referencing it must already be migrated",
+            );
+            break;
+          }
+          case "RecreateScalar": {
+            const recreate = op as Types.RecreateScalarOperation;
+            flagUnsafe(
+              op,
+              `RecreateScalar ${recreate.module}::${recreate.scalarName}`,
+              recreate.reason === "removed-values"
+                ? "removing enum values requires recreating the type — dependent columns must be migrated first"
+                : "reordering enum values requires recreating the type (PG enum order is positional)",
+            );
             break;
           }
           case "AlterType": {
             const alter = op as Types.AlterTypeOperation;
+            // Track whether anything in this alter was flagged so we can
+            // mark the parent op accordingly.
+            let parentFlagged: "unsafe" | "ambiguous" | undefined;
+            const upgradeParent = (level: "unsafe" | "ambiguous") => {
+              if (level === "unsafe" || parentFlagged !== "unsafe") {
+                parentFlagged = level;
+              }
+            };
+
             for (const sub of alter.operations) {
               if (sub.kind === "DropProperty") {
                 const drop = sub as Types.DropPropertyOperation;
-                unsafe.push({
+                flagged.push({
                   operation: `AlterType ${alter.typeName} → DropProperty ${drop.propertyName}`,
                   reason: "drops a column and all values stored in it",
+                  classification: "unsafe",
                 });
+                upgradeParent("unsafe");
               } else if (sub.kind === "DropLink") {
                 const dropLink = sub as Types.DropLinkOperation;
-                unsafe.push({
+                flagged.push({
                   operation: `AlterType ${alter.typeName} → DropLink ${dropLink.linkName}`,
                   reason: "drops a relationship and all foreign-key data",
+                  classification: "unsafe",
                 });
+                upgradeParent("unsafe");
+              } else if (sub.kind === "AlterProperty") {
+                const altProp = sub as Types.AlterPropertyOperation;
+                for (const change of altProp.changes) {
+                  if (change.kind === "ChangeType") {
+                    flagged.push({
+                      operation:
+                        `AlterType ${alter.typeName} → ChangeType ${altProp.propertyName}`,
+                      reason:
+                        `type changed from '${change.oldValue}' to '${change.newValue}' without an explicit cast — PG may refuse the conversion or coerce values lossily`,
+                      classification: "ambiguous",
+                    });
+                    upgradeParent("ambiguous");
+                  } else if (
+                    change.kind === "ChangeRequired" && change.newValue === true
+                  ) {
+                    flagged.push({
+                      operation:
+                        `AlterType ${alter.typeName} → ChangeRequired ${altProp.propertyName}`,
+                      reason:
+                        "optional → required without a default — existing NULL rows will fail the SET NOT NULL",
+                      classification: "ambiguous",
+                    });
+                    upgradeParent("ambiguous");
+                  } else if (change.kind === "ChangeMulti") {
+                    flagged.push({
+                      operation:
+                        `AlterType ${alter.typeName} → ChangeMulti ${altProp.propertyName}`,
+                      reason:
+                        "single ↔ multi cardinality change — disc cannot infer how to fan in/out existing values",
+                      classification: "ambiguous",
+                    });
+                    upgradeParent("ambiguous");
+                  }
+                }
+              } else if (sub.kind === "AlterLink") {
+                const altLink = sub as Types.AlterLinkOperation;
+                for (const change of altLink.changes) {
+                  if (
+                    change.kind === "ChangeCardinality" ||
+                    change.kind === "ChangeMulti"
+                  ) {
+                    flagged.push({
+                      operation:
+                        `AlterType ${alter.typeName} → AlterLink ${altLink.linkName} (${change.kind})`,
+                      reason:
+                        "link cardinality changed — junction-table vs FK column conversion needs explicit data-migration steps",
+                      classification: "ambiguous",
+                    });
+                    upgradeParent("ambiguous");
+                  } else if (change.kind === "ChangeTarget") {
+                    flagged.push({
+                      operation:
+                        `AlterType ${alter.typeName} → AlterLink ${altLink.linkName} (ChangeTarget)`,
+                      reason:
+                        `link target changed from '${change.oldValue}' to '${change.newValue}' — existing FK values almost certainly point to the wrong table`,
+                      classification: "ambiguous",
+                    });
+                    upgradeParent("ambiguous");
+                  }
+                }
               }
+            }
+
+            if (parentFlagged === "unsafe") {
+              op.classification = "unsafe";
+            } else if (parentFlagged === "ambiguous") {
+              op.classification = "ambiguous";
+            } else {
+              flagSafe(op);
             }
             break;
           }
+          default:
+            flagSafe(op);
         }
       }
     }
 
-    return unsafe;
+    return flagged;
   }
 
   /**
@@ -885,6 +1028,37 @@ export class MigrationEngine {
       }
     }
 
+    // Emit scalar/enum CREATE TYPEs first so subsequent base tables can
+    // reference them. (gh/geldata#8517) The differ already extracts
+    // scalars; we just have to mirror that for the initial-only path
+    // where we have a single new schema and no old one to diff against.
+    for (const module of schema) {
+      for (const item of module.items) {
+        if (item.kind === "ScalarTypeDeclaration") {
+          const isEnum = (item.extending ?? []).some((ext) =>
+            ext.name.parts[0] === "enum"
+          );
+          const enumValues = isEnum
+            ? ((item.extending ?? []).find((ext) =>
+              ext.name.parts[0] === "enum"
+            )?.params ?? []).map((p) => p.name.parts.join("::"))
+            : undefined;
+          const op: Types.CreateScalarOperation = {
+            kind: "CreateScalar",
+            scalarName: item.name.value,
+            module: module.name,
+            baseType: isEnum
+              ? "enum"
+              : ((item.extending ?? [])
+                .map((ext) => ext.name.parts.join("::"))
+                .join(", ") || "anyscalar"),
+            ...(enumValues ? { enumValues } : {}),
+          };
+          operations.push(op);
+        }
+      }
+    }
+
     // Only create operations for non-abstract types
     for (const module of schema) {
       for (const item of module.items) {
@@ -1018,9 +1192,40 @@ export class MigrationEngine {
       return;
     }
 
+    // gh/geldata#6304: prefix the migration transaction with safety
+    // pragmas so a long-running concurrent query can't deadlock the
+    // schema apply.
+    //
+    //  - `lock_timeout` bounds how long any single DDL statement waits
+    //    for an exclusive lock; on timeout PG raises a clear error
+    //    instead of hanging the migration.
+    //  - A session-scoped advisory lock (`pg_advisory_xact_lock`)
+    //    serializes concurrent `disc migrate` runs on the same DB so
+    //    two operators can't race. The lock is automatically released
+    //    when the transaction ends.
+    const lockTimeoutMs = this.config.lockTimeoutMs ?? 60_000;
+    const useAdvisoryLock = this.config.useAdvisoryLock ?? true;
+
+    const pragmaPrefix: string[] = [];
+    if (lockTimeoutMs > 0) {
+      pragmaPrefix.push(`SET LOCAL lock_timeout = '${lockTimeoutMs}ms';`);
+    }
+    if (useAdvisoryLock) {
+      // pg_advisory_xact_lock takes a bigint and is auto-released on
+      // commit/rollback. The key is a constant derived from
+      // "disc_migrations" (see migration/types.ts) so concurrent
+      // migrators contend on the same lock.
+      pragmaPrefix.push(
+        `SELECT pg_advisory_xact_lock(${Types.MIGRATION_ADVISORY_LOCK_KEY}::bigint);`,
+      );
+    }
+
     // Pool-based execution path (preferred)
     if (this.pool) {
       await this.pool.transaction(async (conn) => {
+        for (const stmt of pragmaPrefix) {
+          await conn.execute(stmt);
+        }
         for (const stmt of executableStatements) {
           logger.info(`Executing: ${stmt.substring(0, 100)}...`);
           await conn.execute(stmt);
@@ -1040,6 +1245,9 @@ export class MigrationEngine {
 
     // Execute statements in a transaction
     await this.db.transaction(async () => {
+      for (const stmt of pragmaPrefix) {
+        await this.db!.execute(stmt);
+      }
       for (const statement of executableStatements) {
         logger.info(`Executing: ${statement.substring(0, 100)}...`);
         await this.db!.execute(statement);

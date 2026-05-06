@@ -776,17 +776,26 @@ export class SchemaManager {
     }
     const plan = planResult.value;
 
-    // gh/geldata#1838: refuse data-destroying ops by default. Callers
-    // pass `{ allowUnsafe: true }` to bypass — the CLI exposes this via
-    // `--unsafe`. Dry-run still surfaces the unsafe list (caller renders
-    // it) but doesn't refuse, since dry-run mutates nothing.
+    // gh/geldata#1838 + gh/geldata#1840: refuse data-destroying *and*
+    // ambiguous ops by default. Callers pass `{ allowUnsafe: true }` to
+    // bypass — the CLI exposes this via `--unsafe`. Dry-run still
+    // surfaces the list (caller renders it) but doesn't refuse, since
+    // dry-run mutates nothing.
     if (!options?.allowUnsafe && !this.dryRun) {
-      const unsafe = this.engine.classifyUnsafeOperations(plan);
-      if (unsafe.length > 0) {
-        const lines = unsafe.map((u) => `  - ${u.operation}: ${u.reason}`);
+      const flagged = this.engine.classifyUnsafeOperations(plan);
+      if (flagged.length > 0) {
+        const lines = flagged.map((u) =>
+          `  - [${u.classification}] ${u.operation}: ${u.reason}`
+        );
+        const unsafeCount = flagged.filter((u) => u.classification === "unsafe").length;
+        const ambiguousCount = flagged.length - unsafeCount;
+        const summary = [
+          unsafeCount > 0 ? `${unsafeCount} unsafe` : null,
+          ambiguousCount > 0 ? `${ambiguousCount} ambiguous` : null,
+        ].filter(Boolean).join(" + ");
         return Err(
           new MigrationError(
-            `Migration contains ${unsafe.length} unsafe operation(s):\n${
+            `Migration contains ${summary} operation(s):\n${
               lines.join("\n")
             }\n\nPass { allowUnsafe: true } (or --unsafe at the CLI) to apply anyway.`,
           ),

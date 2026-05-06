@@ -72,8 +72,96 @@ function planUnsafeDelta(initialSdl: string, nextSdl: string) {
 
 Deno.test("classifyUnsafeOperations - additive migration is safe", () => {
   const { engine, plan } = planUnsafeDelta(safeInitial, safeAdditive);
-  const unsafe = engine.classifyUnsafeOperations(plan);
-  assertEquals(unsafe.length, 0);
+  const flagged = engine.classifyUnsafeOperations(plan);
+  assertEquals(flagged.length, 0);
+  // Each safe op is annotated on the operation itself.
+  for (const op of plan.migrations[0].operations) {
+    if (op.kind !== "AlterType") continue;
+    assertEquals(op.classification, "safe");
+  }
+});
+
+// gh/geldata#1840: schema changes with multiple plausible interpretations
+// (rename-vs-drop-add, type narrowing without an explicit cast,
+// link-cardinality flips) are flagged as `ambiguous` rather than silently
+// applied. Disc's classifier surfaces them via the unsafe-gate so a
+// non-interactive caller can refuse / re-prompt.
+
+Deno.test("Gel #1840: ChangeType without explicit cast is ambiguous", () => {
+  const before = `
+    module default {
+      type User {
+        required age: int32;
+      };
+    }
+  `;
+  const after = `
+    module default {
+      type User {
+        required age: int64;
+      };
+    }
+  `;
+  const { engine, plan } = planUnsafeDelta(before, after);
+  const flagged = engine.classifyUnsafeOperations(plan);
+  const ambiguous = flagged.filter((f) => f.classification === "ambiguous");
+  assertEquals(ambiguous.length >= 1, true, "expected at least one ambiguous flag");
+  assertStringIncludes(ambiguous[0].operation, "ChangeType");
+  assertStringIncludes(ambiguous[0].reason, "explicit cast");
+});
+
+Deno.test("Gel #1840: optional → required flip is ambiguous", () => {
+  const before = `
+    module default {
+      type User {
+        bio: str;
+      };
+    }
+  `;
+  const after = `
+    module default {
+      type User {
+        required bio: str;
+      };
+    }
+  `;
+  const { engine, plan } = planUnsafeDelta(before, after);
+  const flagged = engine.classifyUnsafeOperations(plan);
+  const ambiguous = flagged.filter((f) => f.classification === "ambiguous");
+  assertEquals(ambiguous.length, 1);
+  assertStringIncludes(ambiguous[0].operation, "ChangeRequired");
+  assertStringIncludes(ambiguous[0].reason, "NULL");
+});
+
+Deno.test("Gel #1840: ambiguous ops gate applySchema like unsafe", async () => {
+  const manager = new SchemaManager({ dryRun: true });
+  await manager.initialize();
+  await manager.applySchema(`
+    module default {
+      type User {
+        required age: int32;
+      };
+    }
+  `);
+  // Switch to non-dry-run so the gate applies.
+  const liveManager = new SchemaManager({ dryRun: false } as any);
+  (liveManager as any).engine = (manager as any).engine;
+  (liveManager as any).currentModules = (manager as any).currentModules;
+  (liveManager as any).initialized = true;
+  (liveManager as any).dryRun = false;
+
+  const result = await liveManager.applySchema(`
+    module default {
+      type User {
+        required age: int64;
+      };
+    }
+  `);
+  assertEquals(result.ok, false);
+  if (!result.ok) {
+    assertStringIncludes(result.error.message, "ambiguous");
+    assertStringIncludes(result.error.message, "--unsafe");
+  }
 });
 
 Deno.test("classifyUnsafeOperations - DropProperty is unsafe", () => {

@@ -17,6 +17,23 @@ export interface Migration {
 
 export interface MigrationOperation {
   kind: string;
+  /**
+   * Optional safety classification (gh/geldata#1840). Set by
+   * `MigrationEngine.classifyUnsafeOperations` when scanning a plan;
+   * left undefined for ops the gate hasn't inspected yet.
+   *
+   *  - `"safe"`        — additive, reversible, no data loss.
+   *  - `"unsafe"`      — drops/destroys data; requires `--unsafe` to apply.
+   *  - `"ambiguous"`   — could be interpreted multiple ways
+   *                      (rename-vs-drop-add, type narrowing without an
+   *                      explicit cast, link-cardinality changes that may
+   *                      lose data); the operator must disambiguate.
+   *
+   * Disc's classifier is non-interactive — it *labels* ops rather than
+   * prompting (Gel's CLI has interactive prompts; we surface a structured
+   * classification so non-CLI callers can render their own UX).
+   */
+  classification?: "safe" | "unsafe" | "ambiguous";
 }
 
 // Schema operations
@@ -127,6 +144,69 @@ export interface CreateAliasOperation extends MigrationOperation {
 export interface DropAliasOperation extends MigrationOperation {
   kind: "DropAlias";
   aliasName: string;
+}
+
+// Scalar / enum operations (gh/geldata#8517, #2564)
+//
+// Disc's differ extracts scalar declarations alongside object types, so a
+// schema author who adds, removes, or reorders enum values gets a real
+// migration plan instead of an empty diff. PostgreSQL's enum semantics
+// constrain what we can emit:
+//
+//  - **Add value**: `ALTER TYPE ... ADD VALUE` is fast and non-destructive.
+//    PG ≥12 supports it inside a transaction (#8517 cited PG 11 limitations
+//    but Disc bundles PG16+, so this is fine).
+//  - **Drop / reorder values**: PG has no native `DROP VALUE` or reorder.
+//    These require type recreation with column-level CASCADE which is
+//    structurally destructive, so Disc emits a `RecreateScalar` op flagged
+//    as unsafe — the unsafe-gate refuses it without `--unsafe`.
+export interface CreateScalarOperation extends MigrationOperation {
+  kind: "CreateScalar";
+  scalarName: string;
+  module: string;
+  /**
+   * The base of the scalar (e.g. "enum", "str", "int64"). When `kind` is
+   * `"enum"`, `enumValues` is non-empty.
+   */
+  baseType: string;
+  enumValues?: string[];
+}
+
+export interface DropScalarOperation extends MigrationOperation {
+  kind: "DropScalar";
+  scalarName: string;
+  module: string;
+}
+
+/**
+ * `ALTER TYPE ... ADD VALUE`. PG enum order is positional, so a value is
+ * inserted at the end unless `before` or `after` is given.
+ */
+export interface AddEnumValueOperation extends MigrationOperation {
+  kind: "AddEnumValue";
+  scalarName: string;
+  module: string;
+  value: string;
+  before?: string;
+  after?: string;
+}
+
+/**
+ * Recreate-with-cascade for value removal or reordering. PG's lack of
+ * `DROP VALUE` forces this two-phase approach: drop dependent columns,
+ * recreate the type, re-add the columns. Because data in dropped columns
+ * is lost, the differ marks this op unsafe (gh/geldata#2564).
+ */
+export interface RecreateScalarOperation extends MigrationOperation {
+  kind: "RecreateScalar";
+  scalarName: string;
+  module: string;
+  /** New, post-change enum value list (used to rebuild the type). */
+  enumValues: string[];
+  /** Old enum values, preserved for rollback / reasoning. */
+  oldEnumValues: string[];
+  /** Reason for recreate ("removed-values" | "reordered-values"). */
+  reason: "removed-values" | "reordered-values";
 }
 
 // Global operations
@@ -375,7 +455,48 @@ export interface MigrationConfig {
    * a migration. (gh/geldata#7490)
    */
   onProgress?: MigrationProgressListener;
+  /**
+   * Per-statement lock timeout in milliseconds (gh/geldata#6304).
+   * Disc sets `lock_timeout` at the start of each migration transaction
+   * so DDL statements that contend with a long-running query fail fast
+   * instead of blocking the migration indefinitely. Defaults to
+   * `60000` (one minute) when undefined; pass `0` to disable.
+   */
+  lockTimeoutMs?: number;
+  /**
+   * Whether to acquire a session-scoped PostgreSQL advisory lock at the
+   * start of `applyMigrations` to serialize concurrent migrators
+   * (gh/geldata#6304). Without this, two `disc migrate` invocations on
+   * the same database can both reach `executeStatements` and step on
+   * each other. Defaults to `true`.
+   */
+  useAdvisoryLock?: boolean;
 }
+
+/**
+ * Disc's PostgreSQL advisory-lock key for migrations. A 64-bit constant
+ * derived from `disc_migrations` so it's stable across processes and
+ * unlikely to collide with application-side advisory locks.
+ *
+ * Computed at module load time via FNV-1a so the constant lives next to
+ * the migration types and any operator who needs to drop the lock by
+ * hand can find it via `pg_locks WHERE objid = …`.
+ */
+export const MIGRATION_ADVISORY_LOCK_KEY = (() => {
+  // FNV-1a 64-bit (BigInt) of "disc_migrations".
+  const data = new TextEncoder().encode("disc_migrations");
+  let hash = 0xcbf29ce484222325n;
+  const prime = 0x100000001b3n;
+  const mask = (1n << 64n) - 1n;
+  for (const byte of data) {
+    hash = (hash ^ BigInt(byte)) & mask;
+    hash = (hash * prime) & mask;
+  }
+  // Postgres `pg_advisory_lock(bigint)` uses a signed 64-bit integer,
+  // so map the unsigned hash into the signed range.
+  if (hash >= 1n << 63n) hash -= 1n << 64n;
+  return hash;
+})();
 
 export interface MigrationCheckpoint {
   id: string;

@@ -43,6 +43,63 @@ export class SchemaDiffer {
       }
     }
 
+    // Diff scalar/enum declarations (gh/geldata#8517, #2564). Disc tracks
+    // scalars alongside object types so enum-value changes produce real
+    // migration plans instead of silent no-ops.
+    const oldScalars = this.extractScalars(oldSchema);
+    const newScalars = this.extractScalars(newSchema);
+
+    // Added scalars
+    for (const [scalarName, scalarDef] of newScalars) {
+      if (!oldScalars.has(scalarName)) {
+        const op: Types.CreateScalarOperation = {
+          kind: "CreateScalar",
+          scalarName: scalarDef.decl.name.value,
+          module: scalarDef.module,
+          baseType: this.scalarBaseType(scalarDef.decl),
+          enumValues: this.scalarEnumValues(scalarDef.decl),
+        };
+        operations.push(op);
+      }
+    }
+
+    // Removed scalars
+    for (const [scalarName, scalarDef] of oldScalars) {
+      if (!newScalars.has(scalarName)) {
+        const op: Types.DropScalarOperation = {
+          kind: "DropScalar",
+          scalarName: scalarDef.decl.name.value,
+          module: scalarDef.module,
+        };
+        operations.push(op);
+      }
+    }
+
+    // Modified scalars — only enum value changes are diff-able today.
+    // Non-enum scalar changes (constraints, base) are out of scope and
+    // surface as a no-op with a comment in DDL emission.
+    for (const [scalarName, newScalarDef] of newScalars) {
+      const oldScalarDef = oldScalars.get(scalarName);
+      if (!oldScalarDef) continue;
+
+      const oldValues = this.scalarEnumValues(oldScalarDef.decl) ?? [];
+      const newValues = this.scalarEnumValues(newScalarDef.decl) ?? [];
+
+      // Only compare enum value lists when both sides are enum-like.
+      const oldIsEnum = this.isEnumScalar(oldScalarDef.decl);
+      const newIsEnum = this.isEnumScalar(newScalarDef.decl);
+      if (!oldIsEnum || !newIsEnum) continue;
+
+      operations.push(
+        ...this.diffEnumValues(
+          newScalarDef.decl.name.value,
+          newScalarDef.module,
+          oldValues,
+          newValues,
+        ),
+      );
+    }
+
     // Diff aliases
     const oldAliases = this.extractAliases(oldSchema);
     const newAliases = this.extractAliases(newSchema);
@@ -1015,5 +1072,153 @@ export class SchemaDiffer {
         : true;
     }
     return result;
+  }
+
+  // ──────────────────────────────────────────────────────────────────────
+  // Scalar / enum extraction (gh/geldata#8517, #2564)
+  // ──────────────────────────────────────────────────────────────────────
+
+  private extractScalars(
+    modules: Module[],
+  ): Map<string, { decl: AST.ScalarTypeDeclaration; module: string }> {
+    const scalars = new Map<
+      string,
+      { decl: AST.ScalarTypeDeclaration; module: string }
+    >();
+
+    for (const module of modules) {
+      for (const item of module.items) {
+        if (item.kind === "ScalarTypeDeclaration") {
+          const qualifiedName = `${module.name}::${item.name.value}`;
+          scalars.set(qualifiedName, { decl: item, module: module.name });
+        }
+      }
+    }
+
+    return scalars;
+  }
+
+  /**
+   * Check whether a scalar extends `enum<...>`. The SDL parser stores
+   * `extending enum<a, b>` as a TypeRef whose name parts begin with `enum`
+   * and whose `params` carry each enum literal as a TypeRef.
+   */
+  private isEnumScalar(decl: AST.ScalarTypeDeclaration): boolean {
+    return (decl.extending ?? []).some(
+      (ext) => ext.name.parts[0] === "enum",
+    );
+  }
+
+  /**
+   * Extract enum values from a scalar declaration. Returns `undefined`
+   * for non-enum scalars.
+   */
+  private scalarEnumValues(
+    decl: AST.ScalarTypeDeclaration,
+  ): string[] | undefined {
+    if (!this.isEnumScalar(decl)) return undefined;
+    const enumExt = (decl.extending ?? []).find(
+      (ext) => ext.name.parts[0] === "enum",
+    );
+    if (!enumExt || !enumExt.params) return [];
+    return enumExt.params.map((p) => p.name.parts.join("::"));
+  }
+
+  /**
+   * Render the base type of a scalar (used for `CreateScalarOperation`).
+   * Non-enum scalars get the joined `extending` chain; enum scalars get
+   * the literal `"enum"` string (values live separately).
+   */
+  private scalarBaseType(decl: AST.ScalarTypeDeclaration): string {
+    if (this.isEnumScalar(decl)) return "enum";
+    if (!decl.extending || decl.extending.length === 0) return "anyscalar";
+    return decl.extending
+      .map((ext) => ext.name.parts.join("::"))
+      .join(", ");
+  }
+
+  /**
+   * Diff old vs new enum value lists. PostgreSQL's enum semantics
+   * dictate the operation choice:
+   *
+   *  - **Pure additions** at the tail → emit `AddEnumValueOperation`
+   *    (one per added value). Cheap, non-destructive.
+   *  - **Pure additions in the middle** → emit `AddEnumValueOperation`
+   *    with `before` set to the next existing value. Still cheap.
+   *  - **Removals** or **reorders** → emit a single
+   *    `RecreateScalarOperation` flagged unsafe. Recreating an enum
+   *    means dropping/re-adding any column referencing it; the
+   *    unsafe-gate refuses these without `--unsafe`.
+   */
+  private diffEnumValues(
+    scalarName: string,
+    moduleName: string,
+    oldValues: string[],
+    newValues: string[],
+  ): Types.MigrationOperation[] {
+    if (oldValues.length === 0 && newValues.length === 0) return [];
+
+    const oldSet = new Set(oldValues);
+    const newSet = new Set(newValues);
+
+    const removed = oldValues.filter((v) => !newSet.has(v));
+    const added = newValues.filter((v) => !oldSet.has(v));
+
+    // If anything was removed, this is a recreate (PG has no DROP VALUE).
+    if (removed.length > 0) {
+      return [
+        {
+          kind: "RecreateScalar",
+          scalarName,
+          module: moduleName,
+          enumValues: newValues,
+          oldEnumValues: oldValues,
+          reason: "removed-values",
+        } as Types.RecreateScalarOperation,
+      ];
+    }
+
+    // No removals — check whether the *retained* values kept their order.
+    const retainedOld = oldValues.filter((v) => newSet.has(v));
+    const retainedNew = newValues.filter((v) => oldSet.has(v));
+    const reordered = retainedOld.length > 0 &&
+      retainedOld.some((v, i) => v !== retainedNew[i]);
+
+    if (reordered) {
+      return [
+        {
+          kind: "RecreateScalar",
+          scalarName,
+          module: moduleName,
+          enumValues: newValues,
+          oldEnumValues: oldValues,
+          reason: "reordered-values",
+        } as Types.RecreateScalarOperation,
+      ];
+    }
+
+    // Pure additions — emit one ADD VALUE per new entry, anchored by
+    // its successor in the new list when that successor still exists.
+    const ops: Types.AddEnumValueOperation[] = [];
+    for (const value of added) {
+      const newIdx = newValues.indexOf(value);
+      // Find the closest *successor* that already existed in the old
+      // list; anchor with `before` so PG inserts in the right slot.
+      let anchorBefore: string | undefined;
+      for (let i = newIdx + 1; i < newValues.length; i++) {
+        if (oldSet.has(newValues[i])) {
+          anchorBefore = newValues[i];
+          break;
+        }
+      }
+      ops.push({
+        kind: "AddEnumValue",
+        scalarName,
+        module: moduleName,
+        value,
+        ...(anchorBefore ? { before: anchorBefore } : {}),
+      });
+    }
+    return ops;
   }
 }
