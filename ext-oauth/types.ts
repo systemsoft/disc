@@ -50,11 +50,31 @@ export interface OAuthConfig {
   defaultRedirectUri?: string;
 }
 
+/**
+ * Normalized profile claims surfaced from a provider's userinfo
+ * endpoint. (gh/geldata#7344, ports geldata/gel#7344)
+ *
+ * Disc maps the OIDC standard claims (`sub`, `email`,
+ * `email_verified`, `name`, `given_name`, `family_name`, `picture`,
+ * `locale`) plus the GitHub-specific aliases (`login` → `name`,
+ * `avatar_url` → `avatarUrl`) to a single shape so downstream code
+ * doesn't have to care which provider issued the token. The full
+ * upstream payload is preserved on `raw` for callers that need
+ * provider-specific fields (e.g. Apple's `is_private_email`).
+ */
 export interface OAuthUserInfo {
   id: string;
   email?: string;
+  /** OIDC `email_verified` claim, when supplied by the provider. */
+  emailVerified?: boolean;
   name?: string;
+  /** OIDC `given_name`. */
+  givenName?: string;
+  /** OIDC `family_name`. */
+  familyName?: string;
   avatarUrl?: string;
+  /** BCP 47 locale (`en-US`, etc.) when the provider returns it. */
+  locale?: string;
   raw: Record<string, unknown>;
 }
 

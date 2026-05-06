@@ -52,9 +52,7 @@ export async function exchangeCodeForToken(
   const data = await response.json() as Record<string, unknown>;
   return {
     accessToken: String(data["access_token"] ?? ""),
-    expiresIn: typeof data["expires_in"] === "number"
-      ? data["expires_in"]
-      : undefined,
+    expiresIn: typeof data["expires_in"] === "number" ? data["expires_in"] : undefined,
     tokenType: String(data["token_type"] ?? "Bearer"),
   };
 }
@@ -77,20 +75,36 @@ export async function fetchUserInfo(
 
   const data = await response.json() as Record<string, unknown>;
 
-  // Normalize across providers
+  // Normalize across providers. (gh/geldata#7344)
+  //   - OIDC standard: `sub`/`email`/`email_verified`/`name`/`given_name`/
+  //     `family_name`/`picture`/`locale`.
+  //   - GitHub: `id` / `login` / `avatar_url`.
+  //
+  // `email_verified` is parsed permissively (some providers send the
+  // string `"true"` instead of a JSON boolean — both Apple and a few
+  // SAML-bridge providers do this) so downstream code can rely on a
+  // boolean. Anything that isn't recognizable as a boolean is dropped
+  // rather than coerced to `false` — "absence" is a meaningful state
+  // distinct from "unverified".
+  const rawEmailVerified = data["email_verified"];
+  let emailVerified: boolean | undefined;
+  if (typeof rawEmailVerified === "boolean") {
+    emailVerified = rawEmailVerified;
+  } else if (rawEmailVerified === "true") {
+    emailVerified = true;
+  } else if (rawEmailVerified === "false") {
+    emailVerified = false;
+  }
+
   return {
-    avatarUrl: typeof data["picture"] === "string"
-      ? data["picture"]
-      : typeof data["avatar_url"] === "string"
-      ? data["avatar_url"]
-      : undefined,
+    avatarUrl: typeof data["picture"] === "string" ? data["picture"] : typeof data["avatar_url"] === "string" ? data["avatar_url"] : undefined,
     email: typeof data["email"] === "string" ? data["email"] : undefined,
+    emailVerified,
+    familyName: typeof data["family_name"] === "string" ? data["family_name"] : undefined,
+    givenName: typeof data["given_name"] === "string" ? data["given_name"] : undefined,
     id: String(data["sub"] ?? data["id"] ?? ""),
-    name: typeof data["name"] === "string"
-      ? data["name"]
-      : typeof data["login"] === "string"
-      ? data["login"]
-      : undefined,
+    locale: typeof data["locale"] === "string" ? data["locale"] : undefined,
+    name: typeof data["name"] === "string" ? data["name"] : typeof data["login"] === "string" ? data["login"] : undefined,
     raw: data,
   };
 }
