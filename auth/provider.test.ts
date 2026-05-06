@@ -51,6 +51,26 @@ describe("AuthProvider", () => {
       assertExists(response.session);
     });
 
+    // gh/geldata#7275: register() returns the identity record alongside
+    // the session so callers don't need an extra getUser(). Mirrors
+    // Gel's `ext::auth::Identity` contract — id, email, createdAt,
+    // emailVerified, roles.
+    it("returns the identity record on the response (gh/geldata#7275)", async () => {
+      const response = await provider.register({
+        email: "identity@example.com",
+        password: "IdentityPass123!",
+      });
+
+      assertExists(response.identity);
+      const id = response.identity!;
+      assertEquals(id.id, response.user.id);
+      assertEquals(id.email, "identity@example.com");
+      assertExists(id.createdAt);
+      assertEquals(typeof id.emailVerified, "boolean");
+      // No roles assigned yet — defaults to [].
+      assertEquals(id.roles, []);
+    });
+
     it("should hash passwords correctly", async () => {
       const registerData: RegisterData = {
         email: "hash@example.com",
@@ -566,6 +586,74 @@ describe("AuthProvider", () => {
         Error,
         AuthErrorCode.EMAIL_NOT_VERIFIED,
       );
+    });
+
+    // gh/geldata#6503: resend must invalidate the previous verification
+    // token. Reusing the original would leave two valid URLs in flight
+    // (the first email and the second), and stop only when one of them
+    // is consumed.
+    it("resendVerification invalidates the previous token", async () => {
+      const verifyProvider = new AuthProvider(
+        { ...testConfig, requireEmailVerification: true },
+        db,
+      );
+      await verifyProvider.initialize();
+
+      const response = await verifyProvider.register({
+        email: "resend@example.com",
+        password: "ResendPass123!",
+      });
+      const original = response.verificationToken!;
+      assertExists(original);
+
+      const fresh = await verifyProvider.resendVerification("resend@example.com");
+      assertExists(fresh);
+      // Sanity: the resend yields a different secret.
+      assert(fresh !== original);
+
+      // Original URL no longer works.
+      await assertRejects(
+        () => verifyProvider.verifyEmail(original),
+        Error,
+        AuthErrorCode.INVALID_TOKEN,
+      );
+
+      // Fresh URL does.
+      await verifyProvider.verifyEmail(fresh);
+      const verified = await verifyProvider.getUser(response.user.id);
+      assertExists(verified);
+      assertEquals(verified.emailVerified, true);
+    });
+
+    it("resendVerification is silent on unknown email", async () => {
+      const verifyProvider = new AuthProvider(
+        { ...testConfig, requireEmailVerification: true },
+        db,
+      );
+      await verifyProvider.initialize();
+
+      // No throw, no token — avoids leaking account existence.
+      const out = await verifyProvider.resendVerification("ghost@example.com");
+      assertEquals(out, null);
+    });
+
+    it("resendVerification is a no-op for already-verified accounts", async () => {
+      const verifyProvider = new AuthProvider(
+        { ...testConfig, requireEmailVerification: true },
+        db,
+      );
+      await verifyProvider.initialize();
+
+      const response = await verifyProvider.register({
+        email: "already-verified@example.com",
+        password: "AlreadyPass123!",
+      });
+      await verifyProvider.verifyEmail(response.verificationToken!);
+
+      const out = await verifyProvider.resendVerification(
+        "already-verified@example.com",
+      );
+      assertEquals(out, null);
     });
   });
 

@@ -172,6 +172,27 @@ export interface TokenPayload {
   roles?: string[];
 }
 
+/**
+ * Compact "identity" view returned alongside the full `user` on
+ * registration responses. Mirrors Gel's `ext::auth::Identity` shape so
+ * callers porting from Gel get the same record without an extra GET.
+ * Includes the role-name snapshot at issue time (same semantics as
+ * `TokenPayload.roles`). (gh/geldata#7275)
+ */
+export interface Identity {
+  id: string;
+  email: string;
+  createdAt: Date;
+  emailVerified: boolean;
+  /**
+   * Role names attached to this identity at the moment the response
+   * was issued. Empty array when the user has no roles assigned.
+   * Snapshot semantics — roles assigned after the response went out
+   * won't show here.
+   */
+  roles: string[];
+}
+
 export interface AuthResponse {
   user: Omit<User, "passwordHash">;
   session: Session;
@@ -185,6 +206,14 @@ export interface AuthResponse {
    * recovered. (P0-03)
    */
   verificationToken?: string;
+  /**
+   * Compact identity view — same id/email/createdAt as `user` plus the
+   * role-name snapshot. Populated on `register()` so callers can stash
+   * the identity without a follow-up `getUser()`. Optional on the type
+   * to keep older callers and synthetic anonymous flows source-compatible.
+   * (gh/geldata#7275)
+   */
+  identity?: Identity;
 }
 
 /**
@@ -310,6 +339,13 @@ export interface AuthProvider {
   ): Promise<void>;
   resetPasswordRequest(email: string): Promise<string>; // returns reset token
   resetPassword(reset_token: string, new_password: string): Promise<void>;
+  /**
+   * Re-issue an email-verification token, invalidating the prior one.
+   * Silent on unknown / already-verified emails to avoid leaking account
+   * state. Returns plaintext for the caller to email; DB stores hash
+   * only. (gh/geldata#6503)
+   */
+  resendVerification(email: string): Promise<string | null>;
   verifyEmail(verification_token: string): Promise<void>;
   revokeAllSessions(userId: string): Promise<void>;
 }

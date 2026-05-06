@@ -586,11 +586,25 @@ export class AuthProvider implements IAuthProvider {
       });
     }
 
+    // gh/geldata#7275: return the identity alongside the session so
+    // callers don't need a follow-up `getUser()` to stash the new
+    // identity record. Roles are read once at issue time — snapshot
+    // semantics match `TokenPayload.roles`.
+    const roles = await this.getUserRoles(userId);
+    const identity = {
+      id: user.id,
+      email: user.email,
+      createdAt: user.createdAt,
+      emailVerified: user.emailVerified,
+      roles,
+    };
+
     return {
       user: this.sanitizeUser(user),
       session,
       token,
       refreshToken: refreshToken,
+      identity,
       // Plaintext for the caller to email; DB has the hash.
       ...(verificationToken ? { verificationToken } : {}),
     };
@@ -1314,6 +1328,53 @@ export class AuthProvider implements IAuthProvider {
 
     // Revoke all sessions
     await this.revokeAllSessions(userId);
+  }
+
+  /**
+   * Issue a fresh email-verification token for an unverified account and
+   * fire `EmailVerificationRequested` so the email-listener can resend
+   * the message. The previous token is invalidated by overwrite — only
+   * the most recent plaintext maps to the stored hash. (gh/geldata#6503)
+   *
+   * Silent on unknown email or already-verified accounts: returning a
+   * differentiated error would leak account existence and verification
+   * state. Returns the plaintext to the caller (same posture as
+   * `register()`); the DB only ever stores the hash.
+   */
+  async resendVerification(email: string): Promise<string | null> {
+    const result = await this.db.query(
+      "SELECT id, email_verified FROM users WHERE email = ?",
+      [email],
+    );
+
+    if (result.rows.length === 0) return null;
+    const row = result.rows[0];
+    if (row.email_verified) return null;
+
+    const userId = row.id;
+    const verificationToken = this.generateToken();
+    const verificationTokenHash = await this.hashToken(verificationToken);
+
+    // Overwrite the stored hash. The previous token's hash is gone, so
+    // verifyEmail() with the old plaintext will now fail with
+    // INVALID_TOKEN — exactly the desired invalidation.
+    await this.db.execute(
+      `UPDATE users SET verification_token = ?,
+       updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      [verificationTokenHash, userId],
+    );
+
+    this.auditEvent("email_verification_resent", userId);
+
+    this.fireWebhook({
+      eventType: "EmailVerificationRequested",
+      eventId: newEventId(),
+      timestamp: newEventTimestamp(),
+      identityId: userId,
+      verificationToken,
+    });
+
+    return verificationToken;
   }
 
   async verifyEmail(verificationToken: string): Promise<void> {
