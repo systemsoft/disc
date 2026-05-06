@@ -10,6 +10,7 @@ import { parseArgs } from "@std/cli/parse-args";
 
 import { CLIArgs, commands } from "./commands.ts";
 import { adminCommand } from "./admin.ts";
+import { runStdio as runLspStdio } from "../lsp/server.ts";
 import { VERSION } from "../mod.ts";
 
 const HELP_TEXT = `
@@ -49,6 +50,7 @@ ${inverse("  COMMANDS ")}
   admin set-password ${gray(".".repeat(7))} Reset a user's password (admin override)
   admin assign-role ${gray(".".repeat(8))} Assign a role to a user (creating it if needed)
   admin list-roles ${gray(".".repeat(9))} List all defined roles
+  lsp ${gray(".".repeat(22))} Run the Disc language server (stdio JSON-RPC)
   pg log ${gray(".".repeat(19))} View PostgreSQL logs
   pg upgrade ${gray(".".repeat(15))} Upgrade PostgreSQL version
 
@@ -522,7 +524,24 @@ ${inverse("  OPTIONS ")}
 
 ${inverse("  USAGE ")}
 
-  disc admin list-roles ${gray("[--database-url <dsn>] [--jwt-secret <sec>]")}`
+  disc admin list-roles ${gray("[--database-url <dsn>] [--jwt-secret <sec>]")}`,
+  "lsp": `
+  Run the Disc language server (stdio JSON-RPC)
+
+  Spoken to by editors via JSON-RPC over stdin/stdout. Phase 1
+  surfaces SDL parse + validation diagnostics on every save. Hover,
+  completion, and EdgeQL support land in follow-up phases.
+
+${inverse("  USAGE ")}
+
+  disc lsp
+
+${inverse("  EDITOR HINTS ")}
+
+  - VS Code: configure ${bgBrightYellow("disc-lsp")} as the language server for
+    files matching ${bgBrightYellow("*.disc")}.
+  - Neovim/lspconfig: pass ${bgBrightYellow("cmd = { 'disc', 'lsp' }")} and
+    ${bgBrightYellow("filetypes = { 'disc' }")}.`
 };
 
 async function main() {
@@ -694,6 +713,12 @@ async function main() {
           }
         }
 
+        break;
+      }
+
+      case "lsp": {
+        const exitCode = await runLspStdio();
+        Deno.exit(exitCode);
         break;
       }
 
