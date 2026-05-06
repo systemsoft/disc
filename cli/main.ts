@@ -58,6 +58,7 @@ ${inverse("  OPTIONS ")}
 
   -h, --help ${gray(".".repeat(15))} Show this help message
   -v, --version ${gray(".".repeat(12))} Show version information
+  -H, --host ${gray("<host>")} ${gray(".".repeat(8))} Hostname for shell/serve commands
   -s, --schema ${gray("<file>")} ${gray(".".repeat(6))} Schema file path (single-file mode)
   --schema-dir ${gray("<dir>")} ${gray(".".repeat(7))} Schema directory for multi-file discovery (default: ${bgBrightYellow("./dbschema")})
   -c, --config ${gray("<file>")} ${gray(".".repeat(6))} Configuration file path
@@ -601,7 +602,11 @@ async function main() {
       "input",
     ],
     alias: {
+      // gh/geldata#1030: pair `-h`/`--help` with `-H`/`--host` so the CLI
+      // matches standard Unix conventions (psql, ssh, curl). Lowercase `h`
+      // stays the help short flag; uppercase `H` is the hostname.
       h: "help",
+      H: "host",
       v: "version",
       p: "port",
       c: "config",

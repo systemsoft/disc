@@ -344,3 +344,71 @@ Deno.test("CLI - alias flag handling", () => {
   assertEquals(args.target, "both");
   assertEquals(args.schema, "custom.disc");
 });
+
+// gh/geldata#1030: `-H` is hostname (Unix convention) while lowercase
+// `-h` stays as help. Verify both with the same alias map main.ts uses.
+Deno.test("CLI - -H short flag maps to --host", () => {
+  const args = parseArgs([
+    "shell",
+    "-H",
+    "db.example.com",
+  ], {
+    string: ["host"],
+    alias: { H: "host" },
+  });
+
+  assertEquals(args.host, "db.example.com");
+});
+
+Deno.test("CLI - -h still triggers help (not host) with -H alias present", () => {
+  const args = parseArgs(["-h"], {
+    boolean: ["help"],
+    string: ["host"],
+    alias: { h: "help", H: "host" },
+  });
+
+  assertEquals(args.help, true);
+  assertEquals(args.host, undefined);
+});
+
+Deno.test("CLI - long --host still works alongside -H", () => {
+  const args = parseArgs([
+    "serve",
+    "--host",
+    "0.0.0.0",
+  ], {
+    string: ["host"],
+    alias: { H: "host" },
+  });
+
+  assertEquals(args.host, "0.0.0.0");
+});
+
+// Integration: spawn `disc shell --help` to confirm short -h triggers
+// command-specific help. Mirrors the `--version` short-flag test above.
+Deno.test("CLI - `disc shell -h` short flag prints shell help", async () => {
+  const cmd = new Deno.Command(Deno.execPath(), {
+    args: [
+      "run",
+      "--allow-net",
+      "--allow-read",
+      "--allow-write",
+      "--allow-env",
+      "--allow-run",
+      "cli/main.ts",
+      "shell",
+      "-h",
+    ],
+    stdout: "piped",
+    stderr: "piped",
+  });
+  const { code, stdout } = await cmd.output();
+  const out = new TextDecoder().decode(stdout);
+  assertEquals(code, 0);
+  // The shell COMMAND_HELP block opens with "Open an interactive EdgeQL REPL".
+  assertEquals(
+    out.includes("Open an interactive EdgeQL REPL"),
+    true,
+    out,
+  );
+});
