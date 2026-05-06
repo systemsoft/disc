@@ -6,6 +6,7 @@ import { getLogger } from "../lib/logger.ts";
 import * as Types from "./types.ts";
 import { renderMetrics } from "./metrics.ts";
 import type { MetricsSource } from "./metrics.ts";
+import { computeCertExpiry } from "./tls-cert-info.ts";
 
 const log = getLogger("http");
 import {
@@ -79,6 +80,13 @@ export class HttpServer {
   private server?: Deno.HttpServer<Deno.NetAddr>;
   private redirect_server?: Deno.HttpServer<Deno.NetAddr>;
   private tls_watcher?: import("./tls-reload.ts").TlsCertWatcher;
+  /**
+   * Cached leaf-certificate `notAfter` timestamp (unix epoch seconds).
+   * Refreshed on initial TLS bind and on every successful hot-reload so
+   * the Prometheus exporter can publish an up-to-date expiry gauge.
+   * (Ports geldata/gel#6205.)
+   */
+  private tls_not_after_unix?: number;
   private request_handler?: (
     request: Request,
     info: Deno.ServeHandlerInfo,
@@ -145,6 +153,7 @@ export class HttpServer {
         cert,
         key,
       }, handler);
+      this.refreshTlsCertExpiry(cert);
 
       // Start file-watch-driven TLS hot-reload when opted in.
       // (gh/geldata#4277, ports geldata/gel#4297)
@@ -289,6 +298,7 @@ export class HttpServer {
       }, this.request_handler);
 
       this.server = newServer;
+      this.refreshTlsCertExpiry(cert);
       log.info("TLS hot-reload: new listener up", {
         host: this.config.host,
         port: this.config.port,
@@ -318,6 +328,28 @@ export class HttpServer {
         });
         throw recoveryErr;
       }
+    }
+  }
+
+  /**
+   * Decode the active leaf cert and cache its `notAfter` for the
+   * Prometheus exporter. Failures here are non-fatal: a parse error
+   * just means the expiry gauge stays unset for this scrape, never
+   * that the server fails to start. Ports geldata/gel#6205.
+   */
+  private refreshTlsCertExpiry(cert: string): void {
+    try {
+      const expiry = computeCertExpiry(cert);
+      this.tls_not_after_unix = expiry.notAfterUnix;
+      log.info("TLS certificate expiry refreshed", {
+        notAfter: expiry.notAfter.toISOString(),
+        secondsUntilExpiry: expiry.secondsUntilExpiry,
+      });
+    } catch (err) {
+      this.tls_not_after_unix = undefined;
+      log.warn("Failed to decode TLS leaf certificate notAfter", {
+        error: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 
@@ -1007,6 +1039,13 @@ export class HttpServer {
       rateLimit: this.rate_limiter?.stats(),
       uptimeMs: Date.now() - this.startTime.getTime(),
       memory: this.get_memory_stats(),
+      tls: this.tls_not_after_unix !== undefined
+        ? {
+          notAfterUnix: this.tls_not_after_unix,
+          secondsUntilExpiry: this.tls_not_after_unix -
+            Math.floor(Date.now() / 1000),
+        }
+        : undefined,
     };
 
     const body = renderMetrics(source);

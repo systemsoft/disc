@@ -50,6 +50,18 @@ export interface MetricsSource {
     heapTotal: number;
     external: number;
   };
+  /**
+   * TLS certificate metadata (optional). When TLS is enabled, the server
+   * reports the leaf certificate's `notAfter` as a unix-epoch-seconds
+   * timestamp plus a derived `seconds_until_expiry` measurement so ops
+   * can alert before renewal fails. Ports geldata/gel#6205.
+   */
+  tls?: {
+    /** Unix epoch seconds at which the leaf cert stops being valid. */
+    notAfterUnix: number;
+    /** Seconds remaining until expiry, computed at scrape time. */
+    secondsUntilExpiry: number;
+  };
 }
 
 export interface MetricsConfig {
@@ -167,6 +179,24 @@ export function renderMetrics(
       `${prefix}_rate_limit_active_clients`,
       "Active rate limit client buckets",
       source.rateLimit.activeClients,
+    );
+  }
+
+  // TLS certificate metrics
+  // Ports geldata/gel#6205. Two related gauges: the absolute notAfter
+  // unix timestamp (matches Gel's `edgedb_tls_certificate_expiration_time`)
+  // and a derived seconds-until-expiry measurement that's friendlier for
+  // alerting rules (`disc_tls_certificate_seconds_until_expiry < 7d`).
+  if (source.tls) {
+    gauge(
+      `${prefix}_tls_certificate_expiration_time`,
+      "TLS leaf certificate notAfter as unix epoch seconds",
+      source.tls.notAfterUnix,
+    );
+    gauge(
+      `${prefix}_tls_certificate_seconds_until_expiry`,
+      "Seconds until TLS leaf certificate expires (negative if expired)",
+      source.tls.secondsUntilExpiry,
     );
   }
 

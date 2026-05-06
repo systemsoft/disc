@@ -157,3 +157,105 @@ Deno.test("renderMetrics output ends with newline", () => {
   const output = renderMetrics(makeSource());
   assertEquals(output[output.length - 1], "\n");
 });
+
+// ── TLS expiry gauge (ports geldata/gel#6205) ──────────────────────────
+
+Deno.test("renderMetrics emits TLS expiry gauges when tls is provided", () => {
+  // notAfter pinned at a fixed unix timestamp; secondsUntilExpiry is
+  // pre-computed by the caller (handle_metrics) so this test doesn't
+  // need to know the wall clock.
+  const source = makeSource({
+    tls: {
+      notAfterUnix: 1893456000, // 2030-01-01T00:00:00Z
+      secondsUntilExpiry: 60 * 60 * 24 * 30, // 30 days
+    },
+  });
+  const output = renderMetrics(source);
+
+  assertStringIncludes(
+    output,
+    "# TYPE disc_tls_certificate_expiration_time gauge",
+  );
+  assertStringIncludes(
+    output,
+    "disc_tls_certificate_expiration_time 1893456000",
+  );
+  assertStringIncludes(
+    output,
+    "# TYPE disc_tls_certificate_seconds_until_expiry gauge",
+  );
+  assertStringIncludes(
+    output,
+    "disc_tls_certificate_seconds_until_expiry 2592000",
+  );
+});
+
+Deno.test("renderMetrics omits TLS gauges when tls is undefined", () => {
+  const output = renderMetrics(makeSource({ tls: undefined }));
+  assertEquals(output.includes("disc_tls_certificate"), false);
+});
+
+// ── Gauge-value sanity audit (ports geldata/gel#5405) ──────────────────
+//
+// Gel #5405: certain `_created` gauges were inadvertently reporting the
+// wall-clock unix timestamp (~1.7e9) instead of the actual measurement.
+// Disc never adopted prom_client's `_created` convention so the bug
+// can't apply structurally — but a regression pin is still cheap. Any
+// gauge whose value falls in the unix-epoch-seconds danger band
+// (Jan 2020–Jan 2050) is suspicious for a count/size/seconds metric.
+//
+// Real expiry timestamps (`disc_tls_certificate_expiration_time`) are
+// allowed to look like unix epochs by design — the gauge name explicitly
+// says "expiration_time" — so we whitelist that line by name.
+
+Deno.test("no gauge other than tls_certificate_expiration_time reports a unix-epoch-shaped value", () => {
+  const source = makeSource({
+    cache: {
+      compilation: { hits: 1, misses: 1, evictions: 0, size: 1 },
+      parse: { hits: 1, misses: 1, evictions: 0, size: 1 },
+    },
+    pool: { total: 5, idle: 4, active: 1, waiters: 0 },
+    rateLimit: { rejectedCount: 0, activeClients: 0 },
+    tls: {
+      notAfterUnix: 1893456000,
+      secondsUntilExpiry: 100,
+    },
+  });
+  const output = renderMetrics(source);
+
+  // Lower bound ≈ 2020-01-01, upper bound ≈ 2050-01-01.
+  const UNIX_LOW = 1_577_836_800;
+  const UNIX_HIGH = 2_524_608_000;
+  const ALLOWED_TIMESTAMP_GAUGES = new Set([
+    "disc_tls_certificate_expiration_time",
+  ]);
+
+  let currentType: "gauge" | "counter" | undefined;
+  let currentName: string | undefined;
+  for (const rawLine of output.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    if (line.startsWith("# TYPE ")) {
+      const [, , name, kind] = line.split(/\s+/);
+      currentName = name;
+      currentType = kind === "gauge" ? "gauge" : "counter";
+      continue;
+    }
+    if (line.startsWith("#")) continue;
+    if (currentType !== "gauge") continue;
+    if (!currentName) continue;
+    if (ALLOWED_TIMESTAMP_GAUGES.has(currentName)) continue;
+
+    // Sample line: "disc_query_cache_size 48"
+    const match = line.match(/^(\S+)\s+(\S+)$/);
+    if (!match) continue;
+    const value = Number(match[2]);
+    if (!Number.isFinite(value)) continue;
+    const looksLikeEpoch = value >= UNIX_LOW && value <= UNIX_HIGH;
+    assertEquals(
+      looksLikeEpoch,
+      false,
+      `gauge ${currentName}=${value} looks like a unix epoch — see geldata/gel#5405`,
+    );
+  }
+});
