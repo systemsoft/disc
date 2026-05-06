@@ -17,23 +17,24 @@ Two issues fall into a fifth bucket: Disc deliberately diverges from Gel's `not_
 
 ## Summary
 
-- **DONE**: ~75 high-relevance items already shipped in disc (was ~50; +25 from the 2026-05-06 BUILD-bundle sweep). Cross-referenced with `git log`.
-- **BUILD**: ~50 high-relevance items still pickable, sorted by leverage below. **Open gap: #8517 scalar/enum value diffing** (pinned-as-zero in `migration/gel-issues.test.ts` until extractTypes/diffType for scalars + CASCADE-aware ordering lands).
+- **DONE**: ~80 high-relevance items already shipped in disc (was ~50; +30 from the 2026-05-06 BUILD-bundle sweep). Cross-referenced with `git log`.
+- **BUILD**: ~45 high-relevance items still pickable, sorted by leverage below.
 - **SKIP**: ~120 high-relevance items not applicable to Disc (Gel-internal, Gel-Python, Gel-cloud-specific, or Disc-already-handled by virtue of being a fresh TS rewrite)
 - **DROP**: 2 high-relevance items upstream rejected (#7482, #7341 — already documented in prior audit; #7341 was actually re-implemented in Disc as opt-in CAPTCHA)
 - **Medium (789) and Low (1,676)**: handled via category-level rules below; no per-issue enumeration
 
 ### 2026-05-06 BUILD-bundle sweep
 
-Five sequential bundles, 25 issues closed, 15 commits, all on `origin/primary`. Cross-check methodology validated: ~6 issues were already-correct in Disc (regression pins added), 1 was a real parser bug (#4406), the rest were genuine ports/feature additions.
+Six sequential bundles, 30 issues closed, 16 commits, all on `origin/primary`. Cross-check methodology validated: ~7 issues were already-correct in Disc (regression pins added), 1 was a real parser bug (#4406), 1 was scoped down (#4583 — Gel feature has no Disc equivalent), the rest were genuine ports/feature additions.
 
 | Bundle | Issues closed | Commits |
 |--------|---------------|---------|
 | 1 — recommended next picks | #4095, #1218, #1030, #1325 | `087c57b`, `9f2adc8`, `43f2410`, `3f20adc` |
 | B — auth polish | #6503, #7275, #7596, #7026, #6433 | `6dcbc95`, `d9008e6`, `2253c39` |
-| C — migration sweep | #4406, #1147, #4343, #2071, #8517 (gap pinned) | `08e5533`, `0c71d97` |
+| C — migration sweep | #4406, #1147, #4343, #2071, #8517 (initial pin) | `08e5533`, `0c71d97` |
 | D — observability + errors | #6205, #5405, #930, #6648 | `0038920`, `ae677c7`, `735e377` |
 | E — auth-config surface | #7344, #8026, #7938, #6731, #6732, #8028 + brandColor OKLCH | `268c296`, `7614ac7`, `2a2353e` |
+| F — migration cluster | #8517 (full impl), #2564, #1840, #5617, #4583 (scoped down), #6304 | `1490ac5` |
 
 ## High Relevance (score 8-10) — full enumeration
 
@@ -114,7 +115,12 @@ Five sequential bundles, 25 issues closed, 15 commits, all on `origin/primary`. 
 | #1147 | ISE during migration | `0c71d97` (already-handled; regression pin) |
 | #4343 | Cannot DROP CONSTRAINT | `0c71d97` (property-level works; type-level is divergence with Gel `not_planned`) |
 | #2071 | Migrations fail after dump/restore | `0c71d97` (PG-backed round-trip pin) |
-| #8517 | Cannot drop enum but only altering | `0c71d97` (pinned-as-zero; **open gap** — scalar/enum diffing not implemented) |
+| #8517 | Cannot drop enum but only altering | `1490ac5` (full scalar/enum diffing — `CreateScalar`/`AddEnumValue`/`RecreateScalar`) |
+| #2564 | Removing/reordering enum values | `1490ac5` (`RecreateScalar` op + cascade-aware DDL guard) |
+| #1840 | Detect operations needing user input | `1490ac5` (`MigrationOperation.classification` + ambiguous gate) |
+| #5617 | User-specified IDs in migrations | `1490ac5` (already worked via `id := <uuid>'…'`; pin) |
+| #6304 | Migration deadlock with long queries | `1490ac5` (`SET LOCAL lock_timeout` + `pg_advisory_xact_lock`) |
+| #4583 | `START MIGRATION REWRITE` | scoped down — Gel DDL/EdgeQL feature without Disc equivalent (SDL-only refactor flow) |
 | #6205 | Prometheus metric for TLS cert expiry | `0038920` (two gauges, ASN.1 walker, refreshes on TLS reload) |
 | #5405 | Prometheus gauge metrics report timestamps as values | `0038920` (Disc never adopted `_created` convention; danger-band pin) |
 | #930 | "Please file an issue" hint on ISE | `ae677c7` (idempotent `appendInternalErrorHint`) |
@@ -154,15 +160,10 @@ Five sequential bundles, 25 issues closed, 15 commits, all on `origin/primary`. 
 | #6094 | (above) | | | |
 | #4319 | Run migrations in IO process | migrations, perf | Engine perf; only matters at >1000-object schemas | M |
 | #6697 | In-place major version upgrades | migration | Big — port pg_dump/pg_restore based path | L |
-| #6304 | Migration deadlock with long queries | migration, perf | Add lock_timeout + advisory-lock pattern | M |
 | #5713 | Inserts in migration are slower than outside | migration, perf | Profile our `migration/engine.ts`; likely identical issue | M |
 | #5322 | Schema comparison slow for large schemas | migration, perf | Linearize ours against quadratic in `migration/diff.ts` | M |
-| #1840 | Detect operations needing user input | migration | We have unsafe-gate; extend to "ambiguous" prompts | M |
-| #5617 | User-specified IDs in migrations | migration | Add data-migration helper API | M |
 | #1772 / #1461 | RFC1000 migration features | migration | Audit our diff generator vs. RFC | L |
 | #5190 | Backport migration rewrites | migration | We don't have versioned rewrites yet | M |
-| #2564 | Removing/reordering enum values | migration | We support add; need remove + reorder. Pairs with the #8517 gap. | M |
-| #4583 | `START MIGRATION REWRITE` | migration | Schema rewrite mode for major refactors | M |
 | #3761 | "Compact" migrations / push command | migration, devtools | Already partially in `767afb7`; finish push | S |
 | #7563 | All public CLI flags via env vars | devtools, cli | Standard envvar mapping audit | S |
 | #5911 | Run CLI programmatically | cli | Expose `cli/api.ts` with Deno-compatible programmatic surface | M |
@@ -186,7 +187,6 @@ Five sequential bundles, 25 issues closed, 15 commits, all on `origin/primary`. 
 | #4215 | Migrate type of computed global | migration | Likely needs a code path | M |
 | #2204 | Migrations not propagated to existing connections | migration | Schema-version bump notify | M |
 | #5641 | Complex schema → missing FROM-clause | migration, db | Smoke test & fix | M |
-| **#8517** (gap) | Cannot drop enum but only altering | migration | **Pinned-as-zero in `migration/gel-issues.test.ts`** — actual fix needs `extractTypes`/`diffType` for scalars + CASCADE-aware ordering | M |
 | #7724 | Extension upgrades | migration | We have an extension model already | M |
 | #2292 | TLS for Postgres connections | db | Should already work via deno-pg; verify | S |
 | #3534 | Listen on multiple TCP ports | infra | Disc supports one HTTP + one binary; multi may not be needed | M |
@@ -207,7 +207,6 @@ Five sequential bundles, 25 issues closed, 15 commits, all on `origin/primary`. 
 | #6119 / #5820 / #5819 | Document UI / UI button visibility | docs | UI documentation pass | S |
 | #6127 | Test guide | docs | We have tests; write the guide | S |
 | #6543 | New SDL loading strategy | migration, code-quality | Architecture-level cleanup | L |
-| #4583 | (above) | | | |
 | #4308 | Modify stdlib during minor upgrades | migration, db | Standard library versioning story | M |
 | #2834 | Migration fails on object-handling functions | migration, db | Edge case | S |
 | #4901 | Docker latest tag mismatch | cloud | Fix our release CI tagging | S |
@@ -232,7 +231,7 @@ Five sequential bundles, 25 issues closed, 15 commits, all on `origin/primary`. 
 | #4351 | `RESET SCHEMA TO initial` | migration | Stretch | M |
 | #4600 | Drop DB and re-create | cli, migration | We have `disc db wipe` — covers it | S |
 | #2910 | Migration errors in CI | migration, devtools | Better non-TTY error output | S |
-| #2910 / #1840 / #1865 / #1772 | Various migration features | migration | Track via meta-issue | — |
+| #2910 / #1865 / #1772 | Various migration features | migration | Track via meta-issue | — |
 | #3208 | Migration creation fails despite no questions | migration | Likely edge case; add fixture | S |
 | #2647 / #4334 | CLI ergonomics — remaining | cli | #1218/#1030 cleared in Bundle 1 (2026-05-06); audit `cli/main.ts` verb-object regularity, brew update messaging | S |
 | #725 | Code quality automation | devtools | Already have lint+fmt+test; add coverage | S |
