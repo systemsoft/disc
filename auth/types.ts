@@ -123,6 +123,53 @@ export interface AuthConfig {
    * (gh/geldata#7341)
    */
   captcha?: import("./captcha.ts").CaptchaConfig;
+  /**
+   * Magic-link URL template used to render the link target in the
+   * built-in email template. Supports a single `{token}` placeholder
+   * that is replaced with the URL-encoded plaintext token. When
+   * omitted, falls back to `${emailBaseUrl}/auth/magic?token=<token>`.
+   *
+   * Example: `https://app.example.com/auth/magic?token={token}` or
+   * `https://app.example.com/login/{token}` for path-style URLs.
+   *
+   * Validated at construction: must be `https://` (or `http://` for
+   * localhost/loopback during development) and must contain the
+   * `{token}` placeholder. (gh/geldata#8028, ports geldata/gel#8030)
+   */
+  magicLinkUrlTemplate?: string;
+  /**
+   * Branding/identity surface used by built-in email templates and
+   * the admin UI. Lets deployments customize the "from" identity
+   * without forking the templates. Each field is sanitized at
+   * construction (CRLF rejected, scheme-checked, length-capped) so a
+   * misconfig fails loud at boot. (gh/geldata#6731 / #6732 / #7938)
+   */
+  branding?: AuthBrandingConfig;
+}
+
+/**
+ * Branding fields applied to email templates and the admin UI. All
+ * fields are optional; defaults render as a generic "your account"
+ * identity. Strict input rules:
+ *
+ *  - `appName`: 1–80 chars, no CR/LF (would splice email headers).
+ *  - `logoUrl` / `darkLogoUrl`: must be `https://` (or `http://` for
+ *    `localhost`/`127.0.0.1` in development). `data:`, `javascript:`,
+ *    and other schemes are rejected outright (XSS via inline-rendered
+ *    HTML emails). 1–2048 chars.
+ *  - `brandColor`: 3- or 6-digit hex (`#0af` or `#00aaff`). Anything
+ *    else (named colors, `rgb(...)`, etc.) is rejected so the value
+ *    is safe to splat into inline CSS without an escape pass.
+ *
+ * Validation errors are thrown at `AuthProvider` construction —
+ * deployment refuses to boot with bad branding rather than emitting
+ * mangled emails. (gh/geldata#7938)
+ */
+export interface AuthBrandingConfig {
+  appName?: string;
+  brandColor?: string;
+  darkLogoUrl?: string;
+  logoUrl?: string;
 }
 
 /**

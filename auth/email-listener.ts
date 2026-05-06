@@ -18,7 +18,10 @@
 
 import { getLogger } from "../lib/logger.ts";
 import type { Mailer } from "../smtp/mailer.ts";
+import { buildMagicLinkUrl } from "./branding.ts";
 import {
+  type BrandingCtx,
+  defaultBranding,
   type EmailTemplateOverrides,
   type RenderedEmail,
   renderMagicCodeEmail,
@@ -26,6 +29,7 @@ import {
   renderPasswordResetEmail,
   renderVerificationEmail,
 } from "./email-templates.ts";
+import type { AuthBrandingConfig } from "./types.ts";
 import type { WebhookEvent } from "./webhooks.ts";
 
 const log = getLogger("auth-email-listener");
@@ -38,6 +42,20 @@ export interface EmailListenerConfig {
    * that consumes them.
    */
   baseUrl: string;
+  /**
+   * Branding values surfaced on every render context. Optional;
+   * defaults to a generic `{ appName: "Your account" }` so templates
+   * always see usable values. (gh/geldata#6731 / #6732)
+   */
+  branding?: AuthBrandingConfig;
+  /**
+   * Magic-link URL template (gh/geldata#8028). When set, takes
+   * precedence over `${baseUrl}/auth/magic?token=…` when constructing
+   * the link rendered into the email body. Validated up at the
+   * `AuthProvider` constructor — by the time this listener sees it,
+   * the template is known-safe.
+   */
+  magicLinkUrlTemplate?: string;
   /** SMTP transport. Pass a `NoopMailer` to dry-run the wiring. */
   mailer: Mailer;
   /**
@@ -49,6 +67,22 @@ export interface EmailListenerConfig {
    */
   resolveRecipient: (identityId: string) => Promise<string | null>;
   templates?: EmailTemplateOverrides;
+}
+
+/**
+ * Promote an `AuthBrandingConfig` (operator-supplied, every field
+ * optional) to the `BrandingCtx` (renderer-facing, `appName` required)
+ * by filling in defaults. Pulled out so every code path in the
+ * listener uses the same fallback rules.
+ */
+function resolveBranding(branding: AuthBrandingConfig | undefined): BrandingCtx {
+  const fallback = defaultBranding();
+  return {
+    appName: branding?.appName ?? fallback.appName,
+    brandColor: branding?.brandColor,
+    darkLogoUrl: branding?.darkLogoUrl,
+    logoUrl: branding?.logoUrl,
+  };
 }
 
 export class EmailEventListener {
@@ -97,6 +131,7 @@ export class EmailEventListener {
     if (!recipient) return;
     const rendered = (this.config.templates?.verification ?? renderVerificationEmail)({
       baseUrl: this.config.baseUrl,
+      branding: resolveBranding(this.config.branding),
       recipient,
       verificationToken,
     });
@@ -108,6 +143,7 @@ export class EmailEventListener {
     if (!recipient) return;
     const rendered = (this.config.templates?.passwordReset ?? renderPasswordResetEmail)({
       baseUrl: this.config.baseUrl,
+      branding: resolveBranding(this.config.branding),
       recipient,
       resetToken,
     });
@@ -117,8 +153,14 @@ export class EmailEventListener {
   private async handleMagicLink(identityId: string, magicLinkToken: string): Promise<void> {
     const recipient = await this.lookup(identityId, "MagicLinkRequested");
     if (!recipient) return;
+    const link = buildMagicLinkUrl(magicLinkToken, {
+      baseUrl: this.config.baseUrl,
+      template: this.config.magicLinkUrlTemplate,
+    });
     const rendered = (this.config.templates?.magicLink ?? renderMagicLinkEmail)({
       baseUrl: this.config.baseUrl,
+      branding: resolveBranding(this.config.branding),
+      link,
       magicLinkToken,
       recipient,
     });
@@ -129,6 +171,7 @@ export class EmailEventListener {
     const recipient = await this.lookup(identityId, "MagicCodeRequested");
     if (!recipient) return;
     const rendered = (this.config.templates?.magicCode ?? renderMagicCodeEmail)({
+      branding: resolveBranding(this.config.branding),
       code,
       recipient,
     });

@@ -168,4 +168,127 @@ describe("AuthProvider — config validation (gh/geldata#7006)", () => {
     );
     await assertRejects(() => provider.initialize(), Error, "bcryptRounds");
   });
+
+  // ── Branding + magic-link URL template (gh/geldata#7938 / #8028) ──
+  //
+  // Branding inputs flow into rendered HTML emails and the admin UI;
+  // they're attacker-adjacent and must refuse to boot on any
+  // suspicious value rather than silently sanitizing.
+
+  it("rejects CRLF in branding.appName at construction (header splice)", () => {
+    // Throws synchronously from the constructor — caught here without
+    // needing initialize().
+    let err: unknown;
+    try {
+      new AuthProvider(
+        {
+          ...baseConfig,
+          branding: { appName: "Acme\r\nBcc: attacker@evil" },
+        },
+        db as any,
+      );
+    } catch (e) {
+      err = e;
+    }
+    if (!(err instanceof Error) || !err.message.includes("control characters")) {
+      throw new Error(`expected control-characters refusal, got ${err}`);
+    }
+  });
+
+  it("rejects javascript: branding.logoUrl at construction (XSS)", () => {
+    let err: unknown;
+    try {
+      new AuthProvider(
+        {
+          ...baseConfig,
+          branding: { logoUrl: "javascript:alert(1)" },
+        },
+        db as any,
+      );
+    } catch (e) {
+      err = e;
+    }
+    if (!(err instanceof Error) || !err.message.includes("https://")) {
+      throw new Error(`expected scheme refusal, got ${err}`);
+    }
+  });
+
+  it("rejects bad brandColor at construction", () => {
+    let err: unknown;
+    try {
+      new AuthProvider(
+        {
+          ...baseConfig,
+          branding: { brandColor: "rgb(0,0,0)" },
+        },
+        db as any,
+      );
+    } catch (e) {
+      err = e;
+    }
+    if (!(err instanceof Error) || !err.message.includes("hex color")) {
+      throw new Error(`expected hex-color refusal, got ${err}`);
+    }
+  });
+
+  it("accepts a fully valid branding block", () => {
+    new AuthProvider(
+      {
+        ...baseConfig,
+        branding: {
+          appName: "Acme",
+          brandColor: "#0af",
+          logoUrl: "https://cdn.acme.com/logo.png",
+        },
+      },
+      db as any,
+    );
+    // No throw → pass.
+  });
+
+  it("rejects magicLinkUrlTemplate without {token}", () => {
+    let err: unknown;
+    try {
+      new AuthProvider(
+        {
+          ...baseConfig,
+          magicLinkUrlTemplate: "https://example.com/login",
+        },
+        db as any,
+      );
+    } catch (e) {
+      err = e;
+    }
+    if (!(err instanceof Error) || !err.message.includes("{token}")) {
+      throw new Error(`expected {token} refusal, got ${err}`);
+    }
+  });
+
+  it("rejects http://example.com magicLinkUrlTemplate (production)", () => {
+    let err: unknown;
+    try {
+      new AuthProvider(
+        {
+          ...baseConfig,
+          magicLinkUrlTemplate: "http://example.com/login?t={token}",
+        },
+        db as any,
+      );
+    } catch (e) {
+      err = e;
+    }
+    if (!(err instanceof Error) || !err.message.includes("https://")) {
+      throw new Error(`expected scheme refusal, got ${err}`);
+    }
+  });
+
+  it("accepts http://localhost magicLinkUrlTemplate (dev)", () => {
+    new AuthProvider(
+      {
+        ...baseConfig,
+        magicLinkUrlTemplate: "http://localhost:3000/login?t={token}",
+      },
+      db as any,
+    );
+  });
 });

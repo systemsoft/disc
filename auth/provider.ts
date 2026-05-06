@@ -35,6 +35,7 @@ import { buildOtpauthUri, generateSecret as generateTotpSecret, verifyTOTP } fro
 import * as webAuthn from "./webauthn.ts";
 import { createMailer } from "../smtp/mailer.ts";
 import { EmailEventListener } from "./email-listener.ts";
+import { validateBranding, validateMagicLinkUrlTemplate } from "./branding.ts";
 
 /**
  * Conditional config fields whose presence depends on `jwtAlgorithm`:
@@ -51,7 +52,9 @@ type ConditionalAuthFields =
   | "smtp"
   | "emailTemplates"
   | "emailBaseUrl"
-  | "captcha";
+  | "captcha"
+  | "magicLinkUrlTemplate"
+  | "branding";
 
 /**
  * Resolved config after defaults merge — every non-conditional field is
@@ -132,6 +135,12 @@ export class AuthProvider implements IAuthProvider {
       ...AUTH_CONFIG_DEFAULTS,
       ...overrides,
     } as ResolvedAuthConfig;
+    // gh/geldata#7938 / #8028: branding + magic-link URL template are
+    // validated at construction so a misconfig (CRLF in `appName`,
+    // `javascript:` logo, missing `{token}` placeholder, etc.) refuses
+    // to boot rather than emitting mangled or unsafe email later.
+    validateBranding(this.config.branding);
+    validateMagicLinkUrlTemplate(this.config.magicLinkUrlTemplate);
     this.db = db;
     this.webhookSender = new WebhookSender(
       this.config.webhooks ?? [],
@@ -159,6 +168,8 @@ export class AuthProvider implements IAuthProvider {
         const mailer = createMailer(this.config.smtp);
         const listener = new EmailEventListener({
           baseUrl: this.config.emailBaseUrl,
+          branding: this.config.branding,
+          magicLinkUrlTemplate: this.config.magicLinkUrlTemplate,
           mailer,
           resolveRecipient: (identityId) => this.resolveEmailRecipient(identityId),
           templates: this.config.emailTemplates,
