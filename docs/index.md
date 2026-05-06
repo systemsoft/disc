@@ -1,6 +1,6 @@
 # Disc Documentation
 
-Disc is a schema-first, TypeScript-native database built on Deno. It sits on top of PostgreSQL and provides a declarative schema language (SDL), a purpose-built query language (EdgeQL), automatic migrations, and a bundled PostgreSQL instance that requires zero manual setup. Disc is a fork of [Gel](https://geldata.com) (formerly EdgeDB), reimplemented in TypeScript while preserving EdgeQL and SDL.
+Disc is a schema-first, TypeScript-native database built on Deno. It sits on top of PostgreSQL and provides a declarative schema language (SDL), a purpose-built query language (EdgeQL), automatic migrations, and a bundled PostgreSQL instance that requires zero manual setup. Disc is a fork of [Gel](https://geldata.com) (formerly EdgeDB), reimplemented in TypeScript while preserving EdgeQL and SDL.
 
 ---
 
@@ -23,35 +23,40 @@ Disc is a schema-first, TypeScript-native database built on Deno. It sits on top
 | Browse data in a web UI              | [Admin UI](admin-ui.md)                           |
 | Understand the bundled PostgreSQL    | [Bundled PostgreSQL](bundled-postgres.md)         |
 | Deploy to production                 | [Production Deployment](production-deployment.md) |
+| Tune queries, indexes, and caches    | [Performance](performance.md)                     |
+| Run Disc via Docker Compose          | [Docker Compose](docker-compose.md)               |
 
 ---
 
 ## Key Concepts
 
-**Schema-first.** Your data model is defined in `.disc` files using SDL (Schema Definition Language). Disc parses these definitions, generates migrations, creates PostgreSQL tables, and produces TypeScript types -- all from one source of truth.
+**Schema-first.** Your data model is defined in `.disc` files using SDL (Schema Definition Language). Disc parses these definitions, generates migrations, creates PostgreSQL tables, and produces TypeScript types -- all from one source of truth.
 
-**EdgeQL.** Disc uses EdgeQL, not SQL, as its primary query language. EdgeQL compiles to PostgreSQL SQL under the hood but provides a cleaner syntax for nested data, filtering, and type-safe queries. You never write raw SQL unless you want to.
+**EdgeQL.** Disc uses EdgeQL, not SQL, as its primary query language. EdgeQL compiles to PostgreSQL SQL under the hood but provides a cleaner syntax for nested data, filtering, and type-safe queries. You never write raw SQL unless you want to.
 
-**Bundled PostgreSQL.** Running `disc init` downloads and manages a PostgreSQL instance automatically. Users never install, configure, or maintain PostgreSQL directly. For production, an external PostgreSQL can be connected via `--backend-dsn`.
+**Bundled PostgreSQL.** Running `disc init` downloads and manages a PostgreSQL instance automatically. Users never install, configure, or maintain PostgreSQL directly. For production, an external PostgreSQL can be connected via `--backend-dsn`.
 
-**TypeScript-native.** The entire stack -- schema parser, query compiler, migration engine, server, CLI, and SDK -- is written in TypeScript and runs on Deno. No Python, Rust, or Java dependencies.
+**TypeScript-native.** The entire stack -- schema parser, query compiler, migration engine, server, CLI, and SDK -- is written in TypeScript and runs on Deno. No Python, Rust, or Java dependencies.
 
 ---
 
 ## Full Table of Contents
 
-- [Getting Started](getting-started.md) -- Install Deno, create a project, write a schema, run queries, generate types.
-- [Schema (SDL)](schema.md) -- Object types, scalar types, links, properties, constraints, defaults, computed fields, abstract types, modules.
-- [EdgeQL](edgeql.md) -- SELECT, INSERT, UPDATE, DELETE, shapes, filters, ordering, pagination, aggregation, subqueries, parameters.
-- [Functions Reference](functions.md) -- Built-in scalar functions, aggregate functions, date/time functions, string functions, math functions.
-- [CLI Reference](cli.md) -- All CLI commands, flags, and usage examples.
-- [Migrations](migrations.md) -- Creating, applying, rolling back, and squashing migrations. Schema diffing and DDL generation.
-- [Codegen](codegen.md) -- Generating TypeScript interfaces, query builders, and client code from your schema.
-- [Client SDK](client-sdk.md) -- Using the `DiscClient` to run queries, manage transactions, subscribe to changes, and handle authentication.
-- [Server Configuration](server.md) -- Environment variables, ports, connection pools, CORS, WebSockets, logging, and protocol options.
-- [Auth](auth.md) -- JWT-based authentication, user registration, login, session management, and the `AuthManager` SDK.
-- [Access Policies](access-policies.md) -- Object-level access policies in SDL, row-level security enforcement, auth context bridging.
-- [Extensions](extensions.md) -- Built-in extensions and the extension system architecture.
-- [Admin UI](admin-ui.md) -- Schema browser, data viewer, query editor, REPL, and migration history in the web-based admin interface.
-- [Bundled PostgreSQL](bundled-postgres.md) -- How Disc downloads, initializes, and manages PostgreSQL. Instance lifecycle, version upgrades, socket configuration.
-- [Production Deployment](production-deployment.md) -- TLS, connection pools, health checks, rate limiting, Docker, native binaries, systemd, monitoring.
+- [Getting Started](getting-started.md) -- Install Deno, create a project, write a schema, run queries, generate types.
+- [Schema (SDL)](schema.md) -- Object types, scalar types, links, properties, constraints, defaults, computed fields, abstract types, modules.
+- [EdgeQL](edgeql.md) -- SELECT, INSERT, UPDATE, DELETE, shapes, filters, ordering, pagination, aggregation, subqueries, parameters.
+- [EdgeQL Cheat Sheet](edgeql-cheatsheet.md) -- One-page reference of common EdgeQL forms.
+- [Functions Reference](functions.md) -- Built-in scalar functions, aggregate functions, date/time functions, string functions, math functions.
+- [CLI Reference](cli.md) -- All CLI commands, flags, and usage examples.
+- [Migrations](migrations.md) -- Creating, applying, rolling back, and squashing migrations. Schema diffing and DDL generation.
+- [Codegen](codegen.md) -- Generating TypeScript interfaces, query builders, and client code from your schema.
+- [Client SDK](client-sdk.md) -- Using the `DiscClient` to run queries, manage transactions, subscribe to changes, and handle authentication.
+- [Server Configuration](server.md) -- Environment variables, ports, connection pools, CORS, WebSockets, logging, and protocol options.
+- [Auth](auth.md) -- JWT-based authentication, user registration, login, session management, and the `AuthManager` SDK.
+- [Access Policies](access-policies.md) -- Object-level access policies in SDL, row-level security enforcement, auth context bridging.
+- [Extensions](extensions.md) -- Built-in extensions and the extension system architecture.
+- [Admin UI](admin-ui.md) -- Schema browser, data viewer, query editor, REPL, and migration history in the web-based admin interface.
+- [Bundled PostgreSQL](bundled-postgres.md) -- How Disc downloads, initializes, and manages PostgreSQL. Instance lifecycle, version upgrades, socket configuration.
+- [Production Deployment](production-deployment.md) -- TLS, connection pools, health checks, rate limiting, Docker, native binaries, systemd, monitoring.
+- [Performance](performance.md) -- Indexing strategy, EXPLAIN diagnostics, parse/compile/EXPLAIN caches, pool tuning, key Prometheus gauges.
+- [Docker Compose](docker-compose.md) -- Self-hosted Disc + bundled PostgreSQL via `docker compose up`.
