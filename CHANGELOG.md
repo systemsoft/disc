@@ -4,6 +4,117 @@ All notable changes to Disc are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com), and the project uses
 [ChronVer](https://chronver.org) (`YYYY.MM.DD`) versioning.
 
+Sections per release: **Added** (new features), **Changed**
+(behavior changes that aren't fixes), **Fixed** (bug fixes),
+**Removed** (deletions), **Security** (vulnerability/posture
+changes), **Docs** (docs-only changes), and **Internal** (refactors
+not user-visible). New entries land under `## [Unreleased]` and are
+moved into a dated `## vYYYY.MM.DD — short-summary` block when a
+tag is cut.
+
+## [Unreleased]
+
+### Added
+
+- Env-var equivalents for `DISC_SHUTDOWN_DRAIN_TIMEOUT`,
+  `DISC_REQUIRE_AUTH`, `DISC_READ_ONLY`, `DISC_TRUST_PROXY`,
+  `DISC_BINARY_PORT`, `DISC_BINARY_PASSWORD`, plus `DISC_TLS_*_ENV`
+  indirection for environments that ship PEM material as env strings
+  (Kubernetes secrets, Fly.io, Render). (gh/geldata#5234, #7563, #4547)
+- Anonymous / guest identity: `loginAnonymous` + `upgradeAnonymous`
+  preserving the same row id across the upgrade (gh/geldata#8750 — open
+  upstream, Disc shipped).
+- TOTP MFA, magic links, recovery codes, WebAuthn / passkeys (#8186,
+  #6725).
+- File / blob storage with content-addressed dedup
+  (`lib/file-storage/`).
+- LSP server through Phase 4 (diagnostics, hover, completion, go-to,
+  symbols, find-references, rename) (#7411, #655).
+- Schema export (`disc schema export`) and PG introspection
+  (`disc schema introspect`) (#702, #7469, #3452).
+- Admin CLI: `disc admin {create-superuser,set-password,assign-role,
+  list-roles}` (#1129, #5383, #6454, #1119, #4209).
+- Multi-database routing (`X-Database` header / `?database=` query
+  string) and `disc db {wipe,dump,restore}`.
+- Generic OIDC + discovery factory (#6908, #7415).
+- Server-wide read-only mode at AST level (#5524).
+- HTTP auth gate (`requireAuth`) with public-route allowlist (#6345).
+- TLS hot-reload via drain-and-swap on cert/key file change (#4277).
+- Auth lifecycle webhooks (fire-and-forget) (#7484).
+- Custom error-message clause on access policies (`errmessage`)
+  threaded through both parsers, INSERT/UPDATE/DELETE deny throws,
+  and SQL-injector throw sites (#4095).
+- Resend verification token (#6503), `register()` returns
+  `identity` snapshot (#7275), PKCE trailing-`=` normalization
+  (#7596).
+- Scalar/enum diffing with `RecreateScalar` op + DDL guard
+  (#8517, #2564), ambiguous-op classification (#1840), advisory-lock
+  + `lock_timeout` pragmas on every migration tx (#6304).
+- Prometheus TLS cert-expiry gauges (#6205) + danger-band pin (#5405).
+- Auth branding config (`AuthBrandingConfig` — appName, logoUrl,
+  brandColor with OKLCH support) flowing through email templates
+  (#7938, #6731, #6732, #8028).
+- OAuth profile claim normalization (`emailVerified`, `givenName`,
+  `familyName`, `locale`) with permissive `email_verified` parsing
+  (#7344, #8026).
+- `[server]` knobs in `disc.toml` (require_auth, read_only, enable_cors,
+  cors_origins, cors_allow_credentials, trust_proxy, enable_websockets,
+  enable_metrics, max_request_body_bytes, request_timeout,
+  rate_limit_rpm) (#1325).
+- REPL `\d` describer rewrite (lists types grouped by module, full
+  per-type detail) (#1218).
+- `-H` short alias for `--host` matching standard Unix conventions
+  (#1030).
+
+### Docs
+
+- Performance guide (`docs/performance.md`) covering indexing, EXPLAIN,
+  parse/compile/EXPLAIN caches, pool tuning, Prometheus gauges (#6126).
+- Production migration documentation (`docs/migrations.md` extended
+  with classification table, RecreateScalar enum-removal flow,
+  5-step rollout, advisory lock semantics, CI/CD pattern) (#6096,
+  #2230).
+- Programmatic migrations API guide (Lifecycle Overview, connection
+  injection, inspecting the diff, safe-vs-unsafe gate, embed-in-app
+  reference) in `docs/migrations.md` (#6094).
+- Containerized local dev / docker-compose (`docs/docker-compose.md`)
+  walking through the shipped `docker-compose.yml` (#4170, #6176).
+- Auth doc finishing in `docs/auth.md` (TOTP/magic-link/recovery,
+  WebAuthn, anonymous, OAuth, branding, webhooks, HTTP auth gate,
+  RBAC) plus admin password management section (#1021, #8421).
+- Secure TLS setup in `docs/production-deployment.md` (hot-reload +
+  cert-expiry gauge alerting) (#4239).
+- Documented previously-undocumented config options (`docs/server.md`)
+  with full `DiscServerOptions` interface, env-var/`disc.toml`
+  matrix (#4787, #8273).
+- EdgeQL cheat sheet (`docs/edgeql-cheatsheet.md`) — one-page
+  reference of common forms (#1163).
+- Error code reference (`docs/error-codes.md`) — full catalog of
+  Disc error classes + GEL_ERROR_CODES numeric table (#6648).
+
+### Security
+
+- SCRAM string compares are constant-time via `constantTimeEqualStr`
+  closing the byte-by-byte timing leak on the server-nonce portion
+  (gh/geldata#9137 — open upstream, Disc shipped).
+- `InternalError` carries "please file an issue" tail with idempotent
+  re-wrap detection (#930).
+
+### Pinned (already correct in Disc)
+
+- Property-level `DROP CONSTRAINT` (#4343 — Gel `not_planned`,
+  Disc divergence documented).
+- Abstract-extraction idempotency (#1147 — closed-completed upstream).
+- Dump/restore round-trip (#2071 — closed-completed upstream).
+- User-specified IDs in migrations (#5617 — already worked via
+  `id := <uuid>'…'`).
+- Auto-allow `redirect_uri` against `allowedRedirectUris` (#6433).
+- PKCE RFC names already used (#7026).
+- Parser accepts explicit `optional`/`single` qualifiers (#4406 —
+  fix shipped: previously rejected, now no-op).
+- First-migration prompts are non-interactive — Disc never prompts
+  on migrations regardless of operation kind (#3733, #3414).
+
 ## v2026.05.04 — Initial tagged release
 
 The first tagged Disc release. Everything below is the cumulative
