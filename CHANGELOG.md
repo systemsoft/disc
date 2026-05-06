@@ -16,6 +16,20 @@ tag is cut.
 
 ### Added
 
+- **Schema-derived REST surface** (Disc-original feature #2 from
+  `docs/disc-original-features.md`). Every non-abstract object type in
+  the schema gets a conventional REST surface under `/api/<TypeName>`:
+  `GET` list (with filter, `__in`, `__contains`, `order_by`, `limit`,
+  `offset`), `GET` single, `POST` insert, `PATCH` update, `DELETE`
+  delete, and `GET /api/<Type>/<id>/<linkName>` for linked
+  collections. Routes synthesize EdgeQL strings and run them through
+  the standard protocol pipeline so access policies, read-only mode,
+  and the auth gate compose without extra work. SDL annotations
+  `rest::hidden` (suppress a property from default GET shape) and
+  `rest::expand` (inline a linked collection) gate visibility.
+  OpenAPI 3.1 spec emitted at `/api/openapi.json`. Disabled via
+  `disc.toml` `enable_rest = false` or `DISC_ENABLE_REST=false`;
+  defaults on. JSON-only bodies; unknown body fields → 400.
 - **Single-binary distribution** (Disc-original feature #4 from
   `docs/disc-original-features.md`). Compiled `disc` binary now
   embeds the SvelteKit admin UI under `/ui` and the platform's

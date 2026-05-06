@@ -2,7 +2,7 @@
 
 Things Disc would build that Gel doesn't have and isn't planning. Each is a deliberate departure — features that justify Disc as a fork rather than a port.
 
-> **Status:** Mixed. **Shipped: #4 single-binary distribution** (Bundle I, 2026-05-06). The remaining four are proposals — rough scoping but no design doc, no scheduled milestone. Use this as the seed list for picking next-up direction once the upstream-parity work is done (see `future-triage.md`).
+> **Status:** Mixed. **Shipped: #4 single-binary distribution** (Bundle I, 2026-05-06) and **#2 schema-derived REST surface** (Bundle J, 2026-05-06). The remaining three are proposals — rough scoping but no design doc, no scheduled milestone. Use this as the seed list for picking next-up direction once the upstream-parity work is done (see `future-triage.md`).
 
 ---
 
@@ -34,7 +34,9 @@ const users = await db.User.select({
 
 ---
 
-## 2. Schema-derived REST surface (auto-generated)
+## 2. Schema-derived REST surface (auto-generated) — **SHIPPED 2026-05-06**
+
+> **Status:** Shipped in Bundle J. Live behavior is documented in `docs/rest-api.md` (`server/rest/router.ts`, `server/rest/openapi.ts`). The doc below is preserved as historical context.
 
 **The problem.** Gel exposes EdgeQL over HTTP and GraphQL via `ext::graphql`, but it doesn't generate a conventional REST surface. Many integrations (n8n, Zapier, mobile apps with locked-down clients, anything that wants OpenAPI) assume REST.
 
@@ -157,7 +159,7 @@ This composes with existing access policies. It's a defense-in-depth layer for t
 Each item is independently scopeable. The natural ordering by **how much it justifies Disc-as-a-fork**:
 
 1. ~~**#4 single-binary** — biggest UX delta for self-hosters, smallest engineering cost.~~ **Shipped 2026-05-06.**
-2. **#2 REST surface** — broadest integration story, modest cost.
+2. ~~**#2 REST surface** — broadest integration story, modest cost.~~ **Shipped 2026-05-06.**
 3. **#1 codegen-free builder** — biggest DX delta for application developers, but most type-system work.
 4. **#3 admin-UI differentiators** — best demo material; can be staged 3a → 3c → 3d → 3b.
 5. **#5 Deno-perm policies** — most novel, narrowest applicability.
