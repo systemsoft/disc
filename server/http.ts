@@ -25,6 +25,8 @@ import { matchCorsOrigin } from "./cors-matcher.ts";
 import { createUiAssetHandler, type UiAssetHandler } from "./ui-assets.ts";
 import { dispatchRest } from "./rest/router.ts";
 import { renderOpenApiSpec } from "./rest/openapi.ts";
+import { handleSchemaWatch } from "./admin/schema-watch.ts";
+import { handleSchemaApply } from "./admin/schema-apply.ts";
 
 const DEFAULT_CORS_METHODS = ["GET", "POST", "OPTIONS"];
 const DEFAULT_CORS_HEADERS = ["Content-Type", "Authorization"];
@@ -49,6 +51,18 @@ export interface HttpServerOptions {
    * (gh/geldata#3567)
    */
   fileManager?: import("../lib/file-storage/manager.ts").FileManager;
+  /**
+   * Live-schema-diff admin wiring (Bundle K — Disc-original feature
+   * #3a). When set, the HTTP server mounts:
+   *   GET  /admin/schema-watch  — SSE stream of diff snapshots
+   *   POST /admin/schema-apply  — apply the on-disk schema
+   * Both routes are gated by the standard auth gate. Omitted → 404.
+   */
+  adminSchemaWatch?: {
+    schemaFilePath: string;
+    appliedSdlProvider: () => string;
+    onApplied?: (newSdl: string) => void;
+  };
 }
 
 export class HttpServer {
@@ -68,6 +82,7 @@ export class HttpServer {
   private databaseRegistry?: DatabaseRegistry;
   private schemaProvider?: SchemaProvider;
   private migrationsProvider?: MigrationsProvider;
+  private adminSchemaWatch?: HttpServerOptions["adminSchemaWatch"];
   private rate_limiter?: RateLimiter;
   private uiAssetHandler: UiAssetHandler;
   private server?: Deno.HttpServer<Deno.NetAddr>;
@@ -106,6 +121,7 @@ export class HttpServer {
     this.databaseRegistry = options.databaseRegistry;
     this.schemaProvider = options.schemaProvider;
     this.migrationsProvider = options.migrationsProvider;
+    this.adminSchemaWatch = options.adminSchemaWatch;
     this.connection_manager = new ConnectionManager();
     this.session_manager = new SessionManager();
     this.transaction_manager = new TransactionManager();
@@ -489,6 +505,23 @@ export class HttpServer {
       if (url.pathname === "/ui" || url.pathname.startsWith("/ui/")) {
         const uiResponse = await this.uiAssetHandler(request);
         if (uiResponse) return uiResponse;
+      }
+
+      // Live-schema-diff admin endpoints (Bundle K — Disc-original
+      // feature #3a). Mounted only when DiscServer was given a
+      // `schemaFilePath`. The auth gate above has already approved
+      // the request; these routes are sensitive (write path), so
+      // operators should also enable `requireAuth` in production.
+      if (
+        this.adminSchemaWatch &&
+        (url.pathname === "/admin/schema-watch" ||
+          url.pathname === "/admin/schema-apply")
+      ) {
+        return await this.handleAdminSchemaRoute(
+          request,
+          url,
+          authedContext,
+        );
       }
 
       // Schema-derived REST surface (Bundle J — Disc-original feature #2).
@@ -1410,6 +1443,53 @@ export class HttpServer {
       });
       return this.create_error_response("Internal error", 500);
     }
+  }
+
+  /**
+   * Live-schema-diff admin endpoints (Bundle K — Disc-original
+   * feature #3a). Dispatches `/admin/schema-watch` and
+   * `/admin/schema-apply` to the dedicated handlers in
+   * `server/admin/`.
+   *
+   * Auth: when `requireAuth` is on, the global gate already enforced
+   * a JWT and we're handed an `AuthContext`. When `requireAuth` is
+   * off (dev default), these routes still respond — operators who
+   * deploy the admin UI in production should pair it with
+   * `requireAuth=true`.
+   */
+  private async handleAdminSchemaRoute(
+    request: Request,
+    url: URL,
+    _authContext: import("../auth/middleware.ts").AuthContext | null,
+  ): Promise<Response> {
+    if (!this.adminSchemaWatch) {
+      return this.create_error_response("Admin endpoints not configured", 404);
+    }
+
+    if (url.pathname === "/admin/schema-watch") {
+      if (request.method !== "GET") {
+        return this.create_error_response("Method Not Allowed", 405);
+      }
+      return handleSchemaWatch({
+        schemaFilePath: this.adminSchemaWatch.schemaFilePath,
+        appliedSdlProvider: this.adminSchemaWatch.appliedSdlProvider,
+      });
+    }
+
+    if (url.pathname === "/admin/schema-apply") {
+      if (request.method !== "POST") {
+        return this.create_error_response("Method Not Allowed", 405);
+      }
+      return await handleSchemaApply({
+        request,
+        url,
+        schemaFilePath: this.adminSchemaWatch.schemaFilePath,
+        databaseUrl: this.config.databaseUrl,
+        onApplied: this.adminSchemaWatch.onApplied,
+      });
+    }
+
+    return this.create_error_response("Not Found", 404);
   }
 
   /**

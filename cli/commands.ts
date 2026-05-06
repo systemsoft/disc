@@ -179,6 +179,15 @@ export class CLICommands {
       // Try to load the project schema from SDL
       const schemaFile = "./dbschema/default.disc";
       const schema = await this.readSchemaAsCompilerSchema(schemaFile);
+      // Cache the SDL text alongside the parsed Schema so the live-
+      // schema-diff admin endpoint can compare it to whatever's on
+      // disk when an editor saves changes. (Bundle K — Disc #3a)
+      let appliedSdl: string | undefined;
+      try {
+        appliedSdl = await Deno.readTextFile(schemaFile);
+      } catch {
+        appliedSdl = undefined;
+      }
 
       if (schema) {
         const objectTypeCount = Array.from(schema.types.values()).filter(
@@ -230,6 +239,14 @@ export class CLICommands {
 
       // Create server from environment variables, passing schema if available
       const server = schema ? createServerFromEnv(undefined, schema) : createServerFromEnv();
+
+      // Wire the live-schema-diff admin endpoints. Only enabled when
+      // both the SDL file and applied-SDL text resolved cleanly; if
+      // either is missing (e.g. fresh init with no schema yet), the
+      // /admin/schema-* routes return 404. (Bundle K)
+      if (appliedSdl !== undefined) {
+        server.setSchemaWatchSource(schemaFile, appliedSdl);
+      }
 
       // Apply layered config overrides. Precedence (lowest → highest):
       //   1. env-derived defaults (already in `server.get_config()`)

@@ -106,6 +106,23 @@ export interface DiscServerOptions extends Partial<Types.ServerConfig> {
    * plain TCP and require ALPN "edgedb-binary".
    */
   binaryTls?: { certFile: string; keyFile: string };
+
+  /**
+   * Path to the SDL schema file for the live-schema-diff admin endpoint
+   * (Bundle K — Disc-original feature #3a). When provided, the HTTP
+   * server mounts `/admin/schema-watch` (SSE diff stream) and
+   * `/admin/schema-apply` (gated migration apply). When omitted, both
+   * routes return 404.
+   */
+  schemaFilePath?: string;
+
+  /**
+   * SDL text the server believes is currently applied. Cached at boot
+   * by the CLI from `schemaFilePath`; re-read internally after each
+   * successful schema apply via `/admin/schema-apply`. Diff-vs-on-disk
+   * is computed against this string.
+   */
+  appliedSdl?: string;
 }
 
 export class DiscServer {
@@ -127,6 +144,12 @@ export class DiscServer {
   private sighup_handler?: () => void;
   private last_log_level?: "DEBUG" | "INFO" | "WARN" | "ERROR";
   private last_log_format?: "json" | "text";
+  /**
+   * Path + cached SDL text for the live-schema-diff admin endpoint.
+   * Updated in-place after a successful `/admin/schema-apply`.
+   */
+  private schemaFilePath?: string;
+  private appliedSdl?: string;
 
   constructor(config: DiscServerOptions = {}) {
     // If a PostgresInstance is provided, derive databaseUrl from its DSN
@@ -169,6 +192,8 @@ export class DiscServer {
     this.postgresInstance = config.postgresInstance;
     this.binaryPassword = config.binaryPassword;
     this.binaryTls = config.binaryTls;
+    this.schemaFilePath = config.schemaFilePath;
+    this.appliedSdl = config.appliedSdl;
 
     // Initialize extension registry and register extensions from options
     this.extensionRegistry = new ExtensionRegistry();
@@ -196,6 +221,20 @@ export class DiscServer {
     } else {
       this.protocolHandler = new SimpleEdgeQLProtocolHandler(handlerOptions);
     }
+  }
+
+  /**
+   * Set or replace the live-schema-diff source (Bundle K — Disc #3a).
+   * Called by the CLI between `createServerFromEnv()` and `start()`
+   * with the path to the project's `.disc` SDL file plus the SDL
+   * text the server is booting from. After start, the server
+   * exposes `/admin/schema-watch` (SSE diff stream) and
+   * `/admin/schema-apply` (gated apply). The cached SDL is updated
+   * automatically on each successful apply.
+   */
+  setSchemaWatchSource(schemaFilePath: string, appliedSdl: string): void {
+    this.schemaFilePath = schemaFilePath;
+    this.appliedSdl = appliedSdl;
   }
 
   async start(): Promise<void> {
@@ -314,6 +353,18 @@ export class DiscServer {
           ? () => this.extensionRegistry.getHealthStatus()
           : undefined,
         databaseRegistry: this.databaseRegistry,
+        // Live-schema-diff (Bundle K — Disc #3a). When the CLI passed a
+        // schemaFilePath, HttpServer mounts `/admin/schema-watch` and
+        // `/admin/schema-apply`; otherwise both 404.
+        adminSchemaWatch: this.schemaFilePath
+          ? {
+            schemaFilePath: this.schemaFilePath,
+            appliedSdlProvider: () => this.appliedSdl ?? "",
+            onApplied: (newSdl) => {
+              this.appliedSdl = newSdl;
+            },
+          }
+          : undefined,
         schemaProvider: () => {
           // Access the handler's current schema (may be updated at runtime)
           const handler = this.protocolHandler as any;
