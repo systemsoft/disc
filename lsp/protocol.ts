@@ -132,6 +132,8 @@ export interface InitializeResult {
     completionProvider?: { triggerCharacters?: string[] };
     definitionProvider?: boolean;
     documentSymbolProvider?: boolean;
+    referencesProvider?: boolean;
+    renameProvider?: boolean | { prepareProvider?: boolean };
   };
   serverInfo?: { name: string; version?: string };
 }
@@ -240,4 +242,30 @@ export interface DocumentSymbol {
   range: Range;
   selectionRange: Range;
   children?: DocumentSymbol[];
+}
+
+// ---------------------------------------------------------------------------
+// References + rename
+// ---------------------------------------------------------------------------
+
+export interface ReferenceContext {
+  includeDeclaration: boolean;
+}
+
+export interface ReferenceParams extends TextDocumentPositionParams {
+  context?: ReferenceContext;
+}
+
+export interface TextEdit {
+  range: Range;
+  newText: string;
+}
+
+export interface WorkspaceEdit {
+  /** URI → list of edits, applied as a single atomic operation by the editor. */
+  changes?: Record<DocumentUri, TextEdit[]>;
+}
+
+export interface RenameParams extends TextDocumentPositionParams {
+  newName: string;
 }

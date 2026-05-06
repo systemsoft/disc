@@ -18,6 +18,8 @@ import { provideHover } from "./hover.ts";
 import { provideCompletion } from "./completion.ts";
 import { provideDefinition } from "./definition.ts";
 import { provideDocumentSymbols } from "./document-symbols.ts";
+import { provideReferences } from "./references.ts";
+import { prepareRename, provideRename } from "./rename.ts";
 import {
   type RpcMessage,
   type RpcRequest,
@@ -30,6 +32,8 @@ import {
   type DocumentUri,
   type InitializeResult,
   type PublishDiagnosticsParams,
+  type ReferenceParams,
+  type RenameParams,
   type TextDocumentIdentifier,
   type TextDocumentPositionParams,
 } from "./protocol.ts";
@@ -86,6 +90,8 @@ export class LanguageServer {
             completionProvider: { triggerCharacters: [":", " ", ">"] },
             definitionProvider: true,
             documentSymbolProvider: true,
+            referencesProvider: true,
+            renameProvider: { prepareProvider: true },
           },
           serverInfo: { name: "disc-lsp", version: "0.1.0" },
         };
@@ -137,6 +143,55 @@ export class LanguageServer {
           return;
         }
         this.respond(req.id, provideDocumentSymbols(doc.text));
+        return;
+      }
+
+      case "textDocument/references": {
+        const params = req.params as ReferenceParams;
+        const doc = this.docs.get(params.textDocument.uri);
+        if (!doc) {
+          this.respond(req.id, []);
+          return;
+        }
+        this.respond(
+          req.id,
+          provideReferences(
+            doc.text,
+            params.position,
+            params.textDocument.uri,
+            { includeDeclaration: params.context?.includeDeclaration ?? true },
+          ),
+        );
+        return;
+      }
+
+      case "textDocument/prepareRename": {
+        const params = req.params as TextDocumentPositionParams;
+        const doc = this.docs.get(params.textDocument.uri);
+        if (!doc) {
+          this.respond(req.id, null);
+          return;
+        }
+        this.respond(req.id, prepareRename(doc.text, params.position));
+        return;
+      }
+
+      case "textDocument/rename": {
+        const params = req.params as RenameParams;
+        const doc = this.docs.get(params.textDocument.uri);
+        if (!doc) {
+          this.respond(req.id, null);
+          return;
+        }
+        this.respond(
+          req.id,
+          provideRename(
+            doc.text,
+            params.position,
+            params.newName,
+            params.textDocument.uri,
+          ),
+        );
         return;
       }
 

@@ -348,6 +348,95 @@ Deno.test("LanguageServer - documentSymbol returns the file outline", async () =
   assertEquals(childNames, ["name", "posts"]);
 });
 
+Deno.test("LanguageServer - initialize advertises references + rename capabilities", async () => {
+  const tx = new FakeTransport();
+  const srv = new LanguageServer((m) => tx.send(m));
+  await srv.handle({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "initialize",
+    params: { capabilities: {} },
+  });
+  const r = tx.outgoing.find((m) => "id" in m && m.id === 1);
+  const result = (r as { result: { capabilities: Record<string, unknown> } }).result;
+  assertEquals(result.capabilities.referencesProvider, true);
+  assertEquals(
+    (result.capabilities.renameProvider as { prepareProvider: boolean }).prepareProvider,
+    true,
+  );
+});
+
+Deno.test("LanguageServer - references returns all use sites of a type", async () => {
+  const { srv, tx } = await newServer();
+  const text = `module default {
+  type User { required name: str; };
+  type Post { required link author -> User; };
+}`;
+  await srv.handle({
+    jsonrpc: "2.0",
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: "file:///r.disc", languageId: "disc", version: 1, text },
+    },
+  });
+  tx.outgoing.length = 0;
+
+  const lines = text.split("\n");
+  const declLine = lines.findIndex((l) => l.includes("type User"));
+  const character = lines[declLine].indexOf("User");
+
+  await srv.handle({
+    jsonrpc: "2.0",
+    id: 60,
+    method: "textDocument/references",
+    params: {
+      textDocument: { uri: "file:///r.disc" },
+      position: { line: declLine, character },
+      context: { includeDeclaration: true },
+    },
+  });
+  const r = tx.outgoing.find((m) => "id" in m && m.id === 60);
+  const result = (r as { result: { uri: string }[] }).result;
+  assertEquals(result.length, 2);
+});
+
+Deno.test("LanguageServer - rename emits a WorkspaceEdit with one TextEdit per occurrence", async () => {
+  const { srv, tx } = await newServer();
+  const text = `module default {
+  type User { required name: str; };
+  type Post { required link author -> User; };
+}`;
+  await srv.handle({
+    jsonrpc: "2.0",
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: "file:///rn.disc", languageId: "disc", version: 1, text },
+    },
+  });
+  tx.outgoing.length = 0;
+
+  const lines = text.split("\n");
+  const declLine = lines.findIndex((l) => l.includes("type User"));
+  const character = lines[declLine].indexOf("User");
+
+  await srv.handle({
+    jsonrpc: "2.0",
+    id: 70,
+    method: "textDocument/rename",
+    params: {
+      textDocument: { uri: "file:///rn.disc" },
+      position: { line: declLine, character },
+      newName: "Member",
+    },
+  });
+  const r = tx.outgoing.find((m) => "id" in m && m.id === 70);
+  const result = (r as { result: { changes: Record<string, { newText: string }[]> } | null }).result;
+  assertExists(result);
+  const edits = result!.changes["file:///rn.disc"];
+  assertEquals(edits.length, 2);
+  for (const e of edits) assertEquals(e.newText, "Member");
+});
+
 Deno.test("LanguageServer - shutdown returns null result", async () => {
   const { srv, tx } = await newServer();
   tx.outgoing.length = 0;
