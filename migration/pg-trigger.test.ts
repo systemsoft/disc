@@ -420,12 +420,14 @@ Deno.test({
     const itemTable = `trigger_item_${ts}`;
 
     try {
-      // Create the audit_log table
+      // Create the audit_log table. Use BIGSERIAL so `ORDER BY id`
+      // returns rows in insertion order — random UUIDs would make the
+      // multi-event ordering assertion flaky.
       await execSQL(
         dsn,
         `
         CREATE TABLE ${auditTable} (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          id BIGSERIAL PRIMARY KEY,
           action TEXT NOT NULL,
           target_name TEXT
         );

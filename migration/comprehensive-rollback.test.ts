@@ -263,19 +263,21 @@ Deno.test({
         "incr_post table should NOT exist yet",
       );
 
-      // Step 2: Add Post type (incremental)
+      // Step 2: Add Post type (incremental). Disc's parser requires
+      // `link <name> -> <Target>` for relationships — the optional-link
+      // shorthand is Gel-only.
       const sdlV2 = `
         type IncrUser {
           required name: str;
           required email: str {
             constraint exclusive;
           };
-          multi posts: IncrPost;
+          multi link posts -> IncrPost;
         };
 
         type IncrPost {
           required title: str;
-          required author: IncrUser;
+          required link author -> IncrUser;
         };
       `;
 

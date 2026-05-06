@@ -36,14 +36,32 @@ const RESERVED_PG_KEYWORDS = new Set<string>([
 export class DDLGenerator {
   /** Tracks junction tables already emitted in this DDL batch to avoid duplicates */
   private createdJunctionTables = new Set<string>();
+  /**
+   * Statements that must run AFTER all base `CREATE TABLE`s in the
+   * batch — single-link FK constraints (`ALTER TABLE ADD CONSTRAINT`),
+   * junction-table creation, and junction unique/index statements.
+   * Without this two-phase emission, a junction table or single-link
+   * FK might reference a table whose `CREATE TABLE` appears later in
+   * the same migration, and PG rejects the FK.
+   *
+   * Cleared at the start of `generateDDL`; populated by the per-op
+   * handlers when they encounter cross-table references.
+   */
+  private deferredStatements: string[] = [];
 
   generateDDL(operations: Types.MigrationOperation[]): string[] {
     this.createdJunctionTables.clear();
+    this.deferredStatements = [];
     const statements: string[] = [];
 
     for (const operation of operations) {
       statements.push(...this.generateOperationDDL(operation));
     }
+
+    // Two-phase emission: all base CREATE TABLEs first, then deferred
+    // FK constraints + junction tables. By the time deferred runs, all
+    // base tables in the batch exist, so cross-references resolve.
+    statements.push(...this.deferredStatements);
 
     return statements;
   }
@@ -251,8 +269,24 @@ export class DDLGenerator {
       }
     }
 
-    // Generate CREATE TABLE statement
-    statements.push(this.generateCreateTableFromColumns(tableName, columns));
+    // Generate CREATE TABLE statement WITHOUT inline FK constraints —
+    // cross-table FKs are emitted later via `ALTER TABLE ADD CONSTRAINT`
+    // so the migration can create types in any order without tripping
+    // "relation does not exist" on a forward reference.
+    statements.push(
+      this.generateCreateTableFromColumns(tableName, columns, {
+        inlineFKs: false,
+      }),
+    );
+
+    // Defer single-link FKs to the second phase.
+    for (const column of columns) {
+      if (column.references) {
+        this.deferredStatements.push(
+          this.generateAddForeignKey(tableName, column),
+        );
+      }
+    }
 
     // Generate junction tables for multi-valued links
     for (const link of operation.links) {
@@ -307,15 +341,20 @@ export class DDLGenerator {
           },
         ];
 
-        statements.push(
+        // Defer junction-table creation: it references base tables on
+        // both sides and may be emitted before either of them exists.
+        // Inline FKs are fine here because by the time deferred runs,
+        // every base CREATE TABLE has already been executed.
+        this.deferredStatements.push(
           this.generateCreateTableFromColumns(
             junctionTableName,
             junctionColumns,
+            { inlineFKs: true },
           ),
         );
 
         // Add unique constraint to prevent duplicate links
-        statements.push(
+        this.deferredStatements.push(
           `ALTER TABLE ${
             this.escapeIdentifier(junctionTableName)
           } ADD CONSTRAINT ${
@@ -325,10 +364,12 @@ export class DDLGenerator {
       }
     }
 
-    // Generate indexes for foreign keys and unique constraints
+    // Defer indexes on FK columns — must come after the FK constraint
+    // exists (so PG agrees the column references something) and after
+    // the table exists.
     for (const column of columns) {
       if (column.references) {
-        statements.push(
+        this.deferredStatements.push(
           `CREATE INDEX ${
             this.escapeIdentifier(`idx_${tableName}_${column.name}`)
           } ON ${this.escapeIdentifier(tableName)} (${
@@ -929,17 +970,36 @@ export class DDLGenerator {
   private generateCreateTableFromColumns(
     tableName: string,
     columns: Types.ColumnDefinition[],
+    options: { inlineFKs?: boolean } = {},
   ): string {
+    const inlineFKs = options.inlineFKs ?? true;
     const columnDefs = columns.map((col) => this.generateColumnDefinition(col));
-    const constraints = columns
-      .filter((col) => col.references)
-      .map((col) => this.generateForeignKeyConstraint(tableName, col));
+    const constraints = inlineFKs
+      ? columns
+        .filter((col) => col.references)
+        .map((col) => this.generateForeignKeyConstraint(tableName, col))
+      : [];
 
     const allDefs = [...columnDefs, ...constraints];
 
     return `CREATE TABLE ${this.escapeIdentifier(tableName)} (\n  ${
       allDefs.join(",\n  ")
     }\n);`;
+  }
+
+  /**
+   * Emit an `ALTER TABLE ... ADD CONSTRAINT ... FOREIGN KEY` statement
+   * for a column that has a `references` clause. Used when FKs are
+   * deferred so cross-table references resolve regardless of CREATE
+   * TABLE ordering within a migration.
+   */
+  private generateAddForeignKey(
+    tableName: string,
+    column: Types.ColumnDefinition,
+  ): string {
+    return `ALTER TABLE ${this.escapeIdentifier(tableName)} ADD ${
+      this.generateForeignKeyConstraint(tableName, column)
+    };`;
   }
 
   private generateColumnDefinition(column: Types.ColumnDefinition): string {

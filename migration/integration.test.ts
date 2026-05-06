@@ -69,7 +69,7 @@ module default {
   type Post {
     required title: str;
     required content: str;
-    required author: User;
+    required link author -> User;
     published_at: datetime;
     multi categories: str;
   };
@@ -96,7 +96,7 @@ module default {
     active: bool {
       default := true;
     };
-    multi posts: Post;
+    multi link posts -> Post;
   };
 
   type Post extending Timestamped {
@@ -104,12 +104,12 @@ module default {
       constraint min_len_value(5);
     };
     required content: str;
-    required author: User;
+    required link author -> User;
     published: bool {
       default := false;
     };
     published_at: datetime;
-    multi tags: Tag;
+    multi link tags -> Tag;
   };
 
   type Tag extending Timestamped {

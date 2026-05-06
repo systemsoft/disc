@@ -686,6 +686,13 @@ export class SchemaManager {
 
         // Second try: many-to-many — target has a reciprocal multi-link
         if (!foundBacklink) {
+          // If the reciprocal pass already assigned this link a canonical
+          // junction table (with swapped source/target columns), don't
+          // overwrite — that would break the agreement that both sides
+          // share one physical junction table.
+          if (linkDef.junctionTable) {
+            continue;
+          }
           const tableName = typeDef.tableName;
           const junctionTable = `${tableName}_${linkDef.name}`;
 

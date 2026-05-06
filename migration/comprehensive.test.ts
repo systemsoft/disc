@@ -172,7 +172,9 @@ async function dropTables(dsn: string, ...tableNames: string[]): Promise<void> {
   try {
     await client.connect();
     for (const name of tableNames) {
-      await client.queryArray(`DROP TABLE IF EXISTS ${name} CASCADE`);
+      // Quote the identifier so PG-reserved names like "user" don't trip
+      // a syntax error on DROP TABLE.
+      await client.queryArray(`DROP TABLE IF EXISTS "${name}" CASCADE`);
     }
     // Drop lingering trigger functions
     await client.queryArray(`
@@ -232,7 +234,7 @@ const COMPREHENSIVE_SDL = `
     };
     bio: str;
     tags: array<str>;
-    multi posts: Post;
+    multi link posts -> Post;
   };
 
   type Post extending Timestamped {
@@ -240,7 +242,7 @@ const COMPREHENSIVE_SDL = `
       constraint max_len_value(200);
     };
     required body: str;
-    required author: User;
+    required link author -> User;
     status: str {
       constraint one_of('draft', 'published', 'archived');
     };
@@ -248,10 +250,10 @@ const COMPREHENSIVE_SDL = `
 
   type Comment extending Timestamped {
     required text: str;
-    required post: Post {
+    required link post -> Post {
       on target delete restrict;
     };
-    author: User;
+    link author -> User;
   };
 `;
 

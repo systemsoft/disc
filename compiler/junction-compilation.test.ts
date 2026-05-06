@@ -474,15 +474,17 @@ Deno.test("SchemaManager - M2M detection sets junctionTable on both LinkDefs", (
     "Course.students should have junctionTable set",
   );
 
-  // The forward direction (Student -> Course) uses the canonical naming
-  // convention: "${sourceTable}_${linkName}" = "student_courses"
+  // The forward direction (Student -> Course) is processed first and
+  // assigns the canonical junction-table name `student_courses`. Both
+  // sides share this single physical table — the reciprocal pass
+  // updates Course.students to point at the same name with source/target
+  // columns swapped, so SELECT TestCourse.students walks the same
+  // junction rows from the other end.
   assertEquals(
     coursesLink.junctionTable,
     "student_courses",
     "Student.courses junctionTable should follow the ${sourceTable}_${linkName} convention",
   );
-
-  // Both junctionSourceColumn and junctionTargetColumn must be set
   assertEquals(
     coursesLink.junctionSourceColumn,
     "source_id",
@@ -494,24 +496,20 @@ Deno.test("SchemaManager - M2M detection sets junctionTable on both LinkDefs", (
     "Student.courses junctionTargetColumn should be target_id",
   );
 
-  // The reverse direction (Course -> Student) independently gets its own
-  // junction table name following the same convention: "course_students"
+  // Course.students shares the same physical table with swapped columns.
   assertEquals(
     studentsLink.junctionTable,
-    "course_students",
-    "Course.students junctionTable should be course_students (reverse convention)",
+    "student_courses",
+    "Course.students should reuse the canonical Student-side junction table",
   );
-
-  // The reverse direction also uses standard source/target column names
-  // since it was assigned independently (not swapped)
   assertEquals(
     studentsLink.junctionSourceColumn,
-    "source_id",
-    "Course.students junctionSourceColumn should be source_id",
+    "target_id",
+    "Course.students junctionSourceColumn should be target_id (swapped)",
   );
   assertEquals(
     studentsLink.junctionTargetColumn,
-    "target_id",
-    "Course.students junctionTargetColumn should be target_id",
+    "source_id",
+    "Course.students junctionTargetColumn should be source_id (swapped)",
   );
 });

@@ -635,7 +635,8 @@ Deno.test({
       assertEquals(rows.length, 1);
       assertEquals(rows[0].title, "My Doc");
       assertEquals(rows[0].audit_note, "Initial creation");
-      assertEquals(rows[0].version, 1);
+      // version is `int64` → PG `bigint` → deno-postgres returns BigInt.
+      assertEquals(Number(rows[0].version), 1);
 
       await manager.close();
     } finally {
