@@ -2,7 +2,7 @@
 
 Things Disc would build that Gel doesn't have and isn't planning. Each is a deliberate departure — features that justify Disc as a fork rather than a port.
 
-> **Status:** Mixed. **Shipped: #4 single-binary distribution** (Bundle I, 2026-05-06), **#2 schema-derived REST surface** (Bundle J, 2026-05-06), and **#3a live schema diff in admin UI** (Bundle K, 2026-05-06). The remaining items (3b/3c/3d UI differentiators, #1 codegen-free TS builder, #5 Deno-perm policies) are proposals — rough scoping but no design doc, no scheduled milestone. Use this as the seed list for picking next-up direction once the upstream-parity work is done (see `future-triage.md`).
+> **Status:** Mixed. **Shipped: #4 single-binary distribution** (Bundle I, 2026-05-06), **#2 schema-derived REST surface** (Bundle J, 2026-05-06), **#3a live schema diff in admin UI** (Bundle K, 2026-05-06), and **#3c live data subscriptions in admin UI** (Bundle L, 2026-05-06). The remaining items (3b/3d UI differentiators, #1 codegen-free TS builder, #5 Deno-perm policies) are proposals — rough scoping but no design doc, no scheduled milestone. Use this as the seed list for picking next-up direction once the upstream-parity work is done (see `future-triage.md`).
 
 ---
 
@@ -85,9 +85,15 @@ Drag types onto a canvas, drop fields into a result shape, draw filters as visua
 
 Gel-UI has a text editor with autocomplete. No visual builder.
 
-### 3c. Live data subscriptions in the browser
+### 3c. Live data subscriptions in the browser — **SHIPPED 2026-05-06**
 
-Query results update in real time when underlying rows change (server pushes diffs over WebSocket). Useful for the data viewer ("watch this table") and for query results during development.
+> **Status:** Shipped in Bundle L. Live behavior is documented in `docs/admin-ui.md` ("Live Data Subscriptions" section); source lives under `server/admin/data-watch{,-ddl,-registry}.ts` + `ui/src/lib/stores/live-query.ts` + `ui/src/routes/data/+page.svelte`.
+
+Query results update in real time when underlying rows change. The data viewer's "Live" toggle subscribes to `/admin/data-watch?tables=…`; the SSE endpoint emits an `invalidate` event for the affected tables and the client refetches via the standard `/query` pipeline. The pattern is **invalidate-then-refetch** (à la SWR / React Query) — server says *what* changed, client re-runs the query so access policies + read-only mode + auth gate compose for free.
+
+Server-side: an idempotent `bootstrapDataWatch()` writes a `disc_change_log` table + `disc_log_change()` PL/pgSQL function and attaches `AFTER INSERT/UPDATE/DELETE … FOR EACH STATEMENT` triggers to every Disc-managed table. A polling `DataWatchRegistry` reads the log on a 250 ms cadence and fans invalidations to subscribers whose interested-tables set intersects the affected set, with a per-subscriber 250 ms debounce that coalesces bursts.
+
+Client-side: the data viewer pulses a green border around the rows pane on each invalidate (TRON aesthetic) and re-runs `loadRows()`. The reusable `liveQuery({ edgeql, tables })` Svelte store wraps the same pattern for ad-hoc query subscriptions in custom routes.
 
 Gel has subscriptions in the SDK but Gel-UI doesn't surface them.
 
@@ -163,7 +169,7 @@ Each item is independently scopeable. The natural ordering by **how much it just
 1. ~~**#4 single-binary** — biggest UX delta for self-hosters, smallest engineering cost.~~ **Shipped 2026-05-06.**
 2. ~~**#2 REST surface** — broadest integration story, modest cost.~~ **Shipped 2026-05-06.**
 3. **#1 codegen-free builder** — biggest DX delta for application developers, but most type-system work.
-4. **#3 admin-UI differentiators** — best demo material; can be staged 3a → 3c → 3d → 3b. ~~**3a (live schema diff) shipped 2026-05-06.**~~ Remaining: 3b visual query builder, 3c live data subscriptions, 3d identity-disc visualization.
+4. **#3 admin-UI differentiators** — best demo material; can be staged 3a → 3c → 3d → 3b. ~~**3a (live schema diff) shipped 2026-05-06.**~~ ~~**3c (live data subscriptions) shipped 2026-05-06.**~~ Remaining: 3b visual query builder, 3d identity-disc visualization.
 5. **#5 Deno-perm policies** — most novel, narrowest applicability.
 
 When `future-triage.md`'s BUILD column runs out (or sooner if one of these is more compelling than what's left upstream), pick from here.

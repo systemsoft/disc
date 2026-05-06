@@ -16,6 +16,25 @@ tag is cut.
 
 ### Added
 
+- **Live data subscriptions in the admin UI** (Disc-original feature
+  #3c from `docs/disc-original-features.md`). The data viewer's new
+  **Live** toggle subscribes to `GET /admin/data-watch?tables=…` and
+  re-fetches the visible rows whenever the underlying PG table
+  receives an `INSERT`, `UPDATE`, or `DELETE` from any client. Server
+  side, `bootstrapDataWatch()` writes a `disc_change_log` table plus
+  a generic `disc_log_change()` PL/pgSQL trigger function and attaches
+  statement-level AFTER triggers to every Disc-managed table; a
+  polling `DataWatchRegistry` (250 ms cadence) demuxes invalidations
+  to subscribers whose interested-table set intersects each poll's
+  affected set, with a per-subscriber 250 ms debounce that coalesces
+  bursts. The pattern is invalidate-then-refetch (à la SWR / React
+  Query) — the refetch goes through the same pipeline as the initial
+  load, so access policies, read-only mode, and the auth gate compose
+  without extra work. Reusable Svelte store at
+  `$lib/stores/live-query.ts`. New config knob: `enableDataWatch`
+  (defaults to `true`); opt-out via `DISC_ENABLE_DATA_WATCH=false` or
+  `disc.toml` `enable_data_watch = false`. Gel has subscriptions in
+  the SDK but Gel-UI doesn't surface them — Disc does.
 - **Live schema diff in the admin UI** (Disc-original feature #3a
   from `docs/disc-original-features.md`). New SvelteKit page at
   `/ui/admin/schema` subscribes to a Server-Sent Events stream at

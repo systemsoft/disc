@@ -103,6 +103,38 @@ The `DataGrid` component powers the table view and supports:
 
 The data viewer communicates with the server through the API client, which provides `getData`, `insertObject`, `updateObject`, and `deleteObject` methods for full CRUD operations.
 
+### Live Mode (Bundle L — Disc-original feature #3c)
+
+The header bar's **Live** toggle subscribes the data viewer to changes on the currently-selected type's table. With Live on, every INSERT, UPDATE, or DELETE to that table — from any client, including other Disc connections, REST callers, or `disc shell` — triggers an automatic re-fetch within ~250 ms. The rows pane briefly pulses with a luminous green border each time an invalidation lands so it's obvious that the table updated even when row counts didn't change.
+
+Under the hood:
+
+- `GET /admin/data-watch?tables=<comma-separated-pg-table-names>` opens an SSE stream of `invalidate` events.
+- The first event is `ready` with the resolved table set so the client can verify it subscribed to what it intended.
+- Subsequent `invalidate` events carry `{ tables: [...], at: <ms> }`. The client refetches the same `select` it ran initially, so access policies, read-only mode, and the auth gate all apply identically to the refetch.
+- Server-side, AFTER INSERT/UPDATE/DELETE triggers (statement-level — one log row per bulk mutation, not per row) write to a `disc_change_log` table. A polling registry reads new rows on a 250 ms cadence and fans invalidations to subscribers.
+
+Reusable from custom Svelte routes:
+
+```svelte
+<script lang="ts">
+  import { liveQuery } from '$lib/stores/live-query';
+  import { onDestroy } from 'svelte';
+
+  const { store, close } = liveQuery({
+    edgeql: 'select User { name, email }',
+    tables: ['users'],
+  });
+  $: ({ data, status } = $store);
+  onDestroy(close);
+</script>
+
+{#if status === 'loading'}<p>Loading…</p>{/if}
+{#if data}<pre>{JSON.stringify(data, null, 2)}</pre>{/if}
+```
+
+Disabled via `disc.toml` `[server] enable_data_watch = false`, env `DISC_ENABLE_DATA_WATCH=false`, or `ServerConfig.enableDataWatch: false`. When disabled, both the trigger bootstrap and the SSE endpoint are skipped — production deployments that don't surface the admin UI can opt out to avoid the per-mutation log row.
+
 ---
 
 ## REPL
