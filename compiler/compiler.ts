@@ -609,6 +609,25 @@ export class EdgeQLCompiler {
       // (e.g., "other::Foo") even though the query used "Foo".
       const resolvedName = typeDef.name;
 
+      // Polymorphic SELECT: abstract types have no physical table in
+      // Disc (the migration engine skips them — see
+      // `engine.ts:891`). Lower `SELECT <Abstract>` to a UNION ALL
+      // across the concrete subtypes' tables so the FROM clause
+      // references real relations. Each branch projects the abstract's
+      // own properties; the outer shape and select items reference
+      // them via the abstract's alias as if it were a real table.
+      if (typeDef.abstract) {
+        const polymorphic = this.compilePolymorphicSelect(
+          typeDef,
+          resolvedName,
+          shape,
+        );
+        if (polymorphic) return polymorphic;
+        // No concrete subtypes — fall through to the regular path which
+        // will raise a clearer error than emitting a SELECT against a
+        // non-existent abstract table.
+      }
+
       // Use the bare resolved name for the alias key, not the raw input —
       // `default::Item` would otherwise leak `::` into a SQL alias and
       // produce a syntax error.
@@ -919,6 +938,87 @@ export class EdgeQLCompiler {
 
       return { selectItems, fromClause };
     }
+  }
+
+  /**
+   * Lower `SELECT <AbstractType>` to a UNION ALL across concrete
+   * subtypes' tables. Each UNION branch projects the abstract type's
+   * own properties (each subtype inherited them under the same
+   * column names), so the outer SELECT can reference the abstract's
+   * alias as if it were a regular table.
+   *
+   * Returns `null` when no concrete subtypes exist — caller falls
+   * back to the regular path which will fail at compile-time with
+   * a clearer message than emitting a query against a non-existent
+   * physical table.
+   */
+  private compilePolymorphicSelect(
+    typeDef: Context.TypeDef,
+    resolvedName: string,
+    shape?: EdgeQLAST.Shape,
+  ): { selectItems: SQL.SelectItem[]; fromClause: SQL.FromClause } | null {
+    const allSubs = Context.getAllSubtypes(this.ctx.schema, resolvedName);
+    const concreteSubs = allSubs
+      .map((n) => this.ctx.schema.types.get(n))
+      .filter((t): t is Context.TypeDef => t !== undefined && !t.abstract);
+
+    if (concreteSubs.length === 0) return null;
+
+    // Columns to project inside each UNION branch. `id` is always present;
+    // every property of the abstract type is inherited (same column name)
+    // by every subtype, so projecting them is safe regardless of which
+    // subtype's table backs the row.
+    const projectedColumns = ["id"];
+    for (const prop of typeDef.properties.values()) {
+      if (prop.computed) continue;
+      const col = prop.columnName ?? prop.name;
+      if (!projectedColumns.includes(col)) projectedColumns.push(col);
+    }
+
+    // Build one SELECT per concrete subtype.
+    const branches: SQL.SelectStatement[] = concreteSubs.map((sub) => {
+      return SQL.createSelectStatement({
+        select: SQL.createSelectClause(
+          projectedColumns.map((col) =>
+            SQL.createSelectItem(
+              SQL.createColumnReference(col),
+            )
+          ),
+        ),
+        from: SQL.createFromClause([
+          SQL.createTableReference(sub.tableName),
+        ]),
+      });
+    });
+
+    const subquery: SQL.SQLStatement = branches.length === 1
+      ? branches[0]
+      : SQL.unionAll(branches);
+
+    const tableAlias = Context.addTableAlias(
+      this.ctx,
+      resolvedName.toLowerCase(),
+      typeDef.tableName ?? resolvedName.toLowerCase(),
+      resolvedName,
+    );
+
+    const fromClause = SQL.createFromClause([
+      {
+        kind: "TableReference",
+        name: "(polymorphic)",
+        alias: tableAlias,
+        subquery,
+      } as SQL.TableReference,
+    ]);
+
+    let selectItems: SQL.SelectItem[];
+    if (shape) {
+      selectItems = this.compileShape(shape, resolvedName, tableAlias);
+    } else {
+      selectItems = this.compileImplicitShape(typeDef, tableAlias);
+    }
+
+    return { selectItems, fromClause };
   }
 
   private compileShape(
