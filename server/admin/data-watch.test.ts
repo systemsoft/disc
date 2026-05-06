@@ -19,10 +19,12 @@ import { ConnectionPool } from "../../lib/connection-pool.ts";
 
 function makeMockPool() {
   return {
-    async query(_sql: string, _params?: unknown[]) {
-      return { rows: [{ cur: 0 }], rowCount: 1 };
+    query(_sql: string, _params?: unknown[]) {
+      return Promise.resolve({ rows: [{ cur: 0 }], rowCount: 1 });
     },
-    async execute() {/* noop */},
+    execute() {
+      return Promise.resolve();
+    },
   } as unknown as ConnectionPool;
 }
 
@@ -128,10 +130,15 @@ Deno.test({
       // Drive an invalidation through the public path: swap the pool
       // to one that returns a single change-log row, then run pollOnce.
       (registry as unknown as { pool: ConnectionPool }).pool = ({
-        async query(_sql: string, _params?: unknown[]) {
-          return { rows: [{ id: 1, table_name: "widgets" }], rowCount: 1 };
+        query(_sql: string, _params?: unknown[]) {
+          return Promise.resolve({
+            rows: [{ id: 1, table_name: "widgets" }],
+            rowCount: 1,
+          });
         },
-        async execute() {},
+        execute() {
+          return Promise.resolve();
+        },
       } as unknown as ConnectionPool);
       await registry.pollOnce();
 

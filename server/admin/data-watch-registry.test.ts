@@ -24,12 +24,14 @@ import { DataWatchRegistry } from "./data-watch-registry.ts";
 function makeMockPool(rowsByCall: Array<unknown[]>) {
   let callIndex = 0;
   return {
-    async query(_sql: string, _params?: unknown[]) {
+    query(_sql: string, _params?: unknown[]) {
       const rows = rowsByCall[callIndex] ?? [];
       callIndex++;
-      return { rows, rowCount: rows.length };
+      return Promise.resolve({ rows, rowCount: rows.length });
     },
-    async execute() {/* noop */},
+    execute() {
+      return Promise.resolve();
+    },
   } as unknown as ConnectionPool;
 }
 
