@@ -123,8 +123,15 @@ function logoHtml(branding: BrandingCtx): string {
 
 /**
  * Pick a button background color, honoring `brandColor` when set.
- * `brandColor` is hex-validated at config time so this is safe to
- * splat into inline CSS without an escape pass.
+ * `brandColor` is validated at config time as either a 3-/6-digit
+ * hex value or a CSS-L4 `oklch(L C H[/ A])` expression — both are
+ * safe to splat into inline CSS without an escape pass since neither
+ * grammar can contain quote-breakouts or `}` characters.
+ *
+ * OKLCH support varies by email client; operators choosing OKLCH
+ * over hex accept that tradeoff (modern clients render correctly,
+ * older clients fall back to default text color, never to broken
+ * markup).
  */
 function buttonStyle(branding: BrandingCtx): string {
   const bg = branding.brandColor ?? "#111";

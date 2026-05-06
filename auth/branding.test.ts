@@ -185,6 +185,111 @@ Deno.test("validateBranding rejects 4-digit hex brandColor", () => {
   );
 });
 
+// ── validateBranding: brandColor (OKLCH) ──────────────────────────────
+
+Deno.test("validateBranding accepts oklch with percentage L", () => {
+  validateBranding({ brandColor: "oklch(70% 0.15 200)" });
+});
+
+Deno.test("validateBranding accepts oklch with unitless L", () => {
+  validateBranding({ brandColor: "oklch(0.7 0.15 200)" });
+});
+
+Deno.test("validateBranding accepts oklch with alpha (number)", () => {
+  validateBranding({ brandColor: "oklch(70% 0.15 200 / 0.5)" });
+});
+
+Deno.test("validateBranding accepts oklch with alpha (percentage)", () => {
+  validateBranding({ brandColor: "oklch(70% 0.15 200 / 50%)" });
+});
+
+Deno.test("validateBranding accepts oklch with mixed whitespace", () => {
+  validateBranding({ brandColor: "oklch(  70%   0.15  200  )" });
+});
+
+Deno.test("validateBranding accepts uppercase OKLCH", () => {
+  validateBranding({ brandColor: "OKLCH(70% 0.15 200)" });
+});
+
+Deno.test("validateBranding accepts oklch at boundaries", () => {
+  validateBranding({ brandColor: "oklch(0% 0 0)" });
+  validateBranding({ brandColor: "oklch(100% 0.5 360)" });
+  validateBranding({ brandColor: "oklch(50% 0.1 180 / 0)" });
+  validateBranding({ brandColor: "oklch(50% 0.1 180 / 1)" });
+});
+
+Deno.test("validateBranding rejects oklch with comma-separated channels", () => {
+  // Modern CSS L4 syntax is space-separated; the comma form is the
+  // legacy CSS syntax and is not accepted.
+  assertThrows(
+    () => validateBranding({ brandColor: "oklch(70%, 0.15, 200)" }),
+    Error,
+    "oklch",
+  );
+});
+
+Deno.test("validateBranding rejects oklch with L > 100%", () => {
+  assertThrows(
+    () => validateBranding({ brandColor: "oklch(110% 0.15 200)" }),
+    Error,
+    "lightness",
+  );
+});
+
+Deno.test("validateBranding rejects oklch with unitless L > 1", () => {
+  assertThrows(
+    () => validateBranding({ brandColor: "oklch(1.5 0.15 200)" }),
+    Error,
+    "lightness",
+  );
+});
+
+Deno.test("validateBranding rejects oklch with chroma > 0.5", () => {
+  // The CSS spec allows arbitrary positive chroma but values > 0.4
+  // are out-of-gamut for any practical display. Cap at 0.5 for sanity.
+  assertThrows(
+    () => validateBranding({ brandColor: "oklch(70% 1.5 200)" }),
+    Error,
+    "chroma",
+  );
+});
+
+Deno.test("validateBranding rejects oklch with hue > 360", () => {
+  // CSS would mod-360 a value like 400, but rejecting surfaces typos
+  // faster than silently mod-ing them.
+  assertThrows(
+    () => validateBranding({ brandColor: "oklch(70% 0.15 400)" }),
+    Error,
+    "hue",
+  );
+});
+
+Deno.test("validateBranding rejects oklch with negative chroma", () => {
+  // Negative numbers can't match the regex (no leading `-` allowed),
+  // so this falls through to the generic "must be hex or oklch" error.
+  assertThrows(
+    () => validateBranding({ brandColor: "oklch(70% -0.1 200)" }),
+    Error,
+    "oklch",
+  );
+});
+
+Deno.test("validateBranding rejects oklch with alpha > 1", () => {
+  assertThrows(
+    () => validateBranding({ brandColor: "oklch(70% 0.15 200 / 1.5)" }),
+    Error,
+    "alpha",
+  );
+});
+
+Deno.test("validateBranding rejects malformed oklch shape", () => {
+  assertThrows(
+    () => validateBranding({ brandColor: "oklch(70% 0.15)" }),
+    Error,
+    "oklch",
+  );
+});
+
 // ── validateMagicLinkUrlTemplate ──────────────────────────────────────
 
 Deno.test("validateMagicLinkUrlTemplate accepts undefined", () => {

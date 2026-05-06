@@ -19,6 +19,26 @@ import type { AuthBrandingConfig } from "./types.ts";
 const MAX_APP_NAME_LEN = 80;
 const MAX_URL_LEN = 2048;
 const HEX_COLOR_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+/**
+ * CSS Color Module Level 4 modern `oklch()` syntax with space-separated
+ * channels and an optional alpha after `/`. Comma-separated legacy form
+ * is rejected — operators using modern OKLCH already use the modern
+ * syntax, and refusing the legacy form keeps the parser tight.
+ *
+ *   oklch(L C H)             — required form
+ *   oklch(L C H / A)         — with alpha
+ *
+ * L: percent (0–100%) or number (0–1). C: non-negative number, capped
+ * at 0.5 to refuse pathological values that would never render
+ * meaningfully. H: 0–360 (CSS allows >360 via mod, but rejecting that
+ * surfaces typos faster than silently mod-ing). A: 0–1 or 0–100%.
+ *
+ * Bounds are enforced after the regex matches; the regex itself only
+ * shape-checks so the error message can name the exact offending channel.
+ */
+const OKLCH_COLOR_RE =
+  /^oklch\(\s*([\d.]+%?)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+%?))?\s*\)$/i;
+const MAX_OKLCH_CHROMA = 0.5;
 const TOKEN_PLACEHOLDER = "{token}";
 
 /**
@@ -121,11 +141,81 @@ export function validateBranding(branding: AuthBrandingConfig | undefined): void
   }
 
   if (branding.brandColor !== undefined) {
-    const v = branding.brandColor;
-    if (typeof v !== "string" || !HEX_COLOR_RE.test(v)) {
+    validateBrandColor(branding.brandColor);
+  }
+}
+
+/**
+ * Accept a 3- or 6-digit hex color or a CSS-L4 `oklch(...)` expression.
+ * Throws with a field-named, value-quoting error on rejection so the
+ * operator sees exactly what was refused and why.
+ */
+function validateBrandColor(v: unknown): void {
+  if (typeof v !== "string") {
+    throw new Error(
+      `AuthProvider: branding.brandColor must be a string; got ${JSON.stringify(v)}`,
+    );
+  }
+  if (HEX_COLOR_RE.test(v)) return;
+
+  const oklchMatch = OKLCH_COLOR_RE.exec(v);
+  if (!oklchMatch) {
+    throw new Error(
+      `AuthProvider: branding.brandColor must be a 3-/6-digit hex color (e.g. "#0af", "#00aaff") or oklch(L C H[/ A]) (e.g. "oklch(70% 0.15 200)"); got ${JSON.stringify(v)}`,
+    );
+  }
+
+  // L: percent (0–100) or number (0–1). The regex already accepted the
+  // shape; here we range-check the magnitude.
+  const lRaw = oklchMatch[1];
+  const lValue = parseFloat(lRaw);
+  if (lRaw.endsWith("%")) {
+    if (!(lValue >= 0 && lValue <= 100)) {
       throw new Error(
-        `AuthProvider: branding.brandColor must be a 3- or 6-digit hex color (e.g. "#0af" or "#00aaff"); got ${JSON.stringify(v)}`,
+        `AuthProvider: branding.brandColor lightness ${JSON.stringify(lRaw)} is out of range (must be 0%–100%)`,
       );
+    }
+  } else {
+    if (!(lValue >= 0 && lValue <= 1)) {
+      throw new Error(
+        `AuthProvider: branding.brandColor lightness ${JSON.stringify(lRaw)} is out of range (must be 0–1 when unitless, or use a percentage)`,
+      );
+    }
+  }
+
+  // C: non-negative, sanity-capped.
+  const cValue = parseFloat(oklchMatch[2]);
+  if (!(cValue >= 0 && cValue <= MAX_OKLCH_CHROMA)) {
+    throw new Error(
+      `AuthProvider: branding.brandColor chroma ${JSON.stringify(oklchMatch[2])} is out of range (must be 0–${MAX_OKLCH_CHROMA})`,
+    );
+  }
+
+  // H: 0–360. CSS would mod-360 values >360, but rejecting surfaces
+  // typos faster.
+  const hValue = parseFloat(oklchMatch[3]);
+  if (!(hValue >= 0 && hValue <= 360)) {
+    throw new Error(
+      `AuthProvider: branding.brandColor hue ${JSON.stringify(oklchMatch[3])} is out of range (must be 0–360)`,
+    );
+  }
+
+  // A (optional): percent (0–100) or number (0–1).
+  const aRaw = oklchMatch[4];
+  if (aRaw !== undefined) {
+    const aValue = parseFloat(aRaw);
+    if (aRaw.endsWith("%")) {
+      if (!(aValue >= 0 && aValue <= 100)) {
+        throw new Error(
+          `AuthProvider: branding.brandColor alpha ${JSON.stringify(aRaw)} is out of range (must be 0%–100%)`,
+        );
+      }
+    } else {
+      if (!(aValue >= 0 && aValue <= 1)) {
+        throw new Error(
+          `AuthProvider: branding.brandColor alpha ${JSON.stringify(aRaw)} is out of range (must be 0–1 when unitless, or use a percentage)`,
+        );
+      }
     }
   }
 }
