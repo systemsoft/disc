@@ -7,6 +7,30 @@
 
 import { dirname, join } from "@std/path";
 
+/**
+ * Subset of `ServerConfig` keys (in `server/types.ts`) that can be set from
+ * `disc.toml`'s `[server]` section. Applied as overrides on top of the
+ * env-derived ServerConfig in `commands.ts:serve()` (CLI flags still win).
+ *
+ * Keep this list a curated subset rather than the entire ServerConfig
+ * surface — TOML is for project-level defaults, not every tunable. Items
+ * like `jwtSecret`, TLS paths, and bcrypt rounds remain env/CLI-only on
+ * purpose (secrets shouldn't live in a tracked file). (gh/geldata#1325)
+ */
+export interface ServerOverrides {
+  corsAllowCredentials?: boolean;
+  corsOrigins?: string[];
+  enableCors?: boolean;
+  enableMetrics?: boolean;
+  enableWebsockets?: boolean;
+  maxRequestBodyBytes?: number;
+  rateLimitRpm?: number;
+  readOnly?: boolean;
+  requestTimeout?: number;
+  requireAuth?: boolean;
+  trustProxy?: boolean;
+}
+
 export interface ProjectContext {
   backendDsn?: string;
   dataDir: string;
@@ -15,22 +39,108 @@ export interface ProjectContext {
   projectName: string;
   projectRoot: string;
   serverHost: string;
+  serverOverrides?: ServerOverrides;
   serverPort: number;
   socketDir: string;
 }
 
 /**
  * A parsed representation of the raw key/value pairs extracted from disc.toml.
- * All values are strings at this stage; type coercion happens during context
- * construction.
+ * Scalar values are strings at this stage; type coercion happens during context
+ * construction. Array values arrive pre-parsed so callers don't re-implement
+ * TOML's bracket grammar.
  */
 interface TomlFields {
   backendDsn?: string;
+  corsAllowCredentials?: string;
+  corsOrigins?: string[];
+  enableCors?: string;
+  enableMetrics?: string;
+  enableWebsockets?: string;
   host?: string;
   instanceName?: string;
   managed?: string;
+  maxRequestBodyBytes?: string;
   name?: string;
   port?: string;
+  rateLimitRpm?: string;
+  readOnly?: string;
+  requestTimeout?: string;
+  requireAuth?: string;
+  trustProxy?: string;
+}
+
+/**
+ * Unescape a TOML basic-string body (already with surrounding quotes
+ * stripped). Handles the two escapes Disc supports: `\"` (literal quote)
+ * and `\\` (literal backslash). (P2-27)
+ */
+function unescapeBasicString(body: string): string {
+  return body.replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+}
+
+/**
+ * Parse a TOML inline array of basic strings: `["a", "b"]`. Returns null
+ * if the syntax doesn't match — callers fall back to ignoring the key.
+ * Whitespace inside the brackets is tolerated; trailing commas are too.
+ */
+function parseStringArray(raw: string): string[] | null {
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith("[") || !trimmed.endsWith("]")) {
+    return null;
+  }
+
+  const inner = trimmed.slice(1, -1).trim();
+  if (inner === "") {
+    return [];
+  }
+
+  const out: string[] = [];
+  // Split on commas that are NOT inside a quoted string. The simple parser
+  // walks character-by-character tracking quote state.
+  let buf = "";
+  let inQuote = false;
+  let escape = false;
+
+  for (const ch of inner) {
+    if (escape) {
+      buf += ch;
+      escape = false;
+      continue;
+    }
+    if (ch === "\\" && inQuote) {
+      buf += ch;
+      escape = true;
+      continue;
+    }
+    if (ch === '"') {
+      buf += ch;
+      inQuote = !inQuote;
+      continue;
+    }
+    if (ch === "," && !inQuote) {
+      const item = buf.trim();
+      if (item !== "") {
+        if (!item.startsWith('"') || !item.endsWith('"')) {
+          return null;
+        }
+        out.push(unescapeBasicString(item.slice(1, -1)));
+      }
+      buf = "";
+      continue;
+    }
+    buf += ch;
+  }
+
+  const last = buf.trim();
+  if (last !== "") {
+    if (!last.startsWith('"') || !last.endsWith('"')) {
+      return null;
+    }
+    out.push(unescapeBasicString(last.slice(1, -1)));
+  }
+
+  return out;
 }
 
 /**
@@ -39,6 +149,7 @@ interface TomlFields {
  * Handles a simple subset of TOML:
  *   - Top-level key = "value" or key = number or key = bool
  *   - Section headers: [database], [server]
+ *   - Inline arrays of strings: key = ["a", "b"] (server.cors_origins only)
  *   - Comments (#) are ignored
  *   - Quoted strings have their quotes stripped
  */
@@ -54,7 +165,8 @@ function parseToml(source: string): TomlFields {
       continue;
     }
 
-    // Section header: [database] or [server]
+    // Section header: [database] or [server]. Note: must check this BEFORE
+    // the kv match, since both `[server]` and `key = [...]` start with `[`.
     const sectionMatch = line.match(/^\[([a-z_]+)\]$/);
     if (sectionMatch) {
       section = sectionMatch[1];
@@ -71,14 +183,11 @@ function parseToml(source: string): TomlFields {
     const rawValue = kvMatch[2].trim();
 
     // Strip surrounding double quotes if present and unescape the TOML
-    // basic-string escapes we care about: \" (literal quote) and \\
-    // (literal backslash). (P2-27)
+    // basic-string escapes we care about. Arrays are kept as raw text and
+    // dispatched to `parseStringArray` only by the keys that expect them.
     let value: string;
     if (rawValue.startsWith('"') && rawValue.endsWith('"')) {
-      value = rawValue
-        .slice(1, -1)
-        .replace(/\\"/g, '"')
-        .replace(/\\\\/g, "\\");
+      value = unescapeBasicString(rawValue.slice(1, -1));
     } else {
       value = rawValue;
     }
@@ -100,11 +209,119 @@ function parseToml(source: string): TomlFields {
         fields.port = value;
       } else if (key === "host") {
         fields.host = value;
+      } else if (key === "require_auth") {
+        fields.requireAuth = value;
+      } else if (key === "read_only") {
+        fields.readOnly = value;
+      } else if (key === "enable_cors") {
+        fields.enableCors = value;
+      } else if (key === "enable_websockets") {
+        fields.enableWebsockets = value;
+      } else if (key === "enable_metrics") {
+        fields.enableMetrics = value;
+      } else if (key === "trust_proxy") {
+        fields.trustProxy = value;
+      } else if (key === "cors_allow_credentials") {
+        fields.corsAllowCredentials = value;
+      } else if (key === "cors_origins") {
+        const arr = parseStringArray(rawValue);
+        if (arr !== null) {
+          fields.corsOrigins = arr;
+        }
+      } else if (key === "max_request_body_bytes") {
+        fields.maxRequestBodyBytes = value;
+      } else if (key === "request_timeout") {
+        fields.requestTimeout = value;
+      } else if (key === "rate_limit_rpm") {
+        fields.rateLimitRpm = value;
       }
     }
   }
 
   return fields;
+}
+
+/**
+ * Coerce a TOML value-string to a boolean, or return undefined when the
+ * value isn't a recognized boolean literal. TOML's spec is strict — only
+ * lowercase `true`/`false` — but we accept case-insensitive forms for
+ * forgiveness on the project-config surface.
+ */
+function parseBool(value: string | undefined): boolean | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const normalized = value.toLowerCase();
+  if (normalized === "true") return true;
+  if (normalized === "false") return false;
+  return undefined;
+}
+
+/**
+ * Coerce a TOML value-string to a positive integer, or return undefined
+ * when it doesn't parse cleanly. Negative or non-finite values are
+ * dropped — those would only ever indicate a mistyped config.
+ */
+function parsePositiveInt(value: string | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const parsed = parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return undefined;
+  }
+  return parsed;
+}
+
+/**
+ * Build the curated `ServerOverrides` slice from raw TomlFields. Only
+ * keys present in disc.toml appear in the result — absent keys leave
+ * the server's env-derived defaults untouched.
+ */
+function buildServerOverrides(fields: TomlFields): ServerOverrides | undefined {
+  const overrides: ServerOverrides = {};
+
+  const requireAuth = parseBool(fields.requireAuth);
+  if (requireAuth !== undefined) overrides.requireAuth = requireAuth;
+
+  const readOnly = parseBool(fields.readOnly);
+  if (readOnly !== undefined) overrides.readOnly = readOnly;
+
+  const enableCors = parseBool(fields.enableCors);
+  if (enableCors !== undefined) overrides.enableCors = enableCors;
+
+  const enableWebsockets = parseBool(fields.enableWebsockets);
+  if (enableWebsockets !== undefined) {
+    overrides.enableWebsockets = enableWebsockets;
+  }
+
+  const enableMetrics = parseBool(fields.enableMetrics);
+  if (enableMetrics !== undefined) overrides.enableMetrics = enableMetrics;
+
+  const trustProxy = parseBool(fields.trustProxy);
+  if (trustProxy !== undefined) overrides.trustProxy = trustProxy;
+
+  const corsAllowCredentials = parseBool(fields.corsAllowCredentials);
+  if (corsAllowCredentials !== undefined) {
+    overrides.corsAllowCredentials = corsAllowCredentials;
+  }
+
+  if (fields.corsOrigins !== undefined) {
+    overrides.corsOrigins = fields.corsOrigins;
+  }
+
+  const maxRequestBodyBytes = parsePositiveInt(fields.maxRequestBodyBytes);
+  if (maxRequestBodyBytes !== undefined) {
+    overrides.maxRequestBodyBytes = maxRequestBodyBytes;
+  }
+
+  const requestTimeout = parsePositiveInt(fields.requestTimeout);
+  if (requestTimeout !== undefined) overrides.requestTimeout = requestTimeout;
+
+  const rateLimitRpm = parsePositiveInt(fields.rateLimitRpm);
+  if (rateLimitRpm !== undefined) overrides.rateLimitRpm = rateLimitRpm;
+
+  return Object.keys(overrides).length > 0 ? overrides : undefined;
 }
 
 /**
@@ -212,6 +429,11 @@ export function resolveProjectContext(cwd?: string): ProjectContext | null {
 
   if (fields.backendDsn) {
     context.backendDsn = fields.backendDsn;
+  }
+
+  const serverOverrides = buildServerOverrides(fields);
+  if (serverOverrides) {
+    context.serverOverrides = serverOverrides;
   }
 
   return context;

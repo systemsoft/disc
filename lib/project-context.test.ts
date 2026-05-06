@@ -123,6 +123,157 @@ Deno.test("resolveProjectContext - defaults when sections missing", async () => 
     assertEquals(result!.serverHost, "localhost");
     // backendDsn is absent
     assertEquals(result!.backendDsn, undefined);
+    // serverOverrides absent when no `[server]` knobs present
+    assertEquals(result!.serverOverrides, undefined);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// resolveProjectContext - serverOverrides (#1325)
+// ---------------------------------------------------------------------------
+
+Deno.test("resolveProjectContext - parses [server] booleans into overrides", async () => {
+  const dir = await makeTempDir();
+  try {
+    await writeToml(
+      dir,
+      `name = "boolean-project"
+[server]
+require_auth = true
+read_only = false
+enable_cors = true
+enable_websockets = false
+enable_metrics = true
+trust_proxy = true
+cors_allow_credentials = true
+`,
+    );
+
+    const result = resolveProjectContext(dir);
+    assertNotEquals(result, null);
+    const overrides = result!.serverOverrides;
+    assertNotEquals(overrides, undefined);
+    assertEquals(overrides!.requireAuth, true);
+    assertEquals(overrides!.readOnly, false);
+    assertEquals(overrides!.enableCors, true);
+    assertEquals(overrides!.enableWebsockets, false);
+    assertEquals(overrides!.enableMetrics, true);
+    assertEquals(overrides!.trustProxy, true);
+    assertEquals(overrides!.corsAllowCredentials, true);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("resolveProjectContext - parses [server] integers into overrides", async () => {
+  const dir = await makeTempDir();
+  try {
+    await writeToml(
+      dir,
+      `name = "integer-project"
+[server]
+max_request_body_bytes = 16777216
+request_timeout = 30000
+rate_limit_rpm = 600
+`,
+    );
+
+    const result = resolveProjectContext(dir);
+    assertNotEquals(result, null);
+    const overrides = result!.serverOverrides;
+    assertNotEquals(overrides, undefined);
+    assertEquals(overrides!.maxRequestBodyBytes, 16777216);
+    assertEquals(overrides!.requestTimeout, 30000);
+    assertEquals(overrides!.rateLimitRpm, 600);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("resolveProjectContext - parses cors_origins inline array", async () => {
+  const dir = await makeTempDir();
+  try {
+    await writeToml(
+      dir,
+      `name = "cors-project"
+[server]
+cors_origins = ["https://app.example.com", "https://*.example.com"]
+`,
+    );
+
+    const result = resolveProjectContext(dir);
+    assertNotEquals(result, null);
+    assertEquals(
+      result!.serverOverrides?.corsOrigins,
+      ["https://app.example.com", "https://*.example.com"],
+    );
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("resolveProjectContext - parses empty cors_origins array", async () => {
+  const dir = await makeTempDir();
+  try {
+    await writeToml(
+      dir,
+      `name = "empty-cors"
+[server]
+cors_origins = []
+`,
+    );
+
+    const result = resolveProjectContext(dir);
+    assertNotEquals(result, null);
+    // Empty array still surfaces — the user explicitly disabled the
+    // permissive default, which is meaningful (vs. omitting the key).
+    assertEquals(result!.serverOverrides?.corsOrigins, []);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("resolveProjectContext - drops malformed boolean and integer values", async () => {
+  const dir = await makeTempDir();
+  try {
+    await writeToml(
+      dir,
+      `name = "malformed-project"
+[server]
+require_auth = "yes"
+max_request_body_bytes = "not-a-number"
+rate_limit_rpm = -5
+`,
+    );
+
+    const result = resolveProjectContext(dir);
+    assertNotEquals(result, null);
+    // All three values fail their respective coercions. Result: no
+    // override fields, so the whole struct collapses to undefined.
+    assertEquals(result!.serverOverrides, undefined);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+});
+
+Deno.test("resolveProjectContext - boolean parser is case-insensitive", async () => {
+  const dir = await makeTempDir();
+  try {
+    await writeToml(
+      dir,
+      `name = "case-project"
+[server]
+require_auth = TRUE
+read_only = False
+`,
+    );
+
+    const result = resolveProjectContext(dir);
+    assertNotEquals(result, null);
+    assertEquals(result!.serverOverrides?.requireAuth, true);
+    assertEquals(result!.serverOverrides?.readOnly, false);
   } finally {
     await Deno.remove(dir, { recursive: true });
   }

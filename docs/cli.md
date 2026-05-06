@@ -970,18 +970,40 @@ instance_name = "my-project"
 [server]
 host = "localhost"
 port = 5656
+# require_auth = true
+# read_only = false
+# enable_cors = true
+# cors_origins = ["https://app.example.com", "https://*.example.com"]
+# cors_allow_credentials = true
+# trust_proxy = true
+# enable_websockets = true
+# enable_metrics = true
+# max_request_body_bytes = 4194304
+# request_timeout = 30000
+# rate_limit_rpm = 600
 ```
 
-| Section      | Key             | Default       | Description                                   |
-| ------------ | --------------- | ------------- | --------------------------------------------- |
-| *(top)*      | `name`          | *(required)*  | Project name                                  |
-| `[database]` | `managed`       | `true`        | Use bundled PostgreSQL                        |
-| `[database]` | `instance_name` | same as name  | Instance directory under `~/.disc/instances/` |
-| `[database]` | `backend_dsn`   | *(none)*      | External PostgreSQL connection string         |
-| `[server]`   | `host`          | `"localhost"` | Server bind host                              |
-| `[server]`   | `port`          | `5656`        | Server bind port                              |
+| Section      | Key                       | Default       | Description                                                       |
+| ------------ | ------------------------- | ------------- | ----------------------------------------------------------------- |
+| *(top)*      | `name`                    | *(required)*  | Project name                                                      |
+| `[database]` | `managed`                 | `true`        | Use bundled PostgreSQL                                            |
+| `[database]` | `instance_name`           | same as name  | Instance directory under `~/.disc/instances/`                     |
+| `[database]` | `backend_dsn`             | *(none)*      | External PostgreSQL connection string                             |
+| `[server]`   | `host`                    | `"localhost"` | Server bind host                                                  |
+| `[server]`   | `port`                    | `5656`        | Server bind port                                                  |
+| `[server]`   | `require_auth`            | `false`       | Reject data-plane requests without a valid `Authorization` header |
+| `[server]`   | `read_only`               | `false`       | Reject INSERT/UPDATE/DELETE/CONFIGURE and migrations              |
+| `[server]`   | `enable_cors`             | `true`        | Emit CORS headers on HTTP responses                               |
+| `[server]`   | `cors_origins`            | *(any)*       | Allowlist of origins; entries may use `https://*.example.com`     |
+| `[server]`   | `cors_allow_credentials`  | `false`       | Emit `Access-Control-Allow-Credentials: true` (requires allowlist)|
+| `[server]`   | `trust_proxy`             | `false`       | Honor `X-Forwarded-For`/`X-Real-IP`/`X-Forwarded-Proto`           |
+| `[server]`   | `enable_websockets`       | `true`        | Accept WebSocket upgrades on the HTTP port                        |
+| `[server]`   | `enable_metrics`          | `false`       | Expose Prometheus metrics on `/metrics`                           |
+| `[server]`   | `max_request_body_bytes`  | `4194304`     | Reject `POST /query` bodies larger than this with 413             |
+| `[server]`   | `request_timeout`         | *(none)*      | Per-request timeout in ms                                         |
+| `[server]`   | `rate_limit_rpm`          | *(none)*      | Per-client rate limit in requests/minute                          |
 
-When no `disc.toml` is found, commands fall back to the current directory name as the project name.
+When no `disc.toml` is found, commands fall back to the current directory name as the project name. CLI flags always win over `disc.toml`, which wins over environment variables.
 
 ---
 

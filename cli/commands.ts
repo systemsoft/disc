@@ -231,8 +231,18 @@ export class CLICommands {
       // Create server from environment variables, passing schema if available
       const server = schema ? createServerFromEnv(undefined, schema) : createServerFromEnv();
 
-      // Override with CLI arguments if provided
+      // Apply layered config overrides. Precedence (lowest → highest):
+      //   1. env-derived defaults (already in `server.get_config()`)
+      //   2. disc.toml `[server]` keys (project-level defaults)
+      //   3. CLI flags (per-invocation overrides)
+      // Keep this order so per-invocation flags always win over file config,
+      // and file config wins over env defaults. (gh/geldata#1325)
       const config = server.get_config();
+
+      if (ctx?.serverOverrides) {
+        Object.assign(config, ctx.serverOverrides);
+      }
+
       if (options.port) config.port = options.port;
       if (options.host) config.host = options.host;
       if (options.binaryPort) config.binaryPort = options.binaryPort;
