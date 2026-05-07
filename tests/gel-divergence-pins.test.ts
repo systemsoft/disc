@@ -676,3 +676,218 @@ Deno.test("Gel #2651: instance name is derived from project context, not a CLI f
     "project-context.ts must default instanceName to projectName when unset (Gel #2651 pin).",
   );
 });
+
+// ---------------------------------------------------------------------------
+// gh/geldata#5641 — complex multi-module schema → "missing FROM-clause
+// entry for table <UUID>". Gel's compiler lost track of FROM entries
+// when compiling computed properties + triggers that reference types
+// across modules (e.g. `pass_v1::Metadata` carrying `default::Account`
+// and `default::Etag` references in a computed property).
+//
+// Disc's compiler emits per-type CREATE TABLE statements with
+// fully-qualified type references resolved up front by the SDL
+// converter. This pin constructs the same multi-module shape Gel's
+// repro used (3 modules, cross-module link + computed prop +
+// trigger) and walks parse → diff → DDL gen end-to-end, asserting
+// every type emits a CREATE TABLE. A regression that breaks
+// cross-module resolution would either fail the parse, drop one of
+// the operations, or fail to emit DDL.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #5641: multi-module schema with cross-module refs compiles cleanly", async () => {
+  const { SDLParser } = await import("../schema/parser.ts");
+  const { SDLConverter } = await import("../schema/converter.ts");
+  const { SchemaDiffer } = await import("../migration/differ.ts");
+  const { DDLGenerator } = await import("../migration/ddl.ts");
+
+  const sdl = `
+    module default {
+      type Account {
+        required name: str;
+        required email: str;
+      }
+      type Etag {
+        required value: str;
+      }
+    }
+
+    module pass_v1 {
+      type Metadata {
+        required account: default::Account;
+        required etag: default::Etag;
+        required generated_at: datetime {
+          default := datetime_current();
+        }
+        cached_account_email := .account.email;
+        trigger log_create after insert for each do (
+          log_audit(__new__.cached_account_email)
+        );
+      }
+    }
+
+    module chained {
+      type Wrapper {
+        required source: pass_v1::Metadata;
+        required cached_email: str;
+      }
+    }
+  `;
+
+  const ast = new SDLParser(sdl).parse();
+  const moduleDecls = ast.declarations.filter(
+    (d) => d.kind === "ModuleDeclaration",
+  );
+  assertEquals(
+    moduleDecls.length,
+    3,
+    "Expected 3 modules (default + pass_v1 + chained) (Gel #5641 pin).",
+  );
+
+  const conv = new SDLConverter();
+  const modules = conv.convertToModules(ast);
+  const ops = new SchemaDiffer().diff([], modules);
+
+  // 4 types: Account, Etag, Metadata, Wrapper. Each produces at least
+  // one CreateType operation; a regression that loses one of them
+  // (e.g. by dropping the cross-module type reference during
+  // converter resolution) trips this assertion.
+  const createTypes = ops.filter((op) => op.kind === "CreateType");
+  assertEquals(
+    createTypes.length,
+    4,
+    `Expected 4 CreateType ops, got ${createTypes.length} (Gel #5641 pin).`,
+  );
+
+  // DDL generation must succeed and emit a CREATE TABLE for each
+  // type. The "missing FROM-clause" error in Gel surfaced at SQL
+  // emit time; if Disc ever regresses to that path, this throws or
+  // returns fewer statements than expected.
+  const ddl = new DDLGenerator();
+  ddl.setEnumScalars(new SchemaDiffer().enumScalarNames(modules));
+  const stmts = ddl.generateDDL(ops);
+  const createTables = stmts.filter((s) => /CREATE TABLE\b/.test(s));
+  assertEquals(
+    createTables.length,
+    4,
+    `Expected 4 CREATE TABLE statements, got ${createTables.length} (Gel #5641 pin).`,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#4215 — migrate type of computed global. Gel's repro:
+// `type B extending A` → `type B` (drop extending) with a global
+// `b := (select B limit 1)` referencing it. Gel's resolver fails
+// even though the DDL is valid.
+//
+// Disc has a *different* gap on this surface: the differ does not
+// currently compare type-level `extending` clauses, so changing
+// `type B extending A` to `type B` produces 0 operations (silent
+// no-op). This is a documented limitation — see `differ.ts:diffType`
+// which only diffs properties, links, and triggers; the
+// `parentTypes` field is captured at CREATE time only.
+//
+// This pin asserts the current behavior so a future refactor that
+// adds the missing detection (the right fix) can land deliberately
+// rather than as a side effect — and lands with corresponding DDL
+// emission for inheritance changes (ALTER TABLE INHERIT etc.).
+// ---------------------------------------------------------------------------
+Deno.test("Gel #4215: type-level extending changes are currently a silent no-op (TODO: detect + emit DDL)", async () => {
+  const { SDLParser } = await import("../schema/parser.ts");
+  const { SDLConverter } = await import("../schema/converter.ts");
+  const { SchemaDiffer } = await import("../migration/differ.ts");
+
+  const before = `
+    module default {
+      abstract type A {
+        required label: str;
+      }
+      type B extending A {
+        required value: int32;
+      }
+    }
+  `;
+
+  const after = `
+    module default {
+      abstract type A {
+        required label: str;
+      }
+      type B {
+        required value: int32;
+      }
+    }
+  `;
+
+  const conv = new SDLConverter();
+  const beforeMods = conv.convertToModules(new SDLParser(before).parse());
+  const afterMods = conv.convertToModules(new SDLParser(after).parse());
+  const ops = new SchemaDiffer().diff(beforeMods, afterMods);
+
+  // CURRENT BEHAVIOR (gap): 0 ops. TODO: when the differ gains
+  // type-level extending detection, this assertion flips to expect
+  // an AlterType op with a ChangeParentTypes change. Removing this
+  // pin without updating the differ is the regression to catch.
+  assertEquals(
+    ops.length,
+    0,
+    `Differ currently silently misses type-level extending changes (Gel #4215 gap pin). Got ${ops.length} ops; if this fails, the differ now detects the change — update the pin to assert the new behavior.`,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#2204 — migrations not propagated to existing connections.
+// Gel's bug: existing client connections kept stale schema descriptors
+// after a migration applied — `select Counter` would error "missing
+// type Counter" until the connection was reopened.
+//
+// Disc solved this structurally with a runtime schema-reload pipeline:
+//
+//   migration/schema-manager.ts    — `onSchemaChange?(schema)` callback
+//                                    fires after each successful apply
+//   server/server.ts:DiscServer    — wires SchemaManager.onSchemaChange
+//                                    to its own `updateSchema(schema)`
+//                                    method, which forwards to the
+//                                    protocol handler
+//   server/edgeql-protocol.ts      — `updateSchema(schema)` rebuilds
+//                                    the compiler with the new schema
+//                                    *and* clears the compilation +
+//                                    parse caches so the next query
+//                                    compiles against the new schema
+//
+// The behavioral side is exercised by `server/schema-reload.test.ts`.
+// This pin asserts every link in the chain stays wired: a refactor
+// that drops `onSchemaChange`, removes the wire-through in
+// `DiscServer`, or skips the cache flush in `EdgeQLProtocol.updateSchema`
+// would all be regressions.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #2204: schema-reload pipeline (SchemaManager → server → protocol) stays wired", async () => {
+  const smSrc = await Deno.readTextFile(
+    new URL("../migration/schema-manager.ts", import.meta.url),
+  );
+  // SchemaManager fires onSchemaChange after each apply.
+  assert(
+    /onSchemaChange\?\.\(this\.currentSchema\)/.test(smSrc),
+    "schema-manager.ts must invoke onSchemaChange after schema reload (Gel #2204 pin).",
+  );
+
+  const serverSrc = await Deno.readTextFile(
+    new URL("../server/server.ts", import.meta.url),
+  );
+  // DiscServer wires onSchemaChange to its own updateSchema delegate.
+  assert(
+    /this\.protocolHandler\.updateSchema/.test(serverSrc),
+    "server.ts must forward updateSchema to the protocol handler (Gel #2204 pin).",
+  );
+
+  const protoSrc = await Deno.readTextFile(
+    new URL("../server/edgeql-protocol.ts", import.meta.url),
+  );
+  // EdgeQLProtocol.updateSchema rebuilds the compiler and clears caches.
+  // The order matters — clearing first, then rebuilding, would race
+  // with concurrent queries; the implementation does it in the right
+  // order. Pin both the rebuild and the clear so neither drops out.
+  assert(
+    /updateSchema\(schema: Context\.Schema\): void \{[\s\S]*?this\.compiler = this\.createCompiler\(schema\);[\s\S]*?this\.compilationCache\.clear\(\);[\s\S]*?this\.parseCache\.clear\(\);/
+      .test(protoSrc),
+    "edgeql-protocol.ts updateSchema must rebuild the compiler and clear both caches (Gel #2204 pin).",
+  );
+});

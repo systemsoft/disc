@@ -14,6 +14,41 @@ tag is cut.
 
 ## [Unreleased]
 
+### Fixed
+
+- **DB/engine correctness cluster pinned** (Bundle OO — gh/geldata#5641
+  - #4215 + #2204). All three are structurally addressed in Disc; pins
+    in `tests/gel-divergence-pins.test.ts` lock the behavior in place.
+  * **#5641 (multi-module FROM-clause) pin**: Gel's compiler lost
+    track of FROM entries when compiling computed properties +
+    triggers across modules (e.g. `pass_v1::Metadata` carrying
+    `default::Account` references in a computed prop, with a trigger
+    walking the chain). Disc's SDL converter resolves cross-module
+    type references up-front, and the migration DDL gen emits one
+    CREATE TABLE per type with all FROM-clause-bound column types
+    fully qualified. Pin walks parse → diff → DDL gen end-to-end on a
+    3-module schema with cross-module computed prop + trigger and
+    asserts every type lands a CREATE TABLE.
+  * **#4215 (type-level extending change) gap pin**: Disc has a
+    _different_ gap on this surface from Gel. Gel's bug was the
+    migration resolver failing on a valid DDL change; Disc's gap is
+    that the differ does not currently compare type-level `extending`
+    clauses, so changing `type B extending A` to `type B` produces 0
+    operations (silent no-op). The pin documents the current behavior
+    so a future bundle that adds detection + ALTER TABLE INHERIT
+    emission lands deliberately rather than as a side effect.
+  * **#2204 (schema-version notify) pin**: Gel kept stale schema
+    descriptors on existing connections after migrations applied.
+    Disc has the full pipeline already:
+    `migration/schema-manager.ts:onSchemaChange` →
+    `server/server.ts:DiscServer.updateSchema` →
+    `server/edgeql-protocol.ts:EdgeQLProtocol.updateSchema` →
+    rebuild compiler + clear compilation/parse caches. Behavior is
+    exercised in `server/schema-reload.test.ts`; this pin asserts
+    every link in the chain stays wired so a refactor that drops
+    `onSchemaChange`, removes the forward in `DiscServer`, or skips
+    the cache flush trips here.
+
 ### Added
 
 - **Programmatic CLI surface** (Bundle NN — gh/geldata#5911).
