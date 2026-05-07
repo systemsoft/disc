@@ -65,8 +65,9 @@ Deno.test("renderMagicCodeEmail: branded subject + brandColor on code box", () =
     recipient: "carol@example.com",
   });
   assertEquals(r.subject, "Your Acme sign-in code");
-  // brandColor flows into the inline-styled code box.
-  assertStringIncludes(r.html, "background: #0af");
+  // brandColor flows into the bulletproof code box. The `<td bgcolor>`
+  // attribute is the cross-client carrier (gh/geldata#7629).
+  assertStringIncludes(r.html, 'bgcolor="#0af"');
 });
 
 Deno.test("renderMagicLinkEmail: branded subject", () => {

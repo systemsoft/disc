@@ -181,3 +181,72 @@ Deno.test("renderMagicCodeEmail - mentions the 10-minute TTL", () => {
   assertStringIncludes(rendered.text, "10 minutes");
   assertStringIncludes(rendered.html, "10 minutes");
 });
+
+// gh/geldata#7629 — bulletproof CTA button. Outlook on Windows drops
+// `display: inline-block` + `padding` on `<a>` (and `<p>`), so the
+// CTA renders as plain underlined text on the page background — when
+// the brand color was the only thing providing contrast against white
+// text, the result was invisible. Each button-bearing template now
+// wraps the link/badge in a single-cell `<table>` carrying the
+// background via the legacy `bgcolor` attribute.
+Deno.test("renderVerificationEmail - CTA uses bulletproof table markup", () => {
+  const rendered = renderVerificationEmail({
+    baseUrl: "https://app.example.com",
+    recipient: "alice@example.com",
+    verificationToken: "tok-verify-abc",
+  });
+
+  assertStringIncludes(rendered.html, '<table role="presentation"');
+  assertStringIncludes(rendered.html, "bgcolor=");
+  assertStringIncludes(rendered.html, "mso-padding-alt:");
+});
+
+Deno.test("renderPasswordResetEmail - CTA uses bulletproof table markup", () => {
+  const rendered = renderPasswordResetEmail({
+    baseUrl: "https://app.example.com",
+    recipient: "bob@example.com",
+    resetToken: "tok-reset-xyz",
+  });
+
+  assertStringIncludes(rendered.html, '<table role="presentation"');
+  assertStringIncludes(rendered.html, "bgcolor=");
+  assertStringIncludes(rendered.html, "mso-padding-alt:");
+});
+
+Deno.test("renderMagicLinkEmail - CTA uses bulletproof table markup", () => {
+  const rendered = renderMagicLinkEmail({
+    baseUrl: "https://app.example.com",
+    magicLinkToken: "tok-magic-123",
+    recipient: "carol@example.com",
+  });
+
+  assertStringIncludes(rendered.html, '<table role="presentation"');
+  assertStringIncludes(rendered.html, "bgcolor=");
+  assertStringIncludes(rendered.html, "mso-padding-alt:");
+});
+
+Deno.test("renderMagicCodeEmail - code badge uses bulletproof table markup", () => {
+  const rendered = renderMagicCodeEmail({
+    code: "482917",
+    recipient: "carol@example.com",
+  });
+
+  assertStringIncludes(rendered.html, '<table role="presentation"');
+  assertStringIncludes(rendered.html, "bgcolor=");
+  assertStringIncludes(rendered.html, "mso-padding-alt:");
+});
+
+Deno.test("buttonHtml - brandColor flows through to bgcolor attribute", () => {
+  const rendered = renderVerificationEmail({
+    baseUrl: "https://app.example.com",
+    branding: { appName: "Acme", brandColor: "#ff0066" },
+    recipient: "alice@example.com",
+    verificationToken: "t",
+  });
+
+  // bgcolor on the <td> is what every email client uses; inline-block
+  // styling on the <a> is the modern-client path. Both must reflect
+  // the configured brand color so the rendering is consistent.
+  assertStringIncludes(rendered.html, 'bgcolor="#ff0066"');
+  assertStringIncludes(rendered.html, "background: #ff0066");
+});

@@ -133,9 +133,41 @@ function logoHtml(branding: BrandingCtx): string {
  * older clients fall back to default text color, never to broken
  * markup).
  */
-function buttonStyle(branding: BrandingCtx): string {
-  const bg = branding.brandColor ?? "#111";
-  return `display: inline-block; padding: 10px 16px; background: ${bg}; color: #fff; text-decoration: none; border-radius: 4px;`;
+function buttonBackground(branding: BrandingCtx): string {
+  return branding.brandColor ?? "#111";
+}
+
+/**
+ * Bulletproof CTA button. (gh/geldata#7629)
+ *
+ * Outlook on Windows renders HTML through Word, which silently drops
+ * `display: inline-block` and `padding` on `<a>` — the inline-`<a>`
+ * pattern collapses to plain underlined text on the page background,
+ * which can be visually invisible (white-on-white) when the brand
+ * color is the only fill providing contrast.
+ *
+ * The fix is a single-cell table that carries the background via the
+ * legacy `bgcolor` attribute (every client honors this) and MSO's
+ * `mso-padding-alt` so the cell itself is clickable in Outlook even
+ * when the inner `<a>` padding is dropped. Modern clients still see
+ * the inline-block styling on the anchor and render the same as
+ * before, so no regression.
+ *
+ * `href` and `label` are HTML-escaped here; callers pass raw values.
+ */
+function buttonHtml(href: string, label: string, branding: BrandingCtx): string {
+  const bg = buttonBackground(branding);
+  const escapedHref = escapeHtml(href);
+  const escapedLabel = escapeHtml(label);
+  return [
+    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse; margin: 16px 0;">',
+    "<tr>",
+    `<td bgcolor="${bg}" style="border-radius: 4px; mso-padding-alt: 12px 20px;">`,
+    `<a href="${escapedHref}" style="display: inline-block; padding: 12px 20px; background: ${bg}; color: #fff; text-decoration: none; border-radius: 4px; font-weight: 600;">${escapedLabel}</a>`,
+    "</td>",
+    "</tr>",
+    "</table>",
+  ].join("");
 }
 
 /**
@@ -204,7 +236,7 @@ export function renderVerificationEmail(ctx: VerificationCtx): RenderedEmail {
       logoHtml(branding),
       `<p>Hi ${escapeHtml(ctx.recipient)},</p>`,
       `<p>${introHtml}</p>`,
-      `<p><a href="${escapeHtml(link)}" style="${buttonStyle(branding)}">Verify email</a></p>`,
+      buttonHtml(link, "Verify email", branding),
       `<p style="font-size: 13px; color: #555;">Or paste this link into your browser:<br><span style="word-break: break-all;">${escapeHtml(link)}</span></p>`,
       '<p style="font-size: 13px; color: #555;">If you didn\'t create this account, you can safely ignore this message.</p>',
     ].filter((s) => s.length > 0).join("\n"),
@@ -241,7 +273,7 @@ export function renderPasswordResetEmail(ctx: PasswordResetCtx): RenderedEmail {
       logoHtml(branding),
       `<p>Hi ${escapeHtml(ctx.recipient)},</p>`,
       `<p>${introHtml}</p>`,
-      `<p><a href="${escapeHtml(link)}" style="${buttonStyle(branding)}">Reset password</a></p>`,
+      buttonHtml(link, "Reset password", branding),
       `<p style="font-size: 13px; color: #555;">Or paste this link into your browser:<br><span style="word-break: break-all;">${escapeHtml(link)}</span></p>`,
       '<p style="font-size: 13px; color: #555;">If you didn\'t request a password reset, you can safely ignore this message — your password will stay the same.</p>',
     ].filter((s) => s.length > 0).join("\n"),
@@ -278,9 +310,19 @@ export function renderMagicCodeEmail(ctx: MagicCodeCtx): RenderedEmail {
       logoHtml(branding),
       `<p>Hi ${escapeHtml(ctx.recipient)},</p>`,
       `<p>${introHtml}</p>`,
-      `<p style="font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 28px; letter-spacing: 6px; font-weight: 700; padding: 16px 24px; background: ${codeBg}; color: #fff; border-radius: 6px; display: inline-block;">${
-        escapeHtml(ctx.code)
-      }</p>`,
+      // Same bulletproof pattern as buttonHtml — Outlook drops the
+      // `display: inline-block` + `padding` + `background` on `<p>`,
+      // and `color: #fff` without a background renders white-on-white.
+      // (gh/geldata#7629)
+      [
+        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse; margin: 16px 0;">',
+        "<tr>",
+        `<td bgcolor="${codeBg}" style="border-radius: 6px; mso-padding-alt: 16px 24px; padding: 16px 24px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 28px; letter-spacing: 6px; font-weight: 700; color: #fff;">`,
+        escapeHtml(ctx.code),
+        "</td>",
+        "</tr>",
+        "</table>",
+      ].join(""),
       '<p style="font-size: 13px; color: #555;">If you didn\'t request this, you can safely ignore this email.</p>',
     ].filter((s) => s.length > 0).join("\n"),
   );
@@ -321,7 +363,7 @@ export function renderMagicLinkEmail(ctx: MagicLinkCtx): RenderedEmail {
       logoHtml(branding),
       `<p>Hi ${escapeHtml(ctx.recipient)},</p>`,
       `<p>${introHtml}</p>`,
-      `<p><a href="${escapeHtml(link)}" style="${buttonStyle(branding)}">Sign in</a></p>`,
+      buttonHtml(link, "Sign in", branding),
       `<p style="font-size: 13px; color: #555;">Or paste this link into your browser:<br><span style="word-break: break-all;">${escapeHtml(link)}</span></p>`,
       '<p style="font-size: 13px; color: #555;">If you didn\'t request this, you can safely ignore this message.</p>',
     ].filter((s) => s.length > 0).join("\n"),

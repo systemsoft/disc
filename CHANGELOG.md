@@ -14,6 +14,22 @@ tag is cut.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Bulletproof CTA buttons in auth emails** (gh/geldata#7629). Outlook
+  on Windows renders HTML through Word, which silently drops
+  `display: inline-block` and `padding` on `<a>`. The previous
+  inline-anchor button collapsed to plain underlined text on the page
+  background — when the brand color was the only fill providing
+  contrast against the white text, the result was visually invisible.
+  Each button-bearing template (verification, password reset, magic
+  link) now wraps the anchor in a single-cell `<table>` carrying the
+  background via the legacy `bgcolor` attribute and `mso-padding-alt`
+  so the cell itself is clickable in Outlook even when the inner
+  anchor's padding is dropped. The magic-code badge had the same
+  white-on-white bug class and uses the same pattern. Modern clients
+  still see the inline-block styling on the anchor, so no regression.
+
 ### Added
 
 - **Embedded EdgeQL diagnostics in TS/JS files** (LSP Phase 5). The
