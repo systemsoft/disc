@@ -17,12 +17,7 @@ import { getLogger } from "../lib/logger.ts";
 import { authContextToAccessContext } from "./access-bridge.ts";
 
 const log = getLogger("edgeql-protocol");
-import {
-  hashAccessContext,
-  hashString,
-  makeCompilationCacheKey,
-  QueryCache,
-} from "../lib/query-cache.ts";
+import { hashAccessContext, hashString, makeCompilationCacheKey, QueryCache } from "../lib/query-cache.ts";
 import type { CacheStats } from "../lib/query-cache.ts";
 
 export interface EdgeQLExecutionOptions {
@@ -98,18 +93,17 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
   }
 
   private createCompiler(schema: Context.Schema): Compiler.EdgeQLCompiler {
-    const compilerOptions: Compiler.CompilerOptions =
-      this.options.enableAccessPolicies
-        ? {
-          enableAccessControl: true,
-          accessConfig: {
-            mode: "permissive",
-            defaultAllow: true,
-            enableRLS: true,
-            enableAudit: false,
-          },
-        }
-        : { enableAccessControl: false };
+    const compilerOptions: Compiler.CompilerOptions = this.options.enableAccessPolicies
+      ? {
+        enableAccessControl: true,
+        accessConfig: {
+          mode: "permissive",
+          defaultAllow: true,
+          enableRLS: true,
+          enableAudit: false,
+        },
+      }
+      : { enableAccessControl: false };
 
     const compiler = new Compiler.EdgeQLCompiler(schema, compilerOptions);
 
@@ -166,10 +160,19 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
           context.auth.userId,
           context.auth.roles?.[0],
         );
-        compilationKey = makeCompilationCacheKey(
-          queryHash,
-          bypass ? `${ctxHash}|bypass` : ctxHash,
-        );
+        // Embed both bypass flag and the disabled-policies set in the
+        // cache key (gh/geldata#6358 + #6432 slice 3). A disabled-
+        // policies query produces different SQL than a regular query,
+        // so they must not share a cache slot.
+        let suffix = ctxHash;
+        if (bypass) suffix += "|bypass";
+        if (context.disabledPolicies && context.disabledPolicies.size > 0) {
+          // Sort for stable hashing — Set iteration order matches insertion,
+          // not the header's textual order.
+          const disabled = [...context.disabledPolicies].sort().join(",");
+          suffix += `|disabled=${disabled}`;
+        }
+        compilationKey = makeCompilationCacheKey(queryHash, suffix);
       }
 
       // Check compilation cache first
@@ -217,8 +220,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         if (this.options.readOnly && isWriteQuery(ast)) {
           return {
             errors: [{
-              message:
-                "the server is currently in read-only mode; this query would write to the database",
+              message: "the server is currently in read-only mode; this query would write to the database",
               extensions: {
                 code: "READ_ONLY_MODE",
                 queryKind: ast.kind,
@@ -231,10 +233,15 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         // When `context.bypassAccessPolicies` is set, the AccessContext
         // carries `bypass: true` so the compiler short-circuits
         // `applyAccessControl` and emits unfiltered SQL
-        // (gh/geldata#6358).
+        // (gh/geldata#6358). When `context.disabledPolicies` is set, the
+        // AccessContext threads it to the evaluator which silently
+        // skips matching policies (gh/geldata#6432 slice 3).
         if (policiesActive && context.auth) {
           const accessCtx = authContextToAccessContext(context.auth);
           if (bypass) accessCtx.bypass = true;
+          if (context.disabledPolicies && context.disabledPolicies.size > 0) {
+            accessCtx.disabledPolicies = context.disabledPolicies;
+          }
           this.compiler.setAccessContext(accessCtx);
         }
 
@@ -269,9 +276,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       // execute the SET LOCAL on the connection, then return a success response.
       if (parsedAST && parsedAST.kind === "SetGlobalQuery") {
         const setGlobalAST = parsedAST as EdgeQL.SetGlobalQuery;
-        const globalKey = `global::${
-          setGlobalAST.module || "default"
-        }::${setGlobalAST.name}`;
+        const globalKey = `global::${setGlobalAST.module || "default"}::${setGlobalAST.name}`;
         context.session.variables[globalKey] = sqlString;
 
         const executeStart = Date.now();
@@ -323,12 +328,8 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       const threshold = this.options.slowQueryThresholdMs ?? 1000;
 
       if (durationMs >= threshold) {
-        const truncatedQuery = request.query.length > 200
-          ? request.query.substring(0, 200) + "..."
-          : request.query;
-        const truncatedSQL = sqlString.length > 200
-          ? sqlString.substring(0, 200) + "..."
-          : sqlString;
+        const truncatedQuery = request.query.length > 200 ? request.query.substring(0, 200) + "..." : request.query;
+        const truncatedSQL = sqlString.length > 200 ? sqlString.substring(0, 200) + "..." : sqlString;
 
         log.warn("Slow query", {
           durationMs,
@@ -368,9 +369,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
               sql_ast: sqlStatement,
             }
             : undefined,
-          explain_plan: this.options.enableExplain
-            ? await this.getExplainPlan(queryHash, sqlString)
-            : undefined,
+          explain_plan: this.options.enableExplain ? await this.getExplainPlan(queryHash, sqlString) : undefined,
         },
       };
 
@@ -400,9 +399,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         };
       }
 
-      const errorMessage = error instanceof Error
-        ? error.message
-        : "Unknown error";
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
 
       return {
         errors: [{
@@ -462,9 +459,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
 
       return { success: true, ast };
     } catch (error) {
-      const errorMessage = error instanceof Error
-        ? error.message
-        : "Unknown parsing error";
+      const errorMessage = error instanceof Error ? error.message : "Unknown parsing error";
       return {
         success: false,
         error: errorMessage,
@@ -598,9 +593,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         const params = this.prepareParameters(variables);
         const timeoutMs = this.options.requestTimeout ?? 0;
 
-        const result = timeoutMs > 0
-          ? await pool.queryWithTimeout(sql, params, timeoutMs)
-          : await pool.query(sql, params);
+        const result = timeoutMs > 0 ? await pool.queryWithTimeout(sql, params, timeoutMs) : await pool.query(sql, params);
 
         // Format result based on query type
         const normalizedSQL = sql.toLowerCase().trim();
@@ -632,9 +625,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
           throw error;
         }
 
-        const dbError = error instanceof Error
-          ? error
-          : new Error(String(error));
+        const dbError = error instanceof Error ? error : new Error(String(error));
         log.error("Database execution error", { error: dbError.message });
         throw new DatabaseExecutionError(
           `Database query failed: ${dbError.message}`,
@@ -749,9 +740,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       "set",
     ];
 
-    const startsWithValid = validStartKeywords.some((keyword) =>
-      normalized.startsWith(keyword)
-    );
+    const startsWithValid = validStartKeywords.some((keyword) => normalized.startsWith(keyword));
 
     if (!startsWithValid && normalized.length > 0) {
       errors.push({
@@ -1060,9 +1049,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       const latencyMs = Date.now() - start;
 
       const poolStats = this.buildPoolStats();
-      const status: Types.HealthStatus["status"] = poolStats.waiters > 0
-        ? "degraded"
-        : "healthy";
+      const status: Types.HealthStatus["status"] = poolStats.waiters > 0 ? "degraded" : "healthy";
 
       return {
         status,

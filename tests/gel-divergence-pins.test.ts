@@ -1306,3 +1306,60 @@ Deno.test("Gel #6083: docs/migrations.md carries the branch-workflow recipes", a
     );
   }
 });
+
+// ---------------------------------------------------------------------------
+// gh/geldata#6432 slice 3 — per-policy session toggle for testing.
+// Bundle UU shipped this as the `X-Disc-Disable-Policies` HTTP header
+// (admin-gated) plus `AccessContext.disabledPolicies: Set<string>`
+// threaded through `EdgeQLProtocol.handleRequest` to the evaluator.
+// Behavior is exercised in `access/evaluator.test.ts` and
+// `server/access-bypass.test.ts`. This pin asserts the wiring stays
+// in place at source-read time.
+//
+// (Slice 4 — run-in-isolation against a synthetic context — is the
+// only remaining #6432 sub-feature. Tracked as future work in
+// `docs/future-triage.md`.)
+// ---------------------------------------------------------------------------
+Deno.test("Gel #6432 slice 3: per-policy disable threads from HTTP header to evaluator", async () => {
+  const httpSrc = await Deno.readTextFile(
+    new URL("../server/http.ts", import.meta.url),
+  );
+  // The header parser must be admin-gated and produce a Set.
+  assert(
+    /X-Disc-Disable-Policies/.test(httpSrc) &&
+      /disabledPolicies = new Set\(names\)/.test(httpSrc),
+    "server/http.ts must parse X-Disc-Disable-Policies into a Set (Gel #6432 slice 3 pin).",
+  );
+  assert(
+    /disableHeader && callerIsAdmin/.test(httpSrc),
+    "server/http.ts must admin-gate the disabled-policies header (Gel #6432 slice 3 pin).",
+  );
+
+  const protoSrc = await Deno.readTextFile(
+    new URL("../server/edgeql-protocol.ts", import.meta.url),
+  );
+  // The protocol handler must thread `disabledPolicies` from
+  // QueryContext into the AccessContext so the evaluator sees it.
+  assert(
+    /accessCtx\.disabledPolicies = context\.disabledPolicies/.test(protoSrc),
+    "edgeql-protocol.ts must thread disabledPolicies into the AccessContext (Gel #6432 slice 3 pin).",
+  );
+  // The compilation cache key must include the disabled set so a
+  // disabled-policies call doesn't share a cache slot with a regular
+  // call.
+  assert(
+    /\|disabled=/.test(protoSrc),
+    "edgeql-protocol.ts compilation cache key must embed the disabled-policies set (Gel #6432 slice 3 pin).",
+  );
+
+  const evalSrc = await Deno.readTextFile(
+    new URL("../access/evaluator.ts", import.meta.url),
+  );
+  // The evaluator must filter on the qualified `<TypeName>.<policy_name>`
+  // shape and short-circuit before policy evaluation.
+  assert(
+    /context\.disabledPolicies/.test(evalSrc) &&
+      /\$\{p\.objectType \?\? "__global__"\}\.\$\{p\.name\}/.test(evalSrc),
+    "access/evaluator.ts must filter disabledPolicies via qualified <Type>.<name> matching (Gel #6432 slice 3 pin).",
+  );
+});

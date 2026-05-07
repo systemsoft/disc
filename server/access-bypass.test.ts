@@ -164,3 +164,96 @@ Deno.test("EdgeQLProtocolHandler — bypass cache key isolates results", async (
     `expected divergent cache entries: bypass=${sqlBypass} regular=${sqlNoBypass}`,
   );
 });
+
+// ---------------------------------------------------------------------------
+// Per-policy disable (gh/geldata#6432 slice 3 — Bundle UU). The
+// `X-Disc-Disable-Policies` header carries qualified policy names
+// (`<TypeName>.<policy_name>`), admin-gated identically to
+// `X-Disc-Apply-Access-Policies`. Tests below mirror the role-gate
+// shape used for the apply bypass above.
+// ---------------------------------------------------------------------------
+
+/**
+ * Mirrors the disable-policies role gate in
+ * `server/http.ts:handle_query`. Same shape as `headerToBypass`
+ * but parses a comma-separated name list instead of a single flag.
+ */
+function headerToDisabled(
+  header: string | null,
+  roles: string[],
+): Set<string> | undefined {
+  if (header === null) return undefined;
+  if (!roles.includes("admin")) return undefined;
+  const names = header
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  return names.length > 0 ? new Set(names) : undefined;
+}
+
+Deno.test("disable-policies — admin caller parses comma-separated names", () => {
+  const result = headerToDisabled(
+    "Doc.owner_only, User.admin_check ,Tenant.global",
+    ["admin"],
+  );
+  assert(result !== undefined);
+  assertEquals(result.size, 3);
+  assertEquals(result.has("Doc.owner_only"), true);
+  assertEquals(result.has("User.admin_check"), true);
+  assertEquals(result.has("Tenant.global"), true);
+});
+
+Deno.test("disable-policies — non-admin caller dropped silently", () => {
+  assertEquals(headerToDisabled("Doc.owner_only", []), undefined);
+  assertEquals(headerToDisabled("Doc.owner_only", ["user"]), undefined);
+  assertEquals(
+    headerToDisabled("Doc.owner_only", ["editor", "viewer"]),
+    undefined,
+  );
+});
+
+Deno.test("disable-policies — absent or empty header → undefined", () => {
+  assertEquals(headerToDisabled(null, ["admin"]), undefined);
+  assertEquals(headerToDisabled("", ["admin"]), undefined);
+  assertEquals(headerToDisabled("   ", ["admin"]), undefined);
+  assertEquals(headerToDisabled(",,", ["admin"]), undefined);
+});
+
+Deno.test("disable-policies — cache key isolates results from regular calls", async () => {
+  const schema = await schemaFromSDL(SDL_WITH_POLICY);
+  const handler = new EdgeQLProtocolHandler({
+    schema,
+    dryRun: true,
+    enableExplain: true,
+    enableAccessPolicies: true,
+  });
+  const request: QueryRequest = { query: "SELECT User { name, email }" };
+
+  // Regular call — policy WHERE applies.
+  const ctxRegular = makeContext({ userId: "u1" });
+
+  // Disabled call — `User.owner_only` filtered out.
+  const ctxDisabled = makeContext({ userId: "u1" });
+  ctxDisabled.disabledPolicies = new Set(["User.owner_only"]);
+
+  const sqlRegular = (await handler.handleRequest(request, ctxRegular))
+    .extensions?.sql as string;
+  const sqlDisabled = (await handler.handleRequest(request, ctxDisabled))
+    .extensions?.sql as string;
+
+  assert(sqlRegular && sqlDisabled);
+  // The two SQL strings must differ — regular carries the policy
+  // WHERE clause; disabled doesn't.
+  assert(
+    sqlRegular !== sqlDisabled,
+    `Cache keys must isolate disabled-policies calls; got identical SQL: ${sqlRegular}`,
+  );
+  assert(
+    sqlRegular.includes("WHERE"),
+    `Regular call should emit policy WHERE; got: ${sqlRegular}`,
+  );
+  assert(
+    !sqlDisabled.includes("WHERE"),
+    `Disabled call should not emit policy WHERE; got: ${sqlDisabled}`,
+  );
+});

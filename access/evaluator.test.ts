@@ -492,3 +492,96 @@ Deno.test("AccessEvaluator - custom global with unsafe name is rejected", () => 
   }
   assertEquals(threw, true, "Unsafe global identifier must throw");
 });
+
+// ---------------------------------------------------------------------------
+// gh/geldata#6432 slice 3 — per-policy disable for testing.
+// `AccessContext.disabledPolicies` carries qualified policy names
+// (`<TypeName>.<policy_name>`). The evaluator filters them out before
+// evaluation, so a disabled deny-policy stops denying and a disabled
+// allow-policy stops allowing — same shape as if the policy weren't
+// declared at all.
+// ---------------------------------------------------------------------------
+Deno.test("AccessEvaluator - disabledPolicies skips matching policies (Bundle UU — gh/geldata#6432)", () => {
+  const evaluator = new AccessEvaluator(createTestConfig({ defaultAllow: true }));
+
+  // A deny policy that would normally fire on delete.
+  const denyPolicy: AccessPolicy = {
+    name: "no_delete",
+    objectType: "Doc",
+    actions: [{ allow: false, operations: ["delete"] }],
+  };
+  evaluator.registerPolicy(denyPolicy);
+
+  // Without the disable, delete is denied.
+  const baseline = evaluator.evaluate("Doc", "delete", { userId: "u1" });
+  assertEquals(baseline.allowed, false, "Baseline: delete is denied by no_delete");
+
+  // With `Doc.no_delete` disabled, the policy is filtered out and
+  // the type behaves as if the policy weren't declared. Combined
+  // with `defaultAllow: true`, that means the operation is allowed.
+  const withDisable = evaluator.evaluate("Doc", "delete", {
+    userId: "u1",
+    disabledPolicies: new Set(["Doc.no_delete"]),
+  });
+  assertEquals(
+    withDisable.allowed,
+    true,
+    "disabledPolicies must skip the deny policy and fall back to default",
+  );
+  assertEquals(
+    withDisable.reason,
+    "No policies defined, default allow",
+    "Disabling every policy on a type should match the no-policies-defined path",
+  );
+});
+
+Deno.test("AccessEvaluator - disabledPolicies only matches the named policy (Bundle UU)", () => {
+  const evaluator = new AccessEvaluator(createTestConfig());
+  evaluator.registerPolicy({
+    name: "owner_select",
+    objectType: "Doc",
+    actions: [{ allow: true, operations: ["select"] }],
+  });
+  evaluator.registerPolicy({
+    name: "admin_select",
+    objectType: "Doc",
+    actions: [{ allow: true, operations: ["select"] }],
+  });
+
+  // Disable only owner_select. The other allow-policy still applies,
+  // so the request remains allowed.
+  const decision = evaluator.evaluate("Doc", "select", {
+    userId: "u1",
+    disabledPolicies: new Set(["Doc.owner_select"]),
+  });
+  assertEquals(decision.allowed, true, "Request still allowed via admin_select");
+  // appliedPolicies should not list the disabled one.
+  assertEquals(
+    decision.appliedPolicies.includes("owner_select"),
+    false,
+    "Disabled policy must not appear in appliedPolicies",
+  );
+  assertEquals(
+    decision.appliedPolicies.includes("admin_select"),
+    true,
+    "Non-disabled policy must still appear in appliedPolicies",
+  );
+});
+
+Deno.test("AccessEvaluator - disabledPolicies on a different type is a no-op (Bundle UU)", () => {
+  const evaluator = new AccessEvaluator(createTestConfig());
+  evaluator.registerPolicy({
+    name: "owner_select",
+    objectType: "Doc",
+    actions: [{ allow: true, operations: ["select"] }],
+  });
+
+  // Disabling `User.owner_select` should not affect `Doc.owner_select`
+  // — qualified names mean the type binding matters.
+  const decision = evaluator.evaluate("Doc", "select", {
+    userId: "u1",
+    disabledPolicies: new Set(["User.owner_select"]),
+  });
+  assertEquals(decision.allowed, true);
+  assertEquals(decision.appliedPolicies, ["owner_select"]);
+});

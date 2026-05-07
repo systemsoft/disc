@@ -891,6 +891,23 @@ export class HttpServer {
       const callerIsAdmin = authContext.roles.includes("admin");
       const bypassAccessPolicies = bypassRequested && callerIsAdmin;
 
+      // Per-policy disable (gh/geldata#6432 slice 3). The header lists
+      // qualified policy names (`<TypeName>.<policy_name>`) the caller
+      // wants the evaluator to skip — surgical disable for testing,
+      // versus the all-or-nothing `bypassAccessPolicies` above. Same
+      // admin-gate so a non-admin can't disable a policy that protects
+      // them.
+      const disableHeader = request.headers
+        .get("X-Disc-Disable-Policies");
+      let disabledPolicies: Set<string> | undefined;
+      if (disableHeader && callerIsAdmin) {
+        const names = disableHeader
+          .split(",")
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0);
+        if (names.length > 0) disabledPolicies = new Set(names);
+      }
+
       // Create query context
       const context: Types.QueryContext = {
         session: connection.session,
@@ -899,6 +916,7 @@ export class HttpServer {
         startedAt: new Date(),
         clientInfo: this.parse_client_info(request),
         bypassAccessPolicies,
+        disabledPolicies,
       };
 
       // Execute query with optional HTTP-level timeout safety net

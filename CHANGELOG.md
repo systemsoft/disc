@@ -14,6 +14,39 @@ tag is cut.
 
 ## [Unreleased]
 
+### Added
+
+- **Per-policy session disable** (Bundle UU — gh/geldata#6432 slice 3).
+  New `X-Disc-Disable-Policies` HTTP header takes a comma-separated
+  list of qualified policy names (`<TypeName>.<policy_name>`) and
+  silently filters them from the evaluator — the surgical alternative
+  to the all-or-nothing `X-Disc-Apply-Access-Policies: false` bypass.
+  Admin-gated identically: non-admin callers have the header dropped
+  at the HTTP boundary.
+  ```bash
+  # Test how Doc behaves without owner_only filtering
+  curl -X POST http://localhost:5656/edgeql \
+    -H "Authorization: Bearer $ADMIN_JWT" \
+    -H "X-Disc-Disable-Policies: Doc.owner_only, User.admin_check" \
+    -d '{"query": "select Doc { id, title }"}'
+  ```
+  - `access/types.ts` — `AccessContext.disabledPolicies?: Set<string>`.
+  - `access/evaluator.ts` — qualified-name filter before policy
+    evaluation; disabling all policies on a type falls back to
+    `defaultAllow` semantics (same shape as no policies declared).
+  - `server/http.ts` — header parser + admin role gate.
+  - `server/edgeql-protocol.ts` — threads the set into AccessContext
+    and embeds it in the compilation cache key (so disabled-policies
+    calls can't share a cache slot with regular calls).
+  - `access/evaluator.test.ts` — 3 unit tests on the filter.
+  - `server/access-bypass.test.ts` — 4 tests covering header parsing,
+    admin gate, and end-to-end SQL divergence.
+  - `docs/access-policies.md` — new "Per-policy disable" section.
+
+  Closes slice 3 of the Gel #6432 ask. Slice 4 (run-in-isolation
+  against a synthetic context) remains as future work — the only
+  open #6432 sub-feature.
+
 ### Docs
 
 - **Migration narrative cluster** (Bundle TT — gh/geldata#6083 + #1772 + #1461).

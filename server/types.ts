@@ -302,6 +302,16 @@ export interface QueryContext {
    * end-users can't escalate by setting the header. Falsy by default.
    */
   bypassAccessPolicies?: boolean;
+  /**
+   * Per-policy disable set (gh/geldata#6432 slice 3). Each entry is
+   * a qualified policy name in `<TypeName>.<policy_name>` form. The
+   * evaluator silently skips listed policies as if they weren't
+   * declared. Like `bypassAccessPolicies`, only admins may set this
+   * via the `X-Disc-Disable-Policies` HTTP header — the layer drops
+   * the value for non-admins. Surgical disable for testing one policy
+   * at a time without nuking the whole stack via `bypass`.
+   */
+  disabledPolicies?: Set<string>;
 }
 
 export interface ExecutionResult {

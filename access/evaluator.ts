@@ -43,7 +43,21 @@ export class AccessEvaluator {
     // Get applicable policies
     const typePolicies = this.policies.get(objectType) || [];
     const globalPolicies = this.policies.get("__global__") || [];
-    const allPolicies = [...globalPolicies, ...typePolicies];
+    let allPolicies = [...globalPolicies, ...typePolicies];
+
+    // Per-policy disable (gh/geldata#6432 slice 3). Filter out any
+    // policy whose fully-qualified name appears in
+    // `context.disabledPolicies`. Done before the no-policies-defined
+    // check below so disabling every policy on a type falls back to
+    // `defaultAllow` semantics — same shape as a type with no policies
+    // declared, which is the expected mental model for testing.
+    const disabled = context.disabledPolicies;
+    if (disabled && disabled.size > 0) {
+      allPolicies = allPolicies.filter((p) => {
+        const qualifiedName = `${p.objectType ?? "__global__"}.${p.name}`;
+        return !disabled.has(qualifiedName);
+      });
+    }
 
     if (allPolicies.length === 0) {
       // No policies defined - use default behavior

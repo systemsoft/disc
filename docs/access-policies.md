@@ -295,6 +295,45 @@ The implementation lives in `server/http.ts:handle_query` (header
 parsing + role gate) and `compiler/compiler.ts:applyAccessControl`
 (short-circuit on `AccessContext.bypass`). (gh/geldata#6358)
 
+## Per-policy disable (admin-only) (gh/geldata#6432 slice 3)
+
+When you want to test how _one_ policy behaves without nuking the
+whole stack, the `X-Disc-Disable-Policies` header takes a
+comma-separated list of qualified policy names
+(`<TypeName>.<policy_name>`) and silently skips them in the
+evaluator. The evaluator behaves as if those policies weren't
+declared at all — same fall-back to `defaultAllow` semantics.
+
+```bash
+# Disable a single policy, leave the rest in force
+curl -X POST http://localhost:5656/edgeql \
+  -H "Authorization: Bearer $ADMIN_JWT" \
+  -H "X-Disc-Disable-Policies: Doc.owner_only" \
+  -d '{"query": "select Doc { id, title }"}'
+
+# Disable several at once
+curl -X POST http://localhost:5656/edgeql \
+  -H "Authorization: Bearer $ADMIN_JWT" \
+  -H "X-Disc-Disable-Policies: Doc.owner_only, User.admin_check" \
+  -d '{"query": "select Doc { id, title, author: { name } }"}'
+```
+
+Same admin-only gate as the apply-bypass header: a non-admin caller
+setting the header has it dropped at the boundary, never reaching
+the compiler. The compilation cache key embeds the disabled set so a
+disabled-policies call can't share a cache slot with a regular call.
+
+This is the surgical alternative to the all-or-nothing
+`X-Disc-Apply-Access-Policies: false` bypass — useful when you're
+isolating one policy at a time during testing or debugging an
+authorization regression.
+
+The implementation lives in `server/http.ts:handle_query` (header
+parsing + role gate), `server/edgeql-protocol.ts:handleRequest`
+(threading into AccessContext + cache-key embedding), and
+`access/evaluator.ts:evaluate` (qualified-name filter before policy
+evaluation).
+
 ---
 
 ## Auth + Access Flow

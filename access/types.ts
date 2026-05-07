@@ -61,6 +61,16 @@ export interface AccessContext {
    * before the compiler ever sees it.
    */
   bypass?: boolean;
+  /**
+   * Per-policy disable set (gh/geldata#6432 slice 3). Each entry is a
+   * fully-qualified policy name in `<TypeName>.<policy_name>` form
+   * (e.g. `"Doc.owner_only"`). The evaluator silently skips matching
+   * policies as if they were not declared on the type — useful for
+   * isolating one policy at a time during testing without nuking the
+   * whole policy stack via `bypass`. Like `bypass`, this is admin-
+   * gated at the HTTP boundary.
+   */
+  disabledPolicies?: Set<string>;
 }
 
 /**

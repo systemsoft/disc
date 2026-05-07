@@ -86,7 +86,8 @@ A second same-day sweep shipped 18 more bundles (I–CC), closing Disc's eight o
 | QQ     | Cloud/infra cluster: Docker image release pipeline (#5699 + #4901 → ghcr.io with :version + :latest); #6598 logger pin                   | `9106973`                                  |
 | RR     | Migration-robustness cluster: `disc db push` (#3761 — Prisma-style schema push); pins for #5190 (no branches), #6697 (idempotent stdlib) | `e35a73f`                                  |
 | SS     | Auth/access introspection cluster: `disc admin list-policies` (#6432 slices 1-2); pin for #8909 (tied to #6697 — inapplicable)           | `87dff53`                                  |
-| TT     | Migration narrative cluster: docs/migrations.md branch-workflow recipes (#6083); RFC 1000 op-coverage pin (#1772/#1461)                  | (this bundle)                              |
+| TT     | Migration narrative cluster: docs/migrations.md branch-workflow recipes (#6083); RFC 1000 op-coverage pin (#1772/#1461)                  | `9f7cad3`                                  |
+| UU     | #6432 slice 3: per-policy session disable via `X-Disc-Disable-Policies` header (admin-gated, cache-key-isolated). Slice 4 stays open.    | (this bundle)                              |
 
 Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** — #7311, #7196, #7483 (Q), #7629 (U), #3437 (FF), #7525, #6358, #8899, #9034, #2292 (GG/HH/II), and structural-divergence pins for #4408, #4172 (X), #3208, #5132, #2910 (S), #3872, #7360, #3170 (GG/HH), #5158, #5480, #8762, #7972 (II). The Disc-original-features roadmap is also fully closed by this sweep — see `docs/disc-original-features.md`.
 
@@ -238,16 +239,19 @@ Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** 
 > #5504 + #8811 were structurally inapplicable and pinned in
 > `tests/gel-divergence-pins.test.ts`.
 >
-> **Bundle SS closed the auth/access-introspection sub-cluster (#6432 + #8909).**
-> #6432 slices 1+2 shipped as `disc admin list-policies` (errmessage already
-> in `access/evaluator.ts`; new SDL introspection CLI command in `cli/admin.ts`).
-> Slices 3-5 (per-policy session toggle, run-in-isolation, deep narrative docs)
-> stay open as future work. #8909 is tied to #6697 (no semver-major in-place
-> upgrades in Disc) and is structurally inapplicable.
+> **Bundle SS + UU closed most of the auth/access-introspection sub-cluster
+> (#6432 slices 1+2+3 + #8909).** Slice 1 (errmessage) was already in
+> `access/evaluator.ts`; slice 2 (`disc admin list-policies`) shipped in SS;
+> slice 3 (per-policy session toggle via `X-Disc-Disable-Policies` header)
+> shipped in UU; slice 5 (narrative docs) is incrementally covered in
+> `docs/access-policies.md`. Slice 4 (run-in-isolation against a synthetic
+> context) remains as future work — the only open #6432 sub-feature.
+> #8909 is tied to #6697 (no semver-major in-place upgrades in Disc) and
+> is structurally inapplicable.
 
-| #     | Title                             | Category       | Why pickable                                                            | Effort |
-| ----- | --------------------------------- | -------------- | ----------------------------------------------------------------------- | ------ |
-| #6432 | Access policy management features | auth, devtools | Slices 1+2 shipped (Bundle SS); slices 3-5 (toggle, isolation) deferred | M      |
+| #     | Title                                          | Category       | Why pickable                                                                             | Effort |
+| ----- | ---------------------------------------------- | -------------- | ---------------------------------------------------------------------------------------- | ------ |
+| #6432 | Access policy management — slice 4 (isolation) | auth, devtools | `disc admin test-policy` command to evaluate a single policy against a synthetic context | S      |
 
 #### DB / perf / engine (3)
 
@@ -301,10 +305,10 @@ Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** 
 | #648  | SQLite back-end    | db, storage | Stretch — Disc is Postgres-first; deferrable | L      |
 | #7724 | Extension upgrades | migration   | We have an extension model already           | M      |
 
-**Pickable: ~10 items** (Bundles LL + MM + NN + OO + PP + QQ + RR + SS + TT closed 9 fixes + pinned 14 across migration-perf, auth-semantics, CLI/devtools, DB/engine, cloud/infra, migration-robustness, auth/access introspection, and migration narrative). Highest-leverage clusters:
+**Pickable: ~9 items** (Bundles LL + MM + NN + OO + PP + QQ + RR + SS + TT + UU closed 10 fixes + pinned 15 across migration-perf, auth-semantics, CLI/devtools, DB/engine, cloud/infra, migration-robustness, auth/access introspection, migration narrative, and per-policy session disable). Highest-leverage clusters:
 
 1. **Docs** — #6127 test guide + #7382 docs search + #6119/#5820/#5819 UI docs (operator-onboarding)
-2. **#6432 follow-on** — per-policy session toggle for testing + run-in-isolation slices (the larger half of the access-policy mgmt request)
+2. **#6432 slice 4** — `disc admin test-policy` for run-in-isolation evaluation (the last open #6432 sub-feature; small effort)
 3. **Stretch** — #648 SQLite back-end + #7724 extension upgrades (long-tail roadmap)
 
 ### SKIP — not applicable to Disc
