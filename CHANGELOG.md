@@ -16,6 +16,30 @@ tag is cut.
 
 ### Added
 
+- **Polymorphic shape fields on links (single-cardinality)** (Bundle EEE).
+  Closes the link follow-up deferred at Bundle BB. Polymorphic shape
+  syntax `[IS Subtype].linkName` now works for single-FK links the
+  same way Bundle BB shipped it for properties.
+  - **`compilePolymorphicShapeElement`** falls through to the type's
+    `links` map when a name doesn't resolve as a property. For
+    single-cardinality links (those with `link.columnName`), it
+    emits the same `CASE WHEN __type__ IN (...) THEN <fk_col>
+    ELSE NULL END` shape as the property path.
+  - **`collectPolymorphicShapeColumns`** also collects the FK
+    column from owning subtypes' links so each UNION branch
+    projects either the real FK or a typed `NULL::uuid AS <fk_col>`.
+  - **`compilePolymorphicSelect`'s "owns column" check** now
+    considers links alongside properties.
+  - **Multi-cardinality (junction-table) polymorphic links** stay
+    deferred but throw a clear `"multi-cardinality ... not yet
+    supported"` error rather than producing broken SQL — operators
+    get an actionable message instead of a runtime PG crash.
+  - **5 new tests** in `compiler/polymorphic.test.ts` (was 15, now
+    20): single-FK CASE shape, owning-vs-non-owning branch
+    projection, error on non-existent link, mix with regular
+    polymorphic properties, deferred-junction error message.
+  - Full compiler slice: 664 tests pass, no regressions.
+
 - **LSP Phase 8 — cross-file references/rename, formatter, semantic tokens, completion narrowing** (Bundles AAA + BBB + CCC + DDD).
   Closes the four follow-ups deferred since Bundle AA. Together they
   bring the language server up to "production daily-driver" quality:

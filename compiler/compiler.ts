@@ -9,13 +9,7 @@ import * as Context from "./context.ts";
 import { Err, Ok, Result } from "../lib/result.ts";
 import { CompilationError } from "../lib/errors.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
-import {
-  AccessConfig,
-  AccessContext,
-  AccessEvaluator,
-  AccessPolicy,
-  AccessSQLInjector,
-} from "../access/mod.ts";
+import { AccessConfig, AccessContext, AccessEvaluator, AccessPolicy, AccessSQLInjector } from "../access/mod.ts";
 import { describeSchema, describeType } from "./introspection.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import { getConfigRegistry, lookupConfigKey } from "./config-registry.ts";
@@ -222,9 +216,7 @@ export class EdgeQLCompiler {
       }
       return Err(
         new CompilationError(
-          `Compilation failed: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `Compilation failed: ${error instanceof Error ? error.message : String(error)}`,
         ),
       );
     }
@@ -986,13 +978,32 @@ export class EdgeQLCompiler {
       if (!propName) continue;
       const filterTypeDef = Context.resolveTypeName(this.ctx, element.typeFilter);
       if (!filterTypeDef) continue;
+
+      // Property path (Bundle BB).
       const property = filterTypeDef.properties.get(propName);
-      if (!property) continue;
-      const colName = property.columnName ?? property.name;
-      if (inheritedColumns.includes(colName)) continue;
-      if (cols.has(colName)) continue;
-      const pgType = edgeqlTypeToPgType(property.edgeqlType ?? property.type);
-      cols.set(colName, pgType);
+      if (property) {
+        const colName = property.columnName ?? property.name;
+        if (inheritedColumns.includes(colName)) continue;
+        if (cols.has(colName)) continue;
+        const pgType = edgeqlTypeToPgType(property.edgeqlType ?? property.type);
+        cols.set(colName, pgType);
+        continue;
+      }
+
+      // Bundle EEE: single-FK link path. The FK column lives on the
+      // subtype's row, so it needs the same "project from owning
+      // branch, NULL from others" treatment as polymorphic
+      // properties. Junction-table multi links don't need a column
+      // projected here (the eventual subquery references parent.id
+      // directly), so we just skip them.
+      const link = filterTypeDef.links.get(propName);
+      if (link && link.columnName) {
+        const colName = link.columnName;
+        if (inheritedColumns.includes(colName)) continue;
+        if (cols.has(colName)) continue;
+        // FK columns are uuid in Disc's schema (id is uuid).
+        cols.set(colName, "uuid");
+      }
     }
     return cols;
   }
@@ -1028,9 +1039,7 @@ export class EdgeQLCompiler {
     // now projects either the actual column (when the subtype owns it)
     // or `NULL::<pg-type> AS <colName>` (when it doesn't), so PG's
     // UNION column-resolution sees a consistent shape across branches.
-    const polymorphicColumns = shape
-      ? this.collectPolymorphicShapeColumns(shape, inheritedColumns)
-      : new Map<string, string>();
+    const polymorphicColumns = shape ? this.collectPolymorphicShapeColumns(shape, inheritedColumns) : new Map<string, string>();
     const allBranchColumns = [...inheritedColumns, ...polymorphicColumns.keys()];
 
     // Build one SELECT per concrete subtype.
@@ -1040,11 +1049,15 @@ export class EdgeQLCompiler {
         if (inheritedColumns.includes(col)) {
           return SQL.createSelectItem(SQL.createColumnReference(col));
         }
-        // Subtype-specific column. Check if THIS subtype owns it.
-        const ownsColumn = [...sub.properties.values()].some(
+        // Subtype-specific column. Check if THIS subtype owns it as
+        // a property (Bundle BB) or as a single-FK link (Bundle EEE).
+        const ownsAsProperty = [...sub.properties.values()].some(
           (p) => (p.columnName ?? p.name) === col,
         );
-        if (ownsColumn) {
+        const ownsAsLink = [...sub.links.values()].some(
+          (l) => l.columnName === col,
+        );
+        if (ownsAsProperty || ownsAsLink) {
           return SQL.createSelectItem(SQL.createColumnReference(col));
         }
         // Project NULL with a type cast so PG infers the union column's
@@ -1063,9 +1076,7 @@ export class EdgeQLCompiler {
       });
     });
 
-    const subquery: SQL.SQLStatement = branches.length === 1
-      ? branches[0]
-      : SQL.unionAll(branches);
+    const subquery: SQL.SQLStatement = branches.length === 1 ? branches[0] : SQL.unionAll(branches);
 
     const tableAlias = Context.addTableAlias(
       this.ctx,
@@ -1219,9 +1230,20 @@ export class EdgeQLCompiler {
       filterTypeDef.name,
       propName,
     );
-    if (!property) {
+    // Bundle EEE: links resolve via the type's `links` map (not the
+    // property accessor). Single-FK links project the FK column from
+    // the owning subtype's branch — same shape as Bundle BB's
+    // property path. Junction-table multi links are deferred (they
+    // need a correlated subquery wrapped in CASE; future work).
+    const link = property ? null : filterTypeDef.links.get(propName);
+    if (!property && !link) {
       throw new CompilationError(
-        `Property '${propName}' not found on type '${filterTypeDef.name}'`,
+        `Property or link '${propName}' not found on type '${filterTypeDef.name}'`,
+      );
+    }
+    if (link && !link.columnName) {
+      throw new CompilationError(
+        `Polymorphic shape on multi-cardinality link '${filterTypeDef.name}.${propName}' is not yet supported (junction tables / backlinks). Single-cardinality links work today.`,
       );
     }
 
@@ -1246,11 +1268,12 @@ export class EdgeQLCompiler {
       };
     }
 
-    // CASE WHEN condition THEN column ELSE NULL END
-    const columnRef = SQL.createColumnReference(
-      property.columnName,
-      tableAlias,
-    );
+    // CASE WHEN condition THEN column ELSE NULL END.
+    // For property: `tableAlias.column_name`.
+    // For single-FK link: `tableAlias.<fk_column>` (returns the
+    // target's id; clients can drill in via a follow-up SELECT).
+    const targetColumn = property ? property.columnName : link!.columnName!;
+    const columnRef = SQL.createColumnReference(targetColumn, tableAlias);
     const caseExpr = SQL.createCaseExpression(
       [SQL.createWhenClause(condition, columnRef)],
       SQL.createLiteral("null", null),
@@ -2139,9 +2162,7 @@ export class EdgeQLCompiler {
         }
         return {
           kind: "RawSQLExpression" as const,
-          sql: `(${this.renderSqlExpr(args[0])})[${
-            this.renderSqlExpr(args[1])
-          } + 1]`,
+          sql: `(${this.renderSqlExpr(args[0])})[${this.renderSqlExpr(args[1])} + 1]`,
         };
 
       // Set functions with special compilation
@@ -2154,9 +2175,7 @@ export class EdgeQLCompiler {
         }
         return {
           kind: "RawSQLExpression" as const,
-          sql: `jsonb_build_array(ROW_NUMBER() OVER () - 1, ${
-            this.renderSqlExpr(args[0])
-          })`,
+          sql: `jsonb_build_array(ROW_NUMBER() OVER () - 1, ${this.renderSqlExpr(args[0])})`,
         };
 
       case "distinct":
@@ -2255,9 +2274,7 @@ export class EdgeQLCompiler {
         }
         return {
           kind: "RawSQLExpression" as const,
-          sql: `fts_vector @@ plainto_tsquery('english', ${
-            this.renderSqlExpr(args[0])
-          })`,
+          sql: `fts_vector @@ plainto_tsquery('english', ${this.renderSqlExpr(args[0])})`,
         };
 
       case "fts_rank":
@@ -2269,9 +2286,7 @@ export class EdgeQLCompiler {
         }
         return {
           kind: "RawSQLExpression" as const,
-          sql: `ts_rank(fts_vector, plainto_tsquery('english', ${
-            this.renderSqlExpr(args[0])
-          }))`,
+          sql: `ts_rank(fts_vector, plainto_tsquery('english', ${this.renderSqlExpr(args[0])}))`,
         };
     }
 
@@ -2323,9 +2338,7 @@ export class EdgeQLCompiler {
     // Compile PARTITION BY
     let partitionBy: SQL.SQLExpression[] | undefined;
     if (over.partitionBy && over.partitionBy.length > 0) {
-      partitionBy = over.partitionBy.map((expr) =>
-        this.compileExpression(expr)
-      );
+      partitionBy = over.partitionBy.map((expr) => this.compileExpression(expr));
     }
 
     // Compile ORDER BY
@@ -2342,9 +2355,7 @@ export class EdgeQLCompiler {
     let frame: SQL.WindowFrame | undefined;
     if (over.frame) {
       const start = this.compileFrameBound(over.frame.start);
-      const end = over.frame.end
-        ? this.compileFrameBound(over.frame.end)
-        : start;
+      const end = over.frame.end ? this.compileFrameBound(over.frame.end) : start;
 
       frame = {
         kind: "WindowFrame",
@@ -2454,9 +2465,7 @@ export class EdgeQLCompiler {
     if (path.steps.length === 2) {
       const firstStep = path.steps[0];
       const secondStep = path.steps[1];
-      const enumDefPath = firstStep.type === "property"
-        ? Context.resolveTypeName(this.ctx, firstStep.name)
-        : undefined;
+      const enumDefPath = firstStep.type === "property" ? Context.resolveTypeName(this.ctx, firstStep.name) : undefined;
       if (
         firstStep.type === "property" && secondStep.type === "property" &&
         enumDefPath && Array.isArray(enumDefPath.enumValues) &&
@@ -2801,9 +2810,7 @@ export class EdgeQLCompiler {
       const cteName = binding.name.name;
 
       // Register this CTE alias so the body query can resolve it
-      const typeDef = underlyingTypeName
-        ? Context.resolveTypeName(this.ctx, underlyingTypeName)
-        : undefined;
+      const typeDef = underlyingTypeName ? Context.resolveTypeName(this.ctx, underlyingTypeName) : undefined;
 
       Context.addCTEAlias(this.ctx, cteName, {
         cteName,
@@ -3152,9 +3159,7 @@ export class EdgeQLCompiler {
   private compileSetExpr(setExpr: EdgeQLAST.SetExpr): SQL.SQLExpression {
     // Compile set expression {val1, val2, ...} into a SQL tuple (val1, val2, ...)
     // This is used in expressions like FILTER .role IN {"admin", "moderator"}
-    const elements = setExpr.elements.map((elem) =>
-      this.compileExpression(elem)
-    );
+    const elements = setExpr.elements.map((elem) => this.compileExpression(elem));
 
     // Build a raw SQL expression for the tuple representation
     const parts = elements.map((elem) => {
@@ -3228,9 +3233,7 @@ export class EdgeQLCompiler {
         this.compileExpression(clause.result),
       )
     );
-    const elseExpr = caseExpr.elseResult
-      ? this.compileExpression(caseExpr.elseResult)
-      : undefined;
+    const elseExpr = caseExpr.elseResult ? this.compileExpression(caseExpr.elseResult) : undefined;
     return SQL.createCaseExpression(whens, elseExpr);
   }
 
@@ -3248,9 +3251,7 @@ export class EdgeQLCompiler {
     }
     if (literalKinds.size > 1) {
       throw new CompilationError(
-        `Array literal has mixed element types: ${
-          [...literalKinds].sort().join(", ")
-        }. Arrays must be homogeneous.`,
+        `Array literal has mixed element types: ${[...literalKinds].sort().join(", ")}. Arrays must be homogeneous.`,
       );
     }
     const elements = arrayExpr.elements.map((el) => this.compileExpression(el));
@@ -3289,9 +3290,7 @@ export class EdgeQLCompiler {
   private compileNamedTuple(
     namedTuple: EdgeQLAST.NamedTuple,
   ): SQL.SQLExpression {
-    const fields = namedTuple.elements.map((el) =>
-      SQL.createJsonField(el.name, this.compileExpression(el.value))
-    );
+    const fields = namedTuple.elements.map((el) => SQL.createJsonField(el.name, this.compileExpression(el.value)));
     return SQL.createJsonBuildObject(fields);
   }
 
@@ -3375,9 +3374,7 @@ export class EdgeQLCompiler {
     // JSON type cast base → jsonb -> index
     if (
       indexExpr.expr.kind === "TypeCast" &&
-      indexExpr.expr.type.name.parts.some((p: string) =>
-        p === "json" || p === "jsonb"
-      )
+      indexExpr.expr.type.name.parts.some((p: string) => p === "json" || p === "jsonb")
     ) {
       return SQL.createJsonbAccess(base, "->", idx);
     }
@@ -3389,8 +3386,7 @@ export class EdgeQLCompiler {
     const idxStr = this.renderSqlExpr(idx);
     return {
       kind: "RawSQLExpression" as const,
-      sql:
-        `(${baseStr})[CASE WHEN ${idxStr} < 0 THEN CARDINALITY(${baseStr}) + ${idxStr} + 1 ELSE ${idxStr} + 1 END]`,
+      sql: `(${baseStr})[CASE WHEN ${idxStr} < 0 THEN CARDINALITY(${baseStr}) + ${idxStr} + 1 ELSE ${idxStr} + 1 END]`,
     };
   }
 
@@ -3418,8 +3414,7 @@ export class EdgeQLCompiler {
       );
       return {
         kind: "RawSQLExpression" as const,
-        sql:
-          `SUBSTRING(${baseStr} FROM ${startStr} + 1 FOR ${endStr} - ${startStr})`,
+        sql: `SUBSTRING(${baseStr} FROM ${startStr} + 1 FOR ${endStr} - ${startStr})`,
       };
     }
 
@@ -3453,9 +3448,7 @@ export class EdgeQLCompiler {
    * so that unset globals return NULL rather than raising an error.
    */
   private compileGlobalRef(expr: EdgeQLAST.GlobalRef): SQL.SQLExpression {
-    const qualifiedName = expr.module
-      ? `${expr.module}::${expr.name}`
-      : expr.name;
+    const qualifiedName = expr.module ? `${expr.module}::${expr.name}` : expr.name;
     const globalDef = Context.resolveGlobal(
       this.ctx.schema,
       qualifiedName,
@@ -3487,9 +3480,7 @@ export class EdgeQLCompiler {
   private compileSetGlobal(
     query: EdgeQLAST.SetGlobalQuery,
   ): SQL.RawSQLStatement {
-    const qualifiedName = query.module
-      ? `${query.module}::${query.name}`
-      : query.name;
+    const qualifiedName = query.module ? `${query.module}::${query.name}` : query.name;
     const globalDef = Context.resolveGlobal(
       this.ctx.schema,
       qualifiedName,
@@ -3510,8 +3501,7 @@ export class EdgeQLCompiler {
 
     return {
       kind: "RawSQLStatement",
-      sql:
-        `SELECT set_config('${globalDef.pgSettingName}', ${valueStr}::text, true)`,
+      sql: `SELECT set_config('${globalDef.pgSettingName}', ${valueStr}::text, true)`,
     };
   }
 
@@ -3554,8 +3544,7 @@ export class EdgeQLCompiler {
       // DATABASE/INSTANCE: delete from config table
       return {
         kind: "RawSQLStatement",
-        sql:
-          `DELETE FROM disc_config WHERE key = '${query.key}' AND scope = '${query.scope}'`,
+        sql: `DELETE FROM disc_config WHERE key = '${query.key}' AND scope = '${query.scope}'`,
       };
     }
 

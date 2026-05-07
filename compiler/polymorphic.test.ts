@@ -485,8 +485,7 @@ Deno.test("polymorphic - type intersection [IS Type] is distinct from array inde
   const astTypeIntersect = parseEdgeQL("SELECT Shape[IS Circle]") as SelectQuery;
   assertEquals(astTypeIntersect.kind, "SelectQuery");
   if (astTypeIntersect.expr.kind === "Path") {
-    const lastStep =
-      astTypeIntersect.expr.steps[astTypeIntersect.expr.steps.length - 1];
+    const lastStep = astTypeIntersect.expr.steps[astTypeIntersect.expr.steps.length - 1];
     assertEquals(lastStep.type, "type_intersection");
     assertEquals(lastStep.name, "Circle");
   }
@@ -523,5 +522,258 @@ Deno.test("polymorphic - polymorphic shape field with unknown type throws error"
     () => compileEdgeQL("SELECT Shape { [IS Triangle].sides }"),
     CompilationError,
     "not found",
+  );
+});
+
+// ===========================================================================
+// Bundle EEE — polymorphic shape fields on LINKS (not just properties)
+// ===========================================================================
+// Bundle BB shipped polymorphic shape fields for properties: `[IS Circle].radius`
+// → CASE WHEN __type__ = 'Circle' THEN circles.radius ELSE NULL END.
+// Bundle EEE extends the same pattern to links — both single-cardinality
+// (FK column on the source row) and multi-cardinality (junction table).
+// ===========================================================================
+
+/**
+ * Schema with a single-cardinality link owned by a subtype:
+ *
+ *   abstract type Animal { name }
+ *     -> Dog (extending Animal) { + owner: User }
+ *     -> Cat (extending Animal) { (no owner link) }
+ *   type User { handle }
+ */
+function createPolymorphicLinkSchema(): Schema {
+  const user = makeTypeDef({
+    name: "User",
+    tableName: "users",
+    properties: new Map([
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+        edgeqlType: "uuid",
+        hasDefault: true,
+      }],
+      ["handle", {
+        name: "handle",
+        type: "text",
+        required: true,
+        multi: false,
+        columnName: "handle",
+        edgeqlType: "str",
+      }],
+    ]),
+  });
+
+  const animal = makeTypeDef({
+    name: "Animal",
+    tableName: "animals",
+    abstract: true,
+    subtypes: ["Dog", "Cat"],
+    discriminatorColumn: "__type__",
+    properties: new Map([
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+        edgeqlType: "uuid",
+        hasDefault: true,
+      }],
+      ["__type__", {
+        name: "__type__",
+        type: "text",
+        required: true,
+        multi: false,
+        columnName: "__type__",
+        edgeqlType: "str",
+      }],
+      ["name", {
+        name: "name",
+        type: "text",
+        required: false,
+        multi: false,
+        columnName: "name",
+        edgeqlType: "str",
+      }],
+    ]),
+  });
+
+  const dog = makeTypeDef({
+    name: "Dog",
+    tableName: "dogs",
+    parentTypes: ["Animal"],
+    properties: new Map([
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+        edgeqlType: "uuid",
+        hasDefault: true,
+      }],
+      ["__type__", {
+        name: "__type__",
+        type: "text",
+        required: true,
+        multi: false,
+        columnName: "__type__",
+        edgeqlType: "str",
+      }],
+      ["name", {
+        name: "name",
+        type: "text",
+        required: false,
+        multi: false,
+        columnName: "name",
+        edgeqlType: "str",
+      }],
+    ]),
+    links: new Map([
+      ["owner", {
+        name: "owner",
+        target: "User",
+        required: false,
+        multi: false,
+        columnName: "owner_id",
+      }],
+    ]),
+  });
+
+  const cat = makeTypeDef({
+    name: "Cat",
+    tableName: "cats",
+    parentTypes: ["Animal"],
+    properties: new Map([
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+        edgeqlType: "uuid",
+        hasDefault: true,
+      }],
+      ["__type__", {
+        name: "__type__",
+        type: "text",
+        required: true,
+        multi: false,
+        columnName: "__type__",
+        edgeqlType: "str",
+      }],
+      ["name", {
+        name: "name",
+        type: "text",
+        required: false,
+        multi: false,
+        columnName: "name",
+        edgeqlType: "str",
+      }],
+    ]),
+  });
+
+  return {
+    types: new Map([
+      ["User", user],
+      ["Animal", animal],
+      ["Dog", dog],
+      ["Cat", cat],
+    ]),
+    functions: getBuiltinFunctions(),
+  };
+}
+
+Deno.test("polymorphic - shape field [IS Subtype].link (single FK) produces CASE WHEN", () => {
+  const sql = compileEdgeQL(
+    "SELECT Animal { name, [IS Dog].owner }",
+    createPolymorphicLinkSchema(),
+  );
+  // CASE expression for the polymorphic link
+  assertStringIncludes(sql, "CASE");
+  assertStringIncludes(sql, "WHEN");
+  assertStringIncludes(sql, "__type__");
+  assertStringIncludes(sql, "'Dog'");
+  // The FK column from Dog must surface in the projection.
+  assertStringIncludes(sql, "owner_id");
+  assertStringIncludes(sql, "ELSE");
+  assertStringIncludes(sql, "NULL");
+  assertStringIncludes(sql, "END");
+});
+
+Deno.test("polymorphic - subtype FK column is projected from owning branch + NULL from non-owning branches", () => {
+  const sql = compileEdgeQL(
+    "SELECT Animal { [IS Dog].owner }",
+    createPolymorphicLinkSchema(),
+  );
+  // Dog branch: real owner_id projection.
+  // Cat branch: NULL::uuid AS owner_id (so the UNION column unifies).
+  // The codegen output shape varies; we just need both branches to
+  // mention owner_id and at least one NULL::uuid cast for the
+  // non-owning subtype.
+  assertStringIncludes(sql, "owner_id");
+  assertStringIncludes(sql, "NULL::uuid");
+});
+
+Deno.test("polymorphic - shape field [IS Subtype].link with non-existent link throws", () => {
+  // `paws` is neither a property nor a link on Dog. Same error
+  // shape as the property case (Bundle BB).
+  assertThrows(
+    () =>
+      compileEdgeQL(
+        "SELECT Animal { [IS Dog].paws }",
+        createPolymorphicLinkSchema(),
+      ),
+    CompilationError,
+  );
+});
+
+Deno.test("polymorphic - shape field [IS Subtype].link mixes with regular polymorphic properties", () => {
+  const sql = compileEdgeQL(
+    "SELECT Animal { name, [IS Dog].owner }",
+    createPolymorphicLinkSchema(),
+  );
+  // The non-polymorphic `name` field should still appear in the output.
+  assertStringIncludes(sql, "'name'");
+  // Plus the CASE for the polymorphic link.
+  const caseCount = (sql.match(/CASE/g) || []).length;
+  assertEquals(
+    caseCount >= 1,
+    true,
+    `Expected at least 1 CASE for polymorphic link; got ${caseCount}`,
+  );
+});
+
+Deno.test("polymorphic - shape field [IS Subtype].multiLink (junction) errors with a clear message", () => {
+  // Bundle EEE v1: single-cardinality links only. Multi-cardinality
+  // (junction-table or backlink) needs a correlated subquery wrapped
+  // in CASE — deferred. The error message should call out exactly
+  // what's missing so operators don't have to chase a SQL crash.
+  const schema = createPolymorphicLinkSchema();
+  const dog = schema.types.get("Dog")!;
+  const updatedLinks = new Map(dog.links);
+  updatedLinks.set("vetVisits", {
+    name: "vetVisits",
+    target: "User", // any concrete type works for this test
+    required: false,
+    multi: true,
+    junctionTable: "dog_vet_visits",
+    junctionSourceColumn: "source_id",
+    junctionTargetColumn: "target_id",
+  });
+  schema.types.set("Dog", { ...dog, links: updatedLinks });
+
+  assertThrows(
+    () =>
+      compileEdgeQL(
+        "SELECT Animal { [IS Dog].vetVisits }",
+        schema,
+      ),
+    CompilationError,
+    "multi-cardinality",
   );
 });
