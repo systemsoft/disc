@@ -31,9 +31,10 @@
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "dev": "vite dev",
     "preview": "vite preview",
-    "test": "vitest",
-    "test:coverage": "vitest --coverage",
-    "test:ui": "vitest --ui",
+    "test": "vitest --config vite.config.test.ts --run --passWithNoTests",
+    "test:watch": "vitest --config vite.config.test.ts",
+    "test:coverage": "vitest --config vite.config.test.ts --run --coverage --passWithNoTests",
+    "test:ui": "vitest --config vite.config.test.ts --ui",
     "test:e2e": "playwright test"
   },
   "type": "module",
