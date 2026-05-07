@@ -43,6 +43,30 @@ export interface ServeOptions {
   tlsCert?: string;
   tlsKey?: string;
   binaryPort?: number;
+  /**
+   * Security-toggle CLI flags (gh/geldata#5234). Each maps to the
+   * corresponding `DISC_*` env var so the rest of the server config
+   * pipeline is unchanged. CLI > env var > `disc.toml` > default.
+   */
+  requireAuth?: boolean;
+  readOnly?: boolean;
+  trustProxy?: boolean;
+}
+
+/**
+ * Forward security-toggle CLI flags to the matching `DISC_*` env vars
+ * (gh/geldata#5234). The existing `buildEnvOptions` pipeline reads
+ * these and threads them into `ServerConfig` — by setting the env var
+ * here, the CLI flag rides the same path as the env-var-only and
+ * `disc.toml`-only knobs added in Bundle H. Exported so the wiring is
+ * testable without spinning up the full `serve` command.
+ */
+export function applySecurityToggleEnvVars(
+  options: Pick<ServeOptions, "requireAuth" | "readOnly" | "trustProxy">,
+): void {
+  if (options.requireAuth) Deno.env.set("DISC_REQUIRE_AUTH", "true");
+  if (options.readOnly) Deno.env.set("DISC_READ_ONLY", "true");
+  if (options.trustProxy) Deno.env.set("DISC_TRUST_PROXY", "true");
 }
 
 export class CLICommands {
@@ -175,6 +199,8 @@ export class CLICommands {
       if (options.tlsKey) {
         Deno.env.set("DISC_TLS_KEY", options.tlsKey);
       }
+
+      applySecurityToggleEnvVars(options);
 
       // Try to load the project schema from SDL
       const schemaFile = "./dbschema/default.disc";
@@ -361,9 +387,7 @@ export class CLICommands {
       );
       return;
     }
-    const schemas = args.schemas
-      ? args.schemas.split(",").map((s) => s.trim()).filter(Boolean)
-      : undefined;
+    const schemas = args.schemas ? args.schemas.split(",").map((s) => s.trim()).filter(Boolean) : undefined;
     const outputPath = args.output;
 
     const db = new DatabaseConnection(dsn);

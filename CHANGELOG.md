@@ -16,6 +16,13 @@ tag is cut.
 
 ### Added
 
+- **CLI flags for instance-level security toggles** (gh/geldata#5234).
+  `disc serve` now accepts `--require-auth`, `--read-only`, and
+  `--trust-proxy` flags; each maps to the corresponding `DISC_*` env
+  var so the existing `buildEnvOptions` pipeline threads them into
+  `ServerConfig` unchanged. CLI > env var > `disc.toml` > default.
+  Closes the last "(none)" cells in the docs/server.md
+  CLI/env/`disc.toml` matrix.
 - **Magic-link implicit signup** (gh/geldata#7311). New
   `AuthConfig.allowImplicitSignup?: boolean` (default `false`). When
   enabled, `requestMagicLink(email)` for an unknown email persists the

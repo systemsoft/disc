@@ -5,7 +5,7 @@
  * Disc CLI - Command-line interface for Disc database
  */
 
-import { bgBrightRed, brightWhite, bgBrightYellow, gray, inverse } from "@std/fmt/colors";
+import { bgBrightRed, bgBrightYellow, brightWhite, gray, inverse } from "@std/fmt/colors";
 import { parseArgs } from "@std/cli/parse-args";
 
 import { CLIArgs, commands } from "./commands.ts";
@@ -339,8 +339,11 @@ ${inverse("  OPTIONS ")}
   --enable-auth ${gray(".".repeat(12))} Enable authentication system
   --enable-access-policies ${gray(".")} Enable row-level access policy enforcement
   --jwt-secret ${gray("<key>")} ${gray(".".repeat(7))} JWT signing secret (enables auth)
+  --read-only ${gray(".".repeat(14))} Refuse writes (DDL + INSERT/UPDATE/DELETE)
+  --require-auth ${gray(".".repeat(11))} Reject unauthenticated requests on protected routes
   --tls-cert ${gray("<path>")} ${gray(".".repeat(8))} Path to TLS certificate
-  --tls-key ${gray("<path>")} ${gray(".".repeat(9))} Path to TLS private key`,
+  --tls-key ${gray("<path>")} ${gray(".".repeat(9))} Path to TLS private key
+  --trust-proxy ${gray(".".repeat(12))} Trust X-Forwarded-* headers (rate-limit + auth IP source)`,
   build: `
   Compile Disc into a self-contained native binary
 
@@ -542,7 +545,7 @@ ${inverse("  EDITOR HINTS ")}
   - VS Code: configure ${bgBrightYellow("disc-lsp")} as the language server for
     files matching ${bgBrightYellow("*.disc")}.
   - Neovim/lspconfig: pass ${bgBrightYellow("cmd = { 'disc', 'lsp' }")} and
-    ${bgBrightYellow("filetypes = { 'disc' }")}.`
+    ${bgBrightYellow("filetypes = { 'disc' }")}.`,
 };
 
 async function main() {
@@ -564,6 +567,12 @@ async function main() {
       "foreground",
       "enable-auth",
       "enable-access-policies",
+      // Instance-level security toggles (gh/geldata#5234). Each pairs
+      // with a `DISC_*` env var and a `[server]` key in `disc.toml`;
+      // the CLI flag wins over both when supplied.
+      "require-auth",
+      "read-only",
+      "trust-proxy",
       "follow",
       "lite",
       "status",
@@ -660,7 +669,7 @@ async function main() {
           force: args.force,
           name,
           skipPostgres: args["skip-postgres"],
-          template: args.template as "basic" | "minimal" | "full" || "basic"
+          template: args.template as "basic" | "minimal" | "full" || "basic",
         });
 
         break;
@@ -678,7 +687,7 @@ async function main() {
           host: args.host,
           nonInteractive: args["non-interactive"],
           port: args.port ? parseInt(args.port) : undefined,
-          schemaFile: args.schema
+          schemaFile: args.schema,
         });
 
         break;
@@ -784,17 +793,18 @@ async function main() {
 
       case "serve": {
         await commands.serve({
-          binaryPort: args["binary-port"] ?
-            parseInt(args["binary-port"]) :
-            undefined,
+          binaryPort: args["binary-port"] ? parseInt(args["binary-port"]) : undefined,
           config: args.config,
           enableAccessPolicies: args["enable-access-policies"],
           enableAuth: args["enable-auth"],
           host: args.host,
           jwtSecret: args["jwt-secret"],
           port: args.port ? parseInt(args.port) : undefined,
+          readOnly: args["read-only"],
+          requireAuth: args["require-auth"],
           tlsCert: args["tls-cert"],
-          tlsKey: args["tls-key"]
+          tlsKey: args["tls-key"],
+          trustProxy: args["trust-proxy"],
         });
 
         break;
@@ -804,7 +814,7 @@ async function main() {
         await commands.watch({
           delayMs: 1000,
           outputDir: args.output,
-          schemaFile: args.schema
+          schemaFile: args.schema,
         });
 
         break;
@@ -839,7 +849,7 @@ async function main() {
         await commands.build({
           lite: args.lite,
           output: args.output,
-          platform: args.platform
+          platform: args.platform,
         });
 
         break;
@@ -853,7 +863,7 @@ async function main() {
 
         await commands.deploy({
           format: args.format,
-          output: args.output
+          output: args.output,
         });
 
         break;
@@ -868,7 +878,7 @@ async function main() {
               follow: args.follow || false,
               level: args.level,
               lines: args.lines ? parseInt(String(args.lines)) : 50,
-              project: args.name
+              project: args.name,
             });
 
             break;
@@ -884,7 +894,7 @@ async function main() {
               backup: true,
               dryRun: args["dry-run"] || false,
               project: args.name,
-              targetVersion: args["target-version"]
+              targetVersion: args["target-version"],
             });
 
             break;
@@ -994,5 +1004,6 @@ async function main() {
   }
 }
 
-if (import.meta.main)
+if (import.meta.main) {
   await main();
+}

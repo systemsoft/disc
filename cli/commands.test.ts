@@ -374,3 +374,71 @@ Deno.test("CLI Commands - codegen config validation", () => {
   assertEquals(permissiveConfig.includeClient, true);
   assertEquals(permissiveConfig.formatOutput, true);
 });
+
+// ── Security-toggle CLI flags (gh/geldata#5234) ─────────────────────
+
+Deno.test("applySecurityToggleEnvVars — sets DISC_REQUIRE_AUTH when --require-auth is on", async () => {
+  const { applySecurityToggleEnvVars } = await import("./commands.ts");
+  const env = new EnvMock();
+  try {
+    applySecurityToggleEnvVars({ requireAuth: true });
+    assertEquals(Deno.env.get("DISC_REQUIRE_AUTH"), "true");
+  } finally {
+    env.restore();
+  }
+});
+
+Deno.test("applySecurityToggleEnvVars — sets DISC_READ_ONLY when --read-only is on", async () => {
+  const { applySecurityToggleEnvVars } = await import("./commands.ts");
+  const env = new EnvMock();
+  try {
+    applySecurityToggleEnvVars({ readOnly: true });
+    assertEquals(Deno.env.get("DISC_READ_ONLY"), "true");
+  } finally {
+    env.restore();
+  }
+});
+
+Deno.test("applySecurityToggleEnvVars — sets DISC_TRUST_PROXY when --trust-proxy is on", async () => {
+  const { applySecurityToggleEnvVars } = await import("./commands.ts");
+  const env = new EnvMock();
+  try {
+    applySecurityToggleEnvVars({ trustProxy: true });
+    assertEquals(Deno.env.get("DISC_TRUST_PROXY"), "true");
+  } finally {
+    env.restore();
+  }
+});
+
+Deno.test("applySecurityToggleEnvVars — leaves env vars untouched when flags are absent or false", async () => {
+  const { applySecurityToggleEnvVars } = await import("./commands.ts");
+  const env = new EnvMock();
+  try {
+    Deno.env.delete("DISC_REQUIRE_AUTH");
+    Deno.env.delete("DISC_READ_ONLY");
+    Deno.env.delete("DISC_TRUST_PROXY");
+    applySecurityToggleEnvVars({}); // no flags
+    assertEquals(Deno.env.get("DISC_REQUIRE_AUTH"), undefined);
+    assertEquals(Deno.env.get("DISC_READ_ONLY"), undefined);
+    assertEquals(Deno.env.get("DISC_TRUST_PROXY"), undefined);
+    applySecurityToggleEnvVars({ requireAuth: false, readOnly: false, trustProxy: false });
+    assertEquals(Deno.env.get("DISC_REQUIRE_AUTH"), undefined);
+    assertEquals(Deno.env.get("DISC_READ_ONLY"), undefined);
+    assertEquals(Deno.env.get("DISC_TRUST_PROXY"), undefined);
+  } finally {
+    env.restore();
+  }
+});
+
+Deno.test("applySecurityToggleEnvVars — combines multiple flags", async () => {
+  const { applySecurityToggleEnvVars } = await import("./commands.ts");
+  const env = new EnvMock();
+  try {
+    applySecurityToggleEnvVars({ requireAuth: true, readOnly: true, trustProxy: true });
+    assertEquals(Deno.env.get("DISC_REQUIRE_AUTH"), "true");
+    assertEquals(Deno.env.get("DISC_READ_ONLY"), "true");
+    assertEquals(Deno.env.get("DISC_TRUST_PROXY"), "true");
+  } finally {
+    env.restore();
+  }
+});
