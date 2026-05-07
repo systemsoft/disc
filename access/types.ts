@@ -3,6 +3,7 @@
  */
 
 import type { AccessExpressionNode } from "./ast.ts";
+import type { PermissionChecker } from "./runtime-permissions.ts";
 
 /**
  * Access control operations that can be restricted
@@ -44,6 +45,13 @@ export interface AccessContext {
   sessionData?: Record<string, unknown>;
   userId?: string;
   userRole?: string;
+  /**
+   * Override for `runtime::has_permission(...)` evaluation. Defaults to
+   * `defaultPermissionChecker` (which delegates to `Deno.permissions
+   * .querySync`). Tests inject a mock so they don't depend on the
+   * runner's `--allow-*` flags. (Disc-original feature #5)
+   */
+  permissionChecker?: PermissionChecker;
 }
 
 /**

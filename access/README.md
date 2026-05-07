@@ -150,6 +150,56 @@ policy composition that disc doesn't implement and Gel itself documents
 as out of scope for 5.x. The adapter source comment at
 `access/policy-adapter.ts:133-137` is the authoritative spec.
 
+## `runtime::has_permission(...)` — Deno-permission-aware policies
+
+Disc-original feature #5: policies can gate on the Deno process's
+`--allow-*` permission set. The check is defense-in-depth — even if
+the application user is otherwise authorized, the row stays
+invisible if the runtime sandbox doesn't have the corresponding
+permission.
+
+```esdl
+type SecretConfig {
+  required value: str;
+  access policy admin_only for SecretConfig {
+    allow select;
+    using (
+      current_user = "admin"
+      and runtime::has_permission("read:/etc/disc-secrets")
+    );
+  }
+}
+```
+
+Permission-spec grammar:
+
+| Spec                  | Maps to `Deno.permissions.querySync({...})`   |
+| --------------------- | --------------------------------------------- |
+| `read` / `write`      | `{ name }`                                    |
+| `read:/path`          | `{ name: "read", path: "/path" }`             |
+| `net`                 | `{ name: "net" }`                             |
+| `net:host[:port]`     | `{ name: "net", host: "host[:port]" }`        |
+| `env`                 | `{ name: "env" }`                             |
+| `env:VAR`             | `{ name: "env", variable: "VAR" }`            |
+| `run` / `run:cmd`     | `{ name: "run", command? }`                   |
+| `sys` / `sys:KIND`    | `{ name: "sys", kind? }`                      |
+| `ffi` / `ffi:/path`   | `{ name: "ffi", path? }`                      |
+
+Anything outside this grammar throws at policy-load time so a typo
+fails fast rather than silently treating the unknown spec as
+"missing" (which would always deny).
+
+The check is process-local — Postgres can't call back into Deno. At
+SQL emission time the function is pre-evaluated and inlined as `TRUE`
+or `FALSE` in the generated WHERE clause. The Deno permission set is
+fixed for the life of the process, so caching once at SQL emission
+is correct (the policy WHERE clause recompiles when the schema
+changes anyway).
+
+For tests, `AccessContext.permissionChecker` accepts a mock so test
+suites don't depend on the runner's `--allow-*` flags. Default
+checker delegates to `Deno.permissions.querySync(...)`.
+
 ## Testing
 
 ```bash

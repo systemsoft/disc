@@ -4,21 +4,11 @@
  * Evaluates access policies and generates SQL conditions
  */
 
-import {
-  AccessConfig,
-  AccessContext,
-  AccessDecision,
-  AccessOperation,
-  AccessPolicy,
-} from "./types.ts";
-import type {
-  AccessComparisonNode,
-  AccessExpressionNode,
-  AccessFunctionNode,
-  AccessLogicalNode,
-} from "./ast.ts";
+import { AccessConfig, AccessContext, AccessDecision, AccessOperation, AccessPolicy } from "./types.ts";
+import type { AccessComparisonNode, AccessExpressionNode, AccessFunctionNode, AccessLogicalNode } from "./ast.ts";
 import { ValidationError } from "../lib/errors.ts";
 import { assertSafeIdentifier, sqlStringLiteral } from "../lib/sql-escape.ts";
+import { defaultPermissionChecker, parsePermissionSpec } from "./runtime-permissions.ts";
 
 export class AccessEvaluator {
   private config: AccessConfig;
@@ -60,9 +50,7 @@ export class AccessEvaluator {
       return {
         allowed: this.config.defaultAllow,
         appliedPolicies: [],
-        reason: this.config.defaultAllow
-          ? "No policies defined, default allow"
-          : "No policies defined, default deny",
+        reason: this.config.defaultAllow ? "No policies defined, default allow" : "No policies defined, default deny",
       };
     }
 
@@ -112,18 +100,12 @@ export class AccessEvaluator {
     if (this.config.mode === "permissive") {
       // Permissive: allow if any policy allows and no explicit deny
       allowed = hasAllow && !hasDeny;
-      reason = allowed
-        ? "Allowed by permissive policy"
-        : hasDeny
-        ? "Explicitly denied"
-        : "No allowing policy found";
+      reason = allowed ? "Allowed by permissive policy" : hasDeny ? "Explicitly denied" : "No allowing policy found";
     } else {
       // Restrictive: require explicit allow and no deny
       allowed = hasAllow && !hasDeny;
 
-      reason = allowed
-        ? "Allowed by restrictive policy"
-        : "Not explicitly allowed or denied";
+      reason = allowed ? "Allowed by restrictive policy" : "Not explicitly allowed or denied";
     }
 
     return {
@@ -341,15 +323,11 @@ export class AccessEvaluator {
   ): boolean {
     switch (logical.operator) {
       case "and": {
-        return logical.operands.every((op) =>
-          this.evaluateExpression(op, context)
-        );
+        return logical.operands.every((op) => this.evaluateExpression(op, context));
       }
 
       case "or": {
-        return logical.operands.some((op) =>
-          this.evaluateExpression(op, context)
-        );
+        return logical.operands.some((op) => this.evaluateExpression(op, context));
       }
 
       case "not": {
@@ -381,6 +359,21 @@ export class AccessEvaluator {
       case "is_owner": {
         // This would need to be implemented based on actual data
         return false;
+      }
+
+      case "runtime::has_permission": {
+        // Disc-original feature #5: gate on the running Deno process's
+        // permission set. The first argument must be a string literal —
+        // anything else is a typo or expression we'd have to evaluate
+        // before checking permissions, which the spec doesn't promise.
+        const arg = func.args[0];
+        if (!arg || arg.kind !== "AccessLiteral" || arg.type !== "string") {
+          throw new ValidationError(
+            "runtime::has_permission requires a string literal argument",
+          );
+        }
+        const checker = context.permissionChecker ?? defaultPermissionChecker;
+        return checker(parsePermissionSpec(String(arg.value))) === "granted";
       }
 
       default: {
@@ -417,9 +410,7 @@ export class AccessEvaluator {
           }
 
           case "current_role": {
-            return context.userRole
-              ? sqlStringLiteral(context.userRole)
-              : "NULL";
+            return context.userRole ? sqlStringLiteral(context.userRole) : "NULL";
           }
 
           case "current_session": {
@@ -453,13 +444,29 @@ export class AccessEvaluator {
           return `NOT (${this.expressionToSQL(expr.operands[0], context)})`;
         }
 
-        const parts = expr.operands.map((op) =>
-          this.expressionToSQL(op, context)
-        );
+        const parts = expr.operands.map((op) => this.expressionToSQL(op, context));
         return `(${parts.join(` ${expr.operator.toUpperCase()} `)})`;
       }
 
       case "AccessFunction": {
+        // `runtime::has_permission` is process-local — Postgres can't
+        // call back into Deno. Pre-evaluate at SQL-emission time and
+        // inline the verdict as a literal. The Deno permission set is
+        // fixed for the life of the process, so caching once at SQL
+        // emission is correct (the policy WHERE clause is recompiled
+        // anyway when the schema changes).
+        if (expr.name === "runtime::has_permission") {
+          const arg = expr.args[0];
+          if (!arg || arg.kind !== "AccessLiteral" || arg.type !== "string") {
+            throw new ValidationError(
+              "runtime::has_permission requires a string literal argument",
+            );
+          }
+          const checker = context.permissionChecker ?? defaultPermissionChecker;
+          const granted = checker(parsePermissionSpec(String(arg.value))) === "granted";
+          return granted ? "TRUE" : "FALSE";
+        }
+
         const args = expr.args.map((arg) => this.expressionToSQL(arg, context))
           .join(", ");
 

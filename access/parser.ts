@@ -142,9 +142,7 @@ export class AccessPolicyParser {
 
     if (!validOps.includes(opToken.value)) {
       throw new SyntaxError(
-        `Invalid access operation: ${opToken.value}. Must be one of: ${
-          validOps.join(", ")
-        }`,
+        `Invalid access operation: ${opToken.value}. Must be one of: ${validOps.join(", ")}`,
         { location: this.getLocation(opToken) },
       );
     }
@@ -369,18 +367,41 @@ export class AccessPolicyParser {
 
   private parsePathOrFunction(): AccessExpressionNode {
     const path: string[] = [];
+    /**
+     * Tracks the separator that joins each pair of path segments:
+     * "." for property access, "::" for module-qualified names like
+     * `runtime::has_permission`. We only emit `::`-separated names for
+     * function-call targets; mixing the two stays valid because we
+     * reconstruct the qualified name from `separators` when assembling
+     * the function-call AST.
+     */
+    const separators: string[] = [];
     // Handle leading dot for current object reference
     const isRelative = this.match(".");
 
-    // Parse dotted path
+    // Parse dotted/double-colon path
     if (!isRelative || this.peek().type === TokenType.IDENT) {
-      do {
-        if (this.peek().type === TokenType.IDENT) {
-          path.push(this.expectIdentifier());
-        } else {
+      // First identifier (or break if there isn't one — covered by the
+      // relative-path edge case below).
+      if (this.peek().type === TokenType.IDENT) {
+        path.push(this.expectIdentifier());
+      }
+      // Subsequent segments — accept either separator. `runtime::has_permission`
+      // tokenizes as IDENT DOUBLECOLON IDENT, so we keep consuming pairs
+      // until the next token isn't a recognized separator.
+      while (true) {
+        let sep: string | null = null;
+        if (this.match(".")) sep = ".";
+        else if (this.match("::")) sep = "::";
+        else break;
+        if (this.peek().type !== TokenType.IDENT) {
+          // Trailing separator — bail out so existing relative-path
+          // semantics (a bare leading dot) still fire.
           break;
         }
-      } while (this.match("."));
+        path.push(this.expectIdentifier());
+        separators.push(sep);
+      }
     }
 
     // If we have a relative path with no identifiers after the dot,
@@ -391,7 +412,14 @@ export class AccessPolicyParser {
 
     // Check for function call
     if (this.match("(")) {
-      const name = isRelative ? "." + path.join(".") : path.join(".");
+      // Reconstruct the full qualified name preserving the separator
+      // between each pair of segments — `runtime::has_permission`,
+      // `mod::nested::fn`, or plain `has_role`.
+      const joined = path.reduce((acc, seg, i) => {
+        if (i === 0) return seg;
+        return acc + separators[i - 1] + seg;
+      }, "");
+      const name = isRelative ? "." + joined : joined;
       const args: AccessExpressionNode[] = [];
 
       if (!this.check(")")) {
