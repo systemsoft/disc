@@ -75,6 +75,41 @@ export class BuildCommand {
   }
 
   /**
+   * Gate the build when an explicit cross-compile target was requested
+   * but PG staging produced zero files. Without this gate, the build
+   * silently produces a small binary without PG embedded — operators
+   * who tagged a release expecting bundled PG end up with broken
+   * artifacts. (Discovered post-v2026.05.07: release CI was producing
+   * ~80 MB binaries instead of the expected ~217 MB because the
+   * staging step was failing silently.)
+   *
+   * Host builds (no `--platform`) keep the graceful-fallback behavior
+   * — local dev without a PG cache is expected; the binary downloads
+   * PG on first run.
+   *
+   * `--lite` and `DISC_BUILD_NO_BUNDLE_PG=1` are explicit opt-outs,
+   * so they bypass the gate even with `--platform`.
+   */
+  assertEmbeddedPgPresent(
+    options: { platform?: string; lite?: boolean },
+    fileCount: number,
+    pgSourceDir: string,
+  ): void {
+    if (!options.platform) return;
+    if (options.lite) return;
+    if (Deno.env.get("DISC_BUILD_NO_BUNDLE_PG") === "1") return;
+    if (fileCount > 0) return;
+    throw new Error(
+      `Cross-compile build for ${options.platform} produced 0 embedded PG ` +
+        `files (source dir: ${pgSourceDir}). This usually means PG staging ` +
+        `silently failed — check the build log for ` +
+        `"Skipped embedded-PG manifest refresh" or download/extract errors. ` +
+        `To opt out of PG embedding explicitly, set DISC_BUILD_NO_BUNDLE_PG=1 ` +
+        `or pass --lite.`,
+    );
+  }
+
+  /**
    * Validate the platform string. Throws an error with a helpful message
    * listing valid platforms if the platform is not recognized.
    */
@@ -190,6 +225,8 @@ export class BuildCommand {
     // `dist/embedded-pg/<platform>/<version>/` and point the manifest
     // there — the resulting binary embeds the right PG for its target.
     let embeddedPgPaths: string[] = [];
+    let embeddedPgFileCount = 0;
+    let embeddedPgSourceDir = "";
     if (!options.lite) {
       try {
         let pgSourceOverride: string | undefined;
@@ -208,6 +245,8 @@ export class BuildCommand {
           pgSourceOverride,
         );
         embeddedPgPaths = refreshed.includePaths;
+        embeddedPgFileCount = refreshed.fileCount;
+        embeddedPgSourceDir = refreshed.pgSourceDir;
         if (refreshed.wrote) {
           console.log(
             `  Refreshed embedded-PG manifest: ${refreshed.fileCount} files from ${refreshed.pgSourceDir}`,
@@ -223,11 +262,29 @@ export class BuildCommand {
           );
         }
       } catch (err) {
+        // Cross-compile builds (--platform set) re-throw so a release
+        // tag never produces a stripped binary silently. Host builds
+        // log + continue (the binary downloads PG on first run).
+        if (options.platform) {
+          throw new Error(
+            `PG staging failed for ${options.platform}: ${(err as Error).message}`,
+            { cause: err },
+          );
+        }
         console.warn(
           `  Skipped embedded-PG manifest refresh: ${(err as Error).message}`,
         );
       }
     }
+
+    // Final gate: even when the staging+manifest call returned without
+    // throwing, an empty result on a cross-compile build is a release
+    // blocker — fail loud rather than ship a tiny no-PG artifact.
+    this.assertEmbeddedPgPresent(
+      options,
+      embeddedPgFileCount,
+      embeddedPgSourceDir,
+    );
 
     const compileArgs = this.buildCompileArgs(options, embeddedPgPaths);
 

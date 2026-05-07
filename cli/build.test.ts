@@ -1,12 +1,5 @@
 import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
-import {
-  AVAILABLE_PLATFORMS,
-  BuildCommand,
-  generateEmbeddedPgManifest,
-  generateUiManifest,
-  platformPgStagingDir,
-  refreshEmbeddedPgManifest,
-} from "./build.ts";
+import { AVAILABLE_PLATFORMS, BuildCommand, generateEmbeddedPgManifest, generateUiManifest, platformPgStagingDir, refreshEmbeddedPgManifest } from "./build.ts";
 import { join } from "@std/path";
 
 Deno.test("BuildCommand - maps linux-x64 to x86_64-unknown-linux-gnu", () => {
@@ -198,6 +191,83 @@ Deno.test("platformPgStagingDir - composes for every supported platform", () => 
   for (const platform of AVAILABLE_PLATFORMS) {
     const path = platformPgStagingDir("/r", platform, "17.0");
     assertEquals(path.endsWith(`/${platform}/17.0`), true);
+  }
+});
+
+Deno.test("assertEmbeddedPgPresent - throws when --platform set and 0 files staged", () => {
+  const command = new BuildCommand();
+  let threw = false;
+  try {
+    command.assertEmbeddedPgPresent(
+      { platform: "linux-x64" },
+      0,
+      "/dist/embedded-pg/linux-x64/16.4",
+    );
+  } catch (err) {
+    threw = true;
+    assertStringIncludes(
+      (err as Error).message,
+      "0 embedded PG files",
+    );
+    assertStringIncludes(
+      (err as Error).message,
+      "linux-x64",
+    );
+    // Operator-actionable hint: how to opt out, where staging lives.
+    assertStringIncludes(
+      (err as Error).message,
+      "DISC_BUILD_NO_BUNDLE_PG",
+    );
+  }
+  assertEquals(
+    threw,
+    true,
+    "assertEmbeddedPgPresent must throw when --platform is set and 0 files were staged.",
+  );
+});
+
+Deno.test("assertEmbeddedPgPresent - no-op when --platform set and files staged", () => {
+  const command = new BuildCommand();
+  // No throw expected.
+  command.assertEmbeddedPgPresent(
+    { platform: "linux-x64" },
+    137,
+    "/dist/embedded-pg/linux-x64/16.4",
+  );
+});
+
+Deno.test("assertEmbeddedPgPresent - no-op when no --platform (host build)", () => {
+  const command = new BuildCommand();
+  // Host builds should never throw — local dev without PG cache is
+  // expected (the binary downloads PG on first run).
+  command.assertEmbeddedPgPresent({}, 0, "/missing");
+  command.assertEmbeddedPgPresent({}, 137, "/has-files");
+});
+
+Deno.test("assertEmbeddedPgPresent - no-op when --lite even with --platform", () => {
+  const command = new BuildCommand();
+  // --lite explicitly opts out of PG embedding, so 0 files is correct.
+  command.assertEmbeddedPgPresent(
+    { platform: "linux-x64", lite: true },
+    0,
+    "/dist/embedded-pg/linux-x64/16.4",
+  );
+});
+
+Deno.test("assertEmbeddedPgPresent - no-op when DISC_BUILD_NO_BUNDLE_PG=1 even with --platform", () => {
+  const command = new BuildCommand();
+  const prev = Deno.env.get("DISC_BUILD_NO_BUNDLE_PG");
+  Deno.env.set("DISC_BUILD_NO_BUNDLE_PG", "1");
+  try {
+    // Explicit opt-out via env: 0 files is correct.
+    command.assertEmbeddedPgPresent(
+      { platform: "linux-x64" },
+      0,
+      "/dist/embedded-pg/linux-x64/16.4",
+    );
+  } finally {
+    if (prev === undefined) Deno.env.delete("DISC_BUILD_NO_BUNDLE_PG");
+    else Deno.env.set("DISC_BUILD_NO_BUNDLE_PG", prev);
   }
 });
 

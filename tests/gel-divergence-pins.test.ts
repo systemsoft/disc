@@ -1407,6 +1407,43 @@ Deno.test("Gel #6432 slice 4: `disc admin test-policy` runs a policy in isolatio
 });
 
 // ---------------------------------------------------------------------------
+// Disc-internal — Bundle ZZ post-mortem pin (no Gel issue).
+// Discovered after v2026.05.07 was tagged: release CI was producing
+// stripped binaries (~80 MB instead of the expected ~217 MB) because
+// PG staging was failing silently. The original `BuildCommand.execute`
+// wrapped staging + manifest in a single try/catch that just logged
+// the error and proceeded with `embeddedPgPaths: []`. Bundle ZZ added
+// an explicit fail-loud gate so a tagged release can never produce a
+// no-PG binary by accident.
+//
+// This pin asserts (a) the gate function stays in place, (b) it's
+// invoked from `execute`, and (c) the catch block re-throws when
+// `--platform` is set.
+// ---------------------------------------------------------------------------
+Deno.test("Bundle ZZ: cross-compile build fails loud when PG staging produces 0 files", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../cli/build.ts", import.meta.url),
+  );
+  // The gate method must exist on BuildCommand.
+  assert(
+    /assertEmbeddedPgPresent\(/.test(src),
+    "build.ts must declare assertEmbeddedPgPresent (Bundle ZZ pin).",
+  );
+  // It must be invoked from execute() with the file count + source dir.
+  assert(
+    /this\.assertEmbeddedPgPresent\(/.test(src),
+    "build.ts execute() must call this.assertEmbeddedPgPresent (Bundle ZZ pin).",
+  );
+  // The catch block must re-throw on cross-compile rather than
+  // silently swallow.
+  assert(
+    /if \(options\.platform\) \{[\s\S]*?throw new Error\(\s*\n?\s*`PG staging failed/
+      .test(src),
+    "build.ts execute() catch must re-throw when --platform is set (Bundle ZZ pin).",
+  );
+});
+
+// ---------------------------------------------------------------------------
 // gh/geldata#9117 — "gel-py command on Windows 11" / cross-platform
 // CLI ask. Disc explicitly does not support Windows yet — Windows is
 // a documented gap, not silently-broken behavior. The downloader

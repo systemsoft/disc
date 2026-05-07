@@ -14,6 +14,34 @@ tag is cut.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Cross-compile builds now fail loud when PG staging produces 0 files** (Bundle ZZ).
+  Discovered after v2026.05.07 was tagged: release CI was producing
+  stripped ~80 MB binaries instead of the expected ~217 MB because
+  PG staging was failing silently. The original
+  `BuildCommand.execute` wrapped staging + manifest in a single
+  try/catch that logged the error and proceeded with
+  `embeddedPgPaths: []` — so a tag push could "succeed" with a no-PG
+  binary.
+  - **`BuildCommand.assertEmbeddedPgPresent(opts, fileCount, pgSourceDir)`**
+    — new gate. Throws when `--platform` is set, `--lite` is not,
+    `DISC_BUILD_NO_BUNDLE_PG=1` is not, and `fileCount === 0`. Host
+    builds (no `--platform`) keep the graceful-fallback behavior —
+    local dev without a PG cache is expected. `--lite` and
+    `DISC_BUILD_NO_BUNDLE_PG=1` are explicit opt-outs and bypass the
+    gate.
+  - **Catch-block re-throws on `--platform`**: if
+    `ensurePlatformPgStaging` or `refreshEmbeddedPgManifest` throws,
+    the catch block now re-throws (with the original error as
+    `cause`) when `--platform` is set, instead of swallowing +
+    continuing.
+  - **5 new tests** in `cli/build.test.ts` (was 17, now 22) covering
+    the gate's full truth table.
+  - **1 new structural pin** in `tests/gel-divergence-pins.test.ts`
+    (was 44, now 45) asserting the gate stays wired in `execute` and
+    the catch block stays fail-loud.
+
 ### Internal
 
 - **CLI/devtools + cloud/infra + stretch cluster pinned (Bundle YY — gh/geldata#9117 #4308 #4806 #3534 #7724).**
