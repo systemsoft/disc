@@ -194,13 +194,33 @@ Deno.test("platformPgStagingDir - composes for every supported platform", () => 
   }
 });
 
+// A "complete" PG distribution for test purposes: enough files to clear
+// the minimum-file-count threshold + includes bin/postgres + a few
+// share/timezone entries (PG init needs these). Builds the path list
+// with a fake staging root so the gate only inspects the strings, not
+// the filesystem.
+function fakePgPaths(stagingDir: string, fileCount: number): string[] {
+  const paths: string[] = [
+    `${stagingDir}/bin/postgres`,
+    `${stagingDir}/bin/initdb`,
+    `${stagingDir}/bin/pg_ctl`,
+    `${stagingDir}/share/timezone/UTC`,
+    `${stagingDir}/share/extension/plpgsql.control`,
+  ];
+  // Pad with fake share/ files until we hit the target count.
+  for (let i = 0; paths.length < fileCount; i++) {
+    paths.push(`${stagingDir}/share/timezone/zone-${i}`);
+  }
+  return paths;
+}
+
 Deno.test("assertEmbeddedPgPresent - throws when --platform set and 0 files staged", () => {
   const command = new BuildCommand();
   let threw = false;
   try {
     command.assertEmbeddedPgPresent(
       { platform: "linux-x64" },
-      0,
+      [],
       "/dist/embedded-pg/linux-x64/16.4",
     );
   } catch (err) {
@@ -213,7 +233,6 @@ Deno.test("assertEmbeddedPgPresent - throws when --platform set and 0 files stag
       (err as Error).message,
       "linux-x64",
     );
-    // Operator-actionable hint: how to opt out, where staging lives.
     assertStringIncludes(
       (err as Error).message,
       "DISC_BUILD_NO_BUNDLE_PG",
@@ -226,13 +245,70 @@ Deno.test("assertEmbeddedPgPresent - throws when --platform set and 0 files stag
   );
 });
 
-Deno.test("assertEmbeddedPgPresent - no-op when --platform set and files staged", () => {
+Deno.test("assertEmbeddedPgPresent - throws when --platform set and bin/postgres missing", () => {
   const command = new BuildCommand();
-  // No throw expected.
+  // Plenty of files but bin/postgres absent — partial extraction.
+  // The embedded PG is useless without the postgres binary itself.
+  const paths: string[] = [];
+  for (let i = 0; i < 100; i++) {
+    paths.push(`/staging/share/timezone/zone-${i}`);
+  }
+  let threw = false;
+  try {
+    command.assertEmbeddedPgPresent(
+      { platform: "linux-x64" },
+      paths,
+      "/staging",
+    );
+  } catch (err) {
+    threw = true;
+    assertStringIncludes((err as Error).message, "bin/postgres");
+    assertStringIncludes((err as Error).message, "linux-x64");
+  }
+  assertEquals(
+    threw,
+    true,
+    "assertEmbeddedPgPresent must throw when bin/postgres is missing from the embedded paths.",
+  );
+});
+
+Deno.test("assertEmbeddedPgPresent - throws when --platform set and file count below threshold", () => {
+  const command = new BuildCommand();
+  // bin/postgres present but only 3 files total — partial extract.
+  // A real PG distribution has hundreds of files (timezone data,
+  // extensions, locale data); 3 means most of share/ never landed.
+  const paths = [
+    "/staging/bin/postgres",
+    "/staging/bin/initdb",
+    "/staging/bin/pg_ctl",
+  ];
+  let threw = false;
+  try {
+    command.assertEmbeddedPgPresent(
+      { platform: "linux-x64" },
+      paths,
+      "/staging",
+    );
+  } catch (err) {
+    threw = true;
+    assertStringIncludes((err as Error).message, "only 3 embedded PG files");
+    assertStringIncludes((err as Error).message, "linux-x64");
+    assertStringIncludes((err as Error).message, "partial extraction");
+  }
+  assertEquals(
+    threw,
+    true,
+    "assertEmbeddedPgPresent must throw when file count is far below a real PG distribution's count.",
+  );
+});
+
+Deno.test("assertEmbeddedPgPresent - no-op when --platform set and full PG distribution", () => {
+  const command = new BuildCommand();
+  // No throw expected — bin/postgres present + ample files.
   command.assertEmbeddedPgPresent(
     { platform: "linux-x64" },
-    137,
-    "/dist/embedded-pg/linux-x64/16.4",
+    fakePgPaths("/staging", 137),
+    "/staging",
   );
 });
 
@@ -240,16 +316,18 @@ Deno.test("assertEmbeddedPgPresent - no-op when no --platform (host build)", () 
   const command = new BuildCommand();
   // Host builds should never throw — local dev without PG cache is
   // expected (the binary downloads PG on first run).
-  command.assertEmbeddedPgPresent({}, 0, "/missing");
-  command.assertEmbeddedPgPresent({}, 137, "/has-files");
+  command.assertEmbeddedPgPresent({}, [], "/missing");
+  command.assertEmbeddedPgPresent({}, fakePgPaths("/staging", 137), "/has-files");
+  // Even a partial / incomplete cache shouldn't fail a host build.
+  command.assertEmbeddedPgPresent({}, ["/just/one/file"], "/partial");
 });
 
 Deno.test("assertEmbeddedPgPresent - no-op when --lite even with --platform", () => {
   const command = new BuildCommand();
-  // --lite explicitly opts out of PG embedding, so 0 files is correct.
+  // --lite explicitly opts out of PG embedding, so any path list is fine.
   command.assertEmbeddedPgPresent(
     { platform: "linux-x64", lite: true },
-    0,
+    [],
     "/dist/embedded-pg/linux-x64/16.4",
   );
 });
@@ -262,7 +340,7 @@ Deno.test("assertEmbeddedPgPresent - no-op when DISC_BUILD_NO_BUNDLE_PG=1 even w
     // Explicit opt-out via env: 0 files is correct.
     command.assertEmbeddedPgPresent(
       { platform: "linux-x64" },
-      0,
+      [],
       "/dist/embedded-pg/linux-x64/16.4",
     );
   } finally {

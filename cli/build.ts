@@ -76,12 +76,24 @@ export class BuildCommand {
 
   /**
    * Gate the build when an explicit cross-compile target was requested
-   * but PG staging produced zero files. Without this gate, the build
-   * silently produces a small binary without PG embedded — operators
-   * who tagged a release expecting bundled PG end up with broken
-   * artifacts. (Discovered post-v2026.05.07: release CI was producing
-   * ~80 MB binaries instead of the expected ~217 MB because the
-   * staging step was failing silently.)
+   * but PG staging didn't produce a usable PG distribution. Without
+   * this gate, the build silently produces a small binary without PG
+   * embedded — operators who tagged a release expecting bundled PG
+   * end up with broken artifacts.
+   *
+   * Three failure modes the gate catches, all observed post-v2026.05.07:
+   *
+   * 1. **Zero files** — staging failed entirely; manifest is empty.
+   * 2. **`bin/postgres` missing** — partial extract: maybe `share/`
+   *    landed but the actual postgres binary didn't. The embedded PG
+   *    is useless without it; the runtime would crash on first start.
+   * 3. **File count below threshold** — partial extract: maybe just
+   *    `bin/*` landed but `share/timezone/`, `share/extension/`, and
+   *    `lib/` are missing. PG initdb crashes without timezone data.
+   *    A real PG 16 distribution has 600+ files; the threshold below
+   *    is set well under that to avoid false positives on minor
+   *    distribution variations, but well over a "broken extract"
+   *    count to catch real failures.
    *
    * Host builds (no `--platform`) keep the graceful-fallback behavior
    * — local dev without a PG cache is expected; the binary downloads
@@ -92,21 +104,52 @@ export class BuildCommand {
    */
   assertEmbeddedPgPresent(
     options: { platform?: string; lite?: boolean },
-    fileCount: number,
+    paths: readonly string[],
     pgSourceDir: string,
   ): void {
     if (!options.platform) return;
     if (options.lite) return;
     if (Deno.env.get("DISC_BUILD_NO_BUNDLE_PG") === "1") return;
-    if (fileCount > 0) return;
-    throw new Error(
-      `Cross-compile build for ${options.platform} produced 0 embedded PG ` +
-        `files (source dir: ${pgSourceDir}). This usually means PG staging ` +
-        `silently failed — check the build log for ` +
-        `"Skipped embedded-PG manifest refresh" or download/extract errors. ` +
-        `To opt out of PG embedding explicitly, set DISC_BUILD_NO_BUNDLE_PG=1 ` +
-        `or pass --lite.`,
-    );
+
+    const opOutHint = `To opt out of PG embedding explicitly, set DISC_BUILD_NO_BUNDLE_PG=1 ` +
+      `or pass --lite.`;
+
+    if (paths.length === 0) {
+      throw new Error(
+        `Cross-compile build for ${options.platform} produced 0 embedded PG ` +
+          `files (source dir: ${pgSourceDir}). This usually means PG staging ` +
+          `silently failed — check the build log for ` +
+          `"Skipped embedded-PG manifest refresh" or download/extract errors. ` +
+          opOutHint,
+      );
+    }
+
+    const hasPostgresBinary = paths.some((p) => p.endsWith("/bin/postgres"));
+    if (!hasPostgresBinary) {
+      throw new Error(
+        `Cross-compile build for ${options.platform} produced an embedded PG ` +
+          `distribution without bin/postgres (${paths.length} files at ` +
+          `${pgSourceDir}). The runtime needs the postgres binary to start. ` +
+          `This usually means the JAR → txz extract chain partially failed. ` +
+          opOutHint,
+      );
+    }
+
+    // A real PG 16 distribution has 600+ files. 50 catches partial
+    // extracts (e.g. only bin/ landed but share/ and lib/ are missing
+    // — initdb fails without timezone data) without false-positiving
+    // on minor distribution differences across platforms.
+    const MIN_PG_FILES = 50;
+    if (paths.length < MIN_PG_FILES) {
+      throw new Error(
+        `Cross-compile build for ${options.platform} produced only ` +
+          `${paths.length} embedded PG files (source dir: ${pgSourceDir}); ` +
+          `a real PG 16 distribution has 600+ files. This is a partial ` +
+          `extraction — the binary will fail at runtime when PG init can't ` +
+          `find timezone or extension data. ` +
+          opOutHint,
+      );
+    }
   }
 
   /**
@@ -225,7 +268,6 @@ export class BuildCommand {
     // `dist/embedded-pg/<platform>/<version>/` and point the manifest
     // there — the resulting binary embeds the right PG for its target.
     let embeddedPgPaths: string[] = [];
-    let embeddedPgFileCount = 0;
     let embeddedPgSourceDir = "";
     if (!options.lite) {
       try {
@@ -245,7 +287,6 @@ export class BuildCommand {
           pgSourceOverride,
         );
         embeddedPgPaths = refreshed.includePaths;
-        embeddedPgFileCount = refreshed.fileCount;
         embeddedPgSourceDir = refreshed.pgSourceDir;
         if (refreshed.wrote) {
           console.log(
@@ -282,7 +323,7 @@ export class BuildCommand {
     // blocker — fail loud rather than ship a tiny no-PG artifact.
     this.assertEmbeddedPgPresent(
       options,
-      embeddedPgFileCount,
+      embeddedPgPaths,
       embeddedPgSourceDir,
     );
 

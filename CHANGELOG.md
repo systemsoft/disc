@@ -57,6 +57,26 @@ tag is cut.
     (was 44, now 45) asserting the gate stays wired in `execute` and
     the catch block stays fail-loud.
 
+- **Cross-compile gate now catches partial PG extracts (Bundle ZZ-3).**
+  The original Bundle ZZ gate only checked `fileCount > 0`, so a
+  partial JAR → txz extract (e.g. `bin/postgres` missing, or only
+  `bin/*` landed without `share/timezone/`) would slip through and
+  ship a binary that crashes at runtime when PG init can't find
+  timezone data. Confirmed against a re-tag after Bundle ZZ landed:
+  the binary was still small because staging produced _some_ files
+  but not the full distribution.
+  - **`assertEmbeddedPgPresent` signature change**: now takes
+    `paths: readonly string[]` instead of `fileCount: number`,
+    enabling content checks (not just count). The `execute()` call
+    site passes the manifest paths array directly.
+  - **Three failure modes the gate now catches**:
+    1. Zero files (existing — staging failed entirely).
+    2. `bin/postgres` missing (new — partial extract, useless PG).
+    3. File count below 50 (new — partial extract, initdb crashes).
+  - **3 new tests** in `cli/build.test.ts` (was 22, now 24): bin/postgres
+    missing, file count below threshold, full-distribution happy
+    path. Existing 5 tests updated to the new paths-array signature.
+
 ### Internal
 
 - **CLI/devtools + cloud/infra + stretch cluster pinned (Bundle YY — gh/geldata#9117 #4308 #4806 #3534 #7724).**
