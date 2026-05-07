@@ -83,7 +83,12 @@ export class SchemaDiffer {
     for (const [typeName, newTypeDef] of newTypes) {
       const oldTypeDef = oldTypes.get(typeName);
       if (oldTypeDef) {
-        const alterOps = this.diffType(oldTypeDef, newTypeDef);
+        const alterOps = this.diffType(
+          oldTypeDef,
+          newTypeDef,
+          oldTypes,
+          newTypes,
+        );
         if (alterOps.length > 0) {
           operations.push({
             kind: "AlterType",
@@ -649,19 +654,28 @@ export class SchemaDiffer {
   private diffType(
     oldType: AST.TypeDeclaration,
     newType: AST.TypeDeclaration,
+    oldAllTypes?: Map<string, AST.TypeDeclaration>,
+    newAllTypes?: Map<string, AST.TypeDeclaration>,
   ): Types.TypeOperation[] {
     const operations: Types.TypeOperation[] = [];
     const typeName = oldType.name.value;
 
-    // Diff properties
-    const oldProps = this.extractProperties(oldType);
-    const newProps = this.extractProperties(newType);
+    // Diff properties using resolved (inheritance-walked) sets so that
+    // dropping `extending A` surfaces as DropProperty ops for the
+    // properties B inherited from A. (gh/geldata#4215 — the gap was
+    // own-only diff, which silently missed inherited-property losses.)
+    const oldProps = oldAllTypes ? this.extractPropertiesWithInheritance(oldType, oldAllTypes) : this.extractProperties(oldType);
+    const newProps = newAllTypes ? this.extractPropertiesWithInheritance(newType, newAllTypes) : this.extractProperties(newType);
 
     operations.push(...this.diffProperties(oldProps, newProps));
 
-    // Diff rewrites for properties that exist in both old and new schemas
-    const oldPropsMap = new Map(oldProps.map((p) => [p.name, p]));
-    const newPropsMap = new Map(newProps.map((p) => [p.name, p]));
+    // Rewrites are own-only (not inherited) — keep extractProperties
+    // for the rewrite comparison so we don't double-count rewrites
+    // declared on the parent.
+    const oldOwnProps = this.extractProperties(oldType);
+    const newOwnProps = this.extractProperties(newType);
+    const oldPropsMap = new Map(oldOwnProps.map((p) => [p.name, p]));
+    const newPropsMap = new Map(newOwnProps.map((p) => [p.name, p]));
 
     for (const [propName, newProp] of newPropsMap) {
       const oldProp = oldPropsMap.get(propName);
@@ -680,9 +694,10 @@ export class SchemaDiffer {
     // For newly added properties, rewrites are included in the PropertyDefinition
     // For dropped properties, rewrites are implicitly removed with the property
 
-    // Diff links
-    const oldLinks = this.extractLinks(oldType);
-    const newLinks = this.extractLinks(newType);
+    // Diff links using resolved (inheritance-walked) sets — same
+    // reasoning as properties above. (gh/geldata#4215)
+    const oldLinks = oldAllTypes ? this.extractLinksWithInheritance(oldType, oldAllTypes) : this.extractLinks(oldType);
+    const newLinks = newAllTypes ? this.extractLinksWithInheritance(newType, newAllTypes) : this.extractLinks(newType);
 
     operations.push(...this.diffLinks(oldLinks, newLinks));
 

@@ -81,7 +81,8 @@ A second same-day sweep shipped 18 more bundles (I–CC), closing Disc's eight o
 | LL     | Migration-perf cluster: differ linearization (#5322) + structural pins for #5713 (insert speed), #4319 (in-process)          | `80816fb`                                  |
 | MM     | Auth-semantics cluster: webauthn_challenges cascade (#7103) + structural pins for #5504 (UNLESS CONFLICT), #8811 (stdlib)    | `edd2f6b`                                  |
 | NN     | CLI/devtools cluster: programmatic CLI surface (#5911) + offline-setup env vars (#3406) + named-instance DX pin (#2651)      | `78002f7`                                  |
-| OO     | DB/engine correctness cluster: pins for #5641 (multi-module FROM), #4215 (extending-change gap), #2204 (schema-reload chain) | (this bundle)                              |
+| OO     | DB/engine correctness cluster: pins for #5641 (multi-module FROM), #4215 (extending-change gap), #2204 (schema-reload chain) | `3a4fdaa`                                  |
+| PP     | #4215 follow-up: differ now detects type-level `extending` changes via resolved inheritance walk; pin upgraded to behavioral | (this bundle)                              |
 
 Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** — #7311, #7196, #7483 (Q), #7629 (U), #3437 (FF), #7525, #6358, #8899, #9034, #2292 (GG/HH/II), and structural-divergence pins for #4408, #4172 (X), #3208, #5132, #2910 (S), #3872, #7360, #3170 (GG/HH), #5158, #5480, #8762, #7972 (II). The Disc-original-features roadmap is also fully closed by this sweep — see `docs/disc-original-features.md`.
 

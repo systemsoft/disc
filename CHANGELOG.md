@@ -16,6 +16,29 @@ tag is cut.
 
 ### Fixed
 
+- **Type-level extending changes now detected** (Bundle PP — gh/geldata#4215).
+  `migration/differ.ts:diffType` previously called `extractProperties`
+  / `extractLinks` (own-only), which silently missed the property and
+  link sets a type inherited via `extending A`. Changing
+  `type B extending A` to `type B` produced 0 ops despite B's table
+  carrying A's columns from the original CREATE.
+  - Fix: thread the existing `oldTypes`/`newTypes` Maps from `diff()`
+    through `diffType` and use `extractPropertiesWithInheritance` /
+    `extractLinksWithInheritance` for the resolved comparison.
+    Inherited fields that disappear surface as `DropProperty`;
+    inherited fields that appear surface as `AddProperty`. The DDL
+    gen path emits `ALTER TABLE … DROP COLUMN` (with the unsafe-gate
+    warning) and `ALTER TABLE … ADD COLUMN` respectively. Rewrites
+    stay own-only — they aren't inherited and would be double-counted
+    otherwise.
+  - **`tests/gel-divergence-pins.test.ts`** — `Gel #4215` pin updated
+    from "silent no-op" gap-marker to a behavioral assertion that
+    dropping `extending A` from B emits AlterType{B} containing a
+    DropProperty for `label`, and DDL gen emits the corresponding
+    `ALTER TABLE b DROP COLUMN label`.
+  - 998 migration + compiler + schema tests still pass; no other
+    suites regressed by the resolved-inheritance switch.
+
 - **DB/engine correctness cluster pinned** (Bundle OO — gh/geldata#5641
   - #4215 + #2204). All three are structurally addressed in Disc; pins
     in `tests/gel-divergence-pins.test.ts` lock the behavior in place.

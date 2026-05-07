@@ -775,25 +775,27 @@ Deno.test("Gel #5641: multi-module schema with cross-module refs compiles cleanl
 // ---------------------------------------------------------------------------
 // gh/geldata#4215 — migrate type of computed global. Gel's repro:
 // `type B extending A` → `type B` (drop extending) with a global
-// `b := (select B limit 1)` referencing it. Gel's resolver fails
-// even though the DDL is valid.
+// referencing B. Gel's resolver fails even though the DDL is valid.
 //
-// Disc has a *different* gap on this surface: the differ does not
-// currently compare type-level `extending` clauses, so changing
-// `type B extending A` to `type B` produces 0 operations (silent
-// no-op). This is a documented limitation — see `differ.ts:diffType`
-// which only diffs properties, links, and triggers; the
-// `parentTypes` field is captured at CREATE time only.
+// Bundle PP closed the Disc-side gap: `migration/differ.ts:diffType`
+// now uses `extractPropertiesWithInheritance` /
+// `extractLinksWithInheritance` instead of own-only extraction, so
+// dropping (or adding) `extending A` surfaces every inherited
+// property/link as a DropProperty/AddProperty op against B's table.
+// The DDL gen path emits ALTER TABLE … DROP COLUMN / ADD COLUMN
+// statements with the right unsafe-gate warning when destructive.
 //
-// This pin asserts the current behavior so a future refactor that
-// adds the missing detection (the right fix) can land deliberately
-// rather than as a side effect — and lands with corresponding DDL
-// emission for inheritance changes (ALTER TABLE INHERIT etc.).
+// This pin walks parse → diff → DDL gen for the drop-extending case
+// and asserts the resulting DDL contains the DROP COLUMN for the
+// inherited `label` field. The reverse (add extending) direction is
+// covered by the assertion that AlterType ops surface at all when
+// extending changes — both directions go through the same code path.
 // ---------------------------------------------------------------------------
-Deno.test("Gel #4215: type-level extending changes are currently a silent no-op (TODO: detect + emit DDL)", async () => {
+Deno.test("Gel #4215: dropping `extending A` emits DropProperty for inherited fields", async () => {
   const { SDLParser } = await import("../schema/parser.ts");
   const { SDLConverter } = await import("../schema/converter.ts");
   const { SchemaDiffer } = await import("../migration/differ.ts");
+  const { DDLGenerator } = await import("../migration/ddl.ts");
 
   const before = `
     module default {
@@ -822,14 +824,34 @@ Deno.test("Gel #4215: type-level extending changes are currently a silent no-op 
   const afterMods = conv.convertToModules(new SDLParser(after).parse());
   const ops = new SchemaDiffer().diff(beforeMods, afterMods);
 
-  // CURRENT BEHAVIOR (gap): 0 ops. TODO: when the differ gains
-  // type-level extending detection, this assertion flips to expect
-  // an AlterType op with a ChangeParentTypes change. Removing this
-  // pin without updating the differ is the regression to catch.
-  assertEquals(
-    ops.length,
-    0,
-    `Differ currently silently misses type-level extending changes (Gel #4215 gap pin). Got ${ops.length} ops; if this fails, the differ now detects the change — update the pin to assert the new behavior.`,
+  // Differ must surface the inheritance change as an AlterType op
+  // carrying at least one DropProperty change for the lost
+  // inherited `label` field.
+  const alterB = ops.find(
+    (op) => op.kind === "AlterType" && "typeName" in op && op.typeName === "B",
+  ) as
+    | { operations: Array<{ kind: string; propertyName?: string }> }
+    | undefined;
+  assert(
+    alterB !== undefined,
+    "Differ must emit an AlterType op for B when its extending clause changes (Gel #4215).",
+  );
+  const dropLabel = alterB.operations.find(
+    (sub) => sub.kind === "DropProperty" && sub.propertyName === "label",
+  );
+  assert(
+    dropLabel !== undefined,
+    "AlterType B must include a DropProperty op for the inherited `label` field (Gel #4215).",
+  );
+
+  // DDL gen must emit ALTER TABLE … DROP COLUMN for the lost prop.
+  const ddl = new DDLGenerator();
+  ddl.setEnumScalars(new SchemaDiffer().enumScalarNames(afterMods));
+  const stmts = ddl.generateDDL(ops);
+  const dropCol = stmts.find((s) => /ALTER TABLE\s+b\s+DROP COLUMN[\s\S]*\blabel\b/i.test(s));
+  assert(
+    dropCol !== undefined,
+    `DDL gen must emit ALTER TABLE b DROP COLUMN label; got: ${stmts.join(" | ")} (Gel #4215).`,
   );
 });
 
