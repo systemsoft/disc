@@ -32,6 +32,13 @@ tag is cut.
 
 ### Internal
 
+- **CI now builds the UI before the non-PG test suite.** The
+  `lint-and-test` job sets up Bun, runs `bun install --frozen-lockfile`,
+  and `bun run build` so `server/ui-assets.test.ts` exercises the
+  real embed-and-serve path. The four tests in that file previously
+  probe-skipped (Bundle I pattern) because `ui/build/` is gitignored
+  and CI never built it; they now run for real on every PR. Adds
+  ~30s–1min to the job (install + build), well-cached on warm runs.
 - **Phase 23 polymorphic test fixtures rewritten to per-subtype tables.**
   The two `compiler/pg-phase23.test.ts` polymorphism tests previously
   modeled their `Shape`/`Circle`/`Rectangle` hierarchy on a single

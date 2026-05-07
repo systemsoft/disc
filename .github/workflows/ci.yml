@@ -30,6 +30,22 @@ jobs:
         with:
           deno-version: v2.x
 
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      # Build the UI before the deno test step so `server/ui-assets.test.ts`
+      # exercises the real embed-and-serve path. Without this, the four
+      # tests in that file probe-skip when `ui/build/` is absent (the
+      # Bundle I pattern). Caches keep the install + build under a minute
+      # on warm runs.
+      - name: Install UI dependencies
+        run: cd ui && bun install --frozen-lockfile
+
+      - name: Build UI
+        run: cd ui && bun run build
+
       # - name: Check formatting
       #   run: deno fmt --check
 
