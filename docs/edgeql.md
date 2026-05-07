@@ -1359,6 +1359,28 @@ select Shape {
 select Shape filter Shape is not Circle;
 ```
 
+### How polymorphic SELECT compiles
+
+Disc's migration engine creates one PG table per concrete subtype — there's no physical table for the abstract parent. `SELECT <Abstract>` lowers to a `UNION ALL` across the subtype tables; each branch projects the abstract type's properties (`id`, plus shared columns like `color`) so the outer SELECT can reference the abstract's alias as if it were a regular table.
+
+When the SELECT shape uses `[is Subtype].property` to access a subtype-specific column, each UNION branch projects either the actual column (when its subtype owns it) or `NULL::<pg-type> AS <colName>` (when it doesn't), so PG's UNION column-resolution unifies. The outer compiler emits `CASE WHEN __type__ = '<Subtype>' THEN <alias>.<col> ELSE NULL END` to gate the value on the actual row type.
+
+```sql
+-- Compiled shape of `select Shape { color, [is Circle].radius }`:
+SELECT
+  jsonb_build_object(
+    'color', shape_1.color,
+    'radius', CASE WHEN shape_1.__type__ = 'Circle' THEN shape_1.radius ELSE NULL END
+  )
+FROM (
+  SELECT id, __type__, color, radius FROM circles
+  UNION ALL
+  SELECT id, __type__, color, NULL::double precision AS radius FROM rectangles
+) AS shape_1;
+```
+
+The `__type__` column is emitted automatically on every type that participates in a hierarchy (DDL detail in `migration/ddl.ts:398-412`), defaulting to the type's own name. The `IS Type` filter (`filter .id IS Circle` or `Shape[IS Circle]`) reduces to `__type__ = '<Type>'` over the same UNION, with `__type__ IN (...)` when the named type has its own subtypes.
+
 ---
 
 ## DESCRIBE

@@ -929,6 +929,8 @@ module default {
 
 Both `User` and `Post` inherit `created_at` and `updated_at` from `Timestamped`.
 
+> **Production semantics — per-subtype tables.** Disc's migration engine emits one PG table per concrete subtype; abstract types have no physical table. `SELECT <Abstract>` lowers to `UNION ALL` across the subtype tables (each branch projects the abstract's columns), and `IS Type` filters reduce to `__type__ = '<Type>'` over the union. The `__type__` discriminator column is added automatically to every type that participates in a hierarchy. See [EdgeQL → Polymorphic Queries](edgeql.md#polymorphic-queries) for how this affects compiled SQL and what polymorphic shape fields look like at runtime.
+
 ### Concrete Inheritance
 
 Non-abstract types can also be extended:
@@ -1062,6 +1064,7 @@ module default {
 ### Policy Structure
 
 An access policy has:
+
 - A **name** for identification
 - One or more **actions** (`allow` or `deny`) specifying which operations are affected
 - A `using` **condition** expression evaluated at query time
@@ -1135,6 +1138,7 @@ set global current_user_id := <uuid>"a1b2c3d4-...";
 ### Multiple Policies
 
 When multiple policies exist on a type, they interact as follows:
+
 - If any `deny` policy matches, the operation is denied regardless of `allow` policies
 - If no `deny` policy matches and at least one `allow` policy matches, the operation is allowed
 - If no policies match at all, behavior depends on the system default
@@ -1516,7 +1520,7 @@ Range types represent a continuous span of values. They map directly to PostgreS
 ### Supported Range Types
 
 | SDL Range Type               | PostgreSQL Type |
-| ---------------------------- |-----------------|
+| ---------------------------- | --------------- |
 | `range<cal::local_date>`     | `daterange`     |
 | `range<cal::local_datetime>` | `tsrange`       |
 | `range<datetime>`            | `tstzrange`     |

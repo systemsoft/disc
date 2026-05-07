@@ -2,6 +2,8 @@
 
 Disc generates fully-typed TypeScript code from your EdgeQL schema. Running `disc codegen` reads your `.disc` (or `.gel` / `.esdl`) schema files and produces TypeScript interfaces, insert/update types, enum types, query builder classes, and a typed client -- giving you end-to-end type safety from schema to application code.
 
+> **Codegen is one of two type-safety paths.** For projects that prefer to skip the build step entirely, the SDK ships a runtime query builder (`createQueryBuilder(client, schema)`) where `defineSchema()` declares types in TypeScript and the same end-to-end inference applies — no generated files, no codegen step in CI. See [Client SDK → Codegen-free query builder](client-sdk.md#codegen-free-query-builder) for the alternative pattern. Both paths use the same underlying `client.query()` runtime; pick whichever fits your build pipeline.
+
 Related documentation: [Schema](schema.md) | [Client SDK](client-sdk.md) | [EdgeQL](edgeql.md)
 
 ## Running Codegen
@@ -198,10 +200,10 @@ Given the `User` type above:
 ```typescript
 export interface UserInsert {
   active?: boolean; // optional in schema
-  age?: number;     // optional in schema
-  bio?: string;     // optional in schema
-  email: string;    // required, no default
-  name: string;     // required, no default
+  age?: number; // optional in schema
+  bio?: string; // optional in schema
+  email: string; // required, no default
+  name: string; // required, no default
 }
 ```
 
@@ -273,24 +275,20 @@ export class UserQueryBuilder {
     bio: "<str>",
     created_at: "<datetime>",
     email: "<str>",
-    name: "<str>"
+    name: "<str>",
   };
 
   constructor(private client: DiscClient) {}
 
   /** Select all User objects */
   async select(shape?: string): Promise<Types.User[]> {
-    const query = shape ?
-      `select User ${shape}` :
-      `select User { * }`;
+    const query = shape ? `select User ${shape}` : `select User { * }`;
     return await this.client.query<Types.User[]>(query);
   }
 
   /** Select User by ID */
   async selectById(id: string, shape?: string): Promise<Types.User | null> {
-    const query = shape ?
-      `select User ${shape} filter .id = <uuid>$id` :
-      `select User { * } filter .id = <uuid>$id`;
+    const query = shape ? `select User ${shape} filter .id = <uuid>$id` : `select User { * } filter .id = <uuid>$id`;
     const results = await this.client.query<Types.User[]>(query, { id });
     return results[0] || null;
   }
@@ -299,20 +297,16 @@ export class UserQueryBuilder {
   async filter(
     condition: string,
     variables?: Types.UserFilterVars,
-    shape?: string
+    shape?: string,
   ): Promise<Types.User[]> {
-    const query = shape ?
-      `select User ${shape} filter ${condition}` :
-      `select User { * } filter ${condition}`;
+    const query = shape ? `select User ${shape} filter ${condition}` : `select User { * } filter ${condition}`;
     return await this.client.query<Types.User[]>(query, variables);
   }
 
   /** Insert new User */
   async insert(data: Types.UserInsert): Promise<Types.User> {
     const assignments = Object.entries(data)
-      .map(([key, value]) =>
-        `${key} := ${UserQueryBuilder._typeCasts[key] || "<str>"}$${key}`
-      )
+      .map(([key, value]) => `${key} := ${UserQueryBuilder._typeCasts[key] || "<str>"}$${key}`)
       .join(", ");
     const query = `insert User { ${assignments} }`;
     return await this.client.query<Types.User>(query, data);
@@ -321,9 +315,7 @@ export class UserQueryBuilder {
   /** Update User by ID */
   async update(id: string, data: Types.UserUpdate): Promise<Types.User> {
     const assignments = Object.entries(data)
-      .map(([key, value]) =>
-        `${key} := ${UserQueryBuilder._typeCasts[key] || "<str>"}$${key}`
-      )
+      .map(([key, value]) => `${key} := ${UserQueryBuilder._typeCasts[key] || "<str>"}$${key}`)
       .join(", ");
     const query = `update User filter .id = <uuid>$id set { ${assignments} }`;
     return await this.client.query<Types.User>(query, { id, ...data });
@@ -338,11 +330,9 @@ export class UserQueryBuilder {
   /** Count User objects */
   async count(
     condition?: string,
-    variables?: Types.UserFilterVars
+    variables?: Types.UserFilterVars,
   ): Promise<number> {
-    const query = condition ?
-      `select count(User filter ${condition})` :
-      `select count(User)`;
+    const query = condition ? `select count(User filter ${condition})` : `select count(User)`;
     return await this.client.query<number>(query, variables);
   }
 }
@@ -357,11 +347,14 @@ The `select`, `selectById`, and `filter` methods accept an optional `shape` para
 const users = await client.user.select("{ email, name }");
 
 // Select with nested links
-const user = await client.user.selectById(id, `{
+const user = await client.user.selectById(
+  id,
+  `{
   email,
   name,
   posts: { created_at, title }
-}`);
+}`,
+);
 ```
 
 When no shape is provided, `{ * }` is used to select all scalar properties.
@@ -388,12 +381,12 @@ Usage:
 ```typescript
 const activeUsers = await client.user.filter(
   ".active = <bool>$active AND .age > <int32>$minAge",
-  { active: true, minAge: 18 }
+  { active: true, minAge: 18 },
 );
 
 const count = await client.user.count(
   ".email LIKE <str>$pattern",
-  { pattern: "%@example.com" }
+  { pattern: "%@example.com" },
 );
 ```
 
@@ -606,16 +599,16 @@ The full `CodegenConfig` interface:
 
 ```typescript
 interface CodegenConfig {
-  formatOutput: boolean;         // Clean up generated code formatting
-  includeClient: boolean;        // Generate typed client class
-  includeMutations: boolean;     // Generate mutation helpers
+  formatOutput: boolean; // Clean up generated code formatting
+  includeClient: boolean; // Generate typed client class
+  includeMutations: boolean; // Generate mutation helpers
   includeQueryBuilders: boolean; // Generate query builder classes
-  interfaceSuffix?: string;      // Suffix for generated interface names
-  outputDir: string;             // Output directory (default: "./dbschema/disc-client")
-  schemaDir?: string;            // Directory to scan for schema files
-  schemaSource: string;          // SDL schema file path (default: "./schema.disc")
+  interfaceSuffix?: string; // Suffix for generated interface names
+  outputDir: string; // Output directory (default: "./dbschema/disc-client")
+  schemaDir?: string; // Directory to scan for schema files
+  schemaSource: string; // SDL schema file path (default: "./schema.disc")
   target: "client" | "server" | "both"; // Generation target
-  typePrefix?: string;           // Prefix for generated type names (e.g., "Db")
+  typePrefix?: string; // Prefix for generated type names (e.g., "Db")
 }
 ```
 
@@ -672,7 +665,7 @@ export interface QueryResult<T> {
 /** Query error */
 export interface QueryError {
   extensions?: Record<string, any>;
-  locations?: Array<{ column: number; line: number; }>;
+  locations?: Array<{ column: number; line: number }>;
   message: string;
   path?: Array<string | number>;
 }

@@ -269,6 +269,34 @@ CREATE TYPE disc_enum_status AS ENUM ('open', 'closed', 'archived');
 
 The guard is intentional: an operator who skips manually migrating the dependent columns gets a clear error rather than silent corruption. (`migration/ddl.ts` `generateRecreateScalar`, gh/geldata#2564 + #8517)
 
+### Enum scalar columns wire through to the PG enum type
+
+When a property is typed as a user-declared enum scalar, the migration emits a column of the matching `disc_enum_<name>` PG type instead of the historical `TEXT` fallback. The DDL generator carries an enum-scalar registry (primed by `MigrationEngine.planMigration` from the post-state schema) so that:
+
+```
+module default {
+  scalar type Status extending enum<draft, published, archived>;
+  type Article {
+    required title: str;
+    status: Status;
+  };
+}
+```
+
+…emits:
+
+```sql
+CREATE TYPE disc_enum_status AS ENUM ('draft', 'published', 'archived');
+
+CREATE TABLE article (
+  id UUID PRIMARY KEY NOT NULL DEFAULT gen_random_uuid(),
+  title TEXT NOT NULL,
+  status disc_enum_status
+);
+```
+
+…instead of `status TEXT`. Both unqualified (`status: Status`) and qualified (`status: default::Status`) property type strings resolve. A cascade-aware reordering pass in the differ guarantees `CreateScalar` runs before any column referencing it and `DropScalar`/`RecreateScalar` runs after any column dependency has been removed in the same migration plan. (`migration/ddl.ts` `setEnumScalars` + `migration/differ.ts` `reorderForCascade`, gh/geldata#8517 full impl)
+
 ## Production Migration Rollout
 
 Migrating a production database is a five-step ritual:
@@ -599,14 +627,14 @@ the CLI. (gh/geldata#6094)
 The migration system is layered from highest-level (most batteries
 included) to lowest-level (most control):
 
-| Layer               | Best for                                                          | Module                        |
-| ------------------- | ----------------------------------------------------------------- | ----------------------------- |
-| `SchemaManager`     | Drive the full pipeline: parse SDL → diff → plan → DDL → execute  | `migration/schema-manager.ts` |
-| `MigrationEngine`   | Plan / execute / rollback against pre-built `Module[]` ASTs       | `migration/engine.ts`         |
-| `SchemaDiffer`      | Pure diff over two `Module[]` trees, no DB I/O                    | `migration/differ.ts`         |
-| `DDLGenerator`      | Pure DDL emission from `MigrationOperation[]`, no DB I/O          | `migration/ddl.ts`            |
-| `MigrationTracker`  | Read-write access to `disc_migrations` / checkpoint tables        | `migration/tracker.ts`        |
-| `MigrationSquasher` | Combine N applied migrations into one rolled-up form              | `migration/squash.ts`         |
+| Layer               | Best for                                                         | Module                        |
+| ------------------- | ---------------------------------------------------------------- | ----------------------------- |
+| `SchemaManager`     | Drive the full pipeline: parse SDL → diff → plan → DDL → execute | `migration/schema-manager.ts` |
+| `MigrationEngine`   | Plan / execute / rollback against pre-built `Module[]` ASTs      | `migration/engine.ts`         |
+| `SchemaDiffer`      | Pure diff over two `Module[]` trees, no DB I/O                   | `migration/differ.ts`         |
+| `DDLGenerator`      | Pure DDL emission from `MigrationOperation[]`, no DB I/O         | `migration/ddl.ts`            |
+| `MigrationTracker`  | Read-write access to `disc_migrations` / checkpoint tables       | `migration/tracker.ts`        |
+| `MigrationSquasher` | Combine N applied migrations into one rolled-up form             | `migration/squash.ts`         |
 
 The high-level `SchemaManager` covers the common case; reach further
 down only when you need primitives the higher layer hides.
@@ -636,7 +664,7 @@ await manager.initialize();
 // …work…
 
 await manager.close(); // closes the manager's tracker only, NOT the pool
-await pool.close();    // app shuts down the pool when it's truly done
+await pool.close(); // app shuts down the pool when it's truly done
 ```
 
 ### Inspecting the Diff Before Applying

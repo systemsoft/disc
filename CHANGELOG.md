@@ -112,6 +112,35 @@ tag is cut.
 
 ### Docs
 
+- **Documentation audit — medium + low gaps closed** (Bundle EE).
+  Follow-up to Bundle DD — addresses the remaining ~11 audit findings:
+  - `docs/server.md` gained an "Admin Features" env-var subsection
+    (`DISC_ENABLE_DATA_WATCH`, `DISC_ENABLE_REST` — Bundles L + J).
+  - `docs/auth.md` gained subsections for Bundle Q polish: implicit
+    signup via magic link (`allowImplicitSignup` config + new
+    `MagicLinkSignupRequested` webhook event) and WebAuthn
+    discoverable credentials (`requireResidentKey` config; passkeys
+    documented as the default).
+  - `docs/migrations.md` gained an "Enum scalar columns wire through
+    to the PG enum type" subsection demonstrating Bundle W's
+    end-to-end behavior with concrete SDL → DDL example.
+  - `docs/edgeql.md` Polymorphic Queries section gained a "How
+    polymorphic SELECT compiles" subsection with a concrete UNION-ALL
+    plus CASE example covering Bundle BB's subtype-specific column
+    projection.
+  - `docs/codegen.md` opener gained a callout pointing at the
+    codegen-free runtime DSL (Bundle M) as an alternative to the
+    generated-code path; `docs/client-sdk.md` gained a full
+    "Codegen-free query builder" section that the callout links to.
+  - `docs/production-deployment.md` env table gained
+    `DISC_TLS_CERT_ENV` / `DISC_TLS_KEY_ENV` rows.
+  - `docs/admin-ui.md` Live Mode mention now anchors at
+    `server.md#admin-features`.
+  - `docs/schema.md` Inheritance section gained a "Production
+    semantics — per-subtype tables" callout linking to the EdgeQL
+    polymorphic-queries explanation.
+  - `docs/bundled-postgres.md` `disc pg upgrade` section now opens
+    with a status callout flagging the pipeline as in development.
 - **Documentation audit — high-severity gaps closed** (Bundle DD).
   Three issues identified by an end-to-end audit of `docs/` against
   current code state:

@@ -147,6 +147,13 @@ All server configuration can be set via environment variables. The `createServer
 | ---------------------------- | ------- | ----------------------------- |
 | `DISC_ENABLE_MULTI_DATABASE` | `false` | Enable multi-database routing |
 
+#### Admin Features
+
+| Variable                 | Default | Description                                                                                                                                        |
+| ------------------------ | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DISC_ENABLE_DATA_WATCH` | `true`  | Enable the live-data subscription endpoint at `/admin/data-watch` (Bundle L). Set `false` to skip both the trigger bootstrap and the SSE endpoint. |
+| `DISC_ENABLE_REST`       | `true`  | Enable the schema-derived REST surface at `/api/<Type>` (Bundle J). Set `false` to disable.                                                        |
+
 #### Shutdown
 
 | Variable                      | Default | Description                                                     |

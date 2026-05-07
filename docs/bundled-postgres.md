@@ -171,7 +171,7 @@ The upgrade process:
 
 The old PostgreSQL binary remains cached at `~/.disc/postgres/<old-version>/` and is not deleted, so rollback is always possible.
 
-**Note:** The full `pg_dump`/`pg_restore` upgrade pipeline is not yet implemented. The `upgradeInstance` method currently raises an error indicating this feature is in development.
+> **Status:** the full `pg_dump`/`pg_restore` upgrade pipeline isn't implemented yet — `upgradeInstance` currently throws an error indicating the feature is in development. The CLI surface and the flow described above are the intended behavior. The command is gated until the pipeline ships, so running it on a real instance is safe (it errors out before touching anything).
 
 ---
 
@@ -266,7 +266,7 @@ No TCP port is exposed unless you explicitly set a port:
 const instance = new PostgresInstance({
   dataDir: "/path/to/data",
   instanceName: "my-project",
-  port: 5433 // Enable TCP on this port
+  port: 5433, // Enable TCP on this port
 });
 ```
 
@@ -296,7 +296,7 @@ You can also point to an existing PostgreSQL binary directory instead of downlo
 const instance = new PostgresInstance({
   dataDir: "/path/to/data",
   instanceName: "my-project",
-  pgBinDir: "/usr/local/pgsql/bin" // Use existing PG binaries
+  pgBinDir: "/usr/local/pgsql/bin", // Use existing PG binaries
 });
 ```
 
@@ -333,10 +333,10 @@ When a health check fails (connection refused, query timeout, or process not ru
 import { PostgresMonitor } from "disc/postgres/mod.ts";
 
 const monitor = new PostgresMonitor(instance, {
-  autoRestart: true,      // Enable auto-restart (default: true)
+  autoRestart: true, // Enable auto-restart (default: true)
   checkIntervalMs: 15000, // Check every 15 seconds
-  maxRestartAttempts: 5,  // Allow 5 restart attempts before giving up
-  restartDelayMs: 10000   // Wait 10 seconds between restart attempts
+  maxRestartAttempts: 5, // Allow 5 restart attempts before giving up
+  restartDelayMs: 10000, // Wait 10 seconds between restart attempts
 });
 
 await monitor.start();
@@ -405,7 +405,7 @@ const manager = new PostgresManager();
 await manager.discoverInstances();
 
 // List all known instances
-manager.listInstances();  // ["project-a", "project-b"]
+manager.listInstances(); // ["project-a", "project-b"]
 
 // Start a specific instance
 await manager.startInstance("project-a");

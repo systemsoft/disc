@@ -521,6 +521,19 @@ HTTP routes (both public, both rate-limited):
 
 **Single-use + TTL:** tokens are hashed in storage, expire in 15 minutes, and `consumed_at` is set on the first redeem (even when the redeem returns an MFA challenge instead of a session, so the link can't be replayed mid-MFA).
 
+#### Implicit signup (gh/geldata#7311)
+
+By default `requestMagicLink` for an unknown email mints a token that is _not_ persisted (the anti-enumeration path above). With `allowImplicitSignup: true` on `AuthConfig`, the token is instead persisted to a separate `magic_link_signup_tokens` table; on `consumeMagicLink` the user is created (`email_verified=true` since the round-trip proves email control) and a session is returned. The signup table is separate so existing `magic_link_tokens` rows keep their `NOT NULL user_id` constraint — no destructive migration.
+
+```typescript
+const config: AuthConfig = {
+  jwtSecret: "...",
+  allowImplicitSignup: true, // default false
+};
+```
+
+A new webhook event `MagicLinkSignupRequested` (carries `pendingEmail` + `magicLinkToken`, no `identityId` since no user exists yet) fires when an unknown email requests a link with implicit signup enabled. The shipped email listener handles both `MagicLinkRequested` and `MagicLinkSignupRequested` via the same email-template path, so configuring branding once covers both flows.
+
 #### Custom URL template
 
 The default link target is `${emailBaseUrl}/auth/magic?token=<token>`. Override with `magicLinkUrlTemplate`:
@@ -626,6 +639,26 @@ HTTP routes:
 | POST   | `/auth/webauthn/credentials/delete` | Yes               |
 
 Counter monotonicity is enforced on every login — a counter that _decreased_ triggers `INVALID_TOKEN` and a `webauthn_counter_regression` audit event (WebAuthn's clone-detection signal). `clientData.origin` and `authenticatorData.rpIdHash` are checked against the configured `webauthn.{origin, rpId}` on every ceremony. (`auth/webauthn.ts`, gh/geldata#6725)
+
+#### Discoverable credentials / passkeys (gh/geldata#7196)
+
+`beginWebAuthnRegistration` emits `authenticatorSelection: { residentKey: "preferred", userVerification: "preferred" }` by default — passkey-capable authenticators store user-handle metadata locally so future logins can start without the user typing their email first (`beginWebAuthnLogin` without an `email` argument issues an unscoped challenge; `finishWebAuthnLogin` resolves the credential and only enforces user binding when `begin` pinned a userId).
+
+For security-sensitive deployments where every credential **must** be discoverable (no fallback to non-resident keys), set `requireResidentKey` on `WebAuthnConfig`:
+
+```typescript
+const config: AuthConfig = {
+  jwtSecret: "...",
+  webauthn: {
+    rpId: "example.com",
+    rpName: "Acme",
+    origin: "https://example.com",
+    requireResidentKey: true, // upgrades both residentKey to "required" and the legacy requireResidentKey flag
+  },
+};
+```
+
+Login already supported the discoverable-credential path; this only changes registration.
 
 ### Anonymous / Guest Identity
 

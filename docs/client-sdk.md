@@ -9,12 +9,7 @@ The Disc TypeScript SDK provides a typed HTTP client for querying a Disc server,
 Import from the SDK module directly:
 
 ```typescript
-import {
-  AuthManager,
-  createClient,
-  createSubscriptionClient,
-  DiscClient
-} from "disc/sdk/mod.ts";
+import { AuthManager, createClient, createSubscriptionClient, DiscClient } from "disc/sdk/mod.ts";
 ```
 
 If you have generated a typed client with `disc codegen`, you can import the generated types alongside the SDK:
@@ -38,19 +33,19 @@ const client = createClient({
   headers: { "X-Custom-Header": "value" },
   retries: 3,
   retryDelay: 1000,
-  timeout: 30000
+  timeout: 30000,
 });
 ```
 
 ### Configuration Options
 
-| Option       | Type                      | Default                    | Description                                                 |
-| ------------ | ------------------------- | -------------------------- | ----------------------------------------------------------- |
-| `baseUrl`    | `string`                  | `"http://localhost:5656"`  | URL of the Disc server                                      |
-| `headers`    | `Record<string, string>`  | `{}`                       | Custom headers included with every request                  |
-| `retries`    | `number`                  | `0`                        | Number of retries on network or server errors               |
-| `retryDelay` | `number`                  | `1000`                     | Base delay between retries in milliseconds (linear backoff) |
-| `timeout`    | `number`                  | `30000`                    | Request timeout in milliseconds                             |
+| Option       | Type                     | Default                   | Description                                                 |
+| ------------ | ------------------------ | ------------------------- | ----------------------------------------------------------- |
+| `baseUrl`    | `string`                 | `"http://localhost:5656"` | URL of the Disc server                                      |
+| `headers`    | `Record<string, string>` | `{}`                      | Custom headers included with every request                  |
+| `retries`    | `number`                 | `0`                       | Number of retries on network or server errors               |
+| `retryDelay` | `number`                 | `1000`                    | Base delay between retries in milliseconds (linear backoff) |
+| `timeout`    | `number`                 | `30000`                   | Request timeout in milliseconds                             |
 
 The `DiscClient` class can also be instantiated directly if you prefer:
 
@@ -76,7 +71,7 @@ const users = await client.query<User[]>("select User { email, name }");
 const user = await client.query<User>(
   `select User { email, name }
    filter .email = <str>$email`,
-  { email: "ada@example.com" }
+  { email: "ada@example.com" },
 );
 
 // Insert
@@ -85,7 +80,7 @@ const newUser = await client.query<User>(
     email := <str>$email,
     name := <str>$name
   }`,
-  { email: "billie@example.com", name: "Billie" }
+  { email: "billie@example.com", name: "Billie" },
 );
 
 // Update
@@ -93,13 +88,13 @@ await client.query(
   `update User
    filter .email = <str>$email
    set { name := <str>$name }`,
-  { email: "billie@example.com", name: "Robert" }
+  { email: "billie@example.com", name: "Robert" },
 );
 
 // Delete
 await client.query(
   `delete User filter .email = <str>$email`,
-  { email: "billie@example.com" }
+  { email: "billie@example.com" },
 );
 ```
 
@@ -138,7 +133,7 @@ interface QueryResponse<T = unknown> {
 
 interface QueryError {
   extensions?: Record<string, unknown>;
-  locations?: Array<{ column: number; line: number; }>;
+  locations?: Array<{ column: number; line: number }>;
   message: string;
   path?: Array<string | number>;
 }
@@ -237,7 +232,7 @@ const client = createClient({ baseUrl: "http://localhost:5656" });
 
 const auth = new AuthManager(client, {
   autoRefresh: true, // automatically refresh tokens before expiry (default: true)
-  refreshBuffer: 60  // seconds before expiry to trigger refresh (default: 60)
+  refreshBuffer: 60, // seconds before expiry to trigger refresh (default: 60)
 });
 ```
 
@@ -248,7 +243,7 @@ const response = await auth.register({
   email: "ada@example.com",
   metadata: { department: "engineering" }, // optional
   password: "secure-password-123",
-  username: "ada"                        // optional
+  username: "ada", // optional
 });
 
 // response contains:
@@ -266,13 +261,13 @@ After registration, the client is automatically authenticated. All subsequent qu
 // Login with email
 const response = await auth.login({
   email: "ada@example.com",
-  password: "secure-password-123"
+  password: "secure-password-123",
 });
 
 // Login with username
 const response = await auth.login({
   password: "secure-password-123",
-  username: "ada"
+  username: "ada",
 });
 ```
 
@@ -280,7 +275,7 @@ const response = await auth.login({
 
 ```typescript
 auth.isAuthenticated(); // true if a token is set on the client
-auth.getUser();         // cached AuthUser from the last login/register call
+auth.getUser(); // cached AuthUser from the last login/register call
 ```
 
 `getUser()` returns the user from the most recent successful `login()` or `register()` call without making a server request. Returns `null` if no session is active.
@@ -349,7 +344,7 @@ Transactions execute multiple queries atomically. The SDK uses a callback patter
 const result = await client.transaction(async (tx) => {
   const user = await tx.query<User>(
     `insert User { email := <str>$email, name := <str>$name }`,
-    { email: "cher@example.com", name: "Cher" }
+    { email: "cher@example.com", name: "Cher" },
   );
 
   await tx.query(
@@ -358,7 +353,7 @@ const result = await client.transaction(async (tx) => {
       body := <str>$body,
       title := <str>$title
     }`,
-    { body: "Written atomically.", title: "First Post", userId: user.id }
+    { body: "Written atomically.", title: "First Post", userId: user.id },
   );
 
   return user;
@@ -416,9 +411,9 @@ import { createSubscriptionClient } from "disc/sdk/mod.ts";
 const sub = createSubscriptionClient(
   { baseUrl: "http://localhost:5656" },
   {
-    autoReconnect: true,     // reconnect on disconnect (default: true)
+    autoReconnect: true, // reconnect on disconnect (default: true)
     maxReconnectAttempts: 5, // max reconnect attempts (default: 5)
-    reconnectDelay: 1000     // base delay in ms (default: 1000)
+    reconnectDelay: 1000, // base delay in ms (default: 1000)
   },
 );
 
@@ -441,9 +436,9 @@ const handle = sub.subscribe<User[]>(
     },
     onError: (error) => {
       console.error("Subscription error:", error.message);
-    }
+    },
   },
-  { status: "active" } // optional variables
+  { status: "active" }, // optional variables
 );
 ```
 
@@ -451,7 +446,7 @@ The `subscribe()` method returns a `SubscriptionHandle`:
 
 ```typescript
 interface SubscriptionHandle {
-  id: string;              // unique subscription ID
+  id: string; // unique subscription ID
   unsubscribe: () => void; // unsubscribe from this subscription
 }
 ```
@@ -470,7 +465,7 @@ sub.unsubscribe(handle.id);
 
 ```typescript
 sub.isConnected(); // true when WebSocket is in OPEN state
-sub.close();       // close the connection and clean up all subscriptions
+sub.close(); // close the connection and clean up all subscriptions
 ```
 
 Calling `close()` prevents any further reconnection attempts.
@@ -516,14 +511,7 @@ All SDK errors extend `DiscClientError`, which carries a `code` property from th
 ### Catching Specific Errors
 
 ```typescript
-import {
-  DiscAuthError,
-  DiscConnectionError,
-  DiscErrorCode,
-  DiscQueryError,
-  DiscServerError,
-  DiscTimeoutError
-} from "disc/sdk/mod.ts";
+import { DiscAuthError, DiscConnectionError, DiscErrorCode, DiscQueryError, DiscServerError, DiscTimeoutError } from "disc/sdk/mod.ts";
 
 try {
   const users = await client.query("select User { email, name }");
@@ -632,7 +620,7 @@ When the server has multi-database support enabled, you can target a specific da
 ```typescript
 const client = createClient({
   baseUrl: "http://localhost:5656",
-  headers: { "X-Database": "analytics" }
+  headers: { "X-Database": "analytics" },
 });
 
 const data = await client.query("select Event { name, timestamp }");
@@ -663,6 +651,63 @@ The server resolves the database name in this order:
 
 ---
 
+## Codegen-free query builder
+
+A runtime DSL that gives the same end-to-end type safety as [`disc codegen`](codegen.md) without producing any generated files. Useful when CI shouldn't carry a codegen step or when the schema lives in TypeScript next to the application code.
+
+### Declare the schema in TypeScript
+
+`defineSchema()` accepts a record of type definitions; field markers come from the `t.*` namespace:
+
+```typescript
+import { defineSchema, t } from "disc/sdk/mod.ts";
+
+export const schema = defineSchema({
+  User: {
+    email: t.str(),
+    name: t.optional(t.str()),
+    score: t.int64(),
+    posts: t.multi("Post"),
+  },
+  Post: {
+    title: t.str(),
+    body: t.optional(t.str()),
+    author: t.single("User"),
+  },
+});
+```
+
+The `t.*` markers carry compile-time type information; `defineSchema()` validates at construction (PascalCase type names, valid field names, link targets that resolve to defined types) and throws synchronously on misuse.
+
+### Build typed queries
+
+`createQueryBuilder(client, schema)` returns a Proxy where each property is a typed selection chain:
+
+```typescript
+import { createClient, createQueryBuilder } from "disc/sdk/mod.ts";
+import { schema } from "./schema.ts";
+
+const client = createClient();
+const qb = createQueryBuilder(client, schema);
+
+// Awaiting the chain runs the query through `client.query()`.
+const users = await qb.User
+  .select({ email: true, name: true })
+  .filter((u) => u.email.eq("alice@example.com"))
+  .first();
+//    ^? { email: string; name: string | null } | null
+```
+
+`select` narrows the awaited row type to the picked shape. `filter` predicates receive a typed reference where each property accepts only the right comparison operand: `u.email.eq(...)` requires a `string`, `u.score.gt(...)` requires a `number`. Identifier safety is enforced at construction so schema typos fail before reaching the server.
+
+### Composability with `client.query`
+
+The query builder compiles to the same EdgeQL strings the raw `client.query("select User { ... }")` path does and runs through the same access-policy + read-only + auth-gate pipeline. The two patterns interoperate freely — pick whichever reads better at the call site, no migration needed.
+
+(`sdk/query-builder.ts`, `sdk/schema-types.ts`)
+
+---
+
 ## TypeScript Types
 
 When using generated types from `disc codegen`, you can pass them as type parameters to `query()` for full type safety:
@@ -681,7 +726,7 @@ const users = await client.query<User[]>("select User { email, name }");
 const result = await client.transaction(async (tx) => {
   const user = await tx.query<User>(
     `insert User { email := <str>$email, name := <str>$name }`,
-    { email: "daena@example.com", name: "Daena" }
+    { email: "daena@example.com", name: "Daena" },
   );
 
   return user; // typed as User
@@ -718,7 +763,6 @@ The complete list of exports from `disc/sdk/mod.ts`:
 | `SubscriptionClient` | WebSocket subscription client             |
 | `Transaction`        | Transaction handle (received in callback) |
 
-
 ### Factory Functions
 
 | Export                                        | Description                            |
@@ -728,18 +772,18 @@ The complete list of exports from `disc/sdk/mod.ts`:
 
 ### Error Classes
 
-| Export                | Description                          |
-| --------------------- | ------------------------------------ |
-| `DiscAuthError`       | Authentication/authorization failure |
-| `DiscClientError`     | Base error class                     |
-| `DiscConnectionError` | Server unreachable                   |
-| `DiscErrorCode`       | Error code enum                      |
-| `DiscNetworkError`    | Network failure                      |
-| `DiscProtocolError`   | Unexpected response format           |
-| `DiscQueryError`      | Query execution error                |
-| `DiscServerError`     | Server 5xx error                     |
-| `DiscTimeoutError`    | Request timeout                      |
-| `DiscTransactionError`| Invalid transaction state            |
+| Export                 | Description                          |
+| ---------------------- | ------------------------------------ |
+| `DiscAuthError`        | Authentication/authorization failure |
+| `DiscClientError`      | Base error class                     |
+| `DiscConnectionError`  | Server unreachable                   |
+| `DiscErrorCode`        | Error code enum                      |
+| `DiscNetworkError`     | Network failure                      |
+| `DiscProtocolError`    | Unexpected response format           |
+| `DiscQueryError`       | Query execution error                |
+| `DiscServerError`      | Server 5xx error                     |
+| `DiscTimeoutError`     | Request timeout                      |
+| `DiscTransactionError` | Invalid transaction state            |
 
 ### Types
 
