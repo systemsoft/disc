@@ -48,6 +48,27 @@ export class DDLGenerator {
    * handlers when they encounter cross-table references.
    */
   private deferredStatements: string[] = [];
+  /**
+   * Names of user-declared enum scalars that should resolve to PG
+   * `disc_enum_<name>` types instead of the default `TEXT` fallback in
+   * `mapEdgeQLTypeToPostgreSQL`. Populated via {@link setEnumScalars}
+   * — callers that don't set anything get the historical TEXT-fallback
+   * behavior so direct/test callers without a schema context still
+   * work. (gh/geldata#8517)
+   */
+  private enumScalars = new Set<string>();
+
+  /**
+   * Tell the generator which scalar names are enum-typed so column
+   * emission resolves them to their PG enum type. Pass the post-state
+   * schema's scalars — the cascade-ordering pass guarantees scalar
+   * `CREATE TYPE`s fire before any column referencing them. Callers
+   * who don't know (or don't need to know) about enum scalars can skip
+   * this; column emission falls back to TEXT.
+   */
+  setEnumScalars(names: Iterable<string>): void {
+    this.enumScalars = new Set(names);
+  }
 
   generateDDL(operations: Types.MigrationOperation[]): string[] {
     this.createdJunctionTables.clear();
@@ -1378,6 +1399,19 @@ END $$;`,
     // Tuple types map to JSONB (PostgreSQL has no native tuple type)
     if (edgeqlType.startsWith("tuple<")) {
       return "JSONB";
+    }
+
+    // User-declared enum scalar — resolve to the PG enum type emitted
+    // by `generateCreateScalar`. (gh/geldata#8517) Falls through to
+    // TEXT below when no scalar registry was supplied (back-compat).
+    // The property's `type` string may be qualified (`module::Name`)
+    // or bare (`Name`); strip the module prefix when constructing the
+    // PG enum type name so we always get `disc_enum_<simplename>`.
+    if (this.enumScalars.has(edgeqlType)) {
+      const simpleName = edgeqlType.includes("::")
+        ? edgeqlType.slice(edgeqlType.lastIndexOf("::") + 2)
+        : edgeqlType;
+      return this.escapeIdentifier(this.enumTypeName(simpleName));
     }
 
     return "TEXT";

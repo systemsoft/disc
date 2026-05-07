@@ -70,6 +70,15 @@ export class MigrationEngine {
     newSchema: Module[],
   ): Result<Types.MigrationPlan, MigrationError> {
     try {
+      // Prime the DDL generator's enum scalar registry from the
+      // post-state schema. (gh/geldata#8517) Without this, properties
+      // typed as a user-declared enum scalar (`status: Status`) would
+      // emit columns of type TEXT instead of `disc_enum_status`. The
+      // cascade reorder pass in the differ guarantees scalar
+      // `CREATE TYPE`s fire before any column referencing them, so
+      // setting the registry from `newSchema` is safe even mid-batch.
+      this.ddlGenerator.setEnumScalars(this.differ.enumScalarNames(newSchema));
+
       const operations = oldSchema ? this.differ.diff(oldSchema, newSchema) : this.generateInitialMigration(newSchema);
 
       const migration: Types.Migration = {

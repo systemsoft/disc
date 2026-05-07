@@ -229,7 +229,74 @@ export class SchemaDiffer {
       }
     }
 
-    return operations;
+    return this.reorderForCascade(operations);
+  }
+
+  /**
+   * Cascade-aware reordering pass. (gh/geldata#8517)
+   *
+   * Once a property's PG type can be `disc_enum_<name>` (via the
+   * scalar registry on DDLGenerator), operation order matters in PG:
+   *
+   *   - `CREATE TYPE` for an enum must run **before** any
+   *     `ADD COLUMN ... <enum_type>` referencing it.
+   *   - `DROP TYPE` (and the destructive `RecreateScalar` path) must
+   *     run **after** any `DROP COLUMN`/`ALTER COLUMN TYPE` that
+   *     removes the dependency, otherwise PG refuses the drop.
+   *
+   * Three buckets, stable within each: enum-creates first,
+   * everything else in the middle (preserves the existing diff order),
+   * enum-drops/recreates last. `AddEnumValue` sits in the create
+   * bucket — it grows the enum's value set non-destructively, so
+   * doing it before columns reference the new value is always safe.
+   */
+  private reorderForCascade(
+    operations: Types.MigrationOperation[],
+  ): Types.MigrationOperation[] {
+    const creates: Types.MigrationOperation[] = [];
+    const middle: Types.MigrationOperation[] = [];
+    const drops: Types.MigrationOperation[] = [];
+    for (const op of operations) {
+      switch (op.kind) {
+        case "CreateScalar":
+        case "AddEnumValue":
+          creates.push(op);
+          break;
+        case "DropScalar":
+        case "RecreateScalar":
+          drops.push(op);
+          break;
+        default:
+          middle.push(op);
+      }
+    }
+    return [...creates, ...middle, ...drops];
+  }
+
+  /**
+   * Names of every enum-typed scalar declared in `schema`. Used to
+   * prime `DDLGenerator.setEnumScalars(...)` so column emission
+   * resolves user scalar names to their PG `disc_enum_<name>` type
+   * instead of the TEXT fallback. Non-enum scalars are excluded
+   * because they map to the underlying PG type at column emission and
+   * have no PG type of their own. (gh/geldata#8517)
+   *
+   * Returns both qualified (`module::Name`) and unqualified (`Name`)
+   * forms because property type strings can appear either way
+   * depending on how the SDL referenced the scalar — properties in
+   * the same module typically use the bare name; cross-module
+   * references use the qualified form.
+   */
+  enumScalarNames(schema: Module[]): Set<string> {
+    const names = new Set<string>();
+    const scalars = this.extractScalars(schema);
+    for (const [qualifiedName, def] of scalars) {
+      if (this.isEnumScalar(def.decl)) {
+        names.add(qualifiedName);
+        names.add(def.decl.name.value);
+      }
+    }
+    return names;
   }
 
   private extractTypes(modules: Module[]): Map<string, AST.TypeDeclaration> {

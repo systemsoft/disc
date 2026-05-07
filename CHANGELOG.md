@@ -32,6 +32,36 @@ tag is cut.
 
 ### Added
 
+- **Scalar/enum migration end-to-end** (gh/geldata#8517 full impl).
+  Bundle F shipped scalar diffing (`CreateScalar` / `DropScalar` /
+  `AddEnumValue` / `RecreateScalar`), but properties typed as a
+  user-declared enum scalar still emitted columns of `TEXT` because
+  `mapEdgeQLTypeToPostgreSQL` had no way to recognise user types. Two
+  follow-ups close the gap:
+  - **Column wiring via a scalar registry on `DDLGenerator`.** New
+    `setEnumScalars(names)` method registers enum-scalar names so the
+    type mapper resolves them to `disc_enum_<name>` instead of falling
+    through to `TEXT`. The registry is checked after the built-in
+    type map, so it can never shadow real types. `MigrationEngine.
+    planMigration` primes it from the post-state schema's enum
+    scalars, picking up both unqualified (`Status`) and qualified
+    (`module::Status`) property type strings. Direct callers that
+    don't set the registry get the historical TEXT-fallback behavior
+    (back-compat).
+  - **Cascade-aware operation ordering pass.** New `reorderForCascade`
+    in `SchemaDiffer.diff` slots `CreateScalar` / `AddEnumValue`
+    before object-type changes so column adds can reference a brand-
+    new enum, and slots `DropScalar` / `RecreateScalar` after object-
+    type changes so column drops or migrations remove the dependency
+    before PG sees the type drop. Stable order within each bucket
+    preserves the existing diff sequencing. New `enumScalarNames`
+    helper used by the engine to extract the registry input.
+  - 10 new tests in `migration/scalar-cascade.test.ts` covering
+    column wiring (with/without registry, qualified-name handling),
+    engine-level wiring (`planMigration` → `generateDDL` round-trip),
+    and the four ordering invariants (CreateScalar-before-CreateType,
+    DropScalar-after-AlterType, RecreateScalar-after-object-drops,
+    AddEnumValue-grouped-with-creates).
 - **Hover and completion inside embedded EdgeQL strings** (LSP Phase 6).
   When the cursor sits inside an eql-tagged template literal in a TS or
   JS host file, hover surfaces a Markdown description for EdgeQL
