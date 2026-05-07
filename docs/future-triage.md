@@ -288,13 +288,18 @@ Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** 
 | #4806 | PR preview environments      | cloud    | Uffizzi-style; nice-to-have            | M      |
 | #3534 | Listen on multiple TCP ports | infra    | Niche; only when self-host requests it | M      |
 
-#### Docs (3)
+#### Docs (0)
 
-| #                     | Title                              | Category | Why pickable                   | Effort |
-| --------------------- | ---------------------------------- | -------- | ------------------------------ | ------ |
-| #6127                 | Test guide                         | docs     | We have tests; write the guide | S      |
-| #6119 / #5820 / #5819 | Document UI / UI button visibility | docs     | UI documentation pass          | S      |
-| #7382                 | Improved docs search               | docs     | Search infra; deferrable       | M      |
+> **Bundle WW closed the docs cluster (#6127 + #6119/#5820/#5819 + #7382).**
+> #6127 shipped `docs/testing.md` (test-author guide). #6119/#5820/#5819
+> extended `docs/admin-ui.md` so every nav entry has a matching section
+> heading + added Builder / Disc / Config sections. #7382 added a
+> "Searching" section to `docs/index.md` documenting the actual search
+> affordances (browser ⌘F, GitHub repo search, `grep`) rather than
+> wiring up an Algolia/Lunr-style index — Disc's docs are plain
+> Markdown with no docs site to attach a search backend to.
+
+(All docs items in the BUILD column are now closed.)
 
 #### Stretch (2)
 
@@ -303,11 +308,10 @@ Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** 
 | #648  | SQLite back-end    | db, storage | Stretch — Disc is Postgres-first; deferrable | L      |
 | #7724 | Extension upgrades | migration   | We have an extension model already           | M      |
 
-**Pickable: ~8 items** (Bundles LL + MM + NN + OO + PP + QQ + RR + SS + TT + UU + VV closed 11 fixes + pinned 16 across migration-perf, auth-semantics, CLI/devtools, DB/engine, cloud/infra, migration-robustness, full auth/access introspection, migration narrative, and #6432 in its entirety). Highest-leverage clusters:
+**Pickable: ~5 items** (Bundles LL + MM + NN + OO + PP + QQ + RR + SS + TT + UU + VV + WW closed 14 fixes + pinned 19 across migration-perf, auth-semantics, CLI/devtools, DB/engine, cloud/infra, migration-robustness, full auth/access introspection, migration narrative, the docs cluster, and #6432 in its entirety). Highest-leverage clusters remaining:
 
-1. **Docs** — #6127 test guide + #7382 docs search + #6119/#5820/#5819 UI docs (operator-onboarding)
+1. **DB/engine** — #3510 external UUIDs + #5505/#6517 access-policy perf + #1634 connection pool (operator-ergonomics)
 2. **Stretch** — #7724 extension upgrades (long-tail roadmap; #648 SQLite is DROPPED — see "Mini-Disc" note)
-3. **DB/engine** — #3510 external UUIDs + #5505/#6517 access-policy perf + #1634 connection pool (operator-ergonomics)
 
 ### SKIP — not applicable to Disc
 

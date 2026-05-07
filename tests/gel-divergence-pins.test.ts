@@ -1405,3 +1405,112 @@ Deno.test("Gel #6432 slice 4: `disc admin test-policy` runs a policy in isolatio
     "cli/main.ts must route `admin test-policy` to adminCommand.testPolicy (Gel #6432 slice 4 pin).",
   );
 });
+
+// ---------------------------------------------------------------------------
+// gh/geldata#6127 — "test guide" docs ask. Bundle WW shipped
+// `docs/testing.md` covering the unit/PG-integration split, the
+// `EnvMock` discipline, and how to author new tests against the real
+// command surface (rather than the deprecated module-local
+// `mock<Command>` helpers from earlier sessions). The pin asserts the
+// guide stays in place + cross-links to `tests/TESTING.md`.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #6127: docs/testing.md carries the test-author guide", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../docs/testing.md", import.meta.url),
+  );
+  for (
+    const heading of [
+      "# Testing",
+      "## Running the suite",
+      "## Test categories",
+      "## Authoring new tests",
+      "## Env isolation",
+      "## PG-backed tests",
+    ]
+  ) {
+    assert(
+      src.includes(heading),
+      `docs/testing.md must keep '${heading}' section (Gel #6127 pin).`,
+    );
+  }
+  // Cross-link to the in-repo notes doc must stay in place.
+  assert(
+    src.includes("tests/TESTING.md"),
+    "docs/testing.md must cross-link to tests/TESTING.md (Gel #6127 pin).",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#6119 + #5820 + #5819 — "Document UI / UI button visibility"
+// ask. Bundle WW extends `docs/admin-ui.md` to cover every nav entry
+// shipped in `ui/src/routes/+layout.svelte` (Dashboard, Schema, Diff,
+// Data, Query, Builder, Disc, REPL, Migrations, Config). The pin walks
+// the layout file, extracts the labels, and asserts each one has a
+// matching `## <label>` section in the doc.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #6119/#5820/#5819: every UI nav entry is documented in admin-ui.md", async () => {
+  const layoutSrc = await Deno.readTextFile(
+    new URL("../ui/src/routes/+layout.svelte", import.meta.url),
+  );
+  const docSrc = await Deno.readTextFile(
+    new URL("../docs/admin-ui.md", import.meta.url),
+  );
+  // Pull every nav `label: '...'` from the layout. Order in the
+  // layout determines reading order in the doc — but the pin only
+  // asserts presence (each label should be a top-level `## ` or
+  // `### ` heading anywhere in the doc).
+  const labels = [...layoutSrc.matchAll(/label:\s*['"]([^'"]+)['"]/g)].map(
+    (m) => m[1],
+  );
+  assert(
+    labels.length >= 8,
+    `+layout.svelte must declare at least 8 nav labels (Gel #6119 pin) — found ${labels.length}.`,
+  );
+  for (const label of labels) {
+    // Heading match — case-insensitive, allows `## Dashboard` /
+    // `### Dashboard` / `## Dashboard (...)` etc.
+    const headingRegex = new RegExp(
+      `^#{2,3}\\s+${label.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}\\b`,
+      "im",
+    );
+    assert(
+      headingRegex.test(docSrc),
+      `docs/admin-ui.md must document the '${label}' nav entry (Gel #6119/#5820/#5819 pin).`,
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#7382 — "improved docs search" ask. Disc maintains its own
+// docs at `/docs/` as plain Markdown, served via GitHub's blob/raw
+// browser. There's no docs site infrastructure to plug a search index
+// into — `docs/index.md` is the table-of-contents entry point and the
+// search story rides on file-grep + the `Quick Links` table at the top
+// of `docs/index.md`. Bundle WW documents this explicitly so a future
+// session doesn't waste cycles trying to wire up Algolia/Lunr.
+//
+// The pin asserts `docs/index.md` carries a "Searching" section that
+// names the actual search affordances (browser ⌘F, GitHub repo
+// search, `grep` over the `docs/` tree).
+// ---------------------------------------------------------------------------
+Deno.test("Gel #7382: docs/index.md carries a Searching section", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../docs/index.md", import.meta.url),
+  );
+  assert(
+    /## Searching/.test(src),
+    "docs/index.md must keep the 'Searching' section (Gel #7382 pin).",
+  );
+  // The three search affordances callers actually have:
+  for (
+    const phrase of [
+      "GitHub",
+      "grep",
+    ]
+  ) {
+    assert(
+      src.toLowerCase().includes(phrase.toLowerCase()),
+      `docs/index.md Searching section must mention '${phrase}' (Gel #7382 pin).`,
+    );
+  }
+});

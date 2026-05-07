@@ -25,6 +25,7 @@ Disc is a schema-first, TypeScript-native database built on Deno. It sits on top
 | Deploy to production                 | [Production Deployment](production-deployment.md) |
 | Tune queries, indexes, and caches    | [Performance](performance.md)                     |
 | Run Disc via Docker Compose          | [Docker Compose](docker-compose.md)               |
+| Run and write tests                  | [Testing](testing.md)                             |
 | See what's new in this release       | [CHANGELOG](../CHANGELOG.md)                      |
 
 ---
@@ -38,6 +39,18 @@ Disc is a schema-first, TypeScript-native database built on Deno. It sits on top
 **Bundled PostgreSQL.** Running `disc init` downloads and manages a PostgreSQL instance automatically. Users never install, configure, or maintain PostgreSQL directly. For production, an external PostgreSQL can be connected via `--backend-dsn`.
 
 **TypeScript-native.** The entire stack -- schema parser, query compiler, migration engine, server, CLI, and SDK -- is written in TypeScript and runs on Deno. No Python, Rust, or Java dependencies.
+
+---
+
+## Searching
+
+Disc's docs live as plain Markdown under [`docs/`](.) in the source repo — there is deliberately no docs site infrastructure to plug a search index into. The "search story" is the standard tools your editor and browser already give you:
+
+- **Browser ⌘F / Ctrl+F** — every page is a single Markdown file, so in-page search hits everything you'd want from a search box. The "Quick Links" table near the top of this page is a cross-reference into every doc; once you're on the right page, in-page search closes the loop.
+- **GitHub repo search** — the repo's [GitHub search](https://github.com/systemsoft/disc/search?q=&type=) indexes docs along with code, so a query for `disc admin test-policy` returns both the doc reference and the implementation. This is usually the fastest way to answer "where is X documented and where does it live in the code?".
+- **`grep -rn ... docs/`** — the local-checkout equivalent. Useful when you want every match across docs and code, or when you're offline. The whole `docs/` tree is one shallow directory so flat grep works fine.
+
+If a future Disc release ships a docs website (e.g., via mdBook, Docusaurus, or VitePress), that site will get a real search box and this section will document how to use it instead.
 
 ---
 
@@ -61,4 +74,5 @@ Disc is a schema-first, TypeScript-native database built on Deno. It sits on top
 - [Production Deployment](production-deployment.md) -- TLS, connection pools, health checks, rate limiting, Docker, native binaries, systemd, monitoring.
 - [Performance](performance.md) -- Indexing strategy, EXPLAIN diagnostics, parse/compile/EXPLAIN caches, pool tuning, key Prometheus gauges.
 - [Docker Compose](docker-compose.md) -- Self-hosted Disc + bundled PostgreSQL via `docker compose up`.
+- [Testing](testing.md) -- Running the suite, test categories, authoring new tests, env isolation, PG-backed tests.
 - [CHANGELOG](../CHANGELOG.md) -- Release notes in [Keep a Changelog](https://keepachangelog.com) format. New entries land under `[Unreleased]`; tagging promotes them into a dated block.

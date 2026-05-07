@@ -14,6 +14,42 @@ tag is cut.
 
 ## [Unreleased]
 
+### Docs
+
+- **Test-author guide + UI doc completion + docs-search story** (Bundle WW — gh/geldata#6127 #6119 #5820 #5819 #7382).
+  - **`docs/testing.md`** (new — gh/geldata#6127): comprehensive testing guide
+    covering the non-PG vs PG-backed split (`deno task test` vs
+    `DISC_PG_AUTO=1 deno task test:pg`), test categories table,
+    naming/single-behavior/real-code-over-mocks discipline, the
+    `EnvMock` pattern from `tests/test-utils.ts`, structural-pin
+    pattern, common pitfalls (`server.start()` returns `finished`,
+    response-body leak detection, `LoginResult` narrowing), and
+    cross-link to `tests/TESTING.md` for implementation-level notes.
+  - **`docs/admin-ui.md` extended** (gh/geldata#6119 #5820 #5819):
+    every nav entry shipped in `ui/src/routes/+layout.svelte` now has
+    a matching top-level section. Renamed existing headings to lead
+    with the nav label (`## Schema Browser` → `## Schema`,
+    `## Query Editor` → `## Query`, `## Data Viewer` → `## Data`,
+    `## Live Schema Diff` → `## Diff`, `## Migration History` →
+    `## Migrations`). Added missing sections for **Builder** (visual
+    query builder, Bundle N), **Disc** (identity-disc visualization,
+    Bundle O), and **Config** (server config registry surface, Bundle
+    "post-V0.2.0 BUILD"). The pin in `tests/gel-divergence-pins.test.ts`
+    walks `+layout.svelte` for every `label: '...'` and asserts each
+    one has a matching `## <label>` heading in the doc, so future nav
+    additions trip the pin and have to be documented.
+  - **`docs/index.md` Searching section** (gh/geldata#7382): documents
+    the actual search affordances (browser ⌘F, GitHub repo search,
+    `grep -rn ... docs/`) rather than wiring up a docs-site search
+    index. Disc's docs are plain Markdown under `docs/`; there's no
+    docs site to attach Algolia/Lunr to. The "Quick Links" table at
+    the top of `index.md` is the cross-reference; in-page search
+    closes the loop. New row in Quick Links + ToC for `docs/testing.md`.
+  - **3 new structural pins** in `tests/gel-divergence-pins.test.ts`
+    (was 33, now 36): #6127 testing-guide section pin, #6119/#5820/#5819
+    nav-coverage pin (auto-walks the layout, no list-maintenance
+    burden), #7382 searching-section pin.
+
 ### Added
 
 - **`disc admin test-policy`** (Bundle VV — gh/geldata#6432 slice 4).

@@ -40,7 +40,7 @@ Below the summary cards, two panels appear side by side:
 
 ---
 
-## Schema Browser
+## Schema
 
 Navigate to **Schema** in the header bar, or go to `/ui/schema`.
 
@@ -59,7 +59,7 @@ The `SchemaTree` component provides an alternative tree view of the schema organ
 
 ---
 
-## Query Editor
+## Query
 
 Navigate to **Query** in the header bar, or go to `/ui/query`.
 
@@ -84,9 +84,41 @@ The query editor provides a code editing environment for writing and executing E
 
 **Multi-tab support.** The `QueryEditor` component supports multiple tabs. Click the "+" button to open a new query tab. Each tab maintains its own query text independently. Close tabs with the "x" button on the tab  label.
 
+## Builder
+
+Navigate to **Builder** in the header bar, or go to `/ui/query-builder`. This is Disc's visual query builder — a Disc-original feature (Bundle N, #3b in `docs/disc-original-features.md`) that doesn't exist in Gel's UI.
+
+The page is a two-column layout. The **left column** is the form: pick a root type from the dropdown, tick the scalar fields you want returned, optionally tick links and the fields to inline from each link, add filter rows (operator + parameterized value), set order/limit/offset. The **right column** is the synthesized EdgeQL — it updates live as you change the form, so every choice you make corresponds to a line in the query that runs.
+
+A **Copy** button in the EdgeQL pane copies the current query + variables to the clipboard. A **Run** button executes the query through the same `/query` pipeline as the Query editor — so access policies, read-only mode, and the auth gate compose identically. Results render in the same table-or-JSON view as the Query and Data pages, so the mental model carries over.
+
+Filter operators supported: `=`, `!=`, `<`, `<=`, `>`, `>=`. Multiple filters AND together with parens. Link expansion is one level deep — deeper nesting is supported by EdgeQL but the form doesn't surface it (use the Query editor for those). Cross-link filters (e.g., `.author.email = ...`) are scoped out of v1.
+
+Identifier safety is enforced before any name lands in the EdgeQL string: type names, shape fields, link names, and order fields are all validated against `^[a-zA-Z_][a-zA-Z0-9_]*$`. Synthesis errors surface inline.
+
+The Builder pairs naturally with the Query editor: build a starting query visually, copy it across, then refine in raw EdgeQL.
+
 ---
 
-## Data Viewer
+## Disc
+
+Navigate to **Disc** in the header bar, or go to `/ui/disc`. This is the **identity-disc visualization** — a Disc-original feature (Bundle O, #3d in `docs/disc-original-features.md`) and the page that gave the project its name. Click an object and see it as a luminous TRON-style disc, with outgoing links radiating out one side and incoming references arriving on the other.
+
+**Picker bar.** Pick a type from the first dropdown; the second dropdown populates with up to 25 of that type's objects (using a heuristic display field — `name` → `title` → `email` → `label`, falling back to a truncated id). Click **Show disc** to render.
+
+**Disc canvas.** The selected object sits at the center, glowing. Two TRON-aesthetic concentric rings frame the orbit. Outgoing links sweep a 120° arc on the right semicircle (centered on 3 o'clock). Incoming references sweep the same arc on the left (centered on 9 o'clock). Each cluster carries one orbital node labeled with the type and target; clusters of multiple links show a `+N` count badge.
+
+**Navigation.** Click any orbital node to recenter the disc on that object. The previous center pushes onto a breadcrumb stack — a **← Back (N)** button pops back through the trail, so you can drill into a graph and walk back without losing your place.
+
+**Data shape.** Outgoing data comes from one query that walks `type.links` and inlines `{ id, displayField }` for every link. Incoming data comes from a schema-walk of every type's links looking for ones that target the centered type, followed by a parallel `Promise.all` of `select Source filter .linkName.id = <uuid>$id limit 6` — forward-filter syntax keeps the request layer free of EdgeQL backlink syntax.
+
+What's deliberately not in v1: orbit animations, per-cluster expansion (multi-link clusters show `+N` but only navigate to the first target), abstract-type backlink walking, smarter display-field heuristics, and history persistence across page reloads.
+
+---
+
+---
+
+## Data
 
 Navigate to **Data** in the header bar, or go to `/ui/data`.
 
@@ -153,7 +185,7 @@ The REPL uses the same API endpoint (`/api/repl`) as the CLI shell, so behavior 
 
 ---
 
-## Live Schema Diff
+## Diff
 
 Navigate to **Diff** in the header bar, or go to `/ui/admin/schema`.
 
@@ -222,9 +254,21 @@ handler. In permissive (default-dev) mode the routes are reachable
 without authentication -- pair `requireAuth=true` with a deployed
 admin UI.
 
+## Config
+
+Navigate to **Config** in the header bar, or go to `/ui/config`. This page surfaces the running server's config registry — every `cfg::*` setting Disc knows about, with secret-aware masking so values marked with the built-in `@secret` annotation never leak into the page source.
+
+Each row shows the config key, its current value (masked as `••••••` for secrets), the type, and a brief description from `cfg::describe_settings()`. Secret rows carry a small **Reveal** button — click it to fetch the raw value through an admin-gated endpoint. Non-secret values are shown directly.
+
+The page is read-only — config changes go through `disc.toml` or environment variables, not the UI. The Config page exists so operators can verify what the running server is actually using without grepping logs or reading `disc.toml` from the host.
+
+The underlying API is `GET /config` — also useful from CLI/CI scripts. Secrets are masked there too unless an admin token is presented.
+
 ---
 
-## Migration History
+---
+
+## Migrations
 
 Navigate to **Migrations** in the header bar, or go to `/ui/migrations`.
 
