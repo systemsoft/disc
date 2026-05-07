@@ -14,6 +14,51 @@ tag is cut.
 
 ## [Unreleased]
 
+### Added
+
+- **Drift detection in `disc migrate --status`** (Bundle HH —
+  gh/geldata#8899). Status output now includes a `Schema status` line
+  computed by parsing `dbschema/<project>.disc` and running it through
+  the diff engine against the applied state. When the SDL matches the
+  database, the line reads `Schema status: in sync`; when it doesn't,
+  the line reads `Schema status: <N> pending operation(s)` followed
+  by up to 5 ops with their safety classification (`safe` / `unsafe` /
+  `ambiguous`) and a `Run disc migrate to apply.` hint. Operators who
+  only run `--status` to peek at history get the same answer without
+  changing their habit.
+- **Pre-migrate preflight: running-server detection** (Bundle HH —
+  gh/geldata#9034). Before each live migration, the CLI scans
+  `pg_stat_activity` for connections tagged
+  `application_name = 'disc-server'` (newly threaded via the
+  `applicationName` config field on `DatabaseConfig` /
+  `ConnectionPool`). When any are found it warns about stale-cache
+  risk and suggests a follow-up reload (admin UI Diff page → Apply,
+  or restart). Advisory-only — the migration still proceeds. The CLI
+  itself tags its own pool `disc-cli` so the preflight excludes its
+  own connection. Best-effort: silently no-ops if `pg_stat_activity`
+  is restricted. New `SchemaManager.detectRunningServers()` and
+  `SchemaManager.previewMigrationOps()` helpers underpin both items.
+
+### Internal
+
+- **Pinned divergence for `gh/geldata#7360`** (Bundle HH — login UX
+  for non-existing accounts). Disc landed timing equalization in
+  `auth/provider.ts:login` via P1-35 plus `gh/geldata#9137`. Both the
+  no-such-user and wrong-password branches throw `INVALID_CREDENTIALS`
+  at status 401 with the literal `"Invalid credentials"` message, and
+  both call `runDummyCompare` so the wall-clock matches a real bcrypt
+  verify. New pin in `tests/gel-divergence-pins.test.ts` walks
+  `provider.ts:login` to confirm both branches share the shape so a
+  future refactor can't drift them apart.
+- **Pinned divergence for `gh/geldata#3170`** (Bundle HH — misleading
+  disconnect log in CLI). Disc never adopted that log line; the CLI's
+  only shutdown path lives in `cli/shell.ts:cleanup()`, which writes a
+  single newline (P2-14) and closes the database without any
+  user-visible disconnect chatter. New pin asserts the absence of
+  `console.<level>([Dd]isconnected...)` calls across `cli/shell.ts`,
+  `cli/commands.ts`, and `cli/main.ts` so a future refactor adding
+  the log line lands deliberately rather than as a side-effect.
+
 ### Security
 
 - **Router-level lockdown for `/auth/*` routes** (Bundle GG —

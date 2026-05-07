@@ -19,6 +19,16 @@ export interface DatabaseConfig {
   password?: string;
   maxRetries?: number;
   retryDelay?: number;
+  /**
+   * `application_name` reported to PostgreSQL — visible in
+   * `pg_stat_activity.application_name` and the server log line
+   * prefix. The CLI's pre-migrate preflight uses it to detect a
+   * running Disc server attached to the same database
+   * (gh/geldata#9034). Defaults are set at the call sites:
+   * `disc-server` for the protocol pool, `disc-cli` for ad-hoc CLI
+   * connections.
+   */
+  applicationName?: string;
 }
 
 interface ParsedConnection {
@@ -54,9 +64,7 @@ export function parseConnectionString(dsn: string): ParsedConnection {
     const pathPart = atIdx >= 0 ? authAndPath.slice(atIdx + 1) : authAndPath;
 
     const [userPart, passPart] = authPart.split(":");
-    const database = pathPart.startsWith("/")
-      ? pathPart.slice(1)
-      : pathPart || "postgres";
+    const database = pathPart.startsWith("/") ? pathPart.slice(1) : pathPart || "postgres";
 
     return {
       hostname: hostParam[1],
@@ -95,6 +103,10 @@ export class DatabaseConnection {
   }
 
   private getClientConfig() {
+    // gh/geldata#9034: thread `application_name` so a running server's
+    // connections are visible in `pg_stat_activity` and a CLI preflight
+    // can detect them.
+    const applicationName = this.config.applicationName;
     if (this.config.connectionString) {
       const parsed = parseConnectionString(this.config.connectionString);
       if (parsed.host_type === "socket") {
@@ -104,6 +116,7 @@ export class DatabaseConnection {
           password: parsed.password,
           database: parsed.database,
           host_type: "socket" as const,
+          applicationName,
         };
       }
       return {
@@ -112,6 +125,7 @@ export class DatabaseConnection {
         user: parsed.user,
         password: parsed.password,
         database: parsed.database,
+        applicationName,
       };
     }
 
@@ -121,6 +135,7 @@ export class DatabaseConnection {
       user: this.config.user || "postgres",
       password: this.config.password || "",
       database: this.config.database || "postgres",
+      applicationName,
     };
   }
 

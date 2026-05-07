@@ -784,9 +784,7 @@ export class SchemaManager {
     if (!options?.allowUnsafe && !this.dryRun) {
       const flagged = this.engine.classifyUnsafeOperations(plan);
       if (flagged.length > 0) {
-        const lines = flagged.map((u) =>
-          `  - [${u.classification}] ${u.operation}: ${u.reason}`
-        );
+        const lines = flagged.map((u) => `  - [${u.classification}] ${u.operation}: ${u.reason}`);
         const unsafeCount = flagged.filter((u) => u.classification === "unsafe").length;
         const ambiguousCount = flagged.length - unsafeCount;
         const summary = [
@@ -795,9 +793,7 @@ export class SchemaManager {
         ].filter(Boolean).join(" + ");
         return Err(
           new MigrationError(
-            `Migration contains ${summary} operation(s):\n${
-              lines.join("\n")
-            }\n\nPass { allowUnsafe: true } (or --unsafe at the CLI) to apply anyway.`,
+            `Migration contains ${summary} operation(s):\n${lines.join("\n")}\n\nPass { allowUnsafe: true } (or --unsafe at the CLI) to apply anyway.`,
           ),
         );
       }
@@ -991,6 +987,87 @@ export class SchemaManager {
         }
         : null,
     });
+  }
+
+  /**
+   * Detect connections from a running Disc server attached to the
+   * same database (gh/geldata#9034). Used by `disc migrate` as a
+   * preflight: if a server is connected, its in-memory schema cache
+   * will go stale after migration unless the operator triggers a
+   * reload. Returns the list of `(pid, application_name)` pairs the
+   * scan found. Best-effort — silently returns an empty list on
+   * permission errors (operator may have restricted
+   * `pg_stat_activity`).
+   */
+  async detectRunningServers(): Promise<
+    Result<Array<{ pid: number; applicationName: string }>, MigrationError>
+  > {
+    if (!this.pool) {
+      // Dry-run / no pool — nothing to probe.
+      return Ok([]);
+    }
+    try {
+      const conn = await this.pool.acquire();
+      try {
+        // Filter to disc-server tagged connections that aren't this
+        // CLI session. `pg_backend_pid()` excludes our own row even
+        // though our app name should be `disc-cli`.
+        const result = await conn.query(
+          `SELECT pid, COALESCE(application_name, '') AS application_name
+             FROM pg_stat_activity
+            WHERE application_name = 'disc-server'
+              AND pid <> pg_backend_pid()`,
+        );
+        const rows = result.rows.map((r) => ({
+          pid: Number((r as Record<string, unknown>).pid),
+          applicationName: String(
+            (r as Record<string, unknown>).application_name,
+          ),
+        }));
+        return Ok(rows);
+      } finally {
+        this.pool.release(conn);
+      }
+    } catch (err) {
+      // pg_stat_activity may be restricted on hardened deployments;
+      // fail soft so the migration itself isn't blocked.
+      return Err(
+        new MigrationError(
+          `running-server probe failed: ${(err as Error).message}`,
+        ),
+      );
+    }
+  }
+
+  /**
+   * Preview the migration operations that would run if the given SDL
+   * were applied against the current state, without executing them.
+   * Used by `disc migrate --status` to surface drift between the SDL
+   * file on disk and the applied schema (gh/geldata#8899).
+   */
+  previewMigrationOps(
+    sdlSource: string,
+  ): Result<Types.MigrationOperation[], MigrationError> {
+    const parseResult = this.parseSDL(sdlSource);
+    if (!parseResult.ok) return parseResult;
+
+    if (!this.engine) {
+      return Err(
+        new MigrationError(
+          "SchemaManager not initialized. Call initialize() before previewMigrationOps().",
+        ),
+      );
+    }
+
+    const planResult = this.engine.planMigration(
+      this.currentModules,
+      parseResult.value,
+    );
+    if (!planResult.ok) return planResult;
+
+    const ops: Types.MigrationOperation[] = [];
+    for (const m of planResult.value.migrations) ops.push(...m.operations);
+    return Ok(ops);
   }
 
   /**

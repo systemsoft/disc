@@ -160,7 +160,25 @@ Migration Status
     ID: m20240315T140000_add_posts
     Name: add_posts
     Applied at: 2024-03-15T14:00:00.000Z
+
+  Schema status: 2 pending operation(s)
+    - [safe] AddProperty
+    - [ambiguous] ChangeType
+
+  Run `disc migrate` to apply.
 ```
+
+The "Schema status" line is a drift check: `disc migrate --status` parses the SDL file on disk, runs it through the diff engine against the applied state, and surfaces pending operations with their safety classification (`safe`/`unsafe`/`ambiguous`). When the SDL matches the applied state the line reads `Schema status: in sync`. (gh/geldata#8899)
+
+**Pre-migrate preflight (running-server detection).** Before each live migration the CLI scans `pg_stat_activity` for connections tagged `application_name = 'disc-server'`. If any are found, it warns:
+
+```
+⚠ Detected 1 active Disc server connection(s) on this database.
+  Migrate will succeed, but the server's in-memory schema cache will be stale until reload.
+  Trigger a schema reload (admin UI Diff page → Apply, or restart the server) after migration.
+```
+
+The migration still proceeds — this is an advisory, not a refusal. After applying, trigger a schema reload via the admin UI's Diff page (Apply Migration), or restart the server. Best-effort: silently no-ops if `pg_stat_activity` is restricted on the deployment. (gh/geldata#9034)
 
 **Rollback safety:** Rollback is a destructive operation. Rolling back a `DROP TABLE` migration cannot restore lost data. The `--force` flag is required to acknowledge this risk.
 

@@ -141,6 +141,76 @@ Deno.test("Gel #4172: binary protocol server advertises ALPN edgedb-binary", asy
 // below scrapes the type definition) and the operator-facing knob can be
 // added intentionally rather than as a silent regression.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// gh/geldata#7360 — email+password login UX for non-existing accounts. Gel's
+// concern: the response a non-existing-account login produced was visibly
+// different from a wrong-password login (faster path, distinguishable
+// message), making account enumeration possible.
+//
+// Disc landed timing equalization (P1-35 + gh/geldata#9137) in
+// `auth/provider.ts:login`: the no-such-user branch now burns one bcrypt
+// dummy compare *and* throws with the same `INVALID_CREDENTIALS` /
+// "Invalid credentials" / 401 envelope as the wrong-password branch. This
+// pin walks `provider.ts:login` to confirm both branches share the same
+// shape so a future refactor can't drift them apart.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #7360: login no-such-user response matches wrong-password shape", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../auth/provider.ts", import.meta.url),
+  );
+  // Both branches must throw `INVALID_CREDENTIALS` at status 401 with
+  // the literal "Invalid credentials" message — no leaking nuance.
+  const noUserMatches = (src.match(
+    /reason:\s*"no_such_user"[\s\S]{0,400}?AuthErrorCode\.INVALID_CREDENTIALS/g,
+  ) ?? []).length;
+  assert(
+    noUserMatches >= 1,
+    "no-such-user branch must throw INVALID_CREDENTIALS (anti-enumeration parity)",
+  );
+  // Both branches must precede the throw with `runDummyCompare` so the
+  // wall-clock timing matches a real bcrypt verify.
+  assert(
+    src.includes("await this.runDummyCompare(credentials.password);"),
+    "no-such-user branch must burn a dummy bcrypt compare for timing parity",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#3170 — misleading disconnect log in the CLI. Gel's concern: the
+// CLI logged "Disconnected from server" on shutdown even when no server
+// connection had been established (project-init paths, dry-run paths), which
+// confused operators trying to trace real connectivity issues.
+//
+// Disc never adopted that log line. The CLI's only shutdown path lives in
+// `cli/shell.ts:cleanup()` which writes a single newline (P2-14, prevents
+// log-prompt collision) and then closes the database connection — no
+// "disconnected" string is ever written, so the misleading-log bug class
+// doesn't apply structurally. This pin asserts the absence of the offending
+// substring across the CLI surface so a future refactor that *adds* the
+// log line has to land deliberately rather than as a side-effect.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #3170: CLI does not log 'disconnected' on shutdown", async () => {
+  const cliFiles = [
+    "../cli/shell.ts",
+    "../cli/commands.ts",
+    "../cli/main.ts",
+  ];
+  for (const rel of cliFiles) {
+    const src = await Deno.readTextFile(new URL(rel, import.meta.url));
+    // Match the literal log line shape — `"Disconnected"` or
+    // `'disconnected from'`. Allow the word to appear in code comments
+    // since those don't reach stdout.
+    const codeOnly = src.replace(/\/\/.*$/gm, "").replace(
+      /\/\*[\s\S]*?\*\//g,
+      "",
+    );
+    assert(
+      !/console\.\w+\([^)]*[Dd]isconnected/.test(codeOnly),
+      `${rel} contains a disconnect-style console call — Gel #3170 pin`,
+    );
+  }
+});
+
 Deno.test("Gel #3872: Deno.serve TLS surface does not expose cipher selection", () => {
   // Deno's runtime types live on `Deno`. We can't introspect rustls'
   // internal cipher list from user code, so we assert the structural

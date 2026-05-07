@@ -118,7 +118,13 @@ export class CLICommands {
         await manager.initialize();
       } else {
         // Live mode: create pool and wire to SchemaManager
-        pool = new ConnectionPool({ connectionString: databaseUrl });
+        pool = new ConnectionPool({
+          connectionString: databaseUrl,
+          // gh/geldata#9034: tag CLI connections so the preflight can
+          // tell `disc-cli` apart from `disc-server` in
+          // `pg_stat_activity`.
+          applicationName: "disc-cli",
+        });
         await pool.initialize();
 
         manager = new SchemaManager({ pool, dryRun: false, onProgress });
@@ -126,7 +132,7 @@ export class CLICommands {
       }
 
       if (args.status) {
-        await this.showMigrationStatus(manager);
+        await this.showMigrationStatus(manager, schemaFile);
       } else if (args.rollback || args["rollback-to"]) {
         await this.handleRollback(manager, args);
       } else if (args.squash) {
@@ -832,6 +838,7 @@ export class CLICommands {
 
   private async showMigrationStatus(
     manager: SchemaManager,
+    schemaFile?: string,
   ): Promise<void> {
     console.log("Migration Status\n");
 
@@ -859,6 +866,43 @@ export class CLICommands {
       );
     } else {
       console.log(`\n  No migrations have been applied yet.`);
+    }
+
+    // Drift detection (gh/geldata#8899). When a schema file is
+    // available, diff it against the applied state so `migration
+    // --status` answers the question users actually ask: "is my
+    // schema in sync?". Renders one of three lines:
+    //   - "Schema status: in sync" (no operations queued)
+    //   - "Schema status: <N> pending operation(s)"
+    //   - "Schema status: SDL not readable — N/A" (best-effort)
+    if (schemaFile) {
+      try {
+        const sdl = await Deno.readTextFile(schemaFile);
+        const planResult = manager.previewMigrationOps(sdl);
+        if (!planResult.ok) {
+          console.log(
+            `\n  Schema status: drift check failed — ${planResult.error.message}`,
+          );
+          return;
+        }
+        const ops = planResult.value;
+        if (ops.length === 0) {
+          console.log(`\n  Schema status: in sync`);
+        } else {
+          console.log(`\n  Schema status: ${ops.length} pending operation(s)`);
+          for (const op of ops.slice(0, 5)) {
+            console.log(`    - [${op.classification ?? "safe"}] ${op.kind}`);
+          }
+          if (ops.length > 5) {
+            console.log(`    … and ${ops.length - 5} more`);
+          }
+          console.log(`\n  Run \`disc migrate\` to apply.`);
+        }
+      } catch (err) {
+        console.log(
+          `\n  Schema status: SDL not readable (${(err as Error).message}) — N/A`,
+        );
+      }
     }
   }
 
@@ -1219,6 +1263,33 @@ export class CLICommands {
 
       console.log("\nNo changes applied (dry-run mode)");
     } else {
+      // Pre-flight: detect a running Disc server attached to the same
+      // database (gh/geldata#9034). Migration applies via the CLI's
+      // direct PG connection and a running server's in-memory schema
+      // cache won't see the change until it reloads. We surface the
+      // warning *before* mutating the schema so the operator can plan
+      // a follow-up reload (the server's schema-watch endpoint or a
+      // restart) rather than discover stale-cache failures after the
+      // fact.
+      try {
+        const detected = await manager.detectRunningServers();
+        if (detected.ok && detected.value.length > 0 && !quiet) {
+          console.warn(
+            `\n⚠ Detected ${detected.value.length} active Disc server connection(s) on this database.`,
+          );
+          console.warn(
+            "  Migrate will succeed, but the server's in-memory schema cache will be stale until reload.",
+          );
+          console.warn(
+            "  Trigger a schema reload (admin UI Diff page → Apply, or restart the server) after migration.\n",
+          );
+        }
+      } catch {
+        // Best-effort preflight: a probe failure is not a migration
+        // blocker (operator may have stripped pg_stat_activity
+        // permissions). Fall through to the apply.
+      }
+
       // Live execution: applySchema handles parse + diff + execute. Pass
       // through `allowUnsafe` so `--unsafe` callers aren't blocked by
       // the destructive-op gate (gh/geldata#1838).

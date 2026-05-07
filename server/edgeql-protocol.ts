@@ -90,6 +90,9 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         connectionString: options.databaseUrl,
         minConnections: 2,
         maxConnections: 10,
+        // gh/geldata#9034: tag pool connections so the migrate-CLI
+        // preflight can spot a running server attached to the same DB.
+        applicationName: "disc-server",
       });
     }
   }
