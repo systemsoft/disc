@@ -145,7 +145,7 @@ Deno.test("CLI Shell - execute single query", async () => {
 
     const logs = console.getLogs();
     assertLogContains(logs, "disc> select User { name, email }");
-    assertLogContains(logs, '{"id": "123", "name": "Test User"}');
+    assertLogContains(logs, "{\"id\": \"123\", \"name\": \"Test User\"}");
     assertLogContains(logs, "(1 row)");
     assertLogContains(logs, "Query executed, exiting");
   } finally {
@@ -275,7 +275,7 @@ Deno.test("CLI Shell - query timing", () => {
     console.log("⏱️  Query timing is now ON");
     console.log("");
     console.log("disc> select User { name } limit 10;");
-    console.log('[{"name": "Ada"}, {"name": "Billie"}]');
+    console.log("[{\"name\": \"Ada\"}, {\"name\": \"Billie\"}]");
     console.log("⏱️  Time: 15.234ms");
     console.log("(2 rows)");
 
@@ -331,11 +331,11 @@ insert Post {
     console.log("📖 Executing queries from file...");
     console.log("");
     console.log("Query 1: select User { name, email };");
-    console.log('[{"name": "Ada", "email": "ada@example.com"}]');
+    console.log("[{\"name\": \"Ada\", \"email\": \"ada@example.com\"}]");
     console.log("(1 row)");
     console.log("");
     console.log("Query 2: insert Post { ... };");
-    console.log('{"id": "789"}');
+    console.log("{\"id\": \"789\"}");
     console.log("(1 row inserted)");
     console.log("");
     console.log("✅ File execution completed. 2 queries executed.");
@@ -363,7 +363,7 @@ Deno.test("CLI Shell - command history", () => {
     console.log("  3  select Post { title, author: { name } };");
     console.log("  4  \\timing");
     console.log(
-      '  5  insert User { name := "Test", email := "test@example.com" };',
+      "  5  insert User { name := \"Test\", email := \"test@example.com\" };",
     );
     console.log("");
     console.log("5 commands in history");
@@ -416,7 +416,7 @@ Deno.test("CLI Shell - multi-line query", () => {
     console.log("...> };");
     console.log("");
     console.log(
-      '[{"name": "Ada", "email": "ada@example.com", "posts": [{"title": "Hello World"}]}]',
+      "[{\"name\": \"Ada\", \"email\": \"ada@example.com\", \"posts\": [{\"title\": \"Hello World\"}]}]",
     );
     console.log("(1 row)");
 

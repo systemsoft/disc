@@ -18,12 +18,12 @@
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
-import { EdgeQLParser } from "../edgeql/parser.ts";
-import { EdgeQLCompiler } from "./compiler.ts";
+import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
+import { EdgeQLCompiler } from "./compiler.ts";
 import { createTestSchema } from "./context.ts";
 
 const RUN_PG = canRunPgTests();
@@ -35,7 +35,7 @@ const RUN_PG = canRunPgTests();
 /** Parse a DSN into connection config for the raw deno-postgres Client. */
 function parseDsn(
   dsn: string,
-): { hostname: string; port: number; user: string; database: string } {
+): { hostname: string; port: number; user: string; database: string; } {
   const url = new URL(dsn);
   return {
     hostname: url.hostname || "localhost",
@@ -49,13 +49,13 @@ function parseDsn(
 async function getColumns(
   dsn: string,
   tableName: string,
-): Promise<{ column_name: string; data_type: string; udt_name: string }[]> {
+): Promise<{ column_name: string; data_type: string; udt_name: string; }[]> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
   try {
     await client.connect();
     const result = await client.queryObject<
-      { column_name: string; data_type: string; udt_name: string }
+      { column_name: string; data_type: string; udt_name: string; }
     >(
       `SELECT column_name, data_type, udt_name
        FROM information_schema.columns

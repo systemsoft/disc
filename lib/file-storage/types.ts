@@ -51,5 +51,5 @@ export interface FileStorageBackend {
   put(key: string, body: Uint8Array): Promise<void>;
   get(key: string): Promise<Uint8Array>;
   delete(key: string): Promise<void>;
-  head(key: string): Promise<{ size: number } | null>;
+  head(key: string): Promise<{ size: number; } | null>;
 }

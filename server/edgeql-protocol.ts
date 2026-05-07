@@ -2,19 +2,19 @@
  * EdgeQL Protocol Handler with Real Compiler Integration
  */
 
-import * as Types from "./types.ts";
-import * as EdgeQL from "../edgeql/mod.ts";
-import { isWriteQuery } from "../edgeql/query-capabilities.ts";
+import { SQLCodeGenerator } from "../compiler/codegen.ts";
 import * as Compiler from "../compiler/compiler.ts";
 import * as Context from "../compiler/context.ts";
 import * as SQL from "../compiler/sql.ts";
-import { SQLCodeGenerator } from "../compiler/codegen.ts";
+import * as EdgeQL from "../edgeql/mod.ts";
+import { isWriteQuery } from "../edgeql/query-capabilities.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { DatabaseExecutionError, QueryTimeoutError } from "../lib/errors.ts";
-import type { DatabaseRegistry } from "./database-registry.ts";
 import { ExplainCache, ExplainCacheStats } from "../lib/explain-cache.ts";
 import { getLogger } from "../lib/logger.ts";
 import { authContextToAccessContext } from "./access-bridge.ts";
+import type { DatabaseRegistry } from "./database-registry.ts";
+import * as Types from "./types.ts";
 
 const log = getLogger("edgeql-protocol");
 import { hashAccessContext, hashString, makeCompilationCacheKey, QueryCache } from "../lib/query-cache.ts";
@@ -451,7 +451,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
 
   private parseEdgeQLQuery(
     query: string,
-  ): { success: true; ast: EdgeQL.Query } | { success: false; error: string } {
+  ): { success: true; ast: EdgeQL.Query; } | { success: false; error: string; } {
     try {
       // Use the EdgeQL parser (which internally lexes the source)
       const parser = new EdgeQL.EdgeQLParser(query);
@@ -536,9 +536,9 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     if (!Array.isArray(rows) || rows.length === 0) return rows;
     return rows.map((row) => {
       if (
-        row && typeof row === "object" && !Array.isArray(row) &&
-        Object.keys(row).length === 1 &&
-        Object.prototype.hasOwnProperty.call(row, "jsonb_build_object")
+        row && typeof row === "object" && !Array.isArray(row)
+        && Object.keys(row).length === 1
+        && Object.prototype.hasOwnProperty.call(row, "jsonb_build_object")
       ) {
         return row.jsonb_build_object;
       }
@@ -563,7 +563,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     sql: string,
     variables: Record<string, any>,
     context: Types.QueryContext,
-  ): Promise<{ data: any; warnings?: string[] }> {
+  ): Promise<{ data: any; warnings?: string[]; }> {
     log.info("Executing SQL", {
       sessionId: context.session.sessionId,
       sql,
@@ -605,13 +605,13 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
           // shapes — UI/SDK consumers expect `row.id` to work directly.
           return { data: this.unwrapJsonbRows(result.rows) };
         } else if (
-          normalizedSQL.includes("insert") &&
-          normalizedSQL.includes("returning")
+          normalizedSQL.includes("insert")
+          && normalizedSQL.includes("returning")
         ) {
           return { data: result.rows[0] || { success: true } };
         } else if (
-          normalizedSQL.includes("update") &&
-          normalizedSQL.includes("returning")
+          normalizedSQL.includes("update")
+          && normalizedSQL.includes("returning")
         ) {
           return { data: result.rows[0] || { updated: result.rowCount } };
         } else if (normalizedSQL.includes("delete")) {
@@ -687,7 +687,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     sql: string,
     _variables: Record<string, any>,
     context: Types.QueryContext,
-  ): { data: any; warnings?: string[] } {
+  ): { data: any; warnings?: string[]; } {
     // Mock implementation for fallback when no pool is available
     const normalizedSQL = sql.toLowerCase().trim();
 
@@ -754,7 +754,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
 
   private check_balanced_braces(
     query: string,
-  ): { valid: boolean; position: number } {
+  ): { valid: boolean; position: number; } {
     let depth = 0;
     let position = 0;
 
@@ -871,7 +871,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
   async executeBinaryQuery(
     commandText: string,
     args: Record<string, unknown>,
-  ): Promise<{ rows: Record<string, unknown>[]; status: string }> {
+  ): Promise<{ rows: Record<string, unknown>[]; status: string; }> {
     const parser = new EdgeQL.EdgeQLParser(commandText);
     const ast = parser.parse();
 
@@ -969,7 +969,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     return this.schema;
   }
 
-  getCacheStats(): { compilation: CacheStats; parse: CacheStats } {
+  getCacheStats(): { compilation: CacheStats; parse: CacheStats; } {
     return {
       compilation: this.compilationCache.stats(),
       parse: this.parseCache.stats(),
@@ -1092,7 +1092,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     };
   }
 
-  getCompilerInfo(): { version: string; features: string[] } {
+  getCompilerInfo(): { version: string; features: string[]; } {
     return {
       version: "0.1.0",
       features: [

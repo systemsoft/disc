@@ -267,8 +267,8 @@ Deno.test("CLI - migration config construction", () => {
     const config = {
       migrationsDir: "./migrations",
       schemaFile: args.schema || "./schema.disc",
-      databaseUrl: Deno.env.get("DATABASE_URL") ||
-        "postgresql://localhost:5432/disc_dev",
+      databaseUrl: Deno.env.get("DATABASE_URL")
+        || "postgresql://localhost:5432/disc_dev",
       dryRun: args["dry-run"] || false,
       autoApprove: args["auto-approve"] || false,
       backupBeforeMigration: true,

@@ -22,9 +22,9 @@
  */
 
 import { ConnectionPool } from "../../lib/connection-pool.ts";
+import { getLogger } from "../../lib/logger.ts";
 import { SchemaManager } from "../../migration/schema-manager.ts";
 import { computeSchemaDiff } from "./schema-diff.ts";
-import { getLogger } from "../../lib/logger.ts";
 
 const log = getLogger("admin/schema-apply");
 

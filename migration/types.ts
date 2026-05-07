@@ -428,14 +428,14 @@ export interface MigrationResult {
  * → `plan-completed` (or `plan-failed`).
  */
 export type MigrationProgressEvent =
-  | { kind: "plan-started"; totalMigrations: number; totalOperations: number }
-  | { kind: "migration-started"; migrationId: string; name: string; index: number; total: number }
-  | { kind: "ddl-executing"; migrationId: string; statementCount: number }
-  | { kind: "data-migration-running"; migrationId: string }
-  | { kind: "migration-completed"; migrationId: string; durationMs: number }
-  | { kind: "migration-failed"; migrationId: string; error: string; durationMs: number; rollbackAttempted: boolean }
-  | { kind: "plan-completed"; migrationCount: number; durationMs: number }
-  | { kind: "plan-failed"; error: string; durationMs: number };
+  | { kind: "plan-started"; totalMigrations: number; totalOperations: number; }
+  | { kind: "migration-started"; migrationId: string; name: string; index: number; total: number; }
+  | { kind: "ddl-executing"; migrationId: string; statementCount: number; }
+  | { kind: "data-migration-running"; migrationId: string; }
+  | { kind: "migration-completed"; migrationId: string; durationMs: number; }
+  | { kind: "migration-failed"; migrationId: string; error: string; durationMs: number; rollbackAttempted: boolean; }
+  | { kind: "plan-completed"; migrationCount: number; durationMs: number; }
+  | { kind: "plan-failed"; error: string; durationMs: number; };
 
 export type MigrationProgressListener = (event: MigrationProgressEvent) => void;
 

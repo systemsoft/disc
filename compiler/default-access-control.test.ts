@@ -4,11 +4,11 @@
  */
 
 import { assertEquals } from "@std/assert";
-import { EdgeQLParser } from "../edgeql/parser.ts";
-import { EdgeQLCompiler } from "./compiler.ts";
-import { SQLCodeGenerator } from "./codegen.ts";
-import * as Context from "./context.ts";
 import { AccessPolicy } from "../access/mod.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
+import { SQLCodeGenerator } from "./codegen.ts";
+import { EdgeQLCompiler } from "./compiler.ts";
+import * as Context from "./context.ts";
 
 // Create test schema
 function createTestSchema(): Context.Schema {

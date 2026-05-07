@@ -3,9 +3,9 @@
  */
 
 import { assertEquals, assertThrows } from "@std/assert";
+import { SyntaxError } from "../lib/errors.ts";
 import { SDLParser } from "./parser.ts";
 import { SchemaValidator } from "./validator.ts";
-import { SyntaxError } from "../lib/errors.ts";
 
 Deno.test("SDL Parser - Basic Type Declaration", () => {
   const source = `

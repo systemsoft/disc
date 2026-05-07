@@ -15,7 +15,7 @@ interface CapturedRequest {
 
 function makeFetch(
   responder: (req: CapturedRequest) => Response | Promise<Response>,
-): { fetchImpl: typeof fetch; calls: CapturedRequest[] } {
+): { fetchImpl: typeof fetch; calls: CapturedRequest[]; } {
   const calls: CapturedRequest[] = [];
   const fetchImpl = ((
     input: string | URL | Request,

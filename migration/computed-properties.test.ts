@@ -6,10 +6,10 @@
  */
 
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
+import { Module } from "../schema/converter.ts";
 import { DDLGenerator } from "./ddl.ts";
 import { SchemaDiffer } from "./differ.ts";
 import * as Types from "./types.ts";
-import { Module } from "../schema/converter.ts";
 
 // ========================================
 // DDL Generator Tests
@@ -515,8 +515,8 @@ Deno.test("Schema Differ - detects changed computed expression", () => {
 
   const ops = differ.diff(oldSchema, newSchema);
   const alterOp = ops.find((o) =>
-    o.kind === "AlterType" &&
-    (o as Types.AlterTypeOperation).typeName === "Product"
+    o.kind === "AlterType"
+    && (o as Types.AlterTypeOperation).typeName === "Product"
   ) as Types.AlterTypeOperation | undefined;
 
   assertEquals(
@@ -578,8 +578,8 @@ Deno.test("Schema Differ - detects added annotation", () => {
   const propChange = alterOp?.operations.find((o) => o.kind === "AlterProperty") as Types.AlterPropertyOperation | undefined;
   const changeKinds = propChange?.changes.map((c) => c.kind) ?? [];
   assert(
-    changeKinds.includes("AddAnnotation") ||
-      changeKinds.includes("ChangeAnnotation"),
+    changeKinds.includes("AddAnnotation")
+      || changeKinds.includes("ChangeAnnotation"),
     `Expected AddAnnotation/ChangeAnnotation in ${JSON.stringify(changeKinds)}`,
   );
 });

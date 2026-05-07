@@ -3,8 +3,8 @@
  * Performance benchmarks for binary protocol implementation
  */
 
-import { ProtocolParser } from "./parser.ts";
 import { ProtocolBuilder } from "./builder.ts";
+import { ProtocolParser } from "./parser.ts";
 import { BufferPool, CachedMessageBuilder, MessagePool } from "./pool.ts";
 import * as Types from "./types.ts";
 
@@ -86,17 +86,17 @@ Deno.test("Benchmark - Message building", () => {
     dataElements: [
       {
         data: new TextEncoder().encode(
-          '{"id": 1, "name": "Ada", "email": "ada@example.com"}',
+          "{\"id\": 1, \"name\": \"Ada\", \"email\": \"ada@example.com\"}",
         ),
       },
       {
         data: new TextEncoder().encode(
-          '{"id": 2, "name": "Billie", "email": "billie@example.com"}',
+          "{\"id\": 2, \"name\": \"Billie\", \"email\": \"billie@example.com\"}",
         ),
       },
       {
         data: new TextEncoder().encode(
-          '{"id": 3, "name": "Cher", "email": "cher@example.com"}',
+          "{\"id\": 3, \"name\": \"Cher\", \"email\": \"cher@example.com\"}",
         ),
       },
     ],

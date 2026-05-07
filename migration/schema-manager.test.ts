@@ -6,9 +6,9 @@
  */
 
 import { assert, assertEquals, assertNotEquals } from "@std/assert";
-import { SchemaManager } from "./schema-manager.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { canRunPgTests, cleanupTestTables, getTestDsn } from "../tests/pg-test-harness.ts";
+import { SchemaManager } from "./schema-manager.ts";
 
 // ---------------------------------------------------------------------------
 // 1. parseSDL -- valid SDL produces Module[]
@@ -366,7 +366,7 @@ Deno.test({
         "SELECT COUNT(*)::int AS c FROM disc_migrations",
       );
       assertEquals(
-        (migrationCount.rows[0] as { c: number }).c,
+        (migrationCount.rows[0] as { c: number; }).c,
         0,
         "disc_migrations must be empty after a skipHistory apply (Gel #3761)",
       );
@@ -392,7 +392,7 @@ Deno.test({
         "SELECT COUNT(*)::int AS c FROM disc_migrations",
       );
       assertEquals(
-        (migrationCount2.rows[0] as { c: number }).c,
+        (migrationCount2.rows[0] as { c: number; }).c,
         1,
         "disc_migrations must record the non-skip apply (1 row)",
       );

@@ -5,8 +5,8 @@
  */
 
 import { SchemaDiffer } from "../migration/differ.ts";
-import type { Module } from "../schema/converter.ts";
 import type { Identifier, LinkDeclaration, PropertyDeclaration, TypeDeclaration, TypeRef } from "../schema/ast.ts";
+import type { Module } from "../schema/converter.ts";
 
 // Helper to create AST nodes used by the SchemaDiffer
 function ident(value: string): Identifier {
@@ -20,7 +20,7 @@ function typeRef(name: string): TypeRef {
 function prop(
   name: string,
   type: string,
-  options?: { required?: boolean; multi?: boolean },
+  options?: { required?: boolean; multi?: boolean; },
 ): PropertyDeclaration {
   return {
     kind: "PropertyDeclaration",
@@ -36,7 +36,7 @@ function prop(
 function link(
   name: string,
   target: string,
-  options?: { required?: boolean; multi?: boolean },
+  options?: { required?: boolean; multi?: boolean; },
 ): LinkDeclaration {
   return {
     kind: "LinkDeclaration",

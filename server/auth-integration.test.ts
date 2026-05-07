@@ -6,9 +6,9 @@
  */
 
 import { assertEquals, assertExists } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { AuthProvider } from "../auth/provider.ts";
-import { AuthMiddleware } from "../auth/middleware.ts";
 import { AuthRoutes } from "../auth/integration.ts";
+import { AuthMiddleware } from "../auth/middleware.ts";
+import { AuthProvider } from "../auth/provider.ts";
 import { TestDatabase } from "../auth/test-database.ts";
 import { HttpServer } from "./http.ts";
 

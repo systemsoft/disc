@@ -3,11 +3,11 @@
  */
 
 import { assertEquals, assertExists } from "https://deno.land/std@0.208.0/assert/mod.ts";
-import { ComplexQueryCompiler } from "./complex-query.ts";
-import { SQLCodeGenerator } from "./codegen.ts";
 import * as EdgeQLAST from "../edgeql/ast.ts";
-import * as SQL from "./sql.ts";
+import { SQLCodeGenerator } from "./codegen.ts";
+import { ComplexQueryCompiler } from "./complex-query.ts";
 import * as Context from "./context.ts";
+import * as SQL from "./sql.ts";
 
 const codegen = new SQLCodeGenerator();
 

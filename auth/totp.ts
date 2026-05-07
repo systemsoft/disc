@@ -195,10 +195,10 @@ async function hotp(
 
   // Dynamic truncation (RFC 4226 §5.3).
   const offset = sig[sig.length - 1] & 0x0f;
-  const code = ((sig[offset] & 0x7f) << 24) |
-    ((sig[offset + 1] & 0xff) << 16) |
-    ((sig[offset + 2] & 0xff) << 8) |
-    (sig[offset + 3] & 0xff);
+  const code = ((sig[offset] & 0x7f) << 24)
+    | ((sig[offset + 1] & 0xff) << 16)
+    | ((sig[offset + 2] & 0xff) << 8)
+    | (sig[offset + 3] & 0xff);
   return String(code % 10 ** digits).padStart(digits, "0");
 }
 

@@ -6,8 +6,8 @@
  */
 
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
-import type { IndexDef, LinkDef, PropertyDef, Schema, TypeDef } from "../compiler/context.ts";
 import type { AccessPolicy } from "../access/types.ts";
+import type { IndexDef, LinkDef, PropertyDef, Schema, TypeDef } from "../compiler/context.ts";
 import { describeAllTypes, describeType } from "./describe.ts";
 
 function buildSchema(types: TypeDef[]): Schema {
@@ -17,7 +17,7 @@ function buildSchema(types: TypeDef[]): Schema {
   };
 }
 
-function makeProperty(p: Partial<PropertyDef> & { name: string }): PropertyDef {
+function makeProperty(p: Partial<PropertyDef> & { name: string; }): PropertyDef {
   // Build defaults explicitly then merge overrides on top so the spread
   // can never appear after a key it would shadow (TS2783/TS2785).
   const defaults: PropertyDef = {
@@ -31,7 +31,7 @@ function makeProperty(p: Partial<PropertyDef> & { name: string }): PropertyDef {
   return { ...defaults, ...p };
 }
 
-function makeLink(l: Partial<LinkDef> & { name: string; target: string }): LinkDef {
+function makeLink(l: Partial<LinkDef> & { name: string; target: string; }): LinkDef {
   const defaults: LinkDef = {
     multi: false,
     name: l.name,

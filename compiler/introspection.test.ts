@@ -10,12 +10,12 @@
  */
 
 import { assertEquals, assertThrows } from "@std/assert";
-import { describeSchema, describeType } from "./introspection.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
+import { SQLCodeGenerator } from "./codegen.ts";
+import { EdgeQLCompiler } from "./compiler.ts";
 import { createTestSchema } from "./context.ts";
 import type { Schema, TypeDef } from "./context.ts";
-import { EdgeQLParser } from "../edgeql/parser.ts";
-import { EdgeQLCompiler } from "./compiler.ts";
-import { SQLCodeGenerator } from "./codegen.ts";
+import { describeSchema, describeType } from "./introspection.ts";
 
 // ---------------------------------------------------------------------------
 // Shared fixtures
@@ -253,8 +253,8 @@ Deno.test("Parser - invalid DESCRIBE target throws error", () => {
     throw new Error("Expected parse error");
   } catch (e) {
     assertEquals(
-      (e as Error).message.includes("TYPE") ||
-        (e as Error).message.includes("SCHEMA"),
+      (e as Error).message.includes("TYPE")
+        || (e as Error).message.includes("SCHEMA"),
       true,
     );
   }
@@ -268,7 +268,7 @@ Deno.test("Compiler - DescribeType compiles to SELECT jsonb", () => {
   const sql = compileEdgeQL("DESCRIBE TYPE User");
   assertEquals(sql.includes("SELECT"), true);
   assertEquals(sql.includes("::jsonb"), true);
-  assertEquals(sql.includes('"User"') || sql.includes("User"), true);
+  assertEquals(sql.includes("\"User\"") || sql.includes("User"), true);
 });
 
 Deno.test("Compiler - DescribeType result contains expected fields", () => {
@@ -285,7 +285,7 @@ Deno.test("Compiler - DescribeType result contains expected fields", () => {
   assertEquals(Array.isArray(json.links), true);
 
   // Check specific properties exist
-  const propNames = json.properties.map((p: { name: string }) => p.name);
+  const propNames = json.properties.map((p: { name: string; }) => p.name);
   assertEquals(propNames.includes("email"), true);
   assertEquals(propNames.includes("name"), true);
 });
@@ -331,15 +331,15 @@ Deno.test("Compiler - DescribeType includes properties and links in JSON", () =>
   assertEquals(json.name, "Post");
 
   // Check properties
-  const propNames = json.properties.map((p: { name: string }) => p.name);
+  const propNames = json.properties.map((p: { name: string; }) => p.name);
   assertEquals(propNames.includes("title"), true);
   assertEquals(propNames.includes("body"), true);
 
   // Check links
-  const linkNames = json.links.map((l: { name: string }) => l.name);
+  const linkNames = json.links.map((l: { name: string; }) => l.name);
   assertEquals(linkNames.includes("author"), true);
   assertEquals(
-    json.links.find((l: { name: string }) => l.name === "author").target,
+    json.links.find((l: { name: string; }) => l.name === "author").target,
     "User",
   );
 });

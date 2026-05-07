@@ -221,12 +221,12 @@ Deno.test("TypeScriptGenerator - generated query builder has correct _typeCasts 
 
   // Should have _typeCasts with correct casts
   assertStringIncludes(content, "_typeCasts");
-  assertStringIncludes(content, 'name: "<str>"');
-  assertStringIncludes(content, 'email: "<str>"');
-  assertStringIncludes(content, 'age: "<int32>"');
-  assertStringIncludes(content, 'active: "<bool>"');
-  assertStringIncludes(content, 'createdAt: "<datetime>"');
-  assertStringIncludes(content, 'score: "<float64>"');
+  assertStringIncludes(content, "name: \"<str>\"");
+  assertStringIncludes(content, "email: \"<str>\"");
+  assertStringIncludes(content, "age: \"<int32>\"");
+  assertStringIncludes(content, "active: \"<bool>\"");
+  assertStringIncludes(content, "createdAt: \"<datetime>\"");
+  assertStringIncludes(content, "score: \"<float64>\"");
 });
 
 // --- Insert method uses correct casts ---
@@ -292,8 +292,8 @@ Deno.test("TypeScriptGenerator - missing edgeqlType falls back to type field for
   const content = queryFile!.content;
 
   // When edgeqlType is undefined, type field ("str", "int32") should be used
-  assertStringIncludes(content, 'title: "<str>"');
-  assertStringIncludes(content, 'count: "<int32>"');
+  assertStringIncludes(content, "title: \"<str>\"");
+  assertStringIncludes(content, "count: \"<int32>\"");
 });
 
 // --- Interface generation uses edgeqlType for type mapping ---
@@ -597,7 +597,7 @@ Deno.test("TypeScriptGenerator - enum type generates union type string", () => {
   // Should generate a union type for the enum
   assertStringIncludes(
     content,
-    'export type Status = "active" | "inactive" | "pending";',
+    "export type Status = \"active\" | \"inactive\" | \"pending\";",
   );
 
   // Should NOT generate an interface for the enum type

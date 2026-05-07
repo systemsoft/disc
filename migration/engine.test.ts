@@ -3,10 +3,10 @@
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import { MigrationEngine } from "./engine.ts";
-import { SchemaDiffer } from "./differ.ts";
-import { DDLGenerator } from "./ddl.ts";
 import { Module } from "../schema/converter.ts";
+import { DDLGenerator } from "./ddl.ts";
+import { SchemaDiffer } from "./differ.ts";
+import { MigrationEngine } from "./engine.ts";
 import * as Types from "./types.ts";
 
 // Helper functions for creating test schemas
@@ -399,12 +399,12 @@ Deno.test("Migration Engine - Plan Schema Evolution", () => {
     // Should include alter User and create Post
     const operations = plan.migrations[0].operations;
     const hasAlterUser = operations.some((op) =>
-      op.kind === "AlterType" &&
-      (op as Types.AlterTypeOperation).typeName === "User"
+      op.kind === "AlterType"
+      && (op as Types.AlterTypeOperation).typeName === "User"
     );
     const hasCreatePost = operations.some((op) =>
-      op.kind === "CreateType" &&
-      (op as Types.CreateTypeOperation).typeName === "Post"
+      op.kind === "CreateType"
+      && (op as Types.CreateTypeOperation).typeName === "Post"
     );
 
     assertEquals(hasAlterUser, true);
@@ -609,8 +609,8 @@ Deno.test("DDL Generator - Identifier Escaping", () => {
   const createTable = statements[0];
 
   // Reserved keywords should be quoted
-  assertStringIncludes(createTable, '"order"');
-  assertStringIncludes(createTable, '"select"');
+  assertStringIncludes(createTable, "\"order\"");
+  assertStringIncludes(createTable, "\"select\"");
 });
 
 // gh/geldata#7490: per-step progress hooks for the migration engine
@@ -680,14 +680,14 @@ Deno.test("Migration Engine - executeMigration emits progress events in order", 
   // plan-started carries the right totals
   const planStarted = events[0] as Extract<
     Types.MigrationProgressEvent,
-    { kind: "plan-started" }
+    { kind: "plan-started"; }
   >;
   assertEquals(planStarted.totalMigrations, 2);
   assertEquals(planStarted.totalOperations, plan.operationsCount);
 
   // First migration-started event has index 1 of total 2
   const firstStart = events.find((e) => e.kind === "migration-started") as
-    | Extract<Types.MigrationProgressEvent, { kind: "migration-started" }>
+    | Extract<Types.MigrationProgressEvent, { kind: "migration-started"; }>
     | undefined;
   assertEquals(firstStart?.index, 1);
   assertEquals(firstStart?.total, 2);
@@ -741,7 +741,7 @@ Deno.test("Migration Engine - executeMigrationWithRollback emits failed event wi
   assertEquals(result.ok, false);
 
   const failed = events.find((e) => e.kind === "migration-failed") as
-    | Extract<Types.MigrationProgressEvent, { kind: "migration-failed" }>
+    | Extract<Types.MigrationProgressEvent, { kind: "migration-failed"; }>
     | undefined;
   assertEquals(failed !== undefined, true);
   // rollbackOnError is true and rollback SQL was generated → attempted.

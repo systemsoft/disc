@@ -4,8 +4,8 @@
 
 import { assertEquals } from "@std/assert";
 import { EdgeQLParser } from "../edgeql/parser.ts";
-import { EdgeQLCompiler } from "./compiler.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
+import { EdgeQLCompiler } from "./compiler.ts";
 import { createTestSchema } from "./context.ts";
 
 const schema = createTestSchema();

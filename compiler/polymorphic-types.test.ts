@@ -10,12 +10,12 @@
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import { isPolymorphicType, POLYMORPHIC_TYPES } from "./context.ts";
-import { SchemaValidator } from "../schema/validator.ts";
-import { SDLParser } from "../schema/parser.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
-import { EdgeQLCompiler } from "./compiler.ts";
+import { SDLParser } from "../schema/parser.ts";
+import { SchemaValidator } from "../schema/validator.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
+import { EdgeQLCompiler } from "./compiler.ts";
+import { isPolymorphicType, POLYMORPHIC_TYPES } from "./context.ts";
 import { createTestSchema } from "./context.ts";
 
 // ---------------------------------------------------------------------------
@@ -35,7 +35,7 @@ function compileEdgeQL(source: string): string {
   return codegen.generate(result.value);
 }
 
-function validateSDL(source: string): { ok: boolean; errors?: unknown[] } {
+function validateSDL(source: string): { ok: boolean; errors?: unknown[]; } {
   const parser = new SDLParser(source);
   const doc = parser.parse();
   const validator = new SchemaValidator();

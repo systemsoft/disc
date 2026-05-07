@@ -11,8 +11,8 @@ import { assertEquals, assertStringIncludes } from "@std/assert";
 import { EdgeQLLexer } from "../edgeql/lexer.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { TokenType } from "../edgeql/tokens.ts";
-import { EdgeQLCompiler } from "./compiler.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
+import { EdgeQLCompiler } from "./compiler.ts";
 import { createTestSchema } from "./context.ts";
 
 const schema = createTestSchema();
@@ -31,7 +31,7 @@ function compileEdgeQL(source: string): string {
   return codegen.generate(result.value);
 }
 
-function tokenize(source: string): { type: TokenType; value: string }[] {
+function tokenize(source: string): { type: TokenType; value: string; }[] {
   const lexer = new EdgeQLLexer(source);
   return lexer.tokenize().map((t) => ({ type: t.type, value: t.value }));
 }
@@ -138,7 +138,7 @@ Deno.test("Bitwise — precedence: bitwise lower than arithmetic", () => {
   const parser = new EdgeQLParser("SELECT 1 + 2 & 3");
   const ast = parser.parse();
   // The top-level expression should be & with left = (1+2) and right = 3
-  const selectExpr = ast as { expr: { kind: string; op: string } };
+  const selectExpr = ast as { expr: { kind: string; op: string; }; };
   assertEquals(selectExpr.expr.kind, "BinaryOp");
   assertEquals(selectExpr.expr.op, "&");
 });
@@ -198,7 +198,7 @@ Deno.test("Regex — str !~* pattern compiles to !~*", () => {
 Deno.test("Regex vs Bitwise — ~a is unary bitwise NOT", () => {
   const parser = new EdgeQLParser("SELECT ~42");
   const ast = parser.parse();
-  const selectExpr = ast as { expr: { kind: string; op: string } };
+  const selectExpr = ast as { expr: { kind: string; op: string; }; };
   assertEquals(selectExpr.expr.kind, "UnaryOp");
   assertEquals(selectExpr.expr.op, "~");
 });
@@ -206,7 +206,7 @@ Deno.test("Regex vs Bitwise — ~a is unary bitwise NOT", () => {
 Deno.test("Regex vs Bitwise — a ~ b is binary regex match", () => {
   const parser = new EdgeQLParser(`SELECT 'hello' ~ 'h.*o'`);
   const ast = parser.parse();
-  const selectExpr = ast as { expr: { kind: string; op: string } };
+  const selectExpr = ast as { expr: { kind: string; op: string; }; };
   assertEquals(selectExpr.expr.kind, "BinaryOp");
   assertEquals(selectExpr.expr.op, "~");
 });
@@ -222,7 +222,7 @@ Deno.test("EXPLAIN — basic EXPLAIN SELECT parses", () => {
   const explain = ast as {
     analyze?: boolean;
     buffers?: boolean;
-    query: { kind: string };
+    query: { kind: string; };
   };
   assertEquals(explain.analyze, false);
   assertEquals(explain.buffers, false);
@@ -233,7 +233,7 @@ Deno.test("EXPLAIN — EXPLAIN ANALYZE parses", () => {
   const parser = new EdgeQLParser("EXPLAIN ANALYZE SELECT User { name }");
   const ast = parser.parse();
   assertEquals(ast.kind, "ExplainQuery");
-  const explain = ast as { analyze?: boolean };
+  const explain = ast as { analyze?: boolean; };
   assertEquals(explain.analyze, true);
 });
 
@@ -243,7 +243,7 @@ Deno.test("EXPLAIN — EXPLAIN ANALYZE BUFFERS parses", () => {
   );
   const ast = parser.parse();
   assertEquals(ast.kind, "ExplainQuery");
-  const explain = ast as { analyze?: boolean; buffers?: boolean };
+  const explain = ast as { analyze?: boolean; buffers?: boolean; };
   assertEquals(explain.analyze, true);
   assertEquals(explain.buffers, true);
 });

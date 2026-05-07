@@ -17,7 +17,12 @@ Things Disc would build that Gel doesn't have and isn't planning. Each is a deli
 **How it shipped.**
 
 ```typescript
-import { createClient, createQueryBuilder, defineSchema, t } from "jsr:@disc/db/sdk";
+import {
+  createClient,
+  createQueryBuilder,
+  defineSchema,
+  t,
+} from "jsr:@disc/db/sdk";
 
 const schema = defineSchema({
   User: {

@@ -211,8 +211,8 @@ function stripModule(name: string): string {
  */
 function formatAnnotationValue(value: string): string {
   if (
-    (value.startsWith("'") && value.endsWith("'")) ||
-    (value.startsWith('"') && value.endsWith('"'))
+    (value.startsWith("'") && value.endsWith("'"))
+    || (value.startsWith("\"") && value.endsWith("\""))
   ) {
     return value;
   }

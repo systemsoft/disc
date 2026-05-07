@@ -233,8 +233,8 @@ export class BufferReader {
   private ensureAvailable(n: number): void {
     if (this.pos + n > this.buf.length) {
       throw new Error(
-        `Buffer underflow: need ${n} bytes at position ${this.pos}, ` +
-          `but only ${this.buf.length - this.pos} bytes remain`,
+        `Buffer underflow: need ${n} bytes at position ${this.pos}, `
+          + `but only ${this.buf.length - this.pos} bytes remain`,
       );
     }
   }

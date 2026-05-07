@@ -9,8 +9,8 @@
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import { handleGetMigrations, type MigrationsProvider, type MigrationsRouteContext } from "./migrations-endpoint.ts";
 import type { MigrationHistoryEntry } from "../migration/types.ts";
+import { handleGetMigrations, type MigrationsProvider, type MigrationsRouteContext } from "./migrations-endpoint.ts";
 
 function makeCtx(provider: MigrationsProvider): MigrationsRouteContext {
   return {

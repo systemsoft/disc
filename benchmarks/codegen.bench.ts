@@ -4,10 +4,10 @@
  * Benchmarks SQL AST to text generation.
  */
 
-import { EdgeQLCompiler } from "../compiler/compiler.ts";
-import { EdgeQLParser } from "../edgeql/parser.ts";
 import { SQLCodeGenerator } from "../compiler/codegen.ts";
+import { EdgeQLCompiler } from "../compiler/compiler.ts";
 import { createTestSchema } from "../compiler/context.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
 
 const schema = createTestSchema();
 const codegen = new SQLCodeGenerator();

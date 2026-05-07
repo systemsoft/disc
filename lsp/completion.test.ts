@@ -24,7 +24,7 @@ function findPos(haystack: string, needle: string): Position {
   return { line, character };
 }
 
-function names(items: { label: string }[]): string[] {
+function names(items: { label: string; }[]): string[] {
   return items.map((i) => i.label).sort();
 }
 

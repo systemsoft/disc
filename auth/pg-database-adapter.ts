@@ -5,8 +5,8 @@
  * to real PostgreSQL connections (which use `$1, $2, ...` placeholders).
  */
 
-import { DatabaseInterface, QueryResult } from "./database-interface.ts";
 import { DatabaseConnection } from "../lib/database.ts";
+import { DatabaseInterface, QueryResult } from "./database-interface.ts";
 
 /**
  * Convert `?` placeholders to PostgreSQL-style `$1, $2, ...` placeholders.

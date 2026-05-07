@@ -5,9 +5,9 @@
  */
 
 import { assertEquals, assertThrows } from "@std/assert";
-import { convertExpression } from "./expression-converter.ts";
-import type { Expression } from "../schema/ast.ts";
 import { ValidationError } from "../lib/errors.ts";
+import type { Expression } from "../schema/ast.ts";
+import { convertExpression } from "./expression-converter.ts";
 
 // ---------------------------------------------------------------------------
 // 1. Literal — string

@@ -8,8 +8,8 @@
  */
 
 import { assert, assertEquals } from "@std/assert";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { DatabaseConnection } from "../lib/database.ts";
+import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { introspectDatabase } from "./pg-introspect-queries.ts";
 
 const SETUP_SQL = `
@@ -162,8 +162,8 @@ Deno.test({
       });
       const fkPostsAuthor = data.foreignKeys.find(
         (fk) =>
-          fk.fromTable === "introspect_posts" &&
-          fk.fromColumn === "author_id",
+          fk.fromTable === "introspect_posts"
+          && fk.fromColumn === "author_id",
       );
       assert(fkPostsAuthor, "posts.author_id FK missing");
       assertEquals(fkPostsAuthor!.toTable, "introspect_users");
@@ -171,8 +171,8 @@ Deno.test({
 
       const fkJunctionPost = data.foreignKeys.find(
         (fk) =>
-          fk.fromTable === "introspect_posts_tags" &&
-          fk.fromColumn === "post_id",
+          fk.fromTable === "introspect_posts_tags"
+          && fk.fromColumn === "post_id",
       );
       assert(fkJunctionPost, "junction post_id FK missing");
       assertEquals(fkJunctionPost!.toTable, "introspect_posts");

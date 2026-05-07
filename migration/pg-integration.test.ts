@@ -11,8 +11,8 @@
 
 import { assertEquals, assertExists } from "@std/assert";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
+import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { MigrationEngine } from "./engine.ts";
 import { SchemaManager } from "./schema-manager.ts";
 import * as Types from "./types.ts";
@@ -26,7 +26,7 @@ const RUN_PG = canRunPgTests();
 /** Parse a DSN into connection config for the raw deno-postgres Client. */
 function parseDsn(
   dsn: string,
-): { hostname: string; port: number; user: string; database: string } {
+): { hostname: string; port: number; user: string; database: string; } {
   const url = new URL(dsn);
   return {
     hostname: url.hostname || "localhost",
@@ -42,7 +42,7 @@ async function tableExists(dsn: string, tableName: string): Promise<boolean> {
   const client = new Client(cfg);
   try {
     await client.connect();
-    const result = await client.queryObject<{ exists: boolean }>(
+    const result = await client.queryObject<{ exists: boolean; }>(
       `SELECT EXISTS (
         SELECT 1 FROM information_schema.tables
         WHERE table_schema = 'public' AND table_name = $1
@@ -59,13 +59,13 @@ async function tableExists(dsn: string, tableName: string): Promise<boolean> {
 async function getColumns(
   dsn: string,
   tableName: string,
-): Promise<{ column_name: string; data_type: string }[]> {
+): Promise<{ column_name: string; data_type: string; }[]> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
   try {
     await client.connect();
     const result = await client.queryObject<
-      { column_name: string; data_type: string }
+      { column_name: string; data_type: string; }
     >(
       `SELECT column_name, data_type
        FROM information_schema.columns

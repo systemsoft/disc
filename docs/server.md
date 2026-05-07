@@ -54,8 +54,8 @@ await server.start();
 The `createServerFromEnv()` function reads all configuration from environment variables and optionally accepts a `PostgresInstance` (for bundled mode), a parsed `Schema`, and a list of extensions:
 
 ```typescript
-import { createServerFromEnv } from "disc/server/server.ts";
 import { PostgresInstance } from "disc/postgres/instance.ts";
+import { createServerFromEnv } from "disc/server/server.ts";
 
 const pg = new PostgresInstance({ dataDir: "~/.disc/instances/myapp/data" });
 await pg.start();

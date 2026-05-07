@@ -38,7 +38,7 @@ export interface GraphQLResponse {
 
 export interface GraphQLError {
   message: string;
-  locations?: { line: number; column: number }[];
+  locations?: { line: number; column: number; }[];
   path?: (string | number)[];
   extensions?: Record<string, unknown>;
 }

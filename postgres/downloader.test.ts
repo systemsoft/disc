@@ -1,7 +1,7 @@
 import { assertEquals, assertExists, assertRejects } from "@std/assert";
+import { ensureDir } from "@std/fs";
 import { join } from "@std/path";
 import { PostgresBinaryDownloader } from "./downloader.ts";
-import { ensureDir } from "@std/fs";
 
 const TEST_BASE_DIR = join(
   Deno.makeTempDirSync(),
@@ -210,7 +210,7 @@ Deno.test("PostgresBinaryDownloader - DISC_PG_BINARY_DIR overrides default baseD
     const downloader = new PostgresBinaryDownloader();
     // Field is private; cast through an unknown index for the assertion.
     assertEquals(
-      (downloader as unknown as { baseDir: string }).baseDir,
+      (downloader as unknown as { baseDir: string; }).baseDir,
       stagedRoot,
     );
   } finally {

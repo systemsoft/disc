@@ -2,10 +2,10 @@
  * SDL Schema Validator - Validates SDL AST for correctness
  */
 
+import { isPolymorphicType } from "../compiler/context.ts";
 import { ValidationError } from "../lib/errors.ts";
 import * as AST from "./ast.ts";
 import { Module, SDLConverter } from "./converter.ts";
-import { isPolymorphicType } from "../compiler/context.ts";
 
 /**
  * Built-in annotation names that do not require an explicit
@@ -53,7 +53,7 @@ export class SchemaValidator {
 
   validate(
     document: AST.SDLDocument,
-  ): { ok: boolean; errors?: ValidationError[] } {
+  ): { ok: boolean; errors?: ValidationError[]; } {
     const errors = this.validateDocument(document);
     return {
       ok: errors.length === 0,
@@ -544,8 +544,8 @@ export class SchemaValidator {
     // Type compatibility checks (when property type is known)
     if (propertyType) {
       if (
-        (name === "max_len_value" || name === "min_len_value") &&
-        !STRING_TYPES.has(propertyType)
+        (name === "max_len_value" || name === "min_len_value")
+        && !STRING_TYPES.has(propertyType)
       ) {
         this.addError(
           `Constraint '${name}' can only be applied to 'str' or 'bytes' properties, not '${propertyType}'`,
@@ -553,15 +553,15 @@ export class SchemaValidator {
       }
 
       if (
-        (name === "max_value" || name === "min_value" ||
-          name === "max_ex_value" || name === "min_ex_value") &&
-        !NUMERIC_TYPES.has(propertyType) && propertyType !== "datetime" &&
-        propertyType !== "duration" &&
-        propertyType !== "cal::local_datetime" &&
-        propertyType !== "cal::local_date" &&
-        propertyType !== "cal::local_time" &&
-        propertyType !== "cal::relative_duration" &&
-        propertyType !== "cal::date_duration"
+        (name === "max_value" || name === "min_value"
+          || name === "max_ex_value" || name === "min_ex_value")
+        && !NUMERIC_TYPES.has(propertyType) && propertyType !== "datetime"
+        && propertyType !== "duration"
+        && propertyType !== "cal::local_datetime"
+        && propertyType !== "cal::local_date"
+        && propertyType !== "cal::local_time"
+        && propertyType !== "cal::relative_duration"
+        && propertyType !== "cal::date_duration"
       ) {
         this.addError(
           `Constraint '${name}' can only be applied to numeric or temporal properties, not '${propertyType}'`,
@@ -745,8 +745,8 @@ export class SchemaValidator {
 
       if (!orderableTypes.includes(innerTypeName)) {
         this.addError(
-          `Type '${innerTypeName}' is not a valid inner type for '${typeName}'; ` +
-            `expected one of: ${orderableTypes.join(", ")}`,
+          `Type '${innerTypeName}' is not a valid inner type for '${typeName}'; `
+            + `expected one of: ${orderableTypes.join(", ")}`,
         );
       }
 

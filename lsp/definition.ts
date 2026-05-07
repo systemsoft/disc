@@ -2,8 +2,8 @@
  * Go-to-definition provider (#7411 + #655 — Phase 3)
  */
 
-import { buildSymbolIndex } from "./symbol-index.ts";
 import type { DocumentUri, Location, Position } from "./protocol.ts";
+import { buildSymbolIndex } from "./symbol-index.ts";
 
 const IDENT = /[A-Za-z_][A-Za-z_0-9]*/g;
 

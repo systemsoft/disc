@@ -3,8 +3,8 @@
  * Server Integration Module - Serves the built UI from Disc server
  */
 
-import { join } from "@std/path";
 import { exists } from "@std/fs";
+import { join } from "@std/path";
 
 export interface UIServerOptions {
   enabled: boolean;

@@ -11,8 +11,8 @@
 
 import { assertEquals, assertExists } from "@std/assert";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
+import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { SchemaManager } from "./schema-manager.ts";
 
 const RUN_PG = canRunPgTests();
@@ -23,7 +23,7 @@ const RUN_PG = canRunPgTests();
 
 function parseDsn(
   dsn: string,
-): { hostname: string; port: number; user: string; database: string } {
+): { hostname: string; port: number; user: string; database: string; } {
   const url = new URL(dsn);
   return {
     hostname: url.hostname || "localhost",
@@ -38,7 +38,7 @@ async function tableExists(dsn: string, tableName: string): Promise<boolean> {
   const client = new Client(cfg);
   try {
     await client.connect();
-    const result = await client.queryObject<{ exists: boolean }>(
+    const result = await client.queryObject<{ exists: boolean; }>(
       `SELECT EXISTS (
         SELECT 1 FROM information_schema.tables
         WHERE table_schema = 'public' AND table_name = $1
@@ -54,13 +54,13 @@ async function tableExists(dsn: string, tableName: string): Promise<boolean> {
 async function getColumns(
   dsn: string,
   tableName: string,
-): Promise<{ column_name: string; data_type: string }[]> {
+): Promise<{ column_name: string; data_type: string; }[]> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
   try {
     await client.connect();
     const result = await client.queryObject<
-      { column_name: string; data_type: string }
+      { column_name: string; data_type: string; }
     >(
       `SELECT column_name, data_type
        FROM information_schema.columns
@@ -82,7 +82,7 @@ async function getTriggers(
   const client = new Client(cfg);
   try {
     await client.connect();
-    const result = await client.queryObject<{ trigger_name: string }>(
+    const result = await client.queryObject<{ trigger_name: string; }>(
       `SELECT DISTINCT trigger_name
        FROM information_schema.triggers
        WHERE trigger_schema = 'public' AND event_object_table = $1
@@ -235,7 +235,7 @@ Deno.test({
       );
 
       // Verify existing data is intact
-      const rows = await queryRows<{ title: string }>(
+      const rows = await queryRows<{ title: string; }>(
         dsn,
         `SELECT title FROM evo_article`,
       );
@@ -250,7 +250,7 @@ Deno.test({
       );
 
       const newRows = await queryRows<
-        { title: string; created_at: string | null }
+        { title: string; created_at: string | null; }
       >(
         dsn,
         `SELECT title, created_at FROM evo_article WHERE title = $1`,
@@ -476,8 +476,8 @@ Deno.test({
       const catV1 = schemaV1?.types.get("EvoCategory");
       assertExists(catV1, "EvoCategory should exist in schema");
       assertEquals(
-        catV1!.annotations === undefined ||
-          Object.keys(catV1!.annotations).length === 0,
+        catV1!.annotations === undefined
+          || Object.keys(catV1!.annotations).length === 0,
         true,
         "Should have no annotations initially",
       );
@@ -622,7 +622,7 @@ Deno.test({
       );
 
       const rows = await queryRows<
-        { title: string; audit_note: string; version: number }
+        { title: string; audit_note: string; version: number; }
       >(
         dsn,
         `SELECT title, audit_note, version FROM evo_document`,

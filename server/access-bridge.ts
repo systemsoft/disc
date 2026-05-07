@@ -2,8 +2,8 @@
  * Bridge between the server's AuthContext and the access module's AccessContext.
  */
 
-import type { AuthContext } from "./types.ts";
 import type { AccessContext } from "../access/types.ts";
+import type { AuthContext } from "./types.ts";
 
 export function authContextToAccessContext(
   auth: AuthContext,

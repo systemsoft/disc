@@ -21,7 +21,7 @@ import { formatSseEvent, handleSchemaWatch } from "./schema-watch.ts";
 Deno.test("formatSseEvent — emits standard event/data lines", () => {
   const out = formatSseEvent({ event: "snapshot", data: { foo: 1 } });
   assertStringIncludes(out, "event: snapshot\n");
-  assertStringIncludes(out, 'data: {"foo":1}\n');
+  assertStringIncludes(out, "data: {\"foo\":1}\n");
   // SSE frames end with a blank line.
   assertEquals(out.endsWith("\n\n"), true);
 });
@@ -60,8 +60,8 @@ Deno.test("handleSchemaWatch — returns SSE response with correct headers", asy
     assertStringIncludes(body, "event: snapshot\n");
     // The snapshot's `data` JSON should be a SchemaDiffSummary —
     // the on-disk has User, applied is empty.
-    assertStringIncludes(body, '"changed":true');
-    assertStringIncludes(body, '"User"');
+    assertStringIncludes(body, "\"changed\":true");
+    assertStringIncludes(body, "\"User\"");
   } finally {
     await Deno.remove(tmp);
   }
@@ -86,7 +86,7 @@ Deno.test(
 
       const body = await response.text();
       assertStringIncludes(body, "event: snapshot\n");
-      assertStringIncludes(body, '"errors"');
+      assertStringIncludes(body, "\"errors\"");
     } finally {
       await Deno.remove(tmp);
     }

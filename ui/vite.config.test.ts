@@ -1,5 +1,5 @@
-import { defineConfig } from "vitest/config";
 import { sveltekit } from "@sveltejs/kit/vite";
+import { defineConfig } from "vitest/config";
 
 // Vitest config for component-level unit tests. Excludes `tests/e2e/`
 // because those are Playwright specs that crash if loaded into vitest's

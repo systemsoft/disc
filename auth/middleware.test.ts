@@ -2,8 +2,8 @@ import { assertEquals, assertExists } from "@std/assert";
 import { afterEach, beforeEach, describe, it } from "@std/testing/bdd";
 import { AuthMiddleware } from "./middleware.ts";
 import { AuthProvider } from "./provider.ts";
-import { AuthConfig } from "./types.ts";
 import { TestDatabase } from "./test-database.ts";
+import { AuthConfig } from "./types.ts";
 
 describe("AuthMiddleware", () => {
   let middleware: AuthMiddleware;

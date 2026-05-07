@@ -7,15 +7,15 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
+import { TypeScriptGenerator } from "../codegen/typescript-generator.ts";
+import { DDLGenerator } from "../migration/ddl.ts";
+import { SchemaDiffer } from "../migration/differ.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
+import type { TypeDeclaration, TypeRef } from "../schema/ast.ts";
+import { getBuiltinFunctions } from "./builtin-functions.ts";
 import { getAllSubtypes, getTypeHierarchy } from "./context.ts";
 import type { Schema, TypeDef } from "./context.ts";
-import { getBuiltinFunctions } from "./builtin-functions.ts";
-import { TypeScriptGenerator } from "../codegen/typescript-generator.ts";
-import { SchemaDiffer } from "../migration/differ.ts";
-import { DDLGenerator } from "../migration/ddl.ts";
 import { describeType } from "./introspection.ts";
-import type { TypeDeclaration, TypeRef } from "../schema/ast.ts";
 
 // ---------------------------------------------------------------------------
 // Helper: build a minimal TypeDef (mirrors type-hierarchy.test.ts pattern)

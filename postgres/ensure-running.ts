@@ -1,8 +1,8 @@
 import type { ProjectContext } from "../lib/project-context.ts";
+import { EMBEDDED_PG_MANIFEST, EMBEDDED_PG_VERSION } from "./embedded-pg-manifest.ts";
+import { resolveEmbeddedPgBinDir } from "./embedded-pg.ts";
 import type { PostgresInstance } from "./instance.ts";
 import { PostgresManager } from "./manager.ts";
-import { resolveEmbeddedPgBinDir } from "./embedded-pg.ts";
-import { EMBEDDED_PG_MANIFEST, EMBEDDED_PG_VERSION } from "./embedded-pg-manifest.ts";
 
 export interface EnsureResult {
   dsn: string;
@@ -22,7 +22,7 @@ export interface EnsureResult {
  */
 export async function ensurePgRunning(
   ctx: ProjectContext,
-  options: { withMonitor?: boolean } = {},
+  options: { withMonitor?: boolean; } = {},
 ): Promise<EnsureResult> {
   if (!ctx.managed) {
     throw new Error(

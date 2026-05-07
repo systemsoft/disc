@@ -196,7 +196,7 @@ Deno.test("renderVerificationEmail - CTA uses bulletproof table markup", () => {
     verificationToken: "tok-verify-abc",
   });
 
-  assertStringIncludes(rendered.html, '<table role="presentation"');
+  assertStringIncludes(rendered.html, "<table role=\"presentation\"");
   assertStringIncludes(rendered.html, "bgcolor=");
   assertStringIncludes(rendered.html, "mso-padding-alt:");
 });
@@ -208,7 +208,7 @@ Deno.test("renderPasswordResetEmail - CTA uses bulletproof table markup", () => 
     resetToken: "tok-reset-xyz",
   });
 
-  assertStringIncludes(rendered.html, '<table role="presentation"');
+  assertStringIncludes(rendered.html, "<table role=\"presentation\"");
   assertStringIncludes(rendered.html, "bgcolor=");
   assertStringIncludes(rendered.html, "mso-padding-alt:");
 });
@@ -220,7 +220,7 @@ Deno.test("renderMagicLinkEmail - CTA uses bulletproof table markup", () => {
     recipient: "carol@example.com",
   });
 
-  assertStringIncludes(rendered.html, '<table role="presentation"');
+  assertStringIncludes(rendered.html, "<table role=\"presentation\"");
   assertStringIncludes(rendered.html, "bgcolor=");
   assertStringIncludes(rendered.html, "mso-padding-alt:");
 });
@@ -231,7 +231,7 @@ Deno.test("renderMagicCodeEmail - code badge uses bulletproof table markup", () 
     recipient: "carol@example.com",
   });
 
-  assertStringIncludes(rendered.html, '<table role="presentation"');
+  assertStringIncludes(rendered.html, "<table role=\"presentation\"");
   assertStringIncludes(rendered.html, "bgcolor=");
   assertStringIncludes(rendered.html, "mso-padding-alt:");
 });
@@ -247,6 +247,6 @@ Deno.test("buttonHtml - brandColor flows through to bgcolor attribute", () => {
   // bgcolor on the <td> is what every email client uses; inline-block
   // styling on the <a> is the modern-client path. Both must reflect
   // the configured brand color so the rendering is consistent.
-  assertStringIncludes(rendered.html, 'bgcolor="#ff0066"');
+  assertStringIncludes(rendered.html, "bgcolor=\"#ff0066\"");
   assertStringIncludes(rendered.html, "background: #ff0066");
 });

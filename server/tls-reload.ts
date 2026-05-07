@@ -31,8 +31,8 @@ export function validatePemEnvelope(
   kind: "cert" | "key",
 ): boolean {
   if (kind === "cert") {
-    return /-----BEGIN CERTIFICATE-----/.test(content) &&
-      /-----END CERTIFICATE-----/.test(content);
+    return /-----BEGIN CERTIFICATE-----/.test(content)
+      && /-----END CERTIFICATE-----/.test(content);
   }
   // key: any of the standard private-key envelopes
   const keyPattern = /-----BEGIN (?:RSA |EC |ENCRYPTED |DSA )?PRIVATE KEY-----/;

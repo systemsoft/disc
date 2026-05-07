@@ -3,11 +3,11 @@
  */
 
 import { assertEquals, assertRejects } from "@std/assert";
-import { ExtensionRegistry } from "./registry.ts";
+import type { FunctionDef, TypeDef } from "../compiler/context.ts";
 import { BaseExtension } from "./base-extension.ts";
 import { ExtensionDependencyError, ExtensionInitError } from "./errors.ts";
+import { ExtensionRegistry } from "./registry.ts";
 import type { CompilerHook, ExtensionContext, ExtensionDatabaseSetup, ExtensionMetadata, ExtensionMiddleware, ExtensionRoute } from "./types.ts";
-import type { FunctionDef, TypeDef } from "../compiler/context.ts";
 
 // ── Test helpers ─────────────────────────────────────────────────────
 
@@ -28,10 +28,10 @@ function makeContext(): ExtensionContext {
       info: () => {},
       warn: () => {},
       error: () => {},
-      child: function () {
+      child: function() {
         return this;
       },
-      withRequest: function () {
+      withRequest: function() {
         return this;
       },
     } as unknown as ExtensionContext["logger"],

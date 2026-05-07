@@ -2,10 +2,10 @@
  * Extension registry for Disc database
  */
 
-import type { CompilerHook, Extension, ExtensionContext, ExtensionMiddleware, ExtensionRoute } from "./types.ts";
 import type { FunctionDef, TypeDef } from "../compiler/context.ts";
-import { ExtensionDependencyError, ExtensionInitError } from "./errors.ts";
 import { getLogger } from "../lib/logger.ts";
+import { ExtensionDependencyError, ExtensionInitError } from "./errors.ts";
+import type { CompilerHook, Extension, ExtensionContext, ExtensionMiddleware, ExtensionRoute } from "./types.ts";
 
 const log = getLogger("extension-registry");
 
@@ -49,7 +49,7 @@ export class ExtensionRegistry {
    */
   async initializeAll(
     context: ExtensionContext,
-    options: { onError?: "strict" | "continue" } = {},
+    options: { onError?: "strict" | "continue"; } = {},
   ): Promise<string[]> {
     const onError = options.onError ?? "strict";
     const sorted = this.topologicalSort();
@@ -142,9 +142,9 @@ export class ExtensionRegistry {
   }
 
   async getHealthStatus(): Promise<
-    Map<string, { healthy: boolean; details?: string }>
+    Map<string, { healthy: boolean; details?: string; }>
   > {
-    const status = new Map<string, { healthy: boolean; details?: string }>();
+    const status = new Map<string, { healthy: boolean; details?: string; }>();
     for (const [name, ext] of this.extensions) {
       try {
         status.set(name, await ext.healthCheck());

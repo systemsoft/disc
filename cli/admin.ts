@@ -14,15 +14,15 @@
  *   - #4209 fail cleanly on empty password (no ISE)
  */
 
-import { AuthProvider } from "../auth/provider.ts";
-import { PgDatabaseAdapter } from "../auth/pg-database-adapter.ts";
-import { AuthError } from "../auth/types.ts";
-import { DatabaseConnection } from "../lib/database.ts";
-import { SDLParser } from "../schema/parser.ts";
 import { AccessEvaluator } from "../access/evaluator.ts";
 import { adaptAccessPolicies } from "../access/policy-adapter.ts";
 import type { AccessContext, AccessOperation } from "../access/types.ts";
+import { PgDatabaseAdapter } from "../auth/pg-database-adapter.ts";
+import { AuthProvider } from "../auth/provider.ts";
+import { AuthError } from "../auth/types.ts";
+import { DatabaseConnection } from "../lib/database.ts";
 import type * as AST from "../schema/ast.ts";
+import { SDLParser } from "../schema/parser.ts";
 
 interface BaseOptions {
   "database-url"?: string;
@@ -172,7 +172,7 @@ class AdminCommand {
    * Reads `--schema <file>` (default `./dbschema/default.disc`).
    */
   async listPolicies(
-    opts: { schema?: string; type?: string },
+    opts: { schema?: string; type?: string; },
   ): Promise<void> {
     const schemaFile = opts.schema ?? "./dbschema/default.disc";
     const sdl = await Deno.readTextFile(schemaFile);
@@ -392,14 +392,14 @@ export function collectPoliciesFromSdl(
 }
 
 function collectFromTypeDecls(
-  decls: ReadonlyArray<{ kind: string }>,
+  decls: ReadonlyArray<{ kind: string; }>,
   out: Map<string, ListedPolicy[]>,
 ): void {
   for (const d of decls) {
     if (d.kind !== "TypeDeclaration") continue;
     const td = d as unknown as {
-      name: { value: string };
-      members?: Array<{ kind: string; [key: string]: unknown }>;
+      name: { value: string; };
+      members?: Array<{ kind: string; [key: string]: unknown; }>;
     };
     const policies: ListedPolicy[] = [];
     for (const m of td.members ?? []) {
@@ -408,10 +408,10 @@ function collectFromTypeDecls(
       // action has `allow: boolean` + `operations: AccessOperation[]`.
       // Flatten to one ListedPolicy per AccessAction so the listing
       // surfaces both the verdict and the events.
-      const actions = (m.actions as Array<{ allow: boolean; operations: string[] }>) ?? [];
+      const actions = (m.actions as Array<{ allow: boolean; operations: string[]; }>) ?? [];
       for (const action of actions) {
         policies.push({
-          name: (m.name as { value: string }).value,
+          name: (m.name as { value: string; }).value,
           action: action.allow ? "allow" : "deny",
           events: action.operations.slice(),
           condition: m.condition ? stringifyExpr(m.condition as Record<string, unknown>) : undefined,
@@ -433,7 +433,7 @@ function stringifyExpr(expr: Record<string, unknown>): string {
     return ((expr.path as string[]) ?? []).join(".");
   }
   if (expr.kind === "FunctionCall") {
-    const nameParts = ((expr.name as { parts?: string[] } | undefined)?.parts) ?? [];
+    const nameParts = ((expr.name as { parts?: string[]; } | undefined)?.parts) ?? [];
     return `${nameParts.join("::")}(...)`;
   }
   if (expr.kind === "BinaryOp") {
@@ -460,9 +460,9 @@ async function openAuth(opts: BaseOptions): Promise<AuthCtx | null> {
     console.error("❌ --database-url is required (or set DATABASE_URL env var)");
     return null;
   }
-  const jwtSecret = opts["jwt-secret"] ??
-    Deno.env.get("DISC_JWT_SECRET") ??
-    Deno.env.get("JWT_SECRET");
+  const jwtSecret = opts["jwt-secret"]
+    ?? Deno.env.get("DISC_JWT_SECRET")
+    ?? Deno.env.get("JWT_SECRET");
   if (!jwtSecret || jwtSecret.length < 32) {
     console.error(
       "❌ --jwt-secret is required (or set DISC_JWT_SECRET / JWT_SECRET); must be ≥32 bytes",

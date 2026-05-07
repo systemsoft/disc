@@ -15,10 +15,10 @@
  */
 
 import { assert, assertEquals } from "@std/assert";
-import { SDLParser } from "../schema/parser.ts";
 import { SDLConverter } from "../schema/converter.ts";
-import { SchemaDiffer } from "./differ.ts";
+import { SDLParser } from "../schema/parser.ts";
 import { DDLGenerator } from "./ddl.ts";
+import { SchemaDiffer } from "./differ.ts";
 import { MigrationEngine } from "./engine.ts";
 import * as Types from "./types.ts";
 

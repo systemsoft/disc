@@ -9,9 +9,9 @@
  */
 
 import { assertEquals, assertGreater, assertStringIncludes } from "@std/assert";
-import { handleDataWatch } from "./data-watch.ts";
-import { DataWatchRegistry } from "./data-watch-registry.ts";
 import { ConnectionPool } from "../../lib/connection-pool.ts";
+import { DataWatchRegistry } from "./data-watch-registry.ts";
+import { handleDataWatch } from "./data-watch.ts";
 
 function makeMockPool() {
   return {
@@ -55,7 +55,7 @@ async function readUntil(
   let combined = "";
   for (let i = 0; i < maxAttempts; i++) {
     const chunkPromise = reader.read();
-    const timeout = new Promise<{ done: true; value: undefined }>((r) => setTimeout(() => r({ done: true, value: undefined }), perAttemptMs));
+    const timeout = new Promise<{ done: true; value: undefined; }>((r) => setTimeout(() => r({ done: true, value: undefined }), perAttemptMs));
     const result = await Promise.race([chunkPromise, timeout]);
     if (result.done) break;
     combined += decoder.decode(result.value);
@@ -87,8 +87,8 @@ Deno.test({
       const text = await readUntil(reader, "event: ready");
       assertStringIncludes(text, ": connected");
       assertStringIncludes(text, "event: ready");
-      assertStringIncludes(text, '"users"');
-      assertStringIncludes(text, '"posts"');
+      assertStringIncludes(text, "\"users\"");
+      assertStringIncludes(text, "\"posts\"");
 
       await reader.cancel();
     } finally {
@@ -122,7 +122,7 @@ Deno.test({
 
       // Drive an invalidation through the public path: swap the pool
       // to one that returns a single change-log row, then run pollOnce.
-      (registry as unknown as { pool: ConnectionPool }).pool = {
+      (registry as unknown as { pool: ConnectionPool; }).pool = {
         query(_sql: string, _params?: unknown[]) {
           return Promise.resolve({
             rows: [{ id: 1, table_name: "widgets" }],
@@ -137,7 +137,7 @@ Deno.test({
 
       const combined = await readUntil(reader, "event: invalidate", 6, 100);
       assertStringIncludes(combined, "event: invalidate");
-      assertStringIncludes(combined, '"widgets"');
+      assertStringIncludes(combined, "\"widgets\"");
       assertGreater(combined.length, 0);
 
       await reader.cancel();

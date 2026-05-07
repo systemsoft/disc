@@ -16,8 +16,8 @@
  */
 
 import type { DatabaseInterface } from "../../auth/database-interface.ts";
-import type { FileMetadata, FileStorageBackend, FileUpload } from "./types.ts";
 import { getLogger } from "../logger.ts";
+import type { FileMetadata, FileStorageBackend, FileUpload } from "./types.ts";
 
 const log = getLogger("file-storage");
 

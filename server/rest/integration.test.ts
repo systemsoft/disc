@@ -10,8 +10,8 @@
  */
 
 import { assert, assertEquals } from "@std/assert";
-import { HttpServer } from "../http.ts";
 import type { Schema, TypeDef } from "../../compiler/context.ts";
+import { HttpServer } from "../http.ts";
 import type * as Types from "../types.ts";
 
 const TEST_HOST = "127.0.0.1";
@@ -98,9 +98,9 @@ function makeStubHandler(
   responder: (q: string) => unknown = () => [],
 ): {
   handler: Types.ProtocolHandler;
-  captured: { query: string }[];
+  captured: { query: string; }[];
 } {
-  const captured: { query: string }[] = [];
+  const captured: { query: string; }[] = [];
   const handler: Types.ProtocolHandler = {
     handleRequest: (request) => {
       captured.push({ query: request.query });
@@ -116,7 +116,7 @@ async function startServer(opts: {
   responder?: (q: string) => unknown;
 } = {}): Promise<{
   baseUrl: string;
-  captured: { query: string }[];
+  captured: { query: string; }[];
   cleanup: () => Promise<void>;
 }> {
   const schema = buildSchema();

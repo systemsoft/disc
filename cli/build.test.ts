@@ -1,6 +1,6 @@
 import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
-import { AVAILABLE_PLATFORMS, BuildCommand, generateEmbeddedPgManifest, generateUiManifest, platformPgStagingDir, refreshEmbeddedPgManifest } from "./build.ts";
 import { join } from "@std/path";
+import { AVAILABLE_PLATFORMS, BuildCommand, generateEmbeddedPgManifest, generateUiManifest, platformPgStagingDir, refreshEmbeddedPgManifest } from "./build.ts";
 
 Deno.test("BuildCommand - maps linux-x64 to x86_64-unknown-linux-gnu", () => {
   const command = new BuildCommand();
@@ -118,8 +118,8 @@ Deno.test("generateEmbeddedPgManifest - lists files with absolute sourceUrl + co
       sourceDir,
     });
 
-    assertStringIncludes(generated, '"bin/postgres"');
-    assertStringIncludes(generated, '"share/tz.txt"');
+    assertStringIncludes(generated, "\"bin/postgres\"");
+    assertStringIncludes(generated, "\"share/tz.txt\"");
     // bin/* gets executable mode
     assertStringIncludes(generated, "0o755");
     // non-bin gets 0o644
@@ -169,8 +169,8 @@ Deno.test("generateUiManifest - emits sorted, posix-style paths even on backslas
     await Deno.writeTextFile(join(buildDir, "a", "a.js"), "");
 
     const generated = await generateUiManifest(buildDir);
-    const aIdx = generated.indexOf('"a/a.js"');
-    const zIdx = generated.indexOf('"z/z.js"');
+    const aIdx = generated.indexOf("\"a/a.js\"");
+    const zIdx = generated.indexOf("\"z/z.js\"");
     assertEquals(aIdx > 0, true);
     assertEquals(zIdx > aIdx, true);
   } finally {

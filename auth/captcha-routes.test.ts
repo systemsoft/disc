@@ -4,11 +4,11 @@
  */
 
 import { assert, assertEquals } from "@std/assert";
-import { AuthProvider } from "./provider.ts";
-import { AuthMiddleware } from "./middleware.ts";
-import { AuthRoutes } from "./integration.ts";
-import { TestDatabase } from "./test-database.ts";
 import type { CaptchaConfig } from "./captcha.ts";
+import { AuthRoutes } from "./integration.ts";
+import { AuthMiddleware } from "./middleware.ts";
+import { AuthProvider } from "./provider.ts";
+import { TestDatabase } from "./test-database.ts";
 
 interface CapturedRequest {
   url: string;
@@ -17,7 +17,7 @@ interface CapturedRequest {
 
 function makeFetch(
   responder: (body: string) => Response,
-): { fetchImpl: typeof fetch; calls: CapturedRequest[] } {
+): { fetchImpl: typeof fetch; calls: CapturedRequest[]; } {
   const calls: CapturedRequest[] = [];
   const fetchImpl = ((
     input: string | URL | Request,

@@ -1,7 +1,7 @@
 import { assertEquals, assertExists, assertRejects } from "@std/assert";
 import { join } from "@std/path";
-import { PostgresManager } from "./manager.ts";
 import { canRunPgTests, findPgBinDir } from "../tests/pg-test-harness.ts";
+import { PostgresManager } from "./manager.ts";
 
 // Use /tmp directly to keep Unix socket paths under the 108-char limit.
 const TEST_BASE_DIR = Deno.makeTempDirSync({

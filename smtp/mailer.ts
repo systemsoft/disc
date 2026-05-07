@@ -44,9 +44,9 @@ export class SmtpMailer implements Mailer {
       // `--unsafely-ignore-certificate-errors=<host>` on the Deno CLI.
       // See smtp/README.md.
       log.warn(
-        "tlsRejectUnauthorized=false is informational only; pass " +
-          "--unsafely-ignore-certificate-errors=<host> to Deno to actually " +
-          "disable TLS cert validation",
+        "tlsRejectUnauthorized=false is informational only; pass "
+          + "--unsafely-ignore-certificate-errors=<host> to Deno to actually "
+          + "disable TLS cert validation",
         { host: cfg.host },
       );
     }

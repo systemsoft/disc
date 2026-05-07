@@ -4,8 +4,8 @@
  * These extend the base schema AST to support access control features
  */
 
-import { SDLNode } from "../schema/ast.ts";
 import { Span } from "../lib/types.ts";
+import { SDLNode } from "../schema/ast.ts";
 
 /**
  * Access policy AST node for schema-level policies

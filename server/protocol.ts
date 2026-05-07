@@ -171,7 +171,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
 
   private check_balanced_braces(
     query: string,
-  ): { valid: boolean; position: number } {
+  ): { valid: boolean; position: number; } {
     let depth = 0;
     let position = 0;
 

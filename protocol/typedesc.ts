@@ -11,10 +11,10 @@
  * UUID.
  */
 
+import type { TypeDef } from "../compiler/context.ts";
 import { BufferReader, BufferWriter } from "./buffer.ts";
 import { Cardinality } from "./enums.ts";
 import { bytesToUuid, uuidToBytes } from "./types.ts";
-import type { TypeDef } from "../compiler/context.ts";
 
 // ---------------------------------------------------------------------------
 // Descriptor tag constants
@@ -163,7 +163,7 @@ export interface TupleDescriptor {
 export interface NamedTupleDescriptor {
   tag: typeof DescriptorTag.NAMED_TUPLE;
   id: Uint8Array;
-  elements: Array<{ name: string; typeId: Uint8Array }>;
+  elements: Array<{ name: string; typeId: Uint8Array; }>;
 }
 
 export interface RangeDescriptor {
@@ -410,7 +410,7 @@ export function decodeTypeDescriptors(data: Uint8Array): TypeDescriptor[] {
       case DescriptorTag.NAMED_TUPLE: {
         const id = dr.readUUID();
         const count = dr.readUInt16();
-        const elements: Array<{ name: string; typeId: Uint8Array }> = [];
+        const elements: Array<{ name: string; typeId: Uint8Array; }> = [];
         for (let i = 0; i < count; i++) {
           const name = dr.readString();
           const typeId = dr.readUUID();
@@ -514,7 +514,7 @@ export function buildResultDescriptors(
   typeDef: TypeDef,
   shapeFields: string[],
   schema?: Map<string, TypeDef>,
-): { descriptors: TypeDescriptor[]; rootId: Uint8Array } {
+): { descriptors: TypeDescriptor[]; rootId: Uint8Array; } {
   const descriptors: TypeDescriptor[] = [];
   const emittedIds = new Set<string>();
 

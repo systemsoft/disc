@@ -3,12 +3,12 @@
  */
 
 import { assertEquals } from "@std/assert";
+import { AccessEvaluator } from "../access/evaluator.ts";
+import { AccessSQLInjector } from "../access/sql-injector.ts";
+import type { AccessConfig } from "../access/types.ts";
 import { AccessExtensionAdapter } from "./access-extension.ts";
 import type { AccessExtensionAdapterOptions } from "./access-extension.ts";
 import type { ExtensionContext } from "./types.ts";
-import type { AccessConfig } from "../access/types.ts";
-import { AccessEvaluator } from "../access/evaluator.ts";
-import { AccessSQLInjector } from "../access/sql-injector.ts";
 
 // ── Test helpers ──────────────────────────────────────────────────────
 
@@ -29,10 +29,10 @@ function makeContext(): ExtensionContext {
       error: () => {},
       info: () => {},
       warn: () => {},
-      child: function () {
+      child: function() {
         return this;
       },
-      withRequest: function () {
+      withRequest: function() {
         return this;
       },
     } as unknown as ExtensionContext["logger"],

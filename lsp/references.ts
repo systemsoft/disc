@@ -16,13 +16,13 @@
 
 import { SDLLexer } from "../schema/lexer.ts";
 import { type Token, TokenType } from "../schema/tokens.ts";
-import { buildSymbolIndex } from "./symbol-index.ts";
 import type { DocumentUri, Location, Position, Range } from "./protocol.ts";
+import { buildSymbolIndex } from "./symbol-index.ts";
 
 const IDENT = /[A-Za-z_][A-Za-z_0-9]*/g;
 
 export interface ReferencesContext {
-  documents: ReadonlyArray<{ uri: DocumentUri; text: string }>;
+  documents: ReadonlyArray<{ uri: DocumentUri; text: string; }>;
 }
 
 export function provideReferences(
@@ -68,7 +68,7 @@ export function provideReferences(
   // includes the primary doc (the caller often does, since
   // `LanguageServer.collectSdlContext()` returns every open .disc).
   const seen = new Set<DocumentUri>();
-  const targets: { uri: DocumentUri; text: string }[] = [];
+  const targets: { uri: DocumentUri; text: string; }[] = [];
   targets.push({ uri, text });
   seen.add(uri);
   if (options.context) {
@@ -91,9 +91,9 @@ export function provideReferences(
       if (tok.type !== TokenType.IDENT) continue;
       if (tok.value !== word) continue;
       const range = tokenRange(tok);
-      const isDeclSite = target.uri === declUri &&
-        range.start.line === declRangeStart.line &&
-        range.start.character === declRangeStart.character;
+      const isDeclSite = target.uri === declUri
+        && range.start.line === declRangeStart.line
+        && range.start.character === declRangeStart.character;
       if (isDeclSite && !includeDecl) continue;
       out.push({ uri: target.uri, range });
     }

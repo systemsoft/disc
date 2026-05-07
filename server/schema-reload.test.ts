@@ -7,9 +7,9 @@
 
 import { assert, assertEquals } from "@std/assert";
 import type { Schema } from "../compiler/context.ts";
-import type { ProtocolHandler, QueryContext, QueryRequest, QueryResponse } from "./types.ts";
-import { DiscServer } from "./server.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
+import { DiscServer } from "./server.ts";
+import type { ProtocolHandler, QueryContext, QueryRequest, QueryResponse } from "./types.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers

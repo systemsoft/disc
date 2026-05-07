@@ -3,10 +3,10 @@
  * and the email-listener. (gh/geldata#6731 / #6732 / #7938 / #8028)
  */
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
-import { type BrandingCtx, renderMagicCodeEmail, renderMagicLinkEmail, renderPasswordResetEmail, renderVerificationEmail } from "./email-templates.ts";
-import { EmailEventListener } from "./email-listener.ts";
 import type { Mailer } from "../smtp/mailer.ts";
 import type { Email, MailerResult } from "../smtp/types.ts";
+import { EmailEventListener } from "./email-listener.ts";
+import { type BrandingCtx, renderMagicCodeEmail, renderMagicLinkEmail, renderPasswordResetEmail, renderVerificationEmail } from "./email-templates.ts";
 
 const branding: BrandingCtx = {
   appName: "Acme",
@@ -67,7 +67,7 @@ Deno.test("renderMagicCodeEmail: branded subject + brandColor on code box", () =
   assertEquals(r.subject, "Your Acme sign-in code");
   // brandColor flows into the bulletproof code box. The `<td bgcolor>`
   // attribute is the cross-client carrier (gh/geldata#7629).
-  assertStringIncludes(r.html, 'bgcolor="#0af"');
+  assertStringIncludes(r.html, "bgcolor=\"#0af\"");
 });
 
 Deno.test("renderMagicLinkEmail: branded subject", () => {
@@ -95,7 +95,7 @@ Deno.test("renderMagicLinkEmail: prefers ctx.link when supplied (template path)"
 
 // ── Listener-level branding + URL template ────────────────────────────
 
-function makeStubMailer(): { mailer: Mailer; sends: Email[] } {
+function makeStubMailer(): { mailer: Mailer; sends: Email[]; } {
   const sends: Email[] = [];
   const mailer: Mailer = {
     send(email: Email): Promise<MailerResult> {

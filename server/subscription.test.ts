@@ -97,8 +97,8 @@ Deno.test("Subscription Handler - Validation Errors", async () => {
     assert(
       errorMessage.payload.payload.message.includes(
         "cannot contain 'insert'",
-      ) ||
-        errorMessage.payload.payload.message.includes("only support SELECT"),
+      )
+        || errorMessage.payload.payload.message.includes("only support SELECT"),
     );
   } finally {
     handler.dispose();
@@ -229,8 +229,8 @@ Deno.test("Subscription Handler - Subscription Limits", async () => {
 
     const messages = (websocket as unknown as MockWebSocket).getAllMessages();
     const errorMessage = messages.find((m) =>
-      m.payload?.type === "error" &&
-      m.payload?.payload?.message?.includes("Too many subscriptions")
+      m.payload?.type === "error"
+      && m.payload?.payload?.message?.includes("Too many subscriptions")
     );
 
     assertExists(errorMessage);

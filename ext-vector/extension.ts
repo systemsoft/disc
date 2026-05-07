@@ -2,9 +2,9 @@
  * Vector search extension for Disc database
  */
 
+import type { FunctionDef, TypeDef } from "../compiler/context.ts";
 import { BaseExtension } from "../extensions/base-extension.ts";
 import type { CompilerHook, ExtensionContext, ExtensionDatabaseSetup, ExtensionMetadata } from "../extensions/types.ts";
-import type { FunctionDef, TypeDef } from "../compiler/context.ts";
 import type { VectorConfig } from "./types.ts";
 
 export class VectorExtension extends BaseExtension {
@@ -153,7 +153,7 @@ export class VectorExtension extends BaseExtension {
 
   // deno-lint-ignore require-await
   override async healthCheck(): Promise<
-    { healthy: boolean; details?: string }
+    { healthy: boolean; details?: string; }
   > {
     return {
       healthy: this.state === "ready",

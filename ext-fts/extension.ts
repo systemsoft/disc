@@ -10,9 +10,9 @@
  *   - fts::rank(query)   -- ranking score (ts_rank)
  */
 
+import type { FunctionDef } from "../compiler/context.ts";
 import { BaseExtension } from "../extensions/base-extension.ts";
 import type { CompilerHook, ExtensionContext, ExtensionDatabaseSetup, ExtensionMetadata, ExtensionRoute } from "../extensions/types.ts";
-import type { FunctionDef } from "../compiler/context.ts";
 import { DEFAULT_LANGUAGE, FTS_VECTOR_COLUMN } from "./index-builder.ts";
 
 export class FtsExtension extends BaseExtension {
@@ -88,7 +88,7 @@ export class FtsExtension extends BaseExtension {
     return [];
   }
 
-  override healthCheck(): Promise<{ healthy: boolean; details?: string }> {
+  override healthCheck(): Promise<{ healthy: boolean; details?: string; }> {
     return Promise.resolve({
       healthy: this.state === "ready",
       details: this.state === "ready" ? `FTS enabled (language: ${this.language})` : undefined,

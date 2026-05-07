@@ -3,8 +3,8 @@
  */
 
 import { assertEquals, assertNotEquals } from "@std/assert";
+import type { TypeDef } from "../compiler/context.ts";
 import { Cardinality } from "./enums.ts";
-import { bytesToUuid, uuidToBytes } from "./types.ts";
 import {
   type ArrayDescriptor,
   type BaseScalarDescriptor,
@@ -27,7 +27,7 @@ import {
   UUID_TO_TYPE,
   WELL_KNOWN_TYPES,
 } from "./typedesc.ts";
-import type { TypeDef } from "../compiler/context.ts";
+import { bytesToUuid, uuidToBytes } from "./types.ts";
 
 // ---------------------------------------------------------------------------
 // Well-known type UUID lookups

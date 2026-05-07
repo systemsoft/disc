@@ -18,8 +18,8 @@
 import { assertEquals } from "@std/assert";
 import { join } from "@std/path";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
-import { canRunPgTests, findPgBinDir, getTestDsn } from "../tests/pg-test-harness.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
+import { canRunPgTests, findPgBinDir, getTestDsn } from "../tests/pg-test-harness.ts";
 import { MigrationTracker } from "./tracker.ts";
 import * as Types from "./types.ts";
 
@@ -204,7 +204,7 @@ Deno.test({
       try {
         await verifyClient.connect();
         const result = await verifyClient.queryObject<
-          { id: string; name: string; schema_hash: string }
+          { id: string; name: string; schema_hash: string; }
         >(
           `SELECT id, name, schema_hash FROM disc_migrations WHERE id = $1`,
           [migrationId],

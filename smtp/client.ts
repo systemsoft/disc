@@ -42,7 +42,7 @@ export interface SendOutcome {
 }
 
 export interface SmtpClientConfig {
-  auth?: { user: string; pass: string };
+  auth?: { user: string; pass: string; };
   connectImpl?: SmtpConnectImpl;
   host: string;
   hostname: string;

@@ -3,33 +3,33 @@
  */
 
 import { getLogger } from "../lib/logger.ts";
-import * as Types from "./types.ts";
 import { renderMetrics } from "./metrics.ts";
 import type { MetricsSource } from "./metrics.ts";
 import { computeCertExpiry } from "./tls-cert-info.ts";
+import * as Types from "./types.ts";
 
 const log = getLogger("http");
-import { ConnectionManager, SessionManager, TransactionManager } from "./connection.ts";
-import { RateLimiter } from "./rate-limiter.ts";
-import { SubscriptionHandler } from "./subscription-handler.ts";
-import type { AuthProvider } from "../auth/provider.ts";
-import type { AuthMiddleware } from "../auth/middleware.ts";
 import { classifyAuthRoute } from "../auth/integration.ts";
 import type { AuthRoutes } from "../auth/integration.ts";
+import type { AuthMiddleware } from "../auth/middleware.ts";
+import type { AuthProvider } from "../auth/provider.ts";
 import type { ExtensionRoute } from "../extensions/types.ts";
+import type { DataWatchRegistry } from "./admin/data-watch-registry.ts";
+import { handleDataWatch } from "./admin/data-watch.ts";
+import { handleSchemaApply } from "./admin/schema-apply.ts";
+import { handleSchemaWatch } from "./admin/schema-watch.ts";
+import { handleGetConfig } from "./config-endpoint.ts";
+import { ConnectionManager, SessionManager, TransactionManager } from "./connection.ts";
+import { matchCorsOrigin } from "./cors-matcher.ts";
 import type { DatabaseRegistry } from "./database-registry.ts";
+import { handleGetMigrations, type MigrationsProvider } from "./migrations-endpoint.ts";
+import { RateLimiter } from "./rate-limiter.ts";
+import { renderOpenApiSpec } from "./rest/openapi.ts";
+import { dispatchRest } from "./rest/router.ts";
 import type { SchemaProvider } from "./schema-endpoint.ts";
 import { handleGetSchema, handleGetSchemaType, handleGetSchemaTypes } from "./schema-endpoint.ts";
-import { handleGetMigrations, type MigrationsProvider } from "./migrations-endpoint.ts";
-import { handleGetConfig } from "./config-endpoint.ts";
-import { matchCorsOrigin } from "./cors-matcher.ts";
+import { SubscriptionHandler } from "./subscription-handler.ts";
 import { createUiAssetHandler, type UiAssetHandler } from "./ui-assets.ts";
-import { dispatchRest } from "./rest/router.ts";
-import { renderOpenApiSpec } from "./rest/openapi.ts";
-import { handleSchemaWatch } from "./admin/schema-watch.ts";
-import { handleSchemaApply } from "./admin/schema-apply.ts";
-import { handleDataWatch } from "./admin/data-watch.ts";
-import type { DataWatchRegistry } from "./admin/data-watch-registry.ts";
 
 const DEFAULT_CORS_METHODS = ["GET", "POST", "OPTIONS"];
 const DEFAULT_CORS_HEADERS = ["Content-Type", "Authorization"];
@@ -43,7 +43,7 @@ export interface HttpServerOptions {
   authRoutes?: AuthRoutes;
   extensionRoutes?: Map<string, ExtensionRoute[]>;
   extensionHealthGetter?: () => Promise<
-    Map<string, { healthy: boolean; details?: string }>
+    Map<string, { healthy: boolean; details?: string; }>
   >;
   databaseRegistry?: DatabaseRegistry;
   schemaProvider?: SchemaProvider;
@@ -87,7 +87,7 @@ export class HttpServer {
   private fileManager?: import("../lib/file-storage/manager.ts").FileManager;
   private extensionRoutes: Map<string, ExtensionRoute[]>;
   private extensionHealthGetter?: () => Promise<
-    Map<string, { healthy: boolean; details?: string }>
+    Map<string, { healthy: boolean; details?: string; }>
   >;
   private databaseRegistry?: DatabaseRegistry;
   private schemaProvider?: SchemaProvider;
@@ -146,8 +146,8 @@ export class HttpServer {
     ) {
       this.rate_limiter = new RateLimiter({
         requestsPerMinute: options.config.rateLimitRpm,
-        burstSize: options.config.rateLimitBurst ||
-          options.config.rateLimitRpm,
+        burstSize: options.config.rateLimitBurst
+          || options.config.rateLimitRpm,
       });
     }
   }
@@ -405,7 +405,7 @@ export class HttpServer {
     // server doesn't read this value directly, but we mirror it on
     // `this.config` so /stats and similar surfaces see the new value.
     // The protocol handler is updated separately by the caller.
-    (this.config as Types.ServerConfig & { explainCacheTtlMs?: number })
+    (this.config as Types.ServerConfig & { explainCacheTtlMs?: number; })
       .explainCacheTtlMs = ms;
     log.info("config reload: explainCacheTtlMs updated", { value: ms });
   }
@@ -472,8 +472,8 @@ export class HttpServer {
 
       // Handle WebSocket upgrade
       if (
-        this.config.enableWebsockets &&
-        request.headers.get("upgrade") === "websocket"
+        this.config.enableWebsockets
+        && request.headers.get("upgrade") === "websocket"
       ) {
         return this.handle_websocket_upgrade(request, info);
       }
@@ -525,9 +525,9 @@ export class HttpServer {
       // the request; these routes are sensitive (write path), so
       // operators should also enable `requireAuth` in production.
       if (
-        this.adminSchemaWatch &&
-        (url.pathname === "/admin/schema-watch" ||
-          url.pathname === "/admin/schema-apply")
+        this.adminSchemaWatch
+        && (url.pathname === "/admin/schema-watch"
+          || url.pathname === "/admin/schema-apply")
       ) {
         return await this.handleAdminSchemaRoute(
           request,
@@ -541,9 +541,9 @@ export class HttpServer {
       // mounted only when a registry was wired (DiscServer
       // bootstraps it after PG is ready).
       if (
-        this.config.enableDataWatch !== false &&
-        this.dataWatchRegistry &&
-        url.pathname === "/admin/data-watch"
+        this.config.enableDataWatch !== false
+        && this.dataWatchRegistry
+        && url.pathname === "/admin/data-watch"
       ) {
         if (request.method !== "GET") {
           return this.create_error_response("Method Not Allowed", 405);
@@ -560,8 +560,8 @@ export class HttpServer {
       // and the auth gate compose for free. Disabled when
       // `config.enableRest === false`.
       if (
-        this.config.enableRest !== false &&
-        (url.pathname === "/api" || url.pathname.startsWith("/api/"))
+        this.config.enableRest !== false
+        && (url.pathname === "/api" || url.pathname.startsWith("/api/"))
       ) {
         if (url.pathname === "/api/openapi.json") {
           return this.handleOpenApi(request);
@@ -675,7 +675,7 @@ export class HttpServer {
       const headers = this.get_default_headers("application/json");
       // RFC 6750 §3 — return a WWW-Authenticate challenge so clients
       // know which scheme to retry with.
-      headers.set("WWW-Authenticate", 'Bearer realm="disc"');
+      headers.set("WWW-Authenticate", "Bearer realm=\"disc\"");
       return new Response(
         JSON.stringify({ error: "Authentication required" }),
         { status: 401, headers },
@@ -782,8 +782,8 @@ export class HttpServer {
     // P1-12: cap request body size BEFORE reading it into memory. Without
     // this a malicious client can stream multi-gigabyte payloads and OOM
     // the server.
-    const MAX_QUERY_BODY_BYTES = this.config.maxRequestBodyBytes ??
-      4 * 1024 * 1024; // 4 MiB default
+    const MAX_QUERY_BODY_BYTES = this.config.maxRequestBodyBytes
+      ?? 4 * 1024 * 1024; // 4 MiB default
     const contentLengthHeader = request.headers.get("content-length");
     if (contentLengthHeader !== null) {
       const declared = Number(contentLengthHeader);
@@ -836,8 +836,8 @@ export class HttpServer {
 
       // Validate the database exists in the registry (if registry is available)
       if (
-        this.databaseRegistry &&
-        !this.databaseRegistry.getDatabase(databaseName)
+        this.databaseRegistry
+        && !this.databaseRegistry.getDatabase(databaseName)
       ) {
         return this.create_error_response(
           `Unknown database: "${databaseName}"`,
@@ -886,8 +886,8 @@ export class HttpServer {
       // so a regular user setting the header can't escalate.
       const bypassHeader = request.headers
         .get("X-Disc-Apply-Access-Policies");
-      const bypassRequested = bypassHeader !== null &&
-        /^(false|0|no)$/i.test(bypassHeader.trim());
+      const bypassRequested = bypassHeader !== null
+        && /^(false|0|no)$/i.test(bypassHeader.trim());
       const callerIsAdmin = authContext.roles.includes("admin");
       const bypassAccessPolicies = bypassRequested && callerIsAdmin;
 
@@ -941,8 +941,8 @@ export class HttpServer {
           ]);
         } catch (error) {
           if (
-            error instanceof Error &&
-            error.message === "__HTTP_TIMEOUT__"
+            error instanceof Error
+            && error.message === "__HTTP_TIMEOUT__"
           ) {
             this.stats.failed_requests++;
             return new Response(
@@ -1050,7 +1050,7 @@ export class HttpServer {
   private async handle_health(request?: Request): Promise<Response> {
     // Gather extension health if available
     let extensionHealth:
-      | Record<string, { healthy: boolean; details?: string }>
+      | Record<string, { healthy: boolean; details?: string; }>
       | undefined;
     if (this.extensionHealthGetter) {
       const extMap = await this.extensionHealthGetter();
@@ -1152,8 +1152,8 @@ export class HttpServer {
       tls: this.tls_not_after_unix !== undefined
         ? {
           notAfterUnix: this.tls_not_after_unix,
-          secondsUntilExpiry: this.tls_not_after_unix -
-            Math.floor(Date.now() / 1000),
+          secondsUntilExpiry: this.tls_not_after_unix
+            - Math.floor(Date.now() / 1000),
         }
         : undefined,
     };
@@ -1715,7 +1715,7 @@ export class HttpServer {
       const ctx = await this.authMiddleware.authenticate(request);
       if (!ctx) {
         const headers = this.get_default_headers("application/json");
-        headers.set("WWW-Authenticate", 'Bearer realm="disc"');
+        headers.set("WWW-Authenticate", "Bearer realm=\"disc\"");
         return new Response(
           JSON.stringify({ error: "Authentication required" }),
           { status: 401, headers },

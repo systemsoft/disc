@@ -19,8 +19,8 @@
  */
 
 import { ConnectionPool } from "../../lib/connection-pool.ts";
-import { CHANGE_LOG_TABLE, pruneChangeLog } from "./data-watch-ddl.ts";
 import { getLogger } from "../../lib/logger.ts";
+import { CHANGE_LOG_TABLE, pruneChangeLog } from "./data-watch-ddl.ts";
 
 const log = getLogger("admin/data-watch-registry");
 
@@ -89,8 +89,8 @@ export class DataWatchRegistry {
   constructor(options: DataWatchRegistryOptions) {
     this.pool = options.pool;
     this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
-    this.invalidateDebounceMs = options.invalidateDebounceMs ??
-      DEFAULT_INVALIDATE_DEBOUNCE_MS;
+    this.invalidateDebounceMs = options.invalidateDebounceMs
+      ?? DEFAULT_INVALIDATE_DEBOUNCE_MS;
     this.pruneIntervalMs = options.pruneIntervalMs ?? DEFAULT_PRUNE_INTERVAL_MS;
     this.pruneLookbackSeconds = options.pruneLookbackSeconds ?? 3600;
   }
@@ -191,7 +191,7 @@ export class DataWatchRegistry {
       // Collect distinct affected tables across this poll.
       const affected = new Set<string>();
       let maxId = this.lastSeenId;
-      for (const row of result.rows as Array<{ id: number | string; table_name: string }>) {
+      for (const row of result.rows as Array<{ id: number | string; table_name: string; }>) {
         affected.add(row.table_name);
         const idNum = Number(row.id);
         if (idNum > maxId) maxId = idNum;

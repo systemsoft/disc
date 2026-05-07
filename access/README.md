@@ -79,7 +79,12 @@ module default {
 ### Programmatic Usage
 
 ```typescript
-import { AccessConfig, AccessEvaluator, AccessSQLInjector, adaptAccessPolicies } from "./access/mod.ts";
+import {
+  AccessConfig,
+  AccessEvaluator,
+  AccessSQLInjector,
+  adaptAccessPolicies,
+} from "./access/mod.ts";
 
 // Adapt SDL policies to runtime format
 const policies = adaptAccessPolicies(sdlAccessPolicies, "User");

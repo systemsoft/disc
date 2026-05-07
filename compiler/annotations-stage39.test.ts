@@ -8,13 +8,13 @@
  */
 
 import { assertEquals } from "@std/assert";
-import { describeSchema, describeType } from "./introspection.ts";
-import type { LinkDef, PropertyDef, Schema, TypeDef } from "./context.ts";
-import { getBuiltinFunctions } from "./builtin-functions.ts";
 import { TypeScriptGenerator } from "../codegen/typescript-generator.ts";
+import { SchemaManager } from "../migration/schema-manager.ts";
 import { SDLParser } from "../schema/parser.ts";
 import { SchemaValidator } from "../schema/validator.ts";
-import { SchemaManager } from "../migration/schema-manager.ts";
+import { getBuiltinFunctions } from "./builtin-functions.ts";
+import type { LinkDef, PropertyDef, Schema, TypeDef } from "./context.ts";
+import { describeSchema, describeType } from "./introspection.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers

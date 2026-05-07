@@ -26,8 +26,6 @@
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { type DiscError } from "../lib/errors.ts";
 import { findUserType, renderUserType } from "./hover.ts";
-import { lookupScalar, SCALAR_TYPES } from "./scalar-info.ts";
-import { buildSymbolIndex } from "./symbol-index.ts";
 import {
   type CompletionItem,
   CompletionItemKind,
@@ -39,6 +37,8 @@ import {
   type Position,
   type Range,
 } from "./protocol.ts";
+import { lookupScalar, SCALAR_TYPES } from "./scalar-info.ts";
+import { buildSymbolIndex } from "./symbol-index.ts";
 
 /**
  * Open SDL documents the LSP knows about, fed to the embedded
@@ -51,7 +51,7 @@ import {
  * an empty array and the providers behave exactly as Phase 6.
  */
 export interface EmbeddedSdlContext {
-  documents: ReadonlyArray<{ uri: DocumentUri; text: string }>;
+  documents: ReadonlyArray<{ uri: DocumentUri; text: string; }>;
 }
 
 const SOURCE = "disc-eql";

@@ -3,9 +3,9 @@
  */
 
 import { SyntaxError } from "../lib/errors.ts";
-import { Token, TokenType } from "./tokens.ts";
-import { SDLLexer } from "./lexer.ts";
 import * as AST from "./ast.ts";
+import { SDLLexer } from "./lexer.ts";
+import { Token, TokenType } from "./tokens.ts";
 
 export class SDLParser {
   private tokens: Token[];
@@ -112,8 +112,8 @@ export class SDLParser {
       // Stop AT a top-level keyword or closing brace so the caller can
       // start fresh on it.
       if (
-        STARTS.has(this.peek().type) ||
-        this.peek().type === TokenType.RBRACE
+        STARTS.has(this.peek().type)
+        || this.peek().type === TokenType.RBRACE
       ) {
         return;
       }
@@ -124,8 +124,8 @@ export class SDLParser {
   private parseTopLevelDeclaration(): AST.Declaration | null {
     // Skip semicolons and whitespace at top level
     while (
-      this.match(TokenType.SEMICOLON) || this.match(TokenType.WHITESPACE) ||
-      this.match(TokenType.NEWLINE)
+      this.match(TokenType.SEMICOLON) || this.match(TokenType.WHITESPACE)
+      || this.match(TokenType.NEWLINE)
     ) {
       // Do nothing
     }
@@ -683,9 +683,9 @@ export class SDLParser {
           // on target delete ... | on source delete ...
           const directionToken = this.peek();
           if (
-            directionToken.type !== TokenType.IDENT ||
-            (directionToken.value !== "target" &&
-              directionToken.value !== "source")
+            directionToken.type !== TokenType.IDENT
+            || (directionToken.value !== "target"
+              && directionToken.value !== "source")
           ) {
             throw this.error(
               `Expected 'target' or 'source' after 'on', got '${directionToken.value}'`,
@@ -744,8 +744,8 @@ export class SDLParser {
       const possibleName = this.parseIdentifier();
 
       if (
-        this.check(TokenType.LPAREN) || this.check(TokenType.ON) ||
-        this.check(TokenType.SEMICOLON) || this.check(TokenType.LBRACE)
+        this.check(TokenType.LPAREN) || this.check(TokenType.ON)
+        || this.check(TokenType.SEMICOLON) || this.check(TokenType.LBRACE)
       ) {
         name = possibleName;
       } else {
@@ -938,8 +938,8 @@ export class SDLParser {
     const timingToken = this.peek();
     let timing: AST.TriggerTiming;
     if (
-      timingToken.type === TokenType.IDENT &&
-      (timingToken.value === "after" || timingToken.value === "before")
+      timingToken.type === TokenType.IDENT
+      && (timingToken.value === "after" || timingToken.value === "before")
     ) {
       timing = timingToken.value as AST.TriggerTiming;
       this.advance();
@@ -964,8 +964,8 @@ export class SDLParser {
     const scopeToken = this.peek();
     let scope: AST.TriggerScope;
     if (
-      scopeToken.type === TokenType.IDENT &&
-      (scopeToken.value === "each" || scopeToken.value === "all")
+      scopeToken.type === TokenType.IDENT
+      && (scopeToken.value === "each" || scopeToken.value === "all")
     ) {
       scope = scopeToken.value as AST.TriggerScope;
       this.advance();
@@ -1234,8 +1234,8 @@ export class SDLParser {
           this.advance();
           const nextToken = this.peek();
           if (
-            nextToken.type === TokenType.IDENT &&
-            nextToken.value === "empty"
+            nextToken.type === TokenType.IDENT
+            && nextToken.value === "empty"
           ) {
             this.advance();
             return "set empty";
@@ -1269,8 +1269,8 @@ export class SDLParser {
       this.advance();
       const targetToken = this.peek();
       if (
-        targetToken.type === TokenType.IDENT &&
-        targetToken.value === "target"
+        targetToken.type === TokenType.IDENT
+        && targetToken.value === "target"
       ) {
         this.advance();
         return "delete target";
@@ -1585,14 +1585,14 @@ export class SDLParser {
     const parts: string[] = [];
 
     if (
-      this.check(TokenType.IDENT) || this.check(TokenType.BACKTICK_IDENT) ||
-      this.check(TokenType.DEFAULT)
+      this.check(TokenType.IDENT) || this.check(TokenType.BACKTICK_IDENT)
+      || this.check(TokenType.DEFAULT)
     ) {
       // Handle keywords that can be used as identifiers (like "default")
       const token = this.peek();
       if (
-        token.type === TokenType.DEFAULT || token.type === TokenType.IDENT ||
-        token.type === TokenType.BACKTICK_IDENT
+        token.type === TokenType.DEFAULT || token.type === TokenType.IDENT
+        || token.type === TokenType.BACKTICK_IDENT
       ) {
         parts.push(token.value);
         this.advance();

@@ -14,8 +14,8 @@
  * debounce — a single editor save typically fires 3–4 raw events.
  */
 
-import { computeSchemaDiff, type SchemaDiffSummary } from "./schema-diff.ts";
 import { getLogger } from "../../lib/logger.ts";
+import { computeSchemaDiff, type SchemaDiffSummary } from "./schema-diff.ts";
 
 const log = getLogger("admin/schema-watch");
 

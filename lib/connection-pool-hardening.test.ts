@@ -15,7 +15,7 @@ import { DatabaseConnection } from "./database.ts";
 // Helper to mock DatabaseConnection.prototype methods and restore them
 function mockConnect(): () => void {
   const original = DatabaseConnection.prototype.connect;
-  DatabaseConnection.prototype.connect = function () {
+  DatabaseConnection.prototype.connect = function() {
     return Promise.resolve();
   };
   return () => {
@@ -51,7 +51,7 @@ Deno.test(
     let validateCalled = false;
 
     const originalQuery = DatabaseConnection.prototype.query;
-    DatabaseConnection.prototype.query = function (sql: string) {
+    DatabaseConnection.prototype.query = function(sql: string) {
       if (sql === "SELECT 1") {
         validateCalled = true;
         return Promise.resolve({ rows: [{ "?column?": 1 }], rowCount: 1 });
@@ -232,7 +232,7 @@ Deno.test(
     const originalConnect = DatabaseConnection.prototype.connect;
     let lastAttemptTime = Date.now();
 
-    DatabaseConnection.prototype.connect = function () {
+    DatabaseConnection.prototype.connect = function() {
       const now = Date.now();
       if (attemptCount > 0) {
         delays.push(now - lastAttemptTime);

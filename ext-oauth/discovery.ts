@@ -62,9 +62,9 @@ export async function fetchOidcDiscovery(
   const tokenEndpoint = doc["token_endpoint"];
 
   if (
-    typeof issuer !== "string" ||
-    typeof authorizationEndpoint !== "string" ||
-    typeof tokenEndpoint !== "string"
+    typeof issuer !== "string"
+    || typeof authorizationEndpoint !== "string"
+    || typeof tokenEndpoint !== "string"
   ) {
     throw new Error(
       `OIDC discovery doc at ${url} is missing required endpoints (issuer / authorization_endpoint / token_endpoint)`,

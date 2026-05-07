@@ -41,7 +41,7 @@ Deno.test("createTriggerSql — drops then re-creates AFTER trigger for INSERT/U
   assertStringIncludes(sql, `DROP TRIGGER IF EXISTS "disc_data_watch_users"`);
   // Re-create AFTER mutating ops.
   assertStringIncludes(sql, `CREATE TRIGGER "disc_data_watch_users"`);
-  assertStringIncludes(sql, 'AFTER INSERT OR UPDATE OR DELETE ON "users"');
+  assertStringIncludes(sql, "AFTER INSERT OR UPDATE OR DELETE ON \"users\"");
   assertStringIncludes(sql, "FOR EACH STATEMENT");
   assertStringIncludes(sql, `EXECUTE FUNCTION ${CHANGE_LOG_FN}()`);
 });

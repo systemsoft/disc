@@ -10,12 +10,12 @@
  */
 
 import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
-import { EdgeQLParser } from "../edgeql/parser.ts";
 import type { SelectQuery } from "../edgeql/ast.ts";
-import { EdgeQLCompiler } from "./compiler.ts";
-import { SQLCodeGenerator } from "./codegen.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
 import { CompilationError } from "../lib/errors.ts";
 import { getBuiltinFunctions } from "./builtin-functions.ts";
+import { SQLCodeGenerator } from "./codegen.ts";
+import { EdgeQLCompiler } from "./compiler.ts";
 import type { Schema, TypeDef } from "./context.ts";
 
 // ---------------------------------------------------------------------------

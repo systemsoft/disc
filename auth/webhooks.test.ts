@@ -261,7 +261,7 @@ Deno.test("WebhookSender - listener errors don't break HTTP webhook dispatch", a
 async function makeProvider(
   webhooks: WebhookConfig[],
   fetchImpl: typeof fetch,
-): Promise<{ provider: AuthProvider; db: TestDatabase }> {
+): Promise<{ provider: AuthProvider; db: TestDatabase; }> {
   const db = new TestDatabase();
   await db.connect();
   const provider = new AuthProvider(

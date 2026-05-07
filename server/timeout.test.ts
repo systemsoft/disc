@@ -8,8 +8,8 @@
  */
 
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
-import { QueryTimeoutError } from "../lib/errors.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
+import { QueryTimeoutError } from "../lib/errors.ts";
 import { EdgeQLProtocolHandler } from "./edgeql-protocol.ts";
 import { HttpServer } from "./http.ts";
 import type { ProtocolHandler, QueryContext, QueryError, QueryRequest, QueryResponse, ServerConfig } from "./types.ts";
@@ -203,8 +203,8 @@ Deno.test(
 
     // Should succeed
     assert(
-      response.errors === undefined ||
-        response.errors.every(
+      response.errors === undefined
+        || response.errors.every(
           (e) => e.extensions?.code === "WARNING",
         ),
       "Expected no real errors",

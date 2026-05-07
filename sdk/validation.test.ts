@@ -3,8 +3,8 @@ import { assertEquals, assertInstanceOf, assertRejects } from "@std/assert";
 
 import { DiscClient } from "./client.ts";
 import { DiscValidationError } from "./errors.ts";
-import { applyValidator } from "./validation.ts";
 import type { StandardSchemaV1 } from "./types.ts";
+import { applyValidator } from "./validation.ts";
 
 // --- Mock fetch helper ---
 
@@ -37,10 +37,10 @@ const userSchema: StandardSchemaV1<User> = {
     vendor: "test",
     validate(value) {
       if (
-        typeof value === "object" &&
-        value !== null &&
-        typeof (value as { name?: unknown }).name === "string" &&
-        typeof (value as { age?: unknown }).age === "number"
+        typeof value === "object"
+        && value !== null
+        && typeof (value as { name?: unknown; }).name === "string"
+        && typeof (value as { age?: unknown; }).age === "number"
       ) {
         return { value: value as User };
       }
@@ -68,7 +68,7 @@ const asyncUserSchema: StandardSchemaV1<User> = {
 
 Deno.test("applyValidator - function returns value", async () => {
   const result = await applyValidator(
-    (v: unknown) => v as { ok: true },
+    (v: unknown) => v as { ok: true; },
     { ok: true },
   );
   assertEquals(result.ok, true);
@@ -135,7 +135,7 @@ Deno.test("client.query - validate function transforms data", async () => {
       undefined,
       {
         validate: (v) => {
-          const r = v as { name: string; age: number };
+          const r = v as { name: string; age: number; };
           return { ...r, name: r.name.toUpperCase() };
         },
       },
@@ -186,10 +186,10 @@ Deno.test("client.query - omitted validator preserves cast behavior", async () =
   try {
     const client = new DiscClient();
     // Intentionally lying about the response shape; cast must succeed.
-    const u = await client.query<{ name: string }>(
+    const u = await client.query<{ name: string; }>(
       "select User { name }",
     );
-    assertEquals((u as unknown as { whatever: boolean }).whatever, true);
+    assertEquals((u as unknown as { whatever: boolean; }).whatever, true);
   } finally {
     restore();
   }
@@ -205,7 +205,7 @@ Deno.test("client.query - revive: true converts ISO datetime to Date", async () 
   );
   try {
     const client = new DiscClient();
-    const u = await client.query<{ created_at: Date; name: string }>(
+    const u = await client.query<{ created_at: Date; name: string; }>(
       "select User { created_at, name }",
       undefined,
       { revive: true },
@@ -226,17 +226,17 @@ Deno.test("client.query - revive runs before validator (validator sees Date)", a
   );
   try {
     const client = new DiscClient();
-    const out = await client.query<{ created_at: Date }>(
+    const out = await client.query<{ created_at: Date; }>(
       "select User { created_at }",
       undefined,
       {
         revive: true,
         validate: (v: unknown) => {
-          const obj = v as { created_at: unknown };
+          const obj = v as { created_at: unknown; };
           if (!(obj.created_at instanceof Date)) {
             throw new Error("validator did not see Date");
           }
-          return v as { created_at: Date };
+          return v as { created_at: Date; };
         },
       },
     );
@@ -254,7 +254,7 @@ Deno.test("client.query - omitted revive leaves strings alone", async () => {
   );
   try {
     const client = new DiscClient();
-    const u = await client.query<{ created_at: string }>(
+    const u = await client.query<{ created_at: string; }>(
       "select User { created_at }",
     );
     assertEquals(typeof u.created_at, "string");

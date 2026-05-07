@@ -142,8 +142,8 @@ export class MigrationSquasher {
 
     if (startIndex > endIndex) {
       throw new MigrationError(
-        `Invalid squash range: "${fromId}" comes after "${toId}". ` +
-          "The from-migration must precede the to-migration.",
+        `Invalid squash range: "${fromId}" comes after "${toId}". `
+          + "The from-migration must precede the to-migration.",
       );
     }
 
@@ -160,9 +160,9 @@ export class MigrationSquasher {
     if (withData.length > 0) {
       const ids = withData.map((m) => m.id).join(", ");
       throw new MigrationError(
-        `Cannot squash migrations that include data migrations. ` +
-          `The following migrations have data migrations: ${ids}. ` +
-          `Remove or manually consolidate the data migrations first.`,
+        `Cannot squash migrations that include data migrations. `
+          + `The following migrations have data migrations: ${ids}. `
+          + `Remove or manually consolidate the data migrations first.`,
       );
     }
   }

@@ -6,11 +6,11 @@
  */
 
 import { assertEquals, assertExists, assertStringIncludes } from "@std/assert";
-import { MigrationTracker } from "./tracker.ts";
+import { ConnectionPool } from "../lib/connection-pool.ts";
 import { MigrationEngine } from "./engine.ts";
 import { SchemaManager } from "./schema-manager.ts";
+import { MigrationTracker } from "./tracker.ts";
 import * as Types from "./types.ts";
-import { ConnectionPool } from "../lib/connection-pool.ts";
 
 // ---------------------------------------------------------------------------
 // Mock helpers
@@ -21,7 +21,7 @@ import { ConnectionPool } from "../lib/connection-pool.ts";
  * The queryResponses map keys are substrings matched against the SQL text.
  */
 function createMockPool(
-  queryResponses: Map<string, { rows: any[]; rowCount: number }>,
+  queryResponses: Map<string, { rows: any[]; rowCount: number; }>,
   executedStatements: string[] = [],
 ): ConnectionPool {
   const pool = {
@@ -85,7 +85,7 @@ function createTestConfig(
 // ---------------------------------------------------------------------------
 
 Deno.test("Tracker - getLatestMigration returns most recent migration", async () => {
-  const responses = new Map<string, { rows: any[]; rowCount: number }>();
+  const responses = new Map<string, { rows: any[]; rowCount: number; }>();
 
   // Response for CREATE TABLE IF NOT EXISTS (initialization)
   responses.set("CREATE TABLE IF NOT EXISTS", { rows: [], rowCount: 0 });
@@ -121,7 +121,7 @@ Deno.test("Tracker - getLatestMigration returns most recent migration", async ()
 });
 
 Deno.test("Tracker - getLatestMigration returns null when empty", async () => {
-  const responses = new Map<string, { rows: any[]; rowCount: number }>();
+  const responses = new Map<string, { rows: any[]; rowCount: number; }>();
   responses.set("CREATE TABLE IF NOT EXISTS", { rows: [], rowCount: 0 });
 
   // Empty result for getLatestMigration
@@ -141,7 +141,7 @@ Deno.test("Tracker - getLatestMigration returns null when empty", async () => {
 });
 
 Deno.test("Tracker - getMigrationsAfter returns correct subset in reverse order", async () => {
-  const responses = new Map<string, { rows: any[]; rowCount: number }>();
+  const responses = new Map<string, { rows: any[]; rowCount: number; }>();
   responses.set("CREATE TABLE IF NOT EXISTS", { rows: [], rowCount: 0 });
 
   // Response for the reference migration lookup
@@ -192,7 +192,7 @@ Deno.test("Tracker - getMigrationsAfter returns correct subset in reverse order"
 });
 
 Deno.test("Tracker - getRollbackSQL returns stored SQL array", async () => {
-  const responses = new Map<string, { rows: any[]; rowCount: number }>();
+  const responses = new Map<string, { rows: any[]; rowCount: number; }>();
   responses.set("CREATE TABLE IF NOT EXISTS", { rows: [], rowCount: 0 });
 
   responses.set("SELECT rollback_sql FROM disc_migrations", {
@@ -221,7 +221,7 @@ Deno.test("Tracker - getRollbackSQL returns stored SQL array", async () => {
 });
 
 Deno.test("Tracker - getRollbackSQL throws for unknown migration", async () => {
-  const responses = new Map<string, { rows: any[]; rowCount: number }>();
+  const responses = new Map<string, { rows: any[]; rowCount: number; }>();
   responses.set("CREATE TABLE IF NOT EXISTS", { rows: [], rowCount: 0 });
 
   // Empty result for unknown migration
@@ -245,7 +245,7 @@ Deno.test("Tracker - getRollbackSQL throws for unknown migration", async () => {
 
 Deno.test("Tracker - removeMigration deletes record", async () => {
   const executedStatements: string[] = [];
-  const responses = new Map<string, { rows: any[]; rowCount: number }>();
+  const responses = new Map<string, { rows: any[]; rowCount: number; }>();
   responses.set("CREATE TABLE IF NOT EXISTS", { rows: [], rowCount: 0 });
 
   // Migration exists
@@ -274,7 +274,7 @@ Deno.test("Tracker - removeMigration deletes record", async () => {
 
 Deno.test("Engine - executeRollback executes rollback SQL in transaction", async () => {
   const executedStatements: string[] = [];
-  const responses = new Map<string, { rows: any[]; rowCount: number }>();
+  const responses = new Map<string, { rows: any[]; rowCount: number; }>();
   responses.set("CREATE TABLE IF NOT EXISTS", { rows: [], rowCount: 0 });
 
   // getAppliedMigrations (for initialize)
@@ -312,7 +312,7 @@ Deno.test("Engine - executeRollback executes rollback SQL in transaction", async
 
 Deno.test("Engine - executeRollback removes migration record after execution", async () => {
   const executedStatements: string[] = [];
-  const responses = new Map<string, { rows: any[]; rowCount: number }>();
+  const responses = new Map<string, { rows: any[]; rowCount: number; }>();
   responses.set("CREATE TABLE IF NOT EXISTS", { rows: [], rowCount: 0 });
 
   responses.set("SELECT id FROM disc_migrations", {
@@ -345,7 +345,7 @@ Deno.test("Engine - executeRollback removes migration record after execution", a
 });
 
 Deno.test("Engine - executeRollback throws when no rollback SQL available", async () => {
-  const responses = new Map<string, { rows: any[]; rowCount: number }>();
+  const responses = new Map<string, { rows: any[]; rowCount: number; }>();
   responses.set("CREATE TABLE IF NOT EXISTS", { rows: [], rowCount: 0 });
 
   responses.set("SELECT id FROM disc_migrations", {
@@ -373,7 +373,7 @@ Deno.test("Engine - executeRollback throws when no rollback SQL available", asyn
 
 Deno.test("Engine - executeRollbackTo rolls back all migrations after target", async () => {
   const executedStatements: string[] = [];
-  const responses = new Map<string, { rows: any[]; rowCount: number }>();
+  const responses = new Map<string, { rows: any[]; rowCount: number; }>();
   responses.set("CREATE TABLE IF NOT EXISTS", { rows: [], rowCount: 0 });
 
   responses.set("SELECT id FROM disc_migrations", {
@@ -441,7 +441,7 @@ Deno.test("Engine - executeRollbackTo rolls back all migrations after target", a
 
 Deno.test("Engine - executeRollbackTo preserves target migration", async () => {
   const executedStatements: string[] = [];
-  const responses = new Map<string, { rows: any[]; rowCount: number }>();
+  const responses = new Map<string, { rows: any[]; rowCount: number; }>();
   responses.set("CREATE TABLE IF NOT EXISTS", { rows: [], rowCount: 0 });
 
   responses.set("SELECT id FROM disc_migrations", {
@@ -499,7 +499,7 @@ Deno.test("Engine - executeRollbackTo preserves target migration", async () => {
 });
 
 Deno.test("Engine - getMigrationStatus returns correct counts", async () => {
-  const responses = new Map<string, { rows: any[]; rowCount: number }>();
+  const responses = new Map<string, { rows: any[]; rowCount: number; }>();
   responses.set("CREATE TABLE IF NOT EXISTS", { rows: [], rowCount: 0 });
 
   // getAppliedMigrations
@@ -543,7 +543,7 @@ Deno.test("Engine - getMigrationStatus returns correct counts", async () => {
 
 Deno.test("SchemaManager - rollbackLastMigration delegates to engine", async () => {
   const executedStatements: string[] = [];
-  const responses = new Map<string, { rows: any[]; rowCount: number }>();
+  const responses = new Map<string, { rows: any[]; rowCount: number; }>();
   responses.set("CREATE TABLE IF NOT EXISTS", { rows: [], rowCount: 0 });
 
   // getAppliedMigrations (for engine.initialize)
@@ -596,7 +596,7 @@ Deno.test("SchemaManager - rollbackLastMigration delegates to engine", async () 
 
 Deno.test("SchemaManager - rollbackToMigration delegates to engine", async () => {
   const executedStatements: string[] = [];
-  const responses = new Map<string, { rows: any[]; rowCount: number }>();
+  const responses = new Map<string, { rows: any[]; rowCount: number; }>();
   responses.set("CREATE TABLE IF NOT EXISTS", { rows: [], rowCount: 0 });
 
   responses.set("SELECT id FROM disc_migrations", {
@@ -646,7 +646,7 @@ Deno.test("SchemaManager - rollbackToMigration delegates to engine", async () =>
 });
 
 Deno.test("SchemaManager - getMigrationStatus returns formatted status", async () => {
-  const responses = new Map<string, { rows: any[]; rowCount: number }>();
+  const responses = new Map<string, { rows: any[]; rowCount: number; }>();
   responses.set("CREATE TABLE IF NOT EXISTS", { rows: [], rowCount: 0 });
 
   responses.set("SELECT id FROM disc_migrations", {

@@ -9,14 +9,14 @@
  */
 
 import { assertEquals } from "@std/assert";
+import { getBuiltinFunctions } from "../compiler/builtin-functions.ts";
+import { SQLCodeGenerator } from "../compiler/codegen.ts";
+import { EdgeQLCompiler } from "../compiler/compiler.ts";
 import { createTestSchema } from "../compiler/context.ts";
 import type { Schema, TypeDef } from "../compiler/context.ts";
-import { getBuiltinFunctions } from "../compiler/builtin-functions.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
 import { handleGetSchema, handleGetSchemaType, handleGetSchemaTypes } from "./schema-endpoint.ts";
 import type { SchemaRouteContext } from "./schema-endpoint.ts";
-import { EdgeQLParser } from "../edgeql/parser.ts";
-import { EdgeQLCompiler } from "../compiler/compiler.ts";
-import { SQLCodeGenerator } from "../compiler/codegen.ts";
 
 // ---------------------------------------------------------------------------
 // Shared fixtures
@@ -249,7 +249,7 @@ Deno.test("schema::types() - returns type name array", () => {
 });
 
 Deno.test("schema::get_type('User') - returns type description", () => {
-  const sql = compileEdgeQL('select schema::get_type("User")');
+  const sql = compileEdgeQL("select schema::get_type(\"User\")");
   assertEquals(sql.includes("SELECT"), true);
   assertEquals(sql.includes("::jsonb"), true);
 
@@ -262,7 +262,7 @@ Deno.test("schema::get_type('User') - returns type description", () => {
 });
 
 Deno.test("schema::get_type('Unknown') - returns compilation error", () => {
-  const parser = new EdgeQLParser('select schema::get_type("Unknown")');
+  const parser = new EdgeQLParser("select schema::get_type(\"Unknown\")");
   const ast = parser.parse();
   const compiler = new EdgeQLCompiler(schema, { enableAccessControl: false });
   const result = compiler.compile(ast);

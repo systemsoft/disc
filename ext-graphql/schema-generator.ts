@@ -155,7 +155,7 @@ function formatFieldType(field: GraphQLField): string {
  */
 export function generateGraphQLSchema(
   schema: Schema,
-  options?: { enableMutations?: boolean },
+  options?: { enableMutations?: boolean; },
 ): string {
   const enableMutations = options?.enableMutations ?? false;
   const lines: string[] = [];

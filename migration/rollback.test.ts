@@ -3,9 +3,9 @@
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import { MigrationEngine } from "./engine.ts";
-import { DDLGenerator } from "./ddl.ts";
 import { Module } from "../schema/converter.ts";
+import { DDLGenerator } from "./ddl.ts";
+import { MigrationEngine } from "./engine.ts";
 import * as Types from "./types.ts";
 
 // Helper function to create test config

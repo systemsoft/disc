@@ -3,8 +3,8 @@ import { assert, assertEquals, assertExists, assertRejects } from "@std/assert";
 import { afterEach, beforeEach, describe, it } from "@std/testing/bdd";
 
 import { AuthProvider } from "./provider.ts";
-import type { AuthConfig } from "./types.ts";
 import { TestDatabase } from "./test-database.ts";
+import type { AuthConfig } from "./types.ts";
 
 /**
  * P3-04: RS256 (asymmetric-key) JWT signing tests. The HS256 path keeps
@@ -16,7 +16,7 @@ import { TestDatabase } from "./test-database.ts";
 // --- Helpers ---
 
 async function generateRsaPemPair(): Promise<
-  { privatePem: string; publicPem: string }
+  { privatePem: string; publicPem: string; }
 > {
   const keyPair = await crypto.subtle.generateKey(
     {

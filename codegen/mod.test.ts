@@ -4,10 +4,10 @@
 
 import { assertEquals, assertExists, assertStringIncludes } from "@std/assert";
 import { join } from "@std/path";
-import * as Codegen from "./mod.ts";
-import * as Types from "./types.ts";
 import * as Context from "../compiler/context.ts";
 import { cleanupTempDir, createTempDir } from "../tests/test-utils.ts";
+import * as Codegen from "./mod.ts";
+import * as Types from "./types.ts";
 
 Deno.test("Codegen - generateTypeScript with default config", () => {
   const schema = Context.createTestSchema();
@@ -317,7 +317,7 @@ Deno.test("Codegen - full pipeline with enriched test schema", () => {
   // Enum union type generated
   assertStringIncludes(
     typesContent,
-    'export type Status = "active" | "inactive" | "pending";',
+    "export type Status = \"active\" | \"inactive\" | \"pending\";",
   );
 
   // Smart Insert type: excludes id, excludes computed (postCount),
@@ -368,11 +368,11 @@ Deno.test("Codegen - full pipeline with enriched test schema", () => {
   const queryContent = queryFile.content;
 
   assertStringIncludes(queryContent, "_typeCasts");
-  assertStringIncludes(queryContent, 'name: "<str>"');
-  assertStringIncludes(queryContent, 'email: "<str>"');
-  assertStringIncludes(queryContent, 'age: "<int32>"');
-  assertStringIncludes(queryContent, 'active: "<bool>"');
-  assertStringIncludes(queryContent, 'createdAt: "<datetime>"');
+  assertStringIncludes(queryContent, "name: \"<str>\"");
+  assertStringIncludes(queryContent, "email: \"<str>\"");
+  assertStringIncludes(queryContent, "age: \"<int32>\"");
+  assertStringIncludes(queryContent, "active: \"<bool>\"");
+  assertStringIncludes(queryContent, "createdAt: \"<datetime>\"");
 });
 
 Deno.test("Codegen - backward compatibility with minimal PropertyDef", () => {
@@ -435,8 +435,8 @@ Deno.test("Codegen - backward compatibility with minimal PropertyDef", () => {
   // Query builders should still work with type field fallback
   const queryFile = result.files.find((f) => f.type === "queries");
   assertExists(queryFile);
-  assertStringIncludes(queryFile.content, 'title: "<str>"');
-  assertStringIncludes(queryFile.content, 'count: "<int32>"');
+  assertStringIncludes(queryFile.content, "title: \"<str>\"");
+  assertStringIncludes(queryFile.content, "count: \"<int32>\"");
 });
 
 Deno.test("Codegen - mixed schema with enum and object types", () => {
@@ -455,7 +455,7 @@ Deno.test("Codegen - mixed schema with enum and object types", () => {
   // Enum type generates a union type
   assertStringIncludes(
     content,
-    'export type Status = "active" | "inactive" | "pending";',
+    "export type Status = \"active\" | \"inactive\" | \"pending\";",
   );
 
   // Object types generate interfaces
@@ -547,12 +547,12 @@ Deno.test("Codegen - multi-module enums inside namespaces", () => {
   // MerchantStatus enum in $default namespace
   assertStringIncludes(
     content,
-    'export type MerchantStatus = "active" | "suspended" | "pending"',
+    "export type MerchantStatus = \"active\" | \"suspended\" | \"pending\"",
   );
   // PaymentStatus enum in payment namespace
   assertStringIncludes(
     content,
-    'export type PaymentStatus = "pending" | "completed" | "failed" | "refunded"',
+    "export type PaymentStatus = \"pending\" | \"completed\" | \"failed\" | \"refunded\"",
   );
 });
 
@@ -604,7 +604,7 @@ Deno.test("Codegen - multi-module query builders use qualified EdgeQL names", ()
   assertStringIncludes(content, "Types.api.ApiKey");
 
   // Import from interfaces.ts
-  assertStringIncludes(content, 'from "./interfaces.ts"');
+  assertStringIncludes(content, "from \"./interfaces.ts\"");
 });
 
 Deno.test("Codegen - multi-module index exports from interfaces.ts", () => {

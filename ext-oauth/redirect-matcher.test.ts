@@ -2,10 +2,10 @@
 import { assertEquals } from "@std/assert";
 import { describe, it } from "@std/testing/bdd";
 
-import { matchRedirectUri } from "./redirect-matcher.ts";
-import { OAuthExtension } from "./extension.ts";
 import type { ExtensionContext } from "../extensions/types.ts";
+import { OAuthExtension } from "./extension.ts";
 import { googleProvider } from "./providers.ts";
+import { matchRedirectUri } from "./redirect-matcher.ts";
 
 /**
  * gh/geldata#7468: redirect-URI matcher accepts wildcard subdomains in
@@ -187,10 +187,10 @@ function makeContext(): ExtensionContext {
       info: () => {},
       warn: () => {},
       error: () => {},
-      child: function () {
+      child: function() {
         return this;
       },
-      withRequest: function () {
+      withRequest: function() {
         return this;
       },
     } as any,

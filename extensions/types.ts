@@ -3,9 +3,9 @@
  */
 
 import type { FunctionDef, TypeDef } from "../compiler/context.ts";
+import type { Schema } from "../compiler/context.ts";
 import type { ConnectionPool } from "../lib/connection-pool.ts";
 import type { Logger } from "../lib/logger.ts";
-import type { Schema } from "../compiler/context.ts";
 import type { ServerConfig } from "../server/types.ts";
 
 export type ExtensionState =
@@ -97,5 +97,5 @@ export interface Extension {
   getMiddleware(): ExtensionMiddleware[];
   getDatabaseSetup(): ExtensionDatabaseSetup;
   getCompilerHooks(): CompilerHook[];
-  healthCheck(): Promise<{ healthy: boolean; details?: string }>;
+  healthCheck(): Promise<{ healthy: boolean; details?: string; }>;
 }

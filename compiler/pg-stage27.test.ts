@@ -9,8 +9,8 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
+import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 
 const RUN_PG = canRunPgTests();
 
@@ -349,8 +349,8 @@ Deno.test({
       );
       const val = String(result.rows[0].val);
       assertEquals(
-        val.includes("01:00:00") || val.includes("1:00:00") ||
-          val.includes("1 hour"),
+        val.includes("01:00:00") || val.includes("1:00:00")
+          || val.includes("1 hour"),
         true,
         `Interval should represent 1 hour, got: ${val}`,
       );
@@ -426,7 +426,7 @@ Deno.test({
       const val = result.rows[0].val;
       // PG returns jsonb as a parsed JS value via deno-postgres
       assertEquals(
-        val === "hello" || JSON.stringify(val) === '"hello"',
+        val === "hello" || JSON.stringify(val) === "\"hello\"",
         true,
         `TO_JSONB('hello') should return the jsonb string 'hello', got: ${JSON.stringify(val)}`,
       );

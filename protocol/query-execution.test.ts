@@ -12,9 +12,6 @@
  */
 
 import { assertEquals } from "@std/assert";
-import { BinaryProtocolServer, GEL_ERROR_CODES, mapErrorToGelCode } from "./binary-server.ts";
-import { type ClientMessage, decodeServerMessage, encodeClientMessage, type ServerMessage } from "./messages.ts";
-import { Cardinality, InputLanguage, OutputFormat, PROTOCOL_MAJOR_VERSION, PROTOCOL_MINOR_VERSION, TransactionState } from "./enums.ts";
 import { createTestSchema } from "../compiler/context.ts";
 import {
   CompilationError,
@@ -27,6 +24,9 @@ import {
   SyntaxError,
   ValidationError,
 } from "../lib/errors.ts";
+import { BinaryProtocolServer, GEL_ERROR_CODES, mapErrorToGelCode } from "./binary-server.ts";
+import { Cardinality, InputLanguage, OutputFormat, PROTOCOL_MAJOR_VERSION, PROTOCOL_MINOR_VERSION, TransactionState } from "./enums.ts";
+import { type ClientMessage, decodeServerMessage, encodeClientMessage, type ServerMessage } from "./messages.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers (shared with binary-server.test.ts pattern)
@@ -40,7 +40,7 @@ const ZERO_UUID = new Uint8Array(16);
 
 async function readMessage(
   conn: Deno.TcpConn,
-): Promise<{ mtype: number; payload: Uint8Array } | null> {
+): Promise<{ mtype: number; payload: Uint8Array; } | null> {
   const header = new Uint8Array(5);
   const headerRead = await readExact(conn, header);
   if (!headerRead) return null;
@@ -72,7 +72,7 @@ async function readExact(
   return true;
 }
 
-function decode(raw: { mtype: number; payload: Uint8Array }): ServerMessage {
+function decode(raw: { mtype: number; payload: Uint8Array; }): ServerMessage {
   return decodeServerMessage(raw.mtype, raw.payload);
 }
 
@@ -380,8 +380,8 @@ Deno.test("query-execution - Parse caches compilation, second Parse reuses cache
 
   // Both should produce the same descriptor IDs
   if (
-    desc1.kind === "CommandDataDescription" &&
-    desc2.kind === "CommandDataDescription"
+    desc1.kind === "CommandDataDescription"
+    && desc2.kind === "CommandDataDescription"
   ) {
     assertEquals(desc1.inputTypedescId, desc2.inputTypedescId);
     assertEquals(desc1.outputTypedescId, desc2.outputTypedescId);
@@ -425,8 +425,8 @@ Deno.test("query-execution - Execute reuses cached Parse result", async () => {
   assertEquals(execDesc.kind, "CommandDataDescription");
 
   if (
-    parseDesc.kind === "CommandDataDescription" &&
-    execDesc.kind === "CommandDataDescription"
+    parseDesc.kind === "CommandDataDescription"
+    && execDesc.kind === "CommandDataDescription"
   ) {
     assertEquals(parseDesc.inputTypedescId, execDesc.inputTypedescId);
     assertEquals(parseDesc.outputTypedescId, execDesc.outputTypedescId);

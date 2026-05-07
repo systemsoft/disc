@@ -49,7 +49,7 @@ test.describe("Data viewer — read", () => {
     await expect(page.locator("tbody tr")).toHaveCount(3);
 
     const filterRow = page.locator("tr.filter-row");
-    const nameFilter = filterRow.locator('input[placeholder="contains…"]').first();
+    const nameFilter = filterRow.locator("input[placeholder=\"contains…\"]").first();
     await nameFilter.fill("cycle");
     await nameFilter.press("Enter");
 
@@ -63,7 +63,7 @@ test.describe("Data viewer — read", () => {
 
     // The count column has placeholder ">=10, <5, 10..20".
     const countFilter = page
-      .locator('tr.filter-row input[placeholder*=".."]')
+      .locator("tr.filter-row input[placeholder*=\"..\"]")
       .first();
 
     await countFilter.fill(">=2");
@@ -90,7 +90,7 @@ test.describe("Data viewer — read", () => {
     // sits between count and name in column order (id, count, createdAt,
     // name) so it's the second .. placeholder input.
     const dtFilter = page
-      .locator('tr.filter-row input[placeholder*=">=2026"]')
+      .locator("tr.filter-row input[placeholder*=\">=2026\"]")
       .first();
     // Today's seed rows are timestamped "now"; a bare YYYY-MM-DD for
     // today should match all 3, NOT zero (which is what `.col = <datetime>'today'`
@@ -110,7 +110,7 @@ test.describe("Data viewer — read", () => {
     await expect(page.locator("tbody tr")).toHaveCount(3);
 
     const filterRow = page.locator("tr.filter-row");
-    const nameFilter = filterRow.locator('input[placeholder="contains…"]').first();
+    const nameFilter = filterRow.locator("input[placeholder=\"contains…\"]").first();
     await nameFilter.fill("cycle");
     await nameFilter.press("Enter");
     await expect(page.locator("tbody tr")).toHaveCount(1);
@@ -147,7 +147,7 @@ test.describe("Data viewer — CRUD", () => {
 
     // Editable columns in order: count, createdAt, name (id is read-only).
     // Target the name input (index 2) explicitly — `first()` would hit count.
-    const editingInputs = page.locator('tr.editing input[type="text"]');
+    const editingInputs = page.locator("tr.editing input[type=\"text\"]");
     await editingInputs.nth(2).fill("Sark v2");
     await page.getByRole("button", { name: "Save" }).click();
 

@@ -33,7 +33,7 @@ export interface RpcSuccessResponse {
 export interface RpcErrorResponse {
   jsonrpc: "2.0";
   id: number | string | null;
-  error: { code: number; message: string; data?: unknown };
+  error: { code: number; message: string; data?: unknown; };
 }
 
 export type RpcResponse = RpcSuccessResponse | RpcErrorResponse;
@@ -129,18 +129,18 @@ export interface InitializeResult {
   capabilities: {
     textDocumentSync: typeof TextDocumentSyncKind[keyof typeof TextDocumentSyncKind];
     hoverProvider?: boolean;
-    completionProvider?: { triggerCharacters?: string[] };
+    completionProvider?: { triggerCharacters?: string[]; };
     definitionProvider?: boolean;
     documentSymbolProvider?: boolean;
     referencesProvider?: boolean;
-    renameProvider?: boolean | { prepareProvider?: boolean };
+    renameProvider?: boolean | { prepareProvider?: boolean; };
     documentFormattingProvider?: boolean;
     semanticTokensProvider?: {
       legend: SemanticTokensLegend;
-      full: boolean | { delta?: boolean };
+      full: boolean | { delta?: boolean; };
     };
   };
-  serverInfo?: { name: string; version?: string };
+  serverInfo?: { name: string; version?: string; };
 }
 
 // ---------------------------------------------------------------------------

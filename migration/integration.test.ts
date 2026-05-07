@@ -8,10 +8,10 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { SDLParser } from "../schema/parser.ts";
 import { SchemaValidator } from "../schema/validator.ts";
+import { canRunPgTests, cleanupTestTables, getTestDsn } from "../tests/pg-test-harness.ts";
 import { MigrationEngine } from "./engine.ts";
 import { MigrationTracker } from "./tracker.ts";
 import * as Types from "./types.ts";
-import { canRunPgTests, cleanupTestTables, getTestDsn } from "../tests/pg-test-harness.ts";
 
 const RUN_PG = canRunPgTests();
 
@@ -179,12 +179,12 @@ Deno.test("Integration - Schema Evolution Migration", () => {
     assertEquals(operations.length >= 2, true);
 
     const alterUserOp = operations.find((op: Types.MigrationOperation) =>
-      op.kind === "AlterType" &&
-      (op as Types.AlterTypeOperation).typeName === "User"
+      op.kind === "AlterType"
+      && (op as Types.AlterTypeOperation).typeName === "User"
     );
     const createPostOp = operations.find((op: Types.MigrationOperation) =>
-      op.kind === "CreateType" &&
-      (op as Types.CreateTypeOperation).typeName === "Post"
+      op.kind === "CreateType"
+      && (op as Types.CreateTypeOperation).typeName === "Post"
     );
 
     assertEquals(alterUserOp !== undefined, true);

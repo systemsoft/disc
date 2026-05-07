@@ -15,10 +15,10 @@
  */
 
 import { assertEquals } from "@std/assert";
-import { SDLParser } from "../schema/parser.ts";
 import { SDLConverter } from "../schema/converter.ts";
-import { SchemaDiffer } from "./differ.ts";
+import { SDLParser } from "../schema/parser.ts";
 import { DDLGenerator } from "./ddl.ts";
+import { SchemaDiffer } from "./differ.ts";
 import * as Types from "./types.ts";
 
 function diff(beforeSrc: string, afterSrc: string): Types.MigrationOperation[] {
@@ -151,8 +151,8 @@ Deno.test("Gel #8517: adding an enum value emits AddEnumValue", () => {
 
   const ops = diff(before, after);
   const enumOps = ops.filter((o) =>
-    o.kind === "AddEnumValue" || o.kind === "CreateScalar" ||
-    o.kind === "RecreateScalar"
+    o.kind === "AddEnumValue" || o.kind === "CreateScalar"
+    || o.kind === "RecreateScalar"
   );
   assertEquals(enumOps.length, 1, "expected exactly one enum value op");
   const addOp = enumOps[0] as Types.AddEnumValueOperation;
@@ -282,7 +282,7 @@ Deno.test("Gel #6304: migration apply emits lock_timeout + advisory lock pragmas
   // Capture executed SQL via a spy connection pool.
   const executed: string[] = [];
   const fakePool = {
-    transaction: async (fn: (conn: { execute: (s: string) => Promise<void> }) => Promise<void>) => {
+    transaction: async (fn: (conn: { execute: (s: string) => Promise<void>; }) => Promise<void>) => {
       await fn({
         execute: (s: string) => {
           executed.push(s);
@@ -300,7 +300,7 @@ Deno.test("Gel #6304: migration apply emits lock_timeout + advisory lock pragmas
     connectionPool: fakePool as unknown as import("../lib/connection-pool.ts").ConnectionPool,
   } as unknown as Types.MigrationConfig);
 
-  await (engine as unknown as { executeStatements(s: string[]): Promise<void> })
+  await (engine as unknown as { executeStatements(s: string[]): Promise<void>; })
     .executeStatements(["CREATE TABLE foo (id uuid primary key);"]);
 
   const setLockTimeout = executed.find((s) => s.includes("lock_timeout"));
@@ -329,7 +329,7 @@ Deno.test("Gel #6304: lockTimeoutMs=0 disables the timeout pragma", async () => 
 
   const executed: string[] = [];
   const fakePool = {
-    transaction: async (fn: (conn: { execute: (s: string) => Promise<void> }) => Promise<void>) => {
+    transaction: async (fn: (conn: { execute: (s: string) => Promise<void>; }) => Promise<void>) => {
       await fn({
         execute: (s: string) => {
           executed.push(s);
@@ -349,7 +349,7 @@ Deno.test("Gel #6304: lockTimeoutMs=0 disables the timeout pragma", async () => 
     useAdvisoryLock: false,
   } as unknown as Types.MigrationConfig);
 
-  await (engine as unknown as { executeStatements(s: string[]): Promise<void> })
+  await (engine as unknown as { executeStatements(s: string[]): Promise<void>; })
     .executeStatements(["CREATE TABLE foo (id uuid primary key);"]);
 
   // With both knobs disabled we expect *only* the user statement.
@@ -421,9 +421,9 @@ Deno.test("Gel #3208: migration create is non-interactive (no answer-resolution 
   const surface = Object.getOwnPropertyNames(MigrationEngine.prototype);
   for (const method of surface) {
     assertEquals(
-      method.toLowerCase().includes("answer") ||
-        method.toLowerCase().includes("question") ||
-        method.toLowerCase().includes("prompt"),
+      method.toLowerCase().includes("answer")
+        || method.toLowerCase().includes("question")
+        || method.toLowerCase().includes("prompt"),
       false,
       `MigrationEngine method ${JSON.stringify(method)} hints at interactive resolution; Disc's engine is non-interactive by design (Gel #3208 pin).`,
     );
@@ -502,7 +502,7 @@ Deno.test("Gel #2910: every migration tx acquires pg_advisory_xact_lock (auto-re
 
   const executed: string[] = [];
   const fakePool = {
-    transaction: async (fn: (conn: { execute: (s: string) => Promise<void> }) => Promise<void>) => {
+    transaction: async (fn: (conn: { execute: (s: string) => Promise<void>; }) => Promise<void>) => {
       await fn({
         execute: (s: string) => {
           executed.push(s);
@@ -520,12 +520,12 @@ Deno.test("Gel #2910: every migration tx acquires pg_advisory_xact_lock (auto-re
     connectionPool: fakePool as unknown as import("../lib/connection-pool.ts").ConnectionPool,
   } as unknown as Types.MigrationConfig);
 
-  await (engine as unknown as { executeStatements(s: string[]): Promise<void> })
+  await (engine as unknown as { executeStatements(s: string[]): Promise<void>; })
     .executeStatements(["CREATE TABLE foo (id uuid primary key);"]);
 
   const advisoryLock = executed.find((s) =>
-    s.includes("pg_advisory_xact_lock") &&
-    s.includes(MIGRATION_ADVISORY_LOCK_KEY.toString())
+    s.includes("pg_advisory_xact_lock")
+    && s.includes(MIGRATION_ADVISORY_LOCK_KEY.toString())
   );
   assertEquals(
     advisoryLock !== undefined,

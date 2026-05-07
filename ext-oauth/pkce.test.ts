@@ -7,8 +7,8 @@
  */
 
 import { assertEquals } from "@std/assert";
-import { describe, it } from "@std/testing/bdd";
 import { encodeBase64Url } from "@std/encoding/base64url";
+import { describe, it } from "@std/testing/bdd";
 
 import { normalizePkceParam, pickPkceParam } from "./pkce.ts";
 

@@ -11,11 +11,11 @@
 
 import { assert, assertEquals } from "@std/assert";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
-import { canRunPgTests, getTestDsn } from "../../tests/pg-test-harness.ts";
+import type { Schema, TypeDef } from "../../compiler/context.ts";
 import { ConnectionPool } from "../../lib/connection-pool.ts";
+import { canRunPgTests, getTestDsn } from "../../tests/pg-test-harness.ts";
 import { EdgeQLProtocolHandler } from "../edgeql-protocol.ts";
 import { HttpServer } from "../http.ts";
-import type { Schema, TypeDef } from "../../compiler/context.ts";
 
 const RUN_PG = canRunPgTests();
 const TEST_HOST = "127.0.0.1";

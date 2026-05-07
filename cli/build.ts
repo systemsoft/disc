@@ -103,7 +103,7 @@ export class BuildCommand {
    * so they bypass the gate even with `--platform`.
    */
   assertEmbeddedPgPresent(
-    options: { platform?: string; lite?: boolean },
+    options: { platform?: string; lite?: boolean; },
     paths: readonly string[],
     pgSourceDir: string,
   ): void {
@@ -111,27 +111,27 @@ export class BuildCommand {
     if (options.lite) return;
     if (Deno.env.get("DISC_BUILD_NO_BUNDLE_PG") === "1") return;
 
-    const opOutHint = `To opt out of PG embedding explicitly, set DISC_BUILD_NO_BUNDLE_PG=1 ` +
-      `or pass --lite.`;
+    const opOutHint = `To opt out of PG embedding explicitly, set DISC_BUILD_NO_BUNDLE_PG=1 `
+      + `or pass --lite.`;
 
     if (paths.length === 0) {
       throw new Error(
-        `Cross-compile build for ${options.platform} produced 0 embedded PG ` +
-          `files (source dir: ${pgSourceDir}). This usually means PG staging ` +
-          `silently failed — check the build log for ` +
-          `"Skipped embedded-PG manifest refresh" or download/extract errors. ` +
-          opOutHint,
+        `Cross-compile build for ${options.platform} produced 0 embedded PG `
+          + `files (source dir: ${pgSourceDir}). This usually means PG staging `
+          + `silently failed — check the build log for `
+          + `"Skipped embedded-PG manifest refresh" or download/extract errors. `
+          + opOutHint,
       );
     }
 
     const hasPostgresBinary = paths.some((p) => p.endsWith("/bin/postgres"));
     if (!hasPostgresBinary) {
       throw new Error(
-        `Cross-compile build for ${options.platform} produced an embedded PG ` +
-          `distribution without bin/postgres (${paths.length} files at ` +
-          `${pgSourceDir}). The runtime needs the postgres binary to start. ` +
-          `This usually means the JAR → txz extract chain partially failed. ` +
-          opOutHint,
+        `Cross-compile build for ${options.platform} produced an embedded PG `
+          + `distribution without bin/postgres (${paths.length} files at `
+          + `${pgSourceDir}). The runtime needs the postgres binary to start. `
+          + `This usually means the JAR → txz extract chain partially failed. `
+          + opOutHint,
       );
     }
 
@@ -142,12 +142,12 @@ export class BuildCommand {
     const MIN_PG_FILES = 50;
     if (paths.length < MIN_PG_FILES) {
       throw new Error(
-        `Cross-compile build for ${options.platform} produced only ` +
-          `${paths.length} embedded PG files (source dir: ${pgSourceDir}); ` +
-          `a real PG 16 distribution has 600+ files. This is a partial ` +
-          `extraction — the binary will fail at runtime when PG init can't ` +
-          `find timezone or extension data. ` +
-          opOutHint,
+        `Cross-compile build for ${options.platform} produced only `
+          + `${paths.length} embedded PG files (source dir: ${pgSourceDir}); `
+          + `a real PG 16 distribution has 600+ files. This is a partial `
+          + `extraction — the binary will fail at runtime when PG init can't `
+          + `find timezone or extension data. `
+          + opOutHint,
       );
     }
   }
@@ -298,8 +298,8 @@ export class BuildCommand {
           );
         } else {
           console.log(
-            `  No embedded PG (no cache at ${refreshed.pgSourceDir}); ` +
-              `binary will download PG on first run`,
+            `  No embedded PG (no cache at ${refreshed.pgSourceDir}); `
+              + `binary will download PG on first run`,
           );
         }
       } catch (err) {
@@ -409,8 +409,8 @@ export async function generateUiManifest(buildDir: string): Promise<string> {
   const files = await listBuildArtifacts(buildDir);
   if (files.length === 0) {
     throw new Error(
-      `No files under ${buildDir} — no UI build artifacts to embed. ` +
-        `Run \`bash ui/build.sh\` before \`disc build\` (or pass --lite).`,
+      `No files under ${buildDir} — no UI build artifacts to embed. `
+        + `Run \`bash ui/build.sh\` before \`disc build\` (or pass --lite).`,
     );
   }
 
@@ -445,7 +445,7 @@ export const UI_ASSET_SET: ReadonlySet<string> = new Set(UI_ASSET_MANIFEST);
 async function walkPgSource(
   rootDir: string,
   dir: string,
-  entries: { abs: string; rel: string; mode: number }[],
+  entries: { abs: string; rel: string; mode: number; }[],
 ): Promise<void> {
   for await (const entry of Deno.readDir(dir)) {
     const full = join(dir, entry.name);
@@ -474,7 +474,7 @@ export async function generateEmbeddedPgManifest(options: {
   pgVersion: string;
   sourceDir: string;
 }): Promise<string> {
-  const entries: { abs: string; rel: string; mode: number }[] = [];
+  const entries: { abs: string; rel: string; mode: number; }[] = [];
 
   let exists = false;
   try {
@@ -526,7 +526,7 @@ export const EMBEDDED_PG_MANIFEST: readonly EmbeddedPgEntry[] = ${body};
  */
 export async function refreshUiManifest(
   rootDir: string = Deno.cwd(),
-): Promise<{ wrote: boolean; path: string }> {
+): Promise<{ wrote: boolean; path: string; }> {
   const buildDir = join(rootDir, "ui", "build");
   const manifestPath = join(rootDir, "server", "ui-asset-manifest.ts");
 

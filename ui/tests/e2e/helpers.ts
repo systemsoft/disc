@@ -11,7 +11,7 @@ const API_BASE = "http://localhost:5173/api";
 /** Issue a raw EdgeQL query through the same `/query` route the UI uses. */
 export async function runQuery(query: string): Promise<{
   data?: unknown;
-  errors?: Array<{ message: string }>;
+  errors?: Array<{ message: string; }>;
 }> {
   const res = await fetch(`${API_BASE}/query`, {
     method: "POST",
@@ -34,7 +34,7 @@ export async function insertItem(name: string, count: number): Promise<string> {
   if (result.errors) {
     throw new Error(`insertItem failed: ${result.errors[0].message}`);
   }
-  return (result.data as { id: string }).id;
+  return (result.data as { id: string; }).id;
 }
 
 /** Count rows for the named type. */

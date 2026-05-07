@@ -6,8 +6,8 @@
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import { AuthProvider } from "./provider.ts";
 import { TestDatabase } from "./test-database.ts";
-import { AuthError, AuthErrorCode } from "./types.ts";
 import { generateTOTP } from "./totp.ts";
+import { AuthError, AuthErrorCode } from "./types.ts";
 
 async function makeProvider(): Promise<{
   provider: AuthProvider;

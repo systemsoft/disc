@@ -6,11 +6,11 @@
  * using a pg_dumpall/pg_restore strategy with automatic backup and rollback.
  */
 
-import { join } from "@std/path";
 import { ensureDir } from "@std/fs";
-import { PostgresManager } from "../postgres/mod.ts";
+import { join } from "@std/path";
 import { PostgresBinaryDownloader } from "../postgres/downloader.ts";
 import { PostgresInstance } from "../postgres/instance.ts";
+import { PostgresManager } from "../postgres/mod.ts";
 
 export interface PgUpgradeOptions {
   targetVersion: string;

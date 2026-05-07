@@ -3,8 +3,8 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
-import * as Types from "./types.ts";
 import { Result } from "../lib/result.ts";
+import * as Types from "./types.ts";
 
 Deno.test("MigrationConfig - default values", () => {
   const config: Types.MigrationConfig = {

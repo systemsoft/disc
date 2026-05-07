@@ -4,8 +4,8 @@
 
 import { assertStringIncludes } from "@std/assert";
 import { EdgeQLParser } from "../edgeql/parser.ts";
-import { EdgeQLCompiler } from "./compiler.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
+import { EdgeQLCompiler } from "./compiler.ts";
 import * as Context from "./context.ts";
 
 /** Normalize SQL whitespace for comparison: collapse newlines and multi-spaces to single space, trim */

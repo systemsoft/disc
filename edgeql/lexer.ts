@@ -26,8 +26,8 @@ export class EdgeQLLexer {
 
       const token = this.nextToken();
       if (
-        token && token.type !== TokenType.WHITESPACE &&
-        token.type !== TokenType.COMMENT
+        token && token.type !== TokenType.WHITESPACE
+        && token.type !== TokenType.COMMENT
       ) {
         this.tokens.push(token);
       }
@@ -58,27 +58,27 @@ export class EdgeQLLexer {
     // Triple-quoted string literals (""" or ''' for multi-line strings).
     // Must be checked BEFORE plain string literals. (P1-06)
     if (
-      (ch === '"' && this.peekAhead(1) === '"' && this.peekAhead(2) === '"') ||
-      (ch === "'" && this.peekAhead(1) === "'" && this.peekAhead(2) === "'")
+      (ch === "\"" && this.peekAhead(1) === "\"" && this.peekAhead(2) === "\"")
+      || (ch === "'" && this.peekAhead(1) === "'" && this.peekAhead(2) === "'")
     ) {
       return this.scanTripleQuotedString(ch);
     }
 
     // String literals (single and double quotes)
-    if (ch === '"' || ch === "'") {
+    if (ch === "\"" || ch === "'") {
       return this.scanString(ch);
     }
 
     // Raw string literals (r"..." or r'...')
     if (
-      ch === "r" && (this.peekAhead(1) === '"' || this.peekAhead(1) === "'")
+      ch === "r" && (this.peekAhead(1) === "\"" || this.peekAhead(1) === "'")
     ) {
       return this.scanRawString();
     }
 
     // Bytes literals (b"..." or b'...')
     if (
-      ch === "b" && (this.peekAhead(1) === '"' || this.peekAhead(1) === "'")
+      ch === "b" && (this.peekAhead(1) === "\"" || this.peekAhead(1) === "'")
     ) {
       return this.scanBytesLiteral();
     }
@@ -629,8 +629,8 @@ export class EdgeQLLexer {
     while (this.pos < this.source.length) {
       const ch = this.peek();
       if (
-        ch === quote && this.peekAhead(1) === quote &&
-        this.peekAhead(2) === quote
+        ch === quote && this.peekAhead(1) === quote
+        && this.peekAhead(2) === quote
       ) {
         const content = this.source.slice(contentStart, this.pos);
         this.advance();
@@ -1013,8 +1013,8 @@ export class EdgeQLLexer {
           break;
         }
       } else if (
-        !this.isIdentCont(ch) && ch !== ":" && ch !== " " && ch !== "\t" &&
-        ch !== ","
+        !this.isIdentCont(ch) && ch !== ":" && ch !== " " && ch !== "\t"
+        && ch !== ","
       ) {
         break;
       }
@@ -1071,8 +1071,8 @@ export class EdgeQLLexer {
         return "\t";
       case "\\":
         return "\\";
-      case '"':
-        return '"';
+      case "\"":
+        return "\"";
       case "'":
         return "'";
       case "x": // Hex escape
@@ -1119,9 +1119,9 @@ export class EdgeQLLexer {
 
   private isIdentStart(ch: string | null): boolean {
     if (ch === null) return false;
-    return (ch >= "a" && ch <= "z") ||
-      (ch >= "A" && ch <= "Z") ||
-      ch === "_";
+    return (ch >= "a" && ch <= "z")
+      || (ch >= "A" && ch <= "Z")
+      || ch === "_";
   }
 
   private isIdentCont(ch: string | null): boolean {

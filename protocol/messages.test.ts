@@ -163,8 +163,8 @@ Deno.test("Parse message - round-trip", () => {
     kind: "Parse",
     annotations: [{ name: "query_id", value: "abc123" }],
     allowedCapabilities: 0xffn,
-    compilationFlags: CompilationFlag.INJECT_OUTPUT_TYPE_IDS |
-      CompilationFlag.INJECT_OUTPUT_TYPE_NAMES,
+    compilationFlags: CompilationFlag.INJECT_OUTPUT_TYPE_IDS
+      | CompilationFlag.INJECT_OUTPUT_TYPE_NAMES,
     implicitLimit: 100n,
     inputLanguage: InputLanguage.EDGEQL,
     outputFormat: OutputFormat.JSON,
@@ -182,8 +182,8 @@ Deno.test("Parse message - round-trip", () => {
   assertEquals(result.allowedCapabilities, 0xffn);
   assertEquals(
     result.compilationFlags,
-    CompilationFlag.INJECT_OUTPUT_TYPE_IDS |
-      CompilationFlag.INJECT_OUTPUT_TYPE_NAMES,
+    CompilationFlag.INJECT_OUTPUT_TYPE_IDS
+      | CompilationFlag.INJECT_OUTPUT_TYPE_NAMES,
   );
   assertEquals(result.implicitLimit, 100n);
   assertEquals(result.inputLanguage, InputLanguage.EDGEQL);
@@ -464,14 +464,14 @@ Deno.test("Data message - single element", () => {
   const encoder = new TextEncoder();
   const msg: DataMsg = {
     kind: "Data",
-    data: [encoder.encode('{"name":"Ada"}')],
+    data: [encoder.encode("{\"name\":\"Ada\"}")],
   };
 
   const result = roundTripServer(msg) as DataMsg;
   assertEquals(result.kind, "Data");
   assertEquals(result.data.length, 1);
   const decoder = new TextDecoder();
-  assertEquals(decoder.decode(result.data[0]), '{"name":"Ada"}');
+  assertEquals(decoder.decode(result.data[0]), "{\"name\":\"Ada\"}");
 });
 
 Deno.test("Data message - multiple elements", () => {
@@ -479,9 +479,9 @@ Deno.test("Data message - multiple elements", () => {
   const msg: DataMsg = {
     kind: "Data",
     data: [
-      encoder.encode('{"id":1}'),
-      encoder.encode('{"id":2}'),
-      encoder.encode('{"id":3}'),
+      encoder.encode("{\"id\":1}"),
+      encoder.encode("{\"id\":2}"),
+      encoder.encode("{\"id\":3}"),
     ],
   };
 

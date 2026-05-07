@@ -23,7 +23,7 @@ const RUN_PG = canRunPgTests();
 
 function parseDsn(
   dsn: string,
-): { hostname: string; port: number; user: string; database: string } {
+): { hostname: string; port: number; user: string; database: string; } {
   const url = new URL(dsn);
   return {
     hostname: url.hostname || "localhost",
@@ -161,7 +161,7 @@ Deno.test({
       );
 
       // Verify audit_log has a row from the trigger
-      const rows = await queryRows<{ action: string; target_name: string }>(
+      const rows = await queryRows<{ action: string; target_name: string; }>(
         dsn,
         `SELECT action, target_name FROM ${auditTable}`,
       );
@@ -246,7 +246,7 @@ Deno.test({
       );
 
       // Verify audit_log is empty after INSERT (trigger is UPDATE-only)
-      const emptyRows = await queryRows<{ action: string }>(
+      const emptyRows = await queryRows<{ action: string; }>(
         dsn,
         `SELECT action FROM ${auditTable}`,
       );
@@ -265,7 +265,7 @@ Deno.test({
       );
 
       // Verify audit_log has one entry from the UPDATE trigger
-      const rows = await queryRows<{ action: string; target_name: string }>(
+      const rows = await queryRows<{ action: string; target_name: string; }>(
         dsn,
         `SELECT action, target_name FROM ${auditTable}`,
       );
@@ -368,7 +368,7 @@ Deno.test({
 
       // Verify audit_log has an entry logged BEFORE the delete
       const auditRows = await queryRows<
-        { action: string; target_name: string }
+        { action: string; target_name: string; }
       >(
         dsn,
         `SELECT action, target_name FROM ${auditTable}`,
@@ -387,7 +387,7 @@ Deno.test({
       );
 
       // Verify the row was actually deleted from the user table
-      const userRows = await queryRows<{ name: string }>(
+      const userRows = await queryRows<{ name: string; }>(
         dsn,
         `SELECT name FROM ${userTable}`,
       );
@@ -493,7 +493,7 @@ Deno.test({
       );
 
       // Verify 3 audit_log entries, one per operation
-      const rows = await queryRows<{ action: string; target_name: string }>(
+      const rows = await queryRows<{ action: string; target_name: string; }>(
         dsn,
         `SELECT action, target_name FROM ${auditTable} ORDER BY id`,
       );
@@ -585,8 +585,8 @@ Deno.test({
       // Filter for only the trigger-related statements.
       const triggerSql = triggerStatements.filter(
         (s) =>
-          s.includes("CREATE OR REPLACE FUNCTION") ||
-          s.includes("CREATE TRIGGER"),
+          s.includes("CREATE OR REPLACE FUNCTION")
+          || s.includes("CREATE TRIGGER"),
       );
 
       assertEquals(
@@ -609,7 +609,7 @@ Deno.test({
       );
 
       // Verify audit_log was populated by the DDL-generated trigger
-      const rows = await queryRows<{ action: string; target_name: string }>(
+      const rows = await queryRows<{ action: string; target_name: string; }>(
         dsn,
         `SELECT action, target_name FROM ${auditTable}`,
       );

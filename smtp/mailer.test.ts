@@ -207,7 +207,7 @@ function appendBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
   return out;
 }
 
-function makeConnectImpl(socket: { conn: SmtpConn }): SmtpConnectImpl {
+function makeConnectImpl(socket: { conn: SmtpConn; }): SmtpConnectImpl {
   return {
     // deno-lint-ignore require-await
     connect: async () => socket.conn,

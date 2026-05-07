@@ -5,8 +5,8 @@
  */
 
 import { EdgeQLCompiler } from "../compiler/compiler.ts";
-import { EdgeQLParser } from "../edgeql/parser.ts";
 import { createTestSchema } from "../compiler/context.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
 
 const schema = createTestSchema();
 

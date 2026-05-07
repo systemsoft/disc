@@ -342,7 +342,7 @@ export interface IfElse extends EdgeQLNode {
  */
 export interface CaseExpression extends EdgeQLNode {
   kind: "CaseExpression";
-  whenClauses: Array<{ condition: Expression; result: Expression }>;
+  whenClauses: Array<{ condition: Expression; result: Expression; }>;
   elseResult?: Expression;
 }
 

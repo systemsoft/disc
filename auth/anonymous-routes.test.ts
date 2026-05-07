@@ -4,9 +4,9 @@
  */
 
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { AuthProvider } from "./provider.ts";
-import { AuthMiddleware } from "./middleware.ts";
 import { AuthRoutes } from "./integration.ts";
+import { AuthMiddleware } from "./middleware.ts";
+import { AuthProvider } from "./provider.ts";
 import { TestDatabase } from "./test-database.ts";
 
 async function makeRoutes(): Promise<{

@@ -5,11 +5,11 @@
  */
 
 import * as EdgeQLAST from "../edgeql/ast.ts";
-import * as SQL from "./sql.ts";
-import * as Context from "./context.ts";
-import { Err, Ok, Result } from "../lib/result.ts";
 import { CompilationError } from "../lib/errors.ts";
+import { Err, Ok, Result } from "../lib/result.ts";
 import { EdgeQLCompiler } from "./compiler.ts";
+import * as Context from "./context.ts";
+import * as SQL from "./sql.ts";
 
 export interface QueryComplexity {
   score: number;

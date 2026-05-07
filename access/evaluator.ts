@@ -4,11 +4,11 @@
  * Evaluates access policies and generates SQL conditions
  */
 
-import { AccessConfig, AccessContext, AccessDecision, AccessOperation, AccessPolicy } from "./types.ts";
-import type { AccessComparisonNode, AccessExpressionNode, AccessFunctionNode, AccessLogicalNode } from "./ast.ts";
 import { ValidationError } from "../lib/errors.ts";
 import { assertSafeIdentifier, sqlStringLiteral } from "../lib/sql-escape.ts";
+import type { AccessComparisonNode, AccessExpressionNode, AccessFunctionNode, AccessLogicalNode } from "./ast.ts";
 import { defaultPermissionChecker, parsePermissionSpec } from "./runtime-permissions.ts";
+import { AccessConfig, AccessContext, AccessDecision, AccessOperation, AccessPolicy } from "./types.ts";
 
 export class AccessEvaluator {
   private config: AccessConfig;
@@ -138,7 +138,7 @@ export class AccessEvaluator {
     policy: AccessPolicy,
     operation: AccessOperation,
     context: AccessContext,
-  ): { allowed: boolean; denied: boolean; sqlCondition?: string } {
+  ): { allowed: boolean; denied: boolean; sqlCondition?: string; } {
     let allowed = false;
     let denied = false;
     let sqlCondition: string | undefined;

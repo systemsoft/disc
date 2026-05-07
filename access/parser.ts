@@ -4,9 +4,9 @@
  * Parses access policy definitions from SDL and standalone policy files
  */
 
-import { Token, TokenType } from "../schema/tokens.ts";
 import { SyntaxError } from "../lib/errors.ts";
 import { Span } from "../lib/types.ts";
+import { Token, TokenType } from "../schema/tokens.ts";
 import {
   AccessComparisonNode,
   AccessExpressionNode,
@@ -329,8 +329,8 @@ export class AccessPolicyParser {
 
     // Global variables (current_user, current_role, etc.)
     if (
-      this.match("current_user") || this.match("current_role") ||
-      this.match("current_session")
+      this.match("current_user") || this.match("current_role")
+      || this.match("current_session")
     ) {
       const globalName = this.previous().value;
 
@@ -477,8 +477,8 @@ export class AccessPolicyParser {
   }
 
   private isAtEnd(): boolean {
-    return this.current >= this.tokens.length ||
-      this.peek().type === TokenType.EOF;
+    return this.current >= this.tokens.length
+      || this.peek().type === TokenType.EOF;
   }
 
   private peek(): Token {

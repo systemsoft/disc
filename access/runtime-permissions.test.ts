@@ -8,12 +8,12 @@
  */
 
 import { assertEquals, assertThrows } from "@std/assert";
-import { hasPermission, parsePermissionSpec, type PermissionChecker, type PermissionSpec } from "./runtime-permissions.ts";
-import { AccessEvaluator } from "./evaluator.ts";
-import type { AccessContext } from "./types.ts";
-import { AccessPolicyParser } from "./parser.ts";
 import { SDLLexer } from "../schema/lexer.ts";
 import type { AccessExpressionNode, AccessFunctionNode } from "./ast.ts";
+import { AccessEvaluator } from "./evaluator.ts";
+import { AccessPolicyParser } from "./parser.ts";
+import { hasPermission, parsePermissionSpec, type PermissionChecker, type PermissionSpec } from "./runtime-permissions.ts";
+import type { AccessContext } from "./types.ts";
 
 // --- parsePermissionSpec ---
 
@@ -73,7 +73,7 @@ function parseExpr(source: string): AccessExpressionNode {
   return policy.using;
 }
 
-Deno.test('parser accepts runtime::has_permission("net")', () => {
+Deno.test("parser accepts runtime::has_permission(\"net\")", () => {
   const expr = parseExpr(`runtime::has_permission("net")`) as AccessFunctionNode;
   assertEquals(expr.kind, "AccessFunction");
   assertEquals(expr.name, "runtime::has_permission");

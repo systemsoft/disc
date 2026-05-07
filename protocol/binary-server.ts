@@ -14,15 +14,15 @@
  *   - Error code mapping (Disc errors -> Gel protocol error codes)
  */
 
-import { type ClientMessage, decodeClientMessage, encodeServerMessage, type ServerMessage } from "./messages.ts";
-import { Cardinality, ErrorSeverity, OutputFormat, PROTOCOL_MAJOR_VERSION, PROTOCOL_MINOR_VERSION, TransactionState } from "./enums.ts";
-import { generateDescriptorIdSync, resolveWellKnownType } from "./typedesc.ts";
-import { BufferReader, BufferWriter } from "./buffer.ts";
-import { uuidToBytes } from "./types.ts";
-import { EdgeQLParser } from "../edgeql/parser.ts";
-import type * as AST from "../edgeql/ast.ts";
 import type { Schema } from "../compiler/context.ts";
+import type * as AST from "../edgeql/ast.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
+import { BufferReader, BufferWriter } from "./buffer.ts";
+import { Cardinality, ErrorSeverity, OutputFormat, PROTOCOL_MAJOR_VERSION, PROTOCOL_MINOR_VERSION, TransactionState } from "./enums.ts";
+import { type ClientMessage, decodeClientMessage, encodeServerMessage, type ServerMessage } from "./messages.ts";
 import { deriveKeys, generateServerFirstMessage, parseClientFirstMessage, type ScramServerState, verifyClientFinalMessage } from "./scram.ts";
+import { generateDescriptorIdSync, resolveWellKnownType } from "./typedesc.ts";
+import { uuidToBytes } from "./types.ts";
 
 import {
   CompilationError,
@@ -152,7 +152,7 @@ function encodeSystemConfigValue(): Uint8Array {
  * The typedesc block is one length-prefixed CTYPE_INPUT_SHAPE descriptor:
  *   [u32 descLen=19][u8 t=8][16 tid][u16 els=0]
  */
-function buildEmptyStateDescriptor(): { tid: Uint8Array; typedesc: Uint8Array } {
+function buildEmptyStateDescriptor(): { tid: Uint8Array; typedesc: Uint8Array; } {
   const tid = generateDescriptorIdSync(
     new TextEncoder().encode("disc:state:empty:v1"),
   );
@@ -224,8 +224,8 @@ function encodeShapeV2(
  * gets sent in the CommandDataDescription header).
  */
 function packTypedescBlock(
-  descriptors: Array<{ id: Uint8Array; bytes: Uint8Array }>,
-): { data: Uint8Array; rootId: Uint8Array } {
+  descriptors: Array<{ id: Uint8Array; bytes: Uint8Array; }>,
+): { data: Uint8Array; rootId: Uint8Array; } {
   const w = new BufferWriter();
   for (const d of descriptors) {
     w.writeLenPrefixedBytes(d.bytes);
@@ -269,7 +269,7 @@ interface OutputShape {
  */
 function detectBareScalarType(expr: unknown): string | null {
   if (!expr || typeof expr !== "object") return null;
-  const e = expr as { kind?: string };
+  const e = expr as { kind?: string; };
 
   if (e.kind === "TypeCast") {
     const cast = expr as AST.TypeCast;
@@ -310,12 +310,12 @@ function collectParameters(node: unknown): ParamInfo[] {
 
   function visit(n: unknown): void {
     if (!n || typeof n !== "object") return;
-    const obj = n as { kind?: string; type?: AST.TypeName; expr?: unknown };
+    const obj = n as { kind?: string; type?: AST.TypeName; expr?: unknown; };
     if (
-      obj.kind === "TypeCast" &&
-      obj.expr &&
-      typeof obj.expr === "object" &&
-      (obj.expr as { kind?: string }).kind === "Parameter"
+      obj.kind === "TypeCast"
+      && obj.expr
+      && typeof obj.expr === "object"
+      && (obj.expr as { kind?: string; }).kind === "Parameter"
     ) {
       const param = obj.expr as AST.Parameter;
       const tn = obj.type;
@@ -352,13 +352,13 @@ function collectParameters(node: unknown): ParamInfo[] {
  */
 function inferOutputShape(
   query: unknown,
-  schema?: { types?: Map<string, { properties: Map<string, { edgeqlType?: string; type: string }> }> },
+  schema?: { types?: Map<string, { properties: Map<string, { edgeqlType?: string; type: string; }>; }>; },
 ): OutputShape {
   const idField: OutputField = { name: "id", edgeqlType: "uuid" };
   if (!query || typeof query !== "object") {
     return { typeName: "Object", fields: [idField] };
   }
-  const q = query as { kind?: string };
+  const q = query as { kind?: string; };
 
   if (q.kind === "InsertQuery" || q.kind === "UpdateQuery" || q.kind === "DeleteQuery") {
     return { typeName: "Object", fields: [idField] };
@@ -412,7 +412,7 @@ function extractTypeNameFromExpr(expr: unknown): string | null {
   const e = expr as {
     kind?: string;
     steps?: AST.PathStep[];
-    name?: { parts?: string[] } | string;
+    name?: { parts?: string[]; } | string;
   };
   if (e.kind === "Path" && e.steps && e.steps.length > 0) {
     // First step is the root type identifier in `SELECT Type { ... }`.
@@ -425,7 +425,7 @@ function extractTypeNameFromExpr(expr: unknown): string | null {
   // a type reference, not a path. Pull the qualified name out of its
   // `parts` (one entry for default-module types).
   if (e.kind === "TypeName" && e.name && typeof e.name === "object") {
-    const parts = (e.name as { parts?: string[] }).parts;
+    const parts = (e.name as { parts?: string[]; }).parts;
     if (parts && parts.length > 0) return parts.join("::");
   }
   return null;
@@ -437,7 +437,7 @@ function extractTypeNameFromExpr(expr: unknown): string | null {
  */
 function extractFieldNameFromExpr(expr: unknown): string | undefined {
   if (!expr || typeof expr !== "object") return undefined;
-  const e = expr as { kind?: string; name?: string; steps?: AST.PathStep[] };
+  const e = expr as { kind?: string; name?: string; steps?: AST.PathStep[]; };
   if (e.kind === "Identifier" && typeof e.name === "string") return e.name;
   if (e.kind === "Path" && e.steps && e.steps.length > 0) {
     return e.steps[e.steps.length - 1]?.name;
@@ -452,15 +452,15 @@ function extractFieldNameFromExpr(expr: unknown): string | undefined {
  */
 function buildInputDescriptor(
   params: ParamInfo[],
-): { id: Uint8Array; data: Uint8Array } {
-  const descriptors: Array<{ id: Uint8Array; bytes: Uint8Array }> = [];
+): { id: Uint8Array; data: Uint8Array; } {
+  const descriptors: Array<{ id: Uint8Array; bytes: Uint8Array; }> = [];
   const scalarPos = new Map<string, number>();
 
   function ensureScalar(eqlType: string): number {
     let pos = scalarPos.get(eqlType);
     if (pos !== undefined) return pos;
-    const tid = resolveWellKnownType(eqlType) ??
-      resolveWellKnownType("uuid")!;
+    const tid = resolveWellKnownType(eqlType)
+      ?? resolveWellKnownType("uuid")!;
     pos = descriptors.length;
     descriptors.push({ id: tid, bytes: encodeBaseScalarV2(tid) });
     scalarPos.set(eqlType, pos);
@@ -650,7 +650,7 @@ function encodeRowsAsObjects(
 
 function buildOutputDescriptor(
   shape: OutputShape,
-): { id: Uint8Array; data: Uint8Array } {
+): { id: Uint8Array; data: Uint8Array; } {
   // Bare-scalar SELECT: emit a single CTYPE_BASE_SCALAR descriptor and
   // use its tid as the root. No CTYPE_SHAPE wrapper — both upstream Gel
   // clients special-case scalar codecs by descriptor type, and wrapping
@@ -658,21 +658,21 @@ function buildOutputDescriptor(
   // of what bytes we put in the Data payload.
   if (shape.isScalar) {
     const eqlType = shape.fields[0].edgeqlType;
-    const tid = resolveWellKnownType(eqlType) ??
-      resolveWellKnownType("uuid")!;
+    const tid = resolveWellKnownType(eqlType)
+      ?? resolveWellKnownType("uuid")!;
     const descriptor = { id: tid, bytes: encodeBaseScalarV2(tid) };
     const packed = packTypedescBlock([descriptor]);
     return { id: packed.rootId, data: packed.data };
   }
 
-  const descriptors: Array<{ id: Uint8Array; bytes: Uint8Array }> = [];
+  const descriptors: Array<{ id: Uint8Array; bytes: Uint8Array; }> = [];
   const scalarPos = new Map<string, number>();
 
   function ensureScalar(eqlType: string): number {
     let pos = scalarPos.get(eqlType);
     if (pos !== undefined) return pos;
-    const tid = resolveWellKnownType(eqlType) ??
-      resolveWellKnownType("uuid")!;
+    const tid = resolveWellKnownType(eqlType)
+      ?? resolveWellKnownType("uuid")!;
     pos = descriptors.length;
     descriptors.push({ id: tid, bytes: encodeBaseScalarV2(tid) });
     scalarPos.set(eqlType, pos);
@@ -849,7 +849,7 @@ export interface BinaryServerOptions {
    * advertises ALPN "edgedb-binary". Required for compatibility with the
    * upstream Gel Python/JS clients — they refuse to talk plain TCP.
    */
-  tls?: { certFile: string; keyFile: string };
+  tls?: { certFile: string; keyFile: string; };
   /**
    * Runs an EdgeQL query against the underlying database and returns the
    * rows the binary server needs to encode as Data messages. Wired in by
@@ -1135,7 +1135,7 @@ export class BinaryConnection {
   // -----------------------------------------------------------------------
 
   private async handleHandshake(
-    _msg: ClientMessage & { kind: "ClientHandshake" },
+    _msg: ClientMessage & { kind: "ClientHandshake"; },
   ): Promise<void> {
     // Send ServerHandshake with our protocol version
     await this.sendMessage({
@@ -1187,7 +1187,7 @@ export class BinaryConnection {
   // -----------------------------------------------------------------------
 
   private async handleSASLInitialResponse(
-    msg: ClientMessage & { kind: "AuthenticationSASLInitialResponse" },
+    msg: ClientMessage & { kind: "AuthenticationSASLInitialResponse"; },
   ): Promise<void> {
     if (this.state !== "authenticating" || !this.scramState) {
       await this.sendError("Unexpected SASL initial response");
@@ -1229,11 +1229,11 @@ export class BinaryConnection {
   }
 
   private async handleSASLResponse(
-    msg: ClientMessage & { kind: "AuthenticationSASLResponse" },
+    msg: ClientMessage & { kind: "AuthenticationSASLResponse"; },
   ): Promise<void> {
     if (
-      this.state !== "authenticating" || !this.scramState ||
-      !this.scramStoredKey || !this.scramServerKey
+      this.state !== "authenticating" || !this.scramState
+      || !this.scramStoredKey || !this.scramServerKey
     ) {
       await this.sendError("Unexpected SASL response");
       this.close();
@@ -1316,7 +1316,7 @@ export class BinaryConnection {
   // -----------------------------------------------------------------------
 
   private async handleParse(
-    msg: ClientMessage & { kind: "Parse" },
+    msg: ClientMessage & { kind: "Parse"; },
   ): Promise<void> {
     try {
       // Phase 4.1: Parse state data if present
@@ -1362,8 +1362,8 @@ export class BinaryConnection {
         kind: "CommandDataDescription",
         annotations: [],
         capabilities: 0n,
-        resultCardinality: msg.expectedCardinality ||
-          Cardinality.MANY,
+        resultCardinality: msg.expectedCardinality
+          || Cardinality.MANY,
         inputTypedescId: built.inputDesc.id,
         inputTypedesc: built.inputDesc.data,
         outputTypedescId: built.outputDesc.id,
@@ -1380,15 +1380,15 @@ export class BinaryConnection {
   }
 
   private async handleExecute(
-    msg: ClientMessage & { kind: "Execute" },
+    msg: ClientMessage & { kind: "Execute"; },
   ): Promise<void> {
     try {
       // Phase 4.1: Parse state data if present
       this.parseStateData(msg.stateTypedescId, msg.stateData);
 
       // Phase 4.2: Check cache for previously parsed statements
-      let inputDesc: { id: Uint8Array; data: Uint8Array };
-      let outputDesc: { id: Uint8Array; data: Uint8Array };
+      let inputDesc: { id: Uint8Array; data: Uint8Array; };
+      let outputDesc: { id: Uint8Array; data: Uint8Array; };
       let commandStatus: string;
       let params: ParamInfo[];
       let outputShape: OutputShape;
@@ -1444,8 +1444,8 @@ export class BinaryConnection {
           kind: "CommandDataDescription",
           annotations: [],
           capabilities: 0n,
-          resultCardinality: msg.expectedCardinality ||
-            Cardinality.MANY,
+          resultCardinality: msg.expectedCardinality
+            || Cardinality.MANY,
           inputTypedescId: inputDesc.id,
           inputTypedesc: inputDesc.data,
           outputTypedescId: outputDesc.id,
@@ -1591,8 +1591,8 @@ export class BinaryConnection {
   private buildDescriptors(
     commandText: string,
   ): {
-    inputDesc: { id: Uint8Array; data: Uint8Array };
-    outputDesc: { id: Uint8Array; data: Uint8Array };
+    inputDesc: { id: Uint8Array; data: Uint8Array; };
+    outputDesc: { id: Uint8Array; data: Uint8Array; };
     params: ParamInfo[];
     outputShape: OutputShape;
   } {

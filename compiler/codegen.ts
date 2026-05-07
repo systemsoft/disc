@@ -65,7 +65,7 @@ export class SQLCodeGenerator {
         return stmt.sql;
       default:
         throw new Error(
-          `Unsupported statement type: ${(stmt as never as { kind: string }).kind}`,
+          `Unsupported statement type: ${(stmt as never as { kind: string; }).kind}`,
         );
     }
   }
@@ -93,32 +93,32 @@ export class SQLCodeGenerator {
     // WHERE clause
     if (stmt.where) {
       parts.push(
-        "\nWHERE\n" + this.indent() +
-          this.generateExpression(stmt.where.condition),
+        "\nWHERE\n" + this.indent()
+          + this.generateExpression(stmt.where.condition),
       );
     }
 
     // GROUP BY clause
     if (stmt.groupBy) {
       parts.push(
-        "\nGROUP BY\n" + this.indent() +
-          this.generateGroupByClause(stmt.groupBy),
+        "\nGROUP BY\n" + this.indent()
+          + this.generateGroupByClause(stmt.groupBy),
       );
     }
 
     // HAVING clause
     if (stmt.having) {
       parts.push(
-        "\nHAVING\n" + this.indent() +
-          this.generateExpression(stmt.having.condition),
+        "\nHAVING\n" + this.indent()
+          + this.generateExpression(stmt.having.condition),
       );
     }
 
     // ORDER BY clause
     if (stmt.orderBy) {
       parts.push(
-        "\nORDER BY\n" + this.indent() +
-          this.generateOrderByClause(stmt.orderBy),
+        "\nORDER BY\n" + this.indent()
+          + this.generateOrderByClause(stmt.orderBy),
       );
     }
 
@@ -174,11 +174,11 @@ export class SQLCodeGenerator {
       parts.push(" AS " + this.escapeIdentifier(table.alias));
       if (table.columnAliases && table.columnAliases.length > 0) {
         parts.push(
-          "(" +
-            table.columnAliases.map((c) => this.escapeIdentifier(c)).join(
+          "("
+            + table.columnAliases.map((c) => this.escapeIdentifier(c)).join(
               ", ",
-            ) +
-            ")",
+            )
+            + ")",
         );
       }
     }
@@ -216,8 +216,8 @@ export class SQLCodeGenerator {
 
     if (stmt.columns.length > 0) {
       parts.push(
-        " (" + stmt.columns.map((col) => this.escapeIdentifier(col)).join(", ") +
-          ")",
+        " (" + stmt.columns.map((col) => this.escapeIdentifier(col)).join(", ")
+          + ")",
       );
     }
 
@@ -226,8 +226,8 @@ export class SQLCodeGenerator {
     for (let i = 0; i < stmt.values.length; i++) {
       if (i > 0) parts.push(",");
       parts.push(
-        "\n" + this.indent() + "(" + stmt.values[i].map((expr) => this.generateExpression(expr)).join(", ") +
-          ")",
+        "\n" + this.indent() + "(" + stmt.values[i].map((expr) => this.generateExpression(expr)).join(", ")
+          + ")",
       );
     }
 
@@ -237,8 +237,8 @@ export class SQLCodeGenerator {
 
     if (stmt.returning) {
       parts.push(
-        "\nRETURNING " +
-          stmt.returning.map((item) => this.generateSelectItem(item)).join(
+        "\nRETURNING "
+          + stmt.returning.map((item) => this.generateSelectItem(item)).join(
             ", ",
           ),
       );
@@ -251,15 +251,15 @@ export class SQLCodeGenerator {
     let sql = "ON CONFLICT";
 
     if (onConflict.target && onConflict.target.length > 0) {
-      sql += " (" + onConflict.target.map((col) => this.escapeIdentifier(col)).join(", ") +
-        ")";
+      sql += " (" + onConflict.target.map((col) => this.escapeIdentifier(col)).join(", ")
+        + ")";
     }
 
     if (onConflict.action === "DO NOTHING") {
       sql += " DO NOTHING";
     } else if (onConflict.action.kind === "UpdateAction") {
-      sql += " DO UPDATE SET " +
-        onConflict.action.set.map((set) => this.generateSetClause(set)).join(
+      sql += " DO UPDATE SET "
+        + onConflict.action.set.map((set) => this.generateSetClause(set)).join(
           ", ",
         );
     }
@@ -269,24 +269,24 @@ export class SQLCodeGenerator {
 
   private generateUpdateStatement(stmt: SQL.UpdateStatement): string {
     let sql = "UPDATE " + this.escapeIdentifier(stmt.table);
-    sql += "\nSET " +
-      stmt.set.map((set) => this.generateSetClause(set)).join(", ");
+    sql += "\nSET "
+      + stmt.set.map((set) => this.generateSetClause(set)).join(", ");
 
     if (stmt.where) {
       sql += "\nWHERE " + this.generateExpression(stmt.where.condition);
     }
 
     if (stmt.returning) {
-      sql += "\nRETURNING " +
-        stmt.returning.map((item) => this.generateSelectItem(item)).join(", ");
+      sql += "\nRETURNING "
+        + stmt.returning.map((item) => this.generateSelectItem(item)).join(", ");
     }
 
     return sql;
   }
 
   private generateSetClause(set: SQL.SetClause): string {
-    return this.escapeIdentifier(set.column) + " = " +
-      this.generateExpression(set.value);
+    return this.escapeIdentifier(set.column) + " = "
+      + this.generateExpression(set.value);
   }
 
   private generateDeleteStatement(stmt: SQL.DeleteStatement): string {
@@ -297,8 +297,8 @@ export class SQLCodeGenerator {
     }
 
     if (stmt.returning) {
-      sql += "\nRETURNING " +
-        stmt.returning.map((item) => this.generateSelectItem(item)).join(", ");
+      sql += "\nRETURNING "
+        + stmt.returning.map((item) => this.generateSelectItem(item)).join(", ");
     }
 
     return sql;
@@ -338,15 +338,15 @@ export class SQLCodeGenerator {
         return this.generateJsonbAccessExpression(expr);
       default:
         throw new Error(
-          `Unsupported expression type: ${(expr as never as { kind: string }).kind}`,
+          `Unsupported expression type: ${(expr as never as { kind: string; }).kind}`,
         );
     }
   }
 
   private generateColumnReference(expr: SQL.ColumnReference): string {
     if (expr.table) {
-      return this.escapeIdentifier(expr.table) + "." +
-        this.escapeIdentifier(expr.column);
+      return this.escapeIdentifier(expr.table) + "."
+        + this.escapeIdentifier(expr.column);
     }
     return this.escapeIdentifier(expr.column);
   }
@@ -413,16 +413,16 @@ export class SQLCodeGenerator {
 
     for (const whenClause of expr.when) {
       parts.push(
-        "\n" + this.indent() + "WHEN " +
-          this.generateExpression(whenClause.condition),
+        "\n" + this.indent() + "WHEN "
+          + this.generateExpression(whenClause.condition),
       );
       parts.push(" THEN " + this.generateExpression(whenClause.then));
     }
 
     if (expr.else) {
       parts.push(
-        "\n" + this.indent() + "ELSE " +
-          this.generateExpression(expr.else),
+        "\n" + this.indent() + "ELSE "
+          + this.generateExpression(expr.else),
       );
     }
 
@@ -490,8 +490,8 @@ export class SQLCodeGenerator {
 
     if (expr.over.partitionBy && expr.over.partitionBy.length > 0) {
       overParts.push(
-        "PARTITION BY " +
-          expr.over.partitionBy.map((e) => this.generateExpression(e)).join(
+        "PARTITION BY "
+          + expr.over.partitionBy.map((e) => this.generateExpression(e)).join(
             ", ",
           ),
       );
@@ -499,8 +499,8 @@ export class SQLCodeGenerator {
 
     if (expr.over.orderBy && expr.over.orderBy.length > 0) {
       overParts.push(
-        "ORDER BY " +
-          expr.over.orderBy.map((item) => `${this.generateExpression(item.expression)} ${item.direction}`).join(", "),
+        "ORDER BY "
+          + expr.over.orderBy.map((item) => `${this.generateExpression(item.expression)} ${item.direction}`).join(", "),
       );
     }
 
@@ -534,9 +534,9 @@ export class SQLCodeGenerator {
   }
 
   private isComplex(expr: SQL.SQLExpression): boolean {
-    return expr.kind === "FunctionCall" || expr.kind === "JsonBuildObject" ||
-      expr.kind === "SubqueryExpression" || expr.kind === "CaseExpression" ||
-      expr.kind === "JsonbAccessExpression";
+    return expr.kind === "FunctionCall" || expr.kind === "JsonBuildObject"
+      || expr.kind === "SubqueryExpression" || expr.kind === "CaseExpression"
+      || expr.kind === "JsonbAccessExpression";
   }
 
   private needsParentheses(expr: SQL.SQLExpression): boolean {
@@ -550,12 +550,12 @@ export class SQLCodeGenerator {
     }
     // Simple identifier escaping - in production, this should be more robust
     if (
-      /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(identifier) &&
-      !this.isReservedKeyword(identifier)
+      /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(identifier)
+      && !this.isReservedKeyword(identifier)
     ) {
       return identifier;
     }
-    return '"' + identifier.replace(/"/g, '""') + '"';
+    return "\"" + identifier.replace(/"/g, "\"\"") + "\"";
   }
 
   private escapeString(str: string): string {

@@ -2,7 +2,7 @@ import { assertEquals, assertStringIncludes } from "@std/assert";
 import { configureLogging, getLogger, Logger } from "./logger.ts";
 
 // Helper to capture log output
-function captureOutput(): { lines: string[]; output: (line: string) => void } {
+function captureOutput(): { lines: string[]; output: (line: string) => void; } {
   const lines: string[] = [];
   return { lines, output: (line: string) => lines.push(line) };
 }

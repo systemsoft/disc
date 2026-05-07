@@ -5,13 +5,13 @@
  * Disc CLI - Command-line interface for Disc database
  */
 
-import { bgBrightRed, bgBrightYellow, brightWhite, gray, inverse } from "@std/fmt/colors";
 import { parseArgs } from "@std/cli/parse-args";
+import { bgBrightRed, bgBrightYellow, brightWhite, gray, inverse } from "@std/fmt/colors";
 
-import { CLIArgs, commands } from "./commands.ts";
-import { adminCommand } from "./admin.ts";
 import { runStdio as runLspStdio } from "../lsp/server.ts";
 import { VERSION } from "../mod.ts";
+import { adminCommand } from "./admin.ts";
+import { CLIArgs, commands } from "./commands.ts";
 
 const HELP_TEXT = `
 █▀▀▀▄ █ ▄▀▀▀▀ ▄▀▀▀▀ v${VERSION}

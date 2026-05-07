@@ -53,8 +53,8 @@ auth/
 ### Basic Setup
 
 ```typescript
-import { AuthMiddleware, AuthProvider, initializeAuth } from "./auth/mod.ts";
 import { DatabaseConnection } from "../lib/database.ts";
+import { AuthMiddleware, AuthProvider, initializeAuth } from "./auth/mod.ts";
 
 // Initialize auth system
 const db = new DatabaseConnection("postgresql://...");

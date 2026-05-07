@@ -7,12 +7,12 @@
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
+import { Module } from "../schema/converter.ts";
 import { SDLParser } from "../schema/parser.ts";
 import { SchemaValidator } from "../schema/validator.ts";
 import { DDLGenerator } from "./ddl.ts";
 import { SchemaDiffer } from "./differ.ts";
 import { SchemaManager } from "./schema-manager.ts";
-import { Module } from "../schema/converter.ts";
 import * as Types from "./types.ts";
 
 // ============================================================
@@ -197,8 +197,8 @@ Deno.test("Parser - type with multiple properties having rewrites", () => {
 
   const propsWithoutRewrites = postType.members.filter(
     (m) =>
-      m.kind === "PropertyDeclaration" &&
-      (!m.rewrites || m.rewrites.length === 0),
+      m.kind === "PropertyDeclaration"
+      && (!m.rewrites || m.rewrites.length === 0),
   );
   assertEquals(propsWithoutRewrites.length, 1);
 });
@@ -246,8 +246,8 @@ Deno.test("Validator - duplicate event across multiple rewrites on same property
 
   const dupeErrors = (result.errors || []).filter(
     (e) =>
-      e.message.includes("Duplicate rewrite event") ||
-      e.message.includes("duplicate") && e.message.includes("rewrite"),
+      e.message.includes("Duplicate rewrite event")
+      || e.message.includes("duplicate") && e.message.includes("rewrite"),
   );
   assertEquals(dupeErrors.length >= 1, true);
 });
@@ -835,8 +835,8 @@ Deno.test("End-to-end - SDL with insert rewrite produces correct DDL", () => {
   // Should have CREATE FUNCTION for rewrite
   const createFn = ddl.find(
     (s) =>
-      s.includes("CREATE OR REPLACE FUNCTION") &&
-      s.includes("post__created_at__rewrite_fn"),
+      s.includes("CREATE OR REPLACE FUNCTION")
+      && s.includes("post__created_at__rewrite_fn"),
   );
   assertEquals(createFn !== undefined, true);
   assertStringIncludes(createFn!, "statement_timestamp()");
@@ -844,8 +844,8 @@ Deno.test("End-to-end - SDL with insert rewrite produces correct DDL", () => {
   // Should have CREATE TRIGGER for rewrite
   const createTrig = ddl.find(
     (s) =>
-      s.includes("CREATE TRIGGER") &&
-      s.includes("post__created_at__rewrite"),
+      s.includes("CREATE TRIGGER")
+      && s.includes("post__created_at__rewrite"),
   );
   assertEquals(createTrig !== undefined, true);
   assertStringIncludes(createTrig!, "BEFORE INSERT");
@@ -870,8 +870,8 @@ Deno.test("End-to-end - SDL with insert+update rewrite produces correct DDL", ()
 
   const createTrig = ddl.find(
     (s) =>
-      s.includes("CREATE TRIGGER") &&
-      s.includes("post__updated_at__rewrite"),
+      s.includes("CREATE TRIGGER")
+      && s.includes("post__updated_at__rewrite"),
   );
   assertEquals(createTrig !== undefined, true);
   assertStringIncludes(createTrig!, "BEFORE INSERT OR UPDATE");

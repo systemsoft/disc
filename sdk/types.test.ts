@@ -47,7 +47,7 @@ Deno.test("types - QueryRequest", () => {
 });
 
 Deno.test("types - QueryResponse with data", () => {
-  const res: QueryResponse<{ name: string }[]> = {
+  const res: QueryResponse<{ name: string; }[]> = {
     data: [{ name: "Ada" }],
     extensions: { parseMs: 1, compileMs: 2, executeMs: 3, cacheHit: false },
   };

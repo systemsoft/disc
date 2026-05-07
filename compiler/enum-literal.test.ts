@@ -5,10 +5,10 @@
 
 import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
 import { EdgeQLParser } from "../edgeql/parser.ts";
-import { EdgeQLCompiler } from "./compiler.ts";
-import { SQLCodeGenerator } from "./codegen.ts";
-import { createTestSchema, getEnumSqlType, isEnumType } from "./context.ts";
 import { CompilationError } from "../lib/errors.ts";
+import { SQLCodeGenerator } from "./codegen.ts";
+import { EdgeQLCompiler } from "./compiler.ts";
+import { createTestSchema, getEnumSqlType, isEnumType } from "./context.ts";
 
 const schema = createTestSchema();
 const compiler = new EdgeQLCompiler(schema);

@@ -12,10 +12,10 @@
  * because either a keyword or a type is syntactically valid.
  */
 
-import { SDLParser } from "../schema/parser.ts";
 import * as AST from "../schema/ast.ts";
-import { SCALAR_TYPES } from "./scalar-info.ts";
+import { SDLParser } from "../schema/parser.ts";
 import { type CompletionItem, CompletionItemKind, type Position } from "./protocol.ts";
+import { SCALAR_TYPES } from "./scalar-info.ts";
 
 const KEYWORDS = [
   "module",

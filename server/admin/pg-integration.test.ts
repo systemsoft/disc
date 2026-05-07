@@ -13,8 +13,8 @@
  */
 
 import { assertEquals } from "@std/assert";
-import { canRunPgTests, getTestDsn } from "../../tests/pg-test-harness.ts";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
+import { canRunPgTests, getTestDsn } from "../../tests/pg-test-harness.ts";
 import { handleSchemaApply } from "./schema-apply.ts";
 
 const RUN_PG = canRunPgTests();

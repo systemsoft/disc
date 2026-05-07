@@ -3,8 +3,8 @@
  */
 
 import { assertEquals, assertStrictEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { convertPlaceholders, PgDatabaseAdapter } from "./pg-database-adapter.ts";
 import { DatabaseInterface, QueryResult } from "./database-interface.ts";
+import { convertPlaceholders, PgDatabaseAdapter } from "./pg-database-adapter.ts";
 
 // --- convertPlaceholders tests ---
 
@@ -63,7 +63,7 @@ Deno.test("convertPlaceholders - complex INSERT with many params", () => {
 
 /** Fake DatabaseConnection for testing delegation */
 class FakeDatabaseConnection {
-  calls: { method: string; args: any[] }[] = [];
+  calls: { method: string; args: any[]; }[] = [];
   private _connected = false;
   queryResult: QueryResult = { rows: [], rowCount: 0 };
 

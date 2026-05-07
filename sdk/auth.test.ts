@@ -1,7 +1,7 @@
 import { assertEquals, assertInstanceOf, assertRejects } from "@std/assert";
 
-import { DiscClient } from "./client.ts";
 import { AuthManager } from "./auth.ts";
+import { DiscClient } from "./client.ts";
 import { DiscAuthError } from "./errors.ts";
 import type { AuthResponse, AuthTokens, AuthUser } from "./types.ts";
 

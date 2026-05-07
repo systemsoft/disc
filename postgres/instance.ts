@@ -1,8 +1,8 @@
 import { ensureDir } from "@std/fs";
 import { join } from "@std/path";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
-import { PostgresBinaryDownloader } from "./downloader.ts";
 import { PostgresConfig } from "./config.ts";
+import { PostgresBinaryDownloader } from "./downloader.ts";
 import { logger } from "./logger.ts";
 
 export interface PostgresInstanceOptions {
@@ -224,7 +224,7 @@ export class PostgresInstance {
       const admin = new Client(this.adminClientConfig());
       try {
         await admin.connect();
-        const exists = await admin.queryObject<{ exists: boolean }>(
+        const exists = await admin.queryObject<{ exists: boolean; }>(
           `SELECT 1 AS exists FROM pg_database WHERE datname = $1`,
           [this.instanceName],
         );

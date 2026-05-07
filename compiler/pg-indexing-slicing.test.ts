@@ -8,8 +8,8 @@
  */
 
 import { assertEquals } from "@std/assert";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
+import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 
 const RUN_PG = canRunPgTests();
 

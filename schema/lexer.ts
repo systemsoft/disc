@@ -26,8 +26,8 @@ export class SDLLexer {
 
       const token = this.nextToken();
       if (
-        token && token.type !== TokenType.WHITESPACE &&
-        token.type !== TokenType.COMMENT
+        token && token.type !== TokenType.WHITESPACE
+        && token.type !== TokenType.COMMENT
       ) {
         this.tokens.push(token);
       }
@@ -56,7 +56,7 @@ export class SDLLexer {
     }
 
     // String literals
-    if (ch === '"' || ch === "'") {
+    if (ch === "\"" || ch === "'") {
       return this.scanString(ch);
     }
 
@@ -72,7 +72,7 @@ export class SDLLexer {
 
     // Raw strings (r"..." or r'...')
     if (
-      ch === "r" && (this.peekAhead(1) === '"' || this.peekAhead(1) === "'")
+      ch === "r" && (this.peekAhead(1) === "\"" || this.peekAhead(1) === "'")
     ) {
       this.advance(); // consume 'r'
       return this.scanRawString();
@@ -501,7 +501,7 @@ export class SDLLexer {
     const startColumn = this.column - 1;
 
     const quote = this.peek();
-    if (!quote || (quote !== '"' && quote !== "'")) {
+    if (!quote || (quote !== "\"" && quote !== "'")) {
       throw new SyntaxError(`Expected quote after 'r'`, {
         location: { line: startLine, column: startColumn, offset: startPos },
       });
@@ -692,8 +692,8 @@ export class SDLLexer {
         return "\t";
       case "\\":
         return "\\";
-      case '"':
-        return '"';
+      case "\"":
+        return "\"";
       case "'":
         return "'";
       default:
@@ -737,9 +737,9 @@ export class SDLLexer {
     if (ch === null) return false;
     // ASCII fast-path
     if (
-      (ch >= "a" && ch <= "z") ||
-      (ch >= "A" && ch <= "Z") ||
-      ch === "_"
+      (ch >= "a" && ch <= "z")
+      || (ch >= "A" && ch <= "Z")
+      || ch === "_"
     ) {
       return true;
     }

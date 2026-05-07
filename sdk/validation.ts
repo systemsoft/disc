@@ -7,8 +7,8 @@
  * see structured issues instead of opaque library-specific errors.
  */
 
-import type { QueryValidator, StandardSchemaIssue, StandardSchemaV1 } from "./types.ts";
 import { DiscValidationError } from "./errors.ts";
+import type { QueryValidator, StandardSchemaIssue, StandardSchemaV1 } from "./types.ts";
 
 /**
  * Run the validator against `value` and return the validated `T`.
@@ -31,7 +31,7 @@ export async function applyValidator<T>(
     if ("issues" in result && result.issues) {
       throw new DiscValidationError(result.issues);
     }
-    return (result as { value: T }).value;
+    return (result as { value: T; }).value;
   }
 
   // Plain function validator: must throw or return T.
@@ -52,9 +52,9 @@ function isStandardSchema<T>(
   v: QueryValidator<T>,
 ): v is StandardSchemaV1<T> {
   return (
-    typeof v === "object" &&
-    v !== null &&
-    "~standard" in v &&
-    typeof (v as StandardSchemaV1<T>)["~standard"]?.validate === "function"
+    typeof v === "object"
+    && v !== null
+    && "~standard" in v
+    && typeof (v as StandardSchemaV1<T>)["~standard"]?.validate === "function"
   );
 }

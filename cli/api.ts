@@ -34,27 +34,27 @@ import { commands } from "./commands.ts";
 
 // Typed Options interfaces — re-exported so callers get IntelliSense
 // without reaching into individual command modules.
-export type { InitOptions } from "./init.ts";
 export type { BuildOptions } from "./build.ts";
+export type { ServeOptions } from "./commands.ts";
 export type { DeployOptions } from "./deploy.ts";
+export type { InitOptions } from "./init.ts";
 export type { PgLogOptions } from "./pg-log.ts";
 export type { PgUpgradeOptions } from "./pg-upgrade.ts";
 export type { ShellOptions } from "./shell.ts";
 export type { WatchOptions } from "./watch.ts";
-export type { ServeOptions } from "./commands.ts";
 
 // Imports for the typed function signatures below. Re-exporting types
 // happens via `export type` lines above; these `import type` lines
 // give the wrapper functions their parameter shapes without paying a
 // runtime import cost.
-import type { InitOptions } from "./init.ts";
 import type { BuildOptions } from "./build.ts";
+import type { ServeOptions } from "./commands.ts";
 import type { DeployOptions } from "./deploy.ts";
+import type { InitOptions } from "./init.ts";
 import type { PgLogOptions } from "./pg-log.ts";
 import type { PgUpgradeOptions } from "./pg-upgrade.ts";
 import type { ShellOptions } from "./shell.ts";
 import type { WatchOptions } from "./watch.ts";
-import type { ServeOptions } from "./commands.ts";
 
 /** Initialize a new Disc project. */
 export function init(options: InitOptions): Promise<void> {

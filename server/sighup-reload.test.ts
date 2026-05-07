@@ -13,8 +13,8 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
-import { DiscServer } from "./server.ts";
 import { HttpServer } from "./http.ts";
+import { DiscServer } from "./server.ts";
 import type { ProtocolHandler, QueryContext, QueryRequest, QueryResponse } from "./types.ts";
 
 /**
@@ -50,11 +50,11 @@ function attachHttpServer(server: DiscServer): {
     config: server.get_config(),
     protocolHandler: stubHandler(),
   });
-  (server as unknown as { httpServer: HttpServer }).httpServer = http;
+  (server as unknown as { httpServer: HttpServer; }).httpServer = http;
   const cleanup = () => {
     // SubscriptionHandler's heartbeat interval starts in its
     // constructor — dispose to release the timer.
-    const sub = (http as unknown as { subscription_handler: { dispose(): void } })
+    const sub = (http as unknown as { subscription_handler: { dispose(): void; }; })
       .subscription_handler;
     sub.dispose();
   };
@@ -98,7 +98,7 @@ Deno.test("reloadConfig - applies new requestTimeout from env", async () => {
       assertEquals(server.get_config().requestTimeout, 9999);
       // HttpServer's view of the value (used per-request) was also updated.
       assertEquals(
-        (http as unknown as { config: { requestTimeout: number } }).config.requestTimeout,
+        (http as unknown as { config: { requestTimeout: number; }; }).config.requestTimeout,
         9999,
       );
     } finally {
@@ -117,7 +117,7 @@ Deno.test("reloadConfig - applies new enableCors toggle", async () => {
 
       assertEquals(server.get_config().enableCors, false);
       assertEquals(
-        (http as unknown as { config: { enableCors: boolean } }).config.enableCors,
+        (http as unknown as { config: { enableCors: boolean; }; }).config.enableCors,
         false,
       );
     } finally {
@@ -140,7 +140,7 @@ Deno.test("reloadConfig - updates corsOrigins allowlist", async () => {
       const origins = server.get_config().corsOrigins;
       assertEquals(origins, ["https://new.example", "https://other.example"]);
       assertEquals(
-        (http as unknown as { config: { corsOrigins?: string[] } }).config.corsOrigins,
+        (http as unknown as { config: { corsOrigins?: string[]; }; }).config.corsOrigins,
         ["https://new.example", "https://other.example"],
       );
     } finally {
@@ -159,7 +159,7 @@ Deno.test("reloadConfig - updates slowQueryThresholdMs", async () => {
 
       assertEquals(server.get_config().slowQueryThresholdMs, 2500);
       assertEquals(
-        (http as unknown as { config: { slowQueryThresholdMs?: number } }).config
+        (http as unknown as { config: { slowQueryThresholdMs?: number; }; }).config
           .slowQueryThresholdMs,
         2500,
       );

@@ -202,8 +202,8 @@ export class TestDatabase implements DatabaseInterface {
     // Separate SET params from WHERE params
     // Count ? placeholders in SET clause to know which params go where
     const normalized = sql.replace(/\s+/g, " ").trim();
-    const setMatch = normalized.match(/set (.+?) where/i) ||
-      normalized.match(/set (.+)$/i);
+    const setMatch = normalized.match(/set (.+?) where/i)
+      || normalized.match(/set (.+)$/i);
 
     let setParamCount = 0;
     if (setMatch) {
@@ -332,7 +332,7 @@ export class TestDatabase implements DatabaseInterface {
     row: any,
     expr: string,
     params: any[],
-    paramRef: { index: number },
+    paramRef: { index: number; },
   ): boolean {
     const trimmed = expr.trim();
 
@@ -376,8 +376,8 @@ export class TestDatabase implements DatabaseInterface {
       else if (expr[i] === ")") depth--;
 
       if (
-        depth === 0 &&
-        lowerExpr.substring(i, i + lowerKeyword.length) === lowerKeyword
+        depth === 0
+        && lowerExpr.substring(i, i + lowerKeyword.length) === lowerKeyword
       ) {
         parts.push(current.trim());
         current = "";
@@ -397,7 +397,7 @@ export class TestDatabase implements DatabaseInterface {
     row: any,
     condition: string,
     params: any[],
-    paramRef: { index: number },
+    paramRef: { index: number; },
   ): boolean {
     const trimmed = condition.trim();
     const lower = trimmed.toLowerCase();
@@ -436,8 +436,8 @@ export class TestDatabase implements DatabaseInterface {
 
     // Handle "column < value"
     if (
-      trimmed.includes("<") && !trimmed.includes("<=") &&
-      !trimmed.includes("<>")
+      trimmed.includes("<") && !trimmed.includes("<=")
+      && !trimmed.includes("<>")
     ) {
       const parts = trimmed.split("<").map((s) => s.trim());
       if (parts.length === 2) {
@@ -467,8 +467,8 @@ export class TestDatabase implements DatabaseInterface {
       if (valuePart === "?") {
         expectedValue = params[paramRef.index++];
       } else if (
-        valuePart.toLowerCase() === "true" ||
-        valuePart.toLowerCase() === "false"
+        valuePart.toLowerCase() === "true"
+        || valuePart.toLowerCase() === "false"
       ) {
         expectedValue = valuePart.toLowerCase() === "true";
       } else if (valuePart.toLowerCase() === "null") {

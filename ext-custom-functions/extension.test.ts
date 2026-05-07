@@ -3,10 +3,10 @@
  */
 
 import { assertEquals, assertThrows } from "@std/assert";
-import { CustomFunctionsExtension } from "./extension.ts";
 import { ExtensionConfigError } from "../extensions/errors.ts";
-import type { CustomFunctionsConfig } from "./types.ts";
 import type { ExtensionContext } from "../extensions/types.ts";
+import { CustomFunctionsExtension } from "./extension.ts";
+import type { CustomFunctionsConfig } from "./types.ts";
 
 // ── Test helpers ──────────────────────────────────────────────────────
 
@@ -27,10 +27,10 @@ function makeContext(): ExtensionContext {
       info: () => {},
       warn: () => {},
       error: () => {},
-      child: function () {
+      child: function() {
         return this;
       },
-      withRequest: function () {
+      withRequest: function() {
         return this;
       },
     } as unknown as ExtensionContext["logger"],

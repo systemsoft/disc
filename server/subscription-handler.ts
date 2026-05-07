@@ -32,10 +32,10 @@ export class SubscriptionHandler {
 
   constructor(options: SubscriptionOptions = {}) {
     this.options = {
-      maxSubscriptionsPerConnection: options.maxSubscriptionsPerConnection ||
-        10,
-      subscriptionTimeoutMs: options.subscriptionTimeoutMs ||
-        30 * 60 * 1000, // 30 minutes
+      maxSubscriptionsPerConnection: options.maxSubscriptionsPerConnection
+        || 10,
+      subscriptionTimeoutMs: options.subscriptionTimeoutMs
+        || 30 * 60 * 1000, // 30 minutes
       heartbeatIntervalMs: options.heartbeatIntervalMs || 30 * 1000, // 30 seconds
     };
 
@@ -50,8 +50,8 @@ export class SubscriptionHandler {
     const connectionId = context.session.sessionId;
 
     // Check subscription limits
-    const existingSubs = this.connection_subscriptions.get(connectionId) ||
-      new Set();
+    const existingSubs = this.connection_subscriptions.get(connectionId)
+      || new Set();
     if (existingSubs.size >= this.options.maxSubscriptionsPerConnection) {
       this.send_error(websocket, subscription.id, "Too many subscriptions");
       return;
@@ -379,7 +379,7 @@ export class SubscriptionHandler {
     active_subscriptions: number;
     total_connections_with_subscriptions: number;
     subscriptions_by_connection: Array<
-      { connectionId: string; count: number }
+      { connectionId: string; count: number; }
     >;
   } {
     const connectionsWithSubs = Array.from(

@@ -8,10 +8,10 @@
 import { assert, assertEquals, assertRejects } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { AuthProvider } from "./provider.ts";
 import { TestDatabase } from "./test-database.ts";
-import { AuthError, AuthErrorCode } from "./types.ts";
-import { base64UrlDecode, base64UrlEncode } from "./webauthn.ts";
-import { buildAttestationObject, buildAuthenticatorData, buildClientDataJSON, generateTestKeyPair, signAssertion } from "./webauthn-test-helper.ts";
 import { generateTOTP } from "./totp.ts";
+import { AuthError, AuthErrorCode } from "./types.ts";
+import { buildAttestationObject, buildAuthenticatorData, buildClientDataJSON, generateTestKeyPair, signAssertion } from "./webauthn-test-helper.ts";
+import { base64UrlDecode, base64UrlEncode } from "./webauthn.ts";
 
 const RP_ID = "example.com";
 const ORIGIN = "https://example.com";

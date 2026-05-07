@@ -55,8 +55,8 @@ export function buildSymbolIndex(text: string): SymbolIndex {
     const tok = tokens[i];
     // Match `[abstract] type <Name>` or `scalar type <Name>`
     if (
-      matchesKeyword(tok, "type") || matchesKeyword(tok, "abstract") ||
-      matchesKeyword(tok, "scalar")
+      matchesKeyword(tok, "type") || matchesKeyword(tok, "abstract")
+      || matchesKeyword(tok, "scalar")
     ) {
       const consumed = tryReadTypeDecl(tokens, i, text);
       if (consumed) {
@@ -198,10 +198,10 @@ function tryReadMember(tokens: Token[], start: number): ConsumedMember | null {
   let i = start;
   // Skip qualifiers `required`, `multi`, `readonly`, `overloaded`
   while (
-    matchesKeyword(tokens[i], "required") ||
-    matchesKeyword(tokens[i], "multi") ||
-    matchesKeyword(tokens[i], "readonly") ||
-    matchesKeyword(tokens[i], "overloaded")
+    matchesKeyword(tokens[i], "required")
+    || matchesKeyword(tokens[i], "multi")
+    || matchesKeyword(tokens[i], "readonly")
+    || matchesKeyword(tokens[i], "overloaded")
   ) {
     i++;
   }
@@ -219,9 +219,9 @@ function tryReadMember(tokens: Token[], start: number): ConsumedMember | null {
   // Peek ahead to confirm this is actually a member (next should be `:` or `->`)
   const afterName = tokens[i + 1];
   if (
-    afterName?.type !== TokenType.COLON &&
-    afterName?.type !== TokenType.ARROW &&
-    afterName?.type !== TokenType.ASSIGN
+    afterName?.type !== TokenType.COLON
+    && afterName?.type !== TokenType.ARROW
+    && afterName?.type !== TokenType.ASSIGN
   ) {
     return null;
   }

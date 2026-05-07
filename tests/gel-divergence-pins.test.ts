@@ -32,7 +32,7 @@ Deno.test("Gel #4408: Deno-task surface is the lint/fmt/test entry point", async
   const denoJsonText = await Deno.readTextFile(
     new URL("../deno.json", import.meta.url),
   );
-  const denoJson = JSON.parse(denoJsonText) as { tasks?: Record<string, string> };
+  const denoJson = JSON.parse(denoJsonText) as { tasks?: Record<string, string>; };
   const tasks = denoJson.tasks ?? {};
 
   // The commit skill and CI run these specific tasks. Renaming or removing
@@ -49,9 +49,9 @@ Deno.test("Gel #4408: Deno-task surface is the lint/fmt/test entry point", async
   // contract honest.
   const checkTask = tasks.check ?? "";
   assert(
-    checkTask.includes("deno task lint") &&
-      checkTask.includes("deno task fmt") &&
-      checkTask.includes("deno task test"),
+    checkTask.includes("deno task lint")
+      && checkTask.includes("deno task fmt")
+      && checkTask.includes("deno task test"),
     `deno.json:tasks.check should compose lint + fmt + test; got: ${checkTask}`,
   );
 });
@@ -120,7 +120,7 @@ Deno.test("Gel #4172: binary protocol server advertises ALPN edgedb-binary", asy
   // ALPN "edgedb-binary" is what gates client negotiation onto that path —
   // dropping it is what would force HTTP tunneling, so we pin it here.
   assert(
-    src.includes('"edgedb-binary"'),
+    src.includes("\"edgedb-binary\""),
     "binary-server should advertise ALPN edgedb-binary for upstream client compatibility",
   );
 });
@@ -403,8 +403,8 @@ Deno.test("Gel #5322: differ caches reverse subtype map + inheritance walks", as
     "differ.ts must expose a per-allTypes DiffCache via getCache() (Gel #5322 pin)",
   );
   assert(
-    /computePropertiesWithInheritance/.test(src) &&
-      /computeLinksWithInheritance/.test(src),
+    /computePropertiesWithInheritance/.test(src)
+      && /computeLinksWithInheritance/.test(src),
     "differ.ts must split memoized inheritance walks from compute helpers (Gel #5322 pin)",
   );
 });
@@ -422,11 +422,11 @@ Deno.test("Gel #3872: Deno.serve TLS surface does not expose cipher selection", 
   // is enabled. If a future bundle adds cipher config it has to touch this
   // call site, which is also where the pin lives.
   assert(
-    !httpServerSrc.includes("cipherSuites") &&
-      !httpServerSrc.includes("tlsCiphers") &&
-      !httpServerSrc.includes("tls_ciphers"),
-    "server/http.ts mentions cipher-suite config — Deno doesn't expose this surface " +
-      "(Gel #3872 pin). Remove the reference or update the divergence note.",
+    !httpServerSrc.includes("cipherSuites")
+      && !httpServerSrc.includes("tlsCiphers")
+      && !httpServerSrc.includes("tls_ciphers"),
+    "server/http.ts mentions cipher-suite config — Deno doesn't expose this surface "
+      + "(Gel #3872 pin). Remove the reference or update the divergence note.",
   );
 });
 
@@ -464,8 +464,8 @@ Deno.test("Gel #7103: auth tables carry ON DELETE CASCADE on user_id FKs", async
     /CREATE TABLE IF NOT EXISTS webauthn_challenges \(([\s\S]*?)\n\s*\)/,
   );
   assert(
-    challengesBlock !== null &&
-      /FOREIGN KEY \(user_id\) REFERENCES users\(id\) ON DELETE CASCADE/.test(
+    challengesBlock !== null
+      && /FOREIGN KEY \(user_id\) REFERENCES users\(id\) ON DELETE CASCADE/.test(
         challengesBlock[1],
       ),
     "webauthn_challenges must declare ON DELETE CASCADE on user_id (Gel #7103 pin).",
@@ -669,8 +669,8 @@ Deno.test("Gel #2651: instance name is derived from project context, not a CLI f
   // name fallback. Pinning both means a refactor that drops the
   // fallback (forcing operators to set the field manually) trips here.
   assert(
-    /instanceName: fields\.instanceName \?\? projectName/.test(ctxSrc) ||
-      /const instanceName = fields\.instanceName \?\? projectName/.test(
+    /instanceName: fields\.instanceName \?\? projectName/.test(ctxSrc)
+      || /const instanceName = fields\.instanceName \?\? projectName/.test(
         ctxSrc,
       ),
     "project-context.ts must default instanceName to projectName when unset (Gel #2651 pin).",
@@ -830,7 +830,7 @@ Deno.test("Gel #4215: dropping `extending A` emits DropProperty for inherited fi
   const alterB = ops.find(
     (op) => op.kind === "AlterType" && "typeName" in op && op.typeName === "B",
   ) as
-    | { operations: Array<{ kind: string; propertyName?: string }> }
+    | { operations: Array<{ kind: string; propertyName?: string; }>; }
     | undefined;
   assert(
     alterB !== undefined,
@@ -1326,8 +1326,8 @@ Deno.test("Gel #6432 slice 3: per-policy disable threads from HTTP header to eva
   );
   // The header parser must be admin-gated and produce a Set.
   assert(
-    /X-Disc-Disable-Policies/.test(httpSrc) &&
-      /disabledPolicies = new Set\(names\)/.test(httpSrc),
+    /X-Disc-Disable-Policies/.test(httpSrc)
+      && /disabledPolicies = new Set\(names\)/.test(httpSrc),
     "server/http.ts must parse X-Disc-Disable-Policies into a Set (Gel #6432 slice 3 pin).",
   );
   assert(
@@ -1358,8 +1358,8 @@ Deno.test("Gel #6432 slice 3: per-policy disable threads from HTTP header to eva
   // The evaluator must filter on the qualified `<TypeName>.<policy_name>`
   // shape and short-circuit before policy evaluation.
   assert(
-    /context\.disabledPolicies/.test(evalSrc) &&
-      /\$\{p\.objectType \?\? "__global__"\}\.\$\{p\.name\}/.test(evalSrc),
+    /context\.disabledPolicies/.test(evalSrc)
+      && /\$\{p\.objectType \?\? "__global__"\}\.\$\{p\.name\}/.test(evalSrc),
     "access/evaluator.ts must filter disabledPolicies via qualified <Type>.<name> matching (Gel #6432 slice 3 pin).",
   );
 });
@@ -1428,8 +1428,8 @@ Deno.test("Bundle ZZ-4: Dockerfile.bundled does not use deprecated apt-key", asy
   // it produces `exit code: 127` ("command not found").
   assert(
     !/apt-key\s+add/.test(src),
-    "Dockerfile.bundled must not use `apt-key add` (deprecated in Debian 11, removed in 12). " +
-      "Use the modern keyring approach with `signed-by=` (Bundle ZZ-4 pin).",
+    "Dockerfile.bundled must not use `apt-key add` (deprecated in Debian 11, removed in 12). "
+      + "Use the modern keyring approach with `signed-by=` (Bundle ZZ-4 pin).",
   );
   // The modern approach uses `signed-by=` in the sources.list entry
   // — pin asserts the new shape stays in place.
@@ -1538,8 +1538,8 @@ Deno.test("Gel #9117: postgres downloader fails fast on Windows with a clear mes
     new URL("../postgres/downloader.ts", import.meta.url),
   );
   assert(
-    /os === "windows"/.test(src) &&
-      /Windows support not yet implemented/.test(src),
+    /os === "windows"/.test(src)
+      && /Windows support not yet implemented/.test(src),
     "downloader.ts must throw an explicit Windows-not-supported error (Gel #9117 pin).",
   );
 });
@@ -1608,8 +1608,8 @@ Deno.test("Gel #4806: PR preview environments are deferred (release pipeline shi
   );
   // Release workflow ships binaries (4 platforms) + Docker image.
   assert(
-    /tags:\s*\n\s*-\s*['"]?v\*['"]?/.test(releaseSrc) ||
-      /tags:\s*\[\s*['"]v\*['"]/.test(releaseSrc),
+    /tags:\s*\n\s*-\s*['"]?v\*['"]?/.test(releaseSrc)
+      || /tags:\s*\[\s*['"]v\*['"]/.test(releaseSrc),
     "release.yml must trigger on v* tag pushes (Gel #4806 pin — release pipeline shape).",
   );
   // Docker job from Bundle QQ pushes to ghcr.io.
@@ -1783,8 +1783,8 @@ Deno.test("Gel #1634: connection pool pre-warms minConnections + reuses idle on 
     "connection-pool.ts initialize() must loop minConnections times to warm the pool (Gel #1634 pin).",
   );
   assert(
-    /this\.idleConnections\.push\(conn\)/.test(src) &&
-      /await Promise\.all\(promises\)/.test(src),
+    /this\.idleConnections\.push\(conn\)/.test(src)
+      && /await Promise\.all\(promises\)/.test(src),
     "connection-pool.ts initialize() must push warm conns onto idleConnections + await all (Gel #1634 pin).",
   );
   // The acquire path must reuse idle connections before creating new

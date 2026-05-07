@@ -7,25 +7,6 @@
  * - Migration planning (migration/engine.ts) -> MigrationPlan
  */
 
-import { ConnectionPool } from "../lib/connection-pool.ts";
-import { MigrationError } from "../lib/errors.ts";
-import { Err, Ok, Result } from "../lib/result.ts";
-import { propNameToColumnName, typeNameToTableName } from "../lib/identifiers.ts";
-import { SDLParser } from "../schema/parser.ts";
-import { Module, SDLConverter } from "../schema/converter.ts";
-import {
-  AccessPolicy as SDLAccessPolicy,
-  AliasDeclaration,
-  Annotation as SDLAnnotation,
-  AnnotationDeclaration,
-  Constraint as SDLConstraint,
-  Expression,
-  GlobalDeclaration,
-  LinkDeclaration,
-  ScalarTypeDeclaration,
-  TriggerDeclaration,
-  TypeDeclaration,
-} from "../schema/ast.ts";
 import { adaptAccessPolicies } from "../access/policy-adapter.ts";
 import { getBuiltinFunctions } from "../compiler/builtin-functions.ts";
 import {
@@ -41,6 +22,25 @@ import {
   TriggerDef,
   TypeDef,
 } from "../compiler/context.ts";
+import { ConnectionPool } from "../lib/connection-pool.ts";
+import { MigrationError } from "../lib/errors.ts";
+import { propNameToColumnName, typeNameToTableName } from "../lib/identifiers.ts";
+import { Err, Ok, Result } from "../lib/result.ts";
+import {
+  AccessPolicy as SDLAccessPolicy,
+  AliasDeclaration,
+  Annotation as SDLAnnotation,
+  AnnotationDeclaration,
+  Constraint as SDLConstraint,
+  Expression,
+  GlobalDeclaration,
+  LinkDeclaration,
+  ScalarTypeDeclaration,
+  TriggerDeclaration,
+  TypeDeclaration,
+} from "../schema/ast.ts";
+import { Module, SDLConverter } from "../schema/converter.ts";
+import { SDLParser } from "../schema/parser.ts";
 import { MigrationEngine } from "./engine.ts";
 import * as Types from "./types.ts";
 
@@ -125,8 +125,8 @@ function sdlTypeToSqlType(sdlType: string): string {
  */
 function typeRefToSdlString(
   typeRef: {
-    name: { parts: string[] };
-    params?: { name: { parts: string[] }; params?: unknown[] }[];
+    name: { parts: string[]; };
+    params?: { name: { parts: string[]; }; params?: unknown[]; }[];
   },
 ): string {
   let result = typeRef.name.parts.join("::");
@@ -135,8 +135,8 @@ function typeRefToSdlString(
       typeRef.params.map((p) =>
         typeRefToSdlString(
           p as {
-            name: { parts: string[] };
-            params?: { name: { parts: string[] }; params?: unknown[] }[];
+            name: { parts: string[]; };
+            params?: { name: { parts: string[]; }; params?: unknown[]; }[];
           },
         )
       ).join(", ")
@@ -170,8 +170,8 @@ function stringifyExpression(expr: Expression): string {
         "group",
       ]);
       if (
-        expr.path.length > 0 &&
-        edgeqlKeywords.has(expr.path[0].toLowerCase())
+        expr.path.length > 0
+        && edgeqlKeywords.has(expr.path[0].toLowerCase())
       ) {
         return expr.path.join(" ");
       }
@@ -198,7 +198,7 @@ function stringifyExpression(expr: Expression): string {
     case "ConditionalExpression":
       return `${stringifyExpression(expr.consequent)} if ${stringifyExpression(expr.test)} else ${stringifyExpression(expr.alternate)}`;
     default:
-      return String((expr as { value?: unknown }).value ?? "");
+      return String((expr as { value?: unknown; }).value ?? "");
   }
 }
 
@@ -330,8 +330,8 @@ export class SchemaManager {
         }
 
         if (
-          item.kind === "LinkDeclaration" &&
-          (item as LinkDeclaration).abstract
+          item.kind === "LinkDeclaration"
+          && (item as LinkDeclaration).abstract
         ) {
           const linkDecl = item as LinkDeclaration;
           abstractLinks.set(linkDecl.name.value, linkDecl);
@@ -362,9 +362,9 @@ export class SchemaManager {
             if (aliasDecl.using.args.length > 0) {
               const firstArg = aliasDecl.using.args[0];
               if (
-                firstArg.kind === "PathExpression" &&
-                firstArg.path[0] &&
-                /^[A-Z]/.test(firstArg.path[0])
+                firstArg.kind === "PathExpression"
+                && firstArg.path[0]
+                && /^[A-Z]/.test(firstArg.path[0])
               ) {
                 targetType = firstArg.path[0];
               }
@@ -749,7 +749,7 @@ export class SchemaManager {
    */
   async applySchema(
     sdlSource: string,
-    options?: { allowUnsafe?: boolean; skipHistory?: boolean },
+    options?: { allowUnsafe?: boolean; skipHistory?: boolean; },
   ): Promise<Result<Types.MigrationResult[], MigrationError>> {
     // Parse SDL
     const parseResult = this.parseSDL(sdlSource);
@@ -1005,7 +1005,7 @@ export class SchemaManager {
    * `pg_stat_activity`).
    */
   async detectRunningServers(): Promise<
-    Result<Array<{ pid: number; applicationName: string }>, MigrationError>
+    Result<Array<{ pid: number; applicationName: string; }>, MigrationError>
   > {
     if (!this.pool) {
       // Dry-run / no pool — nothing to probe.

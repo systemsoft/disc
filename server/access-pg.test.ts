@@ -10,15 +10,15 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
+import type { AccessExpressionNode } from "../access/ast.ts";
+import type { AccessConfig, AccessContext, AccessPolicy } from "../access/mod.ts";
+import { SQLCodeGenerator } from "../compiler/codegen.ts";
+import { EdgeQLCompiler } from "../compiler/compiler.ts";
+import type { Schema } from "../compiler/context.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
-import { EdgeQLParser } from "../edgeql/parser.ts";
-import { EdgeQLCompiler } from "../compiler/compiler.ts";
-import { SQLCodeGenerator } from "../compiler/codegen.ts";
-import type { Schema } from "../compiler/context.ts";
-import type { AccessConfig, AccessContext, AccessPolicy } from "../access/mod.ts";
-import type { AccessExpressionNode } from "../access/ast.ts";
+import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 
 const RUN_PG = canRunPgTests();
 
@@ -46,7 +46,7 @@ const MIGRATION_TABLES = [
 async function applyTestSchema(
   pool: ConnectionPool,
   sdl: string,
-): Promise<{ manager: SchemaManager; schema: Schema }> {
+): Promise<{ manager: SchemaManager; schema: Schema; }> {
   const manager = new SchemaManager({ pool });
   await manager.initialize();
 
@@ -79,7 +79,7 @@ function compileWithAccess(
   policies: AccessPolicy[],
   accessConfig: AccessConfig,
   accessContext: AccessContext,
-): { ok: true; sql: string } | { ok: false; error: string } {
+): { ok: true; sql: string; } | { ok: false; error: string; } {
   const parser = new EdgeQLParser(edgeql);
   const ast = parser.parse();
 
@@ -331,7 +331,7 @@ Deno.test({
 
       // Compile INSERT — should fail at compilation
       const compiled = compileWithAccess(
-        'insert RestrictedUser { name := "Hacker" }',
+        "insert RestrictedUser { name := \"Hacker\" }",
         schema,
         [policy],
         DEFAULT_ACCESS_CONFIG,
@@ -399,7 +399,7 @@ Deno.test({
 
       // Compile UPDATE with userId = uuid1 (Ada)
       const compiled = compileWithAccess(
-        'update UpdatableUser set { status := "inactive" }',
+        "update UpdatableUser set { status := \"inactive\" }",
         schema,
         [policy],
         DEFAULT_ACCESS_CONFIG,
@@ -816,8 +816,8 @@ Deno.test({
       // Extract names and verify
       const names = result.rows
         .map((r: Record<string, unknown>) => {
-          const data = (r as Record<string, Record<string, unknown>>).jsonb_build_object ??
-            r;
+          const data = (r as Record<string, Record<string, unknown>>).jsonb_build_object
+            ?? r;
           return data.name;
         })
         .sort();
@@ -1023,8 +1023,8 @@ Deno.test({
       // Extract titles and verify
       const titles = docResult.rows
         .map((r: Record<string, unknown>) => {
-          const data = (r as Record<string, Record<string, unknown>>).jsonb_build_object ??
-            r;
+          const data = (r as Record<string, Record<string, unknown>>).jsonb_build_object
+            ?? r;
           return data.title;
         })
         .sort();

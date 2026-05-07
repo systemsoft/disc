@@ -2,8 +2,8 @@
  * DDL generation for custom functions
  */
 
-import type { CustomFunctionDef, FunctionVolatility } from "./types.ts";
 import { ExtensionConfigError } from "../extensions/errors.ts";
+import type { CustomFunctionDef, FunctionVolatility } from "./types.ts";
 
 const EDGEQL_TO_PG_TYPE: Record<string, string> = {
   bool: "boolean",

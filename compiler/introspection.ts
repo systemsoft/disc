@@ -6,8 +6,8 @@
  * descriptions that the compiler serializes as JSON literals.
  */
 
-import type { FunctionDef, LinkDef, PropertyDef, Schema, TypeDef } from "./context.ts";
 import { CompilationError } from "../lib/errors.ts";
+import type { FunctionDef, LinkDef, PropertyDef, Schema, TypeDef } from "./context.ts";
 
 // ---------------------------------------------------------------------------
 // Description interfaces

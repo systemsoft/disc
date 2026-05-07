@@ -2,8 +2,8 @@
  * OAuth provider factory functions
  */
 
-import type { OAuthProviderConfig } from "./types.ts";
 import { fetchOidcDiscovery } from "./discovery.ts";
+import type { OAuthProviderConfig } from "./types.ts";
 
 export function googleProvider(
   clientId: string,

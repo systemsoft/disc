@@ -288,7 +288,9 @@ export class UserQueryBuilder {
 
   /** Select User by ID */
   async selectById(id: string, shape?: string): Promise<Types.User | null> {
-    const query = shape ? `select User ${shape} filter .id = <uuid>$id` : `select User { * } filter .id = <uuid>$id`;
+    const query = shape
+      ? `select User ${shape} filter .id = <uuid>$id`
+      : `select User { * } filter .id = <uuid>$id`;
     const results = await this.client.query<Types.User[]>(query, { id });
     return results[0] || null;
   }
@@ -299,14 +301,18 @@ export class UserQueryBuilder {
     variables?: Types.UserFilterVars,
     shape?: string,
   ): Promise<Types.User[]> {
-    const query = shape ? `select User ${shape} filter ${condition}` : `select User { * } filter ${condition}`;
+    const query = shape
+      ? `select User ${shape} filter ${condition}`
+      : `select User { * } filter ${condition}`;
     return await this.client.query<Types.User[]>(query, variables);
   }
 
   /** Insert new User */
   async insert(data: Types.UserInsert): Promise<Types.User> {
     const assignments = Object.entries(data)
-      .map(([key, value]) => `${key} := ${UserQueryBuilder._typeCasts[key] || "<str>"}$${key}`)
+      .map(([key, value]) =>
+        `${key} := ${UserQueryBuilder._typeCasts[key] || "<str>"}$${key}`
+      )
       .join(", ");
     const query = `insert User { ${assignments} }`;
     return await this.client.query<Types.User>(query, data);
@@ -315,7 +321,9 @@ export class UserQueryBuilder {
   /** Update User by ID */
   async update(id: string, data: Types.UserUpdate): Promise<Types.User> {
     const assignments = Object.entries(data)
-      .map(([key, value]) => `${key} := ${UserQueryBuilder._typeCasts[key] || "<str>"}$${key}`)
+      .map(([key, value]) =>
+        `${key} := ${UserQueryBuilder._typeCasts[key] || "<str>"}$${key}`
+      )
       .join(", ");
     const query = `update User filter .id = <uuid>$id set { ${assignments} }`;
     return await this.client.query<Types.User>(query, { id, ...data });
@@ -332,7 +340,9 @@ export class UserQueryBuilder {
     condition?: string,
     variables?: Types.UserFilterVars,
   ): Promise<number> {
-    const query = condition ? `select count(User filter ${condition})` : `select count(User)`;
+    const query = condition
+      ? `select count(User filter ${condition})`
+      : `select count(User)`;
     return await this.client.query<number>(query, variables);
   }
 }
@@ -665,7 +675,7 @@ export interface QueryResult<T> {
 /** Query error */
 export interface QueryError {
   extensions?: Record<string, any>;
-  locations?: Array<{ column: number; line: number }>;
+  locations?: Array<{ column: number; line: number; }>;
   message: string;
   path?: Array<string | number>;
 }

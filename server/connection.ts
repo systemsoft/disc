@@ -2,10 +2,10 @@
  * Connection and Session Management for Disc Server
  */
 
-import * as Types from "./types.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { DatabaseConnection } from "../lib/database.ts";
 import { logger } from "../postgres/logger.ts";
+import * as Types from "./types.ts";
 
 export class SessionManager implements Types.SessionManager {
   private sessions = new Map<string, Types.SessionContext>();
@@ -128,8 +128,8 @@ export class ConnectionManager implements Types.ConnectionManager {
     const idleConnections: string[] = [];
 
     for (const [id, connection] of this.connections) {
-      const idleTime = now.getTime() -
-        connection.session.lastActivity.getTime();
+      const idleTime = now.getTime()
+        - connection.session.lastActivity.getTime();
       if (idleTime > this.connectionTimeoutMs) {
         idleConnections.push(id);
       }

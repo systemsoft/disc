@@ -2,25 +2,25 @@
  * Main Disc Database Server
  */
 
-import * as Types from "./types.ts";
-import { HttpServer } from "./http.ts";
-import { SimpleEdgeQLProtocolHandler } from "./simple-edgeql-protocol.ts";
-import { EdgeQLProtocolHandler } from "./edgeql-protocol.ts";
+import { AuthRoutes } from "../auth/integration.ts";
+import { AuthMiddleware } from "../auth/middleware.ts";
+import { PgDatabaseAdapter } from "../auth/pg-database-adapter.ts";
+import { AuthProvider } from "../auth/provider.ts";
+import type { Schema } from "../compiler/context.ts";
+import { mergeSchemaAdditions } from "../compiler/context.ts";
+import { createExtensionContext } from "../extensions/context.ts";
+import { ExtensionRegistry } from "../extensions/registry.ts";
+import type { Extension } from "../extensions/types.ts";
+import { DatabaseConnection } from "../lib/database.ts";
 import { configureLogging } from "../lib/logger.ts";
 import { PostgresInstance } from "../postgres/instance.ts";
 import { logger } from "../postgres/logger.ts";
-import type { Schema } from "../compiler/context.ts";
-import { mergeSchemaAdditions } from "../compiler/context.ts";
-import { AuthProvider } from "../auth/provider.ts";
-import { AuthMiddleware } from "../auth/middleware.ts";
-import { AuthRoutes } from "../auth/integration.ts";
-import { PgDatabaseAdapter } from "../auth/pg-database-adapter.ts";
-import { DatabaseConnection } from "../lib/database.ts";
-import { ExtensionRegistry } from "../extensions/registry.ts";
-import { createExtensionContext } from "../extensions/context.ts";
-import type { Extension } from "../extensions/types.ts";
-import { DatabaseRegistry } from "./database-registry.ts";
 import { BinaryProtocolServer } from "../protocol/binary-server.ts";
+import { DatabaseRegistry } from "./database-registry.ts";
+import { EdgeQLProtocolHandler } from "./edgeql-protocol.ts";
+import { HttpServer } from "./http.ts";
+import { SimpleEdgeQLProtocolHandler } from "./simple-edgeql-protocol.ts";
+import * as Types from "./types.ts";
 
 /**
  * Options for constructing a DiscServer.
@@ -105,7 +105,7 @@ export interface DiscServerOptions extends Partial<Types.ServerConfig> {
    * upstream Gel client compatibility — the Python and JS clients refuse
    * plain TCP and require ALPN "edgedb-binary".
    */
-  binaryTls?: { certFile: string; keyFile: string };
+  binaryTls?: { certFile: string; keyFile: string; };
 
   /**
    * Path to the SDL schema file for the live-schema-diff admin endpoint
@@ -145,7 +145,7 @@ export class DiscServer {
   private dataWatchRegistry?: import("./admin/data-watch-registry.ts").DataWatchRegistry;
   private binaryServer?: BinaryProtocolServer;
   private binaryPassword?: string;
-  private binaryTls?: { certFile: string; keyFile: string };
+  private binaryTls?: { certFile: string; keyFile: string; };
   private stopping = false;
   private signal_handler?: () => void;
   private sighup_handler?: () => void;
@@ -161,8 +161,8 @@ export class DiscServer {
   constructor(config: DiscServerOptions = {}) {
     // If a PostgresInstance is provided, derive databaseUrl from its DSN
     // unless the caller explicitly set a databaseUrl.
-    const databaseUrl = config.databaseUrl ||
-      (config.postgresInstance ? config.postgresInstance.dsn() : "postgresql://localhost:5432/disc");
+    const databaseUrl = config.databaseUrl
+      || (config.postgresInstance ? config.postgresInstance.dsn() : "postgresql://localhost:5432/disc");
 
     this.config = {
       host: config.host || "localhost",
@@ -285,8 +285,8 @@ export class DiscServer {
       if (this.extensionRegistry.size > 0) {
         const extCtx = createExtensionContext({
           schema: this.config.extensions
-            ? (this.protocolHandler as any).schema ||
-              { types: new Map(), functions: new Map() }
+            ? (this.protocolHandler as any).schema
+              || { types: new Map(), functions: new Map() }
             : { types: new Map(), functions: new Map() },
           config: this.config,
         });
@@ -296,14 +296,14 @@ export class DiscServer {
         const extFunctions = this.extensionRegistry.getAllFunctions();
         const extTypes = this.extensionRegistry.getAllTypes();
         if (
-          (extFunctions.length > 0 || extTypes.length > 0) &&
-          this.protocolHandler.updateSchema
+          (extFunctions.length > 0 || extTypes.length > 0)
+          && this.protocolHandler.updateSchema
         ) {
           const handlerSchema: {
             types: Map<string, any>;
             functions: Map<string, any>;
-          } = (this.protocolHandler as any).schema ||
-            { types: new Map(), functions: new Map() };
+          } = (this.protocolHandler as any).schema
+            || { types: new Map(), functions: new Map() };
           const merged = mergeSchemaAdditions(
             handlerSchema,
             extFunctions,
@@ -318,8 +318,8 @@ export class DiscServer {
 
       // Initialize binary protocol server if binaryPort is configured
       if (this.config.binaryPort !== undefined) {
-        const handlerSchema = (this.protocolHandler as any).schema ||
-          { types: new Map(), functions: new Map() };
+        const handlerSchema = (this.protocolHandler as any).schema
+          || { types: new Map(), functions: new Map() };
         // Bind a stable executor that delegates to whatever protocol
         // handler is currently configured. Calling `.bind` here so the
         // closure captures the EdgeQL handler's `this`, since some
@@ -672,8 +672,8 @@ export class DiscServer {
     }
 
     if (
-      next.slowQueryThresholdMs !== undefined &&
-      next.slowQueryThresholdMs !== cur.slowQueryThresholdMs
+      next.slowQueryThresholdMs !== undefined
+      && next.slowQueryThresholdMs !== cur.slowQueryThresholdMs
     ) {
       noteApplied(
         "slowQueryThresholdMs",
@@ -684,23 +684,23 @@ export class DiscServer {
       this.httpServer?.updateSlowQueryThreshold(next.slowQueryThresholdMs);
     }
 
-    const curExplain = (cur as Types.ServerConfig & { explainCacheTtlMs?: number })
+    const curExplain = (cur as Types.ServerConfig & { explainCacheTtlMs?: number; })
       .explainCacheTtlMs;
     if (
-      next.explainCacheTtlMs !== undefined &&
-      next.explainCacheTtlMs !== curExplain
+      next.explainCacheTtlMs !== undefined
+      && next.explainCacheTtlMs !== curExplain
     ) {
       noteApplied("explainCacheTtlMs", curExplain, next.explainCacheTtlMs);
       const ttl = next.explainCacheTtlMs;
-      (cur as Types.ServerConfig & { explainCacheTtlMs?: number }).explainCacheTtlMs = ttl;
+      (cur as Types.ServerConfig & { explainCacheTtlMs?: number; }).explainCacheTtlMs = ttl;
       this.httpServer?.updateExplainCacheTtl(ttl);
     }
 
     // Logging — reconfigure the global logger if either knob changed.
     const nextLogging = readLoggingEnv();
     if (
-      nextLogging.level !== this.last_log_level ||
-      nextLogging.format !== this.last_log_format
+      nextLogging.level !== this.last_log_level
+      || nextLogging.format !== this.last_log_format
     ) {
       noteApplied(
         "logLevel/format",
@@ -729,8 +729,8 @@ export class DiscServer {
       noteIgnored("enableAuth", cur.enableAuth, next.enableAuth);
     }
     if (
-      next.enableAccessPolicies !== undefined &&
-      next.enableAccessPolicies !== cur.enableAccessPolicies
+      next.enableAccessPolicies !== undefined
+      && next.enableAccessPolicies !== cur.enableAccessPolicies
     ) {
       noteIgnored(
         "enableAccessPolicies",
@@ -739,8 +739,8 @@ export class DiscServer {
       );
     }
     if (
-      next.enableWebsockets !== undefined &&
-      next.enableWebsockets !== cur.enableWebsockets
+      next.enableWebsockets !== undefined
+      && next.enableWebsockets !== cur.enableWebsockets
     ) {
       noteIgnored("enableWebsockets", cur.enableWebsockets, next.enableWebsockets);
     }
@@ -748,8 +748,8 @@ export class DiscServer {
       noteIgnored("enableMetrics", cur.enableMetrics, next.enableMetrics);
     }
     if (
-      next.maxConnections !== undefined &&
-      next.maxConnections !== cur.maxConnections
+      next.maxConnections !== undefined
+      && next.maxConnections !== cur.maxConnections
     ) {
       noteIgnored("maxConnections", cur.maxConnections, next.maxConnections);
     }
@@ -838,8 +838,8 @@ export function createDefaultConfig(): Types.ServerConfig {
   return {
     host: "localhost",
     port: 5656,
-    databaseUrl: Deno.env.get("DATABASE_URL") ||
-      "postgresql://localhost:5432/disc",
+    databaseUrl: Deno.env.get("DATABASE_URL")
+      || "postgresql://localhost:5432/disc",
     maxConnections: 100,
     requestTimeout: 30000,
     enableCors: true,
@@ -881,10 +881,10 @@ export function buildEnvOptions(
       Deno.env.get("DISC_SLOW_QUERY_MS") || "1000",
     ),
     enableMetrics: Deno.env.get("DISC_ENABLE_METRICS") === "true",
-    rateLimitRpm: parseInt(Deno.env.get("DISC_RATE_LIMIT_RPM") || "0") ||
-      undefined,
-    rateLimitBurst: parseInt(Deno.env.get("DISC_RATE_LIMIT_BURST") || "0") ||
-      undefined,
+    rateLimitRpm: parseInt(Deno.env.get("DISC_RATE_LIMIT_RPM") || "0")
+      || undefined,
+    rateLimitBurst: parseInt(Deno.env.get("DISC_RATE_LIMIT_BURST") || "0")
+      || undefined,
     postgresInstance,
     // Default to the full EdgeQL compiler. The "simple" path is a hand-rolled
     // stub that omits FROM/LIMIT/ORDER and bypasses the real compiler — kept
@@ -1043,7 +1043,7 @@ function resolveTlsMaterial(pathKey: string, envKey: string): string | undefined
  * Read logging-related env vars. Returned separately because logging is
  * configured globally at process scope, not per-server.
  */
-function readLoggingEnv(): { format: "json" | "text"; level: "DEBUG" | "INFO" | "WARN" | "ERROR" } {
+function readLoggingEnv(): { format: "json" | "text"; level: "DEBUG" | "INFO" | "WARN" | "ERROR"; } {
   const level = (Deno.env.get("DISC_LOG_LEVEL") || "INFO").toUpperCase() as
     | "DEBUG"
     | "INFO"
@@ -1072,11 +1072,11 @@ export function createServerFromEnv(
 }
 
 // Export all types and classes for external use
-export * from "./types.ts";
+export { BinaryProtocolServer } from "../protocol/binary-server.ts";
 export { ConnectionManager, SessionManager, TransactionManager } from "./connection.ts";
+export { DatabaseRegistry } from "./database-registry.ts";
+export { EdgeQLProtocolHandler } from "./edgeql-protocol.ts";
 export { HttpServer } from "./http.ts";
 export { EdgeQLProtocolHandler as MockEdgeQLProtocolHandler, GraphQLProtocolHandler } from "./protocol.ts";
-export { EdgeQLProtocolHandler } from "./edgeql-protocol.ts";
 export { SimpleEdgeQLProtocolHandler } from "./simple-edgeql-protocol.ts";
-export { DatabaseRegistry } from "./database-registry.ts";
-export { BinaryProtocolServer } from "../protocol/binary-server.ts";
+export * from "./types.ts";

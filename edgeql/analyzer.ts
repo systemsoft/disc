@@ -3,8 +3,8 @@
  */
 
 import { ValidationError } from "../lib/errors.ts";
-import * as AST from "./ast.ts";
 import * as SchemaAST from "../schema/ast.ts";
+import * as AST from "./ast.ts";
 
 interface AnalysisContext {
   schema: Map<
@@ -281,9 +281,9 @@ export class EdgeQLAnalyzer {
       const propName = this.getPropertyName(element.expr);
 
       if (
-        propName && contextType.properties &&
-        !contextType.properties.has(propName) &&
-        contextType.links && !contextType.links.has(propName)
+        propName && contextType.properties
+        && !contextType.properties.has(propName)
+        && contextType.links && !contextType.links.has(propName)
       ) {
         this.addError(`Property or link '${propName}' not found in type`);
       }
@@ -471,8 +471,8 @@ export class EdgeQLAnalyzer {
         cardinality: { required: true, multi: false },
       };
     } else if (
-      funcName === "str_trim" || funcName === "str_lower" ||
-      funcName === "str_upper"
+      funcName === "str_trim" || funcName === "str_lower"
+      || funcName === "str_upper"
     ) {
       return {
         name: "str",

@@ -26,12 +26,12 @@
  *   Set DISC_PG_DEBUG=1 to enable verbose logging during PG startup/teardown.
  */
 
-import { join } from "@std/path";
 import { ensureDir } from "@std/fs";
+import { join } from "@std/path";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
-import { PostgresInstance } from "../postgres/instance.ts";
 import type { ConnectionPool } from "../lib/connection-pool.ts";
 import type { DatabaseConnection } from "../lib/database.ts";
+import { PostgresInstance } from "../postgres/instance.ts";
 
 // ---------------------------------------------------------------------------
 // Debug logging helper
@@ -207,8 +207,8 @@ export async function getTestDsn(): Promise<string> {
 
   if (!pgBinDir) {
     throw new Error(
-      "Cannot start test PostgreSQL: no PG binaries found. " +
-        "Set DISC_PG_BINARY_PATH or install PostgreSQL locally.",
+      "Cannot start test PostgreSQL: no PG binaries found. "
+        + "Set DISC_PG_BINARY_PATH or install PostgreSQL locally.",
     );
   }
 
@@ -429,7 +429,7 @@ async function createTestDatabase(port: number): Promise<void> {
     await client.connect();
 
     // Check if the database already exists
-    const result = await client.queryObject<{ exists: boolean }>(
+    const result = await client.queryObject<{ exists: boolean; }>(
       `SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = 'disc_test') AS exists`,
     );
 
@@ -448,7 +448,7 @@ async function createTestDatabase(port: number): Promise<void> {
  */
 function parseDsn(
   dsn: string,
-): { hostname: string; port: number; user: string; database: string } {
+): { hostname: string; port: number; user: string; database: string; } {
   const url = new URL(dsn);
   return {
     hostname: url.hostname || "localhost",

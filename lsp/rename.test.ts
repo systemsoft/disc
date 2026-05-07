@@ -3,8 +3,8 @@
  */
 
 import { assert, assertEquals } from "@std/assert";
-import { prepareRename, provideRename } from "./rename.ts";
 import type { Position } from "./protocol.ts";
+import { prepareRename, provideRename } from "./rename.ts";
 
 function findPos(haystack: string, needle: string, occurrence = 0): Position {
   let offset = -1;

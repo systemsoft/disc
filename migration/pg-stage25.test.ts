@@ -11,8 +11,8 @@
 
 import { assertEquals } from "@std/assert";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
+import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { SchemaManager } from "./schema-manager.ts";
 
 const RUN_PG = canRunPgTests();
@@ -24,7 +24,7 @@ const RUN_PG = canRunPgTests();
 /** Parse a DSN into connection config for the raw deno-postgres Client. */
 function parseDsn(
   dsn: string,
-): { hostname: string; port: number; user: string; database: string } {
+): { hostname: string; port: number; user: string; database: string; } {
   const url = new URL(dsn);
   return {
     hostname: url.hostname || "localhost",
@@ -38,13 +38,13 @@ function parseDsn(
 async function getColumns(
   dsn: string,
   tableName: string,
-): Promise<{ column_name: string; data_type: string }[]> {
+): Promise<{ column_name: string; data_type: string; }[]> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
   try {
     await client.connect();
     const result = await client.queryObject<
-      { column_name: string; data_type: string }
+      { column_name: string; data_type: string; }
     >(
       `SELECT column_name, data_type
        FROM information_schema.columns
@@ -157,9 +157,9 @@ Deno.test({
         boundaryViolated = true;
         const message = error instanceof Error ? error.message : String(error);
         assertEquals(
-          message.toLowerCase().includes("check") ||
-            message.toLowerCase().includes("constraint") ||
-            message.toLowerCase().includes("violates"),
+          message.toLowerCase().includes("check")
+            || message.toLowerCase().includes("constraint")
+            || message.toLowerCase().includes("violates"),
           true,
           `Error should mention CHECK/constraint/violates, got: ${message}`,
         );
@@ -183,9 +183,9 @@ Deno.test({
         overViolated = true;
         const message = error instanceof Error ? error.message : String(error);
         assertEquals(
-          message.toLowerCase().includes("check") ||
-            message.toLowerCase().includes("constraint") ||
-            message.toLowerCase().includes("violates"),
+          message.toLowerCase().includes("check")
+            || message.toLowerCase().includes("constraint")
+            || message.toLowerCase().includes("violates"),
           true,
           `Error should mention CHECK/constraint/violates, got: ${message}`,
         );
@@ -262,9 +262,9 @@ Deno.test({
         boundaryViolated = true;
         const message = error instanceof Error ? error.message : String(error);
         assertEquals(
-          message.toLowerCase().includes("check") ||
-            message.toLowerCase().includes("constraint") ||
-            message.toLowerCase().includes("violates"),
+          message.toLowerCase().includes("check")
+            || message.toLowerCase().includes("constraint")
+            || message.toLowerCase().includes("violates"),
           true,
           `Error should mention CHECK/constraint/violates, got: ${message}`,
         );
@@ -288,9 +288,9 @@ Deno.test({
         underViolated = true;
         const message = error instanceof Error ? error.message : String(error);
         assertEquals(
-          message.toLowerCase().includes("check") ||
-            message.toLowerCase().includes("constraint") ||
-            message.toLowerCase().includes("violates"),
+          message.toLowerCase().includes("check")
+            || message.toLowerCase().includes("constraint")
+            || message.toLowerCase().includes("violates"),
           true,
           `Error should mention CHECK/constraint/violates, got: ${message}`,
         );
@@ -374,9 +374,9 @@ Deno.test({
         oneOfViolated = true;
         const message = error instanceof Error ? error.message : String(error);
         assertEquals(
-          message.toLowerCase().includes("check") ||
-            message.toLowerCase().includes("constraint") ||
-            message.toLowerCase().includes("violates"),
+          message.toLowerCase().includes("check")
+            || message.toLowerCase().includes("constraint")
+            || message.toLowerCase().includes("violates"),
           true,
           `Error should mention CHECK/constraint/violates, got: ${message}`,
         );
@@ -453,9 +453,9 @@ Deno.test({
         underViolated = true;
         const message = error instanceof Error ? error.message : String(error);
         assertEquals(
-          message.toLowerCase().includes("check") ||
-            message.toLowerCase().includes("constraint") ||
-            message.toLowerCase().includes("violates"),
+          message.toLowerCase().includes("check")
+            || message.toLowerCase().includes("constraint")
+            || message.toLowerCase().includes("violates"),
           true,
           `Error should mention CHECK/constraint/violates, got: ${message}`,
         );
@@ -479,9 +479,9 @@ Deno.test({
         overViolated = true;
         const message = error instanceof Error ? error.message : String(error);
         assertEquals(
-          message.toLowerCase().includes("check") ||
-            message.toLowerCase().includes("constraint") ||
-            message.toLowerCase().includes("violates"),
+          message.toLowerCase().includes("check")
+            || message.toLowerCase().includes("constraint")
+            || message.toLowerCase().includes("violates"),
           true,
           `Error should mention CHECK/constraint/violates, got: ${message}`,
         );
@@ -573,9 +573,9 @@ Deno.test({
         lowerViolated = true;
         const message = error instanceof Error ? error.message : String(error);
         assertEquals(
-          message.toLowerCase().includes("check") ||
-            message.toLowerCase().includes("constraint") ||
-            message.toLowerCase().includes("violates"),
+          message.toLowerCase().includes("check")
+            || message.toLowerCase().includes("constraint")
+            || message.toLowerCase().includes("violates"),
           true,
           `Error should mention CHECK/constraint/violates, got: ${message}`,
         );
@@ -599,9 +599,9 @@ Deno.test({
         upperViolated = true;
         const message = error instanceof Error ? error.message : String(error);
         assertEquals(
-          message.toLowerCase().includes("check") ||
-            message.toLowerCase().includes("constraint") ||
-            message.toLowerCase().includes("violates"),
+          message.toLowerCase().includes("check")
+            || message.toLowerCase().includes("constraint")
+            || message.toLowerCase().includes("violates"),
           true,
           `Error should mention CHECK/constraint/violates, got: ${message}`,
         );
@@ -697,9 +697,9 @@ Deno.test({
         constraintViolated = true;
         const message = error instanceof Error ? error.message : String(error);
         assertEquals(
-          message.toLowerCase().includes("check") ||
-            message.toLowerCase().includes("constraint") ||
-            message.toLowerCase().includes("violates"),
+          message.toLowerCase().includes("check")
+            || message.toLowerCase().includes("constraint")
+            || message.toLowerCase().includes("violates"),
           true,
           `Error should mention CHECK/constraint/violates, got: ${message}`,
         );

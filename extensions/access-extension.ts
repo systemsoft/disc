@@ -8,10 +8,10 @@
  * down cleanly alongside the rest of the server.
  */
 
-import { BaseExtension } from "./base-extension.ts";
-import type { ExtensionContext, ExtensionMetadata } from "./types.ts";
 import type { AccessEvaluator } from "../access/evaluator.ts";
 import type { AccessSQLInjector } from "../access/sql-injector.ts";
+import { BaseExtension } from "./base-extension.ts";
+import type { ExtensionContext, ExtensionMetadata } from "./types.ts";
 
 export interface AccessExtensionAdapterOptions {
   evaluator: AccessEvaluator;
@@ -78,7 +78,7 @@ export class AccessExtensionAdapter extends BaseExtension {
     return { setupSql: [] };
   }
 
-  override healthCheck(): Promise<{ healthy: boolean; details?: string }> {
+  override healthCheck(): Promise<{ healthy: boolean; details?: string; }> {
     return Promise.resolve({ healthy: this.state === "ready" });
   }
 }

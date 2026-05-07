@@ -3,8 +3,8 @@
  */
 
 import { assertEquals, assertThrows } from "@std/assert";
-import { generateCreateFunction, generateDropFunction, mapEdgeqlTypeToPg } from "./ddl.ts";
 import { ExtensionConfigError } from "../extensions/errors.ts";
+import { generateCreateFunction, generateDropFunction, mapEdgeqlTypeToPg } from "./ddl.ts";
 import type { CustomFunctionDef } from "./types.ts";
 
 // ── mapEdgeqlTypeToPg ─────────────────────────────────────────────────

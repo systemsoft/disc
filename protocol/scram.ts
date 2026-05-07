@@ -249,7 +249,7 @@ export function generateServerFirstMessage(
   clientNonce: string,
   salt: Uint8Array,
   iterations: number,
-): { serverNonce: string; serverFirstMessage: string } {
+): { serverNonce: string; serverFirstMessage: string; } {
   const serverNonce = generateNonce();
   const combinedNonce = clientNonce + serverNonce;
   const serverFirstMessage = `r=${combinedNonce},s=${toBase64(salt)},i=${iterations}`;
@@ -276,7 +276,7 @@ export async function verifyClientFinalMessage(
   state: ScramServerState,
   storedKey: Uint8Array,
   serverKey: Uint8Array,
-): Promise<{ valid: boolean; serverSignature: string }> {
+): Promise<{ valid: boolean; serverSignature: string; }> {
   const str = textDecoder.decode(data);
 
   // Parse client-final-message: c=<cb>,r=<nonce>,p=<proof>
@@ -361,7 +361,7 @@ export async function deriveKeys(
   password: string,
   salt: Uint8Array,
   iterations: number,
-): Promise<{ storedKey: Uint8Array; serverKey: Uint8Array }> {
+): Promise<{ storedKey: Uint8Array; serverKey: Uint8Array; }> {
   if (iterations < MIN_SCRAM_ITERATIONS) {
     throw new Error(
       `SCRAM iteration count ${iterations} is below the minimum of ${MIN_SCRAM_ITERATIONS}`,
@@ -399,7 +399,7 @@ export async function deriveKeys(
 export function buildClientFirstMessage(
   username: string,
   clientNonce: string,
-): { message: Uint8Array; clientFirstMessageBare: string } {
+): { message: Uint8Array; clientFirstMessageBare: string; } {
   const clientFirstMessageBare = `n=${username},r=${clientNonce}`;
   const message = textEncoder.encode(`n,,${clientFirstMessageBare}`);
   return { message, clientFirstMessageBare };

@@ -2,8 +2,8 @@
  * SubscriptionClient — WebSocket-based subscription client for Disc database
  */
 
-import type { DiscClientConfig, SubscriptionCallbacks, SubscriptionClientConfig, SubscriptionHandle } from "./types.ts";
 import { DiscConnectionError } from "./errors.ts";
+import type { DiscClientConfig, SubscriptionCallbacks, SubscriptionClientConfig, SubscriptionHandle } from "./types.ts";
 
 const DEFAULT_BASE_URL = "http://localhost:5656";
 const DEFAULT_AUTO_RECONNECT = true;
@@ -53,8 +53,8 @@ export class SubscriptionClient {
   constructor(config?: DiscClientConfig, options?: SubscriptionClientConfig) {
     this.baseUrl = (config?.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
     this.autoReconnect = options?.autoReconnect ?? DEFAULT_AUTO_RECONNECT;
-    this.maxReconnectAttempts = options?.maxReconnectAttempts ??
-      DEFAULT_MAX_RECONNECT_ATTEMPTS;
+    this.maxReconnectAttempts = options?.maxReconnectAttempts
+      ?? DEFAULT_MAX_RECONNECT_ATTEMPTS;
     this.reconnectDelay = options?.reconnectDelay ?? DEFAULT_RECONNECT_DELAY;
   }
 
@@ -226,11 +226,11 @@ export class SubscriptionClient {
     }
 
     if (
-      this.autoReconnect &&
-      this.reconnectAttempt < this.maxReconnectAttempts
+      this.autoReconnect
+      && this.reconnectAttempt < this.maxReconnectAttempts
     ) {
-      const delay = this.reconnectDelay *
-        Math.pow(2, this.reconnectAttempt);
+      const delay = this.reconnectDelay
+        * Math.pow(2, this.reconnectAttempt);
       this.reconnectAttempt++;
 
       this.reconnectTimer = setTimeout(() => {

@@ -2,17 +2,17 @@
  * Migration Engine - orchestrates schema diffing, DDL generation, and migration execution
  */
 
-import { Module } from "../schema/converter.ts";
-import * as Types from "./types.ts";
-import { SchemaDiffer } from "./differ.ts";
-import { DDLGenerator } from "./ddl.ts";
-import { Err, Ok, Result } from "../lib/result.ts";
-import { MigrationError } from "../lib/errors.ts";
-import { DatabaseConnection } from "../lib/database.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
-import { MigrationTracker } from "./tracker.ts";
-import { DataMigrationRunner } from "./data-migration.ts";
+import { DatabaseConnection } from "../lib/database.ts";
+import { MigrationError } from "../lib/errors.ts";
+import { Err, Ok, Result } from "../lib/result.ts";
 import { logger } from "../postgres/logger.ts";
+import { Module } from "../schema/converter.ts";
+import { DataMigrationRunner } from "./data-migration.ts";
+import { DDLGenerator } from "./ddl.ts";
+import { SchemaDiffer } from "./differ.ts";
+import { MigrationTracker } from "./tracker.ts";
+import * as Types from "./types.ts";
 
 export class MigrationEngine {
   private differ = new SchemaDiffer();
@@ -150,7 +150,7 @@ export class MigrationEngine {
    */
   async executeMigration(
     plan: Types.MigrationPlan,
-    options?: { skipHistory?: boolean },
+    options?: { skipHistory?: boolean; },
   ): Promise<Result<Types.MigrationResult[], MigrationError>> {
     const planStartTime = Date.now();
     const results: Types.MigrationResult[] = [];
@@ -491,8 +491,8 @@ export class MigrationEngine {
     if (rollbackSql.length === 0) {
       return Err(
         new MigrationError(
-          `No rollback SQL available for migration ${migrationId}. ` +
-            "The migration was recorded without rollback instructions.",
+          `No rollback SQL available for migration ${migrationId}. `
+            + "The migration was recorded without rollback instructions.",
         ),
       );
     }
@@ -836,8 +836,8 @@ export class MigrationEngine {
                 const altLink = sub as Types.AlterLinkOperation;
                 for (const change of altLink.changes) {
                   if (
-                    change.kind === "ChangeCardinality" ||
-                    change.kind === "ChangeMulti"
+                    change.kind === "ChangeCardinality"
+                    || change.kind === "ChangeMulti"
                   ) {
                     flagged.push({
                       operation: `AlterType ${alter.typeName} → AlterLink ${altLink.linkName} (${change.kind})`,

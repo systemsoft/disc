@@ -25,14 +25,14 @@
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import { SDLParser } from "../schema/parser.ts";
-import { SchemaValidator } from "../schema/validator.ts";
-import { SchemaManager } from "../migration/schema-manager.ts";
 import { DDLGenerator } from "../migration/ddl.ts";
 import { SchemaDiffer } from "../migration/differ.ts";
-import { SDLConverter } from "../schema/converter.ts";
-import * as AST from "../schema/ast.ts";
+import { SchemaManager } from "../migration/schema-manager.ts";
 import * as MigrationTypes from "../migration/types.ts";
+import * as AST from "../schema/ast.ts";
+import { SDLConverter } from "../schema/converter.ts";
+import { SDLParser } from "../schema/parser.ts";
+import { SchemaValidator } from "../schema/validator.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers

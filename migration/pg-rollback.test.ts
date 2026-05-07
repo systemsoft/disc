@@ -8,8 +8,8 @@
 
 import { assertEquals } from "@std/assert";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
+import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { MigrationEngine } from "./engine.ts";
 import * as Types from "./types.ts";
 
@@ -21,7 +21,7 @@ const RUN_PG = canRunPgTests();
 
 function parseDsn(
   dsn: string,
-): { hostname: string; port: number; user: string; database: string } {
+): { hostname: string; port: number; user: string; database: string; } {
   const url = new URL(dsn);
   return {
     hostname: url.hostname || "localhost",
@@ -36,7 +36,7 @@ async function tableExists(dsn: string, tableName: string): Promise<boolean> {
   const client = new Client(cfg);
   try {
     await client.connect();
-    const result = await client.queryObject<{ exists: boolean }>(
+    const result = await client.queryObject<{ exists: boolean; }>(
       `SELECT EXISTS (
         SELECT 1 FROM information_schema.tables
         WHERE table_schema = 'public' AND table_name = $1
@@ -344,8 +344,8 @@ Deno.test({
       if (!result.ok) {
         // Should get a "not found" error from the tracker
         assertEquals(
-          result.error.message.includes("not found") ||
-            result.error.message.includes("not applied"),
+          result.error.message.includes("not found")
+            || result.error.message.includes("not applied"),
           true,
           `Error should mention not found: ${result.error.message}`,
         );

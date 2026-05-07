@@ -7,11 +7,11 @@
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
+import { Module } from "../schema/converter.ts";
 import { SDLParser } from "../schema/parser.ts";
 import { SchemaValidator } from "../schema/validator.ts";
 import { DDLGenerator } from "./ddl.ts";
 import { SchemaDiffer } from "./differ.ts";
-import { Module } from "../schema/converter.ts";
 import * as Types from "./types.ts";
 
 // ============================================================

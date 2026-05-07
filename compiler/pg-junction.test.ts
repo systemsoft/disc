@@ -12,12 +12,12 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
-import { EdgeQLParser } from "../edgeql/parser.ts";
-import { EdgeQLCompiler } from "./compiler.ts";
+import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
+import { EdgeQLCompiler } from "./compiler.ts";
 import { Schema } from "./context.ts";
 
 const RUN_PG = canRunPgTests();
@@ -52,7 +52,7 @@ function compileEdgeQL(edgeql: string, schema: Schema): string {
 async function applySchema(
   pool: ConnectionPool,
   sdl: string,
-): Promise<{ manager: SchemaManager; schema: Schema }> {
+): Promise<{ manager: SchemaManager; schema: Schema; }> {
   const manager = new SchemaManager({ pool });
   await manager.initialize();
 
@@ -166,7 +166,7 @@ Deno.test({
       assertExists(data.courses, "Should have courses field");
 
       const courseTitles = data.courses
-        .map((c: { title: string }) => c.title)
+        .map((c: { title: string; }) => c.title)
         .sort();
       assertEquals(courseTitles, ["Math", "Science"]);
     } finally {
@@ -250,7 +250,7 @@ Deno.test({
       assertExists(data.students, "Should have students field");
 
       const studentNames = data.students
-        .map((s: { name: string }) => s.name)
+        .map((s: { name: string; }) => s.name)
         .sort();
       assertEquals(studentNames, ["Ada", "Billie"]);
     } finally {
@@ -316,7 +316,7 @@ Deno.test({
 
       assertEquals(data.name, "Ada");
       const titles = data.articles
-        .map((a: { title: string }) => a.title)
+        .map((a: { title: string; }) => a.title)
         .sort();
       assertEquals(titles, ["Paper A", "Paper B"]);
     } finally {

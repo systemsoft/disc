@@ -8,16 +8,16 @@
  */
 
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
-import { EmailEventListener } from "./email-listener.ts";
 import type { Mailer } from "../smtp/mailer.ts";
 import type { Email, MailerResult } from "../smtp/types.ts";
+import { EmailEventListener } from "./email-listener.ts";
 import type { WebhookEvent } from "./webhooks.ts";
 
 interface CapturedSend {
   email: Email;
 }
 
-function makeStubMailer(): { mailer: Mailer; sends: CapturedSend[] } {
+function makeStubMailer(): { mailer: Mailer; sends: CapturedSend[]; } {
   const sends: CapturedSend[] = [];
   const mailer: Mailer = {
     send(email: Email): Promise<MailerResult> {

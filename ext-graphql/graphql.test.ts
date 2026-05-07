@@ -9,12 +9,12 @@
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import { GraphQLExtension } from "./extension.ts";
-import { generateGraphQLSchema, generateGraphQLTypes, mapEdgeQLTypeToGraphQL, SCALAR_TYPE_MAP } from "./schema-generator.ts";
-import { parseGraphQLQuery, translateToEdgeQL } from "./query-translator.ts";
-import type { ExtensionContext } from "../extensions/types.ts";
 import type { Schema } from "../compiler/context.ts";
 import { createTestSchema } from "../compiler/context.ts";
+import type { ExtensionContext } from "../extensions/types.ts";
+import { GraphQLExtension } from "./extension.ts";
+import { parseGraphQLQuery, translateToEdgeQL } from "./query-translator.ts";
+import { generateGraphQLSchema, generateGraphQLTypes, mapEdgeQLTypeToGraphQL, SCALAR_TYPE_MAP } from "./schema-generator.ts";
 
 // ── Test helpers ───────────────────────────────────────────────────────
 
@@ -35,10 +35,10 @@ function makeContext(schema?: Schema): ExtensionContext {
       info: () => {},
       warn: () => {},
       error: () => {},
-      child: function () {
+      child: function() {
         return this;
       },
-      withRequest: function () {
+      withRequest: function() {
         return this;
       },
     } as unknown as ExtensionContext["logger"],
@@ -191,11 +191,11 @@ Deno.test("GraphQL query translation - nested selection produces EdgeQL nested s
 
 Deno.test("GraphQL query translation - query with id argument produces FILTER", () => {
   const schema = createTestSchema();
-  const parsed = parseGraphQLQuery('{ user(id: "abc-123") { name, email } }');
+  const parsed = parseGraphQLQuery("{ user(id: \"abc-123\") { name, email } }");
   const result = translateToEdgeQL(parsed, schema);
   assertEquals(
     result.edgeql,
-    'SELECT User {name, email} FILTER .id = <uuid>"abc-123"',
+    "SELECT User {name, email} FILTER .id = <uuid>\"abc-123\"",
   );
 });
 
@@ -215,12 +215,12 @@ Deno.test("GraphQL query translation - list query with first/offset produces LIM
 Deno.test("GraphQL query translation - create mutation produces INSERT", () => {
   const schema = createTestSchema();
   const parsed = parseGraphQLQuery(
-    'mutation { createUser(input: {name: "Ada", email: "ada@example.com"}) { id } }',
+    "mutation { createUser(input: {name: \"Ada\", email: \"ada@example.com\"}) { id } }",
   );
   const result = translateToEdgeQL(parsed, schema);
   assertEquals(
     result.edgeql,
-    'INSERT User {name := "Ada", email := "ada@example.com"}',
+    "INSERT User {name := \"Ada\", email := \"ada@example.com\"}",
   );
 });
 
@@ -229,12 +229,12 @@ Deno.test("GraphQL query translation - create mutation produces INSERT", () => {
 Deno.test("GraphQL query translation - update mutation produces UPDATE SET", () => {
   const schema = createTestSchema();
   const parsed = parseGraphQLQuery(
-    'mutation { updateUser(id: "abc-123", input: {name: "Billie"}) { id } }',
+    "mutation { updateUser(id: \"abc-123\", input: {name: \"Billie\"}) { id } }",
   );
   const result = translateToEdgeQL(parsed, schema);
   assertEquals(
     result.edgeql,
-    'UPDATE User FILTER .id = <uuid>"abc-123" SET {name := "Billie"}',
+    "UPDATE User FILTER .id = <uuid>\"abc-123\" SET {name := \"Billie\"}",
   );
 });
 
@@ -243,12 +243,12 @@ Deno.test("GraphQL query translation - update mutation produces UPDATE SET", () 
 Deno.test("GraphQL query translation - delete mutation produces DELETE FILTER", () => {
   const schema = createTestSchema();
   const parsed = parseGraphQLQuery(
-    'mutation { deleteUser(id: "abc-123") }',
+    "mutation { deleteUser(id: \"abc-123\") }",
   );
   const result = translateToEdgeQL(parsed, schema);
   assertEquals(
     result.edgeql,
-    'DELETE User FILTER .id = <uuid>"abc-123"',
+    "DELETE User FILTER .id = <uuid>\"abc-123\"",
   );
 });
 
@@ -304,7 +304,7 @@ Deno.test("GraphQL parser - parse simple query", () => {
 // ── GraphQL Parser: Test 20 ─────────────────────────────────────────────
 
 Deno.test("GraphQL parser - parse query with arguments", () => {
-  const parsed = parseGraphQLQuery('{ user(id: "123") { name } }');
+  const parsed = parseGraphQLQuery("{ user(id: \"123\") { name } }");
   assertEquals(parsed.selections[0].arguments.id, "123");
 });
 
@@ -326,7 +326,7 @@ Deno.test("GraphQL parser - parse nested selections", () => {
 
 Deno.test("GraphQL parser - parse mutation", () => {
   const parsed = parseGraphQLQuery(
-    'mutation { createUser(input: {name: "Ada"}) { id } }',
+    "mutation { createUser(input: {name: \"Ada\"}) { id } }",
   );
   assertEquals(parsed.type, "mutation");
   assertEquals(parsed.selections[0].fieldName, "createUser");
@@ -623,7 +623,7 @@ Deno.test("GraphQL introspection - __schema returns type list", () => {
   const schema = createTestSchema();
   const parsed = parseGraphQLQuery(`{ __schema { types { name } } }`);
   const data = resolveIntrospection(parsed, schema) as {
-    __schema: { types: Array<{ name: string }> };
+    __schema: { types: Array<{ name: string; }>; };
   };
   assertEquals(Array.isArray(data.__schema.types), true);
   // The test schema includes a User type — verify it's surfaced.
@@ -637,7 +637,7 @@ Deno.test("GraphQL introspection - __type(name: 'User') returns its fields", () 
     `{ __type(name: "User") { name fields { name } } }`,
   );
   const data = resolveIntrospection(parsed, schema) as {
-    __type: { name: string; fields: Array<{ name: string }> };
+    __type: { name: string; fields: Array<{ name: string; }>; };
   };
   assertEquals(data.__type.name, "User");
   assertEquals(data.__type.fields.length > 0, true);
@@ -648,7 +648,7 @@ Deno.test("GraphQL introspection - __type returns null for unknown type", () => 
   const parsed = parseGraphQLQuery(
     `{ __type(name: "DoesNotExist") { name } }`,
   );
-  const data = resolveIntrospection(parsed, schema) as { __type: unknown };
+  const data = resolveIntrospection(parsed, schema) as { __type: unknown; };
   assertEquals(data.__type, null);
 });
 
@@ -663,7 +663,7 @@ Deno.test("GraphQLExtension - POST /graphql short-circuits __schema introspectio
   );
   assertEquals(response.status, 200);
   const body = await response.json() as {
-    data: { __schema: { types: Array<{ name: string }> } };
+    data: { __schema: { types: Array<{ name: string; }>; }; };
   };
   assertEquals(Array.isArray(body.data.__schema.types), true);
   // Crucially, the response should NOT carry __edgeql — introspection

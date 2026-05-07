@@ -14,12 +14,12 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
-import { EdgeQLParser } from "../edgeql/parser.ts";
-import { EdgeQLCompiler } from "./compiler.ts";
+import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
+import { EdgeQLCompiler } from "./compiler.ts";
 import type { GlobalDef, Schema } from "./context.ts";
 
 const RUN_PG = canRunPgTests();
@@ -60,7 +60,7 @@ const TEST_TABLE = "test_account";
 async function applyTestSchema(
   pool: ConnectionPool,
   globals?: Map<string, GlobalDef>,
-): Promise<{ manager: SchemaManager; schema: Schema }> {
+): Promise<{ manager: SchemaManager; schema: Schema; }> {
   // Pre-cleanup: drop tables from previous test runs
   await pool.query(`DROP TABLE IF EXISTS ${TEST_TABLE} CASCADE`);
   await pool.query("DROP TABLE IF EXISTS disc_migrations CASCADE");
@@ -380,8 +380,8 @@ Deno.test({
       // Verify it's Billie
       const row = result.rows[0] as Record<string, unknown>;
       const rowData = row.jsonb_build_object ?? row;
-      const name = (rowData as Record<string, unknown>).name ??
-        (typeof rowData === "object" ? Object.values(rowData)[0] : undefined);
+      const name = (rowData as Record<string, unknown>).name
+        ?? (typeof rowData === "object" ? Object.values(rowData)[0] : undefined);
       assertExists(name, "Row should contain name data");
 
       await cleanup(pool, manager);

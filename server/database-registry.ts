@@ -7,12 +7,12 @@
  * with system databases.
  */
 
+import type { Schema } from "../compiler/context.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { createDatabase, dropDatabase, replaceDsnDatabase } from "../lib/database.ts";
 import { DatabaseRegistryError } from "../lib/errors.ts";
 import { MigrationTracker } from "../migration/tracker.ts";
 import { logger } from "../postgres/logger.ts";
-import type { Schema } from "../compiler/context.ts";
 
 /**
  * A single database entry managed by the registry.

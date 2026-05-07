@@ -6,11 +6,11 @@
  */
 
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
+import { ConnectionPool } from "../lib/connection-pool.ts";
+import { DatabaseExecutionError } from "../lib/errors.ts";
 import { EdgeQLProtocolHandler } from "./edgeql-protocol.ts";
 import { SimpleEdgeQLProtocolHandler } from "./simple-edgeql-protocol.ts";
-import { DatabaseExecutionError } from "../lib/errors.ts";
 import * as Types from "./types.ts";
-import { ConnectionPool } from "../lib/connection-pool.ts";
 
 // --- Helpers ---
 
@@ -49,7 +49,7 @@ function makeFaultyPool(errorMessage: string): ConnectionPool {
 Deno.test(
   "DatabaseExecutionError - wraps original error and includes SQL",
   () => {
-    const originalError = new Error('relation "users" does not exist');
+    const originalError = new Error("relation \"users\" does not exist");
     const sql = "SELECT * FROM users WHERE id = $1";
     const dbError = new DatabaseExecutionError(
       `Database query failed: ${originalError.message}`,
@@ -58,7 +58,7 @@ Deno.test(
     );
 
     assertEquals(dbError.name, "DatabaseExecutionError");
-    assertStringIncludes(dbError.message, 'relation "users" does not exist');
+    assertStringIncludes(dbError.message, "relation \"users\" does not exist");
     assertEquals(dbError.sql, sql);
     assertEquals(dbError.cause, originalError);
 
@@ -66,7 +66,7 @@ Deno.test(
     assertStringIncludes(formatted, "DatabaseExecutionError");
     assertStringIncludes(formatted, sql);
     assertStringIncludes(formatted, "Caused by:");
-    assertStringIncludes(formatted, 'relation "users" does not exist');
+    assertStringIncludes(formatted, "relation \"users\" does not exist");
   },
 );
 

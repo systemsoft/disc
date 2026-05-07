@@ -3,11 +3,11 @@
  * Manages the lifecycle of a binary protocol connection
  */
 
-import * as Types from "./types.ts";
-import { ProtocolParser } from "./parser.ts";
 import { ProtocolBuilder } from "./builder.ts";
-import { ScramServer } from "./scram.ts";
+import { ProtocolParser } from "./parser.ts";
 import { ConnectionPools } from "./pool.ts";
+import { ScramServer } from "./scram.ts";
+import * as Types from "./types.ts";
 
 export enum ConnectionState {
   AwaitingHandshake,
@@ -360,7 +360,7 @@ export class ProtocolConnection {
       type: Types.MessageType.Data,
       length: 0,
       dataElements: [
-        { data: new TextEncoder().encode('{"result": "mock"}') },
+        { data: new TextEncoder().encode("{\"result\": \"mock\"}") },
       ],
     };
     responses.push(this.builder.buildMessage(data));
@@ -445,9 +445,9 @@ export class ProtocolConnection {
     const now = Date.now();
 
     if (
-      this.state === ConnectionState.AwaitingAuthentication ||
-      this.state === ConnectionState.AwaitingSASLInitial ||
-      this.state === ConnectionState.AwaitingSASLResponse
+      this.state === ConnectionState.AwaitingAuthentication
+      || this.state === ConnectionState.AwaitingSASLInitial
+      || this.state === ConnectionState.AwaitingSASLResponse
     ) {
       return now - this.lastActivity > this.options.authenticationTimeout;
     }
@@ -468,10 +468,10 @@ export class ProtocolConnection {
   getStats(): {
     state: string;
     lastActivity: number;
-    clientVersion: { major: number; minor: number };
+    clientVersion: { major: number; minor: number; };
     parameters: Record<string, string>;
     poolStats: {
-      bufferPool: { size: number; count: number }[];
+      bufferPool: { size: number; count: number; }[];
       messageCache: {
         hits: number;
         misses: number;

@@ -12,8 +12,8 @@
 
 import { assertEquals, assertExists } from "@std/assert";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
+import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { SchemaManager } from "./schema-manager.ts";
 
 const RUN_PG = canRunPgTests();
@@ -24,7 +24,7 @@ const RUN_PG = canRunPgTests();
 
 function parseDsn(
   dsn: string,
-): { hostname: string; port: number; user: string; database: string } {
+): { hostname: string; port: number; user: string; database: string; } {
   const url = new URL(dsn);
   return {
     hostname: url.hostname || "localhost",
@@ -39,7 +39,7 @@ async function tableExists(dsn: string, tableName: string): Promise<boolean> {
   const client = new Client(cfg);
   try {
     await client.connect();
-    const result = await client.queryObject<{ exists: boolean }>(
+    const result = await client.queryObject<{ exists: boolean; }>(
       `SELECT EXISTS (
         SELECT 1 FROM information_schema.tables
         WHERE table_schema = 'public' AND table_name = $1
@@ -55,13 +55,13 @@ async function tableExists(dsn: string, tableName: string): Promise<boolean> {
 async function getColumns(
   dsn: string,
   tableName: string,
-): Promise<{ column_name: string; data_type: string; is_nullable: string }[]> {
+): Promise<{ column_name: string; data_type: string; is_nullable: string; }[]> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
   try {
     await client.connect();
     const result = await client.queryObject<
-      { column_name: string; data_type: string; is_nullable: string }
+      { column_name: string; data_type: string; is_nullable: string; }
     >(
       `SELECT column_name, data_type, is_nullable
        FROM information_schema.columns
@@ -78,13 +78,13 @@ async function getColumns(
 async function getCheckConstraints(
   dsn: string,
   tableName: string,
-): Promise<{ constraint_name: string; check_clause: string }[]> {
+): Promise<{ constraint_name: string; check_clause: string; }[]> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
   try {
     await client.connect();
     const result = await client.queryObject<
-      { constraint_name: string; check_clause: string }
+      { constraint_name: string; check_clause: string; }
     >(
       `SELECT cc.constraint_name, cc.check_clause
        FROM information_schema.check_constraints cc
@@ -104,7 +104,7 @@ async function getTriggers(
   dsn: string,
   tableName: string,
 ): Promise<
-  { trigger_name: string; event_manipulation: string; action_timing: string }[]
+  { trigger_name: string; event_manipulation: string; action_timing: string; }[]
 > {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
@@ -527,7 +527,7 @@ Deno.test({
 
       // Verify the row was inserted
       const users = await queryRows<
-        { name: string; email: string; age: number }
+        { name: string; email: string; age: number; }
       >(
         dsn,
         `SELECT name, email, age FROM "user"`,
@@ -606,7 +606,7 @@ Deno.test({
       );
 
       // Insert a valid Post with status constraint
-      const userRows = await queryRows<{ id: string }>(
+      const userRows = await queryRows<{ id: string; }>(
         dsn,
         `SELECT id FROM "user" LIMIT 1`,
       );
@@ -721,7 +721,7 @@ Deno.test({
       );
 
       // Similarly test Post rewrite triggers
-      const userRows = await queryRows<{ id: string }>(
+      const userRows = await queryRows<{ id: string; }>(
         dsn,
         `SELECT id FROM "user" LIMIT 1`,
       );

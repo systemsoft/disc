@@ -49,7 +49,7 @@ export class LocalFileStorage implements FileStorageBackend {
     }
   }
 
-  async head(key: string): Promise<{ size: number } | null> {
+  async head(key: string): Promise<{ size: number; } | null> {
     try {
       const stat = await Deno.stat(this.absolutePath(key));
       return { size: stat.size };

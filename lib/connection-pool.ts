@@ -9,9 +9,9 @@
  * - Statistics tracking
  */
 
+import { logger } from "../postgres/logger.ts";
 import { DatabaseConfig, DatabaseConnection, QueryResult } from "./database.ts";
 import { QueryTimeoutError } from "./errors.ts";
-import { logger } from "../postgres/logger.ts";
 
 export interface PoolConfig extends DatabaseConfig {
   minConnections?: number;
@@ -496,8 +496,8 @@ export class ConnectionPool {
     }
 
     // Not healthy if all connections in use and wait queue has waiters
-    const allInUse = this.connections.size >= this.config.maxConnections! &&
-      this.idleConnections.length === 0;
+    const allInUse = this.connections.size >= this.config.maxConnections!
+      && this.idleConnections.length === 0;
     if (allInUse && this.waitQueue.length > 0) {
       return false;
     }

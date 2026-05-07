@@ -5,7 +5,13 @@ Modular extension system for the Disc database server. Extensions can register c
 ## Import
 
 ```typescript
-import { AccessExtensionAdapter, AuthExtensionAdapter, BaseExtension, createExtensionContext, ExtensionRegistry } from "disc/extensions/mod.ts";
+import {
+  AccessExtensionAdapter,
+  AuthExtensionAdapter,
+  BaseExtension,
+  createExtensionContext,
+  ExtensionRegistry,
+} from "disc/extensions/mod.ts";
 
 import type {
   CompilerHook,
@@ -36,7 +42,7 @@ interface Extension {
   getMiddleware(): ExtensionMiddleware[];
   getDatabaseSetup(): ExtensionDatabaseSetup;
   getCompilerHooks(): CompilerHook[];
-  healthCheck(): Promise<{ healthy: boolean; details?: string }>;
+  healthCheck(): Promise<{ healthy: boolean; details?: string; }>;
 }
 ```
 
@@ -69,7 +75,10 @@ Abstract base class with sensible defaults for all extension methods. Extend thi
 
 ```typescript
 import { BaseExtension } from "disc/extensions/mod.ts";
-import type { ExtensionContext, ExtensionMetadata } from "disc/extensions/mod.ts";
+import type {
+  ExtensionContext,
+  ExtensionMetadata,
+} from "disc/extensions/mod.ts";
 
 class MyExtension extends BaseExtension {
   readonly metadata: ExtensionMetadata = {

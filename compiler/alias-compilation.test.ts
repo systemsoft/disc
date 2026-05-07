@@ -15,11 +15,11 @@
 
 import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
 import { EdgeQLParser } from "../edgeql/parser.ts";
-import { EdgeQLCompiler } from "./compiler.ts";
-import { SQLCodeGenerator } from "./codegen.ts";
-import { AliasDef, createTestSchema, resolveAlias, Schema } from "./context.ts";
 import { CompilationError } from "../lib/errors.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
+import { SQLCodeGenerator } from "./codegen.ts";
+import { EdgeQLCompiler } from "./compiler.ts";
+import { AliasDef, createTestSchema, resolveAlias, Schema } from "./context.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -119,7 +119,7 @@ Deno.test("Alias Compilation - alias with additional filter combines both filter
 
   const sql = compileWithSchema(
     schema,
-    'select ActiveUsers filter .name = "Ada"',
+    "select ActiveUsers filter .name = \"Ada\"",
   );
 
   // Both the alias filter (active = true) and the outer filter (name = Ada) should be present

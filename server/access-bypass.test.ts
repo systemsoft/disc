@@ -68,8 +68,8 @@ function headerToBypass(
   header: string | null,
   roles: string[],
 ): boolean {
-  const requested = header !== null &&
-    /^(false|0|no)$/i.test(header.trim());
+  const requested = header !== null
+    && /^(false|0|no)$/i.test(header.trim());
   return requested && roles.includes("admin");
 }
 

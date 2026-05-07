@@ -3,16 +3,16 @@
  * Transforms EdgeQL AST into PostgreSQL-compatible SQL
  */
 
-import * as EdgeQLAST from "../edgeql/ast.ts";
-import * as SQL from "./sql.ts";
-import * as Context from "./context.ts";
-import { Err, Ok, Result } from "../lib/result.ts";
-import { CompilationError } from "../lib/errors.ts";
-import { EdgeQLParser } from "../edgeql/parser.ts";
 import { AccessConfig, AccessContext, AccessEvaluator, AccessPolicy, AccessSQLInjector } from "../access/mod.ts";
-import { describeSchema, describeType } from "./introspection.ts";
+import * as EdgeQLAST from "../edgeql/ast.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
+import { CompilationError } from "../lib/errors.ts";
+import { Err, Ok, Result } from "../lib/result.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import { getConfigRegistry, lookupConfigKey } from "./config-registry.ts";
+import * as Context from "./context.ts";
+import { describeSchema, describeType } from "./introspection.ts";
+import * as SQL from "./sql.ts";
 
 /** Maps EdgeQL type names to PostgreSQL type names */
 function edgeqlTypeToPgType(edgeqlType: string): string {
@@ -114,7 +114,7 @@ export function buildParameterIndex(node: unknown): Map<string, number> {
 
   function visit(n: unknown): void {
     if (!n || typeof n !== "object") return;
-    const obj = n as { kind?: string; name?: string };
+    const obj = n as { kind?: string; name?: string; };
     if (obj.kind === "Parameter" && typeof obj.name === "string") {
       const bare = obj.name.startsWith("$") ? obj.name.slice(1) : obj.name;
       // Numeric parameters keep their source-supplied index.
@@ -189,7 +189,7 @@ export class EdgeQLCompiler {
 
   compile(
     query: EdgeQLAST.Query,
-    options?: { parameterMap?: Map<string, number> },
+    options?: { parameterMap?: Map<string, number>; },
   ): Result<SQL.SQLStatement, CompilationError> {
     try {
       // Establish a stable name → 1-indexed-position map for $name parameters
@@ -197,8 +197,8 @@ export class EdgeQLCompiler {
       // Caller can pre-supply the map (binary protocol does this so the
       // index lines up with the input typedesc element order); otherwise we
       // walk the AST in first-seen order to derive one.
-      this.parameterIndex = options?.parameterMap ??
-        buildParameterIndex(query);
+      this.parameterIndex = options?.parameterMap
+        ?? buildParameterIndex(query);
 
       let statement = this.compileQuery(query);
 
@@ -322,8 +322,8 @@ export class EdgeQLCompiler {
         );
         if (!decision.allowed) {
           throw new CompilationError(
-            decision.denialMessage ??
-              `INSERT not allowed on ${objectType}: ${decision.reason}`,
+            decision.denialMessage
+              ?? `INSERT not allowed on ${objectType}: ${decision.reason}`,
           );
         }
         return statement;
@@ -338,8 +338,8 @@ export class EdgeQLCompiler {
         );
         if (!decision.allowed) {
           throw new CompilationError(
-            decision.denialMessage ??
-              `UPDATE not allowed on ${objectType}: ${decision.reason}`,
+            decision.denialMessage
+              ?? `UPDATE not allowed on ${objectType}: ${decision.reason}`,
           );
         }
 
@@ -389,8 +389,8 @@ export class EdgeQLCompiler {
         );
         if (!decision.allowed) {
           throw new CompilationError(
-            decision.denialMessage ??
-              `DELETE not allowed on ${objectType}: ${decision.reason}`,
+            decision.denialMessage
+              ?? `DELETE not allowed on ${objectType}: ${decision.reason}`,
           );
         }
 
@@ -509,7 +509,7 @@ export class EdgeQLCompiler {
       case "ConfigureQuery":
         return this.compileConfigureQuery(query as EdgeQLAST.ConfigureQuery);
       default:
-        throw new CompilationError(`Unsupported query type: ${(query as { kind: string }).kind}`);
+        throw new CompilationError(`Unsupported query type: ${(query as { kind: string; }).kind}`);
     }
   }
 
@@ -859,8 +859,8 @@ export class EdgeQLCompiler {
         // the shape elements, referencing the derived table alias directly.
         const fields: SQL.JsonField[] = [];
         for (const element of shape.elements) {
-          const propName = element.name?.name ||
-            (element.expr.kind === "Identifier" ? element.expr.name : null);
+          const propName = element.name?.name
+            || (element.expr.kind === "Identifier" ? element.expr.name : null);
           if (propName) {
             fields.push(
               SQL.createJsonField(
@@ -973,8 +973,8 @@ export class EdgeQLCompiler {
     const cols = new Map<string, string>();
     for (const element of shape.elements) {
       if (!element.typeFilter) continue;
-      const propName = element.name?.name ||
-        (element.expr.kind === "Identifier" ? element.expr.name : "");
+      const propName = element.name?.name
+        || (element.expr.kind === "Identifier" ? element.expr.name : "");
       if (!propName) continue;
       const filterTypeDef = Context.resolveTypeName(this.ctx, element.typeFilter);
       if (!filterTypeDef) continue;
@@ -1012,7 +1012,7 @@ export class EdgeQLCompiler {
     typeDef: Context.TypeDef,
     resolvedName: string,
     shape?: EdgeQLAST.Shape,
-  ): { selectItems: SQL.SelectItem[]; fromClause: SQL.FromClause } | null {
+  ): { selectItems: SQL.SelectItem[]; fromClause: SQL.FromClause; } | null {
     const allSubs = Context.getAllSubtypes(this.ctx.schema, resolvedName);
     const concreteSubs = allSubs
       .map((n) => this.ctx.schema.types.get(n))
@@ -1217,8 +1217,8 @@ export class EdgeQLCompiler {
     }
 
     // Resolve the property from the filtered type
-    const propName = element.name?.name ||
-      (element.expr.kind === "Identifier" ? element.expr.name : "");
+    const propName = element.name?.name
+      || (element.expr.kind === "Identifier" ? element.expr.name : "");
     if (!propName) {
       throw new CompilationError(
         "Polymorphic shape element must reference a property",
@@ -1338,8 +1338,8 @@ export class EdgeQLCompiler {
         );
       }
       const reverseLink = targetTypeDef.links.get(link.backlink);
-      const fkColumn = reverseLink?.columnName ||
-        `${link.name.toLowerCase()}_id`;
+      const fkColumn = reverseLink?.columnName
+        || `${link.name.toLowerCase()}_id`;
 
       const subquery = SQL.createSelectStatement({
         select: SQL.createSelectClause([
@@ -1458,8 +1458,8 @@ export class EdgeQLCompiler {
       // Reverse link (multi): target.fk_column = parent.id
       // Find the reverse link's column name from the target type
       const reverseLink = targetTypeDef.links.get(link.backlink || "");
-      const fkColumn = reverseLink?.columnName ||
-        `${link.name.toLowerCase()}_id`;
+      const fkColumn = reverseLink?.columnName
+        || `${link.name.toLowerCase()}_id`;
       joinCondition = SQL.createBinaryExpression(
         "=",
         SQL.createColumnReference(fkColumn, targetTypeDef.tableName),
@@ -1505,8 +1505,8 @@ export class EdgeQLCompiler {
         // Check if this is an enum literal (e.g., Status.active)
         const enumDef = Context.resolveTypeName(this.ctx, typeStep.name);
         if (
-          enumDef && Array.isArray(enumDef.enumValues) &&
-          enumDef.enumValues.length > 0
+          enumDef && Array.isArray(enumDef.enumValues)
+          && enumDef.enumValues.length > 0
         ) {
           const enumExpr = this.compileEnumLiteral(
             typeStep.name,
@@ -1850,8 +1850,8 @@ export class EdgeQLCompiler {
 
     // Check for schema:: / cfg:: introspection functions
     if (
-      qualifiedName.startsWith("schema::") ||
-      qualifiedName.startsWith("cfg::")
+      qualifiedName.startsWith("schema::")
+      || qualifiedName.startsWith("cfg::")
     ) {
       return this.compileIntrospectionFunction(qualifiedName, funcCall);
     }
@@ -1868,8 +1868,8 @@ export class EdgeQLCompiler {
           throw new CompilationError("contains() requires exactly 2 arguments");
         }
         const containsFirstArg = funcCall.args[0].value;
-        const isContainsRangeArg = containsFirstArg.kind === "FunctionCall" &&
-          containsFirstArg.name.parts.join("_") === "range";
+        const isContainsRangeArg = containsFirstArg.kind === "FunctionCall"
+          && containsFirstArg.name.parts.join("_") === "range";
         if (isContainsRangeArg) {
           return SQL.createBinaryExpression("@>", args[0], args[1]);
         }
@@ -2122,8 +2122,8 @@ export class EdgeQLCompiler {
           );
         }
         const getFieldArg = funcCall.args[1].value;
-        const getField = getFieldArg.kind === "Literal" &&
-            typeof getFieldArg.value === "string"
+        const getField = getFieldArg.kind === "Literal"
+            && typeof getFieldArg.value === "string"
           ? getFieldArg.value
           : "epoch";
         return {
@@ -2294,8 +2294,8 @@ export class EdgeQLCompiler {
     // underscore-joined form (`std_md5`); fall back to the qualified
     // form (`std::md5`) for entries that prefer the user-facing key.
     let sqlName = functionName;
-    const funcDef = this.ctx.schema.functions.get(functionName) ??
-      this.ctx.schema.functions.get(qualifiedName);
+    const funcDef = this.ctx.schema.functions.get(functionName)
+      ?? this.ctx.schema.functions.get(qualifiedName);
     if (funcDef?.windowOnly) {
       throw new CompilationError(
         `Function '${functionName}' requires an OVER clause`,
@@ -2467,9 +2467,9 @@ export class EdgeQLCompiler {
       const secondStep = path.steps[1];
       const enumDefPath = firstStep.type === "property" ? Context.resolveTypeName(this.ctx, firstStep.name) : undefined;
       if (
-        firstStep.type === "property" && secondStep.type === "property" &&
-        enumDefPath && Array.isArray(enumDefPath.enumValues) &&
-        enumDefPath.enumValues.length > 0
+        firstStep.type === "property" && secondStep.type === "property"
+        && enumDefPath && Array.isArray(enumDefPath.enumValues)
+        && enumDefPath.enumValues.length > 0
       ) {
         return this.compileEnumLiteral(firstStep.name, secondStep.name);
       }
@@ -2507,8 +2507,8 @@ export class EdgeQLCompiler {
 
     if (!typeDef.enumValues.includes(memberName)) {
       throw new CompilationError(
-        `'${memberName}' is not a member of enum type '${enumTypeName}'. ` +
-          `Valid members: ${typeDef.enumValues.join(", ")}`,
+        `'${memberName}' is not a member of enum type '${enumTypeName}'. `
+          + `Valid members: ${typeDef.enumValues.join(", ")}`,
       );
     }
 
@@ -2769,10 +2769,10 @@ export class EdgeQLCompiler {
       // Validate recursive CTEs: must contain a UNION (which maps to SQL
       // UNION ALL) between a base case and recursive case
       if (binding.recursive) {
-        const hasUnion = binding.value.kind === "Subquery" &&
-          binding.value.query.kind === "SelectQuery" &&
-          binding.value.query.expr.kind === "BinaryOp" &&
-          (binding.value.query.expr as EdgeQLAST.BinaryOp).op === "UNION";
+        const hasUnion = binding.value.kind === "Subquery"
+          && binding.value.query.kind === "SelectQuery"
+          && binding.value.query.expr.kind === "BinaryOp"
+          && (binding.value.query.expr as EdgeQLAST.BinaryOp).op === "UNION";
 
         if (!hasUnion) {
           throw new CompilationError(
@@ -2792,8 +2792,8 @@ export class EdgeQLCompiler {
         // Compile the CTE inner query as raw columns (SELECT * FROM ...)
         // so the body query can reference individual columns by name
         if (
-          underlyingTypeName &&
-          binding.value.query.kind === "SelectQuery"
+          underlyingTypeName
+          && binding.value.query.kind === "SelectQuery"
         ) {
           bindingQuery = this.compileSelectQueryRaw(binding.value.query);
         } else {
@@ -2964,9 +2964,9 @@ export class EdgeQLCompiler {
       // multi-row INSERT instead of UNION ALL (which is invalid for INSERTs)
       if (
         compiledQueries.every((q) =>
-          q.kind === "InsertStatement" &&
-          (q as SQL.InsertStatement).table ===
-            (compiledQueries[0] as SQL.InsertStatement).table
+          q.kind === "InsertStatement"
+          && (q as SQL.InsertStatement).table
+            === (compiledQueries[0] as SQL.InsertStatement).table
         )
       ) {
         const first = compiledQueries[0] as SQL.InsertStatement;
@@ -3246,7 +3246,7 @@ export class EdgeQLCompiler {
     const literalKinds = new Set<string>();
     for (const el of arrayExpr.elements) {
       if (el.kind === "Literal") {
-        literalKinds.add(typeof (el as { value: unknown }).value);
+        literalKinds.add(typeof (el as { value: unknown; }).value);
       }
     }
     if (literalKinds.size > 1) {
@@ -3352,8 +3352,8 @@ export class EdgeQLCompiler {
   ): SQL.SQLExpression {
     const typeName = introspection.type.name.parts.join("::");
     throw new CompilationError(
-      `Introspection queries (INTROSPECT ${typeName}) are not yet supported. ` +
-        `Schema metadata queries require the schema reflection catalog.`,
+      `Introspection queries (INTROSPECT ${typeName}) are not yet supported. `
+        + `Schema metadata queries require the schema reflection catalog.`,
     );
   }
 
@@ -3365,16 +3365,16 @@ export class EdgeQLCompiler {
 
     // String key access → jsonb -> 'key'
     if (
-      indexExpr.index.kind === "Literal" &&
-      indexExpr.index.type === "string"
+      indexExpr.index.kind === "Literal"
+      && indexExpr.index.type === "string"
     ) {
       return SQL.createJsonbAccess(base, "->", idx);
     }
 
     // JSON type cast base → jsonb -> index
     if (
-      indexExpr.expr.kind === "TypeCast" &&
-      indexExpr.expr.type.name.parts.some((p: string) => p === "json" || p === "jsonb")
+      indexExpr.expr.kind === "TypeCast"
+      && indexExpr.expr.type.name.parts.some((p: string) => p === "json" || p === "jsonb")
     ) {
       return SQL.createJsonbAccess(base, "->", idx);
     }

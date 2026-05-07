@@ -8,11 +8,11 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
+import { TypeScriptGenerator } from "../codegen/typescript-generator.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
+import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { describeSchema, describeType } from "./introspection.ts";
-import { TypeScriptGenerator } from "../codegen/typescript-generator.ts";
 
 const RUN_PG = canRunPgTests();
 

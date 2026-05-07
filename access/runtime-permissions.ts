@@ -30,13 +30,13 @@
  */
 
 export type PermissionSpec =
-  | { name: "read"; path?: string }
-  | { name: "write"; path?: string }
-  | { name: "net"; host?: string }
-  | { name: "env"; variable?: string }
-  | { name: "run"; command?: string }
-  | { name: "sys"; kind?: string }
-  | { name: "ffi"; path?: string };
+  | { name: "read"; path?: string; }
+  | { name: "write"; path?: string; }
+  | { name: "net"; host?: string; }
+  | { name: "env"; variable?: string; }
+  | { name: "run"; command?: string; }
+  | { name: "sys"; kind?: string; }
+  | { name: "ffi"; path?: string; };
 
 /** Permission state — Deno returns "granted" / "denied" / "prompt". */
 export type PermissionState = "granted" | "denied" | "prompt";

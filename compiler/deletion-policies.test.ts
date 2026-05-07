@@ -7,12 +7,12 @@
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import { SDLParser } from "../schema/parser.ts";
-import { SchemaValidator } from "../schema/validator.ts";
 import { DDLGenerator } from "../migration/ddl.ts";
 import { SchemaDiffer } from "../migration/differ.ts";
-import { Module } from "../schema/converter.ts";
 import * as Types from "../migration/types.ts";
+import { Module } from "../schema/converter.ts";
+import { SDLParser } from "../schema/parser.ts";
+import { SchemaValidator } from "../schema/validator.ts";
 
 // ============================================================
 // Helpers
@@ -165,8 +165,8 @@ Deno.test("Differ: mapOnTargetDelete set empty returns SET NULL", () => {
   const ops = diffFromEmpty(sdl);
   const createComment = ops.find(
     (op) =>
-      op.kind === "CreateType" &&
-      (op as Types.CreateTypeOperation).typeName === "Comment",
+      op.kind === "CreateType"
+      && (op as Types.CreateTypeOperation).typeName === "Comment",
   ) as Types.CreateTypeOperation;
 
   assertEquals(createComment !== undefined, true);
@@ -190,8 +190,8 @@ Deno.test("Differ: link with onSourceDelete extracted correctly", () => {
   const ops = diffFromEmpty(sdl);
   const createParent = ops.find(
     (op) =>
-      op.kind === "CreateType" &&
-      (op as Types.CreateTypeOperation).typeName === "Parent",
+      op.kind === "CreateType"
+      && (op as Types.CreateTypeOperation).typeName === "Parent",
   ) as Types.CreateTypeOperation;
 
   assertEquals(createParent !== undefined, true);
@@ -224,8 +224,8 @@ Deno.test("Differ: onSourceDelete change detected in diff", () => {
   const ops = diffSchemas(oldSdl, newSdl);
   const alterParent = ops.find(
     (op) =>
-      op.kind === "AlterType" &&
-      (op as Types.AlterTypeOperation).typeName === "Parent",
+      op.kind === "AlterType"
+      && (op as Types.AlterTypeOperation).typeName === "Parent",
   ) as Types.AlterTypeOperation;
 
   assertEquals(alterParent !== undefined, true);
@@ -386,8 +386,8 @@ Deno.test("Differ: onSourceDelete allow extracted correctly", () => {
   const ops = diffFromEmpty(sdl);
   const createOrder = ops.find(
     (op) =>
-      op.kind === "CreateType" &&
-      (op as Types.CreateTypeOperation).typeName === "Order",
+      op.kind === "CreateType"
+      && (op as Types.CreateTypeOperation).typeName === "Order",
   ) as Types.CreateTypeOperation;
 
   assertEquals(createOrder !== undefined, true);

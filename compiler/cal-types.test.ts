@@ -15,15 +15,15 @@
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import { EdgeQLParser } from "../edgeql/parser.ts";
-import { EdgeQLCompiler } from "./compiler.ts";
-import { SQLCodeGenerator } from "./codegen.ts";
-import { SchemaManager } from "../migration/schema-manager.ts";
-import { DDLGenerator } from "../migration/ddl.ts";
-import * as MigrationTypes from "../migration/types.ts";
 import * as Types from "../codegen/types.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
+import { DDLGenerator } from "../migration/ddl.ts";
+import { SchemaManager } from "../migration/schema-manager.ts";
+import * as MigrationTypes from "../migration/types.ts";
 import { SDLParser } from "../schema/parser.ts";
 import { SchemaValidator } from "../schema/validator.ts";
+import { SQLCodeGenerator } from "./codegen.ts";
+import { EdgeQLCompiler } from "./compiler.ts";
 import { Schema } from "./context.ts";
 
 // ---------------------------------------------------------------------------

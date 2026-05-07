@@ -80,8 +80,8 @@ export class SDLConverter {
 
       for (const item of module.items) {
         if (
-          item.kind === "TypeDeclaration" ||
-          item.kind === "ScalarTypeDeclaration"
+          item.kind === "TypeDeclaration"
+          || item.kind === "ScalarTypeDeclaration"
         ) {
           const qualifiedName = modulePrefix + item.name.value;
           types.set(qualifiedName, item);

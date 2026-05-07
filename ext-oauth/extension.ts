@@ -3,13 +3,13 @@
  */
 
 import { BaseExtension } from "../extensions/base-extension.ts";
-import type { ExtensionContext, ExtensionDatabaseSetup, ExtensionMetadata, ExtensionRoute } from "../extensions/types.ts";
 import { ExtensionConfigError } from "../extensions/errors.ts";
-import type { OAuthConfig, OAuthErrorResponse, OAuthProviderConfig } from "./types.ts";
-import { OAuthStateManager } from "./state-manager.ts";
+import type { ExtensionContext, ExtensionDatabaseSetup, ExtensionMetadata, ExtensionRoute } from "../extensions/types.ts";
 import { normalizePkceParam } from "./pkce.ts";
 import { matchRedirectUri } from "./redirect-matcher.ts";
+import { OAuthStateManager } from "./state-manager.ts";
 import { exchangeCodeForToken, fetchUserInfo } from "./token-exchange.ts";
+import type { OAuthConfig, OAuthErrorResponse, OAuthProviderConfig } from "./types.ts";
 
 const MAX_METADATA_BYTES = 2048;
 
@@ -199,9 +199,9 @@ export class OAuthExtension extends BaseExtension {
         400,
       );
     } else {
-      redirectUri = provider.redirectUri ??
-        this.config.defaultRedirectUri ??
-        "";
+      redirectUri = provider.redirectUri
+        ?? this.config.defaultRedirectUri
+        ?? "";
     }
 
     // gh/geldata#8841: caller-supplied opaque metadata carried through

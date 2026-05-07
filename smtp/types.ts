@@ -28,7 +28,7 @@ export interface SmtpConfig {
    * Optional SMTP authentication. When provided, the client picks
    * AUTH PLAIN if advertised, otherwise AUTH LOGIN.
    */
-  auth?: { user: string; pass: string };
+  auth?: { user: string; pass: string; };
   /** Default From address (RFC 5322). Email.from overrides per send. */
   from: string;
   /** SMTP server hostname or IP. */
@@ -147,5 +147,5 @@ export interface SmtpConnectImpl {
    * STARTTLS upgrade. Default impl wraps `Deno.startTls`. Tests can
    * return the same conn to skip TLS layering.
    */
-  startTls(conn: SmtpConn, opts: { hostname: string }): Promise<SmtpConn>;
+  startTls(conn: SmtpConn, opts: { hostname: string; }): Promise<SmtpConn>;
 }

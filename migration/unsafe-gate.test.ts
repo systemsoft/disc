@@ -1,10 +1,10 @@
 // deno-lint-ignore-file no-explicit-any
 import { assertEquals, assertStringIncludes } from "@std/assert";
 
-import { MigrationEngine } from "./engine.ts";
-import { SchemaManager } from "./schema-manager.ts";
 import { SDLParser } from "../schema/parser.ts";
 import { SchemaValidator } from "../schema/validator.ts";
+import { MigrationEngine } from "./engine.ts";
+import { SchemaManager } from "./schema-manager.ts";
 
 /**
  * gh/geldata#1838: forward-direction destructive-op classifier and

@@ -3,8 +3,8 @@
  */
 
 import { assertEquals } from "@std/assert";
-import { VectorExtension } from "./extension.ts";
 import type { ExtensionContext } from "../extensions/types.ts";
+import { VectorExtension } from "./extension.ts";
 
 // ── Test helpers ───────────────────────────────────────────────────────
 
@@ -25,10 +25,10 @@ function makeContext(): ExtensionContext {
       info: () => {},
       warn: () => {},
       error: () => {},
-      child: function () {
+      child: function() {
         return this;
       },
-      withRequest: function () {
+      withRequest: function() {
         return this;
       },
     } as unknown as ExtensionContext["logger"],

@@ -27,9 +27,9 @@
  * `require_auth=true`.
  */
 
+import { getLogger } from "../../lib/logger.ts";
 import { DataWatchRegistry } from "./data-watch-registry.ts";
 import { formatSseEvent } from "./schema-watch.ts";
-import { getLogger } from "../../lib/logger.ts";
 
 const log = getLogger("admin/data-watch");
 

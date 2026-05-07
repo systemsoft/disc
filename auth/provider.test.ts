@@ -1,9 +1,9 @@
 import { assertEquals, assertExists, assertRejects } from "@std/assert";
 import { afterEach, beforeEach, describe, it } from "@std/testing/bdd";
-import { AuthProvider } from "./provider.ts";
-import { AuthConfig, AuthErrorCode, LoginCredentials, RegisterData, requireAuthResponse } from "./types.ts";
-import { TestDatabase } from "./test-database.ts";
 import { configureLogging } from "../lib/logger.ts";
+import { AuthProvider } from "./provider.ts";
+import { TestDatabase } from "./test-database.ts";
+import { AuthConfig, AuthErrorCode, LoginCredentials, RegisterData, requireAuthResponse } from "./types.ts";
 
 describe("AuthProvider", () => {
   let provider: AuthProvider;
@@ -757,8 +757,8 @@ describe("AuthProvider", () => {
 
         const capRevocations = events.filter(
           (e) =>
-            e.event === "session_revoked" &&
-            e.reason === "max_sessions_per_user",
+            e.event === "session_revoked"
+            && e.reason === "max_sessions_per_user",
         );
         assertEquals(
           capRevocations.length >= 1,

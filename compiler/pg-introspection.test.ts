@@ -13,12 +13,12 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
-import { ConnectionPool } from "../lib/connection-pool.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
-import { EdgeQLCompiler } from "./compiler.ts";
-import { SQLCodeGenerator } from "./codegen.ts";
+import { ConnectionPool } from "../lib/connection-pool.ts";
+import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { getBuiltinFunctions } from "./builtin-functions.ts";
+import { SQLCodeGenerator } from "./codegen.ts";
+import { EdgeQLCompiler } from "./compiler.ts";
 import type { Schema, TypeDef } from "./context.ts";
 
 const RUN_PG = canRunPgTests();
@@ -192,7 +192,7 @@ Deno.test({
       assertExists(json);
       assertEquals(Array.isArray(json.types), true);
 
-      const types = json.types as Array<{ name: string }>;
+      const types = json.types as Array<{ name: string; }>;
       const typeNames = types.map((t) => t.name);
       assertEquals(typeNames.includes("User"), true);
       assertEquals(typeNames.includes("Post"), true);
@@ -246,14 +246,14 @@ Deno.test({
       const json = Object.values(row)[0] as Record<string, unknown>;
 
       // Check properties
-      const props = json.properties as Array<{ name: string; type: string }>;
+      const props = json.properties as Array<{ name: string; type: string; }>;
       const propNames = props.map((p) => p.name);
       assertEquals(propNames.includes("title"), true);
       assertEquals(propNames.includes("id"), true);
 
       // Check links
       const links = json.links as Array<
-        { name: string; target: string; cardinality: string }
+        { name: string; target: string; cardinality: string; }
       >;
       const authorLink = links.find((l) => l.name === "author");
       assertExists(authorLink);

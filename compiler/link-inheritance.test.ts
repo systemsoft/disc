@@ -7,12 +7,12 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
-import { SDLParser } from "../schema/parser.ts";
-import { SchemaManager } from "../migration/schema-manager.ts";
-import { SchemaValidator } from "../schema/validator.ts";
 import { SchemaDiffer } from "../migration/differ.ts";
-import { SDLConverter } from "../schema/converter.ts";
+import { SchemaManager } from "../migration/schema-manager.ts";
 import type { LinkDeclaration, TypeDeclaration } from "../schema/ast.ts";
+import { SDLConverter } from "../schema/converter.ts";
+import { SDLParser } from "../schema/parser.ts";
+import { SchemaValidator } from "../schema/validator.ts";
 
 // ---------------------------------------------------------------------------
 // Helper: parse SDL and return the document AST
@@ -313,7 +313,7 @@ Deno.test("link inheritance - differ: extending change detected", () => {
     operations: {
       kind: string;
       linkName?: string;
-      changes?: { kind: string }[];
+      changes?: { kind: string; }[];
     }[];
   };
   assertEquals(alterTypeOp.typeName, "User");
@@ -357,13 +357,13 @@ Deno.test("link inheritance - differ: link with extending extracted correctly", 
   // Find the CreateType operation for User
   const createUser = operations.find(
     (op) =>
-      op.kind === "CreateType" &&
-      (op as unknown as { typeName: string }).typeName === "User",
+      op.kind === "CreateType"
+      && (op as unknown as { typeName: string; }).typeName === "User",
   );
   assertExists(createUser, "CreateType for User should exist");
 
   const userOp = createUser as unknown as {
-    links: { name: string; extending?: string[] }[];
+    links: { name: string; extending?: string[]; }[];
   };
   const friendsLink = userOp.links.find((l) => l.name === "friends");
   assertExists(friendsLink, "friends link should be in CreateType operation");

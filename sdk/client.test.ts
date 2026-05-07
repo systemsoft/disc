@@ -44,7 +44,7 @@ Deno.test("client - query returns data", async () => {
   const restore = mockFetch((_url) => new Response(JSON.stringify({ data: [{ name: "Ada" }] })));
   try {
     const client = new DiscClient();
-    const result = await client.query<{ name: string }[]>(
+    const result = await client.query<{ name: string; }[]>(
       "select User { name }",
     );
     assertEquals(result, [{ name: "Ada" }]);

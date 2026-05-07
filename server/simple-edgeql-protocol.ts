@@ -15,15 +15,15 @@
  * default modules.
  */
 
-import * as Types from "./types.ts";
-import type { HealthStatus } from "./types.ts";
+import * as Context from "../compiler/context.ts";
 import * as EdgeQL from "../edgeql/mod.ts";
 import { isWriteQuery } from "../edgeql/query-capabilities.ts";
-import * as Context from "../compiler/context.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { DatabaseExecutionError } from "../lib/errors.ts";
-import type { DatabaseRegistry } from "./database-registry.ts";
 import { getLogger } from "../lib/logger.ts";
+import type { DatabaseRegistry } from "./database-registry.ts";
+import * as Types from "./types.ts";
+import type { HealthStatus } from "./types.ts";
 
 const log = getLogger("simple-edgeql-protocol");
 
@@ -54,7 +54,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
 
     if (options.enableAccessPolicies) {
       log.warn(
-        'Access policies are not supported by SimpleEdgeQLProtocolHandler. Use protocol: "full" for access policy enforcement.',
+        "Access policies are not supported by SimpleEdgeQLProtocolHandler. Use protocol: \"full\" for access policy enforcement.",
       );
     }
 
@@ -218,8 +218,9 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
   }
 
   private parseEdgeQL(query: string):
-    | { success: true; ast: EdgeQL.Query; token_count: number }
-    | { success: false; error: string } {
+    | { success: true; ast: EdgeQL.Query; token_count: number; }
+    | { success: false; error: string; }
+  {
     try {
       // Use the real EdgeQL lexer
       const lexer = new EdgeQL.EdgeQLLexer(query);
@@ -254,8 +255,9 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
     ast: EdgeQL.Query,
     variables: Record<string, any>,
   ):
-    | { success: true; sql: string }
-    | { success: false; error: string } {
+    | { success: true; sql: string; }
+    | { success: false; error: string; }
+  {
     try {
       // Simulate compilation based on AST structure
       let sql = "";
@@ -445,7 +447,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
     sql: string,
     variables: Record<string, any>,
     context: Types.QueryContext,
-  ): Promise<{ data: any; warnings?: string[] }> {
+  ): Promise<{ data: any; warnings?: string[]; }> {
     log.info("Executing SQL", { sql });
     log.info("Query variables", { variables: JSON.stringify(variables) });
     log.info("Query session", { sessionId: context.session.sessionId });
@@ -479,13 +481,13 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
         if (normalizedSQL.includes("select")) {
           return { data: result.rows };
         } else if (
-          normalizedSQL.includes("insert") &&
-          normalizedSQL.includes("returning")
+          normalizedSQL.includes("insert")
+          && normalizedSQL.includes("returning")
         ) {
           return { data: result.rows[0] || { success: true } };
         } else if (
-          normalizedSQL.includes("update") &&
-          normalizedSQL.includes("returning")
+          normalizedSQL.includes("update")
+          && normalizedSQL.includes("returning")
         ) {
           return { data: result.rows[0] || { updated: result.rowCount } };
         } else if (normalizedSQL.includes("delete")) {
@@ -518,7 +520,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
     sql: string,
     _variables: Record<string, any>,
     context: Types.QueryContext,
-  ): { data: any; warnings?: string[] } {
+  ): { data: any; warnings?: string[]; } {
     // Original mock implementation for fallback
     const normalizedSQL = sql.toLowerCase().trim();
 
@@ -584,7 +586,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
 
   private check_balanced_braces(
     query: string,
-  ): { valid: boolean; position: number } {
+  ): { valid: boolean; position: number; } {
     let depth = 0;
     let position = 0;
 

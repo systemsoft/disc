@@ -4,11 +4,11 @@
  */
 
 import { assertEquals } from "@std/assert";
+import type { AuthContext, RequestHandler } from "../auth/middleware.ts";
+import type { AuthResponse, LoginCredentials, RegisterData, TokenPayload, User } from "../auth/types.ts";
 import { AuthExtensionAdapter } from "./auth-extension.ts";
 import type { AuthExtensionAdapterOptions } from "./auth-extension.ts";
 import type { ExtensionContext } from "./types.ts";
-import type { AuthResponse, LoginCredentials, RegisterData, TokenPayload, User } from "../auth/types.ts";
-import type { AuthContext, RequestHandler } from "../auth/middleware.ts";
 
 // ── Test helpers ──────────────────────────────────────────────────────
 
@@ -29,10 +29,10 @@ function makeContext(): ExtensionContext {
       error: () => {},
       info: () => {},
       warn: () => {},
-      child: function () {
+      child: function() {
         return this;
       },
-      withRequest: function () {
+      withRequest: function() {
         return this;
       },
     } as unknown as ExtensionContext["logger"],
@@ -242,7 +242,7 @@ Deno.test("AuthExtensionAdapter - healthCheck returns healthy after initialize w
     ...mockAuthProvider,
     verifyToken: (_token: string): Promise<TokenPayload> => {
       const err = new Error("Invalid token");
-      (err as Error & { name: string }).name = "AuthError";
+      (err as Error & { name: string; }).name = "AuthError";
       return Promise.reject(err);
     },
   };

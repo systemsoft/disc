@@ -5,8 +5,8 @@
 
 import { assertEquals } from "@std/assert";
 import { EdgeQLParser } from "../edgeql/parser.ts";
-import { EdgeQLCompiler } from "./compiler.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
+import { EdgeQLCompiler } from "./compiler.ts";
 import * as Context from "./context.ts";
 
 // Create a minimal schema for testing
@@ -148,7 +148,7 @@ Deno.test("Simple SELECT - Basic query", () => {
 });
 
 Deno.test("Simple SELECT - With filter", () => {
-  const edgeql = 'SELECT User FILTER .name = "Ada"';
+  const edgeql = "SELECT User FILTER .name = \"Ada\"";
 
   // Parse
   const parser = new EdgeQLParser(edgeql);

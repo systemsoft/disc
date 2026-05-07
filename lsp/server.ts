@@ -13,7 +13,10 @@
  * transport.
  */
 
+import { provideCompletion } from "./completion.ts";
+import { provideDefinition } from "./definition.ts";
 import { analyzeDiscDocument } from "./diagnostics.ts";
+import { provideDocumentSymbols } from "./document-symbols.ts";
 import {
   analyzeEmbeddedDocument,
   type EmbeddedSdlContext,
@@ -22,14 +25,8 @@ import {
   provideEmbeddedDefinition,
   provideEmbeddedHover,
 } from "./embedded-edgeql.ts";
-import { provideHover } from "./hover.ts";
-import { provideCompletion } from "./completion.ts";
-import { provideDefinition } from "./definition.ts";
-import { provideDocumentSymbols } from "./document-symbols.ts";
 import { provideFormatting } from "./formatting.ts";
-import { provideReferences } from "./references.ts";
-import { prepareRename, provideRename } from "./rename.ts";
-import { provideSemanticTokens, SEMANTIC_TOKEN_LEGEND } from "./semantic-tokens.ts";
+import { provideHover } from "./hover.ts";
 import {
   type DidChangeTextDocumentParams,
   type DidCloseTextDocumentParams,
@@ -49,6 +46,9 @@ import {
   type TextDocumentPositionParams,
   TextDocumentSyncKind,
 } from "./protocol.ts";
+import { provideReferences } from "./references.ts";
+import { prepareRename, provideRename } from "./rename.ts";
+import { provideSemanticTokens, SEMANTIC_TOKEN_LEGEND } from "./semantic-tokens.ts";
 
 type Sender = (msg: RpcMessage) => void;
 
@@ -169,7 +169,7 @@ export class LanguageServer {
       }
 
       case "textDocument/documentSymbol": {
-        const params = req.params as { textDocument: TextDocumentIdentifier };
+        const params = req.params as { textDocument: TextDocumentIdentifier; };
         const doc = this.docs.get(params.textDocument.uri);
         if (!doc) {
           this.respond(req.id, []);
@@ -305,7 +305,7 @@ export class LanguageServer {
    * providers fall back to Phase 6 behavior (keywords + scalars only).
    */
   private collectSdlContext(): EmbeddedSdlContext {
-    const documents: { uri: DocumentUri; text: string }[] = [];
+    const documents: { uri: DocumentUri; text: string; }[] = [];
     for (const [uri, doc] of this.docs) {
       if (uri.endsWith(".disc")) {
         documents.push({ uri, text: doc.text });
@@ -487,9 +487,9 @@ export async function runStdio(): Promise<number> {
 
       // The `exit` notification ends the loop after a prior shutdown.
       if (
-        "method" in msg &&
-        msg.method === "exit" &&
-        !("id" in msg)
+        "method" in msg
+        && msg.method === "exit"
+        && !("id" in msg)
       ) {
         return server.isShutdownRequested() ? 0 : 1;
       }
@@ -503,10 +503,10 @@ function findHeaderEnd(buf: Uint8Array): number {
   // Look for `\r\n\r\n` (0x0D 0x0A 0x0D 0x0A).
   for (let i = 0; i + 3 < buf.byteLength; i++) {
     if (
-      buf[i] === 0x0d &&
-      buf[i + 1] === 0x0a &&
-      buf[i + 2] === 0x0d &&
-      buf[i + 3] === 0x0a
+      buf[i] === 0x0d
+      && buf[i + 1] === 0x0a
+      && buf[i + 2] === 0x0d
+      && buf[i + 3] === 0x0a
     ) {
       return i;
     }

@@ -248,11 +248,11 @@ export class SchemaDiffer {
         const newReadonly = newGlobalDef.decl.readonly ?? false;
 
         if (
-          oldType !== newType ||
-          oldRequired !== newRequired ||
-          oldMulti !== newMulti ||
-          oldDefault !== newDefault ||
-          oldReadonly !== newReadonly
+          oldType !== newType
+          || oldRequired !== newRequired
+          || oldMulti !== newMulti
+          || oldDefault !== newDefault
+          || oldReadonly !== newReadonly
         ) {
           operations.push(
             Types.dropGlobalOperation(
@@ -381,10 +381,10 @@ export class SchemaDiffer {
 
   private extractGlobals(
     modules: Module[],
-  ): Map<string, { decl: AST.GlobalDeclaration; module: string }> {
+  ): Map<string, { decl: AST.GlobalDeclaration; module: string; }> {
     const globals = new Map<
       string,
-      { decl: AST.GlobalDeclaration; module: string }
+      { decl: AST.GlobalDeclaration; module: string; }
     >();
 
     for (const module of modules) {
@@ -953,8 +953,8 @@ export class SchemaDiffer {
       const oldTrigger = oldTriggersMap.get(triggerName);
       if (oldTrigger) {
         const timingChanged = oldTrigger.timing !== newTrigger.timing;
-        const eventsChanged = JSON.stringify([...oldTrigger.events].sort()) !==
-          JSON.stringify([...newTrigger.events].sort());
+        const eventsChanged = JSON.stringify([...oldTrigger.events].sort())
+          !== JSON.stringify([...newTrigger.events].sort());
         const scopeChanged = oldTrigger.scope !== newTrigger.scope;
         const bodyChanged = oldTrigger.body !== newTrigger.body;
 
@@ -1164,7 +1164,7 @@ export class SchemaDiffer {
           this.extractExpressionString(expr.alternate)
         }`;
       default:
-        return String((expr as { kind: string }).kind);
+        return String((expr as { kind: string; }).kind);
     }
   }
 
@@ -1211,10 +1211,10 @@ export class SchemaDiffer {
 
   private extractScalars(
     modules: Module[],
-  ): Map<string, { decl: AST.ScalarTypeDeclaration; module: string }> {
+  ): Map<string, { decl: AST.ScalarTypeDeclaration; module: string; }> {
     const scalars = new Map<
       string,
-      { decl: AST.ScalarTypeDeclaration; module: string }
+      { decl: AST.ScalarTypeDeclaration; module: string; }
     >();
 
     for (const module of modules) {
@@ -1312,8 +1312,8 @@ export class SchemaDiffer {
     // No removals — check whether the *retained* values kept their order.
     const retainedOld = oldValues.filter((v) => newSet.has(v));
     const retainedNew = newValues.filter((v) => oldSet.has(v));
-    const reordered = retainedOld.length > 0 &&
-      retainedOld.some((v, i) => v !== retainedNew[i]);
+    const reordered = retainedOld.length > 0
+      && retainedOld.some((v, i) => v !== retainedNew[i]);
 
     if (reordered) {
       return [

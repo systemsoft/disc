@@ -6,13 +6,13 @@
  */
 
 import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
-import { EdgeQLParser } from "../edgeql/parser.ts";
-import { EdgeQLCompiler } from "./compiler.ts";
-import { SQLCodeGenerator } from "./codegen.ts";
-import type { Schema, TypeDef } from "./context.ts";
-import { getBuiltinFunctions } from "./builtin-functions.ts";
-import { CompilationError } from "../lib/errors.ts";
 import type * as AST from "../edgeql/ast.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
+import { CompilationError } from "../lib/errors.ts";
+import { getBuiltinFunctions } from "./builtin-functions.ts";
+import { SQLCodeGenerator } from "./codegen.ts";
+import { EdgeQLCompiler } from "./compiler.ts";
+import type { Schema, TypeDef } from "./context.ts";
 
 // ---------------------------------------------------------------------------
 // Test schema: types in multiple modules

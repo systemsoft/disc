@@ -2,12 +2,12 @@
  * EdgeQL Compiler with Access Control Integration
  */
 
+import { AccessConfig, AccessContext, AccessEvaluator, AccessPolicy, AccessSQLInjector } from "../access/mod.ts";
 import * as EdgeQLAST from "../edgeql/ast.ts";
-import * as SQL from "./sql.ts";
-import * as Context from "./context.ts";
 import { CompilationError } from "../lib/errors.ts";
 import { Err, Ok, Result } from "../lib/result.ts";
-import { AccessConfig, AccessContext, AccessEvaluator, AccessPolicy, AccessSQLInjector } from "../access/mod.ts";
+import * as Context from "./context.ts";
+import * as SQL from "./sql.ts";
 
 export class EdgeQLCompilerWithAccess {
   private ctx: Context.CompilationContext;
@@ -123,8 +123,8 @@ export class EdgeQLCompilerWithAccess {
         );
         if (!decision.allowed) {
           throw new CompilationError(
-            decision.denialMessage ??
-              `INSERT not allowed on ${objectType}: ${decision.reason}`,
+            decision.denialMessage
+              ?? `INSERT not allowed on ${objectType}: ${decision.reason}`,
           );
         }
         return statement;

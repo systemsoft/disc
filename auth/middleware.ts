@@ -123,8 +123,8 @@ export class AuthMiddleware {
 
     if (credentials && origins.includes("*")) {
       throw new Error(
-        "CORS misconfiguration: credentials=true is incompatible with origins:['*']. " +
-          "Specify explicit allowed origins when sharing credentials.",
+        "CORS misconfiguration: credentials=true is incompatible with origins:['*']. "
+          + "Specify explicit allowed origins when sharing credentials.",
       );
     }
 

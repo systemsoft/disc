@@ -12,8 +12,8 @@
  * server-side validators on the same execution path as raw EdgeQL.
  */
 
-import type { QueryOptions } from "./types.ts";
 import type { DiscSchema, FieldType, ResolveSelected, ResolveType, SchemaSpec, SelectShape } from "./schema-types.ts";
+import type { QueryOptions } from "./types.ts";
 
 /** Minimum surface a client must expose to be awaitable from the builder. */
 export interface QueryRunner {
@@ -31,11 +31,11 @@ export interface Shape {
 
 /** A boolean expression node — the result of comparisons / `exists`. */
 type Expr =
-  | { kind: "binop"; op: string; field: string; value: unknown }
-  | { kind: "exists"; field: string }
-  | { kind: "and"; exprs: Expr[] }
-  | { kind: "or"; exprs: Expr[] }
-  | { kind: "not"; expr: Expr };
+  | { kind: "binop"; op: string; field: string; value: unknown; }
+  | { kind: "exists"; field: string; }
+  | { kind: "and"; exprs: Expr[]; }
+  | { kind: "or"; exprs: Expr[]; }
+  | { kind: "not"; expr: Expr; };
 
 /** Order specification — produced by `field.desc()` or by passing a bare FieldRef. */
 interface OrderSpec {

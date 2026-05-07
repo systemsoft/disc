@@ -56,7 +56,7 @@ export interface ClientHandshakeMsg {
   kind: "ClientHandshake";
   majorVersion: number;
   minorVersion: number;
-  params: Array<{ name: string; value: string }>;
+  params: Array<{ name: string; value: string; }>;
   extensions: ProtocolExtension[];
 }
 
@@ -420,7 +420,7 @@ function decodeClientHandshake(r: BufferReader): ClientHandshakeMsg {
   const majorVersion = r.readUInt16();
   const minorVersion = r.readUInt16();
   const paramCount = r.readUInt16();
-  const params: Array<{ name: string; value: string }> = [];
+  const params: Array<{ name: string; value: string; }> = [];
   for (let i = 0; i < paramCount; i++) {
     const name = r.readString();
     const value = r.readString();
@@ -741,7 +741,8 @@ function decodeAuthentication(
   | AuthenticationOKMsg
   | AuthenticationRequiredSASLMsg
   | AuthenticationSASLContinueMsg
-  | AuthenticationSASLFinalMsg {
+  | AuthenticationSASLFinalMsg
+{
   const authStatus = r.readUInt32();
   switch (authStatus) {
     case AuthStatus.OK:
@@ -914,7 +915,7 @@ export function decodeServerMessage(
  */
 export function splitWireMessage(
   data: Uint8Array,
-): { mtype: number; payload: Uint8Array } | null {
+): { mtype: number; payload: Uint8Array; } | null {
   if (data.length < 5) return null;
   const mtype = data[0];
   const view = new DataView(data.buffer, data.byteOffset);

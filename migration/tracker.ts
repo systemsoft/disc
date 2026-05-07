@@ -2,12 +2,12 @@
  * Migration Tracker - persists migration state to database
  */
 
-import { Err, Ok, Result } from "../lib/result.ts";
-import { MigrationError } from "../lib/errors.ts";
-import * as Types from "./types.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
-import { logger } from "../postgres/logger.ts";
+import { MigrationError } from "../lib/errors.ts";
+import { Err, Ok, Result } from "../lib/result.ts";
 import { bootstrapStdlib } from "../lib/stdlib-sql.ts";
+import { logger } from "../postgres/logger.ts";
+import * as Types from "./types.ts";
 
 export class MigrationTracker {
   private pool: ConnectionPool;
@@ -724,8 +724,8 @@ export class MigrationTracker {
     h1 = Math.imul(h1 ^ (h1 >>> 16), 0x85ebca6b);
     h2 = Math.imul(h2 ^ (h2 >>> 13), 0xc2b2ae35);
     return (
-      (h2 >>> 0).toString(16).padStart(8, "0") +
-      (h1 >>> 0).toString(16).padStart(8, "0")
+      (h2 >>> 0).toString(16).padStart(8, "0")
+      + (h1 >>> 0).toString(16).padStart(8, "0")
     );
   }
 }

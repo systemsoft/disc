@@ -5,9 +5,19 @@ TypeScript type generator for Disc. Reads the EdgeQL schema and produces typed i
 ## Import
 
 ```typescript
-import { DEFAULT_CONFIGS, generateTypeScript, TypeScriptGenerator, writeGeneratedFiles } from "disc/codegen/mod.ts";
+import {
+  DEFAULT_CONFIGS,
+  generateTypeScript,
+  TypeScriptGenerator,
+  writeGeneratedFiles,
+} from "disc/codegen/mod.ts";
 
-import type { CodegenConfig, CodegenResult, GeneratedFile, TypeMapping } from "disc/codegen/mod.ts";
+import type {
+  CodegenConfig,
+  CodegenResult,
+  GeneratedFile,
+  TypeMapping,
+} from "disc/codegen/mod.ts";
 ```
 
 ## Usage

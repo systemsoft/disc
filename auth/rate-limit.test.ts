@@ -7,11 +7,11 @@
  */
 
 import { assertEquals } from "@std/assert";
+import { RateLimiter } from "../server/rate-limiter.ts";
+import { NoopCaptchaVerifier } from "./captcha.ts";
 import { AuthRoutes } from "./integration.ts";
 import { AuthMiddleware } from "./middleware.ts";
-import { RateLimiter } from "../server/rate-limiter.ts";
 import type { AuthProvider } from "./provider.ts";
-import { NoopCaptchaVerifier } from "./captcha.ts";
 
 // Minimal stub — the rate-limit check runs before any provider call, so we
 // don't need a working provider for these tests. The `captchaVerifier`

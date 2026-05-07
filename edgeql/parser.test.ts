@@ -3,9 +3,9 @@
  */
 
 import { assertEquals, assertThrows } from "@std/assert";
-import { EdgeQLParser } from "./parser.ts";
-import { EdgeQLAnalyzer } from "./analyzer.ts";
 import { SyntaxError } from "../lib/errors.ts";
+import { EdgeQLAnalyzer } from "./analyzer.ts";
+import { EdgeQLParser } from "./parser.ts";
 
 Deno.test("EdgeQL Parser - Simple SELECT", () => {
   const source = `SELECT User`;

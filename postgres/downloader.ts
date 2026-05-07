@@ -56,11 +56,11 @@ export class PostgresBinaryDownloader {
    * follow-up: cross-platform reproducible builds).
    */
   constructor(
-    baseDirOrOpts: string | { baseDir?: string; platform?: string } = Deno.env.get("DISC_PG_BINARY_DIR") ??
-      join(Deno.env.get("HOME")!, ".disc", "postgres"),
+    baseDirOrOpts: string | { baseDir?: string; platform?: string; } = Deno.env.get("DISC_PG_BINARY_DIR")
+      ?? join(Deno.env.get("HOME")!, ".disc", "postgres"),
   ) {
-    const defaultBaseDir = Deno.env.get("DISC_PG_BINARY_DIR") ??
-      join(Deno.env.get("HOME")!, ".disc", "postgres");
+    const defaultBaseDir = Deno.env.get("DISC_PG_BINARY_DIR")
+      ?? join(Deno.env.get("HOME")!, ".disc", "postgres");
     if (typeof baseDirOrOpts === "string") {
       this.baseDir = baseDirOrOpts;
       this.platform = this.detectPlatform();
@@ -103,14 +103,14 @@ export class PostgresBinaryDownloader {
     // gives air-gapped operators a clear failure with the path they
     // need to populate, and prevents an accidental network call in
     // sandboxed CI environments.
-    const offline = Deno.env.get("DISC_OFFLINE") === "1" ||
-      Deno.env.get("DISC_OFFLINE") === "true";
+    const offline = Deno.env.get("DISC_OFFLINE") === "1"
+      || Deno.env.get("DISC_OFFLINE") === "true";
     if (offline) {
       throw new Error(
-        `DISC_OFFLINE=1 set but PostgreSQL ${version} not staged at ${binPath}. ` +
-          `Pre-stage a PG ${version} build for ${this.platform} under ` +
-          `${this.baseDir} (or set DISC_PG_BINARY_DIR to its location), ` +
-          `or unset DISC_OFFLINE to allow the download.`,
+        `DISC_OFFLINE=1 set but PostgreSQL ${version} not staged at ${binPath}. `
+          + `Pre-stage a PG ${version} build for ${this.platform} under `
+          + `${this.baseDir} (or set DISC_PG_BINARY_DIR to its location), `
+          + `or unset DISC_OFFLINE to allow the download.`,
       );
     }
 
@@ -248,8 +248,8 @@ export class PostgresBinaryDownloader {
         let inner: string | null = null;
         for await (const entry of Deno.readDir(stagingDir)) {
           if (
-            entry.isFile &&
-            /\.(txz|tar\.xz|tgz|tar\.gz|tar)$/i.test(entry.name)
+            entry.isFile
+            && /\.(txz|tar\.xz|tgz|tar\.gz|tar)$/i.test(entry.name)
           ) {
             inner = join(stagingDir, entry.name);
             break;

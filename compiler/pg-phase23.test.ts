@@ -14,12 +14,12 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
-import { ConnectionPool } from "../lib/connection-pool.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
-import { EdgeQLCompiler } from "./compiler.ts";
-import { SQLCodeGenerator } from "./codegen.ts";
+import { ConnectionPool } from "../lib/connection-pool.ts";
+import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { getBuiltinFunctions } from "./builtin-functions.ts";
+import { SQLCodeGenerator } from "./codegen.ts";
+import { EdgeQLCompiler } from "./compiler.ts";
 import type { Schema, TypeDef } from "./context.ts";
 
 const RUN_PG = canRunPgTests();
@@ -243,7 +243,7 @@ Deno.test({
 
       // Compile: SELECT (name := 'hello', age := 42).name
       const sql = compileEdgeQL(
-        'SELECT (name := "hello", age := 42).name',
+        "SELECT (name := \"hello\", age := 42).name",
         schema,
       );
 

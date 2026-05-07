@@ -65,8 +65,8 @@ export function generateFtsColumn(config: FtsIndexConfig): string {
  * Generate a CREATE INDEX statement for a GIN index on the `fts_vector` column.
  */
 export function generateFtsIndex(config: FtsIndexConfig): string {
-  const indexName = config.indexName ??
-    `${config.tableName}_fts_idx`;
+  const indexName = config.indexName
+    ?? `${config.tableName}_fts_idx`;
 
   return `CREATE INDEX ${indexName} ON ${config.tableName} USING GIN (${FTS_VECTOR_COLUMN});`;
 }
@@ -76,8 +76,8 @@ export function generateFtsIndex(config: FtsIndexConfig): string {
  * column from a table.
  */
 export function generateDropFtsIndex(config: FtsIndexConfig): string {
-  const indexName = config.indexName ??
-    `${config.tableName}_fts_idx`;
+  const indexName = config.indexName
+    ?? `${config.tableName}_fts_idx`;
 
   return `DROP INDEX IF EXISTS ${indexName}; ALTER TABLE ${config.tableName} DROP COLUMN IF EXISTS ${FTS_VECTOR_COLUMN};`;
 }

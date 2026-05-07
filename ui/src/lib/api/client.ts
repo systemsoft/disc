@@ -62,7 +62,7 @@ export interface SchemaDescription {
 
 export interface QueryError {
   extensions?: Record<string, any>;
-  locations?: Array<{ column: number; line: number }>;
+  locations?: Array<{ column: number; line: number; }>;
   message: string;
   path?: Array<string | number>;
 }
@@ -85,12 +85,12 @@ export interface ServerHealth {
   uptimeMs: number;
   connections?: any;
   memory?: any;
-  extensions?: Record<string, { details?: string; healthy: boolean }>;
+  extensions?: Record<string, { details?: string; healthy: boolean; }>;
 }
 
 export interface ServerStats {
   connections: any;
-  queries: { avgDurationMs: number; failed: number; successful: number; total: number };
+  queries: { avgDurationMs: number; failed: number; successful: number; total: number; };
   transactions: any;
   uptimeMs: number;
   memoryUsage?: any;
@@ -184,7 +184,7 @@ export class DiscAPIClient {
   async login(
     email: string,
     password: string,
-  ): Promise<{ token: string; refreshToken?: string } | null> {
+  ): Promise<{ token: string; refreshToken?: string; } | null> {
     try {
       const res = await fetch(`${this.baseUrl}/auth/login`, {
         method: "POST",
@@ -228,8 +228,8 @@ export class DiscAPIClient {
       const durationMs = performance.now() - startedAt;
 
       if (!response.ok || (body.errors && body.errors.length > 0)) {
-        const message = body.errors?.[0]?.message ?? response.statusText ??
-          `Query failed (HTTP ${response.status})`;
+        const message = body.errors?.[0]?.message ?? response.statusText
+          ?? `Query failed (HTTP ${response.status})`;
         return { data: null, durationMs, error: message };
       }
 

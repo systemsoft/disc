@@ -17,8 +17,8 @@ class MockWebSocket {
   sent: string[] = [];
 
   onopen: (() => void) | null = null;
-  onclose: ((ev: { code: number }) => void) | null = null;
-  onmessage: ((ev: { data: string }) => void) | null = null;
+  onclose: ((ev: { code: number; }) => void) | null = null;
+  onmessage: ((ev: { data: string; }) => void) | null = null;
   onerror: ((ev: Event) => void) | null = null;
 
   constructor(url: string) {
@@ -129,7 +129,7 @@ Deno.test(
 
       const msg = JSON.parse(ws.sent[0]) as {
         type: string;
-        payload: { id: string; query: string };
+        payload: { id: string; query: string; };
       };
       assertEquals(msg.type, "subscribe");
       assertEquals(msg.payload.query, "select User { name }");
@@ -267,7 +267,7 @@ Deno.test("subscription - unsubscribe() sends unsubscribe message", async () => 
 
     const msg = JSON.parse(ws.sent[ws.sent.length - 1]) as {
       type: string;
-      payload: { subscriptionId: string };
+      payload: { subscriptionId: string; };
     };
     assertEquals(msg.type, "unsubscribe");
     assertEquals(msg.payload.subscriptionId, handle.id);

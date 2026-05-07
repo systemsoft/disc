@@ -6,8 +6,8 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
-import { LanguageServer } from "./server.ts";
 import type { RpcMessage } from "./protocol.ts";
+import { LanguageServer } from "./server.ts";
 
 class FakeTransport {
   outgoing: RpcMessage[] = [];
@@ -19,7 +19,7 @@ class FakeTransport {
   }
 }
 
-async function newServer(): Promise<{ srv: LanguageServer; tx: FakeTransport }> {
+async function newServer(): Promise<{ srv: LanguageServer; tx: FakeTransport; }> {
   const tx = new FakeTransport();
   const srv = new LanguageServer((m) => tx.send(m));
   await srv.handle({
@@ -49,7 +49,7 @@ Deno.test("LanguageServer - initialize returns capabilities", async () => {
     (m) => "id" in m && m.id === 1 && "result" in m,
   );
   assertEquals(responses.length, 1);
-  const result = (responses[0] as { result: { capabilities: { textDocumentSync: number } } }).result;
+  const result = (responses[0] as { result: { capabilities: { textDocumentSync: number; }; }; }).result;
   // textDocumentSync.Full = 1
   assertEquals(result.capabilities.textDocumentSync, 1);
 });
@@ -72,7 +72,7 @@ Deno.test("LanguageServer - didOpen with valid SDL publishes empty diagnostics",
 
   const published = tx.received("textDocument/publishDiagnostics");
   assertEquals(published.length, 1);
-  const params = (published[0] as { params: { uri: string; diagnostics: unknown[] } }).params;
+  const params = (published[0] as { params: { uri: string; diagnostics: unknown[]; }; }).params;
   assertEquals(params.uri, "file:///tmp/test.disc");
   assertEquals(params.diagnostics.length, 0);
 });
@@ -100,7 +100,7 @@ Deno.test("LanguageServer - didOpen with bad SDL publishes error diagnostics", a
   const published = tx.received("textDocument/publishDiagnostics");
   assertEquals(published.length, 1);
   const params = (published[0] as {
-    params: { uri: string; diagnostics: { message: string; severity?: number }[] };
+    params: { uri: string; diagnostics: { message: string; severity?: number; }[]; };
   }).params;
   assertEquals(params.uri, "file:///tmp/bad.disc");
   assertExists(
@@ -136,7 +136,7 @@ Deno.test("LanguageServer - didChange re-publishes diagnostics for new text", as
 
   const published = tx.received("textDocument/publishDiagnostics");
   assertEquals(published.length, 1);
-  const diags = (published[0] as { params: { diagnostics: unknown[] } }).params.diagnostics;
+  const diags = (published[0] as { params: { diagnostics: unknown[]; }; }).params.diagnostics;
   assertEquals(diags.length > 0, true, "expected diagnostics for broken doc");
 });
 
@@ -150,7 +150,7 @@ Deno.test("LanguageServer - initialize advertises hover + completion capabilitie
     params: { capabilities: {} },
   });
   const r = tx.outgoing.find((m) => "id" in m && m.id === 1);
-  const result = (r as { result: { capabilities: Record<string, unknown> } }).result;
+  const result = (r as { result: { capabilities: Record<string, unknown>; }; }).result;
   assertEquals(result.capabilities.hoverProvider, true);
   assertExists(result.capabilities.completionProvider);
 });
@@ -185,7 +185,7 @@ Deno.test("LanguageServer - hover request returns markdown for known scalar", as
   });
   const r = tx.outgoing.find((m) => "id" in m && m.id === 42);
   assertExists(r);
-  const result = (r as { result: { contents: { value: string } } | null }).result;
+  const result = (r as { result: { contents: { value: string; }; } | null; }).result;
   assertExists(result);
   assertEquals(result!.contents.value.includes("str"), true);
 });
@@ -215,7 +215,7 @@ Deno.test("LanguageServer - completion returns SDL keywords + scalars", async ()
     },
   });
   const r = tx.outgoing.find((m) => "id" in m && m.id === 7);
-  const result = (r as { result: { label: string }[] }).result;
+  const result = (r as { result: { label: string; }[]; }).result;
   const labels = new Set(result.map((i) => i.label));
   assertEquals(labels.has("type"), true);
   assertEquals(labels.has("str"), true);
@@ -234,7 +234,7 @@ Deno.test("LanguageServer - hover/completion on unknown document returns null/em
     },
   });
   const hover = tx.outgoing.find((m) => "id" in m && m.id === 50);
-  assertEquals((hover as { result: unknown }).result, null);
+  assertEquals((hover as { result: unknown; }).result, null);
 
   await srv.handle({
     jsonrpc: "2.0",
@@ -246,7 +246,7 @@ Deno.test("LanguageServer - hover/completion on unknown document returns null/em
     },
   });
   const compl = tx.outgoing.find((m) => "id" in m && m.id === 51);
-  assertEquals(((compl as { result: unknown }).result as unknown[]).length, 0);
+  assertEquals(((compl as { result: unknown; }).result as unknown[]).length, 0);
 });
 
 Deno.test("LanguageServer - initialize advertises definition + documentSymbol capabilities", async () => {
@@ -259,7 +259,7 @@ Deno.test("LanguageServer - initialize advertises definition + documentSymbol ca
     params: { capabilities: {} },
   });
   const r = tx.outgoing.find((m) => "id" in m && m.id === 1);
-  const result = (r as { result: { capabilities: Record<string, unknown> } }).result;
+  const result = (r as { result: { capabilities: Record<string, unknown>; }; }).result;
   assertEquals(result.capabilities.definitionProvider, true);
   assertEquals(result.capabilities.documentSymbolProvider, true);
 });
@@ -300,7 +300,7 @@ Deno.test("LanguageServer - definition jumps to declaration", async () => {
   });
   const r = tx.outgoing.find((m) => "id" in m && m.id === 33);
   assertExists(r);
-  const result = (r as { result: { uri: string; range: { start: { line: number } } } | null }).result;
+  const result = (r as { result: { uri: string; range: { start: { line: number; }; }; } | null; }).result;
   assertExists(result);
   assertEquals(result!.uri, "file:///d.disc");
   // Declaration is on the line containing `type User`
@@ -340,7 +340,7 @@ Deno.test("LanguageServer - documentSymbol returns the file outline", async () =
     params: { textDocument: { uri: "file:///s.disc" } },
   });
   const r = tx.outgoing.find((m) => "id" in m && m.id === 44);
-  const result = (r as { result: { name: string; children?: { name: string }[] }[] }).result;
+  const result = (r as { result: { name: string; children?: { name: string; }[]; }[]; }).result;
   const names = result.map((s) => s.name).sort();
   assertEquals(names, ["Post", "User"]);
   const user = result.find((s) => s.name === "User")!;
@@ -358,10 +358,10 @@ Deno.test("LanguageServer - initialize advertises references + rename capabiliti
     params: { capabilities: {} },
   });
   const r = tx.outgoing.find((m) => "id" in m && m.id === 1);
-  const result = (r as { result: { capabilities: Record<string, unknown> } }).result;
+  const result = (r as { result: { capabilities: Record<string, unknown>; }; }).result;
   assertEquals(result.capabilities.referencesProvider, true);
   assertEquals(
-    (result.capabilities.renameProvider as { prepareProvider: boolean }).prepareProvider,
+    (result.capabilities.renameProvider as { prepareProvider: boolean; }).prepareProvider,
     true,
   );
 });
@@ -396,7 +396,7 @@ Deno.test("LanguageServer - references returns all use sites of a type", async (
     },
   });
   const r = tx.outgoing.find((m) => "id" in m && m.id === 60);
-  const result = (r as { result: { uri: string }[] }).result;
+  const result = (r as { result: { uri: string; }[]; }).result;
   assertEquals(result.length, 2);
 });
 
@@ -430,7 +430,7 @@ Deno.test("LanguageServer - rename emits a WorkspaceEdit with one TextEdit per o
     },
   });
   const r = tx.outgoing.find((m) => "id" in m && m.id === 70);
-  const result = (r as { result: { changes: Record<string, { newText: string }[]> } | null }).result;
+  const result = (r as { result: { changes: Record<string, { newText: string; }[]>; } | null; }).result;
   assertExists(result);
   const edits = result!.changes["file:///rn.disc"];
   assertEquals(edits.length, 2);
@@ -467,7 +467,7 @@ required name: str;
     },
   });
   const r = tx.outgoing.find((m) => "id" in m && m.id === 75);
-  const result = (r as { result: { newText: string }[] }).result;
+  const result = (r as { result: { newText: string; }[]; }).result;
   assertEquals(result.length, 1);
   // Properly re-indented output.
   assertEquals(
@@ -505,7 +505,7 @@ Deno.test("LanguageServer - formatting on a TS host file is a no-op", async () =
   const r = tx.outgoing.find((m) => "id" in m && m.id === 76);
   // Non-.disc URIs return [] so the host formatter (deno fmt /
   // prettier) keeps ownership.
-  assertEquals((r as { result: unknown[] }).result.length, 0);
+  assertEquals((r as { result: unknown[]; }).result.length, 0);
 });
 
 Deno.test("LanguageServer - initialize advertises documentFormattingProvider capability", async () => {
@@ -518,7 +518,7 @@ Deno.test("LanguageServer - initialize advertises documentFormattingProvider cap
     params: {},
   });
   const r = tx.outgoing.find((m) => "id" in m && m.id === 77);
-  const result = (r as { result: { capabilities: { documentFormattingProvider?: boolean } } }).result;
+  const result = (r as { result: { capabilities: { documentFormattingProvider?: boolean; }; }; }).result;
   assertEquals(result.capabilities.documentFormattingProvider, true);
 });
 
@@ -548,7 +548,7 @@ Deno.test("LanguageServer - hover on a TS host file routes through embedded-Edge
     },
   });
   const r = tx.outgoing.find((m) => "id" in m && m.id === 80);
-  const result = (r as { result: { contents: { value: string } } | null }).result;
+  const result = (r as { result: { contents: { value: string; }; } | null; }).result;
   assertExists(result);
   // Embedded-EdgeQL hover labels the keyword as such — the SDL hover
   // provider would never produce this string.
@@ -575,7 +575,7 @@ Deno.test("LanguageServer - completion on a TS host file outside any eql tag ret
     },
   });
   const r = tx.outgoing.find((m) => "id" in m && m.id === 81);
-  const result = (r as { result: unknown[] }).result;
+  const result = (r as { result: unknown[]; }).result;
   // Outside any embedded query in a TS host file, completion is empty —
   // we don't surface SDL keywords inside plain TypeScript.
   assertEquals(result.length, 0);
@@ -601,7 +601,7 @@ Deno.test("LanguageServer - completion inside an eql tag returns EdgeQL keywords
     },
   });
   const r = tx.outgoing.find((m) => "id" in m && m.id === 82);
-  const result = (r as { result: { label: string }[] }).result;
+  const result = (r as { result: { label: string; }[]; }).result;
   const labels = new Set(result.map((i) => i.label));
   assertEquals(labels.has("select"), true);
   assertEquals(labels.has("filter"), true);
@@ -643,7 +643,7 @@ Deno.test("LanguageServer - hover on a TS host file resolves user-defined types 
     },
   });
   const r = tx.outgoing.find((m) => "id" in m && m.id === 90);
-  const result = (r as { result: { contents: { value: string } } | null }).result;
+  const result = (r as { result: { contents: { value: string; }; } | null; }).result;
   assertExists(result);
   assertEquals(result!.contents.value.includes("**Article**"), true);
 });
@@ -676,7 +676,7 @@ Deno.test("LanguageServer - definition on a TS host file jumps into the .disc de
     },
   });
   const r = tx.outgoing.find((m) => "id" in m && m.id === 91);
-  const result = (r as { result: { uri: string; range: { start: { line: number } } } | null }).result;
+  const result = (r as { result: { uri: string; range: { start: { line: number; }; }; } | null; }).result;
   assertExists(result);
   assertEquals(result!.uri, "file:///dbschema/default.disc");
   // `type Article` lives on line 1 (0-indexed) of the SDL.
@@ -693,5 +693,5 @@ Deno.test("LanguageServer - shutdown returns null result", async () => {
   });
   const r = tx.outgoing.find((m) => "id" in m && m.id === 99);
   assertExists(r);
-  assertEquals((r as { result: unknown }).result, null);
+  assertEquals((r as { result: unknown; }).result, null);
 });

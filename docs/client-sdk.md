@@ -9,7 +9,12 @@ The Disc TypeScript SDK provides a typed HTTP client for querying a Disc server,
 Import from the SDK module directly:
 
 ```typescript
-import { AuthManager, createClient, createSubscriptionClient, DiscClient } from "disc/sdk/mod.ts";
+import {
+  AuthManager,
+  createClient,
+  createSubscriptionClient,
+  DiscClient,
+} from "disc/sdk/mod.ts";
 ```
 
 If you have generated a typed client with `disc codegen`, you can import the generated types alongside the SDK:
@@ -133,7 +138,7 @@ interface QueryResponse<T = unknown> {
 
 interface QueryError {
   extensions?: Record<string, unknown>;
-  locations?: Array<{ column: number; line: number }>;
+  locations?: Array<{ column: number; line: number; }>;
   message: string;
   path?: Array<string | number>;
 }
@@ -511,7 +516,14 @@ All SDK errors extend `DiscClientError`, which carries a `code` property from th
 ### Catching Specific Errors
 
 ```typescript
-import { DiscAuthError, DiscConnectionError, DiscErrorCode, DiscQueryError, DiscServerError, DiscTimeoutError } from "disc/sdk/mod.ts";
+import {
+  DiscAuthError,
+  DiscConnectionError,
+  DiscErrorCode,
+  DiscQueryError,
+  DiscServerError,
+  DiscTimeoutError,
+} from "disc/sdk/mod.ts";
 
 try {
   const users = await client.query("select User { email, name }");

@@ -160,7 +160,7 @@ function buttonHtml(href: string, label: string, branding: BrandingCtx): string 
   const escapedHref = escapeHtml(href);
   const escapedLabel = escapeHtml(label);
   return [
-    '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse; margin: 16px 0;">',
+    "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"border-collapse: collapse; margin: 16px 0;\">",
     "<tr>",
     `<td bgcolor="${bg}" style="border-radius: 4px; mso-padding-alt: 12px 20px;">`,
     `<a href="${escapedHref}" style="display: inline-block; padding: 12px 20px; background: ${bg}; color: #fff; text-decoration: none; border-radius: 4px; font-weight: 600;">${escapedLabel}</a>`,
@@ -181,7 +181,7 @@ function escapeHtml(value: string): string {
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
+    .replaceAll("\"", "&quot;")
     .replaceAll("'", "&#39;");
 }
 
@@ -192,9 +192,9 @@ function escapeHtml(value: string): string {
 function htmlShell(title: string, bodyHtml: string): string {
   return [
     "<!doctype html>",
-    '<html lang="en">',
+    "<html lang=\"en\">",
     "<head>",
-    '<meta charset="utf-8">',
+    "<meta charset=\"utf-8\">",
     `<title>${escapeHtml(title)}</title>`,
     "</head>",
     "<body style=\"font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.5; color: #111; max-width: 560px; margin: 24px auto; padding: 0 16px;\">",
@@ -238,7 +238,7 @@ export function renderVerificationEmail(ctx: VerificationCtx): RenderedEmail {
       `<p>${introHtml}</p>`,
       buttonHtml(link, "Verify email", branding),
       `<p style="font-size: 13px; color: #555;">Or paste this link into your browser:<br><span style="word-break: break-all;">${escapeHtml(link)}</span></p>`,
-      '<p style="font-size: 13px; color: #555;">If you didn\'t create this account, you can safely ignore this message.</p>',
+      "<p style=\"font-size: 13px; color: #555;\">If you didn't create this account, you can safely ignore this message.</p>",
     ].filter((s) => s.length > 0).join("\n"),
   );
 
@@ -275,7 +275,7 @@ export function renderPasswordResetEmail(ctx: PasswordResetCtx): RenderedEmail {
       `<p>${introHtml}</p>`,
       buttonHtml(link, "Reset password", branding),
       `<p style="font-size: 13px; color: #555;">Or paste this link into your browser:<br><span style="word-break: break-all;">${escapeHtml(link)}</span></p>`,
-      '<p style="font-size: 13px; color: #555;">If you didn\'t request a password reset, you can safely ignore this message — your password will stay the same.</p>',
+      "<p style=\"font-size: 13px; color: #555;\">If you didn't request a password reset, you can safely ignore this message — your password will stay the same.</p>",
     ].filter((s) => s.length > 0).join("\n"),
   );
 
@@ -315,7 +315,7 @@ export function renderMagicCodeEmail(ctx: MagicCodeCtx): RenderedEmail {
       // and `color: #fff` without a background renders white-on-white.
       // (gh/geldata#7629)
       [
-        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse; margin: 16px 0;">',
+        "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"border-collapse: collapse; margin: 16px 0;\">",
         "<tr>",
         `<td bgcolor="${codeBg}" style="border-radius: 6px; mso-padding-alt: 16px 24px; padding: 16px 24px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 28px; letter-spacing: 6px; font-weight: 700; color: #fff;">`,
         escapeHtml(ctx.code),
@@ -323,7 +323,7 @@ export function renderMagicCodeEmail(ctx: MagicCodeCtx): RenderedEmail {
         "</tr>",
         "</table>",
       ].join(""),
-      '<p style="font-size: 13px; color: #555;">If you didn\'t request this, you can safely ignore this email.</p>',
+      "<p style=\"font-size: 13px; color: #555;\">If you didn't request this, you can safely ignore this email.</p>",
     ].filter((s) => s.length > 0).join("\n"),
   );
 
@@ -336,8 +336,8 @@ export function renderMagicLinkEmail(ctx: MagicLinkCtx): RenderedEmail {
   // `magicLinkUrlTemplate`); fall back to the historical
   // `${baseUrl}/auth/magic?token=…` shape so direct callers of this
   // renderer keep working without setting up a template.
-  const link = ctx.link ??
-    `${trimBase(ctx.baseUrl)}/auth/magic?token=${encodeURIComponent(ctx.magicLinkToken)}`;
+  const link = ctx.link
+    ?? `${trimBase(ctx.baseUrl)}/auth/magic?token=${encodeURIComponent(ctx.magicLinkToken)}`;
   const branded = branding.appName !== DEFAULT_APP_NAME;
   const subject = branded ? `Sign in to ${branding.appName}` : "Sign in to your account";
   const intro = branded
@@ -365,7 +365,7 @@ export function renderMagicLinkEmail(ctx: MagicLinkCtx): RenderedEmail {
       `<p>${introHtml}</p>`,
       buttonHtml(link, "Sign in", branding),
       `<p style="font-size: 13px; color: #555;">Or paste this link into your browser:<br><span style="word-break: break-all;">${escapeHtml(link)}</span></p>`,
-      '<p style="font-size: 13px; color: #555;">If you didn\'t request this, you can safely ignore this message.</p>',
+      "<p style=\"font-size: 13px; color: #555;\">If you didn't request this, you can safely ignore this message.</p>",
     ].filter((s) => s.length > 0).join("\n"),
   );
 

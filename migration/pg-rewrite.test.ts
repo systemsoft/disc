@@ -23,7 +23,7 @@ const RUN_PG = canRunPgTests();
 
 function parseDsn(
   dsn: string,
-): { hostname: string; port: number; user: string; database: string } {
+): { hostname: string; port: number; user: string; database: string; } {
   const url = new URL(dsn);
   return {
     hostname: url.hostname || "localhost",
@@ -148,7 +148,7 @@ Deno.test({
       );
 
       // Verify created_at was auto-set by the rewrite trigger
-      const rows = await queryRows<{ title: string; created_at: string }>(
+      const rows = await queryRows<{ title: string; created_at: string; }>(
         dsn,
         `SELECT title, created_at FROM ${tableName}`,
       );
@@ -258,8 +258,8 @@ Deno.test({
       assertEquals(updateRows.length, 1);
       assertEquals(updateRows[0].title, "Updated Title");
       assertEquals(
-        updateRows[0].updated_at !== null &&
-          updateRows[0].updated_at !== undefined,
+        updateRows[0].updated_at !== null
+          && updateRows[0].updated_at !== undefined,
         true,
         "updated_at should be auto-set by rewrite trigger on UPDATE",
       );
@@ -447,7 +447,7 @@ Deno.test({
       `,
       );
 
-      let rows = await queryRows<{ name: string; counter: number }>(
+      let rows = await queryRows<{ name: string; counter: number; }>(
         dsn,
         `SELECT name, counter FROM ${tableName}`,
       );
@@ -467,7 +467,7 @@ Deno.test({
       `,
       );
 
-      rows = await queryRows<{ name: string; counter: number }>(
+      rows = await queryRows<{ name: string; counter: number; }>(
         dsn,
         `SELECT name, counter FROM ${tableName}`,
       );
@@ -487,7 +487,7 @@ Deno.test({
       `,
       );
 
-      rows = await queryRows<{ name: string; counter: number }>(
+      rows = await queryRows<{ name: string; counter: number; }>(
         dsn,
         `SELECT name, counter FROM ${tableName}`,
       );
@@ -560,9 +560,9 @@ Deno.test({
       // (skip CREATE TABLE since we already created the table)
       const rewriteSql = allStatements.filter(
         (s) =>
-          s.includes("CREATE OR REPLACE FUNCTION") &&
-            s.includes("rewrite_fn") ||
-          s.includes("CREATE TRIGGER") && s.includes("rewrite"),
+          s.includes("CREATE OR REPLACE FUNCTION")
+            && s.includes("rewrite_fn")
+          || s.includes("CREATE TRIGGER") && s.includes("rewrite"),
       );
 
       assertEquals(

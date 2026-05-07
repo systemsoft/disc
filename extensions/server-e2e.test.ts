@@ -14,13 +14,13 @@
  */
 
 import { assert, assertEquals } from "@std/assert";
-import { HttpServer } from "../server/http.ts";
-import type { ProtocolHandler, QueryContext, QueryRequest, QueryResponse } from "../server/types.ts";
-import { ExtensionRegistry } from "./registry.ts";
 import { CustomFunctionsExtension } from "../ext-custom-functions/extension.ts";
 import { OAuthExtension } from "../ext-oauth/extension.ts";
 import { VectorExtension } from "../ext-vector/extension.ts";
 import { getLogger } from "../lib/logger.ts";
+import { HttpServer } from "../server/http.ts";
+import type { ProtocolHandler, QueryContext, QueryRequest, QueryResponse } from "../server/types.ts";
+import { ExtensionRegistry } from "./registry.ts";
 
 const TEST_HOST = "127.0.0.1";
 

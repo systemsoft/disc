@@ -3,8 +3,8 @@
  */
 
 import { assertEquals } from "@std/assert";
-import { provideReferences } from "./references.ts";
 import type { Position } from "./protocol.ts";
+import { provideReferences } from "./references.ts";
 
 function findPos(haystack: string, needle: string, occurrence = 0): Position {
   let offset = -1;

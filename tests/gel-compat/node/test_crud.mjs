@@ -10,9 +10,9 @@
  * script at tests/gel-compat/run.sh handles that.
  */
 
-import { after, before, test } from "node:test";
-import assert from "node:assert/strict";
 import { createClient } from "gel";
+import assert from "node:assert/strict";
+import { after, before, test } from "node:test";
 
 const host = process.env.DISC_HOST ?? "127.0.0.1";
 const port = parseInt(process.env.DISC_BINARY_PORT ?? "5656", 10);

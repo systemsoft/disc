@@ -2,10 +2,10 @@
  * Transaction — Execute multiple queries atomically
  */
 
-import type { QueryOptions, QueryResponse, QueryValidator, TransactionState } from "./types.ts";
-import { DiscQueryError, DiscTransactionError } from "./errors.ts";
-import { applyValidator } from "./validation.ts";
 import { reviveResponse } from "./codecs.ts";
+import { DiscQueryError, DiscTransactionError } from "./errors.ts";
+import type { QueryOptions, QueryResponse, QueryValidator, TransactionState } from "./types.ts";
+import { applyValidator } from "./validation.ts";
 
 import type { DiscClient } from "./client.ts";
 

@@ -6,10 +6,10 @@
  * preserving PostgreSQL as the storage engine.
  */
 
-export * as Schema from "./schema/mod.ts";
-export * as EdgeQL from "./edgeql/mod.ts";
 export * from "./compiler/mod.ts";
+export * as EdgeQL from "./edgeql/mod.ts";
 export * from "./lib/mod.ts";
+export * as Schema from "./schema/mod.ts";
 
 /**
  * Programmatic CLI surface (gh/geldata#5911) — drive Disc commands

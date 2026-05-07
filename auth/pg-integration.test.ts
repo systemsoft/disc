@@ -7,8 +7,8 @@
 
 import { assertEquals, assertExists, assertRejects } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { DatabaseConnection } from "../lib/database.ts";
+import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { PgDatabaseAdapter } from "./pg-database-adapter.ts";
 import { AuthProvider } from "./provider.ts";
 import { AuthError, requireAuthResponse } from "./types.ts";

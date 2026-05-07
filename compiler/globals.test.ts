@@ -12,8 +12,8 @@
  */
 
 import { assertEquals } from "@std/assert";
-import { createTestSchema, GlobalDef, resolveGlobal, Schema } from "./context.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
+import { createTestSchema, GlobalDef, resolveGlobal, Schema } from "./context.ts";
 
 // ---------------------------------------------------------------------------
 // Tests: SchemaManager extracts globals from SDL

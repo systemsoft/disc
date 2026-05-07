@@ -110,7 +110,7 @@ Deno.test("DbCommand - drop rejects dropping default disc database", async () =>
         force: true,
       }),
     Error,
-    'Cannot drop the default "disc" database',
+    "Cannot drop the default \"disc\" database",
   );
 });
 
@@ -144,7 +144,7 @@ Deno.test("DbCommand - wipe rejects wiping default disc database", async () => {
         name: "disc",
       }),
     Error,
-    'Cannot wipe the default "disc" database',
+    "Cannot wipe the default \"disc\" database",
   );
 });
 

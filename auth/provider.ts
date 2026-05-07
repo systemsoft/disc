@@ -4,10 +4,15 @@
 
 import * as bcrypt from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
 import { create, verify } from "https://deno.land/x/djwt@v3.0.2/mod.ts";
-import { DatabaseInterface } from "./database-interface.ts";
 import { getLogger } from "../lib/logger.ts";
+import { DatabaseInterface } from "./database-interface.ts";
 
 const authLogger = getLogger("auth");
+import { createMailer } from "../smtp/mailer.ts";
+import { validateBranding, validateMagicLinkUrlTemplate } from "./branding.ts";
+import { type CaptchaVerifier, createCaptchaVerifier, type RemoteCaptchaVerifierOptions } from "./captcha.ts";
+import { EmailEventListener } from "./email-listener.ts";
+import { buildOtpauthUri, generateSecret as generateTotpSecret, verifyTOTP } from "./totp.ts";
 import {
   AuthConfig,
   AuthError,
@@ -29,13 +34,8 @@ import {
   type WebAuthnRegistrationFinish,
   type WebAuthnRegistrationOptions,
 } from "./types.ts";
-import { newEventId, newEventTimestamp, type WebhookEvent, WebhookSender, type WebhookSenderOptions } from "./webhooks.ts";
-import { type CaptchaVerifier, createCaptchaVerifier, type RemoteCaptchaVerifierOptions } from "./captcha.ts";
-import { buildOtpauthUri, generateSecret as generateTotpSecret, verifyTOTP } from "./totp.ts";
 import * as webAuthn from "./webauthn.ts";
-import { createMailer } from "../smtp/mailer.ts";
-import { EmailEventListener } from "./email-listener.ts";
-import { validateBranding, validateMagicLinkUrlTemplate } from "./branding.ts";
+import { newEventId, newEventTimestamp, type WebhookEvent, WebhookSender, type WebhookSenderOptions } from "./webhooks.ts";
 
 /**
  * Conditional config fields whose presence depends on `jwtAlgorithm`:
@@ -1320,8 +1320,8 @@ export class AuthProvider implements IAuthProvider {
     // Same silent-return shape as no-such-user so callers can't tell
     // verified-vs-unverified by response.
     if (
-      this.config.requireEmailVerification &&
-      !result.rows[0].email_verified
+      this.config.requireEmailVerification
+      && !result.rows[0].email_verified
     ) {
       this.auditEvent("password_reset_requested", userId, {
         result: "unverified_account_blocked",
@@ -1521,7 +1521,7 @@ export class AuthProvider implements IAuthProvider {
   }
 
   /** List every registered role. */
-  async listRoles(): Promise<Array<{ name: string; description?: string }>> {
+  async listRoles(): Promise<Array<{ name: string; description?: string; }>> {
     const result = await this.db.query(
       "SELECT name, description FROM roles ORDER BY name",
       [],
@@ -1849,9 +1849,9 @@ export class AuthProvider implements IAuthProvider {
     );
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 min
     if (
-      result.rows.length > 0 &&
-      result.rows[0].active &&
-      !result.rows[0].is_anonymous
+      result.rows.length > 0
+      && result.rows[0].active
+      && !result.rows[0].is_anonymous
     ) {
       const tokenHash = await this.hashToken(plaintext);
       await this.db.execute(
@@ -2102,9 +2102,9 @@ export class AuthProvider implements IAuthProvider {
     );
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min
     if (
-      result.rows.length > 0 &&
-      result.rows[0].active &&
-      !result.rows[0].is_anonymous
+      result.rows.length > 0
+      && result.rows[0].active
+      && !result.rows[0].is_anonymous
     ) {
       const tokenHash = await this.hashToken(code);
       await this.db.execute(
@@ -2172,9 +2172,9 @@ export class AuthProvider implements IAuthProvider {
     // wall-clock posture matches the happy path. Same rationale as
     // `runDummyCompare` for password login (P1-35 / gh/geldata#9137).
     if (
-      userResult.rows.length === 0 ||
-      !userResult.rows[0].active ||
-      userResult.rows[0].is_anonymous
+      userResult.rows.length === 0
+      || !userResult.rows[0].active
+      || userResult.rows[0].is_anonymous
     ) {
       await this.hashToken(code);
       throw new AuthError(
@@ -2211,8 +2211,8 @@ export class AuthProvider implements IAuthProvider {
         [userId],
       );
       if (
-        liveResult.rows.length > 0 &&
-        new Date(liveResult.rows[0].expires_at).getTime() > Date.now()
+        liveResult.rows.length > 0
+        && new Date(liveResult.rows[0].expires_at).getTime() > Date.now()
       ) {
         const newAttempts = Number(liveResult.rows[0].attempts) + 1;
         if (newAttempts >= 5) {
@@ -2557,7 +2557,7 @@ export class AuthProvider implements IAuthProvider {
    */
   async finishWebAuthnRegistration(
     finish: WebAuthnRegistrationFinish,
-  ): Promise<{ credentialId: string }> {
+  ): Promise<{ credentialId: string; }> {
     if (!this.config.webauthn) {
       throw new AuthError(
         "WebAuthn not configured",
@@ -2650,7 +2650,7 @@ export class AuthProvider implements IAuthProvider {
     const challengeId = this.generateId();
 
     let userId: string | null = null;
-    let allowCredentials: Array<{ id: string; type: "public-key" }> = [];
+    let allowCredentials: Array<{ id: string; type: "public-key"; }> = [];
     if (email) {
       const userResult = await this.db.query(
         "SELECT id FROM users WHERE email = ? AND active = ?",
@@ -2875,7 +2875,7 @@ export class AuthProvider implements IAuthProvider {
   private async consumeWebAuthnChallenge(
     challengeId: string,
     purpose: "register" | "login",
-  ): Promise<{ challenge: string; user_id: string | null }> {
+  ): Promise<{ challenge: string; user_id: string | null; }> {
     const result = await this.db.query(
       `SELECT challenge, purpose, user_id, expires_at, consumed_at
        FROM webauthn_challenges WHERE id = ?`,
@@ -2919,7 +2919,7 @@ export class AuthProvider implements IAuthProvider {
 
   private async createSession(
     userId: string,
-    meta?: { ipAddress?: string; userAgent?: string },
+    meta?: { ipAddress?: string; userAgent?: string; },
   ): Promise<Session> {
     const sessionId = this.generateId();
     const expiresAt = new Date(Date.now() + this.config.sessionTimeout * 1000);
@@ -3073,8 +3073,8 @@ export class AuthProvider implements IAuthProvider {
     }
 
     if (
-      this.config.passwordRequireSpecial &&
-      !/[!@#$%^&*(),.?":{}|<>]/.test(password)
+      this.config.passwordRequireSpecial
+      && !/[!@#$%^&*(),.?":{}|<>]/.test(password)
     ) {
       errors.push("Password must contain at least one special character");
     }
@@ -3240,9 +3240,9 @@ function validateAuthConfig(config: ResolvedAuthConfig): void {
   // (rounds=15 is already ~1s/hash on commodity hardware) is what we
   // enforce — beyond that, registration becomes a DoS amplifier.
   if (
-    !Number.isInteger(config.bcryptRounds) ||
-    config.bcryptRounds < 4 ||
-    config.bcryptRounds > 15
+    !Number.isInteger(config.bcryptRounds)
+    || config.bcryptRounds < 4
+    || config.bcryptRounds > 15
   ) {
     throw new Error(
       `AuthProvider: bcryptRounds must be an integer in [4, 15]; got ${config.bcryptRounds}`,
@@ -3256,8 +3256,8 @@ function validateAuthConfig(config: ResolvedAuthConfig): void {
   }
 
   if (
-    config.refreshTokenExpiry <= 0 ||
-    !Number.isFinite(config.refreshTokenExpiry)
+    config.refreshTokenExpiry <= 0
+    || !Number.isFinite(config.refreshTokenExpiry)
   ) {
     throw new Error(
       `AuthProvider: refreshTokenExpiry must be a positive number of seconds; got ${config.refreshTokenExpiry}`,
@@ -3277,8 +3277,8 @@ function validateAuthConfig(config: ResolvedAuthConfig): void {
   }
 
   if (
-    !Number.isInteger(config.passwordMinLength) ||
-    config.passwordMinLength < 1
+    !Number.isInteger(config.passwordMinLength)
+    || config.passwordMinLength < 1
   ) {
     throw new Error(
       `AuthProvider: passwordMinLength must be a positive integer; got ${config.passwordMinLength}`,
@@ -3286,8 +3286,8 @@ function validateAuthConfig(config: ResolvedAuthConfig): void {
   }
 
   if (
-    !Number.isInteger(config.maxSessionsPerUser) ||
-    config.maxSessionsPerUser < 0
+    !Number.isInteger(config.maxSessionsPerUser)
+    || config.maxSessionsPerUser < 0
   ) {
     throw new Error(
       `AuthProvider: maxSessionsPerUser must be a non-negative integer (0 disables the cap); got ${config.maxSessionsPerUser}`,
@@ -3297,8 +3297,8 @@ function validateAuthConfig(config: ResolvedAuthConfig): void {
   // jwtAlgorithm is type-checked at compile time, but TypeScript's
   // type narrowing doesn't survive untrusted JSON config.
   if (
-    config.jwtAlgorithm !== "HS256" &&
-    config.jwtAlgorithm !== "RS256"
+    config.jwtAlgorithm !== "HS256"
+    && config.jwtAlgorithm !== "RS256"
   ) {
     throw new Error(
       `AuthProvider: jwtAlgorithm must be "HS256" or "RS256"; got ${JSON.stringify(config.jwtAlgorithm)}`,
@@ -3312,8 +3312,8 @@ function validateAuthConfig(config: ResolvedAuthConfig): void {
   }
 
   if (
-    typeof config.jwtAudience !== "string" ||
-    config.jwtAudience.length === 0
+    typeof config.jwtAudience !== "string"
+    || config.jwtAudience.length === 0
   ) {
     throw new Error(
       "AuthProvider: jwtAudience must be a non-empty string",
@@ -3357,7 +3357,7 @@ async function importHmacKey(secret: string | undefined): Promise<CryptoKey> {
 async function importRsaKeys(
   privateKeyPem: string | undefined,
   publicKeyPem: string | undefined,
-): Promise<{ signKey: CryptoKey; verifyKey: CryptoKey }> {
+): Promise<{ signKey: CryptoKey; verifyKey: CryptoKey; }> {
   if (!publicKeyPem) {
     throw new Error(
       "AuthProvider: jwtPublicKey is required when jwtAlgorithm is RS256",

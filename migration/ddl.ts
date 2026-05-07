@@ -2,8 +2,8 @@
  * DDL Generator - converts migration operations to SQL DDL statements
  */
 
-import * as Types from "./types.ts";
 import { propNameToColumnName, typeNameToTableName } from "../lib/identifiers.ts";
+import * as Types from "./types.ts";
 
 // PostgreSQL 16 reserved keywords that cannot appear unquoted as identifiers.
 // Source: https://www.postgresql.org/docs/16/sql-keywords-appendix.html
@@ -477,8 +477,8 @@ END $$;`,
     // Add __type__ discriminator column for types participating in a hierarchy
     // (types that have subtypes OR types that have parentTypes)
     if (
-      (operation.subtypes && operation.subtypes.length > 0) ||
-      (operation.parentTypes && operation.parentTypes.length > 0)
+      (operation.subtypes && operation.subtypes.length > 0)
+      || (operation.parentTypes && operation.parentTypes.length > 0)
     ) {
       columns.push({
         name: "__type__",
@@ -1184,7 +1184,7 @@ END $$;`,
   private generateCreateTableFromColumns(
     tableName: string,
     columns: Types.ColumnDefinition[],
-    options: { inlineFKs?: boolean } = {},
+    options: { inlineFKs?: boolean; } = {},
   ): string {
     const inlineFKs = options.inlineFKs ?? true;
     const columnDefs = columns.map((col) => this.generateColumnDefinition(col));
@@ -1455,8 +1455,8 @@ END $$;`,
       // e.g., 0.0 should render as "0.0" not "0" in SQL
       const str = String(value);
       if (
-        Number.isFinite(value) && !str.includes(".") && !str.includes("e") &&
-        !str.includes("E")
+        Number.isFinite(value) && !str.includes(".") && !str.includes("e")
+        && !str.includes("E")
       ) {
         return str + ".0";
       }
@@ -1478,7 +1478,7 @@ END $$;`,
     const reservedKeywords = RESERVED_PG_KEYWORDS;
 
     if (reservedKeywords.has(identifier.toLowerCase())) {
-      return `"${identifier.replace(/"/g, '""')}"`;
+      return `"${identifier.replace(/"/g, "\"\"")}"`;
     }
 
     // Check if identifier needs escaping due to special characters
@@ -1486,7 +1486,7 @@ END $$;`,
       return identifier;
     }
 
-    return `"${identifier.replace(/"/g, '""')}"`;
+    return `"${identifier.replace(/"/g, "\"\"")}"`;
   }
 
   // ========================================

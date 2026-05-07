@@ -12,8 +12,8 @@
  */
 
 import { assertStringIncludes } from "@std/assert";
-import { EdgeQLCompiler } from "./compiler.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
+import { EdgeQLCompiler } from "./compiler.ts";
 import { createTestSchema, GlobalDef, Schema } from "./context.ts";
 
 // ---------------------------------------------------------------------------

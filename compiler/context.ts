@@ -2,10 +2,10 @@
  * Compilation context and schema information
  */
 
-import { getBuiltinFunctions } from "./builtin-functions.ts";
-import * as EdgeQLAST from "../edgeql/ast.ts";
-import * as SQL from "./sql.ts";
 import type { AccessPolicy } from "../access/types.ts";
+import * as EdgeQLAST from "../edgeql/ast.ts";
+import { getBuiltinFunctions } from "./builtin-functions.ts";
+import * as SQL from "./sql.ts";
 
 /**
  * Abstract polymorphic types used in EdgeQL function signatures.
@@ -424,8 +424,8 @@ export function removeCTEAlias(
 /** Check if a name refers to an enum type in the schema */
 export function isEnumType(schema: Schema, name: string): boolean {
   const typeDef = schema.types.get(name);
-  return !!typeDef && Array.isArray(typeDef.enumValues) &&
-    typeDef.enumValues.length > 0;
+  return !!typeDef && Array.isArray(typeDef.enumValues)
+    && typeDef.enumValues.length > 0;
 }
 
 /** Convert a PascalCase type name to snake_case for SQL enum type naming */

@@ -8,10 +8,10 @@
  */
 
 import { assertEquals, assertThrows } from "@std/assert";
-import { defineSchema, t } from "./schema-types.ts";
-import type { LinkStub, ResolveSelected, ResolveType } from "./schema-types.ts";
 import { createQueryBuilder } from "./query-builder.ts";
 import type { TypedQueryBuilder, TypedSelectChain } from "./query-builder.ts";
+import { defineSchema, t } from "./schema-types.ts";
+import type { LinkStub, ResolveSelected, ResolveType } from "./schema-types.ts";
 
 // --- Type-level helpers (compile-time-only) ---
 
@@ -44,7 +44,7 @@ const blogSchema = defineSchema({
 Deno.test("defineSchema returns a wrapper carrying the spec", () => {
   assertEquals(Object.keys(blogSchema.spec).sort(), ["Post", "User"]);
   assertEquals(blogSchema.spec.User.email.kind, "scalar");
-  assertEquals((blogSchema.spec.User.email as { typeName: string }).typeName, "str");
+  assertEquals((blogSchema.spec.User.email as { typeName: string; }).typeName, "str");
 });
 
 Deno.test("defineSchema rejects non-PascalCase type names", () => {
@@ -143,9 +143,9 @@ Deno.test("typed createQueryBuilder runtime emits the same EdgeQL as the untyped
 
 type UserRow = ResolveType<typeof blogSchema.spec, typeof blogSchema.spec.User>;
 type PostRow = ResolveType<typeof blogSchema.spec, typeof blogSchema.spec.Post>;
-type FlatRow = ResolveSelected<typeof blogSchema.spec, "User", { email: true; name: true }>;
-type NestedRow = ResolveSelected<typeof blogSchema.spec, "Post", { title: true; author: { email: true } }>;
-type MultiRow = ResolveSelected<typeof blogSchema.spec, "User", { name: true; posts: { title: true } }>;
+type FlatRow = ResolveSelected<typeof blogSchema.spec, "User", { email: true; name: true; }>;
+type NestedRow = ResolveSelected<typeof blogSchema.spec, "Post", { title: true; author: { email: true; }; }>;
+type MultiRow = ResolveSelected<typeof blogSchema.spec, "User", { name: true; posts: { title: true; }; }>;
 type Builder = TypedQueryBuilder<typeof blogSchema.spec>;
 
 declare const _resolveTypeChecks: [
@@ -161,9 +161,9 @@ declare const _resolveTypeChecks: [
 ];
 
 declare const _resolveSelectedChecks: [
-  Expect<Equal<FlatRow, { email: string; name: string }>>,
-  Expect<Equal<NestedRow, { title: string; author: { email: string } | null }>>,
-  Expect<Equal<MultiRow, { name: string; posts: { title: string }[] }>>,
+  Expect<Equal<FlatRow, { email: string; name: string; }>>,
+  Expect<Equal<NestedRow, { title: string; author: { email: string; } | null; }>>,
+  Expect<Equal<MultiRow, { name: string; posts: { title: string; }[]; }>>,
 ];
 
 declare const _builderShapeCheck: Expect<
@@ -194,7 +194,7 @@ Deno.test("typed first() returns row | null with the inferred shape", async () =
 });
 
 Deno.test("typed filter predicate gets a typed FieldRef per field", async () => {
-  const calls: Array<{ query: string; variables: unknown }> = [];
+  const calls: Array<{ query: string; variables: unknown; }> = [];
   const fakeClient = {
     query: <T = unknown>(query: string, variables?: Record<string, unknown>): Promise<T> => {
       calls.push({ query, variables: variables ?? {} });

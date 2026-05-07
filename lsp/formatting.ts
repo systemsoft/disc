@@ -80,7 +80,7 @@ function stripStringsAndComments(line: string): string {
       break;
     }
     // String literal — skip to closing quote.
-    if (ch === '"' || ch === "'") {
+    if (ch === "\"" || ch === "'") {
       const quote = ch;
       out += " ";
       i++;

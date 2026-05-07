@@ -6,8 +6,8 @@
  */
 
 import { assertEquals } from "@std/assert";
-import { SchemaValidator } from "./validator.ts";
 import * as AST from "./ast.ts";
+import { SchemaValidator } from "./validator.ts";
 
 function makeDocument(
   propertyType: string,
@@ -113,8 +113,8 @@ Deno.test("Validator - max_len_value on non-string type produces error", () => {
   assertEquals(result.ok, false);
   assertEquals(
     result.errors!.some((e) =>
-      e.message.includes("max_len_value") &&
-      e.message.includes("'str' or 'bytes'")
+      e.message.includes("max_len_value")
+      && e.message.includes("'str' or 'bytes'")
     ),
     true,
   );
@@ -146,8 +146,8 @@ Deno.test("Validator - min_value on str type produces error", () => {
   assertEquals(result.ok, false);
   assertEquals(
     result.errors!.some((e) =>
-      e.message.includes("min_value") &&
-      e.message.includes("numeric or temporal")
+      e.message.includes("min_value")
+      && e.message.includes("numeric or temporal")
     ),
     true,
   );
@@ -192,8 +192,8 @@ Deno.test("Validator - min_ex_value on bool type produces error", () => {
   assertEquals(result.ok, false);
   assertEquals(
     result.errors!.some((e) =>
-      e.message.includes("min_ex_value") &&
-      e.message.includes("numeric or temporal")
+      e.message.includes("min_ex_value")
+      && e.message.includes("numeric or temporal")
     ),
     true,
   );

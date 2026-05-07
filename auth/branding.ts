@@ -274,7 +274,7 @@ export function validateMagicLinkUrlTemplate(template: string | undefined): void
  */
 export function buildMagicLinkUrl(
   token: string,
-  opts: { baseUrl: string; template?: string },
+  opts: { baseUrl: string; template?: string; },
 ): string {
   const encoded = encodeURIComponent(token);
   if (opts.template) {

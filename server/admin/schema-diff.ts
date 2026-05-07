@@ -10,9 +10,9 @@
  * `schema-watch.ts` reads the files and calls in here.
  */
 
-import { SDLParser } from "../../schema/parser.ts";
-import { type Module, SDLConverter } from "../../schema/converter.ts";
 import type * as AST from "../../schema/ast.ts";
+import { type Module, SDLConverter } from "../../schema/converter.ts";
+import { SDLParser } from "../../schema/parser.ts";
 
 export interface DiffPropertySnapshot {
   name: string;
@@ -215,9 +215,9 @@ function diffPropertyList(
     if (!beforeProp) {
       added.push(afterProp);
     } else if (
-      beforeProp.type !== afterProp.type ||
-      beforeProp.required !== afterProp.required ||
-      beforeProp.default !== afterProp.default
+      beforeProp.type !== afterProp.type
+      || beforeProp.required !== afterProp.required
+      || beforeProp.default !== afterProp.default
     ) {
       changed.push({ name, before: beforeProp, after: afterProp });
     }
@@ -251,9 +251,9 @@ function diffLinkList(
     if (!beforeLink) {
       added.push(afterLink);
     } else if (
-      beforeLink.target !== afterLink.target ||
-      beforeLink.required !== afterLink.required ||
-      beforeLink.multi !== afterLink.multi
+      beforeLink.target !== afterLink.target
+      || beforeLink.required !== afterLink.required
+      || beforeLink.multi !== afterLink.multi
     ) {
       changed.push({ name, before: beforeLink, after: afterLink });
     }
@@ -315,13 +315,13 @@ export function computeSchemaDiff(
 
     const propDiff = diffPropertyList(beforeSnap.properties, afterSnap.properties);
     const linkDiff = diffLinkList(beforeSnap.links, afterSnap.links);
-    const noChange = propDiff.added.length === 0 &&
-      propDiff.removed.length === 0 &&
-      propDiff.changed.length === 0 &&
-      linkDiff.added.length === 0 &&
-      linkDiff.removed.length === 0 &&
-      linkDiff.changed.length === 0 &&
-      beforeSnap.abstract === afterSnap.abstract;
+    const noChange = propDiff.added.length === 0
+      && propDiff.removed.length === 0
+      && propDiff.changed.length === 0
+      && linkDiff.added.length === 0
+      && linkDiff.removed.length === 0
+      && linkDiff.changed.length === 0
+      && beforeSnap.abstract === afterSnap.abstract;
     if (noChange) continue;
 
     modified.push({

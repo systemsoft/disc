@@ -267,8 +267,8 @@ Deno.test("E2E Access - schema reload updates active policies", async () => {
   // With schema A (no policies), INSERT should succeed in dry-run mode
   const responseA = await handler.handleRequest(insertRequest, context);
   assertExists(responseA, "Expected response from schema A");
-  const hasErrorA = responseA.errors !== undefined &&
-    responseA.errors.length > 0;
+  const hasErrorA = responseA.errors !== undefined
+    && responseA.errors.length > 0;
 
   // Schema B: deny insert policy
   const schemaB = await schemaFromSDL(SDL_WITH_DENY_INSERT);

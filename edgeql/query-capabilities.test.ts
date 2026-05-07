@@ -4,9 +4,9 @@
  */
 
 import { assertEquals } from "@std/assert";
+import type { Query } from "./ast.ts";
 import { EdgeQLParser } from "./parser.ts";
 import { isWriteQuery } from "./query-capabilities.ts";
-import type { Query } from "./ast.ts";
 
 function parse(q: string): Query {
   return new EdgeQLParser(q).parse();

@@ -9,9 +9,9 @@
  */
 
 import { assertEquals, assertThrows } from "@std/assert";
+import type { ExtensionContext } from "../extensions/types.ts";
 import { FtsExtension } from "./extension.ts";
 import { DEFAULT_LANGUAGE, FTS_VECTOR_COLUMN, generateDropFtsIndex, generateFtsColumn, generateFtsIndex, validateFtsConfig } from "./index-builder.ts";
-import type { ExtensionContext } from "../extensions/types.ts";
 import type { FtsIndexConfig } from "./types.ts";
 
 // ── Test helpers ───────────────────────────────────────────────────────
@@ -33,10 +33,10 @@ function makeContext(): ExtensionContext {
       info: () => {},
       warn: () => {},
       error: () => {},
-      child: function () {
+      child: function() {
         return this;
       },
-      withRequest: function () {
+      withRequest: function() {
         return this;
       },
     } as unknown as ExtensionContext["logger"],
@@ -202,7 +202,7 @@ Deno.test("validateFtsConfig - throws on invalid weight value", () => {
         weights: { title: "X" as "A" },
       }),
     Error,
-    'Invalid weight "X"',
+    "Invalid weight \"X\"",
   );
 });
 

@@ -148,7 +148,7 @@ export function liveQuery<T = unknown>(
       try {
         const payload = JSON.parse(
           (event as MessageEvent).data,
-        ) as { tables?: string[] };
+        ) as { tables?: string[]; };
         store.update((s) => ({
           ...s,
           lastInvalidatedTables: payload.tables ?? [],

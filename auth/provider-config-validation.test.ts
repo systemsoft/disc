@@ -3,8 +3,8 @@ import { assertRejects } from "@std/assert";
 import { afterEach, beforeEach, describe, it } from "@std/testing/bdd";
 
 import { AuthProvider } from "./provider.ts";
-import type { AuthConfig } from "./types.ts";
 import { TestDatabase } from "./test-database.ts";
+import type { AuthConfig } from "./types.ts";
 
 /**
  * gh/geldata#7006: every AuthConfig field is validated at
@@ -154,7 +154,7 @@ describe("AuthProvider — config validation (gh/geldata#7006)", () => {
     await assertRejects(
       () => provider.initialize(),
       Error,
-      'jwtAlgorithm must be "HS256" or "RS256"',
+      "jwtAlgorithm must be \"HS256\" or \"RS256\"",
     );
   });
 

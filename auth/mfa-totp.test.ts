@@ -6,8 +6,8 @@
 import { assert, assertEquals, assertRejects } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { AuthProvider } from "./provider.ts";
 import { TestDatabase } from "./test-database.ts";
-import { AuthError, AuthErrorCode } from "./types.ts";
 import { generateTOTP } from "./totp.ts";
+import { AuthError, AuthErrorCode } from "./types.ts";
 
 async function makeProvider(): Promise<{
   provider: AuthProvider;
@@ -29,7 +29,7 @@ async function makeProvider(): Promise<{
 
 async function registerAndCode(
   provider: AuthProvider,
-): Promise<{ userId: string; secret: string; firstCode: string }> {
+): Promise<{ userId: string; secret: string; firstCode: string; }> {
   const auth = await provider.register({
     email: "u@example.com",
     password: "password123",

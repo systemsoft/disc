@@ -2,11 +2,11 @@
  * DiscClient — Core HTTP client for Disc database
  */
 
-import type { DiscClientConfig, HealthStatus, QueryOptions, QueryResponse, QueryValidator, ServerStats } from "./types.ts";
-import { DiscAuthError, DiscConnectionError, DiscNetworkError, DiscProtocolError, DiscQueryError, DiscServerError, DiscTimeoutError } from "./errors.ts";
-import { applyValidator } from "./validation.ts";
 import { reviveResponse } from "./codecs.ts";
+import { DiscAuthError, DiscConnectionError, DiscNetworkError, DiscProtocolError, DiscQueryError, DiscServerError, DiscTimeoutError } from "./errors.ts";
 import { Transaction } from "./transaction.ts";
+import type { DiscClientConfig, HealthStatus, QueryOptions, QueryResponse, QueryValidator, ServerStats } from "./types.ts";
+import { applyValidator } from "./validation.ts";
 
 const DEFAULT_BASE_URL = "http://localhost:5656";
 const DEFAULT_TIMEOUT = 30000;
@@ -253,9 +253,9 @@ export class DiscClient {
       } catch (error) {
         // Don't retry auth, query, protocol, or server errors
         if (
-          error instanceof DiscAuthError ||
-          error instanceof DiscQueryError ||
-          error instanceof DiscProtocolError
+          error instanceof DiscAuthError
+          || error instanceof DiscQueryError
+          || error instanceof DiscProtocolError
         ) {
           throw error;
         }
@@ -267,7 +267,7 @@ export class DiscClient {
             this.logger?.warn?.("retrying after server error", {
               attempt: attempt + 1,
               max: this.retries,
-              status: (error as { statusCode?: number }).statusCode,
+              status: (error as { statusCode?: number; }).statusCode,
             });
             await this.delay(this.backoffDelay(attempt));
             continue;

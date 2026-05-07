@@ -69,7 +69,7 @@ JSON only, with `Content-Type: application/json`.
 // POST /api/User
 {
   "name": "Ada Lovelace",
-  "email": "ada@example.com"
+  "email": "ada@example.com",
 }
 ```
 
@@ -79,7 +79,7 @@ Links are passed by id:
 // POST /api/Post
 {
   "title": "Notes on the Analytical Engine",
-  "author": "61f4c7ad-…"
+  "author": "61f4c7ad-…",
 }
 ```
 

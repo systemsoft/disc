@@ -19,10 +19,10 @@
  */
 
 import { assertEquals, assertNotEquals } from "@std/assert";
-import { BinaryProtocolServer } from "./binary-server.ts";
-import { type ClientMessage, decodeServerMessage, encodeClientMessage, type ServerMessage } from "./messages.ts";
-import { Cardinality, InputLanguage, OutputFormat, PROTOCOL_MAJOR_VERSION, PROTOCOL_MINOR_VERSION } from "./enums.ts";
 import { createTestSchema } from "../compiler/context.ts";
+import { BinaryProtocolServer } from "./binary-server.ts";
+import { Cardinality, InputLanguage, OutputFormat, PROTOCOL_MAJOR_VERSION, PROTOCOL_MINOR_VERSION } from "./enums.ts";
+import { type ClientMessage, decodeServerMessage, encodeClientMessage, type ServerMessage } from "./messages.ts";
 import { buildClientFinalMessage, buildClientFirstMessage } from "./scram.ts";
 
 const textDecoder = new TextDecoder();
@@ -39,7 +39,7 @@ const ZERO_UUID = new Uint8Array(16);
 
 async function readMessage(
   conn: Deno.TcpConn,
-): Promise<{ mtype: number; payload: Uint8Array } | null> {
+): Promise<{ mtype: number; payload: Uint8Array; } | null> {
   const header = new Uint8Array(5);
   const headerRead = await readExact(conn, header);
   if (!headerRead) return null;
@@ -71,7 +71,7 @@ async function readExact(
   return true;
 }
 
-function decode(raw: { mtype: number; payload: Uint8Array }): ServerMessage {
+function decode(raw: { mtype: number; payload: Uint8Array; }): ServerMessage {
   return decodeServerMessage(raw.mtype, raw.payload);
 }
 
@@ -458,8 +458,8 @@ Deno.test("wire-integration - Parse then Execute (two-step) returns matching des
 
   // The descriptor IDs should match between Parse and Execute
   if (
-    parseDesc.kind === "CommandDataDescription" &&
-    msgs[0].kind === "CommandDataDescription"
+    parseDesc.kind === "CommandDataDescription"
+    && msgs[0].kind === "CommandDataDescription"
   ) {
     assertEquals(parseDesc.inputTypedescId, msgs[0].inputTypedescId);
     assertEquals(parseDesc.outputTypedescId, msgs[0].outputTypedescId);

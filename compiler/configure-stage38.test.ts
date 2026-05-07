@@ -8,11 +8,11 @@
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { assertThrows } from "@std/assert/throws";
-import { EdgeQLParser } from "../edgeql/parser.ts";
-import { EdgeQLCompiler } from "./compiler.ts";
-import { SQLCodeGenerator } from "./codegen.ts";
-import { createTestSchema } from "./context.ts";
 import type { ConfigureQuery } from "../edgeql/ast.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
+import { SQLCodeGenerator } from "./codegen.ts";
+import { EdgeQLCompiler } from "./compiler.ts";
+import { createTestSchema } from "./context.ts";
 
 const schema = createTestSchema();
 const codegen = new SQLCodeGenerator();

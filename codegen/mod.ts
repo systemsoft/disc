@@ -9,8 +9,8 @@ import * as Context from "../compiler/context.ts";
 import { getLogger } from "../lib/logger.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
 import type { Module } from "../schema/converter.ts";
-import { TypeScriptGenerator } from "./typescript-generator.ts";
 import * as Types from "./types.ts";
+import { TypeScriptGenerator } from "./typescript-generator.ts";
 
 const log = getLogger("codegen");
 
@@ -47,7 +47,7 @@ export function generateTypeScript(
 export async function writeGeneratedFiles(
   result: Types.CodegenResult,
   basePath: string = ".",
-  options: { runFmt?: boolean } = {},
+  options: { runFmt?: boolean; } = {},
 ): Promise<void> {
   // Default: run `deno fmt` over the written files so downstream code
   // matches project conventions. Tests that round-trip content verbatim

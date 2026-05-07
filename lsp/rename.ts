@@ -13,9 +13,9 @@
  * sibling SDL file too.
  */
 
-import { buildSymbolIndex } from "./symbol-index.ts";
-import { provideReferences, type ReferencesContext } from "./references.ts";
 import type { DocumentUri, Position, Range, TextEdit, WorkspaceEdit } from "./protocol.ts";
+import { provideReferences, type ReferencesContext } from "./references.ts";
+import { buildSymbolIndex } from "./symbol-index.ts";
 
 const IDENT = /[A-Za-z_][A-Za-z_0-9]*/g;
 const VALID_IDENTIFIER = /^[A-Za-z_][A-Za-z_0-9]*$/;
@@ -40,7 +40,7 @@ export function provideRename(
   pos: Position,
   newName: string,
   uri: DocumentUri,
-  options: { context?: ReferencesContext } = {},
+  options: { context?: ReferencesContext; } = {},
 ): WorkspaceEdit | null {
   // Validate the new name is a syntactically-correct identifier.
   if (!VALID_IDENTIFIER.test(newName)) return null;

@@ -9,12 +9,12 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
-import { EdgeQLParser } from "../edgeql/parser.ts";
-import { EdgeQLCompiler } from "./compiler.ts";
+import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
+import { EdgeQLCompiler } from "./compiler.ts";
 
 import { Schema } from "./context.ts";
 
@@ -129,8 +129,8 @@ Deno.test({
       // Find the row data - it could be the row itself or nested in a
       // jsonb_build_object column
       const rowData = firstRow.jsonb_build_object ?? firstRow;
-      const name = rowData.name ??
-        (typeof rowData === "object" ? Object.values(rowData)[0] : undefined);
+      const name = rowData.name
+        ?? (typeof rowData === "object" ? Object.values(rowData)[0] : undefined);
       assertExists(name, "Row should contain name data");
 
       await manager.close();
@@ -159,7 +159,7 @@ Deno.test({
 
       // Compile and execute an EdgeQL INSERT
       const insertSql = compileEdgeQL(
-        'insert TestItem { name := "beta", value := 20 }',
+        "insert TestItem { name := \"beta\", value := 20 }",
         schema,
       );
       await pool.query(insertSql);
@@ -260,7 +260,7 @@ Deno.test({
 
       // Compile and execute an EdgeQL UPDATE
       const updateSql = compileEdgeQL(
-        'update TestItem filter .name = "gamma" set { value := 99 }',
+        "update TestItem filter .name = \"gamma\" set { value := 99 }",
         schema,
       );
       await pool.query(updateSql);
@@ -322,7 +322,7 @@ Deno.test({
 
       // Compile and execute an EdgeQL DELETE
       const deleteSql = compileEdgeQL(
-        'delete TestItem filter .name = "delta"',
+        "delete TestItem filter .name = \"delta\"",
         schema,
       );
       await pool.query(deleteSql);
@@ -368,7 +368,7 @@ const EMPLOYEE_TABLE = "test_employee";
 /** Apply the employee SDL and return the schema for compilation. */
 async function applyEmployeeSchema(
   pool: ConnectionPool,
-): Promise<{ manager: SchemaManager; schema: Schema }> {
+): Promise<{ manager: SchemaManager; schema: Schema; }> {
   const manager = new SchemaManager({ pool });
   await manager.initialize();
 
@@ -662,7 +662,7 @@ Deno.test({
       // contains(.name, "li") should match only "Billie"
       // (Ada/Billie/Cher — "li" is a substring of Billie only)
       const containsSql = compileEdgeQL(
-        'select TestEmployee { name } filter contains(.name, "li")',
+        "select TestEmployee { name } filter contains(.name, \"li\")",
         schema,
       );
       const containsResult = await pool.query(containsSql);
@@ -674,7 +674,7 @@ Deno.test({
 
       // find(.name, "il") != -1 should match only "Billie"
       const findSql = compileEdgeQL(
-        'select TestEmployee { name } filter find(.name, "il") != -1',
+        "select TestEmployee { name } filter find(.name, \"il\") != -1",
         schema,
       );
       const findResult = await pool.query(findSql);

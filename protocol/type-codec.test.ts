@@ -3,10 +3,10 @@
  */
 
 import { assertAlmostEquals, assertEquals, assertThrows } from "@std/assert";
+import { Cardinality } from "./enums.ts";
 import { decodeScalarValue, encodeObjectValue, encodeScalarValue } from "./type-codec.ts";
 import { DescriptorTag, type ObjectShapeDescriptor, type TypeDescriptor } from "./typedesc.ts";
 import { bytesToUuid, uuidToBytes } from "./types.ts";
-import { Cardinality } from "./enums.ts";
 
 // ---------------------------------------------------------------------------
 // str encode/decode
@@ -226,7 +226,7 @@ Deno.test("duration - negative duration", () => {
 // ---------------------------------------------------------------------------
 
 Deno.test("json - encode/decode string value", () => {
-  const encoded = encodeScalarValue("json", '{"key":"value"}');
+  const encoded = encodeScalarValue("json", "{\"key\":\"value\"}");
   // First byte should be format version 0x01
   assertEquals(encoded[0], 0x01);
   const decoded = decodeScalarValue("json", encoded);

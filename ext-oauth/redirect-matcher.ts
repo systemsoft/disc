@@ -53,9 +53,9 @@ function matchesPattern(supplied: URL, pattern: string): boolean {
     return false;
   }
   return (
-    supplied.protocol === parsedPattern.protocol &&
-    supplied.host.toLowerCase() === parsedPattern.host.toLowerCase() &&
-    supplied.pathname === parsedPattern.pathname
+    supplied.protocol === parsedPattern.protocol
+    && supplied.host.toLowerCase() === parsedPattern.host.toLowerCase()
+    && supplied.pathname === parsedPattern.pathname
   );
 }
 

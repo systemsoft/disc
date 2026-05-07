@@ -4,6 +4,7 @@
  */
 
 import { assert, assertEquals, assertRejects } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { buildAttestationObject, buildAuthenticatorData, buildClientDataJSON, encodeCbor, generateTestKeyPair, signAssertion } from "./webauthn-test-helper.ts";
 import {
   base64UrlDecode,
   base64UrlEncode,
@@ -14,7 +15,6 @@ import {
   verifyAssertionSignature,
   verifyClientData,
 } from "./webauthn.ts";
-import { buildAttestationObject, buildAuthenticatorData, buildClientDataJSON, encodeCbor, generateTestKeyPair, signAssertion } from "./webauthn-test-helper.ts";
 
 // ── base64url + CBOR round-trip ──────────────────────────────────────
 

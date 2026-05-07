@@ -296,8 +296,8 @@ Deno.test("CLI Workflow - Command argument validation", async () => {
     for (const name of validNames) {
       // Should not throw
       assert(
-        /^[a-z0-9-]+$/.test(name) && !name.startsWith("-") &&
-          !name.endsWith("-"),
+        /^[a-z0-9-]+$/.test(name) && !name.startsWith("-")
+          && !name.endsWith("-"),
       );
     }
   } finally {
@@ -311,13 +311,13 @@ Deno.test("CLI Workflow - Environment variable integration", () => {
   try {
     // Test DATABASE_URL handling
     env.clear("DATABASE_URL");
-    let dbUrl = Deno.env.get("DATABASE_URL") ||
-      "postgresql://localhost:5432/disc_dev";
+    let dbUrl = Deno.env.get("DATABASE_URL")
+      || "postgresql://localhost:5432/disc_dev";
     assertEquals(dbUrl, "postgresql://localhost:5432/disc_dev");
 
     env.set("DATABASE_URL", "postgresql://custom:5432/custom_db");
-    dbUrl = Deno.env.get("DATABASE_URL") ||
-      "postgresql://localhost:5432/disc_dev";
+    dbUrl = Deno.env.get("DATABASE_URL")
+      || "postgresql://localhost:5432/disc_dev";
     assertEquals(dbUrl, "postgresql://custom:5432/custom_db");
 
     // Test server environment variables

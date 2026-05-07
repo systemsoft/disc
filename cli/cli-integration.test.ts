@@ -14,14 +14,14 @@
  */
 
 import { assert, assertEquals, assertExists } from "@std/assert";
-import { cleanupTempDir, ConsoleCapture, createTempDir } from "../tests/test-utils.ts";
-import { CLICommands } from "./commands.ts";
-import { SchemaManager } from "../migration/schema-manager.ts";
+import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
 import * as Context from "../compiler/context.ts";
+import { ConnectionPool } from "../lib/connection-pool.ts";
+import { SchemaManager } from "../migration/schema-manager.ts";
 import { createServerFromEnv, DiscServer } from "../server/server.ts";
 import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
-import { ConnectionPool } from "../lib/connection-pool.ts";
-import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
+import { cleanupTempDir, ConsoleCapture, createTempDir } from "../tests/test-utils.ts";
+import { CLICommands } from "./commands.ts";
 
 const RUN_PG = canRunPgTests();
 
@@ -45,7 +45,7 @@ function getPrivateMethod<T>(
 /** Parse a DSN into connection config for the raw deno-postgres Client. */
 function parseDsn(
   dsn: string,
-): { hostname: string; port: number; user: string; database: string } {
+): { hostname: string; port: number; user: string; database: string; } {
   const url = new URL(dsn);
   return {
     hostname: url.hostname || "localhost",
@@ -78,7 +78,7 @@ async function tableExists(dsn: string, tableName: string): Promise<boolean> {
   const client = new Client(cfg);
   try {
     await client.connect();
-    const result = await client.queryObject<{ exists: boolean }>(
+    const result = await client.queryObject<{ exists: boolean; }>(
       `SELECT EXISTS (
         SELECT 1 FROM information_schema.tables
         WHERE table_schema = 'public' AND table_name = $1
@@ -478,10 +478,10 @@ Deno.test(
       const allOutput = logs.join("\n");
 
       assert(
-        allOutput.includes("Migration Plan") ||
-          allOutput.includes("Creating new migration") ||
-          allOutput.includes("DRY RUN") ||
-          allOutput.includes("migration"),
+        allOutput.includes("Migration Plan")
+          || allOutput.includes("Creating new migration")
+          || allOutput.includes("DRY RUN")
+          || allOutput.includes("migration"),
         `migrate --create should show plan info, got:\n${allOutput}`,
       );
     } finally {
@@ -584,7 +584,7 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema should succeed: ${result.ok ? "" : (result as { ok: false; error: Error }).error.message}`,
+        `applySchema should succeed: ${result.ok ? "" : (result as { ok: false; error: Error; }).error.message}`,
       );
 
       // Verify the table was created

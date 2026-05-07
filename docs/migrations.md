@@ -769,7 +769,7 @@ export async function migrate(opts: {
   databaseUrl: string;
   sdlSource: string;
   dryRun?: boolean;
-}): Promise<{ migrationsApplied: number; durationMs: number }> {
+}): Promise<{ migrationsApplied: number; durationMs: number; }> {
   const pool = new ConnectionPool({ connectionString: opts.databaseUrl });
   await pool.initialize();
 
@@ -829,7 +829,9 @@ const result = await manager.applySchema(`
 
 if (result.ok) {
   for (const migration of result.value) {
-    console.log(`Applied ${migration.migrationId} in ${migration.durationMs}ms`);
+    console.log(
+      `Applied ${migration.migrationId} in ${migration.durationMs}ms`,
+    );
   }
 }
 ```

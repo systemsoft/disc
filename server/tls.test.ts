@@ -3,10 +3,10 @@
  */
 
 import { assertEquals, assertRejects } from "@std/assert";
-import { DiscServer } from "./server.ts";
 import { HttpServer } from "./http.ts";
-import type { ServerConfig } from "./types.ts";
+import { DiscServer } from "./server.ts";
 import { SimpleEdgeQLProtocolHandler } from "./simple-edgeql-protocol.ts";
+import type { ServerConfig } from "./types.ts";
 
 // ---------------------------------------------------------------------------
 // Test 1: TLS config is properly set when certFile and keyFile are provided

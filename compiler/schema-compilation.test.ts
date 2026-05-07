@@ -9,10 +9,10 @@
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { EdgeQLParser } from "../edgeql/parser.ts";
-import { EdgeQLCompiler } from "./compiler.ts";
-import { SQLCodeGenerator } from "./codegen.ts";
-import { Schema } from "./context.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
+import { SQLCodeGenerator } from "./codegen.ts";
+import { EdgeQLCompiler } from "./compiler.ts";
+import { Schema } from "./context.ts";
 
 // ---------------------------------------------------------------------------
 // Test SDL

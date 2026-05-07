@@ -4,12 +4,12 @@
  */
 
 import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { AuthProvider } from "../auth/provider.ts";
-import { AuthMiddleware } from "../auth/middleware.ts";
 import { AuthRoutes } from "../auth/integration.ts";
+import { AuthMiddleware } from "../auth/middleware.ts";
+import { AuthProvider } from "../auth/provider.ts";
 import { TestDatabase } from "../auth/test-database.ts";
-import { FileManager } from "../lib/file-storage/manager.ts";
 import { LocalFileStorage } from "../lib/file-storage/local.ts";
+import { FileManager } from "../lib/file-storage/manager.ts";
 import { HttpServer } from "./http.ts";
 
 const TEST_HOST = "127.0.0.1";

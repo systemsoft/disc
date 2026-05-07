@@ -9,8 +9,8 @@
 
 import { join } from "@std/path";
 import { createDatabase, DatabaseConnection, dropDatabase } from "../lib/database.ts";
-import { PostgresBinaryDownloader, PostgresManager } from "../postgres/mod.ts";
 import { resolveProjectContext } from "../lib/project-context.ts";
+import { PostgresBinaryDownloader, PostgresManager } from "../postgres/mod.ts";
 
 export interface DbCreateOptions {
   name: string;
@@ -164,7 +164,7 @@ export class DbCommand {
 
     if (name === DEFAULT_DATABASE_NAME) {
       throw new Error(
-        'Cannot drop the default "disc" database.',
+        "Cannot drop the default \"disc\" database.",
       );
     }
 
@@ -202,7 +202,7 @@ export class DbCommand {
 
     if (name === DEFAULT_DATABASE_NAME) {
       throw new Error(
-        'Cannot wipe the default "disc" database.',
+        "Cannot wipe the default \"disc\" database.",
       );
     }
 
@@ -368,8 +368,8 @@ export class DbCommand {
    * discovery when not provided directly.
    */
   private async resolvePgPaths(
-    opts: { databaseUrl: string; pgBinDir?: string; socketDir?: string },
-  ): Promise<{ pgBinDir: string; socketDir: string }> {
+    opts: { databaseUrl: string; pgBinDir?: string; socketDir?: string; },
+  ): Promise<{ pgBinDir: string; socketDir: string; }> {
     if (opts.pgBinDir && opts.socketDir) {
       return { pgBinDir: opts.pgBinDir, socketDir: opts.socketDir };
     }
@@ -468,8 +468,8 @@ export function isCustomFormatDump(buf: Uint8Array): boolean {
     return false;
   }
   // "PGDMP"
-  return buf[0] === 0x50 && buf[1] === 0x47 && buf[2] === 0x44 &&
-    buf[3] === 0x4d && buf[4] === 0x50;
+  return buf[0] === 0x50 && buf[1] === 0x47 && buf[2] === 0x44
+    && buf[3] === 0x4d && buf[4] === 0x50;
 }
 
 /**
@@ -481,7 +481,7 @@ export function isCustomFormatDump(buf: Uint8Array): boolean {
 async function peekBytes(
   source: ReadableStream<Uint8Array>,
   n: number,
-): Promise<{ peek: Uint8Array; rest: ReadableStream<Uint8Array> }> {
+): Promise<{ peek: Uint8Array; rest: ReadableStream<Uint8Array>; }> {
   const reader = source.getReader();
   const collected: Uint8Array[] = [];
   let total = 0;

@@ -7,13 +7,13 @@
  */
 
 import { assertEquals, assertLessOrEqual } from "@std/assert";
-import { MigrationEngine } from "./engine.ts";
-import { SchemaDiffer } from "./differ.ts";
-import { MigrationTracker } from "./tracker.ts";
-import { Module } from "../schema/converter.ts";
 import * as AST from "../schema/ast.ts";
-import * as Types from "./types.ts";
+import { Module } from "../schema/converter.ts";
 import { canRunPgTests, cleanupTestTables, getTestDsn } from "../tests/pg-test-harness.ts";
+import { SchemaDiffer } from "./differ.ts";
+import { MigrationEngine } from "./engine.ts";
+import { MigrationTracker } from "./tracker.ts";
+import * as Types from "./types.ts";
 
 const RUN_PG = canRunPgTests();
 

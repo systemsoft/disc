@@ -2,13 +2,13 @@
  * Auth Integration with Disc Server
  */
 
-import { getLogger } from "../lib/logger.ts";
-import { AuthProvider } from "./provider.ts";
-import { AuthContext, AuthMiddleware, RequestHandler } from "./middleware.ts";
-import { AuthConfig, LoginCredentials, RegisterData } from "./types.ts";
-import type { CaptchaEndpoint } from "./captcha.ts";
 import { DatabaseConnection } from "../lib/database.ts";
+import { getLogger } from "../lib/logger.ts";
 import { RateLimiter } from "../server/rate-limiter.ts";
+import type { CaptchaEndpoint } from "./captcha.ts";
+import { AuthContext, AuthMiddleware, RequestHandler } from "./middleware.ts";
+import { AuthProvider } from "./provider.ts";
+import { AuthConfig, LoginCredentials, RegisterData } from "./types.ts";
 
 const log = getLogger("auth");
 
@@ -81,7 +81,7 @@ function extractClientIp(request: Request, trustProxy: boolean): string {
 function extractRequestMeta(
   request: Request,
   trustProxy: boolean,
-): { ipAddress?: string; userAgent?: string } {
+): { ipAddress?: string; userAgent?: string; } {
   const ip = extractClientIp(request, trustProxy);
   const ua = request.headers.get("user-agent") ?? undefined;
   return {
@@ -163,8 +163,8 @@ export class AuthRoutes {
     if (options.rateLimiter === null) {
       this.rateLimiter = null;
     } else {
-      this.rateLimiter = options.rateLimiter ??
-        new RateLimiter(DEFAULT_AUTH_RATE_LIMIT);
+      this.rateLimiter = options.rateLimiter
+        ?? new RateLimiter(DEFAULT_AUTH_RATE_LIMIT);
     }
     this.trustProxy = options.trustProxy ?? false;
   }
@@ -1182,10 +1182,10 @@ export class AuthRoutes {
 
     // Check for AuthError shape using type narrowing
     if (
-      error !== null &&
-      typeof error === "object" &&
-      "name" in error &&
-      (error as { name: unknown }).name === "AuthError"
+      error !== null
+      && typeof error === "object"
+      && "name" in error
+      && (error as { name: unknown; }).name === "AuthError"
     ) {
       const authErr = error as unknown as {
         code: string;

@@ -140,7 +140,7 @@ Deno.test("cleanup removes stale entries after idle TTL", () => {
 
   // The cleanup runs on the 60s interval; we invoke it directly by
   // casting to access the private method.
-  (limiter as unknown as { cleanup_stale(): void }).cleanup_stale();
+  (limiter as unknown as { cleanup_stale(): void; }).cleanup_stale();
 
   assertEquals(limiter.stats().activeClients, 0);
 

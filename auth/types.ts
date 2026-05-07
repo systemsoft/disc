@@ -338,13 +338,13 @@ export interface TotpEnrollment {
 export interface WebAuthnRegistrationOptions {
   challengeId: string;
   publicKey: {
-    rp: { id: string; name: string };
-    user: { id: string; name: string; displayName: string };
+    rp: { id: string; name: string; };
+    user: { id: string; name: string; displayName: string; };
     challenge: string; // base64url
-    pubKeyCredParams: Array<{ type: "public-key"; alg: number }>;
+    pubKeyCredParams: Array<{ type: "public-key"; alg: number; }>;
     timeout?: number;
     attestation?: "none";
-    excludeCredentials?: Array<{ id: string; type: "public-key" }>;
+    excludeCredentials?: Array<{ id: string; type: "public-key"; }>;
     /**
      * Authenticator selection criteria — surfaces discoverable-credential
      * preference (gh/geldata#7196). `residentKey` is the modern
@@ -371,7 +371,7 @@ export interface WebAuthnLoginOptions {
     rpId: string;
     challenge: string;
     timeout?: number;
-    allowCredentials?: Array<{ id: string; type: "public-key" }>;
+    allowCredentials?: Array<{ id: string; type: "public-key"; }>;
     userVerification?: "required" | "preferred" | "discouraged";
   };
 }

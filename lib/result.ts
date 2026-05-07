@@ -3,8 +3,8 @@
  */
 
 export type Result<T, E = Error> =
-  | { ok: true; value: T }
-  | { ok: false; error: E };
+  | { ok: true; value: T; }
+  | { ok: false; error: E; };
 
 export function Ok<T>(value: T): Result<T, never> {
   return { ok: true, value };
@@ -16,13 +16,13 @@ export function Err<E>(error: E): Result<never, E> {
 
 export function isOk<T, E>(
   result: Result<T, E>,
-): result is { ok: true; value: T } {
+): result is { ok: true; value: T; } {
   return result.ok === true;
 }
 
 export function isErr<T, E>(
   result: Result<T, E>,
-): result is { ok: false; error: E } {
+): result is { ok: false; error: E; } {
   return result.ok === false;
 }
 

@@ -161,7 +161,7 @@ export function verifyClientData(opts: {
   expectedChallenge: Uint8Array;
   expectedOrigin: string;
   expectedType: "webauthn.create" | "webauthn.get";
-}): { challenge: string; origin: string; type: string } {
+}): { challenge: string; origin: string; type: string; } {
   const text = new TextDecoder().decode(opts.clientDataJSON);
   const parsed = JSON.parse(text) as {
     challenge: string;

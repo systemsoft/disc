@@ -10,13 +10,13 @@
  */
 
 import { assert, assertEquals, assertRejects } from "https://deno.land/std@0.224.0/assert/mod.ts";
-import { BaseExtension } from "../extensions/base-extension.ts";
-import { getLogger } from "../lib/logger.ts";
-import type { ExtensionContext, ExtensionMetadata, ExtensionRoute } from "../extensions/types.ts";
 import type { FunctionDef } from "../compiler/context.ts";
+import { BaseExtension } from "../extensions/base-extension.ts";
+import { ExtensionRegistry } from "../extensions/registry.ts";
+import type { ExtensionContext, ExtensionMetadata, ExtensionRoute } from "../extensions/types.ts";
+import { getLogger } from "../lib/logger.ts";
 import { HttpServer } from "./http.ts";
 import type { ProtocolHandler, QueryContext, QueryRequest, QueryResponse } from "./types.ts";
-import { ExtensionRegistry } from "../extensions/registry.ts";
 
 const TEST_HOST = "127.0.0.1";
 
@@ -177,7 +177,7 @@ function createExtHttpServer(
 function createHealthHttpServer(
   port: number,
   healthGetter: () => Promise<
-    Map<string, { healthy: boolean; details?: string }>
+    Map<string, { healthy: boolean; details?: string; }>
   >,
 ): HttpServer {
   return new HttpServer({
@@ -387,7 +387,7 @@ Deno.test({
   fn: async () => {
     const port = randomPort();
 
-    const healthMap = new Map<string, { healthy: boolean; details?: string }>();
+    const healthMap = new Map<string, { healthy: boolean; details?: string; }>();
     healthMap.set("my-ext", { healthy: false, details: "always broken" });
 
     const server = createHealthHttpServer(

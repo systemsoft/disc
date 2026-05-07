@@ -25,8 +25,8 @@
  *   - Disc-internal tables (`disc_*`) are skipped.
  */
 
-import type { LinkDef, PropertyDef, Schema, TypeDef } from "./context.ts";
 import { getBuiltinFunctions } from "./builtin-functions.ts";
+import type { LinkDef, PropertyDef, Schema, TypeDef } from "./context.ts";
 
 // ---------------------------------------------------------------------------
 // Input shape
@@ -46,7 +46,7 @@ export interface IntrospectedTable {
   columns: IntrospectedColumn[];
   primaryKey?: string[];
   uniqueConstraints?: string[][];
-  checkConstraints?: { name: string; expression: string }[];
+  checkConstraints?: { name: string; expression: string; }[];
 }
 
 export interface IntrospectedForeignKey {
@@ -201,7 +201,7 @@ export function buildSchemaFromIntrospection(
   // Build a lookup: table name → PK→{module, type} so FKs can resolve targets.
   const targetByTable = new Map<
     string,
-    { module: string; typeName: string; qualified: string }
+    { module: string; typeName: string; qualified: string; }
   >();
   for (const t of data.tables) {
     if (isDiscInternal(t.tableName)) continue;
@@ -254,7 +254,7 @@ function buildObjectType(
     fksByFromTable: Map<string, IntrospectedForeignKey[]>;
     targetByTable: Map<
       string,
-      { module: string; typeName: string; qualified: string }
+      { module: string; typeName: string; qualified: string; }
     >;
   },
 ): TypeDef {
@@ -323,7 +323,7 @@ function applyJunction(
   types: Map<string, TypeDef>,
   targetByTable: Map<
     string,
-    { module: string; typeName: string; qualified: string }
+    { module: string; typeName: string; qualified: string; }
   >,
 ): void {
   const left = targetByTable.get(j.leftTarget);

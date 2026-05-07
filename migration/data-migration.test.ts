@@ -13,9 +13,9 @@ import { DataMigration, DataMigrationContext, DataMigrationRunner } from "./data
  */
 function createMockPool(): {
   pool: any;
-  calls: { method: string; args: any[] }[];
+  calls: { method: string; args: any[]; }[];
 } {
-  const calls: { method: string; args: any[] }[] = [];
+  const calls: { method: string; args: any[]; }[] = [];
 
   const pool = {
     query: async (sql: string, params?: any[]) => {

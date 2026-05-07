@@ -80,7 +80,7 @@ interface TomlFields {
  * and `\\` (literal backslash). (P2-27)
  */
 function unescapeBasicString(body: string): string {
-  return body.replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+  return body.replace(/\\"/g, "\"").replace(/\\\\/g, "\\");
 }
 
 /**
@@ -117,7 +117,7 @@ function parseStringArray(raw: string): string[] | null {
       escape = true;
       continue;
     }
-    if (ch === '"') {
+    if (ch === "\"") {
       buf += ch;
       inQuote = !inQuote;
       continue;
@@ -125,7 +125,7 @@ function parseStringArray(raw: string): string[] | null {
     if (ch === "," && !inQuote) {
       const item = buf.trim();
       if (item !== "") {
-        if (!item.startsWith('"') || !item.endsWith('"')) {
+        if (!item.startsWith("\"") || !item.endsWith("\"")) {
           return null;
         }
         out.push(unescapeBasicString(item.slice(1, -1)));
@@ -138,7 +138,7 @@ function parseStringArray(raw: string): string[] | null {
 
   const last = buf.trim();
   if (last !== "") {
-    if (!last.startsWith('"') || !last.endsWith('"')) {
+    if (!last.startsWith("\"") || !last.endsWith("\"")) {
       return null;
     }
     out.push(unescapeBasicString(last.slice(1, -1)));
@@ -190,7 +190,7 @@ function parseToml(source: string): TomlFields {
     // basic-string escapes we care about. Arrays are kept as raw text and
     // dispatched to `parseStringArray` only by the keys that expect them.
     let value: string;
-    if (rawValue.startsWith('"') && rawValue.endsWith('"')) {
+    if (rawValue.startsWith("\"") && rawValue.endsWith("\"")) {
       value = unescapeBasicString(rawValue.slice(1, -1));
     } else {
       value = rawValue;

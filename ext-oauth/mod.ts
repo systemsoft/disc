@@ -4,9 +4,9 @@
 
 export type { OAuthConfig, OAuthProviderConfig, OAuthState, OAuthUserInfo } from "./types.ts";
 
+export { buildDiscoveryUrl, fetchOidcDiscovery, type OidcDiscoveryDoc } from "./discovery.ts";
 export { OAuthExtension } from "./extension.ts";
-export { OAuthStateManager } from "./state-manager.ts";
 export { appleProvider, createOidcProvider, genericOidcProvider, githubProvider, googleProvider } from "./providers.ts";
 export type { OidcProviderOptions } from "./providers.ts";
-export { buildDiscoveryUrl, fetchOidcDiscovery, type OidcDiscoveryDoc } from "./discovery.ts";
+export { OAuthStateManager } from "./state-manager.ts";
 export { exchangeCodeForToken, fetchUserInfo } from "./token-exchange.ts";

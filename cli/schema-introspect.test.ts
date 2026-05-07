@@ -3,10 +3,10 @@
  */
 
 import { assertStringIncludes } from "@std/assert";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
-import { commands } from "./commands.ts";
-import { cleanupTempDir, ConsoleCapture, createTempDir } from "../tests/test-utils.ts";
 import { DatabaseConnection } from "../lib/database.ts";
+import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
+import { cleanupTempDir, ConsoleCapture, createTempDir } from "../tests/test-utils.ts";
+import { commands } from "./commands.ts";
 
 const FIXTURE_SQL = `
 DROP TABLE IF EXISTS schema_intr_posts CASCADE;

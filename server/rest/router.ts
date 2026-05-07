@@ -222,8 +222,8 @@ async function handleUpdate(
     return errorJson("PATCH body must contain at least one field", 400);
   }
 
-  const edgeql = `update ${typeDef.name} filter .id = <uuid>${edgeqlString(id)} ` +
-    `set { ${assignments} }`;
+  const edgeql = `update ${typeDef.name} filter .id = <uuid>${edgeqlString(id)} `
+    + `set { ${assignments} }`;
 
   const result = await runEdgeQL(opts, edgeql);
   if (result instanceof Response) return result;
@@ -297,8 +297,8 @@ async function handleLinkedCollection(
   if (offset !== undefined) linkClause += ` offset ${offset}`;
   if (limit !== undefined) linkClause += ` limit ${limit}`;
 
-  const edgeql = `select ${parentType.name} { ${linkClause} } ` +
-    `filter .id = <uuid>${edgeqlString(parentId)}`;
+  const edgeql = `select ${parentType.name} { ${linkClause} } `
+    + `filter .id = <uuid>${edgeqlString(parentId)}`;
 
   const result = await runEdgeQL(opts, edgeql);
   if (result instanceof Response) return result;
@@ -608,8 +608,8 @@ function mapErrorCodeToStatus(code: string): number {
 // ---------------------------------------------------------------------------
 
 function resolveType(schema: Schema, name: string): TypeDef | undefined {
-  return schema.types.get(name) ??
-    schema.types.get(`default::${name}`);
+  return schema.types.get(name)
+    ?? schema.types.get(`default::${name}`);
 }
 
 function isHidden(annotations: Record<string, string> | undefined): boolean {

@@ -105,8 +105,8 @@ export function parseConnectionString(dsn: string): ParsedConnection {
 function isValidSslmode(
   s: string | null,
 ): s is "disable" | "prefer" | "require" | "verify-ca" | "verify-full" {
-  return s === "disable" || s === "prefer" || s === "require" ||
-    s === "verify-ca" || s === "verify-full";
+  return s === "disable" || s === "prefer" || s === "require"
+    || s === "verify-ca" || s === "verify-full";
 }
 
 /**
@@ -118,7 +118,7 @@ function isValidSslmode(
  */
 export function sslmodeToTlsOptions(
   sslmode: ParsedConnection["sslmode"],
-): { enabled: boolean; enforce: boolean; caCertificates: string[] } | undefined {
+): { enabled: boolean; enforce: boolean; caCertificates: string[]; } | undefined {
   switch (sslmode) {
     case "disable":
       return { enabled: false, enforce: false, caCertificates: [] };

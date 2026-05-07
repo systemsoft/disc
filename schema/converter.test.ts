@@ -3,9 +3,9 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
-import { SDLParser } from "./parser.ts";
-import { SDLConverter } from "./converter.ts";
 import * as SDLAST from "./ast.ts";
+import { SDLConverter } from "./converter.ts";
+import { SDLParser } from "./parser.ts";
 
 Deno.test("SDL Converter - Convert Simple Type", () => {
   const source = `

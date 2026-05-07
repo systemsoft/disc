@@ -34,7 +34,7 @@ Deno.test("base32Decode rejects invalid characters", () => {
 // Base32 of that is "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ".
 const RFC_SECRET_SHA1 = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
 
-const RFC_VECTORS: Array<{ timestampSeconds: number; expected: string }> = [
+const RFC_VECTORS: Array<{ timestampSeconds: number; expected: string; }> = [
   { timestampSeconds: 59, expected: "94287082" },
   { timestampSeconds: 1111111109, expected: "07081804" },
   { timestampSeconds: 1111111111, expected: "14050471" },

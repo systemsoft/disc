@@ -44,7 +44,7 @@ export interface OrderSpec {
 /** Shape node — leaves track scalar field names; `links` carries one-level expansions. */
 export interface ShapeNode {
   fields: string[];
-  links: Record<string, { fields: string[] }>;
+  links: Record<string, { fields: string[]; }>;
 }
 
 export interface QuerySpec {

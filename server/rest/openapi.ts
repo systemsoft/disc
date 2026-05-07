@@ -67,14 +67,14 @@ interface Parameter {
 interface RequestBody {
   required: boolean;
   content: {
-    "application/json": { schema: JsonSchema };
+    "application/json": { schema: JsonSchema; };
   };
 }
 
 interface ResponseObj {
   description: string;
   content?: {
-    "application/json": { schema: JsonSchema };
+    "application/json": { schema: JsonSchema; };
   };
 }
 
@@ -119,11 +119,11 @@ export function renderOpenApiSpec(
     openapi: "3.1.0",
     info: {
       title: "Disc Schema-Derived REST API",
-      description: "Auto-generated from the database schema. Every object type " +
-        "exposes list/get/insert/update/delete and per-link collection " +
-        "endpoints. All routes pass through the standard EdgeQL " +
-        "pipeline, so access policies, read-only mode, and the auth " +
-        "gate apply.",
+      description: "Auto-generated from the database schema. Every object type "
+        + "exposes list/get/insert/update/delete and per-link collection "
+        + "endpoints. All routes pass through the standard EdgeQL "
+        + "pipeline, so access policies, read-only mode, and the auth "
+        + "gate apply.",
       version: options.version ?? "0.1.0",
     },
     paths,
@@ -259,8 +259,8 @@ function addTypePaths(
   // Linked-collection: GET /api/<Type>/{id}/<linkName>
   for (const [linkName, link] of typeDef.links) {
     if (link.computed) continue;
-    const targetType = schema.types.get(link.target) ??
-      schema.types.get(`default::${link.target}`);
+    const targetType = schema.types.get(link.target)
+      ?? schema.types.get(`default::${link.target}`);
     if (!targetType) continue;
     const targetRef: JsonSchema = {
       $ref: `#/components/schemas/${targetType.name}`,
@@ -313,9 +313,9 @@ function filterParametersFor(typeDef: TypeDef): Parameter[] {
     params.push({
       name,
       in: "query",
-      description: `Filter rows where ${name} = the given value. ` +
-        `Pair as \`${name}__in=a,b,c\` for set membership or ` +
-        `\`${name}__contains=x\` for substring.`,
+      description: `Filter rows where ${name} = the given value. `
+        + `Pair as \`${name}__in=a,b,c\` for set membership or `
+        + `\`${name}__contains=x\` for substring.`,
       schema: jsonSchemaForProperty(prop),
     });
   }
@@ -333,8 +333,8 @@ function buildTypeSchema(typeDef: TypeDef, schema: Schema): JsonSchema {
   }
   for (const [name, link] of typeDef.links) {
     if (!isExpand(link.annotations)) continue;
-    const targetType = schema.types.get(link.target) ??
-      schema.types.get(`default::${link.target}`);
+    const targetType = schema.types.get(link.target)
+      ?? schema.types.get(`default::${link.target}`);
     if (!targetType) continue;
     const targetRef: JsonSchema = {
       $ref: `#/components/schemas/${targetType.name}`,

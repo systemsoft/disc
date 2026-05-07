@@ -10,11 +10,11 @@
  * - GET  /graphql/schema — Return the generated GraphQL SDL
  */
 
+import type { Schema } from "../compiler/context.ts";
 import { BaseExtension } from "../extensions/base-extension.ts";
 import type { ExtensionContext, ExtensionMetadata, ExtensionRoute } from "../extensions/types.ts";
-import type { Schema } from "../compiler/context.ts";
-import { generateGraphQLSchema } from "./schema-generator.ts";
 import { isIntrospectionQuery, parseGraphQLQuery, resolveIntrospection, translateToEdgeQL } from "./query-translator.ts";
+import { generateGraphQLSchema } from "./schema-generator.ts";
 import type { GraphQLConfig, GraphQLResponse } from "./types.ts";
 
 export class GraphQLExtension extends BaseExtension {
@@ -72,7 +72,7 @@ export class GraphQLExtension extends BaseExtension {
     ];
   }
 
-  override healthCheck(): Promise<{ healthy: boolean; details?: string }> {
+  override healthCheck(): Promise<{ healthy: boolean; details?: string; }> {
     return Promise.resolve({
       details: this.state === "ready" ? `GraphQL endpoint ready (mutations: ${this.enableMutations})` : undefined,
       healthy: this.state === "ready",
@@ -204,8 +204,8 @@ export class GraphQLExtension extends BaseExtension {
       );
     }
 
-    const sdl = this.cachedSdl ??
-      generateGraphQLSchema(this.schema, {
+    const sdl = this.cachedSdl
+      ?? generateGraphQLSchema(this.schema, {
         enableMutations: this.enableMutations,
       });
 
@@ -227,7 +227,7 @@ export class GraphQLExtension extends BaseExtension {
 
     for (let i = 0; i < query.length; i++) {
       const ch = query[i];
-      if (ch === '"' && (i === 0 || query[i - 1] !== "\\")) {
+      if (ch === "\"" && (i === 0 || query[i - 1] !== "\\")) {
         inString = !inString;
         continue;
       }

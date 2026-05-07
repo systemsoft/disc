@@ -1,8 +1,8 @@
 import { ensureDir } from "@std/fs";
 import { join } from "@std/path";
 import { PostgresInstance, PostgresInstanceOptions } from "./instance.ts";
-import { PostgresMonitor } from "./monitor.ts";
 import { logger } from "./logger.ts";
+import { PostgresMonitor } from "./monitor.ts";
 
 export interface ManagedInstance {
   instance: PostgresInstance;

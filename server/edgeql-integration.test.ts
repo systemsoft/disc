@@ -3,9 +3,9 @@
  */
 
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
+import * as Context from "../compiler/context.ts";
 import { EdgeQLProtocolHandler } from "./edgeql-protocol.ts";
 import * as Types from "./types.ts";
-import * as Context from "../compiler/context.ts";
 
 Deno.test("EdgeQL Protocol - Basic Query Validation", () => {
   const handler = new EdgeQLProtocolHandler();
@@ -231,8 +231,8 @@ Deno.test("EdgeQL Protocol - Parse Error Handling", async () => {
   // Accept either PARSE_ERROR or SYNTAX_ERROR depending on which check catches it first
   const errorCode = response.errors![0].extensions?.code;
   assert(
-    errorCode === "PARSE_ERROR" || errorCode === "SYNTAX_ERROR" ||
-      errorCode === "COMPILATION_ERROR",
+    errorCode === "PARSE_ERROR" || errorCode === "SYNTAX_ERROR"
+      || errorCode === "COMPILATION_ERROR",
     `Expected PARSE_ERROR, SYNTAX_ERROR, or COMPILATION_ERROR but got ${errorCode}`,
   );
 });

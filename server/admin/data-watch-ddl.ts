@@ -144,7 +144,7 @@ export interface BootstrapDataWatchOptions {
  */
 export async function bootstrapDataWatch(
   options: BootstrapDataWatchOptions,
-): Promise<{ wiredTables: string[] }> {
+): Promise<{ wiredTables: string[]; }> {
   const excluded = options.excludedTables ?? DEFAULT_EXCLUDED_TABLES;
   const log = options.log;
 
@@ -164,7 +164,7 @@ export async function bootstrapDataWatch(
     `SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename`,
   );
   const wired: string[] = [];
-  for (const row of result.rows as Array<{ tablename: string }>) {
+  for (const row of result.rows as Array<{ tablename: string; }>) {
     const tableName = row.tablename;
     if (excluded.has(tableName)) continue;
     // Skip _SQL-internal_ tables that PG itself creates. They never

@@ -4,8 +4,8 @@
  * Injects access control conditions into SQL queries
  */
 
-import { AccessContext } from "./types.ts";
 import { AccessEvaluator } from "./evaluator.ts";
+import { AccessContext } from "./types.ts";
 
 export interface SQLQuery {
   params: any[];
@@ -60,8 +60,8 @@ export class AccessSQLInjector {
 
     if (!decision.allowed) {
       throw new Error(
-        decision.denialMessage ??
-          `INSERT not allowed on ${objectType}: ${decision.reason}`,
+        decision.denialMessage
+          ?? `INSERT not allowed on ${objectType}: ${decision.reason}`,
       );
     }
 
@@ -84,8 +84,8 @@ export class AccessSQLInjector {
 
     if (!decision.allowed) {
       throw new Error(
-        decision.denialMessage ??
-          `UPDATE not allowed on ${objectType}: ${decision.reason}`,
+        decision.denialMessage
+          ?? `UPDATE not allowed on ${objectType}: ${decision.reason}`,
       );
     }
 
@@ -110,8 +110,8 @@ export class AccessSQLInjector {
 
     if (!decision.allowed) {
       throw new Error(
-        decision.denialMessage ??
-          `DELETE not allowed on ${objectType}: ${decision.reason}`,
+        decision.denialMessage
+          ?? `DELETE not allowed on ${objectType}: ${decision.reason}`,
       );
     }
 

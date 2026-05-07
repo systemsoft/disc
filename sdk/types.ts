@@ -50,12 +50,12 @@ export interface StandardSchemaV1<Output = unknown> {
 }
 
 export type StandardSchemaResult<Output> =
-  | { value: Output; issues?: undefined }
-  | { issues: ReadonlyArray<StandardSchemaIssue> };
+  | { value: Output; issues?: undefined; }
+  | { issues: ReadonlyArray<StandardSchemaIssue>; };
 
 export interface StandardSchemaIssue {
   readonly message: string;
-  readonly path?: ReadonlyArray<PropertyKey | { key: PropertyKey }>;
+  readonly path?: ReadonlyArray<PropertyKey | { key: PropertyKey; }>;
 }
 
 /**
@@ -101,7 +101,7 @@ export interface QueryResponse<T = unknown> {
 
 export interface QueryError {
   message: string;
-  locations?: Array<{ line: number; column: number }>;
+  locations?: Array<{ line: number; column: number; }>;
   path?: Array<string | number>;
   extensions?: Record<string, unknown>;
 }

@@ -67,8 +67,8 @@ Deno.test("CLI api: typed Options interfaces are re-exported", async () => {
     ]
   ) {
     assert(
-      src.includes(`export type { ${t}`) ||
-        new RegExp(`export type \\{ [^}]*\\b${t}\\b`).test(src),
+      src.includes(`export type { ${t}`)
+        || new RegExp(`export type \\{ [^}]*\\b${t}\\b`).test(src),
       `cli/api.ts must re-export type ${t} (Gel #5911)`,
     );
   }

@@ -23,8 +23,8 @@ async function denoCheck(file: string): Promise<{
     cwd: new URL("..", import.meta.url).pathname,
   });
   const result = await cmd.output();
-  const output = new TextDecoder().decode(result.stderr) +
-    new TextDecoder().decode(result.stdout);
+  const output = new TextDecoder().decode(result.stderr)
+    + new TextDecoder().decode(result.stdout);
   return { ok: result.success, output };
 }
 

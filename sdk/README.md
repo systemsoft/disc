@@ -5,7 +5,14 @@ TypeScript client SDK for consuming Disc from applications. Provides a typed HTT
 ## Import
 
 ```typescript
-import { AuthManager, createClient, createSubscriptionClient, DiscClient, SubscriptionClient, Transaction } from "disc/sdk/mod.ts";
+import {
+  AuthManager,
+  createClient,
+  createSubscriptionClient,
+  DiscClient,
+  SubscriptionClient,
+  Transaction,
+} from "disc/sdk/mod.ts";
 ```
 
 ## DiscClient

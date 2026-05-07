@@ -5,9 +5,9 @@
 export type FunctionVolatility = "immutable" | "stable" | "volatile";
 
 export type FunctionImplementation =
-  | { kind: "sql_name"; sqlName: string }
-  | { kind: "sql_expression"; expression: string }
-  | { kind: "plpgsql"; body: string };
+  | { kind: "sql_name"; sqlName: string; }
+  | { kind: "sql_expression"; expression: string; }
+  | { kind: "plpgsql"; body: string; };
 
 export interface CustomFunctionArg {
   name: string;

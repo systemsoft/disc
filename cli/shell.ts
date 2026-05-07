@@ -4,8 +4,8 @@
  */
 
 import { TextLineStream } from "jsr:@std/streams@1.0.8/text-line-stream";
-import type { Schema } from "../compiler/context.ts";
 import { discoverSchemaFiles, loadMultiFileSchema } from "../codegen/mod.ts";
+import type { Schema } from "../compiler/context.ts";
 import { DatabaseConnection } from "../lib/database.ts";
 import { resolveProjectContext } from "../lib/project-context.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
@@ -54,9 +54,9 @@ export class DiscShell {
     // available; the prior default "disc" was an artifact of the old
     // hardcoded superuser db and mis-labeled what we actually connect to.
     const ctx = resolveProjectContext();
-    const database = options.database ||
-      ctx?.instanceName ||
-      "disc";
+    const database = options.database
+      || ctx?.instanceName
+      || "disc";
 
     try {
       this.session = {
@@ -403,8 +403,8 @@ export class DiscShell {
   private describeTypeByName(name: string): void {
     if (!this.schema || this.schema.types.size === 0) {
       console.log(
-        "⚠️  No schema loaded. Pass --schema <file> or run from a project " +
-          "with a dbschema/ directory.",
+        "⚠️  No schema loaded. Pass --schema <file> or run from a project "
+          + "with a dbschema/ directory.",
       );
       return;
     }

@@ -11,11 +11,11 @@
 
 import { assertEquals, assertExists, assertNotEquals } from "@std/assert";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
+import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { TransactionManager } from "./connection.ts";
-import { SimpleEdgeQLProtocolHandler } from "./simple-edgeql-protocol.ts";
 import { EdgeQLProtocolHandler } from "./edgeql-protocol.ts";
+import { SimpleEdgeQLProtocolHandler } from "./simple-edgeql-protocol.ts";
 import * as Types from "./types.ts";
 
 const RUN_PG = canRunPgTests();
@@ -27,7 +27,7 @@ const RUN_PG = canRunPgTests();
 /** Parse a DSN into connection config for the raw deno-postgres Client. */
 function parseDsn(
   dsn: string,
-): { hostname: string; port: number; user: string; database: string } {
+): { hostname: string; port: number; user: string; database: string; } {
   const url = new URL(dsn);
   return {
     hostname: url.hostname || "localhost",
@@ -89,7 +89,7 @@ async function countRows(
   try {
     await client.connect();
     const sql = where ? `SELECT COUNT(*)::int AS cnt FROM ${TEST_TABLE} WHERE ${where}` : `SELECT COUNT(*)::int AS cnt FROM ${TEST_TABLE}`;
-    const result = await client.queryObject<{ cnt: number }>(sql);
+    const result = await client.queryObject<{ cnt: number; }>(sql);
     return result.rows[0]?.cnt ?? 0;
   } finally {
     await client.end();

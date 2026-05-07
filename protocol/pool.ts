@@ -104,8 +104,8 @@ export class BufferPool {
     this.pools.clear();
   }
 
-  stats(): { size: number; count: number }[] {
-    const stats: { size: number; count: number }[] = [];
+  stats(): { size: number; count: number; }[] {
+    const stats: { size: number; count: number; }[] = [];
     for (const [size, pool] of this.pools) {
       stats.push({ size, count: pool.length });
     }
@@ -273,7 +273,7 @@ export class MessageCache {
     this.misses = 0;
   }
 
-  stats(): { hits: number; misses: number; hitRate: number; size: number } {
+  stats(): { hits: number; misses: number; hitRate: number; size: number; } {
     const total = this.hits + this.misses;
     return {
       hits: this.hits,

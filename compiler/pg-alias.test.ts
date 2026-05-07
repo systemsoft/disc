@@ -13,12 +13,12 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
-import { EdgeQLParser } from "../edgeql/parser.ts";
-import { EdgeQLCompiler } from "./compiler.ts";
+import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
+import { EdgeQLCompiler } from "./compiler.ts";
 import type { AliasDef, Schema } from "./context.ts";
 
 const RUN_PG = canRunPgTests();
@@ -59,7 +59,7 @@ const TEST_TABLE = "test_account";
 async function applyTestSchema(
   pool: ConnectionPool,
   aliases?: Map<string, AliasDef>,
-): Promise<{ manager: SchemaManager; schema: Schema }> {
+): Promise<{ manager: SchemaManager; schema: Schema; }> {
   const manager = new SchemaManager({ pool });
   await manager.initialize();
 
@@ -190,7 +190,7 @@ Deno.test({
 
       // Compile and execute alias query with additional filter
       const sql = compileEdgeQL(
-        'select ActiveAccounts { name } filter .name = "Ada"',
+        "select ActiveAccounts { name } filter .name = \"Ada\"",
         schema,
       );
       const result = await pool.query(sql);
@@ -205,8 +205,8 @@ Deno.test({
       // Verify it's Ada
       const row = result.rows[0];
       const rowData = row.jsonb_build_object ?? row;
-      const name = rowData.name ??
-        (typeof rowData === "object" ? Object.values(rowData)[0] : undefined);
+      const name = rowData.name
+        ?? (typeof rowData === "object" ? Object.values(rowData)[0] : undefined);
       assertExists(name, "Row should contain name data");
 
       await cleanup(pool, manager);

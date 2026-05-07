@@ -1,7 +1,7 @@
 import { assertEquals, assertExists } from "@std/assert";
 import { join } from "@std/path";
-import { PostgresInstance } from "./instance.ts";
 import { canRunPgTests, findPgBinDir } from "../tests/pg-test-harness.ts";
+import { PostgresInstance } from "./instance.ts";
 
 // Use /tmp directly to keep Unix socket paths under the 108-char limit.
 // Default Deno temp dirs on macOS (/var/folders/...) are too long.

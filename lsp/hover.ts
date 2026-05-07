@@ -7,10 +7,10 @@
  * `null` for unrecognized tokens so editors don't show empty popups.
  */
 
-import { SDLParser } from "../schema/parser.ts";
 import * as AST from "../schema/ast.ts";
-import { lookupScalar } from "./scalar-info.ts";
+import { SDLParser } from "../schema/parser.ts";
 import type { Hover, Position } from "./protocol.ts";
+import { lookupScalar } from "./scalar-info.ts";
 
 export function provideHover(text: string, pos: Position): Hover | null {
   const word = wordAt(text, pos);

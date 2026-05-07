@@ -9,10 +9,10 @@
  */
 
 import { assert, assertEquals, assertExists, assertStringIncludes } from "@std/assert";
+import type { AuthRoutes } from "../../auth/integration.ts";
 import { HttpServer } from "../../server/http.ts";
 import type { HttpServerOptions } from "../../server/http.ts";
 import type { HealthStatus, ProtocolHandler, QueryContext, QueryError, QueryRequest, QueryResponse, ServerConfig } from "../../server/types.ts";
-import type { AuthRoutes } from "../../auth/integration.ts";
 import { canRunPgTests } from "../../tests/pg-test-harness.ts";
 
 // ---------------------------------------------------------------------------

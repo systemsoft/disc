@@ -3,16 +3,16 @@
  * CLI Watch Command Implementation - File watching for development
  */
 
-import { MigrationEngine } from "../migration/engine.ts";
-import { MigrationTracker } from "../migration/tracker.ts";
-import { generateTypeScript, writeGeneratedFiles } from "../codegen/mod.ts";
-import { SDLParser } from "../schema/parser.ts";
-import { Module, SDLConverter } from "../schema/converter.ts";
-import * as Context from "../compiler/context.ts";
-import { dirname } from "@std/path";
 import { ensureDir } from "@std/fs";
-import * as Types from "../migration/types.ts";
+import { dirname } from "@std/path";
+import { generateTypeScript, writeGeneratedFiles } from "../codegen/mod.ts";
+import * as Context from "../compiler/context.ts";
+import { MigrationEngine } from "../migration/engine.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
+import { MigrationTracker } from "../migration/tracker.ts";
+import * as Types from "../migration/types.ts";
+import { Module, SDLConverter } from "../schema/converter.ts";
+import { SDLParser } from "../schema/parser.ts";
 
 export interface WatchOptions {
   schemaFile?: string;
@@ -183,8 +183,8 @@ export class WatchCommand {
       const currentHash = this.hashSchema(modules);
 
       // Check for migration changes
-      const migrationNeeded = currentHash !== this.lastSchemaHash &&
-        this.lastSchemaHash !== undefined;
+      const migrationNeeded = currentHash !== this.lastSchemaHash
+        && this.lastSchemaHash !== undefined;
 
       if (migrationNeeded) {
         console.log("📋 Schema changes detected, creating migration...");
@@ -242,8 +242,8 @@ export class WatchCommand {
   ): Promise<void> {
     try {
       // Get database URL
-      const databaseUrl = Deno.env.get("DATABASE_URL") ||
-        "postgresql://localhost:5432/disc";
+      const databaseUrl = Deno.env.get("DATABASE_URL")
+        || "postgresql://localhost:5432/disc";
 
       // Initialize tracker
       const tracker = new MigrationTracker(databaseUrl);
@@ -427,7 +427,7 @@ export class WatchCommand {
     }
   }
 
-  getStatus(): { watching: boolean; files: string[]; uptime: number } {
+  getStatus(): { watching: boolean; files: string[]; uptime: number; } {
     return {
       watching: this.isWatching,
       files: [], // Would track watched files in real implementation

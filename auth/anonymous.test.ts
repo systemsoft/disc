@@ -10,7 +10,7 @@ import { AuthError, AuthErrorCode, requireAuthResponse } from "./types.ts";
 
 async function makeProvider(opts: {
   requireEmailVerification?: boolean;
-} = {}): Promise<{ provider: AuthProvider; db: TestDatabase }> {
+} = {}): Promise<{ provider: AuthProvider; db: TestDatabase; }> {
   const db = new TestDatabase();
   await db.connect();
   const provider = new AuthProvider(

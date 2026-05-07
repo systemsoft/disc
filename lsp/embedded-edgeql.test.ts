@@ -222,7 +222,7 @@ Deno.test("provideEmbeddedHover surfaces an EdgeQL keyword when cursor is on one
   // Cursor on `select` (column 14..19).
   const hover = provideEmbeddedHover(text, { line: 0, character: 16 });
   assert(hover, "expected hover for `select`");
-  const md = (hover.contents as { value: string }).value;
+  const md = (hover.contents as { value: string; }).value;
   assert(md.includes("**select**"));
   assert(md.includes("EdgeQL keyword"));
 });
@@ -236,7 +236,7 @@ Deno.test("provideEmbeddedHover surfaces a built-in scalar when cursor is on one
   // begins at host column 22. Cursor on `t` (column 23).
   const hover = provideEmbeddedHover(text, { line: 0, character: 23 });
   assert(hover, "expected hover for `str`");
-  const md = (hover.contents as { value: string }).value;
+  const md = (hover.contents as { value: string; }).value;
   assert(md.includes("**str**"));
   assert(md.includes("scalar"));
 });
@@ -317,7 +317,7 @@ Deno.test("provideEmbeddedHover surfaces a user-defined type from an open .disc 
   // Cursor on `User` (column 21..24).
   const hover = provideEmbeddedHover(text, { line: 0, character: 22 }, ctxFromSdl(SAMPLE_SDL));
   assert(hover, "expected hover for user-defined type User");
-  const md = (hover.contents as { value: string }).value;
+  const md = (hover.contents as { value: string; }).value;
   assert(md.includes("**User**"), `expected hover to mention User; got: ${md}`);
   assert(md.includes("type"), "expected hover to acknowledge it as a type");
   assert(md.includes("email"), "expected property summary to include email");
@@ -330,7 +330,7 @@ Deno.test("provideEmbeddedHover keeps EdgeQL keywords ahead of user types on the
   const text = "const q = eql`select User`;";
   const hover = provideEmbeddedHover(text, { line: 0, character: 16 }, ctxFromSdl(SAMPLE_SDL));
   assert(hover, "expected hover for `select`");
-  const md = (hover.contents as { value: string }).value;
+  const md = (hover.contents as { value: string; }).value;
   assert(md.includes("EdgeQL keyword"), `expected keyword hover; got: ${md}`);
 });
 

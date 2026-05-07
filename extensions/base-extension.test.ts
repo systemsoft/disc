@@ -3,9 +3,9 @@
  */
 
 import { assertEquals } from "@std/assert";
+import type { FunctionDef, TypeDef } from "../compiler/context.ts";
 import { BaseExtension } from "./base-extension.ts";
 import type { ExtensionContext, ExtensionMetadata } from "./types.ts";
-import type { FunctionDef, TypeDef } from "../compiler/context.ts";
 
 // Minimal concrete subclass used across all tests
 class TestExtension extends BaseExtension {
@@ -34,10 +34,10 @@ function makeContext(): ExtensionContext {
       info: () => {},
       warn: () => {},
       error: () => {},
-      child: function () {
+      child: function() {
         return this;
       },
-      withRequest: function () {
+      withRequest: function() {
         return this;
       },
     } as unknown as ExtensionContext["logger"],

@@ -5,9 +5,9 @@ Schema migration system for Disc. Parses SDL schemas, diffs them against the cur
 ## Import
 
 ```typescript
-import { SchemaManager } from "disc/migration/schema-manager.ts";
-import { MigrationEngine } from "disc/migration/engine.ts";
 import { SchemaDiffer } from "disc/migration/differ.ts";
+import { MigrationEngine } from "disc/migration/engine.ts";
+import { SchemaManager } from "disc/migration/schema-manager.ts";
 import { MigrationTracker } from "disc/migration/tracker.ts";
 import type {
   AlterTypeOperation,
@@ -31,8 +31,8 @@ import type {
 The primary entry point. Bridges SDL parsing, the query compiler schema, and migration planning/execution.
 
 ```typescript
-import { SchemaManager } from "disc/migration/schema-manager.ts";
 import { ConnectionPool } from "disc/lib/connection-pool.ts";
+import { SchemaManager } from "disc/migration/schema-manager.ts";
 
 const pool = new ConnectionPool({ connectionString: "postgresql://..." });
 await pool.initialize();

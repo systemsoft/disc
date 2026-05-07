@@ -13,12 +13,12 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
-import { EdgeQLParser } from "../edgeql/parser.ts";
-import { EdgeQLCompiler } from "./compiler.ts";
+import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
+import { EdgeQLCompiler } from "./compiler.ts";
 import { Schema } from "./context.ts";
 
 const RUN_PG = canRunPgTests();
@@ -62,7 +62,7 @@ function compileEdgeQL(edgeql: string, schema: Schema): string {
 async function applySchema(
   pool: ConnectionPool,
   sdl: string,
-): Promise<{ manager: SchemaManager; schema: Schema }> {
+): Promise<{ manager: SchemaManager; schema: Schema; }> {
   const manager = new SchemaManager({ pool });
   await manager.initialize();
 
@@ -124,7 +124,7 @@ Deno.test({
 
       // Compile EdgeQL with IF/ELSE in a computed shape field
       const sql = compileEdgeQL(
-        'SELECT TestPerson { name, status := "active" IF .active ELSE "inactive" } ORDER BY .name',
+        "SELECT TestPerson { name, status := \"active\" IF .active ELSE \"inactive\" } ORDER BY .name",
         schema,
       );
 
@@ -199,7 +199,7 @@ Deno.test({
       // For active=true rows, compare .name to "admin"
       // For active=false rows, compare .name to "guest"
       const sql = compileEdgeQL(
-        'SELECT TestPerson { name } FILTER .name = ("admin" IF .active ELSE "guest")',
+        "SELECT TestPerson { name } FILTER .name = (\"admin\" IF .active ELSE \"guest\")",
         schema,
       );
 
@@ -298,8 +298,8 @@ Deno.test({
         if (typeof singleVal === "string") {
           // Could be a stringified array like "{1,2,3}"
           assertEquals(
-            singleVal.includes("1") && singleVal.includes("2") &&
-              singleVal.includes("3"),
+            singleVal.includes("1") && singleVal.includes("2")
+              && singleVal.includes("3"),
             true,
             "Stringified array should contain 1, 2, 3",
           );
@@ -338,7 +338,7 @@ Deno.test({
 
       // Compile a named tuple expression
       const sql = compileEdgeQL(
-        'SELECT (label := "hello", count := 42)',
+        "SELECT (label := \"hello\", count := 42)",
         schema,
       );
 

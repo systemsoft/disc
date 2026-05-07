@@ -79,11 +79,11 @@ Extensions are registered with the `DiscServer` at startup. In code:
 
 ```typescript
 import { CustomFunctionsExtension } from "./ext-custom-functions/extension.ts";
-import { DiscServer } from "./server/disc-server.ts";
 import { FtsExtension } from "./ext-fts/extension.ts";
 import { GraphQLExtension } from "./ext-graphql/extension.ts";
 import { OAuthExtension } from "./ext-oauth/extension.ts";
 import { VectorExtension } from "./ext-vector/extension.ts";
+import { DiscServer } from "./server/disc-server.ts";
 
 const server = new DiscServer({
   // ... server config
@@ -110,7 +110,10 @@ Full-text search uses PostgreSQL's built-in tsvector and tsquery infrastructure.
 Add an FTS index to your type's properties using the index builder:
 
 ```typescript
-import { generateFtsColumn, generateFtsIndex } from "./ext-fts/index-builder.ts";
+import {
+  generateFtsColumn,
+  generateFtsIndex,
+} from "./ext-fts/index-builder.ts";
 
 const config = {
   columns: ["title", "body"],
@@ -567,7 +570,11 @@ The OAuth extension adds OAuth 2.0 authorization code flow support with built-in
 ```typescript
 import { OAuthExtension } from "./ext-oauth/extension.ts";
 
-import { appleProvider, githubProvider, googleProvider } from "./ext-oauth/providers.ts";
+import {
+  appleProvider,
+  githubProvider,
+  googleProvider,
+} from "./ext-oauth/providers.ts";
 
 const ext = new OAuthExtension({
   defaultRedirectUri: "http://localhost:8080/ext/oauth/callback",
@@ -655,7 +662,10 @@ const customProvider: OAuthProviderConfig = {
 4. **Exchange for tokens:** In a full implementation, the callback exchanges the authorization code for an access token and fetches user info. The token exchange and user info functions are available:
 
 ```typescript
-import { exchangeCodeForToken, fetchUserInfo } from "./ext-oauth/token-exchange.ts";
+import {
+  exchangeCodeForToken,
+  fetchUserInfo,
+} from "./ext-oauth/token-exchange.ts";
 
 const tokenResponse = await exchangeCodeForToken(provider, code, redirectUri);
 // { accessToken: "...", expiresIn: 3600, tokenType: "Bearer" }
@@ -727,7 +737,7 @@ interface Extension {
   getMiddleware(): ExtensionMiddleware[];
   getRoutes(): ExtensionRoute[];
   getTypes(): TypeDef[];
-  healthCheck(): Promise<{ details?: string; healthy: boolean }>;
+  healthCheck(): Promise<{ details?: string; healthy: boolean; }>;
 }
 ```
 
@@ -738,7 +748,11 @@ Extend `BaseExtension` to get default implementations for all methods. Override 
 ```typescript
 import { BaseExtension } from "./extensions/base-extension.ts";
 
-import type { ExtensionContext, ExtensionMetadata, ExtensionRoute } from "./extensions/types.ts";
+import type {
+  ExtensionContext,
+  ExtensionMetadata,
+  ExtensionRoute,
+} from "./extensions/types.ts";
 
 export class MyExtension extends BaseExtension {
   readonly metadata: ExtensionMetadata = {
@@ -919,8 +933,8 @@ override async healthCheck(): Promise<{ details?: string; healthy: boolean; }> {
 Register your extension with the server:
 
 ```typescript
-import { DiscServer } from "./server/disc-server.ts";
 import { MyExtension } from "./my-extension/extension.ts";
+import { DiscServer } from "./server/disc-server.ts";
 
 const server = new DiscServer({
   // ... config
@@ -953,13 +967,21 @@ const routes = registry.getAllRoutes();
 The extension system provides specific error classes:
 
 ```typescript
-import { ExtensionConfigError, ExtensionDependencyError, ExtensionError, ExtensionInitError } from "./extensions/errors.ts";
+import {
+  ExtensionConfigError,
+  ExtensionDependencyError,
+  ExtensionError,
+  ExtensionInitError,
+} from "./extensions/errors.ts";
 
 // General extension error
 throw new ExtensionError("my-extension", "Something went wrong");
 
 // Initialization failure
-throw new ExtensionInitError("my-extension", "Cannot connect to external service");
+throw new ExtensionInitError(
+  "my-extension",
+  "Cannot connect to external service",
+);
 
 // Missing dependencies
 throw new ExtensionDependencyError("my-extension", ["vector", "fts"]);

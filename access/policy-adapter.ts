@@ -6,9 +6,9 @@
  */
 
 import type { AccessAction as SDLAccessAction, AccessPolicy as SDLAccessPolicy } from "../schema/ast.ts";
-import type { AccessAction as RuntimeAccessAction, AccessPolicy as RuntimeAccessPolicy } from "./types.ts";
 import type { AccessExpressionNode } from "./ast.ts";
 import { convertExpression } from "./expression-converter.ts";
+import type { AccessAction as RuntimeAccessAction, AccessPolicy as RuntimeAccessPolicy } from "./types.ts";
 
 /**
  * Converts a single SDL AccessAction into a runtime AccessAction, stripping
@@ -33,8 +33,8 @@ export function containsColumnReference(expr: AccessExpressionNode): boolean {
     case "AccessGlobal":
       return false;
     case "AccessComparison":
-      return containsColumnReference(expr.left) ||
-        containsColumnReference(expr.right);
+      return containsColumnReference(expr.left)
+        || containsColumnReference(expr.right);
     case "AccessLogical":
       return expr.operands.some(containsColumnReference);
     case "AccessFunction":

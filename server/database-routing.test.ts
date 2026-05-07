@@ -11,9 +11,9 @@
  */
 
 import { assertEquals, assertExists, assertStringIncludes } from "@std/assert";
+import { ConnectionPool } from "../lib/connection-pool.ts";
 import type { DatabaseEntry, DatabaseRegistry } from "./database-registry.ts";
 import type { QueryContext, SessionContext } from "./types.ts";
-import { ConnectionPool } from "../lib/connection-pool.ts";
 
 // ---------------------------------------------------------------------------
 // Minimal mock helpers

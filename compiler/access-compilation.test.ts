@@ -4,11 +4,11 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
+import type { AccessPolicy } from "../access/types.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
+import { SQLCodeGenerator } from "./codegen.ts";
 import { CompilerOptions, EdgeQLCompiler } from "./compiler.ts";
 import { createTestSchema, Schema, TypeDef } from "./context.ts";
-import { SQLCodeGenerator } from "./codegen.ts";
-import { EdgeQLParser } from "../edgeql/parser.ts";
-import type { AccessPolicy } from "../access/types.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers

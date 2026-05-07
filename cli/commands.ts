@@ -3,30 +3,30 @@
  * CLI Commands Implementation - Core command functionality
  */
 
-import { SchemaManager } from "../migration/schema-manager.ts";
-import type { MigrationProgressEvent, MigrationProgressListener } from "../migration/types.ts";
-import type { Module } from "../schema/converter.ts";
-import { createServerFromEnv } from "../server/server.ts";
 import * as Codegen from "../codegen/mod.ts";
 import * as Context from "../compiler/context.ts";
 import type { Schema } from "../compiler/context.ts";
-import { serializeSchema } from "../compiler/sdl-serializer.ts";
-import { buildSchemaFromIntrospection } from "../compiler/pg-introspect.ts";
 import { introspectDatabase } from "../compiler/pg-introspect-queries.ts";
-import { DatabaseConnection } from "../lib/database.ts";
+import { buildSchemaFromIntrospection } from "../compiler/pg-introspect.ts";
+import { serializeSchema } from "../compiler/sdl-serializer.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
-import { initCommand, InitOptions } from "./init.ts";
-import { shellCommand, ShellOptions } from "./shell.ts";
-import { watchCommand, WatchOptions } from "./watch.ts";
+import { DatabaseConnection } from "../lib/database.ts";
+import { resolveDsn, resolveProjectContext } from "../lib/project-context.ts";
+import { SchemaManager } from "../migration/schema-manager.ts";
+import { MigrationSquasher, SquashableMigration } from "../migration/squash.ts";
+import type { MigrationProgressEvent, MigrationProgressListener } from "../migration/types.ts";
+import { ensurePgRunning } from "../postgres/ensure-running.ts";
+import { PostgresManager } from "../postgres/mod.ts";
+import type { Module } from "../schema/converter.ts";
+import { createServerFromEnv } from "../server/server.ts";
 import { buildCommand, BuildOptions } from "./build.ts";
+import { dbCommand } from "./db.ts";
 import { deployCommand, DeployOptions } from "./deploy.ts";
+import { initCommand, InitOptions } from "./init.ts";
 import { pgLogCommand, PgLogOptions } from "./pg-log.ts";
 import { pgUpgradeCommand, PgUpgradeOptions } from "./pg-upgrade.ts";
-import { dbCommand } from "./db.ts";
-import { PostgresManager } from "../postgres/mod.ts";
-import { MigrationSquasher, SquashableMigration } from "../migration/squash.ts";
-import { resolveDsn, resolveProjectContext } from "../lib/project-context.ts";
-import { ensurePgRunning } from "../postgres/ensure-running.ts";
+import { shellCommand, ShellOptions } from "./shell.ts";
+import { watchCommand, WatchOptions } from "./watch.ts";
 
 export interface CLIArgs {
   [key: string]: any;
@@ -97,9 +97,9 @@ export class CLICommands {
       await ensurePgRunning(ctx);
     }
 
-    const databaseUrl = args["backend-dsn"] ||
-      Deno.env.get("DATABASE_URL") ||
-      (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc_dev");
+    const databaseUrl = args["backend-dsn"]
+      || Deno.env.get("DATABASE_URL")
+      || (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc_dev");
 
     let pool: ConnectionPool | undefined;
     let manager: SchemaManager | undefined;
@@ -263,8 +263,8 @@ export class CLICommands {
         console.log("🔐 Authentication enabled");
       }
       if (
-        options.enableAccessPolicies ||
-        Deno.env.get("DISC_ENABLE_ACCESS_POLICIES")
+        options.enableAccessPolicies
+        || Deno.env.get("DISC_ENABLE_ACCESS_POLICIES")
       ) {
         console.log("🛡️ Access policies enabled");
       }
@@ -339,7 +339,7 @@ export class CLICommands {
    * (gh/geldata#702, #7469)
    */
   async schemaExport(
-    args: { schema?: string; "schema-dir"?: string; output?: string },
+    args: { schema?: string; "schema-dir"?: string; output?: string; },
   ): Promise<void> {
     const schemaFile = args.schema;
     const schemaDir = args["schema-dir"] ?? "./dbschema";
@@ -385,8 +385,8 @@ export class CLICommands {
       output?: string;
     },
   ): Promise<void> {
-    const dsn = args["database-url"] ??
-      Deno.env.get("DATABASE_URL");
+    const dsn = args["database-url"]
+      ?? Deno.env.get("DATABASE_URL");
     if (!dsn) {
       console.error(
         "❌ --database-url is required (or set DATABASE_URL env var)",
@@ -740,9 +740,9 @@ export class CLICommands {
    */
   async dbCreate(name: string, args: CLIArgs): Promise<void> {
     const ctx = resolveProjectContext();
-    const databaseUrl = args["database-url"] ||
-      Deno.env.get("DATABASE_URL") ||
-      (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
+    const databaseUrl = args["database-url"]
+      || Deno.env.get("DATABASE_URL")
+      || (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
     await dbCommand.create({ name, databaseUrl });
   }
 
@@ -751,9 +751,9 @@ export class CLICommands {
    */
   async dbList(args: CLIArgs): Promise<void> {
     const ctx = resolveProjectContext();
-    const databaseUrl = args["database-url"] ||
-      Deno.env.get("DATABASE_URL") ||
-      (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
+    const databaseUrl = args["database-url"]
+      || Deno.env.get("DATABASE_URL")
+      || (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
     await dbCommand.list({ databaseUrl });
   }
 
@@ -762,9 +762,9 @@ export class CLICommands {
    */
   async dbDrop(name: string, args: CLIArgs): Promise<void> {
     const ctx = resolveProjectContext();
-    const databaseUrl = args["database-url"] ||
-      Deno.env.get("DATABASE_URL") ||
-      (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
+    const databaseUrl = args["database-url"]
+      || Deno.env.get("DATABASE_URL")
+      || (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
     await dbCommand.drop({
       name,
       databaseUrl,
@@ -780,9 +780,9 @@ export class CLICommands {
     if (ctx?.managed) {
       await ensurePgRunning(ctx);
     }
-    const databaseUrl = args["database-url"] ||
-      Deno.env.get("DATABASE_URL") ||
-      (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
+    const databaseUrl = args["database-url"]
+      || Deno.env.get("DATABASE_URL")
+      || (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
     await dbCommand.wipe({
       databaseUrl,
       force: args.force || false,
@@ -798,9 +798,9 @@ export class CLICommands {
     if (ctx?.managed) {
       await ensurePgRunning(ctx);
     }
-    const databaseUrl = args["database-url"] ||
-      Deno.env.get("DATABASE_URL") ||
-      (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
+    const databaseUrl = args["database-url"]
+      || Deno.env.get("DATABASE_URL")
+      || (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
 
     const fmtRaw = args.format ? String(args.format) : "plain";
     if (fmtRaw !== "plain" && fmtRaw !== "custom") {
@@ -834,8 +834,8 @@ export class CLICommands {
   async dbPush(args: CLIArgs): Promise<void> {
     if (!args.force) {
       console.error(
-        "Error: `disc db push` skips migration history (foot-gun in shared/production envs).\n" +
-          "Pass --force to confirm intent. For production schema changes, use `disc migrate` instead.",
+        "Error: `disc db push` skips migration history (foot-gun in shared/production envs).\n"
+          + "Pass --force to confirm intent. For production schema changes, use `disc migrate` instead.",
       );
       Deno.exit(1);
     }
@@ -845,9 +845,9 @@ export class CLICommands {
     if (ctx?.managed) {
       await ensurePgRunning(ctx);
     }
-    const databaseUrl = args["backend-dsn"] ||
-      Deno.env.get("DATABASE_URL") ||
-      (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc_dev");
+    const databaseUrl = args["backend-dsn"]
+      || Deno.env.get("DATABASE_URL")
+      || (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc_dev");
 
     const sdlSource = await Deno.readTextFile(schemaFile);
 
@@ -887,9 +887,9 @@ export class CLICommands {
     if (ctx?.managed) {
       await ensurePgRunning(ctx);
     }
-    const databaseUrl = args["database-url"] ||
-      Deno.env.get("DATABASE_URL") ||
-      (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
+    const databaseUrl = args["database-url"]
+      || Deno.env.get("DATABASE_URL")
+      || (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
     await dbCommand.restore({
       clean: args.clean || false,
       databaseUrl,

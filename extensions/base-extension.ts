@@ -2,6 +2,7 @@
  * Base extension class with empty defaults for Disc database
  */
 
+import type { FunctionDef, TypeDef } from "../compiler/context.ts";
 import type {
   CompilerHook,
   Extension,
@@ -12,7 +13,6 @@ import type {
   ExtensionRoute,
   ExtensionState,
 } from "./types.ts";
-import type { FunctionDef, TypeDef } from "../compiler/context.ts";
 
 export abstract class BaseExtension implements Extension {
   abstract readonly metadata: ExtensionMetadata;
@@ -60,7 +60,7 @@ export abstract class BaseExtension implements Extension {
     return [];
   }
 
-  healthCheck(): Promise<{ healthy: boolean; details?: string }> {
+  healthCheck(): Promise<{ healthy: boolean; details?: string; }> {
     return Promise.resolve({ healthy: this._state === "ready" });
   }
 }

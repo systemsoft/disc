@@ -3,9 +3,9 @@
  */
 
 import { assert, assertStringIncludes } from "@std/assert";
-import { commands } from "./commands.ts";
-import { cleanupTempDir, ConsoleCapture, createTempDir } from "../tests/test-utils.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
+import { cleanupTempDir, ConsoleCapture, createTempDir } from "../tests/test-utils.ts";
+import { commands } from "./commands.ts";
 
 const SAMPLE_SDL = `module default {
   type User {

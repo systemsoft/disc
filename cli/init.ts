@@ -99,7 +99,7 @@ export class InitCommand {
    */
   private normalizeNameOrPath(
     options: InitOptions,
-  ): { name: string; directory?: string } {
+  ): { name: string; directory?: string; } {
     const raw = options.name;
     if (!raw.includes("/")) {
       return { name: raw, directory: options.directory };
@@ -112,8 +112,8 @@ export class InitCommand {
   }
 
   private isValidProjectName(name: string): boolean {
-    return /^[a-z0-9-]+$/.test(name) && !name.startsWith("-") &&
-      !name.endsWith("-");
+    return /^[a-z0-9-]+$/.test(name) && !name.startsWith("-")
+      && !name.endsWith("-");
   }
 
   private async createProjectFiles(
@@ -281,15 +281,15 @@ export class InitCommand {
     // and only write DATABASE_URL when the user explicitly asked for an
     // external DSN. Document the override as a comment in the managed case.
     const header = "# Disc Database Configuration";
-    const appConfig = "DISC_PORT=5656\nDISC_HOST=localhost\n\n" +
-      "# Development settings\nNODE_ENV=development\n";
+    const appConfig = "DISC_PORT=5656\nDISC_HOST=localhost\n\n"
+      + "# Development settings\nNODE_ENV=development\n";
 
     let envContent: string;
     if (options.backendDsn) {
       envContent = `${header}\nDATABASE_URL=${options.backendDsn}\n${appConfig}`;
     } else {
-      envContent = `${header}\n# Managed PostgreSQL — the DSN is resolved from disc.toml.\n` +
-        `# Set DATABASE_URL here only to override with an external database.\n${appConfig}`;
+      envContent = `${header}\n# Managed PostgreSQL — the DSN is resolved from disc.toml.\n`
+        + `# Set DATABASE_URL here only to override with an external database.\n${appConfig}`;
     }
 
     await Deno.writeTextFile(`${projectDir}/.env`, envContent);

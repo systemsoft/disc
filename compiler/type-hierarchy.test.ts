@@ -8,9 +8,9 @@
  */
 
 import { assertEquals } from "@std/assert";
+import { getBuiltinFunctions } from "./builtin-functions.ts";
 import { getAllSubtypes, getTypeHierarchy } from "./context.ts";
 import type { Schema, TypeDef } from "./context.ts";
-import { getBuiltinFunctions } from "./builtin-functions.ts";
 
 // ---------------------------------------------------------------------------
 // Helper: build a minimal TypeDef

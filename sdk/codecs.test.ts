@@ -74,7 +74,7 @@ Deno.test("parseBytes - rejects malformed base64", () => {
 // ── reviveResponse ───────────────────────────────────────────────────
 
 Deno.test("reviveResponse - revives ISO-8601 dates in a flat object", () => {
-  const out = reviveResponse<{ created_at: Date; name: string }>({
+  const out = reviveResponse<{ created_at: Date; name: string; }>({
     created_at: "2026-05-05T12:34:56Z",
     name: "Alice",
   });
@@ -84,7 +84,7 @@ Deno.test("reviveResponse - revives ISO-8601 dates in a flat object", () => {
 });
 
 Deno.test("reviveResponse - revives bigints beyond safe range", () => {
-  const out = reviveResponse<{ id: bigint; small: number }>({
+  const out = reviveResponse<{ id: bigint; small: number; }>({
     id: "9007199254740993", // 2^53 + 1
     small: 42, // already a number, untouched
   });
@@ -96,17 +96,17 @@ Deno.test("reviveResponse - revives bigints beyond safe range", () => {
 Deno.test("reviveResponse - leaves small numeric strings alone (P1-29 conservatism)", () => {
   // "42" looks like a numeric string but is within safe range — keep
   // it as a string so callers don't get surprise type changes.
-  const out = reviveResponse<{ small: string }>({ small: "42" });
+  const out = reviveResponse<{ small: string; }>({ small: "42" });
   assertEquals(out.small, "42");
 });
 
 Deno.test("reviveResponse - leaves date-only strings alone", () => {
-  const out = reviveResponse<{ d: string }>({ d: "2026-05-05" });
+  const out = reviveResponse<{ d: string; }>({ d: "2026-05-05" });
   assertEquals(out.d, "2026-05-05");
 });
 
 Deno.test("reviveResponse - walks arrays", () => {
-  const out = reviveResponse<Array<{ created_at: Date }>>([
+  const out = reviveResponse<Array<{ created_at: Date; }>>([
     { created_at: "2026-05-05T00:00:00Z" },
     { created_at: "2026-05-06T00:00:00Z" },
   ]);
@@ -115,7 +115,7 @@ Deno.test("reviveResponse - walks arrays", () => {
 });
 
 Deno.test("reviveResponse - walks nested structures", () => {
-  const out = reviveResponse<{ user: { posts: Array<{ at: Date }> } }>({
+  const out = reviveResponse<{ user: { posts: Array<{ at: Date; }>; }; }>({
     user: {
       posts: [{ at: "2026-05-05T12:00:00Z" }],
     },
@@ -124,7 +124,7 @@ Deno.test("reviveResponse - walks nested structures", () => {
 });
 
 Deno.test("reviveResponse - dates: false disables date revival", () => {
-  const out = reviveResponse<{ at: string }>(
+  const out = reviveResponse<{ at: string; }>(
     { at: "2026-05-05T12:00:00Z" },
     { dates: false },
   );
@@ -132,7 +132,7 @@ Deno.test("reviveResponse - dates: false disables date revival", () => {
 });
 
 Deno.test("reviveResponse - bigints: false disables bigint revival", () => {
-  const out = reviveResponse<{ id: string }>(
+  const out = reviveResponse<{ id: string; }>(
     { id: "9007199254740993" },
     { bigints: false },
   );

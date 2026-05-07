@@ -74,9 +74,9 @@ Deno.test("analyzeDiscDocument - LSP positions are 0-indexed", () => {
     assert(d.range.start.character >= 0);
     // End position must not be before start.
     assert(
-      d.range.end.line > d.range.start.line ||
-        (d.range.end.line === d.range.start.line &&
-          d.range.end.character >= d.range.start.character),
+      d.range.end.line > d.range.start.line
+        || (d.range.end.line === d.range.start.line
+          && d.range.end.character >= d.range.start.character),
       `range invalid: ${JSON.stringify(d.range)}`,
     );
   }

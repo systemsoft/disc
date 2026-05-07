@@ -3,10 +3,10 @@
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import { SchemaDiffer } from "./differ.ts";
-import { DDLGenerator } from "./ddl.ts";
-import { MigrationEngine } from "./engine.ts";
 import { Module } from "../schema/converter.ts";
+import { DDLGenerator } from "./ddl.ts";
+import { SchemaDiffer } from "./differ.ts";
+import { MigrationEngine } from "./engine.ts";
 import * as Types from "./types.ts";
 
 // Helper functions for creating complex test schemas
@@ -340,20 +340,20 @@ Deno.test("Schema Differ - Detect Property Rename (appears as drop + add)", () =
 
   // Should detect changes to User type
   const userAlterOp = operations.find((op) =>
-    op.kind === "AlterType" &&
-    (op as Types.AlterTypeOperation).typeName === "User"
+    op.kind === "AlterType"
+    && (op as Types.AlterTypeOperation).typeName === "User"
   ) as Types.AlterTypeOperation;
 
   assertEquals(userAlterOp !== undefined, true);
 
   // Should have drop "name" and add "full_name"
   const dropNameOp = userAlterOp.operations.find((op) =>
-    op.kind === "DropProperty" &&
-    (op as Types.DropPropertyOperation).propertyName === "name"
+    op.kind === "DropProperty"
+    && (op as Types.DropPropertyOperation).propertyName === "name"
   );
   const addFullNameOp = userAlterOp.operations.find((op) =>
-    op.kind === "AddProperty" &&
-    (op as Types.AddPropertyOperation).property.name === "full_name"
+    op.kind === "AddProperty"
+    && (op as Types.AddPropertyOperation).property.name === "full_name"
   );
 
   assertEquals(dropNameOp !== undefined, true);
@@ -361,12 +361,12 @@ Deno.test("Schema Differ - Detect Property Rename (appears as drop + add)", () =
 
   // Should also have drop "age" and add "birth_year"
   const dropAgeOp = userAlterOp.operations.find((op) =>
-    op.kind === "DropProperty" &&
-    (op as Types.DropPropertyOperation).propertyName === "age"
+    op.kind === "DropProperty"
+    && (op as Types.DropPropertyOperation).propertyName === "age"
   );
   const addBirthYearOp = userAlterOp.operations.find((op) =>
-    op.kind === "AddProperty" &&
-    (op as Types.AddPropertyOperation).property.name === "birth_year"
+    op.kind === "AddProperty"
+    && (op as Types.AddPropertyOperation).property.name === "birth_year"
   );
 
   assertEquals(dropAgeOp !== undefined, true);
@@ -381,16 +381,16 @@ Deno.test("Schema Differ - Detect Type Changes in Properties", () => {
   const operations = differ.diff(oldSchema, newSchema);
 
   const userAlterOp = operations.find((op) =>
-    op.kind === "AlterType" &&
-    (op as Types.AlterTypeOperation).typeName === "User"
+    op.kind === "AlterType"
+    && (op as Types.AlterTypeOperation).typeName === "User"
   ) as Types.AlterTypeOperation;
 
   assertEquals(userAlterOp !== undefined, true);
 
   // Should detect type change for age property
   const ageAlterOp = userAlterOp.operations.find((op) =>
-    op.kind === "AlterProperty" &&
-    (op as Types.AlterPropertyOperation).propertyName === "age"
+    op.kind === "AlterProperty"
+    && (op as Types.AlterPropertyOperation).propertyName === "age"
   ) as Types.AlterPropertyOperation;
 
   assertEquals(ageAlterOp !== undefined, true);
@@ -423,16 +423,16 @@ Deno.test("Schema Differ - Detect Link Changes", () => {
   const operations = differ.diff(oldSchema, newSchema);
 
   const postAlterOp = operations.find((op) =>
-    op.kind === "AlterType" &&
-    (op as Types.AlterTypeOperation).typeName === "Post"
+    op.kind === "AlterType"
+    && (op as Types.AlterTypeOperation).typeName === "Post"
   ) as Types.AlterTypeOperation;
 
   assertEquals(postAlterOp !== undefined, true);
 
   // Should detect changes to author link
   const authorAlterOp = postAlterOp.operations.find((op) =>
-    op.kind === "AlterLink" &&
-    (op as Types.AlterLinkOperation).linkName === "author"
+    op.kind === "AlterLink"
+    && (op as Types.AlterLinkOperation).linkName === "author"
   ) as Types.AlterLinkOperation;
 
   assertEquals(authorAlterOp !== undefined, true);
@@ -460,12 +460,12 @@ Deno.test("Schema Differ - Detect Type Rename (appears as drop + add)", () => {
 
   // Should detect User type being dropped and Account type being added
   const dropUserOp = operations.find((op) =>
-    op.kind === "DropType" &&
-    (op as Types.DropTypeOperation).typeName === "User"
+    op.kind === "DropType"
+    && (op as Types.DropTypeOperation).typeName === "User"
   );
   const createAccountOp = operations.find((op) =>
-    op.kind === "CreateType" &&
-    (op as Types.CreateTypeOperation).typeName === "Account"
+    op.kind === "CreateType"
+    && (op as Types.CreateTypeOperation).typeName === "Account"
   );
 
   assertEquals(dropUserOp !== undefined, true);
@@ -473,16 +473,16 @@ Deno.test("Schema Differ - Detect Type Rename (appears as drop + add)", () => {
 
   // Should also update Post type to change link target
   const postAlterOp = operations.find((op) =>
-    op.kind === "AlterType" &&
-    (op as Types.AlterTypeOperation).typeName === "Post"
+    op.kind === "AlterType"
+    && (op as Types.AlterTypeOperation).typeName === "Post"
   ) as Types.AlterTypeOperation;
 
   assertEquals(postAlterOp !== undefined, true);
 
   // Should have alter link operation
   const authorAlterOp = postAlterOp.operations.find((op) =>
-    op.kind === "AlterLink" &&
-    (op as Types.AlterLinkOperation).linkName === "author"
+    op.kind === "AlterLink"
+    && (op as Types.AlterLinkOperation).linkName === "author"
   ) as Types.AlterLinkOperation;
 
   assertEquals(authorAlterOp !== undefined, true);
@@ -632,16 +632,16 @@ Deno.test("Migration Engine - Handle Constraint Changes", () => {
   if (planResult.ok) {
     const operations = planResult.value.migrations[0].operations;
     const userAlterOp = operations.find((op) =>
-      op.kind === "AlterType" &&
-      (op as Types.AlterTypeOperation).typeName === "User"
+      op.kind === "AlterType"
+      && (op as Types.AlterTypeOperation).typeName === "User"
     ) as Types.AlterTypeOperation;
 
     assertEquals(userAlterOp !== undefined, true);
 
     // Should have operation to change email property (removing exclusive constraint)
     const emailAlterOp = userAlterOp.operations.find((op) =>
-      op.kind === "AlterProperty" &&
-      (op as Types.AlterPropertyOperation).propertyName === "email"
+      op.kind === "AlterProperty"
+      && (op as Types.AlterPropertyOperation).propertyName === "email"
     );
 
     assertEquals(emailAlterOp !== undefined, true);

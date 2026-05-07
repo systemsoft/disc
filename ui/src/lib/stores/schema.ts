@@ -1,6 +1,6 @@
-import { derived, get, writable } from "svelte/store";
 import type { SchemaTypeDescription } from "$lib/api/client";
 import { discAPI } from "$lib/api/client";
+import { derived, get, writable } from "svelte/store";
 
 export const schemaTypes = writable<SchemaTypeDescription[]>([]);
 export const selectedType = writable<SchemaTypeDescription | null>(null);

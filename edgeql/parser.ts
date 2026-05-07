@@ -3,9 +3,9 @@
  */
 
 import { SyntaxError } from "../lib/errors.ts";
-import { Token, TokenType } from "./tokens.ts";
-import { EdgeQLLexer } from "./lexer.ts";
 import * as AST from "./ast.ts";
+import { EdgeQLLexer } from "./lexer.ts";
+import { Token, TokenType } from "./tokens.ts";
 
 export class EdgeQLParser {
   private tokens: Token[];
@@ -171,8 +171,8 @@ export class EdgeQLParser {
 
     // Check for set operations at the query level (UNION, EXCEPT, INTERSECT)
     while (
-      this.check(TokenType.UNION) || this.check(TokenType.EXCEPT) ||
-      this.check(TokenType.INTERSECT)
+      this.check(TokenType.UNION) || this.check(TokenType.EXCEPT)
+      || this.check(TokenType.INTERSECT)
     ) {
       const opToken = this.advance();
       const op = opToken.type === TokenType.UNION ? "UNION" : opToken.type === TokenType.EXCEPT ? "EXCEPT" : "INTERSECT";
@@ -223,13 +223,13 @@ export class EdgeQLParser {
       // next token is NOT `:=`, then "recursive" is a modifier and the real
       // binding name follows.
       if (
-        this.check(TokenType.IDENT) &&
-        this.peek().value.toLowerCase() === "recursive"
+        this.check(TokenType.IDENT)
+        && this.peek().value.toLowerCase() === "recursive"
       ) {
         const nextPos = this.current + 1;
         if (
-          nextPos < this.tokens.length &&
-          this.tokens[nextPos].type !== TokenType.ASSIGN
+          nextPos < this.tokens.length
+          && this.tokens[nextPos].type !== TokenType.ASSIGN
         ) {
           this.advance(); // consume "recursive"
           recursive = true;
@@ -464,8 +464,8 @@ export class EdgeQLParser {
 
     // Parse optional BUFFERS keyword (contextual identifier)
     if (
-      this.check(TokenType.IDENT) &&
-      this.peek().value.toLowerCase() === "buffers"
+      this.check(TokenType.IDENT)
+      && this.peek().value.toLowerCase() === "buffers"
     ) {
       this.advance();
       buffers = true;
@@ -490,8 +490,8 @@ export class EdgeQLParser {
     if (this.match(TokenType.SESSION)) {
       scope = "SESSION";
     } else if (
-      this.check(TokenType.IDENT) &&
-      this.peek().value.toLowerCase() === "database"
+      this.check(TokenType.IDENT)
+      && this.peek().value.toLowerCase() === "database"
     ) {
       this.advance();
       scope = "DATABASE";
@@ -543,8 +543,8 @@ export class EdgeQLParser {
    */
   private isSetGlobal(): boolean {
     const nextPos = this.current + 1;
-    return nextPos < this.tokens.length &&
-      this.tokens[nextPos].type === TokenType.GLOBAL;
+    return nextPos < this.tokens.length
+      && this.tokens[nextPos].type === TokenType.GLOBAL;
   }
 
   /**
@@ -589,14 +589,14 @@ export class EdgeQLParser {
       let emptyOrder: "EMPTY FIRST" | "EMPTY LAST" | undefined;
       if (this.match(TokenType.EMPTY)) {
         if (
-          this.check(TokenType.IDENT) &&
-          this.peek().value.toLowerCase() === "first"
+          this.check(TokenType.IDENT)
+          && this.peek().value.toLowerCase() === "first"
         ) {
           this.advance();
           emptyOrder = "EMPTY FIRST";
         } else if (
-          this.check(TokenType.IDENT) &&
-          this.peek().value.toLowerCase() === "last"
+          this.check(TokenType.IDENT)
+          && this.peek().value.toLowerCase() === "last"
         ) {
           this.advance();
           emptyOrder = "EMPTY LAST";
@@ -794,7 +794,7 @@ export class EdgeQLParser {
    */
   private parseCaseExpression(): AST.CaseExpression {
     const whenClauses: Array<
-      { condition: AST.Expression; result: AST.Expression }
+      { condition: AST.Expression; result: AST.Expression; }
     > = [];
 
     while (this.match(TokenType.WHEN)) {
@@ -1132,9 +1132,9 @@ export class EdgeQLParser {
             index,
           };
         } else if (
-          (expr.kind === "TupleExpr" || expr.kind === "NamedTuple" ||
-            expr.kind === "TupleAccessExpr") &&
-          (this.check(TokenType.IDENT) || this.check(TokenType.BACKTICK_IDENT))
+          (expr.kind === "TupleExpr" || expr.kind === "NamedTuple"
+            || expr.kind === "TupleAccessExpr")
+          && (this.check(TokenType.IDENT) || this.check(TokenType.BACKTICK_IDENT))
         ) {
           // Named tuple field access (e.g., (name := 'foo').name)
           const fieldName = this.parseIdentifier().name;
@@ -1488,9 +1488,9 @@ export class EdgeQLParser {
     // When a keyword like SCHEMA is followed by ::, treat it as a qualified
     // name rather than a keyword so that schema::get_type() etc. parse correctly.
     if (
-      this.check(TokenType.SCHEMA) &&
-      this.current + 1 < this.tokens.length &&
-      this.tokens[this.current + 1].type === TokenType.NAMESPACE
+      this.check(TokenType.SCHEMA)
+      && this.current + 1 < this.tokens.length
+      && this.tokens[this.current + 1].type === TokenType.NAMESPACE
     ) {
       const parts: string[] = [];
       parts.push(this.advance().value.toLowerCase());
@@ -1542,9 +1542,9 @@ export class EdgeQLParser {
 
     // Subquery (SELECT, INSERT, etc. in expression position)
     if (
-      this.check(TokenType.SELECT) || this.check(TokenType.INSERT) ||
-      this.check(TokenType.UPDATE) || this.check(TokenType.DELETE) ||
-      this.check(TokenType.FOR) || this.check(TokenType.WITH)
+      this.check(TokenType.SELECT) || this.check(TokenType.INSERT)
+      || this.check(TokenType.UPDATE) || this.check(TokenType.DELETE)
+      || this.check(TokenType.FOR) || this.check(TokenType.WITH)
     ) {
       const query = this.parseQuery();
       return { kind: "Subquery", query };
@@ -1642,8 +1642,8 @@ export class EdgeQLParser {
 
     // Parse frame spec: ROWS|RANGE|GROUPS BETWEEN ... AND ...
     if (
-      this.check(TokenType.ROWS) || this.check(TokenType.RANGE) ||
-      this.check(TokenType.GROUPS)
+      this.check(TokenType.ROWS) || this.check(TokenType.RANGE)
+      || this.check(TokenType.GROUPS)
     ) {
       const modeToken = this.advance();
       const mode = modeToken.value.toUpperCase() as "ROWS" | "RANGE" | "GROUPS";
@@ -1672,8 +1672,8 @@ export class EdgeQLParser {
 
       // Parse optional EXCLUDE clause
       if (
-        frame && this.check(TokenType.IDENT) &&
-        this.peek().value.toLowerCase() === "exclude"
+        frame && this.check(TokenType.IDENT)
+        && this.peek().value.toLowerCase() === "exclude"
       ) {
         this.advance(); // consume "exclude"
 
@@ -1681,8 +1681,8 @@ export class EdgeQLParser {
           this.advance(); // consume CURRENT
           // expect ROW as identifier
           if (
-            this.check(TokenType.IDENT) &&
-            this.peek().value.toLowerCase() === "row"
+            this.check(TokenType.IDENT)
+            && this.peek().value.toLowerCase() === "row"
           ) {
             this.advance();
             frame.exclude = "CURRENT ROW";
@@ -1701,8 +1701,8 @@ export class EdgeQLParser {
             this.advance();
             // expect "others" as identifier
             if (
-              this.check(TokenType.IDENT) &&
-              this.peek().value.toLowerCase() === "others"
+              this.check(TokenType.IDENT)
+              && this.peek().value.toLowerCase() === "others"
             ) {
               this.advance();
               frame.exclude = "NO OTHERS";
@@ -1752,8 +1752,8 @@ export class EdgeQLParser {
       this.advance();
       // Expect ROW as an identifier
       if (
-        this.check(TokenType.IDENT) &&
-        this.peek().value.toLowerCase() === "row"
+        this.check(TokenType.IDENT)
+        && this.peek().value.toLowerCase() === "row"
       ) {
         this.advance();
         return { kind: "FrameBound", type: "CURRENT ROW" };

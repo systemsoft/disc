@@ -2,12 +2,12 @@
  * Extension context factory for Disc database
  */
 
-import type { ExtensionContext } from "./types.ts";
-import type { ConnectionPool } from "../lib/connection-pool.ts";
 import type { Schema } from "../compiler/context.ts";
-import type { ServerConfig } from "../server/types.ts";
+import type { ConnectionPool } from "../lib/connection-pool.ts";
 import { getLogger } from "../lib/logger.ts";
 import type { Logger } from "../lib/logger.ts";
+import type { ServerConfig } from "../server/types.ts";
+import type { ExtensionContext } from "./types.ts";
 
 export function createExtensionContext(options: {
   pool?: ConnectionPool;

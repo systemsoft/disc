@@ -3,10 +3,10 @@
  */
 
 import { assertEquals, assertNotEquals } from "@std/assert";
-import { BinaryProtocolServer } from "./binary-server.ts";
-import { type ClientMessage, decodeServerMessage, encodeClientMessage, type ServerMessage } from "./messages.ts";
-import { Cardinality, InputLanguage, OutputFormat, PROTOCOL_MAJOR_VERSION, PROTOCOL_MINOR_VERSION, TransactionState } from "./enums.ts";
 import { createTestSchema } from "../compiler/context.ts";
+import { BinaryProtocolServer } from "./binary-server.ts";
+import { Cardinality, InputLanguage, OutputFormat, PROTOCOL_MAJOR_VERSION, PROTOCOL_MINOR_VERSION, TransactionState } from "./enums.ts";
+import { type ClientMessage, decodeServerMessage, encodeClientMessage, type ServerMessage } from "./messages.ts";
 import { buildClientFinalMessage, buildClientFirstMessage } from "./scram.ts";
 
 const textDecoder = new TextDecoder();
@@ -27,7 +27,7 @@ const ZERO_UUID = new Uint8Array(16);
  */
 async function readMessage(
   conn: Deno.TcpConn,
-): Promise<{ mtype: number; payload: Uint8Array } | null> {
+): Promise<{ mtype: number; payload: Uint8Array; } | null> {
   const header = new Uint8Array(5);
   const headerRead = await readExact(conn, header);
   if (!headerRead) return null;
@@ -65,7 +65,7 @@ async function readExact(
 /**
  * Decode a raw protocol message into a ServerMessage.
  */
-function decode(raw: { mtype: number; payload: Uint8Array }): ServerMessage {
+function decode(raw: { mtype: number; payload: Uint8Array; }): ServerMessage {
   return decodeServerMessage(raw.mtype, raw.payload);
 }
 

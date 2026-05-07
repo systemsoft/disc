@@ -193,7 +193,7 @@ Deno.test("toEdgeQL is pure — calling twice returns the same compiled output",
 });
 
 Deno.test("attaching a client makes the chain awaitable", async () => {
-  const calls: Array<{ query: string; variables: unknown }> = [];
+  const calls: Array<{ query: string; variables: unknown; }> = [];
   const fakeClient = {
     query: <T = unknown>(
       query: string,

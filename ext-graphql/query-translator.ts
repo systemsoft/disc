@@ -222,9 +222,9 @@ class GraphQLParser {
 
     // Spread (`...`) — fragment spread or inline fragment.
     if (
-      this.peek() === "." &&
-      this.input[this.pos + 1] === "." &&
-      this.input[this.pos + 2] === "."
+      this.peek() === "."
+      && this.input[this.pos + 1] === "."
+      && this.input[this.pos + 2] === "."
     ) {
       this.pos += 3;
       this.skipWhitespace();
@@ -365,7 +365,7 @@ class GraphQLParser {
     const ch = this.peek();
 
     // String literal
-    if (ch === '"') {
+    if (ch === "\"") {
       return this.parseString();
     }
 
@@ -401,9 +401,9 @@ class GraphQLParser {
   }
 
   private parseString(): string {
-    this.expect('"');
+    this.expect("\"");
     let result = "";
-    while (this.pos < this.input.length && this.peek() !== '"') {
+    while (this.pos < this.input.length && this.peek() !== "\"") {
       if (this.peek() === "\\") {
         this.pos++;
         const escaped = this.peek();
@@ -415,8 +415,8 @@ class GraphQLParser {
           case "t":
             result += "\t";
             break;
-          case '"':
-            result += '"';
+          case "\"":
+            result += "\"";
             break;
           case "\\":
             result += "\\";
@@ -429,7 +429,7 @@ class GraphQLParser {
         this.pos++;
       }
     }
-    this.expect('"');
+    this.expect("\"");
     return result;
   }
 
@@ -537,8 +537,8 @@ class GraphQLParser {
   private readName(): string {
     const start = this.pos;
     while (
-      this.pos < this.input.length &&
-      /[a-zA-Z0-9_]/.test(this.input[this.pos])
+      this.pos < this.input.length
+      && /[a-zA-Z0-9_]/.test(this.input[this.pos])
     ) {
       this.pos++;
     }
@@ -711,7 +711,7 @@ function resolveTypeIntrospection(
   typeName: string,
 ): Record<string, unknown> | null {
   // Tolerate qualified ("module::Type") and unqualified ("Type") names.
-  let def: { name: string; properties: Map<string, unknown>; links?: Map<string, unknown> } | undefined;
+  let def: { name: string; properties: Map<string, unknown>; links?: Map<string, unknown>; } | undefined;
   for (const [name, candidate] of schema.types) {
     const short = name.includes("::") ? name.split("::").pop()! : name;
     if (name === typeName || short === typeName) {
@@ -725,7 +725,7 @@ function resolveTypeIntrospection(
 
 function introspectionTypeShape(
   selection: GraphQLSelection,
-  def: { name: string; properties: Map<string, unknown>; links?: Map<string, unknown> },
+  def: { name: string; properties: Map<string, unknown>; links?: Map<string, unknown>; },
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const sub of selection.subSelections ?? []) {
@@ -827,7 +827,7 @@ function formatEdgeQLValue(value: unknown): string {
   if (
     typeof value === "object" && value !== null && "__variable" in value
   ) {
-    return `<str>$${(value as { __variable: string }).__variable}`;
+    return `<str>$${(value as { __variable: string; }).__variable}`;
   }
   return String(value);
 }
@@ -917,7 +917,7 @@ function translateQuery(
         typeof value === "object" && value !== null && "__variable" in value
       ) {
         variables[
-          (value as { __variable: string }).__variable
+          (value as { __variable: string; }).__variable
         ] = undefined;
       }
     }

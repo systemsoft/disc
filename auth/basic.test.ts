@@ -1,8 +1,8 @@
 import { assertEquals, assertExists } from "@std/assert";
 import { afterEach, beforeEach, describe, it } from "@std/testing/bdd";
 import { AuthProvider } from "./provider.ts";
-import { AuthConfig, AuthError } from "./types.ts";
 import { TestDatabase } from "./test-database.ts";
+import { AuthConfig, AuthError } from "./types.ts";
 
 describe("Auth Module Smoke Test", () => {
   let provider: AuthProvider;

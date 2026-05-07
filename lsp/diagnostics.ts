@@ -6,9 +6,9 @@
  * loop and editor integrations can both consume it.
  */
 
+import { DiscError } from "../lib/errors.ts";
 import { SDLParser } from "../schema/parser.ts";
 import { SchemaValidator } from "../schema/validator.ts";
-import { DiscError } from "../lib/errors.ts";
 import { type Diagnostic, DiagnosticSeverity, type Position, type Range } from "./protocol.ts";
 
 const SOURCE = "disc";
@@ -84,11 +84,11 @@ function extendToEndOfTokenOrLine(
   // squiggle covers a meaningful chunk rather than a zero-width caret.
   let end = character;
   while (
-    end < lineText.length &&
-    !/\s/.test(lineText[end]) &&
-    lineText[end] !== ";" &&
-    lineText[end] !== "{" &&
-    lineText[end] !== "}"
+    end < lineText.length
+    && !/\s/.test(lineText[end])
+    && lineText[end] !== ";"
+    && lineText[end] !== "{"
+    && lineText[end] !== "}"
   ) {
     end++;
   }

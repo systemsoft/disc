@@ -6,11 +6,11 @@
  * initializeAuth() path remains untouched; this is an alternative entry point.
  */
 
+import type { AuthRoutes } from "../auth/integration.ts";
+import type { AuthMiddleware } from "../auth/middleware.ts";
+import type { AuthProvider } from "../auth/provider.ts";
 import { BaseExtension } from "./base-extension.ts";
 import type { ExtensionContext, ExtensionMetadata, ExtensionMiddleware, ExtensionRoute } from "./types.ts";
-import type { AuthProvider } from "../auth/provider.ts";
-import type { AuthMiddleware } from "../auth/middleware.ts";
-import type { AuthRoutes } from "../auth/integration.ts";
 
 export interface AuthExtensionAdapterOptions {
   authMiddleware: AuthMiddleware;
@@ -159,7 +159,7 @@ export class AuthExtensionAdapter extends BaseExtension {
   }
 
   override async healthCheck(): Promise<
-    { healthy: boolean; details?: string }
+    { healthy: boolean; details?: string; }
   > {
     if (this.state !== "ready") {
       return { details: `state is ${this.state}`, healthy: false };

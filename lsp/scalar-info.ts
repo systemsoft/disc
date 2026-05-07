@@ -6,7 +6,7 @@
  * record so completion enumerates them and hover looks them up.
  */
 
-export const SCALAR_TYPES: ReadonlyArray<{ name: string; description: string }> = [
+export const SCALAR_TYPES: ReadonlyArray<{ name: string; description: string; }> = [
   { name: "str", description: "Variable-length text. Maps to PostgreSQL `text`." },
   { name: "int16", description: "16-bit signed integer (-32 768 .. 32 767)." },
   { name: "int32", description: "32-bit signed integer (-2 147 483 648 .. 2 147 483 647)." },
@@ -27,6 +27,6 @@ export const SCALAR_TYPES: ReadonlyArray<{ name: string; description: string }> 
 
 const BY_NAME = new Map(SCALAR_TYPES.map((s) => [s.name, s]));
 
-export function lookupScalar(name: string): { name: string; description: string } | undefined {
+export function lookupScalar(name: string): { name: string; description: string; } | undefined {
   return BY_NAME.get(name);
 }

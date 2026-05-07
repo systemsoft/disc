@@ -3,9 +3,9 @@
  */
 
 import { assertEquals, assertExists, assertRejects, assertStringIncludes } from "@std/assert";
-import { DatabaseRegistry } from "./database-registry.ts";
 import { DatabaseConnection, replaceDsnDatabase } from "../lib/database.ts";
 import { DatabaseRegistryError } from "../lib/errors.ts";
+import { DatabaseRegistry } from "./database-registry.ts";
 
 // ---------------------------------------------------------------------------
 // Test helpers — mock DatabaseConnection.connect / .execute / .close
@@ -22,20 +22,20 @@ function installMocks(): {
   const origClose = DatabaseConnection.prototype.close;
   const origQuery = DatabaseConnection.prototype.query;
 
-  DatabaseConnection.prototype.connect = function () {
+  DatabaseConnection.prototype.connect = function() {
     return Promise.resolve();
   };
 
-  DatabaseConnection.prototype.execute = function (sql: string) {
+  DatabaseConnection.prototype.execute = function(sql: string) {
     executedSql.push(sql);
     return Promise.resolve();
   };
 
-  DatabaseConnection.prototype.close = function () {
+  DatabaseConnection.prototype.close = function() {
     return Promise.resolve();
   };
 
-  DatabaseConnection.prototype.query = function (sql: string) {
+  DatabaseConnection.prototype.query = function(sql: string) {
     if (sql === "SELECT 1") {
       return Promise.resolve({ rows: [{ "?column?": 1 }], rowCount: 1 });
     }

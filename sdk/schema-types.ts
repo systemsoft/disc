@@ -76,7 +76,7 @@ export const t = {
 // --- Schema spec + DiscSchema wrapper ---
 
 /** A schema spec: each top-level key is a type, mapped to its fields. */
-export type SchemaSpec = { [TypeName: string]: { [FieldName: string]: FieldMarker } };
+export type SchemaSpec = { [TypeName: string]: { [FieldName: string]: FieldMarker; }; };
 
 /**
  * The output of `defineSchema()`. Carries the spec at runtime and a
@@ -85,7 +85,7 @@ export type SchemaSpec = { [TypeName: string]: { [FieldName: string]: FieldMarke
  */
 export interface DiscSchema<S extends SchemaSpec> {
   readonly spec: S;
-  readonly __rows?: { [K in keyof S]: ResolveType<S, S[K]> };
+  readonly __rows?: { [K in keyof S]: ResolveType<S, S[K]>; };
 }
 
 // --- Type-level helpers (used by the typed builder) ---
@@ -96,7 +96,7 @@ export interface DiscSchema<S extends SchemaSpec> {
  * just an `{ id: string }` reference. Full expansion happens only via
  * `select User { posts: { title } }` and `ResolveSelected`.
  */
-export type LinkStub = { id: string };
+export type LinkStub = { id: string; };
 
 /** Resolve a single field marker to its TS type. */
 export type FieldType<S extends SchemaSpec, F> = F extends Scalar<string, infer T> ? T
@@ -155,7 +155,7 @@ const FIELD_NAME_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
 function isFieldMarker(value: unknown): value is FieldMarker {
   if (typeof value !== "object" || value === null) return false;
-  const kind = (value as { kind?: unknown }).kind;
+  const kind = (value as { kind?: unknown; }).kind;
   return kind === "scalar" || kind === "optional" || kind === "link";
 }
 

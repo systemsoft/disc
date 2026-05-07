@@ -11,9 +11,9 @@
 
 import { assertEquals } from "@std/assert";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
+import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 
 const RUN_PG = canRunPgTests();
 
@@ -24,7 +24,7 @@ const RUN_PG = canRunPgTests();
 /** Parse a DSN into connection config for the raw deno-postgres Client. */
 function parseDsn(
   dsn: string,
-): { hostname: string; port: number; user: string; database: string } {
+): { hostname: string; port: number; user: string; database: string; } {
   const url = new URL(dsn);
   return {
     hostname: url.hostname || "localhost",
@@ -38,13 +38,13 @@ function parseDsn(
 async function getColumns(
   dsn: string,
   tableName: string,
-): Promise<{ column_name: string; data_type: string }[]> {
+): Promise<{ column_name: string; data_type: string; }[]> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
   try {
     await client.connect();
     const result = await client.queryObject<
-      { column_name: string; data_type: string }
+      { column_name: string; data_type: string; }
     >(
       `SELECT column_name, data_type
        FROM information_schema.columns
@@ -422,8 +422,8 @@ Deno.test({
       // PostgreSQL returns interval in various formats; verify it represents 2h30m
       const val = String(rows[0].time_span);
       assertEquals(
-        val.includes("02:30:00") || val.includes("2:30:00") ||
-          val.includes("2 hours 30 min"),
+        val.includes("02:30:00") || val.includes("2:30:00")
+          || val.includes("2 hours 30 min"),
         true,
         `Round-tripped cal::relative_duration should represent 2h30m, got: ${val}`,
       );
@@ -501,8 +501,8 @@ Deno.test({
       // PostgreSQL returns '3 days' interval in various formats
       const val = String(rows[0].date_span);
       assertEquals(
-        val.includes("3 day") || val.includes("3 days") ||
-          val.includes("72:00:00"),
+        val.includes("3 day") || val.includes("3 days")
+          || val.includes("72:00:00"),
         true,
         `Round-tripped cal::date_duration should represent 3 days, got: ${val}`,
       );
@@ -645,8 +645,8 @@ Deno.test({
       // Verify relative_dur_val
       const relDurVal = String(row.relative_dur_val);
       assertEquals(
-        relDurVal.includes("02:30:00") || relDurVal.includes("2:30:00") ||
-          relDurVal.includes("2 hours 30 min"),
+        relDurVal.includes("02:30:00") || relDurVal.includes("2:30:00")
+          || relDurVal.includes("2 hours 30 min"),
         true,
         `relative_dur_val should represent 2h30m, got: ${relDurVal}`,
       );
@@ -654,8 +654,8 @@ Deno.test({
       // Verify date_dur_val
       const dateDurVal = String(row.date_dur_val);
       assertEquals(
-        dateDurVal.includes("3 day") || dateDurVal.includes("3 days") ||
-          dateDurVal.includes("72:00:00"),
+        dateDurVal.includes("3 day") || dateDurVal.includes("3 days")
+          || dateDurVal.includes("72:00:00"),
         true,
         `date_dur_val should represent 3 days, got: ${dateDurVal}`,
       );

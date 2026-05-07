@@ -22,8 +22,8 @@ function createMockMigrateConfig(args: any): any {
   return {
     migrationsDir: "./migrations",
     schemaFile: args.schema || "./schema.disc",
-    databaseUrl: Deno.env.get("DATABASE_URL") ||
-      "postgresql://localhost:5432/disc_dev",
+    databaseUrl: Deno.env.get("DATABASE_URL")
+      || "postgresql://localhost:5432/disc_dev",
     dryRun: args["dry-run"] || false,
     autoApprove: args["auto-approve"] || false,
     backupBeforeMigration: true,
@@ -330,8 +330,8 @@ Deno.test("CLI Commands - environment variable defaults", () => {
     // Test without DATABASE_URL
     env.clear("DATABASE_URL");
 
-    const defaultDbUrl = Deno.env.get("DATABASE_URL") ||
-      "postgresql://localhost:5432/disc_dev";
+    const defaultDbUrl = Deno.env.get("DATABASE_URL")
+      || "postgresql://localhost:5432/disc_dev";
     assertEquals(defaultDbUrl, "postgresql://localhost:5432/disc_dev");
 
     // Test with DATABASE_URL

@@ -19,15 +19,6 @@
     "./schema": "./schema/mod.ts",
     "./sdk": "./sdk/mod.ts"
   },
-  "fmt": {
-    "exclude": ["deploy/helm/disc/**/*.yaml"],
-    "indentWidth": 2,
-    "lineWidth": 160,
-    "proseWrap": "preserve",
-    "semiColons": true,
-    "singleQuote": false,
-    "useTabs": false
-  },
   "imports": {
     "@std/assert": "jsr:@std/assert@1.0.8",
     "@std/async": "jsr:@std/async@1.0.8",
@@ -52,7 +43,7 @@
     }
   },
   "lock": false,
-  "name": "@disc/db",
+  "name": "@systemsoft/disc",
   "tasks": {
     "bench": "deno bench --allow-all --no-check benchmarks/",
     "bench:pg": "DISC_PG_AUTO=1 deno bench --allow-all --no-check benchmarks/",
@@ -67,7 +58,8 @@
     "docker:build": "docker build -t disc .",
     "docker:down": "docker compose down",
     "docker:up": "docker compose up -d",
-    "format": "deno fmt",
+    "format": "dprint fmt",
+    "format:check": "dprint check",
     "lint": "deno lint",
     "serve": "deno run --allow-net --allow-read --allow-env server/server.ts",
     "test": "deno test --allow-env --allow-net --allow-read --allow-write --no-check",

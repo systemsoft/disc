@@ -6,8 +6,8 @@
  * a symbol; its properties and links nest underneath.
  */
 
-import { buildSymbolIndex, type TypeKind } from "./symbol-index.ts";
 import { type DocumentSymbol, SymbolKind } from "./protocol.ts";
+import { buildSymbolIndex, type TypeKind } from "./symbol-index.ts";
 
 export function provideDocumentSymbols(text: string): DocumentSymbol[] {
   const idx = buildSymbolIndex(text);
@@ -33,8 +33,8 @@ export function provideDocumentSymbols(text: string): DocumentSymbol[] {
 
   // Sort by start line for stable, file-order output.
   out.sort((a, b) =>
-    a.range.start.line - b.range.start.line ||
-    a.range.start.character - b.range.start.character
+    a.range.start.line - b.range.start.line
+    || a.range.start.character - b.range.start.character
   );
   return out;
 }

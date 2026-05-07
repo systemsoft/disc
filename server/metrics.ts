@@ -20,7 +20,7 @@ export interface MetricsSource {
       evictions: number;
       size: number;
     };
-    parse: { hits: number; misses: number; evictions: number; size: number };
+    parse: { hits: number; misses: number; evictions: number; size: number; };
   };
   /** Query metrics (optional) */
   queryMetrics?: {

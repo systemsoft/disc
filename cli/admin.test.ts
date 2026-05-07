@@ -4,10 +4,10 @@
  */
 
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
+import { DatabaseConnection } from "../lib/database.ts";
 import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { ConsoleCapture } from "../tests/test-utils.ts";
 import { adminCommand, collectAccessPolicyAst, collectPoliciesFromSdl, testPolicyImpl } from "./admin.ts";
-import { DatabaseConnection } from "../lib/database.ts";
 
 const JWT_SECRET = "test-secret-must-be-at-least-32-bytes-long";
 

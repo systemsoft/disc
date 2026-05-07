@@ -7,11 +7,11 @@
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import { serializeSchema, serializeType } from "./sdl-serializer.ts";
+import { SchemaManager } from "../migration/schema-manager.ts";
+import { getBuiltinFunctions } from "./builtin-functions.ts";
 import type { LinkDef, PropertyDef, Schema, TypeDef } from "./context.ts";
 import { createTestSchema } from "./context.ts";
-import { getBuiltinFunctions } from "./builtin-functions.ts";
-import { SchemaManager } from "../migration/schema-manager.ts";
+import { serializeSchema, serializeType } from "./sdl-serializer.ts";
 
 // Helpers ------------------------------------------------------------------
 
@@ -349,8 +349,8 @@ Deno.test("sdl-serializer - round-trips enum scalar Status", () => {
     "scalar type Status extending enum<active, inactive, pending>;",
   );
   const reparsed = reparse(sdl);
-  const status = reparsed.types.get("Status") ??
-    reparsed.types.get("default::Status");
+  const status = reparsed.types.get("Status")
+    ?? reparsed.types.get("default::Status");
   assertEquals(status !== undefined, true);
   assertEquals(status!.kind, "enum");
 });

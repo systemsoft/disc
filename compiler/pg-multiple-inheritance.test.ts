@@ -13,12 +13,12 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
-import { canRunPgTests, getTestDsn, resetTestDatabase } from "../tests/pg-test-harness.ts";
+import { EdgeQLParser } from "../edgeql/parser.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
-import { EdgeQLParser } from "../edgeql/parser.ts";
-import { EdgeQLCompiler } from "./compiler.ts";
+import { canRunPgTests, getTestDsn, resetTestDatabase } from "../tests/pg-test-harness.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
+import { EdgeQLCompiler } from "./compiler.ts";
 import type { Schema } from "./context.ts";
 
 const RUN_PG = canRunPgTests();
@@ -44,7 +44,7 @@ function makePool(dsn: string): ConnectionPool {
 async function applySDL(
   pool: ConnectionPool,
   sdl: string,
-): Promise<{ manager: SchemaManager; schema: Schema }> {
+): Promise<{ manager: SchemaManager; schema: Schema; }> {
   const manager = new SchemaManager({ pool });
   await manager.initialize();
 
@@ -119,7 +119,7 @@ Deno.test({
       // INSERT a BlogPost with author_name, title, body
       // created_at should get a default value from datetime_current()
       const insertSql = compileEdgeQL(
-        'INSERT BlogPost { author_name := "Jane Doe", title := "Hello World", body := "First post content" }',
+        "INSERT BlogPost { author_name := \"Jane Doe\", title := \"Hello World\", body := \"First post content\" }",
         schema,
       );
       await pool.query(insertSql);
@@ -140,8 +140,8 @@ Deno.test({
 
       // Extract data from JSON result
       const firstRow = result.rows[0];
-      const data = (firstRow as Record<string, unknown>).jsonb_build_object ??
-        firstRow;
+      const data = (firstRow as Record<string, unknown>).jsonb_build_object
+        ?? firstRow;
       const rowData = data as Record<string, unknown>;
 
       // Verify all properties are present (including inherited ones)
@@ -200,7 +200,7 @@ Deno.test({
 
       // INSERT an Item with all properties
       const insertSql = compileEdgeQL(
-        'INSERT Item { name := "Widget", category := "Hardware", tag := "sale", price := 999 }',
+        "INSERT Item { name := \"Widget\", category := \"Hardware\", tag := \"sale\", price := 999 }",
         schema,
       );
       await pool.query(insertSql);
@@ -220,8 +220,8 @@ Deno.test({
 
       // Extract data
       const firstRow = result.rows[0];
-      const data = (firstRow as Record<string, unknown>).jsonb_build_object ??
-        firstRow;
+      const data = (firstRow as Record<string, unknown>).jsonb_build_object
+        ?? firstRow;
       const rowData = data as Record<string, unknown>;
 
       // Verify all 4 properties are returned
@@ -274,7 +274,7 @@ Deno.test({
 
       // INSERT a BlogPost row
       const insertSql = compileEdgeQL(
-        'INSERT BlogPost { author_name := "Ada", title := "Test Post", body := "Some body text" }',
+        "INSERT BlogPost { author_name := \"Ada\", title := \"Test Post\", body := \"Some body text\" }",
         schema,
       );
       await pool.query(insertSql);
@@ -307,8 +307,8 @@ Deno.test({
 
       // Verify inherited property value via Authored query
       const authFirstRow = authResult.rows[0];
-      const authData = (authFirstRow as Record<string, unknown>).jsonb_build_object ??
-        authFirstRow;
+      const authData = (authFirstRow as Record<string, unknown>).jsonb_build_object
+        ?? authFirstRow;
       assertEquals(
         (authData as Record<string, unknown>).author_name,
         "Ada",
@@ -370,14 +370,14 @@ Deno.test({
 
       // INSERT an Article
       const insertArticleSql = compileEdgeQL(
-        'INSERT Article { author_name := "Billie", headline := "Breaking News" }',
+        "INSERT Article { author_name := \"Billie\", headline := \"Breaking News\" }",
         schema,
       );
       await pool.query(insertArticleSql);
 
       // INSERT a Review
       const insertReviewSql = compileEdgeQL(
-        'INSERT Review { author_name := "Cher", rating := 5, comment := "Excellent!" }',
+        "INSERT Review { author_name := \"Cher\", rating := 5, comment := \"Excellent!\" }",
         schema,
       );
       await pool.query(insertReviewSql);
@@ -396,8 +396,8 @@ Deno.test({
       );
 
       const articleRow = articleResult.rows[0];
-      const articleData = (articleRow as Record<string, unknown>).jsonb_build_object ??
-        articleRow;
+      const articleData = (articleRow as Record<string, unknown>).jsonb_build_object
+        ?? articleRow;
       const article = articleData as Record<string, unknown>;
 
       assertEquals(
