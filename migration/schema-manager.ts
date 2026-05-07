@@ -749,7 +749,7 @@ export class SchemaManager {
    */
   async applySchema(
     sdlSource: string,
-    options?: { allowUnsafe?: boolean },
+    options?: { allowUnsafe?: boolean; skipHistory?: boolean },
   ): Promise<Result<Types.MigrationResult[], MigrationError>> {
     // Parse SDL
     const parseResult = this.parseSDL(sdlSource);
@@ -817,8 +817,12 @@ export class SchemaManager {
       return Ok(results);
     }
 
-    // Execute the migration plan
-    const execResult = await this.engine.executeMigration(plan);
+    // Execute the migration plan. `skipHistory` (gh/geldata#3761) is
+    // the `db push` path — DDL still applies, but the engine doesn't
+    // record the migration in `disc_migrations`.
+    const execResult = await this.engine.executeMigration(plan, {
+      skipHistory: options?.skipHistory,
+    });
     if (!execResult.ok) {
       return execResult;
     }

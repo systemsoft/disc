@@ -818,6 +818,68 @@ export class CLICommands {
   }
 
   /**
+   * Push the current schema directly to the live database without
+   * recording a migration. (gh/geldata#3761 — Prisma-style db push.)
+   *
+   * Use case: rapid dev iteration. Edit `dbschema/default.disc`,
+   * `disc db push`, test. No migration files are created. When the
+   * design settles, run `disc migrate --create` and the differ
+   * produces a single clean migration covering the cumulative shape
+   * change since the last recorded baseline.
+   *
+   * Refuses without `--force` because skipping migration history is
+   * a foot-gun in shared/production environments. Honors
+   * `--allow-unsafe` for destructive ops the same way `migrate` does.
+   */
+  async dbPush(args: CLIArgs): Promise<void> {
+    if (!args.force) {
+      console.error(
+        "Error: `disc db push` skips migration history (foot-gun in shared/production envs).\n" +
+          "Pass --force to confirm intent. For production schema changes, use `disc migrate` instead.",
+      );
+      Deno.exit(1);
+    }
+
+    const schemaFile = args.schema || "./dbschema/default.disc";
+    const ctx = resolveProjectContext();
+    if (ctx?.managed) {
+      await ensurePgRunning(ctx);
+    }
+    const databaseUrl = args["backend-dsn"] ||
+      Deno.env.get("DATABASE_URL") ||
+      (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc_dev");
+
+    const sdlSource = await Deno.readTextFile(schemaFile);
+
+    const pool = new ConnectionPool({
+      connectionString: databaseUrl,
+      applicationName: "disc-cli-push",
+    });
+    await pool.initialize();
+
+    try {
+      const manager = new SchemaManager({ pool, dryRun: false });
+      await manager.initialize();
+
+      const result = await manager.applySchema(sdlSource, {
+        allowUnsafe: args["allow-unsafe"] === true,
+        skipHistory: true,
+      });
+
+      if (!result.ok) {
+        console.error(`Error: ${result.error.message}`);
+        Deno.exit(1);
+      }
+
+      console.log(
+        `✓ Schema pushed (${result.value.length} ${result.value.length === 1 ? "migration" : "migrations"} applied, no history recorded).`,
+      );
+    } finally {
+      await pool.close();
+    }
+  }
+
+  /**
    * Restore a Disc-managed database from stdin or a file.
    */
   async dbRestore(name: string, args: CLIArgs): Promise<void> {

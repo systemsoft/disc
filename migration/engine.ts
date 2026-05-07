@@ -138,10 +138,19 @@ export class MigrationEngine {
   }
 
   /**
-   * Execute a migration plan (placeholder - would need database connection)
+   * Execute a migration plan against the configured database.
+   *
+   * `skipHistory` (gh/geldata#3761): when true, DDL still executes
+   * but the engine doesn't record the migration in `disc_migrations`.
+   * This is the path `disc db push` takes — push compacts a series
+   * of dev iterations into the live schema without leaving migration
+   * artifacts; a real `disc migrate` later sees the diff from the
+   * recorded baseline to current and produces a single clean
+   * migration.
    */
   async executeMigration(
     plan: Types.MigrationPlan,
+    options?: { skipHistory?: boolean },
   ): Promise<Result<Types.MigrationResult[], MigrationError>> {
     const planStartTime = Date.now();
     const results: Types.MigrationResult[] = [];
@@ -207,7 +216,9 @@ export class MigrationEngine {
 
         this.appliedMigrations.add(migration.id);
 
-        if (this.tracker) {
+        // Record in tracker unless caller asked to skip history
+        // (gh/geldata#3761 — `disc db push` path).
+        if (this.tracker && !options?.skipHistory) {
           await this.tracker.recordMigration(
             migration,
             results[results.length - 1],

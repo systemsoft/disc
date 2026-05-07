@@ -16,6 +16,46 @@ tag is cut.
 
 ### Added
 
+- **`disc db push` command** (Bundle RR — gh/geldata#3761).
+  Prisma-style schema push: applies the current SDL directly to the
+  live database without recording a migration. The dev-loop iteration
+  command — edit `dbschema/default.disc`, push, test; no migration
+  files until the design settles. When you do run
+  `disc migrate --create`, the differ produces a single clean
+  migration covering the cumulative shape change since the last
+  recorded baseline.
+  - `migration/engine.ts` — `executeMigration(plan, { skipHistory })`
+    skips `tracker.recordMigration` so the apply leaves no row in
+    `disc_migrations`.
+  - `migration/schema-manager.ts` — `applySchema(sdl, { skipHistory })`
+    threads through to the engine.
+  - `cli/commands.ts:dbPush` — refuses without `--force` (skipping
+    audit history is a foot-gun in shared/production envs); honors
+    `--allow-unsafe` for destructive ops the same way `migrate` does.
+  - `cli/main.ts` — `disc db push` subcommand + help-text entry.
+  - `migration/schema-manager.test.ts` — PG-backed test asserts
+    skipHistory leaves `disc_migrations` empty after apply, and that
+    a subsequent non-skip apply records normally (option doesn't leak).
+
+### Fixed
+
+- **Migration-robustness cluster pinned** (Bundle RR — gh/geldata#5190 + #6697).
+  Both upstream issues are structurally inapplicable to Disc:
+  - **#5190 (backport migration rewrites)** — Gel's concern was
+    backporting fixes from the 3.0 branch to the 2.x maintenance
+    branch. Disc has a single `primary` trunk and ChronVer releases
+    (`v2026.05.07`); there are no semver-major branches to backport
+    between. Pin asserts `version.txt` is ChronVer-shaped and
+    CHANGELOG release headers match.
+  - **#6697 (in-place major version upgrades)** — Gel's plan
+    involved a versioned `edgedbstd_v<N>` schema + trampoline views
+    so a Gel-server major-version bump could swap stdlib in place.
+    Disc's stdlib is a tiny set of `CREATE OR REPLACE FUNCTION`
+    crypto + encoding wrappers in `lib/stdlib-sql.ts`; every
+    bootstrap is idempotent and runs unconditionally on server boot.
+    No version-gated swap dance needed. Pin asserts every wrapper
+    uses `CREATE OR REPLACE` and `bootstrapStdlib` runs unconditionally.
+
 - **Docker image release pipeline** (Bundle QQ — gh/geldata#5699 + #4901).
   `.github/workflows/release.yml` now carries a `docker` job that
   builds `Dockerfile.bundled` and pushes to `ghcr.io/systemsoft/disc`

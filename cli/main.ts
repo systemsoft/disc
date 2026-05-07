@@ -44,6 +44,7 @@ ${inverse("  COMMANDS ")}
   db wipe ${gray(".".repeat(18))} Drop and recreate a database (requires ${bgBrightRed(brightWhite("--force"))})
   db dump ${gray(".".repeat(18))} Dump a database to stdout or a file
   db restore ${gray(".".repeat(15))} Restore a database from stdin or a file
+  db push ${gray(".".repeat(18))} Push schema directly (no migration history; requires ${bgBrightRed(brightWhite("--force"))})
   schema export ${gray(".".repeat(12))} Export the current schema as a single SDL file
   schema introspect ${gray(".".repeat(8))} Generate SDL from an existing PostgreSQL database
   admin create-superuser  Create a user and assign the superuser role
@@ -980,9 +981,20 @@ async function main() {
             break;
           }
 
+          case "push": {
+            // gh/geldata#3761 — Prisma-style push. Applies the current
+            // schema to the live DB without recording a migration. The
+            // dev-loop iteration command: rapid schema-edit → push →
+            // test, no migration files until you're ready for one.
+            await commands.dbPush(args);
+            break;
+          }
+
           default: {
             console.error(`Unknown db subcommand: ${dbSubcommand}`);
-            console.log("Available: db create, db list, db drop, db wipe, db dump, db restore");
+            console.log(
+              "Available: db create, db list, db drop, db wipe, db dump, db restore, db push",
+            );
 
             Deno.exit(1);
           }

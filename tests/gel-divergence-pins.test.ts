@@ -1022,3 +1022,89 @@ Deno.test("Gel #6598: Logger.child(extra) supports arbitrary structured fields (
   // the captured-output sink.
   configureLogging({ level: "INFO", format: "json" });
 });
+
+// ---------------------------------------------------------------------------
+// gh/geldata#5190 — backport migration rewrites to 2.x. The upstream
+// concern was Gel's release branch model: migration improvements
+// landed in Gel 3.0 needed to ride back to the 2.x maintenance branch
+// to support `geldata/gel-cli#976` ahead of the 3.0 release.
+//
+// Disc has no parallel-branch model. There is no `2.x` or `3.x` —
+// `primary` is the single trunk; releases are ChronVer dates
+// (`v2026.05.07`) cut from trunk, not semver-major branches with
+// independent maintenance. There is therefore no surface for a
+// "backport" workflow to attach to. The pin asserts the structural
+// reality so a future "let's adopt release branches" change has to
+// land deliberately rather than as a side effect.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #5190: Disc has a single trunk (no semver-major release branches to backport between)", async () => {
+  // version.txt must carry a ChronVer-shaped date, not a semver-major.
+  const versionRaw = await Deno.readTextFile(
+    new URL("../version.txt", import.meta.url),
+  );
+  const version = versionRaw.trim();
+  assert(
+    /^\d{4}\.\d{2}\.\d{2}$/.test(version),
+    `version.txt must be ChronVer (YYYY.MM.DD); got "${version}" (Gel #5190 pin).`,
+  );
+
+  // The CHANGELOG release headers should match the same shape — no
+  // `vX.0.0` or `vX.Y.Z` anchors that would suggest a semver-major
+  // model. Skip the [Unreleased] line.
+  const changelog = await Deno.readTextFile(
+    new URL("../CHANGELOG.md", import.meta.url),
+  );
+  const releaseHeaders = changelog.match(/^## v[\d.]+/gm) ?? [];
+  for (const header of releaseHeaders) {
+    assert(
+      /^## v\d{4}\.\d{2}\.\d{2}/.test(header),
+      `CHANGELOG release header "${header}" should be ChronVer-shaped (Gel #5190 pin).`,
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#6697 — in-place major version upgrades. Gel's plan
+// proposed a versioned `edgedbstd_v<N>` schema with trampoline views,
+// so a Gel-server major-version bump could swap the active stdlib in
+// place rather than via dump/restore.
+//
+// Disc has no semver-major release model (see #5190 above), and no
+// versioned stdlib schema. The stdlib is a tiny set of crypto +
+// encoding wrappers in `lib/stdlib-sql.ts`, every statement
+// idempotent (`CREATE OR REPLACE FUNCTION`, `CREATE EXTENSION IF NOT
+// EXISTS`). Bootstrap re-runs on every server boot via
+// `bootstrapStdlib(pool)` and is a no-op when nothing changed.
+// Major-version migration semantics simply don't apply.
+//
+// This pin asserts (a) the stdlib stays a `CREATE OR REPLACE` set
+// (no schema-versioned table that would need a swap dance) and (b)
+// `bootstrapStdlib` runs unconditionally rather than via a
+// version-gated path.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #6697: stdlib is idempotent CREATE OR REPLACE — no versioned schema swap needed", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../lib/stdlib-sql.ts", import.meta.url),
+  );
+  // Every wrapper function must use CREATE OR REPLACE — that's what
+  // makes the bootstrap idempotent + version-free. Plain CREATE
+  // FUNCTION (without OR REPLACE) would force a versioned schema
+  // dance like Gel #6697 proposed.
+  const funcDecls = src.match(/CREATE (?:OR REPLACE )?FUNCTION /g) ?? [];
+  assert(
+    funcDecls.length > 0,
+    "stdlib-sql.ts must declare at least one function (Gel #6697 pin).",
+  );
+  for (const decl of funcDecls) {
+    assert(
+      decl.includes("OR REPLACE"),
+      `stdlib function declarations must use CREATE OR REPLACE FUNCTION; got "${decl.trim()}" (Gel #6697 pin).`,
+    );
+  }
+  // `bootstrapStdlib` runs unconditionally — no `if (currentVersion < N)`
+  // gate. The function exists and runs on server boot.
+  assert(
+    /export async function bootstrapStdlib/.test(src),
+    "lib/stdlib-sql.ts must export bootstrapStdlib() (Gel #6697 pin).",
+  );
+});
