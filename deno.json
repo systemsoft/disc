@@ -20,6 +20,7 @@
     "./sdk": "./sdk/mod.ts"
   },
   "fmt": {
+    "exclude": ["*.yaml"],
     "indentWidth": 2,
     "lineWidth": 160,
     "proseWrap": "preserve",
@@ -66,7 +67,7 @@
     "docker:build": "docker build -t disc .",
     "docker:down": "docker compose down",
     "docker:up": "docker compose up -d",
-    "fmt": "deno fmt",
+    "format": "deno fmt",
     "lint": "deno lint",
     "serve": "deno run --allow-net --allow-read --allow-env server/server.ts",
     "test": "deno test --allow-env --allow-net --allow-read --allow-write --no-check",
