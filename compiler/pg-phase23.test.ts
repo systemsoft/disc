@@ -563,21 +563,17 @@ Deno.test({
 // Phase 23.5 -- Polymorphic Shape Field [IS Type].property
 // =========================================================================
 
-// TODO(polymorphic-shape-field): the polymorphic UNION emitted by
-// `compiler.ts:compilePolymorphicSelect` projects only the abstract
-// type's properties (id + Shape's properties). A polymorphic shape
-// field like `[IS Circle].radius` then references `<alias>.radius`,
-// which doesn't exist in the union projection — running this test
-// errors with `column shape_1.radius does not exist`. Fixing this
-// needs a second pass on `compilePolymorphicSelect` to also project
-// (as NULL where absent) any subtype-specific columns referenced by
-// polymorphic shape fields elsewhere in the SELECT. Test fixture is
-// rewritten to the per-subtype-table model so flipping `ignore: false`
-// after the compiler enhancement lands is a one-line change.
+// `compilePolymorphicSelect` extends each UNION branch's projection
+// to include subtype-specific columns referenced by polymorphic shape
+// fields elsewhere in the SELECT. Branches whose subtype doesn't own
+// the column project `NULL::<pg-type>` so the union's column shape
+// stays consistent — the outer CASE expression in
+// `compilePolymorphicShapeElement` then resolves `<alias>.<col>`
+// without "column shape_1.<col> does not exist" errors.
 Deno.test({
   name:
     "PG Phase 23: Polymorphic shape -- [IS Circle].radius returns radius for circles, null for others",
-  ignore: true,
+  ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
     const pool = makePool(dsn);

@@ -109,6 +109,22 @@ tag is cut.
     and the four ordering invariants (CreateScalar-before-CreateType,
     DropScalar-after-AlterType, RecreateScalar-after-object-drops,
     AddEnumValue-grouped-with-creates).
+- **Polymorphic shape fields in UNION'd subtype tables.** Bundle Y
+  closed Phase 23 Test 1 (`IS Type` filter over a per-subtype-table
+  hierarchy) but Test 2 — `[IS Circle].radius` selecting a
+  subtype-specific column polymorphically — stayed ignored because
+  the polymorphic UNION emitted by `compiler.ts:compilePolymorphicSelect`
+  only projected the abstract type's columns. The outer CASE in
+  `compilePolymorphicShapeElement` then resolved `<alias>.radius`
+  against a column that wasn't in the union projection (PG: "column
+  shape_1.radius does not exist"). The compiler now collects every
+  `[IS Type].property` column referenced by the SELECT shape and
+  extends each branch's projection: branches whose subtype owns the
+  column emit the column normally; branches that don't emit
+  `NULL::<pg-type> AS <colName>` so the union's column shape stays
+  consistent across branches and PG can resolve the outer CASE.
+  Phase 23 Test 2 un-ignored — `compiler/pg-phase23.test.ts` now 7
+  passing + 0 ignored (was 6 passing + 1 ignored).
 - **Cross-file SDL resolution from embedded EdgeQL** (LSP Phase 7).
   The Phase 6 limitation around user-defined types is closed: when
   the cursor sits on an identifier inside an `eql`-tagged template in

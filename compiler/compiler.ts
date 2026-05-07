@@ -955,6 +955,42 @@ export class EdgeQLCompiler {
    * a clearer message than emitting a query against a non-existent
    * physical table.
    */
+  /**
+   * Walk a SELECT shape collecting every (column-name → pg-type) pair
+   * referenced via a polymorphic shape field `[IS Type].property`.
+   * Used by `compilePolymorphicSelect` to extend each UNION branch's
+   * projection so the outer CASE expression can reference the column
+   * by name (subtypes that don't own the column project a typed NULL).
+   *
+   * Skips columns already inherited from the abstract type (caller
+   * passes `inheritedColumns` as the dedupe set), and silently ignores
+   * polymorphic refs whose type or property doesn't resolve — those
+   * errors surface from `compilePolymorphicShapeElement` with a better
+   * message.
+   */
+  private collectPolymorphicShapeColumns(
+    shape: EdgeQLAST.Shape,
+    inheritedColumns: ReadonlyArray<string>,
+  ): Map<string, string> {
+    const cols = new Map<string, string>();
+    for (const element of shape.elements) {
+      if (!element.typeFilter) continue;
+      const propName = element.name?.name ||
+        (element.expr.kind === "Identifier" ? element.expr.name : "");
+      if (!propName) continue;
+      const filterTypeDef = Context.resolveTypeName(this.ctx, element.typeFilter);
+      if (!filterTypeDef) continue;
+      const property = filterTypeDef.properties.get(propName);
+      if (!property) continue;
+      const colName = property.columnName ?? property.name;
+      if (inheritedColumns.includes(colName)) continue;
+      if (cols.has(colName)) continue;
+      const pgType = edgeqlTypeToPgType(property.edgeqlType ?? property.type);
+      cols.set(colName, pgType);
+    }
+    return cols;
+  }
+
   private compilePolymorphicSelect(
     typeDef: Context.TypeDef,
     resolvedName: string,
@@ -967,27 +1003,54 @@ export class EdgeQLCompiler {
 
     if (concreteSubs.length === 0) return null;
 
-    // Columns to project inside each UNION branch. `id` is always present;
-    // every property of the abstract type is inherited (same column name)
-    // by every subtype, so projecting them is safe regardless of which
+    // Phase 1 — abstract type's columns. `id` is always present; every
+    // property of the abstract type is inherited (same column name) by
+    // every subtype, so projecting them is safe regardless of which
     // subtype's table backs the row.
-    const projectedColumns = ["id"];
+    const inheritedColumns = ["id"];
     for (const prop of typeDef.properties.values()) {
       if (prop.computed) continue;
       const col = prop.columnName ?? prop.name;
-      if (!projectedColumns.includes(col)) projectedColumns.push(col);
+      if (!inheritedColumns.includes(col)) inheritedColumns.push(col);
     }
+
+    // Phase 2 — subtype-specific columns referenced via polymorphic
+    // shape fields like `[IS Circle].radius`. Without this projection
+    // the outer CASE expression in `compilePolymorphicShapeElement`
+    // resolves `<alias>.radius` against the union, which doesn't have
+    // the column → "column shape_1.radius does not exist". Each branch
+    // now projects either the actual column (when the subtype owns it)
+    // or `NULL::<pg-type> AS <colName>` (when it doesn't), so PG's
+    // UNION column-resolution sees a consistent shape across branches.
+    const polymorphicColumns = shape
+      ? this.collectPolymorphicShapeColumns(shape, inheritedColumns)
+      : new Map<string, string>();
+    const allBranchColumns = [...inheritedColumns, ...polymorphicColumns.keys()];
 
     // Build one SELECT per concrete subtype.
     const branches: SQL.SelectStatement[] = concreteSubs.map((sub) => {
+      const items: SQL.SelectItem[] = allBranchColumns.map((col) => {
+        // Inherited columns: every subtype has them.
+        if (inheritedColumns.includes(col)) {
+          return SQL.createSelectItem(SQL.createColumnReference(col));
+        }
+        // Subtype-specific column. Check if THIS subtype owns it.
+        const ownsColumn = [...sub.properties.values()].some(
+          (p) => (p.columnName ?? p.name) === col,
+        );
+        if (ownsColumn) {
+          return SQL.createSelectItem(SQL.createColumnReference(col));
+        }
+        // Project NULL with a type cast so PG infers the union column's
+        // type from the typed NULL rather than failing to unify branches.
+        const pgType = polymorphicColumns.get(col)!;
+        return SQL.createSelectItem(
+          { kind: "RawSQLExpression" as const, sql: `NULL::${pgType}` },
+          col,
+        );
+      });
       return SQL.createSelectStatement({
-        select: SQL.createSelectClause(
-          projectedColumns.map((col) =>
-            SQL.createSelectItem(
-              SQL.createColumnReference(col),
-            )
-          ),
-        ),
+        select: SQL.createSelectClause(items),
         from: SQL.createFromClause([
           SQL.createTableReference(sub.tableName),
         ]),
