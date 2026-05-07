@@ -25,6 +25,32 @@ Deno.test("PostgresBinaryDownloader - platform detection", () => {
   assertEquals(supportedPlatforms.includes(platform), true);
 });
 
+Deno.test("PostgresBinaryDownloader - opts shape accepts explicit platform override", () => {
+  // Bundle I follow-up: cross-platform builds need to instantiate the
+  // downloader for a target platform other than the host. The opts
+  // shape lets callers pin both `baseDir` and `platform`.
+  const downloader = new PostgresBinaryDownloader({
+    baseDir: TEST_BASE_DIR,
+    platform: "linux-arm64",
+  });
+  assertEquals((downloader as any).platform, "linux-arm64");
+  assertEquals((downloader as any).baseDir, TEST_BASE_DIR);
+
+  // The manifest lookup uses the overridden platform — a downloader
+  // pinned to `linux-arm64` returns the linux-arm64 URL even when
+  // the test process is on darwin.
+  const manifest = (downloader as any).getManifest("16.4");
+  assertExists(manifest);
+  assertEquals(manifest.platform, "linux-arm64");
+});
+
+Deno.test("PostgresBinaryDownloader - back-compat: string baseDir argument still works", () => {
+  // The old `new PostgresBinaryDownloader(baseDir)` form must keep
+  // working for existing call sites.
+  const downloader = new PostgresBinaryDownloader(TEST_BASE_DIR);
+  assertEquals((downloader as any).baseDir, TEST_BASE_DIR);
+});
+
 Deno.test("PostgresBinaryDownloader - manifest retrieval", () => {
   const downloader = new PostgresBinaryDownloader(TEST_BASE_DIR);
 

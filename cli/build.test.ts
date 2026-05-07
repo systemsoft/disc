@@ -1,5 +1,12 @@
 import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
-import { AVAILABLE_PLATFORMS, BuildCommand, generateEmbeddedPgManifest, generateUiManifest } from "./build.ts";
+import {
+  AVAILABLE_PLATFORMS,
+  BuildCommand,
+  generateEmbeddedPgManifest,
+  generateUiManifest,
+  platformPgStagingDir,
+  refreshEmbeddedPgManifest,
+} from "./build.ts";
 import { join } from "@std/path";
 
 Deno.test("BuildCommand - maps linux-x64 to x86_64-unknown-linux-gnu", () => {
@@ -173,6 +180,54 @@ Deno.test("generateUiManifest - emits sorted, posix-style paths even on backslas
     const zIdx = generated.indexOf('"z/z.js"');
     assertEquals(aIdx > 0, true);
     assertEquals(zIdx > aIdx, true);
+  } finally {
+    await Deno.remove(tmp, { recursive: true });
+  }
+});
+
+// =====================================================================
+// Bundle I follow-up — cross-platform reproducible builds
+// =====================================================================
+
+Deno.test("platformPgStagingDir - returns dist/embedded-pg/<platform>/<version>/", () => {
+  const path = platformPgStagingDir("/repo", "linux-x64", "16.4");
+  assertEquals(path, "/repo/dist/embedded-pg/linux-x64/16.4");
+});
+
+Deno.test("platformPgStagingDir - composes for every supported platform", () => {
+  for (const platform of AVAILABLE_PLATFORMS) {
+    const path = platformPgStagingDir("/r", platform, "17.0");
+    assertEquals(path.endsWith(`/${platform}/17.0`), true);
+  }
+});
+
+Deno.test("refreshEmbeddedPgManifest - honors pgSourceDirOverride for cross-compile staging", async () => {
+  // Stage a fake PG distribution under a per-platform dir and confirm
+  // the manifest emitter sources from THAT path, not from <DISC_HOME>.
+  const tmp = await Deno.makeTempDir({ prefix: "disc-pg-staging-" });
+  try {
+    const stagingDir = join(tmp, "dist", "embedded-pg", "linux-x64", "16.4");
+    await Deno.mkdir(join(stagingDir, "bin"), { recursive: true });
+    await Deno.writeTextFile(join(stagingDir, "bin", "postgres"), "fake");
+    await Deno.chmod(join(stagingDir, "bin", "postgres"), 0o755);
+
+    // refreshEmbeddedPgManifest writes its output under
+    // `<rootDir>/postgres/embedded-pg-manifest.ts`. Use a tmp rootDir so
+    // we don't clobber the real manifest.
+    const fakeRoot = await Deno.makeTempDir({ prefix: "disc-pg-root-" });
+    try {
+      await Deno.mkdir(join(fakeRoot, "postgres"), { recursive: true });
+      const result = await refreshEmbeddedPgManifest(
+        fakeRoot,
+        "16.4",
+        stagingDir,
+      );
+      assertEquals(result.pgSourceDir, stagingDir);
+      assertEquals(result.fileCount, 1);
+      assertEquals(result.includePaths[0], join(stagingDir, "bin", "postgres"));
+    } finally {
+      await Deno.remove(fakeRoot, { recursive: true });
+    }
   } finally {
     await Deno.remove(tmp, { recursive: true });
   }

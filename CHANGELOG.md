@@ -109,6 +109,24 @@ tag is cut.
     and the four ordering invariants (CreateScalar-before-CreateType,
     DropScalar-after-AlterType, RecreateScalar-after-object-drops,
     AddEnumValue-grouped-with-creates).
+- **Cross-platform reproducible builds for `disc build --platform`.**
+  Bundle I shipped single-binary distribution by walking
+  `<DISC_HOME>/postgres/<version>/` for the embedded PG manifest, but
+  that dir only ever holds one platform's PG (whichever the build
+  machine downloaded). When `disc build --platform linux-x64` ran on a
+  darwin-arm64 host, the resulting binary embedded darwin-arm64's PG —
+  unable to extract or run on the target platform. The build command
+  now stages the target platform's PG into
+  `dist/embedded-pg/<platform>/<version>/` before regenerating the
+  manifest, and `refreshEmbeddedPgManifest` accepts an optional
+  `pgSourceDirOverride` to point at the staging dir. One CI runner can
+  now produce all four platform binaries in sequence by reusing the
+  per-platform staging caches. New `platformPgStagingDir` and
+  `ensurePlatformPgStaging` helpers in `cli/build.ts`. The
+  `PostgresBinaryDownloader` constructor accepts an opts shape
+  (`{baseDir, platform}`) so it can be pinned to a target platform
+  other than the host; the prior single-string form still works
+  (back-compat).
 - **Polymorphic shape fields in UNION'd subtype tables.** Bundle Y
   closed Phase 23 Test 1 (`IS Type` filter over a per-subtype-table
   hierarchy) but Test 2 — `[IS Circle].radius` selecting a

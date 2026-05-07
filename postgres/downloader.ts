@@ -40,9 +40,25 @@ export class PostgresBinaryDownloader {
   private baseDir: string;
   private platform: string;
 
-  constructor(baseDir = join(Deno.env.get("HOME")!, ".disc", "postgres")) {
-    this.baseDir = baseDir;
-    this.platform = this.detectPlatform();
+  /**
+   * `baseDir` defaults to `<HOME>/.disc/postgres`; pass an explicit
+   * directory (e.g. a per-platform staging dir under `dist/`) when
+   * cross-compiling. `platform` defaults to the running platform's
+   * detected slug; pass an explicit slug
+   * (`darwin-arm64`/`darwin-x64`/`linux-arm64`/`linux-x64`) when
+   * staging PG for a target other than the current host (Bundle I
+   * follow-up: cross-platform reproducible builds).
+   */
+  constructor(
+    baseDirOrOpts: string | { baseDir?: string; platform?: string } = join(Deno.env.get("HOME")!, ".disc", "postgres"),
+  ) {
+    if (typeof baseDirOrOpts === "string") {
+      this.baseDir = baseDirOrOpts;
+      this.platform = this.detectPlatform();
+    } else {
+      this.baseDir = baseDirOrOpts.baseDir ?? join(Deno.env.get("HOME")!, ".disc", "postgres");
+      this.platform = baseDirOrOpts.platform ?? this.detectPlatform();
+    }
   }
 
   private detectPlatform(): string {

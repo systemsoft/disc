@@ -11,6 +11,7 @@
  */
 
 import { join, relative } from "@std/path";
+import { PostgresBinaryDownloader } from "../postgres/downloader.ts";
 
 export interface BuildOptions {
   platform?: string;
@@ -182,10 +183,30 @@ export class BuildCommand {
     // Bundle I Phase 2: refresh the embedded-PG manifest from the local
     // PG distribution cache (set by `disc init` / `disc start`) and
     // collect the absolute paths to embed via --include.
+    //
+    // Bundle I follow-up (cross-platform): when `--platform` is set,
+    // the build machine's `<DISC_HOME>/postgres/<version>/` cache only
+    // contains the host's PG. We stage the TARGET platform's PG into
+    // `dist/embedded-pg/<platform>/<version>/` and point the manifest
+    // there — the resulting binary embeds the right PG for its target.
     let embeddedPgPaths: string[] = [];
     if (!options.lite) {
       try {
-        const refreshed = await refreshEmbeddedPgManifest();
+        let pgSourceOverride: string | undefined;
+        if (options.platform) {
+          console.log(
+            `  Staging PG for cross-compile target ${options.platform}…`,
+          );
+          pgSourceOverride = await ensurePlatformPgStaging(
+            Deno.cwd(),
+            options.platform,
+          );
+        }
+        const refreshed = await refreshEmbeddedPgManifest(
+          Deno.cwd(),
+          "16.4",
+          pgSourceOverride,
+        );
         embeddedPgPaths = refreshed.includePaths;
         if (refreshed.wrote) {
           console.log(
@@ -458,6 +479,45 @@ export interface RefreshEmbeddedPgResult {
 }
 
 /**
+ * Per-platform PG staging dir for cross-compilation. Bundle I shipped
+ * single-platform binaries by walking `<DISC_HOME>/postgres/<version>/`,
+ * but that dir only ever holds one platform's PG (whichever the build
+ * machine downloaded). For `disc build --platform <p>` to embed the
+ * RIGHT PG, we stage the target platform's distribution under
+ * `dist/embedded-pg/<platform>/<version>/` and point the manifest
+ * generator there.
+ */
+export function platformPgStagingDir(
+  rootDir: string,
+  platform: string,
+  pgVersion: string,
+): string {
+  return join(rootDir, "dist", "embedded-pg", platform, pgVersion);
+}
+
+/**
+ * Download the target platform's PG into the per-platform staging dir
+ * if it isn't there already. No-op when the staging dir is already
+ * populated (the downloader's own short-circuit catches that), so
+ * repeated builds across platforms in the same CI run don't re-fetch.
+ *
+ * Returns the staging dir's `<version>` subpath so the caller can pass
+ * it to `refreshEmbeddedPgManifest(..., override)`.
+ */
+export async function ensurePlatformPgStaging(
+  rootDir: string,
+  platform: string,
+  pgVersion: string = "16.4",
+): Promise<string> {
+  const stagingBase = join(rootDir, "dist", "embedded-pg", platform);
+  const downloader = new PostgresBinaryDownloader({
+    baseDir: stagingBase,
+    platform,
+  });
+  return await downloader.download(pgVersion);
+}
+
+/**
  * Regenerate `postgres/embedded-pg-manifest.ts` from the on-disk PG
  * distribution under `<DISC_HOME>/postgres/<version>/` and return the
  * absolute paths to feed into `deno compile --include`. When the source
@@ -470,10 +530,14 @@ export interface RefreshEmbeddedPgResult {
 export async function refreshEmbeddedPgManifest(
   rootDir: string = Deno.cwd(),
   pgVersion: string = "16.4",
+  pgSourceDirOverride?: string,
 ): Promise<RefreshEmbeddedPgResult> {
   const manifestPath = join(rootDir, "postgres", "embedded-pg-manifest.ts");
   const optOut = Deno.env.get("DISC_BUILD_NO_BUNDLE_PG") === "1";
-  const pgSourceDir = optOut ? join(defaultDiscHome(), "postgres", "__opt_out__") : join(defaultDiscHome(), "postgres", pgVersion);
+  // Override wins over both opt-out and the default `<DISC_HOME>` path
+  // — cross-platform builds (Bundle I follow-up) supply a per-platform
+  // staging dir under `dist/embedded-pg/<platform>/<version>/`.
+  const pgSourceDir = pgSourceDirOverride ?? (optOut ? join(defaultDiscHome(), "postgres", "__opt_out__") : join(defaultDiscHome(), "postgres", pgVersion));
 
   const generated = await generateEmbeddedPgManifest({
     pgVersion,
