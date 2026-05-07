@@ -84,7 +84,8 @@ A second same-day sweep shipped 18 more bundles (I–CC), closing Disc's eight o
 | OO     | DB/engine correctness cluster: pins for #5641 (multi-module FROM), #4215 (extending-change gap), #2204 (schema-reload chain)             | `3a4fdaa`                                  |
 | PP     | #4215 follow-up: differ now detects type-level `extending` changes via resolved inheritance walk; pin upgraded to behavioral             | `730eea8`                                  |
 | QQ     | Cloud/infra cluster: Docker image release pipeline (#5699 + #4901 → ghcr.io with :version + :latest); #6598 logger pin                   | `9106973`                                  |
-| RR     | Migration-robustness cluster: `disc db push` (#3761 — Prisma-style schema push); pins for #5190 (no branches), #6697 (idempotent stdlib) | (this bundle)                              |
+| RR     | Migration-robustness cluster: `disc db push` (#3761 — Prisma-style schema push); pins for #5190 (no branches), #6697 (idempotent stdlib) | `e35a73f`                                  |
+| SS     | Auth/access introspection cluster: `disc admin list-policies` (#6432 slices 1-2); pin for #8909 (tied to #6697 — inapplicable)           | (this bundle)                              |
 
 Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** — #7311, #7196, #7483 (Q), #7629 (U), #3437 (FF), #7525, #6358, #8899, #9034, #2292 (GG/HH/II), and structural-divergence pins for #4408, #4172 (X), #3208, #5132, #2910 (S), #3872, #7360, #3170 (GG/HH), #5158, #5480, #8762, #7972 (II). The Disc-original-features roadmap is also fully closed by this sweep — see `docs/disc-original-features.md`.
 
@@ -226,17 +227,23 @@ Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** 
 | #6083         | Advanced migration workflows | docs      | Branches, squashing, partial application — narrative + recipes | M      |
 | #1772 / #1461 | RFC1000 migration features   | migration | Audit our diff generator vs. RFC                               | L      |
 
-#### Auth & access (2)
+#### Auth & access (1)
 
 > **Bundle MM closed the auth-semantics sub-cluster (#7103 + #5504 + #8811).**
 > #7103 was a real FK gap on `webauthn_challenges` fixed in `auth/provider.ts`;
 > #5504 + #8811 were structurally inapplicable and pinned in
 > `tests/gel-divergence-pins.test.ts`.
+>
+> **Bundle SS closed the auth/access-introspection sub-cluster (#6432 + #8909).**
+> #6432 slices 1+2 shipped as `disc admin list-policies` (errmessage already
+> in `access/evaluator.ts`; new SDL introspection CLI command in `cli/admin.ts`).
+> Slices 3-5 (per-policy session toggle, run-in-isolation, deep narrative docs)
+> stay open as future work. #8909 is tied to #6697 (no semver-major in-place
+> upgrades in Disc) and is structurally inapplicable.
 
-| #     | Title                             | Category        | Why pickable                                             | Effort |
-| ----- | --------------------------------- | --------------- | -------------------------------------------------------- | ------ |
-| #6432 | Access policy management features | auth, devtools  | UI-side schema browser shows them; add introspection API | M      |
-| #8909 | In-place upgrades & auth update   | auth, migration | Tied to #6697                                            | M      |
+| #     | Title                             | Category       | Why pickable                                                            | Effort |
+| ----- | --------------------------------- | -------------- | ----------------------------------------------------------------------- | ------ |
+| #6432 | Access policy management features | auth, devtools | Slices 1+2 shipped (Bundle SS); slices 3-5 (toggle, isolation) deferred | M      |
 
 #### DB / perf / engine (3)
 
@@ -290,11 +297,11 @@ Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** 
 | #648  | SQLite back-end    | db, storage | Stretch — Disc is Postgres-first; deferrable | L      |
 | #7724 | Extension upgrades | migration   | We have an extension model already           | M      |
 
-**Pickable: ~15 items** (Bundles LL + MM + NN + OO + PP + QQ + RR closed 7 fixes + pinned 11 across migration-perf, auth-semantics, CLI/devtools, DB/engine, cloud/infra, and migration-robustness). Highest-leverage clusters:
+**Pickable: ~13 items** (Bundles LL + MM + NN + OO + PP + QQ + RR + SS closed 8 fixes + pinned 12 across migration-perf, auth-semantics, CLI/devtools, DB/engine, cloud/infra, migration-robustness, and auth/access introspection). Highest-leverage clusters:
 
-1. **Auth/access** — #6432 access-policy introspection API + #8909 in-place auth upgrades (admin UI surface)
-2. **Docs** — #6127 test guide + #7382 docs search (operator-onboarding)
-3. **Migration narrative** — #6083 advanced migration workflows + #1772/#1461 RFC1000 features (deep documentation work)
+1. **Docs** — #6127 test guide + #7382 docs search (operator-onboarding)
+2. **Migration narrative** — #6083 advanced migration workflows + #1772/#1461 RFC1000 features (deep documentation work)
+3. **#6432 follow-on** — per-policy session toggle for testing + run-in-isolation slices (the larger half of the access-policy mgmt request)
 
 ### SKIP — not applicable to Disc
 

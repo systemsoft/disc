@@ -6,7 +6,7 @@
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { ConsoleCapture } from "../tests/test-utils.ts";
-import { adminCommand } from "./admin.ts";
+import { adminCommand, collectPoliciesFromSdl } from "./admin.ts";
 import { DatabaseConnection } from "../lib/database.ts";
 
 const JWT_SECRET = "test-secret-must-be-at-least-32-bytes-long";
@@ -271,4 +271,90 @@ Deno.test("admin commands - missing DSN reports a clear error", async () => {
     cap.restore();
   }
   assertStringIncludes(cap.getErrors().join("\n"), "--database-url");
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#6432 — `disc admin list-policies` is pure SDL
+// introspection, no DB required. Tests target the underlying
+// `collectPoliciesFromSdl` helper so we exercise the policy-name +
+// action + condition shape without a CLI runner.
+// ---------------------------------------------------------------------------
+Deno.test("admin list-policies — collects policies from SDL with action + events + condition", () => {
+  const sdl = `
+    module default {
+      type Document {
+        required title: str;
+        required owner: User;
+        access policy owner_read {
+          allow select;
+          using (.owner.id = global current_user);
+        };
+        access policy owner_write {
+          allow update, delete;
+          using (.owner.id = global current_user);
+        };
+        access policy admin_override {
+          allow all;
+          using (global is_admin);
+          errmessage := "Only admins can bypass document policies";
+        };
+      }
+      type User {
+        required name: str;
+      }
+    }
+  `;
+
+  const policies = collectPoliciesFromSdl(sdl);
+
+  assertEquals(
+    policies.has("Document"),
+    true,
+    "Document type should appear in policy list (Gel #6432)",
+  );
+  assertEquals(
+    policies.has("User"),
+    false,
+    "User has no policies — must not appear in the listing",
+  );
+
+  const docPolicies = policies.get("Document")!;
+  assertEquals(docPolicies.length, 3, "Document declares 3 policies");
+
+  const ownerRead = docPolicies.find((p) => p.name === "owner_read");
+  assert(ownerRead !== undefined, "owner_read policy missing");
+  assertEquals(ownerRead.action, "allow");
+  assertEquals(ownerRead.events, ["select"]);
+  assert(
+    typeof ownerRead.condition === "string" && ownerRead.condition.length > 0,
+    "owner_read should carry a condition string",
+  );
+
+  const ownerWrite = docPolicies.find((p) => p.name === "owner_write");
+  assert(ownerWrite !== undefined);
+  assertEquals(
+    ownerWrite.events.sort(),
+    ["delete", "update"],
+    "owner_write should list both update + delete events",
+  );
+
+  const adminOverride = docPolicies.find((p) => p.name === "admin_override");
+  assert(adminOverride !== undefined);
+  assertEquals(
+    adminOverride.errmessage,
+    "Only admins can bypass document policies",
+    "errmessage on admin_override must round-trip from SDL",
+  );
+});
+
+Deno.test("admin list-policies — schemas with no policies return an empty map", () => {
+  const sdl = `
+    module default {
+      type User {
+        required name: str;
+      }
+    }
+  `;
+  const policies = collectPoliciesFromSdl(sdl);
+  assertEquals(policies.size, 0, "No policies → empty map");
 });

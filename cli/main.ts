@@ -51,6 +51,7 @@ ${inverse("  COMMANDS ")}
   admin set-password ${gray(".".repeat(7))} Reset a user's password (admin override)
   admin assign-role ${gray(".".repeat(8))} Assign a role to a user (creating it if needed)
   admin list-roles ${gray(".".repeat(9))} List all defined roles
+  admin list-policies ${gray(".".repeat(6))} List access policies on a type (or all types) from SDL
   lsp ${gray(".".repeat(22))} Run the Disc language server (stdio JSON-RPC)
   pg log ${gray(".".repeat(19))} View PostgreSQL logs
   pg upgrade ${gray(".".repeat(15))} Upgrade PostgreSQL version
@@ -780,10 +781,20 @@ async function main() {
             break;
           }
 
+          case "list-policies": {
+            // gh/geldata#6432 — pure SDL introspection, no auth/DB
+            // hookup needed (operates on the schema file directly).
+            await adminCommand.listPolicies({
+              schema: args.schema,
+              type: args._[2] ? String(args._[2]) : undefined,
+            });
+            break;
+          }
+
           default: {
             console.error(`Unknown admin subcommand: ${adminSub}`);
             console.log(
-              "Available: admin create-superuser, admin set-password, admin assign-role, admin list-roles",
+              "Available: admin create-superuser, admin set-password, admin assign-role, admin list-roles, admin list-policies",
             );
             Deno.exit(1);
           }

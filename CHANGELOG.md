@@ -16,6 +16,43 @@ tag is cut.
 
 ### Added
 
+- **`disc admin list-policies [type]`** (Bundle SS — gh/geldata#6432).
+  Pure-SDL introspection command. Reads `dbschema/default.disc` (or
+  the file passed via `--schema`) and lists every type's access
+  policies with name, action (allow/deny), events (select/insert/
+  update/delete/all), condition expression, and optional errmessage.
+  Operates on the schema file directly — no DB hookup needed.
+  ```
+  $ disc admin list-policies
+  Document:
+    owner_only [allow] for select, update, delete
+      when (.owner.id = global current_user)
+    admin_override [allow] for all
+      when (global is_admin)
+      errmessage: "Only admins can bypass document policies"
+  ```
+  Output format covers slices 1+2 of the Gel #6432 ask (errmessage
+  surfacing + REPL-style policy listing); session-level policy toggle
+  for testing + run-in-isolation stay open in BUILD as future work.
+  - `cli/admin.ts` — new `listPolicies(opts)` + exported
+    `collectPoliciesFromSdl(sdl)` helper.
+  - `cli/main.ts` — `admin list-policies` subcommand + help-text entry.
+  - `cli/admin.test.ts` — 2 unit tests on the SDL→Map collector.
+
+### Fixed
+
+- **#8909 (auth update with in-place upgrades) pinned** (Bundle SS —
+  gh/geldata#8909). Tied to #6697 (Gel server major-version in-place
+  upgrades), which is itself structurally inapplicable to Disc.
+  Disc's auth tables evolve via idempotent
+  `CREATE TABLE IF NOT EXISTS` on every `auth/provider.ts:createTables`
+  run, plus the post-CREATE FK migration pattern from Bundle MM
+  (orphan-scrub + `ALTER TABLE … ADD CONSTRAINT IF NOT EXISTS`).
+  No major-version upgrade dance for the auth extension to plug into.
+  Pin in `tests/gel-divergence-pins.test.ts` asserts every auth-table
+  create uses `CREATE TABLE IF NOT EXISTS` (no version-gated path) and
+  the Bundle MM FK-migration block stays in place.
+
 - **`disc db push` command** (Bundle RR — gh/geldata#3761).
   Prisma-style schema push: applies the current SDL directly to the
   live database without recording a migration. The dev-loop iteration

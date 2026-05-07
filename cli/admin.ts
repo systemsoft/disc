@@ -18,6 +18,7 @@ import { AuthProvider } from "../auth/provider.ts";
 import { PgDatabaseAdapter } from "../auth/pg-database-adapter.ts";
 import { AuthError } from "../auth/types.ts";
 import { DatabaseConnection } from "../lib/database.ts";
+import { SDLParser } from "../schema/parser.ts";
 
 interface BaseOptions {
   "database-url"?: string;
@@ -68,9 +69,7 @@ class AdminCommand {
       // createRole is idempotent — duplicate name updates the description.
       await ctx.provider.createRole(
         roleName,
-        opts.role
-          ? `Custom role created via 'disc admin create-superuser --role ${roleName}'`
-          : "Top-level admin role with all permissions",
+        opts.role ? `Custom role created via 'disc admin create-superuser --role ${roleName}'` : "Top-level admin role with all permissions",
       );
       await ctx.provider.assignRole(userId, roleName);
 
@@ -152,6 +151,140 @@ class AdminCommand {
       await ctx.close();
     }
   }
+
+  /**
+   * `disc admin list-policies [type]` — pure SDL introspection.
+   * Lists access policies on a single type, or every type when no
+   * type is given. (gh/geldata#6432 — operators wanted REPL-level
+   * tooling like Postgres `\dp`. Disc surfaces it as a CLI command
+   * because the SDL file is the source of truth, not the live DB.)
+   *
+   * Output shape:
+   *   <TypeName>:
+   *     <policy-name> [allow|deny] for <action> ...
+   *       when (<condition expression>)
+   *       errmessage: "..."
+   *
+   * Reads `--schema <file>` (default `./dbschema/default.disc`).
+   */
+  async listPolicies(
+    opts: { schema?: string; type?: string },
+  ): Promise<void> {
+    const schemaFile = opts.schema ?? "./dbschema/default.disc";
+    const sdl = await Deno.readTextFile(schemaFile);
+
+    const policiesByType = collectPoliciesFromSdl(sdl);
+
+    const targetTypes = opts.type ? [opts.type].filter((t) => policiesByType.has(t)) : Array.from(policiesByType.keys()).sort();
+
+    if (opts.type && !policiesByType.has(opts.type)) {
+      console.log(`(no policies on type ${opts.type})`);
+      return;
+    }
+    if (targetTypes.length === 0) {
+      console.log("(no policies defined in schema)");
+      return;
+    }
+
+    for (const typeName of targetTypes) {
+      const policies = policiesByType.get(typeName)!;
+      console.log(`${typeName}:`);
+      for (const p of policies) {
+        const verdict = p.action;
+        const events = p.events.join(", ");
+        console.log(`  ${p.name} [${verdict}] for ${events}`);
+        if (p.condition) {
+          console.log(`    when (${p.condition})`);
+        }
+        if (p.errmessage) {
+          console.log(`    errmessage: ${JSON.stringify(p.errmessage)}`);
+        }
+      }
+    }
+  }
+}
+
+interface ListedPolicy {
+  name: string;
+  action: "allow" | "deny";
+  events: string[];
+  condition?: string;
+  errmessage?: string;
+}
+
+/**
+ * Read access policies straight from SDL source. Pure function,
+ * exported for testing — keeps `disc admin list-policies` independent
+ * of the live database. (gh/geldata#6432)
+ */
+export function collectPoliciesFromSdl(
+  sdl: string,
+): Map<string, ListedPolicy[]> {
+  const out = new Map<string, ListedPolicy[]>();
+  const ast = new SDLParser(sdl).parse();
+
+  for (const decl of ast.declarations) {
+    if (decl.kind === "ModuleDeclaration") {
+      collectFromTypeDecls(decl.declarations, out);
+    } else {
+      collectFromTypeDecls([decl], out);
+    }
+  }
+  return out;
+}
+
+function collectFromTypeDecls(
+  decls: ReadonlyArray<{ kind: string }>,
+  out: Map<string, ListedPolicy[]>,
+): void {
+  for (const d of decls) {
+    if (d.kind !== "TypeDeclaration") continue;
+    const td = d as unknown as {
+      name: { value: string };
+      members?: Array<{ kind: string; [key: string]: unknown }>;
+    };
+    const policies: ListedPolicy[] = [];
+    for (const m of td.members ?? []) {
+      if (m.kind !== "AccessPolicy") continue;
+      // AccessPolicy carries `actions: AccessAction[]` where each
+      // action has `allow: boolean` + `operations: AccessOperation[]`.
+      // Flatten to one ListedPolicy per AccessAction so the listing
+      // surfaces both the verdict and the events.
+      const actions = (m.actions as Array<{ allow: boolean; operations: string[] }>) ?? [];
+      for (const action of actions) {
+        policies.push({
+          name: (m.name as { value: string }).value,
+          action: action.allow ? "allow" : "deny",
+          events: action.operations.slice(),
+          condition: m.condition ? stringifyExpr(m.condition as Record<string, unknown>) : undefined,
+          errmessage: m.errmessage as string | undefined,
+        });
+      }
+    }
+    if (policies.length > 0) {
+      out.set(td.name.value, policies);
+    }
+  }
+}
+
+function stringifyExpr(expr: Record<string, unknown>): string {
+  // Best-effort textualization of the AST node — enough for human
+  // inspection at the CLI. Not a full SDL re-serialization.
+  if (expr.kind === "Literal") return String(expr.value);
+  if (expr.kind === "PathExpression") {
+    return ((expr.path as string[]) ?? []).join(".");
+  }
+  if (expr.kind === "FunctionCall") {
+    const nameParts = ((expr.name as { parts?: string[] } | undefined)?.parts) ?? [];
+    return `${nameParts.join("::")}(...)`;
+  }
+  if (expr.kind === "BinaryOp") {
+    const op = expr.op as string;
+    const left = stringifyExpr(expr.left as Record<string, unknown>);
+    const right = stringifyExpr(expr.right as Record<string, unknown>);
+    return `${left} ${op} ${right}`;
+  }
+  return `<${String(expr.kind)}>`;
 }
 
 // ---------------------------------------------------------------------------

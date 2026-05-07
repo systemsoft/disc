@@ -1108,3 +1108,101 @@ Deno.test("Gel #6697: stdlib is idempotent CREATE OR REPLACE — no versioned sc
     "lib/stdlib-sql.ts must export bootstrapStdlib() (Gel #6697 pin).",
   );
 });
+
+// ---------------------------------------------------------------------------
+// gh/geldata#6432 — access-policy management features. Gel listed
+// five things (errmsg-with-policy-name, list-policies-on-type, disable
+// policies for testing, deep policy docs, run-single-policy
+// in-isolation). Bundle SS shipped slice 1 + 2 in `cli/admin.ts`:
+//
+//   - **Policy name in error messages** was already in
+//     `access/evaluator.ts` (each denial carries the policy.name plus
+//     optional `errmessage`).
+//   - **`disc admin list-policies [type]`** is the new pure-SDL
+//     introspection command — no DB hookup needed; reads
+//     `dbschema/default.disc` and lists every type's policies with
+//     name + action (allow/deny) + events + condition + errmessage.
+//
+// The remaining slices (per-policy session toggle for testing,
+// run-in-isolation, deep narrative docs) stay open in BUILD; this
+// pin asserts the shipped slice's structural shape so a refactor
+// that drops the entry point trips here.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #6432: `disc admin list-policies` is a pure SDL introspection command", async () => {
+  const { collectPoliciesFromSdl } = await import("../cli/admin.ts");
+  const sdl = `
+    module default {
+      type Doc {
+        required title: str;
+        access policy admin_only {
+          allow all;
+          using (global is_admin);
+          errmessage := "admins only";
+        };
+      }
+    }
+  `;
+  const policies = collectPoliciesFromSdl(sdl);
+  assertEquals(
+    policies.has("Doc"),
+    true,
+    "collectPoliciesFromSdl must surface policies on each type (Gel #6432).",
+  );
+  const docPolicies = policies.get("Doc")!;
+  assertEquals(docPolicies.length >= 1, true);
+  assertEquals(docPolicies[0].name, "admin_only");
+  assertEquals(docPolicies[0].action, "allow");
+  assertEquals(docPolicies[0].errmessage, "admins only");
+
+  // Source-level pin for the CLI entry point — cli/main.ts must route
+  // `admin list-policies` to `adminCommand.listPolicies(...)`.
+  const main = await Deno.readTextFile(
+    new URL("../cli/main.ts", import.meta.url),
+  );
+  assert(
+    /case "list-policies":[\s\S]*?adminCommand\.listPolicies/.test(main),
+    "cli/main.ts must route `admin list-policies` to adminCommand.listPolicies (Gel #6432 pin).",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#8909 — auth update with in-place upgrades. The upstream
+// concern is making the auth extension's data migrate cleanly during
+// a Gel server major-version in-place upgrade (i.e. the upgrade path
+// from #6697). Disc has no semver-major release model and therefore
+// no in-place major upgrade flow either (see #5190 + #6697 pins
+// above) — there is no upgrade dance for the auth extension to plug
+// into. The auth tables are managed via the same migration system as
+// user types: `auth/provider.ts:createTables` runs idempotent CREATE
+// TABLE IF NOT EXISTS on every initialize, and Bundle MM added the
+// post-CREATE FK migration pattern (`webauthn_challenges` ON DELETE
+// CASCADE) for any future schema evolution.
+//
+// This pin asserts (a) the auth provider's `createTables` stays
+// idempotent (no version-gated CREATE-only-if-major-N path) and
+// (b) the FK migration block from Bundle MM is the canonical pattern
+// for evolving auth tables in place.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #8909: auth tables evolve via idempotent CREATE TABLE + post-CREATE migrations", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../auth/provider.ts", import.meta.url),
+  );
+  // Every auth-table create uses CREATE TABLE IF NOT EXISTS — no
+  // version-conditional CREATE that would require a major-version
+  // upgrade dance.
+  const createCount = (src.match(/CREATE TABLE IF NOT EXISTS/g) ?? []).length;
+  assert(
+    createCount >= 9,
+    `Expected ≥9 CREATE TABLE IF NOT EXISTS statements (sessions, webauthn_*, recovery_codes, magic_*, mfa_*, roles, user_roles); found ${createCount} (Gel #8909 pin).`,
+  );
+
+  // The Bundle MM idempotent FK migration pattern stays in place —
+  // this is the canonical "evolve an existing auth table in place"
+  // flow that #8909 would have needed if Disc shipped major-version
+  // in-place upgrades.
+  assert(
+    /DO \$\$[\s\S]*?webauthn_challenges_user_id_fkey[\s\S]*?ALTER TABLE webauthn_challenges/
+      .test(src),
+    "auth/provider.ts must keep the idempotent FK-add migration block (Bundle MM pattern; Gel #8909 pin).",
+  );
+});
