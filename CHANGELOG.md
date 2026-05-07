@@ -79,6 +79,30 @@ tag is cut.
 
 ### Added
 
+- **Homebrew Formula** (gh/geldata#3437 — Disc-equivalent shipped).
+  New `homebrew/disc.rb` Formula installs the `disc` binary on macOS
+  and Linux via `brew install`. Builds from source by depending on
+  `deno` + `oven-sh/bun/bun` and running the existing
+  `deno task build` pipeline (UI bundled via `bun run build` first).
+  Ships both a stable block (pinned to the latest tag) and a `head`
+  block (`brew install --HEAD ...` against `primary`) so early
+  adopters can track shipped bundles before the next tag.
+  - **PG isn't bundled in the brew-built binary** — the build machine
+    has no `<DISC_HOME>/postgres/` cache, so the embedded-PG manifest
+    is empty. The runtime downloads PG on first `disc init` /
+    `disc serve` (same as `DISC_BUILD_NO_BUNDLE_PG=1`).
+  - **Tap repo (`github.com/systemsoft/homebrew-disc`) not yet
+    published** — until it is, install via the direct-formula URL
+    documented in `homebrew/README.md` and `docs/getting-started.md`.
+    The Formula in this repo stays canonical; the tap repo
+    eventually copies it into `Formula/disc.rb`.
+  - `docs/getting-started.md` gained an "Install Disc" section
+    documenting Homebrew (cutting-edge + stable paths) and from-source
+    build alternatives.
+  - The Formula's `sha256` for the stable block carries a clear
+    `REPLACE_WITH_TAG_SHA256_AT_PUBLISH_TIME` placeholder. Set it
+    when publishing the tap repo (or use `brew bump-formula-pr`).
+
 - **Scalar/enum migration end-to-end** (gh/geldata#8517 full impl).
   Bundle F shipped scalar diffing (`CreateScalar` / `DropScalar` /
   `AddEnumValue` / `RecreateScalar`), but properties typed as a

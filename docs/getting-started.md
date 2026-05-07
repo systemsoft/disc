@@ -22,6 +22,41 @@ deno --version
 
 ---
 
+## Install Disc
+
+Pick whichever path matches your environment. Each option puts the `disc` binary on your PATH so the rest of this guide can run `disc init`/`serve`/etc. directly.
+
+### Homebrew (macOS, Linux)
+
+The Homebrew Formula builds Disc from source via `deno compile` and installs the binary into `$(brew --prefix)/bin`. `deno` and `bun` are pulled in automatically.
+
+```bash
+# Cutting-edge (primary branch HEAD):
+brew install --HEAD https://raw.githubusercontent.com/systemsoft/disc/primary/homebrew/disc.rb
+
+# Stable (latest tagged release):
+brew install https://raw.githubusercontent.com/systemsoft/disc/primary/homebrew/disc.rb
+```
+
+The brew-built binary doesn't bundle PostgreSQL — the runtime downloads it on first `disc init` or `disc serve`. If you want a bundled binary instead, build from source with `deno task build` (see "From source" below).
+
+A standalone tap repo (`brew tap systemsoft/disc && brew install disc`) is planned; until it's published, the Formula URL above is the canonical install path. See [`homebrew/README.md`](https://github.com/systemsoft/disc/blob/primary/homebrew/README.md) for the full rationale.
+
+### From source (any platform)
+
+Clone the repo and use the existing `deno task build`:
+
+```bash
+git clone https://github.com/systemsoft/disc.git
+cd disc
+deno task build
+sudo install ./disc /usr/local/bin/disc   # or wherever your PATH points
+```
+
+This produces a binary that bundles whatever PG version is in `<DISC_HOME>/postgres/<version>/` if one is cached, otherwise the binary downloads PG on first run. For cross-compilation to a different platform, see [`disc build --platform`](cli.md#disc-build).
+
+---
+
 ## 1. Initialize a Project
 
 Create a new Disc project:
@@ -327,7 +362,7 @@ Import the SDK and run queries programmatically:
 import { createClient } from "disc/sdk/mod.ts";
 
 const client = createClient({
-  baseUrl: "http://localhost:5656"
+  baseUrl: "http://localhost:5656",
 });
 
 // Run an EdgeQL query
@@ -355,12 +390,15 @@ const user = await client.query(
 ### Insert data
 
 ```typescript
-await client.query(`
+await client.query(
+  `
   insert User {
     email := <str>$email,
     name := <str>$name
   }
-`, { email: "billie@example.com", name: "Billie" });
+`,
+  { email: "billie@example.com", name: "Billie" },
+);
 ```
 
 ### Transactions
