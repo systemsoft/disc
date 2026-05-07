@@ -18,20 +18,20 @@ export class PostgresLogger {
     this.inner = getLogger("postgres");
   }
 
-  debug(message: string): void {
-    this.inner.debug(message);
+  debug(message: string, extra?: Record<string, unknown>): void {
+    this.inner.debug(message, extra);
   }
 
-  info(message: string): void {
-    this.inner.info(message);
+  info(message: string, extra?: Record<string, unknown>): void {
+    this.inner.info(message, extra);
   }
 
-  warn(message: string): void {
-    this.inner.warn(message);
+  warn(message: string, extra?: Record<string, unknown>): void {
+    this.inner.warn(message, extra);
   }
 
-  error(message: string): void {
-    this.inner.error(message);
+  error(message: string, extra?: Record<string, unknown>): void {
+    this.inner.error(message, extra);
   }
 }
 

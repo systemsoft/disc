@@ -14,6 +14,34 @@ tag is cut.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Pre-existing TS errors blocking `deno check` cleared** (Bundle JJ).
+  Four production-source files now pass `deno check` for the first
+  time in months:
+  - **`migration/engine.ts:41`** — `logger.warn("...", { ... })` was a
+    two-arg call against the wrapper's one-arg signature. Updated
+    `postgres/logger.ts:PostgresLogger` to forward an optional
+    `extra: Record<string, unknown>` to the structured logger so
+    context fields no longer drop on the floor.
+  - **`smtp/client.ts:334`** — `concatBytes(...)` returned the broader
+    `Uint8Array` (defaults to `Uint8Array<ArrayBufferLike>` under
+    modern lib types), incompatible with the field's
+    `Uint8Array<ArrayBuffer>` type. Pinned the return type
+    explicitly to match the field.
+  - **`server/rest/openapi.ts:263, :368`** — read `link.computed` on
+    a `LinkDef` that didn't declare the field. Added
+    `computed?: boolean` to `LinkDef` in `compiler/context.ts` and
+    populated it in the SDL converter (`migration/schema-manager.ts`)
+    so computed links are now correctly skipped at REST-route
+    synthesis time.
+  - **`cli/admin.ts:64`** (surfaced after the above unblocked
+    compilation) — passed `name` to `RegisterData`, which only
+    declares `username`. Renamed at the call site.
+  - 7 regression tests in `tests/typecheck-pins.test.ts` re-run
+    `deno check` on each formerly-broken file so a future regression
+    fails the pin rather than silently re-breaking CI.
+
 ### Added
 
 - **TLS to external PostgreSQL via `?sslmode=...`** (Bundle II —

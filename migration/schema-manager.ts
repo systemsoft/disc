@@ -543,6 +543,7 @@ export class SchemaManager {
             required: linkDecl.required ?? false,
             multi: isMulti,
             columnName: isMulti ? undefined : `${linkName}_id`,
+            computed: linkDecl.computed ? true : undefined,
             annotations: linkAnnotations,
           });
         }

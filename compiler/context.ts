@@ -171,6 +171,8 @@ export interface LinkDef {
   junctionTable?: string; // For many-to-many via junction table
   junctionSourceColumn?: string; // Column referencing this type (default: "source_id")
   junctionTargetColumn?: string; // Column referencing target type (default: "target_id")
+  /** Whether this link is computed (no physical column / not stored). */
+  computed?: boolean;
   /** Annotations (e.g., description) from SDL */
   annotations?: Record<string, string>;
 }

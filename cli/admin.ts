@@ -61,7 +61,7 @@ class AdminCommand {
       const result = await ctx.provider.register({
         email: opts.email,
         password: opts.password,
-        name: opts.name ?? opts.email.split("@")[0],
+        username: opts.name ?? opts.email.split("@")[0],
       });
       const userId = result.user.id;
 
