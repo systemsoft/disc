@@ -1363,3 +1363,45 @@ Deno.test("Gel #6432 slice 3: per-policy disable threads from HTTP header to eva
     "access/evaluator.ts must filter disabledPolicies via qualified <Type>.<name> matching (Gel #6432 slice 3 pin).",
   );
 });
+
+// ---------------------------------------------------------------------------
+// gh/geldata#6432 slice 4 — run a policy in isolation against a
+// synthetic context. Bundle VV shipped this as
+// `disc admin test-policy <Type>.<policy>` plus a `--all` mode that
+// evaluates every policy on a type one at a time.
+//
+// The command takes `--action`, `--user-id`, `--user-role`, and
+// `--global key=value` flags to build the synthetic AccessContext,
+// then runs each target policy through a fresh AccessEvaluator and
+// prints the verdict, reason, optional errmessage, and the SQL
+// condition the policy generated.
+//
+// This pin asserts the underlying surface stays exposed
+// (`testPolicyImpl` exported from `cli/admin.ts`, the CLI route in
+// `cli/main.ts`). Behavior is exercised in `cli/admin.test.ts`.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #6432 slice 4: `disc admin test-policy` runs a policy in isolation", async () => {
+  const adminSrc = await Deno.readTextFile(
+    new URL("../cli/admin.ts", import.meta.url),
+  );
+  // Exported testPolicyImpl is the testable surface — pure function
+  // taking opts + an emit callback.
+  assert(
+    /export async function testPolicyImpl/.test(adminSrc),
+    "cli/admin.ts must export testPolicyImpl (Gel #6432 slice 4 pin).",
+  );
+  // The AccessPolicy AST collector must also be exported so tests
+  // can verify the AST shape independent of the evaluator path.
+  assert(
+    /export function collectAccessPolicyAst/.test(adminSrc),
+    "cli/admin.ts must export collectAccessPolicyAst (Gel #6432 slice 4 pin).",
+  );
+
+  const mainSrc = await Deno.readTextFile(
+    new URL("../cli/main.ts", import.meta.url),
+  );
+  assert(
+    /case "test-policy":[\s\S]*?adminCommand\.testPolicy/.test(mainSrc),
+    "cli/main.ts must route `admin test-policy` to adminCommand.testPolicy (Gel #6432 slice 4 pin).",
+  );
+});

@@ -334,6 +334,71 @@ parsing + role gate), `server/edgeql-protocol.ts:handleRequest`
 `access/evaluator.ts:evaluate` (qualified-name filter before policy
 evaluation).
 
+## Run-in-isolation: `disc admin test-policy` (gh/geldata#6432 slice 4)
+
+When you want to debug _why_ a specific policy is denying a specific
+user — without spinning up the server or wiring an admin token —
+the `disc admin test-policy` CLI runs a single policy (or every
+policy on a type) against a synthetic `AccessContext` built from
+flags. Pure SDL + in-memory evaluator; no DB hookup.
+
+```bash
+# Evaluate one policy against a synthetic user
+disc admin test-policy Doc.owner_only \
+  --action select \
+  --user-id u1 \
+  --global current_user=u1
+
+# Output:
+#   Doc.owner_only (select): ALLOW (12µs)
+#     reason: Allowed by permissive policy
+#     sql: ($1 = u1)
+
+# --all mode: walk every policy on the type
+disc admin test-policy Doc --all \
+  --action delete \
+  --user-id u1 \
+  --user-role admin \
+  --global is_admin=true
+
+# Output:
+#   Doc.owner_only (delete): DENY (8µs)
+#     reason: No allowing policy found
+#   Doc.admin_override (delete): ALLOW (5µs)
+#     reason: Allowed by permissive policy
+#     sql: ($1 = true)
+```
+
+Flags:
+
+| Flag                 | Meaning                                                                 |
+| -------------------- | ----------------------------------------------------------------------- |
+| `<Type>.<policy>`    | The policy to evaluate (positional). Use `<Type>` with `--all` instead. |
+| `--all`              | Evaluate every policy on the type                                       |
+| `--action <op>`      | `select` (default), `insert`, `update`, `delete`, or `all`              |
+| `--user-id <id>`     | `AccessContext.userId`                                                  |
+| `--user-role <role>` | `AccessContext.userRole`                                                |
+| `--global key=value` | Add to `AccessContext.globals` (repeatable)                             |
+| `--schema <file>`    | Override default `./dbschema/default.disc`                              |
+
+Each policy runs through a fresh `AccessEvaluator` so global
+mode/defaultAllow don't muddy the per-policy verdict. The output
+includes the verdict (ALLOW/DENY), the reason, the policy's
+errmessage if it carries one, the generated SQL condition, and the
+evaluation time in microseconds.
+
+This complements the `X-Disc-Disable-Policies` header above:
+
+- **Disable header** — debug behavior of a live query with one
+  policy turned off.
+- **`test-policy`** — debug a single policy itself in isolation,
+  no live query needed.
+
+The implementation lives in `cli/admin.ts:testPolicyImpl` (pure
+function exported for testing) and `cli/main.ts` (CLI routing).
+The exported `collectAccessPolicyAst(sdl)` helper exposes the raw
+AST shape for tests that don't want to drive the evaluator path.
+
 ---
 
 ## Auth + Access Flow

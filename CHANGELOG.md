@@ -16,6 +16,38 @@ tag is cut.
 
 ### Added
 
+- **`disc admin test-policy`** (Bundle VV — gh/geldata#6432 slice 4).
+  Run-in-isolation policy debugger: evaluate a single policy (or
+  every policy on a type via `--all`) against a synthetic
+  `AccessContext` built from CLI flags. Pure SDL + in-memory
+  evaluator; no DB hookup needed.
+  ```bash
+  disc admin test-policy Doc.owner_only \
+    --action select \
+    --user-id u1 \
+    --global current_user=u1
+  # Doc.owner_only (select): ALLOW (12µs)
+  #   reason: Allowed by permissive policy
+  #   sql: ($1 = u1)
+  ```
+  Each policy runs through a fresh `AccessEvaluator` so global
+  mode/defaultAllow don't muddy the per-policy verdict. Output
+  carries verdict, reason, optional errmessage, generated SQL
+  condition, and evaluation time in microseconds.
+  - `cli/admin.ts` — exported `testPolicyImpl(opts, emit)` (pure
+    function for testing) + exported `collectAccessPolicyAst(sdl)`
+    (raw AST shape) + `adminCommand.testPolicy(opts)` wrapper.
+  - `cli/main.ts` — `admin test-policy` subcommand + help-text entry.
+  - `cli/admin.test.ts` — 6 unit tests covering single-target,
+    `--all` mode, denial reason path, no-policies-on-type message,
+    and bad-target error shape.
+  - `docs/access-policies.md` — new "Run-in-isolation" section with
+    flag table + curl-style examples.
+
+  Closes slice 4 — the last open #6432 sub-feature. Slices 1+2
+  (errmessage, `list-policies`) shipped in Bundle SS; slice 3
+  (`X-Disc-Disable-Policies` header) shipped in Bundle UU.
+
 - **Per-policy session disable** (Bundle UU — gh/geldata#6432 slice 3).
   New `X-Disc-Disable-Policies` HTTP header takes a comma-separated
   list of qualified policy names (`<TypeName>.<policy_name>`) and

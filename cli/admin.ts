@@ -19,6 +19,10 @@ import { PgDatabaseAdapter } from "../auth/pg-database-adapter.ts";
 import { AuthError } from "../auth/types.ts";
 import { DatabaseConnection } from "../lib/database.ts";
 import { SDLParser } from "../schema/parser.ts";
+import { AccessEvaluator } from "../access/evaluator.ts";
+import { adaptAccessPolicies } from "../access/policy-adapter.ts";
+import type { AccessContext, AccessOperation } from "../access/types.ts";
+import type * as AST from "../schema/ast.ts";
 
 interface BaseOptions {
   "database-url"?: string;
@@ -201,6 +205,160 @@ class AdminCommand {
         }
       }
     }
+  }
+
+  /**
+   * `disc admin test-policy <Type>.<policy> --action <op> [opts]`
+   *
+   * Run-in-isolation policy debugger. (gh/geldata#6432 slice 4)
+   * Loads SDL, registers a single named policy on a fresh
+   * `AccessEvaluator`, evaluates against a synthetic `AccessContext`
+   * built from CLI flags, prints the verdict + reason + denial
+   * message + SQL condition.
+   *
+   * Pass `--all` instead of a `<Type>.<policy>` target to evaluate
+   * every policy on a type one at a time, listing each verdict
+   * separately — useful for "which policy is gating this user?"
+   * debugging.
+   */
+  testPolicy(opts: {
+    schema?: string;
+    target?: string; // "Type.policy" or just "Type" with --all
+    action?: AccessOperation;
+    userId?: string;
+    userRole?: string;
+    globals?: Record<string, unknown>;
+    all?: boolean;
+  }): Promise<void> {
+    return testPolicyImpl(opts, (line) => console.log(line));
+  }
+}
+
+/**
+ * Underlying implementation of `disc admin test-policy`. Pure
+ * function exported for testing — lets us assert on the emitted
+ * lines without spinning up a CLI subprocess. (gh/geldata#6432
+ * slice 4)
+ */
+export async function testPolicyImpl(
+  opts: {
+    schema?: string;
+    target?: string;
+    action?: AccessOperation;
+    userId?: string;
+    userRole?: string;
+    globals?: Record<string, unknown>;
+    all?: boolean;
+  },
+  emit: (line: string) => void,
+): Promise<void> {
+  const schemaFile = opts.schema ?? "./dbschema/default.disc";
+  const sdl = await Deno.readTextFile(schemaFile);
+  const action: AccessOperation = opts.action ?? "select";
+
+  const target = opts.target ?? "";
+  let typeName: string;
+  let policyName: string | undefined;
+  if (opts.all) {
+    typeName = target;
+    if (!typeName) {
+      throw new Error(
+        "test-policy --all requires a type name (e.g. `disc admin test-policy Doc --all`)",
+      );
+    }
+  } else {
+    const dot = target.indexOf(".");
+    if (dot < 1 || dot === target.length - 1) {
+      throw new Error(
+        "test-policy target must be `<Type>.<policy>` (e.g. `Doc.owner_only`)",
+      );
+    }
+    typeName = target.slice(0, dot);
+    policyName = target.slice(dot + 1);
+  }
+
+  // Pull AccessPolicy AST nodes for the target type.
+  const sdlPolicies = collectAccessPolicyAst(sdl).get(typeName) ?? [];
+  if (sdlPolicies.length === 0) {
+    emit(`(no policies on type ${typeName})`);
+    return;
+  }
+
+  const targets = policyName ? sdlPolicies.filter((p) => p.name.value === policyName) : sdlPolicies;
+
+  if (targets.length === 0) {
+    emit(`(no policy named ${policyName} on type ${typeName})`);
+    return;
+  }
+
+  const ctx: AccessContext = {
+    userId: opts.userId,
+    userRole: opts.userRole,
+    globals: opts.globals ? new Map(Object.entries(opts.globals)) : undefined,
+  };
+
+  // Evaluate each target policy in isolation against a fresh
+  // evaluator so global mode/defaultAllow don't muddy the per-policy
+  // verdict.
+  for (const sdlPolicy of targets) {
+    const runtimePolicy = adaptAccessPolicies(typeName, [sdlPolicy])[0];
+    const evaluator = new AccessEvaluator({
+      mode: "permissive",
+      defaultAllow: false,
+      enableRLS: true,
+      enableAudit: false,
+    });
+    evaluator.registerPolicy(runtimePolicy);
+
+    const start = performance.now();
+    const decision = evaluator.evaluate(typeName, action, ctx);
+    const durationUs = Math.round((performance.now() - start) * 1000);
+
+    emit(
+      `${typeName}.${sdlPolicy.name.value} (${action}): ${decision.allowed ? "ALLOW" : "DENY"} (${durationUs}µs)`,
+    );
+    emit(`  reason: ${decision.reason}`);
+    if (decision.denialMessage) {
+      emit(`  errmessage: ${JSON.stringify(decision.denialMessage)}`);
+    }
+    if (decision.sqlConditions && decision.sqlConditions.length > 0) {
+      emit(`  sql: ${decision.sqlConditions.join(" AND ")}`);
+    }
+  }
+}
+
+/**
+ * Pull `AccessPolicy` AST nodes off each `TypeDeclaration` in the
+ * SDL source. Pure function exported for testing — exposes the raw
+ * AST shape for `testPolicy` to thread through `adaptAccessPolicies`.
+ * (gh/geldata#6432 slice 4)
+ */
+export function collectAccessPolicyAst(
+  sdl: string,
+): Map<string, AST.AccessPolicy[]> {
+  const out = new Map<string, AST.AccessPolicy[]>();
+  const doc = new SDLParser(sdl).parse();
+  for (const decl of doc.declarations) {
+    if (decl.kind === "ModuleDeclaration") {
+      collectAccessPolicyAstFromDecls(decl.declarations, out);
+    } else {
+      collectAccessPolicyAstFromDecls([decl], out);
+    }
+  }
+  return out;
+}
+
+function collectAccessPolicyAstFromDecls(
+  decls: ReadonlyArray<AST.Declaration>,
+  out: Map<string, AST.AccessPolicy[]>,
+): void {
+  for (const d of decls) {
+    if (d.kind !== "TypeDeclaration") continue;
+    const policies: AST.AccessPolicy[] = [];
+    for (const m of d.members ?? []) {
+      if (m.kind === "AccessPolicy") policies.push(m);
+    }
+    if (policies.length > 0) out.set(d.name.value, policies);
   }
 }
 

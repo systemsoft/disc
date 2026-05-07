@@ -52,6 +52,7 @@ ${inverse("  COMMANDS ")}
   admin assign-role ${gray(".".repeat(8))} Assign a role to a user (creating it if needed)
   admin list-roles ${gray(".".repeat(9))} List all defined roles
   admin list-policies ${gray(".".repeat(6))} List access policies on a type (or all types) from SDL
+  admin test-policy ${gray(".".repeat(8))} Evaluate a policy in isolation against a synthetic context
   lsp ${gray(".".repeat(22))} Run the Disc language server (stdio JSON-RPC)
   pg log ${gray(".".repeat(19))} View PostgreSQL logs
   pg upgrade ${gray(".".repeat(15))} Upgrade PostgreSQL version
@@ -791,10 +792,51 @@ async function main() {
             break;
           }
 
+          case "test-policy": {
+            // gh/geldata#6432 slice 4 — run a single policy in
+            // isolation against a synthetic context. Pure SDL
+            // introspection + in-memory evaluator; no DB hookup.
+            const target = args._[2] ? String(args._[2]) : "";
+            const action = args.action
+              ? String(args.action) as
+                | "select"
+                | "insert"
+                | "update"
+                | "delete"
+                | "all"
+              : "select";
+            // Globals come in as repeated `--global key=value` flags
+            // or a single `--globals "k1=v1,k2=v2"` shorthand. The
+            // parser collapses repeats into an array; normalize both
+            // forms into a record.
+            const globals: Record<string, unknown> = {};
+            const globalArg = args.global ?? args.globals;
+            if (globalArg !== undefined) {
+              const list: string[] = Array.isArray(globalArg)
+                ? globalArg.map((v: unknown) => String(v))
+                : String(globalArg).split(",").map((s: string) => s.trim());
+              for (const kv of list) {
+                const eq = kv.indexOf("=");
+                if (eq < 1) continue;
+                globals[kv.slice(0, eq).trim()] = kv.slice(eq + 1).trim();
+              }
+            }
+            await adminCommand.testPolicy({
+              schema: args.schema,
+              target,
+              action,
+              userId: args["user-id"] ? String(args["user-id"]) : undefined,
+              userRole: args["user-role"] ? String(args["user-role"]) : undefined,
+              globals: Object.keys(globals).length > 0 ? globals : undefined,
+              all: args.all === true,
+            });
+            break;
+          }
+
           default: {
             console.error(`Unknown admin subcommand: ${adminSub}`);
             console.log(
-              "Available: admin create-superuser, admin set-password, admin assign-role, admin list-roles, admin list-policies",
+              "Available: admin create-superuser, admin set-password, admin assign-role, admin list-roles, admin list-policies, admin test-policy",
             );
             Deno.exit(1);
           }
