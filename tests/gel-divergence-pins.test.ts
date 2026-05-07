@@ -913,3 +913,112 @@ Deno.test("Gel #2204: schema-reload pipeline (SchemaManager → server → proto
     "edgeql-protocol.ts updateSchema must rebuild the compiler and clear both caches (Gel #2204 pin).",
   );
 });
+
+// ---------------------------------------------------------------------------
+// gh/geldata#4901 + gh/geldata#5699 — Docker image distribution.
+// Gel's bugs: `:latest` on Docker Hub drifted out of sync with the
+// version tag (#4901), and Gel didn't push to ghcr.io (#5699).
+//
+// Bundle QQ adds a `docker` job to `.github/workflows/release.yml`
+// that builds `Dockerfile.bundled` and pushes to ghcr.io with both
+// `:<version>` and `:latest` tags from the same image build, so the
+// two tags are always in sync. ghcr.io is the canonical registry
+// (no Docker Hub mirror) per the operator-facing decision documented
+// inline in the workflow.
+//
+// This pin asserts the structural shape of the workflow stays in
+// place: a `docker` job with both tags in its push list and the
+// ghcr.io login. A future refactor that drops `:latest` (re-introducing
+// #4901) or stops pushing to ghcr.io (#5699) trips here.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #4901 + #5699: release CI pushes Docker image to ghcr.io with :version + :latest tags", async () => {
+  const wf = await Deno.readTextFile(
+    new URL("../.github/workflows/release.yml", import.meta.url),
+  );
+  // Workflow must declare a docker job that logs into ghcr.io.
+  assert(
+    /docker:/.test(wf) && /registry: ghcr\.io/.test(wf),
+    "release.yml must include a docker job that logs into ghcr.io (Gel #5699 pin).",
+  );
+  // Build-and-push step must tag both `:<version>` and `:latest`
+  // from the same image build — this is what closes #4901's lockstep
+  // requirement.
+  assert(
+    /ghcr\.io\/systemsoft\/disc:\$\{\{ steps\.version\.outputs\.version \}\}/
+      .test(wf),
+    "release.yml must tag the image with the version output (Gel #5699 pin).",
+  );
+  assert(
+    /ghcr\.io\/systemsoft\/disc:latest/.test(wf),
+    "release.yml must also tag the image with :latest in the same push (Gel #4901 pin).",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#6598 — multi-tenant logging. Gel's request: stamp every
+// log line with a tenant identifier so multi-tenant deployments can
+// filter logs per tenant.
+//
+// Disc's structured logger (`lib/logger.ts:Logger`) already supports
+// this via the generic `child(extra)` method. Operators wire a
+// per-request `logger.child({ tenant })` (or any other dimension —
+// requestId, userId, etc.) and every emitted line carries the field.
+// The logger's `withRequest` shortcut is built on top of `child`;
+// the same pattern works for `withTenant`, `withUser`, etc.
+//
+// This pin asserts the structural property: `Logger.child(extra)`
+// exists and the underlying log path threads the extra fields into
+// every emitted entry. A regression that removes `child()` or stops
+// merging the bag into log entries would break multi-tenant log
+// observability and is what we want to catch.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #6598: Logger.child(extra) supports arbitrary structured fields (incl. tenant)", async () => {
+  const { Logger, configureLogging } = await import("../lib/logger.ts");
+
+  const captured: string[] = [];
+  configureLogging({
+    level: "INFO",
+    format: "json",
+    output: (line) => captured.push(line),
+  });
+
+  const base = new Logger("test");
+  const tenantLogger = base.child({ tenant: "acme-corp", region: "us-west" });
+  tenantLogger.info("query executed", { durationMs: 42 });
+
+  assertEquals(
+    captured.length,
+    1,
+    "Logger should emit exactly one entry (Gel #6598 pin).",
+  );
+  const entry = JSON.parse(captured[0]) as Record<string, unknown>;
+  assertEquals(
+    entry.tenant,
+    "acme-corp",
+    "Tenant field from child() must reach the emitted entry (Gel #6598 pin).",
+  );
+  assertEquals(
+    entry.region,
+    "us-west",
+    "Other child() fields must also reach the emitted entry (Gel #6598 pin).",
+  );
+  assertEquals(
+    entry.durationMs,
+    42,
+    "Per-call extras must merge alongside child() fields (Gel #6598 pin).",
+  );
+
+  // Source-level pin so a refactor that removes `child` from the API
+  // surface trips here too — captured only via runtime above.
+  const src = await Deno.readTextFile(
+    new URL("../lib/logger.ts", import.meta.url),
+  );
+  assert(
+    /child\(extra: Record<string, unknown>\): Logger/.test(src),
+    "lib/logger.ts must keep `child(extra)` on the Logger surface (Gel #6598 pin).",
+  );
+
+  // Restore default config so subsequent tests aren't affected by
+  // the captured-output sink.
+  configureLogging({ level: "INFO", format: "json" });
+});

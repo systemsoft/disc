@@ -82,7 +82,8 @@ A second same-day sweep shipped 18 more bundles (I–CC), closing Disc's eight o
 | MM     | Auth-semantics cluster: webauthn_challenges cascade (#7103) + structural pins for #5504 (UNLESS CONFLICT), #8811 (stdlib)    | `edd2f6b`                                  |
 | NN     | CLI/devtools cluster: programmatic CLI surface (#5911) + offline-setup env vars (#3406) + named-instance DX pin (#2651)      | `78002f7`                                  |
 | OO     | DB/engine correctness cluster: pins for #5641 (multi-module FROM), #4215 (extending-change gap), #2204 (schema-reload chain) | `3a4fdaa`                                  |
-| PP     | #4215 follow-up: differ now detects type-level `extending` changes via resolved inheritance walk; pin upgraded to behavioral | (this bundle)                              |
+| PP     | #4215 follow-up: differ now detects type-level `extending` changes via resolved inheritance walk; pin upgraded to behavioral | `730eea8`                                  |
+| QQ     | Cloud/infra cluster: Docker image release pipeline (#5699 + #4901 → ghcr.io with :version + :latest); #6598 logger pin       | (this bundle)                              |
 
 Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** — #7311, #7196, #7483 (Q), #7629 (U), #3437 (FF), #7525, #6358, #8899, #9034, #2292 (GG/HH/II), and structural-divergence pins for #4408, #4172 (X), #3208, #5132, #2910 (S), #3872, #7360, #3170 (GG/HH), #5158, #5480, #8762, #7972 (II). The Disc-original-features roadmap is also fully closed by this sweep — see `docs/disc-original-features.md`.
 
@@ -258,15 +259,17 @@ Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** 
 | #9117 | gel-py command on Windows 11        | cli           | Cross-platform CLI — verify we handle Windows correctly | M      |
 | #4308 | Modify stdlib during minor upgrades | migration, db | Standard library versioning story                       | M      |
 
-#### Cloud / infra (5)
+#### Cloud / infra (2)
 
-| #     | Title                        | Category        | Why pickable                           | Effort |
-| ----- | ---------------------------- | --------------- | -------------------------------------- | ------ |
-| #4901 | Docker latest tag mismatch   | cloud           | Fix our release CI tagging             | S      |
-| #5699 | Push images to GHCR          | cloud, devtools | Already in GHCR? Verify                | S      |
-| #4806 | PR preview environments      | cloud           | Uffizzi-style; nice-to-have            | M      |
-| #6598 | Multi-tenant logging         | cloud           | Add tenant tag to log lines            | M      |
-| #3534 | Listen on multiple TCP ports | infra           | Niche; only when self-host requests it | M      |
+> **Bundle QQ closed the cloud/infra sub-cluster (#4901 + #5699 + #6598).**
+> #4901 + #5699 shipped a real Docker image release pipeline; #6598 was
+> already supported via `Logger.child` and pinned in
+> `tests/gel-divergence-pins.test.ts`.
+
+| #     | Title                        | Category | Why pickable                           | Effort |
+| ----- | ---------------------------- | -------- | -------------------------------------- | ------ |
+| #4806 | PR preview environments      | cloud    | Uffizzi-style; nice-to-have            | M      |
+| #3534 | Listen on multiple TCP ports | infra    | Niche; only when self-host requests it | M      |
 
 #### Docs (3)
 
@@ -283,11 +286,11 @@ Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** 
 | #648  | SQLite back-end    | db, storage | Stretch — Disc is Postgres-first; deferrable | L      |
 | #7724 | Extension upgrades | migration   | We have an extension model already           | M      |
 
-**Pickable: ~21 items** (Bundles LL + MM + NN + OO closed 4 fixes + pinned 8 across migration-perf, auth-semantics, CLI/devtools, and DB/engine). Highest-leverage clusters:
+**Pickable: ~18 items** (Bundles LL + MM + NN + OO + PP + QQ closed 6 fixes + pinned 9 across migration-perf, auth-semantics, CLI/devtools, DB/engine, and cloud/infra). Highest-leverage clusters:
 
-1. **Cloud/infra** — #4901 docker latest tag + #5699 GHCR images (release-CI polish)
-2. **Migration robustness** — #5190 backport rewrites + #3761 push command + #6697 in-place upgrades (operator-ergonomics)
-3. **Auth/access** — #6432 access-policy introspection API + #8909 in-place auth upgrades (admin UI surface)
+1. **Migration robustness** — #5190 backport rewrites + #3761 push command + #6697 in-place upgrades (operator-ergonomics)
+2. **Auth/access** — #6432 access-policy introspection API + #8909 in-place auth upgrades (admin UI surface)
+3. **Docs** — #6127 test guide + #7382 docs search (operator-onboarding)
 
 ### SKIP — not applicable to Disc
 

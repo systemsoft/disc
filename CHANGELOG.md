@@ -14,7 +14,37 @@ tag is cut.
 
 ## [Unreleased]
 
+### Added
+
+- **Docker image release pipeline** (Bundle QQ — gh/geldata#5699 + #4901).
+  `.github/workflows/release.yml` now carries a `docker` job that
+  builds `Dockerfile.bundled` and pushes to `ghcr.io/systemsoft/disc`
+  with both `:<version>` and `:latest` tags from the _same_ image
+  build. Two structural choices close both upstream issues at once:
+  - **One build, two tags**: the `:latest` tag and the version tag
+    fire from the same `docker/build-push-action` step, so they
+    cannot drift apart (closes #4901 — Gel had a Docker Hub publish
+    flow where `:latest` lagged behind `:vX.Y.Z`).
+  - **ghcr.io as canonical registry**: no Docker Hub mirror; ghcr.io
+    is the operator-facing pull URL going forward (closes #5699 —
+    Gel didn't push to GHCR; Disc now does, on every tag push).
+  - Multi-arch: `linux/amd64,linux/arm64`, matching the two pre-built
+    binary platforms produced by the `publish` job.
+  - Triggers on the same `tags: v*` event as the binary build, so a
+    tag push produces both binaries and container images in the same
+    release window.
+
 ### Fixed
+
+- **#6598 (multi-tenant logging) pinned** (Bundle QQ — gh/geldata#6598).
+  Disc's structured logger (`lib/logger.ts:Logger`) already supports
+  arbitrary tenant tagging via the generic `child(extra)` method.
+  Operators wire `logger.child({ tenant })` (mirroring the
+  `withRequest` pattern) and every emitted line carries the field.
+  Pin in `tests/gel-divergence-pins.test.ts` exercises the runtime
+  surface (child fields reach the emitted JSON entry) and walks the
+  source to confirm `child(extra: Record<string, unknown>): Logger`
+  stays on the Logger surface.
 
 - **Type-level extending changes now detected** (Bundle PP — gh/geldata#4215).
   `migration/differ.ts:diffType` previously called `extractProperties`
