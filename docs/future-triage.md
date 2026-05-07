@@ -1,9 +1,9 @@
 # FUTURE.md Triage
 
 > Status of every Gel issue tracked in `FUTURE.md` against Disc's roadmap.
-> Generated: 2026-05-05 · Last updated: 2026-05-07 (Bundles I–II closed Disc-original-features roadmap + 22 more upstream items + LSP Phases 5–7 + Homebrew + auth router hardening + PG TLS support)
+> Generated: 2026-05-05 · Last updated: 2026-05-07 (Bundles I–KK closed Disc-original-features roadmap + 22 more upstream items + LSP Phases 5–7 + Homebrew + auth router hardening + PG TLS support + zero `deno check` errors project-wide)
 >
-> **The DONE/BUILD tables below are a snapshot as of Bundle H (2026-05-06 morning).** Subsequent same-day sweeps (Bundles I through II — see the post-Bundle-H sweep table) shipped Disc's eight original features, the LSP, additional auth/migration polish, and 12 structural-divergence pins. See `CHANGELOG.md` `[Unreleased]` for the authoritative post-snapshot list — items marked BUILD here may already be DONE there. The Summary tally below tracks the running total.
+> **The DONE table below is a snapshot as of Bundle H (2026-05-06 morning); the BUILD table was de-duped 2026-05-07 after Bundles I–KK shipped.** Subsequent same-day sweeps (Bundles I through KK — see the post-Bundle-H sweep table) shipped Disc's eight original features, the LSP, additional auth/migration polish, 12 structural-divergence pins, and a full project-wide `deno check` cleanup. See `CHANGELOG.md` `[Unreleased]` for authoritative bundle details. The Summary tally below tracks the running total.
 
 ## Methodology
 
@@ -21,7 +21,7 @@ Two issues fall into a fifth bucket: Disc deliberately diverges from Gel's `not_
 
 - **DONE**: 118 high-relevance items shipped in disc (108 in the DONE table snapshot + 10 ports from the post-Bundle-H sweep — Q/U/FF/GG/HH/II). Cross-referenced with `git log`.
 - **PIN**: 22 high-relevance items recorded as Disc-vs-Gel divergence with regression pins (no behavior change; structural reality of the Disc rewrite makes the Gel-side bug class inapplicable). Live in `tests/gel-divergence-pins.test.ts` and `migration/gel-issues.test.ts`. Includes #4408, #4172, #3208, #5132, #2910, #3872, #7360, #3170, #5158, #5480, #8762, #7972 + the in-DONE-table pins (#4334, #3733, #3414, #4343, #1147, #5617, #2071).
-- **BUILD**: ~20 high-relevance items still pickable (the snapshot listed ~27; recent bundles trimmed several).
+- **BUILD**: 33 high-relevance items still pickable (the snapshot listed ~80 with overlap; Bundles I–KK closed 22 + pinned 12 — see the de-duped table below).
 - **SKIP**: ~120 high-relevance items not applicable to Disc (Gel-internal, Gel-Python, Gel-cloud-specific, or Disc-already-handled by virtue of being a fresh TS rewrite).
 - **DROP**: 2 high-relevance items upstream rejected (#7482, #7341 — already documented in prior audit; #7341 was actually re-implemented in Disc as opt-in CAPTCHA).
 - **Medium (789) and Low (1,676)**: handled via category-level rules below; no per-issue enumeration.
@@ -47,35 +47,37 @@ Seven sequential bundles, 41 issues closed, 21 commits, all on `origin/primary`.
 
 A second same-day sweep shipped 18 more bundles (I–CC), closing Disc's eight original features and a handful of additional upstream items. The DONE/BUILD enumeration below predates these — `CHANGELOG.md` `[Unreleased]` is authoritative for anything shipped after Bundle H.
 
-| Bundle | Subject                                                                                           | Source                                     |
-| ------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| I      | Single-binary distribution (Disc-original feature #4)                                             | `fcebdb1`                                  |
-| J      | Schema-derived REST surface (Disc-original feature #2)                                            | `7b1d3cf`, `3a3d7d1`                       |
-| K      | Live schema diff in admin UI (Disc-original feature #3a)                                          | `cfe9533`, `8be5d73`                       |
-| L      | Live data subscriptions in admin UI (Disc-original feature #3c)                                   | `3021c3c`, `5730b3d`, `ceaebb0`, `cfdcdd2` |
-| M      | Codegen-free TS query builder (Disc-original feature #1)                                          | `c7ace89`, `caa7bb4`                       |
-| N      | Visual query builder (Disc-original feature #3b)                                                  | `d204b66`                                  |
-| O      | Identity-disc visualization (Disc-original feature #3d)                                           | `b7db3c9`                                  |
-| P      | Deno-permission-aware access policies (Disc-original feature #5)                                  | `a445cb5`                                  |
-| Q      | Auth polish: #7311 implicit signup, #7196 WebAuthn discoverable creds, #7483 docs                 | `cd735bb`                                  |
-| R      | `--require-auth` / `--read-only` / `--trust-proxy` CLI flags (#5234)                              | `bd3822a`                                  |
-| S      | Migration robustness pins (#3208, #5132, #2910)                                                   | `33c7c03`                                  |
-| T      | LSP Phase 5: embedded EdgeQL diagnostics in TS/JS                                                 | `18ddd02`                                  |
-| U      | Bulletproof CTA buttons in auth emails (#7629)                                                    | `a0c1744`                                  |
-| V      | LSP Phase 6: hover + completion inside `eql\`...\``                                               | `4537390`                                  |
-| W      | Scalar/enum migration end-to-end (#8517 full impl + cascade ordering)                             | `c39aa26`                                  |
-| X      | Structural-divergence pins (#4408 pre-commit, #4172 SCRAM-tunneled)                               | `2dd49c7`                                  |
-| Y      | Phase 23 polymorphic test fixtures rewritten to per-subtype tables                                | `ded914e`                                  |
-| Z      | CI builds UI before non-PG test suite                                                             | `c2e99f5`                                  |
-| AA     | LSP Phase 7: cross-file SDL resolution                                                            | `35071fd`                                  |
-| BB     | Polymorphic shape fields project subtype-specific cols in UNION                                   | `eedd27d`                                  |
-| CC     | Cross-platform reproducible builds via per-platform PG staging                                    | `85bf883`                                  |
-| DD     | Documentation audit — high-severity gaps                                                          | `840c3c0`                                  |
-| EE     | Documentation audit — medium + low gaps                                                           | `09925ea`                                  |
-| FF     | Homebrew Formula (#3437)                                                                          | `34902d6`                                  |
-| GG     | Auth router lockdown (#7525) + admin policy bypass (#6358) + TLS cipher pin (#3872)               | `9971268`                                  |
-| HH     | Migration drift status (#8899) + running-server preflight (#9034) + login/CLI pins (#7360, #3170) | `ba08a24`                                  |
-| II     | PG `?sslmode=` parsing (#2292) + verification pins (#5158, #5480, #8762, #7972)                   | `fea2ce8`                                  |
+| Bundle | Subject                                                                                                             | Source                                     |
+| ------ | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| I      | Single-binary distribution (Disc-original feature #4)                                                               | `fcebdb1`                                  |
+| J      | Schema-derived REST surface (Disc-original feature #2)                                                              | `7b1d3cf`, `3a3d7d1`                       |
+| K      | Live schema diff in admin UI (Disc-original feature #3a)                                                            | `cfe9533`, `8be5d73`                       |
+| L      | Live data subscriptions in admin UI (Disc-original feature #3c)                                                     | `3021c3c`, `5730b3d`, `ceaebb0`, `cfdcdd2` |
+| M      | Codegen-free TS query builder (Disc-original feature #1)                                                            | `c7ace89`, `caa7bb4`                       |
+| N      | Visual query builder (Disc-original feature #3b)                                                                    | `d204b66`                                  |
+| O      | Identity-disc visualization (Disc-original feature #3d)                                                             | `b7db3c9`                                  |
+| P      | Deno-permission-aware access policies (Disc-original feature #5)                                                    | `a445cb5`                                  |
+| Q      | Auth polish: #7311 implicit signup, #7196 WebAuthn discoverable creds, #7483 docs                                   | `cd735bb`                                  |
+| R      | `--require-auth` / `--read-only` / `--trust-proxy` CLI flags (#5234)                                                | `bd3822a`                                  |
+| S      | Migration robustness pins (#3208, #5132, #2910)                                                                     | `33c7c03`                                  |
+| T      | LSP Phase 5: embedded EdgeQL diagnostics in TS/JS                                                                   | `18ddd02`                                  |
+| U      | Bulletproof CTA buttons in auth emails (#7629)                                                                      | `a0c1744`                                  |
+| V      | LSP Phase 6: hover + completion inside `eql\`...\``                                                                 | `4537390`                                  |
+| W      | Scalar/enum migration end-to-end (#8517 full impl + cascade ordering)                                               | `c39aa26`                                  |
+| X      | Structural-divergence pins (#4408 pre-commit, #4172 SCRAM-tunneled)                                                 | `2dd49c7`                                  |
+| Y      | Phase 23 polymorphic test fixtures rewritten to per-subtype tables                                                  | `ded914e`                                  |
+| Z      | CI builds UI before non-PG test suite                                                                               | `c2e99f5`                                  |
+| AA     | LSP Phase 7: cross-file SDL resolution                                                                              | `35071fd`                                  |
+| BB     | Polymorphic shape fields project subtype-specific cols in UNION                                                     | `eedd27d`                                  |
+| CC     | Cross-platform reproducible builds via per-platform PG staging                                                      | `85bf883`                                  |
+| DD     | Documentation audit — high-severity gaps                                                                            | `840c3c0`                                  |
+| EE     | Documentation audit — medium + low gaps                                                                             | `09925ea`                                  |
+| FF     | Homebrew Formula (#3437)                                                                                            | `34902d6`                                  |
+| GG     | Auth router lockdown (#7525) + admin policy bypass (#6358) + TLS cipher pin (#3872)                                 | `9971268`                                  |
+| HH     | Migration drift status (#8899) + running-server preflight (#9034) + login/CLI pins (#7360, #3170)                   | `ba08a24`                                  |
+| II     | PG `?sslmode=` parsing (#2292) + verification pins (#5158, #5480, #8762, #7972)                                     | `fea2ce8`                                  |
+| JJ     | Pre-existing TS errors cleared (logger.warn signature, Uint8Array, LinkDef.computed, RegisterData.username)         | `f55e200`                                  |
+| KK     | `deno check` clean across whole project (151 errors → 0; LoginResult helpers, Result narrowing, legacy SCRAM shims) | `55cc01c`                                  |
 
 Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** — #7311, #7196, #7483 (Q), #7629 (U), #3437 (FF), #7525, #6358, #8899, #9034, #2292 (GG/HH/II), and structural-divergence pins for #4408, #4172 (X), #3208, #5132, #2910 (S), #3872, #7360, #3170 (GG/HH), #5158, #5480, #8762, #7972 (II). The Disc-original-features roadmap is also fully closed by this sweep — see `docs/disc-original-features.md`.
 
@@ -198,115 +200,82 @@ Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** 
 
 ### BUILD — sorted by leverage (security/correctness > UX > infra; S < M < L effort)
 
-> Items shipped in the 2026-05-06 sweep are now in DONE above. The list below has been pruned accordingly.
+> **De-duped 2026-05-07 after Bundles I–KK closed 22 items + 12 pins.** Items shipped or pinned across Bundles 1–KK are listed in the post-Bundle-H sweep table at the top of this file (and authoritatively in `CHANGELOG.md` `[Unreleased]`). The table below enumerates only what's actually pickable now.
 
-| #                                                             | Title                                                                 | Category                | Why pickable                                                                                                    | Effort           |
-| ------------------------------------------------------------- | --------------------------------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------- | ---------------- |
-| ~~#5234~~                                                     | ~~Instance-level config via CLI args / env~~                          | ~~devtools~~            | DONE Bundle H (`fe1738b`)                                                                                       | ~~S~~            |
-| ~~#4547~~                                                     | ~~`DISC_SERVER_TLS_CERT_ENV` / `_KEY_ENV`~~                           | ~~auth~~                | DONE Bundle H (`fe1738b`)                                                                                       | ~~S~~            |
-| #4408                                                         | Pre-commit + CI hooks                                                 | devtools                | Project-side: add `.pre-commit-config.yaml` calling `deno fmt`/`deno lint`                                      | S                |
-| #5709                                                         | Refresh button in UI data viewer                                      | devtools                | UI-only; SvelteKit data viewer                                                                                  | S                |
-| ~~#6126~~                                                     | ~~Performance guide~~                                                 | ~~docs~~                | DONE Bundle G (`041035f`)                                                                                       | ~~S~~            |
-| ~~#6096~~                                                     | ~~Production migration documentation~~                                | ~~docs~~                | DONE Bundle G (`fdaccbf`)                                                                                       | ~~S~~            |
-| ~~#1163~~                                                     | ~~EdgeQL cheat sheet~~                                                | ~~docs~~                | DONE Bundle G (`32f5e96`)                                                                                       | ~~S~~            |
-| ~~#4170~~                                                     | ~~Containerized local dev docs~~                                      | ~~docs~~                | DONE Bundle G (`041035f`)                                                                                       | ~~S~~            |
-| ~~#6176~~                                                     | ~~docker-compose example~~                                            | ~~docs~~                | DONE Bundle G (`041035f`)                                                                                       | ~~S~~            |
-| ~~#4239~~                                                     | ~~Secure TLS setup in deploy guides~~                                 | ~~docs~~                | DONE Bundle G (`c4abb9a`)                                                                                       | ~~S~~            |
-| ~~#4787~~                                                     | ~~Document undocumented config options~~                              | ~~docs~~                | DONE Bundle G (`c4abb9a`)                                                                                       | ~~S~~            |
-| ~~#4943~~                                                     | ~~Document new features~~                                             | ~~docs~~                | DONE Bundle H (`4080cb0`)                                                                                       | ~~S~~            |
-| ~~#1021~~                                                     | ~~Authentication is under documented~~                                | ~~docs~~                | DONE Bundle G (`5d3a0b1`)                                                                                       | ~~S~~            |
-| #2647                                                         | CLI verb-object regularity                                            | cli                     | Audit `cli/main.ts` command surface; `disc db wipe` lands here                                                  | M                |
-| #1486 + escape-hatch                                          | (already DONE for wipe) — also need backup-before-wipe gate           | cli                     | Cherry on top                                                                                                   | S                |
-| ~~#6094~~                                                     | ~~Programmatic reimplementing migrations guide~~                      | ~~docs, migrations~~    | DONE Bundle H (`7dcd1a9`)                                                                                       | ~~M~~            |
-| #6083                                                         | Advanced migration workflows                                          | docs                    | Branches, squashing, partial application                                                                        | M                |
-| #6094                                                         | (above)                                                               |                         |                                                                                                                 |                  |
-| #4319                                                         | Run migrations in IO process                                          | migrations, perf        | Engine perf; only matters at >1000-object schemas                                                               | M                |
-| #6697                                                         | In-place major version upgrades                                       | migration               | Big — port pg_dump/pg_restore based path                                                                        | L                |
-| #5713                                                         | Inserts in migration are slower than outside                          | migration, perf         | Profile our `migration/engine.ts`; likely identical issue                                                       | M                |
-| #5322                                                         | Schema comparison slow for large schemas                              | migration, perf         | Linearize ours against quadratic in `migration/diff.ts`                                                         | M                |
-| #1772 / #1461                                                 | RFC1000 migration features                                            | migration               | Audit our diff generator vs. RFC                                                                                | L                |
-| #5190                                                         | Backport migration rewrites                                           | migration               | We don't have versioned rewrites yet                                                                            | M                |
-| #3761                                                         | "Compact" migrations / push command                                   | migration, devtools     | Already partially in `767afb7`; finish push                                                                     | S                |
-| ~~#7563~~                                                     | ~~All public CLI flags via env vars~~                                 | ~~devtools, cli~~       | DONE Bundle H (`fe1738b`)                                                                                       | ~~S~~            |
-| #5911                                                         | Run CLI programmatically                                              | cli                     | Expose `cli/api.ts` with Deno-compatible programmatic surface                                                   | M                |
-| #3437                                                         | Homebrew formula                                                      | devtools                | Brew tap + formula                                                                                              | S                |
-| #3406                                                         | Offline setup                                                         | devtools, cloud         | Bundle PG binary download manifest in tarball                                                                   | M                |
-| #4172                                                         | SCRAM auth over HTTP-tunneled binary protocol                         | auth                    | Already have SCRAM; add HTTP tunnel mode                                                                        | M                |
-| #6432                                                         | Access policy management features                                     | auth, devtools          | UI-side schema browser already shows them; add introspection API                                                | M                |
-| #6358                                                         | Toggle `apply_access_policies` for GraphQL/HTTP                       | auth                    | Per-request override header                                                                                     | S                |
-| #7525                                                         | Authenticate `ext::auth` server endpoints                             | auth                    | Lock down `/auth/*` routes by default                                                                           | S                |
-| #3872                                                         | Configurable TLS cipher suites/curves                                 | auth                    | Deno's TLS config supports it; expose                                                                           | S                |
-| #7629                                                         | Invisible link button in auth emails                                  | auth                    | Update default email template CSS                                                                               | S                |
-| #7972                                                         | Auth email button background color                                    | auth                    | Subsumed by Bundle E `brandColor`; verify CSS fall-through and pin                                              | S                |
-| #7196                                                         | WebAuthn options without email                                        | auth                    | Discoverable credentials / conditional UI                                                                       | M                |
-| #7311                                                         | Magic link UX: email not sent w/o signup                              | auth                    | Make registration implicit on magic link                                                                        | S                |
-| #7360                                                         | Email+password: non-existing account UX                               | auth                    | Equalize timing (already done at `01bd379`); also fix UI message                                                | S                |
-| #7483                                                         | Verify email cross-device                                             | auth                    | Already works via token; document                                                                               | S                |
-| #7103                                                         | Missing deletion policies in auth ext                                 | auth, db                | Cascade rules in our `auth/schema.ts`                                                                           | S                |
-| #8909                                                         | In-place upgrades & auth update                                       | auth, migration         | Tied to #6697                                                                                                   | M                |
-| #5504                                                         | UNLESS CONFLICT misbehaves w/o select access                          | auth, db                | Access-policy x conflict-resolution edge case                                                                   | M                |
-| #8811                                                         | Audit stdlib for permissions                                          | auth, db                | Run through our std::* implementations                                                                          | M                |
-| #4215                                                         | Migrate type of computed global                                       | migration               | Likely needs a code path                                                                                        | M                |
-| #2204                                                         | Migrations not propagated to existing connections                     | migration               | Schema-version bump notify                                                                                      | M                |
-| #5641                                                         | Complex schema → missing FROM-clause                                  | migration, db           | Smoke test & fix                                                                                                | M                |
-| #7724                                                         | Extension upgrades                                                    | migration               | We have an extension model already                                                                              | M                |
-| #2292                                                         | TLS for Postgres connections                                          | db                      | Should already work via deno-pg; verify                                                                         | S                |
-| #3534                                                         | Listen on multiple TCP ports                                          | infra                   | Disc supports one HTTP + one binary; multi may not be needed                                                    | M                |
-| #648                                                          | SQLite back-end                                                       | db, storage             | Stretch — Disc is Postgres-first by design; deferrable                                                          | L                |
-| #3510                                                         | External UUIDs                                                        | db                      | Add `id` override at schema level                                                                               | M                |
-| #5505 / #6517                                                 | Access policies slow performance                                      | auth, perf              | Profile our `access/evaluator.ts` once usage scales                                                             | M                |
-| #1634                                                         | Reduce cost of new connections                                        | perf                    | Connection pooling already exists; warm-cache audit                                                             | M                |
-| #4319                                                         | (above)                                                               |                         |                                                                                                                 |                  |
-| #2651                                                         | "Named instance" DX confusion                                         | cli, devtools           | Naming review pass (#1325 cleared in Bundle 1, 2026-05-06)                                                      | S                |
-| #5158                                                         | Project init timeout                                                  | cli                     | Already much better in our impl; smoke test                                                                     | S                |
-| #5480                                                         | ClientConnectionFailedError on certain networks                       | cli                     | DNS/IPv6 handling                                                                                               | S                |
-| #9117                                                         | gel-py command on Windows 11                                          | cli                     | Cross-platform CLI — verify we handle Windows correctly                                                         | M                |
-| #9034                                                         | CLI migration succeeds, server fails                                  | cli, migration          | Better preflight check                                                                                          | S                |
-| #8762                                                         | Auto project init leaves bad state                                    | cli                     | Already gets `disc.toml` cleanup right; verify                                                                  | S                |
-| #8899                                                         | `migration status` partial output                                     | cli, migration          | Format fix                                                                                                      | S                |
-| ~~#8273~~                                                     | ~~Document connection resolution algorithm~~                          | ~~docs, cli~~           | DONE Bundle G (`c4abb9a`)                                                                                       | ~~S~~            |
-| ~~#8421~~                                                     | ~~Document `GEL_SERVER_PASSWORD_HASH`~~                               | ~~docs, auth~~          | DONE Bundle G (`5d3a0b1`)                                                                                       | ~~S~~            |
-| #6119 / #5820 / #5819                                         | Document UI / UI button visibility                                    | docs                    | UI documentation pass                                                                                           | S                |
-| #6127                                                         | Test guide                                                            | docs                    | We have tests; write the guide                                                                                  | S                |
-| #6543                                                         | New SDL loading strategy                                              | migration, code-quality | Architecture-level cleanup                                                                                      | L                |
-| #4308                                                         | Modify stdlib during minor upgrades                                   | migration, db           | Standard library versioning story                                                                               | M                |
-| #2834                                                         | Migration fails on object-handling functions                          | migration, db           | Edge case                                                                                                       | S                |
-| #4901                                                         | Docker latest tag mismatch                                            | cloud                   | Fix our release CI tagging                                                                                      | S                |
-| #5699                                                         | Push images to GHCR                                                   | cloud, devtools         | Already in GHCR? Verify                                                                                         | S                |
-| #4806                                                         | PR preview environments                                               | cloud                   | Uffizzi-style; nice-to-have                                                                                     | M                |
-| #6598                                                         | Multi-tenant logging                                                  | cloud                   | Add tenant tag to log lines                                                                                     | M                |
-| ~~#2230~~                                                     | ~~Update migration workflow docs~~                                    | ~~docs, migration~~     | DONE Bundle G (`fdaccbf`)                                                                                       | ~~S~~            |
-| #7382                                                         | Improved docs search                                                  | docs                    | Search infra; deferrable                                                                                        | M                |
-| #2401                                                         | Doc complex mutations                                                 | docs                    | EdgeQL guide expansion                                                                                          | M                |
-| (LSP Phase 5+)                                                | EdgeQL embedded support, semantic tokens, formatting, cross-file refs | devtools                | Phases 1–4 shipped via #7411/#655 (`d5a0a85`/`3d74f85`/`fd16e28`/`b4c2ffc`); Phase 5+ continues                 | M-L              |
-| #3265 / #3366 / #2157                                         | Doc clean-ups                                                         | docs                    | Steady-state                                                                                                    | S                |
-| #1276                                                         | Add Rust bindings to roadmap                                          | docs, sdk               | We have TS-only; defer Rust                                                                                     | S                |
-| #4943 / #61 / #39 / #5097                                     | Roadmap & doc updates                                                 | docs                    | Steady-state                                                                                                    | S                |
-| #3854                                                         | Java client library                                                   | sdk                     | Out of scope for Disc v1; mention in roadmap                                                                    | L                |
-| #3485                                                         | NextAuth ORM adapter                                                  | sdk, auth               | TS-native, fits well; community-grade                                                                           | M                |
-| #3522 / #3560 / #4590 / #2080                                 | Better error reporting                                                | devtools                | Pass through `parseWithRecovery` work                                                                           | S                |
-| ~~#4334~~                                                     | ~~Brew update messaging~~                                             | ~~cli~~                 | PIN Bundle H — follow-on of #3437 (no Disc Homebrew formula yet)                                                | ~~S~~            |
-| #2204                                                         | (above)                                                               |                         |                                                                                                                 |                  |
-| #4789 / #4766 / #3280 / #5060 / #5132 / #5497 / #4215 / #5641 | Remaining migration robustness bugs                                   | migration               | #1147/#4343/#4406 cleared in Bundle C (2026-05-06); smoke-test the rest                                         | M (collectively) |
-| #5132                                                         | Cannot drop alias depending on its own computed link                  | migration               | Edge case                                                                                                       | S                |
-| #1489                                                         | Compile produced DDL before dumping                                   | migration               | Already in our pipeline; verify                                                                                 | S                |
-| #4351                                                         | `RESET SCHEMA TO initial`                                             | migration               | Stretch                                                                                                         | M                |
-| #4600                                                         | Drop DB and re-create                                                 | cli, migration          | We have `disc db wipe` — covers it                                                                              | S                |
-| #2910                                                         | Migration errors in CI                                                | migration, devtools     | Better non-TTY error output                                                                                     | S                |
-| #2910 / #1865 / #1772                                         | Various migration features                                            | migration               | Track via meta-issue                                                                                            | —                |
-| #3208                                                         | Migration creation fails despite no questions                         | migration               | Likely edge case; add fixture                                                                                   | S                |
-| #2647 / #4334                                                 | CLI ergonomics — remaining                                            | cli                     | #1218/#1030 cleared in Bundle 1 (2026-05-06); audit `cli/main.ts` verb-object regularity, brew update messaging | S                |
-| #725                                                          | Code quality automation                                               | devtools                | Already have lint+fmt+test; add coverage                                                                        | S                |
-| #357 / #5097 / #61 / #39                                      | Where's the dockerfile / docs roadmap                                 | docs                    | We have one; keep it current                                                                                    | S                |
-| #1613                                                         | Getting started doc                                                   | docs                    | We have `docs/getting-started.md`; verify                                                                       | S                |
-| #184 / #61                                                    | Non-technical example schema                                          | docs                    | Switch examples to a relatable domain                                                                           | S                |
-| #12                                                           | Tool for testing doc examples                                         | devtools, docs          | doctest-style runner                                                                                            | M                |
-| #4408                                                         | (above)                                                               |                         |                                                                                                                 |                  |
-| #838                                                          | Build instructions not full                                           | docs                    | `deno task` audit                                                                                               | S                |
-| #673                                                          | Add favicon                                                           | UI                      | Trivial                                                                                                         | S                |
-| #3437 / #4334                                                 | Homebrew                                                              | devtools                | (above)                                                                                                         | S                |
+#### Migration & perf (8)
 
-(Pickable now: ~80 items; many small, several large. Sort within Disc roadmap separately.)
+| #             | Title                                    | Category            | Why pickable                                                   | Effort |
+| ------------- | ---------------------------------------- | ------------------- | -------------------------------------------------------------- | ------ |
+| #6083         | Advanced migration workflows             | docs                | Branches, squashing, partial application — narrative + recipes | M      |
+| #4319         | Run migrations in IO process             | migrations, perf    | Engine perf; matters at >1000-object schemas                   | M      |
+| #5713         | Inserts in migration slower than outside | migration, perf     | Profile `migration/engine.ts`; likely identical issue          | M      |
+| #5322         | Schema comparison slow for large schemas | migration, perf     | Linearize ours against quadratic in `migration/differ.ts`      | M      |
+| #1772 / #1461 | RFC1000 migration features               | migration           | Audit our diff generator vs. RFC                               | L      |
+| #5190         | Backport migration rewrites              | migration           | We don't have versioned rewrites yet                           | M      |
+| #3761         | "Compact" migrations / push command      | migration, devtools | Already partially in `767afb7`; finish push                    | S      |
+| #6697         | In-place major version upgrades          | migration           | Big — port pg_dump/pg_restore based path                       | L      |
+
+#### Auth & access (5)
+
+| #     | Title                                        | Category        | Why pickable                                             | Effort |
+| ----- | -------------------------------------------- | --------------- | -------------------------------------------------------- | ------ |
+| #6432 | Access policy management features            | auth, devtools  | UI-side schema browser shows them; add introspection API | M      |
+| #7103 | Missing deletion policies in auth ext        | auth, db        | Cascade rules in our `auth/schema.ts`                    | S      |
+| #5504 | UNLESS CONFLICT misbehaves w/o select access | auth, db        | Access-policy × conflict-resolution edge case            | M      |
+| #8811 | Audit stdlib for permissions                 | auth, db        | Run through our `std::*` implementations                 | M      |
+| #8909 | In-place upgrades & auth update              | auth, migration | Tied to #6697                                            | M      |
+
+#### DB / perf / engine (6)
+
+| #             | Title                                             | Category      | Why pickable                                    | Effort |
+| ------------- | ------------------------------------------------- | ------------- | ----------------------------------------------- | ------ |
+| #5641         | Complex schema → missing FROM-clause              | migration, db | Smoke test & fix                                | M      |
+| #4215         | Migrate type of computed global                   | migration     | Likely needs a code path                        | M      |
+| #2204         | Migrations not propagated to existing connections | migration     | Schema-version bump notify                      | M      |
+| #3510         | External UUIDs                                    | db            | Add `id` override at schema level               | M      |
+| #5505 / #6517 | Access policies slow performance                  | auth, perf    | Profile `access/evaluator.ts` once usage scales | M      |
+| #1634         | Reduce cost of new connections                    | perf          | Connection pool warm-cache audit                | M      |
+
+#### CLI / devtools (5)
+
+| #     | Title                               | Category      | Why pickable                                                  | Effort |
+| ----- | ----------------------------------- | ------------- | ------------------------------------------------------------- | ------ |
+| #5911 | Run CLI programmatically            | cli           | Expose `cli/api.ts` with Deno-compatible programmatic surface | M      |
+| #3406 | Offline setup                       | devtools      | Bundle PG binary download manifest in tarball                 | M      |
+| #2651 | "Named instance" DX confusion       | cli, devtools | Naming review pass                                            | S      |
+| #9117 | gel-py command on Windows 11        | cli           | Cross-platform CLI — verify we handle Windows correctly       | M      |
+| #4308 | Modify stdlib during minor upgrades | migration, db | Standard library versioning story                             | M      |
+
+#### Cloud / infra (5)
+
+| #     | Title                        | Category        | Why pickable                           | Effort |
+| ----- | ---------------------------- | --------------- | -------------------------------------- | ------ |
+| #4901 | Docker latest tag mismatch   | cloud           | Fix our release CI tagging             | S      |
+| #5699 | Push images to GHCR          | cloud, devtools | Already in GHCR? Verify                | S      |
+| #4806 | PR preview environments      | cloud           | Uffizzi-style; nice-to-have            | M      |
+| #6598 | Multi-tenant logging         | cloud           | Add tenant tag to log lines            | M      |
+| #3534 | Listen on multiple TCP ports | infra           | Niche; only when self-host requests it | M      |
+
+#### Docs (3)
+
+| #                     | Title                              | Category | Why pickable                   | Effort |
+| --------------------- | ---------------------------------- | -------- | ------------------------------ | ------ |
+| #6127                 | Test guide                         | docs     | We have tests; write the guide | S      |
+| #6119 / #5820 / #5819 | Document UI / UI button visibility | docs     | UI documentation pass          | S      |
+| #7382                 | Improved docs search               | docs     | Search infra; deferrable       | M      |
+
+#### Stretch (2)
+
+| #     | Title              | Category    | Why pickable                                 | Effort |
+| ----- | ------------------ | ----------- | -------------------------------------------- | ------ |
+| #648  | SQLite back-end    | db, storage | Stretch — Disc is Postgres-first; deferrable | L      |
+| #7724 | Extension upgrades | migration   | We have an extension model already           | M      |
+
+**Pickable: ~33 items.** Highest-leverage clusters:
+
+1. **Migration perf** — #5713 + #5322 + #4319 (three M items, real user pain on large schemas)
+2. **Auth semantics** — #7103 + #5504 + #8811 (small surface, real bugs)
+3. **CLI/devtools polish** — #5911 + #3406 + #2651 (adoption levers)
 
 ### SKIP — not applicable to Disc
 
