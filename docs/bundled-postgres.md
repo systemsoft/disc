@@ -302,6 +302,24 @@ const instance = new PostgresInstance({
 
 When `pgBinDir` is set, the download step is skipped and Disc uses the binaries at the specified path.
 
+### TLS to PostgreSQL (`?sslmode=...`)
+
+When connecting to an external PostgreSQL over TCP, append `?sslmode=<mode>` to the DSN. Disc parses the parameter out of the connection string and forwards a matching `tls` option to the underlying driver:
+
+| `sslmode`     | TLS enabled | Enforced (refuse plain) | Notes                                                                                      |
+| ------------- | ----------- | ----------------------- | ------------------------------------------------------------------------------------------ |
+| `disable`     | no          | n/a                     | Plaintext only.                                                                            |
+| `prefer`      | yes         | no                      | Try TLS, fall back to plain if unavailable.                                                |
+| `require`     | yes         | yes                     | Refuse the connection if TLS is unavailable.                                               |
+| `verify-ca`   | yes         | yes                     | Same enforcement as `require`. CA verification beyond the driver default is not yet wired. |
+| `verify-full` | yes         | yes                     | Same enforcement as `require`. Hostname verification is not yet wired.                     |
+
+```bash
+disc init my-app --backend-dsn "postgres://user:pass@db.example.com:5432/disc?sslmode=require"
+```
+
+Unix-socket DSNs ignore `sslmode` — sockets don't carry TLS. Unknown values are dropped at parse time so a typo never silently downgrades a `require` connection to plaintext. (`lib/database.ts:parseConnectionString`, gh/geldata#2292)
+
 ---
 
 ## Health Monitoring

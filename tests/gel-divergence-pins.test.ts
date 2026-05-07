@@ -211,6 +211,111 @@ Deno.test("Gel #3170: CLI does not log 'disconnected' on shutdown", async () => 
   }
 });
 
+// ---------------------------------------------------------------------------
+// gh/geldata#5158 — `gel project init` timeout. Gel's CLI made a long
+// network call mid-init (downloading binaries, contacting cloud) without a
+// resumable contract, so a flaky network left the project half-initialized
+// and the user with no clear way forward.
+//
+// Disc's `disc init` writes the project skeleton (including `disc.toml`)
+// *before* touching PostgreSQL — even when the bundled-PG download fails,
+// the project directory is left valid and the operator gets a clear
+// "re-run `disc start`" hint. This pin asserts the file-creation step
+// happens before the PG-setup step in `cli/init.ts:execute` so a future
+// reorder can't regress the resumability guarantee.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #5158: disc init writes project files before PG setup", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../cli/init.ts", import.meta.url),
+  );
+  const filesIdx = src.indexOf("await this.createProjectFiles");
+  const pgIdx = src.indexOf("await this.initializePostgres");
+  assert(filesIdx > 0 && pgIdx > 0, "expected both calls in init.ts");
+  assert(
+    filesIdx < pgIdx,
+    "createProjectFiles must run before initializePostgres so a PG failure leaves a resumable project",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#5480 — `ClientConnectionFailedError` on certain networks.
+// Gel's cloud client reported a single failed connect attempt as a fatal
+// error, so transient DNS/IPv6 hiccups surfaced as user-facing crashes.
+// Disc's `DatabaseConnection` retries `maxRetries` times with a configurable
+// `retryDelay` between attempts (default: 3 × 1s). This pin keeps the retry
+// loop in place — a refactor that drops it would re-introduce the same
+// brittleness.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #5480: database connect retries on transient failure", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../lib/database.ts", import.meta.url),
+  );
+  // Look for `for (let attempt = 1; attempt <= maxRetries; attempt++)` —
+  // the retry loop's structural shape.
+  assert(
+    /for\s*\(\s*let\s+attempt\s*=\s*1\s*;\s*attempt\s*<=\s*maxRetries/.test(
+      src,
+    ),
+    "DatabaseConnection.connect must keep its retry loop (Gel #5480 pin)",
+  );
+  // Default of 3 attempts — operators can override but the floor stays.
+  assert(
+    /this\.config\.maxRetries\s*\|\|\s*3/.test(src),
+    "DatabaseConnection retry default must remain 3 (Gel #5480 pin)",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#8762 — auto project init leaves bad state. Gel's reported
+// failure mode: `gel project init` errored mid-flight (network / port
+// conflict / partial schema) without rolling back, so the next `gel ...`
+// invocation tripped over the half-written state. The user had to manually
+// scrub artifacts before they could retry.
+//
+// Disc takes the opposite approach: write `disc.toml` *first* and never
+// roll it back on failure. The init script's catch block emits a clear
+// hint pointing the operator at `disc start` from inside the project to
+// resume PG setup — the project itself stays valid. This pin asserts the
+// hint stays in place so a future refactor that swallows the message
+// won't ship.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #8762: disc init resumability hint stays in place", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../cli/init.ts", import.meta.url),
+  );
+  // The hint must mention `disc start` and reference the project dir
+  // so the operator knows exactly what to run.
+  assert(
+    /disc start/.test(src) && /Project files were created/.test(src),
+    "init.ts catch block must surface the 'disc start' resume hint (Gel #8762 pin)",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#7972 — auth email button background color. Subsumed by
+// Bundle E (`brandColor` validated at config time + flows into branding
+// templates) and Bundle U (bulletproof CTA wraps the anchor in a `<table>`
+// with the brand color carried via the legacy `bgcolor` attribute, which
+// every email client honors). This pin asserts the brand color reaches
+// the `bgcolor` attribute in `auth/email-templates.ts:buttonHtml` so a
+// future template rewrite can't regress the Outlook-clickable cell.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #7972: brandColor reaches bgcolor on auth email CTAs", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../auth/email-templates.ts", import.meta.url),
+  );
+  // The CTA-button helper must compose the bg via `branding.brandColor`
+  // as the source and emit it via `bgcolor="${bg}"` on the `<td>`.
+  assert(
+    /branding\.brandColor/.test(src),
+    "email-templates.ts must read brandColor from the branding config (Gel #7972 pin)",
+  );
+  assert(
+    /bgcolor="\$\{[^}]+\}"/.test(src),
+    "email-templates.ts must emit a `bgcolor` attribute on CTA cells (Gel #7972 pin)",
+  );
+});
+
 Deno.test("Gel #3872: Deno.serve TLS surface does not expose cipher selection", () => {
   // Deno's runtime types live on `Deno`. We can't introspect rustls'
   // internal cipher list from user code, so we assert the structural

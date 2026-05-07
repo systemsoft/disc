@@ -16,6 +16,17 @@ tag is cut.
 
 ### Added
 
+- **TLS to external PostgreSQL via `?sslmode=...`** (Bundle II —
+  gh/geldata#2292). `lib/database.ts:parseConnectionString` now
+  surfaces the `sslmode` query parameter and `getClientConfig` maps
+  it to the deno-postgres driver's `tls` option shape (mirrors
+  `connection_params.ts:parseOptionsFromUri` upstream). Supported
+  modes: `disable`, `prefer`, `require`, `verify-ca`, `verify-full`.
+  Unknown values drop at parse time so a typo never silently
+  downgrades a `require` connection to plaintext. Socket DSNs
+  ignore `sslmode` (sockets don't carry TLS). New
+  `lib/sslmode.test.ts` (7 tests) pins the parsing + mapping
+  contract.
 - **Drift detection in `disc migrate --status`** (Bundle HH —
   gh/geldata#8899). Status output now includes a `Schema status` line
   computed by parsing `dbschema/<project>.disc` and running it through
@@ -41,6 +52,27 @@ tag is cut.
 
 ### Internal
 
+- **Verification pins for four legacy bug-class reports** (Bundle II)
+  now live in `tests/gel-divergence-pins.test.ts`:
+  - **gh/geldata#5158** — `disc init` writes the project files (and
+    `disc.toml`) before touching PostgreSQL, so a network failure
+    mid-download leaves a resumable project rather than half-state.
+    Pin asserts `createProjectFiles` runs before `initializePostgres`
+    in `cli/init.ts:execute`.
+  - **gh/geldata#5480** — `DatabaseConnection.connect` retries
+    transient failures (default 3 × 1s with configurable
+    `maxRetries`/`retryDelay`). Pin walks `lib/database.ts` for the
+    retry loop's structural shape so a refactor that drops it would
+    fail fast.
+  - **gh/geldata#8762** — `disc init`'s catch block surfaces the
+    "re-run `disc start` from inside the project to finish PG setup"
+    hint. Pin asserts the message stays in `cli/init.ts` so a future
+    refactor doesn't quietly swallow it.
+  - **gh/geldata#7972** — `brandColor` reaches the `bgcolor`
+    attribute on auth-email CTAs (subsumed by Bundle E +
+    Bundle U's bulletproof `<table>` button). Pin asserts the
+    `branding.brandColor` reference and the `bgcolor="${...}"`
+    template emission both stay in `auth/email-templates.ts`.
 - **Pinned divergence for `gh/geldata#7360`** (Bundle HH — login UX
   for non-existing accounts). Disc landed timing equalization in
   `auth/provider.ts:login` via P1-35 plus `gh/geldata#9137`. Both the

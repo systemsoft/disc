@@ -39,6 +39,13 @@ interface ParsedConnection {
   database: string;
   // deno-lint-ignore camelcase
   host_type?: "socket" | "tcp";
+  /**
+   * `sslmode` query parameter. Supported values mirror libpq + the
+   * deno-postgres driver: `disable`, `prefer`, `require`, `verify-ca`,
+   * `verify-full`. Anything else is left undefined (the driver
+   * defaults to `prefer` when omitted). (gh/geldata#2292)
+   */
+  sslmode?: "disable" | "prefer" | "require" | "verify-ca" | "verify-full";
 }
 
 /**
@@ -78,13 +85,52 @@ export function parseConnectionString(dsn: string): ParsedConnection {
 
   // Standard TCP DSN — safe for URL parser
   const url = new URL(dsn);
+  // gh/geldata#2292: surface `?sslmode=...` so the client config can
+  // map it to `tls: { enabled, enforce }`. The Deno postgres driver
+  // already understands these modes when the DSN is passed verbatim,
+  // but we've already destructured into an object form by here, so
+  // we re-derive the TLS hint explicitly.
+  const rawSslmode = url.searchParams.get("sslmode");
+  const sslmode = isValidSslmode(rawSslmode) ? rawSslmode : undefined;
   return {
     hostname: url.hostname || "localhost",
     port: url.port ? parseInt(url.port) : 5432,
     user: url.username || "postgres",
     password: url.password || "",
     database: url.pathname.slice(1) || "postgres",
+    sslmode,
   };
+}
+
+function isValidSslmode(
+  s: string | null,
+): s is "disable" | "prefer" | "require" | "verify-ca" | "verify-full" {
+  return s === "disable" || s === "prefer" || s === "require" ||
+    s === "verify-ca" || s === "verify-full";
+}
+
+/**
+ * Map a libpq-style `sslmode` value to the `tls` option shape the
+ * deno-postgres Client accepts. `prefer` is the driver's default when
+ * unset, so callers don't need to construct an explicit object for
+ * that mode — `undefined` here means "use the driver default".
+ * (gh/geldata#2292)
+ */
+export function sslmodeToTlsOptions(
+  sslmode: ParsedConnection["sslmode"],
+): { enabled: boolean; enforce: boolean; caCertificates: string[] } | undefined {
+  switch (sslmode) {
+    case "disable":
+      return { enabled: false, enforce: false, caCertificates: [] };
+    case "prefer":
+      return { enabled: true, enforce: false, caCertificates: [] };
+    case "require":
+    case "verify-ca":
+    case "verify-full":
+      return { enabled: true, enforce: true, caCertificates: [] };
+    default:
+      return undefined;
+  }
 }
 
 export class DatabaseConnection {
@@ -110,6 +156,7 @@ export class DatabaseConnection {
     if (this.config.connectionString) {
       const parsed = parseConnectionString(this.config.connectionString);
       if (parsed.host_type === "socket") {
+        // Socket connections never use TLS; the driver enforces this.
         return {
           hostname: parsed.hostname,
           user: parsed.user,
@@ -119,6 +166,11 @@ export class DatabaseConnection {
           applicationName,
         };
       }
+      // gh/geldata#2292: forward TLS hints derived from `?sslmode=...`
+      // so TCP connections honor the operator's transport-security
+      // requirement instead of silently falling back to the driver
+      // default.
+      const tls = sslmodeToTlsOptions(parsed.sslmode);
       return {
         hostname: parsed.hostname,
         port: parsed.port,
@@ -126,6 +178,7 @@ export class DatabaseConnection {
         password: parsed.password,
         database: parsed.database,
         applicationName,
+        ...(tls ? { tls } : {}),
       };
     }
 
