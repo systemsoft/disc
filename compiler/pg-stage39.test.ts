@@ -53,7 +53,8 @@ Deno.test({
       const parseResult = manager.parseSDL(sdl);
       assertEquals(parseResult.ok, true);
 
-      const schema = manager.modulesToSchema(parseResult.value);
+      if (!parseResult.ok) throw parseResult.error;
+  const schema = manager.modulesToSchema(parseResult.value);
 
       // Use introspection to verify annotations propagated
       const typeDesc = describeType(schema, "Article");
@@ -100,10 +101,14 @@ Deno.test({
       const parseResult = manager.parseSDL(sdl);
       assertEquals(parseResult.ok, true);
 
-      const schema = manager.modulesToSchema(parseResult.value);
+      if (!parseResult.ok) throw parseResult.error;
+  const schema = manager.modulesToSchema(parseResult.value);
 
       // Generate TypeScript
       const generator = new TypeScriptGenerator(schema, {
+        schemaSource: "",
+        target: "client" as const,
+        includeMutations: false,
         outputDir: "./generated",
         formatOutput: true,
         includeQueryBuilders: false,
@@ -165,7 +170,8 @@ Deno.test({
       const parseResult = manager.parseSDL(sdl);
       assertEquals(parseResult.ok, true);
 
-      const schema = manager.modulesToSchema(parseResult.value);
+      if (!parseResult.ok) throw parseResult.error;
+  const schema = manager.modulesToSchema(parseResult.value);
 
       // Verify abstract annotations collected
       assertExists(schema.abstractAnnotations);

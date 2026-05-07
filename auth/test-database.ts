@@ -152,7 +152,6 @@ export class TestDatabase implements DatabaseInterface {
     const rightAlias = fromMatch[4];
     const joinLeftAlias = fromMatch[5];
     const joinLeftCol = fromMatch[6];
-    const _joinRightAlias = fromMatch[7];
     const joinRightCol = fromMatch[8];
 
     const leftRows = this.tables.get(leftTable) || [];

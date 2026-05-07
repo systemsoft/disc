@@ -16,6 +16,56 @@ tag is cut.
 
 ### Fixed
 
+- **Test-file TS errors cleared — `deno check` is now clean across the
+  whole project** (Bundle KK). Bundle JJ fixed the four originally
+  flagged production-source errors but unblocked compilation surfaced
+  ~150 more across 51 test/legacy files. This bundle drives that down
+  to zero. Notable changes:
+  - **`LoginResult` union narrowing.** `auth/types.ts` now exports
+    `isAuthResponse(result)` and `requireAuthResponse(result)` so
+    tests can chain `.user`/`.token`/`.session` access after a single
+    narrow rather than scattering type guards throughout. Applied to
+    `auth/provider.test.ts`, `auth/anonymous.test.ts`,
+    `auth/pg-integration.test.ts`, `auth/roles.test.ts` (21 errors).
+  - **Result `<T, E>` narrowing.** Tests that called
+    `parseResult.value` without first narrowing via
+    `if (!parseResult.ok) throw parseResult.error;` now do — applied
+    to compiler test fixtures across cal-types, annotations-stage39,
+    tuple-access, pg-stage39, link-inheritance, pg-phase23,
+    collection-types, secret-annotation, with-module,
+    schema-export, sdl-serializer (32 errors).
+  - **`Query` AST union narrowing.** `compiler/polymorphic.test.ts`
+    and `compiler/tuple-access.test.ts` cast their parser results
+    via `as SelectQuery` so `.expr` and `.shape` access type-checks
+    (18 errors).
+  - **`LinkDef.computed` propagation.** Bundle JJ added the field;
+    Bundle KK threads it through the SDL converter so REST-route
+    synthesis sees it.
+  - **Legacy `protocol/server.ts` + `protocol/connection.ts` shims.**
+    Both files target an older SCRAM API (`generateStoredKeys`,
+    `ScramServer` class) that the live binary-protocol path
+    superseded. Added compile-only shims in `protocol/scram.ts` so
+    the dead code still type-checks; production imports remain on
+    the functional API.
+  - **Inline AST literals fixed.** `compiler/compiler.test.ts`,
+    `migration/computed-properties.test.ts` now include the required
+    `kind`/`type` discriminators on `Literal`, `FunctionArg`,
+    `PathStep`, and `OrderByClause` nodes.
+  - **`MigrationConfig` / `MigrationEngine` constructor** call sites
+    in `migration/scalar-cascade.test.ts`, `migration/unsafe-gate.test.ts`,
+    `migration/rewrite.test.ts` now pass the required fields
+    (`migrationsDir`, `schemaFile`, `databaseUrl`, `dryRun`,
+    `autoApprove`, `backupBeforeMigration`, `rollbackOnError`).
+  - **`PostgresBinaryDownloader` etc.** Misc smaller fixes:
+    deno-postgres `applicationName` thread-through, abstract types
+    use `tableName: ""` placeholder, unused-variable cleanups across
+    auth-e2e, auth-integration, sdk/types, sdk/client,
+    extension-integration, query-execution, trigger, wire-integration,
+    operators-stage37, pg-stage38, enum-literal, schema-reload,
+    database-routing, websocket, migrations-endpoint, subscription,
+    binary-server.
+  - **Net result**: full project (excluding `ui/` Bun-managed code)
+    type-checks under `deno check` with zero errors. Lint clean.
 - **Pre-existing TS errors blocking `deno check` cleared** (Bundle JJ).
   Four production-source files now pass `deno check` for the first
   time in months:

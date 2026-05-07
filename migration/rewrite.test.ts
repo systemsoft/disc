@@ -906,7 +906,6 @@ Deno.test("End-to-end - schema with rewrite extracts to compiler context (Rewrit
   `);
 
   const schemaManager = new SchemaManager({
-    projectDir: "/tmp/disc-test",
     dryRun: true,
   });
   const schema = schemaManager.modulesToSchema(modules);

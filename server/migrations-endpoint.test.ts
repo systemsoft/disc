@@ -35,6 +35,7 @@ function entry(
     durationMs: 7,
     createdAt: new Date("2026-01-01T00:00:00Z"),
     dataMigration: false,
+    appliedOrder: 1,
     ...overrides,
   };
 }

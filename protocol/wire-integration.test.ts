@@ -32,7 +32,6 @@ import {
   OutputFormat,
   PROTOCOL_MAJOR_VERSION,
   PROTOCOL_MINOR_VERSION,
-  TransactionState,
 } from "./enums.ts";
 import { createTestSchema } from "../compiler/context.ts";
 import { buildClientFinalMessage, buildClientFirstMessage } from "./scram.ts";

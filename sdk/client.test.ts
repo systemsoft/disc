@@ -2,18 +2,14 @@
 import {
   assertEquals,
   assertInstanceOf,
-  assertRejects,
-  assertStringIncludes,
-} from "@std/assert";
+  assertRejects,} from "@std/assert";
 
 import { createClient, DiscClient } from "./client.ts";
 import {
   DiscAuthError,
   DiscConnectionError,
   DiscQueryError,
-  DiscServerError,
-  DiscTimeoutError,
-} from "./errors.ts";
+  DiscServerError,} from "./errors.ts";
 
 // --- Mock fetch helper ---
 
@@ -357,7 +353,7 @@ Deno.test("client - custom headers are sent", async () => {
 
 Deno.test("client - transaction commits on success", async () => {
   const calls: string[] = [];
-  const restore = mockFetch((url, init) => {
+  const restore = mockFetch((url, _init) => {
     if (url.endsWith("/transaction/begin")) {
       calls.push("begin");
       return new Response(JSON.stringify({ transactionId: "tx-1" }));

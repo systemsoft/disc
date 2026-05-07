@@ -180,6 +180,9 @@ Deno.test("Stage 39 - codegen: type-level @description in interface JSDoc", () =
   ]);
 
   const generator = new TypeScriptGenerator(schema, {
+    schemaSource: "",
+    target: "client" as const,
+    includeMutations: false,
     outputDir: "./generated",
     formatOutput: true,
     includeQueryBuilders: false,
@@ -222,6 +225,9 @@ Deno.test("Stage 39 - codegen: property-level @description in JSDoc tag", () => 
   const schema = makeSchema([makeType("User", { properties })]);
 
   const generator = new TypeScriptGenerator(schema, {
+    schemaSource: "",
+    target: "client" as const,
+    includeMutations: false,
     outputDir: "./generated",
     formatOutput: true,
     includeQueryBuilders: false,
@@ -241,6 +247,9 @@ Deno.test("Stage 39 - codegen: no @description when no annotations", () => {
   const schema = makeSchema([makeType("User")]);
 
   const generator = new TypeScriptGenerator(schema, {
+    schemaSource: "",
+    target: "client" as const,
+    includeMutations: false,
     outputDir: "./generated",
     formatOutput: true,
     includeQueryBuilders: false,
@@ -373,6 +382,7 @@ Deno.test("Stage 39 - SchemaManager: annotations extracted from SDL type/propert
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true);
 
+  if (!parseResult.ok) throw parseResult.error;
   const schema = manager.modulesToSchema(parseResult.value);
 
   // Check type-level annotation
@@ -407,6 +417,7 @@ Deno.test("Stage 39 - SchemaManager: abstract annotation declarations collected 
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true);
 
+  if (!parseResult.ok) throw parseResult.error;
   const schema = manager.modulesToSchema(parseResult.value);
   assertEquals(schema.abstractAnnotations !== undefined, true);
   assertEquals(schema.abstractAnnotations!.has("custom_note"), true);

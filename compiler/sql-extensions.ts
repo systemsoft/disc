@@ -290,7 +290,8 @@ export function generateOrderItem(item: OrderItem): string {
 // Placeholder functions to be integrated with main SQL module
 function generateSQL(statement: SQL.SQLStatement): string {
   // This would call the main SQL generation function
-  return statement.toSQL ? statement.toSQL() : JSON.stringify(statement);
+  const stmt = statement as { toSQL?: () => string };
+  return stmt.toSQL ? stmt.toSQL() : JSON.stringify(statement);
 }
 
 function generateExpression(expr: SQL.SQLExpression): string {

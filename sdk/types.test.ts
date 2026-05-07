@@ -2,8 +2,6 @@
 import { assertEquals, assertExists } from "@std/assert";
 
 import type {
-  AuthManagerOptions,
-  AuthResponse,
   AuthTokens,
   AuthUser,
   DiscClientConfig,
@@ -15,12 +13,8 @@ import type {
   QueryRequest,
   QueryResponse,
   RegisterData,
-  ServerStats,
-  SubscriptionCallbacks,
   SubscriptionClientConfig,
-  SubscriptionHandle,
   SubscriptionMessage,
-  SubscriptionRequest,
   TransactionState,
 } from "./types.ts";
 

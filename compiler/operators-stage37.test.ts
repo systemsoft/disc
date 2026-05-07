@@ -8,7 +8,6 @@
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import { assertThrows } from "@std/assert/throws";
 import { EdgeQLLexer } from "../edgeql/lexer.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { TokenType } from "../edgeql/tokens.ts";

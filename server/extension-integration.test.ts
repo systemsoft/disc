@@ -15,6 +15,7 @@ import {
   assertRejects,
 } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { BaseExtension } from "../extensions/base-extension.ts";
+import { getLogger } from "../lib/logger.ts";
 import type {
   ExtensionContext,
   ExtensionMetadata,
@@ -231,7 +232,7 @@ Deno.test({
       // No extensionRoutes — should default to empty map
     });
 
-    const _sp = server.start();
+    void server.start();
     await new Promise((r) => setTimeout(r, 200));
 
     try {
@@ -272,12 +273,7 @@ Deno.test({
         enableCors: true,
         enableWebsockets: false,
       },
-      logger: {
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        error: () => {},
-      },
+      logger: getLogger("test"),
     });
 
     assert(ext.initializeCalled, "initialize() should have been called");
@@ -307,12 +303,7 @@ Deno.test({
         enableCors: true,
         enableWebsockets: false,
       },
-      logger: {
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        error: () => {},
-      },
+      logger: getLogger("test"),
     });
 
     assertEquals(ext.shutdownCalled, false);
@@ -336,7 +327,7 @@ Deno.test({
     const ext = new RouteExtension();
     const server = createExtHttpServer(port, ext);
 
-    const _sp = server.start();
+    void server.start();
     await new Promise((r) => setTimeout(r, 200));
 
     try {
@@ -379,7 +370,7 @@ Deno.test({
     const ext = new RouteExtension();
     const server = createExtHttpServer(port, ext);
 
-    const _sp = server.start();
+    void server.start();
     await new Promise((r) => setTimeout(r, 200));
 
     try {
@@ -417,7 +408,7 @@ Deno.test({
       () => Promise.resolve(healthMap),
     );
 
-    const _sp = server.start();
+    void server.start();
     await new Promise((r) => setTimeout(r, 200));
 
     try {
@@ -461,12 +452,7 @@ Deno.test({
             enableCors: true,
             enableWebsockets: false,
           },
-          logger: {
-            debug: () => {},
-            info: () => {},
-            warn: () => {},
-            error: () => {},
-          },
+          logger: getLogger("test"),
         }),
       Error,
       "failing",
@@ -497,12 +483,7 @@ Deno.test({
         enableCors: true,
         enableWebsockets: false,
       },
-      logger: {
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        error: () => {},
-      },
+      logger: getLogger("test"),
     });
 
     const functions = registry.getAllFunctions();
@@ -541,12 +522,7 @@ Deno.test({
         enableCors: true,
         enableWebsockets: false,
       },
-      logger: {
-        debug: () => {},
-        info: () => {},
-        warn: () => {},
-        error: () => {},
-      },
+      logger: getLogger("test"),
     };
 
     await registry.initializeAll(ctx);
@@ -577,7 +553,7 @@ Deno.test({
     const ext = new RouteExtension();
     const server = createExtHttpServer(port, ext);
 
-    const _sp = server.start();
+    void server.start();
     await new Promise((r) => setTimeout(r, 200));
 
     try {

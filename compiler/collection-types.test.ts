@@ -243,7 +243,7 @@ Deno.test("Validator - tuple with 0 params is rejected", () => {
 
 Deno.test("DDL - array<str> maps to TEXT[]", () => {
   const ddl = new DDLGenerator();
-  const ops: MigrationTypes.MigrationOperation[] = [
+  const ops: MigrationTypes.CreateTypeOperation[] = [
     {
       kind: "CreateType",
       typeName: "Config",
@@ -268,7 +268,7 @@ Deno.test("DDL - array<str> maps to TEXT[]", () => {
 
 Deno.test("DDL - array<int64> maps to BIGINT[]", () => {
   const ddl = new DDLGenerator();
-  const ops: MigrationTypes.MigrationOperation[] = [
+  const ops: MigrationTypes.CreateTypeOperation[] = [
     {
       kind: "CreateType",
       typeName: "Config",
@@ -293,7 +293,7 @@ Deno.test("DDL - array<int64> maps to BIGINT[]", () => {
 
 Deno.test("DDL - tuple<str, int64> maps to JSONB", () => {
   const ddl = new DDLGenerator();
-  const ops: MigrationTypes.MigrationOperation[] = [
+  const ops: MigrationTypes.CreateTypeOperation[] = [
     {
       kind: "CreateType",
       typeName: "Config",

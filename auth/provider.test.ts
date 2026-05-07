@@ -6,6 +6,7 @@ import {
   AuthErrorCode,
   LoginCredentials,
   RegisterData,
+  requireAuthResponse,
 } from "./types.ts";
 import { TestDatabase } from "./test-database.ts";
 import { configureLogging } from "../lib/logger.ts";
@@ -152,7 +153,7 @@ describe("AuthProvider", () => {
         password: "MyPassword123!",
       };
 
-      const response = await provider.login(credentials);
+      const response = requireAuthResponse(await provider.login(credentials));
 
       assertExists(response.user);
       assertEquals(response.user.email, "login@example.com");
@@ -166,7 +167,7 @@ describe("AuthProvider", () => {
         password: "MyPassword123!",
       };
 
-      const response = await provider.login(credentials);
+      const response = requireAuthResponse(await provider.login(credentials));
 
       assertExists(response.user);
       assertEquals(response.user.username, "loginuser");
@@ -370,7 +371,7 @@ describe("AuthProvider", () => {
         email: "revoke@example.com",
         password: "RevokePass123!",
       };
-      const response2 = await provider.login(credentials);
+      const response2 = requireAuthResponse(await provider.login(credentials));
 
       // Revoke all sessions
       await provider.revokeAllSessions(response1.user.id);
@@ -400,10 +401,10 @@ describe("AuthProvider", () => {
     });
 
     it("should update password successfully", async () => {
-      const response = await provider.login({
+      const response = requireAuthResponse(await provider.login({
         email: "password@example.com",
         password: "OldPassword123!",
-      });
+      }));
 
       await provider.updatePassword(
         response.user.id,
@@ -423,18 +424,18 @@ describe("AuthProvider", () => {
       );
 
       // New password should work
-      const newLogin = await provider.login({
+      const newLogin = requireAuthResponse(await provider.login({
         email: "password@example.com",
         password: "NewPassword456!",
-      });
+      }));
       assertExists(newLogin.user);
     });
 
     it("should require correct old password for update", async () => {
-      const response = await provider.login({
+      const response = requireAuthResponse(await provider.login({
         email: "password@example.com",
         password: "OldPassword123!",
-      });
+      }));
 
       await assertRejects(
         () =>
@@ -459,10 +460,10 @@ describe("AuthProvider", () => {
       await provider.resetPassword(resetToken, "ResetPassword789!");
 
       // Login with new password
-      const response = await provider.login({
+      const response = requireAuthResponse(await provider.login({
         email: "password@example.com",
         password: "ResetPassword789!",
-      });
+      }));
       assertExists(response.user);
     });
 
@@ -678,11 +679,11 @@ describe("AuthProvider", () => {
         email: "loginmeta@example.com",
         password: "GoodPass123!",
       });
-      const response = await provider.login({
+      const response = requireAuthResponse(await provider.login({
         email: "loginmeta@example.com",
         password: "GoodPass123!",
         meta: { ipAddress: "198.51.100.4", userAgent: "ua-2" },
-      });
+      }));
 
       const sessions = await db.query(
         "SELECT ip_address, user_agent FROM sessions WHERE id = ?",

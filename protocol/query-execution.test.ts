@@ -11,9 +11,8 @@
  *   - Connection state across multiple queries
  */
 
-import { assertEquals, assertNotEquals } from "@std/assert";
+import { assertEquals } from "@std/assert";
 import {
-  BinaryConnection,
   BinaryProtocolServer,
   GEL_ERROR_CODES,
   mapErrorToGelCode,

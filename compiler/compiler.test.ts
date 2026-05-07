@@ -1129,13 +1129,18 @@ Deno.test("OVER enforcement - non-window function with OVER throws error", () =>
       kind: "WindowFunctionCall",
       name: { kind: "QualifiedName", parts: ["len"] },
       args: [{
+        kind: "FunctionArg",
         name: undefined,
         value: { kind: "Literal", type: "string", value: "hello" },
       }],
       over: {
         kind: "WindowOverClause",
         orderBy: [{
-          expr: { kind: "Path", steps: [{ type: "property", name: "name" }] },
+          kind: "OrderByClause",
+          expr: {
+            kind: "Path",
+            steps: [{ kind: "PathStep", type: "property", name: "name" }],
+          },
           direction: "ASC",
         }],
       },

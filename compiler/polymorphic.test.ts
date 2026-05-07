@@ -11,6 +11,7 @@
 
 import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
 import { EdgeQLParser } from "../edgeql/parser.ts";
+import type { SelectQuery } from "../edgeql/ast.ts";
 import { EdgeQLCompiler } from "./compiler.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import { CompilationError } from "../lib/errors.ts";
@@ -287,7 +288,7 @@ Deno.test("polymorphic - parse [IS Type] type intersection in path", () => {
 
   // The SELECT expr should be a path with a type_intersection step
   assertEquals(ast.kind, "SelectQuery");
-  const selectQuery = ast;
+  const selectQuery = ast as SelectQuery;
   const expr = selectQuery.expr;
 
   // The parser produces a Path: Shape -> [IS Circle]
@@ -310,7 +311,7 @@ Deno.test("polymorphic - parse polymorphic shape field [IS Type].property", () =
   const ast = parseEdgeQL("SELECT Shape { [IS Circle].radius }");
 
   assertEquals(ast.kind, "SelectQuery");
-  const selectQuery = ast;
+  const selectQuery = ast as SelectQuery;
   assertEquals(selectQuery.shape !== undefined, true);
 
   if (selectQuery.shape) {
@@ -481,7 +482,7 @@ Deno.test("polymorphic - IS with leaf type (Rectangle) uses simple equality", ()
 
 Deno.test("polymorphic - type intersection [IS Type] is distinct from array indexing", () => {
   // [IS Type] should produce a type_intersection path step
-  const astTypeIntersect = parseEdgeQL("SELECT Shape[IS Circle]");
+  const astTypeIntersect = parseEdgeQL("SELECT Shape[IS Circle]") as SelectQuery;
   assertEquals(astTypeIntersect.kind, "SelectQuery");
   if (astTypeIntersect.expr.kind === "Path") {
     const lastStep =
@@ -491,7 +492,7 @@ Deno.test("polymorphic - type intersection [IS Type] is distinct from array inde
   }
 
   // [0] should produce an IndexExpression (array indexing)
-  const astIndex = parseEdgeQL("SELECT Shape[0]");
+  const astIndex = parseEdgeQL("SELECT Shape[0]") as SelectQuery;
   assertEquals(astIndex.kind, "SelectQuery");
   // The expr should be an IndexExpression
   assertEquals(astIndex.expr.kind, "IndexExpression");

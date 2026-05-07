@@ -15,7 +15,9 @@ import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { DatabaseConnection } from "../lib/database.ts";
 import { PgDatabaseAdapter } from "./pg-database-adapter.ts";
 import { AuthProvider } from "./provider.ts";
-import { AuthError } from "./types.ts";
+import { AuthError ,
+  requireAuthResponse,
+} from "./types.ts";
 
 /** Drop auth tables for clean state */
 async function cleanupAuthTables(dsn: string): Promise<void> {
@@ -151,10 +153,10 @@ Deno.test({
       });
 
       // Login
-      const loginResponse = await provider.login({
+      const loginResponse = requireAuthResponse(await provider.login({
         email: "login-test@example.com",
         password: "mypassword123",
-      });
+      }));
 
       assertExists(loginResponse.token);
       assertEquals(loginResponse.user.email, "login-test@example.com");
@@ -334,10 +336,10 @@ Deno.test({
       await provider.resetPassword(resetToken, "newpassword456");
 
       // Login with new password
-      const loginResponse = await provider.login({
+      const loginResponse = requireAuthResponse(await provider.login({
         email: "reset-test@example.com",
         password: "newpassword456",
-      });
+      }));
       assertExists(loginResponse.token);
 
       // Old password should fail

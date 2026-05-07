@@ -8,7 +8,7 @@
  * Set DISC_PG_TEST_URL or DISC_PG_AUTO=1 to enable them.
  */
 
-import { assertEquals, assertExists } from "@std/assert";
+import { assertEquals } from "@std/assert";
 import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 

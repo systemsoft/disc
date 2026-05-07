@@ -195,6 +195,7 @@ Deno.test("WITH MODULE - Module scope does not leak to outer query", () => {
   const ast2 = parser2.parse();
   const result2 = compiler.compile(ast2);
   assertEquals(result2.ok, true);
+  if (!result2.ok) throw result2.error;
   const sql2 = codegen.generate(result2.value);
   assertStringIncludes(sql2, "users");
 });

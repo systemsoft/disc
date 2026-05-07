@@ -93,7 +93,7 @@ class WebSocketTestClient {
         this.socket!.onclose = (ev) => {
           this.connected = false;
           if (prevOnClose && typeof prevOnClose === "function") {
-            prevOnClose.call(this.socket, ev);
+            prevOnClose.call(this.socket!, ev);
           }
           resolve();
         };

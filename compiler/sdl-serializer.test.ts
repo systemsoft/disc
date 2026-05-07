@@ -26,7 +26,7 @@ function reparse(sdl: string): Schema {
   const mgr = new SchemaManager({ dryRun: true });
   const r = mgr.parseSDL(sdl);
   if (!r.ok) {
-    throw new Error(`re-parse failed: ${JSON.stringify(r.errors)}`);
+    throw new Error(`re-parse failed: ${JSON.stringify(r.error)}`);
   }
   return mgr.modulesToSchema(r.value);
 }

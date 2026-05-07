@@ -86,8 +86,8 @@ Deno.test("Schema Reload - handler receives schema update", () => {
   handler.updateSchema!(testSchema);
 
   assert(receivedSchema !== null, "Expected updateSchema to be called");
-  assertEquals(receivedSchema!.types.has("User"), true);
-  assertEquals(receivedSchema!.types.get("User")!.name, "User");
+  assertEquals((receivedSchema! as Schema).types.has("User"), true);
+  assertEquals((receivedSchema! as Schema).types.get("User")!.name, "User");
 });
 
 // ---------------------------------------------------------------------------
@@ -140,7 +140,7 @@ Deno.test("Schema Reload - DiscServer delegates updateSchema to handler", () => 
   );
 
   // Monkey-patch updateSchema on the handler to verify delegation
-  (handler as Record<string, unknown>).updateSchema = (schema: Schema) => {
+  (handler as unknown as Record<string, unknown>).updateSchema = (schema: Schema) => {
     delegatedSchema = schema;
   };
 
@@ -150,7 +150,7 @@ Deno.test("Schema Reload - DiscServer delegates updateSchema to handler", () => 
     delegatedSchema !== null,
     "Expected updateSchema to be delegated to handler",
   );
-  assertEquals(delegatedSchema!.types.has("Post"), true);
+  assertEquals((delegatedSchema! as Schema).types.has("Post"), true);
 });
 
 // ---------------------------------------------------------------------------
@@ -180,11 +180,11 @@ Deno.test("Schema Reload - SchemaManager callback fires after applySchema (dry-r
   assert(result.ok, "Expected applySchema to succeed");
   assert(callbackSchema !== null, "Expected onSchemaChange callback to fire");
   assert(
-    callbackSchema!.types.has("User"),
+    (callbackSchema! as Schema).types.has("User"),
     "Expected schema to contain User type",
   );
 
-  const userType = callbackSchema!.types.get("User")!;
+  const userType = (callbackSchema! as Schema).types.get("User")!;
   assertEquals(userType.tableName, "user");
   assert(
     userType.properties.has("name"),

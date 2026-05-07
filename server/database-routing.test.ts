@@ -258,7 +258,7 @@ Deno.test("backward compat - resolvePool returns handler pool when no registry",
   const handlerPool = { _tag: "handler" } as unknown as ConnectionPool;
 
   // Simulate resolvePool logic with no registry
-  const registry: DatabaseRegistry | undefined = undefined;
+  const registry = undefined as DatabaseRegistry | undefined;
   const context = makeContext({
     session: makeSession({ database: "anything" }),
   });
@@ -288,7 +288,7 @@ Deno.test("backward compat - no registry means all requests use default pool", (
       session: makeSession({ database: dbName }),
     });
 
-    const registry: DatabaseRegistry | undefined = undefined;
+    const registry = undefined as DatabaseRegistry | undefined;
     let resolvedPool: ConnectionPool | undefined;
     if (registry && context.session.database) {
       const entry = registry.getDatabase(context.session.database);

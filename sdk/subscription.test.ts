@@ -58,7 +58,8 @@ type GlobalWithWebSocket = typeof globalThis & {
 function installMockWebSocket(): () => void {
   const original = (globalThis as GlobalWithWebSocket).WebSocket;
   MockWebSocket.instances = [];
-  (globalThis as GlobalWithWebSocket).WebSocket = MockWebSocket;
+  // deno-lint-ignore no-explicit-any
+  (globalThis as any).WebSocket = MockWebSocket;
 
   return () => {
     (globalThis as GlobalWithWebSocket).WebSocket = original;

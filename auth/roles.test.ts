@@ -10,7 +10,9 @@ import {
 } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { AuthProvider } from "./provider.ts";
 import { TestDatabase } from "./test-database.ts";
-import { AuthError, AuthErrorCode } from "./types.ts";
+import { AuthError, AuthErrorCode ,
+  requireAuthResponse,
+} from "./types.ts";
 
 async function makeProvider(): Promise<{
   provider: AuthProvider;
@@ -182,10 +184,10 @@ Deno.test("login — JWT carries the user's roles", async () => {
     await provider.assignRole(auth.user.id, "admin");
     await provider.assignRole(auth.user.id, "viewer");
 
-    const login = await provider.login({
+    const login = requireAuthResponse(await provider.login({
       email: "u@example.com",
       password: "password123",
-    });
+    }));
     const payload = await provider.verifyToken(login.token);
     assert(payload.roles, "roles must be present in token payload");
     assertEquals(payload.roles!.sort(), ["admin", "viewer"]);
@@ -201,10 +203,10 @@ Deno.test("login — JWT omits roles claim when user has none", async () => {
       email: "u@example.com",
       password: "password123",
     });
-    const login = await provider.login({
+    const login = requireAuthResponse(await provider.login({
       email: "u@example.com",
       password: "password123",
-    });
+    }));
     const payload = await provider.verifyToken(login.token);
     // Either undefined or an empty array — both signal "no roles"
     if (payload.roles !== undefined) {
@@ -224,10 +226,10 @@ Deno.test("token snapshot — roles assigned after login do not affect existing 
       email: "u@example.com",
       password: "password123",
     });
-    const login = await provider.login({
+    const login = requireAuthResponse(await provider.login({
       email: "u@example.com",
       password: "password123",
-    });
+    }));
     // Assign role AFTER token issued
     await provider.assignRole(auth.user.id, "admin");
     const payload = await provider.verifyToken(login.token);
@@ -237,10 +239,10 @@ Deno.test("token snapshot — roles assigned after login do not affect existing 
       assertEquals(payload.roles.includes("admin"), false);
     }
     // But a fresh login picks it up.
-    const refreshed = await provider.login({
+    const refreshed = requireAuthResponse(await provider.login({
       email: "u@example.com",
       password: "password123",
-    });
+    }));
     const refreshedPayload = await provider.verifyToken(refreshed.token);
     assert(refreshedPayload.roles?.includes("admin"));
   } finally {

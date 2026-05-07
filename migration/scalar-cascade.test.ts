@@ -104,10 +104,13 @@ Deno.test("DDLGenerator: non-enum scalar names in registry are still subject to 
 
 Deno.test("MigrationEngine: planMigration sets enum scalars so generated DDL uses disc_enum_<name>", () => {
   const engine = new MigrationEngine({
-    autoApply: false,
+    migrationsDir: "",
+    schemaFile: "",
+    databaseUrl: "",
+    dryRun: true,
+    autoApprove: true,
     backupBeforeMigration: false,
-    requireConfirmation: false,
-    validateOperations: true,
+    rollbackOnError: false,
   } as Types.MigrationConfig);
 
   const newSchema = parseModules(

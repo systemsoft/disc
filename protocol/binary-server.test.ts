@@ -781,13 +781,18 @@ Deno.test("binary-server - BinaryConnection stmt cache is bounded (P0-09)", asyn
   // Fill past the cap to force eviction
   const cap = MAX_STATEMENT_CACHE_SIZE;
   for (let i = 0; i < cap + 10; i++) {
-    // @ts-expect-error private field access in test
-    bc.stmtCache.set(`query_${i}`, {
-      inputTypedescId: ZERO_UUID,
-      outputTypedescId: ZERO_UUID,
-      inputDescriptor: new Uint8Array(0),
-      outputDescriptor: new Uint8Array(0),
-      cardinality: Cardinality.MANY,
+    // deno-lint-ignore no-explicit-any
+    (bc as any).stmtCache.set(`query_${i}`, {
+      commandText: `query_${i}`,
+      inputDescId: ZERO_UUID,
+      outputDescId: ZERO_UUID,
+      inputDesc: new Uint8Array(0),
+      outputDesc: new Uint8Array(0),
+      outputFormat: 0,
+      resultCardinality: Cardinality.MANY,
+      commandStatus: "SELECT",
+      params: [],
+      outputShape: { kind: "scalar", isScalar: true },
     });
   }
 

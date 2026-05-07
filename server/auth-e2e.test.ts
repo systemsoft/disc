@@ -79,7 +79,7 @@ Deno.test({
     const { server, db, capturedContexts } = await createE2EServer(port);
     const base = `http://${TEST_HOST}:${port}`;
 
-    const _serverPromise = server.start();
+    void server.start();
     await new Promise((r) => setTimeout(r, 200));
 
     try {
@@ -100,9 +100,7 @@ Deno.test({
       assertEquals(registerBody.user.email, "e2e@test.com");
       assertEquals(registerBody.user.username, "e2euser");
 
-      const _token = registerBody.token;
       const refreshToken = registerBody.refreshToken;
-      const _sessionId = registerBody.session.id;
 
       // 2. Login (separate flow)
       const loginRes = await fetch(`${base}/auth/login`, {
@@ -185,7 +183,7 @@ Deno.test({
     const { server, db, capturedContexts } = await createE2EServer(port);
     const base = `http://${TEST_HOST}:${port}`;
 
-    const _serverPromise = server.start();
+    void server.start();
     await new Promise((r) => setTimeout(r, 200));
 
     try {
@@ -217,7 +215,7 @@ Deno.test({
     const { server, db } = await createE2EServer(port);
     const base = `http://${TEST_HOST}:${port}`;
 
-    const _serverPromise = server.start();
+    void server.start();
     await new Promise((r) => setTimeout(r, 200));
 
     try {

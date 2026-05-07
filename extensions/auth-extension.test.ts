@@ -10,9 +10,7 @@ import type { ExtensionContext } from "./types.ts";
 import type {
   AuthResponse,
   LoginCredentials,
-  RegisterData,
-  Session,
-  TokenPayload,
+  RegisterData,  TokenPayload,
   User,
 } from "../auth/types.ts";
 import type { AuthContext, RequestHandler } from "../auth/middleware.ts";

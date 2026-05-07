@@ -292,6 +292,32 @@ export interface MfaChallenge {
 export type LoginResult = AuthResponse | MfaChallenge;
 
 /**
+ * Type guard discriminating `LoginResult` into the authenticated
+ * `AuthResponse` branch. Use in code paths that expect a successful
+ * login (no MFA gate). Pairs with `requireAuthResponse` for tests
+ * that want to throw on the unexpected MFA-challenge case rather
+ * than narrow with an `if`.
+ */
+export function isAuthResponse(result: LoginResult): result is AuthResponse {
+  return !("mfaRequired" in result) || result.mfaRequired !== true;
+}
+
+/**
+ * Test/CLI helper: assert that a `LoginResult` is the authenticated
+ * branch and throw a clear error if it isn't. Returns the narrowed
+ * `AuthResponse` so callers can chain `result.user`/`.token`/etc.
+ * without further narrowing. (Bundle KK)
+ */
+export function requireAuthResponse(result: LoginResult): AuthResponse {
+  if (!isAuthResponse(result)) {
+    throw new Error(
+      "expected AuthResponse, got MfaChallenge — caller must complete the MFA flow first",
+    );
+  }
+  return result;
+}
+
+/**
  * Returned from `enrollTOTP()` so callers can render the QR code and
  * keep the secret around for `confirmTOTP()`. The secret is base32 —
  * authenticator apps consume it directly, and the URI is what's

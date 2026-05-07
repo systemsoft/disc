@@ -49,7 +49,8 @@ Deno.test("comparison operators emit the right EdgeQL operator", () => {
   for (const [method, op] of cases) {
     const compiled = from("Post")
       .select({ id: true })
-      .filter((p) => (p.score as Record<string, (v: number) => unknown>)[method](10))
+      // deno-lint-ignore no-explicit-any
+      .filter((p) => ((p.score as any)[method] as (v: number) => any)(10))
       .toEdgeQL();
     assertEquals(
       compiled.query,

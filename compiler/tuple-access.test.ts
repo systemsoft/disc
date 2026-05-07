@@ -5,6 +5,7 @@
 
 import { assertEquals } from "@std/assert";
 import { EdgeQLParser } from "../edgeql/parser.ts";
+import type { SelectQuery } from "../edgeql/ast.ts";
 import { EdgeQLCompiler } from "./compiler.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import { createTestSchema } from "./context.ts";
@@ -35,7 +36,7 @@ function parseEdgeQL(source: string) {
 // =========================================================================
 
 Deno.test("Tuple Access - Parse numeric index .0 on tuple", () => {
-  const ast = parseEdgeQL("SELECT (1, 2, 3).0");
+  const ast = parseEdgeQL("SELECT (1, 2, 3).0") as SelectQuery;
 
   assertEquals(ast.kind, "SelectQuery");
   const expr = ast.expr;
@@ -48,7 +49,7 @@ Deno.test("Tuple Access - Parse numeric index .0 on tuple", () => {
 });
 
 Deno.test("Tuple Access - Parse numeric index .2 on tuple", () => {
-  const ast = parseEdgeQL("SELECT (10, 20, 30).2");
+  const ast = parseEdgeQL("SELECT (10, 20, 30).2") as SelectQuery;
 
   assertEquals(ast.kind, "SelectQuery");
   const expr = ast.expr;
@@ -64,7 +65,7 @@ Deno.test("Tuple Access - Parse numeric index .2 on tuple", () => {
 // =========================================================================
 
 Deno.test("Tuple Access - Parse named field access .name", () => {
-  const ast = parseEdgeQL("SELECT (name := 'foo').name");
+  const ast = parseEdgeQL("SELECT (name := 'foo').name") as SelectQuery;
 
   assertEquals(ast.kind, "SelectQuery");
   const expr = ast.expr;
@@ -77,7 +78,7 @@ Deno.test("Tuple Access - Parse named field access .name", () => {
 });
 
 Deno.test("Tuple Access - Parse named field access .age", () => {
-  const ast = parseEdgeQL("SELECT (name := 'foo', age := 30).age");
+  const ast = parseEdgeQL("SELECT (name := 'foo', age := 30).age") as SelectQuery;
 
   assertEquals(ast.kind, "SelectQuery");
   const expr = ast.expr;

@@ -358,11 +358,11 @@ Deno.test("link inheritance - differ: link with extending extracted correctly", 
   const createUser = operations.find(
     (op) =>
       op.kind === "CreateType" &&
-      (op as { typeName: string }).typeName === "User",
+      (op as unknown as { typeName: string }).typeName === "User",
   );
   assertExists(createUser, "CreateType for User should exist");
 
-  const userOp = createUser as {
+  const userOp = createUser as unknown as {
     links: { name: string; extending?: string[] }[];
   };
   const friendsLink = userOp.links.find((l) => l.name === "friends");

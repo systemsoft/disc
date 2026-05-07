@@ -75,7 +75,7 @@ Deno.test("schema export - emitted SDL re-parses cleanly", async () => {
     const text = await Deno.readTextFile(schemaOut);
     const mgr = new SchemaManager({ dryRun: true });
     const result = mgr.parseSDL(text);
-    assert(result.ok, `re-parse failed: ${JSON.stringify(result.errors)}`);
+    if (!result.ok) throw new Error(`re-parse failed: ${JSON.stringify(result.error)}`);
     const schema = mgr.modulesToSchema(result.value);
     assert(schema.types.has("User") || schema.types.has("default::User"));
     assert(schema.types.has("Post") || schema.types.has("default::Post"));

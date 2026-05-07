@@ -31,21 +31,6 @@ function parseToModules(source: string): Module[] {
   return validator.convertToModules(doc);
 }
 
-/** Diff empty schema against the given SDL and return migration operations */
-function diffFromEmpty(source: string): Types.MigrationOperation[] {
-  const differ = new SchemaDiffer();
-  return differ.diff([], parseToModules(source));
-}
-
-/** Diff two SDL strings and return migration operations */
-function diffSchemas(
-  oldSource: string,
-  newSource: string,
-): Types.MigrationOperation[] {
-  const differ = new SchemaDiffer();
-  return differ.diff(parseToModules(oldSource), parseToModules(newSource));
-}
-
 /** Generate DDL from migration operations */
 function generateDDL(operations: Types.MigrationOperation[]): string[] {
   const generator = new DDLGenerator();

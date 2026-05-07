@@ -52,10 +52,13 @@ module default {
 function planUnsafeDelta(initialSdl: string, nextSdl: string) {
   const validator = new SchemaValidator();
   const engine = new MigrationEngine({
-    autoApply: false,
+    migrationsDir: "",
+    schemaFile: "",
+    databaseUrl: "",
+    dryRun: true,
+    autoApprove: true,
     backupBeforeMigration: false,
-    requireConfirmation: false,
-    validateOperations: true,
+    rollbackOnError: false,
   });
   const initialModules = validator.convertToModules(
     new SDLParser(initialSdl).parse(),

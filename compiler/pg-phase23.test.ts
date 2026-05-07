@@ -414,7 +414,10 @@ Deno.test({
       const shape: TypeDef = {
         name: "Shape",
         kind: "object",
-        // No `tableName` — abstract types have no physical table.
+        // Abstract types have no physical table; `tableName` is a
+        // placeholder empty string here (the production path skips
+        // tableName lookups for abstract types via the `abstract` flag).
+        tableName: "",
         abstract: true,
         subtypes: ["Circle", "Rectangle"],
         discriminatorColumn: "__type__",
@@ -614,7 +617,10 @@ Deno.test({
       const shape: TypeDef = {
         name: "Shape",
         kind: "object",
-        // No `tableName` — abstract types have no physical table.
+        // Abstract types have no physical table; `tableName` is a
+        // placeholder empty string here (the production path skips
+        // tableName lookups for abstract types via the `abstract` flag).
+        tableName: "",
         abstract: true,
         subtypes: ["Circle", "Rectangle"],
         discriminatorColumn: "__type__",
@@ -823,24 +829,23 @@ Deno.test({
       // Use the DDL generator to produce CREATE TABLE with __type__
       const { DDLGenerator } = await import("../migration/ddl.ts");
       const generator = new DDLGenerator();
-      const ddlStatements = generator.generateDDL([
-        {
-          kind: "CreateType",
-          typeName: "Animal",
-          properties: [
-            {
-              name: "name",
-              type: "str",
-              required: true,
-              multi: false,
-              constraints: [],
-              annotations: {},
-            },
-          ],
-          links: [],
-          subtypes: ["Dog", "Cat"],
-        },
-      ]);
+      const createOp: import("../migration/types.ts").CreateTypeOperation = {
+        kind: "CreateType",
+        typeName: "Animal",
+        properties: [
+          {
+            name: "name",
+            type: "str",
+            required: true,
+            multi: false,
+            constraints: [],
+            annotations: {},
+          },
+        ],
+        links: [],
+        subtypes: ["Dog", "Cat"],
+      };
+      const ddlStatements = generator.generateDDL([createOp]);
 
       // Execute the DDL
       for (const stmt of ddlStatements) {

@@ -48,7 +48,7 @@ export interface ExtensionRoute {
   handler: (
     request: Request,
     authContext?: ExtensionAuthContext,
-  ) => Promise<Response>;
+  ) => Response | Promise<Response>;
 }
 
 export interface ExtensionMiddleware {

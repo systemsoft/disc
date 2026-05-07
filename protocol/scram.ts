@@ -475,3 +475,52 @@ export async function buildClientFinalMessage(
 
 // Re-export helpers for testing
 export { fromBase64, generateNonce, toBase64 };
+
+// ---------------------------------------------------------------------------
+// Legacy OOP shims kept for `protocol/server.ts` and
+// `protocol/connection.ts`, which target an older API surface. Both
+// files are unused in the current binary-protocol path
+// (`protocol/binary-server.ts` is the live entry point); these shims
+// exist only so `deno check` doesn't fail on the dead-code imports.
+// (Bundle KK)
+// ---------------------------------------------------------------------------
+
+export async function generateStoredKeys(
+  _username: string,
+  password: string,
+): Promise<{
+  storedKey: Uint8Array;
+  serverKey: Uint8Array;
+  salt: Uint8Array;
+  iterations: number;
+}> {
+  const salt = textEncoder.encode(generateNonce());
+  const iterations = MIN_SCRAM_ITERATIONS;
+  const { storedKey, serverKey } = await deriveKeys(
+    password,
+    salt,
+    iterations,
+  );
+  return { storedKey, serverKey, salt, iterations };
+}
+
+export class ScramServer {
+  constructor(
+    public readonly storedKey: unknown,
+    public readonly serverKey: unknown,
+    public readonly salt: unknown,
+    public readonly iterations: number,
+  ) {}
+
+  processClientFirst(_clientFirst: string): string {
+    throw new Error(
+      "ScramServer.processClientFirst: legacy SCRAM API; use generateServerFirstMessage from this module instead",
+    );
+  }
+
+  processClientFinal(_clientFinal: string): string {
+    throw new Error(
+      "ScramServer.processClientFinal: legacy SCRAM API; use verifyClientFinalMessage from this module instead",
+    );
+  }
+}
