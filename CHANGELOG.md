@@ -109,6 +109,32 @@ tag is cut.
     and the four ordering invariants (CreateScalar-before-CreateType,
     DropScalar-after-AlterType, RecreateScalar-after-object-drops,
     AddEnumValue-grouped-with-creates).
+
+### Docs
+
+- **Documentation audit — high-severity gaps closed** (Bundle DD).
+  Three issues identified by an end-to-end audit of `docs/` against
+  current code state:
+  - `docs/access-policies.md` gained a "Deno-Permission-Aware
+    Policies" section covering `runtime::has_permission(<spec>)`
+    (Bundle P, shipped since 2026-05-06). The function and spec
+    grammar previously lived only in `docs/disc-original-features.md`,
+    so the main reference omitted the feature entirely.
+  - `docs/cli.md` `disc serve` table gained `--require-auth`,
+    `--read-only`, `--trust-proxy` flag rows (Bundle R/H), and the
+    env-var list gained `DISC_TLS_CERT_ENV`, `DISC_TLS_KEY_ENV`,
+    `DISC_REQUIRE_AUTH`, `DISC_READ_ONLY`, `DISC_TRUST_PROXY`,
+    `DISC_ENABLE_DATA_WATCH`, `DISC_ENABLE_REST`,
+    `DISC_SHUTDOWN_DRAIN_TIMEOUT`. The `disc build` section gained
+    a "Cross-platform PG staging" note explaining Bundle CC.
+  - `docs/future-triage.md` header now flags that the DONE/BUILD
+    snapshot predates Bundles I–CC; a new "post-Bundle-H sweep" table
+    enumerates the 21 bundles shipped after the snapshot was taken
+    and points readers at `CHANGELOG.md` `[Unreleased]` for the
+    authoritative current state.
+
+### Added
+
 - **Cross-platform reproducible builds for `disc build --platform`.**
   Bundle I shipped single-binary distribution by walking
   `<DISC_HOME>/postgres/<version>/` for the embedded PG manifest, but

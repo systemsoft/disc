@@ -178,17 +178,20 @@ disc serve [options]
 
 **Options:**
 
-| Flag                       | Description                                    | Default     |
-| -------------------------- | ---------------------------------------------- | ----------- |
-| `--port <port>`            | HTTP server port                               | `5656`      |
-| `--host <host>`            | Host to bind to                                | `localhost` |
-| `--jwt-secret <key>`       | JWT signing secret for authentication          | --          |
-| `--enable-auth`            | Enable the authentication system               | `false`     |
-| `--enable-access-policies` | Enable object-level access policy enforcement  | `false`     |
-| `--binary-port <port>`     | Start binary wire protocol server on this port | --          |
-| `--tls-cert <path>`        | Path to TLS certificate file                   | --          |
-| `--tls-key <path>`         | Path to TLS private key file                   | --          |
-| `--no-ui`                  | Start server without serving UI assets         | `false`     |
+| Flag                       | Description                                                           | Default     |
+| -------------------------- | --------------------------------------------------------------------- | ----------- |
+| `--port <port>`            | HTTP server port                                                      | `5656`      |
+| `--host <host>`            | Host to bind to                                                       | `localhost` |
+| `--jwt-secret <key>`       | JWT signing secret for authentication                                 | --          |
+| `--enable-auth`            | Enable the authentication system                                      | `false`     |
+| `--enable-access-policies` | Enable object-level access policy enforcement                         | `false`     |
+| `--binary-port <port>`     | Start binary wire protocol server on this port                        | --          |
+| `--tls-cert <path>`        | Path to TLS certificate file                                          | --          |
+| `--tls-key <path>`         | Path to TLS private key file                                          | --          |
+| `--no-ui`                  | Start server without serving UI assets                                | `false`     |
+| `--require-auth`           | Reject unauthenticated requests on protected routes (gh/geldata#5234) | `false`     |
+| `--read-only`              | Refuse INSERT/UPDATE/DELETE/DDL at the AST level                      | `false`     |
+| `--trust-proxy`            | Trust `X-Forwarded-For` / `X-Forwarded-Proto` headers for client IP   | `false`     |
 
 **Examples:**
 
@@ -231,6 +234,14 @@ disc serve --host 0.0.0.0
 - `DISC_TLS_CERT` -- Path to TLS certificate
 - `DISC_TLS_KEY` -- Path to TLS private key
 - `DATABASE_URL` -- PostgreSQL connection URL
+- `DISC_TLS_CERT_ENV` -- Name of an env var holding PEM cert contents (for K8s/Fly.io/Render env-only secret injection); materializes to a 0600 temp file
+- `DISC_TLS_KEY_ENV` -- Name of an env var holding PEM key contents
+- `DISC_REQUIRE_AUTH` -- Set to `"true"` / `"1"` / `"yes"` to require auth on protected routes (mirrors `--require-auth`)
+- `DISC_READ_ONLY` -- Set to `"true"` / `"1"` / `"yes"` to enable read-only mode (mirrors `--read-only`)
+- `DISC_TRUST_PROXY` -- Set to `"true"` / `"1"` / `"yes"` to trust forwarded headers (mirrors `--trust-proxy`)
+- `DISC_ENABLE_DATA_WATCH` -- Set to `"false"` to disable the live-data subscription endpoint (`/admin/data-watch`); default `true`
+- `DISC_ENABLE_REST` -- Set to `"false"` to disable the schema-derived REST surface; default `true`
+- `DISC_SHUTDOWN_DRAIN_TIMEOUT` -- Milliseconds to wait for in-flight connections to drain on SIGTERM
 
 ---
 
@@ -610,6 +621,10 @@ disc build --output ./my-disc
 # Cross-compile for Linux ARM64
 disc build --platform linux-arm64 --output ./disc-linux-arm64
 ```
+
+**Cross-platform PG staging:**
+
+When `--platform <p>` is set, `disc build` stages the target platform's PostgreSQL distribution into `dist/embedded-pg/<platform>/<version>/` before regenerating the embedded-PG manifest. The resulting binary embeds the right PG for its target — without this step, the build machine's host PG would be embedded into every cross-compiled binary, breaking on extraction. Per-platform staging caches are reused across builds, so producing all four platform binaries from a single CI runner only downloads each PG distribution once.
 
 **Output:**
 

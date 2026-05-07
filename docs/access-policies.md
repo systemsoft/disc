@@ -177,6 +177,59 @@ Custom globals are resolved at query time using PostgreSQL’s `current_setting(
 
 ---
 
+## Deno-Permission-Aware Policies
+
+Access policies can gate on the running Disc process's `--allow-*` permission set as a defense-in-depth layer. Even an authorized application user gets an empty result when the runtime sandbox lacks the corresponding permission — useful for restricting whole categories of access (e.g. "this read endpoint must not run on a process without filesystem read") without re-engineering the auth layer.
+
+### `runtime::has_permission(<spec>)`
+
+A built-in policy function that pre-evaluates against `Deno.permissions.querySync(...)` at SQL emission time and inlines the result as `TRUE`/`FALSE` in the generated WHERE clause. Postgres can't call back into Deno; the permission set is fixed for the life of the process, so caching at SQL emission is correct.
+
+### Spec grammar
+
+| Spec form                            | Maps to                           | Example                           |
+| ------------------------------------ | --------------------------------- | --------------------------------- |
+| `read`                               | `{name: "read"}`                  | `runtime::has_permission("read")` |
+| `read:/path`                         | `{name: "read", path: "/path"}`   | `read:/etc/secrets`               |
+| `write` / `write:/path`              | `{name: "write", ...}`            | `write:/var/disc/uploads`         |
+| `net` / `net:host` / `net:host:port` | `{name: "net", host?: "..."}`     | `net:api.example.com`             |
+| `env` / `env:VAR`                    | `{name: "env", variable?: "VAR"}` | `env:DATABASE_URL`                |
+| `run` / `run:cmd`                    | `{name: "run", command?: "cmd"}`  | `run:git`                         |
+| `sys` / `sys:KIND`                   | `{name: "sys", kind?: "KIND"}`    | `sys:hostname`                    |
+| `ffi` / `ffi:/lib`                   | `{name: "ffi", path?: "..."}`     | `ffi:/usr/lib/libfoo.so`          |
+
+The spec parser is strict — unknown names (`"filesystem"`, `"admin"`) and empty scopes (`"read:"`) throw a `ValidationError` at policy-load time so SDL typos fail fast rather than silently always-denying.
+
+### Example
+
+```
+module default {
+  type SecretDoc {
+    required title: str;
+    required body: str;
+
+    access policy filesystem_required
+      allow select
+      using (
+        global current_user
+        and runtime::has_permission("read:/etc/disc/secrets")
+      );
+  };
+};
+```
+
+A SELECT against `SecretDoc` returns rows only when (a) the request is authenticated **and** (b) the Disc process was started with `--allow-read=/etc/disc/secrets`. Drop the flag and the same query — same user, same JWT — returns an empty set.
+
+### Composition
+
+`runtime::has_permission(...)` composes with every other policy expression. The spec argument **must** be a string literal — non-literal arguments are rejected at policy parse time with a `ValidationError`, since arbitrary expression args have undefined semantics.
+
+### Test seam
+
+Production code calls `Deno.permissions.querySync(...)` via the `defaultPermissionChecker`. Tests inject a `PermissionChecker` mock through `AccessContext.permissionChecker` to assert deterministic `granted`/`denied`/`prompt` outcomes without depending on the test runner's `--allow-*` flags. See `access/runtime-permissions.test.ts` for the pattern.
+
+---
+
 ## Evaluation Order
 
 Disc evaluates policies in two modes:
@@ -202,7 +255,7 @@ const evaluator = new AccessEvaluator({
   defaultAllow: false,
   enableAudit: false,
   enableRLS: true,
-  mode: "permissive"  // or "restrictive"
+  mode: "permissive", // or "restrictive"
 });
 ```
 
@@ -245,13 +298,13 @@ The bridge function maps auth claims to access context:
 ```typescript
 function authContextToAccessContext(
   auth: AuthContext,
-  sessionGlobals?: Map<string, unknown>
+  sessionGlobals?: Map<string, unknown>,
 ): AccessContext {
   return {
     globals: sessionGlobals,
     sessionData: auth.jwtClaims,
     userId: auth.userId,
-    userRole: auth.roles.length > 0 ? auth.roles[0] : undefined
+    userRole: auth.roles.length > 0 ? auth.roles[0] : undefined,
   };
 }
 ```
@@ -396,7 +449,7 @@ const evaluator = new AccessEvaluator({
   defaultAllow: false,
   enableAudit: false,
   enableRLS: true,
-  mode: "permissive"
+  mode: "permissive",
 });
 
 // Register a policy
@@ -409,17 +462,17 @@ evaluator.registerPolicy({
     kind: "AccessComparison",
     left: { kind: "AccessPath", path: ["user_id"] },
     operator: "=",
-    right: { kind: "AccessGlobal", name: "current_user" }
+    right: { kind: "AccessGlobal", name: "current_user" },
   },
 });
 
 // Test with authenticated context
 const decision = evaluator.evaluate("Profile", "select", {
   userId: "user-123",
-  userRole: "member"
+  userRole: "member",
 });
 
-console.log(decision.allowed);       // true
+console.log(decision.allowed); // true
 console.log(decision.sqlConditions); // ["(user_id = 'user-123')"]
 ```
 

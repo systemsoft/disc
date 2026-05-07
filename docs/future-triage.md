@@ -1,7 +1,9 @@
 # FUTURE.md Triage
 
 > Status of every Gel issue tracked in `FUTURE.md` against Disc's roadmap.
-> Generated: 2026-05-05 · Last updated: 2026-05-06 (Bundle H — 7 issues moved BUILD → DONE: env-var gaps + remaining docs)
+> Generated: 2026-05-05 · Last updated: 2026-05-07 (Bundles I–CC closed Disc-original-features roadmap + ~10 more upstream issues + LSP Phases 5–7)
+>
+> **The DONE/BUILD tables below are a snapshot as of Bundle H (2026-05-06 morning).** A subsequent same-day sweep (Bundles I–CC) shipped Disc's eight original features, the LSP, additional auth/migration polish, and structural-divergence pins. See `CHANGELOG.md` `[Unreleased]` for the authoritative post-snapshot list — items marked BUILD here may already be DONE there.
 
 ## Methodology
 
@@ -37,6 +39,36 @@ Seven sequential bundles, 41 issues closed, 21 commits, all on `origin/primary`.
 | F — migration cluster      | #8517 (full impl), #2564, #1840, #5617, #4583 (scoped down), #6304          | `1490ac5`                                             |
 | G — docs sweep             | #6126, #6096, #4170, #6176, #4239, #1163, #1021, #4787, #2230, #8273, #8421 | `041035f`, `fdaccbf`, `5d3a0b1`, `c4abb9a`, `32f5e96` |
 | H — env-var gaps + docs    | #5234, #7563, #4547, #4943, #6094, #4334, #3733, #3414                      | `fe1738b`, `7dcd1a9`, `4080cb0`                       |
+
+### 2026-05-06–07 post-Bundle-H sweep
+
+A second same-day sweep shipped 18 more bundles (I–CC), closing Disc's eight original features and a handful of additional upstream items. The DONE/BUILD enumeration below predates these — `CHANGELOG.md` `[Unreleased]` is authoritative for anything shipped after Bundle H.
+
+| Bundle | Subject                                                                           | Source                                     |
+| ------ | --------------------------------------------------------------------------------- | ------------------------------------------ |
+| I      | Single-binary distribution (Disc-original feature #4)                             | `fcebdb1`                                  |
+| J      | Schema-derived REST surface (Disc-original feature #2)                            | `7b1d3cf`, `3a3d7d1`                       |
+| K      | Live schema diff in admin UI (Disc-original feature #3a)                          | `cfe9533`, `8be5d73`                       |
+| L      | Live data subscriptions in admin UI (Disc-original feature #3c)                   | `3021c3c`, `5730b3d`, `ceaebb0`, `cfdcdd2` |
+| M      | Codegen-free TS query builder (Disc-original feature #1)                          | `c7ace89`, `caa7bb4`                       |
+| N      | Visual query builder (Disc-original feature #3b)                                  | `d204b66`                                  |
+| O      | Identity-disc visualization (Disc-original feature #3d)                           | `b7db3c9`                                  |
+| P      | Deno-permission-aware access policies (Disc-original feature #5)                  | `a445cb5`                                  |
+| Q      | Auth polish: #7311 implicit signup, #7196 WebAuthn discoverable creds, #7483 docs | `cd735bb`                                  |
+| R      | `--require-auth` / `--read-only` / `--trust-proxy` CLI flags (#5234)              | `bd3822a`                                  |
+| S      | Migration robustness pins (#3208, #5132, #2910)                                   | `33c7c03`                                  |
+| T      | LSP Phase 5: embedded EdgeQL diagnostics in TS/JS                                 | `18ddd02`                                  |
+| U      | Bulletproof CTA buttons in auth emails (#7629)                                    | `a0c1744`                                  |
+| V      | LSP Phase 6: hover + completion inside `eql\`...\``                               | `4537390`                                  |
+| W      | Scalar/enum migration end-to-end (#8517 full impl + cascade ordering)             | `c39aa26`                                  |
+| X      | Structural-divergence pins (#4408 pre-commit, #4172 SCRAM-tunneled)               | `2dd49c7`                                  |
+| Y      | Phase 23 polymorphic test fixtures rewritten to per-subtype tables                | `ded914e`                                  |
+| Z      | CI builds UI before non-PG test suite                                             | `c2e99f5`                                  |
+| AA     | LSP Phase 7: cross-file SDL resolution                                            | `35071fd`                                  |
+| BB     | Polymorphic shape fields project subtype-specific cols in UNION                   | `eedd27d`                                  |
+| CC     | Cross-platform reproducible builds via per-platform PG staging                    | `85bf883`                                  |
+
+Issues from the BUILD column closed in this post-snapshot sweep: #7311, #7196, #7483 (Q), #7629 (U), #8517 full impl (W), and structural-divergence pins for #4408, #4172 (X). The Disc-original-features roadmap is also fully closed by this sweep — see `docs/disc-original-features.md`.
 
 ## High Relevance (score 8-10) — full enumeration
 
@@ -144,14 +176,14 @@ Seven sequential bundles, 41 issues closed, 21 commits, all on `origin/primary`.
 | #2230 | Update migration workflow docs                       | `fdaccbf` (`docs/migrations.md` — create→review→apply→rollback narrative)                        |
 | #8273 | Connection resolution algorithm                      | `c4abb9a` (`docs/server.md#connection-resolution` — `resolveDsn` order documented)               |
 | #8421 | Document `GEL_SERVER_PASSWORD_HASH` equivalent       | `5d3a0b1` (`docs/auth.md#admin-password-management` — bcrypt + `disc admin set-password`)        |
-| #5234 | Instance-level config via CLI args / env             | `fe1738b` (`DISC_REQUIRE_AUTH`/`READ_ONLY`/`TRUST_PROXY`/`SHUTDOWN_DRAIN_TIMEOUT`/`BINARY_PORT`)  |
+| #5234 | Instance-level config via CLI args / env             | `fe1738b` (`DISC_REQUIRE_AUTH`/`READ_ONLY`/`TRUST_PROXY`/`SHUTDOWN_DRAIN_TIMEOUT`/`BINARY_PORT`) |
 | #7563 | All public CLI flags via env vars                    | `fe1738b` (companion to #5234 — full env-var parity audit)                                       |
 | #4547 | `DISC_TLS_CERT_ENV` / `_KEY_ENV` indirection         | `fe1738b` (`resolveTlsMaterial` materializes PEM env strings to 0600 temp files)                 |
 | #4943 | Document new features (CHANGELOG)                    | `4080cb0` (Keep-a-Changelog format + `[Unreleased]` section + auto-extendable per-tag promotion) |
 | #6094 | Programmatic reimplementing migrations guide         | `7dcd1a9` (`docs/migrations.md#programmatic-api` — Lifecycle, ConnectionPool injection, embed)   |
-| #4334 | Brew update messaging                                 | follow-on of #3437 (no Disc Homebrew formula yet — pinned)                                      |
-| #3733 | Skip prompts for first migration                     | PIN — Disc has no interactive migration prompts (classifier labels + non-interactive gate)        |
-| #3414 | Confusing constraint-change prompts                  | PIN — same; differ emits `AlterProperty` not Drop+Create cycle                                    |
+| #4334 | Brew update messaging                                | follow-on of #3437 (no Disc Homebrew formula yet — pinned)                                       |
+| #3733 | Skip prompts for first migration                     | PIN — Disc has no interactive migration prompts (classifier labels + non-interactive gate)       |
+| #3414 | Confusing constraint-change prompts                  | PIN — same; differ emits `AlterProperty` not Drop+Create cycle                                   |
 
 (Approx. 84 items — many ride on a single commit; cross-referenced via `git log --oneline`.)
 
