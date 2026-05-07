@@ -124,3 +124,40 @@ Deno.test("Gel #4172: binary protocol server advertises ALPN edgedb-binary", asy
     "binary-server should advertise ALPN edgedb-binary for upstream client compatibility",
   );
 });
+
+// ---------------------------------------------------------------------------
+// gh/geldata#3872 — configurable TLS cipher suites/curves. Gel exposes
+// `tls_ciphers` / `tls_groups` knobs because its server is built on Python's
+// `ssl` module (OpenSSL underneath), which lets the operator name a cipher
+// list. Disc serves TLS through `Deno.serve({ cert, key })`, which is built
+// on rustls under the hood. rustls's design choice is to *not* expose cipher
+// selection — it ships TLS 1.2 + 1.3 only, AEAD-only ciphers
+// (AES-GCM/ChaCha20-Poly1305), and forward-secret key exchanges (ECDHE/DHE)
+// by default. There is no public Deno API to override that list.
+//
+// Disc therefore aligns with rustls's safe defaults rather than expose a
+// knob that could only weaken the cipher set. If Deno later surfaces a
+// cipher-suite API on `Deno.serve`, this pin should fail (the assertion
+// below scrapes the type definition) and the operator-facing knob can be
+// added intentionally rather than as a silent regression.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #3872: Deno.serve TLS surface does not expose cipher selection", () => {
+  // Deno's runtime types live on `Deno`. We can't introspect rustls'
+  // internal cipher list from user code, so we assert the structural
+  // shape of `Deno.ServeTlsOptions`: only `cert` + `key` (and the
+  // shared listen options). A future API addition like `cipherSuites`
+  // or `tlsCiphers` would land as a typed property and trip this pin.
+  const httpServerSrc = Deno.readTextFileSync(
+    new URL("../server/http.ts", import.meta.url),
+  );
+  // Disc passes only { hostname, port, cert, key } to Deno.serve when TLS
+  // is enabled. If a future bundle adds cipher config it has to touch this
+  // call site, which is also where the pin lives.
+  assert(
+    !httpServerSrc.includes("cipherSuites") &&
+      !httpServerSrc.includes("tlsCiphers") &&
+      !httpServerSrc.includes("tls_ciphers"),
+    "server/http.ts mentions cipher-suite config — Deno doesn't expose this surface " +
+      "(Gel #3872 pin). Remove the reference or update the divergence note.",
+  );
+});

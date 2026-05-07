@@ -14,6 +14,7 @@ import { RateLimiter } from "./rate-limiter.ts";
 import { SubscriptionHandler } from "./subscription-handler.ts";
 import type { AuthProvider } from "../auth/provider.ts";
 import type { AuthMiddleware } from "../auth/middleware.ts";
+import { classifyAuthRoute } from "../auth/integration.ts";
 import type { AuthRoutes } from "../auth/integration.ts";
 import type { ExtensionRoute } from "../extensions/types.ts";
 import type { DatabaseRegistry } from "./database-registry.ts";
@@ -878,6 +879,18 @@ export class HttpServer {
         }
       }
 
+      // Per-request access-policy override (gh/geldata#6358). The
+      // header opts out of policy injection for the upcoming query,
+      // mirroring `apply_access_policies := false` in EdgeQL. Only
+      // admins may exercise it; for any other role the flag is dropped
+      // so a regular user setting the header can't escalate.
+      const bypassHeader = request.headers
+        .get("X-Disc-Apply-Access-Policies");
+      const bypassRequested = bypassHeader !== null &&
+        /^(false|0|no)$/i.test(bypassHeader.trim());
+      const callerIsAdmin = authContext.roles.includes("admin");
+      const bypassAccessPolicies = bypassRequested && callerIsAdmin;
+
       // Create query context
       const context: Types.QueryContext = {
         session: connection.session,
@@ -885,6 +898,7 @@ export class HttpServer {
         requestId,
         startedAt: new Date(),
         clientInfo: this.parse_client_info(request),
+        bypassAccessPolicies,
       };
 
       // Execute query with optional HTTP-level timeout safety net
@@ -1658,6 +1672,38 @@ export class HttpServer {
 
     // Strip /auth/ prefix to get the route
     const route = url.pathname.slice(6); // "/auth/".length === 6
+
+    // Router-level lockdown (gh/geldata#7525). Every dispatched route
+    // must be classified explicitly as public or authenticated; an
+    // unknown classification means a developer added a handler to the
+    // switch without an explicit policy decision — fail closed rather
+    // than ship a quietly-public endpoint. For authenticated routes
+    // the JWT is enforced here regardless of `config.requireAuth`,
+    // independent of the global gate so logout/profile/password etc.
+    // are protected even in permissive mode.
+    const classification = classifyAuthRoute(route);
+    if (classification === "unknown") {
+      return this.create_error_response("Unknown auth endpoint", 404);
+    }
+    if (classification === "authenticated") {
+      if (!this.authMiddleware) {
+        return new Response(
+          JSON.stringify({
+            error: "Authentication required but auth provider not configured",
+          }),
+          { status: 503, headers: this.get_default_headers("application/json") },
+        );
+      }
+      const ctx = await this.authMiddleware.authenticate(request);
+      if (!ctx) {
+        const headers = this.get_default_headers("application/json");
+        headers.set("WWW-Authenticate", 'Bearer realm="disc"');
+        return new Response(
+          JSON.stringify({ error: "Authentication required" }),
+          { status: 401, headers },
+        );
+      }
+    }
 
     switch (route) {
       case "register":

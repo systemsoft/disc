@@ -96,6 +96,60 @@ export interface AuthIntegration {
   routes: AuthRoutes;
 }
 
+/**
+ * Auth route classification (gh/geldata#7525). Every `/auth/<route>`
+ * the dispatcher knows about must appear in exactly one of these sets;
+ * a route in neither fails closed at the router. Public routes
+ * bootstrap a session (no JWT possible yet); authenticated routes
+ * mutate or reveal state for the caller and require a valid JWT before
+ * the handler runs.
+ *
+ * Defense-in-depth: handlers in this module also wrap themselves with
+ * `middleware.requireAuth()` where appropriate. The router-level set
+ * exists so a *new* handler added to the dispatcher without an
+ * explicit decision can't quietly slip through as public.
+ */
+export const AUTH_PUBLIC_ROUTES: ReadonlySet<string> = new Set([
+  "register",
+  "login",
+  "anonymous",
+  "refresh",
+  "reset",
+  "reset/confirm",
+  "verify",
+  "magic-link/request",
+  "magic-link/consume",
+  "magic-code/request",
+  "magic-code/verify",
+  "mfa/totp/login",
+  "mfa/recovery-codes/login",
+  "webauthn/login/begin",
+  "webauthn/login/finish",
+]);
+
+export const AUTH_AUTHENTICATED_ROUTES: ReadonlySet<string> = new Set([
+  "logout",
+  "profile",
+  "password",
+  "upgrade",
+  "mfa/totp/enroll",
+  "mfa/totp/confirm",
+  "mfa/totp/disable",
+  "mfa/recovery-codes/generate",
+  "webauthn/register/begin",
+  "webauthn/register/finish",
+  "webauthn/credentials",
+  "webauthn/credentials/delete",
+]);
+
+export type AuthRouteClassification = "public" | "authenticated" | "unknown";
+
+export function classifyAuthRoute(route: string): AuthRouteClassification {
+  if (AUTH_PUBLIC_ROUTES.has(route)) return "public";
+  if (AUTH_AUTHENTICATED_ROUTES.has(route)) return "authenticated";
+  return "unknown";
+}
+
 export class AuthRoutes {
   private rateLimiter: RateLimiter | null;
   private trustProxy: boolean;

@@ -14,6 +14,51 @@ tag is cut.
 
 ## [Unreleased]
 
+### Security
+
+- **Router-level lockdown for `/auth/*` routes** (Bundle GG —
+  gh/geldata#7525). The dispatcher in `server/http.ts` now classifies
+  every `/auth/<route>` it knows about as either bootstrap-public
+  (`register`, `login`, `anonymous`, `refresh`, `reset`, `verify`,
+  `magic-link/{request,consume}`, `magic-code/{request,verify}`,
+  `webauthn/login/{begin,finish}`, `mfa/{totp,recovery-codes}/login`)
+  or authenticated (`logout`, `profile`, `password`, `upgrade`,
+  `mfa/totp/{enroll,confirm,disable}`, `mfa/recovery-codes/generate`,
+  `webauthn/register/{begin,finish}`, `webauthn/credentials`,
+  `webauthn/credentials/delete`). Authenticated routes enforce a JWT
+  at the router level — independent of `config.requireAuth` — so
+  logout/profile/password etc. are protected even in permissive mode.
+  A route reaching the dispatcher with no classification fails closed
+  with 404 rather than shipping silently public. Existing per-handler
+  `middleware.requireAuth()` wrappers stay as defense-in-depth.
+- **Per-request access-policy override** (Bundle GG —
+  gh/geldata#6358). New header `X-Disc-Apply-Access-Policies: false`
+  opts out of policy injection for the upcoming query, mirroring
+  Gel's `apply_access_policies := false` session config. Honored
+  only when the caller carries an `admin` role in their JWT roles
+  claim; non-admins setting the header have it silently dropped at
+  the HTTP boundary so end-users can't escalate. The compilation
+  cache key embeds the bypass flag so a bypassed result can't be
+  served to a non-bypassed call (and vice versa). Compiler-side
+  short-circuit lives in `compiler/compiler.ts:applyAccessControl`
+  via the new `AccessContext.bypass` flag.
+
+### Internal
+
+- **TLS cipher-suite divergence pinned** (Bundle GG —
+  gh/geldata#3872). Gel exposes operator-facing `tls_ciphers` /
+  `tls_groups` knobs because its server runs on Python's `ssl`
+  (OpenSSL). Disc serves TLS through `Deno.serve({ cert, key })`
+  which is built on rustls — and rustls deliberately doesn't expose
+  cipher selection. It ships TLS 1.2/1.3 only, AEAD-only ciphers
+  (AES-GCM / ChaCha20-Poly1305), forward-secret key exchanges
+  (ECDHE/DHE) by default. Disc aligns with rustls's safe defaults
+  rather than expose a knob that could only weaken them. New pin in
+  `tests/gel-divergence-pins.test.ts` asserts no cipher-config
+  symbols leak into `server/http.ts` so a future Deno API change
+  that lands cipher knobs has to be adopted deliberately rather than
+  silently.
+
 ### Fixed
 
 - **Bulletproof CTA buttons in auth emails** (gh/geldata#7629). Outlook

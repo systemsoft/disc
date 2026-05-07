@@ -261,6 +261,42 @@ const evaluator = new AccessEvaluator({
 
 ---
 
+## Per-request bypass (admin-only)
+
+Admin-role callers can opt out of policy injection on a single
+request via the `X-Disc-Apply-Access-Policies: false` header. This
+mirrors Gel's session-level `apply_access_policies := false` and is
+useful for support tooling that needs to read across tenants, or
+admin scripts that intentionally want unfiltered output.
+
+```bash
+curl -X POST http://localhost:5656/query \
+  -H "Authorization: Bearer <admin-jwt>" \
+  -H "X-Disc-Apply-Access-Policies: false" \
+  -H "Content-Type: application/json" \
+  -d '{"query":"SELECT User { name, email }"}'
+```
+
+**Gating.** The HTTP layer reads the JWT's `roles` claim and only
+honors the header when `roles` includes `"admin"`. Non-admin callers
+who set the header have it silently dropped at the boundary — there
+is no way for a regular user to escalate by setting the header.
+
+**Cache safety.** The compilation cache key embeds the bypass flag so
+a bypassed result is never served to a non-bypassed call (and vice
+versa). Two requests with the same EdgeQL but different bypass state
+compile independently.
+
+**Truthy values.** The header value is normalized: `false`, `0`, and
+`no` (case-insensitive, trimmed) all opt out. Any other value
+(including absent, empty, `true`, `1`) keeps policies enforced.
+
+The implementation lives in `server/http.ts:handle_query` (header
+parsing + role gate) and `compiler/compiler.ts:applyAccessControl`
+(short-circuit on `AccessContext.bypass`). (gh/geldata#6358)
+
+---
+
 ## Auth + Access Flow
 
 When a request arrives, Disc builds the access context from the authenticated JWT:

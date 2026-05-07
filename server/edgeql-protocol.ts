@@ -150,12 +150,23 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       // Build compilation cache key (includes access context when policies enabled)
       let compilationKey = queryHash;
 
-      if (this.options.enableAccessPolicies && context.auth) {
+      // Per-request override (gh/geldata#6358): admins can opt out of
+      // policy injection via `X-Disc-Apply-Access-Policies: false`.
+      // The HTTP layer enforces the role gate; we just thread the flag
+      // through. The cache key embeds the bypass flag so a bypassed
+      // result can't be served to a non-bypassed call (or vice versa).
+      const policiesActive = this.options.enableAccessPolicies === true;
+      const bypass = policiesActive && context.bypassAccessPolicies === true;
+
+      if (policiesActive && context.auth) {
         const ctxHash = hashAccessContext(
           context.auth.userId,
           context.auth.roles?.[0],
         );
-        compilationKey = makeCompilationCacheKey(queryHash, ctxHash);
+        compilationKey = makeCompilationCacheKey(
+          queryHash,
+          bypass ? `${ctxHash}|bypass` : ctxHash,
+        );
       }
 
       // Check compilation cache first
@@ -213,11 +224,15 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
           };
         }
 
-        // Set access context before compilation (affects generated SQL)
-        if (this.options.enableAccessPolicies && context.auth) {
-          this.compiler.setAccessContext(
-            authContextToAccessContext(context.auth),
-          );
+        // Set access context before compilation (affects generated SQL).
+        // When `context.bypassAccessPolicies` is set, the AccessContext
+        // carries `bypass: true` so the compiler short-circuits
+        // `applyAccessControl` and emits unfiltered SQL
+        // (gh/geldata#6358).
+        if (policiesActive && context.auth) {
+          const accessCtx = authContextToAccessContext(context.auth);
+          if (bypass) accessCtx.bypass = true;
+          this.compiler.setAccessContext(accessCtx);
         }
 
         // Compile EdgeQL to SQL

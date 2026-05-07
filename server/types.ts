@@ -293,6 +293,15 @@ export interface QueryContext {
     version: string;
     library: string;
   };
+  /**
+   * Per-request override for access policy enforcement
+   * (gh/geldata#6358). When `true`, the compiler skips the
+   * `setAccessContext` call so the generated SQL contains no
+   * policy-derived WHERE clauses. Honored only when the caller has
+   * an `admin` role; the HTTP layer drops the flag for non-admins so
+   * end-users can't escalate by setting the header. Falsy by default.
+   */
+  bypassAccessPolicies?: boolean;
 }
 
 export interface ExecutionResult {

@@ -238,6 +238,12 @@ export class EdgeQLCompiler {
       return statement;
     }
 
+    // Per-request bypass (gh/geldata#6358). The HTTP layer gates the
+    // override behind admin role; once set here we emit unfiltered SQL.
+    if (this.accessContext.bypass) {
+      return statement;
+    }
+
     // Determine the object type being accessed
     const objectType = this.extractObjectType(query);
     if (!objectType) {

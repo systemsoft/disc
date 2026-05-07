@@ -807,6 +807,35 @@ require_auth = true
 
 (`server/types.ts` `requireAuth`, gh/geldata#6345)
 
+### `/auth/*` route lockdown
+
+Independent of `requireAuth`, the auth-route dispatcher classifies
+every `/auth/<route>` it knows about. Bootstrap routes (the ones that
+_give_ you a session) stay public; everything else requires a valid
+JWT at the router level — even when the global gate is permissive.
+That way `/auth/logout`, `/auth/password`, `/auth/profile`,
+`/auth/upgrade`, `/auth/mfa/totp/{enroll,confirm,disable}`,
+`/auth/mfa/recovery-codes/generate`, and `/auth/webauthn/{register,
+credentials}*` can't be hit anonymously regardless of server-wide
+configuration.
+
+Public bootstrap routes:
+
+- `/auth/register`, `/auth/login`, `/auth/anonymous`, `/auth/refresh`
+- `/auth/reset`, `/auth/reset/confirm`, `/auth/verify`
+- `/auth/magic-link/{request,consume}`,
+  `/auth/magic-code/{request,verify}`
+- `/auth/mfa/totp/login`, `/auth/mfa/recovery-codes/login`
+- `/auth/webauthn/login/{begin,finish}`
+
+Everything else is implicitly authenticated. A new `/auth/*` handler
+added to the dispatcher without classifying it explicitly fails closed
+with `404`; this is the defense-in-depth safety net so a future
+addition can't quietly slip through as public.
+
+(`auth/integration.ts:classifyAuthRoute`,
+`server/http.ts:handle_auth_route`, gh/geldata#7525)
+
 ### Roles & RBAC
 
 Disc has a small role registry plus user→role assignments. Roles are named strings (`"admin"`, `"viewer"`, …) with optional descriptions. Permissions are encoded in [access policies](access-policies.md) via `has_role("admin")` and `current_role`, not stored per-role — your SDL is the authoritative permission spec.

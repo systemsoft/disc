@@ -52,6 +52,15 @@ export interface AccessContext {
    * runner's `--allow-*` flags. (Disc-original feature #5)
    */
   permissionChecker?: PermissionChecker;
+  /**
+   * Per-request bypass flag (gh/geldata#6358). When `true`, the
+   * compiler short-circuits `applyAccessControl` and emits unfiltered
+   * SQL — equivalent to Gel's `apply_access_policies := false`
+   * session config. The HTTP layer only sets this on `admin`-role
+   * callers; non-admins setting the bypass header have it dropped
+   * before the compiler ever sees it.
+   */
+  bypass?: boolean;
 }
 
 /**
