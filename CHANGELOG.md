@@ -14,7 +14,50 @@ tag is cut.
 
 ## [Unreleased]
 
+### Added
+
+- **Programmatic CLI surface** (Bundle NN — gh/geldata#5911).
+  `cli/api.ts` re-exports the well-typed command set (`init`,
+  `migrate`, `serve`, `shell`, `watch`, `build`, `deploy`, `pgLog`,
+  `pgUpgrade`) with their Options interfaces. The top-level `mod.ts`
+  re-exports the surface as `CLI.*`, so consumers can drive Disc from
+  setup scripts / CI / test fixtures without spawning subprocesses.
+  ```ts
+  import { CLI } from "disc";
+  await CLI.init({ name: "my-project", template: "basic" });
+  await CLI.migrate({ schema: "./dbschema/default.disc" });
+  ```
+  `cli/api.test.ts` exercises every exported function. Bag-style
+  commands (`db *`, `codegen`, `status`) are intentionally left to the
+  binary entry point — they target argv-driven operator workflows.
+
+- **Offline PostgreSQL setup** (Bundle NN — gh/geldata#3406).
+  `postgres/downloader.ts` honors two new env vars:
+  - **`DISC_PG_BINARY_DIR`** — overrides the default
+    `<HOME>/.disc/postgres` baseDir so operators can pre-stage PG
+    binaries anywhere on disk. Once `bin/postgres` exists at
+    `<DIR>/<version>/bin/postgres`, the downloader skips the fetch.
+  - **`DISC_OFFLINE=1`** — turns a missing binary into a hard error
+    with the exact path needed (instead of a silent download). Pairs
+    with `DISC_PG_BINARY_DIR` for air-gapped CI.
+
+  Bundle I (single-binary distribution) already handled the third
+  case where PG is embedded inside the compiled `disc` binary; these
+  env vars cover the deno-source workflow.
+
 ### Fixed
+
+- **#2651 (named-instance DX) pinned** (Bundle NN — gh/geldata#2651).
+  Gel users were confused by a multi-instance CLI surface where every
+  command took `--instance` and instance names lived outside the
+  project. Disc's design avoids the confusion structurally: instance
+  name defaults to the project's `name` (from `disc.toml`); the
+  override is `[database] instance_name = "..."` in `disc.toml`; no
+  `--instance` flag on any CLI command — the project context resolves
+  the instance from the directory `disc.toml` lives in (same pattern
+  `git` uses for `.git/`). Pin in `tests/gel-divergence-pins.test.ts`
+  asserts no `--instance` flag in `cli/main.ts` and that
+  `lib/project-context.ts` keeps the projectName fallback.
 
 - **Auth-extension cascade-delete gap closed** (Bundle MM — gh/geldata#7103 fix; structural pins for #5504 and #8811).
   - **#7103 (real fix)**: `auth/provider.ts` declares 9 user-bound auth

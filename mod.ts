@@ -12,6 +12,13 @@ export * from "./compiler/mod.ts";
 export * from "./lib/mod.ts";
 
 /**
+ * Programmatic CLI surface (gh/geldata#5911) — drive Disc commands
+ * from Deno scripts without spawning subprocesses. See `cli/api.ts`
+ * for the full surface and stability contract.
+ */
+export * as CLI from "./cli/api.ts";
+
+/**
  * Disc version, read from version.txt at module-load time (P1-48).
  *
  * version.txt is the single source of truth and is bumped by the

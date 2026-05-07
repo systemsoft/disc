@@ -13,8 +13,7 @@ export interface BinaryManifest {
 // (a zip) containing a single nested `postgres-<platform>.txz`. We download
 // the JAR, unzip to find the inner archive, then extract it normally.
 // Native arm64 builds keep ARM Macs off Rosetta (P1-03).
-const ZONKY_BASE =
-  "https://repo1.maven.org/maven2/io/zonky/test/postgres";
+const ZONKY_BASE = "https://repo1.maven.org/maven2/io/zonky/test/postgres";
 
 function zonkyJar(platformSlug: string, version: string): string {
   const artifact = `embedded-postgres-binaries-${platformSlug}`;
@@ -41,22 +40,32 @@ export class PostgresBinaryDownloader {
   private platform: string;
 
   /**
-   * `baseDir` defaults to `<HOME>/.disc/postgres`; pass an explicit
-   * directory (e.g. a per-platform staging dir under `dist/`) when
-   * cross-compiling. `platform` defaults to the running platform's
-   * detected slug; pass an explicit slug
+   * `baseDir` defaults to `$DISC_PG_BINARY_DIR` if set, else
+   * `<HOME>/.disc/postgres`. The env var is the offline-setup escape
+   * hatch (gh/geldata#3406): operators in air-gapped environments can
+   * pre-stage PG binaries under any directory and point Disc at them
+   * without ever calling out to the network. Once `bin/postgres`
+   * exists at `<baseDir>/<version>/bin/postgres`, `download()` skips
+   * the fetch and returns the existing path.
+   *
+   * Pass an explicit directory (e.g. a per-platform staging dir under
+   * `dist/`) when cross-compiling. `platform` defaults to the running
+   * platform's detected slug; pass an explicit slug
    * (`darwin-arm64`/`darwin-x64`/`linux-arm64`/`linux-x64`) when
    * staging PG for a target other than the current host (Bundle I
    * follow-up: cross-platform reproducible builds).
    */
   constructor(
-    baseDirOrOpts: string | { baseDir?: string; platform?: string } = join(Deno.env.get("HOME")!, ".disc", "postgres"),
+    baseDirOrOpts: string | { baseDir?: string; platform?: string } = Deno.env.get("DISC_PG_BINARY_DIR") ??
+      join(Deno.env.get("HOME")!, ".disc", "postgres"),
   ) {
+    const defaultBaseDir = Deno.env.get("DISC_PG_BINARY_DIR") ??
+      join(Deno.env.get("HOME")!, ".disc", "postgres");
     if (typeof baseDirOrOpts === "string") {
       this.baseDir = baseDirOrOpts;
       this.platform = this.detectPlatform();
     } else {
-      this.baseDir = baseDirOrOpts.baseDir ?? join(Deno.env.get("HOME")!, ".disc", "postgres");
+      this.baseDir = baseDirOrOpts.baseDir ?? defaultBaseDir;
       this.platform = baseDirOrOpts.platform ?? this.detectPlatform();
     }
   }
@@ -89,6 +98,22 @@ export class PostgresBinaryDownloader {
       // Not downloaded yet, proceed
     }
 
+    // Offline mode (gh/geldata#3406). When `DISC_OFFLINE=1` is set, a
+    // missing binary is a hard error rather than a silent download —
+    // gives air-gapped operators a clear failure with the path they
+    // need to populate, and prevents an accidental network call in
+    // sandboxed CI environments.
+    const offline = Deno.env.get("DISC_OFFLINE") === "1" ||
+      Deno.env.get("DISC_OFFLINE") === "true";
+    if (offline) {
+      throw new Error(
+        `DISC_OFFLINE=1 set but PostgreSQL ${version} not staged at ${binPath}. ` +
+          `Pre-stage a PG ${version} build for ${this.platform} under ` +
+          `${this.baseDir} (or set DISC_PG_BINARY_DIR to its location), ` +
+          `or unset DISC_OFFLINE to allow the download.`,
+      );
+    }
+
     const manifest = this.getManifest(version);
     if (!manifest) {
       throw new Error(
@@ -113,18 +138,18 @@ export class PostgresBinaryDownloader {
     const archiveExt = urlPath.endsWith(".txz")
       ? ".txz"
       : urlPath.endsWith(".tgz")
-        ? ".tgz"
-        : urlPath.endsWith(".tar.xz")
-          ? ".tar.xz"
-          : urlPath.endsWith(".tar.gz")
-            ? ".tar.gz"
-            : urlPath.endsWith(".zip")
-              ? ".zip"
-              : urlPath.endsWith(".jar")
-                ? ".jar"
-                : urlPath.endsWith(".tar")
-                  ? ".tar"
-                  : ".archive";
+      ? ".tgz"
+      : urlPath.endsWith(".tar.xz")
+      ? ".tar.xz"
+      : urlPath.endsWith(".tar.gz")
+      ? ".tar.gz"
+      : urlPath.endsWith(".zip")
+      ? ".zip"
+      : urlPath.endsWith(".jar")
+      ? ".jar"
+      : urlPath.endsWith(".tar")
+      ? ".tar"
+      : ".archive";
     const archivePath = join(versionDir, `postgres${archiveExt}`);
     const data = new Uint8Array(await response.arrayBuffer());
     await Deno.writeFile(archivePath, data);
@@ -186,12 +211,10 @@ export class PostgresBinaryDownloader {
   }
 
   private getManifest(version: string): BinaryManifest | null {
-    const versionManifests =
-      POSTGRES_VERSIONS[version as keyof typeof POSTGRES_VERSIONS];
+    const versionManifests = POSTGRES_VERSIONS[version as keyof typeof POSTGRES_VERSIONS];
     if (!versionManifests) return null;
 
-    const platformManifest =
-      versionManifests[this.platform as keyof typeof versionManifests];
+    const platformManifest = versionManifests[this.platform as keyof typeof versionManifests];
     if (!platformManifest) return null;
 
     return {

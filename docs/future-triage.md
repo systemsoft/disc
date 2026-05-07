@@ -79,7 +79,8 @@ A second same-day sweep shipped 18 more bundles (I–CC), closing Disc's eight o
 | JJ     | Pre-existing TS errors cleared (logger.warn signature, Uint8Array, LinkDef.computed, RegisterData.username)               | `f55e200`                                  |
 | KK     | `deno check` clean across whole project (151 errors → 0; LoginResult helpers, Result narrowing, legacy SCRAM shims)       | `55cc01c`                                  |
 | LL     | Migration-perf cluster: differ linearization (#5322) + structural pins for #5713 (insert speed), #4319 (in-process)       | `80816fb`                                  |
-| MM     | Auth-semantics cluster: webauthn_challenges cascade (#7103) + structural pins for #5504 (UNLESS CONFLICT), #8811 (stdlib) | (this bundle)                              |
+| MM     | Auth-semantics cluster: webauthn_challenges cascade (#7103) + structural pins for #5504 (UNLESS CONFLICT), #8811 (stdlib) | `edd2f6b`                                  |
+| NN     | CLI/devtools cluster: programmatic CLI surface (#5911) + offline-setup env vars (#3406) + named-instance DX pin (#2651)   | (this bundle)                              |
 
 Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** — #7311, #7196, #7483 (Q), #7629 (U), #3437 (FF), #7525, #6358, #8899, #9034, #2292 (GG/HH/II), and structural-divergence pins for #4408, #4172 (X), #3208, #5132, #2910 (S), #3872, #7360, #3170 (GG/HH), #5158, #5480, #8762, #7972 (II). The Disc-original-features roadmap is also fully closed by this sweep — see `docs/disc-original-features.md`.
 
@@ -241,15 +242,17 @@ Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** 
 | #5505 / #6517 | Access policies slow performance                  | auth, perf    | Profile `access/evaluator.ts` once usage scales | M      |
 | #1634         | Reduce cost of new connections                    | perf          | Connection pool warm-cache audit                | M      |
 
-#### CLI / devtools (5)
+#### CLI / devtools (2)
 
-| #     | Title                               | Category      | Why pickable                                                  | Effort |
-| ----- | ----------------------------------- | ------------- | ------------------------------------------------------------- | ------ |
-| #5911 | Run CLI programmatically            | cli           | Expose `cli/api.ts` with Deno-compatible programmatic surface | M      |
-| #3406 | Offline setup                       | devtools      | Bundle PG binary download manifest in tarball                 | M      |
-| #2651 | "Named instance" DX confusion       | cli, devtools | Naming review pass                                            | S      |
-| #9117 | gel-py command on Windows 11        | cli           | Cross-platform CLI — verify we handle Windows correctly       | M      |
-| #4308 | Modify stdlib during minor upgrades | migration, db | Standard library versioning story                             | M      |
+> **Bundle NN closed the CLI/devtools sub-cluster (#5911 + #3406 + #2651).**
+> #5911 + #3406 shipped real env-var/API additions; #2651 was structurally
+> handled by Disc's project-context model and pinned in
+> `tests/gel-divergence-pins.test.ts`.
+
+| #     | Title                               | Category      | Why pickable                                            | Effort |
+| ----- | ----------------------------------- | ------------- | ------------------------------------------------------- | ------ |
+| #9117 | gel-py command on Windows 11        | cli           | Cross-platform CLI — verify we handle Windows correctly | M      |
+| #4308 | Modify stdlib during minor upgrades | migration, db | Standard library versioning story                       | M      |
 
 #### Cloud / infra (5)
 
@@ -276,11 +279,11 @@ Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** 
 | #648  | SQLite back-end    | db, storage | Stretch — Disc is Postgres-first; deferrable | L      |
 | #7724 | Extension upgrades | migration   | We have an extension model already           | M      |
 
-**Pickable: ~27 items** (Bundles LL + MM closed 2 fixes + pinned 4 across migration-perf and auth-semantics). Highest-leverage clusters:
+**Pickable: ~24 items** (Bundles LL + MM + NN closed 4 fixes + pinned 5 across migration-perf, auth-semantics, and CLI/devtools). Highest-leverage clusters:
 
-1. **CLI/devtools polish** — #5911 + #3406 + #2651 (adoption levers)
-2. **DB / engine** — #5641 missing FROM-clause + #4215 computed-global migrate + #2204 schema-version notify (correctness gaps in less-common shapes)
-3. **Cloud/infra** — #4901 docker latest tag + #5699 GHCR images (release-CI polish)
+1. **DB / engine** — #5641 missing FROM-clause + #4215 computed-global migrate + #2204 schema-version notify (correctness gaps in less-common shapes)
+2. **Cloud/infra** — #4901 docker latest tag + #5699 GHCR images (release-CI polish)
+3. **Migration robustness** — #5190 backport rewrites + #3761 push command + #6697 in-place upgrades (operator-ergonomics)
 
 ### SKIP — not applicable to Disc
 

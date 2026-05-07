@@ -554,3 +554,125 @@ Deno.test("Gel #8811: stdlib SQL only declares pure scalar wrappers (no table re
     );
   }
 });
+
+// ---------------------------------------------------------------------------
+// gh/geldata#5911 — programmatic CLI surface. Bundle NN exposes
+// `cli/api.ts` (re-exported via `mod.ts` as `CLI.*`) so consumers can
+// drive every well-typed command (init, migrate, serve, shell, watch,
+// build, deploy, pgLog, pgUpgrade) from a Deno script without spawning
+// subprocesses. The behavioral surface is exercised in
+// `cli/api.test.ts`; this pin asserts the structural property — that
+// the api.ts module exists and is reachable through the top-level
+// re-export — so a refactor that drops it from `mod.ts` trips here too.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #5911: cli/api.ts is reachable through top-level mod.ts", async () => {
+  const modSrc = await Deno.readTextFile(
+    new URL("../mod.ts", import.meta.url),
+  );
+  assert(
+    /export \* as CLI from "\.\/cli\/api\.ts"/.test(modSrc),
+    "mod.ts must re-export CLI from ./cli/api.ts (Gel #5911 pin).",
+  );
+  // The api.ts file itself must exist and export at least the core
+  // command set. Source-level check so it's caught even if the
+  // top-level re-export is wired but the underlying file regresses.
+  const apiSrc = await Deno.readTextFile(
+    new URL("../cli/api.ts", import.meta.url),
+  );
+  for (
+    const fn of [
+      "export function init",
+      "export function migrate",
+      "export function serve",
+      "export function shell",
+    ]
+  ) {
+    assert(
+      apiSrc.includes(fn),
+      `cli/api.ts must declare ${fn}() (Gel #5911 pin).`,
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#3406 — offline setup. Bundle NN adds two env-var hooks
+// to `postgres/downloader.ts`:
+//
+//   - `DISC_PG_BINARY_DIR` overrides the default `~/.disc/postgres`
+//     baseDir, so operators can pre-stage PG binaries anywhere.
+//   - `DISC_OFFLINE=1` turns a missing binary into a hard error
+//     (with the staging path the operator needs to populate)
+//     instead of a silent download.
+//
+// Behavior is exercised in `postgres/downloader.test.ts`. This pin
+// asserts the env vars stay wired into the source so a refactor that
+// drops them is caught at file-read time too. (Bundle I — single-binary
+// distribution — covers the third case where PG is embedded inside
+// the compiled `disc` binary; these env vars cover the deno-source
+// workflow.)
+// ---------------------------------------------------------------------------
+Deno.test("Gel #3406: downloader honors DISC_PG_BINARY_DIR + DISC_OFFLINE env vars", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../postgres/downloader.ts", import.meta.url),
+  );
+  assert(
+    /Deno\.env\.get\("DISC_PG_BINARY_DIR"\)/.test(src),
+    "downloader.ts must read DISC_PG_BINARY_DIR (Gel #3406 pin).",
+  );
+  assert(
+    /Deno\.env\.get\("DISC_OFFLINE"\)/.test(src),
+    "downloader.ts must read DISC_OFFLINE (Gel #3406 pin).",
+  );
+  // The DISC_OFFLINE error must include the env-var name so operators
+  // can grep for it in logs.
+  assert(
+    /DISC_OFFLINE=1/.test(src),
+    "downloader.ts DISC_OFFLINE error must reference the env var name (Gel #3406 pin).",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#2651 — "named instance" DX confusion. Gel users were
+// confused by the multi-instance CLI surface where every command took
+// an optional `--instance` flag and instance names lived outside the
+// project. Disc's design avoids the confusion structurally:
+//
+//   - Instance name defaults to the project's `name` (from
+//     `disc.toml`); operators don't have to think about instances at
+//     all in the common case.
+//   - Override is `[database] instance_name = "..."` in `disc.toml` —
+//     scoped to the project, not a CLI flag.
+//   - There is no `--instance` flag on `disc start/stop/migrate/...`;
+//     the project context resolves the instance from the directory
+//     `disc.toml` lives in (same pattern `git` uses for `.git/`).
+//
+// This pin asserts the design property: no CLI command surfaces
+// `--instance` as an argument, and `lib/project-context.ts`
+// derives the instance name from the project context.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #2651: instance name is derived from project context, not a CLI flag", async () => {
+  const cliMain = await Deno.readTextFile(
+    new URL("../cli/main.ts", import.meta.url),
+  );
+  // The CLI help text + argv parser shouldn't list a `--instance`
+  // flag. (`instance` as a noun in help text is fine — the assertion
+  // is specifically against an `--instance` argument.)
+  assert(
+    !/--instance(?:\s|=|\b)/.test(cliMain),
+    "cli/main.ts must not surface a --instance flag — Disc derives instance from project context (Gel #2651 pin).",
+  );
+  const ctxSrc = await Deno.readTextFile(
+    new URL("../lib/project-context.ts", import.meta.url),
+  );
+  // The project-context resolver must derive `instanceName` from
+  // either the explicit `instance_name` in disc.toml or the project
+  // name fallback. Pinning both means a refactor that drops the
+  // fallback (forcing operators to set the field manually) trips here.
+  assert(
+    /instanceName: fields\.instanceName \?\? projectName/.test(ctxSrc) ||
+      /const instanceName = fields\.instanceName \?\? projectName/.test(
+        ctxSrc,
+      ),
+    "project-context.ts must default instanceName to projectName when unset (Gel #2651 pin).",
+  );
+});

@@ -187,3 +187,52 @@ Deno.test("PostgresBinaryDownloader - extractArchive handles different formats",
   // Cleanup
   await Deno.remove(TEST_BASE_DIR, { recursive: true });
 });
+
+// gh/geldata#3406 — offline setup. The Gel issue asked for a way to
+// run `disc init` against pre-staged PG binaries without ever touching
+// the network. Bundle NN adds two env-var hooks:
+//
+//   1. `DISC_PG_BINARY_DIR` — overrides the default
+//      `<HOME>/.disc/postgres` baseDir so operators can pre-stage PG
+//      binaries anywhere on disk.
+//   2. `DISC_OFFLINE=1` — turns a missing binary into a hard error
+//      (with the exact path needed) instead of a silent download.
+//
+// These cover both the "operator already has the binary" path and the
+// "no network at all" path. Bundle I (single-binary distribution)
+// handles the third case where PG is embedded inside the compiled
+// binary; the env-var hooks here cover the deno-source workflow.
+Deno.test("PostgresBinaryDownloader - DISC_PG_BINARY_DIR overrides default baseDir (Bundle NN — gh/geldata#3406)", () => {
+  const original = Deno.env.get("DISC_PG_BINARY_DIR");
+  try {
+    const stagedRoot = "/opt/disc-staged-pg";
+    Deno.env.set("DISC_PG_BINARY_DIR", stagedRoot);
+    const downloader = new PostgresBinaryDownloader();
+    // Field is private; cast through an unknown index for the assertion.
+    assertEquals(
+      (downloader as unknown as { baseDir: string }).baseDir,
+      stagedRoot,
+    );
+  } finally {
+    if (original === undefined) Deno.env.delete("DISC_PG_BINARY_DIR");
+    else Deno.env.set("DISC_PG_BINARY_DIR", original);
+  }
+});
+
+Deno.test("PostgresBinaryDownloader - DISC_OFFLINE=1 throws with actionable message (Bundle NN — gh/geldata#3406)", async () => {
+  const tempDir = await Deno.makeTempDir();
+  const offlineOriginal = Deno.env.get("DISC_OFFLINE");
+  try {
+    Deno.env.set("DISC_OFFLINE", "1");
+    const downloader = new PostgresBinaryDownloader(tempDir);
+    await assertRejects(
+      () => downloader.download("16.4"),
+      Error,
+      "DISC_OFFLINE=1",
+    );
+  } finally {
+    if (offlineOriginal === undefined) Deno.env.delete("DISC_OFFLINE");
+    else Deno.env.set("DISC_OFFLINE", offlineOriginal);
+    await Deno.remove(tempDir, { recursive: true });
+  }
+});
