@@ -360,48 +360,61 @@ Deno.test({
 // Phase 23.5 -- IS Type Check (Discriminator Column)
 // =========================================================================
 
-// TODO(single-table-inheritance): this test creates a single `shapes`
-// table with a `__type__` discriminator and tests `IS Type` filtering
-// against it. Disc's production migration engine doesn't create
-// physical tables for abstract types (engine.ts:891) — concrete
-// subtypes get their own tables, and SELECT against an abstract
-// type now lowers to a UNION ALL across the subtypes' tables. The
-// test fixture's single-table model contradicts that behavior. Mark
-// ignored until the test is rewritten to use per-subtype tables.
+// Per-subtype-table model: Disc's production migration engine emits one
+// physical table per concrete subtype (no physical table for the abstract
+// parent — engine.ts:891). `SELECT <Abstract>` lowers to `UNION ALL`
+// across the subtypes' tables. Each subtype's table carries a `__type__`
+// column with a default of its own type name (DDL emission at
+// `migration/ddl.ts:398-412`), so `IS <Type>` checks reduce to
+// `__type__ = '<Type>'` over the union — no shared `shapes` table.
 Deno.test({
   name:
     "PG Phase 23: IS type check -- FILTER Shape IS Circle returns only circles",
-  ignore: true,
+  ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
     const pool = makePool(dsn);
     await pool.initialize();
 
     try {
-      // Create a single shapes table with __type__ discriminator
-      await pool.query("DROP TABLE IF EXISTS shapes CASCADE");
+      // Per-subtype tables: one for Circle, one for Rectangle. The
+      // `__type__` column gates `IS <Type>` filtering at the UNION
+      // level — no abstract `shapes` table is created.
+      await pool.query("DROP TABLE IF EXISTS circles CASCADE");
+      await pool.query("DROP TABLE IF EXISTS rectangles CASCADE");
       await pool.query(`
-        CREATE TABLE shapes (
+        CREATE TABLE circles (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          __type__ VARCHAR(255) NOT NULL DEFAULT 'Shape',
+          __type__ VARCHAR(255) NOT NULL DEFAULT 'Circle',
+          color VARCHAR
+        )
+      `);
+      await pool.query(`
+        CREATE TABLE rectangles (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          __type__ VARCHAR(255) NOT NULL DEFAULT 'Rectangle',
           color VARCHAR
         )
       `);
 
-      // Insert shapes with different __type__ values
-      await pool.query(`
-        INSERT INTO shapes (id, __type__, color) VALUES
-          (gen_random_uuid(), 'Circle', 'red'),
-          (gen_random_uuid(), 'Rectangle', 'blue'),
-          (gen_random_uuid(), 'Circle', 'green'),
-          (gen_random_uuid(), 'Rectangle', 'yellow')
-      `);
+      // 2 circles + 2 rectangles. The default `__type__` value carries
+      // the subtype name without the test having to set it explicitly.
+      await pool.query(
+        `INSERT INTO circles (color) VALUES ('red'), ('green')`,
+      );
+      await pool.query(
+        `INSERT INTO rectangles (color) VALUES ('blue'), ('yellow')`,
+      );
 
-      // Build schema with Shape hierarchy
+      // Build schema with Shape hierarchy. Abstract Shape has no
+      // `tableName` — production semantics: abstract types have no
+      // physical table. Concrete subtypes carry their own tableName
+      // and inherit the same property shape so the UNION's projection
+      // is uniform.
       const shape: TypeDef = {
         name: "Shape",
         kind: "object",
-        tableName: "shapes",
+        // No `tableName` — abstract types have no physical table.
         abstract: true,
         subtypes: ["Circle", "Rectangle"],
         discriminatorColumn: "__type__",
@@ -539,7 +552,8 @@ Deno.test({
         "Circle colors should be green and red",
       );
     } finally {
-      await pool.query("DROP TABLE IF EXISTS shapes CASCADE");
+      await pool.query("DROP TABLE IF EXISTS circles CASCADE");
+      await pool.query("DROP TABLE IF EXISTS rectangles CASCADE");
       await pool.close();
     }
   },
@@ -549,8 +563,17 @@ Deno.test({
 // Phase 23.5 -- Polymorphic Shape Field [IS Type].property
 // =========================================================================
 
-// TODO(single-table-inheritance): see note on the previous Phase 23
-// test — same single-table fixture mismatch with production semantics.
+// TODO(polymorphic-shape-field): the polymorphic UNION emitted by
+// `compiler.ts:compilePolymorphicSelect` projects only the abstract
+// type's properties (id + Shape's properties). A polymorphic shape
+// field like `[IS Circle].radius` then references `<alias>.radius`,
+// which doesn't exist in the union projection — running this test
+// errors with `column shape_1.radius does not exist`. Fixing this
+// needs a second pass on `compilePolymorphicSelect` to also project
+// (as NULL where absent) any subtype-specific columns referenced by
+// polymorphic shape fields elsewhere in the SELECT. Test fixture is
+// rewritten to the per-subtype-table model so flipping `ignore: false`
+// after the compiler enhancement lands is a one-line change.
 Deno.test({
   name:
     "PG Phase 23: Polymorphic shape -- [IS Circle].radius returns radius for circles, null for others",
@@ -561,36 +584,41 @@ Deno.test({
     await pool.initialize();
 
     try {
-      // Create a single shapes table with __type__ discriminator and
-      // type-specific columns (nullable for types that don't have them)
-      await pool.query("DROP TABLE IF EXISTS shapes CASCADE");
+      // Per-subtype tables. Each subtype carries its own columns;
+      // there's no shared `shapes` table.
+      await pool.query("DROP TABLE IF EXISTS circles CASCADE");
+      await pool.query("DROP TABLE IF EXISTS rectangles CASCADE");
       await pool.query(`
-        CREATE TABLE shapes (
+        CREATE TABLE circles (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          __type__ VARCHAR(255) NOT NULL DEFAULT 'Shape',
+          __type__ VARCHAR(255) NOT NULL DEFAULT 'Circle',
           color VARCHAR,
-          radius DOUBLE PRECISION,
+          radius DOUBLE PRECISION
+        )
+      `);
+      await pool.query(`
+        CREATE TABLE rectangles (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          __type__ VARCHAR(255) NOT NULL DEFAULT 'Rectangle',
+          color VARCHAR,
           width DOUBLE PRECISION,
           height DOUBLE PRECISION
         )
       `);
 
-      // Insert shapes with different types and type-specific data
-      await pool.query(`
-        INSERT INTO shapes (id, __type__, color, radius) VALUES
-          (gen_random_uuid(), 'Circle', 'red', 5.0),
-          (gen_random_uuid(), 'Circle', 'green', 10.0)
-      `);
-      await pool.query(`
-        INSERT INTO shapes (id, __type__, color, width, height) VALUES
-          (gen_random_uuid(), 'Rectangle', 'blue', 3.0, 4.0)
-      `);
+      // 2 circles + 1 rectangle.
+      await pool.query(
+        `INSERT INTO circles (color, radius) VALUES ('red', 5.0), ('green', 10.0)`,
+      );
+      await pool.query(
+        `INSERT INTO rectangles (color, width, height) VALUES ('blue', 3.0, 4.0)`,
+      );
 
-      // Build schema with hierarchy
+      // Build schema with hierarchy. Abstract Shape has no tableName.
       const shape: TypeDef = {
         name: "Shape",
         kind: "object",
-        tableName: "shapes",
+        // No `tableName` — abstract types have no physical table.
         abstract: true,
         subtypes: ["Circle", "Rectangle"],
         discriminatorColumn: "__type__",
@@ -775,7 +803,8 @@ Deno.test({
         "Circle radii should be 5 and 10",
       );
     } finally {
-      await pool.query("DROP TABLE IF EXISTS shapes CASCADE");
+      await pool.query("DROP TABLE IF EXISTS circles CASCADE");
+      await pool.query("DROP TABLE IF EXISTS rectangles CASCADE");
       await pool.close();
     }
   },

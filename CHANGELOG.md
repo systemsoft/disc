@@ -32,6 +32,26 @@ tag is cut.
 
 ### Internal
 
+- **Phase 23 polymorphic test fixtures rewritten to per-subtype tables.**
+  The two `compiler/pg-phase23.test.ts` polymorphism tests previously
+  modeled their `Shape`/`Circle`/`Rectangle` hierarchy on a single
+  `shapes` table with a `__type__` discriminator (single-table
+  inheritance). Disc's production migration engine emits one physical
+  table per concrete subtype — abstract types have no physical table —
+  and `SELECT <Abstract>` lowers to `UNION ALL` across the subtype
+  tables (the column projection comes from the abstract type's
+  properties). The fixtures now match production semantics: per-subtype
+  `circles`/`rectangles` tables, abstract `Shape` with no `tableName`,
+  default `__type__` value carried by each subtype's `CREATE TABLE`.
+  The `IS Type` filter test (Phase 23.5 part 1) un-ignored — passes
+  green at 6/6 phase23 tests. The `[IS Circle].radius` polymorphic
+  shape field test stays ignored with a precise comment pointing at
+  the compiler gap (`compiler.ts:compilePolymorphicSelect` projects
+  only the abstract type's columns; subtype-specific columns
+  referenced by polymorphic shape fields aren't projected, so
+  `<alias>.radius` errors with "column shape_1.radius does not
+  exist"). Flipping the second test to active is a one-line change
+  once the projection enhancement lands.
 - **Structural-divergence pins** for two Gel issues that don't apply
   to Disc (gh/geldata#4408, #4172). No behavior change — the pins
   capture the structural reality so a future refactor that breaks the
