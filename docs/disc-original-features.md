@@ -2,7 +2,7 @@
 
 Things Disc would build that Gel doesn't have and isn't planning. Each is a deliberate departure — features that justify Disc as a fork rather than a port.
 
-> **Status:** Mixed. **Shipped: #4 single-binary distribution** (Bundle I, 2026-05-06), **#2 schema-derived REST surface** (Bundle J, 2026-05-06), **#3a live schema diff in admin UI** (Bundle K, 2026-05-06), **#3c live data subscriptions in admin UI** (Bundle L, 2026-05-06), **#1 codegen-free TypeScript query builder** (Bundle M, 2026-05-06), and **#3b visual query builder** (Bundle N, 2026-05-06). The remaining items (#3d identity-disc visualization, #5 Deno-perm policies) are proposals — rough scoping but no design doc, no scheduled milestone. Use this as the seed list for picking next-up direction once the upstream-parity work is done (see `future-triage.md`).
+> **Status:** Mixed. **Shipped: #4 single-binary distribution** (Bundle I, 2026-05-06), **#2 schema-derived REST surface** (Bundle J, 2026-05-06), **#3a live schema diff in admin UI** (Bundle K, 2026-05-06), **#3c live data subscriptions in admin UI** (Bundle L, 2026-05-06), **#1 codegen-free TypeScript query builder** (Bundle M, 2026-05-06), **#3b visual query builder** (Bundle N, 2026-05-06), and **#3d identity-disc visualization** (Bundle O, 2026-05-06). The only remaining item is **#5 Deno-perm policies** — rough scoping, no design doc, no scheduled milestone. Use this as the seed list for picking next-up direction once the upstream-parity work is done (see `future-triage.md`).
 
 ---
 
@@ -123,9 +123,13 @@ Client-side: the data viewer pulses a green border around the rows pane on each 
 
 Gel has subscriptions in the SDK but Gel-UI doesn't surface them.
 
-### 3d. Identity-disc visualization
+### 3d. Identity-disc visualization — **SHIPPED 2026-05-06**
 
-The TRON metaphor taken seriously: a visualization of an object's outgoing and incoming links rendered as a literal disc — the object at the center, link types as luminous radii, linked objects orbiting. Click a linked object to recenter on it. This is closer to a graph database UI than a relational one, but the data is already there in Disc's schema.
+> **Status:** Shipped in Bundle O. Live behavior is documented in `docs/admin-ui.md` ("Identity Disc" section); source lives at `ui/src/lib/identity-disc-layout.ts` (pure SVG geometry) + `ui/src/routes/disc/+page.svelte`.
+
+The TRON metaphor taken seriously: a row's outgoing links and incoming references rendered as a literal disc — the object at the center, link types as luminous radii, linked objects orbiting. Click an orbital to recenter on that object; a breadcrumb tracks recent centers. Outgoing data comes from one query expanding every link's `id` + display field; incoming data comes from a schema-walk for every type that links to the centered type, then a parallel forward-filter query per (sourceType, linkName) pair.
+
+Layout splits the disc into two arcs: outgoing fills 30°–150° on the right semicircle, incoming fills 210°–330° on the left, so the visual half-plane unambiguously reads "things I link to" vs "things that link to me". Multi-link clusters (e.g. 12 posts) collapse to a single orbital with a `+11` count badge — fancier expansion is V2.
 
 **Effort.** M each, parallelizable. 3a depends on a server endpoint that streams schema-diff events. 3c depends on the existing live-query plumbing. 3d is mostly Svelte + a graph layout library; no backend work.
 
@@ -195,7 +199,7 @@ Each item is independently scopeable. The natural ordering by **how much it just
 1. ~~**#4 single-binary** — biggest UX delta for self-hosters, smallest engineering cost.~~ **Shipped 2026-05-06.**
 2. ~~**#2 REST surface** — broadest integration story, modest cost.~~ **Shipped 2026-05-06.**
 3. ~~**#1 codegen-free builder** — biggest DX delta for application developers, but most type-system work.~~ **Shipped 2026-05-06.**
-4. **#3 admin-UI differentiators** — best demo material; can be staged 3a → 3c → 3d → 3b. ~~**3a (live schema diff) shipped 2026-05-06.**~~ ~~**3c (live data subscriptions) shipped 2026-05-06.**~~ ~~**3b (visual query builder) shipped 2026-05-06.**~~ Remaining: 3d identity-disc visualization.
+4. ~~**#3 admin-UI differentiators** — best demo material; can be staged 3a → 3c → 3d → 3b.~~ **All four shipped 2026-05-06** (3a Bundle K, 3c Bundle L, 3b Bundle N, 3d Bundle O).
 5. **#5 Deno-perm policies** — most novel, narrowest applicability.
 
 When `future-triage.md`'s BUILD column runs out (or sooner if one of these is more compelling than what's left upstream), pick from here.
