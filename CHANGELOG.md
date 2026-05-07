@@ -16,6 +16,72 @@ tag is cut.
 
 ### Added
 
+- **Deno-permission-aware access policies** (Disc-original feature #5
+  from `docs/disc-original-features.md`). Access policies can now gate
+  on the running Deno process's `--allow-*` permission set as a
+  defense-in-depth layer — even an authorized application user gets an
+  empty result if the runtime sandbox doesn't have the corresponding
+  permission. New builtin `runtime::has_permission(<spec>)` accepts
+  `read` / `read:/path`, `write` / `write:/path`, `net` / `net:host`
+  (with optional `:port`), `env` / `env:VAR`, `run` / `run:cmd`, `sys`
+  / `sys:KIND`, `ffi` / `ffi:/path`. Strict — unknown names and empty
+  scopes throw at policy-load time so SDL typos fail fast rather than
+  silently always-denying. The check is process-local: at SQL-emission
+  time the function is pre-evaluated against `Deno.permissions
+  .querySync(...)` and inlined as `TRUE`/`FALSE` in the generated
+  WHERE clause. `AccessContext.permissionChecker` is the test seam.
+  Closes the entire Disc-original-features roadmap.
+- **Identity-disc visualization** (Disc-original feature #3d from
+  `docs/disc-original-features.md`). New SvelteKit page at `/ui/disc`
+  renders a row's outgoing links and incoming references as a literal
+  disc — the centered object at the middle, links radiating outward
+  as luminous radii, linked objects orbiting at the rim. Outgoing
+  fills the right semicircle (30°–150° arc), incoming fills the left
+  (210°–330°). Click any orbital to recenter on that object;
+  breadcrumb tracks recent centers so navigation is reversible.
+  Outgoing data comes from one query expanding every link; incoming
+  data comes from a schema-walk for every type that links to the
+  centered type, then a forward-filter query per (sourceType,
+  linkName) pair. Multi-link clusters collapse to a single orbital
+  with a `+N` count badge. Gel has no equivalent.
+- **Visual query builder** (Disc-original feature #3b from
+  `docs/disc-original-features.md`). New SvelteKit page at
+  `/ui/query-builder` lets users pick a root type, check fields and
+  links to include in the result shape, add filter rows (field +
+  operator + value, auto-typed by the field's SDL scalar), set
+  order/limit/offset. The synthesized EdgeQL renders live in a side
+  pane with TRON-aesthetic glow; hitting Run sends it through the
+  same `/query` endpoint as the text editor so access policies,
+  read-only mode, and the auth gate compose for free. Filter values
+  are parameterized as `$p0`, `$p1`, … with per-field type coercion.
+  Form-based UX rather than canvas drag-and-drop — same educational
+  value, much cheaper to build. Pure `synthesize()` core decoupled
+  from the form, so a canvas overlay remains a future option.
+- **Codegen-free TypeScript query builder** (Disc-original feature #1
+  from `docs/disc-original-features.md`). New SDK module
+  `sdk/query-builder.ts` ships a runtime EdgeQL emitter:
+  `from(typeName)` returns a chainable `SelectChain` that emits
+  `{ query, variables }` via `.toEdgeQL()`. `createQueryBuilder(client)`
+  returns a Proxy where `qb.User.select({...}).filter(...)` is
+  awaitable and runs through the existing `client.query()` pipeline.
+  Operators: `eq`/`neq`/`lt`/`lte`/`gt`/`gte`/`exists`; multiple
+  `.filter()` calls AND together; top-level `and`/`or`/`not`
+  combinators; `orderBy` accepts a bare FieldRef (asc default) or
+  `field.desc()`; `first()` adds `limit 1` and unwraps `T[] → T |
+  null`. Companion type-level surface in `sdk/schema-types.ts`:
+  `defineSchema()` + `t.*` namespace (`t.str()`, `t.int64()`,
+  `t.optional(t.bool())`, `t.multi("Post")`, etc.) provide full TS
+  inference on the runtime DSL. Schema-aware `createQueryBuilder<S>(
+  client, schema)` overload narrows `select<Sh>(shape)` to return
+  rows typed by the requested shape; filter predicates get typed
+  FieldRefs so `u.email.eq(...)` only accepts `string`. Circular
+  schemas (User.posts → Post.author → User…) type-check cleanly:
+  `FieldType` resolves links to a shallow `LinkStub = { id: string }`
+  placeholder; full link expansion happens only via `ResolveSelected`
+  when the user explicitly nests in `select({ posts: { title: true }
+  })`. Schema-of-record stays in `.disc`; the TS file is a thin
+  re-declaration (hand-written or generated once via `disc codegen`
+  and committed). Either way, no codegen step on every change.
 - **Live data subscriptions in the admin UI** (Disc-original feature
   #3c from `docs/disc-original-features.md`). The data viewer's new
   **Live** toggle subscribes to `GET /admin/data-watch?tables=…` and
@@ -110,7 +176,7 @@ tag is cut.
   (#7596).
 - Scalar/enum diffing with `RecreateScalar` op + DDL guard
   (#8517, #2564), ambiguous-op classification (#1840), advisory-lock
-  + `lock_timeout` pragmas on every migration tx (#6304).
+  - `lock_timeout` pragmas on every migration tx (#6304).
 - Prometheus TLS cert-expiry gauges (#6205) + danger-band pin (#5405).
 - Auth branding config (`AuthBrandingConfig` — appName, logoUrl,
   brandColor with OKLCH support) flowing through email templates
@@ -201,7 +267,7 @@ be diff-shaped.
 - **WebSocket subscriptions** with timeout cleanup on unsubscribe
   (P1-11), reconnect-with-replay on the SDK side.
 - **Binary protocol** (port 5656) speaks Gel's wire format with TLS
-  + ALPN (`edgedb-binary`); supports Python and Node Gel clients.
+  - ALPN (`edgedb-binary`); supports Python and Node Gel clients.
 - **Rate limiting** at the HTTP layer applies before extension routing,
   so every endpoint including `/ext/graphql/*` is protected
   (gh/geldata#718).
@@ -252,7 +318,7 @@ be diff-shaped.
   documented in `auth/README.md`.
 - **Sessions**: revocable via `revoked` flag, server-side
   `expires_at` checked on every verify (P1-33), bound to request IP
-  + User-Agent for anomaly detection on refresh (P2-21).
+  - User-Agent for anomaly detection on refresh (P2-21).
 - **Concurrent-session cap** (`maxSessionsPerUser`) — oldest session
   is revoked when a new one would exceed the cap (P2-22).
 - **Audit log** for nine event classes (login_succeeded,
