@@ -134,8 +134,47 @@ export interface InitializeResult {
     documentSymbolProvider?: boolean;
     referencesProvider?: boolean;
     renameProvider?: boolean | { prepareProvider?: boolean };
+    documentFormattingProvider?: boolean;
+    semanticTokensProvider?: {
+      legend: SemanticTokensLegend;
+      full: boolean | { delta?: boolean };
+    };
   };
   serverInfo?: { name: string; version?: string };
+}
+
+// ---------------------------------------------------------------------------
+// Formatting (LSP Phase 8b)
+// ---------------------------------------------------------------------------
+
+export interface FormattingOptions {
+  tabSize: number;
+  insertSpaces: boolean;
+  trimTrailingWhitespace?: boolean;
+  insertFinalNewline?: boolean;
+  trimFinalNewlines?: boolean;
+}
+
+export interface DocumentFormattingParams {
+  textDocument: TextDocumentIdentifier;
+  options: FormattingOptions;
+}
+
+// ---------------------------------------------------------------------------
+// Semantic tokens (LSP Phase 8c)
+// ---------------------------------------------------------------------------
+
+export interface SemanticTokensLegend {
+  tokenTypes: readonly string[];
+  tokenModifiers: readonly string[];
+}
+
+export interface SemanticTokensParams {
+  textDocument: TextDocumentIdentifier;
+}
+
+export interface SemanticTokens {
+  data: number[];
 }
 
 // ---------------------------------------------------------------------------

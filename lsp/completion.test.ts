@@ -122,3 +122,81 @@ Deno.test("provideCompletion - position past EOF doesn't throw", () => {
   // Returns at least the keyword set; doesn't throw.
   assert(items.length > 0);
 });
+
+// =========================================================================
+// Phase 8d — context-aware narrowing
+// =========================================================================
+// After `:`, `->`, or `extending`, only types are valid syntactically.
+// Keywords like `module`/`required`/`multi` would be noise in those
+// contexts — narrow the popup to scalar + user-defined type names.
+// =========================================================================
+
+Deno.test("provideCompletion - narrows to types after `:` (property type position)", () => {
+  const text = `module default {
+  type User {
+    required name:
+  };
+}`;
+  // Cursor right after the `:` on the property line.
+  const pos = findPos(text, "required name:");
+  pos.character += "required name:".length;
+  const items = provideCompletion(text, pos);
+  const ns = new Set(names(items));
+  // Types must be present.
+  assert(ns.has("str"), "scalar str missing in type context");
+  assert(ns.has("uuid"), "scalar uuid missing in type context");
+  // Keywords must NOT be present.
+  assert(!ns.has("module"), "keyword `module` leaked into type context");
+  assert(!ns.has("required"), "keyword `required` leaked into type context");
+  assert(!ns.has("type"), "keyword `type` leaked into type context");
+});
+
+Deno.test("provideCompletion - narrows to types after `->` (link target position)", () => {
+  const text = `module default {
+  type Post {
+    required link author ->
+  };
+}`;
+  const pos = findPos(text, "author ->");
+  pos.character += "author ->".length;
+  const items = provideCompletion(text, pos);
+  const ns = new Set(names(items));
+  // Built-in scalar types still surface (rare for links but valid).
+  assert(ns.has("str"));
+  // User-defined types must surface even more.
+  assert(!ns.has("module"), "keyword `module` leaked into link target context");
+  assert(!ns.has("required"), "keyword `required` leaked into link target context");
+});
+
+Deno.test("provideCompletion - narrows to types after `extending` (inheritance position)", () => {
+  const text = `module default {
+  abstract type Base { };
+  type User extending
+}`;
+  const pos = findPos(text, "extending");
+  pos.character += "extending".length;
+  const items = provideCompletion(text, pos);
+  const ns = new Set(names(items));
+  // After `extending` the parser only accepts type names.
+  assert(!ns.has("module"));
+  assert(!ns.has("type"));
+  assert(!ns.has("required"));
+});
+
+Deno.test("provideCompletion - keeps keywords at clause boundary (start of property line)", () => {
+  // Cursor inside a type body, before any property keyword. Both
+  // keywords (`required`, `multi`, `link`, …) AND types are
+  // technically valid here — the user might be starting a property
+  // or a link. Keep the full set rather than narrow.
+  const text = `module default {
+  type User {
+
+  };
+}`;
+  // Cursor on the empty line at column 4 (inside the type body).
+  const items = provideCompletion(text, { line: 2, character: 4 });
+  const ns = new Set(names(items));
+  assert(ns.has("required"), "keyword `required` should be in clause-boundary context");
+  assert(ns.has("multi"), "keyword `multi` should be in clause-boundary context");
+  assert(ns.has("link"), "keyword `link` should be in clause-boundary context");
+});

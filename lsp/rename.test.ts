@@ -3,7 +3,7 @@
  */
 
 import { assert, assertEquals } from "@std/assert";
-import { provideRename, prepareRename } from "./rename.ts";
+import { prepareRename, provideRename } from "./rename.ts";
 import type { Position } from "./protocol.ts";
 
 function findPos(haystack: string, needle: string, occurrence = 0): Position {
@@ -127,4 +127,93 @@ Deno.test("provideRename - rejects rename to an existing type name (collision)",
   );
   // Collision detected.
   assertEquals(result, null);
+});
+
+// =====================================================================
+// LSP Phase 8a — cross-file rename
+// =====================================================================
+// A type renamed in one .disc file must update use sites in every
+// other open .disc file too. Otherwise the rename leaves the schema
+// in a broken state until the operator hand-edits the siblings.
+// =====================================================================
+
+Deno.test("provideRename - cross-file: edits land in every file that uses the type", () => {
+  const aText = `module default {
+  type User {
+    required name: str;
+  };
+}`;
+  const bText = `module default {
+  type Post {
+    required link author -> User;
+  };
+
+  type Comment {
+    required link author -> User;
+  };
+}`;
+  const pos = findPos(aText, "User");
+  const edit = provideRename(aText, pos, "Member", "file:///a.disc", {
+    context: {
+      documents: [
+        { uri: "file:///a.disc", text: aText },
+        { uri: "file:///b.disc", text: bText },
+      ],
+    },
+  });
+  assert(edit !== null);
+  // a.disc gets the declaration edit.
+  const aEdits = edit!.changes!["file:///a.disc"];
+  assertEquals(aEdits.length, 1);
+  assertEquals(aEdits[0].newText, "Member");
+  // b.disc gets two reference edits.
+  const bEdits = edit!.changes!["file:///b.disc"];
+  assertEquals(bEdits.length, 2);
+  for (const e of bEdits) {
+    assertEquals(e.newText, "Member");
+  }
+});
+
+Deno.test("provideRename - cross-file: collision with a type in a sibling file", () => {
+  const aText = `module default {
+  type User { required name: str; };
+}`;
+  // Sibling file declares `Member`. Renaming User → Member in a.disc
+  // would produce duplicate type names across the schema.
+  const bText = `module default {
+  type Member { required handle: str; };
+}`;
+  const result = provideRename(aText, findPos(aText, "User"), "Member", "file:///a.disc", {
+    context: {
+      documents: [
+        { uri: "file:///a.disc", text: aText },
+        { uri: "file:///b.disc", text: bText },
+      ],
+    },
+  });
+  assertEquals(result, null);
+});
+
+Deno.test("provideRename - cross-file: cursor on a use site in one file edits the declaration in another", () => {
+  const aText = `module default {
+  type User { required name: str; };
+}`;
+  const bText = `module default {
+  type Post { required link author -> User; };
+}`;
+  // Cursor on `User` in b.disc (a use site, not the declaration).
+  const pos = findPos(bText, "User");
+  const edit = provideRename(bText, pos, "Member", "file:///b.disc", {
+    context: {
+      documents: [
+        { uri: "file:///a.disc", text: aText },
+        { uri: "file:///b.disc", text: bText },
+      ],
+    },
+  });
+  assert(edit !== null);
+  // a.disc declaration must be renamed.
+  assertEquals(edit!.changes!["file:///a.disc"].length, 1);
+  // b.disc use site must be renamed.
+  assertEquals(edit!.changes!["file:///b.disc"].length, 1);
 });

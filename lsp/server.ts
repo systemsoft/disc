@@ -26,12 +26,15 @@ import { provideHover } from "./hover.ts";
 import { provideCompletion } from "./completion.ts";
 import { provideDefinition } from "./definition.ts";
 import { provideDocumentSymbols } from "./document-symbols.ts";
+import { provideFormatting } from "./formatting.ts";
 import { provideReferences } from "./references.ts";
 import { prepareRename, provideRename } from "./rename.ts";
+import { provideSemanticTokens, SEMANTIC_TOKEN_LEGEND } from "./semantic-tokens.ts";
 import {
   type DidChangeTextDocumentParams,
   type DidCloseTextDocumentParams,
   type DidOpenTextDocumentParams,
+  type DocumentFormattingParams,
   type DocumentUri,
   type InitializeResult,
   type PublishDiagnosticsParams,
@@ -41,6 +44,7 @@ import {
   type RpcNotification,
   type RpcRequest,
   type RpcSuccessResponse,
+  type SemanticTokensParams,
   type TextDocumentIdentifier,
   type TextDocumentPositionParams,
   TextDocumentSyncKind,
@@ -100,6 +104,11 @@ export class LanguageServer {
             documentSymbolProvider: true,
             referencesProvider: true,
             renameProvider: { prepareProvider: true },
+            documentFormattingProvider: true,
+            semanticTokensProvider: {
+              legend: SEMANTIC_TOKEN_LEGEND,
+              full: true,
+            },
           },
           serverInfo: { name: "disc-lsp", version: "0.1.0" },
         };
@@ -177,13 +186,18 @@ export class LanguageServer {
           this.respond(req.id, []);
           return;
         }
+        // Phase 8a: pass the cross-file SDL context so a type
+        // declared in one .disc file finds uses in sibling files.
         this.respond(
           req.id,
           provideReferences(
             doc.text,
             params.position,
             params.textDocument.uri,
-            { includeDeclaration: params.context?.includeDeclaration ?? true },
+            {
+              includeDeclaration: params.context?.includeDeclaration ?? true,
+              context: this.collectSdlContext(),
+            },
           ),
         );
         return;
@@ -207,6 +221,9 @@ export class LanguageServer {
           this.respond(req.id, null);
           return;
         }
+        // Phase 8a: pass the cross-file SDL context so renames edit
+        // every file that uses the type + collision-check against
+        // siblings.
         this.respond(
           req.id,
           provideRename(
@@ -214,8 +231,45 @@ export class LanguageServer {
             params.position,
             params.newName,
             params.textDocument.uri,
+            { context: this.collectSdlContext() },
           ),
         );
+        return;
+      }
+
+      case "textDocument/semanticTokens/full": {
+        const params = req.params as SemanticTokensParams;
+        const doc = this.docs.get(params.textDocument.uri);
+        if (!doc) {
+          this.respond(req.id, { data: [] });
+          return;
+        }
+        // Phase 8c: only emit semantic tokens for `.disc` files. The
+        // embedded-EdgeQL provider would need its own legend for TS
+        // host files; out of scope for v1.
+        if (!params.textDocument.uri.endsWith(".disc")) {
+          this.respond(req.id, { data: [] });
+          return;
+        }
+        this.respond(req.id, provideSemanticTokens(doc.text));
+        return;
+      }
+
+      case "textDocument/formatting": {
+        const params = req.params as DocumentFormattingParams;
+        const doc = this.docs.get(params.textDocument.uri);
+        if (!doc) {
+          this.respond(req.id, []);
+          return;
+        }
+        // Phase 8b: only format `.disc` files. Embedded EdgeQL inside
+        // TS/JS host files is out of scope — let the host formatter
+        // (deno fmt / prettier) handle those.
+        if (!params.textDocument.uri.endsWith(".disc")) {
+          this.respond(req.id, []);
+          return;
+        }
+        this.respond(req.id, provideFormatting(doc.text));
         return;
       }
 

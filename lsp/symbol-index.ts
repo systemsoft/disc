@@ -45,9 +45,7 @@ export function buildSymbolIndex(text: string): SymbolIndex {
 
   let tokens: Token[];
   try {
-    tokens = new SDLLexer(text).tokenize().filter((t) =>
-      t.type !== TokenType.WHITESPACE && t.type !== TokenType.COMMENT
-    );
+    tokens = new SDLLexer(text).tokenize().filter((t) => t.type !== TokenType.WHITESPACE && t.type !== TokenType.COMMENT);
   } catch {
     return { types };
   }
@@ -56,8 +54,10 @@ export function buildSymbolIndex(text: string): SymbolIndex {
   while (i < tokens.length) {
     const tok = tokens[i];
     // Match `[abstract] type <Name>` or `scalar type <Name>`
-    if (matchesKeyword(tok, "type") || matchesKeyword(tok, "abstract") ||
-        matchesKeyword(tok, "scalar")) {
+    if (
+      matchesKeyword(tok, "type") || matchesKeyword(tok, "abstract") ||
+      matchesKeyword(tok, "scalar")
+    ) {
       const consumed = tryReadTypeDecl(tokens, i, text);
       if (consumed) {
         types.set(consumed.symbol.name, consumed.symbol);

@@ -14,7 +14,57 @@ tag is cut.
 
 ## [Unreleased]
 
-### Fixed
+### Added
+
+- **LSP Phase 8 — cross-file references/rename, formatter, semantic tokens, completion narrowing** (Bundles AAA + BBB + CCC + DDD).
+  Closes the four follow-ups deferred since Bundle AA. Together they
+  bring the language server up to "production daily-driver" quality:
+  multi-file refactors stay safe, `.disc` files have a built-in
+  formatter, syntax highlighting flows from the lexer (no
+  TextMate-grammar drift), and completion popups stop suggesting
+  keywords where only types are syntactically valid.
+
+  - **Bundle AAA — cross-file find-references + rename**.
+    `provideReferences` and `provideRename` now accept an optional
+    `EmbeddedSdlContext`-shaped argument. When present, references
+    walk every open `.disc` document, and rename's `WorkspaceEdit`
+    contains one entry per file that uses the type. Collision
+    checks for rename also run against names in every sibling SDL
+    file. `LanguageServer` passes `this.collectSdlContext()` to
+    both providers (same plumbing Phase 7 introduced for hover/
+    completion/definition). 8 new tests (5 in `references.test.ts`,
+    3 in `rename.test.ts`).
+  - **Bundle BBB — `.disc` formatter**. New `lsp/formatting.ts`
+    with `formatSdl(text)` (pure, idempotent re-indenter) and
+    `provideFormatting(text)` (LSP wrapper returning a single
+    whole-document `TextEdit` or empty array when no change).
+    Counts brace depth (skipping braces inside string literals
+    and `//` comments), re-indents at 2 spaces per level, preserves
+    trailing newlines + comment lines + blank lines. Out of scope:
+    line reflow, intra-line spacing normalization, alphabetization
+    — operators who want a heavier-touch tool can layer `deno fmt`
+    on top. `textDocument/formatting` capability advertised; only
+    `.disc` URIs are formatted (TS/JS host files stay with
+    `deno fmt` / `prettier`). 12 new unit tests + 3 server-routing
+    tests.
+  - **Bundle CCC — semantic tokens**. New `lsp/semantic-tokens.ts`
+    with the LSP delta-encoded format. `SEMANTIC_TOKEN_LEGEND`
+    declares 7 token types (`keyword`, `type`, `property`,
+    `string`, `number`, `comment`, `operator`); the categorizer
+    maps SDLLexer tokens to legend indices using the
+    PascalCase-vs-camelCase heuristic for identifiers. Punctuation
+    is deliberately not emitted — TextMate grammars handle it for
+    free. `textDocument/semanticTokens/full` capability advertised
+    with the legend; only `.disc` URIs return semantic tokens.
+    13 new unit tests.
+  - **Bundle DDD — context-aware completion narrowing**. The
+    completion provider's `pos` argument is now used: it inspects
+    the line prefix and narrows to types-only when the cursor is
+    after `:`, `->`, or `extending`. Other positions keep the full
+    keyword + type set. 4 new tests.
+
+  - **140 LSP tests pass** (was ~108 at session start). Lint + type
+    check clean across all touched files.
 
 - **Dockerfile.bundled: replace deprecated `apt-key` with modern keyring approach** (Bundle ZZ-4).
   After ZZ-2 unblocked the multi-stage cache COPY, the next docker

@@ -3,19 +3,19 @@
  *
  * Phase 2 returns a flat list of candidates: SDL keywords, built-in
  * scalar types, and any user-defined types in the current document.
- * Editors filter by prefix client-side, so context-aware narrowing
- * (e.g. only types after `:`, only keywords at top of a type body)
- * is a Phase 3 refinement.
+ *
+ * Phase 8d adds context-aware narrowing: after `:` (property type
+ * position), `->` (link target), or `extending` (inheritance), the
+ * popup is filtered to types only — keywords like `module`/`required`
+ * would be noise in those positions. At clause boundaries (e.g. start
+ * of a property line inside a type body) the full set still appears
+ * because either a keyword or a type is syntactically valid.
  */
 
 import { SDLParser } from "../schema/parser.ts";
 import * as AST from "../schema/ast.ts";
 import { SCALAR_TYPES } from "./scalar-info.ts";
-import {
-  type CompletionItem,
-  CompletionItemKind,
-  type Position,
-} from "./protocol.ts";
+import { type CompletionItem, CompletionItemKind, type Position } from "./protocol.ts";
 
 const KEYWORDS = [
   "module",
@@ -49,17 +49,66 @@ const KEYWORDS = [
   "check",
 ];
 
+/**
+ * Result of analyzing the cursor's surrounding context. `typesOnly`
+ * is the only narrowing v1 ships; future phases can add finer-grained
+ * cases (e.g., keyword-only at module-body start).
+ */
+interface CursorContext {
+  typesOnly: boolean;
+}
+
+/**
+ * Inspect the line up to the cursor and decide whether the position
+ * is in a "type-only" context. Three triggers:
+ *
+ *   1. Last non-whitespace char before the cursor is `:` — property
+ *      type position (`name: <here>`).
+ *   2. Last two non-whitespace chars are `->` — link target position
+ *      (`link author -> <here>`).
+ *   3. The most recent identifier before the cursor is `extending` —
+ *      inheritance position (`type User extending <here>`).
+ */
+function classifyCursor(text: string, pos: Position): CursorContext {
+  const lines = text.split("\n");
+  const line = lines[pos.line] ?? "";
+  // Slice up to the cursor; do all detection on the prefix to avoid
+  // confusion with material to the right of the cursor.
+  const prefix = line.slice(0, Math.min(pos.character, line.length));
+
+  // Trim trailing whitespace and look at what immediately precedes.
+  const trimmedRight = prefix.replace(/\s+$/, "");
+  if (trimmedRight.endsWith("->")) {
+    return { typesOnly: true };
+  }
+  if (trimmedRight.endsWith(":")) {
+    return { typesOnly: true };
+  }
+  // `extending` (alone or with a partial type name following) — the
+  // parser only accepts type names here, so narrow even when the
+  // cursor is immediately after the keyword (no space typed yet).
+  // The `\b` boundary keeps this from matching mid-word like
+  // "preextending" or similar typos.
+  if (/\bextending\b\s*([A-Za-z_][A-Za-z_0-9]*)?$/.test(prefix)) {
+    return { typesOnly: true };
+  }
+  return { typesOnly: false };
+}
+
 export function provideCompletion(
   text: string,
-  _pos: Position,
+  pos: Position,
 ): CompletionItem[] {
+  const ctx = classifyCursor(text, pos);
   const items = new Map<string, CompletionItem>();
 
-  for (const kw of KEYWORDS) {
-    items.set(kw, {
-      label: kw,
-      kind: CompletionItemKind.Keyword,
-    });
+  if (!ctx.typesOnly) {
+    for (const kw of KEYWORDS) {
+      items.set(kw, {
+        label: kw,
+        kind: CompletionItemKind.Keyword,
+      });
+    }
   }
 
   for (const s of SCALAR_TYPES) {

@@ -438,6 +438,91 @@ Deno.test("LanguageServer - rename emits a WorkspaceEdit with one TextEdit per o
 });
 
 // =====================================================================
+// Phase 8b — .disc formatting
+// =====================================================================
+
+Deno.test("LanguageServer - formatting on .disc emits a re-indent TextEdit", async () => {
+  const { srv, tx } = await newServer();
+  const text = `module default {
+type User {
+required name: str;
+};
+}`;
+  await srv.handle({
+    jsonrpc: "2.0",
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: "file:///fmt.disc", languageId: "disc", version: 1, text },
+    },
+  });
+  tx.outgoing.length = 0;
+
+  await srv.handle({
+    jsonrpc: "2.0",
+    id: 75,
+    method: "textDocument/formatting",
+    params: {
+      textDocument: { uri: "file:///fmt.disc" },
+      options: { tabSize: 2, insertSpaces: true },
+    },
+  });
+  const r = tx.outgoing.find((m) => "id" in m && m.id === 75);
+  const result = (r as { result: { newText: string }[] }).result;
+  assertEquals(result.length, 1);
+  // Properly re-indented output.
+  assertEquals(
+    result[0].newText.includes("  type User"),
+    true,
+    "formatted output must indent `type User` 2 spaces",
+  );
+  assertEquals(
+    result[0].newText.includes("    required name"),
+    true,
+    "formatted output must indent property 4 spaces",
+  );
+});
+
+Deno.test("LanguageServer - formatting on a TS host file is a no-op", async () => {
+  const { srv, tx } = await newServer();
+  const text = "const q = eql`select User`;";
+  await srv.handle({
+    jsonrpc: "2.0",
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: "file:///app.ts", languageId: "typescript", version: 1, text },
+    },
+  });
+  tx.outgoing.length = 0;
+  await srv.handle({
+    jsonrpc: "2.0",
+    id: 76,
+    method: "textDocument/formatting",
+    params: {
+      textDocument: { uri: "file:///app.ts" },
+      options: { tabSize: 2, insertSpaces: true },
+    },
+  });
+  const r = tx.outgoing.find((m) => "id" in m && m.id === 76);
+  // Non-.disc URIs return [] so the host formatter (deno fmt /
+  // prettier) keeps ownership.
+  assertEquals((r as { result: unknown[] }).result.length, 0);
+});
+
+Deno.test("LanguageServer - initialize advertises documentFormattingProvider capability", async () => {
+  const { srv, tx } = await newServer();
+  tx.outgoing.length = 0;
+  await srv.handle({
+    jsonrpc: "2.0",
+    id: 77,
+    method: "initialize",
+    params: {},
+  });
+  const r = tx.outgoing.find((m) => "id" in m && m.id === 77);
+  const result = (r as { result: { capabilities: { documentFormattingProvider?: boolean } } }).result;
+  assertEquals(result.capabilities.documentFormattingProvider, true);
+});
+
+// =====================================================================
 // Phase 6 — embedded EdgeQL hover/completion routed by URI
 // =====================================================================
 

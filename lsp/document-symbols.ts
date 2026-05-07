@@ -7,10 +7,7 @@
  */
 
 import { buildSymbolIndex, type TypeKind } from "./symbol-index.ts";
-import {
-  type DocumentSymbol,
-  SymbolKind,
-} from "./protocol.ts";
+import { type DocumentSymbol, SymbolKind } from "./protocol.ts";
 
 export function provideDocumentSymbols(text: string): DocumentSymbol[] {
   const idx = buildSymbolIndex(text);

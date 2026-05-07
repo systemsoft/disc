@@ -57,9 +57,7 @@ Deno.test("analyzeDiscDocument - validator error produces an Error diagnostic", 
   assert(diags.length > 0, "expected validation diagnostic");
   assert(
     diags.some((d) => d.message.includes("custom_note")),
-    `expected a diagnostic mentioning custom_note; got: ${
-      JSON.stringify(diags)
-    }`,
+    `expected a diagnostic mentioning custom_note; got: ${JSON.stringify(diags)}`,
   );
 });
 

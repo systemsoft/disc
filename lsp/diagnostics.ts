@@ -9,12 +9,7 @@
 import { SDLParser } from "../schema/parser.ts";
 import { SchemaValidator } from "../schema/validator.ts";
 import { DiscError } from "../lib/errors.ts";
-import {
-  type Diagnostic,
-  DiagnosticSeverity,
-  type Position,
-  type Range,
-} from "./protocol.ts";
+import { type Diagnostic, DiagnosticSeverity, type Position, type Range } from "./protocol.ts";
 
 const SOURCE = "disc";
 

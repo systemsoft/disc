@@ -32,9 +32,7 @@ Deno.test("buildSymbolIndex - records each type declaration with its range", () 
   assertEquals(user.range.start.line, 1);
   assert(
     text.split("\n")[1].slice(user.range.start.character).startsWith("User"),
-    `range start should land on 'User'; got line: ${
-      JSON.stringify(text.split("\n")[1])
-    }, char: ${user.range.start.character}`,
+    `range start should land on 'User'; got line: ${JSON.stringify(text.split("\n")[1])}, char: ${user.range.start.character}`,
   );
 
   const ts = idx.types.get("Timestamped")!;
