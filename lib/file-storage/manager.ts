@@ -16,11 +16,7 @@
  */
 
 import type { DatabaseInterface } from "../../auth/database-interface.ts";
-import type {
-  FileMetadata,
-  FileStorageBackend,
-  FileUpload,
-} from "./types.ts";
+import type { FileMetadata, FileStorageBackend, FileUpload } from "./types.ts";
 import { getLogger } from "../logger.ts";
 
 const log = getLogger("file-storage");
@@ -226,9 +222,7 @@ function rowToMetadata(row: Record<string, unknown>): FileMetadata {
     size: Number(row.size),
     sha256: String(row.sha256),
     storageKey: String(row.storage_key),
-    metadata: row.metadata
-      ? JSON.parse(String(row.metadata)) as Record<string, unknown>
-      : null,
+    metadata: row.metadata ? JSON.parse(String(row.metadata)) as Record<string, unknown> : null,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };

@@ -1,10 +1,5 @@
 import { assertEquals, assertNotEquals } from "@std/assert";
-import {
-  isPgRunning,
-  type ProjectContext,
-  resolveDsn,
-  resolveProjectContext,
-} from "./project-context.ts";
+import { isPgRunning, type ProjectContext, resolveDsn, resolveProjectContext } from "./project-context.ts";
 import { join } from "@std/path";
 
 // ---------------------------------------------------------------------------

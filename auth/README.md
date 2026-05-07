@@ -237,9 +237,9 @@ in the browser-passkey ecosystem.
 const provider = new AuthProvider({
   jwtSecret: "...",
   webauthn: {
-    rpId: "example.com",        // apex domain credentials are scoped to
-    rpName: "Example App",       // shown in browser prompts
-    origin: "https://example.com" // expected clientData.origin
+    rpId: "example.com", // apex domain credentials are scoped to
+    rpName: "Example App", // shown in browser prompts
+    origin: "https://example.com", // expected clientData.origin
   },
 }, db);
 ```
@@ -259,10 +259,10 @@ const opts = await provider.beginWebAuthnRegistration(userId);
 // 2. Browser returns a PublicKeyCredential. Caller assembles:
 await provider.finishWebAuthnRegistration({
   challengeId: opts.challengeId,
-  credentialId: cred.id,                                    // base64url
+  credentialId: cred.id, // base64url
   attestationObject: base64url(cred.response.attestationObject),
   clientDataJSON: base64url(cred.response.clientDataJSON),
-  name: "My iPhone",                                         // optional
+  name: "My iPhone", // optional
 });
 ```
 
@@ -287,21 +287,22 @@ if ("mfaRequired" in result) {
 
 **HTTP routes** (login routes public + rate-limited; rest auth-gated):
 
-| Method | Path                                  | Body                     |
-|--------|---------------------------------------|--------------------------|
-| POST   | `/auth/webauthn/register/begin`       | (none)                   |
-| POST   | `/auth/webauthn/register/finish`      | `WebAuthnRegistrationFinish` |
-| POST   | `/auth/webauthn/login/begin`          | `{ "email"?: "..." }`    |
-| POST   | `/auth/webauthn/login/finish`         | `WebAuthnLoginFinish`    |
-| GET    | `/auth/webauthn/credentials`          | (none)                   |
-| POST   | `/auth/webauthn/credentials/delete`   | `{ "credentialId": "..." }` |
+| Method | Path                                | Body                         |
+| ------ | ----------------------------------- | ---------------------------- |
+| POST   | `/auth/webauthn/register/begin`     | (none)                       |
+| POST   | `/auth/webauthn/register/finish`    | `WebAuthnRegistrationFinish` |
+| POST   | `/auth/webauthn/login/begin`        | `{ "email"?: "..." }`        |
+| POST   | `/auth/webauthn/login/finish`       | `WebAuthnLoginFinish`        |
+| GET    | `/auth/webauthn/credentials`        | (none)                       |
+| POST   | `/auth/webauthn/credentials/delete` | `{ "credentialId": "..." }`  |
 
 **Security notes:**
+
 - Challenges are stored server-side (keyed by `challengeId`), 5-min
   TTL, single-use. Burned on every error path that read them — no
   replay even mid-failure.
 - Counter monotonicity is enforced on every login. A counter that
-  *decreased* triggers `INVALID_TOKEN` and a `webauthn_counter_regression`
+  _decreased_ triggers `INVALID_TOKEN` and a `webauthn_counter_regression`
   audit event — that's how WebAuthn detects cloned credentials. Counter
   of 0 (some authenticators don't implement counters) is allowed but
   never bumps stored state.
@@ -346,11 +347,12 @@ if ("mfaRequired" in challenge) {
 **HTTP routes:**
 
 | Method | Path                                | Body                                         |
-|--------|-------------------------------------|----------------------------------------------|
-| POST   | `/auth/mfa/recovery-codes/generate` | `{ "count"?: 8 }` (auth-gated)              |
+| ------ | ----------------------------------- | -------------------------------------------- |
+| POST   | `/auth/mfa/recovery-codes/generate` | `{ "count"?: 8 }` (auth-gated)               |
 | POST   | `/auth/mfa/recovery-codes/login`    | `{ "challengeToken": "...", "code": "..." }` |
 
 **Design notes:**
+
 - Codes are stored SHA-256 hashed (the same scheme reset/verify tokens
   use — full-length high-entropy inputs don't need bcrypt's slow hash).
 - Input normalization strips dashes/spaces and uppercases, so users can
@@ -386,10 +388,10 @@ if ("mfaRequired" in result) {
 
 **HTTP routes** (both public, both rate-limited the same as login):
 
-| Method | Path                        | Body                  |
-|--------|-----------------------------|-----------------------|
-| POST   | `/auth/magic-link/request`  | `{ "email": "..." }`  |
-| POST   | `/auth/magic-link/consume`  | `{ "token": "..." }`  |
+| Method | Path                       | Body                 |
+| ------ | -------------------------- | -------------------- |
+| POST   | `/auth/magic-link/request` | `{ "email": "..." }` |
+| POST   | `/auth/magic-link/consume` | `{ "token": "..." }` |
 
 **Anti-enumeration:** `requestMagicLink` always returns a plaintext
 token, even when no user matches the email — the token just isn't
@@ -440,14 +442,15 @@ if ("mfaRequired" in result) {
 
 **HTTP routes** (auth-gated except `/auth/mfa/totp/login`):
 
-| Method | Path                       | Body                                |
-|--------|----------------------------|-------------------------------------|
-| POST   | `/auth/mfa/totp/enroll`    | (none)                              |
-| POST   | `/auth/mfa/totp/confirm`   | `{ "code": "123456" }`              |
-| POST   | `/auth/mfa/totp/disable`   | (none)                              |
-| POST   | `/auth/mfa/totp/login`     | `{ "challengeToken": "...", "code": "123456" }` |
+| Method | Path                     | Body                                            |
+| ------ | ------------------------ | ----------------------------------------------- |
+| POST   | `/auth/mfa/totp/enroll`  | (none)                                          |
+| POST   | `/auth/mfa/totp/confirm` | `{ "code": "123456" }`                          |
+| POST   | `/auth/mfa/totp/disable` | (none)                                          |
+| POST   | `/auth/mfa/totp/login`   | `{ "challengeToken": "...", "code": "123456" }` |
 
 **Design notes:**
+
 - Pending enrollments (no `confirmed_at`) do NOT gate login — protects
   users from locking themselves out if they close the QR before scanning.
 - Re-enrolling rotates the secret; the previous QR becomes invalid.
@@ -474,10 +477,10 @@ await provider.createRole("viewer", "Read-only");
 await provider.assignRole(userId, "admin");
 await provider.revokeRole(userId, "admin");
 
-const roles = await provider.getUserRoles(userId);   // string[]
+const roles = await provider.getUserRoles(userId); // string[]
 const isAdmin = await provider.userHasRole(userId, "admin");
 const all = await provider.listRoles();
-await provider.deleteRole("viewer");                  // cascades to user_roles
+await provider.deleteRole("viewer"); // cascades to user_roles
 ```
 
 `assignRole` is idempotent (granting a role twice is a no-op) and
@@ -496,7 +499,7 @@ The access bridge maps `auth.roles[0]` → `userRole`, which the access
 evaluator and SQL injector both use for `has_role()` / `current_role`.
 
 **Snapshot semantics**: a token carries the roles that were active when
-it was *issued*. Roles assigned (or revoked) afterwards do not take
+it was _issued_. Roles assigned (or revoked) afterwards do not take
 effect on existing tokens — the user re-logs to pick up the change.
 This is intentional: it keeps tokens self-contained (no DB lookup per
 request to refresh role state) and matches how the compilation-cache

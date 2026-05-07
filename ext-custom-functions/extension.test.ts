@@ -217,15 +217,11 @@ Deno.test("CustomFunctionsExtension - getDatabaseSetup returns DROP SQL for all 
   const setup = ext.getDatabaseSetup();
   assertEquals(setup.teardownSql?.length, 2);
   assertEquals(
-    setup.teardownSql?.some((s) =>
-      s.includes("DROP FUNCTION IF EXISTS pg_func")
-    ),
+    setup.teardownSql?.some((s) => s.includes("DROP FUNCTION IF EXISTS pg_func")),
     true,
   );
   assertEquals(
-    setup.teardownSql?.some((s) =>
-      s.includes("DROP FUNCTION IF EXISTS sql_alias")
-    ),
+    setup.teardownSql?.some((s) => s.includes("DROP FUNCTION IF EXISTS sql_alias")),
     true,
   );
 });

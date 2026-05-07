@@ -222,9 +222,7 @@ export class PostgresMonitor {
     const port = this.instance.getPort();
     const effectivePort = port === 0 ? 5432 : port;
 
-    const connArgs = port === 0
-      ? ["-h", socketDir, "-p", String(effectivePort), "-U", "disc"]
-      : ["-h", "localhost", "-p", String(port), "-U", "disc"];
+    const connArgs = port === 0 ? ["-h", socketDir, "-p", String(effectivePort), "-U", "disc"] : ["-h", "localhost", "-p", String(port), "-U", "disc"];
 
     try {
       const query = `
@@ -281,9 +279,7 @@ export class PostgresMonitor {
     const port = this.instance.getPort();
     const effectivePort = port === 0 ? 5432 : port;
 
-    const connArgs = port === 0
-      ? ["-h", socketDir, "-p", String(effectivePort), "-U", "disc"]
-      : ["-h", "localhost", "-p", String(port), "-U", "disc"];
+    const connArgs = port === 0 ? ["-h", socketDir, "-p", String(effectivePort), "-U", "disc"] : ["-h", "localhost", "-p", String(port), "-U", "disc"];
 
     logger.info("Running PostgreSQL maintenance tasks...");
 

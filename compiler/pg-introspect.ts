@@ -175,9 +175,7 @@ function detectJunctions(data: IntrospectionData): JunctionInfo[] {
     if (extraCols.length > 0) continue;
 
     // Order by FK source-column position to make the result deterministic.
-    const sortedFks = [...fks].sort((a, b) =>
-      a.fromColumn.localeCompare(b.fromColumn)
-    );
+    const sortedFks = [...fks].sort((a, b) => a.fromColumn.localeCompare(b.fromColumn));
     junctions.push({
       tableName: t.tableName,
       leftColumn: sortedFks[0].fromColumn,

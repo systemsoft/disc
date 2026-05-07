@@ -4,13 +4,7 @@
 
 import { assertEquals, assertExists, assertRejects } from "@std/assert";
 import { parseArgs } from "@std/cli/parse-args";
-import {
-  cleanupTempDir,
-  createTempDir,
-  createTestSchema,
-  EnvMock,
-  SIMPLE_SCHEMA,
-} from "../tests/test-utils.ts";
+import { cleanupTempDir, createTempDir, createTestSchema, EnvMock, SIMPLE_SCHEMA } from "../tests/test-utils.ts";
 
 // Import functions to test (we'll need to export them from main.ts)
 // For now, we'll test the CLI by importing and calling functions directly

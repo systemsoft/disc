@@ -6,12 +6,7 @@
  * (gh/geldata#3567)
  */
 
-export {
-  FileAccessDeniedError,
-  FileManager,
-  FileNotFoundError,
-  FileTooLargeError,
-} from "./manager.ts";
+export { FileAccessDeniedError, FileManager, FileNotFoundError, FileTooLargeError } from "./manager.ts";
 export type { FileManagerOptions } from "./manager.ts";
 
 export { LocalFileStorage } from "./local.ts";

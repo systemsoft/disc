@@ -8,11 +8,7 @@
  *   - emits `invalidate` when the registry fans an invalidation
  */
 
-import {
-  assertEquals,
-  assertGreater,
-  assertStringIncludes,
-} from "@std/assert";
+import { assertEquals, assertGreater, assertStringIncludes } from "@std/assert";
 import { handleDataWatch } from "./data-watch.ts";
 import { DataWatchRegistry } from "./data-watch-registry.ts";
 import { ConnectionPool } from "../../lib/connection-pool.ts";
@@ -59,9 +55,7 @@ async function readUntil(
   let combined = "";
   for (let i = 0; i < maxAttempts; i++) {
     const chunkPromise = reader.read();
-    const timeout = new Promise<{ done: true; value: undefined }>((r) =>
-      setTimeout(() => r({ done: true, value: undefined }), perAttemptMs)
-    );
+    const timeout = new Promise<{ done: true; value: undefined }>((r) => setTimeout(() => r({ done: true, value: undefined }), perAttemptMs));
     const result = await Promise.race([chunkPromise, timeout]);
     if (result.done) break;
     combined += decoder.decode(result.value);
@@ -104,8 +98,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "handleDataWatch — emits invalidate when the registry fans an event",
+  name: "handleDataWatch — emits invalidate when the registry fans an event",
   // Stream cancel() callback uses setTimeout-based clearInterval; Deno's
   // test runner counts the in-flight heartbeat as a leak. The handler
   // is correct — clearInterval is called on cancel — and the leak goes
@@ -129,7 +122,7 @@ Deno.test({
 
       // Drive an invalidation through the public path: swap the pool
       // to one that returns a single change-log row, then run pollOnce.
-      (registry as unknown as { pool: ConnectionPool }).pool = ({
+      (registry as unknown as { pool: ConnectionPool }).pool = {
         query(_sql: string, _params?: unknown[]) {
           return Promise.resolve({
             rows: [{ id: 1, table_name: "widgets" }],
@@ -139,7 +132,7 @@ Deno.test({
         execute() {
           return Promise.resolve();
         },
-      } as unknown as ConnectionPool);
+      } as unknown as ConnectionPool;
       await registry.pollOnce();
 
       const combined = await readUntil(reader, "event: invalidate", 6, 100);

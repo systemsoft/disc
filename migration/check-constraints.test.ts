@@ -501,24 +501,18 @@ Deno.test("End-to-end - Schema with constraints produces correct DDL", () => {
   const createTable = ddl.find((s) => s.startsWith("CREATE TABLE"));
   assertEquals(createTable !== undefined, true);
 
-  const uniqueIndex = ddl.find((s) =>
-    s.includes("UNIQUE INDEX") && s.includes("username")
-  );
+  const uniqueIndex = ddl.find((s) => s.includes("UNIQUE INDEX") && s.includes("username"));
   assertEquals(uniqueIndex !== undefined, true);
 
   const checkStatements = ddl.filter((s) => s.includes("CHECK"));
   assertEquals(checkStatements.length, 4);
 
   // Verify min_len_value CHECK for username
-  const minLenCheck = checkStatements.find((s) =>
-    s.includes("length(username) >= 3")
-  );
+  const minLenCheck = checkStatements.find((s) => s.includes("length(username) >= 3"));
   assertEquals(minLenCheck !== undefined, true);
 
   // Verify max_len_value CHECK for username
-  const maxLenCheck = checkStatements.find((s) =>
-    s.includes("length(username) <= 50")
-  );
+  const maxLenCheck = checkStatements.find((s) => s.includes("length(username) <= 50"));
   assertEquals(maxLenCheck !== undefined, true);
 
   // Verify min_value CHECK for age
@@ -967,9 +961,7 @@ Deno.test("DDL Generator - DropConstraint generates ALTER TABLE DROP CONSTRAINT"
   };
 
   const statements = generator.generateDDL([operation]);
-  const dropStatements = statements.filter((s) =>
-    s.includes("DROP CONSTRAINT")
-  );
+  const dropStatements = statements.filter((s) => s.includes("DROP CONSTRAINT"));
 
   assertEquals(dropStatements.length, 1);
   assertStringIncludes(dropStatements[0], "DROP CONSTRAINT IF EXISTS");

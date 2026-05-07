@@ -692,9 +692,7 @@ Deno.test("SDL Parser - parseWithRecovery: collects multiple errors in one pass"
     `expected at least 1 error, got ${errors.length}`,
   );
   // Good1 + Good2 must both be present in the recovered document.
-  const names = document.declarations.flatMap((d) =>
-    d.kind === "TypeDeclaration" ? [d.name.value] : []
-  );
+  const names = document.declarations.flatMap((d) => d.kind === "TypeDeclaration" ? [d.name.value] : []);
   assertEquals(names.includes("Good1"), true);
   assertEquals(names.includes("Good2"), true);
 });
@@ -712,9 +710,7 @@ Deno.test("SDL Parser - parseWithRecovery: recovers across multiple bad blocks",
 
   const { document, errors } = new SDLParser(source).parseWithRecovery();
 
-  const names = document.declarations.flatMap((d) =>
-    d.kind === "TypeDeclaration" ? [d.name.value] : []
-  );
+  const names = document.declarations.flatMap((d) => d.kind === "TypeDeclaration" ? [d.name.value] : []);
   for (const expected of ["Ok1", "Ok2", "Ok3"]) {
     assertEquals(
       names.includes(expected),

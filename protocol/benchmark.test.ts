@@ -18,9 +18,7 @@ function benchmark(name: string, fn: () => void, iterations = 10000): void {
   const time = end - start;
   const opsPerSecond = (iterations / (time / 1000)).toFixed(0);
   console.log(
-    `${name}: ${
-      time.toFixed(2)
-    }ms for ${iterations} iterations (${opsPerSecond} ops/sec)`,
+    `${name}: ${time.toFixed(2)}ms for ${iterations} iterations (${opsPerSecond} ops/sec)`,
   );
 }
 
@@ -53,8 +51,7 @@ Deno.test("Benchmark - Message parsing", () => {
     inputLanguage: Types.InputLanguage.EdgeQL,
     outputFormat: Types.OutputFormat.JSON,
     expectedCardinality: Types.Cardinality.Many,
-    commandText:
-      "SELECT User { id, name, email, posts: { title, content } } FILTER .active = true ORDER BY .createdAt DESC LIMIT 100",
+    commandText: "SELECT User { id, name, email, posts: { title, content } } FILTER .active = true ORDER BY .createdAt DESC LIMIT 100",
   };
 
   const message = builder.buildMessage(parseMessage);
@@ -269,8 +266,7 @@ Deno.test("Benchmark - End-to-end message roundtrip", () => {
     inputLanguage: Types.InputLanguage.EdgeQL,
     outputFormat: Types.OutputFormat.Binary,
     expectedCardinality: Types.Cardinality.Many,
-    commandText:
-      "SELECT User { id, name, email, profile: { bio, avatar_url }, posts: { id, title, content, tags, createdAt } } FILTER .id = <uuid>$0",
+    commandText: "SELECT User { id, name, email, profile: { bio, avatar_url }, posts: { id, title, content, tags, createdAt } } FILTER .id = <uuid>$0",
     stateDataDescriptorId: Types.uuidToBytes(
       "11111111-2222-3333-4444-555555555555",
     ),

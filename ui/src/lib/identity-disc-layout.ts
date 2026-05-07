@@ -73,11 +73,7 @@ export function layoutDisc(opts: LayoutOptions): DiscLayout {
   }
   return {
     center: { x: cx, y: cy },
-    outgoing: spread(outgoingCount, OUTGOING_ARC).map((a) =>
-      pointAt(cx, cy, radius, a)
-    ),
-    incoming: spread(incomingCount, INCOMING_ARC).map((a) =>
-      pointAt(cx, cy, radius, a)
-    ),
+    outgoing: spread(outgoingCount, OUTGOING_ARC).map((a) => pointAt(cx, cy, radius, a)),
+    incoming: spread(incomingCount, INCOMING_ARC).map((a) => pointAt(cx, cy, radius, a)),
   };
 }

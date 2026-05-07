@@ -11,13 +11,7 @@
  */
 
 import { BaseExtension } from "../extensions/base-extension.ts";
-import type {
-  CompilerHook,
-  ExtensionContext,
-  ExtensionDatabaseSetup,
-  ExtensionMetadata,
-  ExtensionRoute,
-} from "../extensions/types.ts";
+import type { CompilerHook, ExtensionContext, ExtensionDatabaseSetup, ExtensionMetadata, ExtensionRoute } from "../extensions/types.ts";
 import type { FunctionDef } from "../compiler/context.ts";
 import { DEFAULT_LANGUAGE, FTS_VECTOR_COLUMN } from "./index-builder.ts";
 
@@ -78,14 +72,10 @@ export class FtsExtension extends BaseExtension {
           switch (funcName) {
             case "fts::search":
             case "fts__search":
-              return `${FTS_VECTOR_COLUMN} @@ plainto_tsquery('${language}', ${
-                args[0]
-              })`;
+              return `${FTS_VECTOR_COLUMN} @@ plainto_tsquery('${language}', ${args[0]})`;
             case "fts::rank":
             case "fts__rank":
-              return `ts_rank(${FTS_VECTOR_COLUMN}, plainto_tsquery('${language}', ${
-                args[0]
-              }))`;
+              return `ts_rank(${FTS_VECTOR_COLUMN}, plainto_tsquery('${language}', ${args[0]}))`;
             default:
               return undefined;
           }
@@ -101,9 +91,7 @@ export class FtsExtension extends BaseExtension {
   override healthCheck(): Promise<{ healthy: boolean; details?: string }> {
     return Promise.resolve({
       healthy: this.state === "ready",
-      details: this.state === "ready"
-        ? `FTS enabled (language: ${this.language})`
-        : undefined,
+      details: this.state === "ready" ? `FTS enabled (language: ${this.language})` : undefined,
     });
   }
 }

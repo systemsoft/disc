@@ -347,8 +347,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Phase 20: Computed property is not stored as a column in PostgreSQL",
+  name: "PG Phase 20: Computed property is not stored as a column in PostgreSQL",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -422,8 +421,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Phase 20: Multiple CHECK constraints on same type enforced by PostgreSQL",
+  name: "PG Phase 20: Multiple CHECK constraints on same type enforced by PostgreSQL",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();

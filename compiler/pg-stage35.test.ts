@@ -146,8 +146,7 @@ function compileEdgeQL(source: string): string {
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Stage 35: array<str> property creates TEXT[] column and round-trips array data",
+  name: "PG Stage 35: array<str> property creates TEXT[] column and round-trips array data",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -171,9 +170,7 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema should succeed: ${
-          result.ok ? "" : JSON.stringify(result)
-        }`,
+        `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`,
       );
 
       // Verify column type
@@ -234,8 +231,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Stage 35: tuple<str, int64> property creates JSONB column and round-trips tuple data",
+  name: "PG Stage 35: tuple<str, int64> property creates JSONB column and round-trips tuple data",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -259,9 +255,7 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema should succeed: ${
-          result.ok ? "" : JSON.stringify(result)
-        }`,
+        `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`,
       );
 
       // Verify column type is JSONB
@@ -324,8 +318,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Stage 35: on target delete set empty produces FK with ON DELETE SET NULL",
+  name: "PG Stage 35: on target delete set empty produces FK with ON DELETE SET NULL",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -406,8 +399,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Stage 35: AFTER DELETE trigger deletes target when source is deleted",
+  name: "PG Stage 35: AFTER DELETE trigger deletes target when source is deleted",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -519,8 +511,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Stage 35: link inheritance - abstract link properties are inherited by extending links",
+  name: "PG Stage 35: link inheritance - abstract link properties are inherited by extending links",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -623,8 +614,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Stage 35: polymorphic function resolution - count() with anytype compiles and executes",
+  name: "PG Stage 35: polymorphic function resolution - count() with anytype compiles and executes",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -665,8 +655,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Stage 35: combined array + tuple properties create correct column types and round-trip data",
+  name: "PG Stage 35: combined array + tuple properties create correct column types and round-trip data",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -692,9 +681,7 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema should succeed: ${
-          result.ok ? "" : JSON.stringify(result)
-        }`,
+        `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`,
       );
 
       // Verify column types

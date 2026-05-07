@@ -311,8 +311,7 @@ Deno.test("Stage 39 - validator: undeclared annotation usage produces error", ()
   assertEquals(result.ok, false);
   assertEquals(result.errors !== undefined, true);
   const hasAnnotationError = result.errors!.some(
-    (e) =>
-      e.message.includes("custom_note") && e.message.includes("not defined"),
+    (e) => e.message.includes("custom_note") && e.message.includes("not defined"),
   );
   assertEquals(hasAnnotationError, true);
 });

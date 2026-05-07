@@ -35,8 +35,7 @@ export const DescriptorTag = {
   TYPE_ANNOTATION: 0xff,
 } as const;
 
-export type DescriptorTagValue =
-  (typeof DescriptorTag)[keyof typeof DescriptorTag];
+export type DescriptorTagValue = (typeof DescriptorTag)[keyof typeof DescriptorTag];
 
 // ---------------------------------------------------------------------------
 // Well-known type UUIDs
@@ -546,9 +545,7 @@ export function buildResultDescriptors(
       if (prop) {
         const scalarType = prop.edgeqlType ?? prop.type;
         const typeId = emitScalar(scalarType);
-        const cardinality = prop.required
-          ? Cardinality.ONE
-          : Cardinality.AT_MOST_ONE;
+        const cardinality = prop.required ? Cardinality.ONE : Cardinality.AT_MOST_ONE;
         const flags = prop.hasDefault ? ShapeElementFlags.IMPLICIT : 0;
         elements.push({ flags, cardinality, name: fieldName, typeId });
         continue;
@@ -572,9 +569,7 @@ export function buildResultDescriptors(
           linkTypeId = emitScalar("uuid");
         }
 
-        const cardinality = link.multi
-          ? Cardinality.MANY
-          : (link.required ? Cardinality.ONE : Cardinality.AT_MOST_ONE);
+        const cardinality = link.multi ? Cardinality.MANY : (link.required ? Cardinality.ONE : Cardinality.AT_MOST_ONE);
         elements.push({
           flags: ShapeElementFlags.LINK,
           cardinality,

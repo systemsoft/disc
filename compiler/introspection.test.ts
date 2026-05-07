@@ -96,9 +96,7 @@ Deno.test("describeType - constraints include args", () => {
   const desc = describeType(schema, "User");
   const nameProp = desc.properties.find((p) => p.name === "name");
   assertEquals(nameProp !== undefined, true);
-  const maxLenConstraint = nameProp!.constraints.find((c) =>
-    c.startsWith("max_length")
-  );
+  const maxLenConstraint = nameProp!.constraints.find((c) => c.startsWith("max_length"));
   assertEquals(maxLenConstraint !== undefined, true);
   assertEquals(maxLenConstraint!.includes("255"), true);
 });

@@ -420,12 +420,8 @@ export function resolveProjectContext(cwd?: string): ProjectContext | null {
     );
   }
   const instanceName = fields.instanceName ?? projectName;
-  const managed = fields.managed !== undefined
-    ? fields.managed.toLowerCase() === "true"
-    : true;
-  const serverPort = fields.port !== undefined
-    ? parseInt(fields.port, 10)
-    : 5656;
+  const managed = fields.managed !== undefined ? fields.managed.toLowerCase() === "true" : true;
+  const serverPort = fields.port !== undefined ? parseInt(fields.port, 10) : 5656;
   const serverHost = fields.host ?? "localhost";
 
   const instancesBase = join(discHome(), "instances", instanceName);

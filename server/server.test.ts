@@ -5,11 +5,7 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { DiscServer } from "./server.ts";
 import { EdgeQLProtocolHandler } from "./protocol.ts";
-import {
-  ConnectionManager,
-  SessionManager,
-  TransactionManager,
-} from "./connection.ts";
+import { ConnectionManager, SessionManager, TransactionManager } from "./connection.ts";
 
 Deno.test("Server Config - Default Values", () => {
   const server = new DiscServer();

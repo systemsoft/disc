@@ -128,8 +128,7 @@ export class AuthMiddleware {
       );
     }
 
-    const isAllowed = (origin: string | null): origin is string =>
-      !!origin && (origins.includes("*") || origins.includes(origin));
+    const isAllowed = (origin: string | null): origin is string => !!origin && (origins.includes("*") || origins.includes(origin));
 
     return async (request: Request, context?: AuthContext) => {
       const origin = request.headers.get("Origin");

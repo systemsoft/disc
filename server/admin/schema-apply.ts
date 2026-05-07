@@ -90,9 +90,7 @@ export async function handleSchemaApply(
   // structured error before opening a DB connection.
   const parsePreview = computeSchemaDiff("module default {};", onDiskSdl);
   if (parsePreview.errors.length > 0) {
-    const onDiskParseErrors = parsePreview.errors.filter((e) =>
-      e.source === "onDisk"
-    );
+    const onDiskParseErrors = parsePreview.errors.filter((e) => e.source === "onDisk");
     if (onDiskParseErrors.length > 0) {
       return jsonResponse(400, {
         error: "Schema file has parse errors",

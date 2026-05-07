@@ -159,8 +159,7 @@ async function handleGet(
   id: string,
 ): Promise<Response> {
   const shape = renderShape(opts.schema, typeDef);
-  const edgeql =
-    `select ${typeDef.name} ${shape} filter .id = <uuid>${edgeqlString(id)}`;
+  const edgeql = `select ${typeDef.name} ${shape} filter .id = <uuid>${edgeqlString(id)}`;
 
   const result = await runEdgeQL(opts, edgeql);
   if (result instanceof Response) return result;
@@ -223,8 +222,7 @@ async function handleUpdate(
     return errorJson("PATCH body must contain at least one field", 400);
   }
 
-  const edgeql =
-    `update ${typeDef.name} filter .id = <uuid>${edgeqlString(id)} ` +
+  const edgeql = `update ${typeDef.name} filter .id = <uuid>${edgeqlString(id)} ` +
     `set { ${assignments} }`;
 
   const result = await runEdgeQL(opts, edgeql);
@@ -241,8 +239,7 @@ async function handleDelete(
   typeDef: TypeDef,
   id: string,
 ): Promise<Response> {
-  const edgeql =
-    `delete ${typeDef.name} filter .id = <uuid>${edgeqlString(id)}`;
+  const edgeql = `delete ${typeDef.name} filter .id = <uuid>${edgeqlString(id)}`;
   const result = await runEdgeQL(opts, edgeql);
   if (result instanceof Response) return result;
   // Return 204 even if the row didn't exist — DELETE is idempotent and
@@ -625,8 +622,7 @@ function isExpand(annotations: Record<string, string> | undefined): boolean {
   return "rest::expand" in annotations;
 }
 
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function isValidUuid(s: string): boolean {
   return UUID_RE.test(s);

@@ -15,11 +15,7 @@ function mockFetch(
     input: string | URL | Request,
     init?: RequestInit,
   ): Promise<Response> => {
-    const url = typeof input === "string"
-      ? input
-      : input instanceof URL
-      ? input.toString()
-      : input.url;
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     return Promise.resolve(handler(url, init));
   };
   return () => {

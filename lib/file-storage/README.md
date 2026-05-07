@@ -6,7 +6,7 @@ backend now; S3-compatible backend is the obvious follow-up.
 ## Wiring
 
 ```ts
-import { LocalFileStorage, FileManager } from "disc/lib/file-storage/mod.ts";
+import { FileManager, LocalFileStorage } from "disc/lib/file-storage/mod.ts";
 
 const fileManager = new FileManager(db, {
   backend: new LocalFileStorage("/var/disc/files"),
@@ -15,9 +15,11 @@ const fileManager = new FileManager(db, {
 await fileManager.initialize();
 
 const server = new HttpServer({
-  config: { /* ... */ },
+  config: {/* ... */},
   protocolHandler,
-  authProvider, authMiddleware, authRoutes,
+  authProvider,
+  authMiddleware,
+  authRoutes,
   fileManager, // optional — omit to disable /files routes
 });
 ```
@@ -27,13 +29,13 @@ const server = new HttpServer({
 All routes require `Authorization: Bearer <JWT>` and operate on the
 authenticated user's files only.
 
-| Method | Path                  | Body / Headers                                |
-|--------|-----------------------|-----------------------------------------------|
-| POST   | `/files`              | raw bytes; `Content-Type` + `x-file-name` opt |
-| GET    | `/files`              | (none) — returns `{ "files": [...] }`         |
-| GET    | `/files/:id`          | (none) — binary, with `Content-Disposition`   |
-| GET    | `/files/:id/meta`     | (none) — JSON metadata                        |
-| DELETE | `/files/:id`          | (none) — `204` on success                     |
+| Method | Path              | Body / Headers                                |
+| ------ | ----------------- | --------------------------------------------- |
+| POST   | `/files`          | raw bytes; `Content-Type` + `x-file-name` opt |
+| GET    | `/files`          | (none) — returns `{ "files": [...] }`         |
+| GET    | `/files/:id`      | (none) — binary, with `Content-Disposition`   |
+| GET    | `/files/:id/meta` | (none) — JSON metadata                        |
+| DELETE | `/files/:id`      | (none) — `204` on success                     |
 
 ## Behavior
 

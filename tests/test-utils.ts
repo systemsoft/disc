@@ -149,17 +149,11 @@ export class ConsoleCapture {
   }
 
   hasLog(pattern: string | RegExp): boolean {
-    return this.logs.some((log) =>
-      typeof pattern === "string" ? log.includes(pattern) : pattern.test(log)
-    );
+    return this.logs.some((log) => typeof pattern === "string" ? log.includes(pattern) : pattern.test(log));
   }
 
   hasError(pattern: string | RegExp): boolean {
-    return this.errors.some((error) =>
-      typeof pattern === "string"
-        ? error.includes(pattern)
-        : pattern.test(error)
-    );
+    return this.errors.some((error) => typeof pattern === "string" ? error.includes(pattern) : pattern.test(error));
   }
 }
 
@@ -210,9 +204,7 @@ export function assertLogContains(
       throw new Error(`Expected log to contain ${pattern}, but got:\n${logs}`);
     }
   } else {
-    const found = source.some((log) =>
-      typeof pattern === "string" ? log.includes(pattern) : pattern.test(log)
-    );
+    const found = source.some((log) => typeof pattern === "string" ? log.includes(pattern) : pattern.test(log));
     if (!found) {
       throw new Error(
         `Expected logs to contain ${pattern}, but got:\n${source.join("\n")}`,
@@ -233,9 +225,7 @@ export function assertErrorContains(
       );
     }
   } else {
-    const found = source.some((err) =>
-      typeof pattern === "string" ? err.includes(pattern) : pattern.test(err)
-    );
+    const found = source.some((err) => typeof pattern === "string" ? err.includes(pattern) : pattern.test(err));
     if (!found) {
       throw new Error(
         `Expected errors to contain ${pattern}, but got:\n${source.join("\n")}`,

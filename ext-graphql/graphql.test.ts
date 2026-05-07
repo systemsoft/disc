@@ -10,12 +10,7 @@
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { GraphQLExtension } from "./extension.ts";
-import {
-  generateGraphQLSchema,
-  generateGraphQLTypes,
-  mapEdgeQLTypeToGraphQL,
-  SCALAR_TYPE_MAP,
-} from "./schema-generator.ts";
+import { generateGraphQLSchema, generateGraphQLTypes, mapEdgeQLTypeToGraphQL, SCALAR_TYPE_MAP } from "./schema-generator.ts";
 import { parseGraphQLQuery, translateToEdgeQL } from "./query-translator.ts";
 import type { ExtensionContext } from "../extensions/types.ts";
 import type { Schema } from "../compiler/context.ts";
@@ -413,9 +408,7 @@ Deno.test("GraphQLExtension - POST /graphql returns translated EdgeQL", async ()
   const ext = new GraphQLExtension();
   await ext.initialize(makeContext());
   const routes = ext.getRoutes();
-  const postRoute = routes.find((r) =>
-    r.method === "POST" && r.path === "/graphql"
-  )!;
+  const postRoute = routes.find((r) => r.method === "POST" && r.path === "/graphql")!;
 
   const response = await postRoute.handler(
     makeRequest("/graphql", "POST", {
@@ -433,9 +426,7 @@ Deno.test("GraphQLExtension - POST /graphql returns error for missing query", as
   const ext = new GraphQLExtension();
   await ext.initialize(makeContext());
   const routes = ext.getRoutes();
-  const postRoute = routes.find((r) =>
-    r.method === "POST" && r.path === "/graphql"
-  )!;
+  const postRoute = routes.find((r) => r.method === "POST" && r.path === "/graphql")!;
 
   const response = await postRoute.handler(
     makeRequest("/graphql", "POST", {}),
@@ -451,9 +442,7 @@ Deno.test("GraphQLExtension - GET /graphql returns HTML playground", async () =>
   const ext = new GraphQLExtension();
   await ext.initialize(makeContext());
   const routes = ext.getRoutes();
-  const getRoute = routes.find((r) =>
-    r.method === "GET" && r.path === "/graphql"
-  )!;
+  const getRoute = routes.find((r) => r.method === "GET" && r.path === "/graphql")!;
 
   const response = await getRoute.handler(makeRequest("/graphql"));
   assertEquals(response.status, 200);
@@ -502,9 +491,7 @@ Deno.test("GraphQLExtension - rejects queries exceeding max depth", async () => 
   const ext = new GraphQLExtension({ maxDepth: 2 });
   await ext.initialize(makeContext());
   const routes = ext.getRoutes();
-  const postRoute = routes.find((r) =>
-    r.method === "POST" && r.path === "/graphql"
-  )!;
+  const postRoute = routes.find((r) => r.method === "POST" && r.path === "/graphql")!;
 
   // This query has depth 3 (outer { + allUsers { + posts { )
   const response = await postRoute.handler(
@@ -519,10 +506,7 @@ Deno.test("GraphQLExtension - rejects queries exceeding max depth", async () => 
 
 // ── P2-24: directives, fragments, introspection ───────────────────────
 
-import {
-  isIntrospectionQuery,
-  resolveIntrospection,
-} from "./query-translator.ts";
+import { isIntrospectionQuery, resolveIntrospection } from "./query-translator.ts";
 
 Deno.test("GraphQL parser - parses fragment spreads", () => {
   const parsed = parseGraphQLQuery(`

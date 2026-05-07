@@ -11,19 +11,10 @@
  */
 
 import { BaseExtension } from "../extensions/base-extension.ts";
-import type {
-  ExtensionContext,
-  ExtensionMetadata,
-  ExtensionRoute,
-} from "../extensions/types.ts";
+import type { ExtensionContext, ExtensionMetadata, ExtensionRoute } from "../extensions/types.ts";
 import type { Schema } from "../compiler/context.ts";
 import { generateGraphQLSchema } from "./schema-generator.ts";
-import {
-  isIntrospectionQuery,
-  parseGraphQLQuery,
-  resolveIntrospection,
-  translateToEdgeQL,
-} from "./query-translator.ts";
+import { isIntrospectionQuery, parseGraphQLQuery, resolveIntrospection, translateToEdgeQL } from "./query-translator.ts";
 import type { GraphQLConfig, GraphQLResponse } from "./types.ts";
 
 export class GraphQLExtension extends BaseExtension {
@@ -83,9 +74,7 @@ export class GraphQLExtension extends BaseExtension {
 
   override healthCheck(): Promise<{ healthy: boolean; details?: string }> {
     return Promise.resolve({
-      details: this.state === "ready"
-        ? `GraphQL endpoint ready (mutations: ${this.enableMutations})`
-        : undefined,
+      details: this.state === "ready" ? `GraphQL endpoint ready (mutations: ${this.enableMutations})` : undefined,
       healthy: this.state === "ready",
     });
   }
@@ -118,8 +107,7 @@ export class GraphQLExtension extends BaseExtension {
         return this.jsonResponse(
           {
             errors: [{
-              message:
-                `Query depth ${depth} exceeds maximum allowed depth of ${this.maxDepth}`,
+              message: `Query depth ${depth} exceeds maximum allowed depth of ${this.maxDepth}`,
             }],
           },
           400,

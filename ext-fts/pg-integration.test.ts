@@ -9,11 +9,7 @@
  */
 
 import { assert, assertEquals } from "@std/assert";
-import {
-  canRunPgTests,
-  getTestDsn,
-  resetTestDatabase,
-} from "../tests/pg-test-harness.ts";
+import { canRunPgTests, getTestDsn, resetTestDatabase } from "../tests/pg-test-harness.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 
 const RUN_PG = canRunPgTests();
@@ -36,8 +32,7 @@ function makePool(dsn: string): ConnectionPool {
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name:
-    "FTS PG - create table with fts_vector column and GIN index, verify index exists",
+  name: "FTS PG - create table with fts_vector column and GIN index, verify index exists",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -256,8 +251,7 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name:
-    "FTS PG - multi-column weighted search ranks title matches higher than body",
+  name: "FTS PG - multi-column weighted search ranks title matches higher than body",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();

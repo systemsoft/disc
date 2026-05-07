@@ -106,9 +106,7 @@ Deno.test(
       // Wait for leak warning to fire
       await new Promise((resolve) => setTimeout(resolve, 120));
 
-      const leakWarning = warnings.find((w) =>
-        w.includes("Potential connection leak detected")
-      );
+      const leakWarning = warnings.find((w) => w.includes("Potential connection leak detected"));
       assertExists(
         leakWarning,
         "Expected a leak warning to be logged",
@@ -155,9 +153,7 @@ Deno.test(
       // Wait past the timeout to make sure no warning fires
       await new Promise((resolve) => setTimeout(resolve, 300));
 
-      const leakWarning = warnings.find((w) =>
-        w.includes("Potential connection leak detected")
-      );
+      const leakWarning = warnings.find((w) => w.includes("Potential connection leak detected"));
       assertEquals(
         leakWarning,
         undefined,
@@ -199,9 +195,7 @@ Deno.test(
       // Wait a bit - no warning should fire because detection is disabled
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      const leakWarning = warnings.find((w) =>
-        w.includes("Potential connection leak detected")
-      );
+      const leakWarning = warnings.find((w) => w.includes("Potential connection leak detected"));
       assertEquals(
         leakWarning,
         undefined,

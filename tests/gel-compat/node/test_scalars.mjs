@@ -10,7 +10,7 @@
  * top-level SELECT expressions.
  */
 
-import { test, after } from "node:test";
+import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { createClient } from "gel";
 

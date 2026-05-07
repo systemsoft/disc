@@ -296,8 +296,7 @@ Deno.test("Access Control - Block INSERT without permission", () => {
   compiler.setAccessContext(context);
 
   // Try to insert (would need INSERT query support in parser)
-  const edgeql =
-    "INSERT Document { title := 'Secret', content := 'Classified' }";
+  const edgeql = "INSERT Document { title := 'Secret', content := 'Classified' }";
 
   assertThrows(
     () => {

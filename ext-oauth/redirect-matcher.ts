@@ -68,9 +68,7 @@ function matchesWildcardPattern(supplied: URL, pattern: string): boolean {
   const scheme = pattern.slice(0, schemeIdx); // "https"
   const afterStar = pattern.slice(schemeIdx + "://*.".length); // "foo.com/cb"
   const slashIdx = afterStar.indexOf("/");
-  const baseHost = (slashIdx === -1
-    ? afterStar
-    : afterStar.slice(0, slashIdx)).toLowerCase();
+  const baseHost = (slashIdx === -1 ? afterStar : afterStar.slice(0, slashIdx)).toLowerCase();
   const patternPath = slashIdx === -1 ? "/" : afterStar.slice(slashIdx);
 
   if (supplied.protocol !== `${scheme}:`) return false;

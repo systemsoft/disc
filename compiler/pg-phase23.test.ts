@@ -61,8 +61,7 @@ function compileEdgeQL(edgeql: string, schema: Schema): string {
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Phase 23: Enum literal in FILTER -- Status.active matches correct rows",
+  name: "PG Phase 23: Enum literal in FILTER -- Status.active matches correct rows",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -229,8 +228,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Phase 23: Named tuple field access -- (name := 'hello', age := 42).name returns 'hello'",
+  name: "PG Phase 23: Named tuple field access -- (name := 'hello', age := 42).name returns 'hello'",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -277,8 +275,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Phase 23: WITH MODULE -- resolves unqualified type name in module scope",
+  name: "PG Phase 23: WITH MODULE -- resolves unqualified type name in module scope",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -368,8 +365,7 @@ Deno.test({
 // `migration/ddl.ts:398-412`), so `IS <Type>` checks reduce to
 // `__type__ = '<Type>'` over the union — no shared `shapes` table.
 Deno.test({
-  name:
-    "PG Phase 23: IS type check -- FILTER Shape IS Circle returns only circles",
+  name: "PG Phase 23: IS type check -- FILTER Shape IS Circle returns only circles",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -574,8 +570,7 @@ Deno.test({
 // `compilePolymorphicShapeElement` then resolves `<alias>.<col>`
 // without "column shape_1.<col> does not exist" errors.
 Deno.test({
-  name:
-    "PG Phase 23: Polymorphic shape -- [IS Circle].radius returns radius for circles, null for others",
+  name: "PG Phase 23: Polymorphic shape -- [IS Circle].radius returns radius for circles, null for others",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -786,9 +781,7 @@ Deno.test({
         "Should have 2 rows with non-null radius (circles)",
       );
 
-      const rectRows = rows.filter((r) =>
-        r.radius === null || r.radius === undefined
-      );
+      const rectRows = rows.filter((r) => r.radius === null || r.radius === undefined);
       assertEquals(
         rectRows.length,
         1,
@@ -817,8 +810,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Phase 23: DDL-generated __type__ column -- INSERT with default and query discriminator",
+  name: "PG Phase 23: DDL-generated __type__ column -- INSERT with default and query discriminator",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();

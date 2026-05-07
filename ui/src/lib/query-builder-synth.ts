@@ -89,9 +89,7 @@ export function coerceValue(
       if (v === "true" || v === "1") return true;
       if (v === "false" || v === "0") return false;
       throw new Error(
-        `${fieldLabel}: expected boolean (true/false), got ${
-          JSON.stringify(value)
-        }`,
+        `${fieldLabel}: expected boolean (true/false), got ${JSON.stringify(value)}`,
       );
     }
     case "int16":

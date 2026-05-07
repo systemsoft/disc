@@ -2,14 +2,7 @@
  * AuthManager — Handles authentication lifecycle for the Disc SDK
  */
 
-import type {
-  AuthManagerOptions,
-  AuthResponse,
-  AuthTokens,
-  AuthUser,
-  LoginCredentials,
-  RegisterData,
-} from "./types.ts";
+import type { AuthManagerOptions, AuthResponse, AuthTokens, AuthUser, LoginCredentials, RegisterData } from "./types.ts";
 import { DiscAuthError } from "./errors.ts";
 import type { DiscClient } from "./client.ts";
 

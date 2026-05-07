@@ -97,9 +97,7 @@ export class Logger {
         )
         .map(([k, v]) => `${k}=${formatLogValue(v)}`)
         .join(" ");
-      const line = `${entry.timestamp} [${level}] [${this.module}] ${message}${
-        kvPairs ? " " + kvPairs : ""
-      }`;
+      const line = `${entry.timestamp} [${level}] [${this.module}] ${message}${kvPairs ? " " + kvPairs : ""}`;
       output(line);
     }
   }

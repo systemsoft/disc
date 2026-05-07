@@ -9,11 +9,7 @@
  */
 
 import { assertEquals } from "@std/assert";
-import {
-  canRunPgTests,
-  getTestDsn,
-  resetTestDatabase,
-} from "../tests/pg-test-harness.ts";
+import { canRunPgTests, getTestDsn, resetTestDatabase } from "../tests/pg-test-harness.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { OAuthExtension } from "./extension.ts";
 

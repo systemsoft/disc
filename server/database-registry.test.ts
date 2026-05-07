@@ -2,12 +2,7 @@
  * Tests for DatabaseRegistry
  */
 
-import {
-  assertEquals,
-  assertExists,
-  assertRejects,
-  assertStringIncludes,
-} from "@std/assert";
+import { assertEquals, assertExists, assertRejects, assertStringIncludes } from "@std/assert";
 import { DatabaseRegistry } from "./database-registry.ts";
 import { DatabaseConnection, replaceDsnDatabase } from "../lib/database.ts";
 import { DatabaseRegistryError } from "../lib/errors.ts";
@@ -168,9 +163,7 @@ Deno.test("DatabaseRegistry - createDatabase creates entry with pool", async () 
     assertStringIncludes(entry.databaseUrl, "disc_analytics");
 
     // Should have issued CREATE DATABASE
-    const createStmt = executedSql.find((s) =>
-      s.includes("CREATE DATABASE") && s.includes("disc_analytics")
-    );
+    const createStmt = executedSql.find((s) => s.includes("CREATE DATABASE") && s.includes("disc_analytics"));
     assertExists(createStmt);
 
     await registry.close();
@@ -280,9 +273,7 @@ Deno.test("DatabaseRegistry - dropDatabase removes entry and drops PG database",
     assertEquals(registry.getDatabase("temp"), undefined);
 
     // Should have issued DROP DATABASE
-    const dropStmt = executedSql.find((s) =>
-      s.includes("DROP DATABASE") && s.includes("disc_temp")
-    );
+    const dropStmt = executedSql.find((s) => s.includes("DROP DATABASE") && s.includes("disc_temp"));
     assertExists(dropStmt);
 
     await registry.close();

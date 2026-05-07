@@ -26,8 +26,7 @@ function makePool(dsn: string): ConnectionPool {
 }
 
 Deno.test({
-  name:
-    "PG Stage 39: schema with annotations -> migrate -> DESCRIBE TYPE -> verify annotations",
+  name: "PG Stage 39: schema with annotations -> migrate -> DESCRIBE TYPE -> verify annotations",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -54,7 +53,7 @@ Deno.test({
       assertEquals(parseResult.ok, true);
 
       if (!parseResult.ok) throw parseResult.error;
-  const schema = manager.modulesToSchema(parseResult.value);
+      const schema = manager.modulesToSchema(parseResult.value);
 
       // Use introspection to verify annotations propagated
       const typeDesc = describeType(schema, "Article");
@@ -75,8 +74,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "PG Stage 39: schema with @description -> codegen -> verify JSDoc output",
+  name: "PG Stage 39: schema with @description -> codegen -> verify JSDoc output",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -102,7 +100,7 @@ Deno.test({
       assertEquals(parseResult.ok, true);
 
       if (!parseResult.ok) throw parseResult.error;
-  const schema = manager.modulesToSchema(parseResult.value);
+      const schema = manager.modulesToSchema(parseResult.value);
 
       // Generate TypeScript
       const generator = new TypeScriptGenerator(schema, {
@@ -143,8 +141,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "PG Stage 39: abstract annotation + usage -> migrate -> DESCRIBE SCHEMA -> verify",
+  name: "PG Stage 39: abstract annotation + usage -> migrate -> DESCRIBE SCHEMA -> verify",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -171,7 +168,7 @@ Deno.test({
       assertEquals(parseResult.ok, true);
 
       if (!parseResult.ok) throw parseResult.error;
-  const schema = manager.modulesToSchema(parseResult.value);
+      const schema = manager.modulesToSchema(parseResult.value);
 
       // Verify abstract annotations collected
       assertExists(schema.abstractAnnotations);

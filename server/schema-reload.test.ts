@@ -7,12 +7,7 @@
 
 import { assert, assertEquals } from "@std/assert";
 import type { Schema } from "../compiler/context.ts";
-import type {
-  ProtocolHandler,
-  QueryContext,
-  QueryRequest,
-  QueryResponse,
-} from "./types.ts";
+import type { ProtocolHandler, QueryContext, QueryRequest, QueryResponse } from "./types.ts";
 import { DiscServer } from "./server.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
 
@@ -37,9 +32,7 @@ function createMockHandler(options?: {
     validateRequest(_request: QueryRequest) {
       return [];
     },
-    updateSchema: options?.onUpdateSchema
-      ? (schema: Schema) => options.onUpdateSchema!(schema)
-      : undefined,
+    updateSchema: options?.onUpdateSchema ? (schema: Schema) => options.onUpdateSchema!(schema) : undefined,
   };
 }
 

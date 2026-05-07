@@ -103,8 +103,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       if (this.options.readOnly && isWriteQuery(parseResult.ast)) {
         return {
           errors: [{
-            message:
-              "the server is currently in read-only mode; this query would write to the database",
+            message: "the server is currently in read-only mode; this query would write to the database",
             extensions: {
               code: "READ_ONLY_MODE",
               queryKind: parseResult.ast.kind,
@@ -168,9 +167,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       log.error("Query execution error", {
         error: error instanceof Error ? error.message : String(error),
       });
-      const errorMessage = error instanceof Error
-        ? error.message
-        : "Unknown error";
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
 
       return {
         errors: [{
@@ -244,9 +241,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
         token_count: tokens.length,
       };
     } catch (error) {
-      const errorMessage = error instanceof Error
-        ? error.message
-        : "Unknown parsing error";
+      const errorMessage = error instanceof Error ? error.message : "Unknown parsing error";
       log.debug("Exception during parsing", { error: errorMessage });
       return {
         success: false,
@@ -288,18 +283,14 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       // Replace variables in SQL (simplified)
       let finalSQL = sql;
       for (const [name, value] of Object.entries(variables)) {
-        const sqlValue = typeof value === "string"
-          ? `'${value}'`
-          : String(value);
+        const sqlValue = typeof value === "string" ? `'${value}'` : String(value);
         finalSQL = finalSQL.replace(new RegExp(`\\$${name}`, "g"), sqlValue);
       }
 
       log.debug("Generated SQL", { sql: finalSQL });
       return { success: true, sql: finalSQL };
     } catch (error) {
-      const errorMessage = error instanceof Error
-        ? error.message
-        : "Unknown compilation error";
+      const errorMessage = error instanceof Error ? error.message : "Unknown compilation error";
       log.debug("Compilation error", { error: errorMessage });
       return {
         success: false,
@@ -321,9 +312,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
           return "*";
         })
         .join(", ");
-      sql += `jsonb_build_object(${
-        fields.split(", ").map((f) => `'${f}', ${f}`).join(", ")
-      })`;
+      sql += `jsonb_build_object(${fields.split(", ").map((f) => `'${f}', ${f}`).join(", ")})`;
     } else {
       sql += "*";
     }
@@ -505,9 +494,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
           return { data: { rowCount: result.rowCount, success: true } };
         }
       } catch (error) {
-        const dbError = error instanceof Error
-          ? error
-          : new Error(String(error));
+        const dbError = error instanceof Error ? error : new Error(String(error));
         log.error("Database execution error", { error: dbError.message });
         throw new DatabaseExecutionError(
           `Database query failed: ${dbError.message}`,
@@ -583,9 +570,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       "configure",
     ];
 
-    const startsWithValid = validStartKeywords.some((keyword) =>
-      normalized.startsWith(keyword)
-    );
+    const startsWithValid = validStartKeywords.some((keyword) => normalized.startsWith(keyword));
 
     if (!startsWithValid && normalized.length > 0) {
       errors.push({
@@ -702,9 +687,7 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       const latencyMs = Date.now() - start;
 
       const poolStats = this.buildPoolStats();
-      const status: HealthStatus["status"] = poolStats.waiters > 0
-        ? "degraded"
-        : "healthy";
+      const status: HealthStatus["status"] = poolStats.waiters > 0 ? "degraded" : "healthy";
 
       return {
         status,

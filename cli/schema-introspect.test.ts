@@ -5,11 +5,7 @@
 import { assertStringIncludes } from "@std/assert";
 import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { commands } from "./commands.ts";
-import {
-  cleanupTempDir,
-  ConsoleCapture,
-  createTempDir,
-} from "../tests/test-utils.ts";
+import { cleanupTempDir, ConsoleCapture, createTempDir } from "../tests/test-utils.ts";
 import { DatabaseConnection } from "../lib/database.ts";
 
 const FIXTURE_SQL = `

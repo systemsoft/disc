@@ -20,19 +20,8 @@
 
 import { assertEquals, assertNotEquals } from "@std/assert";
 import { BinaryProtocolServer } from "./binary-server.ts";
-import {
-  type ClientMessage,
-  decodeServerMessage,
-  encodeClientMessage,
-  type ServerMessage,
-} from "./messages.ts";
-import {
-  Cardinality,
-  InputLanguage,
-  OutputFormat,
-  PROTOCOL_MAJOR_VERSION,
-  PROTOCOL_MINOR_VERSION,
-} from "./enums.ts";
+import { type ClientMessage, decodeServerMessage, encodeClientMessage, type ServerMessage } from "./messages.ts";
+import { Cardinality, InputLanguage, OutputFormat, PROTOCOL_MAJOR_VERSION, PROTOCOL_MINOR_VERSION } from "./enums.ts";
 import { createTestSchema } from "../compiler/context.ts";
 import { buildClientFinalMessage, buildClientFirstMessage } from "./scram.ts";
 
@@ -381,8 +370,7 @@ Deno.test("wire-integration - full SCRAM auth flow then Execute succeeds", async
 
   // 3. SASL initial
   const clientNonce = "wire-integration-nonce";
-  const { message: clientFirstMsg, clientFirstMessageBare } =
-    buildClientFirstMessage("test", clientNonce);
+  const { message: clientFirstMsg, clientFirstMessageBare } = buildClientFirstMessage("test", clientNonce);
   await sendMessage(conn, {
     kind: "AuthenticationSASLInitialResponse",
     method: "SCRAM-SHA-256",

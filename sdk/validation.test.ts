@@ -1,9 +1,5 @@
 // deno-lint-ignore-file
-import {
-  assertEquals,
-  assertInstanceOf,
-  assertRejects,
-} from "@std/assert";
+import { assertEquals, assertInstanceOf, assertRejects } from "@std/assert";
 
 import { DiscClient } from "./client.ts";
 import { DiscValidationError } from "./errors.ts";
@@ -20,11 +16,7 @@ function mockFetch(
     input: string | URL | Request,
     init?: RequestInit,
   ): Promise<Response> => {
-    const url = typeof input === "string"
-      ? input
-      : input instanceof URL
-      ? input.toString()
-      : input.url;
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     return Promise.resolve(handler(url, init));
   };
   return () => {
@@ -135,9 +127,7 @@ Deno.test("applyValidator - schema throw becomes DiscValidationError", async () 
 // --- client.query<T>() integration ---
 
 Deno.test("client.query - validate function transforms data", async () => {
-  const restore = mockFetch(() =>
-    new Response(JSON.stringify({ data: { name: "Ada", age: 36 } }))
-  );
+  const restore = mockFetch(() => new Response(JSON.stringify({ data: { name: "Ada", age: 36 } })));
   try {
     const client = new DiscClient();
     const u = await client.query(
@@ -157,9 +147,7 @@ Deno.test("client.query - validate function transforms data", async () => {
 });
 
 Deno.test("client.query - validate schema rejects mismatched response", async () => {
-  const restore = mockFetch(() =>
-    new Response(JSON.stringify({ data: { name: "Ada" } }))
-  );
+  const restore = mockFetch(() => new Response(JSON.stringify({ data: { name: "Ada" } })));
   try {
     const client = new DiscClient();
     await assertRejects(
@@ -176,9 +164,7 @@ Deno.test("client.query - validate schema rejects mismatched response", async ()
 
 Deno.test("client.query - validate not run on query errors", async () => {
   let validatorCalled = false;
-  const restore = mockFetch(() =>
-    new Response(JSON.stringify({ errors: [{ message: "boom" }] }))
-  );
+  const restore = mockFetch(() => new Response(JSON.stringify({ errors: [{ message: "boom" }] })));
   try {
     const client = new DiscClient();
     await assertRejects(() =>
@@ -196,9 +182,7 @@ Deno.test("client.query - validate not run on query errors", async () => {
 });
 
 Deno.test("client.query - omitted validator preserves cast behavior", async () => {
-  const restore = mockFetch(() =>
-    new Response(JSON.stringify({ data: { whatever: true } }))
-  );
+  const restore = mockFetch(() => new Response(JSON.stringify({ data: { whatever: true } })));
   try {
     const client = new DiscClient();
     // Intentionally lying about the response shape; cast must succeed.

@@ -7,11 +7,7 @@
  * see structured issues instead of opaque library-specific errors.
  */
 
-import type {
-  QueryValidator,
-  StandardSchemaIssue,
-  StandardSchemaV1,
-} from "./types.ts";
+import type { QueryValidator, StandardSchemaIssue, StandardSchemaV1 } from "./types.ts";
 import { DiscValidationError } from "./errors.ts";
 
 /**

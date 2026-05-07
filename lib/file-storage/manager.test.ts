@@ -3,18 +3,9 @@
  * and LocalFileStorage on a tmpdir.
  */
 
-import {
-  assert,
-  assertEquals,
-  assertRejects,
-} from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assert, assertEquals, assertRejects } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { TestDatabase } from "../../auth/test-database.ts";
-import {
-  FileAccessDeniedError,
-  FileManager,
-  FileNotFoundError,
-  FileTooLargeError,
-} from "./manager.ts";
+import { FileAccessDeniedError, FileManager, FileNotFoundError, FileTooLargeError } from "./manager.ts";
 import { LocalFileStorage } from "./local.ts";
 
 async function setup(): Promise<{

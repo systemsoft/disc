@@ -182,16 +182,12 @@ Deno.test("DDL Generator - Generate Rollback SQL for AlterProperty", () => {
   assertEquals(rollbackSQL.length >= 2, true);
 
   // Should reverse the type change
-  const typeChangeRollback = rollbackSQL.find((sql) =>
-    sql.includes("ALTER COLUMN age TYPE")
-  );
+  const typeChangeRollback = rollbackSQL.find((sql) => sql.includes("ALTER COLUMN age TYPE"));
   assertEquals(typeChangeRollback !== undefined, true);
   assertStringIncludes(typeChangeRollback!, "INTEGER");
 
   // Should reverse the required change
-  const requiredChangeRollback = rollbackSQL.find((sql) =>
-    sql.includes("DROP NOT NULL")
-  );
+  const requiredChangeRollback = rollbackSQL.find((sql) => sql.includes("DROP NOT NULL"));
   assertEquals(requiredChangeRollback !== undefined, true);
 });
 

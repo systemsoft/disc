@@ -28,7 +28,7 @@
  *   - "error"       last fetch failed
  */
 
-import { writable, type Readable } from "svelte/store";
+import { type Readable, writable } from "svelte/store";
 import { discAPI } from "../api/client";
 
 export type LiveQueryStatus =

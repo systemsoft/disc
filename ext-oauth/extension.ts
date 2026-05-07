@@ -3,18 +3,9 @@
  */
 
 import { BaseExtension } from "../extensions/base-extension.ts";
-import type {
-  ExtensionContext,
-  ExtensionDatabaseSetup,
-  ExtensionMetadata,
-  ExtensionRoute,
-} from "../extensions/types.ts";
+import type { ExtensionContext, ExtensionDatabaseSetup, ExtensionMetadata, ExtensionRoute } from "../extensions/types.ts";
 import { ExtensionConfigError } from "../extensions/errors.ts";
-import type {
-  OAuthConfig,
-  OAuthErrorResponse,
-  OAuthProviderConfig,
-} from "./types.ts";
+import type { OAuthConfig, OAuthErrorResponse, OAuthProviderConfig } from "./types.ts";
 import { OAuthStateManager } from "./state-manager.ts";
 import { normalizePkceParam } from "./pkce.ts";
 import { matchRedirectUri } from "./redirect-matcher.ts";

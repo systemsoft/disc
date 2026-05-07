@@ -5,10 +5,7 @@
  * Uses TestDatabase (no PG required) to test the complete server auth pipeline.
  */
 
-import {
-  assertEquals,
-  assertExists,
-} from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assertEquals, assertExists } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { AuthProvider } from "../auth/provider.ts";
 import { AuthMiddleware } from "../auth/middleware.ts";
 import { AuthRoutes } from "../auth/integration.ts";
@@ -70,8 +67,7 @@ async function createE2EServer(port: number): Promise<{
 }
 
 Deno.test({
-  name:
-    "E2E: full auth lifecycle - register -> login -> profile -> query -> logout",
+  name: "E2E: full auth lifecycle - register -> login -> profile -> query -> logout",
   sanitizeResources: false,
   sanitizeOps: false,
   fn: async () => {

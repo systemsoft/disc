@@ -6,13 +6,7 @@
  */
 
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
-import type {
-  IndexDef,
-  LinkDef,
-  PropertyDef,
-  Schema,
-  TypeDef,
-} from "../compiler/context.ts";
+import type { IndexDef, LinkDef, PropertyDef, Schema, TypeDef } from "../compiler/context.ts";
 import type { AccessPolicy } from "../access/types.ts";
 import { describeAllTypes, describeType } from "./describe.ts";
 
@@ -157,25 +151,34 @@ Deno.test("describeType - emits full property metadata", () => {
       kind: "object",
       tableName: "users",
       properties: new Map([
-        ["email", makeProperty({
-          name: "email",
-          required: true,
-          edgeqlType: "str",
-          constraints: [{ name: "exclusive" }, { name: "max_length", args: ["255"] }],
-          annotations: { description: "Login email" },
-        })],
+        [
+          "email",
+          makeProperty({
+            name: "email",
+            required: true,
+            edgeqlType: "str",
+            constraints: [{ name: "exclusive" }, { name: "max_length", args: ["255"] }],
+            annotations: { description: "Login email" },
+          }),
+        ],
         ["name", makeProperty({ name: "name", required: true })],
-        ["createdAt", makeProperty({
-          name: "createdAt",
-          edgeqlType: "datetime",
-          readonly: true,
-          hasDefault: true,
-        })],
-        ["postCount", makeProperty({
-          name: "postCount",
-          edgeqlType: "int32",
-          computed: true,
-        })],
+        [
+          "createdAt",
+          makeProperty({
+            name: "createdAt",
+            edgeqlType: "datetime",
+            readonly: true,
+            hasDefault: true,
+          }),
+        ],
+        [
+          "postCount",
+          makeProperty({
+            name: "postCount",
+            edgeqlType: "int32",
+            computed: true,
+          }),
+        ],
       ]),
       links: new Map(),
     },
@@ -203,12 +206,15 @@ Deno.test("describeType - emits link cardinality and target", () => {
       tableName: "users",
       properties: new Map(),
       links: new Map([
-        ["posts", makeLink({
-          name: "posts",
-          target: "Post",
-          multi: true,
-          backlink: "author",
-        })],
+        [
+          "posts",
+          makeLink({
+            name: "posts",
+            target: "Post",
+            multi: true,
+            backlink: "author",
+          }),
+        ],
       ]),
     },
     {
@@ -217,11 +223,14 @@ Deno.test("describeType - emits link cardinality and target", () => {
       tableName: "posts",
       properties: new Map(),
       links: new Map([
-        ["author", makeLink({
-          name: "author",
-          target: "User",
-          required: true,
-        })],
+        [
+          "author",
+          makeLink({
+            name: "author",
+            target: "User",
+            required: true,
+          }),
+        ],
       ]),
     },
   ]);

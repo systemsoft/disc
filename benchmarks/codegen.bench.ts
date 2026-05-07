@@ -14,8 +14,7 @@ const codegen = new SQLCodeGenerator();
 
 const queries: Record<string, string> = {
   "simple": "SELECT User { name }",
-  "complex":
-    "SELECT User { name, email, posts: { title, body } } FILTER .name = 'Ada' ORDER BY .name LIMIT 10",
+  "complex": "SELECT User { name, email, posts: { title, body } } FILTER .name = 'Ada' ORDER BY .name LIMIT 10",
   "insert": "INSERT User { name := 'Ada', email := 'ada@example.com' }",
   "update": "UPDATE User FILTER .name = 'Ada' SET { name := 'Billie' }",
 };
@@ -23,8 +22,7 @@ const queries: Record<string, string> = {
 // Pre-compile to SQL ASTs
 const sqlAsts: Record<
   string,
-  ReturnType<SQLCodeGenerator["generate"]> extends string
-    ? Parameters<SQLCodeGenerator["generate"]>[0]
+  ReturnType<SQLCodeGenerator["generate"]> extends string ? Parameters<SQLCodeGenerator["generate"]>[0]
     : never
 > = {};
 

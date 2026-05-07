@@ -92,9 +92,7 @@ export class DataMigrationRunner {
           });
         } catch (error) {
           logger.warn(
-            `Failed to import data migration ${entry.name}: ${
-              error instanceof Error ? error.message : String(error)
-            }`,
+            `Failed to import data migration ${entry.name}: ${error instanceof Error ? error.message : String(error)}`,
           );
         }
       }
@@ -143,9 +141,7 @@ export class DataMigrationRunner {
       logger.info(`Data migration ${migration.name} completed successfully`);
     } catch (error) {
       throw new MigrationError(
-        `Data migration "${migration.name}" failed: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        `Data migration "${migration.name}" failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
@@ -189,9 +185,7 @@ export class DataMigrationRunner {
       );
     } catch (error) {
       throw new MigrationError(
-        `Data migration "${migration.name}" rollback failed: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
+        `Data migration "${migration.name}" rollback failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }

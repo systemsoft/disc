@@ -35,10 +35,8 @@ export function validatePemEnvelope(
       /-----END CERTIFICATE-----/.test(content);
   }
   // key: any of the standard private-key envelopes
-  const keyPattern =
-    /-----BEGIN (?:RSA |EC |ENCRYPTED |DSA )?PRIVATE KEY-----/;
-  const keyEndPattern =
-    /-----END (?:RSA |EC |ENCRYPTED |DSA )?PRIVATE KEY-----/;
+  const keyPattern = /-----BEGIN (?:RSA |EC |ENCRYPTED |DSA )?PRIVATE KEY-----/;
+  const keyEndPattern = /-----END (?:RSA |EC |ENCRYPTED |DSA )?PRIVATE KEY-----/;
   return keyPattern.test(content) && keyEndPattern.test(content);
 }
 

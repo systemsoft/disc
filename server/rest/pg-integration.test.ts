@@ -148,8 +148,7 @@ function buildSchema(): Schema {
 }
 
 Deno.test({
-  name:
-    "REST PG: GET → POST → GET → DELETE roundtrip exercises real EdgeQL pipeline",
+  name: "REST PG: GET → POST → GET → DELETE roundtrip exercises real EdgeQL pipeline",
   ignore: !RUN_PG,
   sanitizeResources: false,
   sanitizeOps: false,

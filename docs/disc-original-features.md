@@ -115,7 +115,7 @@ Gel-UI has a text editor with autocomplete. No visual builder.
 
 > **Status:** Shipped in Bundle L. Live behavior is documented in `docs/admin-ui.md` ("Live Data Subscriptions" section); source lives under `server/admin/data-watch{,-ddl,-registry}.ts` + `ui/src/lib/stores/live-query.ts` + `ui/src/routes/data/+page.svelte`.
 
-Query results update in real time when underlying rows change. The data viewer's "Live" toggle subscribes to `/admin/data-watch?tables=…`; the SSE endpoint emits an `invalidate` event for the affected tables and the client refetches via the standard `/query` pipeline. The pattern is **invalidate-then-refetch** (à la SWR / React Query) — server says *what* changed, client re-runs the query so access policies + read-only mode + auth gate compose for free.
+Query results update in real time when underlying rows change. The data viewer's "Live" toggle subscribes to `/admin/data-watch?tables=…`; the SSE endpoint emits an `invalidate` event for the affected tables and the client refetches via the standard `/query` pipeline. The pattern is **invalidate-then-refetch** (à la SWR / React Query) — server says _what_ changed, client re-runs the query so access policies + read-only mode + auth gate compose for free.
 
 Server-side: an idempotent `bootstrapDataWatch()` writes a `disc_change_log` table + `disc_log_change()` PL/pgSQL function and attaches `AFTER INSERT/UPDATE/DELETE … FOR EACH STATEMENT` triggers to every Disc-managed table. A polling `DataWatchRegistry` reads the log on a 250 ms cadence and fans invalidations to subscribers whose interested-tables set intersects the affected set, with a per-subscriber 250 ms debounce that coalesces bursts.
 

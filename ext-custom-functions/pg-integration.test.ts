@@ -9,11 +9,7 @@
  */
 
 import { assertEquals, assertRejects } from "@std/assert";
-import {
-  canRunPgTests,
-  getTestDsn,
-  resetTestDatabase,
-} from "../tests/pg-test-harness.ts";
+import { canRunPgTests, getTestDsn, resetTestDatabase } from "../tests/pg-test-harness.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { CustomFunctionsExtension } from "./extension.ts";
 import type { ExtensionContext } from "../extensions/types.ts";
@@ -259,8 +255,7 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name:
-    "Custom Functions PG - full extension initialize() creates function in PG",
+  name: "Custom Functions PG - full extension initialize() creates function in PG",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();

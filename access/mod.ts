@@ -16,26 +16,9 @@ export { AccessEvaluator } from "./evaluator.ts";
 export { AccessSQLInjector } from "./sql-injector.ts";
 
 // Re-export key types
-export type {
-  AccessAction,
-  AccessConfig,
-  AccessContext,
-  AccessDecision,
-  AccessOperation,
-  AccessPolicy,
-  PolicyMode,
-} from "./types.ts";
+export type { AccessAction, AccessConfig, AccessContext, AccessDecision, AccessOperation, AccessPolicy, PolicyMode } from "./types.ts";
 
-export type {
-  AccessExpressionNode,
-  AccessOperationNode,
-  AccessPolicyNode,
-  AccessRuleNode,
-} from "./ast.ts";
+export type { AccessExpressionNode, AccessOperationNode, AccessPolicyNode, AccessRuleNode } from "./ast.ts";
 
-export {
-  adaptAccessPolicies,
-  containsColumnReference,
-  extractGlobalGuard,
-} from "./policy-adapter.ts";
+export { adaptAccessPolicies, containsColumnReference, extractGlobalGuard } from "./policy-adapter.ts";
 export { convertExpression } from "./expression-converter.ts";

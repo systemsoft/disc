@@ -5,12 +5,7 @@
  */
 
 import { assert, assertEquals } from "@std/assert";
-import {
-  cleanupTempDir,
-  ConsoleCapture,
-  createTempDir,
-  EnvMock,
-} from "../tests/test-utils.ts";
+import { cleanupTempDir, ConsoleCapture, createTempDir, EnvMock } from "../tests/test-utils.ts";
 import { commands } from "./commands.ts";
 
 Deno.test("CLI Workflow - Complete project initialization", async () => {
@@ -44,9 +39,7 @@ Deno.test("CLI Workflow - Complete project initialization", async () => {
     const schemaExists = await Deno.stat(
       `${projectDir}/dbschema/default.disc`,
     ).then(() => true).catch(() => false);
-    const configExists = await Deno.stat(`${projectDir}/deno.json`).then(() =>
-      true
-    ).catch(() => false);
+    const configExists = await Deno.stat(`${projectDir}/deno.json`).then(() => true).catch(() => false);
     const envExists = await Deno.stat(`${projectDir}/.env`).then(() => true)
       .catch(() => false);
 

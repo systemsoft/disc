@@ -5,14 +5,8 @@
  * policy objects (from access/types.ts) used by the access control evaluator.
  */
 
-import type {
-  AccessAction as SDLAccessAction,
-  AccessPolicy as SDLAccessPolicy,
-} from "../schema/ast.ts";
-import type {
-  AccessAction as RuntimeAccessAction,
-  AccessPolicy as RuntimeAccessPolicy,
-} from "./types.ts";
+import type { AccessAction as SDLAccessAction, AccessPolicy as SDLAccessPolicy } from "../schema/ast.ts";
+import type { AccessAction as RuntimeAccessAction, AccessPolicy as RuntimeAccessPolicy } from "./types.ts";
 import type { AccessExpressionNode } from "./ast.ts";
 import { convertExpression } from "./expression-converter.ts";
 

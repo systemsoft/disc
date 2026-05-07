@@ -84,9 +84,7 @@ export class PgUpgradeCommand {
     const availableVersions = this.getAvailableVersions();
     if (!availableVersions.includes(targetVersion)) {
       throw new Error(
-        `Unknown PostgreSQL version: ${targetVersion}. Available versions: ${
-          availableVersions.join(", ")
-        }`,
+        `Unknown PostgreSQL version: ${targetVersion}. Available versions: ${availableVersions.join(", ")}`,
       );
     }
 
@@ -299,9 +297,7 @@ export class PgUpgradeCommand {
             console.log("Old PostgreSQL instance restarted.");
           } catch (restartError) {
             console.error(
-              `Failed to restart old instance: ${
-                (restartError as Error).message
-              }`,
+              `Failed to restart old instance: ${(restartError as Error).message}`,
             );
           }
         } catch (rollbackError) {

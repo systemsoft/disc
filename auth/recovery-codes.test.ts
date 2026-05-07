@@ -3,11 +3,7 @@
  * (gh/geldata#8186 Phase C)
  */
 
-import {
-  assert,
-  assertEquals,
-  assertRejects,
-} from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assert, assertEquals, assertRejects } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { AuthProvider } from "./provider.ts";
 import { TestDatabase } from "./test-database.ts";
 import { AuthError, AuthErrorCode } from "./types.ts";
@@ -291,8 +287,7 @@ Deno.test("loginWithRecoveryCode — single-use challenge: cannot replay after s
     await provider.loginWithRecoveryCode(challenge.challengeToken, codes[0]);
 
     const err = await assertRejects(
-      () =>
-        provider.loginWithRecoveryCode(challenge.challengeToken, codes[1]),
+      () => provider.loginWithRecoveryCode(challenge.challengeToken, codes[1]),
       AuthError,
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_TOKEN);

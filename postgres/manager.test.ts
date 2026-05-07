@@ -49,8 +49,7 @@ Deno.test({
 
     // Attempt to create duplicate should throw
     await assertRejects(
-      async () =>
-        await manager.createInstance(instanceName, { pgBinDir: PG_BIN_DIR! }),
+      async () => await manager.createInstance(instanceName, { pgBinDir: PG_BIN_DIR! }),
       Error,
       "already exists",
     );

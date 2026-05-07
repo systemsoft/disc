@@ -9,26 +9,13 @@
  * DiscServer tests use a no-op protocol handler to bypass the connection pool.
  */
 
-import {
-  assert,
-  assertEquals,
-  assertRejects,
-} from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assert, assertEquals, assertRejects } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { BaseExtension } from "../extensions/base-extension.ts";
 import { getLogger } from "../lib/logger.ts";
-import type {
-  ExtensionContext,
-  ExtensionMetadata,
-  ExtensionRoute,
-} from "../extensions/types.ts";
+import type { ExtensionContext, ExtensionMetadata, ExtensionRoute } from "../extensions/types.ts";
 import type { FunctionDef } from "../compiler/context.ts";
 import { HttpServer } from "./http.ts";
-import type {
-  ProtocolHandler,
-  QueryContext,
-  QueryRequest,
-  QueryResponse,
-} from "./types.ts";
+import type { ProtocolHandler, QueryContext, QueryRequest, QueryResponse } from "./types.ts";
 import { ExtensionRegistry } from "../extensions/registry.ts";
 
 const TEST_HOST = "127.0.0.1";
@@ -465,8 +452,7 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name:
-    "Extension Integration - extension functions available after registry init",
+  name: "Extension Integration - extension functions available after registry init",
   fn: async () => {
     const ext = new FunctionExtension();
     const registry = new ExtensionRegistry();
@@ -497,8 +483,7 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name:
-    "Extension Integration - multiple extensions all initialize and shut down",
+  name: "Extension Integration - multiple extensions all initialize and shut down",
   fn: async () => {
     const ext1 = new TrackingExtension("ext-alpha");
     const ext2 = new TrackingExtension("ext-beta");

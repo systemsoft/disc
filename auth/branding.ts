@@ -36,8 +36,7 @@ const HEX_COLOR_RE = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
  * Bounds are enforced after the regex matches; the regex itself only
  * shape-checks so the error message can name the exact offending channel.
  */
-const OKLCH_COLOR_RE =
-  /^oklch\(\s*([\d.]+%?)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+%?))?\s*\)$/i;
+const OKLCH_COLOR_RE = /^oklch\(\s*([\d.]+%?)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+%?))?\s*\)$/i;
 const MAX_OKLCH_CHROMA = 0.5;
 const TOKEN_PLACEHOLDER = "{token}";
 
@@ -161,7 +160,9 @@ function validateBrandColor(v: unknown): void {
   const oklchMatch = OKLCH_COLOR_RE.exec(v);
   if (!oklchMatch) {
     throw new Error(
-      `AuthProvider: branding.brandColor must be a 3-/6-digit hex color (e.g. "#0af", "#00aaff") or oklch(L C H[/ A]) (e.g. "oklch(70% 0.15 200)"); got ${JSON.stringify(v)}`,
+      `AuthProvider: branding.brandColor must be a 3-/6-digit hex color (e.g. "#0af", "#00aaff") or oklch(L C H[/ A]) (e.g. "oklch(70% 0.15 200)"); got ${
+        JSON.stringify(v)
+      }`,
     );
   }
 

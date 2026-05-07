@@ -10,14 +10,7 @@
 
 import { assertEquals, assertThrows } from "@std/assert";
 import { FtsExtension } from "./extension.ts";
-import {
-  DEFAULT_LANGUAGE,
-  FTS_VECTOR_COLUMN,
-  generateDropFtsIndex,
-  generateFtsColumn,
-  generateFtsIndex,
-  validateFtsConfig,
-} from "./index-builder.ts";
+import { DEFAULT_LANGUAGE, FTS_VECTOR_COLUMN, generateDropFtsIndex, generateFtsColumn, generateFtsIndex, validateFtsConfig } from "./index-builder.ts";
 import type { ExtensionContext } from "../extensions/types.ts";
 import type { FtsIndexConfig } from "./types.ts";
 

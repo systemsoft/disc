@@ -1,9 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("Schema page", () => {
-  test("renders the type list and selects the first type by default", async ({
-    page,
-  }) => {
+  test("renders the type list and selects the first type by default", async ({ page }) => {
     await page.goto("/ui/schema");
 
     // Sidebar lists Item.
@@ -15,9 +13,7 @@ test.describe("Schema page", () => {
     await expect(page.getByRole("heading", { name: "Item" })).toBeVisible();
   });
 
-  test("shows the meta tags (module, abstract, extends) where applicable", async ({
-    page,
-  }) => {
+  test("shows the meta tags (module, abstract, extends) where applicable", async ({ page }) => {
     await page.goto("/ui/schema");
 
     // The fixture's Item type lives in the default module.
@@ -34,9 +30,7 @@ test.describe("Schema page", () => {
     }
   });
 
-  test("'default' flag appears on properties with a default expression", async ({
-    page,
-  }) => {
+  test("'default' flag appears on properties with a default expression", async ({ page }) => {
     await page.goto("/ui/schema");
     // Item.createdAt has `default := datetime_current()` in the fixture.
     await expect(page.getByText("default", { exact: true }).first()).toBeVisible();

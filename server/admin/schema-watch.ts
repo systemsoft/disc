@@ -141,9 +141,7 @@ export function handleSchemaWatch(options: SchemaWatchOptions): Response {
       // file directly works on macOS but is unreliable on Linux when
       // editors save via rename — the watched inode disappears and no
       // further events arrive.
-      const dir = ctx.schemaFilePath.includes("/")
-        ? ctx.schemaFilePath.slice(0, ctx.schemaFilePath.lastIndexOf("/"))
-        : ".";
+      const dir = ctx.schemaFilePath.includes("/") ? ctx.schemaFilePath.slice(0, ctx.schemaFilePath.lastIndexOf("/")) : ".";
 
       try {
         watcher = Deno.watchFs([dir], { recursive: false });
@@ -151,9 +149,7 @@ export function handleSchemaWatch(options: SchemaWatchOptions): Response {
         controller.enqueue(encoder.encode(formatSseEvent({
           event: "error",
           data: {
-            message: `watch failed: ${
-              err instanceof Error ? err.message : String(err)
-            }`,
+            message: `watch failed: ${err instanceof Error ? err.message : String(err)}`,
           },
         })));
         controller.close();
@@ -181,9 +177,7 @@ export function handleSchemaWatch(options: SchemaWatchOptions): Response {
           for await (const event of watcher!) {
             if (abortController.signal.aborted) break;
             // Filter for our SDL file and any peer .disc files in the dir.
-            const matchedPath = event.paths.find((p) =>
-              p === ctx.schemaFilePath || p.endsWith(".disc")
-            );
+            const matchedPath = event.paths.find((p) => p === ctx.schemaFilePath || p.endsWith(".disc"));
             if (!matchedPath) continue;
             debounceDelta();
           }

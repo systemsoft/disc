@@ -2,12 +2,7 @@
  * SubscriptionClient — WebSocket-based subscription client for Disc database
  */
 
-import type {
-  DiscClientConfig,
-  SubscriptionCallbacks,
-  SubscriptionClientConfig,
-  SubscriptionHandle,
-} from "./types.ts";
+import type { DiscClientConfig, SubscriptionCallbacks, SubscriptionClientConfig, SubscriptionHandle } from "./types.ts";
 import { DiscConnectionError } from "./errors.ts";
 
 const DEFAULT_BASE_URL = "http://localhost:5656";
@@ -213,9 +208,7 @@ export class SubscriptionClient {
     } else if (type === "error") {
       if (callbacks.onError) {
         const err = payload instanceof Error ? payload : new Error(
-          typeof payload === "string"
-            ? payload
-            : JSON.stringify(payload ?? "Subscription error"),
+          typeof payload === "string" ? payload : JSON.stringify(payload ?? "Subscription error"),
         );
         callbacks.onError(err);
       }

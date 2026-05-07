@@ -262,9 +262,7 @@ Deno.test("Tracker - removeMigration deletes record", async () => {
   assertEquals(result.ok, true);
 
   // Verify DELETE was executed
-  const deleteStatement = executedStatements.find((s) =>
-    s.includes("DELETE FROM disc_migrations")
-  );
+  const deleteStatement = executedStatements.find((s) => s.includes("DELETE FROM disc_migrations"));
   assertExists(deleteStatement);
 
   await tracker.close();
@@ -308,9 +306,7 @@ Deno.test("Engine - executeRollback executes rollback SQL in transaction", async
   assertEquals(result.ok, true);
 
   // Verify the rollback SQL was executed
-  const dropStatement = executedStatements.find((s) =>
-    s.includes("DROP TABLE IF EXISTS user CASCADE")
-  );
+  const dropStatement = executedStatements.find((s) => s.includes("DROP TABLE IF EXISTS user CASCADE"));
   assertExists(dropStatement);
 });
 
@@ -344,9 +340,7 @@ Deno.test("Engine - executeRollback removes migration record after execution", a
   await engine.executeRollback("m001");
 
   // Verify DELETE was executed (migration record removal)
-  const deleteStatement = executedStatements.find((s) =>
-    s.includes("DELETE FROM disc_migrations")
-  );
+  const deleteStatement = executedStatements.find((s) => s.includes("DELETE FROM disc_migrations"));
   assertExists(deleteStatement);
 });
 
@@ -441,9 +435,7 @@ Deno.test("Engine - executeRollbackTo rolls back all migrations after target", a
   assertEquals(result.ok, true);
 
   // Should have executed DROP TABLE for each rolled back migration
-  const dropStatements = executedStatements.filter((s) =>
-    s.includes("DROP TABLE IF EXISTS test CASCADE")
-  );
+  const dropStatements = executedStatements.filter((s) => s.includes("DROP TABLE IF EXISTS test CASCADE"));
   assertEquals(dropStatements.length, 2);
 });
 
@@ -499,9 +491,7 @@ Deno.test("Engine - executeRollbackTo preserves target migration", async () => {
 
   // Only m002 should have been rolled back, not m001
   // The DELETE should only have been called once
-  const deleteStatements = executedStatements.filter((s) =>
-    s.includes("DELETE FROM disc_migrations")
-  );
+  const deleteStatements = executedStatements.filter((s) => s.includes("DELETE FROM disc_migrations"));
   assertEquals(deleteStatements.length, 1);
 
   // m001 should still be in the applied set
@@ -598,9 +588,7 @@ Deno.test("SchemaManager - rollbackLastMigration delegates to engine", async () 
   assertEquals(result.ok, true);
 
   // Verify rollback SQL was executed
-  const dropStatement = executedStatements.find((s) =>
-    s.includes("DROP TABLE IF EXISTS user CASCADE")
-  );
+  const dropStatement = executedStatements.find((s) => s.includes("DROP TABLE IF EXISTS user CASCADE"));
   assertExists(dropStatement);
 
   await manager.close();

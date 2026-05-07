@@ -16,20 +16,20 @@ mode, and the `requireAuth` HTTP gate compose without extra work.
 
 For every type `T` in the schema:
 
-| Method | Path | Description |
-|---|---|---|
-| `GET`    | `/api/T`              | List with filter / order / pagination |
-| `GET`    | `/api/T/{id}`         | Single object by id (`uuid`)          |
-| `POST`   | `/api/T`              | Insert                                |
-| `PATCH`  | `/api/T/{id}`         | Partial update                        |
-| `DELETE` | `/api/T/{id}`         | Delete (idempotent: 204 either way)   |
-| `GET`    | `/api/T/{id}/{link}`  | Linked collection (offset/limit only) |
+| Method   | Path                 | Description                           |
+| -------- | -------------------- | ------------------------------------- |
+| `GET`    | `/api/T`             | List with filter / order / pagination |
+| `GET`    | `/api/T/{id}`        | Single object by id (`uuid`)          |
+| `POST`   | `/api/T`             | Insert                                |
+| `PATCH`  | `/api/T/{id}`        | Partial update                        |
+| `DELETE` | `/api/T/{id}`        | Delete (idempotent: 204 either way)   |
+| `GET`    | `/api/T/{id}/{link}` | Linked collection (offset/limit only) |
 
 Plus:
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/api/openapi.json` | OpenAPI 3.1 spec for the surface |
+| Method | Path                | Description                      |
+| ------ | ------------------- | -------------------------------- |
+| `GET`  | `/api/openapi.json` | OpenAPI 3.1 spec for the surface |
 
 ## Query parameters (list endpoint)
 
@@ -41,11 +41,11 @@ GET /api/User?email__in=a@x.com,b@y.com
 GET /api/User?bio__contains=author
 ```
 
-| Operator      | Form                  | EdgeQL emitted                   |
-|---------------|-----------------------|----------------------------------|
-| Equality      | `?prop=value`          | `.prop = 'value'`                 |
-| Set membership| `?prop__in=a,b,c`     | `.prop in {'a', 'b', 'c'}`       |
-| Substring     | `?prop__contains=foo` | `contains(.prop, 'foo')` (ILIKE) |
+| Operator       | Form                  | EdgeQL emitted                   |
+| -------------- | --------------------- | -------------------------------- |
+| Equality       | `?prop=value`         | `.prop = 'value'`                |
+| Set membership | `?prop__in=a,b,c`     | `.prop in {'a', 'b', 'c'}`       |
+| Substring      | `?prop__contains=foo` | `contains(.prop, 'foo')` (ILIKE) |
 
 Unknown property names → 400 with the offending field named.
 Bundle J keeps the operator vocabulary intentionally small; richer
@@ -109,24 +109,24 @@ type User {
 
 (SDL syntax: `annotation rest::hidden;` on the property/link body.)
 
-The expanded linked collection uses the *target type's* default REST
+The expanded linked collection uses the _target type's_ default REST
 shape recursively, so its own `rest::hidden` / `rest::expand`
 annotations apply.
 
 ## Status codes
 
-| Code | When |
-|---|---|
-| 200 | GET / PATCH success |
-| 201 | POST success |
-| 204 | DELETE success (returns no body) |
-| 400 | Unknown filter/body field, malformed UUID, empty PATCH body, parse/compile error |
-| 401 | `requireAuth=true` and missing/invalid bearer token |
-| 403 | Access policy denied |
-| 404 | Type not in schema, or row not found |
-| 405 | Method not allowed for the route |
-| 408 | Request exceeded `requestTimeout` |
-| 503 | `readOnly=true` and the request would write |
+| Code | When                                                                             |
+| ---- | -------------------------------------------------------------------------------- |
+| 200  | GET / PATCH success                                                              |
+| 201  | POST success                                                                     |
+| 204  | DELETE success (returns no body)                                                 |
+| 400  | Unknown filter/body field, malformed UUID, empty PATCH body, parse/compile error |
+| 401  | `requireAuth=true` and missing/invalid bearer token                              |
+| 403  | Access policy denied                                                             |
+| 404  | Type not in schema, or row not found                                             |
+| 405  | Method not allowed for the route                                                 |
+| 408  | Request exceeded `requestTimeout`                                                |
+| 503  | `readOnly=true` and the request would write                                      |
 
 ## Disabling the REST surface
 
@@ -145,7 +145,7 @@ DISC_ENABLE_REST=false
 
 ```typescript
 // programmatic
-new DiscServer({ enableRest: false, /* ... */ });
+new DiscServer({ enableRest: false /* ... */ });
 ```
 
 When disabled, `/api/*` returns 404 — the OpenAPI spec is also withheld.

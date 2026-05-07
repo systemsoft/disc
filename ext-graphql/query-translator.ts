@@ -507,9 +507,7 @@ class GraphQLParser {
   private expect(ch: string): void {
     if (this.input[this.pos] !== ch) {
       throw new Error(
-        `GraphQL parse error: expected '${ch}' at position ${this.pos}, got '${
-          this.input[this.pos] ?? "EOF"
-        }'`,
+        `GraphQL parse error: expected '${ch}' at position ${this.pos}, got '${this.input[this.pos] ?? "EOF"}'`,
       );
     }
     this.pos++;
@@ -546,9 +544,7 @@ class GraphQLParser {
     }
     if (this.pos === start) {
       throw new Error(
-        `GraphQL parse error: expected name at position ${this.pos}, got '${
-          this.input[this.pos] ?? "EOF"
-        }'`,
+        `GraphQL parse error: expected name at position ${this.pos}, got '${this.input[this.pos] ?? "EOF"}'`,
       );
     }
     return this.input.slice(start, this.pos);
@@ -672,14 +668,10 @@ export function resolveIntrospection(
     } else if (sel.fieldName === "__type") {
       const nameArg = sel.arguments.name;
       const typeName = typeof nameArg === "string" ? nameArg : null;
-      data[sel.alias ?? "__type"] = typeName
-        ? resolveTypeIntrospection(sel, schema, typeName)
-        : null;
+      data[sel.alias ?? "__type"] = typeName ? resolveTypeIntrospection(sel, schema, typeName) : null;
     } else if (sel.fieldName === "__typename") {
       // Operation-level __typename returns "Query" or "Mutation".
-      data[sel.alias ?? "__typename"] = parsed.type === "mutation"
-        ? "Mutation"
-        : "Query";
+      data[sel.alias ?? "__typename"] = parsed.type === "mutation" ? "Mutation" : "Query";
     }
   }
 
@@ -738,9 +730,7 @@ function introspectionTypeShape(
   const out: Record<string, unknown> = {};
   for (const sub of selection.subSelections ?? []) {
     if (sub.fieldName === "name") {
-      const short = def.name.includes("::")
-        ? def.name.split("::").pop()!
-        : def.name;
+      const short = def.name.includes("::") ? def.name.split("::").pop()! : def.name;
       out[sub.alias ?? "name"] = short;
     } else if (sub.fieldName === "kind") {
       out[sub.alias ?? "kind"] = "OBJECT";
@@ -896,9 +886,7 @@ function translateQuery(
   typeName: string,
   variables: Record<string, unknown>,
 ): string {
-  const shape = selection.subSelections
-    ? ` {${buildShape(selection.subSelections)}}`
-    : "";
+  const shape = selection.subSelections ? ` {${buildShape(selection.subSelections)}}` : "";
 
   const args = selection.arguments;
   let filter = "";

@@ -9,11 +9,7 @@
  */
 
 import { assertEquals } from "@std/assert";
-import {
-  buildSchemaFromIntrospection,
-  pgTypeToEdgeqlType,
-  type IntrospectionData,
-} from "./pg-introspect.ts";
+import { buildSchemaFromIntrospection, type IntrospectionData, pgTypeToEdgeqlType } from "./pg-introspect.ts";
 
 // =========================================================================
 // pgTypeToEdgeqlType — type mapping

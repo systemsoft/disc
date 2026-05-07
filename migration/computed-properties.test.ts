@@ -490,11 +490,9 @@ Deno.test("Schema Differ - detects changed computed expression", () => {
       kind: "TypeDeclaration",
       name: { kind: "Identifier", value: "Product" },
       members: [
-        oldSchema[0].items[0].kind === "TypeDeclaration"
-          ? oldSchema[0].items[0].members[0]
-          : (() => {
-            throw new Error("unreachable");
-          })(),
+        oldSchema[0].items[0].kind === "TypeDeclaration" ? oldSchema[0].items[0].members[0] : (() => {
+          throw new Error("unreachable");
+        })(),
         {
           kind: "PropertyDeclaration",
           name: { kind: "Identifier", value: "total" },
@@ -526,9 +524,7 @@ Deno.test("Schema Differ - detects changed computed expression", () => {
     true,
     "Changing a computed expression must produce an AlterType operation",
   );
-  const propChange = alterOp?.operations.find((o) =>
-    o.kind === "AlterProperty"
-  ) as Types.AlterPropertyOperation | undefined;
+  const propChange = alterOp?.operations.find((o) => o.kind === "AlterProperty") as Types.AlterPropertyOperation | undefined;
   assertEquals(
     propChange !== undefined,
     true,
@@ -579,9 +575,7 @@ Deno.test("Schema Differ - detects added annotation", () => {
     true,
     "Adding an annotation must produce an AlterType operation",
   );
-  const propChange = alterOp?.operations.find((o) =>
-    o.kind === "AlterProperty"
-  ) as Types.AlterPropertyOperation | undefined;
+  const propChange = alterOp?.operations.find((o) => o.kind === "AlterProperty") as Types.AlterPropertyOperation | undefined;
   const changeKinds = propChange?.changes.map((c) => c.kind) ?? [];
   assert(
     changeKinds.includes("AddAnnotation") ||
@@ -623,9 +617,7 @@ Deno.test("Schema Differ - detects removed annotation", () => {
   const alterOp = ops.find((o) => o.kind === "AlterType") as
     | Types.AlterTypeOperation
     | undefined;
-  const propChange = alterOp?.operations.find((o) =>
-    o.kind === "AlterProperty"
-  ) as Types.AlterPropertyOperation | undefined;
+  const propChange = alterOp?.operations.find((o) => o.kind === "AlterProperty") as Types.AlterPropertyOperation | undefined;
   const changeKinds = propChange?.changes.map((c) => c.kind) ?? [];
   assert(
     changeKinds.includes("DropAnnotation"),

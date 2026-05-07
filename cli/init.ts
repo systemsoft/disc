@@ -37,14 +37,10 @@ export class InitCommand {
     // of the method uses a clean bare name.
     options = { ...options, name: normalized.name, directory: normalized.directory };
 
-    const projectDir = options.directory
-      ? `${options.directory}/${options.name}`
-      : `./${options.name}`;
+    const projectDir = options.directory ? `${options.directory}/${options.name}` : `./${options.name}`;
 
     // Check if directory exists
-    const exists = await Deno.stat(projectDir).then(() => true).catch(() =>
-      false
-    );
+    const exists = await Deno.stat(projectDir).then(() => true).catch(() => false);
     if (exists && !options.force) {
       console.error(`❌ Directory '${options.name}' already exists`);
       console.error("💡 Use --force to overwrite or choose a different name");
@@ -292,8 +288,7 @@ export class InitCommand {
     if (options.backendDsn) {
       envContent = `${header}\nDATABASE_URL=${options.backendDsn}\n${appConfig}`;
     } else {
-      envContent =
-        `${header}\n# Managed PostgreSQL — the DSN is resolved from disc.toml.\n` +
+      envContent = `${header}\n# Managed PostgreSQL — the DSN is resolved from disc.toml.\n` +
         `# Set DATABASE_URL here only to override with an external database.\n${appConfig}`;
     }
 

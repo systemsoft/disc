@@ -19,11 +19,7 @@ import { assertEquals, assertGreater } from "@std/assert";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
 import { canRunPgTests, getTestDsn } from "../../tests/pg-test-harness.ts";
 import { ConnectionPool } from "../../lib/connection-pool.ts";
-import {
-  bootstrapDataWatch,
-  CHANGE_LOG_TABLE,
-  pruneChangeLog,
-} from "./data-watch-ddl.ts";
+import { bootstrapDataWatch, CHANGE_LOG_TABLE, pruneChangeLog } from "./data-watch-ddl.ts";
 
 const RUN_PG = canRunPgTests();
 const SUFFIX = `bundlel_${Date.now() % 100000}`;
@@ -64,8 +60,7 @@ async function cleanup(dsn: string): Promise<void> {
 }
 
 Deno.test({
-  name:
-    "Bundle L — bootstrap creates change-log table + function + triggers; mutations append rows",
+  name: "Bundle L — bootstrap creates change-log table + function + triggers; mutations append rows",
   ignore: !RUN_PG,
   sanitizeOps: false,
   sanitizeResources: false,

@@ -55,9 +55,7 @@ async function queryRows<T>(
   const client = new Client(cfg);
   try {
     await client.connect();
-    const result = params
-      ? await client.queryObject<T>(sql, params)
-      : await client.queryObject<T>(sql);
+    const result = params ? await client.queryObject<T>(sql, params) : await client.queryObject<T>(sql);
     return result.rows;
   } finally {
     await client.end();
@@ -95,8 +93,7 @@ async function cleanup(dsn: string, ...tableNames: string[]): Promise<void> {
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name:
-    "PG Rewrite: INSERT rewrite auto-sets created_at on insert via BEFORE INSERT trigger",
+  name: "PG Rewrite: INSERT rewrite auto-sets created_at on insert via BEFORE INSERT trigger",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -277,8 +274,7 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name:
-    "PG Rewrite: INSERT+UPDATE combined rewrite auto-sets column on both operations",
+  name: "PG Rewrite: INSERT+UPDATE combined rewrite auto-sets column on both operations",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -388,8 +384,7 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name:
-    "PG Rewrite: UPDATE rewrite with OLD reference increments counter on each update",
+  name: "PG Rewrite: UPDATE rewrite with OLD reference increments counter on each update",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -514,8 +509,7 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name:
-    "PG Rewrite: DDLGenerator-produced rewrite SQL executes and fires on INSERT",
+  name: "PG Rewrite: DDLGenerator-produced rewrite SQL executes and fires on INSERT",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();

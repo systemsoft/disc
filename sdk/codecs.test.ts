@@ -1,14 +1,5 @@
-import {
-  assert,
-  assertEquals,
-} from "https://deno.land/std@0.208.0/assert/mod.ts";
-import {
-  encodeBytes,
-  parseBytes,
-  parseDateTime,
-  parseInt64,
-  reviveResponse,
-} from "./codecs.ts";
+import { assert, assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
+import { encodeBytes, parseBytes, parseDateTime, parseInt64, reviveResponse } from "./codecs.ts";
 
 // ── parseDateTime ────────────────────────────────────────────────────
 

@@ -18,12 +18,7 @@ export { BaseExtension } from "./base-extension.ts";
 export { createExtensionContext } from "./context.ts";
 export { ExtensionRegistry } from "./registry.ts";
 
-export {
-  ExtensionConfigError,
-  ExtensionDependencyError,
-  ExtensionError,
-  ExtensionInitError,
-} from "./errors.ts";
+export { ExtensionConfigError, ExtensionDependencyError, ExtensionError, ExtensionInitError } from "./errors.ts";
 
 export { AccessExtensionAdapter } from "./access-extension.ts";
 export type { AccessExtensionAdapterOptions } from "./access-extension.ts";

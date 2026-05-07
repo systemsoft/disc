@@ -2,11 +2,7 @@
  * Tests for Database Connection Pool
  */
 
-import {
-  assertEquals,
-  assertExists,
-  assertRejects,
-} from "https://deno.land/std@0.208.0/assert/mod.ts";
+import { assertEquals, assertExists, assertRejects } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import { ConnectionPool, PoolConfig } from "./connection-pool.ts";
 import { DatabaseConnection } from "./database.ts";
 

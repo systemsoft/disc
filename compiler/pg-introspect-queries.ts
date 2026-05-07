@@ -12,12 +12,7 @@
  */
 
 import type { DatabaseConnection } from "../lib/database.ts";
-import type {
-  IntrospectionData,
-  IntrospectedColumn,
-  IntrospectedForeignKey,
-  IntrospectedTable,
-} from "./pg-introspect.ts";
+import type { IntrospectedColumn, IntrospectedForeignKey, IntrospectedTable, IntrospectionData } from "./pg-introspect.ts";
 
 export interface IntrospectOptions {
   /**

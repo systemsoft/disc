@@ -3,13 +3,7 @@
  */
 
 import { SyntaxError } from "../lib/errors.ts";
-import {
-  createToken,
-  KEYWORDS,
-  RESERVED_KEYWORDS,
-  Token,
-  TokenType,
-} from "./tokens.ts";
+import { createToken, KEYWORDS, RESERVED_KEYWORDS, Token, TokenType } from "./tokens.ts";
 
 export class EdgeQLLexer {
   private source: string;

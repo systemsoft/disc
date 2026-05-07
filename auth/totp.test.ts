@@ -2,19 +2,8 @@
  * TOTP unit tests — covers the RFC 6238 §B test vectors plus edge cases.
  */
 
-import {
-  assert,
-  assertEquals,
-  assertThrows,
-} from "https://deno.land/std@0.224.0/assert/mod.ts";
-import {
-  base32Decode,
-  base32Encode,
-  buildOtpauthUri,
-  generateSecret,
-  generateTOTP,
-  verifyTOTP,
-} from "./totp.ts";
+import { assert, assertEquals, assertThrows } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { base32Decode, base32Encode, buildOtpauthUri, generateSecret, generateTOTP, verifyTOTP } from "./totp.ts";
 
 // ── base32 round-trip ────────────────────────────────────────────────
 

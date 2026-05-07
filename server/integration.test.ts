@@ -2,12 +2,7 @@
  * Integration tests for the complete Disc server protocol implementation
  */
 
-import {
-  assert,
-  assertEquals,
-  assertExists,
-  assertStringIncludes,
-} from "@std/assert";
+import { assert, assertEquals, assertExists, assertStringIncludes } from "@std/assert";
 import { DiscServer } from "./server.ts";
 import * as Types from "./types.ts";
 
@@ -19,8 +14,7 @@ const BASE_URL = `http://${TEST_HOST}:${TEST_PORT}`;
 const SAMPLE_QUERIES = {
   validSelect: "select User { name, email }",
   validInsert: "insert User { name := 'Ada', email := 'ada@example.com' }",
-  validUpdate:
-    "update User filter .id = <uuid>$id set { name := 'Ada Updated' }",
+  validUpdate: "update User filter .id = <uuid>$id set { name := 'Ada Updated' }",
   validDelete: "delete User filter .id = <uuid>$id",
   invalidSyntax: "select User { name email }", // Missing comma
   emptyQuery: "",

@@ -7,14 +7,7 @@
 
 import { assert, assertEquals, assertExists } from "@std/assert";
 import { HttpServer } from "./http.ts";
-import type {
-  ProtocolHandler,
-  QueryContext,
-  QueryError,
-  QueryRequest,
-  QueryResponse,
-  ServerConfig,
-} from "./types.ts";
+import type { ProtocolHandler, QueryContext, QueryError, QueryRequest, QueryResponse, ServerConfig } from "./types.ts";
 
 // --- Helpers ---
 
@@ -212,8 +205,7 @@ class WebSocketTestClient {
 // --- Tests ---
 
 Deno.test({
-  name:
-    "Production E2E: Subscribe then unsubscribe returns subscription_stopped",
+  name: "Production E2E: Subscribe then unsubscribe returns subscription_stopped",
   sanitizeResources: false,
   sanitizeOps: false,
   fn: async () => {

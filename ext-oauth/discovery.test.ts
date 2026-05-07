@@ -36,11 +36,7 @@ function mockFetch(
   responder: (url: string) => Response | Promise<Response>,
 ): typeof fetch {
   return ((input: string | URL | Request) => {
-    const url = typeof input === "string"
-      ? input
-      : input instanceof URL
-      ? input.toString()
-      : input.url;
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     return Promise.resolve(responder(url));
   }) as typeof fetch;
 }
@@ -107,9 +103,7 @@ Deno.test("fetchOidcDiscovery - omits userinfo when issuer doesn't advertise one
 });
 
 Deno.test("fetchOidcDiscovery - throws on HTTP error", async () => {
-  const f = mockFetch(() =>
-    new Response("not found", { status: 404, statusText: "Not Found" })
-  );
+  const f = mockFetch(() => new Response("not found", { status: 404, statusText: "Not Found" }));
 
   await assertRejects(
     () => fetchOidcDiscovery("https://example.com", f),

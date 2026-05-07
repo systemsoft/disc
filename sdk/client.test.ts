@@ -1,15 +1,8 @@
 // deno-lint-ignore-file
-import {
-  assertEquals,
-  assertInstanceOf,
-  assertRejects,} from "@std/assert";
+import { assertEquals, assertInstanceOf, assertRejects } from "@std/assert";
 
 import { createClient, DiscClient } from "./client.ts";
-import {
-  DiscAuthError,
-  DiscConnectionError,
-  DiscQueryError,
-  DiscServerError,} from "./errors.ts";
+import { DiscAuthError, DiscConnectionError, DiscQueryError, DiscServerError } from "./errors.ts";
 
 // --- Mock fetch helper ---
 
@@ -21,11 +14,7 @@ function mockFetch(
     input: string | URL | Request,
     init?: RequestInit,
   ): Promise<Response> => {
-    const url = typeof input === "string"
-      ? input
-      : input instanceof URL
-      ? input.toString()
-      : input.url;
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     return Promise.resolve(handler(url, init));
   };
   return () => {
@@ -52,9 +41,7 @@ Deno.test("client - strips trailing slash from baseUrl", () => {
 });
 
 Deno.test("client - query returns data", async () => {
-  const restore = mockFetch((_url) =>
-    new Response(JSON.stringify({ data: [{ name: "Ada" }] }))
-  );
+  const restore = mockFetch((_url) => new Response(JSON.stringify({ data: [{ name: "Ada" }] })));
   try {
     const client = new DiscClient();
     const result = await client.query<{ name: string }[]>(
@@ -149,9 +136,7 @@ Deno.test("client - health endpoint", async () => {
 });
 
 Deno.test("client - isAlive returns true when server responds", async () => {
-  const restore = mockFetch(() =>
-    new Response(JSON.stringify({ status: "alive" }))
-  );
+  const restore = mockFetch(() => new Response(JSON.stringify({ status: "alive" })));
   try {
     const client = new DiscClient();
     assertEquals(await client.isAlive(), true);
@@ -173,9 +158,7 @@ Deno.test("client - isAlive returns false on error", async () => {
 });
 
 Deno.test("client - isReady returns true when server is ready", async () => {
-  const restore = mockFetch(() =>
-    new Response(JSON.stringify({ status: "healthy" }))
-  );
+  const restore = mockFetch(() => new Response(JSON.stringify({ status: "healthy" })));
   try {
     const client = new DiscClient();
     assertEquals(await client.isReady(), true);
@@ -197,9 +180,7 @@ Deno.test("client - isReady returns false on 503", async () => {
 });
 
 Deno.test("client - stats endpoint", async () => {
-  const restore = mockFetch(() =>
-    new Response(JSON.stringify({ uptimeMs: 12345 }))
-  );
+  const restore = mockFetch(() => new Response(JSON.stringify({ uptimeMs: 12345 })));
   try {
     const client = new DiscClient();
     const stats = await client.stats();
@@ -243,9 +224,7 @@ Deno.test("client - clearAuthToken removes Authorization", async () => {
 });
 
 Deno.test("client - 401 throws DiscAuthError", async () => {
-  const restore = mockFetch(() =>
-    new Response("Unauthorized", { status: 401 })
-  );
+  const restore = mockFetch(() => new Response("Unauthorized", { status: 401 }));
   try {
     const client = new DiscClient();
     await assertRejects(
@@ -271,9 +250,7 @@ Deno.test("client - 403 throws DiscAuthError", async () => {
 });
 
 Deno.test("client - 500 throws DiscServerError", async () => {
-  const restore = mockFetch(() =>
-    new Response("Internal Server Error", { status: 500 })
-  );
+  const restore = mockFetch(() => new Response("Internal Server Error", { status: 500 }));
   try {
     const client = new DiscClient();
     await assertRejects(

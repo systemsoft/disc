@@ -56,9 +56,7 @@ export async function writeGeneratedFiles(
   // Collect unique directories from file paths
   const dirs = new Set<string>();
   for (const file of result.files) {
-    const fullPath = file.path.startsWith("/")
-      ? file.path
-      : `${basePath}/${file.path}`;
+    const fullPath = file.path.startsWith("/") ? file.path : `${basePath}/${file.path}`;
     const dir = fullPath.substring(0, fullPath.lastIndexOf("/"));
     if (dir) dirs.add(dir);
   }
@@ -77,9 +75,7 @@ export async function writeGeneratedFiles(
   // Write each file
   const writtenPaths: string[] = [];
   for (const file of result.files) {
-    const fullPath = file.path.startsWith("/")
-      ? file.path
-      : `${basePath}/${file.path}`;
+    const fullPath = file.path.startsWith("/") ? file.path : `${basePath}/${file.path}`;
     await Deno.writeTextFile(fullPath, file.content);
     writtenPaths.push(fullPath);
     log.info("Generated file", { path: fullPath });
@@ -112,9 +108,7 @@ export async function writeGeneratedFiles(
 
   // Report warnings and errors
   if (result.warnings.length > 0) {
-    result.warnings.forEach((warning) =>
-      log.warn("Codegen warning", { warning })
-    );
+    result.warnings.forEach((warning) => log.warn("Codegen warning", { warning }));
   }
 
   if (result.errors.length > 0) {
@@ -135,16 +129,18 @@ export async function discoverSchemaFiles(dir: string): Promise<string[]> {
 
     try {
       for await (const entry of Deno.readDir(dir)) {
-        if (entry.isFile && entry.name.endsWith(`.${ext}`))
+        if (entry.isFile && entry.name.endsWith(`.${ext}`)) {
           files.push(`${dir}/${entry.name}`);
+        }
       }
     } catch {
       // Directory doesn't exist or can't be read
       continue;
     }
 
-    if (files.length > 0)
+    if (files.length > 0) {
       return files.sort();
+    }
   }
 
   return [];
@@ -163,8 +159,9 @@ export async function loadMultiFileSchema(files: string[]): Promise<Context.Sche
     const source = await Deno.readTextFile(file);
     const result = manager.parseSDL(source);
 
-    if (!result.ok)
+    if (!result.ok) {
       throw new Error(`Failed to parse ${file}: ${result.error.message}`);
+    }
 
     allModules.push(...result.value);
   }

@@ -155,9 +155,7 @@ Deno.test("Differ - typeToString() serializes range<int32> correctly", () => {
   const ops = differ.diff([], modules);
 
   // The CreateType operation should have a property with type "range<int32>"
-  const createOp = ops.find((op) =>
-    op.kind === "CreateType"
-  ) as MigrationTypes.CreateTypeOperation;
+  const createOp = ops.find((op) => op.kind === "CreateType") as MigrationTypes.CreateTypeOperation;
   assertEquals(createOp !== undefined, true);
 
   const valProp = createOp.properties.find((p) => p.name === "val");
@@ -179,9 +177,7 @@ Deno.test("Differ - typeToString() serializes multirange<cal::local_date> correc
   const differ = new SchemaDiffer();
   const ops = differ.diff([], modules);
 
-  const createOp = ops.find((op) =>
-    op.kind === "CreateType"
-  ) as MigrationTypes.CreateTypeOperation;
+  const createOp = ops.find((op) => op.kind === "CreateType") as MigrationTypes.CreateTypeOperation;
   const datesProp = createOp.properties.find((p) => p.name === "dates");
   assertEquals(datesProp!.type, "multirange<cal::local_date>");
 });

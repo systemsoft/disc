@@ -129,9 +129,7 @@ Deno.test({
       });
       const users = data.tables.find((t) => t.tableName === "introspect_users")!;
       assertEquals(users.primaryKey, ["id"]);
-      const junction = data.tables.find((t) =>
-        t.tableName === "introspect_posts_tags"
-      )!;
+      const junction = data.tables.find((t) => t.tableName === "introspect_posts_tags")!;
       assertEquals(junction.primaryKey?.sort(), ["post_id", "tag_id"]);
     });
   },

@@ -4,11 +4,7 @@
  */
 
 import { assertEquals, assertRejects } from "@std/assert";
-import {
-  DataMigration,
-  DataMigrationContext,
-  DataMigrationRunner,
-} from "./data-migration.ts";
+import { DataMigration, DataMigrationContext, DataMigrationRunner } from "./data-migration.ts";
 
 // ---- Helpers ----
 

@@ -43,8 +43,7 @@ export default defineConfig({
       // Disc HTTP server — auto-migrates the fixture schema on first run.
       // Path is relative to the fixture cwd (4 dirs up to repo root, then
       // cli/main.ts). Resolved by Deno after Playwright sets cwd.
-      command:
-        "deno run --allow-all ../../../../cli/main.ts serve",
+      command: "deno run --allow-all ../../../../cli/main.ts serve",
       cwd: "./tests/e2e/fixture",
       url: "http://localhost:5656/health",
       reuseExistingServer: !process.env.CI,

@@ -218,9 +218,7 @@ export const DEFAULT_TYPE_MAPPINGS: TypeMapping[] = [
 ];
 
 export function getTypeMapping(edgeqlType: string): TypeMapping | null {
-  return DEFAULT_TYPE_MAPPINGS.find((mapping) =>
-    mapping.edgeqlType === edgeqlType
-  ) || null;
+  return DEFAULT_TYPE_MAPPINGS.find((mapping) => mapping.edgeqlType === edgeqlType) || null;
 }
 
 /**

@@ -18,8 +18,7 @@ const queries: Record<string, string> = {
   "insert": "INSERT User { name := 'Ada', email := 'ada@example.com' }",
   "update": "UPDATE User FILTER .name = 'Ada' SET { name := 'Billie' }",
   "delete": "DELETE User FILTER .name = 'Ada'",
-  "complex":
-    "SELECT User { name, email, posts: { title, body } } FILTER .name = 'Ada' ORDER BY .name LIMIT 10",
+  "complex": "SELECT User { name, email, posts: { title, body } } FILTER .name = 'Ada' ORDER BY .name LIMIT 10",
 };
 
 for (const [name, query] of Object.entries(queries)) {

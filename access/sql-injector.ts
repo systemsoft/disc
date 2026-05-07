@@ -160,9 +160,7 @@ export class AccessSQLInjector {
 
         if (clauseMatch) {
           const clauseIndex = clauseMatch.index!;
-          newText = `${beforeFrom}${
-            afterFromText.substring(0, clauseIndex)
-          } WHERE ${conditionSQL} ${afterFromText.substring(clauseIndex)}`;
+          newText = `${beforeFrom}${afterFromText.substring(0, clauseIndex)} WHERE ${conditionSQL} ${afterFromText.substring(clauseIndex)}`;
         } else {
           newText = `${text} WHERE ${conditionSQL}`;
         }

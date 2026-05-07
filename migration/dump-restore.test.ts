@@ -122,8 +122,7 @@ async function dropTables(dsn: string, ...tables: string[]): Promise<void> {
 }
 
 Deno.test({
-  name:
-    "Gel #2071: disc_migrations survives pg_dump/psql round-trip (no `database is empty` after restore)",
+  name: "Gel #2071: disc_migrations survives pg_dump/psql round-trip (no `database is empty` after restore)",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();

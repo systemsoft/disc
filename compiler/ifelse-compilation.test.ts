@@ -133,8 +133,7 @@ Deno.test("IF/ELSE - in filter expression", () => {
 
 // P1-05 — multi-branch CASE/WHEN
 Deno.test("CASE/WHEN — multi-branch searched CASE compiles to multi-WHEN SQL", () => {
-  const source =
-    `SELECT case when 1 = 1 then "a" when 2 = 2 then "b" else "c" end`;
+  const source = `SELECT case when 1 = 1 then "a" when 2 = 2 then "b" else "c" end`;
   const sql = compileEdgeQL(source);
   assertEquals(sql.includes("CASE"), true);
   const whenCount = (sql.match(/WHEN/g) ?? []).length;

@@ -54,9 +54,8 @@ function attachHttpServer(server: DiscServer): {
   const cleanup = () => {
     // SubscriptionHandler's heartbeat interval starts in its
     // constructor — dispose to release the timer.
-    const sub =
-      (http as unknown as { subscription_handler: { dispose(): void } })
-        .subscription_handler;
+    const sub = (http as unknown as { subscription_handler: { dispose(): void } })
+      .subscription_handler;
     sub.dispose();
   };
   return { cleanup, http };

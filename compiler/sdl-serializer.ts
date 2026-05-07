@@ -17,13 +17,7 @@
  * gap so the round-trip stays observable.
  */
 
-import type {
-  LinkDef,
-  PropertyConstraint,
-  PropertyDef,
-  Schema,
-  TypeDef,
-} from "./context.ts";
+import type { LinkDef, PropertyConstraint, PropertyDef, Schema, TypeDef } from "./context.ts";
 
 const INDENT = "  ";
 
@@ -47,9 +41,7 @@ export function serializeSchema(schema: Schema): string {
 
   const blocks: string[] = [];
   for (const mod of moduleNames) {
-    const types = byModule.get(mod)!.slice().sort((a, b) =>
-      stripModule(a.name).localeCompare(stripModule(b.name))
-    );
+    const types = byModule.get(mod)!.slice().sort((a, b) => stripModule(a.name).localeCompare(stripModule(b.name)));
     const body = types
       .map((t) => indent(serializeTypeAt(t, INDENT), INDENT))
       .join("\n\n");
@@ -96,9 +88,7 @@ function serializeObject(typeDef: TypeDef): string {
   if (typeDef.abstract) header.push("abstract");
   header.push("type", name);
 
-  const parents = (typeDef.parentTypes ?? []).filter((p) =>
-    p !== "std::BaseObject" && p !== "BaseObject"
-  );
+  const parents = (typeDef.parentTypes ?? []).filter((p) => p !== "std::BaseObject" && p !== "BaseObject");
   if (parents.length > 0) {
     header.push("extending", parents.map(stripModule).join(", "));
   }
@@ -113,18 +103,14 @@ function serializeObject(typeDef: TypeDef): string {
   }
 
   // Properties (sorted for determinism)
-  const props = [...typeDef.properties.values()].sort((a, b) =>
-    a.name.localeCompare(b.name)
-  );
+  const props = [...typeDef.properties.values()].sort((a, b) => a.name.localeCompare(b.name));
   for (const p of props) {
     if (p.name === "id") continue; // implicit in disc/gel
     lines.push(serializeProperty(p));
   }
 
   // Links
-  const links = [...typeDef.links.values()].sort((a, b) =>
-    a.name.localeCompare(b.name)
-  );
+  const links = [...typeDef.links.values()].sort((a, b) => a.name.localeCompare(b.name));
   for (const l of links) {
     lines.push(serializeLink(l));
   }

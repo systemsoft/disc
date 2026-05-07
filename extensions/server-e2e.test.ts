@@ -15,12 +15,7 @@
 
 import { assert, assertEquals } from "@std/assert";
 import { HttpServer } from "../server/http.ts";
-import type {
-  ProtocolHandler,
-  QueryContext,
-  QueryRequest,
-  QueryResponse,
-} from "../server/types.ts";
+import type { ProtocolHandler, QueryContext, QueryRequest, QueryResponse } from "../server/types.ts";
 import { ExtensionRegistry } from "./registry.ts";
 import { CustomFunctionsExtension } from "../ext-custom-functions/extension.ts";
 import { OAuthExtension } from "../ext-oauth/extension.ts";
@@ -71,8 +66,7 @@ const MOCK_LOGGER = getLogger("test-extension-e2e");
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name:
-    "Extension Server E2E - server starts with CustomFunctionsExtension and /health returns 200",
+  name: "Extension Server E2E - server starts with CustomFunctionsExtension and /health returns 200",
   sanitizeResources: false,
   sanitizeOps: false,
   fn: async () => {
@@ -138,8 +132,7 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name:
-    "Extension Server E2E - OAuthExtension GET /ext/oauth/providers returns provider list",
+  name: "Extension Server E2E - OAuthExtension GET /ext/oauth/providers returns provider list",
   sanitizeResources: false,
   sanitizeOps: false,
   fn: async () => {
@@ -215,8 +208,7 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name:
-    "Extension Server E2E - VectorExtension and CustomFunctionsExtension both initialize and appear in /health",
+  name: "Extension Server E2E - VectorExtension and CustomFunctionsExtension both initialize and appear in /health",
   sanitizeResources: false,
   sanitizeOps: false,
   fn: async () => {

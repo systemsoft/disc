@@ -105,8 +105,7 @@ const PERSON_SDL = `
 const PERSON_TABLE = "test_person";
 
 Deno.test({
-  name:
-    "PG Phase 20: IF/ELSE in computed shape — CASE/WHEN returns correct status per row",
+  name: "PG Phase 20: IF/ELSE in computed shape — CASE/WHEN returns correct status per row",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -326,8 +325,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Phase 20: Named tuple (label := 'hello', count := 42) compiles to jsonb_build_object",
+  name: "PG Phase 20: Named tuple (label := 'hello', count := 42) compiles to jsonb_build_object",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -358,9 +356,7 @@ Deno.test({
       const rowData = firstRow.jsonb_build_object ?? firstRow;
 
       // Navigate into the result — might be the row itself or nested
-      const data = (typeof rowData === "object" && rowData !== null)
-        ? rowData as Record<string, unknown>
-        : {};
+      const data = (typeof rowData === "object" && rowData !== null) ? rowData as Record<string, unknown> : {};
 
       // Check for label and count either at top level or nested
       let label: unknown;
@@ -407,8 +403,7 @@ const ACCOUNT_SDL = `
 const ACCOUNT_TABLE = "test_account";
 
 Deno.test({
-  name:
-    "PG Phase 20: UPSERT — INSERT UNLESS CONFLICT ELSE UPDATE modifies existing row",
+  name: "PG Phase 20: UPSERT — INSERT UNLESS CONFLICT ELSE UPDATE modifies existing row",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -467,8 +462,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Phase 20: UPSERT DO NOTHING — INSERT UNLESS CONFLICT ON .email leaves existing row unchanged",
+  name: "PG Phase 20: UPSERT DO NOTHING — INSERT UNLESS CONFLICT ON .email leaves existing row unchanged",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();

@@ -75,12 +75,8 @@ export async function fetchOidcDiscovery(
     authorizationEndpoint,
     issuer,
     jwksUri: typeof doc["jwks_uri"] === "string" ? doc["jwks_uri"] : undefined,
-    scopesSupported: Array.isArray(doc["scopes_supported"])
-      ? doc["scopes_supported"].filter((s): s is string => typeof s === "string")
-      : undefined,
+    scopesSupported: Array.isArray(doc["scopes_supported"]) ? doc["scopes_supported"].filter((s): s is string => typeof s === "string") : undefined,
     tokenEndpoint,
-    userInfoEndpoint: typeof doc["userinfo_endpoint"] === "string"
-      ? doc["userinfo_endpoint"]
-      : undefined,
+    userInfoEndpoint: typeof doc["userinfo_endpoint"] === "string" ? doc["userinfo_endpoint"] : undefined,
   };
 }

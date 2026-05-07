@@ -153,9 +153,7 @@ export class DiscShell {
     console.log(`📖 Loading schema from ${schemaFile}`);
 
     try {
-      const exists = await Deno.stat(schemaFile).then(() => true).catch(() =>
-        false
-      );
+      const exists = await Deno.stat(schemaFile).then(() => true).catch(() => false);
       if (!exists) {
         console.log(`⚠️  Schema file not found: ${schemaFile}`);
         return;

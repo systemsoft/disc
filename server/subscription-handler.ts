@@ -90,9 +90,7 @@ export class SubscriptionHandler {
       // Start the subscription (for now, we'll send periodic updates)
       await this.start_subscription(activeSubscription);
     } catch (error) {
-      const errorMessage = error instanceof Error
-        ? error.message
-        : "Unknown subscription error";
+      const errorMessage = error instanceof Error ? error.message : "Unknown subscription error";
       this.send_error(websocket, subscription.id, errorMessage);
     }
   }

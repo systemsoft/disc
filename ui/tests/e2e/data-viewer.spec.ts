@@ -82,9 +82,7 @@ test.describe("Data viewer — read", () => {
     await expect(page.getByText("No rows match")).toBeVisible();
   });
 
-  test("datetime exact-match filter expands a bare YYYY-MM-DD to a one-day range", async ({
-    page,
-  }) => {
+  test("datetime exact-match filter expands a bare YYYY-MM-DD to a one-day range", async ({ page }) => {
     await gotoData(page);
     await expect(page.locator("tbody tr")).toHaveCount(3);
 

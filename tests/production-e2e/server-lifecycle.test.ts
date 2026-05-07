@@ -8,23 +8,10 @@
  * 12 tests total.
  */
 
-import {
-  assert,
-  assertEquals,
-  assertExists,
-  assertStringIncludes,
-} from "@std/assert";
+import { assert, assertEquals, assertExists, assertStringIncludes } from "@std/assert";
 import { HttpServer } from "../../server/http.ts";
 import type { HttpServerOptions } from "../../server/http.ts";
-import type {
-  HealthStatus,
-  ProtocolHandler,
-  QueryContext,
-  QueryError,
-  QueryRequest,
-  QueryResponse,
-  ServerConfig,
-} from "../../server/types.ts";
+import type { HealthStatus, ProtocolHandler, QueryContext, QueryError, QueryRequest, QueryResponse, ServerConfig } from "../../server/types.ts";
 import type { AuthRoutes } from "../../auth/integration.ts";
 import { canRunPgTests } from "../../tests/pg-test-harness.ts";
 
@@ -455,8 +442,7 @@ Deno.test(
 );
 
 Deno.test({
-  name:
-    "Production E2E: (PG) /health/ready with real PG handler returns 200 healthy",
+  name: "Production E2E: (PG) /health/ready with real PG handler returns 200 healthy",
   ignore: !canRunPgTests(),
   fn: async () => {
     // This test is gated behind canRunPgTests(). It uses a mock handler

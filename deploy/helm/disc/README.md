@@ -49,16 +49,16 @@ replica is always serving during the rollout. The pre-stop period is
 See [`values.yaml`](./values.yaml) for the full reference (every option is
 documented inline). The most-likely overrides:
 
-| Path | Purpose |
-| ---- | ------- |
-| `image.tag` | Pin to an exact image tag. |
-| `replicaCount` | HA replica count. |
-| `database.external.url` / `database.external.urlSecretRef` | Connect to your Postgres. |
-| `auth.jwtSecret` / `auth.jwtSecretRef` | Provide your own JWT secret. |
-| `tls.enabled`, `tls.certSecret` | In-pod TLS termination. |
-| `ingress.enabled`, `ingress.hosts`, `ingress.tls` | Expose to the world. |
-| `autoscaling.enabled` | Turn on the HPA. |
-| `metrics.enabled`, `metrics.serviceMonitor.enabled` | Wire up Prometheus. |
+| Path                                                       | Purpose                      |
+| ---------------------------------------------------------- | ---------------------------- |
+| `image.tag`                                                | Pin to an exact image tag.   |
+| `replicaCount`                                             | HA replica count.            |
+| `database.external.url` / `database.external.urlSecretRef` | Connect to your Postgres.    |
+| `auth.jwtSecret` / `auth.jwtSecretRef`                     | Provide your own JWT secret. |
+| `tls.enabled`, `tls.certSecret`                            | In-pod TLS termination.      |
+| `ingress.enabled`, `ingress.hosts`, `ingress.tls`          | Expose to the world.         |
+| `autoscaling.enabled`                                      | Turn on the HPA.             |
+| `metrics.enabled`, `metrics.serviceMonitor.enabled`        | Wire up Prometheus.          |
 
 For a production-grade overlay, see
 [`values-prod-example.yaml`](./values-prod-example.yaml).

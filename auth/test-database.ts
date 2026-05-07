@@ -340,16 +340,12 @@ export class TestDatabase implements DatabaseInterface {
     // But first try splitting by AND/OR at the top level (not inside parens)
     const andParts = this.splitByKeyword(trimmed, " and ");
     if (andParts.length > 1) {
-      return andParts.every((part) =>
-        this.evaluateWhereExpression(row, part, params, paramRef)
-      );
+      return andParts.every((part) => this.evaluateWhereExpression(row, part, params, paramRef));
     }
 
     const orParts = this.splitByKeyword(trimmed, " or ");
     if (orParts.length > 1) {
-      return orParts.some((part) =>
-        this.evaluateWhereExpression(row, part, params, paramRef)
-      );
+      return orParts.some((part) => this.evaluateWhereExpression(row, part, params, paramRef));
     }
 
     // Strip outer parens

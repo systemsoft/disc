@@ -14,18 +14,8 @@
  * exact substrings.
  */
 
-import type {
-  AccessAction,
-  AccessPolicy,
-} from "../access/types.ts";
-import type {
-  IndexDef,
-  LinkDef,
-  PropertyConstraint,
-  PropertyDef,
-  Schema,
-  TypeDef,
-} from "../compiler/context.ts";
+import type { AccessAction, AccessPolicy } from "../access/types.ts";
+import type { IndexDef, LinkDef, PropertyConstraint, PropertyDef, Schema, TypeDef } from "../compiler/context.ts";
 
 /**
  * Render the global type list shown by `\d` without arguments.
@@ -58,9 +48,7 @@ export function describeAllTypes(schema: Schema): string {
   lines.push("");
 
   for (const mod of moduleNames) {
-    const types = byModule.get(mod)!.slice().sort((a, b) =>
-      stripModule(a.name).localeCompare(stripModule(b.name))
-    );
+    const types = byModule.get(mod)!.slice().sort((a, b) => stripModule(a.name).localeCompare(stripModule(b.name)));
     lines.push(`module ${mod}`);
     for (const t of types) {
       lines.push(`  ${stripModule(t.name).padEnd(28)} ${kindLabel(t)}`);

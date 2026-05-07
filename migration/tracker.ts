@@ -113,9 +113,7 @@ export class MigrationTracker {
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to initialize migration tracker: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `Failed to initialize migration tracker: ${error instanceof Error ? error.message : String(error)}`,
         ),
       );
     }
@@ -168,9 +166,7 @@ export class MigrationTracker {
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to record migration: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `Failed to record migration: ${error instanceof Error ? error.message : String(error)}`,
         ),
       );
     }
@@ -206,9 +202,7 @@ export class MigrationTracker {
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to remove migration: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `Failed to remove migration: ${error instanceof Error ? error.message : String(error)}`,
         ),
       );
     }
@@ -233,9 +227,7 @@ export class MigrationTracker {
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to get applied migrations: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `Failed to get applied migrations: ${error instanceof Error ? error.message : String(error)}`,
         ),
       );
     }
@@ -258,17 +250,13 @@ export class MigrationTracker {
         ORDER BY applied_order DESC
       `);
 
-      const history = result.rows.map((row: any) =>
-        this.mapRowToHistoryEntry(row)
-      );
+      const history = result.rows.map((row: any) => this.mapRowToHistoryEntry(row));
 
       return Ok(history);
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to get migration history: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `Failed to get migration history: ${error instanceof Error ? error.message : String(error)}`,
         ),
       );
     }
@@ -296,9 +284,7 @@ export class MigrationTracker {
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to check migration status: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `Failed to check migration status: ${error instanceof Error ? error.message : String(error)}`,
         ),
       );
     }
@@ -340,9 +326,7 @@ export class MigrationTracker {
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to get migration state: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `Failed to get migration state: ${error instanceof Error ? error.message : String(error)}`,
         ),
       );
     }
@@ -380,9 +364,7 @@ export class MigrationTracker {
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to save checkpoint: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `Failed to save checkpoint: ${error instanceof Error ? error.message : String(error)}`,
         ),
       );
     }
@@ -417,21 +399,15 @@ export class MigrationTracker {
         id: row.id,
         name: row.name,
         createdAt: row.created_at,
-        schemaState: typeof row.schema_state === "string"
-          ? JSON.parse(row.schema_state)
-          : row.schema_state,
-        migrationState: typeof row.migration_state === "string"
-          ? JSON.parse(row.migration_state)
-          : row.migration_state,
+        schemaState: typeof row.schema_state === "string" ? JSON.parse(row.schema_state) : row.schema_state,
+        migrationState: typeof row.migration_state === "string" ? JSON.parse(row.migration_state) : row.migration_state,
       };
 
       return Ok(checkpoint);
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to load checkpoint: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `Failed to load checkpoint: ${error instanceof Error ? error.message : String(error)}`,
         ),
       );
     }
@@ -458,21 +434,15 @@ export class MigrationTracker {
         id: row.id,
         name: row.name,
         createdAt: row.created_at,
-        schemaState: typeof row.schema_state === "string"
-          ? JSON.parse(row.schema_state)
-          : row.schema_state,
-        migrationState: typeof row.migration_state === "string"
-          ? JSON.parse(row.migration_state)
-          : row.migration_state,
+        schemaState: typeof row.schema_state === "string" ? JSON.parse(row.schema_state) : row.schema_state,
+        migrationState: typeof row.migration_state === "string" ? JSON.parse(row.migration_state) : row.migration_state,
       }));
 
       return Ok(checkpoints);
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to list checkpoints: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `Failed to list checkpoints: ${error instanceof Error ? error.message : String(error)}`,
         ),
       );
     }
@@ -504,9 +474,7 @@ export class MigrationTracker {
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to get latest migration: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `Failed to get latest migration: ${error instanceof Error ? error.message : String(error)}`,
         ),
       );
     }
@@ -548,17 +516,13 @@ export class MigrationTracker {
         [refAppliedAt],
       );
 
-      const migrations = result.rows.map((row: any) =>
-        this.mapRowToHistoryEntry(row)
-      );
+      const migrations = result.rows.map((row: any) => this.mapRowToHistoryEntry(row));
 
       return Ok(migrations);
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to get migrations after ${migrationId}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `Failed to get migrations after ${migrationId}: ${error instanceof Error ? error.message : String(error)}`,
         ),
       );
     }
@@ -590,9 +554,7 @@ export class MigrationTracker {
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to get rollback SQL: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `Failed to get rollback SQL: ${error instanceof Error ? error.message : String(error)}`,
         ),
       );
     }
@@ -632,9 +594,7 @@ export class MigrationTracker {
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to verify migration integrity: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `Failed to verify migration integrity: ${error instanceof Error ? error.message : String(error)}`,
         ),
       );
     }
@@ -687,17 +647,13 @@ export class MigrationTracker {
         [fromAppliedAt, toAppliedAt],
       );
 
-      const migrations = result.rows.map((row: any) =>
-        this.mapRowToHistoryEntry(row)
-      );
+      const migrations = result.rows.map((row: any) => this.mapRowToHistoryEntry(row));
 
       return Ok(migrations);
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to get migrations in range ${fromId}..${toId}: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `Failed to get migrations in range ${fromId}..${toId}: ${error instanceof Error ? error.message : String(error)}`,
         ),
       );
     }

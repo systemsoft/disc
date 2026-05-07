@@ -119,8 +119,7 @@ export function renderOpenApiSpec(
     openapi: "3.1.0",
     info: {
       title: "Disc Schema-Derived REST API",
-      description:
-        "Auto-generated from the database schema. Every object type " +
+      description: "Auto-generated from the database schema. Every object type " +
         "exposes list/get/insert/update/delete and per-link collection " +
         "endpoints. All routes pass through the standard EdgeQL " +
         "pipeline, so access policies, read-only mode, and the auth " +
@@ -178,8 +177,7 @@ function addTypePaths(
         {
           name: "order_by",
           in: "query",
-          description:
-            "Property to order by. Prefix with `-` for descending.",
+          description: "Property to order by. Prefix with `-` for descending.",
           schema: { type: "string" },
         },
       ],
@@ -315,8 +313,7 @@ function filterParametersFor(typeDef: TypeDef): Parameter[] {
     params.push({
       name,
       in: "query",
-      description:
-        `Filter rows where ${name} = the given value. ` +
+      description: `Filter rows where ${name} = the given value. ` +
         `Pair as \`${name}__in=a,b,c\` for set membership or ` +
         `\`${name}__contains=x\` for substring.`,
       schema: jsonSchemaForProperty(prop),
@@ -342,9 +339,7 @@ function buildTypeSchema(typeDef: TypeDef, schema: Schema): JsonSchema {
     const targetRef: JsonSchema = {
       $ref: `#/components/schemas/${targetType.name}`,
     };
-    properties[name] = link.multi
-      ? { type: "array", items: targetRef }
-      : targetRef;
+    properties[name] = link.multi ? { type: "array", items: targetRef } : targetRef;
   }
   const out: JsonSchema = {
     type: "object",

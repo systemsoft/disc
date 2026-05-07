@@ -102,8 +102,7 @@ const COURSE_TABLE = "test_course";
 const JUNCTION_TABLE = "test_student_courses";
 
 Deno.test({
-  name:
-    "PG Junction: SDL with reciprocal multi-links creates junction table and supports many-to-many queries",
+  name: "PG Junction: SDL with reciprocal multi-links creates junction table and supports many-to-many queries",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -161,9 +160,7 @@ Deno.test({
       assertEquals(result.rows.length, 1, "Should return 1 row for Ada");
 
       const row = result.rows[0];
-      const data = typeof row.jsonb_build_object === "string"
-        ? JSON.parse(row.jsonb_build_object)
-        : row.jsonb_build_object;
+      const data = typeof row.jsonb_build_object === "string" ? JSON.parse(row.jsonb_build_object) : row.jsonb_build_object;
 
       assertEquals(data.name, "Ada");
       assertExists(data.courses, "Should have courses field");
@@ -185,8 +182,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "PG Junction: Reverse direction query through junction table returns correct results",
+  name: "PG Junction: Reverse direction query through junction table returns correct results",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -248,9 +244,7 @@ Deno.test({
       assertEquals(result.rows.length, 1, "Should return 1 row for Math");
 
       const row = result.rows[0];
-      const data = typeof row.jsonb_build_object === "string"
-        ? JSON.parse(row.jsonb_build_object)
-        : row.jsonb_build_object;
+      const data = typeof row.jsonb_build_object === "string" ? JSON.parse(row.jsonb_build_object) : row.jsonb_build_object;
 
       assertEquals(data.title, "Math");
       assertExists(data.students, "Should have students field");
@@ -272,8 +266,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "PG Junction: One-to-many with backlink still works after junction table changes",
+  name: "PG Junction: One-to-many with backlink still works after junction table changes",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -319,9 +312,7 @@ Deno.test({
       assertEquals(result.rows.length, 1);
 
       const row = result.rows[0];
-      const data = typeof row.jsonb_build_object === "string"
-        ? JSON.parse(row.jsonb_build_object)
-        : row.jsonb_build_object;
+      const data = typeof row.jsonb_build_object === "string" ? JSON.parse(row.jsonb_build_object) : row.jsonb_build_object;
 
       assertEquals(data.name, "Ada");
       const titles = data.articles

@@ -88,9 +88,7 @@ async function countRows(
   const client = new Client(cfg);
   try {
     await client.connect();
-    const sql = where
-      ? `SELECT COUNT(*)::int AS cnt FROM ${TEST_TABLE} WHERE ${where}`
-      : `SELECT COUNT(*)::int AS cnt FROM ${TEST_TABLE}`;
+    const sql = where ? `SELECT COUNT(*)::int AS cnt FROM ${TEST_TABLE} WHERE ${where}` : `SELECT COUNT(*)::int AS cnt FROM ${TEST_TABLE}`;
     const result = await client.queryObject<{ cnt: number }>(sql);
     return result.rows[0]?.cnt ?? 0;
   } finally {
@@ -452,8 +450,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Integration: SimpleEdgeQLProtocolHandler -- pool wiring with SELECT",
+  name: "PG Integration: SimpleEdgeQLProtocolHandler -- pool wiring with SELECT",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -486,8 +483,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "PG Integration: SimpleEdgeQLProtocolHandler -- validates requests with real pool",
+  name: "PG Integration: SimpleEdgeQLProtocolHandler -- validates requests with real pool",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -524,8 +520,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "PG Integration: SimpleEdgeQLProtocolHandler -- dryRun returns SQL info",
+  name: "PG Integration: SimpleEdgeQLProtocolHandler -- dryRun returns SQL info",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -563,8 +558,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Integration: EdgeQLProtocolHandler -- dry-run compiles EdgeQL to SQL",
+  name: "PG Integration: EdgeQLProtocolHandler -- dry-run compiles EdgeQL to SQL",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -601,8 +595,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "PG Integration: EdgeQLProtocolHandler -- pool-backed SELECT with real PG",
+  name: "PG Integration: EdgeQLProtocolHandler -- pool-backed SELECT with real PG",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();

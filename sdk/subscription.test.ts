@@ -1,9 +1,6 @@
 import { assertEquals, assertExists } from "@std/assert";
 
-import {
-  createSubscriptionClient,
-  SubscriptionClient,
-} from "./subscription.ts";
+import { createSubscriptionClient, SubscriptionClient } from "./subscription.ts";
 
 // --- Mock WebSocket ---
 

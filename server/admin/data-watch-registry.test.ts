@@ -11,10 +11,7 @@
 import { assertEquals, assertGreater } from "@std/assert";
 import { canRunPgTests, getTestDsn } from "../../tests/pg-test-harness.ts";
 import { ConnectionPool } from "../../lib/connection-pool.ts";
-import {
-  bootstrapDataWatch,
-  CHANGE_LOG_TABLE,
-} from "./data-watch-ddl.ts";
+import { bootstrapDataWatch, CHANGE_LOG_TABLE } from "./data-watch-ddl.ts";
 import { DataWatchRegistry } from "./data-watch-registry.ts";
 
 // ---------------------------------------------------------------------------

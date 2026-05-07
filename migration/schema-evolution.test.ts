@@ -123,9 +123,7 @@ async function queryRows<T>(
   const client = new Client(cfg);
   try {
     await client.connect();
-    const result = params
-      ? await client.queryObject<T>(sql, params)
-      : await client.queryObject<T>(sql);
+    const result = params ? await client.queryObject<T>(sql, params) : await client.queryObject<T>(sql);
     return result.rows;
   } finally {
     await client.end();
@@ -172,8 +170,7 @@ function makePool(dsn: string): ConnectionPool {
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name:
-    "Stage 40 Evolution: add rewrite rule to existing type creates trigger, data intact",
+  name: "Stage 40 Evolution: add rewrite rule to existing type creates trigger, data intact",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -453,8 +450,7 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name:
-    "Stage 40 Evolution: add annotation to existing type appears in schema introspection",
+  name: "Stage 40 Evolution: add annotation to existing type appears in schema introspection",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -537,8 +533,7 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name:
-    "Stage 40 Evolution: type extending abstract types gets inherited properties",
+  name: "Stage 40 Evolution: type extending abstract types gets inherited properties",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();

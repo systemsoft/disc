@@ -151,9 +151,7 @@ function compileToSQL(edgeql: string): string {
     return generator.generate(compileResult.value);
   } catch (error) {
     throw new Error(
-      `Compilation failed: ${
-        error instanceof Error ? error.message : String(error)
-      }`,
+      `Compilation failed: ${error instanceof Error ? error.message : String(error)}`,
     );
   }
 }

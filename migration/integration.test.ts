@@ -11,11 +11,7 @@ import { SchemaValidator } from "../schema/validator.ts";
 import { MigrationEngine } from "./engine.ts";
 import { MigrationTracker } from "./tracker.ts";
 import * as Types from "./types.ts";
-import {
-  canRunPgTests,
-  cleanupTestTables,
-  getTestDsn,
-} from "../tests/pg-test-harness.ts";
+import { canRunPgTests, cleanupTestTables, getTestDsn } from "../tests/pg-test-harness.ts";
 
 const RUN_PG = canRunPgTests();
 
@@ -218,23 +214,15 @@ Deno.test("Integration - Complex Schema with Inheritance", () => {
     const operations = plan.migrations[0].operations;
 
     // Should create tables for concrete types
-    const createOps = operations.filter((op: Types.MigrationOperation) =>
-      op.kind === "CreateType"
-    );
+    const createOps = operations.filter((op: Types.MigrationOperation) => op.kind === "CreateType");
     assertEquals(createOps.length >= 3, true); // User, Post, Tag (Timestamped is abstract)
 
-    const userCreateOp = createOps.find((op: Types.MigrationOperation) =>
-      (op as Types.CreateTypeOperation).typeName === "User"
-    ) as Types.CreateTypeOperation;
+    const userCreateOp = createOps.find((op: Types.MigrationOperation) => (op as Types.CreateTypeOperation).typeName === "User") as Types.CreateTypeOperation;
 
     assertEquals(userCreateOp !== undefined, true);
     // Should inherit properties from Timestamped
-    const hasCreatedAt = userCreateOp.properties.some((prop) =>
-      prop.name === "createdAt"
-    );
-    const hasUpdatedAt = userCreateOp.properties.some((prop) =>
-      prop.name === "updatedAt"
-    );
+    const hasCreatedAt = userCreateOp.properties.some((prop) => prop.name === "createdAt");
+    const hasUpdatedAt = userCreateOp.properties.some((prop) => prop.name === "updatedAt");
     assertEquals(hasCreatedAt, true);
     assertEquals(hasUpdatedAt, true);
   }
@@ -363,9 +351,7 @@ Deno.test("Integration - Generate DDL from SDL Schema", () => {
       assertEquals(statements.length > 0, true);
 
       // Should contain CREATE TABLE statement
-      const createTableStmt = statements.find((stmt) =>
-        stmt.includes("CREATE TABLE")
-      );
+      const createTableStmt = statements.find((stmt) => stmt.includes("CREATE TABLE"));
       assertEquals(createTableStmt !== undefined, true);
 
       // Should contain proper columns
@@ -373,9 +359,7 @@ Deno.test("Integration - Generate DDL from SDL Schema", () => {
       assertStringIncludes(createTableStmt!, "email TEXT NOT NULL");
 
       // Should contain unique constraint for email
-      const uniqueConstraintStmt = statements.find((stmt) =>
-        stmt.includes("UNIQUE") && stmt.includes("email")
-      );
+      const uniqueConstraintStmt = statements.find((stmt) => stmt.includes("UNIQUE") && stmt.includes("email"));
       assertEquals(uniqueConstraintStmt !== undefined, true);
     }
   }
@@ -406,9 +390,7 @@ Deno.test("Integration - Rollback DDL Generation", () => {
       assertEquals(rollbackSQL.length > 0, true);
 
       // Should contain DROP TABLE statement
-      const dropTableStmt = rollbackSQL.find((stmt) =>
-        stmt.includes("DROP TABLE")
-      );
+      const dropTableStmt = rollbackSQL.find((stmt) => stmt.includes("DROP TABLE"));
       assertEquals(dropTableStmt !== undefined, true);
       assertStringIncludes(dropTableStmt!, "user");
     }
@@ -497,9 +479,7 @@ Deno.test("Integration - Data Migration Hints", () => {
       // Should include hints for required properties with defaults
       // Note: In this case we don't have required properties being added,
       // but the test demonstrates the capability
-      hints.find((hint: string) =>
-        hint.includes("default") && hint.includes("required")
-      );
+      hints.find((hint: string) => hint.includes("default") && hint.includes("required"));
     }
   }
 });
@@ -546,9 +526,7 @@ Deno.test("Integration - Performance with Large Schema", () => {
   if (planResult.ok) {
     // Should create all types
     const operations = planResult.value.migrations[0].operations;
-    const createOps = operations.filter((op: Types.MigrationOperation) =>
-      op.kind === "CreateType"
-    );
+    const createOps = operations.filter((op: Types.MigrationOperation) => op.kind === "CreateType");
     assertEquals(createOps.length, 50);
   }
 });

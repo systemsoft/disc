@@ -207,8 +207,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Introspection: DESCRIBE TYPE for unknown type returns compile error",
+  name: "PG Introspection: DESCRIBE TYPE for unknown type returns compile error",
   ignore: !RUN_PG,
   fn: () => {
     const schema = buildTestSchema();

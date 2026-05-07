@@ -14,11 +14,7 @@
  */
 
 import { assert, assertEquals, assertExists } from "@std/assert";
-import {
-  cleanupTempDir,
-  ConsoleCapture,
-  createTempDir,
-} from "../tests/test-utils.ts";
+import { cleanupTempDir, ConsoleCapture, createTempDir } from "../tests/test-utils.ts";
 import { CLICommands } from "./commands.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
 import * as Context from "../compiler/context.ts";
@@ -588,9 +584,7 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema should succeed: ${
-          result.ok ? "" : (result as { ok: false; error: Error }).error.message
-        }`,
+        `applySchema should succeed: ${result.ok ? "" : (result as { ok: false; error: Error }).error.message}`,
       );
 
       // Verify the table was created

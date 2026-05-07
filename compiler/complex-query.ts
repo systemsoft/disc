@@ -110,9 +110,7 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
       throw new CompilationError("CTE binding has no value or query");
     }
 
-    const name = typeof binding.name === "string"
-      ? binding.name
-      : binding.name?.name || "cte";
+    const name = typeof binding.name === "string" ? binding.name : binding.name?.name || "cte";
 
     return {
       kind: "CTE",
@@ -281,24 +279,18 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
    */
   compileWindowFunction(windowFunc: any): SQL.WindowFunctionExpression {
     const func = windowFunc.function;
-    const args = (windowFunc.args || []).map((arg: any) =>
-      this.compileExpression(arg)
-    );
+    const args = (windowFunc.args || []).map((arg: any) => this.compileExpression(arg));
 
     // Build OVER clause
     const overClause: SQL.WindowClause = {
       kind: "WindowClause",
-      partitionBy: windowFunc.partitionBy?.map((expr: any) =>
-        this.compileExpression(expr)
-      ),
+      partitionBy: windowFunc.partitionBy?.map((expr: any) => this.compileExpression(expr)),
       orderBy: windowFunc.orderBy?.map((item: any) => ({
         kind: "OrderByItem" as const,
         expression: this.compileExpression(item.expression),
         direction: (item.direction || "ASC") as "ASC" | "DESC",
       })),
-      frame: windowFunc.frame
-        ? this.compileWindowFrame(windowFunc.frame)
-        : undefined,
+      frame: windowFunc.frame ? this.compileWindowFrame(windowFunc.frame) : undefined,
     };
 
     return SQL.windowFunction(func, args, overClause);
@@ -322,9 +314,7 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
    */
   compileAggregate(aggregate: any): SQL.AggregateExpression {
     const func = aggregate.function;
-    const expr = aggregate.expression
-      ? this.compileExpression(aggregate.expression)
-      : SQL.star();
+    const expr = aggregate.expression ? this.compileExpression(aggregate.expression) : SQL.star();
 
     let result = SQL.aggregate(func, expr);
 

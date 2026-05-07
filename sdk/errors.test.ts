@@ -1,8 +1,4 @@
-import {
-  assertEquals,
-  assertInstanceOf,
-  assertStringIncludes,
-} from "@std/assert";
+import { assertEquals, assertInstanceOf, assertStringIncludes } from "@std/assert";
 
 import {
   DiscAuthError,

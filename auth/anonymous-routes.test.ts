@@ -3,10 +3,7 @@
  * (gh/geldata#8750)
  */
 
-import {
-  assert,
-  assertEquals,
-} from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { AuthProvider } from "./provider.ts";
 import { AuthMiddleware } from "./middleware.ts";
 import { AuthRoutes } from "./integration.ts";

@@ -27,17 +27,7 @@ import {
 } from "./enums.ts";
 
 // Re-export enums for convenience
-export {
-  AuthStatus,
-  Cardinality,
-  ClientMessageType,
-  CompilationFlag,
-  ErrorSeverity,
-  InputLanguage,
-  OutputFormat,
-  ServerMessageType,
-  TransactionState,
-};
+export { AuthStatus, Cardinality, ClientMessageType, CompilationFlag, ErrorSeverity, InputLanguage, OutputFormat, ServerMessageType, TransactionState };
 
 // ---------------------------------------------------------------------------
 // Shared sub-structures

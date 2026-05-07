@@ -137,8 +137,7 @@ Deno.test("scram - full SCRAM-SHA-256 flow succeeds with correct password", asyn
   const clientNonce = "client-nonce-abc123";
 
   // 1. Client builds first message
-  const { message: clientFirstMsg, clientFirstMessageBare } =
-    buildClientFirstMessage("ada", clientNonce);
+  const { message: clientFirstMsg, clientFirstMessageBare } = buildClientFirstMessage("ada", clientNonce);
 
   // 2. Server parses client-first
   const parsed = parseClientFirstMessage(clientFirstMsg);
@@ -194,8 +193,7 @@ Deno.test("scram - full SCRAM flow fails with wrong password", async () => {
   const clientNonce = "nonce-wrong-pass";
 
   // Client builds first message
-  const { message: clientFirstMsg, clientFirstMessageBare } =
-    buildClientFirstMessage("billie", clientNonce);
+  const { message: clientFirstMsg, clientFirstMessageBare } = buildClientFirstMessage("billie", clientNonce);
 
   // Server parses
   const parsed = parseClientFirstMessage(clientFirstMsg);
@@ -250,8 +248,7 @@ Deno.test("scram - verifyClientFinalMessage rejects tampered nonce", async () =>
   const password = "password123";
   const clientNonce = "nonce-tamper-test";
 
-  const { message: clientFirstMsg, clientFirstMessageBare } =
-    buildClientFirstMessage("cher", clientNonce);
+  const { message: clientFirstMsg, clientFirstMessageBare } = buildClientFirstMessage("cher", clientNonce);
   const parsed = parseClientFirstMessage(clientFirstMsg);
 
   const salt = textEncoder.encode("salt-tamper-test");

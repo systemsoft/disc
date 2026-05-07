@@ -5,10 +5,7 @@ export { PostgresBinaryDownloader } from "./downloader.ts";
 export type { BinaryManifest } from "./downloader.ts";
 
 export { PostgresInstance } from "./instance.ts";
-export type {
-  PostgresInstanceOptions,
-  PostgresInstanceStatus,
-} from "./instance.ts";
+export type { PostgresInstanceOptions, PostgresInstanceStatus } from "./instance.ts";
 
 export { PostgresManager } from "./manager.ts";
 export type { ManagedInstance } from "./manager.ts";
@@ -20,10 +17,7 @@ export { logger, PostgresLogger } from "./logger.ts";
 export { LogLevel } from "./logger.ts";
 
 // Import types needed for the interface and internal functions
-import type {
-  PostgresInstance as _PostgresInstance,
-  PostgresInstanceOptions as _PostgresInstanceOptions,
-} from "./instance.ts";
+import type { PostgresInstance as _PostgresInstance, PostgresInstanceOptions as _PostgresInstanceOptions } from "./instance.ts";
 import { PostgresManager as _PostgresManager } from "./manager.ts";
 
 // Main interface for the postgres module

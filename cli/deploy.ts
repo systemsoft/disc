@@ -23,9 +23,7 @@ export class DeployCommand {
   validateFormat(format: string): void {
     if (!(VALID_FORMATS as readonly string[]).includes(format)) {
       throw new Error(
-        `Invalid format: "${format}". Valid formats: ${
-          VALID_FORMATS.join(", ")
-        }`,
+        `Invalid format: "${format}". Valid formats: ${VALID_FORMATS.join(", ")}`,
       );
     }
   }

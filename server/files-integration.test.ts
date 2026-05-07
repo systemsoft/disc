@@ -3,10 +3,7 @@
  * DELETE owner-only, plus the unconfigured-fileManager 404 path.
  */
 
-import {
-  assert,
-  assertEquals,
-} from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { AuthProvider } from "../auth/provider.ts";
 import { AuthMiddleware } from "../auth/middleware.ts";
 import { AuthRoutes } from "../auth/integration.ts";

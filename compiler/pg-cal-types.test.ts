@@ -105,9 +105,7 @@ async function queryRawSQL(
   const client = new Client(cfg);
   try {
     await client.connect();
-    const result = params
-      ? await client.queryObject(sql, params)
-      : await client.queryObject(sql);
+    const result = params ? await client.queryObject(sql, params) : await client.queryObject(sql);
     return result.rows as Record<string, unknown>[];
   } finally {
     await client.end();
@@ -183,9 +181,7 @@ Deno.test({
 
       // PostgreSQL returns date as a Date object or string; verify the value
       const val = rows[0].birthday;
-      const dateStr = val instanceof Date
-        ? val.toISOString().slice(0, 10)
-        : String(val).slice(0, 10);
+      const dateStr = val instanceof Date ? val.toISOString().slice(0, 10) : String(val).slice(0, 10);
       assertEquals(
         dateStr,
         "2024-06-15",
@@ -210,8 +206,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG cal types: cal::local_time maps to time without time zone and round-trips",
+  name: "PG cal types: cal::local_time maps to time without time zone and round-trips",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -289,8 +284,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG cal types: cal::local_datetime maps to timestamp without time zone and round-trips",
+  name: "PG cal types: cal::local_datetime maps to timestamp without time zone and round-trips",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -531,8 +525,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG cal types: All five cal types in one type with correct DDL and round-trip",
+  name: "PG cal types: All five cal types in one type with correct DDL and round-trip",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();

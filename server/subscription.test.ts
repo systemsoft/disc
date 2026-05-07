@@ -156,9 +156,7 @@ Deno.test("Subscription Handler - Stop Subscription", async () => {
 
     // Should send complete message
     const messages = (websocket as unknown as MockWebSocket).getAllMessages();
-    const completeMessage = messages.find((m) =>
-      m.payload?.type === "complete"
-    );
+    const completeMessage = messages.find((m) => m.payload?.type === "complete");
 
     assertExists(completeMessage);
     assertEquals(completeMessage.payload.id, "sub_003");

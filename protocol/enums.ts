@@ -22,8 +22,7 @@ export const ClientMessageType = {
   Terminate: 0x58, // 'X'
 } as const;
 
-export type ClientMessageType =
-  (typeof ClientMessageType)[keyof typeof ClientMessageType];
+export type ClientMessageType = (typeof ClientMessageType)[keyof typeof ClientMessageType];
 
 /** Server-to-client message type identifiers. */
 export const ServerMessageType = {
@@ -40,8 +39,7 @@ export const ServerMessageType = {
   StateDataDescription: 0x73, // 's'
 } as const;
 
-export type ServerMessageType =
-  (typeof ServerMessageType)[keyof typeof ServerMessageType];
+export type ServerMessageType = (typeof ServerMessageType)[keyof typeof ServerMessageType];
 
 // ---------------------------------------------------------------------------
 // Authentication sub-status values (inside mtype 'R' messages)
@@ -80,8 +78,7 @@ export const TransactionState = {
   IN_FAILED_TRANSACTION: 0x45, // 'E'
 } as const;
 
-export type TransactionState =
-  (typeof TransactionState)[keyof typeof TransactionState];
+export type TransactionState = (typeof TransactionState)[keyof typeof TransactionState];
 
 // ---------------------------------------------------------------------------
 // Input language
@@ -132,8 +129,7 @@ export const CompilationFlag = {
   INJECT_OUTPUT_OBJECT_IDS: 1n << 2n,
 } as const;
 
-export type CompilationFlag =
-  (typeof CompilationFlag)[keyof typeof CompilationFlag];
+export type CompilationFlag = (typeof CompilationFlag)[keyof typeof CompilationFlag];
 
 // ---------------------------------------------------------------------------
 // Error severity

@@ -6,16 +6,7 @@
  * parsed from SDL `using(...)` clauses.
  */
 
-import type {
-  BinaryOp,
-  ConditionalExpression,
-  Expression,
-  FunctionCall,
-  Literal,
-  PathExpression,
-  TypeCast,
-  UnaryOp,
-} from "../schema/ast.ts";
+import type { BinaryOp, ConditionalExpression, Expression, FunctionCall, Literal, PathExpression, TypeCast, UnaryOp } from "../schema/ast.ts";
 import type { AccessExpressionNode } from "./ast.ts";
 import { ValidationError } from "../lib/errors.ts";
 
@@ -29,9 +20,11 @@ export function convertExpression(expr: Expression): AccessExpressionNode {
   switch (expr.kind) {
     case "Literal": {
       const lit = expr as Literal;
-      const mappedType = lit.type === "integer" || lit.type === "float"
+      const mappedType = lit.type === "integer" ||
+          lit.type === "float"
         ? "number"
         : lit.type; // "string" | "boolean"
+
       return {
         kind: "AccessLiteral",
         type: mappedType,

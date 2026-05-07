@@ -15,10 +15,8 @@ const queries: Record<string, string> = {
   "insert": "INSERT User { name := 'Ada', email := 'ada@example.com' }",
   "update": "UPDATE User FILTER .id = <uuid>'123' SET { name := 'Billie' }",
   "delete": "DELETE User FILTER .name = 'Ada'",
-  "select with multiple filters":
-    "SELECT User FILTER .name = 'Ada' AND .email LIKE '%@example.com'",
-  "complex nested":
-    "SELECT User { name, email, posts: { title, body, createdAt } } FILTER .name = 'Ada' ORDER BY .name OFFSET 5 LIMIT 10",
+  "select with multiple filters": "SELECT User FILTER .name = 'Ada' AND .email LIKE '%@example.com'",
+  "complex nested": "SELECT User { name, email, posts: { title, body, createdAt } } FILTER .name = 'Ada' ORDER BY .name OFFSET 5 LIMIT 10",
 };
 
 for (const [name, query] of Object.entries(queries)) {

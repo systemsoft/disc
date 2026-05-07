@@ -14,11 +14,7 @@ function mockFetch(
     input: string | URL | Request,
     init?: RequestInit,
   ): Promise<Response> => {
-    const url = typeof input === "string"
-      ? input
-      : input instanceof URL
-      ? input.toString()
-      : input.url;
+    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     return Promise.resolve(handler(url, init));
   };
   return () => {
@@ -77,9 +73,7 @@ Deno.test("transaction - query passes variables in request body", async () => {
 });
 
 Deno.test("transaction - query returns data on success", async () => {
-  const restore = mockFetch(() =>
-    new Response(JSON.stringify({ data: [{ name: "Ada" }] }))
-  );
+  const restore = mockFetch(() => new Response(JSON.stringify({ data: [{ name: "Ada" }] })));
   try {
     const tx = makeTransaction();
     const result = await tx.query<{ name: string }[]>("select User { name }");

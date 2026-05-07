@@ -3,9 +3,7 @@
  * Ports geldata/gel#4297 (gh/geldata#4277).
  */
 
-import {
-  assertEquals,
-} from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { TlsCertWatcher, validatePemEnvelope } from "./tls-reload.ts";
 
 // ── validatePemEnvelope ────────────────────────────────────────────────

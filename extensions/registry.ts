@@ -2,13 +2,7 @@
  * Extension registry for Disc database
  */
 
-import type {
-  CompilerHook,
-  Extension,
-  ExtensionContext,
-  ExtensionMiddleware,
-  ExtensionRoute,
-} from "./types.ts";
+import type { CompilerHook, Extension, ExtensionContext, ExtensionMiddleware, ExtensionRoute } from "./types.ts";
 import type { FunctionDef, TypeDef } from "../compiler/context.ts";
 import { ExtensionDependencyError, ExtensionInitError } from "./errors.ts";
 import { getLogger } from "../lib/logger.ts";
@@ -76,9 +70,7 @@ export class ExtensionRegistry {
         log.info(`Extension initialized: ${name}`);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        const initError = error instanceof ExtensionInitError
-          ? error
-          : new ExtensionInitError(name, message);
+        const initError = error instanceof ExtensionInitError ? error : new ExtensionInitError(name, message);
         if (onError === "strict") {
           throw initError;
         }

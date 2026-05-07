@@ -12,13 +12,7 @@ import { assertEquals, assertStringIncludes } from "@std/assert";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { EdgeQLCompiler } from "./compiler.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
-import {
-  createTestSchema,
-  LinkDef,
-  PropertyDef,
-  Schema,
-  TypeDef,
-} from "./context.ts";
+import { createTestSchema, LinkDef, PropertyDef, Schema, TypeDef } from "./context.ts";
 import { DDLGenerator } from "../migration/ddl.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
 import { getBuiltinFunctions } from "./builtin-functions.ts";
@@ -415,9 +409,7 @@ Deno.test("SchemaManager - M2M detection sets junctionTable on both LinkDefs", (
   assertEquals(
     parseResult.ok,
     true,
-    `SDL parsing should succeed: ${
-      parseResult.ok ? "" : parseResult.error?.message
-    }`,
+    `SDL parsing should succeed: ${parseResult.ok ? "" : parseResult.error?.message}`,
   );
 
   if (!parseResult.ok) {

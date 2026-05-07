@@ -146,9 +146,7 @@ Deno.test("DDL Type Hierarchy - multi-level hierarchy: all levels get __type__ c
   };
 
   const statements = generator.generateDDL([shapeOp, circleOp, ellipseOp]);
-  const createStatements = statements.filter((s) =>
-    s.startsWith("CREATE TABLE")
-  );
+  const createStatements = statements.filter((s) => s.startsWith("CREATE TABLE"));
 
   assertEquals(
     createStatements.length,
@@ -164,27 +162,21 @@ Deno.test("DDL Type Hierarchy - multi-level hierarchy: all levels get __type__ c
   }
 
   // Verify each has its own type name as default
-  const shapeTable = createStatements.find((s) =>
-    s.includes("DEFAULT 'Shape'")
-  );
+  const shapeTable = createStatements.find((s) => s.includes("DEFAULT 'Shape'"));
   assertEquals(
     shapeTable !== undefined,
     true,
     "Shape table should default to 'Shape'",
   );
 
-  const circleTable = createStatements.find((s) =>
-    s.includes("DEFAULT 'Circle'")
-  );
+  const circleTable = createStatements.find((s) => s.includes("DEFAULT 'Circle'"));
   assertEquals(
     circleTable !== undefined,
     true,
     "Circle table should default to 'Circle'",
   );
 
-  const ellipseTable = createStatements.find((s) =>
-    s.includes("DEFAULT 'Ellipse'")
-  );
+  const ellipseTable = createStatements.find((s) => s.includes("DEFAULT 'Ellipse'"));
   assertEquals(
     ellipseTable !== undefined,
     true,

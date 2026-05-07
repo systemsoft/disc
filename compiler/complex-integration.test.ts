@@ -2,10 +2,7 @@
  * Integration tests for complex query compilation
  */
 
-import {
-  assertEquals,
-  assertExists,
-} from "https://deno.land/std@0.208.0/assert/mod.ts";
+import { assertEquals, assertExists } from "https://deno.land/std@0.208.0/assert/mod.ts";
 import { ComplexQueryCompiler } from "./complex-query.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
@@ -89,8 +86,7 @@ Deno.test("Complex query integration - parse and compile update", () => {
   const schema = Context.createTestSchema();
   const compiler = new ComplexQueryCompiler(schema);
 
-  const edgeql =
-    `UPDATE User FILTER .email = 'billie@example.com' SET { name := 'Robert' }`;
+  const edgeql = `UPDATE User FILTER .email = 'billie@example.com' SET { name := 'Robert' }`;
   const parser = new EdgeQLParser(edgeql);
   const ast = parser.parse();
 
@@ -138,8 +134,7 @@ Deno.test("Complex query integration - parse and compile WITH block", () => {
   const compiler = new ComplexQueryCompiler(schema);
 
   // WITH block: bind a subquery then SELECT from the main type
-  const edgeql =
-    `WITH active := (SELECT User FILTER .active = true) SELECT User { name, email }`;
+  const edgeql = `WITH active := (SELECT User FILTER .active = true) SELECT User { name, email }`;
   const parser = new EdgeQLParser(edgeql);
   const ast = parser.parse();
 

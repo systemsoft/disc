@@ -65,9 +65,7 @@ export class SQLCodeGenerator {
         return stmt.sql;
       default:
         throw new Error(
-          `Unsupported statement type: ${
-            (stmt as never as { kind: string }).kind
-          }`,
+          `Unsupported statement type: ${(stmt as never as { kind: string }).kind}`,
         );
     }
   }
@@ -218,9 +216,8 @@ export class SQLCodeGenerator {
 
     if (stmt.columns.length > 0) {
       parts.push(
-        " (" + stmt.columns.map((col) =>
-          this.escapeIdentifier(col)
-        ).join(", ") + ")",
+        " (" + stmt.columns.map((col) => this.escapeIdentifier(col)).join(", ") +
+          ")",
       );
     }
 
@@ -229,9 +226,8 @@ export class SQLCodeGenerator {
     for (let i = 0; i < stmt.values.length; i++) {
       if (i > 0) parts.push(",");
       parts.push(
-        "\n" + this.indent() + "(" + stmt.values[i].map((expr) =>
-          this.generateExpression(expr)
-        ).join(", ") + ")",
+        "\n" + this.indent() + "(" + stmt.values[i].map((expr) => this.generateExpression(expr)).join(", ") +
+          ")",
       );
     }
 
@@ -255,9 +251,8 @@ export class SQLCodeGenerator {
     let sql = "ON CONFLICT";
 
     if (onConflict.target && onConflict.target.length > 0) {
-      sql += " (" + onConflict.target.map((col) =>
-        this.escapeIdentifier(col)
-      ).join(", ") + ")";
+      sql += " (" + onConflict.target.map((col) => this.escapeIdentifier(col)).join(", ") +
+        ")";
     }
 
     if (onConflict.action === "DO NOTHING") {
@@ -343,9 +338,7 @@ export class SQLCodeGenerator {
         return this.generateJsonbAccessExpression(expr);
       default:
         throw new Error(
-          `Unsupported expression type: ${
-            (expr as never as { kind: string }).kind
-          }`,
+          `Unsupported expression type: ${(expr as never as { kind: string }).kind}`,
         );
     }
   }
@@ -465,9 +458,7 @@ export class SQLCodeGenerator {
       const recursive = cte.recursive ? "RECURSIVE " : "";
       const cols = cte.columns.length > 0 ? ` (${cte.columns.join(", ")})` : "";
       const query = this.generateStatement(cte.query);
-      return `${recursive}${
-        this.escapeIdentifier(cte.name)
-      }${cols} AS (\n${this.indent()}  ${query}\n${this.indent()})`;
+      return `${recursive}${this.escapeIdentifier(cte.name)}${cols} AS (\n${this.indent()}  ${query}\n${this.indent()})`;
     }).join(",\n" + this.indent());
 
     const main = this.generateStatement(stmt.query);
@@ -509,15 +500,12 @@ export class SQLCodeGenerator {
     if (expr.over.orderBy && expr.over.orderBy.length > 0) {
       overParts.push(
         "ORDER BY " +
-          expr.over.orderBy.map((item) =>
-            `${this.generateExpression(item.expression)} ${item.direction}`
-          ).join(", "),
+          expr.over.orderBy.map((item) => `${this.generateExpression(item.expression)} ${item.direction}`).join(", "),
       );
     }
 
     if (expr.over.frame) {
-      let frameSql =
-        `${expr.over.frame.mode} BETWEEN ${expr.over.frame.start} AND ${expr.over.frame.end}`;
+      let frameSql = `${expr.over.frame.mode} BETWEEN ${expr.over.frame.start} AND ${expr.over.frame.end}`;
       if (expr.over.frame.exclude) {
         frameSql += ` EXCLUDE ${expr.over.frame.exclude}`;
       }
@@ -528,9 +516,7 @@ export class SQLCodeGenerator {
   }
 
   private generateCastExpression(expr: SQL.CastExpression): string {
-    return `CAST(${
-      this.generateExpression(expr.expression)
-    } AS ${expr.targetType})`;
+    return `CAST(${this.generateExpression(expr.expression)} AS ${expr.targetType})`;
   }
 
   private generateJsonbAccessExpression(

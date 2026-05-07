@@ -7,12 +7,7 @@ import { assertEquals } from "@std/assert";
 import { AuthExtensionAdapter } from "./auth-extension.ts";
 import type { AuthExtensionAdapterOptions } from "./auth-extension.ts";
 import type { ExtensionContext } from "./types.ts";
-import type {
-  AuthResponse,
-  LoginCredentials,
-  RegisterData,  TokenPayload,
-  User,
-} from "../auth/types.ts";
+import type { AuthResponse, LoginCredentials, RegisterData, TokenPayload, User } from "../auth/types.ts";
 import type { AuthContext, RequestHandler } from "../auth/middleware.ts";
 
 // ── Test helpers ──────────────────────────────────────────────────────
@@ -47,17 +42,12 @@ function makeContext(): ExtensionContext {
 // Minimal stub for AuthProvider — no real database needed.
 const mockAuthProvider = {
   getUser: (_userId: string): Promise<User | null> => Promise.resolve(null),
-  login: (_credentials: LoginCredentials): Promise<AuthResponse> =>
-    Promise.reject(new Error("mock")),
+  login: (_credentials: LoginCredentials): Promise<AuthResponse> => Promise.reject(new Error("mock")),
   logout: (_sessionId: string): Promise<void> => Promise.resolve(),
-  refresh: (_refreshToken: string): Promise<AuthResponse> =>
-    Promise.reject(new Error("mock")),
-  register: (_data: RegisterData): Promise<AuthResponse> =>
-    Promise.reject(new Error("mock")),
-  resetPassword: (_resetToken: string, _newPassword: string): Promise<void> =>
-    Promise.resolve(),
-  resetPasswordRequest: (_email: string): Promise<string> =>
-    Promise.resolve("token"),
+  refresh: (_refreshToken: string): Promise<AuthResponse> => Promise.reject(new Error("mock")),
+  register: (_data: RegisterData): Promise<AuthResponse> => Promise.reject(new Error("mock")),
+  resetPassword: (_resetToken: string, _newPassword: string): Promise<void> => Promise.resolve(),
+  resetPasswordRequest: (_email: string): Promise<string> => Promise.resolve("token"),
   revokeAllSessions: (_userId: string): Promise<void> => Promise.resolve(),
   updatePassword: (
     _userId: string,
@@ -65,14 +55,12 @@ const mockAuthProvider = {
     _newPassword: string,
   ): Promise<void> => Promise.resolve(),
   verifyEmail: (_verificationToken: string): Promise<void> => Promise.resolve(),
-  verifyToken: (_token: string): Promise<TokenPayload> =>
-    Promise.reject(new Error("Auth provider not initialized")),
+  verifyToken: (_token: string): Promise<TokenPayload> => Promise.reject(new Error("Auth provider not initialized")),
 };
 
 // Minimal stub for AuthMiddleware.
 const mockAuthMiddleware = {
-  authenticate: (_request: Request): Promise<AuthContext | null> =>
-    Promise.resolve(null),
+  authenticate: (_request: Request): Promise<AuthContext | null> => Promise.resolve(null),
   optionalAuth: (handler: RequestHandler) => handler,
   requireAuth: (handler: RequestHandler) => handler,
   withCORS: (handler: RequestHandler) => handler,

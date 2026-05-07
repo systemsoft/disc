@@ -225,6 +225,7 @@ All CLI commands that need a database connection resolve the DSN in this order:
 ### Auto-start behavior
 
 Commands that need PostgreSQL (`serve`, `migrate`, `shell`, `start`) call `ensurePgRunning(ctx)` which:
+
 1. Discovers existing instances from `~/.disc/instances/` on disk
 2. If the instance exists and is running, returns immediately
 3. If the instance exists but is stopped, starts it via `pg_ctl`

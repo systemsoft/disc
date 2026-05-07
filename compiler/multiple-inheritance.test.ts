@@ -493,9 +493,7 @@ Deno.test("multiple inheritance - DDL generates __type__ discriminator for child
   const statements = ddlGenerator.generateDDL(operations);
 
   // Find the BlogPost CREATE TABLE statement
-  const blogPostDDL = statements.find((s) =>
-    s.includes("blog_post") && s.includes("CREATE TABLE")
-  );
+  const blogPostDDL = statements.find((s) => s.includes("blog_post") && s.includes("CREATE TABLE"));
   assertExists(blogPostDDL, "DDL should include CREATE TABLE for blog_post");
 
   // BlogPost should have __type__ discriminator because it has parentTypes
@@ -513,17 +511,13 @@ Deno.test("multiple inheritance - DDL generates __type__ discriminator for child
   );
 
   // Verify parent tables are also created
-  const timestampedDDL = statements.find((s) =>
-    s.includes("timestamped") && s.includes("CREATE TABLE")
-  );
+  const timestampedDDL = statements.find((s) => s.includes("timestamped") && s.includes("CREATE TABLE"));
   assertExists(
     timestampedDDL,
     "DDL should include CREATE TABLE for timestamped",
   );
 
-  const authoredDDL = statements.find((s) =>
-    s.includes("authored") && s.includes("CREATE TABLE")
-  );
+  const authoredDDL = statements.find((s) => s.includes("authored") && s.includes("CREATE TABLE"));
   assertExists(authoredDDL, "DDL should include CREATE TABLE for authored");
 });
 

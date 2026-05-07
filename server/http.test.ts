@@ -62,9 +62,7 @@ class MockHTTPHandler {
           }),
         };
       } catch (error) {
-        const errorMessage = error instanceof Error
-          ? error.message
-          : "Unknown error";
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
         return {
           status: 400,
           headers: new Headers({ "Content-Type": "application/json" }),

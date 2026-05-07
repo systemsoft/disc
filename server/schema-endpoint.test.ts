@@ -12,11 +12,7 @@ import { assertEquals } from "@std/assert";
 import { createTestSchema } from "../compiler/context.ts";
 import type { Schema, TypeDef } from "../compiler/context.ts";
 import { getBuiltinFunctions } from "../compiler/builtin-functions.ts";
-import {
-  handleGetSchema,
-  handleGetSchemaType,
-  handleGetSchemaTypes,
-} from "./schema-endpoint.ts";
+import { handleGetSchema, handleGetSchemaType, handleGetSchemaTypes } from "./schema-endpoint.ts";
 import type { SchemaRouteContext } from "./schema-endpoint.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { EdgeQLCompiler } from "../compiler/compiler.ts";

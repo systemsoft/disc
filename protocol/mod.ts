@@ -54,13 +54,7 @@ export type {
   TerminateMsg,
 } from "./messages.ts";
 
-export {
-  decodeClientMessage,
-  decodeServerMessage,
-  encodeClientMessage,
-  encodeServerMessage,
-  splitWireMessage,
-} from "./messages.ts";
+export { decodeClientMessage, decodeServerMessage, encodeClientMessage, encodeServerMessage, splitWireMessage } from "./messages.ts";
 
 // Type descriptors
 export {
@@ -91,11 +85,7 @@ export type {
 } from "./typedesc.ts";
 
 // Type codecs
-export {
-  decodeScalarValue,
-  encodeObjectValue,
-  encodeScalarValue,
-} from "./type-codec.ts";
+export { decodeScalarValue, encodeObjectValue, encodeScalarValue } from "./type-codec.ts";
 
 // SCRAM-SHA-256 authentication
 export {

@@ -9,12 +9,7 @@
  */
 
 import { assertEquals } from "@std/assert";
-import {
-  CONFIG_REGISTRY,
-  getConfigRegistry,
-  lookupConfigKey,
-  maskIfSecret,
-} from "./config-registry.ts";
+import { CONFIG_REGISTRY, getConfigRegistry, lookupConfigKey, maskIfSecret } from "./config-registry.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { EdgeQLCompiler } from "./compiler.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
@@ -152,5 +147,5 @@ Deno.test("config-registry - cfg::describe_settings() compiles to JSON of regist
   // The registry is serialized as a JSON literal cast to jsonb.
   assertEquals(sql.includes("::jsonb"), true);
   assertEquals(sql.includes("work_mem"), true);
-  assertEquals(sql.includes("\"secret\""), true);
+  assertEquals(sql.includes('"secret"'), true);
 });

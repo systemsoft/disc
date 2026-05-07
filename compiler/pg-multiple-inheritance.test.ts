@@ -13,11 +13,7 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
-import {
-  canRunPgTests,
-  getTestDsn,
-  resetTestDatabase,
-} from "../tests/pg-test-harness.ts";
+import { canRunPgTests, getTestDsn, resetTestDatabase } from "../tests/pg-test-harness.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
@@ -110,8 +106,7 @@ const MULTI_PARENT_SDL = `
 `;
 
 Deno.test({
-  name:
-    "PG Multiple Inheritance: Multi-parent property inheritance — INSERT and SELECT",
+  name: "PG Multiple Inheritance: Multi-parent property inheritance — INSERT and SELECT",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -193,8 +188,7 @@ const DIAMOND_SDL = `
 `;
 
 Deno.test({
-  name:
-    "PG Multiple Inheritance: Diamond inheritance — no duplicate columns for shared ancestor",
+  name: "PG Multiple Inheritance: Diamond inheritance — no duplicate columns for shared ancestor",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -268,8 +262,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Multiple Inheritance: Multi-parent type filter — SELECT abstract parent returns child rows",
+  name: "PG Multiple Inheritance: Multi-parent type filter — SELECT abstract parent returns child rows",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -314,9 +307,8 @@ Deno.test({
 
       // Verify inherited property value via Authored query
       const authFirstRow = authResult.rows[0];
-      const authData =
-        (authFirstRow as Record<string, unknown>).jsonb_build_object ??
-          authFirstRow;
+      const authData = (authFirstRow as Record<string, unknown>).jsonb_build_object ??
+        authFirstRow;
       assertEquals(
         (authData as Record<string, unknown>).author_name,
         "Ada",
@@ -366,8 +358,7 @@ const MULTI_CHILDREN_SDL = `
 `;
 
 Deno.test({
-  name:
-    "PG Multiple Inheritance: Multiple children extending same multiple parents",
+  name: "PG Multiple Inheritance: Multiple children extending same multiple parents",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -405,9 +396,8 @@ Deno.test({
       );
 
       const articleRow = articleResult.rows[0];
-      const articleData =
-        (articleRow as Record<string, unknown>).jsonb_build_object ??
-          articleRow;
+      const articleData = (articleRow as Record<string, unknown>).jsonb_build_object ??
+        articleRow;
       const article = articleData as Record<string, unknown>;
 
       assertEquals(
@@ -439,8 +429,7 @@ Deno.test({
       );
 
       const reviewRow = reviewResult.rows[0];
-      const reviewData =
-        (reviewRow as Record<string, unknown>).jsonb_build_object ?? reviewRow;
+      const reviewData = (reviewRow as Record<string, unknown>).jsonb_build_object ?? reviewRow;
       const review = reviewData as Record<string, unknown>;
 
       assertEquals(

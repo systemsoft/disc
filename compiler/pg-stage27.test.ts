@@ -50,8 +50,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "PG Stage 27: str_split — STRING_TO_ARRAY('a,b,c', ',') returns {a,b,c}",
+  name: "PG Stage 27: str_split — STRING_TO_ARRAY('a,b,c', ',') returns {a,b,c}",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -75,8 +74,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "PG Stage 27: str_starts_with — STARTS_WITH('hello', 'he') returns true",
+  name: "PG Stage 27: str_starts_with — STARTS_WITH('hello', 'he') returns true",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -95,8 +93,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "PG Stage 27: str_ends_with — RIGHT/LENGTH check for 'hello' ending with 'lo'",
+  name: "PG Stage 27: str_ends_with — RIGHT/LENGTH check for 'hello' ending with 'lo'",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -265,8 +262,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "PG Stage 27: re_replace — REGEXP_REPLACE('a1b2', '[0-9]', 'X') returns 'aXb2'",
+  name: "PG Stage 27: re_replace — REGEXP_REPLACE('a1b2', '[0-9]', 'X') returns 'aXb2'",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -291,8 +287,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Stage 27: datetime_of_transaction — TRANSACTION_TIMESTAMP() returns non-null",
+  name: "PG Stage 27: datetime_of_transaction — TRANSACTION_TIMESTAMP() returns non-null",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -314,8 +309,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "PG Stage 27: to_datetime — CAST('2024-01-01T00:00:00Z' AS timestamptz) returns a timestamp",
+  name: "PG Stage 27: to_datetime — CAST('2024-01-01T00:00:00Z' AS timestamptz) returns a timestamp",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -342,8 +336,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "PG Stage 27: to_duration — CAST('1 hour' AS interval) returns an interval",
+  name: "PG Stage 27: to_duration — CAST('1 hour' AS interval) returns an interval",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -372,8 +365,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Stage 27: cal::to_local_date — CAST('2024-06-15' AS date) returns '2024-06-15'",
+  name: "PG Stage 27: cal::to_local_date — CAST('2024-06-15' AS date) returns '2024-06-15'",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -385,9 +377,7 @@ Deno.test({
         "SELECT CAST('2024-06-15' AS date) AS val",
       );
       const val = result.rows[0].val;
-      const dateStr = val instanceof Date
-        ? val.toISOString().slice(0, 10)
-        : String(val).slice(0, 10);
+      const dateStr = val instanceof Date ? val.toISOString().slice(0, 10) : String(val).slice(0, 10);
       assertEquals(dateStr, "2024-06-15");
     } finally {
       await pool.close();
@@ -396,8 +386,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "PG Stage 27: cal::to_local_time — CAST('14:30:00' AS time) returns '14:30:00'",
+  name: "PG Stage 27: cal::to_local_time — CAST('14:30:00' AS time) returns '14:30:00'",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -439,9 +428,7 @@ Deno.test({
       assertEquals(
         val === "hello" || JSON.stringify(val) === '"hello"',
         true,
-        `TO_JSONB('hello') should return the jsonb string 'hello', got: ${
-          JSON.stringify(val)
-        }`,
+        `TO_JSONB('hello') should return the jsonb string 'hello', got: ${JSON.stringify(val)}`,
       );
     } finally {
       await pool.close();
@@ -450,8 +437,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "PG Stage 27: json_typeof — JSONB_TYPEOF(TO_JSONB(42)) returns 'number'",
+  name: "PG Stage 27: json_typeof — JSONB_TYPEOF(TO_JSONB(42)) returns 'number'",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -491,8 +477,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "PG Stage 27: to_float64 — CAST('3.14' AS double precision) returns ~3.14",
+  name: "PG Stage 27: to_float64 — CAST('3.14' AS double precision) returns ~3.14",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -537,8 +522,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Stage 27: uuid_generate_v4 — GEN_RANDOM_UUID() returns a valid UUID",
+  name: "PG Stage 27: uuid_generate_v4 — GEN_RANDOM_UUID() returns a valid UUID",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -553,8 +537,7 @@ Deno.test({
       assertExists(val, "UUID should not be null");
       assertEquals(val.length, 36, "UUID should be 36 characters long");
       // Verify UUID format: 8-4-4-4-12
-      const uuidRegex =
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       assertEquals(
         uuidRegex.test(val),
         true,
@@ -571,8 +554,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Stage 27: sequence_next/reset — NEXTVAL and SETVAL on a test sequence",
+  name: "PG Stage 27: sequence_next/reset — NEXTVAL and SETVAL on a test sequence",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();

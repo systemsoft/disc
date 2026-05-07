@@ -48,8 +48,7 @@ Deno.test("readOnly=true — UPDATE rejected", async () => {
 
   const result = await handler.handleRequest(
     {
-      query:
-        "UPDATE User FILTER .id = <uuid>$id SET { name := 'bob' }",
+      query: "UPDATE User FILTER .id = <uuid>$id SET { name := 'bob' }",
       variables: { id: "00000000-0000-0000-0000-000000000000" },
     },
     makeContext(),

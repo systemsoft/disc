@@ -39,7 +39,7 @@ Extensions can declare dependencies on other extensions. The registry performs a
 const extension: ExtensionMetadata = {
   dependencies: ["vector"], // initialized after the vector extension
   name: "my-extension",
-  version: "1.0.0"
+  version: "1.0.0",
 };
 ```
 
@@ -90,8 +90,8 @@ const server = new DiscServer({
   extensions: [
     new FtsExtension("english"),
     new VectorExtension({ defaultDimensions: 1536, indexType: "hnsw" }),
-    new GraphQLExtension({ enableMutations: true })
-  ]
+    new GraphQLExtension({ enableMutations: true }),
+  ],
 });
 
 await server.start();
@@ -119,8 +119,8 @@ const config = {
   typeName: "default::BlogPost",
   weights: {
     body: "B",
-    title: "A"
-  }
+    title: "A",
+  },
 };
 
 // Generates:
@@ -188,9 +188,9 @@ ORDER BY ts_rank(bp.fts_vector, plainto_tsquery('english', 'database TypeScript'
 The FTS extension defaults to the `english` text search configuration. Change it at construction:
 
 ```typescript
-new FtsExtension("spanish")
-new FtsExtension("simple") // language-agnostic, no stemming
-new FtsExtension("german")
+new FtsExtension("spanish");
+new FtsExtension("simple"); // language-agnostic, no stemming
+new FtsExtension("german");
 ```
 
 PostgreSQL ships with configurations for many languages. Run `SELECT cfgname FROM pg_ts_config;` to list available configurations.
@@ -210,8 +210,8 @@ The pgvector extension must be available in your PostgreSQL installation. Disc's
 ```typescript
 new VectorExtension({
   defaultDimensions: 1536, // Default: 1536 (OpenAI ada-002)
-  indexType: "hnsw"        // Default: "hnsw" (alternative: "ivfflat")
-})
+  indexType: "hnsw", // Default: "hnsw" (alternative: "ivfflat")
+});
 ```
 
 ### Storing Vectors
@@ -264,8 +264,8 @@ const hnswIndex = generateVectorIndex({
   dimensions: 1536,
   efConstruction: 64, // Build-time search width (default: 64)
   indexType: "hnsw",
-  m: 16,              // Max connections per node (default: 16)
-  tableName: "documents"
+  m: 16, // Max connections per node (default: 16)
+  tableName: "documents",
 });
 // CREATE INDEX IF NOT EXISTS idx_documents_embedding_vector
 //   ON documents USING hnsw (embedding vector_cosine_ops)
@@ -277,7 +277,7 @@ const ivfflatIndex = generateVectorIndex({
   dimensions: 1536,
   indexType: "ivfflat",
   lists: 100, // Number of clusters (default: 100)
-  tableName: "documents"
+  tableName: "documents",
 });
 // CREATE INDEX IF NOT EXISTS idx_documents_embedding_vector
 //   ON documents USING ivfflat (embedding vector_cosine_ops)
@@ -297,8 +297,8 @@ The GraphQL extension auto-generates a GraphQL schema from your SDL type definit
 ```typescript
 new GraphQLExtension({
   enableMutations: false, // Default: false (queries only)
-  maxDepth: 10            // Default: 10 (max nesting depth)
-})
+  maxDepth: 10, // Default: 10 (max nesting depth)
+});
 ```
 
 ### Routes
@@ -316,7 +316,7 @@ The extension registers three HTTP routes:
 GraphQL endpoints inherit the server's HTTP-level rate limiter — the
 same per-client-IP, per-minute gate that applies to `/query` and every
 other route. Configure via `rateLimitRpm` / `rateLimitBurst` on the
-server config; the limiter runs *before* extension routing in
+server config; the limiter runs _before_ extension routing in
 `server/http.ts`, so any flood targeting `/ext/graphql/*` is rejected
 with `429 Rate limit exceeded` exactly like an EdgeQL flood would be.
 
@@ -447,7 +447,7 @@ const ext = new CustomFunctionsExtension({
     {
       args: [
         { name: "amount", required: true, type: "float64" },
-        { name: "rate", required: true, type: "float64" }
+        { name: "rate", required: true, type: "float64" },
       ],
       description: "Calculate tax on an amount",
       implementation: {
@@ -460,9 +460,9 @@ END;
       },
       name: "calculate_tax",
       returnType: "float64",
-      volatility: "immutable"
-    }
-  ]
+      volatility: "immutable",
+    },
+  ],
 });
 ```
 
@@ -567,11 +567,7 @@ The OAuth extension adds OAuth 2.0 authorization code flow support with built-in
 ```typescript
 import { OAuthExtension } from "./ext-oauth/extension.ts";
 
-import {
-  appleProvider,
-  githubProvider,
-  googleProvider
-} from "./ext-oauth/providers.ts";
+import { appleProvider, githubProvider, googleProvider } from "./ext-oauth/providers.ts";
 
 const ext = new OAuthExtension({
   defaultRedirectUri: "http://localhost:8080/ext/oauth/callback",
@@ -579,15 +575,15 @@ const ext = new OAuthExtension({
     githubProvider(
       "your-github-client-id",
       "your-github-client-secret",
-      "http://localhost:8080/ext/oauth/callback/github"
+      "http://localhost:8080/ext/oauth/callback/github",
     ),
     googleProvider(
       "your-google-client-id",
       "your-google-client-secret",
-      "http://localhost:8080/ext/oauth/callback/google"
-    )
+      "http://localhost:8080/ext/oauth/callback/google",
+    ),
   ],
-  stateExpiryMs: 600_000 // 10 minutes (default)
+  stateExpiryMs: 600_000, // 10 minutes (default)
 });
 ```
 
@@ -629,7 +625,7 @@ const customProvider: OAuthProviderConfig = {
   redirectUri: "http://localhost:8080/ext/oauth/callback/gitlab",
   scopes: ["read_user"],
   tokenUrl: "https://gitlab.com/oauth/token",
-  userInfoUrl: "https://gitlab.com/api/v4/user"
+  userInfoUrl: "https://gitlab.com/api/v4/user",
 };
 ```
 
@@ -731,7 +727,7 @@ interface Extension {
   getMiddleware(): ExtensionMiddleware[];
   getRoutes(): ExtensionRoute[];
   getTypes(): TypeDef[];
-  healthCheck(): Promise<{ details?: string; healthy: boolean; }>;
+  healthCheck(): Promise<{ details?: string; healthy: boolean }>;
 }
 ```
 
@@ -742,18 +738,14 @@ Extend `BaseExtension` to get default implementations for all methods. Override 
 ```typescript
 import { BaseExtension } from "./extensions/base-extension.ts";
 
-import type {
-  ExtensionContext,
-  ExtensionMetadata,
-  ExtensionRoute
-} from "./extensions/types.ts";
+import type { ExtensionContext, ExtensionMetadata, ExtensionRoute } from "./extensions/types.ts";
 
 export class MyExtension extends BaseExtension {
   readonly metadata: ExtensionMetadata = {
     dependencies: [], // other extensions this depends on
     description: "Does something useful",
     name: "my-extension",
-    version: "1.0.0"
+    version: "1.0.0",
   };
 
   override async initialize(context: ExtensionContext): Promise<void> {
@@ -776,10 +768,10 @@ The `initialize()` method receives an `ExtensionContext` with access to:
 
 ```typescript
 interface ExtensionContext {
-  config: ServerConfig;    // Full server configuration
-  logger: Logger;          // Scoped logger instance
-  pool?: ConnectionPool;   // Database connection pool
-  schema: Schema;          // Current compiled schema
+  config: ServerConfig; // Full server configuration
+  logger: Logger; // Scoped logger instance
+  pool?: ConnectionPool; // Database connection pool
+  schema: Schema; // Current compiled schema
 }
 ```
 
@@ -832,6 +824,7 @@ override getRoutes(): ExtensionRoute[] {
 ```
 
 These routes would be accessible at:
+
 - `GET /ext/my-extension/status`
 - `POST /ext/my-extension/process`
 
@@ -932,8 +925,8 @@ import { MyExtension } from "./my-extension/extension.ts";
 const server = new DiscServer({
   // ... config
   extensions: [
-    new MyExtension()
-  ]
+    new MyExtension(),
+  ],
 });
 ```
 
@@ -960,12 +953,7 @@ const routes = registry.getAllRoutes();
 The extension system provides specific error classes:
 
 ```typescript
-import {
-  ExtensionConfigError,
-  ExtensionDependencyError,
-  ExtensionError,
-  ExtensionInitError
-} from "./extensions/errors.ts";
+import { ExtensionConfigError, ExtensionDependencyError, ExtensionError, ExtensionInitError } from "./extensions/errors.ts";
 
 // General extension error
 throw new ExtensionError("my-extension", "Something went wrong");

@@ -256,13 +256,7 @@ When a health check fails and `autoRestart` is enabled:
 The module exports convenience functions that use a default singleton `PostgresManager`:
 
 ```typescript
-import {
-  createInstance,
-  getInstance,
-  listInstances,
-  startInstance,
-  stopInstance,
-} from "disc/postgres/mod.ts";
+import { createInstance, getInstance, listInstances, startInstance, stopInstance } from "disc/postgres/mod.ts";
 
 const instance = await createInstance("test-db");
 await startInstance("test-db");

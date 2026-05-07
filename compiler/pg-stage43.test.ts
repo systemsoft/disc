@@ -100,9 +100,7 @@ Deno.test({
       );
       const val = result.rows[0].val;
       // Should return array with first match
-      const arr = Array.isArray(val)
-        ? val
-        : String(val).replace(/[{}]/g, "").split(",");
+      const arr = Array.isArray(val) ? val : String(val).replace(/[{}]/g, "").split(",");
       assertEquals(arr[0], "123");
     } finally {
       await pool.close();
@@ -242,8 +240,7 @@ Deno.test({
       const val = String(result.rows[0].val);
       assertExists(val, "UUID should not be null");
       assertEquals(val.length, 36, "UUID should be 36 characters");
-      const uuidRegex =
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
       assertEquals(
         uuidRegex.test(val),
         true,
@@ -260,8 +257,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Stage 43: datetime_of_transaction — TRANSACTION_TIMESTAMP() returns timestamp",
+  name: "PG Stage 43: datetime_of_transaction — TRANSACTION_TIMESTAMP() returns timestamp",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();

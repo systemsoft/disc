@@ -2,14 +2,8 @@
  * Tests for PgDatabaseAdapter
  */
 
-import {
-  assertEquals,
-  assertStrictEquals,
-} from "https://deno.land/std@0.224.0/assert/mod.ts";
-import {
-  convertPlaceholders,
-  PgDatabaseAdapter,
-} from "./pg-database-adapter.ts";
+import { assertEquals, assertStrictEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { convertPlaceholders, PgDatabaseAdapter } from "./pg-database-adapter.ts";
 import { DatabaseInterface, QueryResult } from "./database-interface.ts";
 
 // --- convertPlaceholders tests ---

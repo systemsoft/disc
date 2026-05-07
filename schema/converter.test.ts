@@ -251,9 +251,7 @@ Deno.test("SDL Converter - Convert Access Policies", () => {
   const modules = converter.convertToModules(ast);
 
   const type = modules[0].items[0] as SDLAST.TypeDeclaration;
-  const policy = type.members.find((m) =>
-    m.kind === "AccessPolicy"
-  ) as SDLAST.AccessPolicy;
+  const policy = type.members.find((m) => m.kind === "AccessPolicy") as SDLAST.AccessPolicy;
 
   assertExists(policy);
   assertEquals(policy.name.value, "owner_only");

@@ -157,9 +157,7 @@ async function queryRows<T>(
   const client = new Client(cfg);
   try {
     await client.connect();
-    const result = params
-      ? await client.queryObject<T>(sql, params)
-      : await client.queryObject<T>(sql);
+    const result = params ? await client.queryObject<T>(sql, params) : await client.queryObject<T>(sql);
     return result.rows;
   } finally {
     await client.end();
@@ -409,27 +407,21 @@ Deno.test({
       // Verify CHECK constraints on User
       const userChecks = await getCheckConstraints(dsn, "user");
       const userCheckNames = userChecks.map((c) => c.constraint_name);
-      const hasNameLenCheck = userCheckNames.some((n) =>
-        n.includes("name") && n.includes("max_len")
-      );
+      const hasNameLenCheck = userCheckNames.some((n) => n.includes("name") && n.includes("max_len"));
       assertEquals(
         hasNameLenCheck,
         true,
         "User should have max_len_value CHECK on name (inherited)",
       );
 
-      const hasAgeMinCheck = userCheckNames.some((n) =>
-        n.includes("age") && n.includes("min_value")
-      );
+      const hasAgeMinCheck = userCheckNames.some((n) => n.includes("age") && n.includes("min_value"));
       assertEquals(
         hasAgeMinCheck,
         true,
         "User should have min_value CHECK on age",
       );
 
-      const hasAgeMaxCheck = userCheckNames.some((n) =>
-        n.includes("age") && n.includes("max_value")
-      );
+      const hasAgeMaxCheck = userCheckNames.some((n) => n.includes("age") && n.includes("max_value"));
       assertEquals(
         hasAgeMaxCheck,
         true,
@@ -439,9 +431,7 @@ Deno.test({
       // Verify CHECK constraints on Post
       const postChecks = await getCheckConstraints(dsn, "post");
       const postCheckNames = postChecks.map((c) => c.constraint_name);
-      const hasStatusOneOf = postCheckNames.some((n) =>
-        n.includes("status") && n.includes("one_of")
-      );
+      const hasStatusOneOf = postCheckNames.some((n) => n.includes("status") && n.includes("one_of"));
       assertEquals(
         hasStatusOneOf,
         true,
@@ -451,18 +441,14 @@ Deno.test({
       // Verify rewrite triggers exist on User (for created_at and updated_at)
       const userTriggers = await getTriggers(dsn, "user");
       const userTriggerNames = userTriggers.map((t) => t.trigger_name);
-      const hasCreatedAtRewrite = userTriggerNames.some((n) =>
-        n.includes("created_at") && n.includes("rewrite")
-      );
+      const hasCreatedAtRewrite = userTriggerNames.some((n) => n.includes("created_at") && n.includes("rewrite"));
       assertEquals(
         hasCreatedAtRewrite,
         true,
         "User should have created_at rewrite trigger",
       );
 
-      const hasUpdatedAtRewrite = userTriggerNames.some((n) =>
-        n.includes("updated_at") && n.includes("rewrite")
-      );
+      const hasUpdatedAtRewrite = userTriggerNames.some((n) => n.includes("updated_at") && n.includes("rewrite"));
       assertEquals(
         hasUpdatedAtRewrite,
         true,
@@ -518,8 +504,7 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name:
-    "Stage 40 Comprehensive: data insertion respects constraints and rejects violations",
+  name: "Stage 40 Comprehensive: data insertion respects constraints and rejects violations",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -671,8 +656,7 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name:
-    "Stage 40 Comprehensive: rewrite triggers auto-set created_at/updated_at",
+  name: "Stage 40 Comprehensive: rewrite triggers auto-set created_at/updated_at",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -782,8 +766,7 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name:
-    "Stage 40 Comprehensive: schema introspection returns all types, properties, links, constraints",
+  name: "Stage 40 Comprehensive: schema introspection returns all types, properties, links, constraints",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -930,8 +913,7 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name:
-    "Stage 40 Comprehensive: migration tracking records persisted in disc_migrations",
+  name: "Stage 40 Comprehensive: migration tracking records persisted in disc_migrations",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();

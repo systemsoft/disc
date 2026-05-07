@@ -5,14 +5,7 @@ TypeScript client SDK for consuming Disc from applications. Provides a typed HTT
 ## Import
 
 ```typescript
-import {
-  AuthManager,
-  createClient,
-  createSubscriptionClient,
-  DiscClient,
-  SubscriptionClient,
-  Transaction,
-} from "disc/sdk/mod.ts";
+import { AuthManager, createClient, createSubscriptionClient, DiscClient, SubscriptionClient, Transaction } from "disc/sdk/mod.ts";
 ```
 
 ## DiscClient
@@ -84,7 +77,7 @@ const ids = await client.query(
 
 If you omit `validate`, the SDK falls back to the legacy unchecked cast
 (fast, but typos and upstream schema drift surface at runtime). For
-codegen-driven type safety where the *query itself* is checked against
+codegen-driven type safety where the _query itself_ is checked against
 your SDL, run `disc codegen`.
 
 ### Health and Stats

@@ -116,8 +116,7 @@ export const CONFIG_REGISTRY: ConfigKeyDef[] = [
     edgeqlType: "duration",
     defaultScope: "session",
     secret: false,
-    description:
-      "Terminate sessions idle in a transaction longer than this (ms).",
+    description: "Terminate sessions idle in a transaction longer than this (ms).",
   },
   {
     name: "lock_timeout",

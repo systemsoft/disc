@@ -7,12 +7,7 @@
  */
 
 import { BaseExtension } from "./base-extension.ts";
-import type {
-  ExtensionContext,
-  ExtensionMetadata,
-  ExtensionMiddleware,
-  ExtensionRoute,
-} from "./types.ts";
+import type { ExtensionContext, ExtensionMetadata, ExtensionMiddleware, ExtensionRoute } from "./types.ts";
 import type { AuthProvider } from "../auth/provider.ts";
 import type { AuthMiddleware } from "../auth/middleware.ts";
 import type { AuthRoutes } from "../auth/integration.ts";
@@ -78,14 +73,12 @@ export class AuthExtensionAdapter extends BaseExtension {
         path: "/auth/profile",
       },
       {
-        handler: (request: Request) =>
-          this.authRoutes.updatePassword()(request),
+        handler: (request: Request) => this.authRoutes.updatePassword()(request),
         method: "POST",
         path: "/auth/password",
       },
       {
-        handler: (request: Request) =>
-          this.authRoutes.resetPasswordRequest()(request),
+        handler: (request: Request) => this.authRoutes.resetPasswordRequest()(request),
         method: "POST",
         path: "/auth/reset",
       },

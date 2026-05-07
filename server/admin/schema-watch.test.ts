@@ -16,10 +16,7 @@
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import {
-  formatSseEvent,
-  handleSchemaWatch,
-} from "./schema-watch.ts";
+import { formatSseEvent, handleSchemaWatch } from "./schema-watch.ts";
 
 Deno.test("formatSseEvent — emits standard event/data lines", () => {
   const out = formatSseEvent({ event: "snapshot", data: { foo: 1 } });

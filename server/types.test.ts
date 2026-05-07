@@ -278,8 +278,7 @@ Deno.test("QueryRequest - empty variables", () => {
 
 Deno.test("QueryRequest - complex variables", () => {
   const request: Types.QueryRequest = {
-    query:
-      "insert User { name := <str>$name, age := <int32>$age, tags := <array<str>>$tags }",
+    query: "insert User { name := <str>$name, age := <int32>$age, tags := <array<str>>$tags }",
     variables: {
       name: "John Doe",
       age: 30,

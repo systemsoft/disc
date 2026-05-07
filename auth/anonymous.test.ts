@@ -3,16 +3,10 @@
  * (gh/geldata#8750)
  */
 
-import {
-  assertEquals,
-  assertExists,
-  assertRejects,
-} from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assertEquals, assertExists, assertRejects } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { AuthProvider } from "./provider.ts";
 import { TestDatabase } from "./test-database.ts";
-import { AuthError, AuthErrorCode ,
-  requireAuthResponse,
-} from "./types.ts";
+import { AuthError, AuthErrorCode, requireAuthResponse } from "./types.ts";
 
 async function makeProvider(opts: {
   requireEmailVerification?: boolean;
@@ -111,10 +105,12 @@ Deno.test("upgradeAnonymous - upgraded user can sign in with the new password", 
       password: "password123",
     });
 
-    const loggedIn = requireAuthResponse(await provider.login({
-      email: "alice@test.com",
-      password: "password123",
-    }));
+    const loggedIn = requireAuthResponse(
+      await provider.login({
+        email: "alice@test.com",
+        password: "password123",
+      }),
+    );
     assertEquals(loggedIn.user.id, guest.user.id);
     assertEquals(loggedIn.user.isAnonymous, false);
   } finally {
@@ -197,10 +193,12 @@ Deno.test("upgradeAnonymous - rejects weak passwords before mutating any state",
     );
 
     // Confirm: still anonymous, no partial mutation.
-    const stillGuest = requireAuthResponse(await provider.login({
-      email: "real@test.com",
-      password: "password123",
-    }).catch((e) => e));
+    const stillGuest = requireAuthResponse(
+      await provider.login({
+        email: "real@test.com",
+        password: "password123",
+      }).catch((e) => e),
+    );
     // No such user, so login throws AuthError — we just want to
     // verify the row wasn't half-written.
     assertEquals(stillGuest instanceof AuthError, true);

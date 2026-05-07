@@ -399,25 +399,19 @@ Deno.test("Schema Differ - Detect Type Changes in Properties", () => {
   assertEquals(ageAlterOp.changes.length >= 3, true);
 
   // Should include type change
-  const typeChange = ageAlterOp.changes.find((change) =>
-    change.kind === "ChangeType"
-  );
+  const typeChange = ageAlterOp.changes.find((change) => change.kind === "ChangeType");
   assertEquals(typeChange !== undefined, true);
   assertEquals(typeChange!.oldValue, "int32");
   assertEquals(typeChange!.newValue, "float64");
 
   // Should include required change
-  const requiredChange = ageAlterOp.changes.find((change) =>
-    change.kind === "ChangeRequired"
-  );
+  const requiredChange = ageAlterOp.changes.find((change) => change.kind === "ChangeRequired");
   assertEquals(requiredChange !== undefined, true);
   assertEquals(requiredChange!.oldValue, false);
   assertEquals(requiredChange!.newValue, true);
 
   // Should include default change
-  const defaultChange = ageAlterOp.changes.find((change) =>
-    change.kind === "ChangeDefault"
-  );
+  const defaultChange = ageAlterOp.changes.find((change) => change.kind === "ChangeDefault");
   assertEquals(defaultChange !== undefined, true);
 });
 
@@ -445,17 +439,13 @@ Deno.test("Schema Differ - Detect Link Changes", () => {
   assertEquals(authorAlterOp.changes.length >= 2, true);
 
   // Should include required change
-  const requiredChange = authorAlterOp.changes.find((change) =>
-    change.kind === "ChangeRequired"
-  );
+  const requiredChange = authorAlterOp.changes.find((change) => change.kind === "ChangeRequired");
   assertEquals(requiredChange !== undefined, true);
   assertEquals(requiredChange!.oldValue, true);
   assertEquals(requiredChange!.newValue, false);
 
   // Should include multi change
-  const multiChange = authorAlterOp.changes.find((change) =>
-    change.kind === "ChangeMulti"
-  );
+  const multiChange = authorAlterOp.changes.find((change) => change.kind === "ChangeMulti");
   assertEquals(multiChange !== undefined, true);
   assertEquals(multiChange!.oldValue, false);
   assertEquals(multiChange!.newValue, true);
@@ -497,9 +487,7 @@ Deno.test("Schema Differ - Detect Type Rename (appears as drop + add)", () => {
 
   assertEquals(authorAlterOp !== undefined, true);
 
-  const targetChange = authorAlterOp.changes.find((change) =>
-    change.kind === "ChangeTarget"
-  );
+  const targetChange = authorAlterOp.changes.find((change) => change.kind === "ChangeTarget");
   assertEquals(targetChange !== undefined, true);
   assertEquals(targetChange!.oldValue, "User");
   assertEquals(targetChange!.newValue, "Account");
@@ -540,16 +528,12 @@ Deno.test("DDL Generator - Handle Complex Type Changes", () => {
   assertEquals(statements.length >= 3, true);
 
   // Should have type change
-  const typeChangeStmt = statements.find((stmt) =>
-    stmt.includes("ALTER COLUMN age TYPE")
-  );
+  const typeChangeStmt = statements.find((stmt) => stmt.includes("ALTER COLUMN age TYPE"));
   assertEquals(typeChangeStmt !== undefined, true);
   assertStringIncludes(typeChangeStmt!, "DOUBLE PRECISION");
 
   // Should have nullability change
-  const nullabilityStmt = statements.find((stmt) =>
-    stmt.includes("SET NOT NULL")
-  );
+  const nullabilityStmt = statements.find((stmt) => stmt.includes("SET NOT NULL"));
   assertEquals(nullabilityStmt !== undefined, true);
 
   // Should have default change
@@ -627,9 +611,7 @@ Deno.test("Migration Engine - Generate Data Migration Hints", () => {
       const hints = hintsResult.value;
 
       // Should include hints about dropping properties
-      const hasDropHint = hints.some((hint: string) =>
-        hint.toLowerCase().includes("backing up")
-      );
+      const hasDropHint = hints.some((hint: string) => hint.toLowerCase().includes("backing up"));
       assertEquals(hasDropHint, true);
     }
   }
@@ -685,9 +667,7 @@ Deno.test("Migration Engine - Complex Changes Integration Test", () => {
       assertEquals(statements.length > 5, true);
 
       // Should include table alterations
-      const hasAlterTable = statements.some((stmt) =>
-        stmt.includes("ALTER TABLE")
-      );
+      const hasAlterTable = statements.some((stmt) => stmt.includes("ALTER TABLE"));
       assertEquals(hasAlterTable, true);
 
       // Should include type changes

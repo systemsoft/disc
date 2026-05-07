@@ -42,9 +42,7 @@ export class DiscQueryError extends DiscClientError {
   readonly errors: QueryError[];
 
   constructor(errors: QueryError[]) {
-    const message = errors.length === 1
-      ? errors[0].message
-      : `${errors.length} query errors: ${errors[0].message}`;
+    const message = errors.length === 1 ? errors[0].message : `${errors.length} query errors: ${errors[0].message}`;
     super(message, DiscErrorCode.QUERY_ERROR);
     this.name = "DiscQueryError";
     this.errors = errors;
@@ -127,9 +125,7 @@ export class DiscValidationError extends DiscClientError {
     issues: ReadonlyArray<StandardSchemaIssue>,
     cause?: Error,
   ) {
-    const summary = issues.length === 1
-      ? issues[0].message
-      : `${issues.length} validation issues: ${issues[0]?.message ?? ""}`;
+    const summary = issues.length === 1 ? issues[0].message : `${issues.length} validation issues: ${issues[0]?.message ?? ""}`;
     super(summary, DiscErrorCode.VALIDATION_ERROR);
     this.name = "DiscValidationError";
     this.issues = issues;

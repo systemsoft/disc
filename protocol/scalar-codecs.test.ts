@@ -8,12 +8,7 @@
  */
 
 import { assertEquals, assertThrows } from "@std/assert";
-import {
-  canonicalScalarName,
-  decodeScalar,
-  encodeScalar,
-  hasScalarCodec,
-} from "./scalar-codecs.ts";
+import { canonicalScalarName, decodeScalar, encodeScalar, hasScalarCodec } from "./scalar-codecs.ts";
 
 Deno.test("canonicalScalarName - normalises short names", () => {
   assertEquals(canonicalScalarName("str"), "std::str");

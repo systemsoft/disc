@@ -11,7 +11,7 @@
  */
 
 import { SDLParser } from "../../schema/parser.ts";
-import { SDLConverter, type Module } from "../../schema/converter.ts";
+import { type Module, SDLConverter } from "../../schema/converter.ts";
 import type * as AST from "../../schema/ast.ts";
 
 export interface DiffPropertySnapshot {

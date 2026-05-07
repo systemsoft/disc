@@ -2,21 +2,9 @@
  * Tests for type codec encoding/decoding.
  */
 
-import {
-  assertAlmostEquals,
-  assertEquals,
-  assertThrows,
-} from "@std/assert";
-import {
-  decodeScalarValue,
-  encodeObjectValue,
-  encodeScalarValue,
-} from "./type-codec.ts";
-import {
-  DescriptorTag,
-  type ObjectShapeDescriptor,
-  type TypeDescriptor,
-} from "./typedesc.ts";
+import { assertAlmostEquals, assertEquals, assertThrows } from "@std/assert";
+import { decodeScalarValue, encodeObjectValue, encodeScalarValue } from "./type-codec.ts";
+import { DescriptorTag, type ObjectShapeDescriptor, type TypeDescriptor } from "./typedesc.ts";
 import { bytesToUuid, uuidToBytes } from "./types.ts";
 import { Cardinality } from "./enums.ts";
 

@@ -8,11 +8,7 @@
  */
 
 import { assertEquals, assertThrows } from "@std/assert";
-import {
-  coerceValue,
-  type QuerySpec,
-  synthesize,
-} from "../ui/src/lib/query-builder-synth.ts";
+import { coerceValue, type QuerySpec, synthesize } from "../ui/src/lib/query-builder-synth.ts";
 
 function spec(overrides: Partial<QuerySpec>): QuerySpec {
   return {

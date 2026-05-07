@@ -79,12 +79,7 @@ module default {
 ### Programmatic Usage
 
 ```typescript
-import {
-  AccessConfig,
-  AccessEvaluator,
-  AccessSQLInjector,
-  adaptAccessPolicies,
-} from "./access/mod.ts";
+import { AccessConfig, AccessEvaluator, AccessSQLInjector, adaptAccessPolicies } from "./access/mod.ts";
 
 // Adapt SDL policies to runtime format
 const policies = adaptAccessPolicies(sdlAccessPolicies, "User");
@@ -173,17 +168,17 @@ type SecretConfig {
 
 Permission-spec grammar:
 
-| Spec                  | Maps to `Deno.permissions.querySync({...})`   |
-| --------------------- | --------------------------------------------- |
-| `read` / `write`      | `{ name }`                                    |
-| `read:/path`          | `{ name: "read", path: "/path" }`             |
-| `net`                 | `{ name: "net" }`                             |
-| `net:host[:port]`     | `{ name: "net", host: "host[:port]" }`        |
-| `env`                 | `{ name: "env" }`                             |
-| `env:VAR`             | `{ name: "env", variable: "VAR" }`            |
-| `run` / `run:cmd`     | `{ name: "run", command? }`                   |
-| `sys` / `sys:KIND`    | `{ name: "sys", kind? }`                      |
-| `ffi` / `ffi:/path`   | `{ name: "ffi", path? }`                      |
+| Spec                | Maps to `Deno.permissions.querySync({...})` |
+| ------------------- | ------------------------------------------- |
+| `read` / `write`    | `{ name }`                                  |
+| `read:/path`        | `{ name: "read", path: "/path" }`           |
+| `net`               | `{ name: "net" }`                           |
+| `net:host[:port]`   | `{ name: "net", host: "host[:port]" }`      |
+| `env`               | `{ name: "env" }`                           |
+| `env:VAR`           | `{ name: "env", variable: "VAR" }`          |
+| `run` / `run:cmd`   | `{ name: "run", command? }`                 |
+| `sys` / `sys:KIND`  | `{ name: "sys", kind? }`                    |
+| `ffi` / `ffi:/path` | `{ name: "ffi", path? }`                    |
 
 Anything outside this grammar throws at policy-load time so a typo
 fails fast rather than silently treating the unknown spec as

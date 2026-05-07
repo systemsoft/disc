@@ -645,9 +645,7 @@ export function select(options: {
   from: SQLNode;
   selections: string[];
 }): SelectStatement {
-  const items = options.selections.map((s) =>
-    createSelectItem(createColumnReference(s))
-  );
+  const items = options.selections.map((s) => createSelectItem(createColumnReference(s)));
   return createSelectStatement({
     select: createSelectClause(items),
   });

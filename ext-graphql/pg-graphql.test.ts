@@ -9,11 +9,7 @@
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import {
-  canRunPgTests,
-  getTestDsn,
-  resetTestDatabase,
-} from "../tests/pg-test-harness.ts";
+import { canRunPgTests, getTestDsn, resetTestDatabase } from "../tests/pg-test-harness.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { GraphQLExtension } from "./extension.ts";
 import { parseGraphQLQuery, translateToEdgeQL } from "./query-translator.ts";
@@ -301,8 +297,7 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name:
-    "GraphQL PG - POST /graphql with nested query translates link traversal",
+  name: "GraphQL PG - POST /graphql with nested query translates link traversal",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();

@@ -411,9 +411,7 @@ export class SDLLexer {
           const hex = this.source.slice(this.pos, this.pos + 4);
           if (!/^[0-9a-fA-F]{4}$/.test(hex)) {
             throw new SyntaxError(
-              `Invalid \\u escape — expected 4 hex digits, got ${
-                JSON.stringify(hex)
-              }`,
+              `Invalid \\u escape — expected 4 hex digits, got ${JSON.stringify(hex)}`,
               {
                 location: { line: this.line, column: this.column, offset: this.pos },
               },

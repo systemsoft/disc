@@ -47,9 +47,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       log.error("Query execution error", {
         error: error instanceof Error ? error.message : String(error),
       });
-      const errorMessage = error instanceof Error
-        ? error.message
-        : "Unknown error";
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
 
       return {
         errors: [{
@@ -210,9 +208,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       "configure",
     ];
 
-    const startsWithValid = validStartKeywords.some((keyword) =>
-      normalized.startsWith(keyword)
-    );
+    const startsWithValid = validStartKeywords.some((keyword) => normalized.startsWith(keyword));
 
     if (!startsWithValid && normalized.length > 0) {
       errors.push({

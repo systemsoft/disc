@@ -191,8 +191,7 @@ Deno.test("Parser - type with multiple properties having rewrites", () => {
   if (postType.kind !== "TypeDeclaration") return;
 
   const propsWithRewrites = postType.members.filter(
-    (m) =>
-      m.kind === "PropertyDeclaration" && m.rewrites && m.rewrites.length > 0,
+    (m) => m.kind === "PropertyDeclaration" && m.rewrites && m.rewrites.length > 0,
   );
   assertEquals(propsWithRewrites.length, 2);
 
@@ -518,9 +517,7 @@ Deno.test("DDL - generateCreateRewrite output for INSERT only event", () => {
 
   const statements = generateDDL([operation]);
 
-  const fnStatements = statements.filter((s) =>
-    s.includes("CREATE OR REPLACE FUNCTION") && s.includes("rewrite_fn")
-  );
+  const fnStatements = statements.filter((s) => s.includes("CREATE OR REPLACE FUNCTION") && s.includes("rewrite_fn"));
   const trigStatements = statements.filter(
     (s) => s.includes("CREATE TRIGGER") && s.includes("rewrite"),
   );
@@ -686,12 +683,8 @@ Deno.test("DDL - generateDropRewrite output", () => {
 
   const statements = generateDDL([operation]);
 
-  const dropTrigStatements = statements.filter((s) =>
-    s.includes("DROP TRIGGER")
-  );
-  const dropFnStatements = statements.filter((s) =>
-    s.includes("DROP FUNCTION")
-  );
+  const dropTrigStatements = statements.filter((s) => s.includes("DROP TRIGGER"));
+  const dropFnStatements = statements.filter((s) => s.includes("DROP FUNCTION"));
 
   assertEquals(dropTrigStatements.length, 1);
   assertEquals(dropFnStatements.length, 1);
@@ -786,12 +779,8 @@ Deno.test("DDL - rollback for AddRewrite generates DROP TRIGGER + DROP FUNCTION"
 
   const statements = generateRollbackDDL([operation]);
 
-  const dropTrigStatements = statements.filter((s) =>
-    s.includes("DROP TRIGGER")
-  );
-  const dropFnStatements = statements.filter((s) =>
-    s.includes("DROP FUNCTION")
-  );
+  const dropTrigStatements = statements.filter((s) => s.includes("DROP TRIGGER"));
+  const dropFnStatements = statements.filter((s) => s.includes("DROP FUNCTION"));
 
   assertEquals(dropTrigStatements.length, 1);
   assertEquals(dropFnStatements.length, 1);
@@ -814,9 +803,7 @@ Deno.test("DDL - rollback for DropRewrite produces manual rollback comment", () 
 
   const statements = generateRollbackDDL([operation]);
 
-  const manualStatements = statements.filter((s) =>
-    s.includes("MANUAL ROLLBACK REQUIRED")
-  );
+  const manualStatements = statements.filter((s) => s.includes("MANUAL ROLLBACK REQUIRED"));
   assertEquals(manualStatements.length >= 1, true);
   assertStringIncludes(manualStatements[0], "created_at");
 });
@@ -972,16 +959,12 @@ Deno.test("End-to-end - full pipeline: SDL -> parse -> diff -> DDL -> verify con
   assertEquals(rewriteTrigs.length, 2);
 
   // Verify the created_at trigger is INSERT-only
-  const createdAtTrig = rewriteTrigs.find((s) =>
-    s.includes("created_at__rewrite")
-  );
+  const createdAtTrig = rewriteTrigs.find((s) => s.includes("created_at__rewrite"));
   assertEquals(createdAtTrig !== undefined, true);
   assertStringIncludes(createdAtTrig!, "BEFORE INSERT ON");
 
   // Verify the updated_at trigger is INSERT OR UPDATE
-  const updatedAtTrig = rewriteTrigs.find((s) =>
-    s.includes("updated_at__rewrite")
-  );
+  const updatedAtTrig = rewriteTrigs.find((s) => s.includes("updated_at__rewrite"));
   assertEquals(updatedAtTrig !== undefined, true);
   assertStringIncludes(updatedAtTrig!, "BEFORE INSERT OR UPDATE ON");
 

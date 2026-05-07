@@ -129,8 +129,7 @@ function makeEngine(pool: ConnectionPool): MigrationEngine {
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name:
-    "Stage 40 Rollback: migrate then rollback drops all tables and triggers",
+  name: "Stage 40 Rollback: migrate then rollback drops all tables and triggers",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -196,9 +195,7 @@ Deno.test({
       assertEquals(
         rollbackResult.ok,
         true,
-        `Rollback should succeed: ${
-          rollbackResult.ok ? "" : rollbackResult.error.message
-        }`,
+        `Rollback should succeed: ${rollbackResult.ok ? "" : rollbackResult.error.message}`,
       );
 
       // Verify table is gone
@@ -226,8 +223,7 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name:
-    "Stage 40 Rollback: incremental migration adds new type to existing schema",
+  name: "Stage 40 Rollback: incremental migration adds new type to existing schema",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -408,8 +404,7 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name:
-    "Stage 40 Rollback: rollback-to specific migration preserves target and earlier",
+  name: "Stage 40 Rollback: rollback-to specific migration preserves target and earlier",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -429,9 +424,7 @@ Deno.test({
       const applyTable = async (
         tableName: string,
       ): Promise<string> => {
-        const id = `test_${tableName}_${Date.now()}_${
-          Math.random().toString(36).slice(2, 6)
-        }`;
+        const id = `test_${tableName}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
         const op: Types.CreateTypeOperation = {
           kind: "CreateType",
           typeName: tableName,
@@ -497,9 +490,7 @@ Deno.test({
       assertEquals(
         rollbackResult.ok,
         true,
-        `Rollback-to should succeed: ${
-          rollbackResult.ok ? "" : rollbackResult.error.message
-        }`,
+        `Rollback-to should succeed: ${rollbackResult.ok ? "" : rollbackResult.error.message}`,
       );
 
       // Verify: first table preserved, second and third dropped

@@ -126,8 +126,7 @@ function makePool(dsn: string): ConnectionPool {
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Range E2E: range<int32> property creates int4range column in PostgreSQL",
+  name: "PG Range E2E: range<int32> property creates int4range column in PostgreSQL",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -151,9 +150,7 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema should succeed: ${
-          result.ok ? "" : JSON.stringify(result)
-        }`,
+        `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`,
       );
 
       // Range types report as USER-DEFINED in data_type; check udt_name instead
@@ -188,8 +185,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Range E2E: multirange<int64> property creates int8multirange column in PostgreSQL",
+  name: "PG Range E2E: multirange<int64> property creates int8multirange column in PostgreSQL",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -213,9 +209,7 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema should succeed: ${
-          result.ok ? "" : JSON.stringify(result)
-        }`,
+        `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`,
       );
 
       // Multirange types also report as USER-DEFINED; check udt_name
@@ -250,8 +244,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Range E2E: INSERT int4range value via raw SQL, SELECT back and verify bounds",
+  name: "PG Range E2E: INSERT int4range value via raw SQL, SELECT back and verify bounds",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -358,8 +351,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Range E2E: ISEMPTY() correctly identifies empty and non-empty ranges",
+  name: "PG Range E2E: ISEMPTY() correctly identifies empty and non-empty ranges",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -501,8 +493,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Range E2E: @> operator in WHERE clause filters rows by range containment",
+  name: "PG Range E2E: @> operator in WHERE clause filters rows by range containment",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -569,8 +560,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Range E2E: range<datetime> creates tstzrange column and round-trips timestamp ranges",
+  name: "PG Range E2E: range<datetime> creates tstzrange column and round-trips timestamp ranges",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -667,8 +657,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Range E2E: multirange<int64> column stores and round-trips multirange values",
+  name: "PG Range E2E: multirange<int64> column stores and round-trips multirange values",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();

@@ -8,11 +8,7 @@
  */
 
 import { ConnectionPool } from "../lib/connection-pool.ts";
-import {
-  createDatabase,
-  dropDatabase,
-  replaceDsnDatabase,
-} from "../lib/database.ts";
+import { createDatabase, dropDatabase, replaceDsnDatabase } from "../lib/database.ts";
 import { DatabaseRegistryError } from "../lib/errors.ts";
 import { MigrationTracker } from "../migration/tracker.ts";
 import { logger } from "../postgres/logger.ts";

@@ -808,8 +808,7 @@ export class MigrationEngine {
                 for (const change of altProp.changes) {
                   if (change.kind === "ChangeType") {
                     flagged.push({
-                      operation:
-                        `AlterType ${alter.typeName} → ChangeType ${altProp.propertyName}`,
+                      operation: `AlterType ${alter.typeName} → ChangeType ${altProp.propertyName}`,
                       reason:
                         `type changed from '${change.oldValue}' to '${change.newValue}' without an explicit cast — PG may refuse the conversion or coerce values lossily`,
                       classification: "ambiguous",
@@ -819,19 +818,15 @@ export class MigrationEngine {
                     change.kind === "ChangeRequired" && change.newValue === true
                   ) {
                     flagged.push({
-                      operation:
-                        `AlterType ${alter.typeName} → ChangeRequired ${altProp.propertyName}`,
-                      reason:
-                        "optional → required without a default — existing NULL rows will fail the SET NOT NULL",
+                      operation: `AlterType ${alter.typeName} → ChangeRequired ${altProp.propertyName}`,
+                      reason: "optional → required without a default — existing NULL rows will fail the SET NOT NULL",
                       classification: "ambiguous",
                     });
                     upgradeParent("ambiguous");
                   } else if (change.kind === "ChangeMulti") {
                     flagged.push({
-                      operation:
-                        `AlterType ${alter.typeName} → ChangeMulti ${altProp.propertyName}`,
-                      reason:
-                        "single ↔ multi cardinality change — disc cannot infer how to fan in/out existing values",
+                      operation: `AlterType ${alter.typeName} → ChangeMulti ${altProp.propertyName}`,
+                      reason: "single ↔ multi cardinality change — disc cannot infer how to fan in/out existing values",
                       classification: "ambiguous",
                     });
                     upgradeParent("ambiguous");
@@ -845,17 +840,14 @@ export class MigrationEngine {
                     change.kind === "ChangeMulti"
                   ) {
                     flagged.push({
-                      operation:
-                        `AlterType ${alter.typeName} → AlterLink ${altLink.linkName} (${change.kind})`,
-                      reason:
-                        "link cardinality changed — junction-table vs FK column conversion needs explicit data-migration steps",
+                      operation: `AlterType ${alter.typeName} → AlterLink ${altLink.linkName} (${change.kind})`,
+                      reason: "link cardinality changed — junction-table vs FK column conversion needs explicit data-migration steps",
                       classification: "ambiguous",
                     });
                     upgradeParent("ambiguous");
                   } else if (change.kind === "ChangeTarget") {
                     flagged.push({
-                      operation:
-                        `AlterType ${alter.typeName} → AlterLink ${altLink.linkName} (ChangeTarget)`,
+                      operation: `AlterType ${alter.typeName} → AlterLink ${altLink.linkName} (ChangeTarget)`,
                       reason:
                         `link target changed from '${change.oldValue}' to '${change.newValue}' — existing FK values almost certainly point to the wrong table`,
                       classification: "ambiguous",
@@ -1055,23 +1047,17 @@ export class MigrationEngine {
     for (const module of schema) {
       for (const item of module.items) {
         if (item.kind === "ScalarTypeDeclaration") {
-          const isEnum = (item.extending ?? []).some((ext) =>
-            ext.name.parts[0] === "enum"
-          );
+          const isEnum = (item.extending ?? []).some((ext) => ext.name.parts[0] === "enum");
           const enumValues = isEnum
-            ? ((item.extending ?? []).find((ext) =>
-              ext.name.parts[0] === "enum"
-            )?.params ?? []).map((p) => p.name.parts.join("::"))
+            ? ((item.extending ?? []).find((ext) => ext.name.parts[0] === "enum")?.params ?? []).map((p) => p.name.parts.join("::"))
             : undefined;
           const op: Types.CreateScalarOperation = {
             kind: "CreateScalar",
             scalarName: item.name.value,
             module: module.name,
-            baseType: isEnum
-              ? "enum"
-              : ((item.extending ?? [])
-                .map((ext) => ext.name.parts.join("::"))
-                .join(", ") || "anyscalar"),
+            baseType: isEnum ? "enum" : ((item.extending ?? [])
+              .map((ext) => ext.name.parts.join("::"))
+              .join(", ") || "anyscalar"),
             ...(enumValues ? { enumValues } : {}),
           };
           operations.push(op);

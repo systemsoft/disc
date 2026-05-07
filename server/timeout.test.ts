@@ -12,14 +12,7 @@ import { QueryTimeoutError } from "../lib/errors.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { EdgeQLProtocolHandler } from "./edgeql-protocol.ts";
 import { HttpServer } from "./http.ts";
-import type {
-  ProtocolHandler,
-  QueryContext,
-  QueryError,
-  QueryRequest,
-  QueryResponse,
-  ServerConfig,
-} from "./types.ts";
+import type { ProtocolHandler, QueryContext, QueryError, QueryRequest, QueryResponse, ServerConfig } from "./types.ts";
 
 // --- Helpers ---
 

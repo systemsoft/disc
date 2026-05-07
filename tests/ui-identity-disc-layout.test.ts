@@ -6,12 +6,7 @@
  * `tests/ui-query-builder-synth.test.ts`).
  */
 
-import {
-  assert,
-  assertAlmostEquals,
-  assertEquals,
-  assertThrows,
-} from "@std/assert";
+import { assert, assertAlmostEquals, assertEquals, assertThrows } from "@std/assert";
 import { layoutDisc } from "../ui/src/lib/identity-disc-layout.ts";
 
 const CX = 300;
@@ -136,9 +131,7 @@ Deno.test("outgoing and incoming halves don't overlap", () => {
 });
 
 Deno.test("rejects negative radius / counts", () => {
-  assertThrows(() =>
-    layoutDisc({ cx: 0, cy: 0, radius: -1, outgoingCount: 0, incomingCount: 0 })
-  );
+  assertThrows(() => layoutDisc({ cx: 0, cy: 0, radius: -1, outgoingCount: 0, incomingCount: 0 }));
   assertThrows(() =>
     layoutDisc({
       cx: 0,

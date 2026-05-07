@@ -8,11 +8,7 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { MigrationTracker } from "./tracker.ts";
 import * as Types from "./types.ts";
-import {
-  canRunPgTests,
-  cleanupTestTables,
-  getTestDsn,
-} from "../tests/pg-test-harness.ts";
+import { canRunPgTests, cleanupTestTables, getTestDsn } from "../tests/pg-test-harness.ts";
 
 const RUN_PG = canRunPgTests();
 

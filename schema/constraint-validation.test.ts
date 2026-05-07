@@ -58,9 +58,7 @@ Deno.test("Validator - max_len_value without args produces error", () => {
 
   assertEquals(result.ok, false);
   assertEquals(
-    result.errors!.some((e) =>
-      e.message.includes("max_len_value") && e.message.includes("one argument")
-    ),
+    result.errors!.some((e) => e.message.includes("max_len_value") && e.message.includes("one argument")),
     true,
   );
 });
@@ -77,9 +75,7 @@ Deno.test("Validator - one_of without args produces error", () => {
 
   assertEquals(result.ok, false);
   assertEquals(
-    result.errors!.some((e) =>
-      e.message.includes("one_of") && e.message.includes("at least one")
-    ),
+    result.errors!.some((e) => e.message.includes("one_of") && e.message.includes("at least one")),
     true,
   );
 });
@@ -95,9 +91,7 @@ Deno.test("Validator - expression without on produces error", () => {
 
   assertEquals(result.ok, false);
   assertEquals(
-    result.errors!.some((e) =>
-      e.message.includes("expression") && e.message.includes("'on' expression")
-    ),
+    result.errors!.some((e) => e.message.includes("expression") && e.message.includes("'on' expression")),
     true,
   );
 });

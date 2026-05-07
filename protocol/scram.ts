@@ -13,8 +13,7 @@ const textDecoder = new TextDecoder();
  * WebCrypto API calls. In Deno, Uint8Array is always backed by a plain
  * ArrayBuffer, but TS 5.7+ generic Uint8Array types are stricter.
  */
-const asBuf = (a: Uint8Array): Uint8Array<ArrayBuffer> =>
-  a as Uint8Array<ArrayBuffer>;
+const asBuf = (a: Uint8Array): Uint8Array<ArrayBuffer> => a as Uint8Array<ArrayBuffer>;
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -253,9 +252,7 @@ export function generateServerFirstMessage(
 ): { serverNonce: string; serverFirstMessage: string } {
   const serverNonce = generateNonce();
   const combinedNonce = clientNonce + serverNonce;
-  const serverFirstMessage = `r=${combinedNonce},s=${
-    toBase64(salt)
-  },i=${iterations}`;
+  const serverFirstMessage = `r=${combinedNonce},s=${toBase64(salt)},i=${iterations}`;
 
   return { serverNonce, serverFirstMessage };
 }
@@ -328,8 +325,7 @@ export async function verifyClientFinalMessage(
   const clientFinalMessageWithoutProof = str.substring(0, proofIdx);
 
   // AuthMessage
-  const authMessage =
-    `${state.clientFirstMessageBare},${state.serverFirstMessage},${clientFinalMessageWithoutProof}`;
+  const authMessage = `${state.clientFirstMessageBare},${state.serverFirstMessage},${clientFinalMessageWithoutProof}`;
   const authMessageBytes = textEncoder.encode(authMessage);
 
   // ClientSignature = HMAC(StoredKey, AuthMessage)
@@ -447,8 +443,7 @@ export async function buildClientFinalMessage(
   const clientFinalWithoutProof = `c=${channelBinding},r=${combinedNonce}`;
 
   // AuthMessage
-  const authMessage =
-    `${clientFirstMessageBare},${serverFirstMessage},${clientFinalWithoutProof}`;
+  const authMessage = `${clientFirstMessageBare},${serverFirstMessage},${clientFinalWithoutProof}`;
   const authMessageBytes = textEncoder.encode(authMessage);
 
   // Derive keys
@@ -467,9 +462,7 @@ export async function buildClientFinalMessage(
   const clientProof = xorBytes(clientKey, clientSignature);
 
   // client-final-message
-  const clientFinalMessage = `${clientFinalWithoutProof},p=${
-    toBase64(clientProof)
-  }`;
+  const clientFinalMessage = `${clientFinalWithoutProof},p=${toBase64(clientProof)}`;
   return textEncoder.encode(clientFinalMessage);
 }
 

@@ -12,12 +12,7 @@
  */
 
 import { assertEquals } from "@std/assert";
-import {
-  createTestSchema,
-  GlobalDef,
-  resolveGlobal,
-  Schema,
-} from "./context.ts";
+import { createTestSchema, GlobalDef, resolveGlobal, Schema } from "./context.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
 
 // ---------------------------------------------------------------------------

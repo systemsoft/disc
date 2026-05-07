@@ -10,7 +10,7 @@
  * script at tests/gel-compat/run.sh handles that.
  */
 
-import { test, before, after } from "node:test";
+import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { createClient } from "gel";
 

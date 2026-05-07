@@ -55,9 +55,7 @@ async function queryRows<T>(
   const client = new Client(cfg);
   try {
     await client.connect();
-    const result = params
-      ? await client.queryObject<T>(sql, params)
-      : await client.queryObject<T>(sql);
+    const result = params ? await client.queryObject<T>(sql, params) : await client.queryObject<T>(sql);
     return result.rows;
   } finally {
     await client.end();
@@ -290,8 +288,7 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name:
-    "PG Trigger: BEFORE DELETE trigger fires and logs to audit_log before deletion",
+  name: "PG Trigger: BEFORE DELETE trigger fires and logs to audit_log before deletion",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -410,8 +407,7 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name:
-    "PG Trigger: Multi-event trigger (INSERT OR UPDATE OR DELETE) fires for all operations",
+  name: "PG Trigger: Multi-event trigger (INSERT OR UPDATE OR DELETE) fires for all operations",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -531,8 +527,7 @@ Deno.test({
 // ---------------------------------------------------------------------------
 
 Deno.test({
-  name:
-    "PG Trigger: DDLGenerator-produced trigger SQL executes and fires on INSERT",
+  name: "PG Trigger: DDLGenerator-produced trigger SQL executes and fires on INSERT",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -571,8 +566,7 @@ Deno.test({
         timing: "after",
         events: ["insert"],
         scope: "each",
-        body:
-          `INSERT INTO ${auditTable}(action, target_name) VALUES (__action__, __new__.name)`,
+        body: `INSERT INTO ${auditTable}(action, target_name) VALUES (__action__, __new__.name)`,
       };
 
       // Generate DDL using the same path as the migration engine:

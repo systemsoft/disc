@@ -57,8 +57,7 @@ interface PoolStatistics {
 export class ConnectionPool {
   private config: PoolConfig;
   private connections: Map<string, PooledConnection> = new Map();
-  private connectionToPooled: Map<DatabaseConnection, PooledConnection> =
-    new Map();
+  private connectionToPooled: Map<DatabaseConnection, PooledConnection> = new Map();
   private idleConnections: PooledConnection[] = [];
   private waitQueue: WaitQueueEntry[] = [];
   private cleanupIntervalId?: number;
@@ -518,9 +517,7 @@ export class ConnectionPool {
     }
 
     const timerId = setTimeout(() => {
-      const heldMs = pooled.acquiredAt
-        ? Date.now() - pooled.acquiredAt.getTime()
-        : timeout;
+      const heldMs = pooled.acquiredAt ? Date.now() - pooled.acquiredAt.getTime() : timeout;
       logger.warn(
         `Potential connection leak detected: connection ${pooled.id} has been held for ${heldMs}ms without being released.\nAcquire stack trace:\n${
           pooled.acquireStackTrace || "unavailable"
@@ -541,9 +538,7 @@ export class ConnectionPool {
   }
 
   private generateConnectionId(): string {
-    return `pool_conn_${Date.now()}_${
-      Math.random().toString(36).substring(2, 9)
-    }`;
+    return `pool_conn_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
   }
 }
 

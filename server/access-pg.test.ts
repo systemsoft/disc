@@ -17,11 +17,7 @@ import { EdgeQLParser } from "../edgeql/parser.ts";
 import { EdgeQLCompiler } from "../compiler/compiler.ts";
 import { SQLCodeGenerator } from "../compiler/codegen.ts";
 import type { Schema } from "../compiler/context.ts";
-import type {
-  AccessConfig,
-  AccessContext,
-  AccessPolicy,
-} from "../access/mod.ts";
+import type { AccessConfig, AccessContext, AccessPolicy } from "../access/mod.ts";
 import type { AccessExpressionNode } from "../access/ast.ts";
 
 const RUN_PG = canRunPgTests();
@@ -820,9 +816,8 @@ Deno.test({
       // Extract names and verify
       const names = result.rows
         .map((r: Record<string, unknown>) => {
-          const data =
-            (r as Record<string, Record<string, unknown>>).jsonb_build_object ??
-              r;
+          const data = (r as Record<string, Record<string, unknown>>).jsonb_build_object ??
+            r;
           return data.name;
         })
         .sort();
@@ -1028,9 +1023,8 @@ Deno.test({
       // Extract titles and verify
       const titles = docResult.rows
         .map((r: Record<string, unknown>) => {
-          const data =
-            (r as Record<string, Record<string, unknown>>).jsonb_build_object ??
-              r;
+          const data = (r as Record<string, Record<string, unknown>>).jsonb_build_object ??
+            r;
           return data.title;
         })
         .sort();

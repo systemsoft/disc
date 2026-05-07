@@ -6,13 +6,7 @@
 
 import { SchemaDiffer } from "../migration/differ.ts";
 import type { Module } from "../schema/converter.ts";
-import type {
-  Identifier,
-  LinkDeclaration,
-  PropertyDeclaration,
-  TypeDeclaration,
-  TypeRef,
-} from "../schema/ast.ts";
+import type { Identifier, LinkDeclaration, PropertyDeclaration, TypeDeclaration, TypeRef } from "../schema/ast.ts";
 
 // Helper to create AST nodes used by the SchemaDiffer
 function ident(value: string): Identifier {

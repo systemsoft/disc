@@ -12,25 +12,9 @@
  */
 
 import { assertEquals } from "@std/assert";
-import {
-  BinaryProtocolServer,
-  GEL_ERROR_CODES,
-  mapErrorToGelCode,
-} from "./binary-server.ts";
-import {
-  type ClientMessage,
-  decodeServerMessage,
-  encodeClientMessage,
-  type ServerMessage,
-} from "./messages.ts";
-import {
-  Cardinality,
-  InputLanguage,
-  OutputFormat,
-  PROTOCOL_MAJOR_VERSION,
-  PROTOCOL_MINOR_VERSION,
-  TransactionState,
-} from "./enums.ts";
+import { BinaryProtocolServer, GEL_ERROR_CODES, mapErrorToGelCode } from "./binary-server.ts";
+import { type ClientMessage, decodeServerMessage, encodeClientMessage, type ServerMessage } from "./messages.ts";
+import { Cardinality, InputLanguage, OutputFormat, PROTOCOL_MAJOR_VERSION, PROTOCOL_MINOR_VERSION, TransactionState } from "./enums.ts";
 import { createTestSchema } from "../compiler/context.ts";
 import {
   CompilationError,

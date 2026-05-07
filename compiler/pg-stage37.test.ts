@@ -184,8 +184,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "PG Stage 37: regex case-insensitive not match — 'Hello' !~* 'xyz' = true",
+  name: "PG Stage 37: regex case-insensitive not match — 'Hello' !~* 'xyz' = true",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();

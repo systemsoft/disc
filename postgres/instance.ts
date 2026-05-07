@@ -70,11 +70,13 @@ export class PostgresInstance {
     // file instead of a directory, ensureDir's error message ("File
     // exists") is opaque — surface the concrete path and what we
     // expected so the user knows exactly what to fix.
-    for (const [label, dir] of [
-      ["data dir", this.dataDir],
-      ["socket dir", this.socketDir],
-      ["logs dir", join(this.dataDir, "..", "logs")],
-    ] as const) {
+    for (
+      const [label, dir] of [
+        ["data dir", this.dataDir],
+        ["socket dir", this.socketDir],
+        ["logs dir", join(this.dataDir, "..", "logs")],
+      ] as const
+    ) {
       try {
         const stat = await Deno.lstat(dir);
         if (!stat.isDirectory) {

@@ -9,14 +9,7 @@
 
 import { assertEquals } from "@std/assert";
 import { HttpServer } from "./http.ts";
-import type {
-  ProtocolHandler,
-  QueryContext,
-  QueryError,
-  QueryRequest,
-  QueryResponse,
-  ServerConfig,
-} from "./types.ts";
+import type { ProtocolHandler, QueryContext, QueryError, QueryRequest, QueryResponse, ServerConfig } from "./types.ts";
 
 /** Minimal protocol handler for shutdown tests. */
 function createMockProtocolHandler(
@@ -31,9 +24,7 @@ function createMockProtocolHandler(
       _context: QueryContext,
     ): Promise<QueryResponse> {
       if (options.requestDelay && options.requestDelay > 0) {
-        await new Promise<void>((resolve) =>
-          setTimeout(resolve, options.requestDelay)
-        );
+        await new Promise<void>((resolve) => setTimeout(resolve, options.requestDelay));
       }
       return { data: { ok: true } };
     },

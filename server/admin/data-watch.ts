@@ -54,8 +54,7 @@ export function handleDataWatch(options: DataWatchOptions): Response {
   if (!tablesParam) {
     return new Response(
       JSON.stringify({
-        error:
-          "Missing required `tables` query parameter (comma-separated PG table names)",
+        error: "Missing required `tables` query parameter (comma-separated PG table names)",
       }),
       {
         status: 400,
@@ -81,8 +80,7 @@ export function handleDataWatch(options: DataWatchOptions): Response {
   if (requestedTables.length > MAX_TABLES_PER_SUB) {
     return new Response(
       JSON.stringify({
-        error:
-          `Too many tables (${requestedTables.length} > ${MAX_TABLES_PER_SUB})`,
+        error: `Too many tables (${requestedTables.length} > ${MAX_TABLES_PER_SUB})`,
       }),
       {
         status: 400,

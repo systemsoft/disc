@@ -3,14 +3,7 @@
  */
 
 import { assert } from "@std/assert";
-import {
-  assertLogContains,
-  cleanupTempDir,
-  ConsoleCapture,
-  createTempDir,
-  createTestSchema,
-  SIMPLE_SCHEMA,
-} from "../tests/test-utils.ts";
+import { assertLogContains, cleanupTempDir, ConsoleCapture, createTempDir, createTestSchema, SIMPLE_SCHEMA } from "../tests/test-utils.ts";
 
 // Mock shell command implementation
 interface ShellOptions {
@@ -308,9 +301,7 @@ Deno.test("CLI Shell - connection error handling", () => {
     assert(errorLogs.some((log) => log.includes("Failed to connect")));
     assert(errorLogs.some((log) => log.includes("Could not reach")));
     assert(
-      errorLogs.some((log) =>
-        log.includes("Make sure the Disc server is running")
-      ),
+      errorLogs.some((log) => log.includes("Make sure the Disc server is running")),
     );
   } finally {
     console.restore();

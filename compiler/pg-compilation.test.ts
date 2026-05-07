@@ -194,8 +194,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "PG Compilation: SDL migrate + multi-row INSERT + SELECT with FILTER returns correct subset",
+  name: "PG Compilation: SDL migrate + multi-row INSERT + SELECT with FILTER returns correct subset",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -431,8 +430,7 @@ Deno.test({
 // --- GROUP BY with HAVING ---
 
 Deno.test({
-  name:
-    "PG Phase 11.3: GROUP BY with FILTER (HAVING) returns only matching groups",
+  name: "PG Phase 11.3: GROUP BY with FILTER (HAVING) returns only matching groups",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -818,8 +816,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Phase 11.1a: SELECT with OFFSET and LIMIT returns correct page of results",
+  name: "PG Phase 11.1a: SELECT with OFFSET and LIMIT returns correct page of results",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -891,8 +888,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Phase 11.1b: FILTER .department IN (SELECT ...) subquery filters correctly",
+  name: "PG Phase 11.1b: FILTER .department IN (SELECT ...) subquery filters correctly",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -952,8 +948,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Phase 11.2: WITH CTE filters active employees and body query references CTE name",
+  name: "PG Phase 11.2: WITH CTE filters active employees and body query references CTE name",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -1142,8 +1137,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Phase 11.4: Window function row_number() OVER (PARTITION BY .department ORDER BY .salary DESC)",
+  name: "PG Phase 11.4: Window function row_number() OVER (PARTITION BY .department ORDER BY .salary DESC)",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -1206,9 +1200,7 @@ Deno.test({
       });
 
       // eng department: Ada (120k) = rank 1, Cher (110k) = rank 2, Billie (100k) = rank 3
-      const engRows = rows.filter((r) =>
-        r.name === "Ada" || r.name === "Billie" || r.name === "Cher"
-      );
+      const engRows = rows.filter((r) => r.name === "Ada" || r.name === "Billie" || r.name === "Cher");
       assertEquals(engRows.length, 3, "Should have 3 eng employees");
 
       // Find Ada's rank (should be 1 — highest salary in eng)
@@ -1238,8 +1230,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "PG Phase 11.4: Aggregate as window function: sum(.salary) OVER (ORDER BY .name)",
+  name: "PG Phase 11.4: Aggregate as window function: sum(.salary) OVER (ORDER BY .name)",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -1383,8 +1374,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Stage 4: WITH CTE single reference produces correct filtered results",
+  name: "PG Stage 4: WITH CTE single reference produces correct filtered results",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -1447,8 +1437,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "PG Stage 4: CTE referenced multiple times in raw SQL produces correct results",
+  name: "PG Stage 4: CTE referenced multiple times in raw SQL produces correct results",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -1509,8 +1498,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG E2E: Frame exclusion — SUM OVER ROWS EXCLUDE CURRENT ROW computes correctly",
+  name: "PG E2E: Frame exclusion — SUM OVER ROWS EXCLUDE CURRENT ROW computes correctly",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -1628,9 +1616,7 @@ Deno.test({
 
       assertEquals(result.rowCount, 5, "Should return 5 rows");
 
-      const values = result.rows.map((row: Record<string, unknown>) =>
-        Number(row.n)
-      );
+      const values = result.rows.map((row: Record<string, unknown>) => Number(row.n));
       assertEquals(
         values,
         [1, 2, 3, 4, 5],

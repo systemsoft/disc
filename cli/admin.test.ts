@@ -6,12 +6,7 @@
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
 import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { ConsoleCapture } from "../tests/test-utils.ts";
-import {
-  adminCommand,
-  collectAccessPolicyAst,
-  collectPoliciesFromSdl,
-  testPolicyImpl,
-} from "./admin.ts";
+import { adminCommand, collectAccessPolicyAst, collectPoliciesFromSdl, testPolicyImpl } from "./admin.ts";
 import { DatabaseConnection } from "../lib/database.ts";
 
 const JWT_SECRET = "test-secret-must-be-at-least-32-bytes-long";
@@ -444,9 +439,7 @@ Deno.test("admin test-policy — single target evaluates only the named policy",
       `Expected header to start with the qualified policy name; got: ${header}`,
     );
     // No other policy headers should appear — only owner_only.
-    const policyHeaders = lines.filter((l) =>
-      /^Doc\.\w+ \(select\):/.test(l)
-    );
+    const policyHeaders = lines.filter((l) => /^Doc\.\w+ \(select\):/.test(l));
     assertEquals(
       policyHeaders.length,
       1,
@@ -469,9 +462,7 @@ Deno.test("admin test-policy — --all mode evaluates every policy on the type",
       (line) => lines.push(line),
     );
 
-    const policyHeaders = lines.filter((l) =>
-      /^Doc\.\w+ \(select\):/.test(l)
-    );
+    const policyHeaders = lines.filter((l) => /^Doc\.\w+ \(select\):/.test(l));
     assertEquals(
       policyHeaders.length,
       2,

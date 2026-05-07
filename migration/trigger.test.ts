@@ -303,8 +303,7 @@ Deno.test("Validator - duplicate trigger name produces error", () => {
   const result = validator.validate(doc);
 
   const triggerErrors = (result.errors || []).filter(
-    (e) =>
-      e.message.includes("audit_log") && e.message.includes("already defined"),
+    (e) => e.message.includes("audit_log") && e.message.includes("already defined"),
   );
   assertEquals(triggerErrors.length, 1);
   assertStringIncludes(triggerErrors[0].message, "audit_log");
@@ -559,9 +558,7 @@ Deno.test("DDL - CreateType with trigger generates CREATE FUNCTION + CREATE TRIG
 
   const statements = generateDDL([operation]);
 
-  const fnStatements = statements.filter((s) =>
-    s.includes("CREATE OR REPLACE FUNCTION")
-  );
+  const fnStatements = statements.filter((s) => s.includes("CREATE OR REPLACE FUNCTION"));
   const trigStatements = statements.filter((s) => s.includes("CREATE TRIGGER"));
 
   assertEquals(fnStatements.length, 1);
@@ -594,9 +591,7 @@ Deno.test("DDL - AddTrigger generates correct DDL output", () => {
 
   const statements = generateDDL([operation]);
 
-  const fnStatements = statements.filter((s) =>
-    s.includes("CREATE OR REPLACE FUNCTION")
-  );
+  const fnStatements = statements.filter((s) => s.includes("CREATE OR REPLACE FUNCTION"));
   const trigStatements = statements.filter((s) => s.includes("CREATE TRIGGER"));
 
   assertEquals(fnStatements.length, 1);
@@ -620,12 +615,8 @@ Deno.test("DDL - DropTrigger generates DROP TRIGGER + DROP FUNCTION", () => {
 
   const statements = generateDDL([operation]);
 
-  const dropTrigStatements = statements.filter((s) =>
-    s.includes("DROP TRIGGER")
-  );
-  const dropFnStatements = statements.filter((s) =>
-    s.includes("DROP FUNCTION")
-  );
+  const dropTrigStatements = statements.filter((s) => s.includes("DROP TRIGGER"));
+  const dropFnStatements = statements.filter((s) => s.includes("DROP FUNCTION"));
 
   assertEquals(dropTrigStatements.length, 1);
   assertEquals(dropFnStatements.length, 1);
@@ -775,16 +766,13 @@ Deno.test("DDL - __new__ / __old__ / __action__ substitution in body", () => {
         timing: "after",
         events: ["update"],
         scope: "each",
-        body:
-          "insert ChangeLog { old_val := __old__, new_val := __new__, action := __action__ }",
+        body: "insert ChangeLog { old_val := __old__, new_val := __new__, action := __action__ }",
       },
     ],
   };
 
   const statements = generateDDL([operation]);
-  const fnStatement = statements.find((s) =>
-    s.includes("CREATE OR REPLACE FUNCTION")
-  );
+  const fnStatement = statements.find((s) => s.includes("CREATE OR REPLACE FUNCTION"));
 
   assertEquals(fnStatement !== undefined, true);
   // __new__ -> NEW, __old__ -> OLD, __action__ -> TG_OP
@@ -817,12 +805,8 @@ Deno.test("DDL - rollback for AddTrigger generates DROP TRIGGER + DROP FUNCTION"
 
   const statements = generateRollbackDDL([operation]);
 
-  const dropTrigStatements = statements.filter((s) =>
-    s.includes("DROP TRIGGER")
-  );
-  const dropFnStatements = statements.filter((s) =>
-    s.includes("DROP FUNCTION")
-  );
+  const dropTrigStatements = statements.filter((s) => s.includes("DROP TRIGGER"));
+  const dropFnStatements = statements.filter((s) => s.includes("DROP FUNCTION"));
 
   assertEquals(dropTrigStatements.length, 1);
   assertEquals(dropFnStatements.length, 1);
@@ -845,9 +829,7 @@ Deno.test("DDL - rollback for DropTrigger produces manual rollback comment", () 
   const statements = generateRollbackDDL([operation]);
 
   // DropTrigger rollback should note that it requires manual intervention
-  const manualStatements = statements.filter((s) =>
-    s.includes("MANUAL ROLLBACK REQUIRED")
-  );
+  const manualStatements = statements.filter((s) => s.includes("MANUAL ROLLBACK REQUIRED"));
   assertEquals(manualStatements.length >= 1, true);
   assertStringIncludes(manualStatements[0], "audit_log");
 });
@@ -944,9 +926,7 @@ Deno.test("Triggers survive SDL → converter → differ → DDL pipeline", asyn
   const ops = new SchemaDiffer().diff([], modules);
   const ddl = new DDLGenerator().generateDDL(ops);
 
-  const triggerDdl = ddl.filter((s) =>
-    /CREATE TRIGGER|CREATE OR REPLACE FUNCTION.*TRIGGER/i.test(s)
-  );
+  const triggerDdl = ddl.filter((s) => /CREATE TRIGGER|CREATE OR REPLACE FUNCTION.*TRIGGER/i.test(s));
   assertEquals(
     triggerDdl.length >= 2,
     true,

@@ -20,7 +20,7 @@
     "./sdk": "./sdk/mod.ts"
   },
   "fmt": {
-    "exclude": ["*.yaml"],
+    "exclude": ["deploy/helm/disc/**/*.yaml"],
     "indentWidth": 2,
     "lineWidth": 160,
     "proseWrap": "preserve",

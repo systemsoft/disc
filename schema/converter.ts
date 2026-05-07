@@ -97,8 +97,7 @@ export class SDLConverter {
    */
   extractProperties(type: AST.TypeDeclaration): AST.PropertyDeclaration[] {
     return type.members.filter(
-      (member): member is AST.PropertyDeclaration =>
-        member.kind === "PropertyDeclaration",
+      (member): member is AST.PropertyDeclaration => member.kind === "PropertyDeclaration",
     );
   }
 
@@ -107,8 +106,7 @@ export class SDLConverter {
    */
   extractLinks(type: AST.TypeDeclaration): AST.LinkDeclaration[] {
     return type.members.filter(
-      (member): member is AST.LinkDeclaration =>
-        member.kind === "LinkDeclaration",
+      (member): member is AST.LinkDeclaration => member.kind === "LinkDeclaration",
     );
   }
 
@@ -179,9 +177,7 @@ export class SDLConverter {
     for (const member of type.members) {
       members.push(member);
       if ("name" in member && member.name) {
-        const name = member.name.kind === "Identifier"
-          ? member.name.value
-          : member.name.parts.join("::");
+        const name = member.name.kind === "Identifier" ? member.name.value : member.name.parts.join("::");
         seenNames.add(name);
       }
     }
@@ -190,9 +186,7 @@ export class SDLConverter {
     for (const baseType of inheritanceChain) {
       for (const member of baseType.members) {
         if ("name" in member && member.name) {
-          const name = member.name.kind === "Identifier"
-            ? member.name.value
-            : member.name.parts.join("::");
+          const name = member.name.kind === "Identifier" ? member.name.value : member.name.parts.join("::");
           if (!seenNames.has(name)) {
             members.push(member);
             seenNames.add(name);
@@ -310,8 +304,6 @@ export class SDLConverter {
     }
 
     // Otherwise, assume it's in the current module
-    return currentModule === "default"
-      ? parts[0]
-      : `${currentModule}::${parts[0]}`;
+    return currentModule === "default" ? parts[0] : `${currentModule}::${parts[0]}`;
   }
 }

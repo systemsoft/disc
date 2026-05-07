@@ -208,8 +208,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "PG Migration: executeMigration records to disc_migrations tracker table",
+  name: "PG Migration: executeMigration records to disc_migrations tracker table",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -517,8 +516,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "PG Migration: SchemaManager applySchema handles schema evolution (ALTER TABLE)",
+  name: "PG Migration: SchemaManager applySchema handles schema evolution (ALTER TABLE)",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -594,8 +592,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "PG Migration: SchemaManager getSchema returns valid Schema after apply",
+  name: "PG Migration: SchemaManager getSchema returns valid Schema after apply",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();

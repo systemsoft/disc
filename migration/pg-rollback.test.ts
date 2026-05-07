@@ -130,9 +130,7 @@ async function applyCreateTableMigration(
   assertEquals(
     result.ok,
     true,
-    `Failed to apply migration for ${tableName}: ${
-      result.ok ? "" : result.error.message
-    }`,
+    `Failed to apply migration for ${tableName}: ${result.ok ? "" : result.error.message}`,
   );
 
   return id;
@@ -168,9 +166,7 @@ Deno.test({
       assertEquals(
         rollbackResult.ok,
         true,
-        `Rollback should succeed: ${
-          rollbackResult.ok ? "" : rollbackResult.error.message
-        }`,
+        `Rollback should succeed: ${rollbackResult.ok ? "" : rollbackResult.error.message}`,
       );
 
       // Verify table is dropped
@@ -202,8 +198,7 @@ Deno.test({
 });
 
 Deno.test({
-  name:
-    "PG Rollback: Apply 3 migrations, rollback-to first - verify only first table remains",
+  name: "PG Rollback: Apply 3 migrations, rollback-to first - verify only first table remains",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
@@ -248,9 +243,7 @@ Deno.test({
       assertEquals(
         rollbackResult.ok,
         true,
-        `Rollback-to should succeed: ${
-          rollbackResult.ok ? "" : rollbackResult.error.message
-        }`,
+        `Rollback-to should succeed: ${rollbackResult.ok ? "" : rollbackResult.error.message}`,
       );
 
       // Verify: first table remains, second and third are dropped

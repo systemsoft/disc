@@ -175,11 +175,7 @@ export class EdgeQLParser {
       this.check(TokenType.INTERSECT)
     ) {
       const opToken = this.advance();
-      const op = opToken.type === TokenType.UNION
-        ? "UNION"
-        : opToken.type === TokenType.EXCEPT
-        ? "EXCEPT"
-        : "INTERSECT";
+      const op = opToken.type === TokenType.UNION ? "UNION" : opToken.type === TokenType.EXCEPT ? "EXCEPT" : "INTERSECT";
 
       const right = this.parseQuery();
 
@@ -341,9 +337,7 @@ export class EdgeQLParser {
 
       let elseClause: AST.Query | AST.Expression | undefined;
       if (this.match(TokenType.ELSE)) {
-        elseClause = this.check(TokenType.LPAREN)
-          ? this.parseSubquery()
-          : this.parseExpression();
+        elseClause = this.check(TokenType.LPAREN) ? this.parseSubquery() : this.parseExpression();
       }
 
       unless = {
@@ -1161,9 +1155,7 @@ export class EdgeQLParser {
             const firstStep: AST.PathStep = {
               kind: "PathStep",
               type: "property",
-              name: expr.kind === "Identifier"
-                ? expr.name
-                : expr.name.parts.join("::"),
+              name: expr.kind === "Identifier" ? expr.name : expr.name.parts.join("::"),
               optional: false,
             };
             expr = AST.createPath([firstStep, step]);
@@ -1251,9 +1243,7 @@ export class EdgeQLParser {
           if (expr.kind === "Path") {
             expr.steps.push(typeIntersectionStep);
           } else if (expr.kind === "Identifier" || expr.kind === "TypeName") {
-            const firstName = expr.kind === "Identifier"
-              ? expr.name
-              : expr.name.parts.join("::");
+            const firstName = expr.kind === "Identifier" ? expr.name : expr.name.parts.join("::");
             const firstStep: AST.PathStep = {
               kind: "PathStep",
               type: "property",

@@ -269,11 +269,11 @@ The protocol handler keeps two LRU caches:
 
 Sizing guidance:
 
-| Scenario | Suggested `cacheMaxSize` |
-|---------|--------------------------|
-| Public site, no auth policies | 500–2 000 (query count only) |
-| Multi-role app (≤10 roles), policies on | (query count) × (role count) |
-| Per-user dynamic policies | not currently distinguished from role; revisit if added |
+| Scenario                                | Suggested `cacheMaxSize`                                |
+| --------------------------------------- | ------------------------------------------------------- |
+| Public site, no auth policies           | 500–2 000 (query count only)                            |
+| Multi-role app (≤10 roles), policies on | (query count) × (role count)                            |
+| Per-user dynamic policies               | not currently distinguished from role; revisit if added |
 
 `DISC_CACHE_MAX_SIZE` sets the bound. `/stats` exposes live hit/miss/eviction rates.
 

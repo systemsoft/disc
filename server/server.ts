@@ -142,9 +142,7 @@ export class DiscServer {
    * Initialized after the protocol handler's pool is ready, then
    * passed into HttpServer.
    */
-  private dataWatchRegistry?: import(
-    "./admin/data-watch-registry.ts"
-  ).DataWatchRegistry;
+  private dataWatchRegistry?: import("./admin/data-watch-registry.ts").DataWatchRegistry;
   private binaryServer?: BinaryProtocolServer;
   private binaryPassword?: string;
   private binaryTls?: { certFile: string; keyFile: string };
@@ -164,9 +162,7 @@ export class DiscServer {
     // If a PostgresInstance is provided, derive databaseUrl from its DSN
     // unless the caller explicitly set a databaseUrl.
     const databaseUrl = config.databaseUrl ||
-      (config.postgresInstance
-        ? config.postgresInstance.dsn()
-        : "postgresql://localhost:5432/disc");
+      (config.postgresInstance ? config.postgresInstance.dsn() : "postgresql://localhost:5432/disc");
 
     this.config = {
       host: config.host || "localhost",
@@ -176,9 +172,7 @@ export class DiscServer {
       requestTimeout: config.requestTimeout || 30000,
       enableCors: config.enableCors !== undefined ? config.enableCors : true,
       corsOrigins: config.corsOrigins,
-      enableWebsockets: config.enableWebsockets !== undefined
-        ? config.enableWebsockets
-        : true,
+      enableWebsockets: config.enableWebsockets !== undefined ? config.enableWebsockets : true,
       jwtSecret: config.jwtSecret,
       enableAuth: config.enableAuth,
       enableAccessPolicies: config.enableAccessPolicies,
@@ -340,14 +334,10 @@ export class DiscServer {
             status: string;
           }>;
         };
-        const executor = handler.executeBinaryQuery
-          ? handler.executeBinaryQuery.bind(this.protocolHandler)
-          : undefined;
+        const executor = handler.executeBinaryQuery ? handler.executeBinaryQuery.bind(this.protocolHandler) : undefined;
 
         this.binaryServer = new BinaryProtocolServer({
-          hostname: this.config.host === "localhost"
-            ? "127.0.0.1"
-            : this.config.host,
+          hostname: this.config.host === "localhost" ? "127.0.0.1" : this.config.host,
           port: this.config.binaryPort,
           schema: handlerSchema,
           password: this.binaryPassword,
@@ -368,9 +358,7 @@ export class DiscServer {
         authMiddleware: this.authMiddleware,
         authRoutes: this.authRoutes,
         extensionRoutes: this.extensionRegistry.getAllRoutes(),
-        extensionHealthGetter: this.extensionRegistry.size > 0
-          ? () => this.extensionRegistry.getHealthStatus()
-          : undefined,
+        extensionHealthGetter: this.extensionRegistry.size > 0 ? () => this.extensionRegistry.getHealthStatus() : undefined,
         databaseRegistry: this.databaseRegistry,
         // Live-schema-diff (Bundle K — Disc #3a). When the CLI passed a
         // schemaFilePath, HttpServer mounts `/admin/schema-watch` and
@@ -572,9 +560,7 @@ export class DiscServer {
     } catch (err) {
       this.dataWatchRegistry = undefined;
       logger.warn(
-        `data-watch: bootstrap failed; live data subscriptions disabled — ${
-          err instanceof Error ? err.message : String(err)
-        }`,
+        `data-watch: bootstrap failed; live data subscriptions disabled — ${err instanceof Error ? err.message : String(err)}`,
       );
     }
   }
@@ -886,9 +872,7 @@ export function buildEnvOptions(
     enableWebsockets: Deno.env.get("DISC_ENABLE_WEBSOCKETS") !== "false",
     jwtSecret: Deno.env.get("DISC_JWT_SECRET"),
     enableAuth: enableAuth !== undefined ? enableAuth !== "false" : undefined,
-    enableAccessPolicies: enableAccessPolicies !== undefined
-      ? enableAccessPolicies !== "false"
-      : undefined,
+    enableAccessPolicies: enableAccessPolicies !== undefined ? enableAccessPolicies !== "false" : undefined,
     cacheMaxSize: parseInt(Deno.env.get("DISC_CACHE_MAX_SIZE") || "1000"),
     explainCacheTtlMs: parseInt(
       Deno.env.get("DISC_EXPLAIN_CACHE_TTL") || "300000",
@@ -1089,16 +1073,9 @@ export function createServerFromEnv(
 
 // Export all types and classes for external use
 export * from "./types.ts";
-export {
-  ConnectionManager,
-  SessionManager,
-  TransactionManager,
-} from "./connection.ts";
+export { ConnectionManager, SessionManager, TransactionManager } from "./connection.ts";
 export { HttpServer } from "./http.ts";
-export {
-  EdgeQLProtocolHandler as MockEdgeQLProtocolHandler,
-  GraphQLProtocolHandler,
-} from "./protocol.ts";
+export { EdgeQLProtocolHandler as MockEdgeQLProtocolHandler, GraphQLProtocolHandler } from "./protocol.ts";
 export { EdgeQLProtocolHandler } from "./edgeql-protocol.ts";
 export { SimpleEdgeQLProtocolHandler } from "./simple-edgeql-protocol.ts";
 export { DatabaseRegistry } from "./database-registry.ts";

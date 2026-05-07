@@ -7,13 +7,7 @@ import * as SQL from "./sql.ts";
 import * as Context from "./context.ts";
 import { CompilationError } from "../lib/errors.ts";
 import { Err, Ok, Result } from "../lib/result.ts";
-import {
-  AccessConfig,
-  AccessContext,
-  AccessEvaluator,
-  AccessPolicy,
-  AccessSQLInjector,
-} from "../access/mod.ts";
+import { AccessConfig, AccessContext, AccessEvaluator, AccessPolicy, AccessSQLInjector } from "../access/mod.ts";
 
 export class EdgeQLCompilerWithAccess {
   private ctx: Context.CompilationContext;
@@ -37,9 +31,7 @@ export class EdgeQLCompilerWithAccess {
       enableAudit: false,
     };
 
-    this.accessMode = config.mode === "restrictive"
-      ? "restrictive"
-      : "permissive";
+    this.accessMode = config.mode === "restrictive" ? "restrictive" : "permissive";
     this.accessEvaluator = new AccessEvaluator(config);
     this.accessInjector = new AccessSQLInjector(this.accessEvaluator);
     this.accessContext = accessContext || {};
@@ -74,9 +66,7 @@ export class EdgeQLCompilerWithAccess {
       }
       return Err(
         new CompilationError(
-          `Compilation failed: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
+          `Compilation failed: ${error instanceof Error ? error.message : String(error)}`,
         ),
       );
     }
@@ -385,14 +375,10 @@ export class EdgeQLCompilerWithAccess {
     const selectClause = this.buildSelectClause(query, alias);
 
     // Build WHERE clause from filter
-    const whereClause = query.filter
-      ? this.compileFilter(query.filter)
-      : undefined;
+    const whereClause = query.filter ? this.compileFilter(query.filter) : undefined;
 
     // Build ORDER BY
-    const orderByClause = query.orderBy && query.orderBy.length > 0
-      ? this.compileOrderBy(query.orderBy)
-      : undefined;
+    const orderByClause = query.orderBy && query.orderBy.length > 0 ? this.compileOrderBy(query.orderBy) : undefined;
 
     // Build LIMIT
     const limitClause = query.limit

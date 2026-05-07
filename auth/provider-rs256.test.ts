@@ -1,10 +1,5 @@
 // deno-lint-ignore-file no-explicit-any
-import {
-  assert,
-  assertEquals,
-  assertExists,
-  assertRejects,
-} from "@std/assert";
+import { assert, assertEquals, assertExists, assertRejects } from "@std/assert";
 import { afterEach, beforeEach, describe, it } from "@std/testing/bdd";
 
 import { AuthProvider } from "./provider.ts";
@@ -53,9 +48,7 @@ function derToPem(der: Uint8Array, label: string): string {
   const b64 = btoa(bin);
   const lines: string[] = [];
   for (let i = 0; i < b64.length; i += 64) lines.push(b64.slice(i, i + 64));
-  return `-----BEGIN ${label}-----\n${
-    lines.join("\n")
-  }\n-----END ${label}-----\n`;
+  return `-----BEGIN ${label}-----\n${lines.join("\n")}\n-----END ${label}-----\n`;
 }
 
 // --- Tests ---

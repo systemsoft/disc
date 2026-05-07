@@ -47,16 +47,18 @@ Deno.test("CLI Init - basic project initialization", async () => {
     const projectDir = await initProject(tempDir, projectName);
 
     // Verify all expected files were created
-    for (const path of [
-      "dbschema/default.disc",
-      "deno.json",
-      ".env",
-      ".gitignore",
-      "README.md",
-      "mod.ts",
-      "migrations",
-      "disc.toml",
-    ]) {
+    for (
+      const path of [
+        "dbschema/default.disc",
+        "deno.json",
+        ".env",
+        ".gitignore",
+        "README.md",
+        "mod.ts",
+        "migrations",
+        "disc.toml",
+      ]
+    ) {
       const exists = await Deno.stat(`${projectDir}/${path}`)
         .then(() => true).catch(() => false);
       assert(exists, `${path} should be created`);
@@ -389,9 +391,7 @@ Deno.test("CLI Init - disc.toml written inside project dir, not CWD", async () =
 
     const projectDir = `${tempDir}/${projectName}`;
 
-    const inProject = await Deno.stat(`${projectDir}/disc.toml`).then(() =>
-      true
-    ).catch(() => false);
+    const inProject = await Deno.stat(`${projectDir}/disc.toml`).then(() => true).catch(() => false);
     const inCwd = await Deno.stat(`${tempDir}/disc.toml`).then(() => true)
       .catch(() => false);
 

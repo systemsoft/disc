@@ -4,11 +4,7 @@
  * Handles incoming connections and protocol negotiation
  */
 
-import {
-  AuthenticationCredentials,
-  ConnectionState,
-  ProtocolConnection,
-} from "./connection.ts";
+import { AuthenticationCredentials, ConnectionState, ProtocolConnection } from "./connection.ts";
 import { generateStoredKeys } from "./scram.ts";
 
 export interface ServerOptions {

@@ -511,8 +511,7 @@ Deno.test({
 // =========================================================================
 
 Deno.test({
-  name:
-    "PG Stage 25: Combined min_ex_value + max_ex_value enforced by PostgreSQL",
+  name: "PG Stage 25: Combined min_ex_value + max_ex_value enforced by PostgreSQL",
   ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();

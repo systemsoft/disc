@@ -19,10 +19,7 @@
 
 @mixin neon-text($color-rgb: var(--color-primary-rgb)) {
   color: rgb($color-rgb);
-  text-shadow:
-    0 0 10px rgb($color-rgb / 0.8),
-    0 0 20px rgb($color-rgb / 0.6),
-    0 0 30px rgb($color-rgb / 0.4);
+  text-shadow: 0 0 10px rgb($color-rgb / 0.8), 0 0 20px rgb($color-rgb / 0.6), 0 0 30px rgb($color-rgb / 0.4);
 }
 
 @mixin grid-lines() {

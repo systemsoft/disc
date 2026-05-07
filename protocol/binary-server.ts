@@ -14,36 +14,15 @@
  *   - Error code mapping (Disc errors -> Gel protocol error codes)
  */
 
-import {
-  type ClientMessage,
-  decodeClientMessage,
-  encodeServerMessage,
-  type ServerMessage,
-} from "./messages.ts";
-import {
-  Cardinality,
-  ErrorSeverity,
-  OutputFormat,
-  PROTOCOL_MAJOR_VERSION,
-  PROTOCOL_MINOR_VERSION,
-  TransactionState,
-} from "./enums.ts";
-import {
-  generateDescriptorIdSync,
-  resolveWellKnownType,
-} from "./typedesc.ts";
+import { type ClientMessage, decodeClientMessage, encodeServerMessage, type ServerMessage } from "./messages.ts";
+import { Cardinality, ErrorSeverity, OutputFormat, PROTOCOL_MAJOR_VERSION, PROTOCOL_MINOR_VERSION, TransactionState } from "./enums.ts";
+import { generateDescriptorIdSync, resolveWellKnownType } from "./typedesc.ts";
 import { BufferReader, BufferWriter } from "./buffer.ts";
 import { uuidToBytes } from "./types.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import type * as AST from "../edgeql/ast.ts";
 import type { Schema } from "../compiler/context.ts";
-import {
-  deriveKeys,
-  generateServerFirstMessage,
-  parseClientFirstMessage,
-  type ScramServerState,
-  verifyClientFinalMessage,
-} from "./scram.ts";
+import { deriveKeys, generateServerFirstMessage, parseClientFirstMessage, type ScramServerState, verifyClientFinalMessage } from "./scram.ts";
 
 import {
   CompilationError,
@@ -57,11 +36,7 @@ import {
   ValidationError,
 } from "../lib/errors.ts";
 import { QueryCache } from "../lib/query-cache.ts";
-import {
-  decodeScalar,
-  encodeScalar,
-  hasScalarCodec,
-} from "./scalar-codecs.ts";
+import { decodeScalar, encodeScalar, hasScalarCodec } from "./scalar-codecs.ts";
 
 /**
  * Maximum size (in bytes) of a single wire-protocol message payload.
@@ -1075,9 +1050,7 @@ export class BinaryConnection {
         } catch (err) {
           // Send error and continue (unless closed)
           if (!this.closed) {
-            const errorCode = err instanceof Error
-              ? mapErrorToGelCode(err)
-              : GEL_ERROR_CODES.InternalServerError;
+            const errorCode = err instanceof Error ? mapErrorToGelCode(err) : GEL_ERROR_CODES.InternalServerError;
             await this.sendErrorWithCode(
               err instanceof Error ? err.message : String(err),
               errorCode,
@@ -1249,9 +1222,7 @@ export class BinaryConnection {
       });
     } catch (err) {
       await this.sendError(
-        `SCRAM auth failed: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
+        `SCRAM auth failed: ${err instanceof Error ? err.message : String(err)}`,
       );
       this.close();
     }
@@ -1294,9 +1265,7 @@ export class BinaryConnection {
       await this.sendAuthOKSequence();
     } catch (err) {
       await this.sendError(
-        `SCRAM verification failed: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
+        `SCRAM verification failed: ${err instanceof Error ? err.message : String(err)}`,
       );
       this.close();
     }
@@ -1401,9 +1370,7 @@ export class BinaryConnection {
         outputTypedesc: built.outputDesc.data,
       });
     } catch (err) {
-      const errorCode = err instanceof Error
-        ? mapErrorToGelCode(err)
-        : GEL_ERROR_CODES.InternalServerError;
+      const errorCode = err instanceof Error ? mapErrorToGelCode(err) : GEL_ERROR_CODES.InternalServerError;
       await this.sendErrorWithCode(
         err instanceof Error ? err.message : String(err),
         errorCode,
@@ -1549,9 +1516,7 @@ export class BinaryConnection {
         stateData: stateResp.stateData,
       });
     } catch (err) {
-      const errorCode = err instanceof Error
-        ? mapErrorToGelCode(err)
-        : GEL_ERROR_CODES.InternalServerError;
+      const errorCode = err instanceof Error ? mapErrorToGelCode(err) : GEL_ERROR_CODES.InternalServerError;
       await this.sendErrorWithCode(
         err instanceof Error ? err.message : String(err),
         errorCode,

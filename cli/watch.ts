@@ -97,9 +97,7 @@ export class WatchCommand {
 
     try {
       // Watch the directory containing the schema file
-      const schemaDir = schemaFile.includes("/")
-        ? schemaFile.substring(0, schemaFile.lastIndexOf("/"))
-        : ".";
+      const schemaDir = schemaFile.includes("/") ? schemaFile.substring(0, schemaFile.lastIndexOf("/")) : ".";
 
       const watcher = Deno.watchFs([schemaDir], {
         recursive: false,
@@ -166,9 +164,7 @@ export class WatchCommand {
       const { document: ast, errors } = parser.parseWithRecovery();
       if (errors.length > 0) {
         console.log(
-          `⚠️  ${errors.length} SDL syntax error${
-            errors.length === 1 ? "" : "s"
-          }:`,
+          `⚠️  ${errors.length} SDL syntax error${errors.length === 1 ? "" : "s"}:`,
         );
         for (const e of errors) {
           console.log(`   • ${e.message}`);
@@ -179,9 +175,7 @@ export class WatchCommand {
         // against whatever did parse cleanly.
         if (ast.declarations.length === 0) return;
         console.log(
-          `   (Continuing with the ${ast.declarations.length} declaration${
-            ast.declarations.length === 1 ? "" : "s"
-          } that did parse.)\n`,
+          `   (Continuing with the ${ast.declarations.length} declaration${ast.declarations.length === 1 ? "" : "s"} that did parse.)\n`,
         );
       }
       const converter = new SDLConverter();
@@ -310,9 +304,7 @@ export class WatchCommand {
         const execResult = await engine.executeMigration(plan);
         if (execResult.ok) {
           console.log(
-            `   ✅ Migration applied successfully (${
-              execResult.value[0].durationMs
-            }ms)`,
+            `   ✅ Migration applied successfully (${execResult.value[0].durationMs}ms)`,
           );
 
           // Record migration
@@ -338,17 +330,11 @@ export class WatchCommand {
       case "AlterType":
         return `Alter type '${(op as Types.AlterTypeOperation).typeName}'`;
       case "AddProperty":
-        return `Add property '${
-          (op as Types.AddPropertyOperation).property.name
-        }'`;
+        return `Add property '${(op as Types.AddPropertyOperation).property.name}'`;
       case "DropProperty":
-        return `Drop property '${
-          (op as Types.DropPropertyOperation).propertyName
-        }'`;
+        return `Drop property '${(op as Types.DropPropertyOperation).propertyName}'`;
       case "AlterProperty":
-        return `Alter property '${
-          (op as Types.AlterPropertyOperation).propertyName
-        }'`;
+        return `Alter property '${(op as Types.AlterPropertyOperation).propertyName}'`;
       default:
         return `${op.kind}: ${JSON.stringify(op)}`;
     }

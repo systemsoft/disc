@@ -2156,23 +2156,23 @@ order by fts::rank('database migration') desc;
 
 ## Function Categories Quick Reference
 
-| Category | Functions |
-|---|---|
-| String | `len`, `str_lower`, `str_upper`, `str_title`, `str_trim`, `str_ltrim`, `str_rtrim`, `str_repeat`, `str_replace`, `str_split`, `str_starts_with`, `str_ends_with`, `str_pad_start`, `str_pad_end`, `contains`, `find` |
-| Regex | `re_match`, `re_match_all`, `re_replace`, `re_test` |
-| Math | `math_abs`, `math_ceil`, `math_floor`, `round`, `math_sqrt`, `math_pow`, `math_power`, `math_log`, `math_ln`, `math_log10`, `math_log2`, `math_pi`, `math_e`, `math_mean` |
-| Aggregate | `count`, `sum`, `min`, `max`, `avg`, `stddev`, `stddev_pop`, `stddev_samp`, `array_agg`, `any`, `all` |
-| Type Conversion | `to_str`, `to_int16`, `to_int32`, `to_int64`, `to_float32`, `to_float64`, `to_bigint`, `to_decimal`, `to_bool`, `to_uuid` |
-| JSON | `to_json`, `json_typeof`, `json_get`, `json_array_unpack`, `json_object_unpack` |
-| Array | `array_agg`, `array_unpack`, `array_join`, `array_get` |
-| Set | `distinct`, `exists`, `enumerate`, `any`, `all` |
-| Assertion | `assert_exists`, `assert_single` |
-| UUID | `uuid_generate_v4`, `uuid_generate_v1mc` |
-| Datetime | `datetime_current`, `datetime_of_transaction`, `datetime_of_statement`, `datetime_get`, `datetime_truncate`, `to_datetime`, `to_duration` |
-| Calendar | `cal_to_local_date`, `cal_to_local_time`, `cal_to_local_datetime` |
-| Window | `row_number`, `rank`, `dense_rank`, `ntile`, `lag`, `lead`, `first_value`, `last_value` |
-| Bytes | `bytes_get_bit`, `bytes_to_str` |
-| Range | `range`, `range_get_lower`, `range_get_upper`, `range_is_empty`, `range_unpack`, `range_is_inclusive_lower`, `range_is_inclusive_upper`, `multirange`, `overlaps`, `contains` (overload) |
-| Sequence | `sequence_next`, `sequence_reset` |
-| Introspection | `schema::types`, `schema::get_type`, `schema::functions` |
-| Full-Text Search | `fts::search`, `fts::rank` |
+| Category         | Functions                                                                                                                                                                                                            |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| String           | `len`, `str_lower`, `str_upper`, `str_title`, `str_trim`, `str_ltrim`, `str_rtrim`, `str_repeat`, `str_replace`, `str_split`, `str_starts_with`, `str_ends_with`, `str_pad_start`, `str_pad_end`, `contains`, `find` |
+| Regex            | `re_match`, `re_match_all`, `re_replace`, `re_test`                                                                                                                                                                  |
+| Math             | `math_abs`, `math_ceil`, `math_floor`, `round`, `math_sqrt`, `math_pow`, `math_power`, `math_log`, `math_ln`, `math_log10`, `math_log2`, `math_pi`, `math_e`, `math_mean`                                            |
+| Aggregate        | `count`, `sum`, `min`, `max`, `avg`, `stddev`, `stddev_pop`, `stddev_samp`, `array_agg`, `any`, `all`                                                                                                                |
+| Type Conversion  | `to_str`, `to_int16`, `to_int32`, `to_int64`, `to_float32`, `to_float64`, `to_bigint`, `to_decimal`, `to_bool`, `to_uuid`                                                                                            |
+| JSON             | `to_json`, `json_typeof`, `json_get`, `json_array_unpack`, `json_object_unpack`                                                                                                                                      |
+| Array            | `array_agg`, `array_unpack`, `array_join`, `array_get`                                                                                                                                                               |
+| Set              | `distinct`, `exists`, `enumerate`, `any`, `all`                                                                                                                                                                      |
+| Assertion        | `assert_exists`, `assert_single`                                                                                                                                                                                     |
+| UUID             | `uuid_generate_v4`, `uuid_generate_v1mc`                                                                                                                                                                             |
+| Datetime         | `datetime_current`, `datetime_of_transaction`, `datetime_of_statement`, `datetime_get`, `datetime_truncate`, `to_datetime`, `to_duration`                                                                            |
+| Calendar         | `cal_to_local_date`, `cal_to_local_time`, `cal_to_local_datetime`                                                                                                                                                    |
+| Window           | `row_number`, `rank`, `dense_rank`, `ntile`, `lag`, `lead`, `first_value`, `last_value`                                                                                                                              |
+| Bytes            | `bytes_get_bit`, `bytes_to_str`                                                                                                                                                                                      |
+| Range            | `range`, `range_get_lower`, `range_get_upper`, `range_is_empty`, `range_unpack`, `range_is_inclusive_lower`, `range_is_inclusive_upper`, `multirange`, `overlaps`, `contains` (overload)                             |
+| Sequence         | `sequence_next`, `sequence_reset`                                                                                                                                                                                    |
+| Introspection    | `schema::types`, `schema::get_type`, `schema::functions`                                                                                                                                                             |
+| Full-Text Search | `fts::search`, `fts::rank`                                                                                                                                                                                           |

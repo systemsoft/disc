@@ -3,10 +3,7 @@
  * sanitization rejection.
  */
 
-import {
-  assertEquals,
-  assertRejects,
-} from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assertEquals, assertRejects } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { join } from "https://deno.land/std@0.224.0/path/mod.ts";
 import { LocalFileStorage } from "./local.ts";
 
@@ -94,8 +91,7 @@ Deno.test("LocalFileStorage — concurrent writes to different keys don't collid
     const fs = new LocalFileStorage(root);
     const N = 20;
     await Promise.all(
-      Array.from({ length: N }, (_, i) =>
-        fs.put(`key${i.toString().padStart(4, "0")}`, new Uint8Array([i]))),
+      Array.from({ length: N }, (_, i) => fs.put(`key${i.toString().padStart(4, "0")}`, new Uint8Array([i]))),
     );
     for (let i = 0; i < N; i++) {
       const got = await fs.get(`key${i.toString().padStart(4, "0")}`);

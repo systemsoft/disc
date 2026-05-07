@@ -135,9 +135,7 @@ export class ProtocolConnection {
     return this.sendError(
       Types.ErrorSeverity.Error,
       0x0801, // protocol_violation
-      `Unexpected message type ${message.type} in state ${
-        ConnectionState[this.state]
-      }`,
+      `Unexpected message type ${message.type} in state ${ConnectionState[this.state]}`,
     );
   }
 
@@ -341,9 +339,7 @@ export class ProtocolConnection {
     const ready: Types.ReadyForCommand = {
       type: Types.MessageType.ReadyForCommand,
       length: 0,
-      transactionState: this.transactionDepth > 0
-        ? Types.TransactionState.InTransaction
-        : Types.TransactionState.Idle,
+      transactionState: this.transactionDepth > 0 ? Types.TransactionState.InTransaction : Types.TransactionState.Idle,
       annotations: [],
     };
     responses.push(this.builder.buildMessage(ready));
@@ -385,9 +381,7 @@ export class ProtocolConnection {
     const ready: Types.ReadyForCommand = {
       type: Types.MessageType.ReadyForCommand,
       length: 0,
-      transactionState: this.transactionDepth > 0
-        ? Types.TransactionState.InTransaction
-        : Types.TransactionState.Idle,
+      transactionState: this.transactionDepth > 0 ? Types.TransactionState.InTransaction : Types.TransactionState.Idle,
       annotations: [],
     };
     responses.push(this.builder.buildMessage(ready));
@@ -402,9 +396,7 @@ export class ProtocolConnection {
     const ready: Types.ReadyForCommand = {
       type: Types.MessageType.ReadyForCommand,
       length: 0,
-      transactionState: this.transactionDepth > 0
-        ? Types.TransactionState.InTransaction
-        : Types.TransactionState.Idle,
+      transactionState: this.transactionDepth > 0 ? Types.TransactionState.InTransaction : Types.TransactionState.Idle,
       annotations: [],
     };
 
