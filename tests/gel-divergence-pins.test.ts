@@ -1407,6 +1407,181 @@ Deno.test("Gel #6432 slice 4: `disc admin test-policy` runs a policy in isolatio
 });
 
 // ---------------------------------------------------------------------------
+// gh/geldata#9117 — "gel-py command on Windows 11" / cross-platform
+// CLI ask. Disc explicitly does not support Windows yet — Windows is
+// a documented gap, not silently-broken behavior. The downloader
+// throws a clear "Windows support not yet implemented" error rather
+// than attempting a fragile binary download.
+//
+// This pin asserts the explicit-throw stays in place. A future PR
+// that adds real Windows support has to delete the throw + update
+// the divergence record.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #9117: postgres downloader fails fast on Windows with a clear message", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../postgres/downloader.ts", import.meta.url),
+  );
+  assert(
+    /os === "windows"/.test(src) &&
+      /Windows support not yet implemented/.test(src),
+    "downloader.ts must throw an explicit Windows-not-supported error (Gel #9117 pin).",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#4308 — "modify stdlib during minor upgrades". Gel ships
+// stdlib changes that need to apply when an instance jumps from one
+// minor to the next, and the upgrade machinery has to swap schema in
+// place. Disc's `lib/stdlib-sql.ts` is a single trunk (no versioned
+// branches) and every wrapper is `CREATE OR REPLACE FUNCTION` — the
+// "minor upgrade" reduces to "run the latest stdlib SQL idempotently
+// against an existing instance". Same structural answer as #6697.
+//
+// This pin asserts the stdlib stays single-trunk (no version-suffixed
+// files) and every function is idempotent.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #4308: stdlib is single-trunk + idempotent (no minor-upgrade swap needed)", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../lib/stdlib-sql.ts", import.meta.url),
+  );
+  // Every function definition must use CREATE OR REPLACE so a
+  // re-run picks up the latest body without manual swap.
+  const createCount = (src.match(/CREATE OR REPLACE FUNCTION/g) ?? []).length;
+  assert(
+    createCount > 0,
+    "stdlib-sql.ts must declare CREATE OR REPLACE FUNCTION wrappers (Gel #4308 pin).",
+  );
+  // No bare CREATE FUNCTION (would fail on re-apply).
+  const bareCreate = (src.match(/CREATE FUNCTION(?! OR REPLACE)/g) ?? []).length;
+  assertEquals(
+    bareCreate,
+    0,
+    `stdlib-sql.ts must not use bare CREATE FUNCTION — found ${bareCreate} (Gel #4308 pin).`,
+  );
+  // No version-suffixed siblings — search for files like
+  // `stdlib-sql-v1.ts` etc. The lib directory should have a single
+  // stdlib file.
+  const libEntries = [];
+  for await (const entry of Deno.readDir(new URL("../lib/", import.meta.url))) {
+    if (entry.name.startsWith("stdlib-sql") && entry.name.endsWith(".ts")) {
+      libEntries.push(entry.name);
+    }
+  }
+  // Two entries are allowed: stdlib-sql.ts + stdlib-sql.test.ts.
+  assert(
+    libEntries.length <= 2,
+    `lib/ must not carry version-suffixed stdlib files — found ${libEntries.join(", ")} (Gel #4308 pin).`,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#4806 — "PR preview environments" (Uffizzi-style ephemeral
+// environments per PR). Disc's CI ships through GitHub Actions with
+// release artifacts (binaries + ghcr.io image, Bundle QQ); preview
+// envs are an M-effort niche feature. Deferred — not in scope for
+// the BUILD column closure.
+//
+// This pin documents the deferral so a future PR that wires up
+// Uffizzi/Coherence can update the divergence record cleanly.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #4806: PR preview environments are deferred (release pipeline ships binaries + ghcr.io image)", async () => {
+  // The release workflow exists and produces artifacts — that's the
+  // structural reality. PR previews would be a separate workflow.
+  const releaseSrc = await Deno.readTextFile(
+    new URL("../.github/workflows/release.yml", import.meta.url),
+  );
+  // Release workflow ships binaries (4 platforms) + Docker image.
+  assert(
+    /tags:\s*\n\s*-\s*['"]?v\*['"]?/.test(releaseSrc) ||
+      /tags:\s*\[\s*['"]v\*['"]/.test(releaseSrc),
+    "release.yml must trigger on v* tag pushes (Gel #4806 pin — release pipeline shape).",
+  );
+  // Docker job from Bundle QQ pushes to ghcr.io.
+  assert(
+    /ghcr\.io/.test(releaseSrc),
+    "release.yml must push Docker image to ghcr.io (Gel #4806 pin).",
+  );
+  // No PR-preview workflow file exists — deferred.
+  let hasPreviewWorkflow = false;
+  for await (
+    const entry of Deno.readDir(
+      new URL("../.github/workflows/", import.meta.url),
+    )
+  ) {
+    if (/preview|uffizzi|coherence/i.test(entry.name)) {
+      hasPreviewWorkflow = true;
+    }
+  }
+  assert(
+    !hasPreviewWorkflow,
+    "no PR-preview workflow file should exist yet (Gel #4806 deferred-pin).",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#3534 — "Listen on multiple TCP ports". Gel asks for the
+// ability to bind the same protocol on multiple TCP ports. Disc binds
+// one HTTP port (`server/server.ts`) + at most one binary-protocol
+// TLS port (`protocol/binary-server.ts`). Multi-port-per-protocol is
+// niche (operators usually solve this with a load balancer in front
+// of a single backend port).
+//
+// This pin asserts the single-port-per-protocol shape. A future PR
+// that adds multi-port support has to update the divergence record.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #3534: server binds one port per protocol (single-port-per-protocol shape)", async () => {
+  const binarySrc = await Deno.readTextFile(
+    new URL("../protocol/binary-server.ts", import.meta.url),
+  );
+  // The binary server uses Deno.listenTls / Deno.listen on a single
+  // listener — count is exactly one per call site.
+  const tlsListens = (binarySrc.match(/Deno\.listenTls/g) ?? []).length;
+  const plainListens = (binarySrc.match(/Deno\.listen\(/g) ?? []).length;
+  // The TLS path and plain path are mutually exclusive (single
+  // `if/else` branch in `start()`); each is referenced once.
+  assert(
+    tlsListens === 1 && plainListens === 1,
+    `binary-server.ts must bind exactly one listener per branch — found ${tlsListens} TLS / ${plainListens} plain (Gel #3534 pin).`,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#7724 — "extension upgrades". Gel ships extensions
+// (auth, ai, graphql, etc.) and the upgrade story across instance
+// versions is non-trivial. Disc's only built-in extension is auth
+// (`auth/provider.ts`); the table-creation block is idempotent
+// (CREATE TABLE IF NOT EXISTS for every table) so re-running
+// `bootstrapAuth()` against an existing instance is safe. The same
+// structural answer as #4308 / #6697 / #8909.
+//
+// This pin asserts every CREATE TABLE in `auth/provider.ts` uses
+// IF NOT EXISTS, so an extension "upgrade" is just a re-run of the
+// bootstrap path.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #7724: auth extension bootstrap is idempotent (extension upgrade = re-run bootstrap)", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../auth/provider.ts", import.meta.url),
+  );
+  // Strip JS line comments before counting so "// The CREATE TABLE
+  // above ..." doesn't count as a SQL statement.
+  const codeOnly = src.replace(/\/\/[^\n]*/g, "");
+  // Count every CREATE TABLE and every CREATE TABLE IF NOT EXISTS in
+  // actual SQL strings; they must match.
+  const allCreates = (codeOnly.match(/CREATE TABLE/g) ?? []).length;
+  const ifNotExists = (codeOnly.match(/CREATE TABLE IF NOT EXISTS/g) ?? []).length;
+  assertEquals(
+    allCreates,
+    ifNotExists,
+    `auth/provider.ts must use IF NOT EXISTS on every CREATE TABLE — found ${allCreates} CREATE / ${ifNotExists} IF NOT EXISTS (Gel #7724 pin).`,
+  );
+  // At least 9 tables (matches the existing #8909 pin's lower bound).
+  assert(
+    ifNotExists >= 9,
+    `auth/provider.ts must declare ≥9 idempotent CREATE TABLE blocks (Gel #7724 pin) — found ${ifNotExists}.`,
+  );
+});
+
+// ---------------------------------------------------------------------------
 // gh/geldata#3510 — external/user-specified UUIDs. Gel asks for the
 // ability to pass an externally-generated UUID into INSERT and have it
 // stick on the row. Disc structurally addresses this via two paths:

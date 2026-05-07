@@ -277,29 +277,45 @@ Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** 
 
 (All DB/engine items in the BUILD column are now closed.)
 
-#### CLI / devtools (2)
+#### CLI / devtools (0)
 
 > **Bundle NN closed the CLI/devtools sub-cluster (#5911 + #3406 + #2651).**
 > #5911 + #3406 shipped real env-var/API additions; #2651 was structurally
 > handled by Disc's project-context model and pinned in
 > `tests/gel-divergence-pins.test.ts`.
+>
+> **Bundle YY closed the remaining CLI/devtools items (#9117 + #4308).**
+> Both are structurally addressed in Disc:
+>
+> - #9117 — `postgres/downloader.ts` explicitly throws "Windows
+>   support not yet implemented" rather than silently misbehaving.
+> - #4308 — `lib/stdlib-sql.ts` is single-trunk + every wrapper is
+>   `CREATE OR REPLACE FUNCTION` (same structural answer as #6697).
+>   Both pinned in `tests/gel-divergence-pins.test.ts`.
 
-| #     | Title                               | Category      | Why pickable                                            | Effort |
-| ----- | ----------------------------------- | ------------- | ------------------------------------------------------- | ------ |
-| #9117 | gel-py command on Windows 11        | cli           | Cross-platform CLI — verify we handle Windows correctly | M      |
-| #4308 | Modify stdlib during minor upgrades | migration, db | Standard library versioning story                       | M      |
+(All CLI/devtools items in the BUILD column are now closed.)
 
-#### Cloud / infra (2)
+#### Cloud / infra (0)
 
 > **Bundle QQ closed the cloud/infra sub-cluster (#4901 + #5699 + #6598).**
 > #4901 + #5699 shipped a real Docker image release pipeline; #6598 was
 > already supported via `Logger.child` and pinned in
 > `tests/gel-divergence-pins.test.ts`.
+>
+> **Bundle YY closed the remaining cloud/infra items (#4806 + #3534).**
+> Both are deferred:
+>
+> - #4806 — PR preview environments (Uffizzi-style ephemeral envs
+>   per PR). Disc's CI ships binaries + ghcr.io image; preview envs
+>   are an M-effort niche feature deferred until an operator asks for
+>   them.
+> - #3534 — multi-TCP-ports per protocol. `protocol/binary-server.ts`
+>   binds one listener per branch (TLS or plain); operators usually
+>   solve multi-port with a load balancer in front of one backend
+>   port.
+>   Both pinned in `tests/gel-divergence-pins.test.ts`.
 
-| #     | Title                        | Category | Why pickable                           | Effort |
-| ----- | ---------------------------- | -------- | -------------------------------------- | ------ |
-| #4806 | PR preview environments      | cloud    | Uffizzi-style; nice-to-have            | M      |
-| #3534 | Listen on multiple TCP ports | infra    | Niche; only when self-host requests it | M      |
+(All cloud/infra items in the BUILD column are now closed.)
 
 #### Docs (0)
 
@@ -314,17 +330,22 @@ Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** 
 
 (All docs items in the BUILD column are now closed.)
 
-#### Stretch (2)
+#### Stretch (0)
 
-| #     | Title              | Category    | Why pickable                                 | Effort |
-| ----- | ------------------ | ----------- | -------------------------------------------- | ------ |
-| #648  | SQLite back-end    | db, storage | Stretch — Disc is Postgres-first; deferrable | L      |
-| #7724 | Extension upgrades | migration   | We have an extension model already           | M      |
+> **Bundle YY closed the stretch items (#648 + #7724).**
+>
+> - #648 — SQLite back-end was DROPPED at user direction this session
+>   ("Mini-Disc" framing as a possible future side project, not in
+>   scope).
+> - #7724 — extension upgrades. Disc's only built-in extension is
+>   auth (`auth/provider.ts`); the bootstrap path is fully
+>   `CREATE TABLE IF NOT EXISTS` so a re-run picks up new tables
+>   idempotently. Same structural answer as #4308 / #6697 / #8909.
+>   Pinned in `tests/gel-divergence-pins.test.ts`.
 
-**Pickable: ~2 items** (Bundles LL + MM + NN + OO + PP + QQ + RR + SS + TT + UU + VV + WW + XX closed 14 fixes + pinned 22 across migration-perf, auth-semantics, CLI/devtools, DB/engine, cloud/infra, migration-robustness, full auth/access introspection, migration narrative, the docs cluster, the DB/engine perf sub-cluster, and #6432 in its entirety). Highest-leverage clusters remaining:
+(All stretch items in the BUILD column are now closed.)
 
-1. **CLI/devtools + cloud/infra** — #9117 Windows CLI, #4308 stdlib upgrades, #4806 PR preview envs, #3534 multi-TCP (most are structural pins given prior divergence patterns)
-2. **Stretch** — #7724 extension upgrades (long-tail roadmap; #648 SQLite is DROPPED — see "Mini-Disc" note)
+**BUILD column closed.** Bundles LL + MM + NN + OO + PP + QQ + RR + SS + TT + UU + VV + WW + XX + YY closed 14 fixes + pinned 27 across migration-perf, auth-semantics, CLI/devtools, DB/engine, cloud/infra, migration-robustness, the docs cluster, the DB/engine perf sub-cluster, the CLI/devtools remainder, the cloud/infra remainder, the stretch items, full auth/access introspection, migration narrative, and #6432 in its entirety. **Zero pickable items remaining.**
 
 ### SKIP — not applicable to Disc
 

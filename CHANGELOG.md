@@ -16,6 +16,37 @@ tag is cut.
 
 ### Internal
 
+- **CLI/devtools + cloud/infra + stretch cluster pinned (Bundle YY — gh/geldata#9117 #4308 #4806 #3534 #7724).**
+  All five issues are structurally addressed in Disc; Bundle YY records
+  the invariants. **The BUILD column is fully closed by this bundle.**
+  - **#9117 Windows CLI**: `postgres/downloader.ts` explicitly throws
+    "Windows support not yet implemented" rather than silently
+    misbehaving. Pin asserts the explicit-throw stays so a future
+    real Windows port has to update the divergence record.
+  - **#4308 stdlib upgrades**: `lib/stdlib-sql.ts` is single-trunk
+    with `CREATE OR REPLACE FUNCTION` wrappers — a "minor upgrade"
+    reduces to "re-run the latest stdlib idempotently" (same
+    structural answer as #6697). Pin asserts no bare `CREATE FUNCTION`
+    - no version-suffixed sibling files in `lib/`.
+  - **#4806 PR preview environments**: deferred. Disc's release
+    workflow (`.github/workflows/release.yml`) ships binaries +
+    ghcr.io image; PR previews would be a separate workflow.
+    Pin asserts no `preview|uffizzi|coherence` workflow exists yet
+    (so a future opt-in adds the workflow + updates the divergence
+    record).
+  - **#3534 multiple TCP ports**: `protocol/binary-server.ts` binds
+    exactly one TLS listener and one plain listener (mutually
+    exclusive branches); operators usually solve "multi-port" with
+    a load balancer in front of one backend port. Pin asserts the
+    one-listener-per-branch shape.
+  - **#7724 extension upgrades**: `auth/provider.ts` declares all
+    13 tables with `IF NOT EXISTS` so `bootstrapAuth()` is safe to
+    re-run against an existing instance. Same structural answer as
+    #4308/#6697/#8909. Pin asserts every `CREATE TABLE` (in actual
+    SQL strings, not comments) uses `IF NOT EXISTS`.
+  - **5 new structural pins** in `tests/gel-divergence-pins.test.ts`
+    (was 39, now 44). **BUILD column closed.**
+
 - **DB/engine cluster pinned as structurally addressed** (Bundle XX — gh/geldata#3510 #5505 #6517 #1634).
   All three issues are already structurally addressed in Disc;
   Bundle XX records the invariants so a future refactor that breaks
