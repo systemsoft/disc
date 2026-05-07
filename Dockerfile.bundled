@@ -17,6 +17,13 @@ FROM denoland/deno:latest AS deps
 
 WORKDIR /app
 
+# Pin the deno cache to a stable, explicit path. The denoland/deno
+# image's default ($DENO_DIR=/deno-dir) has churned across versions and
+# the COPY between stages has to know where to find it. Setting it
+# here makes the multi-stage cache transfer robust across base-image
+# updates. Both stages use the same path.
+ENV DENO_DIR=/app/.deno-cache
+
 COPY deno.json deno.lock* ./
 
 RUN deno install
@@ -27,6 +34,11 @@ RUN deno install
 FROM denoland/deno:latest
 
 WORKDIR /app
+
+# Match the deps stage so the COPY destination is the path deno
+# actually consults at runtime. Without this, deno would look in the
+# upstream image's default DENO_DIR and miss the copied cache.
+ENV DENO_DIR=/app/.deno-cache
 
 # Install PostgreSQL 16 from the official PostgreSQL apt repository.
 # hadolint ignore=DL3008
@@ -53,8 +65,10 @@ ENV PGDATA=/var/lib/postgresql/16/disc
 RUN mkdir -p "$PGDATA" /run/postgresql /var/log/postgresql \
   && chown -R disc:disc "$PGDATA" /run/postgresql /var/log/postgresql
 
-# Pull cached Deno dependencies.
-COPY --from=deps /root/.cache/deno /root/.cache/deno
+# Pull cached Deno dependencies. The cache lives under /app so the
+# later `chown -R disc:disc /app` makes it readable by the non-root
+# disc user; /root/.cache/deno would not be reachable post-USER switch.
+COPY --from=deps /app/.deno-cache /app/.deno-cache
 
 # Copy the full source tree.
 COPY . .

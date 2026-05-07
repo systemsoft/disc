@@ -17,6 +17,10 @@ node_modules
 ui/node_modules
 ui/.svelte-kit
 
+# Deno cache (the Dockerfile populates this from the deps stage; do
+# not let a host-side cache leak into the build context).
+.deno-cache
+
 # Environment files
 .env
 .env.*

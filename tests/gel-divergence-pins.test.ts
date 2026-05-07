@@ -1407,6 +1407,52 @@ Deno.test("Gel #6432 slice 4: `disc admin test-policy` runs a policy in isolatio
 });
 
 // ---------------------------------------------------------------------------
+// Disc-internal — Bundle ZZ-2 Dockerfile COPY path pin.
+// Discovered when v2026.05.07 docker push failed with:
+//   "failed to compute cache key: ... '/root/.cache/deno': not found"
+// The deps stage runs `deno install` which writes the cache to
+// `$DENO_DIR`. The denoland/deno:latest image defaults to
+// `DENO_DIR=/deno-dir`, NOT `/root/.cache/deno`. The original COPY
+// path was a guess that worked on older deno images and broke on
+// current ones. Bundle ZZ-2 sets `ENV DENO_DIR=/root/.cache/deno`
+// explicitly in the deps stage so the cache lives at a stable,
+// explicit location regardless of upstream image churn.
+//
+// This pin asserts the Dockerfile sets DENO_DIR explicitly and the
+// COPY path matches whatever DENO_DIR is set to.
+// ---------------------------------------------------------------------------
+Deno.test("Bundle ZZ-2: Dockerfile.bundled COPY path matches an explicit DENO_DIR", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../Dockerfile.bundled", import.meta.url),
+  );
+  // The deps stage must set DENO_DIR explicitly so the cache lives
+  // at a known location independent of upstream image defaults.
+  const denoDirMatch = src.match(/ENV DENO_DIR=(\S+)/);
+  assert(
+    denoDirMatch !== null,
+    "Dockerfile.bundled must set ENV DENO_DIR explicitly (Bundle ZZ-2 pin).",
+  );
+  const denoDir = denoDirMatch![1];
+
+  // The COPY --from=deps line must match the explicit DENO_DIR.
+  const copyMatch = src.match(/COPY --from=deps (\S+) (\S+)/);
+  assert(
+    copyMatch !== null,
+    "Dockerfile.bundled must carry a COPY --from=deps line (Bundle ZZ-2 pin).",
+  );
+  assertEquals(
+    copyMatch![1],
+    denoDir,
+    `COPY --from=deps source must match DENO_DIR (${denoDir}) (Bundle ZZ-2 pin).`,
+  );
+  assertEquals(
+    copyMatch![2],
+    denoDir,
+    `COPY --from=deps target must match DENO_DIR (${denoDir}) (Bundle ZZ-2 pin).`,
+  );
+});
+
+// ---------------------------------------------------------------------------
 // Disc-internal — Bundle ZZ post-mortem pin (no Gel issue).
 // Discovered after v2026.05.07 was tagged: release CI was producing
 // stripped binaries (~80 MB instead of the expected ~217 MB) because

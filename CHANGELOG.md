@@ -16,6 +16,21 @@ tag is cut.
 
 ### Fixed
 
+- **Dockerfile.bundled: explicit `DENO_DIR` so multi-stage cache COPY works** (Bundle ZZ-2).
+  The v2026.05.07 docker push failed with
+  `failed to compute cache key: ... '/root/.cache/deno': not found` —
+  the Dockerfile's `COPY --from=deps /root/.cache/deno
+  /root/.cache/deno` assumed the deps stage's `deno install` writes to
+  `/root/.cache/deno`, but `denoland/deno:latest` defaults to
+  `DENO_DIR=/deno-dir`. Fix: pin `ENV DENO_DIR=/app/.deno-cache` in
+  both stages (under `/app` so the later `chown -R disc:disc /app`
+  makes it readable post-`USER disc` switch). Also added
+  `.deno-cache` to `.dockerignore` so a host-side cache can't leak
+  into the build context.
+  - **1 new structural pin** in `tests/gel-divergence-pins.test.ts`
+    (was 45, now 46) asserting the COPY src/dst match the explicit
+    `DENO_DIR`.
+
 - **Cross-compile builds now fail loud when PG staging produces 0 files** (Bundle ZZ).
   Discovered after v2026.05.07 was tagged: release CI was producing
   stripped ~80 MB binaries instead of the expected ~217 MB because
