@@ -3,11 +3,7 @@
  * (gh/geldata#8186)
  */
 
-import {
-  assert,
-  assertEquals,
-  assertRejects,
-} from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assert, assertEquals, assertRejects } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { AuthProvider } from "./provider.ts";
 import { TestDatabase } from "./test-database.ts";
 import { AuthError, AuthErrorCode } from "./types.ts";
@@ -186,6 +182,88 @@ Deno.test("consumeMagicLink — when user has TOTP, returns MfaChallenge instead
       AuthError,
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_TOKEN);
+  } finally {
+    await db.close();
+  }
+});
+
+// ── Implicit signup (gh/geldata#7311) ───────────────────────────────
+
+async function makeImplicitSignupProvider(): Promise<{
+  provider: AuthProvider;
+  db: TestDatabase;
+}> {
+  const db = new TestDatabase();
+  await db.connect();
+  const provider = new AuthProvider(
+    {
+      jwtSecret: "test-secret-key-32-bytes-minimum-len",
+      requireEmailVerification: false,
+      allowImplicitSignup: true,
+    },
+    db,
+  );
+  await provider.initialize();
+  return { provider, db };
+}
+
+Deno.test("implicit signup — unknown email + flag on → token redeems and creates user", async () => {
+  const { provider, db } = await makeImplicitSignupProvider();
+  try {
+    const token = await provider.requestMagicLink("new@example.com");
+    const result = await provider.consumeMagicLink(token);
+    // Single-factor consume returns AuthResponse (no MFA configured).
+    assert("user" in result, "expected AuthResponse, not MfaChallenge");
+    assertEquals(result.user.email, "new@example.com");
+    assertEquals(result.user.emailVerified, true, "email proven via round-trip");
+    assertEquals(result.user.active, true);
+  } finally {
+    await db.close();
+  }
+});
+
+Deno.test("implicit signup — token is single-use even on the signup path", async () => {
+  const { provider, db } = await makeImplicitSignupProvider();
+  try {
+    const token = await provider.requestMagicLink("once@example.com");
+    await provider.consumeMagicLink(token); // first redemption ok
+    const err = await assertRejects(
+      () => provider.consumeMagicLink(token),
+      AuthError,
+    );
+    assertEquals((err as AuthError).code, AuthErrorCode.INVALID_TOKEN);
+  } finally {
+    await db.close();
+  }
+});
+
+Deno.test("implicit signup — flag off keeps anti-enumeration: unknown email token never redeems", async () => {
+  // Default behavior — no allowImplicitSignup — must remain unchanged.
+  const { provider, db } = await makeProvider();
+  try {
+    const token = await provider.requestMagicLink("nobody@example.com");
+    const err = await assertRejects(
+      () => provider.consumeMagicLink(token),
+      AuthError,
+    );
+    assertEquals((err as AuthError).code, AuthErrorCode.INVALID_TOKEN);
+  } finally {
+    await db.close();
+  }
+});
+
+Deno.test("implicit signup — known email follows the standard path even with flag on", async () => {
+  const { provider, db } = await makeImplicitSignupProvider();
+  try {
+    const reg = await provider.register({
+      email: "u@example.com",
+      password: "password123",
+    });
+    const token = await provider.requestMagicLink("u@example.com");
+    const result = await provider.consumeMagicLink(token);
+    assert("user" in result, "expected AuthResponse");
+    // Same user id — no duplicate created.
+    assertEquals(result.user.id, reg.user.id);
   } finally {
     await db.close();
   }

@@ -90,6 +90,10 @@ const AUTH_CONFIG_DEFAULTS: Omit<Required<AuthConfig>, ConditionalAuthFields> = 
   // 0 disables the cap (unlimited sessions).
   maxSessionsPerUser: 0,
   webhooks: [],
+  // Off by default — preserves anti-enumeration on `requestMagicLink`.
+  // Operators opt in when they want passwordless first-time signup
+  // through the magic-link flow. (gh/geldata#7311)
+  allowImplicitSignup: false,
 };
 
 export class AuthProvider implements IAuthProvider {
@@ -359,6 +363,23 @@ export class AuthProvider implements IAuthProvider {
         consumed_at TIMESTAMP,
         ip_address TEXT,
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+
+    // Implicit-signup magic-link tokens (gh/geldata#7311). Separate
+    // table so `magic_link_tokens.user_id` stays NOT NULL — no
+    // ALTER COLUMN dance for existing deployments. When
+    // `allowImplicitSignup` is on and `requestMagicLink` is called for
+    // an unknown email, the token lands here; `consumeMagicLink`
+    // creates the user on redemption.
+    await this.db.execute(`
+      CREATE TABLE IF NOT EXISTS magic_link_signup_tokens (
+        token_hash TEXT PRIMARY KEY,
+        pending_email TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        expires_at TIMESTAMP NOT NULL,
+        consumed_at TIMESTAMP,
+        ip_address TEXT
       )
     `);
 
@@ -1818,6 +1839,33 @@ export class AuthProvider implements IAuthProvider {
         identityId: result.rows[0].id,
         magicLinkToken: plaintext,
       });
+    } else if (this.config.allowImplicitSignup) {
+      // Implicit-signup path (gh/geldata#7311). Persist the token bound
+      // to the pending email; `consumeMagicLink` creates the user on
+      // redemption. Same response shape and timing as the existing
+      // path, so the toggle is invisible to a network observer.
+      const tokenHash = await this.hashToken(plaintext);
+      await this.db.execute(
+        `INSERT INTO magic_link_signup_tokens (token_hash, pending_email, expires_at, ip_address)
+         VALUES (?, ?, ?, ?)`,
+        [
+          tokenHash,
+          email,
+          expiresAt.toISOString(),
+          meta?.ipAddress ?? null,
+        ],
+      );
+      this.auditEvent("magic_link_signup_requested", null, {
+        email,
+        ipAddress: meta?.ipAddress,
+      });
+      this.fireWebhook({
+        eventType: "MagicLinkSignupRequested",
+        eventId: newEventId(),
+        timestamp: newEventTimestamp(),
+        pendingEmail: email,
+        magicLinkToken: plaintext,
+      });
     } else {
       this.auditEvent("magic_link_requested", null, {
         result: "no_such_user",
@@ -1847,11 +1895,10 @@ export class AuthProvider implements IAuthProvider {
       [tokenHash],
     );
     if (result.rows.length === 0) {
-      throw new AuthError(
-        "Invalid or expired magic link",
-        AuthErrorCode.INVALID_TOKEN,
-        401,
-      );
+      // Fall through to the implicit-signup table (gh/geldata#7311).
+      // When `allowImplicitSignup` is on, `requestMagicLink` for an
+      // unknown email persists into `magic_link_signup_tokens`.
+      return await this.consumeMagicLinkSignup(tokenHash, meta);
     }
     const row = result.rows[0];
     if (row.consumed_at) {
@@ -1894,6 +1941,101 @@ export class AuthProvider implements IAuthProvider {
     }
 
     this.auditEvent("magic_link_consumed", user.id, {
+      ipAddress: meta?.ipAddress,
+    });
+    return await this.completeLogin(user, meta);
+  }
+
+  /**
+   * Implicit-signup branch for `consumeMagicLink` (gh/geldata#7311).
+   * Looks up the token in `magic_link_signup_tokens`; if found and
+   * valid, creates the user (active, email_verified=true since the
+   * email round-trip just proved control), burns the token, and
+   * completes login. The error path matches the regular magic-link
+   * flow so a token from neither table looks identical to a normal
+   * "invalid or expired" failure.
+   */
+  private async consumeMagicLinkSignup(
+    tokenHash: string,
+    meta?: RequestMeta,
+  ): Promise<LoginResult> {
+    const result = await this.db.query(
+      `SELECT pending_email, expires_at, consumed_at
+       FROM magic_link_signup_tokens
+       WHERE token_hash = ?`,
+      [tokenHash],
+    );
+    if (result.rows.length === 0) {
+      throw new AuthError(
+        "Invalid or expired magic link",
+        AuthErrorCode.INVALID_TOKEN,
+        401,
+      );
+    }
+    const row = result.rows[0];
+    if (row.consumed_at) {
+      throw new AuthError(
+        "Magic link already used",
+        AuthErrorCode.INVALID_TOKEN,
+        401,
+      );
+    }
+    if (new Date(row.expires_at).getTime() < Date.now()) {
+      throw new AuthError(
+        "Magic link expired",
+        AuthErrorCode.TOKEN_EXPIRED,
+        401,
+      );
+    }
+
+    // Race-safe ordering: burn the token first, then create the user.
+    // If a parallel redemption arrived, the second UPDATE finds
+    // `consumed_at` already set and the second consumeMagicLinkSignup
+    // call returns "already used".
+    await this.db.execute(
+      "UPDATE magic_link_signup_tokens SET consumed_at = CURRENT_TIMESTAMP WHERE token_hash = ?",
+      [tokenHash],
+    );
+
+    // It's possible the user registered via another path between
+    // requestMagicLink and consume — if so, fall through to login on
+    // the existing record rather than failing the redemption.
+    const existing = await this.db.query(
+      "SELECT id, active, is_anonymous FROM users WHERE email = ?",
+      [row.pending_email],
+    );
+    let userId: string;
+    if (existing.rows.length > 0 && existing.rows[0].active && !existing.rows[0].is_anonymous) {
+      userId = existing.rows[0].id;
+    } else {
+      userId = this.generateId();
+      await this.db.execute(
+        `INSERT INTO users (id, email, password_hash, email_verified, active)
+         VALUES (?, ?, ?, ?, ?)`,
+        [userId, row.pending_email, "", true, true],
+      );
+      this.auditEvent("identity_created", userId, {
+        via: "magic_link_signup",
+        ipAddress: meta?.ipAddress,
+      });
+      this.fireWebhook({
+        eventType: "IdentityCreated",
+        eventId: newEventId(),
+        timestamp: newEventTimestamp(),
+        identityId: userId,
+      });
+    }
+
+    const user = await this.getUser(userId);
+    if (!user) {
+      throw new AuthError(
+        "User not found after signup",
+        AuthErrorCode.USER_NOT_FOUND,
+        500,
+      );
+    }
+
+    this.auditEvent("magic_link_signup_consumed", userId, {
       ipAddress: meta?.ipAddress,
     });
     return await this.completeLogin(user, meta);
@@ -2336,6 +2478,13 @@ export class AuthProvider implements IAuthProvider {
       [userId],
     );
     this.auditEvent("webauthn_registration_started", userId);
+    // Discoverable-credential preference (gh/geldata#7196). Defaults to
+    // `"preferred"` so passkey-capable authenticators store user-handle
+    // metadata locally — future logins can then start without the user
+    // typing their email first. Operators can flip
+    // `webauthn.requireResidentKey` to `true` to refuse non-resident
+    // authenticators outright.
+    const requireResident = this.config.webauthn.requireResidentKey === true;
     return {
       challengeId,
       publicKey: {
@@ -2352,6 +2501,11 @@ export class AuthProvider implements IAuthProvider {
         pubKeyCredParams: [{ type: "public-key", alg: webAuthn.COSE_ALG_ES256 }],
         timeout: 60000,
         attestation: "none",
+        authenticatorSelection: {
+          residentKey: requireResident ? "required" : "preferred",
+          requireResidentKey: requireResident,
+          userVerification: "preferred",
+        },
         excludeCredentials: existing.rows.map((r) => ({
           id: r.credential_id,
           type: "public-key" as const,

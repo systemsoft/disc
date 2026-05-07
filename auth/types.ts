@@ -138,6 +138,15 @@ export interface AuthConfig {
    */
   magicLinkUrlTemplate?: string;
   /**
+   * When `true`, `requestMagicLink(email)` for an unknown email persists
+   * a token bound to the pending email address; `consumeMagicLink`
+   * creates the user on first redemption (active, email_verified=true
+   * since they proved email control). When `false` (default),
+   * `requestMagicLink` for unknown emails returns a token that's never
+   * persisted — preserves anti-enumeration. (gh/geldata#7311)
+   */
+  allowImplicitSignup?: boolean;
+  /**
    * Branding/identity surface used by built-in email templates and
    * the admin UI. Lets deployments customize the "from" identity
    * without forking the templates. Each field is sanitized at
@@ -310,6 +319,17 @@ export interface WebAuthnRegistrationOptions {
     timeout?: number;
     attestation?: "none";
     excludeCredentials?: Array<{ id: string; type: "public-key" }>;
+    /**
+     * Authenticator selection criteria — surfaces discoverable-credential
+     * preference (gh/geldata#7196). `residentKey` is the modern
+     * preference field; `requireResidentKey` is its boolean fallback for
+     * older browsers that haven't adopted L2.
+     */
+    authenticatorSelection?: {
+      residentKey?: "discouraged" | "preferred" | "required";
+      requireResidentKey?: boolean;
+      userVerification?: "discouraged" | "preferred" | "required";
+    };
   };
 }
 
@@ -365,6 +385,25 @@ export interface WebAuthnConfig {
   rpId: string;
   rpName: string;
   origin: string;
+  /**
+   * Discoverable-credential preference for `beginWebAuthnRegistration`
+   * (gh/geldata#7196). When `true`, the registration ceremony asks the
+   * authenticator to create a *resident* (discoverable) credential — the
+   * authenticator stores user-handle metadata locally so future logins
+   * don't need the user to type their email first. When `false` or
+   * omitted, defaults to `"preferred"` so passkey-capable authenticators
+   * still create discoverable credentials when they can but legacy
+   * security keys without resident-key storage continue to work.
+   *
+   * Maps to WebAuthn's `authenticatorSelection.residentKey`:
+   *   `true`  → `"required"` (refuses non-discoverable credentials)
+   *   omitted → `"preferred"` (default — discoverable when possible)
+   *
+   * Login already supports discoverable credentials when `email` is
+   * omitted from `beginWebAuthnLogin`; this flag only controls
+   * registration.
+   */
+  requireResidentKey?: boolean;
 }
 
 export interface PasswordValidationResult {

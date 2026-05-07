@@ -109,6 +109,11 @@ export class EmailEventListener {
         case "MagicLinkRequested":
           await this.handleMagicLink(event.identityId, event.magicLinkToken);
           return;
+        case "MagicLinkSignupRequested":
+          // Implicit signup — no identity yet, deliver to the pending
+          // email directly (gh/geldata#7311).
+          await this.handleMagicLinkToEmail(event.pendingEmail, event.magicLinkToken);
+          return;
         case "MagicCodeRequested":
           await this.handleMagicCode(event.identityId, event.magicCode);
           return;
@@ -153,6 +158,16 @@ export class EmailEventListener {
   private async handleMagicLink(identityId: string, magicLinkToken: string): Promise<void> {
     const recipient = await this.lookup(identityId, "MagicLinkRequested");
     if (!recipient) return;
+    await this.handleMagicLinkToEmail(recipient, magicLinkToken);
+  }
+
+  /**
+   * Render and deliver a magic-link email to a known address. Used by
+   * both the standard `MagicLinkRequested` path (after `lookup`
+   * resolves the identity) and the implicit-signup `MagicLinkSignupRequested`
+   * path (which already has the email and skips lookup).
+   */
+  private async handleMagicLinkToEmail(recipient: string, magicLinkToken: string): Promise<void> {
     const link = buildMagicLinkUrl(magicLinkToken, {
       baseUrl: this.config.baseUrl,
       template: this.config.magicLinkUrlTemplate,

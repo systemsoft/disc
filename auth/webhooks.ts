@@ -30,6 +30,7 @@ export type WebhookEvent =
   | EmailVerifiedEvent
   | PasswordResetRequestedEvent
   | MagicLinkRequestedEvent
+  | MagicLinkSignupRequestedEvent
   | MagicCodeRequestedEvent;
 
 export interface BaseWebhookEvent {
@@ -79,6 +80,20 @@ export interface MagicLinkRequestedEvent extends BaseWebhookEvent {
    * `requestMagicLink()` returns, so webhooks are how a separate
    * email-sender learns about it. (gh/geldata#8186)
    */
+  magicLinkToken: string;
+}
+
+/**
+ * Magic-link request fired for an unknown email when
+ * `AuthConfig.allowImplicitSignup` is on (gh/geldata#7311). Carries
+ * the pending email directly because no identity exists yet — receivers
+ * deliver the email by address rather than by id lookup.
+ */
+export interface MagicLinkSignupRequestedEvent {
+  eventType: "MagicLinkSignupRequested";
+  eventId: string;
+  timestamp: string;
+  pendingEmail: string;
   magicLinkToken: string;
 }
 

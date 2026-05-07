@@ -16,6 +16,24 @@ tag is cut.
 
 ### Added
 
+- **Magic-link implicit signup** (gh/geldata#7311). New
+  `AuthConfig.allowImplicitSignup?: boolean` (default `false`). When
+  enabled, `requestMagicLink(email)` for an unknown email persists the
+  token in a new `magic_link_signup_tokens` table; `consumeMagicLink`
+  creates the user (active, `email_verified=true`) and completes login
+  on first redemption. Default-off preserves the existing
+  anti-enumeration semantics. New `MagicLinkSignupRequested` webhook
+  event (carries `pendingEmail` + `magicLinkToken`) for email senders
+  that need to deliver to a not-yet-existing identity.
+- **WebAuthn discoverable credentials** (gh/geldata#7196).
+  `beginWebAuthnRegistration` now emits `authenticatorSelection:
+  { residentKey: "preferred", userVerification: "preferred" }` so
+  passkey-capable authenticators store user-handle metadata locally —
+  future logins can start without the user typing their email first.
+  New `WebAuthnConfig.requireResidentKey?: boolean` upgrades to
+  `"required"` for security-sensitive deployments. Login already
+  supported the discoverable-credential path; this only changes
+  registration.
 - **Deno-permission-aware access policies** (Disc-original feature #5
   from `docs/disc-original-features.md`). Access policies can now gate
   on the running Deno process's `--allow-*` permission set as a
@@ -195,6 +213,10 @@ tag is cut.
 
 ### Docs
 
+- **Cross-device email verification** documented in `docs/auth.md`
+  (gh/geldata#7483). `verifyEmail()` looks the user up purely by hashed
+  token — no IP / user-agent / session-cookie check at redemption — so
+  signing up on phone and clicking the link on laptop just works.
 - Performance guide (`docs/performance.md`) covering indexing, EXPLAIN,
   parse/compile/EXPLAIN caches, pool tuning, Prometheus gauges (#6126).
 - Production migration documentation (`docs/migrations.md` extended

@@ -271,6 +271,8 @@ curl "http://localhost:8080/auth/verify?token=abc123..."
 
 Email verification is only active when `requireEmailVerification` is set to `true` in the auth config. When enabled, users cannot log in until their email is verified.
 
+**Cross-device verification works out of the box.** The verification token isn't bound to the session that requested it: a user can sign up on their phone, open the verification email on their laptop, and click the link in any browser without breaking the flow. Implementation note: `verifyEmail()` looks the user up purely by hashed token (`auth/provider.ts:verifyEmail`) — no IP, user-agent, or session-cookie check happens at redemption. This is intentional: tying verification to the originating device would silently break the common "click email link from a different machine" pattern that most users expect. Token security comes from its 32-byte entropy and single-use semantics, not from the client identity. (gh/geldata#7483)
+
 ---
 
 ## Token Format

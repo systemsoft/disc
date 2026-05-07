@@ -5,25 +5,12 @@
  * emit. (gh/geldata#6725)
  */
 
-import {
-  assert,
-  assertEquals,
-  assertRejects,
-} from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assert, assertEquals, assertRejects } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { AuthProvider } from "./provider.ts";
 import { TestDatabase } from "./test-database.ts";
 import { AuthError, AuthErrorCode } from "./types.ts";
-import {
-  base64UrlDecode,
-  base64UrlEncode,
-} from "./webauthn.ts";
-import {
-  buildAttestationObject,
-  buildAuthenticatorData,
-  buildClientDataJSON,
-  generateTestKeyPair,
-  signAssertion,
-} from "./webauthn-test-helper.ts";
+import { base64UrlDecode, base64UrlEncode } from "./webauthn.ts";
+import { buildAttestationObject, buildAuthenticatorData, buildClientDataJSON, generateTestKeyPair, signAssertion } from "./webauthn-test-helper.ts";
 import { generateTOTP } from "./totp.ts";
 
 const RP_ID = "example.com";
@@ -444,6 +431,54 @@ Deno.test("beginWebAuthnRegistration — rejects when WebAuthn not configured", 
       AuthError,
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_OPERATION);
+  } finally {
+    await db.close();
+  }
+});
+
+// ── Discoverable credentials (gh/geldata#7196) ──────────────────────
+
+Deno.test("beginWebAuthnRegistration — defaults residentKey to 'preferred' for passkey discoverability", async () => {
+  const { provider, db } = await makeProvider();
+  try {
+    const reg = await provider.register({
+      email: "u@example.com",
+      password: "password123",
+    });
+    const opts = await provider.beginWebAuthnRegistration(reg.user.id);
+    assertEquals(opts.publicKey.authenticatorSelection?.residentKey, "preferred");
+    assertEquals(opts.publicKey.authenticatorSelection?.requireResidentKey, false);
+    assertEquals(opts.publicKey.authenticatorSelection?.userVerification, "preferred");
+  } finally {
+    await db.close();
+  }
+});
+
+Deno.test("beginWebAuthnRegistration — requireResidentKey=true upgrades to 'required'", async () => {
+  const db = new TestDatabase();
+  await db.connect();
+  const provider = new AuthProvider(
+    {
+      jwtSecret: "test-secret-key-32-bytes-minimum-len",
+      requireEmailVerification: false,
+      webauthn: {
+        rpId: RP_ID,
+        rpName: "Test App",
+        origin: ORIGIN,
+        requireResidentKey: true,
+      },
+    },
+    db,
+  );
+  await provider.initialize();
+  try {
+    const reg = await provider.register({
+      email: "u@example.com",
+      password: "password123",
+    });
+    const opts = await provider.beginWebAuthnRegistration(reg.user.id);
+    assertEquals(opts.publicKey.authenticatorSelection?.residentKey, "required");
+    assertEquals(opts.publicKey.authenticatorSelection?.requireResidentKey, true);
   } finally {
     await db.close();
   }
