@@ -1,10 +1,15 @@
 /**
- * Embedded-EdgeQL diagnostics for TS/JS host files (LSP Phase 5).
+ * Embedded-EdgeQL features for TS/JS host files (LSP Phases 5 + 6).
  *
  * Scans a TypeScript (or JavaScript) source for tagged template
- * literals of the form `eql\`...\`` and runs each one through the
- * EdgeQL parser. Parse errors are mapped back to the host file's
- * coordinates so editors surface squiggles at the right spot.
+ * literals of the form `eql\`...\`` and provides editor features
+ * scoped to those embedded strings:
+ *
+ *   - Phase 5: parse-error diagnostics, mapped to host coordinates
+ *   - Phase 6: hover (EdgeQL keywords + built-in scalars) and
+ *     completion (same surface), driven by a bidirectional cursor
+ *     mapping that resolves a host-file position to a position
+ *     within the embedded string.
  *
  * v1 scope:
  *   - Matches `eql\`...\`` only — `client.query("...")` style strings
@@ -13,14 +18,15 @@
  *   - Skips template literals containing `${...}` substitutions —
  *     the runtime value is unknown at lint time, and the embedded
  *     content rarely parses cleanly with the placeholder in-place.
- *   - Diagnostics-only — hover, completion, and go-to-definition
- *     inside the embedded string are out of scope (those need
- *     bidirectional cursor mapping which doubles the surface area).
+ *   - Hover/completion target keywords + scalars; user-defined types
+ *     and go-to-definition into a paired SDL file are out of scope
+ *     for v1 (would require cross-file resolution).
  */
 
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { type DiscError } from "../lib/errors.ts";
-import { type Diagnostic, DiagnosticSeverity, type Position, type Range } from "./protocol.ts";
+import { lookupScalar, SCALAR_TYPES } from "./scalar-info.ts";
+import { type CompletionItem, CompletionItemKind, type Diagnostic, DiagnosticSeverity, type Hover, type Position, type Range } from "./protocol.ts";
 
 const SOURCE = "disc-eql";
 
@@ -146,4 +152,305 @@ function offsetToPosition(text: string, offset: number): Position {
  */
 export function isEmbeddedEqlHost(uri: string): boolean {
   return /\.(ts|tsx|js|jsx|mts|mjs|cts|cjs)$/i.test(uri);
+}
+
+// =====================================================================
+// Phase 6 — bidirectional cursor mapping + hover/completion
+// =====================================================================
+
+/**
+ * Resolution of a host-file cursor position into the enclosing
+ * embedded EdgeQL literal (if any) and the cursor's position within
+ * the embedded string itself. Returns `null` when the cursor sits
+ * outside every `eql\`...\`` literal in the host file.
+ *
+ * The mapping is the inverse of the diagnostic mapper above —
+ * diagnostics map embedded → host (so editors squiggle at the right
+ * line); hover/completion map host → embedded (so we ask the EdgeQL
+ * provider about the right word).
+ */
+export interface EnclosingQuery {
+  query: EmbeddedQuery;
+  posInQuery: Position;
+}
+
+export function findEnclosingEmbeddedQuery(
+  text: string,
+  hostPos: Position,
+): EnclosingQuery | null {
+  // We need character-offset arithmetic against `hostPos`, so convert
+  // both the cursor and each query's start into flat offsets up front.
+  const cursorOffset = positionToOffset(text, hostPos);
+  if (cursorOffset === null) return null;
+
+  EQL_TEMPLATE_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = EQL_TEMPLATE_RE.exec(text)) !== null) {
+    const contentStartOffset = m.index + "eql`".length;
+    const contentEndOffset = contentStartOffset + m[1].length;
+    // LSP positions sit between characters, so `<=` on the right
+    // edge lets the cursor at the closing backtick still resolve.
+    if (cursorOffset >= contentStartOffset && cursorOffset <= contentEndOffset) {
+      const start = offsetToPosition(text, contentStartOffset);
+      const posInQuery = offsetWithinQuery(m[1], cursorOffset - contentStartOffset);
+      return { query: { start, content: m[1] }, posInQuery };
+    }
+  }
+  return null;
+}
+
+/**
+ * Hover provider for embedded EdgeQL. Returns `null` when the cursor
+ * is outside every `eql\`...\`` literal, on whitespace within one,
+ * or on a token we don't recognise (so editors don't show empty
+ * popups).
+ *
+ * Recognises EdgeQL keywords and built-in scalars in v1. User-defined
+ * types and functions need cross-file SDL resolution which the LSP
+ * doesn't yet plumb.
+ */
+export function provideEmbeddedHover(
+  text: string,
+  hostPos: Position,
+): Hover | null {
+  const enclosing = findEnclosingEmbeddedQuery(text, hostPos);
+  if (!enclosing) return null;
+
+  const word = wordAt(enclosing.query.content, enclosing.posInQuery);
+  if (!word) return null;
+
+  const lower = word.toLowerCase();
+  const keywordDoc = EDGEQL_KEYWORD_DOCS[lower];
+  if (keywordDoc) {
+    return {
+      contents: {
+        kind: "markdown",
+        value: `**${lower}** _(EdgeQL keyword)_\n\n${keywordDoc}`,
+      },
+    };
+  }
+  // Bare keyword (no description in our table): still acknowledge it
+  // as a keyword so the user knows it's recognised.
+  if (EDGEQL_KEYWORDS.has(lower)) {
+    return {
+      contents: {
+        kind: "markdown",
+        value: `**${lower}** _(EdgeQL keyword)_`,
+      },
+    };
+  }
+
+  const scalar = lookupScalar(word);
+  if (scalar) {
+    return {
+      contents: {
+        kind: "markdown",
+        value: `**${scalar.name}** _(scalar)_\n\n${scalar.description}`,
+      },
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Completion provider for embedded EdgeQL. Returns the union of
+ * EdgeQL keywords and built-in scalars when the cursor is inside an
+ * `eql\`...\`` literal; an empty list otherwise (so editors get a
+ * clean response without surfacing SDL keywords inside what is plain
+ * TypeScript).
+ *
+ * Editors filter the returned set by prefix client-side, so we don't
+ * narrow by context here (e.g. "only types after `:`"). That's a
+ * future refinement.
+ */
+export function provideEmbeddedCompletion(
+  text: string,
+  hostPos: Position,
+): CompletionItem[] {
+  const enclosing = findEnclosingEmbeddedQuery(text, hostPos);
+  if (!enclosing) return [];
+
+  const items = new Map<string, CompletionItem>();
+  for (const kw of EDGEQL_KEYWORDS) {
+    items.set(kw, { label: kw, kind: CompletionItemKind.Keyword });
+  }
+  for (const s of SCALAR_TYPES) {
+    items.set(s.name, {
+      label: s.name,
+      kind: CompletionItemKind.Class,
+      detail: "scalar",
+      documentation: s.description,
+    });
+  }
+  return [...items.values()].sort((a, b) => a.label.localeCompare(b.label));
+}
+
+// ---------------------------------------------------------------------
+// EdgeQL keyword surface
+// ---------------------------------------------------------------------
+
+/**
+ * EdgeQL keywords surfaced for hover + completion. A subset of
+ * `edgeql/tokens.ts:KEYWORDS` — we expose what an editor user is
+ * likely to recognise in a query body. Internal lexer keywords for
+ * clauses they'd never type freehand (e.g. `INSTANCE`, `ANALYZE`) are
+ * skipped so completion stays focused.
+ */
+const EDGEQL_KEYWORDS = new Set<string>([
+  "select",
+  "insert",
+  "update",
+  "delete",
+  "for",
+  "with",
+  "filter",
+  "order",
+  "by",
+  "asc",
+  "desc",
+  "limit",
+  "offset",
+  "group",
+  "and",
+  "or",
+  "not",
+  "exists",
+  "distinct",
+  "is",
+  "in",
+  "union",
+  "except",
+  "intersect",
+  "if",
+  "else",
+  "then",
+  "case",
+  "when",
+  "end",
+  "required",
+  "optional",
+  "single",
+  "multi",
+  "set",
+  "unless",
+  "conflict",
+  "on",
+  "like",
+  "ilike",
+  "module",
+  "type",
+  "describe",
+  "explain",
+  "true",
+  "false",
+  "empty",
+  "detached",
+  "global",
+]);
+
+/**
+ * One-line descriptions for the keywords most likely to come up in
+ * everyday queries. Hover falls back to "_EdgeQL keyword_" with no
+ * body for keywords missing here, so it's safe to omit niche ones
+ * rather than write filler descriptions.
+ */
+const EDGEQL_KEYWORD_DOCS: Record<string, string> = {
+  select: "Read query — produce a set of values, optionally with a shape, filter, order, and slicing clauses.",
+  insert: "Create new objects of a given type.",
+  update: "Modify existing objects matching a filter.",
+  delete: "Remove objects matching a filter.",
+  filter: "Restrict the current set to elements matching a boolean expression.",
+  order: "Sort the current set. Pair with `by <expr> [asc|desc]`.",
+  by: "Order/group clause introducer (`order by ...`, `group by ...`).",
+  limit: "Cap the number of returned elements.",
+  offset: "Skip the first N elements before applying `limit`.",
+  with: "Bind aliases (or `with module ...`) for the rest of the statement.",
+  for: "Iterate a `union`-style query over each element of a set.",
+  exists: "True iff the operand set is non-empty.",
+  distinct: "Drop duplicate elements from the operand set.",
+  union: "Set union — concatenate two sets, preserving duplicates.",
+  except: "Set difference — elements of left absent from right.",
+  intersect: "Set intersection — elements present in both operands.",
+  required: "Cardinality marker — at least one value must be present.",
+  optional: "Cardinality marker — zero or more values allowed.",
+  single: "Cardinality marker — exactly one value (or zero with `optional`).",
+  multi: "Cardinality marker — zero or more values.",
+  detached: "Disable implicit path linking; treat the operand as a fresh root.",
+  global: "Reference a session-scoped global value.",
+  module: "Switch the active module for unqualified name resolution.",
+  unless: "Conflict-resolution clause introducer (`insert ... unless conflict on .x`).",
+  conflict: "Conflict-resolution clause introducer (`unless conflict on .x`).",
+};
+
+// ---------------------------------------------------------------------
+// Cursor / token helpers shared by hover + completion
+// ---------------------------------------------------------------------
+
+const IDENT = /[A-Za-z_][A-Za-z_0-9]*/g;
+
+/**
+ * Identifier-or-null at the given position within `text`. LSP
+ * positions sit between characters, so `pos.character` may equal the
+ * end of the matched token (cursor at end-of-word) — both cases
+ * resolve to the token under the cursor.
+ */
+function wordAt(text: string, pos: Position): string | null {
+  const lines = text.split("\n");
+  if (pos.line < 0 || pos.line >= lines.length) return null;
+  const line = lines[pos.line];
+  if (pos.character < 0 || pos.character > line.length) return null;
+  IDENT.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = IDENT.exec(line)) !== null) {
+    const start = m.index;
+    const end = start + m[0].length;
+    if (pos.character >= start && pos.character <= end) return m[0];
+  }
+  return null;
+}
+
+/**
+ * Convert a 0-indexed line/character into a flat offset, or `null` if
+ * the position is out of range. Mirror of `offsetToPosition` for the
+ * inverse mapping.
+ */
+function positionToOffset(text: string, pos: Position): number | null {
+  if (pos.line < 0 || pos.character < 0) return null;
+  let line = 0;
+  let lineStart = 0;
+  for (let i = 0; i < text.length; i++) {
+    if (line === pos.line) {
+      const lineEndCandidate = text.indexOf("\n", lineStart);
+      const lineEnd = lineEndCandidate === -1 ? text.length : lineEndCandidate;
+      const lineLength = lineEnd - lineStart;
+      if (pos.character > lineLength) return null;
+      return lineStart + pos.character;
+    }
+    if (text.charCodeAt(i) === 0x0a /* \n */) {
+      line++;
+      lineStart = i + 1;
+    }
+  }
+  // Cursor on the (empty) trailing line — accept character 0 only.
+  if (line === pos.line && pos.character === 0) return text.length;
+  return null;
+}
+
+/**
+ * Convert an offset within an embedded EdgeQL string into a 0-indexed
+ * `{ line, character }` relative to the embedded content (column 0
+ * for every line *of the embedded string*, not the host).
+ */
+function offsetWithinQuery(content: string, offset: number): Position {
+  let line = 0;
+  let lineStart = 0;
+  const cap = Math.min(offset, content.length);
+  for (let i = 0; i < cap; i++) {
+    if (content.charCodeAt(i) === 0x0a /* \n */) {
+      line++;
+      lineStart = i + 1;
+    }
+  }
+  return { line, character: offset - lineStart };
 }

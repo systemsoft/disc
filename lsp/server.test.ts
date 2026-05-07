@@ -437,6 +437,93 @@ Deno.test("LanguageServer - rename emits a WorkspaceEdit with one TextEdit per o
   for (const e of edits) assertEquals(e.newText, "Member");
 });
 
+// =====================================================================
+// Phase 6 — embedded EdgeQL hover/completion routed by URI
+// =====================================================================
+
+Deno.test("LanguageServer - hover on a TS host file routes through embedded-EdgeQL provider", async () => {
+  const { srv, tx } = await newServer();
+  const text = "const q = eql`select User`;";
+  await srv.handle({
+    jsonrpc: "2.0",
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: "file:///app.ts", languageId: "typescript", version: 1, text },
+    },
+  });
+  tx.outgoing.length = 0;
+  // Cursor on `select` (column 16 — content starts at 14, `s` at 14, `e` at 15, `l` at 16).
+  await srv.handle({
+    jsonrpc: "2.0",
+    id: 80,
+    method: "textDocument/hover",
+    params: {
+      textDocument: { uri: "file:///app.ts" },
+      position: { line: 0, character: 16 },
+    },
+  });
+  const r = tx.outgoing.find((m) => "id" in m && m.id === 80);
+  const result = (r as { result: { contents: { value: string } } | null }).result;
+  assertExists(result);
+  // Embedded-EdgeQL hover labels the keyword as such — the SDL hover
+  // provider would never produce this string.
+  assertEquals(result!.contents.value.includes("EdgeQL keyword"), true);
+});
+
+Deno.test("LanguageServer - completion on a TS host file outside any eql tag returns empty", async () => {
+  const { srv, tx } = await newServer();
+  await srv.handle({
+    jsonrpc: "2.0",
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: "file:///plain.ts", languageId: "typescript", version: 1, text: "const x = 1;" },
+    },
+  });
+  tx.outgoing.length = 0;
+  await srv.handle({
+    jsonrpc: "2.0",
+    id: 81,
+    method: "textDocument/completion",
+    params: {
+      textDocument: { uri: "file:///plain.ts" },
+      position: { line: 0, character: 6 },
+    },
+  });
+  const r = tx.outgoing.find((m) => "id" in m && m.id === 81);
+  const result = (r as { result: unknown[] }).result;
+  // Outside any embedded query in a TS host file, completion is empty —
+  // we don't surface SDL keywords inside plain TypeScript.
+  assertEquals(result.length, 0);
+});
+
+Deno.test("LanguageServer - completion inside an eql tag returns EdgeQL keywords", async () => {
+  const { srv, tx } = await newServer();
+  await srv.handle({
+    jsonrpc: "2.0",
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: "file:///app.ts", languageId: "typescript", version: 1, text: "const q = eql`select User`;" },
+    },
+  });
+  tx.outgoing.length = 0;
+  await srv.handle({
+    jsonrpc: "2.0",
+    id: 82,
+    method: "textDocument/completion",
+    params: {
+      textDocument: { uri: "file:///app.ts" },
+      position: { line: 0, character: 16 },
+    },
+  });
+  const r = tx.outgoing.find((m) => "id" in m && m.id === 82);
+  const result = (r as { result: { label: string }[] }).result;
+  const labels = new Set(result.map((i) => i.label));
+  assertEquals(labels.has("select"), true);
+  assertEquals(labels.has("filter"), true);
+  // SDL-only keywords (deliberately omitted from EdgeQL completion).
+  assertEquals(labels.has("link"), false);
+});
+
 Deno.test("LanguageServer - shutdown returns null result", async () => {
   const { srv, tx } = await newServer();
   tx.outgoing.length = 0;

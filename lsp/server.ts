@@ -14,7 +14,7 @@
  */
 
 import { analyzeDiscDocument } from "./diagnostics.ts";
-import { analyzeEmbeddedDocument, isEmbeddedEqlHost } from "./embedded-edgeql.ts";
+import { analyzeEmbeddedDocument, isEmbeddedEqlHost, provideEmbeddedCompletion, provideEmbeddedHover } from "./embedded-edgeql.ts";
 import { provideHover } from "./hover.ts";
 import { provideCompletion } from "./completion.ts";
 import { provideDefinition } from "./definition.ts";
@@ -107,7 +107,11 @@ export class LanguageServer {
           this.respond(req.id, null);
           return;
         }
-        this.respond(req.id, provideHover(doc.text, params.position));
+        // Phase 6: TS/JS host files get embedded-EdgeQL hover scoped
+        // to `eql\`...\`` literals. Outside any literal returns null
+        // so we don't surface SDL-flavored hover in plain TS code.
+        const hover = isEmbeddedEqlHost(params.textDocument.uri) ? provideEmbeddedHover(doc.text, params.position) : provideHover(doc.text, params.position);
+        this.respond(req.id, hover);
         return;
       }
 
@@ -118,7 +122,10 @@ export class LanguageServer {
           this.respond(req.id, []);
           return;
         }
-        this.respond(req.id, provideCompletion(doc.text, params.position));
+        const completion = isEmbeddedEqlHost(params.textDocument.uri)
+          ? provideEmbeddedCompletion(doc.text, params.position)
+          : provideCompletion(doc.text, params.position);
+        this.respond(req.id, completion);
         return;
       }
 

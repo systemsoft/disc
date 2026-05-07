@@ -32,6 +32,20 @@ tag is cut.
 
 ### Added
 
+- **Hover and completion inside embedded EdgeQL strings** (LSP Phase 6).
+  When the cursor sits inside an eql-tagged template literal in a TS or
+  JS host file, hover surfaces a Markdown description for EdgeQL
+  keywords and built-in scalars; completion returns the same surface
+  (47 keywords + 16 scalars) instead of the SDL keyword set. Routing is
+  by URI extension — TS/JS extensions use the embedded provider,
+  .disc keeps the existing SDL provider. New bidirectional cursor
+  mapping primitive (`findEnclosingEmbeddedQuery`) resolves a host
+  position into the enclosing query plus a position relative to the
+  embedded string, shared by both providers. v1 limitations match
+  Phase 5: matches the eql tag only, skips templates with `${...}`
+  substitutions, user-defined types and go-to-definition into a paired
+  SDL file are out of scope (would need cross-file resolution). 13 new
+  unit tests + 3 server-routing tests.
 - **Embedded EdgeQL diagnostics in TS/JS files** (LSP Phase 5). The
   language server now scans `.ts/.tsx/.js/.jsx/.mts/.mjs/.cts/.cjs`
   files for tagged template literals tagged with `eql` and runs each

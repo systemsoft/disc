@@ -1,9 +1,17 @@
 /**
- * Tests for embedded-EdgeQL diagnostics (LSP Phase 5).
+ * Tests for embedded-EdgeQL diagnostics (LSP Phase 5) + hover and
+ * completion within `eql\`...\`` literals (LSP Phase 6).
  */
 
 import { assert, assertEquals } from "@std/assert";
-import { analyzeEmbeddedDocument, extractEmbeddedQueries, isEmbeddedEqlHost } from "./embedded-edgeql.ts";
+import {
+  analyzeEmbeddedDocument,
+  extractEmbeddedQueries,
+  findEnclosingEmbeddedQuery,
+  isEmbeddedEqlHost,
+  provideEmbeddedCompletion,
+  provideEmbeddedHover,
+} from "./embedded-edgeql.ts";
 
 // --- isEmbeddedEqlHost ---
 
@@ -140,4 +148,139 @@ Deno.test("analyzeEmbeddedDocument doesn't flag SDL-only files (caller routes by
   // files in practice.
   const sdlSource = `module default {\n  type User { required name: str; }\n}`;
   assertEquals(analyzeEmbeddedDocument(sdlSource), []);
+});
+
+// =====================================================================
+// Phase 6 — findEnclosingEmbeddedQuery
+// =====================================================================
+
+Deno.test("findEnclosingEmbeddedQuery returns null when cursor is outside any eql tag", () => {
+  const text = "const q = eql`select User`;";
+  // Cursor on the `c` of `const`.
+  assertEquals(findEnclosingEmbeddedQuery(text, { line: 0, character: 0 }), null);
+  // Cursor on the trailing `;`.
+  assertEquals(findEnclosingEmbeddedQuery(text, { line: 0, character: 26 }), null);
+});
+
+Deno.test("findEnclosingEmbeddedQuery resolves a position inside the embedded string", () => {
+  const text = "const q = eql`select User`;";
+  // Content starts at column 14 (`const q = ` is 10 chars + `eql\`` is 4).
+  // Position the cursor on the `s` of `select` (column 14).
+  const enclosing = findEnclosingEmbeddedQuery(text, { line: 0, character: 14 });
+  assert(enclosing, "expected to be inside the embedded string");
+  assertEquals(enclosing.query.content, "select User");
+  assertEquals(enclosing.posInQuery, { line: 0, character: 0 });
+});
+
+Deno.test("findEnclosingEmbeddedQuery accepts the closing-backtick position (LSP between-chars)", () => {
+  const text = "const q = eql`select User`;";
+  // Embedded content is 11 chars; cursor at column 14 + 11 = 25 sits
+  // at the closing backtick boundary.
+  const enclosing = findEnclosingEmbeddedQuery(text, { line: 0, character: 25 });
+  assert(enclosing, "expected end-of-content position to resolve to enclosing query");
+  assertEquals(enclosing.posInQuery, { line: 0, character: 11 });
+});
+
+Deno.test("findEnclosingEmbeddedQuery picks the right query in a multi-query file", () => {
+  const text = [
+    "const a = eql`select User`;",
+    "const b = eql`select Post`;",
+  ].join("\n");
+  // Cursor inside the second query, on the `P` of `Post`.
+  const enclosing = findEnclosingEmbeddedQuery(text, { line: 1, character: 21 });
+  assert(enclosing);
+  assertEquals(enclosing.query.content, "select Post");
+});
+
+Deno.test("findEnclosingEmbeddedQuery maps multi-line embedded content to per-query coordinates", () => {
+  // Host line 0: `const q = eql\`select User {`  (content starts col 14)
+  // Host line 1: `  id`                          (embedded line 1, col 0)
+  // Host line 2: `}\``;                          (embedded line 2)
+  const text = "const q = eql`select User {\n  id\n}`;";
+  // Cursor on the `i` of `id` — host line 1, char 2.
+  const enclosing = findEnclosingEmbeddedQuery(text, { line: 1, character: 2 });
+  assert(enclosing);
+  // Within the embedded string this is line 1 (subsequent lines have
+  // column origin 0), char 2.
+  assertEquals(enclosing.posInQuery, { line: 1, character: 2 });
+});
+
+// =====================================================================
+// Phase 6 — provideEmbeddedHover
+// =====================================================================
+
+Deno.test("provideEmbeddedHover returns null when cursor is outside any eql tag", () => {
+  const text = "const select = 1;"; // `select` is a JS identifier here.
+  assertEquals(provideEmbeddedHover(text, { line: 0, character: 8 }), null);
+});
+
+Deno.test("provideEmbeddedHover surfaces an EdgeQL keyword when cursor is on one", () => {
+  const text = "const q = eql`select User`;";
+  // Cursor on `select` (column 14..19).
+  const hover = provideEmbeddedHover(text, { line: 0, character: 16 });
+  assert(hover, "expected hover for `select`");
+  const md = (hover.contents as { value: string }).value;
+  assert(md.includes("**select**"));
+  assert(md.includes("EdgeQL keyword"));
+});
+
+Deno.test("provideEmbeddedHover surfaces a built-in scalar when cursor is on one", () => {
+  // Note: the Phase 5 extractor disqualifies `$` so `eql\`<str>$x\``
+  // would be skipped (it can't distinguish EdgeQL parameters from JS
+  // template substitutions). We use a literal cast target instead.
+  const text = "const q = eql`select <str>'hi'`;";
+  // Content starts at column 14; `select <` is 8 chars, so `str`
+  // begins at host column 22. Cursor on `t` (column 23).
+  const hover = provideEmbeddedHover(text, { line: 0, character: 23 });
+  assert(hover, "expected hover for `str`");
+  const md = (hover.contents as { value: string }).value;
+  assert(md.includes("**str**"));
+  assert(md.includes("scalar"));
+});
+
+Deno.test("provideEmbeddedHover returns null on whitespace inside a query", () => {
+  const text = "const q = eql`  select User`;";
+  // Cursor on the leading space of the embedded string.
+  assertEquals(provideEmbeddedHover(text, { line: 0, character: 14 }), null);
+});
+
+Deno.test("provideEmbeddedHover returns null for unknown identifiers (e.g. user-defined names)", () => {
+  const text = "const q = eql`select MyType`;";
+  // Cursor on `MyType` (not an EdgeQL keyword and not a built-in scalar).
+  assertEquals(provideEmbeddedHover(text, { line: 0, character: 24 }), null);
+});
+
+// =====================================================================
+// Phase 6 — provideEmbeddedCompletion
+// =====================================================================
+
+Deno.test("provideEmbeddedCompletion returns an empty list outside any eql tag", () => {
+  const text = "const q = 1; // no embedded EdgeQL here";
+  assertEquals(provideEmbeddedCompletion(text, { line: 0, character: 5 }), []);
+});
+
+Deno.test("provideEmbeddedCompletion returns EdgeQL keywords + scalars inside an eql tag", () => {
+  const text = "const q = eql`select User`;";
+  const items = provideEmbeddedCompletion(text, { line: 0, character: 16 });
+  assert(items.length > 0, "expected non-empty completion list");
+  const labels = new Set(items.map((i) => i.label));
+  // EdgeQL-specific keywords are present.
+  assert(labels.has("select"));
+  assert(labels.has("filter"));
+  assert(labels.has("limit"));
+  // Built-in scalars are present.
+  assert(labels.has("str"));
+  assert(labels.has("uuid"));
+  // SDL-only keywords (that aren't also EdgeQL) should NOT be present —
+  // pick one we deliberately omitted from the EdgeQL list.
+  assert(!labels.has("link"));
+  assert(!labels.has("policy"));
+});
+
+Deno.test("provideEmbeddedCompletion sorts items alphabetically", () => {
+  const text = "const q = eql`select User`;";
+  const items = provideEmbeddedCompletion(text, { line: 0, character: 16 });
+  const labels = items.map((i) => i.label);
+  const sorted = [...labels].sort((a, b) => a.localeCompare(b));
+  assertEquals(labels, sorted);
 });
