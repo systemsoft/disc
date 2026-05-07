@@ -30,6 +30,26 @@ tag is cut.
   white-on-white bug class and uses the same pattern. Modern clients
   still see the inline-block styling on the anchor, so no regression.
 
+### Internal
+
+- **Structural-divergence pins** for two Gel issues that don't apply
+  to Disc (gh/geldata#4408, #4172). No behavior change — the pins
+  capture the structural reality so a future refactor that breaks the
+  assumption gets caught:
+  - #4408 (pre-commit framework integration) — Gel closed-not_planned;
+    Disc aligns. The `commit` skill, CI, and the `deno task check`
+    composition cover the same surface. Pin asserts the
+    `lint`/`fmt`/`test`/`check` Deno tasks stay stable, and the
+    absence of `.pre-commit-config.yaml`.
+  - #4172 (SCRAM over HTTP-tunneled binary protocol) — Gel shipped
+    via PR #4197 upstream, but Disc never ported the HTTP-tunneled
+    binary transport itself. SCRAM-over-tunnel-binary has no surface
+    to attach to. Pin asserts `BinaryProtocolServer` listens via
+    `Deno.listenTls` (TCP+TLS) and not `Deno.serve` (HTTP), and that
+    ALPN `edgedb-binary` stays advertised. Lives in new
+    `tests/gel-divergence-pins.test.ts` (a cross-cutting home for
+    structural-divergence pins that don't belong in any one slice).
+
 ### Added
 
 - **Scalar/enum migration end-to-end** (gh/geldata#8517 full impl).
