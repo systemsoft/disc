@@ -261,9 +261,7 @@ Deno.test("Gel #2564: RecreateScalar DDL guards against orphaning dependents", (
   const ddl = new DDLGenerator().generateDDL(ops);
   // The recreate path emits a DO block that aborts when columns
   // still reference the type — operators must drop dependents first.
-  const guard = ddl.find((s) =>
-    s.includes("RAISE EXCEPTION") && s.includes("recreate enum type")
-  );
+  const guard = ddl.find((s) => s.includes("RAISE EXCEPTION") && s.includes("recreate enum type"));
   assertEquals(
     guard !== undefined,
     true,
@@ -401,5 +399,137 @@ Deno.test("Gel #5617: insert with explicit id compiles to INSERT with id column"
     sql.includes("id") && sql.includes("00000000-0000-0000-0000-000000000001"),
     true,
     `expected id column + literal uuid in compiled SQL: ${sql}`,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#3208: `edgedb migration create` fails with "could not resolve
+// migration with the provided answers" — Gel's interactive prompt-based
+// resolver gets stuck on certain migration histories. Disc's migration engine
+// is **non-interactive** (the classifier labels operations as
+// safe|unsafe|ambiguous; the gate refuses without `--unsafe`; no prompts ever
+// fire). The bug class doesn't exist in Disc structurally — pinning the
+// non-interactive design here so a future "let's add interactive resolution"
+// PR has to make a deliberate decision rather than silently regressing.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #3208: migration create is non-interactive (no answer-resolution loop)", async () => {
+  const { MigrationEngine } = await import("./engine.ts");
+  // The public surface — `applyDiff`, `validate`, etc. — never returns a
+  // structure with "questions" or accepts "answers". Confirming the
+  // signature is stable means the Gel-style answer-resolver class can't
+  // sneak in without a deliberate API change.
+  const surface = Object.getOwnPropertyNames(MigrationEngine.prototype);
+  for (const method of surface) {
+    assertEquals(
+      method.toLowerCase().includes("answer") ||
+        method.toLowerCase().includes("question") ||
+        method.toLowerCase().includes("prompt"),
+      false,
+      `MigrationEngine method ${JSON.stringify(method)} hints at interactive resolution; Disc's engine is non-interactive by design (Gel #3208 pin).`,
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#5132: dropping an alias that contains a computed link with
+// annotations fails because Gel's internal `__<aliasName>__ObjectType__
+// annotations` bookkeeping types think the alias depends on its own computed
+// property. Disc emits aliases as **DDL no-op comments** (Stage 33 alias
+// migration: `migration/alias.test.ts` — `CreateAlias`/`DropAlias` produce
+// `-- ` comment lines, no internal type tracking). The dependency graph the
+// upstream bug rides on doesn't exist in Disc — pinning that DDL output for
+// a drop never references an internal alias-bookkeeping type.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #5132: alias drop emits no-op DDL — no internal bookkeeping types to corrupt", () => {
+  const before = `
+    module default {
+      type User {
+        required name: str;
+      }
+      alias TopUsers := (select User);
+    }
+  `;
+  const after = `
+    module default {
+      type User {
+        required name: str;
+      }
+    }
+  `;
+  const ops = diff(before, after);
+  const aliasOps = ops.filter((o) => o.kind === "DropAlias");
+  assertEquals(aliasOps.length, 1, "expected exactly one DropAlias op");
+
+  const ddl = new DDLGenerator().generateDDL(aliasOps);
+  // Every emitted statement should be a comment (Disc's no-op alias DDL),
+  // not a `DROP TYPE __TopUsers__ObjectType__annotations` (the Gel #5132
+  // failure mode).
+  for (const stmt of ddl) {
+    assertEquals(
+      stmt.trim().startsWith("--"),
+      true,
+      `alias DDL must be a no-op comment, got: ${stmt}`,
+    );
+    assertEquals(
+      stmt.includes("__ObjectType__annotations"),
+      false,
+      `Disc's alias DDL must not reference Gel's internal bookkeeping types: ${stmt}`,
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#2910: SIGTERM mid-migration in a CI bootstrap leaves the service
+// in a half-applied state — Gel's bug was that some migrations applied
+// successfully but the supervisor kicked the process before bootstrap
+// finished, and the next attempt couldn't recover.
+//
+// Disc's protection: every migration transaction holds
+// `pg_advisory_xact_lock(MIGRATION_ADVISORY_LOCK_KEY)` (Bundle F #6304). When
+// a migrate process is killed, PG drops the connection, the advisory lock
+// releases automatically, and the next attempt acquires it without needing
+// any manual cleanup. The transaction itself rolls back on disconnect, so
+// no partial DDL persists — either the migration applied (commit landed
+// before SIGTERM) or it didn't (transaction aborted, lock released).
+//
+// This test pins the advisory-lock invariant: every emitted migration
+// transaction starts with the lock acquisition. If a future refactor moves
+// the lock outside the transaction, the SIGTERM-recovery story breaks.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #2910: every migration tx acquires pg_advisory_xact_lock (auto-released on SIGTERM)", async () => {
+  const { MigrationEngine } = await import("./engine.ts");
+  const { MIGRATION_ADVISORY_LOCK_KEY } = await import("./types.ts");
+
+  const executed: string[] = [];
+  const fakePool = {
+    transaction: async (fn: (conn: { execute: (s: string) => Promise<void> }) => Promise<void>) => {
+      await fn({
+        execute: (s: string) => {
+          executed.push(s);
+          return Promise.resolve();
+        },
+      });
+    },
+  };
+
+  const engine = new MigrationEngine({
+    autoApply: false,
+    backupBeforeMigration: false,
+    requireConfirmation: false,
+    validateOperations: true,
+    connectionPool: fakePool as unknown as import("../lib/connection-pool.ts").ConnectionPool,
+  } as unknown as Types.MigrationConfig);
+
+  await (engine as unknown as { executeStatements(s: string[]): Promise<void> })
+    .executeStatements(["CREATE TABLE foo (id uuid primary key);"]);
+
+  const advisoryLock = executed.find((s) =>
+    s.includes("pg_advisory_xact_lock") &&
+    s.includes(MIGRATION_ADVISORY_LOCK_KEY.toString())
+  );
+  assertEquals(
+    advisoryLock !== undefined,
+    true,
+    "every migration tx must acquire the advisory lock so SIGTERM recovery is automatic (lock releases when the connection drops)",
   );
 });

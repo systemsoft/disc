@@ -16,6 +16,24 @@ tag is cut.
 
 ### Added
 
+- **Migration robustness pins** (gh/geldata#3208, #5132, #2910). No
+  behavior change — three regression pins in
+  `migration/gel-issues.test.ts` that capture Disc's structural
+  divergence from upstream Gel migration bugs:
+  - #3208 (Gel's `migration create` answer-resolver getting stuck) —
+    Disc's migrate engine is non-interactive by design; the pin walks
+    every `MigrationEngine` method and asserts none hint at
+    answer/question/prompt resolution.
+  - #5132 (Gel's alias drop failing on internal
+    `__<aliasName>__ObjectType__annotations` bookkeeping types) — Disc
+    emits aliases as no-op DDL comments; the pin asserts `DropAlias`
+    emits only comments and never references the upstream bookkeeping
+    types.
+  - #2910 (SIGTERM mid-migration leaving Gel in a half-applied state)
+    — Disc's `pg_advisory_xact_lock` releases automatically on
+    connection drop and the transaction rolls back; the pin asserts
+    every migration tx still acquires the advisory lock so a future
+    refactor can't silently break the SIGTERM-recovery path.
 - **CLI flags for instance-level security toggles** (gh/geldata#5234).
   `disc serve` now accepts `--require-auth`, `--read-only`, and
   `--trust-proxy` flags; each maps to the corresponding `DISC_*` env
