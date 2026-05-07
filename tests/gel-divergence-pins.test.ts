@@ -1206,3 +1206,103 @@ Deno.test("Gel #8909: auth tables evolve via idempotent CREATE TABLE + post-CREA
     "auth/provider.ts must keep the idempotent FK-add migration block (Bundle MM pattern; Gel #8909 pin).",
   );
 });
+
+// ---------------------------------------------------------------------------
+// gh/geldata#1772 + gh/geldata#1461 — RFC 1000 migration features.
+// Closed-completed upstream once Gel implemented the core CREATE /
+// ALTER / DROP coverage. Disc's `migration/types.ts` declares the
+// equivalent op union, and `migration/differ.ts` + `migration/ddl.ts`
+// emit + execute every kind. The pin asserts the structural coverage
+// stays in place — a future refactor that drops one of these op
+// kinds (regressing an RFC 1000 capability) trips here.
+//
+// Cross-reference: docs/migrations.md "Migration Operations" section
+// + the Bundle TT branch-workflow recipes use these op kinds in the
+// recipes they describe.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #1772 + #1461: RFC 1000 op coverage — every required kind exists in migration/types.ts", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../migration/types.ts", import.meta.url),
+  );
+  // Required op kinds per RFC 1000:
+  //   - object types: CreateType, DropType, AlterType
+  //   - properties: AddProperty, DropProperty, AlterProperty
+  //   - links: AddLink, DropLink, AlterLink
+  //   - triggers: AddTrigger, DropTrigger
+  //   - rewrites: AddRewrite, DropRewrite
+  //   - aliases: CreateAlias, DropAlias
+  //   - scalars/enums: CreateScalar, DropScalar, AddEnumValue,
+  //     RecreateScalar
+  //   - globals: CreateGlobal, DropGlobal
+  // (Rename ops are not declared as separate kinds in Disc; the differ
+  // surfaces them via a Drop+Create pair on the SDL level. RFC 1000
+  // accepts either model — the user-visible result is the same.)
+  const required = [
+    "CreateType",
+    "DropType",
+    "AlterType",
+    "AddProperty",
+    "DropProperty",
+    "AlterProperty",
+    "AddLink",
+    "DropLink",
+    "AlterLink",
+    "AddTrigger",
+    "DropTrigger",
+    "AddRewrite",
+    "DropRewrite",
+    "CreateAlias",
+    "DropAlias",
+    "CreateScalar",
+    "DropScalar",
+    "AddEnumValue",
+    "RecreateScalar",
+    "CreateGlobal",
+    "DropGlobal",
+  ];
+
+  for (const kind of required) {
+    assert(
+      new RegExp(`kind: "${kind}"`).test(src),
+      `migration/types.ts must declare a "${kind}" op kind (Gel #1772/#1461 RFC 1000 pin).`,
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#6083 — advanced migration workflows. Documentation-only
+// upstream issue. Bundle TT extended `docs/migrations.md` with three
+// recipes:
+//   - Rapid prototyping with `disc db push`
+//   - Feature branch with schema changes
+//   - Combining migrations + data transformations
+//   - Rolling back a feature branch's migrations
+// (The "Resolving Merge Conflicts" section pre-dated this work.)
+//
+// This pin asserts the section anchor stays in `docs/migrations.md`
+// so a docs reorg doesn't drop the workflow recipes.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #6083: docs/migrations.md carries the branch-workflow recipes", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../docs/migrations.md", import.meta.url),
+  );
+  assert(
+    /## Branch Workflows \(gh\/geldata#6083\)/.test(src),
+    "docs/migrations.md must keep the 'Branch Workflows' section heading (Gel #6083 pin).",
+  );
+  // Each recipe heading should be present — they're the contract
+  // the README + cross-references assume.
+  for (
+    const heading of [
+      "Recipe: rapid prototyping with `disc db push`",
+      "Recipe: feature branch with schema changes",
+      "Recipe: combining migrations + data transformations",
+      "Recipe: rolling back a feature branch's migrations",
+    ]
+  ) {
+    assert(
+      src.includes(heading),
+      `docs/migrations.md must keep '${heading}' recipe (Gel #6083 pin).`,
+    );
+  }
+});

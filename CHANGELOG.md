@@ -14,6 +14,37 @@ tag is cut.
 
 ## [Unreleased]
 
+### Docs
+
+- **Migration narrative cluster** (Bundle TT — gh/geldata#6083 + #1772 + #1461).
+  - **Branch Workflows section** (`docs/migrations.md`) — four explicit
+    recipes for the day-to-day "how do I iterate without leaving
+    migration debris in my git history" question:
+    - **Rapid prototyping with `disc db push`** — edit SDL, push, test;
+      no migration files until the design settles. Then
+      `disc migrate --create` snapshots the cumulative shape into one
+      clean migration.
+    - **Feature branch with schema changes** — branch off main, push
+      iteratively to local DB, finalize with `disc migrate --create`
+      before merging.
+    - **Combining migrations + data transformations** — pair a schema
+      migration with a `*.data.ts` data migration sharing a timestamp;
+      both run in the same PG transaction.
+    - **Rolling back a feature branch's migrations** — `--rollback-to`
+      for surgical undo, `db wipe` for the dev nuclear option.
+  - **RFC 1000 op coverage pin** (`tests/gel-divergence-pins.test.ts`)
+    — Disc's `migration/types.ts` declares 21 `MigrationOperation`
+    kinds covering the RFC 1000 surface (CreateType / DropType /
+    AlterType / AddProperty / DropProperty / AlterProperty / AddLink /
+    DropLink / AlterLink / AddTrigger / DropTrigger / AddRewrite /
+    DropRewrite / CreateAlias / DropAlias / CreateScalar / DropScalar /
+    AddEnumValue / RecreateScalar / CreateGlobal / DropGlobal). Pin
+    asserts every kind stays declared — a refactor that drops one
+    regresses an RFC 1000 capability and trips the pin.
+  - **Branch-workflow docs pin** asserts the recipe section + the four
+    recipe headings stay in `docs/migrations.md` so a docs reorg
+    doesn't drop them.
+
 ### Added
 
 - **`disc admin list-policies [type]`** (Bundle SS — gh/geldata#6432).

@@ -984,6 +984,125 @@ at what `disc migrate --dry-run` would emit. Squash long migration
 chains (`disc migrate --squash`) periodically so historical state is
 compact and easier to reason about.
 
+## Branch Workflows (gh/geldata#6083)
+
+The merge-conflict guidance above covers the moment two branches
+land. This section walks through the day-to-day workflow on a
+single branch — the "how do I iterate without leaving migration
+debris in my git history" question.
+
+### Recipe: rapid prototyping with `disc db push`
+
+`disc db push` (gh/geldata#3761) applies the current SDL directly
+to the live database without recording a migration:
+
+```bash
+# Edit dbschema/default.disc — add a field, drop one, change a type
+$EDITOR dbschema/default.disc
+
+# Push to the live DB. No migration history written.
+disc db push --force
+
+# Iterate freely: edit, push, run tests
+$EDITOR dbschema/default.disc
+disc db push --force
+```
+
+When the design settles, snapshot it as a migration:
+
+```bash
+disc migrate --create
+```
+
+The differ produces a single migration covering the cumulative
+shape change since the last recorded baseline — no intermediate
+"add field, oh wait, remove it, oh wait, change its type" steps
+in the migration log.
+
+`--force` is required because `db push` skips the audit history;
+this is the foot-gun gate so production environments can't be
+pushed by accident.
+
+### Recipe: feature branch with schema changes
+
+When you start a feature branch on top of `main`:
+
+```bash
+git checkout -b feature/add-tags
+$EDITOR dbschema/default.disc      # add tag schema
+disc db push --force               # apply to local DB
+# write code that uses the new types, run tests, iterate
+```
+
+When the feature is ready:
+
+```bash
+disc migrate --create              # produces one migration covering
+                                   #  every schema change in the branch
+git add dbschema/default.disc
+git commit -am "feat: add tags"
+git push origin feature/add-tags
+```
+
+The migration table tracks _what's applied_ to the database, not
+_what's in git_ — so a branch that hasn't been merged just has
+extra rows in the local dev DB's `disc_migrations` table. Branch
+switching needs no special action; `disc migrate` against the
+branch's schema brings the DB back into sync (potentially with
+unsafe operations gated by `--unsafe` if you're undoing
+destructive changes).
+
+### Recipe: combining migrations + data transformations
+
+Schema changes and the data backfill that goes with them belong
+together. Disc's data-migration system (see [Data Migrations](#data-migrations))
+links a `*.data.ts` file to a schema migration by timestamp:
+
+```bash
+disc migrate --create               # creates m20260507120000_add_user_status
+                                   #  (schema migration, recorded automatically)
+```
+
+Then write the matching data migration:
+
+```typescript
+// dbschema/migrations/m20260507120000_add_user_status.data.ts
+export default {
+  name: "Backfill user status",
+  timestamp: "20260507120000", // matches the schema migration
+  async up({ sql }) {
+    await sql(`UPDATE users SET status = 'active' WHERE status IS NULL`);
+  },
+  async down({ sql }) {
+    await sql(`UPDATE users SET status = NULL WHERE status = 'active'`);
+  },
+};
+```
+
+The next `disc migrate` runs the schema migration first, then the
+matching data migration — both inside the same PG transaction. If
+the data migration throws, the entire migration rolls back atomically.
+
+### Recipe: rolling back a feature branch's migrations
+
+If a branch's migrations were applied to your dev DB but the
+feature was cancelled, roll back to the pre-branch baseline:
+
+```bash
+disc migrate --rollback-to <id-of-migration-before-branch> --force
+git checkout main
+disc migrate                       # re-applies main's state
+```
+
+Or — for the dev database specifically — wipe and re-apply:
+
+```bash
+disc db wipe <name> --force        # drops + recreates the DB
+disc migrate                       # re-applies main's full chain
+```
+
+`db wipe` is the nuclear option; only use on dev.
+
 ## Best Practices
 
 ### Always Preview in Production

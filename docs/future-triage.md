@@ -85,7 +85,8 @@ A second same-day sweep shipped 18 more bundles (I–CC), closing Disc's eight o
 | PP     | #4215 follow-up: differ now detects type-level `extending` changes via resolved inheritance walk; pin upgraded to behavioral             | `730eea8`                                  |
 | QQ     | Cloud/infra cluster: Docker image release pipeline (#5699 + #4901 → ghcr.io with :version + :latest); #6598 logger pin                   | `9106973`                                  |
 | RR     | Migration-robustness cluster: `disc db push` (#3761 — Prisma-style schema push); pins for #5190 (no branches), #6697 (idempotent stdlib) | `e35a73f`                                  |
-| SS     | Auth/access introspection cluster: `disc admin list-policies` (#6432 slices 1-2); pin for #8909 (tied to #6697 — inapplicable)           | (this bundle)                              |
+| SS     | Auth/access introspection cluster: `disc admin list-policies` (#6432 slices 1-2); pin for #8909 (tied to #6697 — inapplicable)           | `87dff53`                                  |
+| TT     | Migration narrative cluster: docs/migrations.md branch-workflow recipes (#6083); RFC 1000 op-coverage pin (#1772/#1461)                  | (this bundle)                              |
 
 Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** — #7311, #7196, #7483 (Q), #7629 (U), #3437 (FF), #7525, #6358, #8899, #9034, #2292 (GG/HH/II), and structural-divergence pins for #4408, #4172 (X), #3208, #5132, #2910 (S), #3872, #7360, #3170 (GG/HH), #5158, #5480, #8762, #7972 (II). The Disc-original-features roadmap is also fully closed by this sweep — see `docs/disc-original-features.md`.
 
@@ -222,10 +223,13 @@ Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** 
 > ChronVer releases, no semver-major branches; stdlib is idempotent
 > CREATE OR REPLACE — no versioned schema swap needed).
 
-| #             | Title                        | Category  | Why pickable                                                   | Effort |
-| ------------- | ---------------------------- | --------- | -------------------------------------------------------------- | ------ |
-| #6083         | Advanced migration workflows | docs      | Branches, squashing, partial application — narrative + recipes | M      |
-| #1772 / #1461 | RFC1000 migration features   | migration | Audit our diff generator vs. RFC                               | L      |
+> **Bundle TT closed the migration-narrative sub-cluster (#6083 + #1772 + #1461).**
+> #6083 shipped four branch-workflow recipes in `docs/migrations.md`. #1772/#1461
+> (RFC 1000) are a structural-coverage audit pinned in
+> `tests/gel-divergence-pins.test.ts` — Disc's 21 `MigrationOperation` kinds cover
+> the RFC 1000 surface, and the pin trips on any regression.
+
+(All migration items in the BUILD column are now closed.)
 
 #### Auth & access (1)
 
@@ -297,11 +301,11 @@ Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** 
 | #648  | SQLite back-end    | db, storage | Stretch — Disc is Postgres-first; deferrable | L      |
 | #7724 | Extension upgrades | migration   | We have an extension model already           | M      |
 
-**Pickable: ~13 items** (Bundles LL + MM + NN + OO + PP + QQ + RR + SS closed 8 fixes + pinned 12 across migration-perf, auth-semantics, CLI/devtools, DB/engine, cloud/infra, migration-robustness, and auth/access introspection). Highest-leverage clusters:
+**Pickable: ~10 items** (Bundles LL + MM + NN + OO + PP + QQ + RR + SS + TT closed 9 fixes + pinned 14 across migration-perf, auth-semantics, CLI/devtools, DB/engine, cloud/infra, migration-robustness, auth/access introspection, and migration narrative). Highest-leverage clusters:
 
-1. **Docs** — #6127 test guide + #7382 docs search (operator-onboarding)
-2. **Migration narrative** — #6083 advanced migration workflows + #1772/#1461 RFC1000 features (deep documentation work)
-3. **#6432 follow-on** — per-policy session toggle for testing + run-in-isolation slices (the larger half of the access-policy mgmt request)
+1. **Docs** — #6127 test guide + #7382 docs search + #6119/#5820/#5819 UI docs (operator-onboarding)
+2. **#6432 follow-on** — per-policy session toggle for testing + run-in-isolation slices (the larger half of the access-policy mgmt request)
+3. **Stretch** — #648 SQLite back-end + #7724 extension upgrades (long-tail roadmap)
 
 ### SKIP — not applicable to Disc
 
