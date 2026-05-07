@@ -5,19 +5,13 @@
  * Skipped when no PG is available (same pattern as other PG tests).
  */
 
-import {
-  assertEquals,
-  assertExists,
-  assertRejects,
-} from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assertEquals, assertExists, assertRejects } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
 import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { DatabaseConnection } from "../lib/database.ts";
 import { PgDatabaseAdapter } from "./pg-database-adapter.ts";
 import { AuthProvider } from "./provider.ts";
-import { AuthError ,
-  requireAuthResponse,
-} from "./types.ts";
+import { AuthError, requireAuthResponse } from "./types.ts";
 
 /** Drop auth tables for clean state */
 async function cleanupAuthTables(dsn: string): Promise<void> {
@@ -153,10 +147,12 @@ Deno.test({
       });
 
       // Login
-      const loginResponse = requireAuthResponse(await provider.login({
-        email: "login-test@example.com",
-        password: "mypassword123",
-      }));
+      const loginResponse = requireAuthResponse(
+        await provider.login({
+          email: "login-test@example.com",
+          password: "mypassword123",
+        }),
+      );
 
       assertExists(loginResponse.token);
       assertEquals(loginResponse.user.email, "login-test@example.com");
@@ -336,10 +332,12 @@ Deno.test({
       await provider.resetPassword(resetToken, "newpassword456");
 
       // Login with new password
-      const loginResponse = requireAuthResponse(await provider.login({
-        email: "reset-test@example.com",
-        password: "newpassword456",
-      }));
+      const loginResponse = requireAuthResponse(
+        await provider.login({
+          email: "reset-test@example.com",
+          password: "newpassword456",
+        }),
+      );
       assertExists(loginResponse.token);
 
       // Old password should fail
@@ -351,6 +349,77 @@ Deno.test({
           }),
         AuthError,
       );
+    } finally {
+      await conn.close();
+      await cleanupAuthTables(dsn);
+    }
+  },
+});
+
+// gh/geldata#7103 — auth-extension cascade deletes. The Gel issue
+// flagged "missing deletion policies in auth ext"; the analogue in Disc
+// is the raw-SQL FK declarations on auth tables. Most tables already
+// carried `ON DELETE CASCADE` (sessions, webauthn_credentials,
+// recovery_codes, magic_link_tokens, magic_code_tokens, mfa_totp,
+// mfa_challenges, user_roles); the gap was `webauthn_challenges` whose
+// `user_id` column had no FK at all, leaving in-flight register
+// challenges as orphans when their user was deleted.
+//
+// This test asserts the cascade now fires: a register-challenge bound
+// to a user disappears when the user is deleted. (Login challenges
+// with `user_id IS NULL` are unaffected — PG ignores null on the
+// reference side.)
+Deno.test({
+  name: "PG Auth: webauthn_challenges cascades on user delete (Bundle MM — gh/geldata#7103)",
+  ignore: !canRunPgTests(),
+  sanitizeResources: false,
+  sanitizeOps: false,
+  fn: async () => {
+    const dsn = await getTestDsn();
+    await cleanupAuthTables(dsn);
+
+    const conn = new DatabaseConnection(dsn);
+    await conn.connect();
+    const adapter = new PgDatabaseAdapter(conn);
+
+    try {
+      const provider = new AuthProvider(
+        { jwtSecret: "pg-test-secret-must-be-at-least-32-bytes-long" },
+        adapter,
+      );
+      await provider.initialize();
+
+      const registered = requireAuthResponse(
+        await provider.register({
+          email: "cascade-test@example.com",
+          password: "password123",
+        }),
+      );
+      const userId = registered.user.id;
+
+      // Insert a register-challenge bound to the user. Mirrors what
+      // `auth/webauthn.ts:beginRegister` writes during a real ceremony.
+      await conn.query(
+        `INSERT INTO webauthn_challenges (id, challenge, purpose, user_id, expires_at)
+         VALUES ($1, $2, 'register', $3, NOW() + INTERVAL '5 minutes')`,
+        ["c1", "challenge-bytes", userId],
+      );
+
+      // Sanity: the row landed.
+      const before = await conn.query(
+        "SELECT 1 FROM webauthn_challenges WHERE id = $1",
+        ["c1"],
+      );
+      assertEquals(before.rowCount, 1);
+
+      // Deleting the user must cascade the challenge.
+      await conn.query("DELETE FROM users WHERE id = $1", [userId]);
+
+      const after = await conn.query(
+        "SELECT 1 FROM webauthn_challenges WHERE id = $1",
+        ["c1"],
+      );
+      assertEquals(after.rowCount, 0);
     } finally {
       await conn.close();
       await cleanupAuthTables(dsn);

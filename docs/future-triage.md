@@ -47,38 +47,39 @@ Seven sequential bundles, 41 issues closed, 21 commits, all on `origin/primary`.
 
 A second same-day sweep shipped 18 more bundles (I–CC), closing Disc's eight original features and a handful of additional upstream items. The DONE/BUILD enumeration below predates these — `CHANGELOG.md` `[Unreleased]` is authoritative for anything shipped after Bundle H.
 
-| Bundle | Subject                                                                                                             | Source                                     |
-| ------ | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| I      | Single-binary distribution (Disc-original feature #4)                                                               | `fcebdb1`                                  |
-| J      | Schema-derived REST surface (Disc-original feature #2)                                                              | `7b1d3cf`, `3a3d7d1`                       |
-| K      | Live schema diff in admin UI (Disc-original feature #3a)                                                            | `cfe9533`, `8be5d73`                       |
-| L      | Live data subscriptions in admin UI (Disc-original feature #3c)                                                     | `3021c3c`, `5730b3d`, `ceaebb0`, `cfdcdd2` |
-| M      | Codegen-free TS query builder (Disc-original feature #1)                                                            | `c7ace89`, `caa7bb4`                       |
-| N      | Visual query builder (Disc-original feature #3b)                                                                    | `d204b66`                                  |
-| O      | Identity-disc visualization (Disc-original feature #3d)                                                             | `b7db3c9`                                  |
-| P      | Deno-permission-aware access policies (Disc-original feature #5)                                                    | `a445cb5`                                  |
-| Q      | Auth polish: #7311 implicit signup, #7196 WebAuthn discoverable creds, #7483 docs                                   | `cd735bb`                                  |
-| R      | `--require-auth` / `--read-only` / `--trust-proxy` CLI flags (#5234)                                                | `bd3822a`                                  |
-| S      | Migration robustness pins (#3208, #5132, #2910)                                                                     | `33c7c03`                                  |
-| T      | LSP Phase 5: embedded EdgeQL diagnostics in TS/JS                                                                   | `18ddd02`                                  |
-| U      | Bulletproof CTA buttons in auth emails (#7629)                                                                      | `a0c1744`                                  |
-| V      | LSP Phase 6: hover + completion inside `eql\`...\``                                                                 | `4537390`                                  |
-| W      | Scalar/enum migration end-to-end (#8517 full impl + cascade ordering)                                               | `c39aa26`                                  |
-| X      | Structural-divergence pins (#4408 pre-commit, #4172 SCRAM-tunneled)                                                 | `2dd49c7`                                  |
-| Y      | Phase 23 polymorphic test fixtures rewritten to per-subtype tables                                                  | `ded914e`                                  |
-| Z      | CI builds UI before non-PG test suite                                                                               | `c2e99f5`                                  |
-| AA     | LSP Phase 7: cross-file SDL resolution                                                                              | `35071fd`                                  |
-| BB     | Polymorphic shape fields project subtype-specific cols in UNION                                                     | `eedd27d`                                  |
-| CC     | Cross-platform reproducible builds via per-platform PG staging                                                      | `85bf883`                                  |
-| DD     | Documentation audit — high-severity gaps                                                                            | `840c3c0`                                  |
-| EE     | Documentation audit — medium + low gaps                                                                             | `09925ea`                                  |
-| FF     | Homebrew Formula (#3437)                                                                                            | `34902d6`                                  |
-| GG     | Auth router lockdown (#7525) + admin policy bypass (#6358) + TLS cipher pin (#3872)                                 | `9971268`                                  |
-| HH     | Migration drift status (#8899) + running-server preflight (#9034) + login/CLI pins (#7360, #3170)                   | `ba08a24`                                  |
-| II     | PG `?sslmode=` parsing (#2292) + verification pins (#5158, #5480, #8762, #7972)                                     | `fea2ce8`                                  |
-| JJ     | Pre-existing TS errors cleared (logger.warn signature, Uint8Array, LinkDef.computed, RegisterData.username)         | `f55e200`                                  |
-| KK     | `deno check` clean across whole project (151 errors → 0; LoginResult helpers, Result narrowing, legacy SCRAM shims) | `55cc01c`                                  |
-| LL     | Migration-perf cluster: differ linearization (#5322) + structural pins for #5713 (insert speed), #4319 (in-process) | (this bundle)                              |
+| Bundle | Subject                                                                                                                   | Source                                     |
+| ------ | ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| I      | Single-binary distribution (Disc-original feature #4)                                                                     | `fcebdb1`                                  |
+| J      | Schema-derived REST surface (Disc-original feature #2)                                                                    | `7b1d3cf`, `3a3d7d1`                       |
+| K      | Live schema diff in admin UI (Disc-original feature #3a)                                                                  | `cfe9533`, `8be5d73`                       |
+| L      | Live data subscriptions in admin UI (Disc-original feature #3c)                                                           | `3021c3c`, `5730b3d`, `ceaebb0`, `cfdcdd2` |
+| M      | Codegen-free TS query builder (Disc-original feature #1)                                                                  | `c7ace89`, `caa7bb4`                       |
+| N      | Visual query builder (Disc-original feature #3b)                                                                          | `d204b66`                                  |
+| O      | Identity-disc visualization (Disc-original feature #3d)                                                                   | `b7db3c9`                                  |
+| P      | Deno-permission-aware access policies (Disc-original feature #5)                                                          | `a445cb5`                                  |
+| Q      | Auth polish: #7311 implicit signup, #7196 WebAuthn discoverable creds, #7483 docs                                         | `cd735bb`                                  |
+| R      | `--require-auth` / `--read-only` / `--trust-proxy` CLI flags (#5234)                                                      | `bd3822a`                                  |
+| S      | Migration robustness pins (#3208, #5132, #2910)                                                                           | `33c7c03`                                  |
+| T      | LSP Phase 5: embedded EdgeQL diagnostics in TS/JS                                                                         | `18ddd02`                                  |
+| U      | Bulletproof CTA buttons in auth emails (#7629)                                                                            | `a0c1744`                                  |
+| V      | LSP Phase 6: hover + completion inside `eql\`...\``                                                                       | `4537390`                                  |
+| W      | Scalar/enum migration end-to-end (#8517 full impl + cascade ordering)                                                     | `c39aa26`                                  |
+| X      | Structural-divergence pins (#4408 pre-commit, #4172 SCRAM-tunneled)                                                       | `2dd49c7`                                  |
+| Y      | Phase 23 polymorphic test fixtures rewritten to per-subtype tables                                                        | `ded914e`                                  |
+| Z      | CI builds UI before non-PG test suite                                                                                     | `c2e99f5`                                  |
+| AA     | LSP Phase 7: cross-file SDL resolution                                                                                    | `35071fd`                                  |
+| BB     | Polymorphic shape fields project subtype-specific cols in UNION                                                           | `eedd27d`                                  |
+| CC     | Cross-platform reproducible builds via per-platform PG staging                                                            | `85bf883`                                  |
+| DD     | Documentation audit — high-severity gaps                                                                                  | `840c3c0`                                  |
+| EE     | Documentation audit — medium + low gaps                                                                                   | `09925ea`                                  |
+| FF     | Homebrew Formula (#3437)                                                                                                  | `34902d6`                                  |
+| GG     | Auth router lockdown (#7525) + admin policy bypass (#6358) + TLS cipher pin (#3872)                                       | `9971268`                                  |
+| HH     | Migration drift status (#8899) + running-server preflight (#9034) + login/CLI pins (#7360, #3170)                         | `ba08a24`                                  |
+| II     | PG `?sslmode=` parsing (#2292) + verification pins (#5158, #5480, #8762, #7972)                                           | `fea2ce8`                                  |
+| JJ     | Pre-existing TS errors cleared (logger.warn signature, Uint8Array, LinkDef.computed, RegisterData.username)               | `f55e200`                                  |
+| KK     | `deno check` clean across whole project (151 errors → 0; LoginResult helpers, Result narrowing, legacy SCRAM shims)       | `55cc01c`                                  |
+| LL     | Migration-perf cluster: differ linearization (#5322) + structural pins for #5713 (insert speed), #4319 (in-process)       | `80816fb`                                  |
+| MM     | Auth-semantics cluster: webauthn_challenges cascade (#7103) + structural pins for #5504 (UNLESS CONFLICT), #8811 (stdlib) | (this bundle)                              |
 
 Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** — #7311, #7196, #7483 (Q), #7629 (U), #3437 (FF), #7525, #6358, #8899, #9034, #2292 (GG/HH/II), and structural-divergence pins for #4408, #4172 (X), #3208, #5132, #2910 (S), #3872, #7360, #3170 (GG/HH), #5158, #5480, #8762, #7972 (II). The Disc-original-features roadmap is also fully closed by this sweep — see `docs/disc-original-features.md`.
 
@@ -217,15 +218,17 @@ Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** 
 | #3761         | "Compact" migrations / push command | migration, devtools | Already partially in `767afb7`; finish push                    | S      |
 | #6697         | In-place major version upgrades     | migration           | Big — port pg_dump/pg_restore based path                       | L      |
 
-#### Auth & access (5)
+#### Auth & access (2)
 
-| #     | Title                                        | Category        | Why pickable                                             | Effort |
-| ----- | -------------------------------------------- | --------------- | -------------------------------------------------------- | ------ |
-| #6432 | Access policy management features            | auth, devtools  | UI-side schema browser shows them; add introspection API | M      |
-| #7103 | Missing deletion policies in auth ext        | auth, db        | Cascade rules in our `auth/schema.ts`                    | S      |
-| #5504 | UNLESS CONFLICT misbehaves w/o select access | auth, db        | Access-policy × conflict-resolution edge case            | M      |
-| #8811 | Audit stdlib for permissions                 | auth, db        | Run through our `std::*` implementations                 | M      |
-| #8909 | In-place upgrades & auth update              | auth, migration | Tied to #6697                                            | M      |
+> **Bundle MM closed the auth-semantics sub-cluster (#7103 + #5504 + #8811).**
+> #7103 was a real FK gap on `webauthn_challenges` fixed in `auth/provider.ts`;
+> #5504 + #8811 were structurally inapplicable and pinned in
+> `tests/gel-divergence-pins.test.ts`.
+
+| #     | Title                             | Category        | Why pickable                                             | Effort |
+| ----- | --------------------------------- | --------------- | -------------------------------------------------------- | ------ |
+| #6432 | Access policy management features | auth, devtools  | UI-side schema browser shows them; add introspection API | M      |
+| #8909 | In-place upgrades & auth update   | auth, migration | Tied to #6697                                            | M      |
 
 #### DB / perf / engine (6)
 
@@ -273,11 +276,11 @@ Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** 
 | #648  | SQLite back-end    | db, storage | Stretch — Disc is Postgres-first; deferrable | L      |
 | #7724 | Extension upgrades | migration   | We have an extension model already           | M      |
 
-**Pickable: ~30 items** (Bundle LL closed 1 + pinned 2 from the migration-perf cluster). Highest-leverage clusters:
+**Pickable: ~27 items** (Bundles LL + MM closed 2 fixes + pinned 4 across migration-perf and auth-semantics). Highest-leverage clusters:
 
-1. **Auth semantics** — #7103 + #5504 + #8811 (small surface, real bugs)
-2. **CLI/devtools polish** — #5911 + #3406 + #2651 (adoption levers)
-3. **DB / engine** — #5641 missing FROM-clause + #4215 computed-global migrate + #2204 schema-version notify (correctness gaps in less-common shapes)
+1. **CLI/devtools polish** — #5911 + #3406 + #2651 (adoption levers)
+2. **DB / engine** — #5641 missing FROM-clause + #4215 computed-global migrate + #2204 schema-version notify (correctness gaps in less-common shapes)
+3. **Cloud/infra** — #4901 docker latest tag + #5699 GHCR images (release-CI polish)
 
 ### SKIP — not applicable to Disc
 

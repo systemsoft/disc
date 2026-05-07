@@ -16,6 +16,40 @@ tag is cut.
 
 ### Fixed
 
+- **Auth-extension cascade-delete gap closed** (Bundle MM — gh/geldata#7103 fix; structural pins for #5504 and #8811).
+  - **#7103 (real fix)**: `auth/provider.ts` declares 9 user-bound auth
+    tables (sessions, webauthn_credentials, recovery_codes, etc.). Every
+    table except **`webauthn_challenges`** carried
+    `FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE`.
+    Bundle MM closes the gap: the CREATE TABLE statement now carries
+    the same FK, and an idempotent post-CREATE DO-block migration adds
+    the constraint to existing instances after first scrubbing any
+    orphan rows. (Login challenges with `user_id IS NULL` are
+    unaffected — PG ignores null on the reference side.)
+  - **`auth/pg-integration.test.ts`** — new `webauthn_challenges
+    cascades on user delete` PG-backed test verifies the cascade
+    behavior end-to-end.
+  - **#5504 (UNLESS CONFLICT × access-policy) pin**: Gel reports
+    UNLESS CONFLICT misbehaves when a user has INSERT permission but no
+    SELECT permission, because Gel's compiler projects the
+    conflict-target row through the access-policy filter (which
+    returns nothing → no conflict → duplicate insert).
+    Disc's `compiler/applyAccessControl` handles `InsertStatement` as
+    binary allow/deny: it either lets the INSERT through unmodified or
+    throws `CompilationError`. It never injects a WHERE filter on the
+    INSERT path. The compiled SQL is plain
+    `INSERT INTO ... ON CONFLICT (col) DO ...`, so PG's policy-blind
+    unique index handles conflict detection. Pin asserts the
+    `InsertStatement` branch never synthesizes a `WhereClause`.
+  - **#8811 (stdlib permissions audit) pin**: Gel's concern is
+    `std::*` implementations that read tables directly bypassing
+    access policies. Disc's stdlib (`lib/stdlib-sql.ts`) declares only
+    IMMUTABLE crypto + encoding wrappers (md5/sha1/hex/base64) — none
+    touch user tables. Aggregates like `count()` / `sum()` compile
+    inline against a SELECT subquery that goes through
+    `applyAccessControl`. Pin asserts every wrapper is IMMUTABLE and
+    contains no FROM clause referencing a real table.
+
 - **Schema differ: linear scaling on initial-migration path** (Bundle LL —
   gh/geldata#5322 + structural pins for #5713 and #4319).
   `SchemaDiffer.createTypeOperation(typeDef, allTypes)` was O(N²) on the

@@ -322,6 +322,11 @@ export class AuthProvider implements IAuthProvider {
     // verification path treats them differently. `user_id` is null for
     // login challenges that don't bind to a known user yet (we look up
     // by credential id on finish).
+    //
+    // Cascade rule (gh/geldata#7103): when a registered user is deleted,
+    // any in-flight register challenges bound to them have to go too.
+    // Login challenges with `user_id IS NULL` aren't affected — PG's FK
+    // semantics ignore null on the reference side.
     await this.db.execute(`
       CREATE TABLE IF NOT EXISTS webauthn_challenges (
         id TEXT PRIMARY KEY,
@@ -330,9 +335,39 @@ export class AuthProvider implements IAuthProvider {
         user_id TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         expires_at TIMESTAMP NOT NULL,
-        consumed_at TIMESTAMP
+        consumed_at TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       )
     `);
+
+    // Idempotent FK add for instances that pre-date the cascade rule
+    // (gh/geldata#7103). The DO block first scrubs any orphan rows
+    // (challenges referencing a now-deleted user) so the ADD CONSTRAINT
+    // can't fail validation, then adds the constraint if it isn't
+    // already there. Safe to run on every startup — a no-op once the
+    // constraint exists.
+    try {
+      await this.db.execute(`
+        DO $$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint
+            WHERE conname = 'webauthn_challenges_user_id_fkey'
+          ) THEN
+            DELETE FROM webauthn_challenges
+            WHERE user_id IS NOT NULL
+              AND user_id NOT IN (SELECT id FROM users);
+            ALTER TABLE webauthn_challenges
+              ADD CONSTRAINT webauthn_challenges_user_id_fkey
+              FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+          END IF;
+        END $$;
+      `);
+    } catch {
+      // Backend lacks DO-block support (non-PG). The CREATE TABLE above
+      // already carries the inline FK, so fresh deployments are correct;
+      // legacy rows on a non-PG backend are out of scope.
+    }
 
     // Recovery codes (gh/geldata#8186) — single-use codes the user
     // saves at MFA setup time and uses to bypass TOTP if they lose

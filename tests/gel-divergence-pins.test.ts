@@ -429,3 +429,128 @@ Deno.test("Gel #3872: Deno.serve TLS surface does not expose cipher selection", 
       "(Gel #3872 pin). Remove the reference or update the divergence note.",
   );
 });
+
+// ---------------------------------------------------------------------------
+// gh/geldata#7103 — auth-extension cascade deletes. Bundle MM filled
+// the only gap: `webauthn_challenges.user_id` had no FK at all. The
+// CREATE TABLE now carries `FOREIGN KEY (user_id) REFERENCES users(id)
+// ON DELETE CASCADE`, plus an idempotent post-CREATE DO-block migration
+// that adds the constraint to existing instances after first scrubbing
+// any orphan rows.
+//
+// Behavior is exercised under PG in `auth/pg-integration.test.ts`
+// ("webauthn_challenges cascades on user delete"). This pin asserts
+// the structural property at source-read time so a refactor that
+// regresses the FK list trips here too.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #7103: auth tables carry ON DELETE CASCADE on user_id FKs", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../auth/provider.ts", import.meta.url),
+  );
+  // All user-bound auth tables must declare ON DELETE CASCADE.
+  const requiredFkPattern = /FOREIGN KEY \(user_id\) REFERENCES users\(id\) ON DELETE CASCADE/g;
+  const matches = src.match(requiredFkPattern) ?? [];
+  // At time of writing: sessions, webauthn_credentials,
+  // webauthn_challenges, recovery_codes, magic_link_tokens,
+  // magic_code_tokens, mfa_totp, mfa_challenges, user_roles → 9 FKs.
+  // (magic_link_signup_tokens has pending_email instead of user_id.)
+  assert(
+    matches.length >= 9,
+    `Expected ≥9 user_id ON DELETE CASCADE FKs in auth/provider.ts; found ${matches.length} (Gel #7103 pin).`,
+  );
+  // The Bundle MM gap-fix specifically. If a future refactor moves the
+  // webauthn_challenges declaration, the constraint must follow.
+  const challengesBlock = src.match(
+    /CREATE TABLE IF NOT EXISTS webauthn_challenges \(([\s\S]*?)\n\s*\)/,
+  );
+  assert(
+    challengesBlock !== null &&
+      /FOREIGN KEY \(user_id\) REFERENCES users\(id\) ON DELETE CASCADE/.test(
+        challengesBlock[1],
+      ),
+    "webauthn_challenges must declare ON DELETE CASCADE on user_id (Gel #7103 pin).",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#5504 — UNLESS CONFLICT misbehaves without select access.
+// Gel reports that a user with INSERT permission but no SELECT
+// permission can't reliably use UNLESS CONFLICT because Gel's compiler
+// projects the conflict-target row through the access-policy filter
+// (which returns nothing → no conflict detected → duplicate insert).
+//
+// Disc's compiler (`compiler/compiler.ts:applyAccessControl`) treats
+// `InsertStatement` as binary: the access check either allows or
+// throws (`CompilationError`). It never injects a WHERE filter on the
+// INSERT path. The compiled SQL is plain
+// `INSERT INTO ... ON CONFLICT (col) DO ...`, so PG's unique index —
+// which is policy-blind by design — handles conflict detection.
+//
+// This pin asserts the structural property: `applyAccessControl` for
+// `InsertStatement` does not synthesize a WHERE clause.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #5504: INSERT access-control is binary allow/deny (no WHERE injection)", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../compiler/compiler.ts", import.meta.url),
+  );
+  // Locate the InsertStatement branch of applyAccessControl.
+  const insertBranch = src.match(
+    /case "InsertStatement": \{[\s\S]*?return statement;\s*\}/,
+  );
+  assert(
+    insertBranch !== null,
+    "applyAccessControl must have an InsertStatement branch (Gel #5504 pin).",
+  );
+  const body = insertBranch![0];
+  // Branch must throw on denial (not silently filter) and must not
+  // build a WhereClause / mutate `statement.where`.
+  assert(
+    /CompilationError/.test(body),
+    "INSERT access denial must throw CompilationError, not return a filtered statement (Gel #5504 pin).",
+  );
+  assert(
+    !/WhereClause/.test(body) && !/where: \{/.test(body),
+    "INSERT branch must not synthesize a WHERE clause — that would break UNLESS CONFLICT detection (Gel #5504 pin).",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#8811 — audit stdlib for permissions. Gel's concern: any
+// `std::*` implemented as a stored procedure that reads tables
+// directly bypasses access policies.
+//
+// Disc's stdlib (`lib/stdlib-sql.ts`) declares only IMMUTABLE crypto +
+// encoding wrappers (md5/sha1/hex/base64) — none of them touch user
+// tables. Aggregates like `count()`, `sum()` are compiled inline by
+// `compiler/compiler.ts` against a SELECT subquery that goes through
+// `applyAccessControl`, so policies still apply.
+//
+// This pin asserts: every function in `stdlib-sql.ts` is `IMMUTABLE`
+// and contains no FROM clause referencing a real table.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #8811: stdlib SQL only declares pure scalar wrappers (no table reads)", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../lib/stdlib-sql.ts", import.meta.url),
+  );
+  // Every CREATE OR REPLACE FUNCTION block must be marked IMMUTABLE.
+  const funcBlocks = src.match(
+    /CREATE OR REPLACE FUNCTION [\s\S]+?LANGUAGE SQL[^;]*;/g,
+  ) ?? [];
+  assert(
+    funcBlocks.length > 0,
+    "stdlib-sql.ts should declare at least one wrapper function (Gel #8811 pin).",
+  );
+  for (const block of funcBlocks) {
+    assert(
+      /IMMUTABLE/.test(block),
+      `stdlib function block must be marked IMMUTABLE: ${block.split("\n")[0]} (Gel #8811 pin).`,
+    );
+    // No FROM clause referencing a real table. SELECT-with-no-FROM is
+    // fine ("SELECT decode(...)") — this catches `SELECT ... FROM users`
+    // or any other table read inside a stdlib function.
+    assert(
+      !/FROM\s+(?!\(|VALUES)\w+/i.test(block),
+      `stdlib function must not read tables: ${block.split("\n")[0]} (Gel #8811 pin).`,
+    );
+  }
+});
