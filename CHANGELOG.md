@@ -16,6 +16,46 @@ tag is cut.
 
 ### Fixed
 
+- **Schema differ: linear scaling on initial-migration path** (Bundle LL —
+  gh/geldata#5322 + structural pins for #5713 and #4319).
+  `SchemaDiffer.createTypeOperation(typeDef, allTypes)` was O(N²) on the
+  initial-migration path: each call linearly scanned `allTypes` for direct
+  subtypes, and `extractPropertiesWithInheritance` /
+  `extractLinksWithInheritance` recursively walked the parent chain
+  without memoization. On a 2000-deep inheritance chain that was ~800ms;
+  on a 4000-type flat schema it was ~83ms. Both cases scaled
+  superlinearly and would have been seconds on >5k-type schemas.
+  - New `DiffCache` (per-`allTypes` `WeakMap`) holds a reverse
+    parent→child map built once, plus memoized inheritance walks for
+    properties and links. Each parent's contribution is now computed
+    once and reused by every descendant.
+  - Post-fix scaling is linear: 2000-deep chain ≈ 6ms (330× faster);
+    4000-type flat ≈ 4ms (21× faster).
+  - **`migration/performance.test.ts`** — new `Performance - Initial
+    Migration scales linearly with deep inheritance` test pins the
+    bound at 500ms for n=2000 (≈100× headroom over the post-fix
+    typical, ~1.5× the pre-fix 2000-type baseline → fails loud on
+    quadratic regression).
+  - **`tests/gel-divergence-pins.test.ts`** — three new pins:
+    - **#5322 structural pin** asserts `interface DiffCache` +
+      `getCache(allTypes)` + `compute{Properties,Links}WithInheritance`
+      stay in place so a "simplification" refactor can't silently
+      revert the cache.
+    - **#5713 (insert speed in migrations) pin.** Gel reports inserts
+      inside data migrations run slower than outside because their
+      framework buffers each statement through Python and re-marshals
+      via the admin connection. Disc's `migration/data-migration.ts`
+      calls `conn.query(query, params)` directly against the same
+      `ConnectionPool` user code uses — same code path, same speed.
+      Pin asserts `data-migration.ts` issues raw `conn.query` and
+      forbids any compile/buffer wrapper.
+    - **#4319 (run migrations in IO process) pin.** Gel's complaint
+      was that their migration applier shells out to subprocesses.
+      Disc's `engine.executeStatements` runs the entire DDL apply
+      in-process inside a single PG transaction. Pin asserts
+      `engine.ts` never calls `Deno.Command` / `Deno.run` and keeps
+      the `pool.transaction(async (conn) => ...)` single-tx wrapper.
+
 - **Test-file TS errors cleared — `deno check` is now clean across the
   whole project** (Bundle KK). Bundle JJ fixed the four originally
   flagged production-source errors but unblocked compilation surfaced

@@ -78,6 +78,7 @@ A second same-day sweep shipped 18 more bundles (I–CC), closing Disc's eight o
 | II     | PG `?sslmode=` parsing (#2292) + verification pins (#5158, #5480, #8762, #7972)                                     | `fea2ce8`                                  |
 | JJ     | Pre-existing TS errors cleared (logger.warn signature, Uint8Array, LinkDef.computed, RegisterData.username)         | `f55e200`                                  |
 | KK     | `deno check` clean across whole project (151 errors → 0; LoginResult helpers, Result narrowing, legacy SCRAM shims) | `55cc01c`                                  |
+| LL     | Migration-perf cluster: differ linearization (#5322) + structural pins for #5713 (insert speed), #4319 (in-process) | (this bundle)                              |
 
 Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** — #7311, #7196, #7483 (Q), #7629 (U), #3437 (FF), #7525, #6358, #8899, #9034, #2292 (GG/HH/II), and structural-divergence pins for #4408, #4172 (X), #3208, #5132, #2910 (S), #3872, #7360, #3170 (GG/HH), #5158, #5480, #8762, #7972 (II). The Disc-original-features roadmap is also fully closed by this sweep — see `docs/disc-original-features.md`.
 
@@ -202,18 +203,19 @@ Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** 
 
 > **De-duped 2026-05-07 after Bundles I–KK closed 22 items + 12 pins.** Items shipped or pinned across Bundles 1–KK are listed in the post-Bundle-H sweep table at the top of this file (and authoritatively in `CHANGELOG.md` `[Unreleased]`). The table below enumerates only what's actually pickable now.
 
-#### Migration & perf (8)
+#### Migration & perf (5)
 
-| #             | Title                                    | Category            | Why pickable                                                   | Effort |
-| ------------- | ---------------------------------------- | ------------------- | -------------------------------------------------------------- | ------ |
-| #6083         | Advanced migration workflows             | docs                | Branches, squashing, partial application — narrative + recipes | M      |
-| #4319         | Run migrations in IO process             | migrations, perf    | Engine perf; matters at >1000-object schemas                   | M      |
-| #5713         | Inserts in migration slower than outside | migration, perf     | Profile `migration/engine.ts`; likely identical issue          | M      |
-| #5322         | Schema comparison slow for large schemas | migration, perf     | Linearize ours against quadratic in `migration/differ.ts`      | M      |
-| #1772 / #1461 | RFC1000 migration features               | migration           | Audit our diff generator vs. RFC                               | L      |
-| #5190         | Backport migration rewrites              | migration           | We don't have versioned rewrites yet                           | M      |
-| #3761         | "Compact" migrations / push command      | migration, devtools | Already partially in `767afb7`; finish push                    | S      |
-| #6697         | In-place major version upgrades          | migration           | Big — port pg_dump/pg_restore based path                       | L      |
+> **Bundle LL closed the migration-perf sub-cluster (#5322 + #5713 + #4319).**
+> #5322 was a real differ bug fixed in `migration/differ.ts`; #5713 + #4319
+> were structurally inapplicable and pinned in `tests/gel-divergence-pins.test.ts`.
+
+| #             | Title                               | Category            | Why pickable                                                   | Effort |
+| ------------- | ----------------------------------- | ------------------- | -------------------------------------------------------------- | ------ |
+| #6083         | Advanced migration workflows        | docs                | Branches, squashing, partial application — narrative + recipes | M      |
+| #1772 / #1461 | RFC1000 migration features          | migration           | Audit our diff generator vs. RFC                               | L      |
+| #5190         | Backport migration rewrites         | migration           | We don't have versioned rewrites yet                           | M      |
+| #3761         | "Compact" migrations / push command | migration, devtools | Already partially in `767afb7`; finish push                    | S      |
+| #6697         | In-place major version upgrades     | migration           | Big — port pg_dump/pg_restore based path                       | L      |
 
 #### Auth & access (5)
 
@@ -271,11 +273,11 @@ Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** 
 | #648  | SQLite back-end    | db, storage | Stretch — Disc is Postgres-first; deferrable | L      |
 | #7724 | Extension upgrades | migration   | We have an extension model already           | M      |
 
-**Pickable: ~33 items.** Highest-leverage clusters:
+**Pickable: ~30 items** (Bundle LL closed 1 + pinned 2 from the migration-perf cluster). Highest-leverage clusters:
 
-1. **Migration perf** — #5713 + #5322 + #4319 (three M items, real user pain on large schemas)
-2. **Auth semantics** — #7103 + #5504 + #8811 (small surface, real bugs)
-3. **CLI/devtools polish** — #5911 + #3406 + #2651 (adoption levers)
+1. **Auth semantics** — #7103 + #5504 + #8811 (small surface, real bugs)
+2. **CLI/devtools polish** — #5911 + #3406 + #2651 (adoption levers)
+3. **DB / engine** — #5641 missing FROM-clause + #4215 computed-global migrate + #2204 schema-version notify (correctness gaps in less-common shapes)
 
 ### SKIP — not applicable to Disc
 

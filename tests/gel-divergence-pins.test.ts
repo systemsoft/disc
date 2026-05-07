@@ -316,6 +316,99 @@ Deno.test("Gel #7972: brandColor reaches bgcolor on auth email CTAs", async () =
   );
 });
 
+// ---------------------------------------------------------------------------
+// gh/geldata#5713 — "INSERTs in migrations are slower than INSERTs outside".
+// Gel reproduces this because their migration framework buffers each
+// statement through Python and re-marshals via the admin connection,
+// which has more conservative GUCs than user connections. Disc's data
+// migrations route through `migration/data-migration.ts:runMigration`
+// which calls `conn.query(query, params)` against the same
+// `ConnectionPool` user code uses — no extra buffering, no separate
+// admin connection, no per-statement re-compile. INSERTs inside a data
+// migration use the exact same code path as INSERTs outside.
+//
+// This pin asserts the structural property: `data-migration.ts` issues
+// `conn.query` directly (not via a wrapper that could regress to a
+// per-statement marshal/recompile loop). A future bundle that adds
+// EdgeQL execution must wire it through the existing query pipeline,
+// not duplicate it inside the data-migration runner.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #5713: data migration INSERTs use raw conn.query (no buffering layer)", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../migration/data-migration.ts", import.meta.url),
+  );
+  // `runMigration` and `rollbackMigration` must call conn.query(query, params)
+  // directly — no per-statement compile/marshal wrapper.
+  assert(
+    /conn\.query\(query, params\)/.test(src),
+    "data-migration.ts must call conn.query(query, params) directly (Gel #5713 pin)",
+  );
+  // No internal compilation/buffering machinery — the runner is a thin
+  // pass-through. Forbid the obvious wrapper names.
+  assert(
+    !/compileEdgeQL|recompile|bufferStatement/.test(src),
+    "data-migration.ts must not introduce a compile/buffer layer in the INSERT path (Gel #5713 pin)",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#4319 — "Run migrations in IO process". Gel's complaint is
+// that their migration engine spawns subprocesses or shells out to
+// external tools, adding fork/serialize overhead per migration. Disc's
+// `MigrationEngine.executeStatements` runs the entire DDL apply inside
+// the same Deno process — there is no subprocess, no IPC, no marshal
+// layer. The whole batch is wrapped in a single PG transaction so DDL
+// runs at the same speed as any other in-process query.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #4319: migration apply runs in-process (no subprocess fork)", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../migration/engine.ts", import.meta.url),
+  );
+  // Forbid Deno.Command / Deno.run inside engine.ts — those would
+  // signal a subprocess-spawning migration applier.
+  assert(
+    !/new Deno\.Command|Deno\.run\(/.test(src),
+    "engine.ts must not spawn subprocesses for migration apply (Gel #4319 pin)",
+  );
+  // Single-transaction apply: pool.transaction wraps the whole DDL batch.
+  assert(
+    /pool\.transaction\(async \(conn\)/.test(src),
+    "engine.ts must apply DDL in a single in-process transaction (Gel #4319 pin)",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#5322 — "Schema comparison slow for large schemas". The
+// differ's `createTypeOperation(typeDef, allTypes)` used to scan
+// `allTypes` linearly per call (O(N²) total) and recursively walked
+// the parent chain in `extractPropertiesWithInheritance` /
+// `extractLinksWithInheritance` without memoization (also O(N²) on a
+// deep chain). Bundle LL added a per-`allTypes` `DiffCache` that
+// builds a reverse parent→child map once and memoizes inheritance
+// walks, dropping both to amortized O(1).
+//
+// This pin asserts the cache structure stays in place. A regression
+// that removes the cache and re-introduces the inner subtype scan
+// would trip on the missing token. The behavioral perf-bound lives
+// in `migration/performance.test.ts` — this pin guards the structural
+// fix at source-read time so a refactor flagged as "simplification"
+// can't silently revert.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #5322: differ caches reverse subtype map + inheritance walks", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../migration/differ.ts", import.meta.url),
+  );
+  assert(
+    /interface DiffCache/.test(src) && /getCache\(allTypes\)/.test(src),
+    "differ.ts must expose a per-allTypes DiffCache via getCache() (Gel #5322 pin)",
+  );
+  assert(
+    /computePropertiesWithInheritance/.test(src) &&
+      /computeLinksWithInheritance/.test(src),
+    "differ.ts must split memoized inheritance walks from compute helpers (Gel #5322 pin)",
+  );
+});
+
 Deno.test("Gel #3872: Deno.serve TLS surface does not expose cipher selection", () => {
   // Deno's runtime types live on `Deno`. We can't introspect rustls'
   // internal cipher list from user code, so we assert the structural

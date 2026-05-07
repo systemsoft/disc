@@ -6,7 +6,58 @@ import * as AST from "../schema/ast.ts";
 import { Module } from "../schema/converter.ts";
 import * as Types from "./types.ts";
 
+/**
+ * Per-`allTypes` memoization for the initial-migration path. (gh/geldata#5322)
+ *
+ * `createTypeOperation(typeDef, allTypes)` used to scan `allTypes` for each
+ * call to find direct subtypes (O(N) per type → O(N²) for the whole pass)
+ * and recursively walked the parent chain in `extractPropertiesWithInheritance`
+ * / `extractLinksWithInheritance` (O(depth) per type → O(N²) on a deep
+ * inheritance chain). This cache flips both to amortized O(1):
+ *
+ *   - `subtypes`: reverse parent→child map, built once per `allTypes` Map.
+ *   - `props` / `links`: memoized inheritance-resolved member lists, so each
+ *     parent's contribution is computed once and reused by every descendant.
+ */
+interface DiffCache {
+  subtypes: Map<string, string[]>;
+  props: Map<AST.TypeDeclaration, Types.PropertyDefinition[]>;
+  links: Map<AST.TypeDeclaration, Types.LinkDefinition[]>;
+}
+
 export class SchemaDiffer {
+  private caches = new WeakMap<
+    Map<string, AST.TypeDeclaration>,
+    DiffCache
+  >();
+
+  private getCache(
+    allTypes: Map<string, AST.TypeDeclaration>,
+  ): DiffCache {
+    let cache = this.caches.get(allTypes);
+    if (cache) return cache;
+    const subtypes = new Map<string, string[]>();
+    for (const [childName, child] of allTypes) {
+      if (!child.extending) continue;
+      for (const ext of child.extending) {
+        const parentName = ext.name.parts.join("::");
+        let bucket = subtypes.get(parentName);
+        if (!bucket) {
+          bucket = [];
+          subtypes.set(parentName, bucket);
+        }
+        bucket.push(childName);
+      }
+    }
+    cache = {
+      subtypes,
+      props: new Map(),
+      links: new Map(),
+    };
+    this.caches.set(allTypes, cache);
+    return cache;
+  }
+
   diff(oldSchema: Module[], newSchema: Module[]): Types.MigrationOperation[] {
     const operations: Types.MigrationOperation[] = [];
 
@@ -156,9 +207,7 @@ export class SchemaDiffer {
             {
               required: globalDef.decl.required,
               multi: globalDef.decl.multi,
-              default: globalDef.decl.default
-                ? this.extractExpressionString(globalDef.decl.default)
-                : undefined,
+              default: globalDef.decl.default ? this.extractExpressionString(globalDef.decl.default) : undefined,
               readonly: globalDef.decl.readonly,
             },
           ),
@@ -188,12 +237,8 @@ export class SchemaDiffer {
         const newRequired = newGlobalDef.decl.required ?? false;
         const oldMulti = oldGlobalDef.decl.multi ?? false;
         const newMulti = newGlobalDef.decl.multi ?? false;
-        const oldDefault = oldGlobalDef.decl.default
-          ? this.extractExpressionString(oldGlobalDef.decl.default)
-          : undefined;
-        const newDefault = newGlobalDef.decl.default
-          ? this.extractExpressionString(newGlobalDef.decl.default)
-          : undefined;
+        const oldDefault = oldGlobalDef.decl.default ? this.extractExpressionString(oldGlobalDef.decl.default) : undefined;
+        const newDefault = newGlobalDef.decl.default ? this.extractExpressionString(newGlobalDef.decl.default) : undefined;
         const oldReadonly = oldGlobalDef.decl.readonly ?? false;
         const newReadonly = newGlobalDef.decl.readonly ?? false;
 
@@ -394,26 +439,15 @@ export class SchemaDiffer {
     }
 
     if (typeDef.extending && typeDef.extending.length > 0) {
-      op.parentTypes = typeDef.extending.map((ext) =>
-        ext.name.parts.join("::")
-      );
+      op.parentTypes = typeDef.extending.map((ext) => ext.name.parts.join("::"));
     }
 
-    // Compute direct subtypes from allTypes map
+    // Compute direct subtypes via the cached reverse parent→child map.
+    // (gh/geldata#5322 — was O(N) per call, now O(1).)
     if (allTypes) {
-      const subtypes: string[] = [];
-      for (const [name, otherType] of allTypes) {
-        if (
-          otherType.extending &&
-          otherType.extending.some((ext) =>
-            ext.name.parts.join("::") === typeDef.name.value
-          )
-        ) {
-          subtypes.push(name);
-        }
-      }
-      if (subtypes.length > 0) {
-        op.subtypes = subtypes;
+      const subtypes = this.getCache(allTypes).subtypes.get(typeDef.name.value);
+      if (subtypes && subtypes.length > 0) {
+        op.subtypes = [...subtypes];
       }
     }
 
@@ -428,6 +462,21 @@ export class SchemaDiffer {
    * Extract properties including inherited ones from parent types
    */
   private extractPropertiesWithInheritance(
+    typeDef: AST.TypeDeclaration,
+    allTypes?: Map<string, AST.TypeDeclaration>,
+  ): Types.PropertyDefinition[] {
+    if (allTypes) {
+      const cache = this.getCache(allTypes);
+      const cached = cache.props.get(typeDef);
+      if (cached) return [...cached];
+      const resolved = this.computePropertiesWithInheritance(typeDef, allTypes);
+      cache.props.set(typeDef, resolved);
+      return [...resolved];
+    }
+    return this.computePropertiesWithInheritance(typeDef, allTypes);
+  }
+
+  private computePropertiesWithInheritance(
     typeDef: AST.TypeDeclaration,
     allTypes?: Map<string, AST.TypeDeclaration>,
   ): Types.PropertyDefinition[] {
@@ -460,6 +509,21 @@ export class SchemaDiffer {
    * Extract links including inherited ones from parent types
    */
   private extractLinksWithInheritance(
+    typeDef: AST.TypeDeclaration,
+    allTypes?: Map<string, AST.TypeDeclaration>,
+  ): Types.LinkDefinition[] {
+    if (allTypes) {
+      const cache = this.getCache(allTypes);
+      const cached = cache.links.get(typeDef);
+      if (cached) return [...cached];
+      const resolved = this.computeLinksWithInheritance(typeDef, allTypes);
+      cache.links.set(typeDef, resolved);
+      return [...resolved];
+    }
+    return this.computeLinksWithInheritance(typeDef, allTypes);
+  }
+
+  private computeLinksWithInheritance(
     typeDef: AST.TypeDeclaration,
     allTypes?: Map<string, AST.TypeDeclaration>,
   ): Types.LinkDefinition[] {
@@ -501,12 +565,8 @@ export class SchemaDiffer {
           type: this.typeToString(member.type),
           required: member.required || false,
           multi: member.multi || false,
-          default: member.default
-            ? this.extractDefaultValue(member.default)
-            : undefined,
-          computed: member.computed
-            ? this.extractExpressionString(member.computed)
-            : undefined,
+          default: member.default ? this.extractDefaultValue(member.default) : undefined,
+          computed: member.computed ? this.extractExpressionString(member.computed) : undefined,
           constraints: this.extractConstraints(member.constraints || []),
           annotations: this.extractAnnotations(member.annotations || []),
         };
@@ -538,9 +598,7 @@ export class SchemaDiffer {
 
         // Extract extending references
         if (member.extending && member.extending.length > 0) {
-          linkDef.extending = member.extending.map((ext) =>
-            ext.name.parts.join("::")
-          );
+          linkDef.extending = member.extending.map((ext) => ext.name.parts.join("::"));
         }
 
         links.push(linkDef);
@@ -921,8 +979,7 @@ export class SchemaDiffer {
     const operations: Types.TypeOperation[] = [];
 
     // Key rewrites by their sorted event set for comparison
-    const eventKey = (events: ("insert" | "update")[]): string =>
-      [...events].sort().join(",");
+    const eventKey = (events: ("insert" | "update")[]): string => [...events].sort().join(",");
 
     const oldRewritesMap = new Map(
       oldRewrites.map((r) => [eventKey(r.events), r]),
@@ -1076,27 +1133,21 @@ export class SchemaDiffer {
         if (typeof expr.value === "string") return `'${expr.value}'`;
         return String(expr.value);
       case "FunctionCall":
-        return `${expr.name.parts.join("::")}(${
-          expr.args.map((a) => this.extractExpressionString(a)).join(", ")
-        })`;
+        return `${expr.name.parts.join("::")}(${expr.args.map((a) => this.extractExpressionString(a)).join(", ")})`;
       case "PathExpression":
         return expr.path.join(".");
       case "BinaryOp":
-        return `${this.extractExpressionString(expr.left)} ${expr.op} ${
-          this.extractExpressionString(expr.right)
-        }`;
+        return `${this.extractExpressionString(expr.left)} ${expr.op} ${this.extractExpressionString(expr.right)}`;
       case "UnaryOp":
         return `${expr.op} ${this.extractExpressionString(expr.operand)}`;
       case "TypeCast":
-        return `<${expr.type.name.parts.join("::")}>${
-          this.extractExpressionString(expr.expr)
-        }`;
+        return `<${expr.type.name.parts.join("::")}>${this.extractExpressionString(expr.expr)}`;
       case "Parameter":
         return `$${expr.name}`;
       case "ConditionalExpression":
-        return `${this.extractExpressionString(expr.consequent)} if ${
-          this.extractExpressionString(expr.test)
-        } else ${this.extractExpressionString(expr.alternate)}`;
+        return `${this.extractExpressionString(expr.consequent)} if ${this.extractExpressionString(expr.test)} else ${
+          this.extractExpressionString(expr.alternate)
+        }`;
       default:
         return String((expr as { kind: string }).kind);
     }
@@ -1134,9 +1185,7 @@ export class SchemaDiffer {
     const result: Record<string, any> = {};
     for (const annotation of annotations) {
       const name = annotation.name.parts.join("::");
-      result[name] = annotation.value
-        ? this.extractDefaultValue(annotation.value)
-        : true;
+      result[name] = annotation.value ? this.extractDefaultValue(annotation.value) : true;
     }
     return result;
   }

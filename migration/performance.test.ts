@@ -13,11 +13,7 @@ import { MigrationTracker } from "./tracker.ts";
 import { Module } from "../schema/converter.ts";
 import * as AST from "../schema/ast.ts";
 import * as Types from "./types.ts";
-import {
-  canRunPgTests,
-  cleanupTestTables,
-  getTestDsn,
-} from "../tests/pg-test-harness.ts";
+import { canRunPgTests, cleanupTestTables, getTestDsn } from "../tests/pg-test-harness.ts";
 
 const RUN_PG = canRunPgTests();
 
@@ -170,8 +166,7 @@ function createModifiedLargeSchema(numTypes: number): Module[] {
 
     // Modify an existing property (make value required)
     const valueProperty = typeDef.members.find(
-      (item): item is AST.PropertyDeclaration =>
-        item.kind === "PropertyDeclaration" && item.name.value === "value",
+      (item): item is AST.PropertyDeclaration => item.kind === "PropertyDeclaration" && item.name.value === "value",
     );
     if (valueProperty) {
       valueProperty.required = true;
@@ -217,9 +212,7 @@ Deno.test("Performance - Large Schema Initial Migration", () => {
 
   const duration = endTime - startTime;
   console.log(
-    `Initial migration planning for ${numTypes} types took ${
-      duration.toFixed(2)
-    }ms`,
+    `Initial migration planning for ${numTypes} types took ${duration.toFixed(2)}ms`,
   );
 
   // Should complete within reasonable time
@@ -231,6 +224,68 @@ Deno.test("Performance - Large Schema Initial Migration", () => {
     const createOps = operations.filter((op) => op.kind === "CreateType");
     assertEquals(createOps.length, numTypes);
   }
+});
+
+/**
+ * Pins the differ's linear scaling on the initial-migration path with a
+ * deep inheritance chain. (gh/geldata#5322 — was O(N²) before the
+ * `DiffCache` reverse subtype map + memoized inheritance walks landed.)
+ *
+ * Pre-fix timings on the same machine: n=1000 took ~200ms, n=2000 took
+ * ~800ms (clear quadratic). Post-fix: both <50ms. The 500ms cap leaves
+ * headroom for slow CI runners while still failing loud if a regression
+ * brings quadratic behavior back.
+ */
+Deno.test("Performance - Initial Migration scales linearly with deep inheritance (Bundle LL — gh/geldata#5322)", () => {
+  const engine = new MigrationEngine(createPerformanceTestConfig());
+
+  // Build a chain where each type extends the previous one, simulating
+  // a tall hierarchy. This is the worst case for the recursive
+  // inheritance-walk paths.
+  function buildChain(n: number): Module[] {
+    const items: AST.Declaration[] = [];
+    for (let i = 1; i <= n; i++) {
+      const decl: AST.TypeDeclaration = {
+        kind: "TypeDeclaration",
+        name: { kind: "Identifier", value: `Chain${i}` },
+        members: [
+          {
+            kind: "PropertyDeclaration",
+            name: { kind: "Identifier", value: "name" },
+            type: {
+              kind: "TypeRef",
+              name: { kind: "QualifiedName", parts: ["str"] },
+            },
+            required: true,
+            multi: false,
+          },
+        ],
+      };
+      if (i > 1) {
+        decl.extending = [
+          {
+            kind: "TypeRef",
+            name: { kind: "QualifiedName", parts: [`Chain${i - 1}`] },
+          },
+        ];
+      }
+      items.push(decl);
+    }
+    return [{ name: "default", items }];
+  }
+
+  const numTypes = 2000;
+  const start = performance.now();
+  const result = engine.planMigration(null, buildChain(numTypes));
+  const duration = performance.now() - start;
+
+  assertEquals(result.ok, true);
+  console.log(
+    `Initial migration with ${numTypes}-deep inheritance chain: ${duration.toFixed(2)}ms`,
+  );
+  // 500ms cap is ~200× the post-fix typical and ~1.5× the pre-fix
+  // 2000-type baseline → fails loud on quadratic regression.
+  assertLessOrEqual(duration, 500);
 });
 
 Deno.test("Performance - Large Schema Diff", () => {
@@ -318,9 +373,7 @@ Deno.test("Performance - Rollback DDL Generation", () => {
 
     const duration = endTime - startTime;
     console.log(
-      `Rollback DDL generation for ${migration.operations.length} operations took ${
-        duration.toFixed(2)
-      }ms`,
+      `Rollback DDL generation for ${migration.operations.length} operations took ${duration.toFixed(2)}ms`,
     );
 
     // Should complete within reasonable time
@@ -451,9 +504,7 @@ Deno.test({
 
     const duration = endTime - startTime;
     console.log(
-      `Retrieving history for ${numMigrations} migrations took ${
-        duration.toFixed(2)
-      }ms`,
+      `Retrieving history for ${numMigrations} migrations took ${duration.toFixed(2)}ms`,
     );
 
     // Should complete quickly
@@ -520,9 +571,7 @@ Deno.test("Performance - Complex Schema with Deep Inheritance", () => {
 
   const duration = endTime - startTime;
   console.log(
-    `Deep inheritance schema (${numLevels} levels, ${numTypesPerLevel} types/level) took ${
-      duration.toFixed(2)
-    }ms`,
+    `Deep inheritance schema (${numLevels} levels, ${numTypesPerLevel} types/level) took ${duration.toFixed(2)}ms`,
   );
 
   // Should handle complex inheritance within reasonable time
@@ -554,9 +603,7 @@ Deno.test("Performance - Concurrent Migration Operations", () => {
 
   const duration = endTime - startTime;
   console.log(
-    `${numConcurrentOps} concurrent migration planning operations took ${
-      duration.toFixed(2)
-    }ms`,
+    `${numConcurrentOps} concurrent migration planning operations took ${duration.toFixed(2)}ms`,
   );
 
   // Should complete within reasonable time
