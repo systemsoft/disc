@@ -14,6 +14,7 @@
  */
 
 import { analyzeDiscDocument } from "./diagnostics.ts";
+import { analyzeEmbeddedDocument, isEmbeddedEqlHost } from "./embedded-edgeql.ts";
 import { provideHover } from "./hover.ts";
 import { provideCompletion } from "./completion.ts";
 import { provideDefinition } from "./definition.ts";
@@ -21,11 +22,6 @@ import { provideDocumentSymbols } from "./document-symbols.ts";
 import { provideReferences } from "./references.ts";
 import { prepareRename, provideRename } from "./rename.ts";
 import {
-  type RpcMessage,
-  type RpcRequest,
-  type RpcNotification,
-  type RpcSuccessResponse,
-  TextDocumentSyncKind,
   type DidChangeTextDocumentParams,
   type DidCloseTextDocumentParams,
   type DidOpenTextDocumentParams,
@@ -34,8 +30,13 @@ import {
   type PublishDiagnosticsParams,
   type ReferenceParams,
   type RenameParams,
+  type RpcMessage,
+  type RpcNotification,
+  type RpcRequest,
+  type RpcSuccessResponse,
   type TextDocumentIdentifier,
   type TextDocumentPositionParams,
+  TextDocumentSyncKind,
 } from "./protocol.ts";
 
 type Sender = (msg: RpcMessage) => void;
@@ -280,7 +281,10 @@ export class LanguageServer {
     version: number | undefined,
     text: string,
   ): void {
-    const diagnostics = analyzeDiscDocument(text);
+    // SDL diagnostics for `.disc`; embedded-EdgeQL diagnostics for any
+    // TS/JS host file (Phase 5). Other URIs get an empty diagnostic
+    // list so the editor's problems pane stays clean.
+    const diagnostics = isEmbeddedEqlHost(uri) ? analyzeEmbeddedDocument(text) : analyzeDiscDocument(text);
     const params: PublishDiagnosticsParams = {
       uri,
       version,

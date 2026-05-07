@@ -16,6 +16,18 @@ tag is cut.
 
 ### Added
 
+- **Embedded EdgeQL diagnostics in TS/JS files** (LSP Phase 5). The
+  language server now scans `.ts/.tsx/.js/.jsx/.mts/.mjs/.cts/.cjs`
+  files for tagged template literals tagged with `eql` and runs each
+  one through the EdgeQL parser. Parse errors map back to the host
+  file's coordinates and surface as standard LSP diagnostics with the
+  `disc-eql` source — squiggles land on the right token even when the
+  embedded EdgeQL spans multiple lines. v1 limitations: matches the
+  `eql` tag only (not `client.query("...")` strings — that needs a
+  TS AST), skips templates with `${...}` substitutions (runtime-
+  dynamic content), diagnostics-only (hover/completion inside
+  embedded strings are future work). New module
+  `lsp/embedded-edgeql.ts`; URI-based dispatch in `lsp/server.ts`.
 - **Migration robustness pins** (gh/geldata#3208, #5132, #2910). No
   behavior change — three regression pins in
   `migration/gel-issues.test.ts` that capture Disc's structural
