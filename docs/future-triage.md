@@ -1,9 +1,9 @@
 # FUTURE.md Triage
 
 > Status of every Gel issue tracked in `FUTURE.md` against Disc's roadmap.
-> Generated: 2026-05-05 · Last updated: 2026-05-07 (Bundles I–CC closed Disc-original-features roadmap + ~10 more upstream issues + LSP Phases 5–7)
+> Generated: 2026-05-05 · Last updated: 2026-05-07 (Bundles I–II closed Disc-original-features roadmap + 22 more upstream items + LSP Phases 5–7 + Homebrew + auth router hardening + PG TLS support)
 >
-> **The DONE/BUILD tables below are a snapshot as of Bundle H (2026-05-06 morning).** A subsequent same-day sweep (Bundles I–CC) shipped Disc's eight original features, the LSP, additional auth/migration polish, and structural-divergence pins. See `CHANGELOG.md` `[Unreleased]` for the authoritative post-snapshot list — items marked BUILD here may already be DONE there.
+> **The DONE/BUILD tables below are a snapshot as of Bundle H (2026-05-06 morning).** Subsequent same-day sweeps (Bundles I through II — see the post-Bundle-H sweep table) shipped Disc's eight original features, the LSP, additional auth/migration polish, and 12 structural-divergence pins. See `CHANGELOG.md` `[Unreleased]` for the authoritative post-snapshot list — items marked BUILD here may already be DONE there. The Summary tally below tracks the running total.
 
 ## Methodology
 
@@ -19,11 +19,14 @@ Two issues fall into a fifth bucket: Disc deliberately diverges from Gel's `not_
 
 ## Summary
 
-- **DONE**: ~98 high-relevance items already shipped in disc (was ~91; +7 from Bundle H env-var gaps + remaining docs). Cross-referenced with `git log`.
-- **BUILD**: ~27 high-relevance items still pickable, sorted by leverage below.
-- **SKIP**: ~120 high-relevance items not applicable to Disc (Gel-internal, Gel-Python, Gel-cloud-specific, or Disc-already-handled by virtue of being a fresh TS rewrite)
-- **DROP**: 2 high-relevance items upstream rejected (#7482, #7341 — already documented in prior audit; #7341 was actually re-implemented in Disc as opt-in CAPTCHA)
-- **Medium (789) and Low (1,676)**: handled via category-level rules below; no per-issue enumeration
+- **DONE**: 118 high-relevance items shipped in disc (108 in the DONE table snapshot + 10 ports from the post-Bundle-H sweep — Q/U/FF/GG/HH/II). Cross-referenced with `git log`.
+- **PIN**: 22 high-relevance items recorded as Disc-vs-Gel divergence with regression pins (no behavior change; structural reality of the Disc rewrite makes the Gel-side bug class inapplicable). Live in `tests/gel-divergence-pins.test.ts` and `migration/gel-issues.test.ts`. Includes #4408, #4172, #3208, #5132, #2910, #3872, #7360, #3170, #5158, #5480, #8762, #7972 + the in-DONE-table pins (#4334, #3733, #3414, #4343, #1147, #5617, #2071).
+- **BUILD**: ~20 high-relevance items still pickable (the snapshot listed ~27; recent bundles trimmed several).
+- **SKIP**: ~120 high-relevance items not applicable to Disc (Gel-internal, Gel-Python, Gel-cloud-specific, or Disc-already-handled by virtue of being a fresh TS rewrite).
+- **DROP**: 2 high-relevance items upstream rejected (#7482, #7341 — already documented in prior audit; #7341 was actually re-implemented in Disc as opt-in CAPTCHA).
+- **Medium (789) and Low (1,676)**: handled via category-level rules below; no per-issue enumeration.
+
+**Running tally (high-relevance band): 142 Gel issues tackled** (118 ports + 22 pins + 2 drops). Plus **8 Disc-original features** (Bundles I, J, K, L, M, N, O, P) net new — single-binary distribution, schema-derived REST surface, live schema diff + data subscriptions in admin UI, codegen-free TS query builder, visual query builder, identity-disc visualization, Deno-permission-aware access policies. Authoritative: `CHANGELOG.md` `[Unreleased]` for post-Bundle-H specifics.
 
 ### 2026-05-06 BUILD-bundle sweep
 
@@ -44,31 +47,37 @@ Seven sequential bundles, 41 issues closed, 21 commits, all on `origin/primary`.
 
 A second same-day sweep shipped 18 more bundles (I–CC), closing Disc's eight original features and a handful of additional upstream items. The DONE/BUILD enumeration below predates these — `CHANGELOG.md` `[Unreleased]` is authoritative for anything shipped after Bundle H.
 
-| Bundle | Subject                                                                           | Source                                     |
-| ------ | --------------------------------------------------------------------------------- | ------------------------------------------ |
-| I      | Single-binary distribution (Disc-original feature #4)                             | `fcebdb1`                                  |
-| J      | Schema-derived REST surface (Disc-original feature #2)                            | `7b1d3cf`, `3a3d7d1`                       |
-| K      | Live schema diff in admin UI (Disc-original feature #3a)                          | `cfe9533`, `8be5d73`                       |
-| L      | Live data subscriptions in admin UI (Disc-original feature #3c)                   | `3021c3c`, `5730b3d`, `ceaebb0`, `cfdcdd2` |
-| M      | Codegen-free TS query builder (Disc-original feature #1)                          | `c7ace89`, `caa7bb4`                       |
-| N      | Visual query builder (Disc-original feature #3b)                                  | `d204b66`                                  |
-| O      | Identity-disc visualization (Disc-original feature #3d)                           | `b7db3c9`                                  |
-| P      | Deno-permission-aware access policies (Disc-original feature #5)                  | `a445cb5`                                  |
-| Q      | Auth polish: #7311 implicit signup, #7196 WebAuthn discoverable creds, #7483 docs | `cd735bb`                                  |
-| R      | `--require-auth` / `--read-only` / `--trust-proxy` CLI flags (#5234)              | `bd3822a`                                  |
-| S      | Migration robustness pins (#3208, #5132, #2910)                                   | `33c7c03`                                  |
-| T      | LSP Phase 5: embedded EdgeQL diagnostics in TS/JS                                 | `18ddd02`                                  |
-| U      | Bulletproof CTA buttons in auth emails (#7629)                                    | `a0c1744`                                  |
-| V      | LSP Phase 6: hover + completion inside `eql\`...\``                               | `4537390`                                  |
-| W      | Scalar/enum migration end-to-end (#8517 full impl + cascade ordering)             | `c39aa26`                                  |
-| X      | Structural-divergence pins (#4408 pre-commit, #4172 SCRAM-tunneled)               | `2dd49c7`                                  |
-| Y      | Phase 23 polymorphic test fixtures rewritten to per-subtype tables                | `ded914e`                                  |
-| Z      | CI builds UI before non-PG test suite                                             | `c2e99f5`                                  |
-| AA     | LSP Phase 7: cross-file SDL resolution                                            | `35071fd`                                  |
-| BB     | Polymorphic shape fields project subtype-specific cols in UNION                   | `eedd27d`                                  |
-| CC     | Cross-platform reproducible builds via per-platform PG staging                    | `85bf883`                                  |
+| Bundle | Subject                                                                                           | Source                                     |
+| ------ | ------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| I      | Single-binary distribution (Disc-original feature #4)                                             | `fcebdb1`                                  |
+| J      | Schema-derived REST surface (Disc-original feature #2)                                            | `7b1d3cf`, `3a3d7d1`                       |
+| K      | Live schema diff in admin UI (Disc-original feature #3a)                                          | `cfe9533`, `8be5d73`                       |
+| L      | Live data subscriptions in admin UI (Disc-original feature #3c)                                   | `3021c3c`, `5730b3d`, `ceaebb0`, `cfdcdd2` |
+| M      | Codegen-free TS query builder (Disc-original feature #1)                                          | `c7ace89`, `caa7bb4`                       |
+| N      | Visual query builder (Disc-original feature #3b)                                                  | `d204b66`                                  |
+| O      | Identity-disc visualization (Disc-original feature #3d)                                           | `b7db3c9`                                  |
+| P      | Deno-permission-aware access policies (Disc-original feature #5)                                  | `a445cb5`                                  |
+| Q      | Auth polish: #7311 implicit signup, #7196 WebAuthn discoverable creds, #7483 docs                 | `cd735bb`                                  |
+| R      | `--require-auth` / `--read-only` / `--trust-proxy` CLI flags (#5234)                              | `bd3822a`                                  |
+| S      | Migration robustness pins (#3208, #5132, #2910)                                                   | `33c7c03`                                  |
+| T      | LSP Phase 5: embedded EdgeQL diagnostics in TS/JS                                                 | `18ddd02`                                  |
+| U      | Bulletproof CTA buttons in auth emails (#7629)                                                    | `a0c1744`                                  |
+| V      | LSP Phase 6: hover + completion inside `eql\`...\``                                               | `4537390`                                  |
+| W      | Scalar/enum migration end-to-end (#8517 full impl + cascade ordering)                             | `c39aa26`                                  |
+| X      | Structural-divergence pins (#4408 pre-commit, #4172 SCRAM-tunneled)                               | `2dd49c7`                                  |
+| Y      | Phase 23 polymorphic test fixtures rewritten to per-subtype tables                                | `ded914e`                                  |
+| Z      | CI builds UI before non-PG test suite                                                             | `c2e99f5`                                  |
+| AA     | LSP Phase 7: cross-file SDL resolution                                                            | `35071fd`                                  |
+| BB     | Polymorphic shape fields project subtype-specific cols in UNION                                   | `eedd27d`                                  |
+| CC     | Cross-platform reproducible builds via per-platform PG staging                                    | `85bf883`                                  |
+| DD     | Documentation audit — high-severity gaps                                                          | `840c3c0`                                  |
+| EE     | Documentation audit — medium + low gaps                                                           | `09925ea`                                  |
+| FF     | Homebrew Formula (#3437)                                                                          | `34902d6`                                  |
+| GG     | Auth router lockdown (#7525) + admin policy bypass (#6358) + TLS cipher pin (#3872)               | `9971268`                                  |
+| HH     | Migration drift status (#8899) + running-server preflight (#9034) + login/CLI pins (#7360, #3170) | `ba08a24`                                  |
+| II     | PG `?sslmode=` parsing (#2292) + verification pins (#5158, #5480, #8762, #7972)                   | `fea2ce8`                                  |
 
-Issues from the BUILD column closed in this post-snapshot sweep: #7311, #7196, #7483 (Q), #7629 (U), #8517 full impl (W), and structural-divergence pins for #4408, #4172 (X). The Disc-original-features roadmap is also fully closed by this sweep — see `docs/disc-original-features.md`.
+Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** — #7311, #7196, #7483 (Q), #7629 (U), #3437 (FF), #7525, #6358, #8899, #9034, #2292 (GG/HH/II), and structural-divergence pins for #4408, #4172 (X), #3208, #5132, #2910 (S), #3872, #7360, #3170 (GG/HH), #5158, #5480, #8762, #7972 (II). The Disc-original-features roadmap is also fully closed by this sweep — see `docs/disc-original-features.md`.
 
 ## High Relevance (score 8-10) — full enumeration
 
