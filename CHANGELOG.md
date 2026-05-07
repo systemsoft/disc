@@ -16,6 +16,20 @@ tag is cut.
 
 ### Fixed
 
+- **Dockerfile.bundled: replace deprecated `apt-key` with modern keyring approach** (Bundle ZZ-4).
+  After ZZ-2 unblocked the multi-stage cache COPY, the next docker
+  push failed with `exit code: 127` on the apt block. The legacy
+  apt-key subcommand was deprecated in Debian 11 and **removed** in
+  Debian 12 — which is what `denoland/deno:latest` is now based on.
+  Switched to the modern `signed-by=` keyring approach: `wget` the
+  GPG key into `/etc/apt/keyrings/postgresql.gpg` (via
+  `gpg --dearmor`) and reference it from the sources.list entry.
+  Also added `ca-certificates` to the install list since it's a
+  prereq for HTTPS fetches in stripped-down base images.
+  - **1 new structural pin** in `tests/gel-divergence-pins.test.ts`
+    (was 46, now 47) asserting the Dockerfile doesn't reintroduce
+    the legacy apt-key command and the `signed-by=` line stays.
+
 - **Dockerfile.bundled: explicit `DENO_DIR` so multi-stage cache COPY works** (Bundle ZZ-2).
   The v2026.05.07 docker push failed with
   `failed to compute cache key: ... '/root/.cache/deno': not found` —

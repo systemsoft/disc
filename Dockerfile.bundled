@@ -41,15 +41,23 @@ WORKDIR /app
 ENV DENO_DIR=/app/.deno-cache
 
 # Install PostgreSQL 16 from the official PostgreSQL apt repository.
+#
+# Uses the modern signed-by= keyring approach. The legacy apt-key
+# subcommand was deprecated in Debian 11 and removed in Debian 12
+# (the current denoland/deno:latest base); using it would fail with
+# exit code 127 ("apt-key: command not found").
 # hadolint ignore=DL3008
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
+    ca-certificates \
     gnupg2 \
     lsb-release \
     wget \
-  && echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
+  && mkdir -p /etc/apt/keyrings \
+  && wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+    | gpg --dearmor -o /etc/apt/keyrings/postgresql.gpg \
+  && echo "deb [signed-by=/etc/apt/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
     > /etc/apt/sources.list.d/pgdg.list \
-  && wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add - \
   && apt-get update \
   && apt-get install -y --no-install-recommends \
     postgresql-16 \

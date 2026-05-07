@@ -1407,6 +1407,39 @@ Deno.test("Gel #6432 slice 4: `disc admin test-policy` runs a policy in isolatio
 });
 
 // ---------------------------------------------------------------------------
+// Disc-internal — Bundle ZZ-4 Dockerfile apt-key deprecation pin.
+// The v2026.05.08 retag's docker push failed with `exit code: 127` on
+// the apt-get block because `apt-key add -` is deprecated in Debian
+// 11 and removed in Debian 12 — which is what `denoland/deno:latest`
+// is now based on. Bundle ZZ-4 switched to the modern keyring
+// approach: wget the key into `/etc/apt/keyrings/` and reference it
+// in the sources.list via `signed-by=`.
+//
+// This pin asserts `apt-key` is not used in the Dockerfile so a
+// future revert (or paste from an outdated tutorial) trips at
+// source-read time rather than at the next CI run.
+// ---------------------------------------------------------------------------
+Deno.test("Bundle ZZ-4: Dockerfile.bundled does not use deprecated apt-key", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../Dockerfile.bundled", import.meta.url),
+  );
+  // `apt-key` was deprecated in Debian 11 + removed in Debian 12,
+  // which the current denoland/deno:latest base is built on. Using
+  // it produces `exit code: 127` ("command not found").
+  assert(
+    !/apt-key\s+add/.test(src),
+    "Dockerfile.bundled must not use `apt-key add` (deprecated in Debian 11, removed in 12). " +
+      "Use the modern keyring approach with `signed-by=` (Bundle ZZ-4 pin).",
+  );
+  // The modern approach uses `signed-by=` in the sources.list entry
+  // — pin asserts the new shape stays in place.
+  assert(
+    /signed-by=/.test(src),
+    "Dockerfile.bundled must declare the PG repo with `signed-by=...` (Bundle ZZ-4 pin).",
+  );
+});
+
+// ---------------------------------------------------------------------------
 // Disc-internal — Bundle ZZ-2 Dockerfile COPY path pin.
 // Discovered when v2026.05.07 docker push failed with:
 //   "failed to compute cache key: ... '/root/.cache/deno': not found"
