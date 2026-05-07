@@ -14,6 +14,7 @@
     { path: '/ui/data', label: 'Data', icon: '▦' },
     { path: '/ui/query', label: 'Query', icon: '⟩' },
     { path: '/ui/query-builder', label: 'Builder', icon: '◇' },
+    { path: '/ui/disc', label: 'Disc', icon: '◉' },
     { path: '/ui/repl', label: 'REPL', icon: '›_' },
     { path: '/ui/migrations', label: 'Migrations', icon: '⟲' },
     { path: '/ui/config', label: 'Config', icon: '⚙' },
