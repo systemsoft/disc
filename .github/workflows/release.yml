@@ -31,6 +31,15 @@ jobs:
   build:
     name: Build ${{ matrix.platform }}
     strategy:
+      # `darwin-x64` removed from the release matrix because the
+      # macos-13 runner job hangs indefinitely on the GitHub-hosted
+      # runner and never publishes its artifact. Platform support
+      # itself stays — `cli/build.ts` and `postgres/downloader.ts` can
+      # still produce a darwin-x64 binary when invoked directly
+      # (`deno task build:darwin-x64`); we just don't ship one as a
+      # pre-built release artifact. Apple Silicon Macs run the arm64
+      # binary natively; older Intel Macs can build from source or use
+      # Rosetta on the arm64 binary.
       matrix:
         include:
           - platform: linux-x64
@@ -39,9 +48,6 @@ jobs:
           - platform: linux-arm64
             runner: ubuntu-latest
             artifact: disc-linux-arm64
-          - platform: darwin-x64
-            runner: macos-13
-            artifact: disc-darwin-x64
           - platform: darwin-arm64
             runner: macos-14
             artifact: disc-darwin-arm64

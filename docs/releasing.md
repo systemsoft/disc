@@ -33,11 +33,18 @@ git push origin primary --tags
 
 Pushing the tag triggers `.github/workflows/release.yml`, which:
 
-1. Builds native binaries for `linux-x64`, `linux-arm64`, `darwin-x64`,
+1. Builds native binaries for `linux-x64`, `linux-arm64`, and
    `darwin-arm64` (UI is bundled via `bun run build` + `disc build`).
 2. Computes `sha256` checksums.
-3. Publishes a GitHub release named `v$VERSION` with all four binaries
-   + a `CHECKSUMS.txt` file + auto-generated release notes.
+3. Publishes a GitHub release named `v$VERSION` with the three binaries,
+   a `CHECKSUMS.txt` file, and auto-generated release notes.
+
+> **`darwin-x64` is not in the release matrix.** The macos-13 GitHub-hosted
+> runner hangs indefinitely on the build step, so we don't ship a pre-built
+> Intel-Mac binary. Platform support stays in the CLI — Intel-Mac users can
+> build from source via `deno task build:darwin-x64`, or run the `darwin-arm64`
+> binary under Rosetta. Re-introducing the matrix entry would require fixing
+> the runner hang first.
 
 ## Verifying a release
 
