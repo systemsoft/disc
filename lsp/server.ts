@@ -14,7 +14,14 @@
  */
 
 import { analyzeDiscDocument } from "./diagnostics.ts";
-import { analyzeEmbeddedDocument, isEmbeddedEqlHost, provideEmbeddedCompletion, provideEmbeddedHover } from "./embedded-edgeql.ts";
+import {
+  analyzeEmbeddedDocument,
+  type EmbeddedSdlContext,
+  isEmbeddedEqlHost,
+  provideEmbeddedCompletion,
+  provideEmbeddedDefinition,
+  provideEmbeddedHover,
+} from "./embedded-edgeql.ts";
 import { provideHover } from "./hover.ts";
 import { provideCompletion } from "./completion.ts";
 import { provideDefinition } from "./definition.ts";
@@ -108,9 +115,14 @@ export class LanguageServer {
           return;
         }
         // Phase 6: TS/JS host files get embedded-EdgeQL hover scoped
-        // to `eql\`...\`` literals. Outside any literal returns null
-        // so we don't surface SDL-flavored hover in plain TS code.
-        const hover = isEmbeddedEqlHost(params.textDocument.uri) ? provideEmbeddedHover(doc.text, params.position) : provideHover(doc.text, params.position);
+        // to `eql\`...\`` literals. Phase 7 adds cross-file SDL
+        // resolution — user-defined types declared in any open
+        // `.disc` document are surfaced too. Outside any literal
+        // returns null so we don't surface SDL-flavored hover in
+        // plain TS code.
+        const hover = isEmbeddedEqlHost(params.textDocument.uri)
+          ? provideEmbeddedHover(doc.text, params.position, this.collectSdlContext())
+          : provideHover(doc.text, params.position);
         this.respond(req.id, hover);
         return;
       }
@@ -123,7 +135,7 @@ export class LanguageServer {
           return;
         }
         const completion = isEmbeddedEqlHost(params.textDocument.uri)
-          ? provideEmbeddedCompletion(doc.text, params.position)
+          ? provideEmbeddedCompletion(doc.text, params.position, this.collectSdlContext())
           : provideCompletion(doc.text, params.position);
         this.respond(req.id, completion);
         return;
@@ -136,10 +148,14 @@ export class LanguageServer {
           this.respond(req.id, null);
           return;
         }
-        this.respond(
-          req.id,
-          provideDefinition(doc.text, params.position, params.textDocument.uri),
-        );
+        // Phase 7: TS/JS host files route through the embedded
+        // definition provider so a user-defined type in `eql\`...\``
+        // jumps to its `.disc` declaration. SDL files keep the
+        // existing same-file resolution.
+        const definition = isEmbeddedEqlHost(params.textDocument.uri)
+          ? provideEmbeddedDefinition(doc.text, params.position, this.collectSdlContext())
+          : provideDefinition(doc.text, params.position, params.textDocument.uri);
+        this.respond(req.id, definition);
         return;
       }
 
@@ -220,6 +236,28 @@ export class LanguageServer {
         return;
       }
     }
+  }
+
+  /**
+   * Build the cross-file SDL context for embedded-EdgeQL providers
+   * (Phase 7). Iterates every open document, picks out the `.disc`
+   * files, and hands their text + URI to the embedded providers so
+   * hover/completion/definition for user-declared types resolve from
+   * the SDL the editor has open.
+   *
+   * No FS scan — we rely on the editor having opened the relevant
+   * `.disc` file (most editors do this when the project's lsp config
+   * declares `.disc` as a known language). When no SDL is open, the
+   * providers fall back to Phase 6 behavior (keywords + scalars only).
+   */
+  private collectSdlContext(): EmbeddedSdlContext {
+    const documents: { uri: DocumentUri; text: string }[] = [];
+    for (const [uri, doc] of this.docs) {
+      if (uri.endsWith(".disc")) {
+        documents.push({ uri, text: doc.text });
+      }
+    }
+    return { documents };
   }
 
   // ---------------------------------------------------------------------

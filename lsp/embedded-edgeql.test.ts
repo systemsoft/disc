@@ -1,15 +1,18 @@
 /**
- * Tests for embedded-EdgeQL diagnostics (LSP Phase 5) + hover and
- * completion within `eql\`...\`` literals (LSP Phase 6).
+ * Tests for embedded-EdgeQL diagnostics (LSP Phase 5), hover +
+ * completion within `eql\`...\`` literals (LSP Phase 6), and
+ * cross-file SDL resolution from open `.disc` documents (LSP Phase 7).
  */
 
 import { assert, assertEquals } from "@std/assert";
 import {
   analyzeEmbeddedDocument,
+  type EmbeddedSdlContext,
   extractEmbeddedQueries,
   findEnclosingEmbeddedQuery,
   isEmbeddedEqlHost,
   provideEmbeddedCompletion,
+  provideEmbeddedDefinition,
   provideEmbeddedHover,
 } from "./embedded-edgeql.ts";
 
@@ -283,4 +286,133 @@ Deno.test("provideEmbeddedCompletion sorts items alphabetically", () => {
   const labels = items.map((i) => i.label);
   const sorted = [...labels].sort((a, b) => a.localeCompare(b));
   assertEquals(labels, sorted);
+});
+
+// =====================================================================
+// Phase 7 — cross-file SDL resolution from open `.disc` documents
+// =====================================================================
+
+const SAMPLE_SDL = [
+  "module default {",
+  "  type User {",
+  "    required email: str;",
+  "    name: str;",
+  "    posts: Post;",
+  "  }",
+  "  type Post {",
+  "    required title: str;",
+  "    body: str;",
+  "  }",
+  "}",
+].join("\n");
+
+function ctxFromSdl(sdl: string): EmbeddedSdlContext {
+  return {
+    documents: [{ uri: "file:///dbschema/default.disc", text: sdl }],
+  };
+}
+
+Deno.test("provideEmbeddedHover surfaces a user-defined type from an open .disc document", () => {
+  const text = "const q = eql`select User`;";
+  // Cursor on `User` (column 21..24).
+  const hover = provideEmbeddedHover(text, { line: 0, character: 22 }, ctxFromSdl(SAMPLE_SDL));
+  assert(hover, "expected hover for user-defined type User");
+  const md = (hover.contents as { value: string }).value;
+  assert(md.includes("**User**"), `expected hover to mention User; got: ${md}`);
+  assert(md.includes("type"), "expected hover to acknowledge it as a type");
+  assert(md.includes("email"), "expected property summary to include email");
+});
+
+Deno.test("provideEmbeddedHover keeps EdgeQL keywords ahead of user types on the same word", () => {
+  // `User` is a user type, but `select` is an EdgeQL keyword. Hovering
+  // `select` shouldn't get redirected to a user-type lookup just
+  // because the SDL ctx is supplied.
+  const text = "const q = eql`select User`;";
+  const hover = provideEmbeddedHover(text, { line: 0, character: 16 }, ctxFromSdl(SAMPLE_SDL));
+  assert(hover, "expected hover for `select`");
+  const md = (hover.contents as { value: string }).value;
+  assert(md.includes("EdgeQL keyword"), `expected keyword hover; got: ${md}`);
+});
+
+Deno.test("provideEmbeddedHover returns null for unknown identifiers when ctx provides no match", () => {
+  const text = "const q = eql`select MyType`;";
+  // `MyType` is neither a keyword/scalar nor declared in SAMPLE_SDL.
+  const hover = provideEmbeddedHover(text, { line: 0, character: 24 }, ctxFromSdl(SAMPLE_SDL));
+  assertEquals(hover, null);
+});
+
+Deno.test("provideEmbeddedCompletion appends user-defined type names from open .disc docs", () => {
+  const text = "const q = eql`select `;";
+  const items = provideEmbeddedCompletion(text, { line: 0, character: 21 }, ctxFromSdl(SAMPLE_SDL));
+  const labels = new Set(items.map((i) => i.label));
+  assert(labels.has("User"), "expected User in completion");
+  assert(labels.has("Post"), "expected Post in completion");
+  // EdgeQL keywords + scalars still present.
+  assert(labels.has("select"));
+  assert(labels.has("str"));
+});
+
+Deno.test("provideEmbeddedCompletion: built-in scalar wins on label collision with a user type", () => {
+  // Construct a degenerate SDL with a `str` "type" — completion's
+  // built-in `str` (scalar) entry should remain because keywords +
+  // scalars are populated first and the Map upsert preserves earlier
+  // entries.
+  const sdlWithStrCollision = "module default { type str { name: str; } }";
+  const items = provideEmbeddedCompletion(
+    "const q = eql`select `;",
+    { line: 0, character: 21 },
+    ctxFromSdl(sdlWithStrCollision),
+  );
+  const strItem = items.find((i) => i.label === "str");
+  assert(strItem, "expected str in completion");
+  assertEquals(strItem.detail, "scalar", `expected scalar detail, got: ${strItem.detail}`);
+});
+
+Deno.test("provideEmbeddedDefinition jumps to the type's declaration in the .disc document", () => {
+  const text = "const q = eql`select User`;";
+  const loc = provideEmbeddedDefinition(text, { line: 0, character: 22 }, ctxFromSdl(SAMPLE_SDL));
+  assert(loc, "expected a Location for User");
+  assertEquals(loc.uri, "file:///dbschema/default.disc");
+  // `type User` is on line 1 (0-indexed) of SAMPLE_SDL; the name
+  // identifier starts at column 7 (`  type ` = 7 chars).
+  assertEquals(loc.range.start.line, 1);
+  assertEquals(loc.range.start.character, 7);
+});
+
+Deno.test("provideEmbeddedDefinition returns null for EdgeQL keywords and built-in scalars", () => {
+  const text = "const q = eql`select User`;";
+  // `select` is a keyword — no source location.
+  assertEquals(
+    provideEmbeddedDefinition(text, { line: 0, character: 16 }, ctxFromSdl(SAMPLE_SDL)),
+    null,
+  );
+  // `str` (built-in scalar) — no source location.
+  const text2 = "const q = eql`select <str>'x'`;";
+  assertEquals(
+    provideEmbeddedDefinition(text2, { line: 0, character: 23 }, ctxFromSdl(SAMPLE_SDL)),
+    null,
+  );
+});
+
+Deno.test("provideEmbeddedDefinition returns null when ctx is omitted (Phase 6 callers)", () => {
+  const text = "const q = eql`select User`;";
+  assertEquals(
+    provideEmbeddedDefinition(text, { line: 0, character: 22 }),
+    null,
+  );
+});
+
+Deno.test("Phase 7 providers ignore non-.disc context entries silently", () => {
+  // The server filters by URI suffix when collecting context, but the
+  // providers themselves don't reject non-SDL text — they just won't
+  // find any types in it. Confirm with a degenerate ctx.
+  const ctx: EmbeddedSdlContext = {
+    documents: [{ uri: "file:///app.ts", text: "const x = 1;" }],
+  };
+  const hover = provideEmbeddedHover(
+    "const q = eql`select User`;",
+    { line: 0, character: 22 },
+    ctx,
+  );
+  assertEquals(hover, null);
 });

@@ -109,6 +109,25 @@ tag is cut.
     and the four ordering invariants (CreateScalar-before-CreateType,
     DropScalar-after-AlterType, RecreateScalar-after-object-drops,
     AddEnumValue-grouped-with-creates).
+- **Cross-file SDL resolution from embedded EdgeQL** (LSP Phase 7).
+  The Phase 6 limitation around user-defined types is closed: when
+  the cursor sits on an identifier inside an `eql`-tagged template in
+  a TS/JS host file, hover, completion, and go-to-definition now
+  resolve user-declared type names from any open `.disc` document.
+  Hover renders the same Markdown summary as the SDL-side hover (type
+  kind + extends + property/link summaries — `findUserType` and
+  `renderUserType` were extracted as a shared API). Completion
+  appends user-type names with a `<kind> (from dbschema/foo.disc)`
+  detail string; built-in scalars and EdgeQL keywords win on label
+  collision. Go-to-definition jumps from the identifier to its
+  declaration's selection range in the SDL file (URI + range from
+  `buildSymbolIndex` so the result matches what `documentSymbol`
+  exposes — single source of truth for type-decl locations).
+  Resolution is editor-driven: the LSP scans `.disc` documents the
+  editor has opened (most editors do this for known languages), no
+  filesystem walk for the workspace. Falls back cleanly to Phase 6
+  behavior (keywords + scalars only) when no SDL is open. 9 new unit
+  tests + 2 server-routing tests.
 - **Hover and completion inside embedded EdgeQL strings** (LSP Phase 6).
   When the cursor sits inside an eql-tagged template literal in a TS or
   JS host file, hover surfaces a Markdown description for EdgeQL

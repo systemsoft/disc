@@ -25,8 +25,34 @@
 
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { type DiscError } from "../lib/errors.ts";
+import { findUserType, renderUserType } from "./hover.ts";
 import { lookupScalar, SCALAR_TYPES } from "./scalar-info.ts";
-import { type CompletionItem, CompletionItemKind, type Diagnostic, DiagnosticSeverity, type Hover, type Position, type Range } from "./protocol.ts";
+import { buildSymbolIndex } from "./symbol-index.ts";
+import {
+  type CompletionItem,
+  CompletionItemKind,
+  type Diagnostic,
+  DiagnosticSeverity,
+  type DocumentUri,
+  type Hover,
+  type Location,
+  type Position,
+  type Range,
+} from "./protocol.ts";
+
+/**
+ * Open SDL documents the LSP knows about, fed to the embedded
+ * providers so hover/completion/definition for user-declared types
+ * resolve from a paired `.disc` file. (LSP Phase 7)
+ *
+ * The provider iterates these on each request and parses on demand —
+ * SDL files are small and parsing is cheap; no caching layer needed
+ * for v1. Callers with no SDL context (tests, direct callers) pass
+ * an empty array and the providers behave exactly as Phase 6.
+ */
+export interface EmbeddedSdlContext {
+  documents: ReadonlyArray<{ uri: DocumentUri; text: string }>;
+}
 
 const SOURCE = "disc-eql";
 
@@ -205,13 +231,14 @@ export function findEnclosingEmbeddedQuery(
  * or on a token we don't recognise (so editors don't show empty
  * popups).
  *
- * Recognises EdgeQL keywords and built-in scalars in v1. User-defined
- * types and functions need cross-file SDL resolution which the LSP
- * doesn't yet plumb.
+ * Recognises EdgeQL keywords, built-in scalars, and — when an
+ * `EmbeddedSdlContext` is supplied (Phase 7) — user-defined types
+ * declared in any open `.disc` document.
  */
 export function provideEmbeddedHover(
   text: string,
   hostPos: Position,
+  ctx?: EmbeddedSdlContext,
 ): Hover | null {
   const enclosing = findEnclosingEmbeddedQuery(text, hostPos);
   if (!enclosing) return null;
@@ -250,15 +277,31 @@ export function provideEmbeddedHover(
     };
   }
 
+  // Phase 7: cross-file SDL resolution. Walk every open `.disc`
+  // document looking for a type declaration matching `word`. Match
+  // wins on the first hit — name collisions across SDL files are
+  // unusual enough that "first match" is fine for v1.
+  if (ctx) {
+    for (const doc of ctx.documents) {
+      const decl = findUserType(doc.text, word);
+      if (decl) {
+        return {
+          contents: { kind: "markdown", value: renderUserType(decl) },
+        };
+      }
+    }
+  }
+
   return null;
 }
 
 /**
  * Completion provider for embedded EdgeQL. Returns the union of
- * EdgeQL keywords and built-in scalars when the cursor is inside an
- * `eql\`...\`` literal; an empty list otherwise (so editors get a
- * clean response without surfacing SDL keywords inside what is plain
- * TypeScript).
+ * EdgeQL keywords, built-in scalars, and — when an
+ * `EmbeddedSdlContext` is supplied (Phase 7) — user-defined types
+ * from any open `.disc` document. Returns an empty list when the
+ * cursor is outside any `eql\`...\`` literal so editors don't
+ * surface SDL keywords inside plain TypeScript.
  *
  * Editors filter the returned set by prefix client-side, so we don't
  * narrow by context here (e.g. "only types after `:`"). That's a
@@ -267,6 +310,7 @@ export function provideEmbeddedHover(
 export function provideEmbeddedCompletion(
   text: string,
   hostPos: Position,
+  ctx?: EmbeddedSdlContext,
 ): CompletionItem[] {
   const enclosing = findEnclosingEmbeddedQuery(text, hostPos);
   if (!enclosing) return [];
@@ -283,7 +327,74 @@ export function provideEmbeddedCompletion(
       documentation: s.description,
     });
   }
+  // Phase 7: pull user-defined type names from open `.disc` documents.
+  // Built-in scalars and EdgeQL keywords win on a label collision —
+  // user-defined types are appended last and the Map upsert preserves
+  // the earlier entry.
+  if (ctx) {
+    for (const doc of ctx.documents) {
+      const idx = buildSymbolIndex(doc.text);
+      for (const [name, sym] of idx.types) {
+        if (items.has(name)) continue;
+        items.set(name, {
+          label: name,
+          kind: CompletionItemKind.Class,
+          detail: `${sym.kind} (from ${shortenUri(doc.uri)})`,
+        });
+      }
+    }
+  }
   return [...items.values()].sort((a, b) => a.label.localeCompare(b.label));
+}
+
+/**
+ * Go-to-definition provider for embedded EdgeQL (Phase 7). When the
+ * cursor sits on a user-defined type name, return a `Location`
+ * pointing at the type's declaration in whichever open `.disc`
+ * document declares it. Returns `null` for keywords, scalars, or
+ * unknown identifiers (callers route those through other features
+ * or surface nothing).
+ *
+ * The implementation reuses `buildSymbolIndex` so the range matches
+ * what the SDL document-symbol provider exposes — no second source
+ * of truth for type-decl locations.
+ */
+export function provideEmbeddedDefinition(
+  text: string,
+  hostPos: Position,
+  ctx?: EmbeddedSdlContext,
+): Location | null {
+  const enclosing = findEnclosingEmbeddedQuery(text, hostPos);
+  if (!enclosing) return null;
+  const word = wordAt(enclosing.query.content, enclosing.posInQuery);
+  if (!word) return null;
+  // Don't try to resolve EdgeQL keywords or built-in scalars — those
+  // have no source location.
+  if (EDGEQL_KEYWORDS.has(word.toLowerCase())) return null;
+  if (lookupScalar(word)) return null;
+  if (!ctx) return null;
+
+  for (const doc of ctx.documents) {
+    const idx = buildSymbolIndex(doc.text);
+    const sym = idx.types.get(word);
+    if (sym) {
+      return { uri: doc.uri, range: sym.range };
+    }
+  }
+  return null;
+}
+
+/**
+ * Compact a `file:///path/to/dbschema/default.disc` URI to its last
+ * two path segments (`dbschema/default.disc`) for completion-item
+ * detail strings. The full path is noisy in completion popups; the
+ * tail segments tell the user where the type comes from without
+ * dominating the visible width.
+ */
+function shortenUri(uri: DocumentUri): string {
+  const stripped = uri.replace(/^file:\/\//, "");
+  const parts = stripped.split("/").filter(Boolean);
+  return parts.slice(-2).join("/") || stripped;
 }
 
 // ---------------------------------------------------------------------

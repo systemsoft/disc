@@ -524,6 +524,80 @@ Deno.test("LanguageServer - completion inside an eql tag returns EdgeQL keywords
   assertEquals(labels.has("link"), false);
 });
 
+// =====================================================================
+// Phase 7 — cross-file SDL resolution (open .disc + open .ts host)
+// =====================================================================
+
+Deno.test("LanguageServer - hover on a TS host file resolves user-defined types from an open .disc", async () => {
+  const { srv, tx } = await newServer();
+  // Open the SDL first so the server's docs map has both files.
+  const sdl = "module default { type Article { required title: str; } }";
+  await srv.handle({
+    jsonrpc: "2.0",
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: "file:///dbschema/default.disc", languageId: "disc", version: 1, text: sdl },
+    },
+  });
+  await srv.handle({
+    jsonrpc: "2.0",
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: "file:///app.ts", languageId: "typescript", version: 1, text: "const q = eql`select Article`;" },
+    },
+  });
+  tx.outgoing.length = 0;
+  // Cursor on `Article` (column 21..28).
+  await srv.handle({
+    jsonrpc: "2.0",
+    id: 90,
+    method: "textDocument/hover",
+    params: {
+      textDocument: { uri: "file:///app.ts" },
+      position: { line: 0, character: 22 },
+    },
+  });
+  const r = tx.outgoing.find((m) => "id" in m && m.id === 90);
+  const result = (r as { result: { contents: { value: string } } | null }).result;
+  assertExists(result);
+  assertEquals(result!.contents.value.includes("**Article**"), true);
+});
+
+Deno.test("LanguageServer - definition on a TS host file jumps into the .disc declaration", async () => {
+  const { srv, tx } = await newServer();
+  const sdl = "module default {\n  type Article {\n    required title: str;\n  }\n}";
+  await srv.handle({
+    jsonrpc: "2.0",
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: "file:///dbschema/default.disc", languageId: "disc", version: 1, text: sdl },
+    },
+  });
+  await srv.handle({
+    jsonrpc: "2.0",
+    method: "textDocument/didOpen",
+    params: {
+      textDocument: { uri: "file:///app.ts", languageId: "typescript", version: 1, text: "const q = eql`select Article`;" },
+    },
+  });
+  tx.outgoing.length = 0;
+  await srv.handle({
+    jsonrpc: "2.0",
+    id: 91,
+    method: "textDocument/definition",
+    params: {
+      textDocument: { uri: "file:///app.ts" },
+      position: { line: 0, character: 22 },
+    },
+  });
+  const r = tx.outgoing.find((m) => "id" in m && m.id === 91);
+  const result = (r as { result: { uri: string; range: { start: { line: number } } } | null }).result;
+  assertExists(result);
+  assertEquals(result!.uri, "file:///dbschema/default.disc");
+  // `type Article` lives on line 1 (0-indexed) of the SDL.
+  assertEquals(result!.range.start.line, 1);
+});
+
 Deno.test("LanguageServer - shutdown returns null result", async () => {
   const { srv, tx } = await newServer();
   tx.outgoing.length = 0;

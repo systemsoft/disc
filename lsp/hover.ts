@@ -71,7 +71,13 @@ function wordAt(text: string, pos: Position): string | null {
 // User-type lookup
 // ---------------------------------------------------------------------------
 
-function findUserType(text: string, name: string): AST.TypeDeclaration | null {
+/**
+ * Locate a user-defined type by name in a parsed SDL document. Exported
+ * so other LSP features (e.g. cross-file SDL hover from embedded EdgeQL
+ * in TS/JS host files — Phase 7) can reuse the same lookup without
+ * duplicating SDL parsing.
+ */
+export function findUserType(text: string, name: string): AST.TypeDeclaration | null {
   // Re-parse the document with recovery so errors elsewhere don't
   // suppress hover on a valid section. Cheap enough at editor latency.
   let document: AST.SDLDocument;
@@ -103,7 +109,13 @@ function matchType(decl: AST.Declaration, name: string): AST.TypeDeclaration | n
   return null;
 }
 
-function renderUserType(t: AST.TypeDeclaration): string {
+/**
+ * Render a user-defined type as the Markdown body shown in hover
+ * popups. Exported so cross-file resolution from embedded EdgeQL
+ * (Phase 7) can produce identical output without duplicating the
+ * formatting logic.
+ */
+export function renderUserType(t: AST.TypeDeclaration): string {
   const lines: string[] = [];
   const kind = t.abstract ? "abstract type" : "type";
   lines.push(`**${t.name.value}** _(${kind})_`);
@@ -115,9 +127,7 @@ function renderUserType(t: AST.TypeDeclaration): string {
   }
 
   // Property summary — list up to 6 names with their types.
-  const props = t.members.filter((m): m is AST.PropertyDeclaration =>
-    m.kind === "PropertyDeclaration"
-  );
+  const props = t.members.filter((m): m is AST.PropertyDeclaration => m.kind === "PropertyDeclaration");
   if (props.length > 0) {
     lines.push("");
     lines.push("Properties:");
@@ -132,9 +142,7 @@ function renderUserType(t: AST.TypeDeclaration): string {
     }
   }
 
-  const links = t.members.filter((m): m is AST.LinkDeclaration =>
-    m.kind === "LinkDeclaration"
-  );
+  const links = t.members.filter((m): m is AST.LinkDeclaration => m.kind === "LinkDeclaration");
   if (links.length > 0) {
     lines.push("");
     lines.push("Links:");
