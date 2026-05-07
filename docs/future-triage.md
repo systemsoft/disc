@@ -251,18 +251,31 @@ Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** 
 
 (All auth/access items in the BUILD column are now closed.)
 
-#### DB / perf / engine (3)
+#### DB / perf / engine (0)
 
 > **Bundle OO closed the DB/engine correctness sub-cluster (#5641 + #4215 + #2204).**
 > All three are structurally addressed in Disc — pins documented in
 > `tests/gel-divergence-pins.test.ts`. #4215 carries a TODO marker for a
-> future fix to detect type-level `extending` changes in the differ.
+> future fix to detect type-level `extending` changes in the differ
+> (closed in Bundle PP).
+>
+> **Bundle XX closed the DB/engine perf sub-cluster (#3510 + #5505/#6517 + #1634).**
+> All three are structurally addressed in Disc:
+>
+> - #3510 — `migration/schema-manager.ts:450` auto-registers `id` as
+>   `required uuid` on every type; runtime `id := <uuid>'...'`
+>   override flows through the normal INSERT compiler (Bundle F's
+>   #5617 covers the compile-test).
+> - #5505/#6517 — `server/edgeql-protocol.ts` caches compiled SQL
+>   keyed off `(queryHash, accessContextHash)`. One compile per
+>   query+role; subsequent calls reuse the cached SQL.
+> - #1634 — `lib/connection-pool.ts` pre-warms `minConnections`
+>   (default 2) on `initialize()` and reuses idle connections before
+>   opening new ones.
+>
+> All three pinned in `tests/gel-divergence-pins.test.ts`.
 
-| #             | Title                            | Category   | Why pickable                                    | Effort |
-| ------------- | -------------------------------- | ---------- | ----------------------------------------------- | ------ |
-| #3510         | External UUIDs                   | db         | Add `id` override at schema level               | M      |
-| #5505 / #6517 | Access policies slow performance | auth, perf | Profile `access/evaluator.ts` once usage scales | M      |
-| #1634         | Reduce cost of new connections   | perf       | Connection pool warm-cache audit                | M      |
+(All DB/engine items in the BUILD column are now closed.)
 
 #### CLI / devtools (2)
 
@@ -308,9 +321,9 @@ Issues from the BUILD column closed in this post-snapshot sweep: **22 net new** 
 | #648  | SQLite back-end    | db, storage | Stretch — Disc is Postgres-first; deferrable | L      |
 | #7724 | Extension upgrades | migration   | We have an extension model already           | M      |
 
-**Pickable: ~5 items** (Bundles LL + MM + NN + OO + PP + QQ + RR + SS + TT + UU + VV + WW closed 14 fixes + pinned 19 across migration-perf, auth-semantics, CLI/devtools, DB/engine, cloud/infra, migration-robustness, full auth/access introspection, migration narrative, the docs cluster, and #6432 in its entirety). Highest-leverage clusters remaining:
+**Pickable: ~2 items** (Bundles LL + MM + NN + OO + PP + QQ + RR + SS + TT + UU + VV + WW + XX closed 14 fixes + pinned 22 across migration-perf, auth-semantics, CLI/devtools, DB/engine, cloud/infra, migration-robustness, full auth/access introspection, migration narrative, the docs cluster, the DB/engine perf sub-cluster, and #6432 in its entirety). Highest-leverage clusters remaining:
 
-1. **DB/engine** — #3510 external UUIDs + #5505/#6517 access-policy perf + #1634 connection pool (operator-ergonomics)
+1. **CLI/devtools + cloud/infra** — #9117 Windows CLI, #4308 stdlib upgrades, #4806 PR preview envs, #3534 multi-TCP (most are structural pins given prior divergence patterns)
 2. **Stretch** — #7724 extension upgrades (long-tail roadmap; #648 SQLite is DROPPED — see "Mini-Disc" note)
 
 ### SKIP — not applicable to Disc

@@ -14,6 +14,31 @@ tag is cut.
 
 ## [Unreleased]
 
+### Internal
+
+- **DB/engine cluster pinned as structurally addressed** (Bundle XX — gh/geldata#3510 #5505 #6517 #1634).
+  All three issues are already structurally addressed in Disc;
+  Bundle XX records the invariants so a future refactor that breaks
+  them trips a pin.
+  - **#3510 external/user-specified UUIDs**: `migration/schema-manager.ts:450`
+    auto-registers `id` as `required uuid` on every type. Combined
+    with Bundle F's #5617 INSERT compile-test (`insert User { id := <uuid>'...' }`),
+    operators can pass externally-generated UUIDs directly. Pin
+    asserts the implicit-id wiring stays.
+  - **#5505 + #6517 access-policy slow performance**: the compilation
+    cache in `server/edgeql-protocol.ts` keys off
+    `(queryHash, accessContextHash)`, so a query+role combo compiles
+    once and reuses the SQL afterwards. Per-call policy overhead is
+    one compile, not per-request. Pin asserts the cache + access-context
+    wiring stays.
+  - **#1634 reduce cost of new connections**: `lib/connection-pool.ts`
+    pre-warms `minConnections` (default 2) on `initialize()` and
+    `acquire()` reuses idle connections before opening new ones, so
+    the cost of "new" connections is amortized. Pin asserts the
+    warm-up loop + idle-reuse path stay in place.
+  - **3 new structural pins** in `tests/gel-divergence-pins.test.ts`
+    (was 36, now 39).
+
 ### Docs
 
 - **Test-author guide + UI doc completion + docs-search story** (Bundle WW — gh/geldata#6127 #6119 #5820 #5819 #7382).

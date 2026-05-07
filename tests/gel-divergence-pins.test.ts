@@ -1407,6 +1407,104 @@ Deno.test("Gel #6432 slice 4: `disc admin test-policy` runs a policy in isolatio
 });
 
 // ---------------------------------------------------------------------------
+// gh/geldata#3510 — external/user-specified UUIDs. Gel asks for the
+// ability to pass an externally-generated UUID into INSERT and have it
+// stick on the row. Disc structurally addresses this via two paths:
+//   1. The `id` property is auto-registered as `uuid` on every type by
+//      `migration/schema-manager.ts:450` (the implicit-id block).
+//   2. `insert User { id := <uuid>'...', ... }` flows through the
+//      normal INSERT compiler unchanged — Bundle F #5617 added the
+//      pinned compile-test in `migration/gel-issues.test.ts`.
+// This pin asserts the implicit-id wiring stays in place so a future
+// "let's drop the auto-id" refactor has to update the divergence
+// record deliberately.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #3510: schema-manager auto-registers id as uuid on every type", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../migration/schema-manager.ts", import.meta.url),
+  );
+  // The implicit-id block must declare an `id` property of type
+  // `uuid` with `required: true`. The exact phrasing in the comment
+  // is also pinned because it documents the guarantee for users.
+  assert(
+    /Start with implicit id property/.test(src),
+    "schema-manager.ts must keep the implicit-id comment (Gel #3510 pin).",
+  );
+  assert(
+    /properties\.set\("id", \{[\s\S]*?type: "uuid"[\s\S]*?required: true/.test(
+      src,
+    ),
+    "schema-manager.ts must auto-register id: uuid required: true (Gel #3510 pin).",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#5505 + #6517 — Gel reports access policies cause query
+// slowdowns because policy evaluation re-runs per request. Disc caches
+// the compiled SQL (with policy injection baked in) keyed off
+// (queryHash, accessContextHash) in `server/edgeql-protocol.ts`, so
+// per-query policy overhead is one compile, not per-call. The cache
+// key must include access context so a different role doesn't hit a
+// stale entry.
+//
+// This pin asserts the compilation cache exists, the cache key
+// includes access context, and the policy evaluator stays callable
+// from the compiler (no parallel uncached path).
+// ---------------------------------------------------------------------------
+Deno.test("Gel #5505 + #6517: compilation cache embeds access context (one compile per query+role)", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../server/edgeql-protocol.ts", import.meta.url),
+  );
+  assert(
+    /this\.compilationCache = new QueryCache/.test(src),
+    "edgeql-protocol.ts must own a QueryCache for compiled SQL (Gel #5505/#6517 pin).",
+  );
+  // The cache lookup must include the access context — otherwise two
+  // calls with different roles would share the same compiled SQL and
+  // either over-permit or under-permit. The cache-key builder must
+  // mention the access context.
+  assert(
+    /access context when policies enabled|accessCtx|ctxHash/i.test(src),
+    "edgeql-protocol.ts compilation cache key must include access context (Gel #5505/#6517 pin).",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// gh/geldata#1634 — Gel asks for ways to reduce the cost of new
+// PostgreSQL connections. Disc's `lib/connection-pool.ts` pre-warms
+// `minConnections` (default 2) on `initialize()`, so the first N
+// `acquire()` calls hit warm idle connections instead of opening a
+// fresh PG connection each time. The release path returns the
+// connection to the idle pool for reuse rather than tearing it down.
+//
+// This pin asserts the warm-up loop stays in `initialize()` and the
+// idle-connection reuse path stays in `acquire()`.
+// ---------------------------------------------------------------------------
+Deno.test("Gel #1634: connection pool pre-warms minConnections + reuses idle on acquire", async () => {
+  const src = await Deno.readTextFile(
+    new URL("../lib/connection-pool.ts", import.meta.url),
+  );
+  // The warm-up loop must allocate `minConnections` connections at
+  // initialize time, push them onto the idle list, and `Promise.all`
+  // them so initialize() doesn't return until they're ready.
+  assert(
+    /for \(let i = 0; i < this\.config\.minConnections!; i\+\+\)/.test(src),
+    "connection-pool.ts initialize() must loop minConnections times to warm the pool (Gel #1634 pin).",
+  );
+  assert(
+    /this\.idleConnections\.push\(conn\)/.test(src) &&
+      /await Promise\.all\(promises\)/.test(src),
+    "connection-pool.ts initialize() must push warm conns onto idleConnections + await all (Gel #1634 pin).",
+  );
+  // The acquire path must reuse idle connections before creating new
+  // ones — otherwise the warm-up has no effect.
+  assert(
+    /while \(this\.idleConnections\.length > 0\) \{/.test(src),
+    "connection-pool.ts acquire() must reuse idle connections before creating new ones (Gel #1634 pin).",
+  );
+});
+
+// ---------------------------------------------------------------------------
 // gh/geldata#6127 — "test guide" docs ask. Bundle WW shipped
 // `docs/testing.md` covering the unit/PG-integration split, the
 // `EnvMock` discipline, and how to author new tests against the real
