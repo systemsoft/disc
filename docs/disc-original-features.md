@@ -2,7 +2,7 @@
 
 Things Disc would build that Gel doesn't have and isn't planning. Each is a deliberate departure — features that justify Disc as a fork rather than a port.
 
-> **Status:** Mixed. **Shipped: #4 single-binary distribution** (Bundle I, 2026-05-06), **#2 schema-derived REST surface** (Bundle J, 2026-05-06), **#3a live schema diff in admin UI** (Bundle K, 2026-05-06), **#3c live data subscriptions in admin UI** (Bundle L, 2026-05-06), **#1 codegen-free TypeScript query builder** (Bundle M, 2026-05-06), **#3b visual query builder** (Bundle N, 2026-05-06), and **#3d identity-disc visualization** (Bundle O, 2026-05-06). The only remaining item is **#5 Deno-perm policies** — rough scoping, no design doc, no scheduled milestone. Use this as the seed list for picking next-up direction once the upstream-parity work is done (see `future-triage.md`).
+> **Status: roadmap closed — all eight features shipped 2026-05-06.** #4 single-binary distribution (Bundle I), #2 schema-derived REST surface (Bundle J), #3a live schema diff in admin UI (Bundle K), #3c live data subscriptions in admin UI (Bundle L), #1 codegen-free TypeScript query builder (Bundle M), #3b visual query builder (Bundle N), #3d identity-disc visualization (Bundle O), #5 Deno-permission-aware access policies (Bundle P). Future Disc-original ideas should land in their own design docs rather than appending here.
 
 ---
 
@@ -166,7 +166,9 @@ Running `./disc` on a fresh machine gives you a fully working database server wi
 
 ---
 
-## 5. Deno-permission-aware access policies
+## 5. Deno-permission-aware access policies — **SHIPPED 2026-05-06**
+
+> **Status:** Shipped in Bundle P. Live behavior is documented in `access/README.md` ("`runtime::has_permission(...)` — Deno-permission-aware policies" section); source lives at `access/runtime-permissions.ts` (pure spec parser + checker) + the `runtime::has_permission` cases in `access/evaluator.ts`.
 
 **The problem.** Database access policies (Gel's `access policy`, Postgres's RLS) gate row visibility based on application-defined identity. They can't see runtime trust: an extension running with full filesystem access has the same access-policy treatment as one running sandboxed.
 
@@ -188,7 +190,9 @@ This composes with existing access policies. It's a defense-in-depth layer for t
 
 **What Gel has instead.** Application-level identity only. No runtime-permission check, because the Python/Rust runtime doesn't have a structured permission model.
 
-**Effort.** M. Need: a `runtime::has_permission()` builtin in the access-policy evaluator, a way to propagate the calling worker's permission set into the query session, and SDL grammar for the new function. The composability is the interesting part — applies to existing access policies without redesign.
+**How it shipped.** `runtime::has_permission(<spec>)` is a builtin in the access-policy evaluator. The spec string is parsed at policy-load time into a `Deno.PermissionDescriptor`-shaped object (so SDL typos like `runtime::has_permission("filesystem")` fail loudly rather than silently denying). At SQL emission time the function is **pre-evaluated** against `Deno.permissions.querySync(...)` and inlined as `TRUE`/`FALSE` in the generated WHERE clause — Postgres can't call back into Deno, and the permission set is fixed for the life of the process anyway. The composability holds: `current_user.is_admin and runtime::has_permission("read:/secrets")` just works through the existing AND combinator.
+
+**One divergence from the original sketch.** The "calling worker's permission set" model assumed Disc had a worker-based extension architecture; Disc's extensions are TS modules sharing the server's permission set, so the check is effectively a deployment-time gate. If Disc later grows worker-based extensions, the per-worker permission set can be threaded through `AccessContext.permissionChecker` without touching the SDL grammar.
 
 ---
 
@@ -200,6 +204,6 @@ Each item is independently scopeable. The natural ordering by **how much it just
 2. ~~**#2 REST surface** — broadest integration story, modest cost.~~ **Shipped 2026-05-06.**
 3. ~~**#1 codegen-free builder** — biggest DX delta for application developers, but most type-system work.~~ **Shipped 2026-05-06.**
 4. ~~**#3 admin-UI differentiators** — best demo material; can be staged 3a → 3c → 3d → 3b.~~ **All four shipped 2026-05-06** (3a Bundle K, 3c Bundle L, 3b Bundle N, 3d Bundle O).
-5. **#5 Deno-perm policies** — most novel, narrowest applicability.
+5. ~~**#5 Deno-perm policies** — most novel, narrowest applicability.~~ **Shipped 2026-05-06.**
 
 When `future-triage.md`'s BUILD column runs out (or sooner if one of these is more compelling than what's left upstream), pick from here.
