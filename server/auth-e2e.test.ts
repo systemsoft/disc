@@ -30,7 +30,7 @@ async function createE2EServer(port: number): Promise<{
 
   const provider = new AuthProvider(
     { jwtSecret: TEST_JWT_SECRET },
-    db,
+    db
   );
   await provider.initialize();
 
@@ -49,18 +49,18 @@ async function createE2EServer(port: number): Promise<{
       enableCors: true,
       enableWebsockets: false,
       jwtSecret: TEST_JWT_SECRET,
-      enableAuth: true,
+      enableAuth: true
     },
     protocolHandler: {
       handleRequest: (_req: any, ctx: any) => {
         capturedContexts.push(ctx);
         return Promise.resolve({ data: { result: "ok" } });
       },
-      validateRequest: () => [],
+      validateRequest: () => []
     },
     authProvider: provider,
     authMiddleware: middleware,
-    authRoutes: routes,
+    authRoutes: routes
   });
 
   return { server, db, capturedContexts };
@@ -76,7 +76,7 @@ Deno.test({
     const base = `http://${TEST_HOST}:${port}`;
 
     void server.start();
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 200));
 
     try {
       // 1. Register
@@ -86,8 +86,8 @@ Deno.test({
         body: JSON.stringify({
           email: "e2e@test.com",
           password: "testpassword123",
-          username: "e2euser",
-        }),
+          username: "e2euser"
+        })
       });
       assertEquals(registerRes.status, 201);
       const registerBody = await registerRes.json();
@@ -104,8 +104,8 @@ Deno.test({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: "e2e@test.com",
-          password: "testpassword123",
-        }),
+          password: "testpassword123"
+        })
       });
       assertEquals(loginRes.status, 200);
       const loginBody = await loginRes.json();
@@ -116,7 +116,7 @@ Deno.test({
 
       // 3. Profile with token
       const profileRes = await fetch(`${base}/auth/profile`, {
-        headers: { Authorization: `Bearer ${loginToken}` },
+        headers: { Authorization: `Bearer ${loginToken}` }
       });
       assertEquals(profileRes.status, 200);
       const profileBody = await profileRes.json();
@@ -128,9 +128,9 @@ Deno.test({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${loginToken}`,
+          Authorization: `Bearer ${loginToken}`
         },
-        body: JSON.stringify({ query: "SELECT User { name }" }),
+        body: JSON.stringify({ query: "SELECT User { name }" })
       });
       assertEquals(queryRes.status, 200);
       await queryRes.json();
@@ -145,7 +145,7 @@ Deno.test({
       const refreshRes = await fetch(`${base}/auth/refresh`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refreshToken: refreshToken }),
+        body: JSON.stringify({ refreshToken: refreshToken })
       });
       assertEquals(refreshRes.status, 200);
       const refreshBody = await refreshRes.json();
@@ -157,8 +157,8 @@ Deno.test({
         `${base}/auth/logout?sessionId=${loginBody.session.id}`,
         {
           method: "GET",
-          headers: { Authorization: `Bearer ${loginToken}` },
-        },
+          headers: { Authorization: `Bearer ${loginToken}` }
+        }
       );
       assertEquals(logoutRes.status, 200);
       const logoutBody = await logoutRes.json();
@@ -167,7 +167,7 @@ Deno.test({
       await server.stop();
       await db.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -180,13 +180,13 @@ Deno.test({
     const base = `http://${TEST_HOST}:${port}`;
 
     void server.start();
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 200));
 
     try {
       const queryRes = await fetch(`${base}/query`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: "SELECT User { name }" }),
+        body: JSON.stringify({ query: "SELECT User { name }" })
       });
       assertEquals(queryRes.status, 200);
       await queryRes.json();
@@ -199,7 +199,7 @@ Deno.test({
       await server.stop();
       await db.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -212,7 +212,7 @@ Deno.test({
     const base = `http://${TEST_HOST}:${port}`;
 
     void server.start();
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 200));
 
     try {
       const loginRes = await fetch(`${base}/auth/login`, {
@@ -220,8 +220,8 @@ Deno.test({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: "nonexistent@test.com",
-          password: "wrong",
-        }),
+          password: "wrong"
+        })
       });
       // P1-35: nonexistent email returns the same generic 401/INVALID_CREDENTIALS
       // as a wrong-password case to prevent email enumeration.
@@ -232,5 +232,5 @@ Deno.test({
       await server.stop();
       await db.close();
     }
-  },
+  }
 });

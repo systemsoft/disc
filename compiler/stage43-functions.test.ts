@@ -111,7 +111,7 @@ Deno.test("Stage 43 — re_match compiles to REGEXP_MATCH with swapped args", ()
   assertEquals(
     stringIdx < patternIdx,
     true,
-    "string arg should come before pattern (PG order)",
+    "string arg should come before pattern (PG order)"
   );
 });
 
@@ -131,7 +131,7 @@ Deno.test("Stage 43 — re_replace compiles to REGEXP_REPLACE with reordered arg
   assertEquals(
     stringIdx < patternIdx,
     true,
-    "string arg should come before pattern (PG order)",
+    "string arg should come before pattern (PG order)"
   );
 });
 
@@ -268,7 +268,7 @@ Deno.test("Stage 43 — all Stage 43 functions are registered in the built-in ma
     "json_typeof",
     "json_array_unpack",
     "json_object_unpack",
-    "json_get",
+    "json_get"
   ];
 
   for (const name of expected) {

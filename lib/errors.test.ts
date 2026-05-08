@@ -19,7 +19,7 @@ Deno.test("InternalError appends file-an-issue hint to message", () => {
 Deno.test("InternalError hint URL points to systemsoft/disc issues", () => {
   assertEquals(
     INTERNAL_ERROR_ISSUE_URL,
-    "https://github.com/systemsoft/disc/issues",
+    "https://github.com/systemsoft/disc/issues"
   );
 });
 
@@ -34,7 +34,7 @@ Deno.test("InternalError hint append is idempotent across re-wrapping", () => {
 
 Deno.test("InternalError still inherits DiscError formatting", () => {
   const err = new InternalError("bad state", {
-    location: { line: 3, column: 5, offset: 0, file: "x.esdl" },
+    location: { line: 3, column: 5, offset: 0, file: "x.esdl" }
   });
   const formatted = err.formatError();
   assertStringIncludes(formatted, "InternalError: bad state");

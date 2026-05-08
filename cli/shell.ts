@@ -54,9 +54,9 @@ export class DiscShell {
     // available; the prior default "disc" was an artifact of the old
     // hardcoded superuser db and mis-labeled what we actually connect to.
     const ctx = resolveProjectContext();
-    const database = options.database
-      || ctx?.instanceName
-      || "disc";
+    const database = options.database ||
+      ctx?.instanceName ||
+      "disc";
 
     try {
       this.session = {
@@ -65,7 +65,7 @@ export class DiscShell {
         database,
         user: Deno.env.get("USER") || "disc",
         connected: false,
-        timingEnabled: false,
+        timingEnabled: false
       };
 
       // Connect to database
@@ -93,7 +93,7 @@ export class DiscShell {
 
       if (options.nonInteractive) {
         console.log(
-          "💡 Use --execute to run a query, or omit --non-interactive for REPL mode",
+          "💡 Use --execute to run a query, or omit --non-interactive for REPL mode"
         );
         return;
       }
@@ -111,7 +111,7 @@ export class DiscShell {
   private async connectToDatabase(
     host: string,
     port: number,
-    database: string,
+    database: string
   ): Promise<void> {
     // Try project context first (auto-discovery via disc.toml)
     const ctx = resolveProjectContext();
@@ -141,7 +141,7 @@ export class DiscShell {
       port,
       database,
       user: Deno.env.get("DB_USER") || "disc",
-      password: Deno.env.get("DB_PASSWORD") || "",
+      password: Deno.env.get("DB_PASSWORD") || ""
     });
     await this.db.connect();
     if (this.session) {
@@ -188,7 +188,8 @@ export class DiscShell {
       const ctx = resolveProjectContext();
       const dir = ctx ? `${ctx.projectRoot}/dbschema` : "./dbschema";
       const files = await discoverSchemaFiles(dir);
-      if (files.length === 0) return;
+      if (files.length === 0)
+        return;
       this.schema = await loadMultiFileSchema(files);
     } catch {
       // Non-fatal — `\d` falls back to listTables() when schema is missing.
@@ -208,7 +209,9 @@ export class DiscShell {
     await Deno.stdout.write(new TextEncoder().encode("disc> "));
 
     // Start REPL loop - using modern Deno streams
-    const reader = Deno.stdin.readable
+    const reader = Deno
+      .stdin
+      .readable
       .pipeThrough(new TextDecoderStream())
       .pipeThrough(new TextLineStream());
 
@@ -303,7 +306,7 @@ export class DiscShell {
         if (this.session) {
           this.session.timingEnabled = !this.session.timingEnabled;
           console.log(
-            `⏱️  Timing ${this.session.timingEnabled ? "enabled" : "disabled"}`,
+            `⏱️  Timing ${this.session.timingEnabled ? "enabled" : "disabled"}`
           );
         }
         break;
@@ -355,7 +358,7 @@ export class DiscShell {
       if (result.rows.length > 0) {
         console.table(result.rows);
         console.log(
-          `(${result.rows.length} row${result.rows.length === 1 ? "" : "s"})`,
+          `(${result.rows.length} row${result.rows.length === 1 ? "" : "s"})`
         );
       } else {
         console.log("✅ Query executed successfully");
@@ -403,8 +406,8 @@ export class DiscShell {
   private describeTypeByName(name: string): void {
     if (!this.schema || this.schema.types.size === 0) {
       console.log(
-        "⚠️  No schema loaded. Pass --schema <file> or run from a project "
-          + "with a dbschema/ directory.",
+        "⚠️  No schema loaded. Pass --schema <file> or run from a project " +
+          "with a dbschema/ directory."
       );
       return;
     }
@@ -422,15 +425,15 @@ export class DiscShell {
       return;
     }
 
-    const query = detailed
-      ? `SELECT 
+    const query = detailed ?
+      `SELECT 
            tablename as name,
            pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) as size,
            obj_description((schemaname||'.'||tablename)::regclass) as description
          FROM pg_tables 
          WHERE schemaname = 'public' 
-         ORDER BY tablename`
-      : `SELECT tablename as name FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename`;
+         ORDER BY tablename` :
+      `SELECT tablename as name FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename`;
 
     try {
       const result = await this.db.query(query);
@@ -458,7 +461,7 @@ export class DiscShell {
       await this.connectToDatabase(
         this.session?.host || "localhost",
         this.session?.port || 5656,
-        database,
+        database
       );
 
       if (this.session) {
@@ -474,7 +477,7 @@ export class DiscShell {
   private async executeFile(filename: string): Promise<void> {
     try {
       const content = await Deno.readTextFile(filename);
-      const queries = content.split(";").filter((q) => q.trim());
+      const queries = content.split(";").filter(q => q.trim());
 
       console.log(`Executing ${queries.length} queries from ${filename}...`);
 
@@ -532,5 +535,5 @@ export const shellCommand = {
   async execute(options: ShellOptions): Promise<void> {
     const shell = new DiscShell();
     await shell.run(options);
-  },
+  }
 };

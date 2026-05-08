@@ -8,7 +8,7 @@ import { DatabaseConnection } from "./database.ts";
 
 Deno.test("ConnectionPool - creates pool with default config", async () => {
   const pool = new ConnectionPool({
-    connectionString: "postgresql://test@localhost/test",
+    connectionString: "postgresql://test@localhost/test"
   });
 
   assertEquals(pool.getPoolSize(), 0);
@@ -25,7 +25,7 @@ Deno.test("ConnectionPool - creates pool with custom config", async () => {
     maxConnections: 10,
     connectionTimeout: 5000,
     idleTimeout: 30000,
-    maxWaitQueueSize: 100,
+    maxWaitQueueSize: 100
   };
 
   const pool = new ConnectionPool(config);
@@ -40,7 +40,7 @@ Deno.test("ConnectionPool - initializes minimum connections", async () => {
   const pool = new ConnectionPool({
     connectionString: "postgresql://test@localhost/test",
     minConnections: 3,
-    maxConnections: 10,
+    maxConnections: 10
   });
 
   // Mock connect method for testing
@@ -67,7 +67,7 @@ Deno.test("ConnectionPool - initialize is idempotent (no duplicate connections o
   const pool = new ConnectionPool({
     connectionString: "postgresql://test@localhost/test",
     minConnections: 2,
-    maxConnections: 10,
+    maxConnections: 10
   });
 
   const originalConnect = DatabaseConnection.prototype.connect;
@@ -95,7 +95,7 @@ Deno.test("ConnectionPool - acquires and releases connections", async () => {
   const pool = new ConnectionPool({
     connectionString: "postgresql://test@localhost/test",
     minConnections: 1,
-    maxConnections: 5,
+    maxConnections: 5
   });
 
   // Mock connect method
@@ -131,7 +131,7 @@ Deno.test("ConnectionPool - respects max connections limit", async () => {
     connectionString: "postgresql://test@localhost/test",
     minConnections: 0,
     maxConnections: 2,
-    connectionTimeout: 100, // Short timeout for testing
+    connectionTimeout: 100 // Short timeout for testing
   });
 
   DatabaseConnection.prototype.connect = function() {
@@ -152,7 +152,7 @@ Deno.test("ConnectionPool - respects max connections limit", async () => {
       await pool.acquire();
     },
     Error,
-    "Connection pool timeout",
+    "Connection pool timeout"
   );
 
   pool.release(conn1);
@@ -166,7 +166,7 @@ Deno.test("ConnectionPool - handles connection errors gracefully", async () => {
     minConnections: 0,
     maxConnections: 5,
     maxRetries: 1,
-    retryDelay: 100,
+    retryDelay: 100
   });
 
   let connectAttempts = 0;
@@ -180,7 +180,7 @@ Deno.test("ConnectionPool - handles connection errors gracefully", async () => {
       await pool.acquire();
     },
     Error,
-    "Failed to create connection after",
+    "Failed to create connection after"
   );
 
   assertEquals(connectAttempts, 1); // maxRetries is 1, so only 1 attempt
@@ -192,7 +192,7 @@ Deno.test("ConnectionPool - validates connections before returning", async () =>
     connectionString: "postgresql://test@localhost/test",
     minConnections: 1,
     maxConnections: 5,
-    validateOnAcquire: true,
+    validateOnAcquire: true
   });
 
   let validateCalled = false;
@@ -223,7 +223,7 @@ Deno.test("ConnectionPool - removes idle connections after timeout", async () =>
     connectionString: "postgresql://test@localhost/test",
     minConnections: 0,
     maxConnections: 5,
-    idleTimeout: 100, // 100ms for testing
+    idleTimeout: 100 // 100ms for testing
   });
 
   DatabaseConnection.prototype.connect = function() {
@@ -239,7 +239,7 @@ Deno.test("ConnectionPool - removes idle connections after timeout", async () =>
   assertEquals(pool.getIdleConnections(), 1);
 
   // Wait for idle timeout
-  await new Promise((resolve) => setTimeout(resolve, 150));
+  await new Promise(resolve => setTimeout(resolve, 150));
 
   // Cleanup should remove idle connection
   await pool.cleanupIdleConnections();
@@ -253,11 +253,11 @@ Deno.test("ConnectionPool - handles concurrent acquisitions", async () => {
   const pool = new ConnectionPool({
     connectionString: "postgresql://test@localhost/test",
     minConnections: 0,
-    maxConnections: 10,
+    maxConnections: 10
   });
 
   DatabaseConnection.prototype.connect = async function() {
-    await new Promise((resolve) => setTimeout(resolve, 10)); // Simulate connection delay
+    await new Promise(resolve => setTimeout(resolve, 10)); // Simulate connection delay
     return Promise.resolve();
   };
 
@@ -272,7 +272,7 @@ Deno.test("ConnectionPool - handles concurrent acquisitions", async () => {
   assertEquals(pool.getPoolSize(), 5);
 
   // Release all connections
-  connections.forEach((conn) => pool.release(conn));
+  connections.forEach(conn => pool.release(conn));
 
   assertEquals(pool.getActiveConnections(), 0);
   assertEquals(pool.getIdleConnections(), 5);
@@ -285,7 +285,7 @@ Deno.test("ConnectionPool - queues requests when pool is full", async () => {
     connectionString: "postgresql://test@localhost/test",
     minConnections: 0,
     maxConnections: 2,
-    maxWaitQueueSize: 10,
+    maxWaitQueueSize: 10
   });
 
   DatabaseConnection.prototype.connect = function() {
@@ -321,7 +321,7 @@ Deno.test("ConnectionPool - rejects when wait queue is full", async () => {
     minConnections: 0,
     maxConnections: 1,
     maxWaitQueueSize: 1,
-    connectionTimeout: 100,
+    connectionTimeout: 100
   });
 
   DatabaseConnection.prototype.connect = function() {
@@ -340,7 +340,7 @@ Deno.test("ConnectionPool - rejects when wait queue is full", async () => {
       await pool.acquire();
     },
     Error,
-    "Connection pool wait queue is full",
+    "Connection pool wait queue is full"
   );
 
   pool.release(conn1);
@@ -353,7 +353,7 @@ Deno.test("ConnectionPool - tracks statistics", async () => {
   const pool = new ConnectionPool({
     connectionString: "postgresql://test@localhost/test",
     minConnections: 1,
-    maxConnections: 5,
+    maxConnections: 5
   });
 
   DatabaseConnection.prototype.connect = function() {
@@ -387,7 +387,7 @@ Deno.test("ConnectionPool - executes query through pool", async () => {
   const pool = new ConnectionPool({
     connectionString: "postgresql://test@localhost/test",
     minConnections: 1,
-    maxConnections: 5,
+    maxConnections: 5
   });
 
   DatabaseConnection.prototype.connect = function() {
@@ -396,7 +396,7 @@ Deno.test("ConnectionPool - executes query through pool", async () => {
 
   DatabaseConnection.prototype.query = function(
     sql: string,
-    params?: any[],
+    params?: any[]
   ) {
     if (sql === "SELECT $1::text") {
       return Promise.resolve({ rows: [{ text: params?.[0] }], rowCount: 1 });
@@ -417,7 +417,7 @@ Deno.test("ConnectionPool - executes transaction through pool", async () => {
   const pool = new ConnectionPool({
     connectionString: "postgresql://test@localhost/test",
     minConnections: 1,
-    maxConnections: 5,
+    maxConnections: 5
   });
 
   let transactionStarted = false;
@@ -428,14 +428,16 @@ Deno.test("ConnectionPool - executes transaction through pool", async () => {
   };
 
   DatabaseConnection.prototype.execute = function(sql: string) {
-    if (sql === "BEGIN") transactionStarted = true;
-    if (sql === "COMMIT") transactionCommitted = true;
+    if (sql === "BEGIN")
+      transactionStarted = true;
+    if (sql === "COMMIT")
+      transactionCommitted = true;
     return Promise.resolve();
   };
 
   await pool.initialize();
 
-  const result = await pool.transaction((_conn) => {
+  const result = await pool.transaction(_conn => {
     assertEquals(transactionStarted, true);
     return Promise.resolve("success");
   });

@@ -123,7 +123,7 @@ export class DbCommand {
       await conn.connect();
 
       const result = await conn.query(
-        `SELECT datname FROM pg_database WHERE datname LIKE 'disc\\_%' ORDER BY datname`,
+        `SELECT datname FROM pg_database WHERE datname LIKE 'disc\\_%' ORDER BY datname`
       );
 
       if (result.rows.length === 0) {
@@ -158,13 +158,13 @@ export class DbCommand {
 
     if (!force) {
       throw new Error(
-        "Dropping a database requires the --force flag. This action is irreversible.",
+        "Dropping a database requires the --force flag. This action is irreversible."
       );
     }
 
     if (name === DEFAULT_DATABASE_NAME) {
       throw new Error(
-        "Cannot drop the default \"disc\" database.",
+        "Cannot drop the default \"disc\" database."
       );
     }
 
@@ -196,13 +196,13 @@ export class DbCommand {
 
     if (!force) {
       throw new Error(
-        "Wiping a database requires the --force flag. This action is irreversible.",
+        "Wiping a database requires the --force flag. This action is irreversible."
       );
     }
 
     if (name === DEFAULT_DATABASE_NAME) {
       throw new Error(
-        "Cannot wipe the default \"disc\" database.",
+        "Cannot wipe the default \"disc\" database."
       );
     }
 
@@ -233,7 +233,7 @@ export class DbCommand {
     const resolved = await this.resolvePgPaths({
       databaseUrl,
       pgBinDir: options.pgBinDir,
-      socketDir: options.socketDir,
+      socketDir: options.socketDir
     });
 
     const pgDatabaseName = `${DATABASE_PREFIX}${name}`;
@@ -245,8 +245,9 @@ export class DbCommand {
       args,
       stderr: "inherit",
       stdin: "null",
-      stdout: "piped",
-    }).spawn();
+      stdout: "piped"
+    })
+      .spawn();
 
     // Stream stdout to either a file or process stdout.
     // For files we let pipeTo close the file when the stream ends.
@@ -256,7 +257,7 @@ export class DbCommand {
       const file = await Deno.open(output, {
         create: true,
         truncate: true,
-        write: true,
+        write: true
       });
       await child.stdout.pipeTo(file.writable);
     } else {
@@ -266,7 +267,7 @@ export class DbCommand {
     const status = await child.status;
     if (!status.success) {
       throw new Error(
-        `pg_dump failed with exit code ${status.code}`,
+        `pg_dump failed with exit code ${status.code}`
       );
     }
   }
@@ -289,7 +290,7 @@ export class DbCommand {
     const resolved = await this.resolvePgPaths({
       databaseUrl,
       pgBinDir: options.pgBinDir,
-      socketDir: options.socketDir,
+      socketDir: options.socketDir
     });
 
     if (clean) {
@@ -320,8 +321,9 @@ export class DbCommand {
       args,
       stderr: "piped",
       stdin: "piped",
-      stdout: "inherit",
-    }).spawn();
+      stdout: "inherit"
+    })
+      .spawn();
 
     // Drain stderr concurrently so the child doesn't block on a full pipe;
     // collect into a buffer so we can include the message on failure.
@@ -330,7 +332,8 @@ export class DbCommand {
       const reader = child.stderr.getReader();
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        if (done)
+          break;
         stderrChunks.push(value);
       }
     })();
@@ -353,12 +356,12 @@ export class DbCommand {
     if (pipeError || !status.success) {
       const prefix = pipeError ? "Restore stream failed" : `${binary} failed`;
       throw new Error(
-        `${prefix} (exit ${status.code})${stderr ? `: ${stderr}` : ""}`,
+        `${prefix} (exit ${status.code})${stderr ? `: ${stderr}` : ""}`
       );
     }
 
     console.log(
-      `Database "${name}" restored successfully (${isCustom ? "custom" : "plain"} format).`,
+      `Database "${name}" restored successfully (${isCustom ? "custom" : "plain"} format).`
     );
   }
 
@@ -368,7 +371,7 @@ export class DbCommand {
    * discovery when not provided directly.
    */
   private async resolvePgPaths(
-    opts: { databaseUrl: string; pgBinDir?: string; socketDir?: string; },
+    opts: { databaseUrl: string; pgBinDir?: string; socketDir?: string; }
   ): Promise<{ pgBinDir: string; socketDir: string; }> {
     if (opts.pgBinDir && opts.socketDir) {
       return { pgBinDir: opts.pgBinDir, socketDir: opts.socketDir };
@@ -377,7 +380,7 @@ export class DbCommand {
     const ctx = resolveProjectContext();
     if (!ctx) {
       throw new Error(
-        "Could not resolve project context. Run from a Disc project directory or pass --pg-bin-dir + --socket-dir explicitly.",
+        "Could not resolve project context. Run from a Disc project directory or pass --pg-bin-dir + --socket-dir explicitly."
       );
     }
 
@@ -390,7 +393,7 @@ export class DbCommand {
       const instance = manager.getInstance(ctx.instanceName);
       if (!instance) {
         throw new Error(
-          `No PostgreSQL instance found for project '${ctx.instanceName}'. Run 'disc init' first.`,
+          `No PostgreSQL instance found for project '${ctx.instanceName}'. Run 'disc init' first.`
         );
       }
 
@@ -411,7 +414,7 @@ export class DbCommand {
 export function buildPgDumpArgs(
   socketDir: string,
   pgDatabaseName: string,
-  format: "plain" | "custom",
+  format: "plain" | "custom"
 ): string[] {
   return [
     "--host",
@@ -421,14 +424,14 @@ export function buildPgDumpArgs(
     "--no-owner",
     "--no-acl",
     `--format=${format}`,
-    pgDatabaseName,
+    pgDatabaseName
   ];
 }
 
 /** Build the psql restore argument list. */
 export function buildPsqlArgs(
   socketDir: string,
-  pgDatabaseName: string,
+  pgDatabaseName: string
 ): string[] {
   return [
     "--host",
@@ -437,14 +440,14 @@ export function buildPsqlArgs(
     "disc",
     "--dbname",
     pgDatabaseName,
-    "--quiet",
+    "--quiet"
   ];
 }
 
 /** Build the pg_restore argument list. */
 export function buildPgRestoreArgs(
   socketDir: string,
-  pgDatabaseName: string,
+  pgDatabaseName: string
 ): string[] {
   return [
     "--host",
@@ -454,7 +457,7 @@ export function buildPgRestoreArgs(
     "--dbname",
     pgDatabaseName,
     "--no-owner",
-    "--no-acl",
+    "--no-acl"
   ];
 }
 
@@ -468,8 +471,8 @@ export function isCustomFormatDump(buf: Uint8Array): boolean {
     return false;
   }
   // "PGDMP"
-  return buf[0] === 0x50 && buf[1] === 0x47 && buf[2] === 0x44
-    && buf[3] === 0x4d && buf[4] === 0x50;
+  return buf[0] === 0x50 && buf[1] === 0x47 && buf[2] === 0x44 &&
+    buf[3] === 0x4d && buf[4] === 0x50;
 }
 
 /**
@@ -480,7 +483,7 @@ export function isCustomFormatDump(buf: Uint8Array): boolean {
  */
 async function peekBytes(
   source: ReadableStream<Uint8Array>,
-  n: number,
+  n: number
 ): Promise<{ peek: Uint8Array; rest: ReadableStream<Uint8Array>; }> {
   const reader = source.getReader();
   const collected: Uint8Array[] = [];
@@ -488,7 +491,8 @@ async function peekBytes(
 
   while (total < n) {
     const { done, value } = await reader.read();
-    if (done) break;
+    if (done)
+      break;
     collected.push(value);
     total += value.byteLength;
   }
@@ -532,7 +536,7 @@ async function peekBytes(
     },
     cancel(reason) {
       reader.cancel(reason).catch(() => {});
-    },
+    }
   });
 
   return { peek, rest };
@@ -545,7 +549,7 @@ async function peekBytes(
  */
 function prependBytes(
   prefix: Uint8Array,
-  tail: ReadableStream<Uint8Array>,
+  tail: ReadableStream<Uint8Array>
 ): ReadableStream<Uint8Array> {
   const reader = tail.getReader();
   let prefixSent = false;
@@ -568,14 +572,15 @@ function prependBytes(
     },
     cancel(reason) {
       reader.cancel(reason).catch(() => {});
-    },
+    }
   });
 }
 
 /** Concatenate multiple Uint8Array chunks into a single contiguous buffer. */
 function concatChunks(chunks: Uint8Array[]): Uint8Array {
   let total = 0;
-  for (const chunk of chunks) total += chunk.byteLength;
+  for (const chunk of chunks)
+    total += chunk.byteLength;
   const out = new Uint8Array(total);
   let offset = 0;
   for (const chunk of chunks) {

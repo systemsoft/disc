@@ -15,12 +15,12 @@ import { handleGetMigrations, type MigrationsProvider, type MigrationsRouteConte
 function makeCtx(provider: MigrationsProvider): MigrationsRouteContext {
   return {
     migrationsProvider: provider,
-    defaultHeaders: () => new Headers({ "Content-Type": "application/json" }),
+    defaultHeaders: () => new Headers({ "Content-Type": "application/json" })
   };
 }
 
 function entry(
-  overrides: Partial<MigrationHistoryEntry> = {},
+  overrides: Partial<MigrationHistoryEntry> = {}
 ): MigrationHistoryEntry {
   return {
     id: "m20260101T000000_abc123",
@@ -32,14 +32,14 @@ function entry(
     createdAt: new Date("2026-01-01T00:00:00Z"),
     dataMigration: false,
     appliedOrder: 1,
-    ...overrides,
+    ...overrides
   };
 }
 
 Deno.test("GET /migrations - returns 200 with wrapped migrations array", async () => {
   const history = [entry({ name: "create_item" }), entry({ name: "add_user" })];
   const response = await handleGetMigrations(
-    makeCtx(() => Promise.resolve(history)),
+    makeCtx(() => Promise.resolve(history))
   );
 
   assertEquals(response.status, 200);
@@ -52,14 +52,14 @@ Deno.test("GET /migrations - returns 200 with wrapped migrations array", async (
 
 Deno.test("GET /migrations - returns JSON content-type", async () => {
   const response = await handleGetMigrations(
-    makeCtx(() => Promise.resolve([])),
+    makeCtx(() => Promise.resolve([]))
   );
   assertEquals(response.headers.get("Content-Type"), "application/json");
 });
 
 Deno.test("GET /migrations - empty history yields { migrations: [] }", async () => {
   const response = await handleGetMigrations(
-    makeCtx(() => Promise.resolve([])),
+    makeCtx(() => Promise.resolve([]))
   );
 
   assertEquals(response.status, 200);
@@ -71,7 +71,7 @@ Deno.test("GET /migrations - 503 when provider throws (tracker uninitialized)", 
   const response = await handleGetMigrations(
     makeCtx(() => {
       throw new Error("Migration tracker not initialized");
-    }),
+    })
   );
 
   assertEquals(response.status, 503);
@@ -82,7 +82,7 @@ Deno.test("GET /migrations - 503 when provider throws (tracker uninitialized)", 
 
 Deno.test("GET /migrations - 503 when provider rejects async", async () => {
   const response = await handleGetMigrations(
-    makeCtx(() => Promise.reject(new Error("pool drained"))),
+    makeCtx(() => Promise.reject(new Error("pool drained")))
   );
 
   assertEquals(response.status, 503);
@@ -95,7 +95,7 @@ Deno.test("GET /migrations - non-Error thrown values are coerced to string", asy
   const response = await handleGetMigrations(
     makeCtx(() => {
       throw "raw string failure"; // unusual but possible
-    }),
+    })
   );
 
   assertEquals(response.status, 503);
@@ -113,11 +113,11 @@ Deno.test("GET /migrations - preserves all history-entry fields", async () => {
     appliedAt: ts,
     durationMs: 42,
     createdAt: ts,
-    dataMigration: true,
+    dataMigration: true
   });
 
   const response = await handleGetMigrations(
-    makeCtx(() => Promise.resolve([e])),
+    makeCtx(() => Promise.resolve([e]))
   );
 
   const body = JSON.parse(await response.text());

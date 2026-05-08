@@ -24,38 +24,38 @@ function createTestSchema(): Context.Schema {
         type: "uuid",
         required: true,
         multi: false,
-        columnName: "id",
+        columnName: "id"
       }],
       ["name", {
         name: "name",
         type: "str",
         required: true,
         multi: false,
-        columnName: "name",
+        columnName: "name"
       }],
       ["email", {
         name: "email",
         type: "str",
         required: true,
         multi: false,
-        columnName: "email",
+        columnName: "email"
       }],
       ["role", {
         name: "role",
         type: "str",
         required: false,
         multi: false,
-        columnName: "role",
+        columnName: "role"
       }],
       ["tenant_id", {
         name: "tenant_id",
         type: "int",
         required: true,
         multi: false,
-        columnName: "tenant_id",
-      }],
+        columnName: "tenant_id"
+      }]
     ]),
-    links: new Map(),
+    links: new Map()
   });
 
   types.set("Document", {
@@ -68,45 +68,45 @@ function createTestSchema(): Context.Schema {
         type: "uuid",
         required: true,
         multi: false,
-        columnName: "id",
+        columnName: "id"
       }],
       ["title", {
         name: "title",
         type: "str",
         required: true,
         multi: false,
-        columnName: "title",
+        columnName: "title"
       }],
       ["content", {
         name: "content",
         type: "str",
         required: true,
         multi: false,
-        columnName: "content",
+        columnName: "content"
       }],
       ["public", {
         name: "public",
         type: "bool",
         required: false,
         multi: false,
-        columnName: "public",
+        columnName: "public"
       }],
       ["owner_id", {
         name: "owner_id",
         type: "uuid",
         required: true,
         multi: false,
-        columnName: "owner_id",
+        columnName: "owner_id"
       }],
       ["tenant_id", {
         name: "tenant_id",
         type: "int",
         required: true,
         multi: false,
-        columnName: "tenant_id",
-      }],
+        columnName: "tenant_id"
+      }]
     ]),
-    links: new Map(),
+    links: new Map()
   });
 
   return { types, functions: new Map() };
@@ -145,15 +145,15 @@ Deno.test("Access Control - Deny without authentication", () => {
       mode: "restrictive",
       defaultAllow: false,
       enableRLS: true,
-      enableAudit: false,
-    },
+      enableAudit: false
+    }
   );
 
   // Register policy that requires authentication
   const policy: AccessPolicy = {
     name: "require_auth",
     objectType: "User",
-    actions: [{ allow: false, operations: ["select"] }],
+    actions: [{ allow: false, operations: ["select"] }]
   };
 
   compiler.registerAccessPolicy(policy);
@@ -189,8 +189,8 @@ Deno.test("Access Control - Allow with proper role", () => {
       kind: "AccessComparison",
       operator: "=",
       left: { kind: "AccessGlobal", name: "current_role" },
-      right: { kind: "AccessLiteral", value: "admin", type: "string" },
-    } as any,
+      right: { kind: "AccessLiteral", value: "admin", type: "string" }
+    } as any
   };
 
   compiler.registerAccessPolicy(policy);
@@ -198,7 +198,7 @@ Deno.test("Access Control - Allow with proper role", () => {
   // Set admin context
   const context: AccessContext = {
     userId: "user123",
-    userRole: "admin",
+    userRole: "admin"
   };
   compiler.setAccessContext(context);
 
@@ -233,8 +233,8 @@ Deno.test("Access Control - Tenant isolation", () => {
       kind: "AccessComparison",
       operator: "=",
       left: { kind: "AccessPath", path: ["tenant_id"] },
-      right: { kind: "AccessPath", path: ["current_session", "tenant_id"] },
-    } as any,
+      right: { kind: "AccessPath", path: ["current_session", "tenant_id"] }
+    } as any
   };
 
   compiler.registerAccessPolicy(policy);
@@ -242,7 +242,7 @@ Deno.test("Access Control - Tenant isolation", () => {
   // Set context with tenant ID
   const context: AccessContext = {
     userId: "user456",
-    sessionData: { tenant_id: 42 },
+    sessionData: { tenant_id: 42 }
   };
   compiler.setAccessContext(context);
 
@@ -273,8 +273,8 @@ Deno.test("Access Control - Block INSERT without permission", () => {
       mode: "restrictive",
       defaultAllow: false,
       enableRLS: true,
-      enableAudit: false,
-    },
+      enableAudit: false
+    }
   );
 
   // Register read-only policy
@@ -283,15 +283,15 @@ Deno.test("Access Control - Block INSERT without permission", () => {
     objectType: "Document",
     actions: [
       { allow: true, operations: ["select"] },
-      { allow: false, operations: ["insert", "update", "delete"] },
-    ],
+      { allow: false, operations: ["insert", "update", "delete"] }
+    ]
   };
 
   compiler.registerAccessPolicy(policy);
 
   const context: AccessContext = {
     userId: "user789",
-    userRole: "viewer",
+    userRole: "viewer"
   };
   compiler.setAccessContext(context);
 
@@ -308,7 +308,7 @@ Deno.test("Access Control - Block INSERT without permission", () => {
         throw new Error(result.error.message);
       }
     },
-    Error,
+    Error
     // Should throw an error about INSERT not being allowed or not implemented
   );
 });
@@ -326,8 +326,8 @@ Deno.test("Access Control - Public documents visible to all", () => {
       kind: "AccessComparison",
       operator: "=",
       left: { kind: "AccessPath", path: ["public"] },
-      right: { kind: "AccessLiteral", value: true, type: "boolean" },
-    } as any,
+      right: { kind: "AccessLiteral", value: true, type: "boolean" }
+    } as any
   };
 
   compiler.registerAccessPolicy(policy);

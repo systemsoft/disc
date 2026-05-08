@@ -22,7 +22,7 @@ export class AuthExtensionAdapter extends BaseExtension {
   readonly metadata: ExtensionMetadata = {
     description: "Built-in authentication system",
     name: "auth",
-    version: "1.0.0",
+    version: "1.0.0"
   };
 
   private authMiddleware: AuthMiddleware;
@@ -50,48 +50,48 @@ export class AuthExtensionAdapter extends BaseExtension {
       {
         handler: (request: Request) => this.authRoutes.register()(request),
         method: "POST",
-        path: "/auth/register",
+        path: "/auth/register"
       },
       {
         handler: (request: Request) => this.authRoutes.login()(request),
         method: "POST",
-        path: "/auth/login",
+        path: "/auth/login"
       },
       {
         handler: (request: Request) => this.authRoutes.logout()(request),
         method: "POST",
-        path: "/auth/logout",
+        path: "/auth/logout"
       },
       {
         handler: (request: Request) => this.authRoutes.refresh()(request),
         method: "POST",
-        path: "/auth/refresh",
+        path: "/auth/refresh"
       },
       {
         handler: (request: Request) => this.authRoutes.profile()(request),
         method: "GET",
-        path: "/auth/profile",
+        path: "/auth/profile"
       },
       {
         handler: (request: Request) => this.authRoutes.updatePassword()(request),
         method: "POST",
-        path: "/auth/password",
+        path: "/auth/password"
       },
       {
         handler: (request: Request) => this.authRoutes.resetPasswordRequest()(request),
         method: "POST",
-        path: "/auth/reset",
+        path: "/auth/reset"
       },
       {
         handler: (request: Request) => this.authRoutes.resetPassword()(request),
         method: "POST",
-        path: "/auth/reset/confirm",
+        path: "/auth/reset/confirm"
       },
       {
         handler: (request: Request) => this.authRoutes.verifyEmail()(request),
         method: "GET",
-        path: "/auth/verify",
-      },
+        path: "/auth/verify"
+      }
     ];
   }
 
@@ -100,7 +100,7 @@ export class AuthExtensionAdapter extends BaseExtension {
       {
         handle: async (
           request: Request,
-          next: () => Promise<Response>,
+          next: () => Promise<Response>
         ): Promise<Response> => {
           // Populate auth context on the request; downstream handlers
           // can call authenticate() independently if they need it. The
@@ -110,8 +110,8 @@ export class AuthExtensionAdapter extends BaseExtension {
           return next();
         },
         name: "auth",
-        priority: 100,
-      },
+        priority: 100
+      }
     ];
   }
 
@@ -153,8 +153,8 @@ export class AuthExtensionAdapter extends BaseExtension {
         `CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)`,
         `CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)`,
         `CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`,
-        `CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`,
-      ],
+        `CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`
+      ]
     };
   }
 

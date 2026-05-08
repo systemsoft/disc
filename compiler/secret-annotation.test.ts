@@ -23,7 +23,8 @@ import { describeType } from "./introspection.ts";
 
 function makeSchema(types: TypeDef[]): Schema {
   const typeMap = new Map<string, TypeDef>();
-  for (const t of types) typeMap.set(t.name, t);
+  for (const t of types)
+    typeMap.set(t.name, t);
   return { types: typeMap, functions: getBuiltinFunctions() };
 }
 
@@ -33,7 +34,7 @@ function makeType(
     annotations?: Record<string, string>;
     properties?: Map<string, PropertyDef>;
     links?: Map<string, LinkDef>;
-  },
+  }
 ): TypeDef {
   return {
     name,
@@ -46,11 +47,11 @@ function makeType(
         required: true,
         multi: false,
         columnName: "id",
-        edgeqlType: "uuid",
-      }],
+        edgeqlType: "uuid"
+      }]
     ]),
     links: opts?.links ?? new Map(),
-    annotations: opts?.annotations,
+    annotations: opts?.annotations
   };
 }
 
@@ -66,13 +67,13 @@ Deno.test("secret-annotation - property without secret annotation has secret: fa
       required: true,
       multi: false,
       columnName: "email",
-      edgeqlType: "str",
-    }],
+      edgeqlType: "str"
+    }]
   ]);
 
   const schema = makeSchema([makeType("User", { properties })]);
   const desc = describeType(schema, "User");
-  const emailProp = desc.properties.find((p) => p.name === "email");
+  const emailProp = desc.properties.find(p => p.name === "email");
   assertEquals(emailProp!.secret, false);
 });
 
@@ -85,13 +86,13 @@ Deno.test("secret-annotation - property with @secret := true has secret: true", 
       multi: false,
       columnName: "password_hash",
       edgeqlType: "str",
-      annotations: { secret: "true" },
-    }],
+      annotations: { secret: "true" }
+    }]
   ]);
 
   const schema = makeSchema([makeType("User", { properties })]);
   const desc = describeType(schema, "User");
-  const pw = desc.properties.find((p) => p.name === "password_hash");
+  const pw = desc.properties.find(p => p.name === "password_hash");
   assertEquals(pw!.secret, true);
 });
 
@@ -104,13 +105,13 @@ Deno.test("secret-annotation - property with @secret := false has secret: false"
       multi: false,
       columnName: "public_id",
       edgeqlType: "str",
-      annotations: { secret: "false" },
-    }],
+      annotations: { secret: "false" }
+    }]
   ]);
 
   const schema = makeSchema([makeType("User", { properties })]);
   const desc = describeType(schema, "User");
-  const p = desc.properties.find((p) => p.name === "public_id");
+  const p = desc.properties.find(p => p.name === "public_id");
   assertEquals(p!.secret, false);
 });
 
@@ -123,13 +124,13 @@ Deno.test("secret-annotation - qualified std::secret annotation also recognized"
       multi: false,
       columnName: "api_key",
       edgeqlType: "str",
-      annotations: { "std::secret": "true" },
-    }],
+      annotations: { "std::secret": "true" }
+    }]
   ]);
 
   const schema = makeSchema([makeType("Token", { properties })]);
   const desc = describeType(schema, "Token");
-  const ak = desc.properties.find((p) => p.name === "api_key");
+  const ak = desc.properties.find(p => p.name === "api_key");
   assertEquals(ak!.secret, true);
 });
 
@@ -140,19 +141,19 @@ Deno.test("secret-annotation - link with @secret := true has secret: true", () =
       target: "User",
       required: false,
       multi: false,
-      annotations: { secret: "true" },
-    }],
+      annotations: { secret: "true" }
+    }]
   ]);
 
   const schema = makeSchema([makeType("Account", { links })]);
   const desc = describeType(schema, "Account");
-  const link = desc.links.find((l) => l.name === "recoveryContact");
+  const link = desc.links.find(l => l.name === "recoveryContact");
   assertEquals(link!.secret, true);
 });
 
 Deno.test("secret-annotation - type-level @secret := true has secret: true", () => {
   const schema = makeSchema([
-    makeType("Credential", { annotations: { secret: "true" } }),
+    makeType("Credential", { annotations: { secret: "true" } })
   ]);
 
   const desc = describeType(schema, "Credential");
@@ -168,13 +169,13 @@ Deno.test("secret-annotation - generic annotation other than secret does not fli
       multi: false,
       columnName: "email",
       edgeqlType: "str",
-      annotations: { description: "secret email", title: "Email" },
-    }],
+      annotations: { description: "secret email", title: "Email" }
+    }]
   ]);
 
   const schema = makeSchema([makeType("User", { properties })]);
   const desc = describeType(schema, "User");
-  const p = desc.properties.find((p) => p.name === "email");
+  const p = desc.properties.find(p => p.name === "email");
   assertEquals(p!.secret, false);
 });
 
@@ -240,12 +241,13 @@ Deno.test("secret-annotation - end-to-end: SDL @secret := true round-trips throu
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true);
 
-  if (!parseResult.ok) throw parseResult.error;
+  if (!parseResult.ok)
+    throw parseResult.error;
   const schema = manager.modulesToSchema(parseResult.value);
   const desc = describeType(schema, "User");
-  const pw = desc.properties.find((p) => p.name === "password_hash");
+  const pw = desc.properties.find(p => p.name === "password_hash");
   assertEquals(pw!.secret, true);
 
-  const name = desc.properties.find((p) => p.name === "name");
+  const name = desc.properties.find(p => p.name === "name");
   assertEquals(name!.secret, false);
 });

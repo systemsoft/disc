@@ -25,7 +25,7 @@ function makePool(dsn: string): ConnectionPool {
     connectionString: dsn,
     minConnections: 1,
     maxConnections: 3,
-    cleanupInterval: 0,
+    cleanupInterval: 0
   });
 }
 
@@ -45,7 +45,7 @@ function makeTestSchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["name", {
         name: "name",
@@ -53,7 +53,7 @@ function makeTestSchema(): Schema {
         required: true,
         multi: false,
         columnName: "name",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["email", {
         name: "email",
@@ -61,8 +61,8 @@ function makeTestSchema(): Schema {
         required: true,
         multi: false,
         columnName: "email",
-        edgeqlType: "str",
-      }],
+        edgeqlType: "str"
+      }]
     ]),
     links: new Map([
       ["posts", {
@@ -70,9 +70,9 @@ function makeTestSchema(): Schema {
         target: "Post",
         required: false,
         multi: true,
-        backlink: "author",
-      }],
-    ]),
+        backlink: "author"
+      }]
+    ])
   };
 
   const postType: TypeDef = {
@@ -87,7 +87,7 @@ function makeTestSchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["title", {
         name: "title",
@@ -95,8 +95,8 @@ function makeTestSchema(): Schema {
         required: true,
         multi: false,
         columnName: "title",
-        edgeqlType: "str",
-      }],
+        edgeqlType: "str"
+      }]
     ]),
     links: new Map([
       ["author", {
@@ -104,17 +104,17 @@ function makeTestSchema(): Schema {
         target: "User",
         required: true,
         multi: false,
-        columnName: "author_id",
-      }],
-    ]),
+        columnName: "author_id"
+      }]
+    ])
   };
 
   return {
     types: new Map([
       ["User", userType],
-      ["Post", postType],
+      ["Post", postType]
     ]),
-    functions: new Map(),
+    functions: new Map()
   };
 }
 
@@ -128,7 +128,7 @@ function makeContext(schema: Schema): ExtensionContext {
       maxConnections: 5,
       requestTimeout: 5000,
       enableCors: false,
-      enableWebsockets: false,
+      enableWebsockets: false
     },
     logger: {
       debug: () => {},
@@ -140,8 +140,8 @@ function makeContext(schema: Schema): ExtensionContext {
       },
       withRequest: function() {
         return this;
-      },
-    } as unknown as ExtensionContext["logger"],
+      }
+    } as unknown as ExtensionContext["logger"]
   };
 }
 
@@ -170,7 +170,7 @@ Deno.test({
       // Insert test data
       await pool.query(
         "INSERT INTO disc_gql_users (name, email) VALUES ($1, $2)",
-        ["Ada", "ada@example.com"],
+        ["Ada", "ada@example.com"]
       );
 
       // Translate a GraphQL query to EdgeQL
@@ -185,7 +185,7 @@ Deno.test({
       const pgResult = await pool.query(
         `SELECT jsonb_build_object('name', name, 'email', email) AS data
          FROM disc_gql_users
-         ORDER BY name`,
+         ORDER BY name`
       );
       assertEquals(pgResult.rows.length, 1);
       const data = pgResult.rows[0]["data"] as Record<string, string>;
@@ -195,7 +195,7 @@ Deno.test({
       await resetTestDatabase(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -222,26 +222,26 @@ Deno.test({
       // Translate a create mutation to EdgeQL
       const schema = makeTestSchema();
       const parsed = parseGraphQLQuery(
-        "mutation { createUser(input: {name: \"Billie\", email: \"billie@example.com\"}) { id } }",
+        "mutation { createUser(input: {name: \"Billie\", email: \"billie@example.com\"}) { id } }"
       );
       const result = translateToEdgeQL(parsed, schema);
 
       // Verify EdgeQL is an INSERT
       assertEquals(
         result.edgeql,
-        "INSERT User {name := \"Billie\", email := \"billie@example.com\"}",
+        "INSERT User {name := \"Billie\", email := \"billie@example.com\"}"
       );
 
       // Execute the equivalent SQL INSERT
       await pool.query(
         "INSERT INTO disc_gql_users (name, email) VALUES ($1, $2)",
-        ["Billie", "billie@example.com"],
+        ["Billie", "billie@example.com"]
       );
 
       // Verify the record was created
       const pgResult = await pool.query(
         "SELECT name, email FROM disc_gql_users WHERE name = $1",
-        ["Billie"],
+        ["Billie"]
       );
       assertEquals(pgResult.rows.length, 1);
       assertEquals(String(pgResult.rows[0]["name"]), "Billie");
@@ -250,7 +250,7 @@ Deno.test({
       await resetTestDatabase(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -271,9 +271,9 @@ Deno.test({
       await ext.initialize(makeContext(schema));
 
       const routes = ext.getRoutes();
-      const schemaRoute = routes.find((r) => r.path === "/graphql/schema")!;
+      const schemaRoute = routes.find(r => r.path === "/graphql/schema")!;
       const response = await schemaRoute.handler(
-        new Request("http://localhost/graphql/schema"),
+        new Request("http://localhost/graphql/schema")
       );
 
       assertEquals(response.status, 200);
@@ -289,7 +289,7 @@ Deno.test({
       await resetTestDatabase(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -325,19 +325,19 @@ Deno.test({
       // Insert test data
       const userResult = await pool.query(
         "INSERT INTO disc_gql_users (name, email) VALUES ($1, $2) RETURNING id",
-        ["Cher", "cher@example.com"],
+        ["Cher", "cher@example.com"]
       );
       const userId = userResult.rows[0]["id"];
 
       await pool.query(
         "INSERT INTO disc_gql_posts (title, author_id) VALUES ($1, $2)",
-        ["Hello World", userId],
+        ["Hello World", userId]
       );
 
       // Translate nested GraphQL query to EdgeQL
       const schema = makeTestSchema();
       const parsed = parseGraphQLQuery(
-        "{ allUsers { name, posts { title } } }",
+        "{ allUsers { name, posts { title } } }"
       );
       const result = translateToEdgeQL(parsed, schema);
 
@@ -354,7 +354,7 @@ Deno.test({
            )
          ) AS data
          FROM disc_gql_users u
-         ORDER BY u.name`,
+         ORDER BY u.name`
       );
 
       assertEquals(pgResult.rows.length, 1);
@@ -369,5 +369,5 @@ Deno.test({
       await resetTestDatabase(pool);
       await pool.close();
     }
-  },
+  }
 });

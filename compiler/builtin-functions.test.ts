@@ -11,7 +11,7 @@ Deno.test("getBuiltinFunctions returns a Map with at least 32 entries", () => {
   assertEquals(
     fns.size >= 32,
     true,
-    `Expected at least 32 functions, got ${fns.size}`,
+    `Expected at least 32 functions, got ${fns.size}`
   );
 });
 
@@ -24,29 +24,29 @@ Deno.test("every entry has a valid FunctionDef shape", () => {
     assertEquals(
       Array.isArray(def.args),
       true,
-      `${key}: args should be an array`,
+      `${key}: args should be an array`
     );
     assertEquals(
       typeof def.returnType,
       "string",
-      `${key}: returnType should be a string`,
+      `${key}: returnType should be a string`
     );
 
     for (const arg of def.args) {
       assertEquals(
         typeof arg.name,
         "string",
-        `${key}: arg name should be a string`,
+        `${key}: arg name should be a string`
       );
       assertEquals(
         typeof arg.type,
         "string",
-        `${key}: arg type should be a string`,
+        `${key}: arg type should be a string`
       );
       assertEquals(
         typeof arg.required,
         "boolean",
-        `${key}: arg required should be a boolean`,
+        `${key}: arg required should be a boolean`
       );
     }
   }
@@ -410,7 +410,7 @@ Deno.test("each call returns a fresh Map instance", () => {
   assertEquals(
     fns1.size,
     fns2.size,
-    "both should have the same number of entries",
+    "both should have the same number of entries"
   );
 });
 
@@ -426,7 +426,7 @@ Deno.test("window-only functions have windowOnly: true", () => {
     "lag",
     "lead",
     "first_value",
-    "last_value",
+    "last_value"
   ];
 
   for (const name of windowOnlyNames) {
@@ -435,7 +435,7 @@ Deno.test("window-only functions have windowOnly: true", () => {
     assertEquals(
       fn.windowOnly,
       true,
-      `${name} should have windowOnly === true`,
+      `${name} should have windowOnly === true`
     );
   }
 });
@@ -451,7 +451,7 @@ Deno.test("aggregate functions have windowCompatible: true", () => {
     "stddev",
     "stddev_pop",
     "stddev_samp",
-    "array_agg",
+    "array_agg"
   ];
 
   for (const name of windowCompatibleNames) {
@@ -460,7 +460,7 @@ Deno.test("aggregate functions have windowCompatible: true", () => {
     assertEquals(
       fn.windowCompatible,
       true,
-      `${name} should have windowCompatible === true`,
+      `${name} should have windowCompatible === true`
     );
   }
 });
@@ -475,7 +475,7 @@ Deno.test("scalar functions have neither windowOnly nor windowCompatible", () =>
     "math_ceil",
     "math_floor",
     "round",
-    "str_trim",
+    "str_trim"
   ];
 
   for (const name of scalarNames) {
@@ -484,12 +484,12 @@ Deno.test("scalar functions have neither windowOnly nor windowCompatible", () =>
     assertEquals(
       fn.windowOnly,
       undefined,
-      `${name} should not have windowOnly set`,
+      `${name} should not have windowOnly set`
     );
     assertEquals(
       fn.windowCompatible,
       undefined,
-      `${name} should not have windowCompatible set`,
+      `${name} should not have windowCompatible set`
     );
   }
 });

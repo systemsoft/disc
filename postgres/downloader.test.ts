@@ -5,7 +5,7 @@ import { PostgresBinaryDownloader } from "./downloader.ts";
 
 const TEST_BASE_DIR = join(
   Deno.makeTempDirSync(),
-  "disc-postgres-download-test",
+  "disc-postgres-download-test"
 );
 
 Deno.test("PostgresBinaryDownloader - platform detection", () => {
@@ -20,7 +20,7 @@ Deno.test("PostgresBinaryDownloader - platform detection", () => {
     "darwin-arm64",
     "darwin-x64",
     "linux-arm64",
-    "linux-x64",
+    "linux-x64"
   ];
   assertEquals(supportedPlatforms.includes(platform), true);
 });
@@ -31,7 +31,7 @@ Deno.test("PostgresBinaryDownloader - opts shape accepts explicit platform overr
   // shape lets callers pin both `baseDir` and `platform`.
   const downloader = new PostgresBinaryDownloader({
     baseDir: TEST_BASE_DIR,
-    platform: "linux-arm64",
+    platform: "linux-arm64"
   });
   assertEquals((downloader as any).platform, "linux-arm64");
   assertEquals((downloader as any).baseDir, TEST_BASE_DIR);
@@ -128,7 +128,7 @@ Deno.test("PostgresBinaryDownloader - handles unsupported platforms", () => {
         await d.ensurePostgres("16.4");
       },
       Error,
-      "Windows support not yet implemented",
+      "Windows support not yet implemented"
     );
   }
 });
@@ -211,11 +211,13 @@ Deno.test("PostgresBinaryDownloader - DISC_PG_BINARY_DIR overrides default baseD
     // Field is private; cast through an unknown index for the assertion.
     assertEquals(
       (downloader as unknown as { baseDir: string; }).baseDir,
-      stagedRoot,
+      stagedRoot
     );
   } finally {
-    if (original === undefined) Deno.env.delete("DISC_PG_BINARY_DIR");
-    else Deno.env.set("DISC_PG_BINARY_DIR", original);
+    if (original === undefined)
+      Deno.env.delete("DISC_PG_BINARY_DIR");
+    else
+      Deno.env.set("DISC_PG_BINARY_DIR", original);
   }
 });
 
@@ -228,11 +230,13 @@ Deno.test("PostgresBinaryDownloader - DISC_OFFLINE=1 throws with actionable mess
     await assertRejects(
       () => downloader.download("16.4"),
       Error,
-      "DISC_OFFLINE=1",
+      "DISC_OFFLINE=1"
     );
   } finally {
-    if (offlineOriginal === undefined) Deno.env.delete("DISC_OFFLINE");
-    else Deno.env.set("DISC_OFFLINE", offlineOriginal);
+    if (offlineOriginal === undefined)
+      Deno.env.delete("DISC_OFFLINE");
+    else
+      Deno.env.set("DISC_OFFLINE", offlineOriginal);
     await Deno.remove(tempDir, { recursive: true });
   }
 });

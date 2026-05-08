@@ -53,8 +53,8 @@ Deno.test("Access Compilation - no policies does not inject WHERE FALSE", () => 
       mode: "permissive",
       defaultAllow: true,
       enableRLS: false,
-      enableAudit: false,
-    },
+      enableAudit: false
+    }
   };
   const compiler = new EdgeQLCompiler(schema, options);
 
@@ -64,12 +64,12 @@ Deno.test("Access Compilation - no policies does not inject WHERE FALSE", () => 
   assertEquals(
     sql.includes("WHERE FALSE"),
     false,
-    "Expected no WHERE FALSE when no policies are registered and defaultAllow is true",
+    "Expected no WHERE FALSE when no policies are registered and defaultAllow is true"
   );
   assertEquals(
     sql.includes("SELECT"),
     true,
-    "Expected SELECT in generated SQL",
+    "Expected SELECT in generated SQL"
   );
 });
 
@@ -81,7 +81,7 @@ Deno.test("Access Compilation - deny SELECT policy injects WHERE FALSE", () => {
   const denyPolicy: AccessPolicy = {
     name: "deny_select",
     objectType: "User",
-    actions: [{ allow: false, operations: ["select"] }],
+    actions: [{ allow: false, operations: ["select"] }]
   };
 
   const schema = createSchemaWithPolicies([]);
@@ -91,8 +91,8 @@ Deno.test("Access Compilation - deny SELECT policy injects WHERE FALSE", () => {
       mode: "permissive",
       defaultAllow: true,
       enableRLS: false,
-      enableAudit: false,
-    },
+      enableAudit: false
+    }
   };
   const compiler = new EdgeQLCompiler(schema, options);
   compiler.registerAccessPolicy(denyPolicy);
@@ -109,13 +109,13 @@ Deno.test("Access Compilation - deny SELECT policy injects WHERE FALSE", () => {
     assertEquals(
       sql.includes("FALSE"),
       true,
-      "Expected WHERE FALSE injected into SQL when SELECT is denied",
+      "Expected WHERE FALSE injected into SQL when SELECT is denied"
     );
   } else {
     // A CompilationError is also an acceptable response to a deny policy
     assertExists(
       result.error.message,
-      "Expected error message when access is denied",
+      "Expected error message when access is denied"
     );
   }
 });
@@ -134,8 +134,8 @@ Deno.test("Access Compilation - allow policy with using expression injects SQL c
       kind: "AccessComparison",
       operator: "=",
       left: { kind: "AccessPath", path: ["id"] },
-      right: { kind: "AccessGlobal", name: "current_user" },
-    },
+      right: { kind: "AccessGlobal", name: "current_user" }
+    }
   };
 
   const schema = createSchemaWithPolicies([]);
@@ -145,11 +145,11 @@ Deno.test("Access Compilation - allow policy with using expression injects SQL c
       mode: "permissive",
       defaultAllow: false,
       enableRLS: true,
-      enableAudit: false,
+      enableAudit: false
     },
     accessContext: {
-      userId: "abc-123",
-    },
+      userId: "abc-123"
+    }
   };
   const compiler = new EdgeQLCompiler(schema, options);
   compiler.registerAccessPolicy(allowPolicy);
@@ -160,13 +160,13 @@ Deno.test("Access Compilation - allow policy with using expression injects SQL c
   assertEquals(
     sql.includes("SELECT"),
     true,
-    "Expected SELECT in generated SQL",
+    "Expected SELECT in generated SQL"
   );
   // The evaluator should have injected the userId as a condition
   assertEquals(
     sql.includes("abc-123") || sql.includes("WHERE"),
     true,
-    "Expected access condition or WHERE clause to appear in SQL",
+    "Expected access condition or WHERE clause to appear in SQL"
   );
 });
 
@@ -178,7 +178,7 @@ Deno.test("Access Compilation - deny INSERT policy returns Err", () => {
   const denyInsertPolicy: AccessPolicy = {
     name: "deny_insert",
     objectType: "User",
-    actions: [{ allow: false, operations: ["insert"] }],
+    actions: [{ allow: false, operations: ["insert"] }]
   };
 
   const schema = createSchemaWithPolicies([]);
@@ -188,14 +188,14 @@ Deno.test("Access Compilation - deny INSERT policy returns Err", () => {
       mode: "permissive",
       defaultAllow: true,
       enableRLS: false,
-      enableAudit: false,
-    },
+      enableAudit: false
+    }
   };
   const compiler = new EdgeQLCompiler(schema, options);
   compiler.registerAccessPolicy(denyInsertPolicy);
 
   const parser = new EdgeQLParser(
-    `INSERT User { name := "test", email := "test@example.com" }`,
+    `INSERT User { name := "test", email := "test@example.com" }`
   );
   const ast = parser.parse();
   const result = compiler.compile(ast);
@@ -203,11 +203,11 @@ Deno.test("Access Compilation - deny INSERT policy returns Err", () => {
   assertEquals(
     result.ok,
     false,
-    "Expected compilation to fail when INSERT is denied by policy",
+    "Expected compilation to fail when INSERT is denied by policy"
   );
   assertExists(
     result.ok === false && result.error,
-    "Expected an error on denied INSERT",
+    "Expected an error on denied INSERT"
   );
 });
 
@@ -226,8 +226,8 @@ Deno.test("Access Compilation - access context changes evaluation outcome", () =
     condition: {
       // AccessGlobal "current_user" evaluates to Boolean(context.userId)
       kind: "AccessGlobal",
-      name: "current_user",
-    },
+      name: "current_user"
+    }
   };
 
   const schema = createSchemaWithPolicies([]);
@@ -237,8 +237,8 @@ Deno.test("Access Compilation - access context changes evaluation outcome", () =
       mode: "permissive",
       defaultAllow: false,
       enableRLS: false,
-      enableAudit: false,
-    },
+      enableAudit: false
+    }
   };
   const compiler = new EdgeQLCompiler(schema, options);
   compiler.registerAccessPolicy(userPolicy);
@@ -256,13 +256,13 @@ Deno.test("Access Compilation - access context changes evaluation outcome", () =
     assertEquals(
       anonSQL.includes("FALSE"),
       true,
-      "Expected WHERE FALSE for unauthenticated context when condition requires current_user",
+      "Expected WHERE FALSE for unauthenticated context when condition requires current_user"
     );
   } else {
     // A compilation error is also acceptable for denied access
     assertExists(
       anonResult.error.message,
-      "Expected error for unauthenticated access",
+      "Expected error for unauthenticated access"
     );
   }
 
@@ -272,7 +272,7 @@ Deno.test("Access Compilation - access context changes evaluation outcome", () =
   assertEquals(
     authResult.ok,
     true,
-    "Expected successful compilation when userId is set and condition uses current_user",
+    "Expected successful compilation when userId is set and condition uses current_user"
   );
   if (authResult.ok) {
     const codegen = new SQLCodeGenerator();
@@ -280,7 +280,7 @@ Deno.test("Access Compilation - access context changes evaluation outcome", () =
     assertEquals(
       authSQL.includes("SELECT"),
       true,
-      "Expected SELECT in authenticated SQL",
+      "Expected SELECT in authenticated SQL"
     );
   }
 });

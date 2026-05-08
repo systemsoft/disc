@@ -32,20 +32,20 @@ function makePool(dsn: string): ConnectionPool {
     connectionString: dsn,
     minConnections: 1,
     maxConnections: 3,
-    cleanupInterval: 0,
+    cleanupInterval: 0
   });
 }
 
 /** Standard migration cleanup tables to drop alongside test tables. */
 const MIGRATION_TABLES = [
   "disc_migrations",
-  "disc_migration_checkpoints",
+  "disc_migration_checkpoints"
 ];
 
 /** Apply SDL via SchemaManager and return the schema. Caller handles cleanup. */
 async function applyTestSchema(
   pool: ConnectionPool,
-  sdl: string,
+  sdl: string
 ): Promise<{ manager: SchemaManager; schema: Schema; }> {
   const manager = new SchemaManager({ pool });
   await manager.initialize();
@@ -54,7 +54,7 @@ async function applyTestSchema(
   assertEquals(
     result.ok,
     true,
-    `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`,
+    `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`
   );
 
   const schema = manager.getSchema();
@@ -78,7 +78,7 @@ function compileWithAccess(
   schema: Schema,
   policies: AccessPolicy[],
   accessConfig: AccessConfig,
-  accessContext: AccessContext,
+  accessContext: AccessContext
 ): { ok: true; sql: string; } | { ok: false; error: string; } {
   const parser = new EdgeQLParser(edgeql);
   const ast = parser.parse();
@@ -86,7 +86,7 @@ function compileWithAccess(
   const compiler = new EdgeQLCompiler(schema, {
     enableAccessControl: true,
     accessConfig,
-    accessContext,
+    accessContext
   });
 
   // Register each policy with the compiler's internal evaluator
@@ -121,13 +121,13 @@ function buildPolicy(
   objectType: string,
   allow: boolean,
   operations: ("select" | "insert" | "update" | "delete" | "all")[],
-  using?: AccessExpressionNode,
+  using?: AccessExpressionNode
 ): AccessPolicy {
   return {
     name,
     objectType,
     actions: [{ allow, operations }],
-    using,
+    using
   };
 }
 
@@ -136,13 +136,13 @@ const DEFAULT_ACCESS_CONFIG: AccessConfig = {
   mode: "permissive",
   defaultAllow: false,
   enableRLS: true,
-  enableAudit: false,
+  enableAudit: false
 };
 
 /** Drop a list of tables, ignoring errors. */
 async function dropTables(
   pool: ConnectionPool,
-  tables: string[],
+  tables: string[]
 ): Promise<void> {
   for (const table of tables) {
     await pool.query(`DROP TABLE IF EXISTS ${table} CASCADE`);
@@ -180,7 +180,7 @@ Deno.test({
         `INSERT INTO ${TABLE} (id, name) VALUES
           ('${uuid1}', 'Ada'),
           ('${uuid2}', 'Billie'),
-          ('${uuid3}', 'Cher')`,
+          ('${uuid3}', 'Cher')`
       );
 
       // Build policy: allow select using (.id = global current_user)
@@ -188,7 +188,7 @@ Deno.test({
         kind: "AccessComparison",
         operator: "=",
         left: { kind: "AccessPath", path: ["id"] },
-        right: { kind: "AccessGlobal", name: "current_user" },
+        right: { kind: "AccessGlobal", name: "current_user" }
       });
 
       // Compile with userId = uuid1 (Ada)
@@ -197,11 +197,12 @@ Deno.test({
         schema,
         [policy],
         DEFAULT_ACCESS_CONFIG,
-        { userId: uuid1 },
+        { userId: uuid1 }
       );
 
       assertEquals(compiled.ok, true, "Compilation should succeed");
-      if (!compiled.ok) return;
+      if (!compiled.ok)
+        return;
 
       // The SQL should contain a WHERE clause filtering by the user's id
       const result = await pool.query(compiled.sql);
@@ -218,7 +219,7 @@ Deno.test({
       await dropTables(pool, [TABLE, ...MIGRATION_TABLES]);
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -243,7 +244,7 @@ Deno.test({
       await pool.query(
         `INSERT INTO ${TABLE} (id, name) VALUES
           (gen_random_uuid(), 'Ada'),
-          (gen_random_uuid(), 'Billie')`,
+          (gen_random_uuid(), 'Billie')`
       );
 
       // Build policy: allow select using (.id = global current_user)
@@ -262,8 +263,8 @@ Deno.test({
           kind: "AccessComparison",
           operator: "=",
           left: { kind: "AccessPath", path: ["id"] },
-          right: { kind: "AccessGlobal", name: "current_user" },
-        },
+          right: { kind: "AccessGlobal", name: "current_user" }
+        }
       );
 
       // Set condition so the policy only fires when userId is truthy.
@@ -277,22 +278,23 @@ Deno.test({
         schema,
         [policy],
         DEFAULT_ACCESS_CONFIG,
-        {}, // empty context
+        {} // empty context
       );
 
       assertEquals(
         compiled.ok,
         true,
-        "Compilation should succeed (WHERE FALSE injected)",
+        "Compilation should succeed (WHERE FALSE injected)"
       );
-      if (!compiled.ok) return;
+      if (!compiled.ok)
+        return;
 
       // The compiler should inject WHERE FALSE since no allow policy fires
       const result = await pool.query(compiled.sql);
       assertEquals(
         result.rowCount,
         0,
-        "Should return 0 rows when no auth context",
+        "Should return 0 rows when no auth context"
       );
 
       await manager.close();
@@ -300,7 +302,7 @@ Deno.test({
       await dropTables(pool, [TABLE, ...MIGRATION_TABLES]);
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -326,7 +328,7 @@ Deno.test({
         "no_insert",
         "RestrictedUser",
         false, // deny
-        ["insert"],
+        ["insert"]
       );
 
       // Compile INSERT — should fail at compilation
@@ -335,7 +337,7 @@ Deno.test({
         schema,
         [policy],
         DEFAULT_ACCESS_CONFIG,
-        { userId: "some-user" },
+        { userId: "some-user" }
       );
 
       assertEquals(compiled.ok, false, "INSERT compilation should be denied");
@@ -343,7 +345,7 @@ Deno.test({
         assertEquals(
           compiled.error.includes("not allowed"),
           true,
-          `Error should mention 'not allowed', got: ${compiled.error}`,
+          `Error should mention 'not allowed', got: ${compiled.error}`
         );
       }
 
@@ -352,7 +354,7 @@ Deno.test({
       await dropTables(pool, [TABLE, ...MIGRATION_TABLES]);
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -380,7 +382,7 @@ Deno.test({
       await pool.query(
         `INSERT INTO ${TABLE} (id, name, status) VALUES
           ('${uuid1}', 'Ada', 'active'),
-          ('${uuid2}', 'Billie', 'active')`,
+          ('${uuid2}', 'Billie', 'active')`
       );
 
       // Build policy: allow update using (.id = global current_user)
@@ -393,8 +395,8 @@ Deno.test({
           kind: "AccessComparison",
           operator: "=",
           left: { kind: "AccessPath", path: ["id"] },
-          right: { kind: "AccessGlobal", name: "current_user" },
-        },
+          right: { kind: "AccessGlobal", name: "current_user" }
+        }
       );
 
       // Compile UPDATE with userId = uuid1 (Ada)
@@ -403,32 +405,33 @@ Deno.test({
         schema,
         [policy],
         DEFAULT_ACCESS_CONFIG,
-        { userId: uuid1 },
+        { userId: uuid1 }
       );
 
       assertEquals(compiled.ok, true, "UPDATE compilation should succeed");
-      if (!compiled.ok) return;
+      if (!compiled.ok)
+        return;
 
       // Execute the update
       await pool.query(compiled.sql);
 
       // Verify: Ada should be 'inactive', Billie should remain 'active'
       const adaResult = await pool.query(
-        `SELECT status FROM ${TABLE} WHERE id = '${uuid1}'`,
+        `SELECT status FROM ${TABLE} WHERE id = '${uuid1}'`
       );
       assertEquals(
         adaResult.rows[0].status,
         "inactive",
-        "Ada should be inactive",
+        "Ada should be inactive"
       );
 
       const billieResult = await pool.query(
-        `SELECT status FROM ${TABLE} WHERE id = '${uuid2}'`,
+        `SELECT status FROM ${TABLE} WHERE id = '${uuid2}'`
       );
       assertEquals(
         billieResult.rows[0].status,
         "active",
-        "Billie should remain active",
+        "Billie should remain active"
       );
 
       await manager.close();
@@ -436,7 +439,7 @@ Deno.test({
       await dropTables(pool, [TABLE, ...MIGRATION_TABLES]);
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -463,7 +466,7 @@ Deno.test({
       await pool.query(
         `INSERT INTO ${TABLE} (id, name) VALUES
           ('${uuid1}', 'Ada'),
-          ('${uuid2}', 'Billie')`,
+          ('${uuid2}', 'Billie')`
       );
 
       // Build policy: allow delete using (.id = global current_user)
@@ -476,8 +479,8 @@ Deno.test({
           kind: "AccessComparison",
           operator: "=",
           left: { kind: "AccessPath", path: ["id"] },
-          right: { kind: "AccessGlobal", name: "current_user" },
-        },
+          right: { kind: "AccessGlobal", name: "current_user" }
+        }
       );
 
       // Compile DELETE with userId = uuid1 (Ada)
@@ -486,23 +489,24 @@ Deno.test({
         schema,
         [policy],
         DEFAULT_ACCESS_CONFIG,
-        { userId: uuid1 },
+        { userId: uuid1 }
       );
 
       assertEquals(compiled.ok, true, "DELETE compilation should succeed");
-      if (!compiled.ok) return;
+      if (!compiled.ok)
+        return;
 
       // Execute the delete
       await pool.query(compiled.sql);
 
       // Verify: Ada should be gone, Billie should remain
       const remaining = await pool.query(
-        `SELECT name FROM ${TABLE} ORDER BY name`,
+        `SELECT name FROM ${TABLE} ORDER BY name`
       );
       assertEquals(
         remaining.rowCount,
         1,
-        "Should have exactly 1 row remaining",
+        "Should have exactly 1 row remaining"
       );
       assertEquals(remaining.rows[0].name, "Billie", "Billie should remain");
 
@@ -511,7 +515,7 @@ Deno.test({
       await dropTables(pool, [TABLE, ...MIGRATION_TABLES]);
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -544,7 +548,7 @@ Deno.test({
         `INSERT INTO ${TABLE} (id, name) VALUES
           ('${uuid1}', 'Ada'),
           ('${uuid2}', ''),
-          ('${uuid3}', 'Cher')`,
+          ('${uuid3}', 'Cher')`
       );
 
       // Build policy: allow select using (.id = global current_user AND .name != '')
@@ -561,16 +565,16 @@ Deno.test({
               kind: "AccessComparison",
               operator: "=",
               left: { kind: "AccessPath", path: ["id"] },
-              right: { kind: "AccessGlobal", name: "current_user" },
+              right: { kind: "AccessGlobal", name: "current_user" }
             },
             {
               kind: "AccessComparison",
               operator: "!=",
               left: { kind: "AccessPath", path: ["name"] },
-              right: { kind: "AccessLiteral", type: "string", value: "" },
-            },
-          ],
-        },
+              right: { kind: "AccessLiteral", type: "string", value: "" }
+            }
+          ]
+        }
       );
 
       // Query as Ada (uuid1, name='Ada' != '') -> should pass both conditions
@@ -579,15 +583,16 @@ Deno.test({
         schema,
         [policy],
         DEFAULT_ACCESS_CONFIG,
-        { userId: uuid1 },
+        { userId: uuid1 }
       );
 
       assertEquals(
         compiledAda.ok,
         true,
-        "Compilation for Ada should succeed",
+        "Compilation for Ada should succeed"
       );
-      if (!compiledAda.ok) return;
+      if (!compiledAda.ok)
+        return;
 
       const adaResult = await pool.query(compiledAda.sql);
       assertEquals(adaResult.rowCount, 1, "Ada should see exactly 1 row");
@@ -598,21 +603,22 @@ Deno.test({
         schema,
         [policy],
         DEFAULT_ACCESS_CONFIG,
-        { userId: uuid2 },
+        { userId: uuid2 }
       );
 
       assertEquals(
         compiledEmpty.ok,
         true,
-        "Compilation for empty-name user should succeed",
+        "Compilation for empty-name user should succeed"
       );
-      if (!compiledEmpty.ok) return;
+      if (!compiledEmpty.ok)
+        return;
 
       const emptyResult = await pool.query(compiledEmpty.sql);
       assertEquals(
         emptyResult.rowCount,
         0,
-        "User with empty name should see 0 rows (AND condition fails)",
+        "User with empty name should see 0 rows (AND condition fails)"
       );
 
       await manager.close();
@@ -620,7 +626,7 @@ Deno.test({
       await dropTables(pool, [TABLE, ...MIGRATION_TABLES]);
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -650,7 +656,7 @@ Deno.test({
         `INSERT INTO ${TABLE} (id, name, role) VALUES
           ('${uuid1}', 'Ada', 'admin'),
           ('${uuid2}', 'Billie', 'user'),
-          ('${uuid3}', 'Cher', 'admin')`,
+          ('${uuid3}', 'Cher', 'admin')`
       );
 
       // Build policy: allow select using (.role = global current_role OR .id = global current_user)
@@ -667,16 +673,16 @@ Deno.test({
               kind: "AccessComparison",
               operator: "=",
               left: { kind: "AccessPath", path: ["role"] },
-              right: { kind: "AccessGlobal", name: "current_role" },
+              right: { kind: "AccessGlobal", name: "current_role" }
             },
             {
               kind: "AccessComparison",
               operator: "=",
               left: { kind: "AccessPath", path: ["id"] },
-              right: { kind: "AccessGlobal", name: "current_user" },
-            },
-          ],
-        },
+              right: { kind: "AccessGlobal", name: "current_user" }
+            }
+          ]
+        }
       );
 
       // Query as Billie (uuid2) with role='user'
@@ -688,17 +694,18 @@ Deno.test({
         schema,
         [policy],
         DEFAULT_ACCESS_CONFIG,
-        { userId: uuid2, userRole: "user" },
+        { userId: uuid2, userRole: "user" }
       );
 
       assertEquals(compiledBillie.ok, true, "Compilation for Billie should succeed");
-      if (!compiledBillie.ok) return;
+      if (!compiledBillie.ok)
+        return;
 
       const billieResult = await pool.query(compiledBillie.sql);
       assertEquals(
         billieResult.rowCount,
         1,
-        "Billie should see exactly 1 row (himself)",
+        "Billie should see exactly 1 row (himself)"
       );
 
       // Query as Billie (uuid2) with role='admin'
@@ -708,21 +715,22 @@ Deno.test({
         schema,
         [policy],
         DEFAULT_ACCESS_CONFIG,
-        { userId: uuid2, userRole: "admin" },
+        { userId: uuid2, userRole: "admin" }
       );
 
       assertEquals(
         compiledAdmin.ok,
         true,
-        "Compilation for admin role should succeed",
+        "Compilation for admin role should succeed"
       );
-      if (!compiledAdmin.ok) return;
+      if (!compiledAdmin.ok)
+        return;
 
       const adminResult = await pool.query(compiledAdmin.sql);
       assertEquals(
         adminResult.rowCount,
         3,
-        "Admin role + Billie's id should see all 3 rows",
+        "Admin role + Billie's id should see all 3 rows"
       );
 
       await manager.close();
@@ -730,7 +738,7 @@ Deno.test({
       await dropTables(pool, [TABLE, ...MIGRATION_TABLES]);
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -760,7 +768,7 @@ Deno.test({
         `INSERT INTO ${TABLE} (id, name, role) VALUES
           ('${uuid1}', 'Ada', 'admin'),
           ('${uuid2}', 'Billie', 'editor'),
-          ('${uuid3}', 'Cher', 'viewer')`,
+          ('${uuid3}', 'Cher', 'viewer')`
       );
 
       // Policy 1: allow select using (.id = global current_user)
@@ -773,8 +781,8 @@ Deno.test({
           kind: "AccessComparison",
           operator: "=",
           left: { kind: "AccessPath", path: ["id"] },
-          right: { kind: "AccessGlobal", name: "current_user" },
-        },
+          right: { kind: "AccessGlobal", name: "current_user" }
+        }
       );
 
       // Policy 2: allow select using (.role = global current_role)
@@ -787,8 +795,8 @@ Deno.test({
           kind: "AccessComparison",
           operator: "=",
           left: { kind: "AccessPath", path: ["role"] },
-          right: { kind: "AccessGlobal", name: "current_role" },
-        },
+          right: { kind: "AccessGlobal", name: "current_role" }
+        }
       );
 
       // Query as Cher (uuid3) with role='admin'
@@ -800,24 +808,26 @@ Deno.test({
         schema,
         [ownerPolicy, rolePolicy],
         DEFAULT_ACCESS_CONFIG,
-        { userId: uuid3, userRole: "admin" },
+        { userId: uuid3, userRole: "admin" }
       );
 
       assertEquals(compiled.ok, true, "Compilation should succeed");
-      if (!compiled.ok) return;
+      if (!compiled.ok)
+        return;
 
       const result = await pool.query(compiled.sql);
       assertEquals(
         result.rowCount,
         2,
-        "Should return 2 rows (Ada via role, Cher via ownership)",
+        "Should return 2 rows (Ada via role, Cher via ownership)"
       );
 
       // Extract names and verify
-      const names = result.rows
+      const names = result
+        .rows
         .map((r: Record<string, unknown>) => {
-          const data = (r as Record<string, Record<string, unknown>>).jsonb_build_object
-            ?? r;
+          const data = (r as Record<string, Record<string, unknown>>).jsonb_build_object ??
+            r;
           return data.name;
         })
         .sort();
@@ -828,7 +838,7 @@ Deno.test({
       await dropTables(pool, [TABLE, ...MIGRATION_TABLES]);
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -852,7 +862,7 @@ Deno.test({
       await pool.query(
         `INSERT INTO ${TABLE} (id, name) VALUES
           (gen_random_uuid(), 'Ada'),
-          (gen_random_uuid(), 'Billie')`,
+          (gen_random_uuid(), 'Billie')`
       );
 
       // Policy 1: allow select (unconditional, no using expression)
@@ -860,7 +870,7 @@ Deno.test({
         "allow_all_select",
         "DenyOverrideUser",
         true,
-        ["select"],
+        ["select"]
       );
 
       // Policy 2: deny select (unconditional)
@@ -869,7 +879,7 @@ Deno.test({
         "deny_select",
         "DenyOverrideUser",
         false, // deny
-        ["select"],
+        ["select"]
       );
 
       const compiled = compileWithAccess(
@@ -877,22 +887,23 @@ Deno.test({
         schema,
         [allowPolicy, denyPolicy],
         DEFAULT_ACCESS_CONFIG,
-        { userId: "some-user" },
+        { userId: "some-user" }
       );
 
       assertEquals(
         compiled.ok,
         true,
-        "Compilation should succeed (WHERE FALSE injected)",
+        "Compilation should succeed (WHERE FALSE injected)"
       );
-      if (!compiled.ok) return;
+      if (!compiled.ok)
+        return;
 
       // The evaluator sees hasDeny=true -> allowed=false -> compiler injects WHERE FALSE
       const result = await pool.query(compiled.sql);
       assertEquals(
         result.rowCount,
         0,
-        "Deny should override allow, returning 0 rows",
+        "Deny should override allow, returning 0 rows"
       );
 
       await manager.close();
@@ -900,7 +911,7 @@ Deno.test({
       await dropTables(pool, [TABLE, ...MIGRATION_TABLES]);
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -934,14 +945,14 @@ Deno.test({
       await pool.query(
         `INSERT INTO ${TABLE_A} (id, name, team) VALUES
           ('${uuid1}', 'Ada', 'engineering'),
-          ('${uuid2}', 'Billie', 'marketing')`,
+          ('${uuid2}', 'Billie', 'marketing')`
       );
 
       await pool.query(
         `INSERT INTO ${TABLE_B} (id, title, team) VALUES
           (gen_random_uuid(), 'Design Doc', 'engineering'),
           (gen_random_uuid(), 'Campaign Plan', 'marketing'),
-          (gen_random_uuid(), 'Architecture RFC', 'engineering')`,
+          (gen_random_uuid(), 'Architecture RFC', 'engineering')`
       );
 
       // TeamMember policy: allow select using (.id = global current_user)
@@ -954,8 +965,8 @@ Deno.test({
           kind: "AccessComparison",
           operator: "=",
           left: { kind: "AccessPath", path: ["id"] },
-          right: { kind: "AccessGlobal", name: "current_user" },
-        },
+          right: { kind: "AccessGlobal", name: "current_user" }
+        }
       );
 
       // TeamDoc policy: allow select using (.team = global current_role)
@@ -969,13 +980,13 @@ Deno.test({
           kind: "AccessComparison",
           operator: "=",
           left: { kind: "AccessPath", path: ["team"] },
-          right: { kind: "AccessGlobal", name: "current_role" },
-        },
+          right: { kind: "AccessGlobal", name: "current_role" }
+        }
       );
 
       const context: AccessContext = {
         userId: uuid1, // Ada
-        userRole: "engineering", // Ada's team
+        userRole: "engineering" // Ada's team
       };
 
       // Query TeamMember — should return only Ada (owner filter)
@@ -984,21 +995,22 @@ Deno.test({
         schema,
         [memberPolicy, docPolicy],
         DEFAULT_ACCESS_CONFIG,
-        context,
+        context
       );
 
       assertEquals(
         compiledMembers.ok,
         true,
-        "TeamMember compilation should succeed",
+        "TeamMember compilation should succeed"
       );
-      if (!compiledMembers.ok) return;
+      if (!compiledMembers.ok)
+        return;
 
       const memberResult = await pool.query(compiledMembers.sql);
       assertEquals(
         memberResult.rowCount,
         1,
-        "Should see only 1 TeamMember (Ada)",
+        "Should see only 1 TeamMember (Ada)"
       );
 
       // Query TeamDoc — should return 2 engineering docs
@@ -1007,31 +1019,33 @@ Deno.test({
         schema,
         [memberPolicy, docPolicy],
         DEFAULT_ACCESS_CONFIG,
-        context,
+        context
       );
 
       assertEquals(compiledDocs.ok, true, "TeamDoc compilation should succeed");
-      if (!compiledDocs.ok) return;
+      if (!compiledDocs.ok)
+        return;
 
       const docResult = await pool.query(compiledDocs.sql);
       assertEquals(
         docResult.rowCount,
         2,
-        "Should see 2 TeamDocs (engineering team)",
+        "Should see 2 TeamDocs (engineering team)"
       );
 
       // Extract titles and verify
-      const titles = docResult.rows
+      const titles = docResult
+        .rows
         .map((r: Record<string, unknown>) => {
-          const data = (r as Record<string, Record<string, unknown>>).jsonb_build_object
-            ?? r;
+          const data = (r as Record<string, Record<string, unknown>>).jsonb_build_object ??
+            r;
           return data.title;
         })
         .sort();
       assertEquals(
         titles,
         ["Architecture RFC", "Design Doc"],
-        "Should see the two engineering docs",
+        "Should see the two engineering docs"
       );
 
       await manager.close();
@@ -1039,5 +1053,5 @@ Deno.test({
       await dropTables(pool, [TABLE_A, TABLE_B, ...MIGRATION_TABLES]);
       await pool.close();
     }
-  },
+  }
 });

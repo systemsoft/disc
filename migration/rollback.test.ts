@@ -10,7 +10,7 @@ import * as Types from "./types.ts";
 
 // Helper function to create test config
 function createTestConfig(
-  overrides: Partial<Types.MigrationConfig> = {},
+  overrides: Partial<Types.MigrationConfig> = {}
 ): Types.MigrationConfig {
   return {
     migrationsDir: "./migrations",
@@ -20,7 +20,7 @@ function createTestConfig(
     autoApprove: false,
     backupBeforeMigration: true,
     rollbackOnError: true,
-    ...overrides,
+    ...overrides
   };
 }
 
@@ -39,25 +39,25 @@ function createSimpleSchema(): Module[] {
               name: { kind: "Identifier", value: "name" },
               type: {
                 kind: "TypeRef",
-                name: { kind: "QualifiedName", parts: ["str"] },
+                name: { kind: "QualifiedName", parts: ["str"] }
               },
               required: true,
-              multi: false,
+              multi: false
             },
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "email" },
               type: {
                 kind: "TypeRef",
-                name: { kind: "QualifiedName", parts: ["str"] },
+                name: { kind: "QualifiedName", parts: ["str"] }
               },
               required: true,
-              multi: false,
-            },
-          ],
-        },
-      ],
-    },
+              multi: false
+            }
+          ]
+        }
+      ]
+    }
   ];
 }
 
@@ -73,10 +73,10 @@ Deno.test("DDL Generator - Generate Rollback SQL for CreateType", () => {
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const rollbackSQL = generator.generateRollbackDDL([operation]);
@@ -90,7 +90,7 @@ Deno.test("DDL Generator - Generate Rollback SQL for DropType", () => {
   const generator = new DDLGenerator();
   const operation: Types.DropTypeOperation = {
     kind: "DropType",
-    typeName: "User",
+    typeName: "User"
   };
 
   // For drop operations, rollback would need schema information to recreate
@@ -116,10 +116,10 @@ Deno.test("DDL Generator - Generate Rollback SQL for AddProperty", () => {
           required: false,
           multi: false,
           constraints: [],
-          annotations: {},
-        },
-      } as Types.AddPropertyOperation,
-    ],
+          annotations: {}
+        }
+      } as Types.AddPropertyOperation
+    ]
   };
 
   const rollbackSQL = generator.generateRollbackDDL([operation]);
@@ -137,9 +137,9 @@ Deno.test("DDL Generator - Generate Rollback SQL for DropProperty", () => {
     operations: [
       {
         kind: "DropProperty",
-        propertyName: "active",
-      } as Types.DropPropertyOperation,
-    ],
+        propertyName: "active"
+      } as Types.DropPropertyOperation
+    ]
   };
 
   const rollbackSQL = generator.generateRollbackDDL([operation]);
@@ -165,16 +165,16 @@ Deno.test("DDL Generator - Generate Rollback SQL for AlterProperty", () => {
           {
             kind: "ChangeType",
             oldValue: "int32",
-            newValue: "int64",
+            newValue: "int64"
           },
           {
             kind: "ChangeRequired",
             oldValue: false,
-            newValue: true,
-          },
-        ],
-      } as Types.AlterPropertyOperation,
-    ],
+            newValue: true
+          }
+        ]
+      } as Types.AlterPropertyOperation
+    ]
   };
 
   const rollbackSQL = generator.generateRollbackDDL([operation]);
@@ -182,12 +182,12 @@ Deno.test("DDL Generator - Generate Rollback SQL for AlterProperty", () => {
   assertEquals(rollbackSQL.length >= 2, true);
 
   // Should reverse the type change
-  const typeChangeRollback = rollbackSQL.find((sql) => sql.includes("ALTER COLUMN age TYPE"));
+  const typeChangeRollback = rollbackSQL.find(sql => sql.includes("ALTER COLUMN age TYPE"));
   assertEquals(typeChangeRollback !== undefined, true);
   assertStringIncludes(typeChangeRollback!, "INTEGER");
 
   // Should reverse the required change
-  const requiredChangeRollback = rollbackSQL.find((sql) => sql.includes("DROP NOT NULL"));
+  const requiredChangeRollback = rollbackSQL.find(sql => sql.includes("DROP NOT NULL"));
   assertEquals(requiredChangeRollback !== undefined, true);
 });
 
@@ -235,15 +235,15 @@ Deno.test("Migration Engine - Execute Migration with Rollback on Error", async (
               required: true,
               multi: false,
               constraints: [],
-              annotations: {},
-            },
+              annotations: {}
+            }
           ],
-          links: [],
-        } as Types.CreateTypeOperation,
-      ],
+          links: []
+        } as Types.CreateTypeOperation
+      ]
     }],
     targetSchemaHash: "test",
-    operationsCount: 1,
+    operationsCount: 1
   };
 
   // Mock the private executeStatements method to simulate a failure
@@ -294,7 +294,7 @@ Deno.test("Migration Engine - Rollback To Specific Migration", async () => {
   const migrations = [
     { name: "migration1", operations: [] as Types.MigrationOperation[] },
     { name: "migration2", operations: [] as Types.MigrationOperation[] },
-    { name: "migration3", operations: [] as Types.MigrationOperation[] },
+    { name: "migration3", operations: [] as Types.MigrationOperation[] }
   ];
 
   const migrationIds: string[] = [];
@@ -307,10 +307,10 @@ Deno.test("Migration Engine - Rollback To Specific Migration", async () => {
         description: `Test ${migData.name}`,
         createdAt: new Date(),
         schemaHash: migData.name,
-        operations: migData.operations,
+        operations: migData.operations
       }],
       targetSchemaHash: migData.name,
-      operationsCount: migData.operations.length,
+      operationsCount: migData.operations.length
     };
 
     await engine.executeMigration(plan);
@@ -347,7 +347,7 @@ Deno.test("Migration Engine - Validate Rollback Safety", () => {
       operations: [
         {
           kind: "DropType",
-          typeName: "User",
+          typeName: "User"
         } as Types.DropTypeOperation,
         {
           kind: "AlterType",
@@ -355,14 +355,14 @@ Deno.test("Migration Engine - Validate Rollback Safety", () => {
           operations: [
             {
               kind: "DropProperty",
-              propertyName: "content",
-            } as Types.DropPropertyOperation,
-          ],
-        } as Types.AlterTypeOperation,
-      ],
+              propertyName: "content"
+            } as Types.DropPropertyOperation
+          ]
+        } as Types.AlterTypeOperation
+      ]
     }],
     targetSchemaHash: "destructive",
-    operationsCount: 2,
+    operationsCount: 2
   };
 
   const validationResult = engine.validateRollbackSafety(destructivePlan);
@@ -372,11 +372,11 @@ Deno.test("Migration Engine - Validate Rollback Safety", () => {
   if (!validationResult.ok) {
     assertStringIncludes(
       validationResult.error.message.toLowerCase(),
-      "rollback",
+      "rollback"
     );
     assertStringIncludes(
       validationResult.error.message.toLowerCase(),
-      "data loss",
+      "data loss"
     );
   }
 });
@@ -387,7 +387,7 @@ Deno.test("Migration Engine - Create Migration Checkpoint", async () => {
 
   // Create checkpoint before migration
   const checkpointResult = await engine.createMigrationCheckpoint(
-    "test-checkpoint",
+    "test-checkpoint"
   );
   assertEquals(checkpointResult.ok, true);
 
@@ -405,7 +405,7 @@ Deno.test("Migration Engine - Restore From Checkpoint", async () => {
 
   // Create a checkpoint
   const checkpointResult = await engine.createMigrationCheckpoint(
-    "restore-test",
+    "restore-test"
   );
   assertEquals(checkpointResult.ok, true);
 

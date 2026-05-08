@@ -22,7 +22,7 @@ const client = createClient({
   port,
   user: "disc",
   database: "main",
-  tlsSecurity: "insecure",
+  tlsSecurity: "insecure"
 });
 
 after(async () => {
@@ -32,7 +32,7 @@ after(async () => {
 const insertItem = (name, count) =>
   client.querySingle(
     "INSERT Item { name := <str>$name, count := <int32>$count }",
-    { name, count },
+    { name, count }
   );
 
 test("INSERT returns an object with a uuid id", async () => {
@@ -42,7 +42,7 @@ test("INSERT returns an object with a uuid id", async () => {
   // Throws if not a valid uuid string
   assert.match(
     String(item.id),
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
   );
 });
 
@@ -50,7 +50,7 @@ test("SELECT { shape } FILTER .id roundtrips", async () => {
   const inserted = await insertItem("bravo", 2);
   const fetched = await client.querySingle(
     "SELECT Item { id, name, count } FILTER .id = <uuid>$id",
-    { id: inserted.id },
+    { id: inserted.id }
   );
   assert.equal(fetched.name, "bravo");
   assert.equal(fetched.count, 2);
@@ -60,11 +60,11 @@ test("UPDATE then re-select reflects new value", async () => {
   const inserted = await insertItem("charlie", 3);
   await client.query(
     "UPDATE Item FILTER .id = <uuid>$id SET { count := <int32>$new }",
-    { id: inserted.id, new: 99 },
+    { id: inserted.id, new: 99 }
   );
   const fetched = await client.querySingle(
     "SELECT Item { count } FILTER .id = <uuid>$id",
-    { id: inserted.id },
+    { id: inserted.id }
   );
   assert.equal(fetched.count, 99);
 });
@@ -79,11 +79,11 @@ test("DELETE removes the row", async () => {
   const inserted = await insertItem("delta", 4);
   await client.query(
     "DELETE Item FILTER .id = <uuid>$id",
-    { id: inserted.id },
+    { id: inserted.id }
   );
   const fetched = await client.query(
     "SELECT Item { id } FILTER .id = <uuid>$id",
-    { id: inserted.id },
+    { id: inserted.id }
   );
   assert.equal(fetched.length, 0);
 });

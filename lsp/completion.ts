@@ -46,7 +46,7 @@ const KEYWORDS = [
   "all",
   "using",
   "with",
-  "check",
+  "check"
 ];
 
 /**
@@ -97,7 +97,7 @@ function classifyCursor(text: string, pos: Position): CursorContext {
 
 export function provideCompletion(
   text: string,
-  pos: Position,
+  pos: Position
 ): CompletionItem[] {
   const ctx = classifyCursor(text, pos);
   const items = new Map<string, CompletionItem>();
@@ -106,7 +106,7 @@ export function provideCompletion(
     for (const kw of KEYWORDS) {
       items.set(kw, {
         label: kw,
-        kind: CompletionItemKind.Keyword,
+        kind: CompletionItemKind.Keyword
       });
     }
   }
@@ -116,7 +116,7 @@ export function provideCompletion(
       label: s.name,
       kind: CompletionItemKind.Class,
       detail: "scalar",
-      documentation: s.description,
+      documentation: s.description
     });
   }
 
@@ -126,7 +126,7 @@ export function provideCompletion(
     items.set(name, {
       label: name,
       kind: CompletionItemKind.Class,
-      detail: "type (this document)",
+      detail: "type (this document)"
     });
   }
 
@@ -147,18 +147,22 @@ function collectTypeNames(text: string): string[] {
     if (decl.kind === "ModuleDeclaration") {
       for (const inner of decl.declarations) {
         const n = nameOfTypeLikeDecl(inner);
-        if (n) names.push(n);
+        if (n)
+          names.push(n);
       }
     } else {
       const n = nameOfTypeLikeDecl(decl);
-      if (n) names.push(n);
+      if (n)
+        names.push(n);
     }
   }
   return names;
 }
 
 function nameOfTypeLikeDecl(decl: AST.Declaration): string | null {
-  if (decl.kind === "TypeDeclaration") return decl.name.value;
-  if (decl.kind === "ScalarTypeDeclaration") return decl.name.value;
+  if (decl.kind === "TypeDeclaration")
+    return decl.name.value;
+  if (decl.kind === "ScalarTypeDeclaration")
+    return decl.name.value;
   return null;
 }

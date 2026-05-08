@@ -19,45 +19,45 @@ describe("matchRedirectUri", () => {
     it("matches an exact URI", () => {
       assertEquals(
         matchRedirectUri("https://example.com/cb", [
-          "https://example.com/cb",
+          "https://example.com/cb"
         ]),
-        true,
+        true
       );
     });
 
     it("rejects path mismatch", () => {
       assertEquals(
         matchRedirectUri("https://example.com/other", [
-          "https://example.com/cb",
+          "https://example.com/cb"
         ]),
-        false,
+        false
       );
     });
 
     it("rejects scheme mismatch", () => {
       assertEquals(
         matchRedirectUri("http://example.com/cb", [
-          "https://example.com/cb",
+          "https://example.com/cb"
         ]),
-        false,
+        false
       );
     });
 
     it("rejects host mismatch", () => {
       assertEquals(
         matchRedirectUri("https://evil.com/cb", [
-          "https://example.com/cb",
+          "https://example.com/cb"
         ]),
-        false,
+        false
       );
     });
 
     it("ignores host case", () => {
       assertEquals(
         matchRedirectUri("https://EXAMPLE.com/cb", [
-          "https://example.com/cb",
+          "https://example.com/cb"
         ]),
-        true,
+        true
       );
     });
   });
@@ -68,21 +68,21 @@ describe("matchRedirectUri", () => {
     it("matches a single-label subdomain", () => {
       assertEquals(
         matchRedirectUri("https://app.example.com/cb", allowlist),
-        true,
+        true
       );
     });
 
     it("rejects a two-label subdomain (only one label deep)", () => {
       assertEquals(
         matchRedirectUri("https://a.b.example.com/cb", allowlist),
-        false,
+        false
       );
     });
 
     it("rejects the bare base host (wildcard requires a subdomain)", () => {
       assertEquals(
         matchRedirectUri("https://example.com/cb", allowlist),
-        false,
+        false
       );
     });
 
@@ -91,25 +91,25 @@ describe("matchRedirectUri", () => {
       // as a DNS suffix. The matcher must reject this.
       assertEquals(
         matchRedirectUri("https://evilexample.com/cb", allowlist),
-        false,
+        false
       );
       assertEquals(
         matchRedirectUri("https://attackerexample.com/cb", allowlist),
-        false,
+        false
       );
     });
 
     it("rejects path mismatch even when host matches", () => {
       assertEquals(
         matchRedirectUri("https://app.example.com/other", allowlist),
-        false,
+        false
       );
     });
 
     it("rejects scheme mismatch", () => {
       assertEquals(
         matchRedirectUri("http://app.example.com/cb", allowlist),
-        false,
+        false
       );
     });
   });
@@ -118,18 +118,18 @@ describe("matchRedirectUri", () => {
     const allowlist = [
       "https://example.com/cb",
       "https://*.example.com/cb",
-      "https://localhost:3000/cb",
+      "https://localhost:3000/cb"
     ];
 
     it("succeeds on first matching pattern", () => {
       assertEquals(matchRedirectUri("https://example.com/cb", allowlist), true);
       assertEquals(
         matchRedirectUri("https://app.example.com/cb", allowlist),
-        true,
+        true
       );
       assertEquals(
         matchRedirectUri("https://localhost:3000/cb", allowlist),
-        true,
+        true
       );
     });
 
@@ -140,7 +140,7 @@ describe("matchRedirectUri", () => {
     it("respects port differences", () => {
       assertEquals(
         matchRedirectUri("https://localhost:9999/cb", allowlist),
-        false,
+        false
       );
     });
   });
@@ -149,16 +149,16 @@ describe("matchRedirectUri", () => {
     it("rejects an unparseable URI", () => {
       assertEquals(
         matchRedirectUri("not a url", ["https://example.com/cb"]),
-        false,
+        false
       );
     });
 
     it("rejects URIs with userinfo (credentials)", () => {
       assertEquals(
         matchRedirectUri("https://attacker:pw@app.example.com/cb", [
-          "https://*.example.com/cb",
+          "https://*.example.com/cb"
         ]),
-        false,
+        false
       );
     });
 
@@ -180,7 +180,7 @@ function makeContext(): ExtensionContext {
       maxConnections: 5,
       requestTimeout: 5000,
       enableCors: false,
-      enableWebsockets: false,
+      enableWebsockets: false
     },
     logger: {
       debug: () => {},
@@ -192,8 +192,8 @@ function makeContext(): ExtensionContext {
       },
       withRequest: function() {
         return this;
-      },
-    } as any,
+      }
+    } as any
   };
 }
 
@@ -201,16 +201,16 @@ describe("OAuthExtension - allowedRedirectUris (gh/geldata#7468)", () => {
   it("uses caller-supplied redirect_uri when allowlist matches", async () => {
     const provider = {
       ...googleProvider("cid", "csecret", "https://default.example.com/cb"),
-      allowedRedirectUris: ["https://*.example.com/cb"],
+      allowedRedirectUris: ["https://*.example.com/cb"]
     };
     const ext = new OAuthExtension({ providers: [provider] });
     await ext.initialize(makeContext());
-    const route = ext.getRoutes().find((r) => r.path === "/authorize/google")!;
+    const route = ext.getRoutes().find(r => r.path === "/authorize/google")!;
 
     const response = await route.handler(
       new Request(
-        "http://localhost/authorize/google?redirect_uri=https://tenant-a.example.com/cb",
-      ),
+        "http://localhost/authorize/google?redirect_uri=https://tenant-a.example.com/cb"
+      )
     );
 
     assertEquals(response.status, 200);
@@ -218,23 +218,23 @@ describe("OAuthExtension - allowedRedirectUris (gh/geldata#7468)", () => {
     const parsed = new URL(body.url);
     assertEquals(
       parsed.searchParams.get("redirect_uri"),
-      "https://tenant-a.example.com/cb",
+      "https://tenant-a.example.com/cb"
     );
   });
 
   it("rejects caller-supplied redirect_uri when not in allowlist", async () => {
     const provider = {
       ...googleProvider("cid", "csecret", "https://default.example.com/cb"),
-      allowedRedirectUris: ["https://*.example.com/cb"],
+      allowedRedirectUris: ["https://*.example.com/cb"]
     };
     const ext = new OAuthExtension({ providers: [provider] });
     await ext.initialize(makeContext());
-    const route = ext.getRoutes().find((r) => r.path === "/authorize/google")!;
+    const route = ext.getRoutes().find(r => r.path === "/authorize/google")!;
 
     const response = await route.handler(
       new Request(
-        "http://localhost/authorize/google?redirect_uri=https://evil.com/cb",
-      ),
+        "http://localhost/authorize/google?redirect_uri=https://evil.com/cb"
+      )
     );
 
     assertEquals(response.status, 400);
@@ -249,16 +249,16 @@ describe("OAuthExtension - allowedRedirectUris (gh/geldata#7468)", () => {
     const provider = googleProvider(
       "cid",
       "csecret",
-      "https://default.example.com/cb",
+      "https://default.example.com/cb"
     );
     const ext = new OAuthExtension({ providers: [provider] });
     await ext.initialize(makeContext());
-    const route = ext.getRoutes().find((r) => r.path === "/authorize/google")!;
+    const route = ext.getRoutes().find(r => r.path === "/authorize/google")!;
 
     const response = await route.handler(
       new Request(
-        "http://localhost/authorize/google?redirect_uri=https://anywhere.com/cb",
-      ),
+        "http://localhost/authorize/google?redirect_uri=https://anywhere.com/cb"
+      )
     );
 
     assertEquals(response.status, 400);
@@ -268,14 +268,14 @@ describe("OAuthExtension - allowedRedirectUris (gh/geldata#7468)", () => {
     const provider = googleProvider(
       "cid",
       "csecret",
-      "https://default.example.com/cb",
+      "https://default.example.com/cb"
     );
     const ext = new OAuthExtension({ providers: [provider] });
     await ext.initialize(makeContext());
-    const route = ext.getRoutes().find((r) => r.path === "/authorize/google")!;
+    const route = ext.getRoutes().find(r => r.path === "/authorize/google")!;
 
     const response = await route.handler(
-      new Request("http://localhost/authorize/google"),
+      new Request("http://localhost/authorize/google")
     );
 
     assertEquals(response.status, 200);
@@ -283,7 +283,7 @@ describe("OAuthExtension - allowedRedirectUris (gh/geldata#7468)", () => {
     const parsed = new URL(body.url);
     assertEquals(
       parsed.searchParams.get("redirect_uri"),
-      "https://default.example.com/cb",
+      "https://default.example.com/cb"
     );
   });
 
@@ -294,17 +294,17 @@ describe("OAuthExtension - allowedRedirectUris (gh/geldata#7468)", () => {
   it("auto-allows allowlisted exact-match URLs without an allow= flag", async () => {
     const provider = {
       ...googleProvider("cid", "csecret", "https://default.example.com/cb"),
-      allowedRedirectUris: ["https://app.example.com/cb"],
+      allowedRedirectUris: ["https://app.example.com/cb"]
     };
     const ext = new OAuthExtension({ providers: [provider] });
     await ext.initialize(makeContext());
-    const route = ext.getRoutes().find((r) => r.path === "/authorize/google")!;
+    const route = ext.getRoutes().find(r => r.path === "/authorize/google")!;
 
     // Note: no `allow=true` (or similar) anywhere in the request.
     const response = await route.handler(
       new Request(
-        "http://localhost/authorize/google?redirect_uri=https://app.example.com/cb",
-      ),
+        "http://localhost/authorize/google?redirect_uri=https://app.example.com/cb"
+      )
     );
 
     assertEquals(response.status, 200);
@@ -312,7 +312,7 @@ describe("OAuthExtension - allowedRedirectUris (gh/geldata#7468)", () => {
     const parsed = new URL(body.url);
     assertEquals(
       parsed.searchParams.get("redirect_uri"),
-      "https://app.example.com/cb",
+      "https://app.example.com/cb"
     );
   });
 
@@ -322,16 +322,16 @@ describe("OAuthExtension - allowedRedirectUris (gh/geldata#7468)", () => {
   it("auto-allows wildcard-matching URLs without an allow= flag", async () => {
     const provider = {
       ...googleProvider("cid", "csecret", "https://default.example.com/cb"),
-      allowedRedirectUris: ["https://*.example.com/cb"],
+      allowedRedirectUris: ["https://*.example.com/cb"]
     };
     const ext = new OAuthExtension({ providers: [provider] });
     await ext.initialize(makeContext());
-    const route = ext.getRoutes().find((r) => r.path === "/authorize/google")!;
+    const route = ext.getRoutes().find(r => r.path === "/authorize/google")!;
 
     const response = await route.handler(
       new Request(
-        "http://localhost/authorize/google?redirect_uri=https://tenant-b.example.com/cb",
-      ),
+        "http://localhost/authorize/google?redirect_uri=https://tenant-b.example.com/cb"
+      )
     );
 
     assertEquals(response.status, 200);
@@ -339,7 +339,7 @@ describe("OAuthExtension - allowedRedirectUris (gh/geldata#7468)", () => {
     const parsed = new URL(body.url);
     assertEquals(
       parsed.searchParams.get("redirect_uri"),
-      "https://tenant-b.example.com/cb",
+      "https://tenant-b.example.com/cb"
     );
   });
 });

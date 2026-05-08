@@ -24,7 +24,7 @@ import { PostgresManager as _PostgresManager } from "./manager.ts";
 export interface PostgresModule {
   createInstance(
     name: string,
-    options?: _PostgresInstanceOptions,
+    options?: _PostgresInstanceOptions
   ): Promise<_PostgresInstance>;
   destroyInstance(name: string): Promise<void>;
   getInstance(name: string): _PostgresInstance | undefined;
@@ -47,7 +47,7 @@ export function getDefaultManager(): _PostgresManager {
 // Convenience functions using the default manager
 export async function createInstance(
   name: string,
-  options?: Partial<_PostgresInstanceOptions>,
+  options?: Partial<_PostgresInstanceOptions>
 ): Promise<_PostgresInstance> {
   const manager = getDefaultManager();
   return await manager.createInstance(name, options);
@@ -55,7 +55,7 @@ export async function createInstance(
 
 export async function startInstance(
   name: string,
-  withMonitor = true,
+  withMonitor = true
 ): Promise<void> {
   const manager = getDefaultManager();
   return await manager.startInstance(name, withMonitor);

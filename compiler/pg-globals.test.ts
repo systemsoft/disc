@@ -34,7 +34,7 @@ function makePool(dsn: string): ConnectionPool {
     connectionString: dsn,
     minConnections: 1,
     maxConnections: 3,
-    cleanupInterval: 0,
+    cleanupInterval: 0
   });
 }
 
@@ -59,7 +59,7 @@ const TEST_TABLE = "test_account";
  */
 async function applyTestSchema(
   pool: ConnectionPool,
-  globals?: Map<string, GlobalDef>,
+  globals?: Map<string, GlobalDef>
 ): Promise<{ manager: SchemaManager; schema: Schema; }> {
   // Pre-cleanup: drop tables from previous test runs
   await pool.query(`DROP TABLE IF EXISTS ${TEST_TABLE} CASCADE`);
@@ -73,7 +73,7 @@ async function applyTestSchema(
   assertEquals(
     result.ok,
     true,
-    `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`,
+    `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`
   );
 
   const baseSchema = manager.getSchema();
@@ -82,7 +82,7 @@ async function applyTestSchema(
   // Add globals to the schema (globals are compile-time only, not stored in DB)
   const schema: Schema = {
     ...baseSchema!,
-    globals: globals ?? new Map(),
+    globals: globals ?? new Map()
   };
 
   return { manager, schema };
@@ -128,8 +128,8 @@ function makeTestGlobals(): Map<string, GlobalDef> {
       required: false,
       multi: false,
       readonly: false,
-      pgSettingName: "disc.global_default__current_user_id",
-    }],
+      pgSettingName: "disc.global_default__current_user_id"
+    }]
   ]);
 }
 
@@ -154,12 +154,12 @@ Deno.test({
         `INSERT INTO ${TEST_TABLE} (id, name, email, active) VALUES
           (gen_random_uuid(), 'Ada', 'ada@test.com', true),
           (gen_random_uuid(), 'Billie', 'billie@test.com', false)
-        RETURNING id, name`,
+        RETURNING id, name`
       );
 
       // Get Ada's UUID
       const adaRow = insertResult.rows.find(
-        (r: Record<string, unknown>) => r.name === "Ada",
+        (r: Record<string, unknown>) => r.name === "Ada"
       ) as Record<string, unknown>;
       assertExists(adaRow, "Ada should be inserted");
       const adaId = adaRow.id as string;
@@ -167,13 +167,13 @@ Deno.test({
       // Compile the query: SELECT TestAccount { name } FILTER .id = global current_user_id
       const sql = compileEdgeQL(
         "select TestAccount { name } filter .id = global current_user_id",
-        schema,
+        schema
       );
 
       // Execute in a transaction to ensure set_config and query use the same connection
-      const result = await pool.transaction(async (conn) => {
+      const result = await pool.transaction(async conn => {
         await conn.query(
-          `SELECT set_config('disc.global_default__current_user_id', '${adaId}', true)`,
+          `SELECT set_config('disc.global_default__current_user_id', '${adaId}', true)`
         );
         return await conn.query(sql);
       });
@@ -185,7 +185,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -204,7 +204,7 @@ Deno.test({
       // This generates: SELECT current_setting('disc.global_default__current_user_id', true)::uuid
       const sql = compileEdgeQL(
         "select global current_user_id",
-        schema,
+        schema
       );
 
       // Execute without setting the global -- should return NULL
@@ -220,7 +220,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -239,7 +239,7 @@ Deno.test({
       const insertResult = await pool.query(
         `INSERT INTO ${TEST_TABLE} (id, name, email, active) VALUES
           (gen_random_uuid(), 'Ada', 'ada@test.com', true)
-        RETURNING id`,
+        RETURNING id`
       );
       const adaId = (insertResult.rows[0] as Record<string, unknown>)
         .id as string;
@@ -247,17 +247,17 @@ Deno.test({
       // Compile SET GLOBAL
       const setGlobalSql = compileEdgeQL(
         `set global current_user_id := <uuid>'${adaId}'`,
-        schema,
+        schema
       );
 
       // Compile the filter query
       const filterSql = compileEdgeQL(
         "select TestAccount { name } filter .id = global current_user_id",
-        schema,
+        schema
       );
 
       // Execute both in a transaction to ensure same connection
-      const result = await pool.transaction(async (conn) => {
+      const result = await pool.transaction(async conn => {
         await conn.query(setGlobalSql);
         return await conn.query(filterSql);
       });
@@ -265,14 +265,14 @@ Deno.test({
       assertEquals(
         result.rowCount,
         1,
-        "Should return 1 row after SET GLOBAL",
+        "Should return 1 row after SET GLOBAL"
       );
 
       await cleanup(pool, manager);
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -295,8 +295,8 @@ Deno.test({
           required: true,
           multi: false,
           readonly: false,
-          pgSettingName: "disc.global_default__tenant_id",
-        }],
+          pgSettingName: "disc.global_default__tenant_id"
+        }]
       ]);
 
       const { manager, schema } = await applyTestSchema(pool, globals);
@@ -304,7 +304,7 @@ Deno.test({
       // Compile: SELECT global tenant_id
       const sql = compileEdgeQL(
         "select global tenant_id",
-        schema,
+        schema
       );
 
       // Execute without setting -- PG returns NULL (missing_ok=true)
@@ -316,14 +316,14 @@ Deno.test({
       assertEquals(
         values[0],
         null,
-        "Required global unset should still return NULL from PG",
+        "Required global unset should still return NULL from PG"
       );
 
       await cleanup(pool, manager);
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -344,12 +344,12 @@ Deno.test({
           (gen_random_uuid(), 'Ada', 'ada@test.com', true),
           (gen_random_uuid(), 'Billie', 'billie@test.com', true),
           (gen_random_uuid(), 'Cher', 'cher@test.com', true)
-        RETURNING id, name`,
+        RETURNING id, name`
       );
 
       // Get Billie's UUID
       const billieRow = insertResult.rows.find(
-        (r: Record<string, unknown>) => r.name === "Billie",
+        (r: Record<string, unknown>) => r.name === "Billie"
       ) as Record<string, unknown>;
       assertExists(billieRow, "Billie should be inserted");
       const billieId = billieRow.id as string;
@@ -359,13 +359,13 @@ Deno.test({
       // injects this WHERE clause automatically.
       const sql = compileEdgeQL(
         "select TestAccount { name, email } filter .id = global current_user_id",
-        schema,
+        schema
       );
 
       // Execute with global set to Billie's ID, using transaction for same connection
-      const result = await pool.transaction(async (conn) => {
+      const result = await pool.transaction(async conn => {
         await conn.query(
-          `SELECT set_config('disc.global_default__current_user_id', '${billieId}', true)`,
+          `SELECT set_config('disc.global_default__current_user_id', '${billieId}', true)`
         );
         return await conn.query(sql);
       });
@@ -374,19 +374,19 @@ Deno.test({
       assertEquals(
         result.rowCount,
         1,
-        "Access policy filter should return exactly 1 row",
+        "Access policy filter should return exactly 1 row"
       );
 
       // Verify it's Billie
       const row = result.rows[0] as Record<string, unknown>;
       const rowData = row.jsonb_build_object ?? row;
-      const name = (rowData as Record<string, unknown>).name
-        ?? (typeof rowData === "object" ? Object.values(rowData)[0] : undefined);
+      const name = (rowData as Record<string, unknown>).name ??
+        (typeof rowData === "object" ? Object.values(rowData)[0] : undefined);
       assertExists(name, "Row should contain name data");
 
       await cleanup(pool, manager);
     } finally {
       await pool.close();
     }
-  },
+  }
 });

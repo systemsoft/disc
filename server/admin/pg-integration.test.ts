@@ -28,7 +28,7 @@ function parseDsn(dsn: string) {
     hostname: url.hostname || "localhost",
     port: url.port ? parseInt(url.port) : 5432,
     user: url.username || "disc",
-    database: url.pathname.slice(1) || "disc_test",
+    database: url.pathname.slice(1) || "disc_test"
   };
 }
 
@@ -52,7 +52,7 @@ async function tableExists(dsn: string, name: string): Promise<boolean> {
   try {
     const r = await client.queryArray<[boolean]>(
       `SELECT EXISTS(SELECT 1 FROM pg_tables WHERE tablename = $1)`,
-      [name.toLowerCase()],
+      [name.toLowerCase()]
     );
     return r.rows[0]?.[0] === true;
   } finally {
@@ -81,12 +81,12 @@ Deno.test({
     await dropTableIfExists(dsn, TABLE_NAME);
 
     const sdl = `module default {\n  type ${TYPE_NAME} {\n    required name: str;\n  };\n};`;
-    await withTempSdl(sdl, async (path) => {
+    await withTempSdl(sdl, async path => {
       const res = await handleSchemaApply({
         request: new Request("http://localhost/admin/schema-apply", { method: "POST" }),
         url: new URL("http://localhost/admin/schema-apply"),
         schemaFilePath: path,
-        databaseUrl: dsn,
+        databaseUrl: dsn
       });
       assertEquals(res.status, 200);
       const body = await res.json();
@@ -99,7 +99,7 @@ Deno.test({
 
     // Cleanup so re-running the suite doesn't leak.
     await dropTableIfExists(dsn, TABLE_NAME);
-  },
+  }
 });
 
 Deno.test({
@@ -115,12 +115,12 @@ Deno.test({
 
     // Step 1: create the type via apply.
     const sdlWith = `module default {\n  type ${dropTypeName} {\n    required name: str;\n  };\n};`;
-    await withTempSdl(sdlWith, async (path) => {
+    await withTempSdl(sdlWith, async path => {
       const res = await handleSchemaApply({
         request: new Request("http://localhost/admin/schema-apply", { method: "POST" }),
         url: new URL("http://localhost/admin/schema-apply"),
         schemaFilePath: path,
-        databaseUrl: dsn,
+        databaseUrl: dsn
       });
       assertEquals(res.status, 200);
     });
@@ -132,13 +132,13 @@ Deno.test({
     // SchemaManager would start from `null` and treat the drop as
     // a no-op (silently bypassing the gate).
     const sdlEmpty = `module default {};`;
-    await withTempSdl(sdlEmpty, async (path) => {
+    await withTempSdl(sdlEmpty, async path => {
       const refused = await handleSchemaApply({
         request: new Request("http://localhost/admin/schema-apply", { method: "POST" }),
         url: new URL("http://localhost/admin/schema-apply"),
         schemaFilePath: path,
         databaseUrl: dsn,
-        appliedSdl: sdlWith,
+        appliedSdl: sdlWith
       });
       assertEquals(refused.status, 400);
       const body = await refused.json();
@@ -150,12 +150,12 @@ Deno.test({
       // Step 3: same payload with force=true succeeds.
       const forced = await handleSchemaApply({
         request: new Request("http://localhost/admin/schema-apply?force=true", {
-          method: "POST",
+          method: "POST"
         }),
         url: new URL("http://localhost/admin/schema-apply?force=true"),
         schemaFilePath: path,
         databaseUrl: dsn,
-        appliedSdl: sdlWith,
+        appliedSdl: sdlWith
       });
       assertEquals(forced.status, 200);
       const okBody = await forced.json();
@@ -165,5 +165,5 @@ Deno.test({
     });
 
     await dropTableIfExists(dsn, dropTableName);
-  },
+  }
 });

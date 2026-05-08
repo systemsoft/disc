@@ -41,11 +41,12 @@ export interface SymbolIndex {
 
 export function buildSymbolIndex(text: string): SymbolIndex {
   const types = new Map<string, TypeSymbol>();
-  if (text.length === 0) return { types };
+  if (text.length === 0)
+    return { types };
 
   let tokens: Token[];
   try {
-    tokens = new SDLLexer(text).tokenize().filter((t) => t.type !== TokenType.WHITESPACE && t.type !== TokenType.COMMENT);
+    tokens = new SDLLexer(text).tokenize().filter(t => t.type !== TokenType.WHITESPACE && t.type !== TokenType.COMMENT);
   } catch {
     return { types };
   }
@@ -55,8 +56,8 @@ export function buildSymbolIndex(text: string): SymbolIndex {
     const tok = tokens[i];
     // Match `[abstract] type <Name>` or `scalar type <Name>`
     if (
-      matchesKeyword(tok, "type") || matchesKeyword(tok, "abstract")
-      || matchesKeyword(tok, "scalar")
+      matchesKeyword(tok, "type") || matchesKeyword(tok, "abstract") ||
+      matchesKeyword(tok, "scalar")
     ) {
       const consumed = tryReadTypeDecl(tokens, i, text);
       if (consumed) {
@@ -79,7 +80,7 @@ interface ConsumedDecl {
 function tryReadTypeDecl(
   tokens: Token[],
   start: number,
-  _text: string,
+  _text: string
 ): ConsumedDecl | null {
   let i = start;
   let kind: TypeKind = "object";
@@ -95,11 +96,13 @@ function tryReadTypeDecl(
     i++;
   }
   // Required `type`
-  if (!matchesKeyword(tokens[i], "type")) return null;
+  if (!matchesKeyword(tokens[i], "type"))
+    return null;
   i++;
   // Required identifier
   const nameTok = tokens[i];
-  if (!nameTok || nameTok.type !== TokenType.IDENT) return null;
+  if (!nameTok || nameTok.type !== TokenType.IDENT)
+    return null;
   i++;
 
   const nameRange = tokenRange(nameTok);
@@ -116,12 +119,15 @@ function tryReadTypeDecl(
       i++;
       while (i < tokens.length && tokens[i].type === TokenType.IDENT) {
         i++;
-        if (tokens[i]?.type === TokenType.COMMA) i++;
-        else break;
+        if (tokens[i]?.type === TokenType.COMMA)
+          i++;
+        else
+          break;
         // Allow qualified names (Foo::Bar)
         if (tokens[i]?.type === TokenType.DOUBLECOLON) {
           i++;
-          if (tokens[i]?.type === TokenType.IDENT) i++;
+          if (tokens[i]?.type === TokenType.IDENT)
+            i++;
         }
       }
     }
@@ -173,7 +179,7 @@ function tryReadTypeDecl(
 
   const fullRange: Range = {
     start: nameRange.start,
-    end: tokenRange(endTok).end,
+    end: tokenRange(endTok).end
   };
 
   // Suppress duplicate scalar runs that the lexer might emit when source is messy.
@@ -183,9 +189,9 @@ function tryReadTypeDecl(
       kind,
       range: nameRange,
       fullRange,
-      members,
+      members
     },
-    nextIndex: i,
+    nextIndex: i
   };
 }
 
@@ -198,10 +204,10 @@ function tryReadMember(tokens: Token[], start: number): ConsumedMember | null {
   let i = start;
   // Skip qualifiers `required`, `multi`, `readonly`, `overloaded`
   while (
-    matchesKeyword(tokens[i], "required")
-    || matchesKeyword(tokens[i], "multi")
-    || matchesKeyword(tokens[i], "readonly")
-    || matchesKeyword(tokens[i], "overloaded")
+    matchesKeyword(tokens[i], "required") ||
+    matchesKeyword(tokens[i], "multi") ||
+    matchesKeyword(tokens[i], "readonly") ||
+    matchesKeyword(tokens[i], "overloaded")
   ) {
     i++;
   }
@@ -215,13 +221,14 @@ function tryReadMember(tokens: Token[], start: number): ConsumedMember | null {
   }
 
   const nameTok = tokens[i];
-  if (!nameTok || nameTok.type !== TokenType.IDENT) return null;
+  if (!nameTok || nameTok.type !== TokenType.IDENT)
+    return null;
   // Peek ahead to confirm this is actually a member (next should be `:` or `->`)
   const afterName = tokens[i + 1];
   if (
-    afterName?.type !== TokenType.COLON
-    && afterName?.type !== TokenType.ARROW
-    && afterName?.type !== TokenType.ASSIGN
+    afterName?.type !== TokenType.COLON &&
+    afterName?.type !== TokenType.ARROW &&
+    afterName?.type !== TokenType.ASSIGN
   ) {
     return null;
   }
@@ -230,14 +237,15 @@ function tryReadMember(tokens: Token[], start: number): ConsumedMember | null {
     symbol: {
       name: nameTok.value,
       kind: memberKind,
-      range: tokenRange(nameTok),
+      range: tokenRange(nameTok)
     },
-    nextIndex: i + 1,
+    nextIndex: i + 1
   };
 }
 
 function matchesKeyword(tok: Token | undefined, keyword: string): boolean {
-  if (!tok) return false;
+  if (!tok)
+    return false;
   // Some keywords are their own TokenType (e.g. TYPE), others arrive
   // as IDENT depending on the lexer table. Match by value either way.
   return tok.value === keyword;
@@ -249,6 +257,6 @@ function tokenRange(tok: Token): Range {
   const startChar = Math.max(0, tok.column - 1);
   return {
     start: { line: startLine, character: startChar },
-    end: { line: startLine, character: startChar + tok.value.length },
+    end: { line: startLine, character: startChar + tok.value.length }
   };
 }

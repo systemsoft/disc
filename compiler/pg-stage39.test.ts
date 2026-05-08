@@ -21,7 +21,7 @@ function makePool(dsn: string): ConnectionPool {
     connectionString: dsn,
     cleanupInterval: 0,
     maxConnections: 3,
-    minConnections: 1,
+    minConnections: 1
   });
 }
 
@@ -52,17 +52,18 @@ Deno.test({
       const parseResult = manager.parseSDL(sdl);
       assertEquals(parseResult.ok, true);
 
-      if (!parseResult.ok) throw parseResult.error;
+      if (!parseResult.ok)
+        throw parseResult.error;
       const schema = manager.modulesToSchema(parseResult.value);
 
       // Use introspection to verify annotations propagated
       const typeDesc = describeType(schema, "Article");
       assertEquals(
         typeDesc.annotations["description"],
-        "'A published article'",
+        "'A published article'"
       );
 
-      const titleProp = typeDesc.properties.find((p) => p.name === "title");
+      const titleProp = typeDesc.properties.find(p => p.name === "title");
       assertExists(titleProp);
       assertEquals(titleProp.annotations["description"], "'Article headline'");
 
@@ -70,7 +71,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -99,7 +100,8 @@ Deno.test({
       const parseResult = manager.parseSDL(sdl);
       assertEquals(parseResult.ok, true);
 
-      if (!parseResult.ok) throw parseResult.error;
+      if (!parseResult.ok)
+        throw parseResult.error;
       const schema = manager.modulesToSchema(parseResult.value);
 
       // Generate TypeScript
@@ -110,7 +112,7 @@ Deno.test({
         outputDir: "./generated",
         formatOutput: true,
         includeQueryBuilders: false,
-        includeClient: false,
+        includeClient: false
       });
 
       const result = generator.generate();
@@ -119,25 +121,25 @@ Deno.test({
       // an explicit `module` (which the SchemaManager always sets, even
       // to `"default"`). Accept either label.
       const typesFile = result.files.find(
-        (f) => f.type === "types" || f.type === "interfaces",
+        f => f.type === "types" || f.type === "interfaces"
       );
       assertExists(typesFile);
 
       // Verify JSDoc output contains annotation text
       assertEquals(
         typesFile.content.includes("'User profile information'"),
-        true,
+        true
       );
       assertEquals(
         typesFile.content.includes("@description 'Unique username'"),
-        true,
+        true
       );
 
       await manager.close();
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -167,7 +169,8 @@ Deno.test({
       const parseResult = manager.parseSDL(sdl);
       assertEquals(parseResult.ok, true);
 
-      if (!parseResult.ok) throw parseResult.error;
+      if (!parseResult.ok)
+        throw parseResult.error;
       const schema = manager.modulesToSchema(parseResult.value);
 
       // Verify abstract annotations collected
@@ -176,7 +179,7 @@ Deno.test({
 
       // Verify type annotations via DESCRIBE SCHEMA
       const schemaDesc = describeSchema(schema);
-      const widgetType = schemaDesc.types.find((t) => t.name === "Widget");
+      const widgetType = schemaDesc.types.find(t => t.name === "Widget");
       assertExists(widgetType);
       assertEquals(widgetType.annotations["custom_note"], "'Important widget'");
       assertEquals(widgetType.annotations["description"], "'A widget type'");
@@ -185,5 +188,5 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });

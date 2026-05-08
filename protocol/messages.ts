@@ -23,7 +23,7 @@ import {
   InputLanguage,
   OutputFormat,
   ServerMessageType,
-  TransactionState,
+  TransactionState
 } from "./enums.ts";
 
 // Re-export enums for convenience
@@ -268,7 +268,7 @@ function readAnnotations(r: BufferReader): Annotation[] {
 
 function writeExtensions(
   w: BufferWriter,
-  extensions: ProtocolExtension[],
+  extensions: ProtocolExtension[]
 ): void {
   w.writeUInt16(extensions.length);
   for (const ext of extensions) {
@@ -322,25 +322,25 @@ function encodeClientHandshake(msg: ClientHandshakeMsg): Uint8Array {
 }
 
 function encodeSASLInitialResponse(
-  msg: AuthenticationSASLInitialResponseMsg,
+  msg: AuthenticationSASLInitialResponseMsg
 ): Uint8Array {
   const w = new BufferWriter();
   w.writeString(msg.method);
   w.writeLenPrefixedBytes(msg.saslData);
   return wrapMessage(
     ClientMessageType.AuthenticationSASLInitialResponse,
-    w.toBytes(),
+    w.toBytes()
   );
 }
 
 function encodeSASLResponse(
-  msg: AuthenticationSASLResponseMsg,
+  msg: AuthenticationSASLResponseMsg
 ): Uint8Array {
   const w = new BufferWriter();
   w.writeLenPrefixedBytes(msg.saslData);
   return wrapMessage(
     ClientMessageType.AuthenticationSASLResponse,
-    w.toBytes(),
+    w.toBytes()
   );
 }
 
@@ -432,12 +432,12 @@ function decodeClientHandshake(r: BufferReader): ClientHandshakeMsg {
     majorVersion,
     minorVersion,
     params,
-    extensions,
+    extensions
   };
 }
 
 function decodeSASLInitialResponse(
-  r: BufferReader,
+  r: BufferReader
 ): AuthenticationSASLInitialResponseMsg {
   const method = r.readString();
   const saslData = r.readLenPrefixedBytes();
@@ -445,7 +445,7 @@ function decodeSASLInitialResponse(
 }
 
 function decodeSASLResponse(
-  r: BufferReader,
+  r: BufferReader
 ): AuthenticationSASLResponseMsg {
   const saslData = r.readLenPrefixedBytes();
   return { kind: "AuthenticationSASLResponse", saslData };
@@ -475,7 +475,7 @@ function decodeParse(r: BufferReader): ParseMsg {
     expectedCardinality,
     commandText,
     stateTypedescId,
-    stateData,
+    stateData
   };
 }
 
@@ -512,7 +512,7 @@ function decodeExecute(r: BufferReader): ExecuteMsg {
     stateData,
     inputTypedescId,
     outputTypedescId,
-    arguments: arguments_,
+    arguments: arguments_
   };
 }
 
@@ -523,7 +523,7 @@ function decodeExecute(r: BufferReader): ExecuteMsg {
  */
 export function decodeClientMessage(
   mtype: number,
-  payload: Uint8Array,
+  payload: Uint8Array
 ): ClientMessage {
   const r = new BufferReader(payload);
   switch (mtype) {
@@ -545,7 +545,7 @@ export function decodeClientMessage(
       return { kind: "Terminate" };
     default:
       throw new Error(
-        `Unknown client message type: 0x${mtype.toString(16)}`,
+        `Unknown client message type: 0x${mtype.toString(16)}`
       );
   }
 }
@@ -569,7 +569,7 @@ function encodeAuthenticationOK(): Uint8Array {
 }
 
 function encodeAuthenticationRequiredSASL(
-  msg: AuthenticationRequiredSASLMsg,
+  msg: AuthenticationRequiredSASLMsg
 ): Uint8Array {
   const w = new BufferWriter();
   w.writeUInt32(AuthStatus.RequiredSASL);
@@ -581,7 +581,7 @@ function encodeAuthenticationRequiredSASL(
 }
 
 function encodeAuthenticationSASLContinue(
-  msg: AuthenticationSASLContinueMsg,
+  msg: AuthenticationSASLContinueMsg
 ): Uint8Array {
   const w = new BufferWriter();
   w.writeUInt32(AuthStatus.SASLContinue);
@@ -590,7 +590,7 @@ function encodeAuthenticationSASLContinue(
 }
 
 function encodeAuthenticationSASLFinal(
-  msg: AuthenticationSASLFinalMsg,
+  msg: AuthenticationSASLFinalMsg
 ): Uint8Array {
   const w = new BufferWriter();
   w.writeUInt32(AuthStatus.SASLFinal);
@@ -616,7 +616,7 @@ function encodeCommandComplete(msg: CommandCompleteMsg): Uint8Array {
 }
 
 function encodeCommandDataDescription(
-  msg: CommandDataDescriptionMsg,
+  msg: CommandDataDescriptionMsg
 ): Uint8Array {
   const w = new BufferWriter();
   writeAnnotations(w, msg.annotations);
@@ -628,7 +628,7 @@ function encodeCommandDataDescription(
   w.writeLenPrefixedBytes(msg.outputTypedesc);
   return wrapMessage(
     ServerMessageType.CommandDataDescription,
-    w.toBytes(),
+    w.toBytes()
   );
 }
 
@@ -664,7 +664,7 @@ function encodeParameterStatus(msg: ParameterStatusMsg): Uint8Array {
 function encodeServerKeyData(msg: ServerKeyDataMsg): Uint8Array {
   if (msg.data.length !== 32) {
     throw new Error(
-      `ServerKeyData must be exactly 32 bytes, got ${msg.data.length}`,
+      `ServerKeyData must be exactly 32 bytes, got ${msg.data.length}`
     );
   }
   const w = new BufferWriter();
@@ -682,7 +682,7 @@ function encodeLogMessage(msg: LogMessageMsg): Uint8Array {
 }
 
 function encodeStateDataDescription(
-  msg: StateDataDescriptionMsg,
+  msg: StateDataDescriptionMsg
 ): Uint8Array {
   const w = new BufferWriter();
   w.writeUUID(msg.typedescId);
@@ -736,13 +736,12 @@ function decodeServerHandshake(r: BufferReader): ServerHandshakeMsg {
 }
 
 function decodeAuthentication(
-  r: BufferReader,
+  r: BufferReader
 ):
   | AuthenticationOKMsg
   | AuthenticationRequiredSASLMsg
   | AuthenticationSASLContinueMsg
-  | AuthenticationSASLFinalMsg
-{
+  | AuthenticationSASLFinalMsg {
   const authStatus = r.readUInt32();
   switch (authStatus) {
     case AuthStatus.OK:
@@ -765,7 +764,7 @@ function decodeAuthentication(
     }
     default:
       throw new Error(
-        `Unknown auth status: 0x${authStatus.toString(16)}`,
+        `Unknown auth status: 0x${authStatus.toString(16)}`
       );
   }
 }
@@ -788,12 +787,12 @@ function decodeCommandComplete(r: BufferReader): CommandCompleteMsg {
     capabilities,
     status,
     stateTypedescId,
-    stateData,
+    stateData
   };
 }
 
 function decodeCommandDataDescription(
-  r: BufferReader,
+  r: BufferReader
 ): CommandDataDescriptionMsg {
   const annotations = readAnnotations(r);
   const capabilities = r.readUInt64();
@@ -810,7 +809,7 @@ function decodeCommandDataDescription(
     inputTypedescId,
     inputTypedesc,
     outputTypedescId,
-    outputTypedesc,
+    outputTypedesc
   };
 }
 
@@ -857,7 +856,7 @@ function decodeLogMessage(r: BufferReader): LogMessageMsg {
 }
 
 function decodeStateDataDescription(
-  r: BufferReader,
+  r: BufferReader
 ): StateDataDescriptionMsg {
   const typedescId = r.readUUID();
   const typedesc = r.readLenPrefixedBytes();
@@ -871,7 +870,7 @@ function decodeStateDataDescription(
  */
 export function decodeServerMessage(
   mtype: number,
-  payload: Uint8Array,
+  payload: Uint8Array
 ): ServerMessage {
   const r = new BufferReader(payload);
   switch (mtype) {
@@ -899,7 +898,7 @@ export function decodeServerMessage(
       return decodeStateDataDescription(r);
     default:
       throw new Error(
-        `Unknown server message type: 0x${mtype.toString(16)}`,
+        `Unknown server message type: 0x${mtype.toString(16)}`
       );
   }
 }
@@ -914,14 +913,16 @@ export function decodeServerMessage(
  * too short.
  */
 export function splitWireMessage(
-  data: Uint8Array,
+  data: Uint8Array
 ): { mtype: number; payload: Uint8Array; } | null {
-  if (data.length < 5) return null;
+  if (data.length < 5)
+    return null;
   const mtype = data[0];
   const view = new DataView(data.buffer, data.byteOffset);
   const messageLength = view.getUint32(1, false); // includes the 4-byte length field
   const payloadLength = messageLength - 4;
-  if (data.length < 1 + messageLength) return null;
+  if (data.length < 1 + messageLength)
+    return null;
   const payload = data.slice(5, 5 + payloadLength);
   return { mtype, payload };
 }

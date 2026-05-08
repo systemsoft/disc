@@ -372,7 +372,7 @@ Deno.test("encode - throws for unknown type", () => {
   assertThrows(
     () => encodeScalarValue("not_a_type", "hello"),
     Error,
-    "Unsupported scalar type",
+    "Unsupported scalar type"
   );
 });
 
@@ -380,7 +380,7 @@ Deno.test("decode - throws for unknown type", () => {
   assertThrows(
     () => decodeScalarValue("not_a_type", new Uint8Array(4)),
     Error,
-    "Unsupported scalar type",
+    "Unsupported scalar type"
   );
 });
 
@@ -401,32 +401,32 @@ Deno.test("encodeObjectValue - simple object", () => {
         flags: 0,
         cardinality: Cardinality.ONE,
         name: "name",
-        typeId: strTypeId,
+        typeId: strTypeId
       },
       {
         flags: 0,
         cardinality: Cardinality.AT_MOST_ONE,
         name: "age",
-        typeId: int32TypeId,
-      },
-    ],
+        typeId: int32TypeId
+      }
+    ]
   };
 
   const descriptorMap = new Map<string, TypeDescriptor>([
     [bytesToUuid(strTypeId), {
       tag: DescriptorTag.BASE_SCALAR,
-      id: strTypeId,
+      id: strTypeId
     }],
     [bytesToUuid(int32TypeId), {
       tag: DescriptorTag.BASE_SCALAR,
-      id: int32TypeId,
-    }],
+      id: int32TypeId
+    }]
   ]);
 
   const encoded = encodeObjectValue(
     shape,
     { name: "Ada", age: 30 },
-    descriptorMap,
+    descriptorMap
   );
 
   // Verify structure: nelements(4) + per element: reserved(4) + len(4) + data
@@ -446,22 +446,22 @@ Deno.test("encodeObjectValue - with null field", () => {
         flags: 0,
         cardinality: Cardinality.AT_MOST_ONE,
         name: "name",
-        typeId: strTypeId,
-      },
-    ],
+        typeId: strTypeId
+      }
+    ]
   };
 
   const descriptorMap = new Map<string, TypeDescriptor>([
     [bytesToUuid(strTypeId), {
       tag: DescriptorTag.BASE_SCALAR,
-      id: strTypeId,
-    }],
+      id: strTypeId
+    }]
   ]);
 
   const encoded = encodeObjectValue(
     shape,
     { name: null },
-    descriptorMap,
+    descriptorMap
   );
 
   const view = new DataView(encoded.buffer, encoded.byteOffset);
@@ -482,22 +482,22 @@ Deno.test("encodeObjectValue - with undefined field treated as null", () => {
         flags: 0,
         cardinality: Cardinality.AT_MOST_ONE,
         name: "active",
-        typeId: boolTypeId,
-      },
-    ],
+        typeId: boolTypeId
+      }
+    ]
   };
 
   const descriptorMap = new Map<string, TypeDescriptor>([
     [bytesToUuid(boolTypeId), {
       tag: DescriptorTag.BASE_SCALAR,
-      id: boolTypeId,
-    }],
+      id: boolTypeId
+    }]
   ]);
 
   const encoded = encodeObjectValue(
     shape,
     {},
-    descriptorMap,
+    descriptorMap
   );
 
   const view = new DataView(encoded.buffer, encoded.byteOffset);

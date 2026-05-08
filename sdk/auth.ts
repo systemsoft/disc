@@ -23,7 +23,7 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
     const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
     const padded = base64.padEnd(
       base64.length + (4 - (base64.length % 4)) % 4,
-      "=",
+      "="
     );
     const decoded = atob(padded);
     return JSON.parse(decoded) as Record<string, unknown>;
@@ -70,7 +70,7 @@ export class AuthManager {
   async register(data: RegisterData): Promise<AuthResponse> {
     const response = await this.client.fetch("/auth/register", {
       method: "POST",
-      body: JSON.stringify(data),
+      body: JSON.stringify(data)
     });
 
     const authResponse = await response.json() as AuthResponse;
@@ -85,7 +85,7 @@ export class AuthManager {
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
     const response = await this.client.fetch("/auth/login", {
       method: "POST",
-      body: JSON.stringify(credentials),
+      body: JSON.stringify(credentials)
     });
 
     const authResponse = await response.json() as AuthResponse;
@@ -133,7 +133,7 @@ export class AuthManager {
 
       const response = await this.client.fetch("/auth/refresh", {
         method: "POST",
-        body: JSON.stringify({ refreshToken: this.tokens.refreshToken }),
+        body: JSON.stringify({ refreshToken: this.tokens.refreshToken })
       });
 
       const newTokens = await response.json() as AuthTokens;
@@ -172,7 +172,7 @@ export class AuthManager {
    */
   async updatePassword(
     oldPassword: string,
-    newPassword: string,
+    newPassword: string
   ): Promise<void> {
     if (!this.isAuthenticated()) {
       throw new DiscAuthError("Not authenticated");
@@ -180,7 +180,7 @@ export class AuthManager {
 
     await this.client.fetch("/auth/password", {
       method: "POST",
-      body: JSON.stringify({ oldPassword, newPassword }),
+      body: JSON.stringify({ oldPassword, newPassword })
     });
   }
 
@@ -211,7 +211,7 @@ export class AuthManager {
   private storeSession(authResponse: AuthResponse): void {
     const tokens: AuthTokens = {
       token: authResponse.token,
-      refreshToken: authResponse.refreshToken,
+      refreshToken: authResponse.refreshToken
     };
     this.tokens = tokens;
     this.currentUser = authResponse.user;

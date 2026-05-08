@@ -17,7 +17,7 @@ export class MessagePool<T> {
   constructor(
     factory: () => T,
     reset: (obj: T) => void,
-    maxSize = 100,
+    maxSize = 100
   ) {
     this.factory = factory;
     this.reset = reset;
@@ -64,12 +64,12 @@ export class BufferPool {
     8192,
     16384,
     32768,
-    65536,
+    65536
   ];
 
   acquire(minSize: number): Uint8Array {
     // Find the smallest buffer size that fits
-    const size = this.sizes.find((s) => s >= minSize) ?? minSize;
+    const size = this.sizes.find(s => s >= minSize) ?? minSize;
 
     const pool = this.pools.get(size);
     if (pool && pool.length > 0) {
@@ -159,7 +159,7 @@ export class CachedMessageBuilder {
     this.ensureCapacity(2);
     const view = new DataView(
       this.currentBuffer!.buffer,
-      this.currentBuffer!.byteOffset + this.offset,
+      this.currentBuffer!.byteOffset + this.offset
     );
     view.setUint16(0, value, false); // Big-endian
     this.offset += 2;
@@ -169,7 +169,7 @@ export class CachedMessageBuilder {
     this.ensureCapacity(4);
     const view = new DataView(
       this.currentBuffer!.buffer,
-      this.currentBuffer!.byteOffset + this.offset,
+      this.currentBuffer!.byteOffset + this.offset
     );
     view.setUint32(0, value, false); // Big-endian
     this.offset += 4;
@@ -179,7 +179,7 @@ export class CachedMessageBuilder {
     this.ensureCapacity(8);
     const view = new DataView(
       this.currentBuffer!.buffer,
-      this.currentBuffer!.byteOffset + this.offset,
+      this.currentBuffer!.byteOffset + this.offset
     );
     view.setUint32(0, Number(value >> 32n), false);
     view.setUint32(4, Number(value & 0xffffffffn), false);
@@ -279,7 +279,7 @@ export class MessageCache {
       hits: this.hits,
       misses: this.misses,
       hitRate: total > 0 ? this.hits / total : 0,
-      size: this.cache.size,
+      size: this.cache.size
     };
   }
 }
@@ -307,15 +307,15 @@ export class ConnectionPools {
         inputLanguage: Types.InputLanguage.EdgeQL,
         outputFormat: Types.OutputFormat.JSON,
         expectedCardinality: Types.Cardinality.Many,
-        commandText: "",
+        commandText: ""
       }),
-      (msg) => {
+      msg => {
         msg.annotations.length = 0;
         msg.allowedCapabilities = 0n;
         msg.compilationFlags = 0n;
         msg.implicitLimit = 0n;
         msg.commandText = "";
-      },
+      }
     );
 
     this.executeMessagePool = new MessagePool<Types.ExecuteMessage>(
@@ -334,9 +334,9 @@ export class ConnectionPools {
         encodedStateData: new Uint8Array(0),
         argumentDataDescriptorId: new Uint8Array(16),
         argumentData: new Uint8Array(0),
-        outputDataDescriptorId: new Uint8Array(16),
+        outputDataDescriptorId: new Uint8Array(16)
       }),
-      (msg) => {
+      msg => {
         msg.annotations.length = 0;
         msg.allowedCapabilities = 0n;
         msg.compilationFlags = 0n;
@@ -347,18 +347,18 @@ export class ConnectionPools {
         msg.argumentDataDescriptorId.fill(0);
         msg.argumentData = new Uint8Array(0);
         msg.outputDataDescriptorId.fill(0);
-      },
+      }
     );
 
     this.dataMessagePool = new MessagePool<Types.DataMessage>(
       () => ({
         type: Types.MessageType.Data,
         length: 0,
-        dataElements: [] as Types.DataElement[],
+        dataElements: [] as Types.DataElement[]
       }),
-      (msg) => {
+      msg => {
         msg.dataElements.length = 0;
-      },
+      }
     );
 
     this.errorResponsePool = new MessagePool<Types.ErrorResponse>(
@@ -368,14 +368,14 @@ export class ConnectionPools {
         severity: Types.ErrorSeverity.Error,
         errorCode: 0,
         message: "",
-        attributes: new Map<Types.ErrorAttribute, string>(),
+        attributes: new Map<Types.ErrorAttribute, string>()
       }),
-      (msg) => {
+      msg => {
         msg.severity = Types.ErrorSeverity.Error;
         msg.errorCode = 0;
         msg.message = "";
         msg.attributes.clear();
-      },
+      }
     );
   }
 

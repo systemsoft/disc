@@ -14,7 +14,7 @@ import { type EmbeddedPgEntry, extractEmbeddedPg, isEmbeddedPgExtracted } from "
 async function makeSourceFile(
   dir: string,
   relPath: string,
-  bytes: Uint8Array,
+  bytes: Uint8Array
 ): Promise<URL> {
   const full = join(dir, relPath);
   const lastSep = Math.max(full.lastIndexOf("/"), full.lastIndexOf("\\"));
@@ -34,7 +34,7 @@ Deno.test("extractEmbeddedPg - writes files with correct contents and modes", as
 
     const entries: EmbeddedPgEntry[] = [
       { sourceUrl: src1, relPath: "bin/postgres", mode: 0o755 },
-      { sourceUrl: src2, relPath: "share/timezones", mode: 0o644 },
+      { sourceUrl: src2, relPath: "share/timezones", mode: 0o644 }
     ];
 
     const result = await extractEmbeddedPg(target, entries);
@@ -58,7 +58,7 @@ Deno.test("extractEmbeddedPg - idempotent: second call writes nothing when marke
     const src = await makeSourceFile(tmp, "src/bin/postgres", new Uint8Array([1]));
     const target = join(tmp, "target");
     const entries: EmbeddedPgEntry[] = [
-      { sourceUrl: src, relPath: "bin/postgres", mode: 0o755 },
+      { sourceUrl: src, relPath: "bin/postgres", mode: 0o755 }
     ];
 
     const first = await extractEmbeddedPg(target, entries);
@@ -80,7 +80,7 @@ Deno.test("isEmbeddedPgExtracted - false before extract, true after", async () =
 
     const src = await makeSourceFile(tmp, "src/bin/postgres", new Uint8Array([1]));
     await extractEmbeddedPg(target, [
-      { sourceUrl: src, relPath: "bin/postgres", mode: 0o755 },
+      { sourceUrl: src, relPath: "bin/postgres", mode: 0o755 }
     ]);
 
     assertEquals(await isEmbeddedPgExtracted(target), true);
@@ -95,7 +95,7 @@ Deno.test("extractEmbeddedPg - re-extracts when marker is missing even if files 
     const src = await makeSourceFile(tmp, "src/bin/postgres", new Uint8Array([1]));
     const target = join(tmp, "target");
     const entries: EmbeddedPgEntry[] = [
-      { sourceUrl: src, relPath: "bin/postgres", mode: 0o755 },
+      { sourceUrl: src, relPath: "bin/postgres", mode: 0o755 }
     ];
 
     await extractEmbeddedPg(target, entries);

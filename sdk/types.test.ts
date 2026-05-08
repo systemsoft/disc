@@ -15,7 +15,7 @@ import type {
   RegisterData,
   SubscriptionClientConfig,
   SubscriptionMessage,
-  TransactionState,
+  TransactionState
 } from "./types.ts";
 
 Deno.test("types - DiscClientConfig defaults", () => {
@@ -31,7 +31,7 @@ Deno.test("types - DiscClientConfig full", () => {
     timeout: 5000,
     headers: { "X-Custom": "value" },
     retries: 3,
-    retryDelay: 500,
+    retryDelay: 500
   };
   assertEquals(config.baseUrl, "http://localhost:5656");
   assertEquals(config.retries, 3);
@@ -40,7 +40,7 @@ Deno.test("types - DiscClientConfig full", () => {
 Deno.test("types - QueryRequest", () => {
   const req: QueryRequest = {
     query: "select User { name }",
-    variables: { id: "123" },
+    variables: { id: "123" }
   };
   assertEquals(req.query, "select User { name }");
   assertEquals(req.variables?.id, "123");
@@ -49,7 +49,7 @@ Deno.test("types - QueryRequest", () => {
 Deno.test("types - QueryResponse with data", () => {
   const res: QueryResponse<{ name: string; }[]> = {
     data: [{ name: "Ada" }],
-    extensions: { parseMs: 1, compileMs: 2, executeMs: 3, cacheHit: false },
+    extensions: { parseMs: 1, compileMs: 2, executeMs: 3, cacheHit: false }
   };
   assertEquals(res.data?.[0].name, "Ada");
   assertEquals(res.errors, undefined);
@@ -57,7 +57,7 @@ Deno.test("types - QueryResponse with data", () => {
 
 Deno.test("types - QueryResponse with errors", () => {
   const res: QueryResponse = {
-    errors: [{ message: "Syntax error", locations: [{ line: 1, column: 5 }] }],
+    errors: [{ message: "Syntax error", locations: [{ line: 1, column: 5 }] }]
   };
   assertEquals(res.errors?.length, 1);
   assertEquals(res.data, undefined);
@@ -67,7 +67,7 @@ Deno.test("types - QueryError structure", () => {
   const err: QueryError = {
     message: "Unknown type",
     path: ["users", 0, "name"],
-    extensions: { code: "UNKNOWN_TYPE" },
+    extensions: { code: "UNKNOWN_TYPE" }
   };
   assertEquals(err.path?.length, 3);
   assertExists(err.extensions);
@@ -79,7 +79,7 @@ Deno.test("types - QueryExtensions", () => {
     compileMs: 3.4,
     executeMs: 5.6,
     cacheHit: true,
-    custom: "value",
+    custom: "value"
   };
   assertEquals(ext.cacheHit, true);
   assertEquals(ext.custom, "value");
@@ -89,11 +89,11 @@ Deno.test("types - HealthStatus variants", () => {
   const healthy: HealthStatus = { status: "healthy" };
   const degraded: HealthStatus = {
     status: "degraded",
-    database: { connected: true, latencyMs: 500 },
+    database: { connected: true, latencyMs: 500 }
   };
   const unhealthy: HealthStatus = {
     status: "unhealthy",
-    database: { connected: false },
+    database: { connected: false }
   };
   assertEquals(healthy.status, "healthy");
   assertEquals(degraded.database?.latencyMs, 500);
@@ -112,7 +112,7 @@ Deno.test("types - AuthUser", () => {
     createdAt: "2024-01-01",
     updatedAt: "2024-01-01",
     emailVerified: true,
-    active: true,
+    active: true
   };
   assertEquals(user.email, "a@b.com");
   assertEquals(user.username, undefined);
@@ -122,7 +122,7 @@ Deno.test("types - LoginCredentials variants", () => {
   const byEmail: LoginCredentials = { email: "a@b.com", password: "pass" };
   const byUsername: LoginCredentials = {
     username: "ada",
-    password: "pass",
+    password: "pass"
   };
   assertExists(byEmail.email);
   assertExists(byUsername.username);
@@ -133,7 +133,7 @@ Deno.test("types - RegisterData", () => {
     email: "a@b.com",
     password: "secure123",
     username: "ada",
-    metadata: { role: "admin" },
+    metadata: { role: "admin" }
   };
   assertEquals(data.metadata?.role, "admin");
 });
@@ -142,7 +142,7 @@ Deno.test("types - IsolationLevel values", () => {
   const levels: IsolationLevel[] = [
     "read_committed",
     "repeatable_read",
-    "serializable",
+    "serializable"
   ];
   assertEquals(levels.length, 3);
 });
@@ -156,7 +156,7 @@ Deno.test("types - SubscriptionClientConfig", () => {
   const config: SubscriptionClientConfig = {
     autoReconnect: true,
     maxReconnectAttempts: 10,
-    reconnectDelay: 2000,
+    reconnectDelay: 2000
   };
   assertEquals(config.maxReconnectAttempts, 10);
 });
@@ -165,7 +165,7 @@ Deno.test("types - SubscriptionMessage variants", () => {
   const data: SubscriptionMessage<string> = {
     id: "s1",
     type: "data",
-    payload: "hello",
+    payload: "hello"
   };
   const err: SubscriptionMessage = { id: "s1", type: "error" };
   const complete: SubscriptionMessage = { id: "s1", type: "complete" };

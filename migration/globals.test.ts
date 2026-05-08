@@ -35,22 +35,22 @@ function makeModuleWithGlobals(
     multi?: boolean;
     readonly?: boolean;
     default?: AST.Expression;
-  }[],
+  }[]
 ): Module[] {
   return [{
     name: "default",
-    items: globals.map((g) => ({
+    items: globals.map(g => ({
       kind: "GlobalDeclaration" as const,
       name: { kind: "Identifier" as const, value: g.name },
       type: {
         kind: "TypeRef" as const,
-        name: { kind: "QualifiedName" as const, parts: [g.type] },
+        name: { kind: "QualifiedName" as const, parts: [g.type] }
       },
       required: g.required,
       multi: g.multi,
       readonly: g.readonly,
-      default: g.default,
-    })),
+      default: g.default
+    }))
   }];
 }
 
@@ -62,12 +62,12 @@ Deno.test("Differ - detects new global (CreateGlobal)", () => {
   const differ = new SchemaDiffer();
   const oldModules: Module[] = [{ name: "default", items: [] }];
   const newModules = makeModuleWithGlobals([
-    { name: "current_user_id", type: "uuid" },
+    { name: "current_user_id", type: "uuid" }
   ]);
 
   const operations = differ.diff(oldModules, newModules);
 
-  const globalOps = operations.filter((op) => op.kind === "CreateGlobal");
+  const globalOps = operations.filter(op => op.kind === "CreateGlobal");
   assertEquals(globalOps.length, 1);
 
   const createGlobal = globalOps[0] as Types.CreateGlobalOperation;
@@ -83,13 +83,13 @@ Deno.test("Differ - detects new global (CreateGlobal)", () => {
 Deno.test("Differ - detects removed global (DropGlobal)", () => {
   const differ = new SchemaDiffer();
   const oldModules = makeModuleWithGlobals([
-    { name: "current_user_id", type: "uuid" },
+    { name: "current_user_id", type: "uuid" }
   ]);
   const newModules: Module[] = [{ name: "default", items: [] }];
 
   const operations = differ.diff(oldModules, newModules);
 
-  const globalOps = operations.filter((op) => op.kind === "DropGlobal");
+  const globalOps = operations.filter(op => op.kind === "DropGlobal");
   assertEquals(globalOps.length, 1);
 
   const dropGlobal = globalOps[0] as Types.DropGlobalOperation;
@@ -100,23 +100,23 @@ Deno.test("Differ - detects removed global (DropGlobal)", () => {
 Deno.test("Differ - detects changed global type (DropGlobal + CreateGlobal)", () => {
   const differ = new SchemaDiffer();
   const oldModules = makeModuleWithGlobals([
-    { name: "current_user_id", type: "uuid" },
+    { name: "current_user_id", type: "uuid" }
   ]);
   const newModules = makeModuleWithGlobals([
-    { name: "current_user_id", type: "str" },
+    { name: "current_user_id", type: "str" }
   ]);
 
   const operations = differ.diff(oldModules, newModules);
 
-  const dropOps = operations.filter((op) => op.kind === "DropGlobal");
-  const createOps = operations.filter((op) => op.kind === "CreateGlobal");
+  const dropOps = operations.filter(op => op.kind === "DropGlobal");
+  const createOps = operations.filter(op => op.kind === "CreateGlobal");
 
   assertEquals(dropOps.length, 1);
   assertEquals(createOps.length, 1);
 
   assertEquals(
     (dropOps[0] as Types.DropGlobalOperation).name,
-    "current_user_id",
+    "current_user_id"
   );
 
   const createGlobal = createOps[0] as Types.CreateGlobalOperation;
@@ -138,13 +138,13 @@ Deno.test("DDL - CreateGlobal and DropGlobal generate no-op comments", () => {
     pgType: "uuid",
     required: false,
     multi: false,
-    readonly: false,
+    readonly: false
   };
 
   const dropOp: Types.DropGlobalOperation = {
     kind: "DropGlobal",
     name: "current_user_id",
-    module: "default",
+    module: "default"
   };
 
   const createStatements = generateDDL([createOp]);

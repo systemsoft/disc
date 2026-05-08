@@ -39,7 +39,7 @@ Extensions can declare dependencies on other extensions. The registry performs a
 const extension: ExtensionMetadata = {
   dependencies: ["vector"], // initialized after the vector extension
   name: "my-extension",
-  version: "1.0.0",
+  version: "1.0.0"
 };
 ```
 
@@ -90,8 +90,8 @@ const server = new DiscServer({
   extensions: [
     new FtsExtension("english"),
     new VectorExtension({ defaultDimensions: 1536, indexType: "hnsw" }),
-    new GraphQLExtension({ enableMutations: true }),
-  ],
+    new GraphQLExtension({ enableMutations: true })
+  ]
 });
 
 await server.start();
@@ -112,7 +112,7 @@ Add an FTS index to your type's properties using the index builder:
 ```typescript
 import {
   generateFtsColumn,
-  generateFtsIndex,
+  generateFtsIndex
 } from "./ext-fts/index-builder.ts";
 
 const config = {
@@ -122,8 +122,8 @@ const config = {
   typeName: "default::BlogPost",
   weights: {
     body: "B",
-    title: "A",
-  },
+    title: "A"
+  }
 };
 
 // Generates:
@@ -213,7 +213,7 @@ The pgvector extension must be available in your PostgreSQL installation. Disc's
 ```typescript
 new VectorExtension({
   defaultDimensions: 1536, // Default: 1536 (OpenAI ada-002)
-  indexType: "hnsw", // Default: "hnsw" (alternative: "ivfflat")
+  indexType: "hnsw" // Default: "hnsw" (alternative: "ivfflat")
 });
 ```
 
@@ -268,7 +268,7 @@ const hnswIndex = generateVectorIndex({
   efConstruction: 64, // Build-time search width (default: 64)
   indexType: "hnsw",
   m: 16, // Max connections per node (default: 16)
-  tableName: "documents",
+  tableName: "documents"
 });
 // CREATE INDEX IF NOT EXISTS idx_documents_embedding_vector
 //   ON documents USING hnsw (embedding vector_cosine_ops)
@@ -280,7 +280,7 @@ const ivfflatIndex = generateVectorIndex({
   dimensions: 1536,
   indexType: "ivfflat",
   lists: 100, // Number of clusters (default: 100)
-  tableName: "documents",
+  tableName: "documents"
 });
 // CREATE INDEX IF NOT EXISTS idx_documents_embedding_vector
 //   ON documents USING ivfflat (embedding vector_cosine_ops)
@@ -300,7 +300,7 @@ The GraphQL extension auto-generates a GraphQL schema from your SDL type definit
 ```typescript
 new GraphQLExtension({
   enableMutations: false, // Default: false (queries only)
-  maxDepth: 10, // Default: 10 (max nesting depth)
+  maxDepth: 10 // Default: 10 (max nesting depth)
 });
 ```
 
@@ -450,7 +450,7 @@ const ext = new CustomFunctionsExtension({
     {
       args: [
         { name: "amount", required: true, type: "float64" },
-        { name: "rate", required: true, type: "float64" },
+        { name: "rate", required: true, type: "float64" }
       ],
       description: "Calculate tax on an amount",
       implementation: {
@@ -459,13 +459,13 @@ BEGIN
   RETURN amount * rate / 100.0;
 END;
         `,
-        kind: "plpgsql",
+        kind: "plpgsql"
       },
       name: "calculate_tax",
       returnType: "float64",
-      volatility: "immutable",
-    },
-  ],
+      volatility: "immutable"
+    }
+  ]
 });
 ```
 
@@ -573,7 +573,7 @@ import { OAuthExtension } from "./ext-oauth/extension.ts";
 import {
   appleProvider,
   githubProvider,
-  googleProvider,
+  googleProvider
 } from "./ext-oauth/providers.ts";
 
 const ext = new OAuthExtension({
@@ -582,15 +582,15 @@ const ext = new OAuthExtension({
     githubProvider(
       "your-github-client-id",
       "your-github-client-secret",
-      "http://localhost:8080/ext/oauth/callback/github",
+      "http://localhost:8080/ext/oauth/callback/github"
     ),
     googleProvider(
       "your-google-client-id",
       "your-google-client-secret",
-      "http://localhost:8080/ext/oauth/callback/google",
-    ),
+      "http://localhost:8080/ext/oauth/callback/google"
+    )
   ],
-  stateExpiryMs: 600_000, // 10 minutes (default)
+  stateExpiryMs: 600_000 // 10 minutes (default)
 });
 ```
 
@@ -632,7 +632,7 @@ const customProvider: OAuthProviderConfig = {
   redirectUri: "http://localhost:8080/ext/oauth/callback/gitlab",
   scopes: ["read_user"],
   tokenUrl: "https://gitlab.com/oauth/token",
-  userInfoUrl: "https://gitlab.com/api/v4/user",
+  userInfoUrl: "https://gitlab.com/api/v4/user"
 };
 ```
 
@@ -664,7 +664,7 @@ const customProvider: OAuthProviderConfig = {
 ```typescript
 import {
   exchangeCodeForToken,
-  fetchUserInfo,
+  fetchUserInfo
 } from "./ext-oauth/token-exchange.ts";
 
 const tokenResponse = await exchangeCodeForToken(provider, code, redirectUri);
@@ -751,7 +751,7 @@ import { BaseExtension } from "./extensions/base-extension.ts";
 import type {
   ExtensionContext,
   ExtensionMetadata,
-  ExtensionRoute,
+  ExtensionRoute
 } from "./extensions/types.ts";
 
 export class MyExtension extends BaseExtension {
@@ -759,7 +759,7 @@ export class MyExtension extends BaseExtension {
     dependencies: [], // other extensions this depends on
     description: "Does something useful",
     name: "my-extension",
-    version: "1.0.0",
+    version: "1.0.0"
   };
 
   override async initialize(context: ExtensionContext): Promise<void> {
@@ -939,8 +939,8 @@ import { DiscServer } from "./server/disc-server.ts";
 const server = new DiscServer({
   // ... config
   extensions: [
-    new MyExtension(),
-  ],
+    new MyExtension()
+  ]
 });
 ```
 
@@ -971,7 +971,7 @@ import {
   ExtensionConfigError,
   ExtensionDependencyError,
   ExtensionError,
-  ExtensionInitError,
+  ExtensionInitError
 } from "./extensions/errors.ts";
 
 // General extension error
@@ -980,7 +980,7 @@ throw new ExtensionError("my-extension", "Something went wrong");
 // Initialization failure
 throw new ExtensionInitError(
   "my-extension",
-  "Cannot connect to external service",
+  "Cannot connect to external service"
 );
 
 // Missing dependencies

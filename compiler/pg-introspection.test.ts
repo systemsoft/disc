@@ -32,7 +32,7 @@ function makePool(dsn: string): ConnectionPool {
     connectionString: dsn,
     minConnections: 1,
     maxConnections: 3,
-    cleanupInterval: 0,
+    cleanupInterval: 0
   });
 }
 
@@ -63,7 +63,7 @@ function buildTestSchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["name", {
         name: "name",
@@ -71,7 +71,7 @@ function buildTestSchema(): Schema {
         required: true,
         multi: false,
         columnName: "name",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["email", {
         name: "email",
@@ -80,8 +80,8 @@ function buildTestSchema(): Schema {
         multi: false,
         columnName: "email",
         edgeqlType: "str",
-        constraints: [{ name: "exclusive" }],
-      }],
+        constraints: [{ name: "exclusive" }]
+      }]
     ]),
     links: new Map([
       ["posts", {
@@ -89,9 +89,9 @@ function buildTestSchema(): Schema {
         target: "Post",
         required: false,
         multi: true,
-        backlink: "author",
-      }],
-    ]),
+        backlink: "author"
+      }]
+    ])
   };
 
   const postType: TypeDef = {
@@ -106,7 +106,7 @@ function buildTestSchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["title", {
         name: "title",
@@ -114,8 +114,8 @@ function buildTestSchema(): Schema {
         required: true,
         multi: false,
         columnName: "title",
-        edgeqlType: "str",
-      }],
+        edgeqlType: "str"
+      }]
     ]),
     links: new Map([
       ["author", {
@@ -123,14 +123,14 @@ function buildTestSchema(): Schema {
         target: "User",
         required: true,
         multi: false,
-        columnName: "author_id",
-      }],
-    ]),
+        columnName: "author_id"
+      }]
+    ])
   };
 
   return {
     types: new Map([["User", userType], ["Post", postType]]),
-    functions: getBuiltinFunctions(),
+    functions: getBuiltinFunctions()
   };
 }
 
@@ -164,7 +164,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -193,13 +193,13 @@ Deno.test({
       assertEquals(Array.isArray(json.types), true);
 
       const types = json.types as Array<{ name: string; }>;
-      const typeNames = types.map((t) => t.name);
+      const typeNames = types.map(t => t.name);
       assertEquals(typeNames.includes("User"), true);
       assertEquals(typeNames.includes("Post"), true);
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -214,7 +214,7 @@ Deno.test({
     const parser = new EdgeQLParser("DESCRIBE TYPE Ghost");
     const ast = parser.parse();
     const compiler = new EdgeQLCompiler(schema, {
-      enableAccessControl: false,
+      enableAccessControl: false
     });
     const result = compiler.compile(ast);
 
@@ -222,7 +222,7 @@ Deno.test({
     if (!result.ok) {
       assertEquals(result.error.message.includes("not found"), true);
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -247,7 +247,7 @@ Deno.test({
 
       // Check properties
       const props = json.properties as Array<{ name: string; type: string; }>;
-      const propNames = props.map((p) => p.name);
+      const propNames = props.map(p => p.name);
       assertEquals(propNames.includes("title"), true);
       assertEquals(propNames.includes("id"), true);
 
@@ -255,14 +255,14 @@ Deno.test({
       const links = json.links as Array<
         { name: string; target: string; cardinality: string; }
       >;
-      const authorLink = links.find((l) => l.name === "author");
+      const authorLink = links.find(l => l.name === "author");
       assertExists(authorLink);
       assertEquals(authorLink!.target, "User");
       assertEquals(authorLink!.cardinality, "single");
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -291,5 +291,5 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });

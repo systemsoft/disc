@@ -14,7 +14,7 @@ Deno.test("MigrationConfig - default values", () => {
     dryRun: false,
     autoApprove: false,
     backupBeforeMigration: true,
-    rollbackOnError: true,
+    rollbackOnError: true
   };
 
   assertEquals(config.migrationsDir, "./migrations");
@@ -28,7 +28,7 @@ Deno.test("MigrationState - structure", () => {
   const state: Types.MigrationState = {
     appliedMigrations: ["migration-001"],
     currentSchemaHash: "abc123",
-    lastMigrationId: "migration-001",
+    lastMigrationId: "migration-001"
   };
 
   assertEquals(state.appliedMigrations.length, 1);
@@ -50,14 +50,14 @@ Deno.test("MigrationPlan - structure", () => {
             kind: "CreateType",
             typeName: "User",
             properties: [],
-            links: [],
-          } as Types.CreateTypeOperation,
-        ],
-      },
+            links: []
+          } as Types.CreateTypeOperation
+        ]
+      }
     ],
     targetSchemaHash: "hash123",
     operationsCount: 1,
-    estimatedDuration: 100,
+    estimatedDuration: 100
   };
 
   assertEquals(plan.migrations.length, 1);
@@ -77,8 +77,8 @@ Deno.test("CreateTypeOperation - structure", () => {
         required: true,
         multi: false,
         constraints: ["min_length(1)"],
-        annotations: { description: "User name" },
-      },
+        annotations: { description: "User name" }
+      }
     ],
     links: [
       {
@@ -86,9 +86,9 @@ Deno.test("CreateTypeOperation - structure", () => {
         target: "Post",
         required: false,
         multi: true,
-        annotations: {},
-      },
-    ],
+        annotations: {}
+      }
+    ]
   };
 
   assertEquals(operation.kind, "CreateType");
@@ -111,14 +111,14 @@ Deno.test("AlterTypeOperation - structure", () => {
           required: true,
           multi: false,
           constraints: ["exclusive"],
-          annotations: {},
-        },
+          annotations: {}
+        }
       } as Types.AddPropertyOperation,
       {
         kind: "DropProperty",
-        propertyName: "old_field",
-      } as Types.DropPropertyOperation,
-    ],
+        propertyName: "old_field"
+      } as Types.DropPropertyOperation
+    ]
   };
 
   assertEquals(operation.kind, "AlterType");
@@ -131,7 +131,7 @@ Deno.test("AlterTypeOperation - structure", () => {
 Deno.test("DropTypeOperation - structure", () => {
   const operation: Types.DropTypeOperation = {
     kind: "DropType",
-    typeName: "ObsoleteType",
+    typeName: "ObsoleteType"
   };
 
   assertEquals(operation.kind, "DropType");
@@ -148,8 +148,8 @@ Deno.test("PropertyDefinition - all fields", () => {
     constraints: ["readonly"],
     annotations: {
       description: "Creation timestamp",
-      computed: true,
-    },
+      computed: true
+    }
   };
 
   assertEquals(property.name, "createdAt");
@@ -169,7 +169,7 @@ Deno.test("LinkDefinition - single and multi links", () => {
     target: "User",
     required: true,
     multi: false,
-    annotations: {},
+    annotations: {}
   };
 
   const multiLink: Types.LinkDefinition = {
@@ -179,8 +179,8 @@ Deno.test("LinkDefinition - single and multi links", () => {
     multi: true,
     annotations: {
       description: "Associated tags",
-      onDelete: "restrict",
-    },
+      onDelete: "restrict"
+    }
   };
 
   assertEquals(singleLink.multi, false);
@@ -196,7 +196,7 @@ Deno.test("MigrationResult - success case", () => {
     migrationId: "migration-001",
     success: true,
     durationMs: 250,
-    appliedAt: new Date(),
+    appliedAt: new Date()
   };
 
   assertEquals(result.success, true);
@@ -210,7 +210,7 @@ Deno.test("MigrationResult - failure case", () => {
     success: false,
     durationMs: 100,
     appliedAt: new Date(),
-    error: "Constraint violation: duplicate key",
+    error: "Constraint violation: duplicate key"
   };
 
   assertEquals(result.success, false);
@@ -227,8 +227,8 @@ Deno.test("AddPropertyOperation - structure", () => {
       multi: false,
       default: "active",
       constraints: ["enum('active', 'inactive', 'pending')"],
-      annotations: { description: "User status" },
-    },
+      annotations: { description: "User status" }
+    }
   };
 
   assertEquals(operation.kind, "AddProperty");
@@ -239,7 +239,7 @@ Deno.test("AddPropertyOperation - structure", () => {
 Deno.test("DropPropertyOperation - structure", () => {
   const operation: Types.DropPropertyOperation = {
     kind: "DropProperty",
-    propertyName: "deprecated_field",
+    propertyName: "deprecated_field"
   };
 
   assertEquals(operation.kind, "DropProperty");
@@ -254,17 +254,17 @@ Deno.test("AlterPropertyOperation - structure", () => {
       {
         kind: "ChangeRequired",
         oldValue: false,
-        newValue: true,
+        newValue: true
       },
       {
         kind: "AddConstraint",
-        newValue: "exclusive",
+        newValue: "exclusive"
       },
       {
         kind: "DropConstraint",
-        oldValue: "min_length(3)",
-      },
-    ],
+        oldValue: "min_length(3)"
+      }
+    ]
   };
 
   assertEquals(operation.kind, "AlterProperty");
@@ -281,14 +281,14 @@ Deno.test("MigrationOperation - discriminated union", () => {
       kind: "CreateType",
       typeName: "User",
       properties: [],
-      links: [],
+      links: []
     } as Types.CreateTypeOperation,
     { kind: "DropType", typeName: "OldType" } as Types.DropTypeOperation,
     {
       kind: "AlterType",
       typeName: "User",
-      operations: [],
-    } as Types.AlterTypeOperation,
+      operations: []
+    } as Types.AlterTypeOperation
   ];
 
   assertEquals(operations[0].kind, "CreateType");
@@ -310,12 +310,12 @@ Deno.test("MigrationOperation - discriminated union", () => {
 Deno.test("Result type - success and error cases", () => {
   const successResult: Result<string, Error> = {
     ok: true,
-    value: "success",
+    value: "success"
   };
 
   const errorResult: Result<string, Error> = {
     ok: false,
-    error: new Error("Something went wrong"),
+    error: new Error("Something went wrong")
   };
 
   assertEquals(successResult.ok, true);

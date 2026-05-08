@@ -62,11 +62,14 @@ export interface ServeOptions {
  * testable without spinning up the full `serve` command.
  */
 export function applySecurityToggleEnvVars(
-  options: Pick<ServeOptions, "requireAuth" | "readOnly" | "trustProxy">,
+  options: Pick<ServeOptions, "requireAuth" | "readOnly" | "trustProxy">
 ): void {
-  if (options.requireAuth) Deno.env.set("DISC_REQUIRE_AUTH", "true");
-  if (options.readOnly) Deno.env.set("DISC_READ_ONLY", "true");
-  if (options.trustProxy) Deno.env.set("DISC_TRUST_PROXY", "true");
+  if (options.requireAuth)
+    Deno.env.set("DISC_REQUIRE_AUTH", "true");
+  if (options.readOnly)
+    Deno.env.set("DISC_READ_ONLY", "true");
+  if (options.trustProxy)
+    Deno.env.set("DISC_TRUST_PROXY", "true");
 }
 
 export class CLICommands {
@@ -97,9 +100,9 @@ export class CLICommands {
       await ensurePgRunning(ctx);
     }
 
-    const databaseUrl = args["backend-dsn"]
-      || Deno.env.get("DATABASE_URL")
-      || (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc_dev");
+    const databaseUrl = args["backend-dsn"] ||
+      Deno.env.get("DATABASE_URL") ||
+      (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc_dev");
 
     let pool: ConnectionPool | undefined;
     let manager: SchemaManager | undefined;
@@ -123,7 +126,7 @@ export class CLICommands {
           // gh/geldata#9034: tag CLI connections so the preflight can
           // tell `disc-cli` apart from `disc-server` in
           // `pg_stat_activity`.
-          applicationName: "disc-cli",
+          applicationName: "disc-cli"
         });
         await pool.initialize();
 
@@ -145,7 +148,7 @@ export class CLICommands {
           schemaFile,
           dryRun,
           args.unsafe === true,
-          quiet,
+          quiet
         );
       }
     } catch (error) {
@@ -175,7 +178,7 @@ export class CLICommands {
       if (ctx?.managed) {
         console.log(`📦 Starting PostgreSQL for project: ${ctx.projectName}`);
         const { dsn, wasStarted } = await ensurePgRunning(ctx, {
-          withMonitor: true,
+          withMonitor: true
         });
         Deno.env.set("DATABASE_URL", dsn);
         console.log(wasStarted ? "✅ PostgreSQL started" : "✅ PostgreSQL already running");
@@ -222,11 +225,14 @@ export class CLICommands {
       }
 
       if (schema) {
-        const objectTypeCount = Array.from(schema.types.values()).filter(
-          (t) => t.kind === "object",
-        ).length;
+        const objectTypeCount = Array
+          .from(schema.types.values())
+          .filter(
+            t => t.kind === "object"
+          )
+          .length;
         console.log(
-          `  Loaded schema with ${objectTypeCount} object types`,
+          `  Loaded schema with ${objectTypeCount} object types`
         );
 
         // Auto-migrate on dev (managed PG only). External DSN is treated as
@@ -237,24 +243,24 @@ export class CLICommands {
           await this.autoMigrateOnServe(schemaFile);
         } else {
           console.log(
-            "  💡 External DSN — run 'disc migrate' to apply schema changes.",
+            "  💡 External DSN — run 'disc migrate' to apply schema changes."
           );
         }
       } else {
         console.log(
-          "  ⚠️  No schema file found at ./dbschema/default.disc.",
+          "  ⚠️  No schema file found at ./dbschema/default.disc."
         );
         console.log(
-          "     Falling back to in-memory test schema. Queries against",
+          "     Falling back to in-memory test schema. Queries against"
         );
         console.log(
-          "     User/Post/Status will fail because no tables exist in",
+          "     User/Post/Status will fail because no tables exist in"
         );
         console.log(
-          "     PostgreSQL. Run 'disc init' or create a schema file and",
+          "     PostgreSQL. Run 'disc init' or create a schema file and"
         );
         console.log(
-          "     'disc migrate' before issuing queries.",
+          "     'disc migrate' before issuing queries."
         );
       }
 
@@ -263,8 +269,8 @@ export class CLICommands {
         console.log("🔐 Authentication enabled");
       }
       if (
-        options.enableAccessPolicies
-        || Deno.env.get("DISC_ENABLE_ACCESS_POLICIES")
+        options.enableAccessPolicies ||
+        Deno.env.get("DISC_ENABLE_ACCESS_POLICIES")
       ) {
         console.log("🛡️ Access policies enabled");
       }
@@ -292,9 +298,12 @@ export class CLICommands {
         Object.assign(config, ctx.serverOverrides);
       }
 
-      if (options.port) config.port = options.port;
-      if (options.host) config.host = options.host;
-      if (options.binaryPort) config.binaryPort = options.binaryPort;
+      if (options.port)
+        config.port = options.port;
+      if (options.host)
+        config.host = options.host;
+      if (options.binaryPort)
+        config.binaryPort = options.binaryPort;
 
       server.update_config(config);
 
@@ -339,7 +348,7 @@ export class CLICommands {
    * (gh/geldata#702, #7469)
    */
   async schemaExport(
-    args: { schema?: string; "schema-dir"?: string; output?: string; },
+    args: { schema?: string; "schema-dir"?: string; output?: string; }
   ): Promise<void> {
     const schemaFile = args.schema;
     const schemaDir = args["schema-dir"] ?? "./dbschema";
@@ -357,7 +366,7 @@ export class CLICommands {
       const files = await Codegen.discoverSchemaFiles(schemaDir);
       if (files.length === 0) {
         console.error(
-          `❌ No schema files found in ${schemaDir}. Pass --schema <file> or --schema-dir <dir>.`,
+          `❌ No schema files found in ${schemaDir}. Pass --schema <file> or --schema-dir <dir>.`
         );
         return;
       }
@@ -383,17 +392,17 @@ export class CLICommands {
       "database-url"?: string;
       schemas?: string;
       output?: string;
-    },
+    }
   ): Promise<void> {
-    const dsn = args["database-url"]
-      ?? Deno.env.get("DATABASE_URL");
+    const dsn = args["database-url"] ??
+      Deno.env.get("DATABASE_URL");
     if (!dsn) {
       console.error(
-        "❌ --database-url is required (or set DATABASE_URL env var)",
+        "❌ --database-url is required (or set DATABASE_URL env var)"
       );
       return;
     }
-    const schemas = args.schemas ? args.schemas.split(",").map((s) => s.trim()).filter(Boolean) : undefined;
+    const schemas = args.schemas ? args.schemas.split(",").map(s => s.trim()).filter(Boolean) : undefined;
     const outputPath = args.output;
 
     const db = new DatabaseConnection(dsn);
@@ -436,7 +445,7 @@ export class CLICommands {
           console.log(`📖 Loaded types: ${typeNames}`);
         } else {
           console.log(
-            `⚠️  No schema found at ${schemaFile}, falling back to test schema`,
+            `⚠️  No schema found at ${schemaFile}, falling back to test schema`
           );
           schema = Context.createTestSchema();
         }
@@ -447,14 +456,14 @@ export class CLICommands {
 
         if (files.length > 0) {
           console.log(
-            `📖 Discovered ${files.length} schema file(s): ${files.map((f) => f.split("/").pop()).join(", ")}`,
+            `📖 Discovered ${files.length} schema file(s): ${files.map(f => f.split("/").pop()).join(", ")}`
           );
           schema = await Codegen.loadMultiFileSchema(files);
           const typeNames = Array.from(schema.types.keys()).join(", ");
           console.log(`📖 Loaded types: ${typeNames}`);
         } else {
           console.log(
-            `⚠️  No schema files found in ${schemaDir}, falling back to test schema`,
+            `⚠️  No schema files found in ${schemaDir}, falling back to test schema`
           );
           schema = Context.createTestSchema();
         }
@@ -472,7 +481,7 @@ export class CLICommands {
         includeQueryBuilders: args["no-queries"] !== true,
         includeMutations: args["no-mutations"] !== true,
         includeClient: args["no-client"] !== true,
-        formatOutput: args["no-format"] !== true,
+        formatOutput: args["no-format"] !== true
       };
 
       console.log(`⚙️  Generating code...`);
@@ -480,7 +489,7 @@ export class CLICommands {
 
       if (result.errors.length > 0) {
         console.error(`❌ Generation failed with errors:`);
-        result.errors.forEach((error) => console.error(`   ${error}`));
+        result.errors.forEach(error => console.error(`   ${error}`));
         return;
       }
 
@@ -492,21 +501,21 @@ export class CLICommands {
       console.log(`\n📊 Generation Summary:`);
       console.log(`   Files generated: ${result.files.length}`);
       console.log(
-        `   Types generated: ${Array.from(schema.types.keys()).length}`,
+        `   Types generated: ${Array.from(schema.types.keys()).length}`
       );
       console.log(`   Warnings: ${result.warnings.length}`);
       console.log(`   Errors: ${result.errors.length}`);
 
       if (result.warnings.length > 0) {
         console.log(`\n⚠️  Warnings:`);
-        result.warnings.forEach((warning) => console.log(`   ${warning}`));
+        result.warnings.forEach(warning => console.log(`   ${warning}`));
       }
 
       console.log(`\n✅ TypeScript generation complete!`);
       console.log(`💡 Usage example:`);
       console.log(`   import { DiscClient } from "./${outputDir}/index.ts";`);
       console.log(
-        `   const client = new DiscClient({ host: "localhost", port: 5656 });`,
+        `   const client = new DiscClient({ host: "localhost", port: 5656 });`
       );
       console.log(`   const users = await client.user.select();`);
     } catch (error) {
@@ -540,7 +549,7 @@ export class CLICommands {
     try {
       if (ctx?.managed) {
         const { instance, dsn, wasStarted } = await ensurePgRunning(ctx, {
-          withMonitor: useMonitor,
+          withMonitor: useMonitor
         });
         const status = await instance.status();
         console.log(wasStarted ? "✅ PostgreSQL started successfully" : "✅ PostgreSQL already running");
@@ -555,7 +564,7 @@ export class CLICommands {
         if (!instance) {
           console.log("📋 Creating new PostgreSQL instance...");
           instance = await this.postgresManager.createInstance(projectName, {
-            port: args.port || 0,
+            port: args.port || 0
           });
         }
         await this.postgresManager.startInstance(projectName, useMonitor);
@@ -570,12 +579,12 @@ export class CLICommands {
 
       if (foreground) {
         console.log(
-          `\n📡 Running in foreground (--foreground). Press Ctrl-C to stop the health monitor; PostgreSQL itself will keep running until \`disc stop\`.`,
+          `\n📡 Running in foreground (--foreground). Press Ctrl-C to stop the health monitor; PostgreSQL itself will keep running until \`disc stop\`.`
         );
       }
     } catch (error) {
       console.error(
-        `❌ Failed to start PostgreSQL: ${(error as Error).message}`,
+        `❌ Failed to start PostgreSQL: ${(error as Error).message}`
       );
       throw error;
     }
@@ -596,7 +605,7 @@ export class CLICommands {
       console.log("✅ PostgreSQL stopped successfully");
     } catch (error) {
       console.error(
-        `❌ Failed to stop PostgreSQL: ${(error as Error).message}`,
+        `❌ Failed to stop PostgreSQL: ${(error as Error).message}`
       );
       throw error;
     }
@@ -623,14 +632,14 @@ export class CLICommands {
 
       const statusIcon = status.running ? "🟢" : "🔴";
       console.log(
-        `${statusIcon} Status: ${status.running ? "Running" : "Stopped"}`,
+        `${statusIcon} Status: ${status.running ? "Running" : "Stopped"}`
       );
 
       if (status.running) {
         console.log(`   PID: ${status.pid}`);
         console.log(`   Port: ${status.port || "Unix socket only"}`);
         console.log(
-          `   Started: ${status.startedAt?.toLocaleString() || "Unknown"}`,
+          `   Started: ${status.startedAt?.toLocaleString() || "Unknown"}`
         );
 
         if (status.health) {
@@ -639,7 +648,7 @@ export class CLICommands {
           console.log(`   Connections: ${status.health.connections}`);
           console.log(`   Latency: ${status.health.latencyMs}ms`);
           console.log(
-            `   Uptime: ${Math.floor((status.health.uptime || 0) / 60)} minutes`,
+            `   Uptime: ${Math.floor((status.health.uptime || 0) / 60)} minutes`
           );
         }
       }
@@ -701,7 +710,7 @@ export class CLICommands {
       await this.status(args);
     } catch (error) {
       console.error(
-        `❌ Failed to restart PostgreSQL: ${(error as Error).message}`,
+        `❌ Failed to restart PostgreSQL: ${(error as Error).message}`
       );
       throw error;
     }
@@ -740,9 +749,9 @@ export class CLICommands {
    */
   async dbCreate(name: string, args: CLIArgs): Promise<void> {
     const ctx = resolveProjectContext();
-    const databaseUrl = args["database-url"]
-      || Deno.env.get("DATABASE_URL")
-      || (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
+    const databaseUrl = args["database-url"] ||
+      Deno.env.get("DATABASE_URL") ||
+      (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
     await dbCommand.create({ name, databaseUrl });
   }
 
@@ -751,9 +760,9 @@ export class CLICommands {
    */
   async dbList(args: CLIArgs): Promise<void> {
     const ctx = resolveProjectContext();
-    const databaseUrl = args["database-url"]
-      || Deno.env.get("DATABASE_URL")
-      || (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
+    const databaseUrl = args["database-url"] ||
+      Deno.env.get("DATABASE_URL") ||
+      (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
     await dbCommand.list({ databaseUrl });
   }
 
@@ -762,13 +771,13 @@ export class CLICommands {
    */
   async dbDrop(name: string, args: CLIArgs): Promise<void> {
     const ctx = resolveProjectContext();
-    const databaseUrl = args["database-url"]
-      || Deno.env.get("DATABASE_URL")
-      || (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
+    const databaseUrl = args["database-url"] ||
+      Deno.env.get("DATABASE_URL") ||
+      (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
     await dbCommand.drop({
       name,
       databaseUrl,
-      force: args.force || false,
+      force: args.force || false
     });
   }
 
@@ -780,13 +789,13 @@ export class CLICommands {
     if (ctx?.managed) {
       await ensurePgRunning(ctx);
     }
-    const databaseUrl = args["database-url"]
-      || Deno.env.get("DATABASE_URL")
-      || (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
+    const databaseUrl = args["database-url"] ||
+      Deno.env.get("DATABASE_URL") ||
+      (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
     await dbCommand.wipe({
       databaseUrl,
       force: args.force || false,
-      name,
+      name
     });
   }
 
@@ -798,14 +807,14 @@ export class CLICommands {
     if (ctx?.managed) {
       await ensurePgRunning(ctx);
     }
-    const databaseUrl = args["database-url"]
-      || Deno.env.get("DATABASE_URL")
-      || (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
+    const databaseUrl = args["database-url"] ||
+      Deno.env.get("DATABASE_URL") ||
+      (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
 
     const fmtRaw = args.format ? String(args.format) : "plain";
     if (fmtRaw !== "plain" && fmtRaw !== "custom") {
       throw new Error(
-        `Invalid --format "${fmtRaw}". Valid values: plain, custom.`,
+        `Invalid --format "${fmtRaw}". Valid values: plain, custom.`
       );
     }
 
@@ -813,7 +822,7 @@ export class CLICommands {
       databaseUrl,
       format: fmtRaw,
       name,
-      output: args.output,
+      output: args.output
     });
   }
 
@@ -834,8 +843,8 @@ export class CLICommands {
   async dbPush(args: CLIArgs): Promise<void> {
     if (!args.force) {
       console.error(
-        "Error: `disc db push` skips migration history (foot-gun in shared/production envs).\n"
-          + "Pass --force to confirm intent. For production schema changes, use `disc migrate` instead.",
+        "Error: `disc db push` skips migration history (foot-gun in shared/production envs).\n" +
+          "Pass --force to confirm intent. For production schema changes, use `disc migrate` instead."
       );
       Deno.exit(1);
     }
@@ -845,15 +854,15 @@ export class CLICommands {
     if (ctx?.managed) {
       await ensurePgRunning(ctx);
     }
-    const databaseUrl = args["backend-dsn"]
-      || Deno.env.get("DATABASE_URL")
-      || (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc_dev");
+    const databaseUrl = args["backend-dsn"] ||
+      Deno.env.get("DATABASE_URL") ||
+      (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc_dev");
 
     const sdlSource = await Deno.readTextFile(schemaFile);
 
     const pool = new ConnectionPool({
       connectionString: databaseUrl,
-      applicationName: "disc-cli-push",
+      applicationName: "disc-cli-push"
     });
     await pool.initialize();
 
@@ -863,7 +872,7 @@ export class CLICommands {
 
       const result = await manager.applySchema(sdlSource, {
         allowUnsafe: args["allow-unsafe"] === true,
-        skipHistory: true,
+        skipHistory: true
       });
 
       if (!result.ok) {
@@ -872,7 +881,7 @@ export class CLICommands {
       }
 
       console.log(
-        `✓ Schema pushed (${result.value.length} ${result.value.length === 1 ? "migration" : "migrations"} applied, no history recorded).`,
+        `✓ Schema pushed (${result.value.length} ${result.value.length === 1 ? "migration" : "migrations"} applied, no history recorded).`
       );
     } finally {
       await pool.close();
@@ -887,27 +896,27 @@ export class CLICommands {
     if (ctx?.managed) {
       await ensurePgRunning(ctx);
     }
-    const databaseUrl = args["database-url"]
-      || Deno.env.get("DATABASE_URL")
-      || (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
+    const databaseUrl = args["database-url"] ||
+      Deno.env.get("DATABASE_URL") ||
+      (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc");
     await dbCommand.restore({
       clean: args.clean || false,
       databaseUrl,
       input: args.input,
-      name,
+      name
     });
   }
 
   private async showMigrationStatus(
     manager: SchemaManager,
-    schemaFile?: string,
+    schemaFile?: string
   ): Promise<void> {
     console.log("Migration Status\n");
 
     const statusResult = await manager.getMigrationStatus();
     if (!statusResult.ok) {
       console.error(
-        `Failed to get migration status: ${statusResult.error.message}`,
+        `Failed to get migration status: ${statusResult.error.message}`
       );
       return;
     }
@@ -916,7 +925,7 @@ export class CLICommands {
 
     console.log(`  Applied migrations: ${status.applied}`);
     console.log(
-      `  Current schema hash: ${status.currentSchemaHash || "(none)"}`,
+      `  Current schema hash: ${status.currentSchemaHash || "(none)"}`
     );
 
     if (status.latestMigration) {
@@ -924,7 +933,7 @@ export class CLICommands {
       console.log(`    ID: ${status.latestMigration.id}`);
       console.log(`    Name: ${status.latestMigration.name}`);
       console.log(
-        `    Applied at: ${status.latestMigration.appliedAt.toISOString()}`,
+        `    Applied at: ${status.latestMigration.appliedAt.toISOString()}`
       );
     } else {
       console.log(`\n  No migrations have been applied yet.`);
@@ -943,7 +952,7 @@ export class CLICommands {
         const planResult = manager.previewMigrationOps(sdl);
         if (!planResult.ok) {
           console.log(
-            `\n  Schema status: drift check failed — ${planResult.error.message}`,
+            `\n  Schema status: drift check failed — ${planResult.error.message}`
           );
           return;
         }
@@ -962,7 +971,7 @@ export class CLICommands {
         }
       } catch (err) {
         console.log(
-          `\n  Schema status: SDL not readable (${(err as Error).message}) — N/A`,
+          `\n  Schema status: SDL not readable (${(err as Error).message}) — N/A`
         );
       }
     }
@@ -970,17 +979,17 @@ export class CLICommands {
 
   private async handleRollback(
     manager: SchemaManager,
-    args: CLIArgs,
+    args: CLIArgs
   ): Promise<void> {
     if (!args.force) {
       console.error(
-        "Error: Rollback is a destructive operation that may cause data loss.",
+        "Error: Rollback is a destructive operation that may cause data loss."
       );
       console.error(
-        "       Rolling back DROP TABLE cannot restore lost data.",
+        "       Rolling back DROP TABLE cannot restore lost data."
       );
       console.error(
-        "       Use --force to confirm you understand the risks.",
+        "       Use --force to confirm you understand the risks."
       );
       return;
     }
@@ -1011,7 +1020,7 @@ export class CLICommands {
 
   private async handleSquash(
     manager: SchemaManager,
-    args: CLIArgs,
+    args: CLIArgs
   ): Promise<void> {
     console.log("Squashing migrations...");
 
@@ -1022,7 +1031,7 @@ export class CLICommands {
     const statusResult = await manager.getMigrationStatus();
     if (!statusResult.ok) {
       console.error(
-        `Failed to get migration status: ${statusResult.error.message}`,
+        `Failed to get migration status: ${statusResult.error.message}`
       );
       return;
     }
@@ -1038,7 +1047,7 @@ export class CLICommands {
     const historyResult = await manager.getMigrationHistory();
     if (!historyResult.ok) {
       console.error(
-        `Failed to get migration history: ${historyResult.error.message}`,
+        `Failed to get migration history: ${historyResult.error.message}`
       );
       return;
     }
@@ -1046,12 +1055,12 @@ export class CLICommands {
     // History is DESC by default, reverse to ASC for squashing
     const history = historyResult.value.reverse();
 
-    const squashable: SquashableMigration[] = history.map((entry) => ({
+    const squashable: SquashableMigration[] = history.map(entry => ({
       id: entry.id,
       name: entry.name,
       statements: [], // Would be loaded from migration files in production
       rollbackStatements: [],
-      hasDataMigration: entry.dataMigration,
+      hasDataMigration: entry.dataMigration
     }));
 
     const squasher = new MigrationSquasher();
@@ -1069,13 +1078,13 @@ export class CLICommands {
       console.log(`  Migrations squashed: ${result.squashedIds.length}`);
       console.log(`  Combined statements: ${result.statements.length}`);
       console.log(
-        `  Combined rollback statements: ${result.rollbackStatements.length}`,
+        `  Combined rollback statements: ${result.rollbackStatements.length}`
       );
       console.log(`\n  Squashed migration IDs:`);
-      result.squashedIds.forEach((id) => console.log(`    - ${id}`));
+      result.squashedIds.forEach(id => console.log(`    - ${id}`));
 
       console.log(
-        "\nSquash preview complete. In production, this would replace the individual migrations with the squashed result.",
+        "\nSquash preview complete. In production, this would replace the individual migrations with the squashed result."
       );
     } catch (error) {
       console.error(`Squash failed: ${(error as Error).message}`);
@@ -1084,7 +1093,7 @@ export class CLICommands {
 
   private async createMigration(
     manager: SchemaManager,
-    schemaFile: string,
+    schemaFile: string
   ): Promise<void> {
     console.log("Creating new migration...");
 
@@ -1169,7 +1178,8 @@ export class CLICommands {
     }
 
     const databaseUrl = Deno.env.get("DATABASE_URL");
-    if (!databaseUrl) return;
+    if (!databaseUrl)
+      return;
 
     const pool = new ConnectionPool({ connectionString: databaseUrl });
     let manager: SchemaManager | undefined;
@@ -1181,7 +1191,7 @@ export class CLICommands {
       const status = await manager.getMigrationStatus();
       if (status.ok && status.value.applied > 0) {
         console.log(
-          "  💡 Existing migrations detected — run 'disc migrate' to apply schema changes.",
+          "  💡 Existing migrations detected — run 'disc migrate' to apply schema changes."
         );
         return;
       }
@@ -1189,7 +1199,7 @@ export class CLICommands {
       const result = await manager.applySchema(sdlSource);
       if (!result.ok) {
         console.log(
-          `  ⚠️  Auto-migrate failed: ${result.error.message}. Run 'disc migrate' manually.`,
+          `  ⚠️  Auto-migrate failed: ${result.error.message}. Run 'disc migrate' manually.`
         );
         return;
       }
@@ -1198,15 +1208,16 @@ export class CLICommands {
         console.log("  ✅ Schema up to date");
       } else {
         console.log(
-          `  ✅ Auto-applied ${applied} migration${applied === 1 ? "" : "s"}`,
+          `  ✅ Auto-applied ${applied} migration${applied === 1 ? "" : "s"}`
         );
       }
     } catch (error) {
       console.log(
-        `  ⚠️  Auto-migrate error: ${(error as Error).message}. Run 'disc migrate' manually.`,
+        `  ⚠️  Auto-migrate error: ${(error as Error).message}. Run 'disc migrate' manually.`
       );
     } finally {
-      if (manager) await manager.close();
+      if (manager)
+        await manager.close();
       await pool.close();
     }
   }
@@ -1221,22 +1232,23 @@ export class CLICommands {
     return (event: MigrationProgressEvent): void => {
       switch (event.kind) {
         case "plan-started":
-          if (event.totalMigrations === 0) return;
+          if (event.totalMigrations === 0)
+            return;
           console.log(
             `> Planning ${event.totalMigrations} migration${event.totalMigrations === 1 ? "" : "s"} (${event.totalOperations} operation${
               event.totalOperations === 1 ? "" : "s"
-            })…`,
+            })…`
           );
           return;
         case "migration-started":
           startedAt.set(event.migrationId, Date.now());
           console.log(
-            `[${event.index}/${event.total}] ${event.name} …`,
+            `[${event.index}/${event.total}] ${event.name} …`
           );
           return;
         case "ddl-executing":
           console.log(
-            `    applying ${event.statementCount} DDL statement${event.statementCount === 1 ? "" : "s"} …`,
+            `    applying ${event.statementCount} DDL statement${event.statementCount === 1 ? "" : "s"} …`
           );
           return;
         case "data-migration-running":
@@ -1244,18 +1256,19 @@ export class CLICommands {
           return;
         case "migration-completed":
           console.log(
-            `    ✓ done in ${event.durationMs}ms`,
+            `    ✓ done in ${event.durationMs}ms`
           );
           return;
         case "migration-failed":
           console.error(
-            `    ✗ failed: ${event.error} (after ${event.durationMs}ms${event.rollbackAttempted ? ", rollback attempted" : ""})`,
+            `    ✗ failed: ${event.error} (after ${event.durationMs}ms${event.rollbackAttempted ? ", rollback attempted" : ""})`
           );
           return;
         case "plan-completed":
-          if (event.migrationCount === 0) return;
+          if (event.migrationCount === 0)
+            return;
           console.log(
-            `✓ Applied ${event.migrationCount} migration${event.migrationCount === 1 ? "" : "s"} in ${event.durationMs}ms`,
+            `✓ Applied ${event.migrationCount} migration${event.migrationCount === 1 ? "" : "s"} in ${event.durationMs}ms`
           );
           return;
         case "plan-failed":
@@ -1270,7 +1283,7 @@ export class CLICommands {
     schemaFile: string,
     dryRun: boolean,
     allowUnsafe = false,
-    quiet = false,
+    quiet = false
   ): Promise<void> {
     if (!quiet && dryRun) {
       console.log("Applying migrations...");
@@ -1295,7 +1308,7 @@ export class CLICommands {
 
       if (!planResult.ok) {
         console.error(
-          `Migration planning failed: ${planResult.error.message}`,
+          `Migration planning failed: ${planResult.error.message}`
         );
         return;
       }
@@ -1337,13 +1350,13 @@ export class CLICommands {
         const detected = await manager.detectRunningServers();
         if (detected.ok && detected.value.length > 0 && !quiet) {
           console.warn(
-            `\n⚠ Detected ${detected.value.length} active Disc server connection(s) on this database.`,
+            `\n⚠ Detected ${detected.value.length} active Disc server connection(s) on this database.`
           );
           console.warn(
-            "  Migrate will succeed, but the server's in-memory schema cache will be stale until reload.",
+            "  Migrate will succeed, but the server's in-memory schema cache will be stale until reload."
           );
           console.warn(
-            "  Trigger a schema reload (admin UI Diff page → Apply, or restart the server) after migration.\n",
+            "  Trigger a schema reload (admin UI Diff page → Apply, or restart the server) after migration.\n"
           );
         }
       } catch {
@@ -1361,12 +1374,12 @@ export class CLICommands {
       // block was removed — the listener prints `[i/N] name … done in Xms`
       // and a final `✓ Applied N migrations in Yms` summary.
       const applyResult = await manager.applySchema(sdlSource, {
-        allowUnsafe,
+        allowUnsafe
       });
 
       if (!applyResult.ok) {
         console.error(
-          `Migration execution failed: ${applyResult.error.message}`,
+          `Migration execution failed: ${applyResult.error.message}`
         );
         return;
       }
@@ -1432,7 +1445,7 @@ export class CLICommands {
    * be read or parsing fails.
    */
   private async readSchemaAsCompilerSchema(
-    filePath: string,
+    filePath: string
   ): Promise<Schema | null> {
     const modules = await this.readSchemaFile(filePath);
 
@@ -1445,7 +1458,7 @@ export class CLICommands {
       return manager.modulesToSchema(modules);
     } catch (error) {
       console.error(
-        `❌ Failed to convert schema: ${(error as Error).message}`,
+        `❌ Failed to convert schema: ${(error as Error).message}`
       );
       return null;
     }

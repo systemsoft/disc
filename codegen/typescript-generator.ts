@@ -20,7 +20,7 @@ export class TypeScriptGenerator {
     this.type_mappings = new Map();
 
     // Initialize built-in type mappings
-    Types.DEFAULT_TYPE_MAPPINGS.forEach((mapping) => {
+    Types.DEFAULT_TYPE_MAPPINGS.forEach(mapping => {
       this.type_mappings.set(mapping.edgeqlType, mapping);
     });
   }
@@ -29,7 +29,7 @@ export class TypeScriptGenerator {
     const result: Types.CodegenResult = {
       files: [],
       warnings: [],
-      errors: [],
+      errors: []
     };
 
     try {
@@ -103,7 +103,7 @@ export class TypeScriptGenerator {
    */
   private resolveTypeReference(
     target: string,
-    currentModule: string,
+    currentModule: string
   ): string {
     // Check if target contains :: (qualified name like "payment::Transaction")
     let targetModule = "default";
@@ -143,8 +143,10 @@ export class TypeScriptGenerator {
 
       // Sort modules: default first, then alphabetical
       const sortedModules = Array.from(groups.keys()).sort((a, b) => {
-        if (a === "default") return -1;
-        if (b === "default") return 1;
+        if (a === "default")
+          return -1;
+        if (b === "default")
+          return 1;
         return a.localeCompare(b);
       });
 
@@ -197,14 +199,14 @@ export class TypeScriptGenerator {
     return {
       path: `${this.config.outputDir}/${fileName}`,
       content: this.formatContent(content),
-      type: this.isMultiModule() ? "interfaces" : "types",
+      type: this.isMultiModule() ? "interfaces" : "types"
     };
   }
 
   private generateInterface(
     typeDef: Context.TypeDef,
     indent: string = "",
-    currentModule?: string,
+    currentModule?: string
   ): string {
     const interfaceName = this.getTypeScriptTypeName(typeDef.name);
     let content = "";
@@ -221,7 +223,7 @@ export class TypeScriptGenerator {
 
     // Interface declaration (with extends for inherited types)
     if (typeDef.parentTypes && typeDef.parentTypes.length > 0) {
-      const parentNames = typeDef.parentTypes.map((p) => currentModule ? this.resolveTypeReference(p, currentModule) : this.getTypeScriptTypeName(p));
+      const parentNames = typeDef.parentTypes.map(p => currentModule ? this.resolveTypeReference(p, currentModule) : this.getTypeScriptTypeName(p));
       content += `${indent}export interface ${interfaceName} extends ${parentNames.join(", ")} {\n`;
     } else {
       content += `${indent}export interface ${interfaceName} {\n`;
@@ -242,7 +244,7 @@ export class TypeScriptGenerator {
         linkName,
         link,
         indent,
-        currentModule,
+        currentModule
       );
     }
 
@@ -254,7 +256,7 @@ export class TypeScriptGenerator {
   private generateEnumType(
     typeDef: Context.TypeDef,
     indent: string = "",
-    _currentModule?: string,
+    _currentModule?: string
   ): string {
     const typeName = this.getTypeScriptTypeName(typeDef.name);
     let content = "";
@@ -264,7 +266,7 @@ export class TypeScriptGenerator {
     content += `${indent} */\n`;
 
     const values = (typeDef.enumValues ?? [])
-      .map((v) => `"${v}"`)
+      .map(v => `"${v}"`)
       .join(" | ");
 
     content += `${indent}export type ${typeName} = ${values || "never"};\n`;
@@ -275,7 +277,7 @@ export class TypeScriptGenerator {
   private generatePropertyDefinition(
     name: string,
     prop: Context.PropertyDef,
-    indent: string = "",
+    indent: string = ""
   ): string {
     let content = "";
 
@@ -302,7 +304,7 @@ export class TypeScriptGenerator {
       for (const constraint of prop.constraints) {
         if (constraint.args && constraint.args.length > 0) {
           jsdocTags.push(
-            `@constraint ${constraint.name}(${constraint.args.join(", ")})`,
+            `@constraint ${constraint.name}(${constraint.args.join(", ")})`
           );
         } else {
           jsdocTags.push(`@constraint ${constraint.name}`);
@@ -326,7 +328,7 @@ export class TypeScriptGenerator {
     const tsType = Types.mapEdgeQLTypeToTypeScript(
       typeForMapping,
       prop.required,
-      prop.multi,
+      prop.multi
     );
     const optional = prop.required ? "" : "?";
 
@@ -339,7 +341,7 @@ export class TypeScriptGenerator {
     name: string,
     link: Context.LinkDef,
     indent: string = "",
-    currentModule?: string,
+    currentModule?: string
   ): string {
     let content = "";
 
@@ -390,13 +392,13 @@ export class TypeScriptGenerator {
     return {
       path: `${this.config.outputDir}/queries.ts`,
       content: this.formatContent(content),
-      type: "queries",
+      type: "queries"
     };
   }
 
   private generateQueryBuilder(
     typeDef: Context.TypeDef,
-    multiModule: boolean = false,
+    multiModule: boolean = false
   ): string {
     const typeName = this.getTypeScriptTypeName(typeDef.name);
     const builderName = `${typeName}QueryBuilder`;
@@ -419,7 +421,8 @@ export class TypeScriptGenerator {
     // Build the type casts map from property definitions (skip "id")
     const typeCastEntries: string[] = [];
     for (const [propName, prop] of typeDef.properties) {
-      if (propName === "id") continue;
+      if (propName === "id")
+        continue;
       const edgeqlType = prop.edgeqlType ?? prop.type;
       const cast = Types.mapEdgeQLTypeToEdgeQLCast(edgeqlType);
       typeCastEntries.push(`    ${propName}: "${cast}"`);
@@ -436,7 +439,8 @@ export class TypeScriptGenerator {
     // Static type casts map
     content += `  private static _typeCasts: Record<string, string> = {\n`;
     content += typeCastEntries.join(",\n");
-    if (typeCastEntries.length > 0) content += ",\n";
+    if (typeCastEntries.length > 0)
+      content += ",\n";
     content += `  };\n\n`;
 
     content += `  constructor(private client: DiscClient) {}\n\n`;
@@ -537,15 +541,18 @@ export class TypeScriptGenerator {
       // Group by module with comment headers
       const groups = this.groupTypesByModule();
       const sortedModules = Array.from(groups.keys()).sort((a, b) => {
-        if (a === "default") return -1;
-        if (b === "default") return 1;
+        if (a === "default")
+          return -1;
+        if (b === "default")
+          return 1;
         return a.localeCompare(b);
       });
 
       for (const mod of sortedModules) {
         const types = groups.get(mod)!;
-        const objectTypes = types.filter((t) => t.kind === "object");
-        if (objectTypes.length === 0) continue;
+        const objectTypes = types.filter(t => t.kind === "object");
+        if (objectTypes.length === 0)
+          continue;
 
         content += `  // ${mod} module\n`;
         for (const typeDef of objectTypes) {
@@ -574,7 +581,8 @@ export class TypeScriptGenerator {
 
     // Initialize query builders
     for (const [typeName, typeDef] of this.schema.types) {
-      if (typeDef.kind !== "object") continue;
+      if (typeDef.kind !== "object")
+        continue;
       const builderName = `${this.getTypeScriptTypeName(typeName)}QueryBuilder`;
       const propertyName = typeName.toLowerCase();
       content += `    this.${propertyName} = new Queries.${builderName}(this);\n`;
@@ -586,7 +594,7 @@ export class TypeScriptGenerator {
     return {
       path: `${this.config.outputDir}/client.ts`,
       content: this.formatContent(content),
-      type: "client",
+      type: "client"
     };
   }
 
@@ -622,7 +630,7 @@ export class TypeScriptGenerator {
     return {
       path: `${this.config.outputDir}/index.ts`,
       content: this.formatContent(content),
-      type: "index",
+      type: "index"
     };
   }
 
@@ -682,26 +690,29 @@ export class TypeScriptGenerator {
   private generateInsertType(
     tsTypeName: string,
     typeDef: Context.TypeDef,
-    indent: string = "",
+    indent: string = ""
   ): string {
     let content = "";
     content += `${indent}export interface ${tsTypeName}Insert {\n`;
 
     for (const [propName, prop] of typeDef.properties) {
       // Exclude id (auto-generated UUID)
-      if (propName === "id") continue;
+      if (propName === "id")
+        continue;
 
       // Exclude computed properties
-      if (prop.computed) continue;
+      if (prop.computed)
+        continue;
 
       // Exclude readonly properties that have a default (e.g., created_at)
-      if (prop.readonly && prop.hasDefault) continue;
+      if (prop.readonly && prop.hasDefault)
+        continue;
 
       const typeForMapping = prop.edgeqlType ?? prop.type;
       const tsType = Types.mapEdgeQLTypeToTypeScript(
         typeForMapping,
         true, // always use non-nullable base type
-        prop.multi,
+        prop.multi
       );
 
       // Properties with defaults are optional in insert even if required in schema
@@ -718,26 +729,29 @@ export class TypeScriptGenerator {
   private generateUpdateType(
     tsTypeName: string,
     typeDef: Context.TypeDef,
-    indent: string = "",
+    indent: string = ""
   ): string {
     let content = "";
     content += `${indent}export interface ${tsTypeName}Update {\n`;
 
     for (const [propName, prop] of typeDef.properties) {
       // Exclude id
-      if (propName === "id") continue;
+      if (propName === "id")
+        continue;
 
       // Exclude computed properties
-      if (prop.computed) continue;
+      if (prop.computed)
+        continue;
 
       // Exclude readonly properties
-      if (prop.readonly) continue;
+      if (prop.readonly)
+        continue;
 
       const typeForMapping = prop.edgeqlType ?? prop.type;
       const tsType = Types.mapEdgeQLTypeToTypeScript(
         typeForMapping,
         true, // always use non-nullable base type
-        prop.multi,
+        prop.multi
       );
 
       // Everything in update is optional
@@ -751,7 +765,7 @@ export class TypeScriptGenerator {
   private generateFilterVarsType(
     tsTypeName: string,
     typeDef: Context.TypeDef,
-    indent: string = "",
+    indent: string = ""
   ): string {
     let content = "";
     content += `${indent}export interface ${tsTypeName}FilterVars {\n`;
@@ -761,7 +775,7 @@ export class TypeScriptGenerator {
       const tsType = Types.mapEdgeQLTypeToTypeScript(
         typeForMapping,
         true, // always use non-nullable base type
-        prop.multi,
+        prop.multi
       );
 
       content += `${indent}  ${propName}?: ${tsType};\n`;
@@ -775,13 +789,13 @@ export class TypeScriptGenerator {
 
   private generateFileHeader(description: string): string {
     const timestamp = new Date().toISOString();
-    return `/**\n`
-      + ` * ${description}\n`
-      + ` * Generated by Disc TypeScript Codegen\n`
-      + ` * Generated at: ${timestamp}\n`
-      + ` * \n`
-      + ` * DO NOT EDIT THIS FILE MANUALLY\n`
-      + ` */\n`;
+    return `/**\n` +
+      ` * ${description}\n` +
+      ` * Generated by Disc TypeScript Codegen\n` +
+      ` * Generated at: ${timestamp}\n` +
+      ` * \n` +
+      ` * DO NOT EDIT THIS FILE MANUALLY\n` +
+      ` */\n`;
   }
 
   private getTypeScriptTypeName(edgeqlTypeName: string): string {

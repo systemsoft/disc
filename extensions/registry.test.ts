@@ -21,7 +21,7 @@ function makeContext(): ExtensionContext {
       maxConnections: 5,
       requestTimeout: 5000,
       enableCors: false,
-      enableWebsockets: false,
+      enableWebsockets: false
     },
     logger: {
       debug: () => {},
@@ -33,8 +33,8 @@ function makeContext(): ExtensionContext {
       },
       withRequest: function() {
         return this;
-      },
-    } as unknown as ExtensionContext["logger"],
+      }
+    } as unknown as ExtensionContext["logger"]
   };
 }
 
@@ -65,7 +65,7 @@ class MockExtension extends BaseExtension {
     this.metadata = {
       name: options.name,
       version: options.version ?? "1.0.0",
-      dependencies: options.dependencies,
+      dependencies: options.dependencies
     };
     this._functions = options.functions ?? [];
     this._types = options.types ?? [];
@@ -203,19 +203,19 @@ Deno.test("ExtensionRegistry - circular dependency throws ExtensionDependencyErr
 
   await assertRejects(
     () => registry.initializeAll(makeContext()),
-    ExtensionDependencyError,
+    ExtensionDependencyError
   );
 });
 
 Deno.test("ExtensionRegistry - missing dependency throws ExtensionDependencyError", async () => {
   const registry = new ExtensionRegistry();
   registry.register(
-    new MockExtension({ name: "A", dependencies: ["nonexistent"] }),
+    new MockExtension({ name: "A", dependencies: ["nonexistent"] })
   );
 
   await assertRejects(
     () => registry.initializeAll(makeContext()),
-    ExtensionDependencyError,
+    ExtensionDependencyError
   );
 });
 
@@ -258,12 +258,12 @@ Deno.test("ExtensionRegistry - getAllFunctions aggregates from multiple extensio
   const fn1: FunctionDef = {
     name: "ext_func_one",
     args: [],
-    returnType: "str",
+    returnType: "str"
   };
   const fn2: FunctionDef = {
     name: "ext_func_two",
     args: [],
-    returnType: "int32",
+    returnType: "int32"
   };
 
   registry.register(new MockExtension({ name: "A", functions: [fn1] }));
@@ -271,8 +271,8 @@ Deno.test("ExtensionRegistry - getAllFunctions aggregates from multiple extensio
 
   const fns = registry.getAllFunctions();
   assertEquals(fns.length, 2);
-  assertEquals(fns.some((f) => f.name === "ext_func_one"), true);
-  assertEquals(fns.some((f) => f.name === "ext_func_two"), true);
+  assertEquals(fns.some(f => f.name === "ext_func_one"), true);
+  assertEquals(fns.some(f => f.name === "ext_func_two"), true);
 });
 
 Deno.test("ExtensionRegistry - getAllTypes aggregates from multiple extensions", () => {
@@ -283,14 +283,14 @@ Deno.test("ExtensionRegistry - getAllTypes aggregates from multiple extensions",
     kind: "scalar",
     properties: new Map(),
     links: new Map(),
-    tableName: "ext_type_a",
+    tableName: "ext_type_a"
   };
   const type2: TypeDef = {
     name: "ExtTypeB",
     kind: "scalar",
     properties: new Map(),
     links: new Map(),
-    tableName: "ext_type_b",
+    tableName: "ext_type_b"
   };
 
   registry.register(new MockExtension({ name: "A", types: [type1] }));
@@ -306,7 +306,7 @@ Deno.test("ExtensionRegistry - getAllRoutes groups routes by extension name", ()
   const route: ExtensionRoute = {
     method: "GET",
     path: "/ext/resource",
-    handler: (_req: Request) => Promise.resolve(new Response("ok")),
+    handler: (_req: Request) => Promise.resolve(new Response("ok"))
   };
 
   registry.register(new MockExtension({ name: "A", routes: [route] }));
@@ -325,12 +325,12 @@ Deno.test("ExtensionRegistry - getAllMiddleware sorts by priority ascending", ()
   const mid1: ExtensionMiddleware = {
     name: "low-priority",
     priority: 100,
-    handle: (_req: Request, next: () => Promise<Response>) => next(),
+    handle: (_req: Request, next: () => Promise<Response>) => next()
   };
   const mid2: ExtensionMiddleware = {
     name: "high-priority",
     priority: 10,
-    handle: (_req: Request, next: () => Promise<Response>) => next(),
+    handle: (_req: Request, next: () => Promise<Response>) => next()
   };
 
   registry.register(new MockExtension({ name: "A", middleware: [mid1] }));
@@ -386,6 +386,6 @@ Deno.test("ExtensionRegistry - getHealthStatus reports unhealthy for extensions 
   assertEquals(status.get("broken")!.healthy, false);
   assertEquals(
     status.get("broken")!.details?.includes("health probe failed"),
-    true,
+    true
   );
 });

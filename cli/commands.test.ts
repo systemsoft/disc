@@ -12,7 +12,7 @@ import {
   createTestSchema,
   EnvMock,
   SIMPLE_SCHEMA,
-  TEST_SCHEMA,
+  TEST_SCHEMA
 } from "../tests/test-utils.ts";
 
 // Mock configuration interfaces
@@ -22,12 +22,12 @@ function createMockMigrateConfig(args: any): any {
   return {
     migrationsDir: "./migrations",
     schemaFile: args.schema || "./schema.disc",
-    databaseUrl: Deno.env.get("DATABASE_URL")
-      || "postgresql://localhost:5432/disc_dev",
+    databaseUrl: Deno.env.get("DATABASE_URL") ||
+      "postgresql://localhost:5432/disc_dev",
     dryRun: args["dry-run"] || false,
     autoApprove: args["auto-approve"] || false,
     backupBeforeMigration: true,
-    rollbackOnError: true,
+    rollbackOnError: true
   };
 }
 
@@ -38,7 +38,7 @@ function createMockCodegenConfig(args: any): any {
     includeQueryBuilders: args["no-queries"] !== true,
     includeMutations: args["no-mutations"] !== true,
     includeClient: args["no-client"] !== true,
-    formatOutput: args["no-format"] !== true,
+    formatOutput: args["no-format"] !== true
   };
 }
 
@@ -57,9 +57,9 @@ Deno.test("CLI Commands - init command behavior", async () => {
     console.log("✅ Project initialized successfully!");
 
     const logs = console.getLogs();
-    assert(logs.some((log) => log.includes("Initializing new Disc project")));
+    assert(logs.some(log => log.includes("Initializing new Disc project")));
     assert(
-      logs.some((log) => log.includes("Project initialized successfully")),
+      logs.some(log => log.includes("Project initialized successfully"))
     );
   } finally {
     console.restore();
@@ -80,7 +80,7 @@ Deno.test("CLI Commands - migrate create workflow", async () => {
       schema: schemaPath,
       create: true,
       "dry-run": false,
-      "auto-approve": false,
+      "auto-approve": false
     };
 
     const config = createMockMigrateConfig(args);
@@ -96,7 +96,7 @@ Deno.test("CLI Commands - migrate create workflow", async () => {
     console.log("   Operations: 3");
     console.log("💾 Generated DDL:");
     console.log(
-      "   1. CREATE TABLE users (id UUID PRIMARY KEY, name TEXT NOT NULL);",
+      "   1. CREATE TABLE users (id UUID PRIMARY KEY, name TEXT NOT NULL);"
     );
     console.log("✅ Migration created successfully");
 
@@ -121,7 +121,7 @@ Deno.test("CLI Commands - migrate apply workflow", async () => {
     const args = {
       schema: schemaPath,
       "dry-run": true,
-      "auto-approve": false,
+      "auto-approve": false
     };
 
     const config = createMockMigrateConfig(args);
@@ -156,7 +156,7 @@ Deno.test("CLI Commands - serve command configuration", () => {
     // Mock serve command with CLI args
     const args = {
       port: "9000", // Should override environment
-      config: "./custom.json",
+      config: "./custom.json"
     };
 
     // Simulate server configuration
@@ -164,13 +164,13 @@ Deno.test("CLI Commands - serve command configuration", () => {
       host: Deno.env.get("DISC_HOST") || "localhost",
       port: parseInt(Deno.env.get("DISC_PORT") || "5656"),
       enableCors: true,
-      enableWebsockets: true,
+      enableWebsockets: true
     };
 
     // Apply CLI overrides
     const finalConfig = {
       ...defaultConfig,
-      port: args.port ? parseInt(args.port) : defaultConfig.port,
+      port: args.port ? parseInt(args.port) : defaultConfig.port
     };
 
     assertEquals(finalConfig.host, "0.0.0.0"); // from env
@@ -223,7 +223,7 @@ Deno.test("CLI Commands - codegen workflow", async () => {
       "no-queries": false,
       "no-mutations": false,
       "no-client": false,
-      "no-format": false,
+      "no-format": false
     };
 
     const config = createMockCodegenConfig(args);
@@ -282,7 +282,9 @@ Deno.test("CLI Commands - error handling for invalid schema", async () => {
     const invalidSchemaPath = `${tempDir}/nonexistent.disc`;
 
     // Mock error handling for missing schema file
-    const schemaExists = await Deno.stat(invalidSchemaPath).then(() => true)
+    const schemaExists = await Deno
+      .stat(invalidSchemaPath)
+      .then(() => true)
       .catch(() => false);
     assert(!schemaExists, "Schema file should not exist");
 
@@ -306,10 +308,10 @@ Deno.test("CLI Commands - migration validation warnings", () => {
     // Simulate validation warning output
     console.capture();
     console.log(
-      `⚠️  Migration validation warnings: Potentially destructive operation detected`,
+      `⚠️  Migration validation warnings: Potentially destructive operation detected`
     );
     console.log(
-      "Do you want to proceed with potentially dangerous operations? (y/N)",
+      "Do you want to proceed with potentially dangerous operations? (y/N)"
     );
 
     // Simulate user declining
@@ -330,8 +332,8 @@ Deno.test("CLI Commands - environment variable defaults", () => {
     // Test without DATABASE_URL
     env.clear("DATABASE_URL");
 
-    const defaultDbUrl = Deno.env.get("DATABASE_URL")
-      || "postgresql://localhost:5432/disc_dev";
+    const defaultDbUrl = Deno.env.get("DATABASE_URL") ||
+      "postgresql://localhost:5432/disc_dev";
     assertEquals(defaultDbUrl, "postgresql://localhost:5432/disc_dev");
 
     // Test with DATABASE_URL
@@ -349,7 +351,7 @@ Deno.test("CLI Commands - codegen config validation", () => {
     "no-queries": true,
     "no-mutations": true,
     "no-client": true,
-    "no-format": true,
+    "no-format": true
   };
 
   const restrictiveConfig = createMockCodegenConfig(restrictiveArgs);
@@ -364,7 +366,7 @@ Deno.test("CLI Commands - codegen config validation", () => {
     "no-queries": false,
     "no-mutations": false,
     "no-client": false,
-    "no-format": false,
+    "no-format": false
   };
 
   const permissiveConfig = createMockCodegenConfig(permissiveArgs);

@@ -17,7 +17,7 @@ export enum ConnectionState {
   Ready,
   InTransaction,
   Error,
-  Terminated,
+  Terminated
 }
 
 export interface ConnectionOptions {
@@ -52,14 +52,14 @@ export class ProtocolConnection {
 
   constructor(
     credentials: AuthenticationCredentials,
-    options: ConnectionOptions = {},
+    options: ConnectionOptions = {}
   ) {
     this.credentials = credentials;
     this.options = {
       maxMessageSize: options.maxMessageSize ?? 16 * 1024 * 1024, // 16MB
       authenticationTimeout: options.authenticationTimeout ?? 60000, // 60s
       idleTimeout: options.idleTimeout ?? 600000, // 10 minutes
-      enableCompression: options.enableCompression ?? false,
+      enableCompression: options.enableCompression ?? false
     };
   }
 
@@ -74,7 +74,8 @@ export class ProtocolConnection {
 
     while (this.parser.hasCompleteMessage()) {
       const message = this.parser.parseMessage();
-      if (!message) break;
+      if (!message)
+        break;
 
       const response = await this.handleMessage(message);
       if (response) {
@@ -89,7 +90,7 @@ export class ProtocolConnection {
    * Handle a single protocol message
    */
   private handleMessage(
-    message: Types.Message,
+    message: Types.Message
   ): Uint8Array | null | Promise<Uint8Array> {
     switch (this.state) {
       case ConnectionState.AwaitingHandshake:
@@ -107,7 +108,7 @@ export class ProtocolConnection {
           message.type === Types.MessageType.AuthenticationSASLInitialResponse
         ) {
           return this.handleSASLInitial(
-            message as Types.AuthenticationSASLInitialResponse,
+            message as Types.AuthenticationSASLInitialResponse
           );
         }
         break;
@@ -115,7 +116,7 @@ export class ProtocolConnection {
       case ConnectionState.AwaitingSASLResponse:
         if (message.type === Types.MessageType.AuthenticationSASLResponse) {
           return this.handleSASLResponse(
-            message as Types.AuthenticationSASLResponse,
+            message as Types.AuthenticationSASLResponse
           );
         }
         break;
@@ -135,14 +136,14 @@ export class ProtocolConnection {
     return this.sendError(
       Types.ErrorSeverity.Error,
       0x0801, // protocol_violation
-      `Unexpected message type ${message.type} in state ${ConnectionState[this.state]}`,
+      `Unexpected message type ${message.type} in state ${ConnectionState[this.state]}`
     );
   }
 
   private handleClientHandshake(handshake: Types.ClientHandshake): Uint8Array {
     this.clientVersion = {
       major: handshake.majorVersion,
-      minor: handshake.minorVersion,
+      minor: handshake.minorVersion
     };
 
     // Store connection parameters
@@ -158,7 +159,7 @@ export class ProtocolConnection {
         length: 0,
         majorVersion: Types.PROTOCOL_VERSION.major,
         minorVersion: Types.PROTOCOL_VERSION.minor,
-        extensions: [],
+        extensions: []
       };
 
       return this.builder.buildMessage(serverHandshake);
@@ -174,20 +175,20 @@ export class ProtocolConnection {
       type: Types.MessageType.AuthenticationSASL,
       length: 0,
       authStatus: 10, // SASL authentication
-      mechanisms: ["SCRAM-SHA-256"],
+      mechanisms: ["SCRAM-SHA-256"]
     };
 
     return this.builder.buildMessage(authSasl);
   }
 
   private handleSASLInitial(
-    message: Types.AuthenticationSASLInitialResponse,
+    message: Types.AuthenticationSASLInitialResponse
   ): Uint8Array {
     if (message.mechanism !== "SCRAM-SHA-256") {
       return this.sendError(
         Types.ErrorSeverity.Fatal,
         0x2801, // invalid_password
-        `Unsupported SASL mechanism: ${message.mechanism}`,
+        `Unsupported SASL mechanism: ${message.mechanism}`
       );
     }
 
@@ -195,7 +196,7 @@ export class ProtocolConnection {
       return this.sendError(
         Types.ErrorSeverity.Fatal,
         0x2801,
-        "No authentication credentials configured",
+        "No authentication credentials configured"
       );
     }
 
@@ -204,7 +205,7 @@ export class ProtocolConnection {
       this.credentials.storedKey,
       this.credentials.serverKey,
       this.credentials.salt,
-      this.credentials.iterations,
+      this.credentials.iterations
     );
 
     const clientFirst = new TextDecoder().decode(message.initialResponse);
@@ -214,7 +215,7 @@ export class ProtocolConnection {
       type: Types.MessageType.AuthenticationSASLContinue,
       length: 0,
       authStatus: 11, // SASL continue
-      saslData: new TextEncoder().encode(serverFirst),
+      saslData: new TextEncoder().encode(serverFirst)
     };
 
     this.state = ConnectionState.AwaitingSASLResponse;
@@ -222,20 +223,20 @@ export class ProtocolConnection {
   }
 
   private async handleSASLResponse(
-    message: Types.AuthenticationSASLResponse,
+    message: Types.AuthenticationSASLResponse
   ): Promise<Uint8Array> {
     if (!this.scramServer) {
       return this.sendError(
         Types.ErrorSeverity.Fatal,
         0x2801,
-        "SASL authentication not initialized",
+        "SASL authentication not initialized"
       );
     }
 
     try {
       const clientFinal = new TextDecoder().decode(message.response);
       const serverFinal = await this.scramServer.processClientFinal(
-        clientFinal,
+        clientFinal
       );
 
       // Send SASL final
@@ -243,7 +244,7 @@ export class ProtocolConnection {
         type: Types.MessageType.AuthenticationSASLFinal,
         length: 0,
         authStatus: 12, // SASL final
-        saslData: new TextEncoder().encode(serverFinal),
+        saslData: new TextEncoder().encode(serverFinal)
       };
 
       const responses: Uint8Array[] = [];
@@ -253,7 +254,7 @@ export class ProtocolConnection {
       const authOk: Types.AuthenticationOK = {
         type: Types.MessageType.AuthenticationOK,
         length: 0,
-        authStatus: 0, // Success
+        authStatus: 0 // Success
       };
       responses.push(this.builder.buildMessage(authOk));
 
@@ -262,7 +263,7 @@ export class ProtocolConnection {
         type: Types.MessageType.ReadyForCommand,
         length: 0,
         transactionState: Types.TransactionState.Idle,
-        annotations: [],
+        annotations: []
       };
       responses.push(this.builder.buildMessage(ready));
 
@@ -283,13 +284,13 @@ export class ProtocolConnection {
       return this.sendError(
         Types.ErrorSeverity.Fatal,
         0x2801,
-        `Authentication failed: ${message}`,
+        `Authentication failed: ${message}`
       );
     }
   }
 
   private handleCommand(
-    message: Types.Message,
+    message: Types.Message
   ): Uint8Array | null {
     switch (message.type) {
       case Types.MessageType.Parse:
@@ -313,7 +314,7 @@ export class ProtocolConnection {
         return this.sendError(
           Types.ErrorSeverity.Error,
           0x0801,
-          `Unsupported command: ${message.type}`,
+          `Unsupported command: ${message.type}`
         );
     }
   }
@@ -329,7 +330,7 @@ export class ProtocolConnection {
       capabilities: 0n,
       commandStatus: "PARSE COMPLETE",
       stateTypeDescriptorId: new Uint8Array(16),
-      encodedStateData: new Uint8Array(0),
+      encodedStateData: new Uint8Array(0)
     };
 
     const responses: Uint8Array[] = [];
@@ -340,7 +341,7 @@ export class ProtocolConnection {
       type: Types.MessageType.ReadyForCommand,
       length: 0,
       transactionState: this.transactionDepth > 0 ? Types.TransactionState.InTransaction : Types.TransactionState.Idle,
-      annotations: [],
+      annotations: []
     };
     responses.push(this.builder.buildMessage(ready));
 
@@ -348,7 +349,7 @@ export class ProtocolConnection {
   }
 
   private handleExecute(
-    message: Types.ExecuteMessage,
+    message: Types.ExecuteMessage
   ): Uint8Array {
     // This is where we would execute the compiled query
     // For now, return mock data
@@ -360,8 +361,8 @@ export class ProtocolConnection {
       type: Types.MessageType.Data,
       length: 0,
       dataElements: [
-        { data: new TextEncoder().encode("{\"result\": \"mock\"}") },
-      ],
+        { data: new TextEncoder().encode("{\"result\": \"mock\"}") }
+      ]
     };
     responses.push(this.builder.buildMessage(data));
 
@@ -373,7 +374,7 @@ export class ProtocolConnection {
       capabilities: 0n,
       commandStatus: "SELECT 1",
       stateTypeDescriptorId: message.stateDataDescriptorId,
-      encodedStateData: new Uint8Array(0),
+      encodedStateData: new Uint8Array(0)
     };
     responses.push(this.builder.buildMessage(complete));
 
@@ -382,7 +383,7 @@ export class ProtocolConnection {
       type: Types.MessageType.ReadyForCommand,
       length: 0,
       transactionState: this.transactionDepth > 0 ? Types.TransactionState.InTransaction : Types.TransactionState.Idle,
-      annotations: [],
+      annotations: []
     };
     responses.push(this.builder.buildMessage(ready));
 
@@ -397,7 +398,7 @@ export class ProtocolConnection {
       type: Types.MessageType.ReadyForCommand,
       length: 0,
       transactionState: this.transactionDepth > 0 ? Types.TransactionState.InTransaction : Types.TransactionState.Idle,
-      annotations: [],
+      annotations: []
     };
 
     return this.builder.buildMessage(ready);
@@ -407,7 +408,7 @@ export class ProtocolConnection {
     severity: Types.ErrorSeverity,
     code: number,
     message: string,
-    attributes?: Map<Types.ErrorAttribute, string>,
+    attributes?: Map<Types.ErrorAttribute, string>
   ): Uint8Array {
     const error: Types.ErrorResponse = {
       type: Types.MessageType.ErrorResponse,
@@ -415,7 +416,7 @@ export class ProtocolConnection {
       severity,
       errorCode: code,
       message,
-      attributes: attributes ?? new Map(),
+      attributes: attributes ?? new Map()
     };
 
     if (severity === Types.ErrorSeverity.Fatal) {
@@ -445,9 +446,9 @@ export class ProtocolConnection {
     const now = Date.now();
 
     if (
-      this.state === ConnectionState.AwaitingAuthentication
-      || this.state === ConnectionState.AwaitingSASLInitial
-      || this.state === ConnectionState.AwaitingSASLResponse
+      this.state === ConnectionState.AwaitingAuthentication ||
+      this.state === ConnectionState.AwaitingSASLInitial ||
+      this.state === ConnectionState.AwaitingSASLResponse
     ) {
       return now - this.lastActivity > this.options.authenticationTimeout;
     }
@@ -487,8 +488,8 @@ export class ProtocolConnection {
       parameters: Object.fromEntries(this.connectionParameters),
       poolStats: {
         bufferPool: this.pools.bufferPool.stats(),
-        messageCache: this.pools.messageCache.stats(),
-      },
+        messageCache: this.pools.messageCache.stats()
+      }
     };
   }
 

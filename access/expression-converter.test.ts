@@ -68,7 +68,7 @@ Deno.test("expression-converter: boolean literal", () => {
 Deno.test("expression-converter: global path becomes AccessGlobal", () => {
   const expr: Expression = {
     kind: "PathExpression",
-    path: ["global", "current_user"],
+    path: ["global", "current_user"]
   };
   const result = convertExpression(expr);
 
@@ -83,7 +83,7 @@ Deno.test("expression-converter: global path becomes AccessGlobal", () => {
 Deno.test("expression-converter: dot-prefixed path strips leading dot", () => {
   const expr: Expression = {
     kind: "PathExpression",
-    path: [".", "author", "id"],
+    path: [".", "author", "id"]
   };
   const result = convertExpression(expr);
 
@@ -112,7 +112,7 @@ Deno.test("expression-converter: binary comparison (=)", () => {
     kind: "BinaryOp",
     op: "=",
     left: { kind: "PathExpression", path: [".", "id"] },
-    right: { kind: "PathExpression", path: ["global", "current_user"] },
+    right: { kind: "PathExpression", path: ["global", "current_user"] }
   };
   const result = convertExpression(expr);
 
@@ -131,7 +131,7 @@ Deno.test("expression-converter: binary logical (and)", () => {
     kind: "BinaryOp",
     op: "and",
     left: { kind: "Literal", type: "boolean", value: true },
-    right: { kind: "Literal", type: "boolean", value: false },
+    right: { kind: "Literal", type: "boolean", value: false }
   };
   const result = convertExpression(expr);
 
@@ -148,7 +148,7 @@ Deno.test("expression-converter: unary not", () => {
   const expr: Expression = {
     kind: "UnaryOp",
     op: "not",
-    operand: { kind: "Literal", type: "boolean", value: true },
+    operand: { kind: "Literal", type: "boolean", value: true }
   };
   const result = convertExpression(expr);
 
@@ -165,7 +165,7 @@ Deno.test("expression-converter: function call", () => {
   const expr: Expression = {
     kind: "FunctionCall",
     name: { kind: "QualifiedName", parts: ["std", "len"] },
-    args: [{ kind: "PathExpression", path: [".", "name"] }],
+    args: [{ kind: "PathExpression", path: [".", "name"] }]
   };
   const result = convertExpression(expr);
 
@@ -187,8 +187,8 @@ Deno.test("expression-converter: type cast strips cast and recurses", () => {
       kind: "TypeRef",
       name: { kind: "QualifiedName", parts: ["int64"] },
       optional: false,
-      array: false,
-    },
+      array: false
+    }
   };
   const result = convertExpression(expr);
 
@@ -206,7 +206,7 @@ Deno.test("expression-converter: parameter throws ValidationError", () => {
   assertThrows(
     () => convertExpression(expr),
     ValidationError,
-    "not valid in access policies",
+    "not valid in access policies"
   );
 });
 
@@ -219,7 +219,7 @@ Deno.test("expression-converter: optional comparison ?= maps to =", () => {
     kind: "BinaryOp",
     op: "?=",
     left: { kind: "PathExpression", path: [".", "status"] },
-    right: { kind: "Literal", type: "string", value: "active" },
+    right: { kind: "Literal", type: "string", value: "active" }
   };
   const result = convertExpression(expr);
 

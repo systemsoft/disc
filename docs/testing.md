@@ -108,7 +108,7 @@ import { InitCommand } from "../cli/init.ts";
 
 Deno.test("disc init surfaces PG download failures", async () => {
   const cmd = new InitCommand({
-    pgManager: { ensure: () => Promise.reject(new Error("offline")) },
+    pgManager: { ensure: () => Promise.reject(new Error("offline")) }
   });
   await assertRejects(() => cmd.execute([]), Error, "offline");
 });
@@ -127,10 +127,10 @@ Deno.test({
   name: "webauthn_challenges cascades on user delete",
   ignore: !canRunPgTests(),
   async fn() {
-    await withTestDatabase(async (pool) => {
+    await withTestDatabase(async pool => {
       // ... real INSERT, real DELETE, assert the cascade behavior ...
     });
-  },
+  }
 });
 ```
 
@@ -143,7 +143,7 @@ When Disc's behavior structurally diverges from Gel — either because Disc neve
 ```typescript
 Deno.test("Gel #4172: binary protocol server uses TCP/TLS, not HTTP", async () => {
   const src = await Deno.readTextFile(
-    new URL("../protocol/binary-server.ts", import.meta.url),
+    new URL("../protocol/binary-server.ts", import.meta.url)
   );
   assert(src.includes("Deno.listenTls"));
   assert(!src.includes("Deno.serve"));

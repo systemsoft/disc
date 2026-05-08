@@ -25,7 +25,7 @@ async function setup(): Promise<{
   const root = await Deno.makeTempDir({ prefix: "disc-fm-test-" });
   const manager = new FileManager(db, {
     backend: new LocalFileStorage(root),
-    maxUploadBytes: 10 * 1024 * 1024,
+    maxUploadBytes: 10 * 1024 * 1024
   });
   await manager.initialize();
   return {
@@ -35,7 +35,7 @@ async function setup(): Promise<{
     cleanup: async () => {
       await db.close();
       await Deno.remove(root, { recursive: true });
-    },
+    }
   };
 }
 
@@ -47,7 +47,7 @@ Deno.test("FileManager — upload then read returns the same bytes", async () =>
       ownerUserId: "user-A",
       name: "greeting.txt",
       contentType: "text/plain",
-      body,
+      body
     });
     assertEquals(meta.size, body.length);
     assertEquals(meta.name, "greeting.txt");
@@ -74,7 +74,8 @@ Deno.test("FileManager — content-addressed dedup: same bytes share a single bl
 
     // Only one underlying blob on disk
     const blobs: string[] = [];
-    for await (const entry of walk(root)) blobs.push(entry);
+    for await (const entry of walk(root))
+      blobs.push(entry);
     assertEquals(blobs.length, 1);
   } finally {
     await cleanup();
@@ -88,11 +89,11 @@ Deno.test("FileManager — owner-only read: cross-user reads reject", async () =
     const file = await manager.upload({ ownerUserId: "user-A", body });
     await assertRejects(
       () => manager.read(file.id, "user-B"),
-      FileAccessDeniedError,
+      FileAccessDeniedError
     );
     await assertRejects(
       () => manager.readMetadata(file.id, "user-B"),
-      FileAccessDeniedError,
+      FileAccessDeniedError
     );
   } finally {
     await cleanup();
@@ -104,21 +105,22 @@ Deno.test("FileManager — list returns only the requesting user's files", async
   try {
     await manager.upload({
       ownerUserId: "user-A",
-      body: new Uint8Array([1, 2]),
+      body: new Uint8Array([1, 2])
     });
     await manager.upload({
       ownerUserId: "user-A",
-      body: new Uint8Array([3, 4]),
+      body: new Uint8Array([3, 4])
     });
     await manager.upload({
       ownerUserId: "user-B",
-      body: new Uint8Array([5, 6]),
+      body: new Uint8Array([5, 6])
     });
     const aList = await manager.list("user-A");
     const bList = await manager.list("user-B");
     assertEquals(aList.length, 2);
     assertEquals(bList.length, 1);
-    for (const f of aList) assertEquals(f.ownerUserId, "user-A");
+    for (const f of aList)
+      assertEquals(f.ownerUserId, "user-A");
   } finally {
     await cleanup();
   }
@@ -134,13 +136,15 @@ Deno.test("FileManager — delete removes metadata and (only when last ref) the 
     // Delete A's metadata; B still references the same blob.
     await manager.delete(a.id, "user-A");
     let blobs: string[] = [];
-    for await (const entry of walk(root)) blobs.push(entry);
+    for await (const entry of walk(root))
+      blobs.push(entry);
     assertEquals(blobs.length, 1, "blob retained while another row references it");
 
     // Delete B's metadata; now blob is unreferenced and removed.
     await manager.delete(b.id, "user-B");
     blobs = [];
-    for await (const entry of walk(root)) blobs.push(entry);
+    for await (const entry of walk(root))
+      blobs.push(entry);
     assertEquals(blobs.length, 0, "blob removed once unreferenced");
   } finally {
     await cleanup();
@@ -152,11 +156,11 @@ Deno.test("FileManager — delete rejects cross-user", async () => {
   try {
     const file = await manager.upload({
       ownerUserId: "user-A",
-      body: new Uint8Array([1]),
+      body: new Uint8Array([1])
     });
     await assertRejects(
       () => manager.delete(file.id, "user-B"),
-      FileAccessDeniedError,
+      FileAccessDeniedError
     );
   } finally {
     await cleanup();
@@ -168,7 +172,7 @@ Deno.test("FileManager — delete on unknown id throws FileNotFoundError", async
   try {
     await assertRejects(
       () => manager.delete("00000000-0000-0000-0000-000000000000", "user-A"),
-      FileNotFoundError,
+      FileNotFoundError
     );
   } finally {
     await cleanup();
@@ -181,7 +185,7 @@ Deno.test("FileManager — upload over maxUploadBytes throws FileTooLargeError",
     const body = new Uint8Array(11 * 1024 * 1024); // 11 MiB > 10 MiB cap
     await assertRejects(
       () => manager.upload({ ownerUserId: "user-A", body }),
-      FileTooLargeError,
+      FileTooLargeError
     );
   } finally {
     await cleanup();
@@ -194,7 +198,7 @@ Deno.test("FileManager — metadata round-trips arbitrary JSON", async () => {
     const file = await manager.upload({
       ownerUserId: "user-A",
       body: new Uint8Array([1]),
-      metadata: { tags: ["x", "y"], source: "test", n: 42 },
+      metadata: { tags: ["x", "y"], source: "test", n: 42 }
     });
     const m = await manager.readMetadata(file.id, "user-A");
     assertEquals(m.metadata?.tags, ["x", "y"]);

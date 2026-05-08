@@ -26,7 +26,7 @@ export class AccessSQLInjector {
     query: SQLQuery,
     tableName: string,
     objectType: string,
-    context: AccessContext,
+    context: AccessContext
   ): SQLQuery {
     const decision = this.evaluator.evaluate(objectType, "select", context);
 
@@ -34,7 +34,7 @@ export class AccessSQLInjector {
       // Return a query that returns no results
       return {
         params: [],
-        text: `SELECT * FROM ${tableName} WHERE FALSE`,
+        text: `SELECT * FROM ${tableName} WHERE FALSE`
       };
     }
 
@@ -54,14 +54,14 @@ export class AccessSQLInjector {
     query: SQLQuery,
     _tableName: string,
     objectType: string,
-    context: AccessContext,
+    context: AccessContext
   ): SQLQuery {
     const decision = this.evaluator.evaluate(objectType, "insert", context);
 
     if (!decision.allowed) {
       throw new Error(
-        decision.denialMessage
-          ?? `INSERT not allowed on ${objectType}: ${decision.reason}`,
+        decision.denialMessage ??
+          `INSERT not allowed on ${objectType}: ${decision.reason}`
       );
     }
 
@@ -78,14 +78,14 @@ export class AccessSQLInjector {
     _tableName: string,
     objectType: string,
     context: AccessContext,
-    _columns?: string[],
+    _columns?: string[]
   ): SQLQuery {
     const decision = this.evaluator.evaluate(objectType, "update", context);
 
     if (!decision.allowed) {
       throw new Error(
-        decision.denialMessage
-          ?? `UPDATE not allowed on ${objectType}: ${decision.reason}`,
+        decision.denialMessage ??
+          `UPDATE not allowed on ${objectType}: ${decision.reason}`
       );
     }
 
@@ -104,14 +104,14 @@ export class AccessSQLInjector {
     query: SQLQuery,
     _tableName: string,
     objectType: string,
-    context: AccessContext,
+    context: AccessContext
   ): SQLQuery {
     const decision = this.evaluator.evaluate(objectType, "delete", context);
 
     if (!decision.allowed) {
       throw new Error(
-        decision.denialMessage
-          ?? `DELETE not allowed on ${objectType}: ${decision.reason}`,
+        decision.denialMessage ??
+          `DELETE not allowed on ${objectType}: ${decision.reason}`
       );
     }
 
@@ -128,12 +128,12 @@ export class AccessSQLInjector {
    */
   private injectWhereConditions(
     query: SQLQuery,
-    conditions: string[],
+    conditions: string[]
   ): SQLQuery {
     const { text, params } = query;
 
     // Combine all conditions with AND
-    const conditionSQL = conditions.map((c) => `(${c})`).join(" AND ");
+    const conditionSQL = conditions.map(c => `(${c})`).join(" AND ");
 
     // Check if query already has WHERE clause
     const whereMatch = text.match(/\bWHERE\b/i);
@@ -155,7 +155,7 @@ export class AccessSQLInjector {
         const afterFromText = text.substring(afterFrom);
         // Check for JOIN, GROUP BY, ORDER BY, etc.
         const clauseMatch = afterFromText.match(
-          /\b(JOIN|GROUP\s+BY|ORDER\s+BY|LIMIT|OFFSET)\b/i,
+          /\b(JOIN|GROUP\s+BY|ORDER\s+BY|LIMIT|OFFSET)\b/i
         );
 
         if (clauseMatch) {
@@ -172,7 +172,7 @@ export class AccessSQLInjector {
 
     return {
       params,
-      text: newText,
+      text: newText
     };
   }
 
@@ -257,7 +257,7 @@ export class AccessSQLInjector {
    */
   needsInjection(
     _operation: "select" | "insert" | "update" | "delete",
-    objectType: string,
+    objectType: string
   ): boolean {
     const policies = this.evaluator.getPolicies(objectType);
     const globalPolicies = this.evaluator.getPolicies();

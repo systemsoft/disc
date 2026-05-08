@@ -19,7 +19,7 @@ export interface CORSOptions {
 
 export type RequestHandler = (
   request: Request,
-  context?: AuthContext,
+  context?: AuthContext
 ) => Response | Promise<Response>;
 
 export class AuthMiddleware {
@@ -39,7 +39,7 @@ export class AuthMiddleware {
       const payload = await this.provider.verifyToken(token);
       return {
         ...payload,
-        userId: payload.sub,
+        userId: payload.sub
       };
     } catch {
       return null;
@@ -58,8 +58,8 @@ export class AuthMiddleware {
           JSON.stringify({ error: "Authentication required" }),
           {
             status: 401,
-            headers: { "Content-Type": "application/json" },
-          },
+            headers: { "Content-Type": "application/json" }
+          }
         );
       }
 
@@ -90,14 +90,14 @@ export class AuthMiddleware {
       response.headers.set("X-XSS-Protection", "1; mode=block");
       response.headers.set(
         "Referrer-Policy",
-        "strict-origin-when-cross-origin",
+        "strict-origin-when-cross-origin"
       );
       response.headers.set(
         "Content-Security-Policy",
         // P1-34: removed script-src 'unsafe-inline'. Inline scripts must use
         // a nonce or be moved into external files. Style inline is retained
         // until the admin UI ships nonce-based CSS.
-        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';",
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';"
       );
 
       return response;
@@ -118,13 +118,13 @@ export class AuthMiddleware {
       methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
       headers = ["Content-Type", "Authorization"],
       credentials = false, // default no-credentials — safer cross-origin default
-      maxAge = 86400,
+      maxAge = 86400
     } = options;
 
     if (credentials && origins.includes("*")) {
       throw new Error(
-        "CORS misconfiguration: credentials=true is incompatible with origins:['*']. "
-          + "Specify explicit allowed origins when sharing credentials.",
+        "CORS misconfiguration: credentials=true is incompatible with origins:['*']. " +
+          "Specify explicit allowed origins when sharing credentials."
       );
     }
 
@@ -141,11 +141,11 @@ export class AuthMiddleware {
           response.headers.set("Access-Control-Allow-Origin", origin);
           response.headers.set(
             "Access-Control-Allow-Methods",
-            methods.join(", "),
+            methods.join(", ")
           );
           response.headers.set(
             "Access-Control-Allow-Headers",
-            headers.join(", "),
+            headers.join(", ")
           );
           if (credentials) {
             response.headers.set("Access-Control-Allow-Credentials", "true");
@@ -204,7 +204,7 @@ export class AuthMiddleware {
   private parseCookies(cookieHeader: string): Record<string, string> {
     const cookies: Record<string, string> = {};
 
-    cookieHeader.split(";").forEach((cookie) => {
+    cookieHeader.split(";").forEach(cookie => {
       const [key, value] = cookie.trim().split("=");
       if (key && value) {
         cookies[key] = decodeURIComponent(value);

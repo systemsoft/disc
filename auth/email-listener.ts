@@ -27,7 +27,7 @@ import {
   renderMagicCodeEmail,
   renderMagicLinkEmail,
   renderPasswordResetEmail,
-  renderVerificationEmail,
+  renderVerificationEmail
 } from "./email-templates.ts";
 import type { AuthBrandingConfig } from "./types.ts";
 import type { WebhookEvent } from "./webhooks.ts";
@@ -81,7 +81,7 @@ function resolveBranding(branding: AuthBrandingConfig | undefined): BrandingCtx 
     appName: branding?.appName ?? fallback.appName,
     brandColor: branding?.brandColor,
     darkLogoUrl: branding?.darkLogoUrl,
-    logoUrl: branding?.logoUrl,
+    logoUrl: branding?.logoUrl
   };
 }
 
@@ -126,38 +126,41 @@ export class EmailEventListener {
     } catch (err) {
       log.warn("email listener errored", {
         eventType: event.eventType,
-        error: err instanceof Error ? err.message : String(err),
+        error: err instanceof Error ? err.message : String(err)
       });
     }
   }
 
   private async handleVerification(identityId: string, verificationToken: string): Promise<void> {
     const recipient = await this.lookup(identityId, "EmailVerificationRequested");
-    if (!recipient) return;
+    if (!recipient)
+      return;
     const rendered = (this.config.templates?.verification ?? renderVerificationEmail)({
       baseUrl: this.config.baseUrl,
       branding: resolveBranding(this.config.branding),
       recipient,
-      verificationToken,
+      verificationToken
     });
     await this.deliver(recipient, rendered, "EmailVerificationRequested");
   }
 
   private async handlePasswordReset(identityId: string, resetToken: string): Promise<void> {
     const recipient = await this.lookup(identityId, "PasswordResetRequested");
-    if (!recipient) return;
+    if (!recipient)
+      return;
     const rendered = (this.config.templates?.passwordReset ?? renderPasswordResetEmail)({
       baseUrl: this.config.baseUrl,
       branding: resolveBranding(this.config.branding),
       recipient,
-      resetToken,
+      resetToken
     });
     await this.deliver(recipient, rendered, "PasswordResetRequested");
   }
 
   private async handleMagicLink(identityId: string, magicLinkToken: string): Promise<void> {
     const recipient = await this.lookup(identityId, "MagicLinkRequested");
-    if (!recipient) return;
+    if (!recipient)
+      return;
     await this.handleMagicLinkToEmail(recipient, magicLinkToken);
   }
 
@@ -170,25 +173,26 @@ export class EmailEventListener {
   private async handleMagicLinkToEmail(recipient: string, magicLinkToken: string): Promise<void> {
     const link = buildMagicLinkUrl(magicLinkToken, {
       baseUrl: this.config.baseUrl,
-      template: this.config.magicLinkUrlTemplate,
+      template: this.config.magicLinkUrlTemplate
     });
     const rendered = (this.config.templates?.magicLink ?? renderMagicLinkEmail)({
       baseUrl: this.config.baseUrl,
       branding: resolveBranding(this.config.branding),
       link,
       magicLinkToken,
-      recipient,
+      recipient
     });
     await this.deliver(recipient, rendered, "MagicLinkRequested");
   }
 
   private async handleMagicCode(identityId: string, code: string): Promise<void> {
     const recipient = await this.lookup(identityId, "MagicCodeRequested");
-    if (!recipient) return;
+    if (!recipient)
+      return;
     const rendered = (this.config.templates?.magicCode ?? renderMagicCodeEmail)({
       branding: resolveBranding(this.config.branding),
       code,
-      recipient,
+      recipient
     });
     await this.deliver(recipient, rendered, "MagicCodeRequested");
   }
@@ -199,7 +203,7 @@ export class EmailEventListener {
       if (!recipient) {
         log.warn("recipient lookup returned null; skipping email", {
           eventType,
-          identityId,
+          identityId
         });
         return null;
       }
@@ -208,7 +212,7 @@ export class EmailEventListener {
       log.warn("recipient lookup failed", {
         eventType,
         identityId,
-        error: err instanceof Error ? err.message : String(err),
+        error: err instanceof Error ? err.message : String(err)
       });
       return null;
     }
@@ -220,12 +224,12 @@ export class EmailEventListener {
         html: rendered.html,
         subject: rendered.subject,
         text: rendered.text,
-        to: recipient,
+        to: recipient
       });
     } catch (err) {
       log.warn("mailer send failed", {
         eventType,
-        error: err instanceof Error ? err.message : String(err),
+        error: err instanceof Error ? err.message : String(err)
       });
     }
   }

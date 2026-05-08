@@ -77,7 +77,7 @@ function assertIdent(name: string, ctx: string): void {
 export function coerceValue(
   value: string,
   cast: FilterCast,
-  fieldLabel: string,
+  fieldLabel: string
 ): unknown {
   switch (cast) {
     case "str":
@@ -86,10 +86,12 @@ export function coerceValue(
       return value;
     case "bool": {
       const v = value.trim().toLowerCase();
-      if (v === "true" || v === "1") return true;
-      if (v === "false" || v === "0") return false;
+      if (v === "true" || v === "1")
+        return true;
+      if (v === "false" || v === "0")
+        return false;
       throw new Error(
-        `${fieldLabel}: expected boolean (true/false), got ${JSON.stringify(value)}`,
+        `${fieldLabel}: expected boolean (true/false), got ${JSON.stringify(value)}`
       );
     }
     case "int16":
@@ -98,7 +100,7 @@ export function coerceValue(
       const n = Number.parseInt(value, 10);
       if (!Number.isFinite(n) || String(n) !== value.trim()) {
         throw new Error(
-          `${fieldLabel}: expected ${cast}, got ${JSON.stringify(value)}`,
+          `${fieldLabel}: expected ${cast}, got ${JSON.stringify(value)}`
         );
       }
       return n;
@@ -108,7 +110,7 @@ export function coerceValue(
       const n = Number.parseFloat(value);
       if (!Number.isFinite(n)) {
         throw new Error(
-          `${fieldLabel}: expected ${cast}, got ${JSON.stringify(value)}`,
+          `${fieldLabel}: expected ${cast}, got ${JSON.stringify(value)}`
         );
       }
       return n;
@@ -124,7 +126,7 @@ function compileShape(shape: ShapeNode): string {
   }
   for (const [linkName, linkShape] of Object.entries(shape.links)) {
     assertIdent(linkName, "link name");
-    const inner = linkShape.fields.map((f) => {
+    const inner = linkShape.fields.map(f => {
       assertIdent(f, "link field");
       return f;
     });
@@ -148,7 +150,8 @@ export function synthesize(spec: QuerySpec): SynthResult {
   const parts: string[] = [`select ${spec.type}`];
 
   const shapeStr = compileShape(spec.shape);
-  if (shapeStr) parts.push(shapeStr);
+  if (shapeStr)
+    parts.push(shapeStr);
 
   if (spec.filters.length > 0) {
     const compiled = spec.filters.map((f, i) => {
@@ -160,7 +163,7 @@ export function synthesize(spec: QuerySpec): SynthResult {
     if (compiled.length === 1) {
       parts.push(`filter ${compiled[0]}`);
     } else {
-      parts.push(`filter ${compiled.map((c) => `(${c})`).join(" and ")}`);
+      parts.push(`filter ${compiled.map(c => `(${c})`).join(" and ")}`);
     }
   }
 

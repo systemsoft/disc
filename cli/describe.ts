@@ -33,13 +33,16 @@ export function describeAllTypes(schema: Schema): string {
   const byModule = new Map<string, TypeDef[]>();
   for (const t of schema.types.values()) {
     const mod = resolveModule(t);
-    if (!byModule.has(mod)) byModule.set(mod, []);
+    if (!byModule.has(mod))
+      byModule.set(mod, []);
     byModule.get(mod)!.push(t);
   }
 
   const moduleNames = [...byModule.keys()].sort((a, b) => {
-    if (a === "default") return -1;
-    if (b === "default") return 1;
+    if (a === "default")
+      return -1;
+    if (b === "default")
+      return 1;
     return a.localeCompare(b);
   });
 
@@ -57,7 +60,8 @@ export function describeAllTypes(schema: Schema): string {
   }
 
   // Trim trailing blank line
-  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+  while (lines.length > 0 && lines[lines.length - 1] === "")
+    lines.pop();
   return lines.join("\n");
 }
 
@@ -69,7 +73,8 @@ export function describeAllTypes(schema: Schema): string {
  */
 export function describeType(schema: Schema, name: string): string | null {
   const typeDef = lookupType(schema, name);
-  if (!typeDef) return null;
+  if (!typeDef)
+    return null;
 
   const lines: string[] = [];
   const header = formatHeader(typeDef);
@@ -81,8 +86,9 @@ export function describeType(schema: Schema, name: string): string | null {
   }
 
   if (typeDef.parentTypes && typeDef.parentTypes.length > 0) {
-    const parents = typeDef.parentTypes
-      .filter((p) => p !== "std::BaseObject" && p !== "BaseObject")
+    const parents = typeDef
+      .parentTypes
+      .filter(p => p !== "std::BaseObject" && p !== "BaseObject")
       .map(stripModule);
     if (parents.length > 0) {
       lines.push(`Extends: ${parents.join(", ")}`);
@@ -117,13 +123,13 @@ export function describeType(schema: Schema, name: string): string | null {
 
   // Properties
   const props = [...typeDef.properties.values()]
-    .filter((p) => p.name !== "id")
+    .filter(p => p.name !== "id")
     .sort((a, b) => a.name.localeCompare(b.name));
   if (props.length > 0) {
     lines.push("");
     lines.push("Properties:");
     for (const p of props) {
-      formatProperty(p).forEach((line) => lines.push("  " + line));
+      formatProperty(p).forEach(line => lines.push("  " + line));
     }
   }
 
@@ -134,7 +140,7 @@ export function describeType(schema: Schema, name: string): string | null {
     lines.push("");
     lines.push("Links:");
     for (const l of links) {
-      formatLink(l).forEach((line) => lines.push("  " + line));
+      formatLink(l).forEach(line => lines.push("  " + line));
     }
   }
 
@@ -152,7 +158,7 @@ export function describeType(schema: Schema, name: string): string | null {
     lines.push("");
     lines.push("Access policies:");
     for (const policy of typeDef.accessPolicies) {
-      formatAccessPolicy(policy).forEach((line) => lines.push("  " + line));
+      formatAccessPolicy(policy).forEach(line => lines.push("  " + line));
     }
   }
 
@@ -176,16 +182,19 @@ export function describeType(schema: Schema, name: string): string | null {
 function lookupType(schema: Schema, name: string): TypeDef | undefined {
   // 1. Exact match (already qualified or already stored bare).
   const exact = schema.types.get(name);
-  if (exact) return exact;
+  if (exact)
+    return exact;
 
   if (!name.includes("::")) {
     // 2. Try default module.
     const inDefault = schema.types.get(`default::${name}`);
-    if (inDefault) return inDefault;
+    if (inDefault)
+      return inDefault;
 
     // 3. Last resort: walk the schema for a bare-name match across modules.
     for (const t of schema.types.values()) {
-      if (stripModule(t.name) === name) return t;
+      if (stripModule(t.name) === name)
+        return t;
     }
   }
 
@@ -194,21 +203,30 @@ function lookupType(schema: Schema, name: string): TypeDef | undefined {
 
 function formatHeader(typeDef: TypeDef): string {
   const parts: string[] = [];
-  if (typeDef.abstract) parts.push("abstract");
-  if (typeDef.kind === "enum") parts.push("enum");
-  else if (typeDef.kind === "scalar") parts.push("scalar");
-  else parts.push("type");
+  if (typeDef.abstract)
+    parts.push("abstract");
+  if (typeDef.kind === "enum")
+    parts.push("enum");
+  else if (typeDef.kind === "scalar")
+    parts.push("scalar");
+  else
+    parts.push("type");
   parts.push(stripModule(typeDef.name));
   return `Type: ${parts.join(" ")}`;
 }
 
 function formatProperty(prop: PropertyDef): string[] {
   const flags: string[] = [];
-  if (prop.required) flags.push("required");
-  if (prop.multi) flags.push("multi");
-  if (prop.readonly) flags.push("readonly");
-  if (prop.computed) flags.push("computed");
-  if (prop.hasDefault) flags.push("default");
+  if (prop.required)
+    flags.push("required");
+  if (prop.multi)
+    flags.push("multi");
+  if (prop.readonly)
+    flags.push("readonly");
+  if (prop.computed)
+    flags.push("computed");
+  if (prop.hasDefault)
+    flags.push("default");
 
   const flagStr = flags.length > 0 ? ` [${flags.join(", ")}]` : "";
   const typeStr = prop.edgeqlType ?? prop.type;
@@ -239,7 +257,8 @@ function formatProperty(prop: PropertyDef): string[] {
 
 function formatLink(link: LinkDef): string[] {
   const flags: string[] = [];
-  if (link.required) flags.push("required");
+  if (link.required)
+    flags.push("required");
   flags.push(link.multi ? "multi" : "single");
   const flagStr = ` [${flags.join(", ")}]`;
   const head = `${link.name} -> ${stripModule(link.target)}${flagStr}`;
@@ -294,14 +313,18 @@ function formatAccessAction(action: AccessAction): string {
 }
 
 function kindLabel(t: TypeDef): string {
-  if (t.kind === "enum") return "(enum)";
-  if (t.kind === "scalar") return "(scalar)";
-  if (t.abstract) return "(abstract)";
+  if (t.kind === "enum")
+    return "(enum)";
+  if (t.kind === "scalar")
+    return "(scalar)";
+  if (t.abstract)
+    return "(abstract)";
   return "(object)";
 }
 
 function resolveModule(typeDef: TypeDef): string {
-  if (typeDef.module) return typeDef.module;
+  if (typeDef.module)
+    return typeDef.module;
   if (typeDef.name.includes("::")) {
     return typeDef.name.split("::")[0];
   }
@@ -315,8 +338,8 @@ function stripModule(name: string): string {
 
 function formatAnnotationValue(value: string): string {
   if (
-    (value.startsWith("'") && value.endsWith("'"))
-    || (value.startsWith("\"") && value.endsWith("\""))
+    (value.startsWith("'") && value.endsWith("'")) ||
+    (value.startsWith("\"") && value.endsWith("\""))
   ) {
     return value;
   }
@@ -325,5 +348,5 @@ function formatAnnotationValue(value: string): string {
 }
 
 function orderedEntries(o: Record<string, string>): Array<[string, string]> {
-  return Object.keys(o).sort().map((k) => [k, o[k]] as [string, string]);
+  return Object.keys(o).sort().map(k => [k, o[k]] as [string, string]);
 }

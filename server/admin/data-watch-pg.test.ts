@@ -31,7 +31,7 @@ function parseDsn(dsn: string) {
     hostname: url.hostname || "localhost",
     port: url.port ? parseInt(url.port) : 5432,
     user: url.username || "disc",
-    database: url.pathname.slice(1) || "disc_test",
+    database: url.pathname.slice(1) || "disc_test"
   };
 }
 
@@ -52,7 +52,7 @@ async function cleanup(dsn: string): Promise<void> {
   try {
     await execSql(
       dsn,
-      `DELETE FROM ${CHANGE_LOG_TABLE} WHERE table_name = '${TABLE}'`,
+      `DELETE FROM ${CHANGE_LOG_TABLE} WHERE table_name = '${TABLE}'`
     );
   } catch {
     // change-log not bootstrapped yet — fine.
@@ -71,13 +71,13 @@ Deno.test({
     // Create a fresh user table to attach triggers to.
     await execSql(
       dsn,
-      `CREATE TABLE "${TABLE}" (id SERIAL PRIMARY KEY, name TEXT)`,
+      `CREATE TABLE "${TABLE}" (id SERIAL PRIMARY KEY, name TEXT)`
     );
 
     const pool = new ConnectionPool({
       connectionString: dsn,
       minConnections: 1,
-      maxConnections: 4,
+      maxConnections: 4
     });
     try {
       await pool.initialize();
@@ -86,7 +86,7 @@ Deno.test({
       const firstWired: string[] = [];
       const result1 = await bootstrapDataWatch({
         pool,
-        log: (m) => firstWired.push(m),
+        log: m => firstWired.push(m)
       });
       const result2 = await bootstrapDataWatch({ pool });
 
@@ -96,17 +96,17 @@ Deno.test({
 
       // Phase 2: trigger fires on INSERT.
       const insertCursor = await pool.query(
-        `SELECT COALESCE(MAX(id), 0)::bigint AS cur FROM ${CHANGE_LOG_TABLE}`,
+        `SELECT COALESCE(MAX(id), 0)::bigint AS cur FROM ${CHANGE_LOG_TABLE}`
       );
       const startId = Number(insertCursor.rows[0].cur);
 
       await pool.execute(
-        `INSERT INTO "${TABLE}" (name) VALUES ('alpha'), ('bravo')`,
+        `INSERT INTO "${TABLE}" (name) VALUES ('alpha'), ('bravo')`
       );
 
       const afterInsert = await pool.query(
         `SELECT id, table_name, op FROM ${CHANGE_LOG_TABLE} WHERE id > $1 ORDER BY id`,
-        [String(startId)],
+        [String(startId)]
       );
       // FOR EACH STATEMENT — single INSERT (even multi-row) → one log row.
       assertEquals(afterInsert.rows.length, 1);
@@ -118,7 +118,7 @@ Deno.test({
       await pool.execute(`UPDATE "${TABLE}" SET name = 'charlie'`);
       const afterUpdate = await pool.query(
         `SELECT op FROM ${CHANGE_LOG_TABLE} WHERE id > $1 ORDER BY id`,
-        [String(updateStart)],
+        [String(updateStart)]
       );
       assertEquals(afterUpdate.rows.length, 1);
       assertEquals(afterUpdate.rows[0].op, "UPDATE");
@@ -126,12 +126,13 @@ Deno.test({
       // Phase 4: trigger fires on DELETE.
       const updateId = Number(
         (await pool.query(`SELECT MAX(id)::bigint AS cur FROM ${CHANGE_LOG_TABLE}`))
-          .rows[0].cur,
+          .rows[0]
+          .cur
       );
       await pool.execute(`DELETE FROM "${TABLE}"`);
       const afterDelete = await pool.query(
         `SELECT op FROM ${CHANGE_LOG_TABLE} WHERE id > $1 ORDER BY id`,
-        [String(updateId)],
+        [String(updateId)]
       );
       assertEquals(afterDelete.rows.length, 1);
       assertEquals(afterDelete.rows[0].op, "DELETE");
@@ -139,7 +140,7 @@ Deno.test({
       await pool.close();
       await cleanup(dsn);
     }
-  },
+  }
 });
 
 Deno.test({
@@ -152,7 +153,7 @@ Deno.test({
     const pool = new ConnectionPool({
       connectionString: dsn,
       minConnections: 1,
-      maxConnections: 4,
+      maxConnections: 4
     });
     try {
       await pool.initialize();
@@ -167,13 +168,13 @@ Deno.test({
       const r = await pool.query(
         `SELECT COUNT(*)::int AS n FROM pg_trigger
          WHERE tgrelid = '${CHANGE_LOG_TABLE}'::regclass
-         AND NOT tgisinternal`,
+         AND NOT tgisinternal`
       );
       assertEquals(Number(r.rows[0].n), 0);
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -186,7 +187,7 @@ Deno.test({
     const pool = new ConnectionPool({
       connectionString: dsn,
       minConnections: 1,
-      maxConnections: 4,
+      maxConnections: 4
     });
     try {
       await pool.initialize();
@@ -195,16 +196,16 @@ Deno.test({
       // Seed a "stale" row 2 hours in the past.
       await pool.execute(
         `INSERT INTO ${CHANGE_LOG_TABLE} (table_name, op, created_at)
-         VALUES ('___test_stale', 'INSERT', now() - interval '2 hours')`,
+         VALUES ('___test_stale', 'INSERT', now() - interval '2 hours')`
       );
       // And a recent row.
       await pool.execute(
         `INSERT INTO ${CHANGE_LOG_TABLE} (table_name, op)
-         VALUES ('___test_recent', 'INSERT')`,
+         VALUES ('___test_recent', 'INSERT')`
       );
 
       const before = await pool.query(
-        `SELECT COUNT(*)::int AS n FROM ${CHANGE_LOG_TABLE} WHERE table_name LIKE '___test_%'`,
+        `SELECT COUNT(*)::int AS n FROM ${CHANGE_LOG_TABLE} WHERE table_name LIKE '___test_%'`
       );
       assertGreater(Number(before.rows[0].n), 1);
 
@@ -212,24 +213,24 @@ Deno.test({
       assertGreater(pruned, 0);
 
       const after = await pool.query(
-        `SELECT table_name FROM ${CHANGE_LOG_TABLE} WHERE table_name LIKE '___test_%'`,
+        `SELECT table_name FROM ${CHANGE_LOG_TABLE} WHERE table_name LIKE '___test_%'`
       );
       // Stale row should be gone; recent row should remain.
       assertEquals(
         after.rows.some((r: any) => r.table_name === "___test_stale"),
-        false,
+        false
       );
       assertEquals(
         after.rows.some((r: any) => r.table_name === "___test_recent"),
-        true,
+        true
       );
 
       // Cleanup our seeded test rows.
       await pool.execute(
-        `DELETE FROM ${CHANGE_LOG_TABLE} WHERE table_name LIKE '___test_%'`,
+        `DELETE FROM ${CHANGE_LOG_TABLE} WHERE table_name LIKE '___test_%'`
       );
     } finally {
       await pool.close();
     }
-  },
+  }
 });

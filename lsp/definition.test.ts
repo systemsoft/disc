@@ -10,7 +10,8 @@ function findPos(haystack: string, needle: string, occurrence = 0): Position {
   let offset = -1;
   for (let i = 0; i <= occurrence; i++) {
     offset = haystack.indexOf(needle, offset + 1);
-    if (offset === -1) throw new Error(`needle ${needle} occurrence ${i} not found`);
+    if (offset === -1)
+      throw new Error(`needle ${needle} occurrence ${i} not found`);
   }
   let line = 0;
   let character = 0;

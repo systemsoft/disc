@@ -12,11 +12,11 @@ Deno.test("generateVectorIndex - generates IVFFlat DDL with default lists", () =
     tableName: "documents",
     columnName: "embedding",
     dimensions: 1536,
-    indexType: "ivfflat",
+    indexType: "ivfflat"
   });
   assertEquals(
     sql,
-    "CREATE INDEX IF NOT EXISTS idx_documents_embedding_vector ON documents USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);",
+    "CREATE INDEX IF NOT EXISTS idx_documents_embedding_vector ON documents USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);"
   );
 });
 
@@ -26,11 +26,11 @@ Deno.test("generateVectorIndex - generates IVFFlat DDL with custom lists param",
     columnName: "vec",
     dimensions: 512,
     indexType: "ivfflat",
-    lists: 200,
+    lists: 200
   });
   assertEquals(
     sql,
-    "CREATE INDEX IF NOT EXISTS idx_items_vec_vector ON items USING ivfflat (vec vector_cosine_ops) WITH (lists = 200);",
+    "CREATE INDEX IF NOT EXISTS idx_items_vec_vector ON items USING ivfflat (vec vector_cosine_ops) WITH (lists = 200);"
   );
 });
 
@@ -41,11 +41,11 @@ Deno.test("generateVectorIndex - generates HNSW DDL with default params", () => 
     tableName: "products",
     columnName: "feature_vec",
     dimensions: 768,
-    indexType: "hnsw",
+    indexType: "hnsw"
   });
   assertEquals(
     sql,
-    "CREATE INDEX IF NOT EXISTS idx_products_feature_vec_vector ON products USING hnsw (feature_vec vector_cosine_ops) WITH (m = 16, ef_construction = 64);",
+    "CREATE INDEX IF NOT EXISTS idx_products_feature_vec_vector ON products USING hnsw (feature_vec vector_cosine_ops) WITH (m = 16, ef_construction = 64);"
   );
 });
 
@@ -56,10 +56,10 @@ Deno.test("generateVectorIndex - generates HNSW DDL with custom m and ef_constru
     dimensions: 1536,
     indexType: "hnsw",
     m: 32,
-    efConstruction: 128,
+    efConstruction: 128
   });
   assertEquals(
     sql,
-    "CREATE INDEX IF NOT EXISTS idx_embeddings_vector_vector ON embeddings USING hnsw (vector vector_cosine_ops) WITH (m = 32, ef_construction = 128);",
+    "CREATE INDEX IF NOT EXISTS idx_embeddings_vector_vector ON embeddings USING hnsw (vector vector_cosine_ops) WITH (m = 32, ef_construction = 128);"
   );
 });

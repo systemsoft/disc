@@ -68,7 +68,7 @@ export function migrate(
     "dry-run"?: boolean;
     "backend-dsn"?: string;
     quiet?: boolean;
-  } = {},
+  } = {}
 ): Promise<void> {
   // `migrate` accepts the CLIArgs shape internally (positional `_` carries
   // the subcommand from the binary entry point). For the programmatic

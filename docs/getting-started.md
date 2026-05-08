@@ -362,7 +362,7 @@ Import the SDK and run queries programmatically:
 import { createClient } from "disc/sdk/mod.ts";
 
 const client = createClient({
-  baseUrl: "http://localhost:5656",
+  baseUrl: "http://localhost:5656"
 });
 
 // Run an EdgeQL query
@@ -383,7 +383,7 @@ console.log(users);
 const user = await client.query(
   `select User { email, name }
    filter .email = <str>$email`,
-  { email: "ada@example.com" },
+  { email: "ada@example.com" }
 );
 ```
 
@@ -397,14 +397,14 @@ await client.query(
     name := <str>$name
   }
 `,
-  { email: "billie@example.com", name: "Billie" },
+  { email: "billie@example.com", name: "Billie" }
 );
 ```
 
 ### Transactions
 
 ```typescript
-const result = await client.transaction(async (tx) => {
+const result = await client.transaction(async tx => {
   const user = await tx.query(`
     insert User { email := "cher@example.com", name := "Cher" }
   `);

@@ -494,7 +494,8 @@ export const MIGRATION_ADVISORY_LOCK_KEY = (() => {
   }
   // Postgres `pg_advisory_lock(bigint)` uses a signed 64-bit integer,
   // so map the unsigned hash into the signed range.
-  if (hash >= 1n << 63n) hash -= 1n << 64n;
+  if (hash >= 1n << 63n)
+    hash -= 1n << 64n;
   return hash;
 })();
 
@@ -535,37 +536,37 @@ export function createTypeOperation(
     abstract?: boolean;
     parentTypes?: string[];
     subtypes?: string[];
-  },
+  }
 ): CreateTypeOperation {
   return {
     kind: "CreateType",
     typeName: name,
     properties,
     links,
-    ...options,
+    ...options
   };
 }
 
 export function dropTypeOperation(name: string): DropTypeOperation {
   return {
     kind: "DropType",
-    typeName: name,
+    typeName: name
   };
 }
 
 export function addPropertyOperation(
-  property: PropertyDefinition,
+  property: PropertyDefinition
 ): AddPropertyOperation {
   return {
     kind: "AddProperty",
-    property,
+    property
   };
 }
 
 export function dropPropertyOperation(name: string): DropPropertyOperation {
   return {
     kind: "DropProperty",
-    propertyName: name,
+    propertyName: name
   };
 }
 
@@ -573,81 +574,81 @@ export function createTableOperation(
   name: string,
   columns: ColumnDefinition[],
   constraints: ConstraintDefinition[] = [],
-  indexes: IndexDefinition[] = [],
+  indexes: IndexDefinition[] = []
 ): CreateTableOperation {
   return {
     kind: "CreateTable",
     tableName: name,
     columns,
     constraints,
-    indexes,
+    indexes
   };
 }
 
 export function dropTableOperation(name: string): DropTableOperation {
   return {
     kind: "DropTable",
-    tableName: name,
+    tableName: name
   };
 }
 
 export function addColumnOperation(
-  column: ColumnDefinition,
+  column: ColumnDefinition
 ): AddColumnOperation {
   return {
     kind: "AddColumn",
-    column,
+    column
   };
 }
 
 export function dropColumnOperation(name: string): DropColumnOperation {
   return {
     kind: "DropColumn",
-    columnName: name,
+    columnName: name
   };
 }
 
 export function addTriggerOperation(
   _typeName: string,
-  trigger: TriggerDefinition,
+  trigger: TriggerDefinition
 ): AddTriggerOperation {
   return {
     kind: "AddTrigger",
-    trigger,
+    trigger
   };
 }
 
 export function dropTriggerOperation(
   _typeName: string,
-  triggerName: string,
+  triggerName: string
 ): DropTriggerOperation {
   return {
     kind: "DropTrigger",
-    triggerName,
+    triggerName
   };
 }
 
 export function createAddRewriteOperation(
   _typeName: string,
   propertyName: string,
-  rewrite: RewriteDefinition,
+  rewrite: RewriteDefinition
 ): AddRewriteOperation {
   return {
     kind: "AddRewrite",
     propertyName,
-    rewrite,
+    rewrite
   };
 }
 
 export function createDropRewriteOperation(
   _typeName: string,
   propertyName: string,
-  events: ("insert" | "update")[],
+  events: ("insert" | "update")[]
 ): DropRewriteOperation {
   return {
     kind: "DropRewrite",
     propertyName,
-    events,
+    events
   };
 }
 
@@ -661,7 +662,7 @@ export function createGlobalOperation(
     multi?: boolean;
     default?: string;
     readonly?: boolean;
-  },
+  }
 ): CreateGlobalOperation {
   return {
     kind: "CreateGlobal",
@@ -672,37 +673,37 @@ export function createGlobalOperation(
     required: options?.required ?? false,
     multi: options?.multi ?? false,
     default: options?.default,
-    readonly: options?.readonly ?? false,
+    readonly: options?.readonly ?? false
   };
 }
 
 export function dropGlobalOperation(
   name: string,
-  module: string,
+  module: string
 ): DropGlobalOperation {
   return {
     kind: "DropGlobal",
     name,
-    module,
+    module
   };
 }
 
 export function createAliasOperation(
   aliasName: string,
-  expression: string,
+  expression: string
 ): CreateAliasOperation {
   return {
     kind: "CreateAlias",
     aliasName,
-    expression,
+    expression
   };
 }
 
 export function dropAliasOperation(
-  aliasName: string,
+  aliasName: string
 ): DropAliasOperation {
   return {
     kind: "DropAlias",
-    aliasName,
+    aliasName
   };
 }

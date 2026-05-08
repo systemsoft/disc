@@ -71,11 +71,11 @@ Deno.test("Gel #1147: abstract extraction is idempotent (no ISE on rerun)", () =
   // First pass: produces a real diff (creates Editable, drops the local
   // properties on User since they now come from the parent).
   const ops1 = diff(before, after);
-  const kinds1 = ops1.map((op) => op.kind);
+  const kinds1 = ops1.map(op => op.kind);
   assertEquals(
     kinds1.includes("CreateType"),
     true,
-    "first pass should create the abstract Editable type",
+    "first pass should create the abstract Editable type"
   );
 
   // Second pass over the *same* schema state: empty diff. This is the
@@ -84,7 +84,7 @@ Deno.test("Gel #1147: abstract extraction is idempotent (no ISE on rerun)", () =
   assertEquals(
     ops2.length,
     0,
-    "rerunning the diff over an unchanged schema must be idempotent",
+    "rerunning the diff over an unchanged schema must be idempotent"
   );
 });
 
@@ -121,7 +121,7 @@ Deno.test("Gel #4343: property-level DROP CONSTRAINT produces an AlterProperty o
   const propOp = alter.operations[0] as Types.AlterPropertyOperation;
   assertEquals(propOp.kind, "AlterProperty");
   assertEquals(propOp.propertyName, "email");
-  const drop = propOp.changes.find((c) => c.kind === "DropConstraint");
+  const drop = propOp.changes.find(c => c.kind === "DropConstraint");
   assertEquals(drop?.oldValue, "exclusive");
 });
 
@@ -150,9 +150,9 @@ Deno.test("Gel #8517: adding an enum value emits AddEnumValue", () => {
   `;
 
   const ops = diff(before, after);
-  const enumOps = ops.filter((o) =>
-    o.kind === "AddEnumValue" || o.kind === "CreateScalar"
-    || o.kind === "RecreateScalar"
+  const enumOps = ops.filter(o =>
+    o.kind === "AddEnumValue" || o.kind === "CreateScalar" ||
+    o.kind === "RecreateScalar"
   );
   assertEquals(enumOps.length, 1, "expected exactly one enum value op");
   const addOp = enumOps[0] as Types.AddEnumValueOperation;
@@ -170,7 +170,7 @@ Deno.test("Gel #8517: adding an enum value emits AddEnumValue", () => {
     }
   `;
   const midOps = diff(before, midAfter);
-  const midAdd = midOps.find((o) => o.kind === "AddEnumValue") as
+  const midAdd = midOps.find(o => o.kind === "AddEnumValue") as
     | Types.AddEnumValueOperation
     | undefined;
   assertEquals(midAdd?.value, "manager");
@@ -190,12 +190,12 @@ Deno.test("Gel #8517: AddEnumValue emits ALTER TYPE ... ADD VALUE DDL", () => {
   `;
   const ops = diff(before, after);
   const ddl = new DDLGenerator().generateDDL(ops);
-  const alterAdd = ddl.find((s) => s.includes("ALTER TYPE") && s.includes("ADD VALUE"));
+  const alterAdd = ddl.find(s => s.includes("ALTER TYPE") && s.includes("ADD VALUE"));
   assertEquals(alterAdd !== undefined, true, "expected an ALTER TYPE ADD VALUE statement");
   assertEquals(
     alterAdd!.includes("'archived'"),
     true,
-    "ALTER TYPE statement should reference the new enum value",
+    "ALTER TYPE statement should reference the new enum value"
   );
 });
 
@@ -217,7 +217,7 @@ Deno.test("Gel #2564: removing an enum value emits RecreateScalar (removed-value
     }
   `;
   const ops = diff(before, after);
-  const recreate = ops.find((o) => o.kind === "RecreateScalar") as
+  const recreate = ops.find(o => o.kind === "RecreateScalar") as
     | Types.RecreateScalarOperation
     | undefined;
   assertEquals(recreate !== undefined, true, "expected a RecreateScalar op");
@@ -239,7 +239,7 @@ Deno.test("Gel #2564: reordering enum values emits RecreateScalar (reordered-val
     }
   `;
   const ops = diff(before, after);
-  const recreate = ops.find((o) => o.kind === "RecreateScalar") as
+  const recreate = ops.find(o => o.kind === "RecreateScalar") as
     | Types.RecreateScalarOperation
     | undefined;
   assertEquals(recreate !== undefined, true, "expected a RecreateScalar op");
@@ -261,11 +261,11 @@ Deno.test("Gel #2564: RecreateScalar DDL guards against orphaning dependents", (
   const ddl = new DDLGenerator().generateDDL(ops);
   // The recreate path emits a DO block that aborts when columns
   // still reference the type — operators must drop dependents first.
-  const guard = ddl.find((s) => s.includes("RAISE EXCEPTION") && s.includes("recreate enum type"));
+  const guard = ddl.find(s => s.includes("RAISE EXCEPTION") && s.includes("recreate enum type"));
   assertEquals(
     guard !== undefined,
     true,
-    "expected a guard DO block in the recreate DDL",
+    "expected a guard DO block in the recreate DDL"
   );
 });
 
@@ -287,9 +287,9 @@ Deno.test("Gel #6304: migration apply emits lock_timeout + advisory lock pragmas
         execute: (s: string) => {
           executed.push(s);
           return Promise.resolve();
-        },
+        }
       });
-    },
+    }
   };
 
   const engine = new MigrationEngine({
@@ -297,30 +297,30 @@ Deno.test("Gel #6304: migration apply emits lock_timeout + advisory lock pragmas
     backupBeforeMigration: false,
     requireConfirmation: false,
     validateOperations: true,
-    connectionPool: fakePool as unknown as import("../lib/connection-pool.ts").ConnectionPool,
+    connectionPool: fakePool as unknown as import("../lib/connection-pool.ts").ConnectionPool
   } as unknown as Types.MigrationConfig);
 
   await (engine as unknown as { executeStatements(s: string[]): Promise<void>; })
     .executeStatements(["CREATE TABLE foo (id uuid primary key);"]);
 
-  const setLockTimeout = executed.find((s) => s.includes("lock_timeout"));
+  const setLockTimeout = executed.find(s => s.includes("lock_timeout"));
   assertEquals(
     setLockTimeout !== undefined,
     true,
-    "expected SET LOCAL lock_timeout pragma",
+    "expected SET LOCAL lock_timeout pragma"
   );
-  const advisoryLock = executed.find((s) => s.includes("pg_advisory_xact_lock"));
+  const advisoryLock = executed.find(s => s.includes("pg_advisory_xact_lock"));
   assertEquals(
     advisoryLock !== undefined,
     true,
-    "expected pg_advisory_xact_lock pragma",
+    "expected pg_advisory_xact_lock pragma"
   );
   // The advisory lock key is the FNV-1a hash of "disc_migrations" — pin
   // the actual integer so any future regen catches an accidental change.
   assertEquals(
     advisoryLock!.includes(MIGRATION_ADVISORY_LOCK_KEY.toString()),
     true,
-    `expected advisory lock to use the disc_migrations key (${MIGRATION_ADVISORY_LOCK_KEY})`,
+    `expected advisory lock to use the disc_migrations key (${MIGRATION_ADVISORY_LOCK_KEY})`
   );
 });
 
@@ -334,9 +334,9 @@ Deno.test("Gel #6304: lockTimeoutMs=0 disables the timeout pragma", async () => 
         execute: (s: string) => {
           executed.push(s);
           return Promise.resolve();
-        },
+        }
       });
-    },
+    }
   };
 
   const engine = new MigrationEngine({
@@ -346,7 +346,7 @@ Deno.test("Gel #6304: lockTimeoutMs=0 disables the timeout pragma", async () => 
     validateOperations: true,
     connectionPool: fakePool as unknown as import("../lib/connection-pool.ts").ConnectionPool,
     lockTimeoutMs: 0,
-    useAdvisoryLock: false,
+    useAdvisoryLock: false
   } as unknown as Types.MigrationConfig);
 
   await (engine as unknown as { executeStatements(s: string[]): Promise<void>; })
@@ -382,23 +382,25 @@ Deno.test("Gel #5617: insert with explicit id compiles to INSERT with id column"
     }
   `);
   const schema = sm.getSchema();
-  if (!schema) throw new Error("schema manager produced no schema");
+  if (!schema)
+    throw new Error("schema manager produced no schema");
 
   const parser = new EdgeQLParser(
-    `insert User { id := <uuid>'00000000-0000-0000-0000-000000000001', email := 'x@y.z', name := 'X' }`,
+    `insert User { id := <uuid>'00000000-0000-0000-0000-000000000001', email := 'x@y.z', name := 'X' }`
   );
   const ast = parser.parse();
   const compiler = new EdgeQLCompiler(schema, { enableAccessControl: false });
   const result = compiler.compile(ast);
   assertEquals(result.ok, true, "compile should succeed");
-  if (!result.ok) return;
+  if (!result.ok)
+    return;
 
   const sql = new SQLCodeGenerator().generate(result.value);
   // The SQL should reference the `id` column and the literal uuid.
   assertEquals(
     sql.includes("id") && sql.includes("00000000-0000-0000-0000-000000000001"),
     true,
-    `expected id column + literal uuid in compiled SQL: ${sql}`,
+    `expected id column + literal uuid in compiled SQL: ${sql}`
   );
 });
 
@@ -421,11 +423,11 @@ Deno.test("Gel #3208: migration create is non-interactive (no answer-resolution 
   const surface = Object.getOwnPropertyNames(MigrationEngine.prototype);
   for (const method of surface) {
     assertEquals(
-      method.toLowerCase().includes("answer")
-        || method.toLowerCase().includes("question")
-        || method.toLowerCase().includes("prompt"),
+      method.toLowerCase().includes("answer") ||
+        method.toLowerCase().includes("question") ||
+        method.toLowerCase().includes("prompt"),
       false,
-      `MigrationEngine method ${JSON.stringify(method)} hints at interactive resolution; Disc's engine is non-interactive by design (Gel #3208 pin).`,
+      `MigrationEngine method ${JSON.stringify(method)} hints at interactive resolution; Disc's engine is non-interactive by design (Gel #3208 pin).`
     );
   }
 });
@@ -457,7 +459,7 @@ Deno.test("Gel #5132: alias drop emits no-op DDL — no internal bookkeeping typ
     }
   `;
   const ops = diff(before, after);
-  const aliasOps = ops.filter((o) => o.kind === "DropAlias");
+  const aliasOps = ops.filter(o => o.kind === "DropAlias");
   assertEquals(aliasOps.length, 1, "expected exactly one DropAlias op");
 
   const ddl = new DDLGenerator().generateDDL(aliasOps);
@@ -468,12 +470,12 @@ Deno.test("Gel #5132: alias drop emits no-op DDL — no internal bookkeeping typ
     assertEquals(
       stmt.trim().startsWith("--"),
       true,
-      `alias DDL must be a no-op comment, got: ${stmt}`,
+      `alias DDL must be a no-op comment, got: ${stmt}`
     );
     assertEquals(
       stmt.includes("__ObjectType__annotations"),
       false,
-      `Disc's alias DDL must not reference Gel's internal bookkeeping types: ${stmt}`,
+      `Disc's alias DDL must not reference Gel's internal bookkeeping types: ${stmt}`
     );
   }
 });
@@ -507,9 +509,9 @@ Deno.test("Gel #2910: every migration tx acquires pg_advisory_xact_lock (auto-re
         execute: (s: string) => {
           executed.push(s);
           return Promise.resolve();
-        },
+        }
       });
-    },
+    }
   };
 
   const engine = new MigrationEngine({
@@ -517,19 +519,19 @@ Deno.test("Gel #2910: every migration tx acquires pg_advisory_xact_lock (auto-re
     backupBeforeMigration: false,
     requireConfirmation: false,
     validateOperations: true,
-    connectionPool: fakePool as unknown as import("../lib/connection-pool.ts").ConnectionPool,
+    connectionPool: fakePool as unknown as import("../lib/connection-pool.ts").ConnectionPool
   } as unknown as Types.MigrationConfig);
 
   await (engine as unknown as { executeStatements(s: string[]): Promise<void>; })
     .executeStatements(["CREATE TABLE foo (id uuid primary key);"]);
 
-  const advisoryLock = executed.find((s) =>
-    s.includes("pg_advisory_xact_lock")
-    && s.includes(MIGRATION_ADVISORY_LOCK_KEY.toString())
+  const advisoryLock = executed.find(s =>
+    s.includes("pg_advisory_xact_lock") &&
+    s.includes(MIGRATION_ADVISORY_LOCK_KEY.toString())
   );
   assertEquals(
     advisoryLock !== undefined,
     true,
-    "every migration tx must acquire the advisory lock so SIGTERM recovery is automatic (lock releases when the connection drops)",
+    "every migration tx must acquire the advisory lock so SIGTERM recovery is automatic (lock releases when the connection drops)"
   );
 });

@@ -23,7 +23,7 @@ Deno.test("Server Config - Custom Values", () => {
     host: "0.0.0.0",
     port: 8080,
     enableCors: false,
-    maxConnections: 50,
+    maxConnections: 50
   });
 
   const config = server.get_config();
@@ -40,7 +40,7 @@ Deno.test("Protocol Handler - Validate EdgeQL Request", () => {
   // Valid request
   const validRequest = {
     query: "select User { name, email }",
-    variables: {},
+    variables: {}
   };
 
   const validErrors = handler.validateRequest(validRequest);
@@ -49,7 +49,7 @@ Deno.test("Protocol Handler - Validate EdgeQL Request", () => {
   // Invalid request - missing query
   const invalidRequest = {
     query: "",
-    variables: {},
+    variables: {}
   };
 
   const invalidErrors = handler.validateRequest(invalidRequest);
@@ -63,7 +63,7 @@ Deno.test("Protocol Handler - Query Too Large", () => {
   const largeQuery = "select User { name }".repeat(10000); // > 100KB
   const request = {
     query: largeQuery,
-    variables: {},
+    variables: {}
   };
 
   const errors = handler.validateRequest(request);
@@ -77,7 +77,7 @@ Deno.test("Protocol Handler - Syntax Validation", () => {
   // Unbalanced braces
   const unbalancedRequest = {
     query: "select User { name, email",
-    variables: {},
+    variables: {}
   };
 
   const errors = handler.validateRequest(unbalancedRequest);
@@ -104,7 +104,7 @@ Deno.test("Session Manager - Update Activity", async () => {
   const originalTime = session.lastActivity;
 
   // Wait a bit and update activity
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await new Promise(resolve => setTimeout(resolve, 10));
   manager.updateActivity(session.sessionId);
 
   const updated = manager.getSession(session.sessionId);
@@ -151,7 +151,7 @@ Deno.test("Transaction Manager - Begin Transaction", () => {
 
   const transaction = manager.beginTransaction("session_001", {
     isolationLevel: "serializable",
-    readOnly: true,
+    readOnly: true
   });
 
   assertEquals(transaction.sessionId, "session_001");
@@ -184,7 +184,7 @@ Deno.test("Protocol Handler - Mock Query Execution", async () => {
 
   const request = {
     query: "select User { name, email }",
-    variables: {},
+    variables: {}
   };
 
   const context = {
@@ -193,11 +193,11 @@ Deno.test("Protocol Handler - Mock Query Execution", async () => {
       database: "test_db",
       createdAt: new Date(),
       lastActivity: new Date(),
-      variables: {},
+      variables: {}
     },
     auth: { roles: [], permissions: [] },
     requestId: "test_request",
-    startedAt: new Date(),
+    startedAt: new Date()
   };
 
   const response = await handler.handleRequest(request, context);
@@ -213,7 +213,7 @@ Deno.test("Protocol Handler - Error Handling", async () => {
 
   const request = {
     query: "", // Invalid empty query
-    variables: {},
+    variables: {}
   };
 
   const context = {
@@ -222,11 +222,11 @@ Deno.test("Protocol Handler - Error Handling", async () => {
       database: "test_db",
       createdAt: new Date(),
       lastActivity: new Date(),
-      variables: {},
+      variables: {}
     },
     auth: { roles: [], permissions: [] },
     requestId: "test_request",
-    startedAt: new Date(),
+    startedAt: new Date()
   };
 
   const response = await handler.handleRequest(request, context);

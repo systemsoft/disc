@@ -20,7 +20,7 @@ function typeRef(name: string): TypeRef {
 function prop(
   name: string,
   type: string,
-  options?: { required?: boolean; multi?: boolean; },
+  options?: { required?: boolean; multi?: boolean; }
 ): PropertyDeclaration {
   return {
     kind: "PropertyDeclaration",
@@ -29,14 +29,14 @@ function prop(
     required: options?.required,
     multi: options?.multi,
     constraints: [],
-    annotations: [],
+    annotations: []
   };
 }
 
 function link(
   name: string,
   target: string,
-  options?: { required?: boolean; multi?: boolean; },
+  options?: { required?: boolean; multi?: boolean; }
 ): LinkDeclaration {
   return {
     kind: "LinkDeclaration",
@@ -45,18 +45,18 @@ function link(
     required: options?.required,
     multi: options?.multi,
     constraints: [],
-    annotations: [],
+    annotations: []
   };
 }
 
 function typeDef(
   name: string,
-  members: (PropertyDeclaration | LinkDeclaration)[],
+  members: (PropertyDeclaration | LinkDeclaration)[]
 ): TypeDeclaration {
   return {
     kind: "TypeDeclaration",
     name: ident(name),
-    members,
+    members
   };
 }
 
@@ -71,9 +71,9 @@ const simpleSchema: Module[] = [
   mod("default", [
     typeDef("User", [
       prop("name", "str", { required: true }),
-      prop("email", "str", { required: true }),
-    ]),
-  ]),
+      prop("email", "str", { required: true })
+    ])
+  ])
 ];
 
 const modifiedSchema: Module[] = [
@@ -81,28 +81,28 @@ const modifiedSchema: Module[] = [
     typeDef("User", [
       prop("name", "str", { required: true }),
       prop("email", "str", { required: true }),
-      prop("age", "int32"),
-    ]),
-  ]),
+      prop("age", "int32")
+    ])
+  ])
 ];
 
 const multiTypeSchema: Module[] = [
   mod("default", [
     typeDef("User", [
       prop("name", "str", { required: true }),
-      prop("email", "str", { required: true }),
+      prop("email", "str", { required: true })
     ]),
     typeDef("Post", [
       prop("title", "str", { required: true }),
       prop("body", "str", { required: true }),
-      link("author", "User", { required: true }),
+      link("author", "User", { required: true })
     ]),
     typeDef("Comment", [
       prop("body", "str", { required: true }),
       link("author", "User", { required: true }),
-      link("post", "Post", { required: true }),
-    ]),
-  ]),
+      link("post", "Post", { required: true })
+    ])
+  ])
 ];
 
 const largeSchema: Module[] = [
@@ -114,9 +114,9 @@ const largeSchema: Module[] = [
         prop("name", "str", { required: true }),
         prop("description", "str"),
         prop("createdAt", "datetime", { required: true }),
-        prop("updatedAt", "datetime"),
-      ])),
-  ),
+        prop("updatedAt", "datetime")
+      ]))
+  )
 ];
 
 const differ = new SchemaDiffer();

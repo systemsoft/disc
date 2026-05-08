@@ -23,11 +23,11 @@ function makeContext(): QueryContext {
       database: "test_db",
       createdAt: new Date(),
       lastActivity: new Date(),
-      variables: {},
+      variables: {}
     },
     auth: { roles: [], permissions: [] },
     requestId: "test_request",
-    startedAt: new Date(),
+    startedAt: new Date()
   };
 }
 
@@ -44,16 +44,16 @@ function makeSlowPool(delayMs: number): {
 
   const pool = {
     query: () =>
-      new Promise((resolve) => {
+      new Promise(resolve => {
         const id = setTimeout(
           () => resolve({ rows: [{ id: 1 }], rowCount: 1 }),
-          delayMs,
+          delayMs
         );
         timerIds.push(id);
       }),
     queryWithTimeout: ConnectionPool.prototype.queryWithTimeout,
     initialize: () => Promise.resolve(),
-    close: () => Promise.resolve(),
+    close: () => Promise.resolve()
   } as unknown as ConnectionPool;
 
   return {
@@ -63,7 +63,7 @@ function makeSlowPool(delayMs: number): {
         clearTimeout(id);
       }
       timerIds.length = 0;
-    },
+    }
   };
 }
 
@@ -75,7 +75,7 @@ function makeFastPool(): ConnectionPool {
     query: () => Promise.resolve({ rows: [{ id: 1 }], rowCount: 1 }),
     queryWithTimeout: ConnectionPool.prototype.queryWithTimeout,
     initialize: () => Promise.resolve(),
-    close: () => Promise.resolve(),
+    close: () => Promise.resolve()
   } as unknown as ConnectionPool;
 }
 
@@ -98,12 +98,12 @@ Deno.test(
     assert(caught !== undefined, "Expected an error to be thrown");
     assert(
       caught instanceof QueryTimeoutError,
-      `Expected QueryTimeoutError, got ${caught?.constructor.name}`,
+      `Expected QueryTimeoutError, got ${caught?.constructor.name}`
     );
     assertEquals(caught.timeoutMs, 50);
     assertStringIncludes(caught.sql, "SELECT pg_sleep(10)");
     assertStringIncludes(caught.message, "timed out after 50ms");
-  },
+  }
 );
 
 Deno.test(
@@ -114,12 +114,12 @@ Deno.test(
     const result = await pool.queryWithTimeout(
       "SELECT 1",
       [],
-      5000,
+      5000
     );
 
     assertEquals(result.rowCount, 1);
     assertEquals(result.rows[0].id, 1);
-  },
+  }
 );
 
 Deno.test(
@@ -132,7 +132,7 @@ Deno.test(
 
     const result2 = await pool.queryWithTimeout("SELECT 1", [], -1);
     assertEquals(result2.rowCount, 1);
-  },
+  }
 );
 
 // --- EdgeQLProtocolHandler timeout integration ---
@@ -144,28 +144,28 @@ Deno.test(
 
     const handler = new EdgeQLProtocolHandler({
       connectionPool: slowPool,
-      requestTimeout: 50,
+      requestTimeout: 50
     });
 
     const request = {
       query: "select User { name, email }",
-      variables: {},
+      variables: {}
     };
 
     try {
       const response = await handler.handleRequest(
         request,
-        makeContext(),
+        makeContext()
       );
 
       // Must have errors
       assert(
         response.errors !== undefined,
-        "Expected errors in response",
+        "Expected errors in response"
       );
       assert(
         response.errors!.length > 0,
-        "Expected at least one error",
+        "Expected at least one error"
       );
       assertEquals(response.errors![0].extensions?.code, "TIMEOUT");
       assertStringIncludes(response.errors![0].message, "timed out");
@@ -173,12 +173,12 @@ Deno.test(
       // Must NOT have data
       assert(
         response.data === undefined,
-        "Expected no data when query times out",
+        "Expected no data when query times out"
       );
     } finally {
       cleanup();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -188,29 +188,29 @@ Deno.test(
 
     const handler = new EdgeQLProtocolHandler({
       connectionPool: fastPool,
-      requestTimeout: 5000,
+      requestTimeout: 5000
     });
 
     const request = {
       query: "select User { name, email }",
-      variables: {},
+      variables: {}
     };
 
     const response = await handler.handleRequest(
       request,
-      makeContext(),
+      makeContext()
     );
 
     // Should succeed
     assert(
-      response.errors === undefined
-        || response.errors.every(
-          (e) => e.extensions?.code === "WARNING",
+      response.errors === undefined ||
+        response.errors.every(
+          e => e.extensions?.code === "WARNING"
         ),
-      "Expected no real errors",
+      "Expected no real errors"
     );
     assert(response.data !== undefined, "Expected data in response");
-  },
+  }
 );
 
 // --- HTTP-level timeout tests ---
@@ -227,9 +227,9 @@ function createSlowProtocolHandler(delayMs: number): {
   const handler: ProtocolHandler = {
     async handleRequest(
       _request: QueryRequest,
-      _context: QueryContext,
+      _context: QueryContext
     ): Promise<QueryResponse> {
-      await new Promise<void>((resolve) => {
+      await new Promise<void>(resolve => {
         const id = setTimeout(resolve, delayMs);
         timerIds.push(id);
       });
@@ -237,7 +237,7 @@ function createSlowProtocolHandler(delayMs: number): {
     },
     validateRequest(_request: QueryRequest): QueryError[] {
       return [];
-    },
+    }
   };
 
   return {
@@ -247,7 +247,7 @@ function createSlowProtocolHandler(delayMs: number): {
         clearTimeout(id);
       }
       timerIds.length = 0;
-    },
+    }
   };
 }
 
@@ -255,18 +255,18 @@ function createFastProtocolHandler(): ProtocolHandler {
   return {
     handleRequest(
       _request: QueryRequest,
-      _context: QueryContext,
+      _context: QueryContext
     ): Promise<QueryResponse> {
       return Promise.resolve({ data: { ok: true } });
     },
     validateRequest(_request: QueryRequest): QueryError[] {
       return [];
-    },
+    }
   };
 }
 
 function createTestConfig(
-  overrides: Partial<ServerConfig> = {},
+  overrides: Partial<ServerConfig> = {}
 ): ServerConfig {
   return {
     host: "localhost",
@@ -276,7 +276,7 @@ function createTestConfig(
     requestTimeout: 5000,
     enableCors: false,
     enableWebsockets: false,
-    ...overrides,
+    ...overrides
   };
 }
 
@@ -287,7 +287,7 @@ Deno.test(
     const config = createTestConfig({ requestTimeout: 50 });
     const server = new HttpServer({
       config,
-      protocolHandler: handler,
+      protocolHandler: handler
     });
 
     const abortController = new AbortController();
@@ -296,11 +296,11 @@ Deno.test(
         hostname: "127.0.0.1",
         port: 0,
         signal: abortController.signal,
-        onListen() {},
+        onListen() {}
       },
       (request: Request, info: Deno.ServeHandlerInfo) => {
         return (server as any).handleRequest(request, info);
-      },
+      }
     );
 
     const port = testServer.addr.port;
@@ -312,9 +312,9 @@ Deno.test(
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            query: "select User { name }",
-          }),
-        },
+            query: "select User { name }"
+          })
+        }
       );
 
       assertEquals(response.status, 408);
@@ -329,7 +329,7 @@ Deno.test(
       await testServer.finished;
       await server.stop();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -339,7 +339,7 @@ Deno.test(
     const config = createTestConfig({ requestTimeout: 5000 });
     const server = new HttpServer({
       config,
-      protocolHandler: handler,
+      protocolHandler: handler
     });
 
     const abortController = new AbortController();
@@ -348,11 +348,11 @@ Deno.test(
         hostname: "127.0.0.1",
         port: 0,
         signal: abortController.signal,
-        onListen() {},
+        onListen() {}
       },
       (request: Request, info: Deno.ServeHandlerInfo) => {
         return (server as any).handleRequest(request, info);
-      },
+      }
     );
 
     const port = testServer.addr.port;
@@ -364,9 +364,9 @@ Deno.test(
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            query: "select User { name }",
-          }),
-        },
+            query: "select User { name }"
+          })
+        }
       );
 
       assertEquals(response.status, 200);
@@ -379,7 +379,7 @@ Deno.test(
       await testServer.finished;
       await server.stop();
     }
-  },
+  }
 );
 
 // --- QueryTimeoutError unit tests ---
@@ -389,7 +389,7 @@ Deno.test(
   () => {
     const error = new QueryTimeoutError(
       "SELECT * FROM big_table",
-      3000,
+      3000
     );
 
     assertEquals(error.name, "QueryTimeoutError");
@@ -401,5 +401,5 @@ Deno.test(
     assertStringIncludes(formatted, "QueryTimeoutError");
     assertStringIncludes(formatted, "SELECT * FROM big_table");
     assertStringIncludes(formatted, "Timeout: 3000ms");
-  },
+  }
 );

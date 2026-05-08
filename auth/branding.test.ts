@@ -24,7 +24,7 @@ Deno.test("validateBranding rejects empty-string appName", () => {
   assertThrows(
     () => validateBranding({ appName: "" }),
     Error,
-    "non-empty string",
+    "non-empty string"
   );
 });
 
@@ -33,7 +33,7 @@ Deno.test("validateBranding rejects appName > 80 chars", () => {
   assertThrows(
     () => validateBranding({ appName: tooLong }),
     Error,
-    "exceeds 80 chars",
+    "exceeds 80 chars"
   );
 });
 
@@ -41,7 +41,7 @@ Deno.test("validateBranding rejects CR/LF in appName (header-splice attack)", ()
   assertThrows(
     () => validateBranding({ appName: "Acme\r\nBcc: attacker@evil" }),
     Error,
-    "control characters",
+    "control characters"
   );
 });
 
@@ -49,7 +49,7 @@ Deno.test("validateBranding rejects bare \\r in appName", () => {
   assertThrows(
     () => validateBranding({ appName: "Acme\rspliced" }),
     Error,
-    "control characters",
+    "control characters"
   );
 });
 
@@ -57,7 +57,7 @@ Deno.test("validateBranding rejects bare \\n in appName", () => {
   assertThrows(
     () => validateBranding({ appName: "Acme\nspliced" }),
     Error,
-    "control characters",
+    "control characters"
   );
 });
 
@@ -65,7 +65,7 @@ Deno.test("validateBranding rejects NUL in appName", () => {
   assertThrows(
     () => validateBranding({ appName: "Acme\x00null" }),
     Error,
-    "control characters",
+    "control characters"
   );
 });
 
@@ -89,7 +89,7 @@ Deno.test("validateBranding rejects http://example.com logoUrl", () => {
   assertThrows(
     () => validateBranding({ logoUrl: "http://example.com/logo.png" }),
     Error,
-    "https://",
+    "https://"
   );
 });
 
@@ -97,7 +97,7 @@ Deno.test("validateBranding rejects javascript: logoUrl (XSS)", () => {
   assertThrows(
     () => validateBranding({ logoUrl: "javascript:alert(1)" }),
     Error,
-    "https://",
+    "https://"
   );
 });
 
@@ -105,7 +105,7 @@ Deno.test("validateBranding rejects data: logoUrl", () => {
   assertThrows(
     () => validateBranding({ logoUrl: "data:image/png;base64,abc" }),
     Error,
-    "https://",
+    "https://"
   );
 });
 
@@ -113,14 +113,14 @@ Deno.test("validateBranding rejects file: logoUrl", () => {
   assertThrows(
     () => validateBranding({ logoUrl: "file:///etc/passwd" }),
     Error,
-    "https://",
+    "https://"
   );
 });
 
 Deno.test("validateBranding rejects unparseable logoUrl", () => {
   assertThrows(
     () => validateBranding({ logoUrl: "not a url" }),
-    Error,
+    Error
   );
 });
 
@@ -128,7 +128,7 @@ Deno.test("validateBranding applies same scheme rules to darkLogoUrl", () => {
   assertThrows(
     () => validateBranding({ darkLogoUrl: "javascript:void(0)" }),
     Error,
-    "https://",
+    "https://"
   );
 });
 
@@ -137,7 +137,7 @@ Deno.test("validateBranding rejects logoUrl > 2048 chars", () => {
   assertThrows(
     () => validateBranding({ logoUrl: huge }),
     Error,
-    "exceeds 2048 chars",
+    "exceeds 2048 chars"
   );
 });
 
@@ -155,7 +155,7 @@ Deno.test("validateBranding rejects rgb() brandColor", () => {
   assertThrows(
     () => validateBranding({ brandColor: "rgb(0, 170, 255)" }),
     Error,
-    "hex color",
+    "hex color"
   );
 });
 
@@ -163,7 +163,7 @@ Deno.test("validateBranding rejects named brandColor", () => {
   assertThrows(
     () => validateBranding({ brandColor: "blue" }),
     Error,
-    "hex color",
+    "hex color"
   );
 });
 
@@ -171,7 +171,7 @@ Deno.test("validateBranding rejects hex without leading #", () => {
   assertThrows(
     () => validateBranding({ brandColor: "00aaff" }),
     Error,
-    "hex color",
+    "hex color"
   );
 });
 
@@ -181,7 +181,7 @@ Deno.test("validateBranding rejects 4-digit hex brandColor", () => {
   assertThrows(
     () => validateBranding({ brandColor: "#abcd" }),
     Error,
-    "hex color",
+    "hex color"
   );
 });
 
@@ -224,7 +224,7 @@ Deno.test("validateBranding rejects oklch with comma-separated channels", () => 
   assertThrows(
     () => validateBranding({ brandColor: "oklch(70%, 0.15, 200)" }),
     Error,
-    "oklch",
+    "oklch"
   );
 });
 
@@ -232,7 +232,7 @@ Deno.test("validateBranding rejects oklch with L > 100%", () => {
   assertThrows(
     () => validateBranding({ brandColor: "oklch(110% 0.15 200)" }),
     Error,
-    "lightness",
+    "lightness"
   );
 });
 
@@ -240,7 +240,7 @@ Deno.test("validateBranding rejects oklch with unitless L > 1", () => {
   assertThrows(
     () => validateBranding({ brandColor: "oklch(1.5 0.15 200)" }),
     Error,
-    "lightness",
+    "lightness"
   );
 });
 
@@ -250,7 +250,7 @@ Deno.test("validateBranding rejects oklch with chroma > 0.5", () => {
   assertThrows(
     () => validateBranding({ brandColor: "oklch(70% 1.5 200)" }),
     Error,
-    "chroma",
+    "chroma"
   );
 });
 
@@ -260,7 +260,7 @@ Deno.test("validateBranding rejects oklch with hue > 360", () => {
   assertThrows(
     () => validateBranding({ brandColor: "oklch(70% 0.15 400)" }),
     Error,
-    "hue",
+    "hue"
   );
 });
 
@@ -270,7 +270,7 @@ Deno.test("validateBranding rejects oklch with negative chroma", () => {
   assertThrows(
     () => validateBranding({ brandColor: "oklch(70% -0.1 200)" }),
     Error,
-    "oklch",
+    "oklch"
   );
 });
 
@@ -278,7 +278,7 @@ Deno.test("validateBranding rejects oklch with alpha > 1", () => {
   assertThrows(
     () => validateBranding({ brandColor: "oklch(70% 0.15 200 / 1.5)" }),
     Error,
-    "alpha",
+    "alpha"
   );
 });
 
@@ -286,7 +286,7 @@ Deno.test("validateBranding rejects malformed oklch shape", () => {
   assertThrows(
     () => validateBranding({ brandColor: "oklch(70% 0.15)" }),
     Error,
-    "oklch",
+    "oklch"
   );
 });
 
@@ -312,7 +312,7 @@ Deno.test("validateMagicLinkUrlTemplate rejects template missing {token}", () =>
   assertThrows(
     () => validateMagicLinkUrlTemplate("https://app.example.com/login"),
     Error,
-    "{token}",
+    "{token}"
   );
 });
 
@@ -320,10 +320,10 @@ Deno.test("validateMagicLinkUrlTemplate rejects template with two {token}", () =
   assertThrows(
     () =>
       validateMagicLinkUrlTemplate(
-        "https://app.example.com/{token}?also={token}",
+        "https://app.example.com/{token}?also={token}"
       ),
     Error,
-    "exactly one",
+    "exactly one"
   );
 });
 
@@ -331,14 +331,14 @@ Deno.test("validateMagicLinkUrlTemplate rejects http:// for non-localhost host",
   assertThrows(
     () => validateMagicLinkUrlTemplate("http://example.com/auth/magic?t={token}"),
     Error,
-    "https://",
+    "https://"
   );
 });
 
 Deno.test("validateMagicLinkUrlTemplate rejects javascript: scheme", () => {
   assertThrows(
     () => validateMagicLinkUrlTemplate("javascript:alert({token})"),
-    Error,
+    Error
   );
 });
 
@@ -346,7 +346,7 @@ Deno.test("validateMagicLinkUrlTemplate rejects empty string", () => {
   assertThrows(
     () => validateMagicLinkUrlTemplate(""),
     Error,
-    "non-empty",
+    "non-empty"
   );
 });
 
@@ -354,10 +354,10 @@ Deno.test("validateMagicLinkUrlTemplate rejects CRLF in template", () => {
   assertThrows(
     () =>
       validateMagicLinkUrlTemplate(
-        "https://example.com/?t={token}\r\nX-Bcc: x",
+        "https://example.com/?t={token}\r\nX-Bcc: x"
       ),
     Error,
-    "control characters",
+    "control characters"
   );
 });
 
@@ -376,7 +376,7 @@ Deno.test("buildMagicLinkUrl strips trailing slash from baseUrl", () => {
 Deno.test("buildMagicLinkUrl substitutes {token} in template", () => {
   const url = buildMagicLinkUrl("abc123", {
     baseUrl: "https://app.example.com",
-    template: "https://other.example.com/login/{token}",
+    template: "https://other.example.com/login/{token}"
   });
   assertEquals(url, "https://other.example.com/login/abc123");
 });
@@ -384,7 +384,7 @@ Deno.test("buildMagicLinkUrl substitutes {token} in template", () => {
 Deno.test("buildMagicLinkUrl URL-encodes tokens with special chars", () => {
   const url = buildMagicLinkUrl("a/b+c=d", {
     baseUrl: "https://app.example.com",
-    template: "https://other.example.com/login?t={token}",
+    template: "https://other.example.com/login?t={token}"
   });
   assertEquals(url, "https://other.example.com/login?t=a%2Fb%2Bc%3Dd");
 });

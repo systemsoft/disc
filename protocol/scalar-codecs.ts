@@ -34,7 +34,8 @@ const textDecoder = new TextDecoder();
  * `std::*` form used by the codec table. Falls back to the input string.
  */
 export function canonicalScalarName(name: string): string {
-  if (name.includes("::")) return name;
+  if (name.includes("::"))
+    return name;
   // Common short names — keep aligned with WELL_KNOWN_TYPES in typedesc.ts.
   const map: Record<string, string> = {
     bigint: "std::bigint",
@@ -50,7 +51,7 @@ export function canonicalScalarName(name: string): string {
     int64: "std::int64",
     json: "std::json",
     str: "std::str",
-    uuid: "std::uuid",
+    uuid: "std::uuid"
   };
   return map[name] ?? name;
 }
@@ -136,8 +137,10 @@ function encodeDatetime(value: unknown): Uint8Array {
 }
 
 function encodeBytes(value: unknown): Uint8Array {
-  if (value instanceof Uint8Array) return new Uint8Array(value);
-  if (typeof value === "string") return textEncoder.encode(value);
+  if (value instanceof Uint8Array)
+    return new Uint8Array(value);
+  if (typeof value === "string")
+    return textEncoder.encode(value);
   throw new TypeError(`expected Uint8Array|string for bytes, got ${typeof value}`);
 }
 
@@ -192,14 +195,15 @@ function decodeUuid(bytes: Uint8Array): string {
   if (bytes.length !== 16) {
     throw new Error(`uuid bytes must be 16, got ${bytes.length}`);
   }
-  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  const hex = Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
   return [
     hex.slice(0, 8),
     hex.slice(8, 12),
     hex.slice(12, 16),
     hex.slice(16, 20),
-    hex.slice(20, 32),
-  ].join("-");
+    hex.slice(20, 32)
+  ]
+    .join("-");
 }
 
 function decodeDatetime(bytes: Uint8Array): Date {
@@ -242,7 +246,7 @@ const ENCODERS: Record<string, ScalarEncoder> = {
   "std::int64": encodeInt64,
   "std::json": encodeJson,
   "std::str": encodeStr,
-  "std::uuid": encodeUuid,
+  "std::uuid": encodeUuid
 };
 
 const DECODERS: Record<string, ScalarDecoder> = {
@@ -256,7 +260,7 @@ const DECODERS: Record<string, ScalarDecoder> = {
   "std::int64": decodeInt64,
   "std::json": decodeJson,
   "std::str": decodeStr,
-  "std::uuid": decodeUuid,
+  "std::uuid": decodeUuid
 };
 
 /** Encode `value` as the Gel-wire raw bytes for `eqlType`. */

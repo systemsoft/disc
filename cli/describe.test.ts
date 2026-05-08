@@ -12,8 +12,8 @@ import { describeAllTypes, describeType } from "./describe.ts";
 
 function buildSchema(types: TypeDef[]): Schema {
   return {
-    types: new Map(types.map((t) => [t.name, t])),
-    functions: new Map(),
+    types: new Map(types.map(t => [t.name, t])),
+    functions: new Map()
   };
 }
 
@@ -26,7 +26,7 @@ function makeProperty(p: Partial<PropertyDef> & { name: string; }): PropertyDef 
     multi: false,
     name: p.name,
     required: false,
-    type: "str",
+    type: "str"
   };
   return { ...defaults, ...p };
 }
@@ -36,7 +36,7 @@ function makeLink(l: Partial<LinkDef> & { name: string; target: string; }): Link
     multi: false,
     name: l.name,
     required: false,
-    target: l.target,
+    target: l.target
   };
   return { ...defaults, ...l };
 }
@@ -53,7 +53,7 @@ Deno.test("describeAllTypes - groups by module with default first", () => {
       tableName: "users",
       properties: new Map(),
       links: new Map(),
-      module: "default",
+      module: "default"
     },
     {
       name: "payment::Payment",
@@ -61,7 +61,7 @@ Deno.test("describeAllTypes - groups by module with default first", () => {
       tableName: "payments",
       properties: new Map(),
       links: new Map(),
-      module: "payment",
+      module: "payment"
     },
     {
       name: "api::Key",
@@ -69,8 +69,8 @@ Deno.test("describeAllTypes - groups by module with default first", () => {
       tableName: "keys",
       properties: new Map(),
       links: new Map(),
-      module: "api",
-    },
+      module: "api"
+    }
   ]);
 
   const out = describeAllTypes(schema);
@@ -100,7 +100,7 @@ Deno.test("describeAllTypes - distinguishes abstract and enum kinds", () => {
       tableName: "shapes",
       properties: new Map(),
       links: new Map(),
-      abstract: true,
+      abstract: true
     },
     {
       name: "Status",
@@ -108,8 +108,8 @@ Deno.test("describeAllTypes - distinguishes abstract and enum kinds", () => {
       tableName: "status",
       properties: new Map(),
       links: new Map(),
-      enumValues: ["active", "inactive"],
-    },
+      enumValues: ["active", "inactive"]
+    }
   ]);
   const out = describeAllTypes(schema);
   assertStringIncludes(out, "Shape");
@@ -135,8 +135,8 @@ Deno.test("describeType - resolves bare name in default module", () => {
       tableName: "users",
       module: "default",
       properties: new Map([["name", makeProperty({ name: "name", required: true })]]),
-      links: new Map(),
-    },
+      links: new Map()
+    }
   ]);
   const out = describeType(schema, "User");
   assert(out !== null);
@@ -158,8 +158,8 @@ Deno.test("describeType - emits full property metadata", () => {
             required: true,
             edgeqlType: "str",
             constraints: [{ name: "exclusive" }, { name: "max_length", args: ["255"] }],
-            annotations: { description: "Login email" },
-          }),
+            annotations: { description: "Login email" }
+          })
         ],
         ["name", makeProperty({ name: "name", required: true })],
         [
@@ -168,20 +168,20 @@ Deno.test("describeType - emits full property metadata", () => {
             name: "createdAt",
             edgeqlType: "datetime",
             readonly: true,
-            hasDefault: true,
-          }),
+            hasDefault: true
+          })
         ],
         [
           "postCount",
           makeProperty({
             name: "postCount",
             edgeqlType: "int32",
-            computed: true,
-          }),
-        ],
+            computed: true
+          })
+        ]
       ]),
-      links: new Map(),
-    },
+      links: new Map()
+    }
   ]);
 
   const out = describeType(schema, "User")!;
@@ -212,10 +212,10 @@ Deno.test("describeType - emits link cardinality and target", () => {
             name: "posts",
             target: "Post",
             multi: true,
-            backlink: "author",
-          }),
-        ],
-      ]),
+            backlink: "author"
+          })
+        ]
+      ])
     },
     {
       name: "Post",
@@ -228,11 +228,11 @@ Deno.test("describeType - emits link cardinality and target", () => {
           makeLink({
             name: "author",
             target: "User",
-            required: true,
-          }),
-        ],
-      ]),
-    },
+            required: true
+          })
+        ]
+      ])
+    }
   ]);
 
   const userOut = describeType(schema, "User")!;
@@ -246,7 +246,7 @@ Deno.test("describeType - emits link cardinality and target", () => {
 Deno.test("describeType - emits indexes", () => {
   const indexes: IndexDef[] = [
     { name: "users_email_idx", expression: ".email" },
-    { expression: "(.firstName, .lastName)" },
+    { expression: "(.firstName, .lastName)" }
   ];
   const schema = buildSchema([
     {
@@ -255,8 +255,8 @@ Deno.test("describeType - emits indexes", () => {
       tableName: "users",
       properties: new Map(),
       links: new Map(),
-      indexes,
-    },
+      indexes
+    }
   ]);
   const out = describeType(schema, "User")!;
   assertStringIncludes(out, "Indexes:");
@@ -270,14 +270,14 @@ Deno.test("describeType - emits access policies", () => {
       name: "owners_only",
       objectType: "Note",
       actions: [
-        { allow: true, operations: ["select", "update"] },
-      ],
+        { allow: true, operations: ["select", "update"] }
+      ]
     },
     {
       name: "block_delete",
       objectType: "Note",
-      actions: [{ allow: false, operations: ["delete"] }],
-    },
+      actions: [{ allow: false, operations: ["delete"] }]
+    }
   ];
   const schema = buildSchema([
     {
@@ -286,8 +286,8 @@ Deno.test("describeType - emits access policies", () => {
       tableName: "notes",
       properties: new Map(),
       links: new Map(),
-      accessPolicies: policies,
-    },
+      accessPolicies: policies
+    }
   ]);
   const out = describeType(schema, "Note")!;
   assertStringIncludes(out, "Access policies:");
@@ -307,7 +307,7 @@ Deno.test("describeType - reports abstract, parent, subtypes, discriminator", ()
       subtypes: ["Circle", "Square"],
       discriminatorColumn: "__type__",
       properties: new Map(),
-      links: new Map(),
+      links: new Map()
     },
     {
       name: "Circle",
@@ -315,8 +315,8 @@ Deno.test("describeType - reports abstract, parent, subtypes, discriminator", ()
       tableName: "circles",
       parentTypes: ["Shape"],
       properties: new Map(),
-      links: new Map(),
-    },
+      links: new Map()
+    }
   ]);
   const shape = describeType(schema, "Shape")!;
   assertStringIncludes(shape, "Type: abstract type Shape");
@@ -335,8 +335,8 @@ Deno.test("describeType - emits enum values for scalar enum types", () => {
       tableName: "status",
       properties: new Map(),
       links: new Map(),
-      enumValues: ["active", "inactive", "pending"],
-    },
+      enumValues: ["active", "inactive", "pending"]
+    }
   ]);
   const out = describeType(schema, "Status")!;
   assertStringIncludes(out, "Type: enum Status");
@@ -351,10 +351,10 @@ Deno.test("describeType - omits implicit `id` property", () => {
       tableName: "users",
       properties: new Map([
         ["id", makeProperty({ name: "id", edgeqlType: "uuid", required: true })],
-        ["name", makeProperty({ name: "name", required: true })],
+        ["name", makeProperty({ name: "name", required: true })]
       ]),
-      links: new Map(),
-    },
+      links: new Map()
+    }
   ]);
   const out = describeType(schema, "User")!;
   // `id` is implicit in Disc/Gel SDL — describer must not show it.
@@ -380,10 +380,10 @@ Deno.test("describeType - emits triggers when present", () => {
           timing: "after",
           events: ["insert"],
           scope: "each",
-          body: "...",
-        },
-      ],
-    },
+          body: "..."
+        }
+      ]
+    }
   ]);
   const out = describeType(schema, "Post")!;
   assertStringIncludes(out, "Triggers:");

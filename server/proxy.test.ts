@@ -17,7 +17,7 @@ const localhostInfo: Deno.ServeHandlerInfo = {
   // deno-lint-ignore no-explicit-any
   remoteAddr: { transport: "tcp", hostname: "10.0.0.5", port: 12345 } as any,
   // deno-lint-ignore no-explicit-any
-  completed: Promise.resolve() as any,
+  completed: Promise.resolve() as any
 };
 
 // =========================================================================
@@ -33,7 +33,7 @@ Deno.test("getClientIp - trustProxy=false ignores X-Forwarded-For (security defa
 
 Deno.test("getClientIp - trustProxy=true honors X-Forwarded-For (left-most)", () => {
   const req = makeRequest({
-    "x-forwarded-for": "203.0.113.7, 198.51.100.1, 10.0.0.5",
+    "x-forwarded-for": "203.0.113.7, 198.51.100.1, 10.0.0.5"
   });
   assertEquals(getClientIp(req, localhostInfo, true), "203.0.113.7");
 });

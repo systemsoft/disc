@@ -28,12 +28,12 @@ export const SEMANTIC_TOKEN_TYPES = [
   "string",
   "number",
   "comment",
-  "operator",
+  "operator"
 ] as const;
 
 export const SEMANTIC_TOKEN_LEGEND = {
   tokenTypes: SEMANTIC_TOKEN_TYPES,
-  tokenModifiers: [] as readonly string[],
+  tokenModifiers: [] as readonly string[]
 };
 
 type SemanticType = typeof SEMANTIC_TOKEN_TYPES[number];
@@ -62,7 +62,8 @@ function categorize(tok: Token): SemanticType | null {
       // are camelCase. The first letter's case is a strong-enough
       // signal for v1.
       const first = tok.value[0];
-      if (first >= "A" && first <= "Z") return "type";
+      if (first >= "A" && first <= "Z")
+        return "type";
       return "property";
     }
     // Whitespace / newlines / EOF / punctuation aren't useful semantic
@@ -91,11 +92,12 @@ function categorize(tok: Token): SemanticType | null {
 }
 
 const TYPE_TO_INDEX: ReadonlyMap<SemanticType, number> = new Map(
-  SEMANTIC_TOKEN_TYPES.map((t, i) => [t, i] as const),
+  SEMANTIC_TOKEN_TYPES.map((t, i) => [t, i] as const)
 );
 
 export function provideSemanticTokens(text: string): SemanticTokensResult {
-  if (text.length === 0) return { data: [] };
+  if (text.length === 0)
+    return { data: [] };
 
   let tokens: Token[];
   try {
@@ -112,7 +114,8 @@ export function provideSemanticTokens(text: string): SemanticTokensResult {
 
   for (const tok of tokens) {
     const cat = categorize(tok);
-    if (cat === null) continue;
+    if (cat === null)
+      continue;
     // Lexer positions are 1-indexed; LSP positions are 0-indexed.
     const line = Math.max(0, tok.line - 1);
     const startCol = Math.max(0, tok.column - 1);
@@ -122,7 +125,8 @@ export function provideSemanticTokens(text: string): SemanticTokensResult {
     // would apply to BACKTICK_IDENT but that already counts the
     // backticks in `tok.value`.
     const length = cat === "string" ? tok.value.length + 2 : tok.value.length;
-    if (length === 0) continue;
+    if (length === 0)
+      continue;
 
     const deltaLine = line - prevLine;
     const deltaStart = deltaLine === 0 ? startCol - prevStart : startCol;

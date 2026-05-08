@@ -24,17 +24,17 @@ function createTestSchema(): Module[] {
               name: { kind: "Identifier", value: "name" },
               type: {
                 kind: "TypeRef",
-                name: { kind: "QualifiedName", parts: ["str"] },
+                name: { kind: "QualifiedName", parts: ["str"] }
               },
               required: true,
-              multi: false,
+              multi: false
             },
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "email" },
               type: {
                 kind: "TypeRef",
-                name: { kind: "QualifiedName", parts: ["str"] },
+                name: { kind: "QualifiedName", parts: ["str"] }
               },
               required: true,
               multi: false,
@@ -42,14 +42,14 @@ function createTestSchema(): Module[] {
                 {
                   kind: "Constraint",
                   name: { kind: "Identifier", value: "exclusive" },
-                  on: { kind: "PathExpression", path: [".email"] },
-                },
-              ],
-            },
-          ],
-        },
-      ],
-    },
+                  on: { kind: "PathExpression", path: [".email"] }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
   ];
 }
 
@@ -67,17 +67,17 @@ function createExtendedTestSchema(): Module[] {
               name: { kind: "Identifier", value: "name" },
               type: {
                 kind: "TypeRef",
-                name: { kind: "QualifiedName", parts: ["str"] },
+                name: { kind: "QualifiedName", parts: ["str"] }
               },
               required: true,
-              multi: false,
+              multi: false
             },
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "email" },
               type: {
                 kind: "TypeRef",
-                name: { kind: "QualifiedName", parts: ["str"] },
+                name: { kind: "QualifiedName", parts: ["str"] }
               },
               required: true,
               multi: false,
@@ -85,22 +85,22 @@ function createExtendedTestSchema(): Module[] {
                 {
                   kind: "Constraint",
                   name: { kind: "Identifier", value: "exclusive" },
-                  on: { kind: "PathExpression", path: [".email"] },
-                },
-              ],
+                  on: { kind: "PathExpression", path: [".email"] }
+                }
+              ]
             },
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "active" },
               type: {
                 kind: "TypeRef",
-                name: { kind: "QualifiedName", parts: ["bool"] },
+                name: { kind: "QualifiedName", parts: ["bool"] }
               },
               required: false,
               multi: false,
-              default: { kind: "Literal", type: "boolean", value: true },
-            },
-          ],
+              default: { kind: "Literal", type: "boolean", value: true }
+            }
+          ]
         },
         {
           kind: "TypeDeclaration",
@@ -111,25 +111,25 @@ function createExtendedTestSchema(): Module[] {
               name: { kind: "Identifier", value: "title" },
               type: {
                 kind: "TypeRef",
-                name: { kind: "QualifiedName", parts: ["str"] },
+                name: { kind: "QualifiedName", parts: ["str"] }
               },
               required: true,
-              multi: false,
+              multi: false
             },
             {
               kind: "LinkDeclaration",
               name: { kind: "Identifier", value: "author" },
               target: {
                 kind: "TypeRef",
-                name: { kind: "QualifiedName", parts: ["User"] },
+                name: { kind: "QualifiedName", parts: ["User"] }
               },
               required: true,
-              multi: false,
-            },
-          ],
-        },
-      ],
-    },
+              multi: false
+            }
+          ]
+        }
+      ]
+    }
   ];
 }
 
@@ -140,7 +140,7 @@ const config: Types.MigrationConfig = {
   dryRun: true,
   autoApprove: false,
   backupBeforeMigration: true,
-  rollbackOnError: true,
+  rollbackOnError: true
 };
 
 Deno.test("Schema Differ - Add Type", () => {
@@ -184,7 +184,7 @@ Deno.test("Schema Differ - Add Property", () => {
   // Should find: alter User (add active property) and create Post type
   assertEquals(operations.length, 2);
 
-  const alterOp = operations.find((op) => op.kind === "AlterType") as Types.AlterTypeOperation;
+  const alterOp = operations.find(op => op.kind === "AlterType") as Types.AlterTypeOperation;
   assertEquals(alterOp.typeName, "User");
   assertEquals(alterOp.operations.length, 1);
   assertEquals(alterOp.operations[0].kind, "AddProperty");
@@ -207,7 +207,7 @@ Deno.test("DDL Generator - Create Type", () => {
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
+        annotations: {}
       },
       {
         name: "email",
@@ -215,10 +215,10 @@ Deno.test("DDL Generator - Create Type", () => {
         required: true,
         multi: false,
         constraints: ["exclusive"],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
@@ -247,7 +247,7 @@ Deno.test("DDL Generator - camelCase property → snake_case column", () => {
         required: false,
         multi: false,
         constraints: [],
-        annotations: {},
+        annotations: {}
       },
       {
         name: "lastModifiedBy",
@@ -255,7 +255,7 @@ Deno.test("DDL Generator - camelCase property → snake_case column", () => {
         required: false,
         multi: false,
         constraints: [],
-        annotations: {},
+        annotations: {}
       },
       {
         name: "already_snake",
@@ -263,10 +263,10 @@ Deno.test("DDL Generator - camelCase property → snake_case column", () => {
         required: false,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
@@ -279,12 +279,12 @@ Deno.test("DDL Generator - camelCase property → snake_case column", () => {
   assertEquals(
     createTableSQL.includes(`"createdAt"`),
     false,
-    "createdAt should be converted to snake_case, not quoted as-is",
+    "createdAt should be converted to snake_case, not quoted as-is"
   );
   assertEquals(
     createTableSQL.includes(`"lastModifiedBy"`),
     false,
-    "lastModifiedBy should be converted to snake_case, not quoted as-is",
+    "lastModifiedBy should be converted to snake_case, not quoted as-is"
   );
 });
 
@@ -303,10 +303,10 @@ Deno.test("DDL Generator - Add Property", () => {
           multi: false,
           default: true,
           constraints: [],
-          annotations: {},
-        },
-      } as Types.AddPropertyOperation,
-    ],
+          annotations: {}
+        }
+      } as Types.AddPropertyOperation
+    ]
   };
 
   const statements = generator.generateDDL([operation]);
@@ -330,8 +330,8 @@ Deno.test("DDL Generator - Create Link", () => {
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
     links: [
       {
@@ -339,16 +339,16 @@ Deno.test("DDL Generator - Create Link", () => {
         target: "User",
         required: true,
         multi: false,
-        annotations: {},
+        annotations: {}
       },
       {
         name: "tags",
         target: "Tag",
         required: false,
         multi: true,
-        annotations: {},
-      },
-    ],
+        annotations: {}
+      }
+    ]
   };
 
   const statements = generator.generateDDL([operation]);
@@ -361,7 +361,7 @@ Deno.test("DDL Generator - Create Link", () => {
   assertStringIncludes(mainTable, "author_id UUID");
 
   // Check for junction table creation
-  const junctionTable = statements.find((stmt) => stmt.includes("post_tags"));
+  const junctionTable = statements.find(stmt => stmt.includes("post_tags"));
   assertEquals(junctionTable !== undefined, true);
 });
 
@@ -398,13 +398,13 @@ Deno.test("Migration Engine - Plan Schema Evolution", () => {
 
     // Should include alter User and create Post
     const operations = plan.migrations[0].operations;
-    const hasAlterUser = operations.some((op) =>
-      op.kind === "AlterType"
-      && (op as Types.AlterTypeOperation).typeName === "User"
+    const hasAlterUser = operations.some(op =>
+      op.kind === "AlterType" &&
+      (op as Types.AlterTypeOperation).typeName === "User"
     );
-    const hasCreatePost = operations.some((op) =>
-      op.kind === "CreateType"
-      && (op as Types.CreateTypeOperation).typeName === "Post"
+    const hasCreatePost = operations.some(op =>
+      op.kind === "CreateType" &&
+      (op as Types.CreateTypeOperation).typeName === "Post"
     );
 
     assertEquals(hasAlterUser, true);
@@ -427,7 +427,7 @@ Deno.test("Migration Engine - Generate DDL", () => {
       const statements = ddlResult.value;
       assertEquals(statements.length > 0, true);
 
-      const hasCreateTable = statements.some((stmt) => stmt.includes("CREATE TABLE"));
+      const hasCreateTable = statements.some(stmt => stmt.includes("CREATE TABLE"));
       assertEquals(hasCreateTable, true);
     }
   }
@@ -447,12 +447,12 @@ Deno.test("Migration Engine - Validate Migration", () => {
       operations: [
         {
           kind: "DropType",
-          typeName: "User",
-        } as Types.DropTypeOperation,
-      ],
+          typeName: "User"
+        } as Types.DropTypeOperation
+      ]
     }],
     targetSchemaHash: "test",
-    operationsCount: 1,
+    operationsCount: 1
   };
 
   const result = engine.validateMigration(plan);
@@ -505,7 +505,7 @@ Deno.test("Migration Engine - Track Migration State", async () => {
     assertEquals(state.appliedMigrations.length, 1);
     assertEquals(
       engine.isMigrationApplied(planResult.value.migrations[0].id),
-      true,
+      true
     );
   }
 });
@@ -522,7 +522,7 @@ Deno.test("DDL Generator - Type Mapping", () => {
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
+        annotations: {}
       },
       {
         name: "int_field",
@@ -530,7 +530,7 @@ Deno.test("DDL Generator - Type Mapping", () => {
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
+        annotations: {}
       },
       {
         name: "float_field",
@@ -538,7 +538,7 @@ Deno.test("DDL Generator - Type Mapping", () => {
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
+        annotations: {}
       },
       {
         name: "bool_field",
@@ -546,7 +546,7 @@ Deno.test("DDL Generator - Type Mapping", () => {
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
+        annotations: {}
       },
       {
         name: "uuid_field",
@@ -554,7 +554,7 @@ Deno.test("DDL Generator - Type Mapping", () => {
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
+        annotations: {}
       },
       {
         name: "datetime_field",
@@ -562,10 +562,10 @@ Deno.test("DDL Generator - Type Mapping", () => {
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
@@ -591,7 +591,7 @@ Deno.test("DDL Generator - Identifier Escaping", () => {
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
+        annotations: {}
       },
       {
         name: "select",
@@ -599,10 +599,10 @@ Deno.test("DDL Generator - Identifier Escaping", () => {
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
@@ -632,12 +632,12 @@ function makeTwoMigrationPlan(engine: MigrationEngine): Types.MigrationPlan {
     description: "Second migration for progress test",
     createdAt: new Date(),
     schemaHash: "second-hash",
-    operations: first.operations, // reuse — DDL is dry-run
+    operations: first.operations // reuse — DDL is dry-run
   };
   return {
     migrations: [first, second],
     targetSchemaHash: "second-hash",
-    operationsCount: first.operations.length + second.operations.length,
+    operationsCount: first.operations.length + second.operations.length
   };
 }
 
@@ -646,7 +646,7 @@ Deno.test("Migration Engine - executeMigration emits progress events in order", 
   const engine = new MigrationEngine({
     ...config,
     dryRun: true,
-    onProgress: (e) => events.push(e),
+    onProgress: e => events.push(e)
   });
 
   const plan = makeTwoMigrationPlan(engine);
@@ -654,7 +654,7 @@ Deno.test("Migration Engine - executeMigration emits progress events in order", 
 
   assertEquals(result.ok, true);
 
-  const kinds = events.map((e) => e.kind);
+  const kinds = events.map(e => e.kind);
   // First event must be plan-started, last must be plan-completed
   assertEquals(kinds[0], "plan-started");
   assertEquals(kinds[kinds.length - 1], "plan-completed");
@@ -665,16 +665,16 @@ Deno.test("Migration Engine - executeMigration emits progress events in order", 
   //   migration-started, ddl-executing, migration-completed,
   //   plan-completed
   assertEquals(
-    kinds.filter((k) => k === "migration-started").length,
-    2,
+    kinds.filter(k => k === "migration-started").length,
+    2
   );
   assertEquals(
-    kinds.filter((k) => k === "migration-completed").length,
-    2,
+    kinds.filter(k => k === "migration-completed").length,
+    2
   );
   assertEquals(
-    kinds.filter((k) => k === "ddl-executing").length,
-    2,
+    kinds.filter(k => k === "ddl-executing").length,
+    2
   );
 
   // plan-started carries the right totals
@@ -686,7 +686,7 @@ Deno.test("Migration Engine - executeMigration emits progress events in order", 
   assertEquals(planStarted.totalOperations, plan.operationsCount);
 
   // First migration-started event has index 1 of total 2
-  const firstStart = events.find((e) => e.kind === "migration-started") as
+  const firstStart = events.find(e => e.kind === "migration-started") as
     | Extract<Types.MigrationProgressEvent, { kind: "migration-started"; }>
     | undefined;
   assertEquals(firstStart?.index, 1);
@@ -699,12 +699,13 @@ Deno.test("Migration Engine - listener throws are swallowed", async () => {
     dryRun: true,
     onProgress: () => {
       throw new Error("listener boom");
-    },
+    }
   });
 
   const planResult = engine.planMigration(null, createTestSchema());
   assertEquals(planResult.ok, true);
-  if (!planResult.ok) return;
+  if (!planResult.ok)
+    return;
 
   // Migration must succeed despite the listener throwing on every call.
   const result = await engine.executeMigration(planResult.value);
@@ -721,7 +722,7 @@ Deno.test("Migration Engine - executeMigrationWithRollback emits failed event wi
     ...config,
     dryRun: true,
     rollbackOnError: true,
-    onProgress: (e) => events.push(e),
+    onProgress: e => events.push(e)
   });
 
   // Build a plan whose forward DDL generation throws. The engine's
@@ -729,7 +730,8 @@ Deno.test("Migration Engine - executeMigrationWithRollback emits failed event wi
   // still produces SQL — that's enough for `rollbackAttempted: true`.
   const planResult = engine.planMigration(null, createTestSchema());
   assertEquals(planResult.ok, true);
-  if (!planResult.ok) return;
+  if (!planResult.ok)
+    return;
 
   // deno-lint-ignore no-explicit-any
   const generator = (engine as any).ddlGenerator as DDLGenerator;
@@ -740,7 +742,7 @@ Deno.test("Migration Engine - executeMigrationWithRollback emits failed event wi
   const result = await engine.executeMigrationWithRollback(planResult.value);
   assertEquals(result.ok, false);
 
-  const failed = events.find((e) => e.kind === "migration-failed") as
+  const failed = events.find(e => e.kind === "migration-failed") as
     | Extract<Types.MigrationProgressEvent, { kind: "migration-failed"; }>
     | undefined;
   assertEquals(failed !== undefined, true);

@@ -33,7 +33,7 @@ import {
   QueryTimeoutError,
   SchemaError,
   SyntaxError,
-  ValidationError,
+  ValidationError
 } from "../lib/errors.ts";
 import { QueryCache } from "../lib/query-cache.ts";
 import { decodeScalar, encodeScalar, hasScalarCodec } from "./scalar-codecs.ts";
@@ -89,7 +89,7 @@ export const MAX_STATEMENT_CACHE_SIZE = 1000;
  */
 function encodeSystemConfigValue(): Uint8Array {
   const DURATION_TID = uuidToBytes(
-    "00000000-0000-0000-0000-00000000010e",
+    "00000000-0000-0000-0000-00000000010e"
   );
   const TYPE_NAME = "cfg::AbstractConfig";
   const FIELD_NAME = "session_idle_timeout";
@@ -104,7 +104,7 @@ function encodeSystemConfigValue(): Uint8Array {
   // First we need its UUID — derive deterministically from a unique seed
   // so the client can cache the codec across connections.
   const idSeed = new TextEncoder().encode(
-    `disc:system_config:${TYPE_NAME}:${FIELD_NAME}`,
+    `disc:system_config:${TYPE_NAME}:${FIELD_NAME}`
   );
   const namedTupleTid = generateDescriptorIdSync(idSeed);
 
@@ -154,7 +154,7 @@ function encodeSystemConfigValue(): Uint8Array {
  */
 function buildEmptyStateDescriptor(): { tid: Uint8Array; typedesc: Uint8Array; } {
   const tid = generateDescriptorIdSync(
-    new TextEncoder().encode("disc:state:empty:v1"),
+    new TextEncoder().encode("disc:state:empty:v1")
   );
   const desc = new BufferWriter();
   desc.writeUInt8(8); // CTYPE_INPUT_SHAPE
@@ -200,7 +200,7 @@ function encodeBaseScalarV2(tid: Uint8Array): Uint8Array {
 
 function encodeShapeV2(
   tid: Uint8Array,
-  elements: ShapeElementV2[],
+  elements: ShapeElementV2[]
 ): Uint8Array {
   const w = new BufferWriter();
   w.writeUInt8(1);
@@ -224,7 +224,7 @@ function encodeShapeV2(
  * gets sent in the CommandDataDescription header).
  */
 function packTypedescBlock(
-  descriptors: Array<{ id: Uint8Array; bytes: Uint8Array; }>,
+  descriptors: Array<{ id: Uint8Array; bytes: Uint8Array; }>
 ): { data: Uint8Array; rootId: Uint8Array; } {
   const w = new BufferWriter();
   for (const d of descriptors) {
@@ -268,7 +268,8 @@ interface OutputShape {
  * if the expression isn't a known bare scalar form.
  */
 function detectBareScalarType(expr: unknown): string | null {
-  if (!expr || typeof expr !== "object") return null;
+  if (!expr || typeof expr !== "object")
+    return null;
   const e = expr as { kind?: string; };
 
   if (e.kind === "TypeCast") {
@@ -309,13 +310,14 @@ function collectParameters(node: unknown): ParamInfo[] {
   const out: ParamInfo[] = [];
 
   function visit(n: unknown): void {
-    if (!n || typeof n !== "object") return;
+    if (!n || typeof n !== "object")
+      return;
     const obj = n as { kind?: string; type?: AST.TypeName; expr?: unknown; };
     if (
-      obj.kind === "TypeCast"
-      && obj.expr
-      && typeof obj.expr === "object"
-      && (obj.expr as { kind?: string; }).kind === "Parameter"
+      obj.kind === "TypeCast" &&
+      obj.expr &&
+      typeof obj.expr === "object" &&
+      (obj.expr as { kind?: string; }).kind === "Parameter"
     ) {
       const param = obj.expr as AST.Parameter;
       const tn = obj.type;
@@ -326,13 +328,14 @@ function collectParameters(node: unknown): ParamInfo[] {
         seen.add(bare);
         out.push({
           name: bare,
-          edgeqlType: tn.name.parts[tn.name.parts.length - 1],
+          edgeqlType: tn.name.parts[tn.name.parts.length - 1]
         });
       }
     }
     for (const value of Object.values(obj as Record<string, unknown>)) {
       if (Array.isArray(value)) {
-        for (const item of value) visit(item);
+        for (const item of value)
+          visit(item);
       } else if (value && typeof value === "object") {
         visit(value);
       }
@@ -352,7 +355,7 @@ function collectParameters(node: unknown): ParamInfo[] {
  */
 function inferOutputShape(
   query: unknown,
-  schema?: { types?: Map<string, { properties: Map<string, { edgeqlType?: string; type: string; }>; }>; },
+  schema?: { types?: Map<string, { properties: Map<string, { edgeqlType?: string; type: string; }>; }>; }
 ): OutputShape {
   const idField: OutputField = { name: "id", edgeqlType: "uuid" };
   if (!query || typeof query !== "object") {
@@ -378,7 +381,7 @@ function inferOutputShape(
         return {
           typeName: scalar,
           fields: [{ name: "_value", edgeqlType: scalar }],
-          isScalar: true,
+          isScalar: true
         };
       }
     }
@@ -390,7 +393,8 @@ function inferOutputShape(
     if (sel.shape) {
       for (const el of sel.shape.elements) {
         const fieldName = el.name?.name ?? extractFieldNameFromExpr(el.expr);
-        if (!fieldName) continue;
+        if (!fieldName)
+          continue;
         // The schema's TypeDef uses `type` for the SQL type and may carry
         // the original EdgeQL type via a property-level field. Always
         // prefer the EdgeQL type since that's what the wire codec needs.
@@ -400,7 +404,8 @@ function inferOutputShape(
       }
     }
 
-    if (fields.length === 0) fields.push(idField);
+    if (fields.length === 0)
+      fields.push(idField);
     return { typeName, fields };
   }
 
@@ -408,7 +413,8 @@ function inferOutputShape(
 }
 
 function extractTypeNameFromExpr(expr: unknown): string | null {
-  if (!expr || typeof expr !== "object") return null;
+  if (!expr || typeof expr !== "object")
+    return null;
   const e = expr as {
     kind?: string;
     steps?: AST.PathStep[];
@@ -426,7 +432,8 @@ function extractTypeNameFromExpr(expr: unknown): string | null {
   // `parts` (one entry for default-module types).
   if (e.kind === "TypeName" && e.name && typeof e.name === "object") {
     const parts = (e.name as { parts?: string[]; }).parts;
-    if (parts && parts.length > 0) return parts.join("::");
+    if (parts && parts.length > 0)
+      return parts.join("::");
   }
   return null;
 }
@@ -436,9 +443,11 @@ function extractTypeNameFromExpr(expr: unknown): string | null {
  * explicit `name :=` (i.e. just `id` or `.title` or `link.target`).
  */
 function extractFieldNameFromExpr(expr: unknown): string | undefined {
-  if (!expr || typeof expr !== "object") return undefined;
+  if (!expr || typeof expr !== "object")
+    return undefined;
   const e = expr as { kind?: string; name?: string; steps?: AST.PathStep[]; };
-  if (e.kind === "Identifier" && typeof e.name === "string") return e.name;
+  if (e.kind === "Identifier" && typeof e.name === "string")
+    return e.name;
   if (e.kind === "Path" && e.steps && e.steps.length > 0) {
     return e.steps[e.steps.length - 1]?.name;
   }
@@ -451,32 +460,33 @@ function extractFieldNameFromExpr(expr: unknown): string | undefined {
  * shape references those by position.
  */
 function buildInputDescriptor(
-  params: ParamInfo[],
+  params: ParamInfo[]
 ): { id: Uint8Array; data: Uint8Array; } {
   const descriptors: Array<{ id: Uint8Array; bytes: Uint8Array; }> = [];
   const scalarPos = new Map<string, number>();
 
   function ensureScalar(eqlType: string): number {
     let pos = scalarPos.get(eqlType);
-    if (pos !== undefined) return pos;
-    const tid = resolveWellKnownType(eqlType)
-      ?? resolveWellKnownType("uuid")!;
+    if (pos !== undefined)
+      return pos;
+    const tid = resolveWellKnownType(eqlType) ??
+      resolveWellKnownType("uuid")!;
     pos = descriptors.length;
     descriptors.push({ id: tid, bytes: encodeBaseScalarV2(tid) });
     scalarPos.set(eqlType, pos);
     return pos;
   }
 
-  const elements: ShapeElementV2[] = params.map((p) => ({
+  const elements: ShapeElementV2[] = params.map(p => ({
     name: p.name,
     pos: ensureScalar(p.edgeqlType),
-    cardinality: 0x41, // ONE
+    cardinality: 0x41 // ONE
   }));
 
   const tid = generateDescriptorIdSync(
     new TextEncoder().encode(
-      `disc:input:${params.map((p) => p.name + ":" + p.edgeqlType).join(",")}`,
-    ),
+      `disc:input:${params.map(p => p.name + ":" + p.edgeqlType).join(",")}`
+    )
   );
   // Use CTYPE_SHAPE (not CTYPE_INPUT_SHAPE) for query parameters: the
   // Python client raises NotImplementedError on encode_args when the
@@ -490,9 +500,11 @@ function buildInputDescriptor(
 
 /** Byte-for-byte equality on two 16-byte UUIDs. */
 function uuidsEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false;
+  if (a.length !== b.length)
+    return false;
   for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return false;
+    if (a[i] !== b[i])
+      return false;
   }
   return true;
 }
@@ -519,17 +531,19 @@ function uuidsEqual(a: Uint8Array, b: Uint8Array): boolean {
  */
 function decodeArgs(
   blob: Uint8Array,
-  params: ParamInfo[],
+  params: ParamInfo[]
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  if (params.length === 0) return out;
-  if (blob.length < 4) return out;
+  if (params.length === 0)
+    return out;
+  if (blob.length < 4)
+    return out;
 
   const r = new BufferReader(blob);
   const elemCount = r.readUInt32();
   if (elemCount !== params.length) {
     throw new Error(
-      `argument count mismatch: typedesc has ${params.length}, blob has ${elemCount}`,
+      `argument count mismatch: typedesc has ${params.length}, blob has ${elemCount}`
     );
   }
   for (const p of params) {
@@ -563,7 +577,7 @@ function decodeArgs(
  */
 function encodeRowAsScalar(
   row: Record<string, unknown>,
-  shape: OutputShape,
+  shape: OutputShape
 ): Uint8Array {
   // Bare-scalar Data payload: no Object framing, no element-count prefix,
   // no per-field reserved/length wrapper — just the raw scalar bytes.
@@ -576,7 +590,8 @@ function encodeRowAsScalar(
   let value: unknown = null;
   if (row && typeof row === "object") {
     const values = Object.values(row);
-    if (values.length > 0) value = values[0];
+    if (values.length > 0)
+      value = values[0];
   }
   if (value === null || value === undefined) {
     // Empty result set is handled by the caller (no Data frames sent).
@@ -593,7 +608,7 @@ function encodeRowAsScalar(
 
 function encodeRowAsObject(
   row: Record<string, unknown>,
-  shape: OutputShape,
+  shape: OutputShape
 ): Uint8Array {
   const w = new BufferWriter();
   w.writeUInt32(shape.fields.length);
@@ -622,34 +637,36 @@ function encodeRowAsObject(
 function encodeRowsAsObjects(
   rows: Record<string, unknown>[],
   shape: OutputShape,
-  outputFormat: number,
+  outputFormat: number
 ): Uint8Array[] {
-  if (outputFormat === OutputFormat.NONE) return [];
+  if (outputFormat === OutputFormat.NONE)
+    return [];
 
   if (outputFormat === OutputFormat.JSON) {
     // JSON format: the whole result set is one JSON-encoded element.
     // Empty rows still emit `[]` so downstream JSON-parser callers see
     // a uniform shape — that's what the Phase 4.3 test asserts.
     return [
-      new TextEncoder().encode(JSON.stringify(rows)),
+      new TextEncoder().encode(JSON.stringify(rows))
     ];
   }
 
   if (outputFormat === OutputFormat.JSON_ELEMENTS) {
     // One JSON-encoded element per row.
     const enc = new TextEncoder();
-    return rows.map((row) => enc.encode(JSON.stringify(row)));
+    return rows.map(row => enc.encode(JSON.stringify(row)));
   }
 
-  if (shape.fields.length === 0) return [];
+  if (shape.fields.length === 0)
+    return [];
   if (shape.isScalar) {
-    return rows.map((row) => encodeRowAsScalar(row, shape));
+    return rows.map(row => encodeRowAsScalar(row, shape));
   }
-  return rows.map((row) => encodeRowAsObject(row, shape));
+  return rows.map(row => encodeRowAsObject(row, shape));
 }
 
 function buildOutputDescriptor(
-  shape: OutputShape,
+  shape: OutputShape
 ): { id: Uint8Array; data: Uint8Array; } {
   // Bare-scalar SELECT: emit a single CTYPE_BASE_SCALAR descriptor and
   // use its tid as the root. No CTYPE_SHAPE wrapper — both upstream Gel
@@ -658,8 +675,8 @@ function buildOutputDescriptor(
   // of what bytes we put in the Data payload.
   if (shape.isScalar) {
     const eqlType = shape.fields[0].edgeqlType;
-    const tid = resolveWellKnownType(eqlType)
-      ?? resolveWellKnownType("uuid")!;
+    const tid = resolveWellKnownType(eqlType) ??
+      resolveWellKnownType("uuid")!;
     const descriptor = { id: tid, bytes: encodeBaseScalarV2(tid) };
     const packed = packTypedescBlock([descriptor]);
     return { id: packed.rootId, data: packed.data };
@@ -670,25 +687,26 @@ function buildOutputDescriptor(
 
   function ensureScalar(eqlType: string): number {
     let pos = scalarPos.get(eqlType);
-    if (pos !== undefined) return pos;
-    const tid = resolveWellKnownType(eqlType)
-      ?? resolveWellKnownType("uuid")!;
+    if (pos !== undefined)
+      return pos;
+    const tid = resolveWellKnownType(eqlType) ??
+      resolveWellKnownType("uuid")!;
     pos = descriptors.length;
     descriptors.push({ id: tid, bytes: encodeBaseScalarV2(tid) });
     scalarPos.set(eqlType, pos);
     return pos;
   }
 
-  const elements: ShapeElementV2[] = shape.fields.map((f) => ({
+  const elements: ShapeElementV2[] = shape.fields.map(f => ({
     name: f.name,
     pos: ensureScalar(f.edgeqlType),
-    cardinality: 0x41, // ONE
+    cardinality: 0x41 // ONE
   }));
 
   const tid = generateDescriptorIdSync(
     new TextEncoder().encode(
-      `disc:output:${shape.typeName}:${shape.fields.map((f) => f.name + ":" + f.edgeqlType).join(",")}`,
-    ),
+      `disc:output:${shape.typeName}:${shape.fields.map(f => f.name + ":" + f.edgeqlType).join(",")}`
+    )
   );
   descriptors.push({ id: tid, bytes: encodeShapeV2(tid, elements) });
 
@@ -723,7 +741,7 @@ export const GEL_ERROR_CODES = {
   AuthenticationError: 0x06000000,
   AvailabilityError: 0x07000000,
   AccessError: 0x08000000,
-  AccessPolicyError: 0x08000100,
+  AccessPolicyError: 0x08000100
 } as const;
 
 /**
@@ -817,7 +835,7 @@ export interface BinaryExecutionResult {
  */
 export type BinaryQueryExecutor = (
   commandText: string,
-  args: Record<string, unknown>,
+  args: Record<string, unknown>
 ) => Promise<BinaryExecutionResult>;
 
 // ---------------------------------------------------------------------------
@@ -886,13 +904,13 @@ export class BinaryProtocolServer {
         port: this.options.port,
         cert,
         key,
-        alpnProtocols: ["edgedb-binary"],
+        alpnProtocols: ["edgedb-binary"]
       });
     } else {
       this.listener = Deno.listen({
         hostname,
         port: this.options.port,
-        transport: "tcp",
+        transport: "tcp"
       });
     }
     this._port = (this.listener.addr as Deno.NetAddr).port;
@@ -915,7 +933,7 @@ export class BinaryProtocolServer {
     }
     this.connections.clear();
     // Give a brief moment for resources to settle
-    await new Promise((r) => setTimeout(r, 10));
+    await new Promise(r => setTimeout(r, 10));
   }
 
   /** The port the server is actually listening on. */
@@ -940,7 +958,7 @@ export class BinaryProtocolServer {
           tcpConn,
           this.options.schema,
           this.options.password,
-          this.options.executor,
+          this.options.executor
         );
         this.connections.add(conn);
         this.options.onConnection?.(conn);
@@ -952,7 +970,8 @@ export class BinaryProtocolServer {
         });
       } catch {
         // listener closed or accept error — stop loop if not running
-        if (!this.running) break;
+        if (!this.running)
+          break;
       }
     }
   }
@@ -978,7 +997,7 @@ export class BinaryConnection {
   private sessionState: ConnectionState = {
     module: "default",
     aliases: new Map(),
-    config: new Map(),
+    config: new Map()
   };
 
   // Phase 4.2: Prepared statement cache (LRU, capped per-connection)
@@ -988,7 +1007,7 @@ export class BinaryConnection {
     private conn: Deno.TcpConn | Deno.TlsConn,
     private _schema: Schema,
     private password?: string,
-    private executor?: BinaryQueryExecutor,
+    private executor?: BinaryQueryExecutor
   ) {}
 
   /** Get the current session module context. */
@@ -1017,7 +1036,7 @@ export class BinaryConnection {
         const mtype = header[0];
         const view = new DataView(
           header.buffer,
-          header.byteOffset,
+          header.byteOffset
         );
         const messageLength = view.getUint32(1, false);
         const payloadLength = messageLength - 4;
@@ -1029,7 +1048,7 @@ export class BinaryConnection {
           if (!this.closed) {
             await this.sendErrorWithCode(
               `Message size ${payloadLength} bytes exceeds maximum of ${MAX_MESSAGE_SIZE}`,
-              GEL_ERROR_CODES.ProtocolError,
+              GEL_ERROR_CODES.ProtocolError
             );
           }
           break; // Close the connection — payload framing is unrecoverable
@@ -1039,7 +1058,8 @@ export class BinaryConnection {
         let payload = new Uint8Array(0);
         if (payloadLength > 0) {
           const p = await this.readExact(payloadLength);
-          if (!p) break;
+          if (!p)
+            break;
           payload = new Uint8Array(p);
         }
 
@@ -1053,7 +1073,7 @@ export class BinaryConnection {
             const errorCode = err instanceof Error ? mapErrorToGelCode(err) : GEL_ERROR_CODES.InternalServerError;
             await this.sendErrorWithCode(
               err instanceof Error ? err.message : String(err),
-              errorCode,
+              errorCode
             );
             // After error, send ReadyForCommand if in ready state
             if (this.state === "ready") {
@@ -1135,14 +1155,14 @@ export class BinaryConnection {
   // -----------------------------------------------------------------------
 
   private async handleHandshake(
-    _msg: ClientMessage & { kind: "ClientHandshake"; },
+    _msg: ClientMessage & { kind: "ClientHandshake"; }
   ): Promise<void> {
     // Send ServerHandshake with our protocol version
     await this.sendMessage({
       kind: "ServerHandshake",
       majorVersion: PROTOCOL_MAJOR_VERSION,
       minorVersion: PROTOCOL_MINOR_VERSION,
-      extensions: [],
+      extensions: []
     });
 
     if (this.password) {
@@ -1153,7 +1173,7 @@ export class BinaryConnection {
       const { storedKey, serverKey } = await deriveKeys(
         this.password,
         salt,
-        iterations,
+        iterations
       );
       this.scramStoredKey = storedKey;
       this.scramServerKey = serverKey;
@@ -1167,14 +1187,14 @@ export class BinaryConnection {
         iterations,
         clientFirstMessageBare: "",
         serverFirstMessage: "",
-        gs2Header: "",
+        gs2Header: ""
       };
 
       // Send AuthenticationRequiredSASL
       this.state = "authenticating";
       await this.sendMessage({
         kind: "AuthenticationRequiredSASL",
-        methods: ["SCRAM-SHA-256"],
+        methods: ["SCRAM-SHA-256"]
       });
     } else {
       // No auth required — go directly to ready
@@ -1187,7 +1207,7 @@ export class BinaryConnection {
   // -----------------------------------------------------------------------
 
   private async handleSASLInitialResponse(
-    msg: ClientMessage & { kind: "AuthenticationSASLInitialResponse"; },
+    msg: ClientMessage & { kind: "AuthenticationSASLInitialResponse"; }
   ): Promise<void> {
     if (this.state !== "authenticating" || !this.scramState) {
       await this.sendError("Unexpected SASL initial response");
@@ -1203,7 +1223,7 @@ export class BinaryConnection {
       const { serverNonce, serverFirstMessage } = generateServerFirstMessage(
         parsed.clientNonce,
         this.scramState.salt,
-        this.scramState.iterations,
+        this.scramState.iterations
       );
 
       // Update SCRAM state
@@ -1218,22 +1238,22 @@ export class BinaryConnection {
       const encoder = new TextEncoder();
       await this.sendMessage({
         kind: "AuthenticationSASLContinue",
-        saslData: encoder.encode(serverFirstMessage),
+        saslData: encoder.encode(serverFirstMessage)
       });
     } catch (err) {
       await this.sendError(
-        `SCRAM auth failed: ${err instanceof Error ? err.message : String(err)}`,
+        `SCRAM auth failed: ${err instanceof Error ? err.message : String(err)}`
       );
       this.close();
     }
   }
 
   private async handleSASLResponse(
-    msg: ClientMessage & { kind: "AuthenticationSASLResponse"; },
+    msg: ClientMessage & { kind: "AuthenticationSASLResponse"; }
   ): Promise<void> {
     if (
-      this.state !== "authenticating" || !this.scramState
-      || !this.scramStoredKey || !this.scramServerKey
+      this.state !== "authenticating" || !this.scramState ||
+      !this.scramStoredKey || !this.scramServerKey
     ) {
       await this.sendError("Unexpected SASL response");
       this.close();
@@ -1245,7 +1265,7 @@ export class BinaryConnection {
         msg.saslData,
         this.scramState,
         this.scramStoredKey,
-        this.scramServerKey,
+        this.scramServerKey
       );
 
       if (!valid) {
@@ -1258,14 +1278,14 @@ export class BinaryConnection {
       const encoder = new TextEncoder();
       await this.sendMessage({
         kind: "AuthenticationSASLFinal",
-        saslData: encoder.encode(`v=${serverSignature}`),
+        saslData: encoder.encode(`v=${serverSignature}`)
       });
 
       // Send AuthenticationOK + setup messages
       await this.sendAuthOKSequence();
     } catch (err) {
       await this.sendError(
-        `SCRAM verification failed: ${err instanceof Error ? err.message : String(err)}`,
+        `SCRAM verification failed: ${err instanceof Error ? err.message : String(err)}`
       );
       this.close();
     }
@@ -1282,10 +1302,10 @@ export class BinaryConnection {
    */
   private parseStateData(
     stateTypedescId: Uint8Array,
-    stateData: Uint8Array,
+    stateData: Uint8Array
   ): void {
     // Zero UUID means no state data
-    const isZero = stateTypedescId.every((b) => b === 0);
+    const isZero = stateTypedescId.every(b => b === 0);
     if (isZero || stateData.length === 0) {
       return;
     }
@@ -1307,7 +1327,7 @@ export class BinaryConnection {
     // For now, return zero UUID and empty data (no state changes to report)
     return {
       stateTypedescId: new Uint8Array(16),
-      stateData: new Uint8Array(0),
+      stateData: new Uint8Array(0)
     };
   }
 
@@ -1316,7 +1336,7 @@ export class BinaryConnection {
   // -----------------------------------------------------------------------
 
   private async handleParse(
-    msg: ClientMessage & { kind: "Parse"; },
+    msg: ClientMessage & { kind: "Parse"; }
   ): Promise<void> {
     try {
       // Phase 4.1: Parse state data if present
@@ -1334,7 +1354,7 @@ export class BinaryConnection {
           inputTypedescId: cached.inputDescId,
           inputTypedesc: cached.inputDesc,
           outputTypedescId: cached.outputDescId,
-          outputTypedesc: cached.outputDesc,
+          outputTypedesc: cached.outputDesc
         });
         return;
       }
@@ -1355,32 +1375,32 @@ export class BinaryConnection {
         resultCardinality: msg.expectedCardinality || Cardinality.MANY,
         commandStatus,
         params: built.params,
-        outputShape: built.outputShape,
+        outputShape: built.outputShape
       });
 
       await this.sendMessage({
         kind: "CommandDataDescription",
         annotations: [],
         capabilities: 0n,
-        resultCardinality: msg.expectedCardinality
-          || Cardinality.MANY,
+        resultCardinality: msg.expectedCardinality ||
+          Cardinality.MANY,
         inputTypedescId: built.inputDesc.id,
         inputTypedesc: built.inputDesc.data,
         outputTypedescId: built.outputDesc.id,
-        outputTypedesc: built.outputDesc.data,
+        outputTypedesc: built.outputDesc.data
       });
     } catch (err) {
       const errorCode = err instanceof Error ? mapErrorToGelCode(err) : GEL_ERROR_CODES.InternalServerError;
       await this.sendErrorWithCode(
         err instanceof Error ? err.message : String(err),
-        errorCode,
+        errorCode
       );
       await this.sendReadyForCommand();
     }
   }
 
   private async handleExecute(
-    msg: ClientMessage & { kind: "Execute"; },
+    msg: ClientMessage & { kind: "Execute"; }
   ): Promise<void> {
     try {
       // Phase 4.1: Parse state data if present
@@ -1421,7 +1441,7 @@ export class BinaryConnection {
           resultCardinality: msg.expectedCardinality || Cardinality.MANY,
           commandStatus,
           params,
-          outputShape,
+          outputShape
         });
       }
 
@@ -1433,23 +1453,23 @@ export class BinaryConnection {
       // bookkeeping that assumes the descriptor actually changed.
       const inputMismatch = !uuidsEqual(
         msg.inputTypedescId,
-        inputDesc.id,
+        inputDesc.id
       );
       const outputMismatch = !uuidsEqual(
         msg.outputTypedescId,
-        outputDesc.id,
+        outputDesc.id
       );
       if (inputMismatch || outputMismatch) {
         await this.sendMessage({
           kind: "CommandDataDescription",
           annotations: [],
           capabilities: 0n,
-          resultCardinality: msg.expectedCardinality
-            || Cardinality.MANY,
+          resultCardinality: msg.expectedCardinality ||
+            Cardinality.MANY,
           inputTypedescId: inputDesc.id,
           inputTypedesc: inputDesc.data,
           outputTypedescId: outputDesc.id,
-          outputTypedesc: outputDesc.data,
+          outputTypedesc: outputDesc.data
         });
       }
 
@@ -1464,7 +1484,8 @@ export class BinaryConnection {
         rows = result.rows;
         // Prefer the executor's status (it knows whether INSERT had a
         // RETURNING clause, etc.) over the heuristic prefix detection.
-        if (result.status) commandStatus = result.status;
+        if (result.status)
+          commandStatus = result.status;
       } else {
         // No executor wired up — used by the protocol-only test fixtures
         // that don't spin up a real database. Surface one placeholder
@@ -1476,7 +1497,7 @@ export class BinaryConnection {
       const dataElements = encodeRowsAsObjects(
         rows,
         outputShape,
-        msg.outputFormat,
+        msg.outputFormat
       );
 
       // Send one Data message per row — the upstream Gel Python client's
@@ -1513,13 +1534,13 @@ export class BinaryConnection {
         capabilities: 0n,
         status: commandStatus,
         stateTypedescId: stateResp.stateTypedescId,
-        stateData: stateResp.stateData,
+        stateData: stateResp.stateData
       });
     } catch (err) {
       const errorCode = err instanceof Error ? mapErrorToGelCode(err) : GEL_ERROR_CODES.InternalServerError;
       await this.sendErrorWithCode(
         err instanceof Error ? err.message : String(err),
-        errorCode,
+        errorCode
       );
       // Errors get an RFC immediately because the client may not send a
       // Sync after a failed Execute (it can't tell from the network
@@ -1575,10 +1596,14 @@ export class BinaryConnection {
     if (cmd.startsWith("with ")) {
       // WITH clause prefix — look for the actual command after WITH block
       // Simple heuristic: check for SELECT, INSERT, etc. after WITH
-      if (cmd.includes(" select ")) return "SELECT";
-      if (cmd.includes(" insert ")) return "INSERT";
-      if (cmd.includes(" update ")) return "UPDATE";
-      if (cmd.includes(" delete ")) return "DELETE";
+      if (cmd.includes(" select "))
+        return "SELECT";
+      if (cmd.includes(" insert "))
+        return "INSERT";
+      if (cmd.includes(" update "))
+        return "UPDATE";
+      if (cmd.includes(" delete "))
+        return "DELETE";
     }
 
     return "SELECT";
@@ -1589,7 +1614,7 @@ export class BinaryConnection {
   // -----------------------------------------------------------------------
 
   private buildDescriptors(
-    commandText: string,
+    commandText: string
   ): {
     inputDesc: { id: Uint8Array; data: Uint8Array; };
     outputDesc: { id: Uint8Array; data: Uint8Array; };
@@ -1609,7 +1634,7 @@ export class BinaryConnection {
         inputDesc: buildInputDescriptor(params),
         outputDesc: buildOutputDescriptor(outputShape),
         params,
-        outputShape,
+        outputShape
       };
     } catch {
       const emptyData = new Uint8Array(0);
@@ -1618,7 +1643,7 @@ export class BinaryConnection {
         inputDesc: { id: emptyId, data: emptyData },
         outputDesc: { id: emptyId, data: emptyData },
         params: [],
-        outputShape: { typeName: "Object", fields: [] },
+        outputShape: { typeName: "Object", fields: [] }
       };
     }
   }
@@ -1636,7 +1661,7 @@ export class BinaryConnection {
     crypto.getRandomValues(keyData);
     await this.sendMessage({
       kind: "ServerKeyData",
-      data: keyData,
+      data: keyData
     });
 
     // ParameterStatus messages.
@@ -1651,12 +1676,12 @@ export class BinaryConnection {
     await this.sendMessage({
       kind: "ParameterStatus",
       name: encoder.encode("suggested_pool_concurrency"),
-      value: encoder.encode("4"),
+      value: encoder.encode("4")
     });
     await this.sendMessage({
       kind: "ParameterStatus",
       name: encoder.encode("system_config"),
-      value: encodeSystemConfigValue(),
+      value: encodeSystemConfigValue()
     });
 
     // StateDataDescription — required by the upstream Gel clients before
@@ -1668,7 +1693,7 @@ export class BinaryConnection {
     await this.sendMessage({
       kind: "StateDataDescription",
       typedescId: emptyState.tid,
-      typedesc: emptyState.typedesc,
+      typedesc: emptyState.typedesc
     });
 
     // Mark ready
@@ -1681,7 +1706,8 @@ export class BinaryConnection {
   // -----------------------------------------------------------------------
 
   private async sendMessage(msg: ServerMessage): Promise<void> {
-    if (this.closed) return;
+    if (this.closed)
+      return;
     const bytes = encodeServerMessage(msg);
     await this.writeAll(bytes);
   }
@@ -1695,14 +1721,14 @@ export class BinaryConnection {
    */
   private async sendErrorWithCode(
     message: string,
-    errorCode: number,
+    errorCode: number
   ): Promise<void> {
     await this.sendMessage({
       kind: "ErrorResponse",
       severity: ErrorSeverity.ERROR,
       errorCode,
       message,
-      attributes: [],
+      attributes: []
     });
   }
 
@@ -1710,7 +1736,7 @@ export class BinaryConnection {
     await this.sendMessage({
       kind: "ReadyForCommand",
       annotations: [],
-      transactionState: this.transactionState,
+      transactionState: this.transactionState
     });
   }
 
@@ -1723,7 +1749,8 @@ export class BinaryConnection {
     let offset = 0;
     while (offset < n) {
       const nread = await this.conn.read(buf.subarray(offset));
-      if (nread === null) return null;
+      if (nread === null)
+        return null;
       offset += nread;
     }
     return buf;

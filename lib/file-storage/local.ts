@@ -44,7 +44,8 @@ export class LocalFileStorage implements FileStorageBackend {
     try {
       await Deno.remove(this.absolutePath(key));
     } catch (err) {
-      if (err instanceof Deno.errors.NotFound) return;
+      if (err instanceof Deno.errors.NotFound)
+        return;
       throw err;
     }
   }
@@ -54,7 +55,8 @@ export class LocalFileStorage implements FileStorageBackend {
       const stat = await Deno.stat(this.absolutePath(key));
       return { size: stat.size };
     } catch (err) {
-      if (err instanceof Deno.errors.NotFound) return null;
+      if (err instanceof Deno.errors.NotFound)
+        return null;
       throw err;
     }
   }
@@ -68,7 +70,8 @@ export class LocalFileStorage implements FileStorageBackend {
     if (!/^[a-zA-Z0-9._-]+$/.test(key)) {
       throw new Error(`Invalid storage key: ${JSON.stringify(key)}`);
     }
-    if (key.length < 4) return join(this.root, key);
+    if (key.length < 4)
+      return join(this.root, key);
     return join(this.root, key.slice(0, 2), key.slice(2, 4), key);
   }
 }

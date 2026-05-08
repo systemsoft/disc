@@ -31,7 +31,7 @@ const stubProvider = {
   },
   resetPassword() {
     return Promise.resolve();
-  },
+  }
 } as unknown as AuthProvider;
 
 const stubMiddleware = {} as AuthMiddleware;
@@ -39,7 +39,7 @@ const stubMiddleware = {} as AuthMiddleware;
 Deno.test("AuthRoutes - login is rate-limited after burst is exhausted (P0-05)", async () => {
   const limiter = new RateLimiter({ requestsPerMinute: 60, burstSize: 3 });
   const routes = new AuthRoutes(stubProvider, stubMiddleware, {
-    rateLimiter: limiter,
+    rateLimiter: limiter
   });
   const handler = routes.login();
 
@@ -48,9 +48,9 @@ Deno.test("AuthRoutes - login is rate-limited after burst is exhausted (P0-05)",
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-forwarded-for": "203.0.113.5",
+        "x-forwarded-for": "203.0.113.5"
       },
-      body: JSON.stringify({ email: "a@b.com", password: "x" }),
+      body: JSON.stringify({ email: "a@b.com", password: "x" })
     });
 
   // Burst allows 3 immediate requests
@@ -63,7 +63,7 @@ Deno.test("AuthRoutes - login is rate-limited after burst is exhausted (P0-05)",
     assertEquals(
       r.status === 429,
       false,
-      `First 3 in burst should NOT be rate-limited, got ${r.status}`,
+      `First 3 in burst should NOT be rate-limited, got ${r.status}`
     );
     await r.body?.cancel();
   }
@@ -84,7 +84,7 @@ Deno.test("AuthRoutes - rate limit keyed by IP (different IPs independent)", asy
   // requests collapse into the shared "anonymous" rate-limit bucket.
   const routes = new AuthRoutes(stubProvider, stubMiddleware, {
     rateLimiter: limiter,
-    trustProxy: true,
+    trustProxy: true
   });
   const handler = routes.login();
 
@@ -93,9 +93,9 @@ Deno.test("AuthRoutes - rate limit keyed by IP (different IPs independent)", asy
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-forwarded-for": ip,
+        "x-forwarded-for": ip
       },
-      body: JSON.stringify({ email: "a@b.com", password: "x" }),
+      body: JSON.stringify({ email: "a@b.com", password: "x" })
     });
 
   const r1 = await handler(mk("10.0.0.1"));
@@ -115,7 +115,7 @@ Deno.test("AuthRoutes - rate limit keyed by IP (different IPs independent)", asy
 
 Deno.test("AuthRoutes - rate limiter is opt-out via null", async () => {
   const routes = new AuthRoutes(stubProvider, stubMiddleware, {
-    rateLimiter: null, // explicitly disabled
+    rateLimiter: null // explicitly disabled
   });
   const handler = routes.login();
 
@@ -124,9 +124,9 @@ Deno.test("AuthRoutes - rate limiter is opt-out via null", async () => {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-forwarded-for": "203.0.113.9",
+        "x-forwarded-for": "203.0.113.9"
       },
-      body: JSON.stringify({ email: "a@b.com", password: "x" }),
+      body: JSON.stringify({ email: "a@b.com", password: "x" })
     });
 
   // 50 rapid requests should all bypass rate limiting when opted out
@@ -135,7 +135,7 @@ Deno.test("AuthRoutes - rate limiter is opt-out via null", async () => {
     assertEquals(
       r.status === 429,
       false,
-      `request ${i} should not be rate-limited when opted out`,
+      `request ${i} should not be rate-limited when opted out`
     );
     await r.body?.cancel();
   }

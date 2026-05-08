@@ -42,7 +42,7 @@ describe("normalizePkceParam (gh/geldata#7596)", () => {
     const verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
     const digest = await crypto.subtle.digest(
       "SHA-256",
-      new TextEncoder().encode(verifier),
+      new TextEncoder().encode(verifier)
     );
     const unpadded = encodeBase64Url(new Uint8Array(digest));
     // Manually pad with one and two `=` and confirm equivalence.
@@ -62,17 +62,17 @@ describe("pickPkceParam (gh/geldata#7026)", () => {
     const params = new URLSearchParams("verifier=xyz%3D%3D");
     assertEquals(
       pickPkceParam(params, "code_verifier", "verifier"),
-      "xyz",
+      "xyz"
     );
   });
 
   it("prefers the RFC name when both are present", () => {
     const params = new URLSearchParams(
-      "code_verifier=rfc&verifier=legacy",
+      "code_verifier=rfc&verifier=legacy"
     );
     assertEquals(
       pickPkceParam(params, "code_verifier", "verifier"),
-      "rfc",
+      "rfc"
     );
   });
 
@@ -85,9 +85,9 @@ describe("pickPkceParam (gh/geldata#7026)", () => {
     assertEquals(
       pickPkceParam(
         { code_challenge: "ch==", code_challenge_method: "S256" },
-        "code_challenge",
+        "code_challenge"
       ),
-      "ch",
+      "ch"
     );
   });
 });

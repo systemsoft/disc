@@ -21,7 +21,7 @@ import {
   createClient,
   createQueryBuilder,
   defineSchema,
-  t,
+  t
 } from "jsr:@disc/db/sdk";
 
 const schema = defineSchema({
@@ -29,23 +29,26 @@ const schema = defineSchema({
     email: t.str(),
     name: t.str(),
     bio: t.optional(t.str()),
-    posts: t.multi("Post"),
+    posts: t.multi("Post")
   },
   Post: {
     title: t.str(),
     body: t.str(),
-    author: t.single("User"),
-  },
+    author: t.single("User")
+  }
 });
 
 const client = createClient();
 const qb = createQueryBuilder(client, schema);
 
 // Fully typed: rows is { email: string; posts: { title: string }[] }[]
-const users = await qb.User.select({
-  email: true,
-  posts: { title: true },
-}).filter((u) => u.email.eq("user@example.com"));
+const users = await qb
+  .User
+  .select({
+    email: true,
+    posts: { title: true }
+  })
+  .filter(u => u.email.eq("user@example.com"));
 ```
 
 The `t` namespace covers all primary scalars (`str`, `bool`, `int16/32/64`, `float32/64`, `bigint`, `datetime`, `bytes`, `uuid`, `json`), `t.optional(inner)` for nullable wrappers, and `t.single(target)` / `t.multi(target)` for links. The typed `createQueryBuilder<S>(client, schema)` overload narrows every chain method: `select<Sh>(shape)` returns a chain whose awaited row type is computed from the shape, and `filter`/`orderBy` predicates get typed FieldRefs so `u.email.eq(...)` only accepts `string`.

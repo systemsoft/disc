@@ -72,7 +72,7 @@ export class PgDatabaseAdapter implements DatabaseInterface {
     const result = await this.connection.query(convertedSql, params);
     return {
       rows: result.rows,
-      rowCount: result.rowCount,
+      rowCount: result.rowCount
     };
   }
 

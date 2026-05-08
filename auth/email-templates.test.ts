@@ -13,7 +13,7 @@ Deno.test("renderVerificationEmail - returns subject, text, html", () => {
   const rendered = renderVerificationEmail({
     baseUrl: "https://app.example.com",
     recipient: "alice@example.com",
-    verificationToken: "tok-verify-abc",
+    verificationToken: "tok-verify-abc"
   });
 
   assertEquals(rendered.subject, "Verify your email");
@@ -25,7 +25,7 @@ Deno.test("renderVerificationEmail - link contains token and is on baseUrl", () 
   const rendered = renderVerificationEmail({
     baseUrl: "https://app.example.com",
     recipient: "alice@example.com",
-    verificationToken: "tok-verify-abc",
+    verificationToken: "tok-verify-abc"
   });
 
   const expectedLink = "https://app.example.com/auth/verify?token=tok-verify-abc";
@@ -37,7 +37,7 @@ Deno.test("renderVerificationEmail - subject does not leak the token", () => {
   const rendered = renderVerificationEmail({
     baseUrl: "https://app.example.com",
     recipient: "alice@example.com",
-    verificationToken: "tok-verify-abc",
+    verificationToken: "tok-verify-abc"
   });
 
   assertEquals(rendered.subject.includes("tok-verify-abc"), false);
@@ -47,7 +47,7 @@ Deno.test("renderPasswordResetEmail - returns subject, text, html", () => {
   const rendered = renderPasswordResetEmail({
     baseUrl: "https://app.example.com",
     recipient: "bob@example.com",
-    resetToken: "tok-reset-xyz",
+    resetToken: "tok-reset-xyz"
   });
 
   assertEquals(rendered.subject, "Reset your password");
@@ -59,7 +59,7 @@ Deno.test("renderPasswordResetEmail - link contains token", () => {
   const rendered = renderPasswordResetEmail({
     baseUrl: "https://app.example.com",
     recipient: "bob@example.com",
-    resetToken: "tok-reset-xyz",
+    resetToken: "tok-reset-xyz"
   });
 
   const expectedLink = "https://app.example.com/auth/reset?token=tok-reset-xyz";
@@ -71,7 +71,7 @@ Deno.test("renderPasswordResetEmail - subject does not leak the token", () => {
   const rendered = renderPasswordResetEmail({
     baseUrl: "https://app.example.com",
     recipient: "bob@example.com",
-    resetToken: "tok-reset-xyz",
+    resetToken: "tok-reset-xyz"
   });
 
   assertEquals(rendered.subject.includes("tok-reset-xyz"), false);
@@ -81,7 +81,7 @@ Deno.test("renderMagicLinkEmail - returns subject, text, html", () => {
   const rendered = renderMagicLinkEmail({
     baseUrl: "https://app.example.com",
     magicLinkToken: "tok-magic-123",
-    recipient: "carol@example.com",
+    recipient: "carol@example.com"
   });
 
   assertEquals(rendered.subject, "Sign in to your account");
@@ -93,7 +93,7 @@ Deno.test("renderMagicLinkEmail - link contains token", () => {
   const rendered = renderMagicLinkEmail({
     baseUrl: "https://app.example.com",
     magicLinkToken: "tok-magic-123",
-    recipient: "carol@example.com",
+    recipient: "carol@example.com"
   });
 
   const expectedLink = "https://app.example.com/auth/magic?token=tok-magic-123";
@@ -105,7 +105,7 @@ Deno.test("renderMagicLinkEmail - subject does not leak the token", () => {
   const rendered = renderMagicLinkEmail({
     baseUrl: "https://app.example.com",
     magicLinkToken: "tok-magic-123",
-    recipient: "carol@example.com",
+    recipient: "carol@example.com"
   });
 
   assertEquals(rendered.subject.includes("tok-magic-123"), false);
@@ -115,12 +115,12 @@ Deno.test("templates - trailing slash on baseUrl is normalized", () => {
   const a = renderVerificationEmail({
     baseUrl: "https://app.example.com/",
     recipient: "x@y",
-    verificationToken: "t",
+    verificationToken: "t"
   });
   const b = renderVerificationEmail({
     baseUrl: "https://app.example.com",
     recipient: "x@y",
-    verificationToken: "t",
+    verificationToken: "t"
   });
 
   // Both produce links without a double slash on the path.
@@ -132,7 +132,7 @@ Deno.test("templates - tokens with URL-special chars are encoded", () => {
   const rendered = renderMagicLinkEmail({
     baseUrl: "https://app.example.com",
     magicLinkToken: "abc/def+ghi=",
-    recipient: "x@y",
+    recipient: "x@y"
   });
 
   assertStringIncludes(rendered.text, "abc%2Fdef%2Bghi%3D");
@@ -142,7 +142,7 @@ Deno.test("templates - HTML escapes recipient address with special chars", () =>
   const rendered = renderVerificationEmail({
     baseUrl: "https://app.example.com",
     recipient: "<script>alert(1)</script>",
-    verificationToken: "t",
+    verificationToken: "t"
   });
 
   // The recipient should be escaped where it appears in the body.
@@ -153,7 +153,7 @@ Deno.test("templates - HTML escapes recipient address with special chars", () =>
 Deno.test("renderMagicCodeEmail - returns subject, text, html with code in body", () => {
   const rendered = renderMagicCodeEmail({
     code: "482917",
-    recipient: "carol@example.com",
+    recipient: "carol@example.com"
   });
 
   assertEquals(rendered.subject, "Your sign-in code");
@@ -166,7 +166,7 @@ Deno.test("renderMagicCodeEmail - returns subject, text, html with code in body"
 Deno.test("renderMagicCodeEmail - subject does not leak the code", () => {
   const rendered = renderMagicCodeEmail({
     code: "482917",
-    recipient: "carol@example.com",
+    recipient: "carol@example.com"
   });
 
   assertEquals(rendered.subject.includes("482917"), false);
@@ -175,7 +175,7 @@ Deno.test("renderMagicCodeEmail - subject does not leak the code", () => {
 Deno.test("renderMagicCodeEmail - mentions the 10-minute TTL", () => {
   const rendered = renderMagicCodeEmail({
     code: "482917",
-    recipient: "carol@example.com",
+    recipient: "carol@example.com"
   });
 
   assertStringIncludes(rendered.text, "10 minutes");
@@ -193,7 +193,7 @@ Deno.test("renderVerificationEmail - CTA uses bulletproof table markup", () => {
   const rendered = renderVerificationEmail({
     baseUrl: "https://app.example.com",
     recipient: "alice@example.com",
-    verificationToken: "tok-verify-abc",
+    verificationToken: "tok-verify-abc"
   });
 
   assertStringIncludes(rendered.html, "<table role=\"presentation\"");
@@ -205,7 +205,7 @@ Deno.test("renderPasswordResetEmail - CTA uses bulletproof table markup", () => 
   const rendered = renderPasswordResetEmail({
     baseUrl: "https://app.example.com",
     recipient: "bob@example.com",
-    resetToken: "tok-reset-xyz",
+    resetToken: "tok-reset-xyz"
   });
 
   assertStringIncludes(rendered.html, "<table role=\"presentation\"");
@@ -217,7 +217,7 @@ Deno.test("renderMagicLinkEmail - CTA uses bulletproof table markup", () => {
   const rendered = renderMagicLinkEmail({
     baseUrl: "https://app.example.com",
     magicLinkToken: "tok-magic-123",
-    recipient: "carol@example.com",
+    recipient: "carol@example.com"
   });
 
   assertStringIncludes(rendered.html, "<table role=\"presentation\"");
@@ -228,7 +228,7 @@ Deno.test("renderMagicLinkEmail - CTA uses bulletproof table markup", () => {
 Deno.test("renderMagicCodeEmail - code badge uses bulletproof table markup", () => {
   const rendered = renderMagicCodeEmail({
     code: "482917",
-    recipient: "carol@example.com",
+    recipient: "carol@example.com"
   });
 
   assertStringIncludes(rendered.html, "<table role=\"presentation\"");
@@ -241,7 +241,7 @@ Deno.test("buttonHtml - brandColor flows through to bgcolor attribute", () => {
     baseUrl: "https://app.example.com",
     branding: { appName: "Acme", brandColor: "#ff0066" },
     recipient: "alice@example.com",
-    verificationToken: "t",
+    verificationToken: "t"
   });
 
   // bgcolor on the <td> is what every email client uses; inline-block

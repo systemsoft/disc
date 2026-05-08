@@ -311,7 +311,7 @@ export function isAuthResponse(result: LoginResult): result is AuthResponse {
 export function requireAuthResponse(result: LoginResult): AuthResponse {
   if (!isAuthResponse(result)) {
     throw new Error(
-      "expected AuthResponse, got MfaChallenge — caller must complete the MFA flow first",
+      "expected AuthResponse, got MfaChallenge — caller must complete the MFA flow first"
     );
   }
   return result;
@@ -447,7 +447,7 @@ export interface AuthProvider {
   updatePassword(
     userId: string,
     old_password: string,
-    new_password: string,
+    new_password: string
   ): Promise<void>;
   resetPasswordRequest(email: string): Promise<string>; // returns reset token
   resetPassword(reset_token: string, new_password: string): Promise<void>;
@@ -466,7 +466,7 @@ export class AuthError extends Error {
   constructor(
     message: string,
     public code: AuthErrorCode,
-    public status_code = 401,
+    public status_code = 401
   ) {
     super(`${code}: ${message}`);
     this.name = "AuthError";
@@ -489,5 +489,5 @@ export enum AuthErrorCode {
    * Operation invalid for the user's current state — e.g. trying to
    * upgrade a user that's already a full identity. (gh/geldata#8750)
    */
-  INVALID_OPERATION = "INVALID_OPERATION",
+  INVALID_OPERATION = "INVALID_OPERATION"
 }

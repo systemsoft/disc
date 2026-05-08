@@ -26,8 +26,8 @@ export class EdgeQLLexer {
 
       const token = this.nextToken();
       if (
-        token && token.type !== TokenType.WHITESPACE
-        && token.type !== TokenType.COMMENT
+        token && token.type !== TokenType.WHITESPACE &&
+        token.type !== TokenType.COMMENT
       ) {
         this.tokens.push(token);
       }
@@ -38,7 +38,7 @@ export class EdgeQLLexer {
       "",
       this.line,
       this.column,
-      this.pos,
+      this.pos
     ));
 
     return this.tokens;
@@ -58,8 +58,8 @@ export class EdgeQLLexer {
     // Triple-quoted string literals (""" or ''' for multi-line strings).
     // Must be checked BEFORE plain string literals. (P1-06)
     if (
-      (ch === "\"" && this.peekAhead(1) === "\"" && this.peekAhead(2) === "\"")
-      || (ch === "'" && this.peekAhead(1) === "'" && this.peekAhead(2) === "'")
+      (ch === "\"" && this.peekAhead(1) === "\"" && this.peekAhead(2) === "\"") ||
+      (ch === "'" && this.peekAhead(1) === "'" && this.peekAhead(2) === "'")
     ) {
       return this.scanTripleQuotedString(ch);
     }
@@ -106,7 +106,8 @@ export class EdgeQLLexer {
     // Type cast <type>
     if (ch === "<" && this.isIdentStart(this.peekAhead(1))) {
       const lookahead = this.scanTypeCast();
-      if (lookahead) return lookahead;
+      if (lookahead)
+        return lookahead;
     }
 
     // Operators and punctuation
@@ -120,7 +121,7 @@ export class EdgeQLLexer {
             ":=",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         if (this.peek() === ":") {
@@ -130,7 +131,7 @@ export class EdgeQLLexer {
             "::",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         return createToken(
@@ -138,7 +139,7 @@ export class EdgeQLLexer {
           ":",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "-":
@@ -150,7 +151,7 @@ export class EdgeQLLexer {
             "-=",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         if (this.peek() === ">") {
@@ -160,7 +161,7 @@ export class EdgeQLLexer {
             "->",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         if (this.peek() === "|" && this.peekAhead(1) === "-") {
@@ -171,7 +172,7 @@ export class EdgeQLLexer {
             "-|-",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         return createToken(
@@ -179,7 +180,7 @@ export class EdgeQLLexer {
           "-",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "+":
@@ -191,7 +192,7 @@ export class EdgeQLLexer {
             "+=",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         if (this.peek() === "+") {
@@ -201,7 +202,7 @@ export class EdgeQLLexer {
             "++",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         return createToken(
@@ -209,7 +210,7 @@ export class EdgeQLLexer {
           "+",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "*":
@@ -221,7 +222,7 @@ export class EdgeQLLexer {
             "**",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         return createToken(
@@ -229,7 +230,7 @@ export class EdgeQLLexer {
           "*",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "/":
@@ -241,7 +242,7 @@ export class EdgeQLLexer {
             "//",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         return createToken(
@@ -249,7 +250,7 @@ export class EdgeQLLexer {
           "/",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "?":
@@ -261,7 +262,7 @@ export class EdgeQLLexer {
             "??",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         if (this.peek() === "=") {
@@ -271,7 +272,7 @@ export class EdgeQLLexer {
             "?=",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         if (this.peek() === "!" && this.peekAhead(1) === "=") {
@@ -282,11 +283,11 @@ export class EdgeQLLexer {
             "?!=",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         throw new SyntaxError(`Unexpected character '?'`, {
-          location: { line: startLine, column: startColumn, offset: startPos },
+          location: { line: startLine, column: startColumn, offset: startPos }
         });
 
       case ".":
@@ -298,7 +299,7 @@ export class EdgeQLLexer {
             ".<",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         if (this.peek() === "?" && this.peekAhead(1) === ">") {
@@ -309,7 +310,7 @@ export class EdgeQLLexer {
             ".?>",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         return createToken(
@@ -317,7 +318,7 @@ export class EdgeQLLexer {
           ".",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "=":
@@ -327,7 +328,7 @@ export class EdgeQLLexer {
           "=",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "!":
@@ -339,7 +340,7 @@ export class EdgeQLLexer {
             "!=",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         if (this.peek() === "~") {
@@ -351,7 +352,7 @@ export class EdgeQLLexer {
               "!~*",
               startLine,
               startColumn,
-              startPos,
+              startPos
             );
           }
           return createToken(
@@ -359,11 +360,11 @@ export class EdgeQLLexer {
             "!~",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         throw new SyntaxError(`Unexpected character '!'`, {
-          location: { line: startLine, column: startColumn, offset: startPos },
+          location: { line: startLine, column: startColumn, offset: startPos }
         });
 
       case "<":
@@ -375,7 +376,7 @@ export class EdgeQLLexer {
             "<=",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         if (this.peek() === "<") {
@@ -385,7 +386,7 @@ export class EdgeQLLexer {
             "<<",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         if (this.peek() === "@") {
@@ -395,7 +396,7 @@ export class EdgeQLLexer {
             "<@",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         return createToken(
@@ -403,7 +404,7 @@ export class EdgeQLLexer {
           "<",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case ">":
@@ -415,7 +416,7 @@ export class EdgeQLLexer {
             ">=",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         if (this.peek() === ">") {
@@ -425,7 +426,7 @@ export class EdgeQLLexer {
             ">>",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         return createToken(
@@ -433,7 +434,7 @@ export class EdgeQLLexer {
           ">",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case ";":
@@ -443,7 +444,7 @@ export class EdgeQLLexer {
           ";",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case ",":
@@ -453,7 +454,7 @@ export class EdgeQLLexer {
           ",",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "(":
@@ -463,7 +464,7 @@ export class EdgeQLLexer {
           "(",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case ")":
@@ -473,7 +474,7 @@ export class EdgeQLLexer {
           ")",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "{":
@@ -483,7 +484,7 @@ export class EdgeQLLexer {
           "{",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "}":
@@ -493,7 +494,7 @@ export class EdgeQLLexer {
           "}",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "[":
@@ -503,7 +504,7 @@ export class EdgeQLLexer {
           "[",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "]":
@@ -513,7 +514,7 @@ export class EdgeQLLexer {
           "]",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "%":
@@ -523,7 +524,7 @@ export class EdgeQLLexer {
           "%",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "@":
@@ -535,7 +536,7 @@ export class EdgeQLLexer {
             "@>",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         return createToken(TokenType.AT, "@", startLine, startColumn, startPos);
@@ -549,7 +550,7 @@ export class EdgeQLLexer {
             "&&",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         return createToken(
@@ -557,7 +558,7 @@ export class EdgeQLLexer {
           "&",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "|":
@@ -567,7 +568,7 @@ export class EdgeQLLexer {
           "|",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "^":
@@ -577,7 +578,7 @@ export class EdgeQLLexer {
           "^",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "~":
@@ -589,7 +590,7 @@ export class EdgeQLLexer {
             "~*",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         return createToken(
@@ -597,12 +598,12 @@ export class EdgeQLLexer {
           "~",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       default:
         throw new SyntaxError(`Unexpected character '${ch}'`, {
-          location: { line: startLine, column: startColumn, offset: startPos },
+          location: { line: startLine, column: startColumn, offset: startPos }
         });
     }
   }
@@ -629,8 +630,8 @@ export class EdgeQLLexer {
     while (this.pos < this.source.length) {
       const ch = this.peek();
       if (
-        ch === quote && this.peekAhead(1) === quote
-        && this.peekAhead(2) === quote
+        ch === quote && this.peekAhead(1) === quote &&
+        this.peekAhead(2) === quote
       ) {
         const content = this.source.slice(contentStart, this.pos);
         this.advance();
@@ -641,14 +642,14 @@ export class EdgeQLLexer {
           content,
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
       }
       this.advance();
     }
 
     throw new SyntaxError(`Unterminated triple-quoted string literal`, {
-      location: { line: startLine, column: startColumn, offset: startPos },
+      location: { line: startLine, column: startColumn, offset: startPos }
     });
   }
 
@@ -668,7 +669,7 @@ export class EdgeQLLexer {
 
       if (ch === null) {
         throw new SyntaxError(`Unterminated string literal`, {
-          location: { line: startLine, column: startColumn, offset: startPos },
+          location: { line: startLine, column: startColumn, offset: startPos }
         });
       }
 
@@ -695,7 +696,7 @@ export class EdgeQLLexer {
           parts.join(""),
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
       } else {
         this.advance();
@@ -703,7 +704,7 @@ export class EdgeQLLexer {
     }
 
     throw new SyntaxError(`Unterminated string literal`, {
-      location: { line: startLine, column: startColumn, offset: startPos },
+      location: { line: startLine, column: startColumn, offset: startPos }
     });
   }
 
@@ -723,7 +724,7 @@ export class EdgeQLLexer {
 
       if (ch === null) {
         throw new SyntaxError(`Unterminated raw string literal`, {
-          location: { line: startLine, column: startColumn, offset: startPos },
+          location: { line: startLine, column: startColumn, offset: startPos }
         });
       }
 
@@ -735,7 +736,7 @@ export class EdgeQLLexer {
           value,
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
       }
 
@@ -743,7 +744,7 @@ export class EdgeQLLexer {
     }
 
     throw new SyntaxError(`Unterminated raw string literal`, {
-      location: { line: startLine, column: startColumn, offset: startPos },
+      location: { line: startLine, column: startColumn, offset: startPos }
     });
   }
 
@@ -765,7 +766,7 @@ export class EdgeQLLexer {
 
       if (ch === null) {
         throw new SyntaxError(`Unterminated bytes literal`, {
-          location: { line: startLine, column: startColumn, offset: startPos },
+          location: { line: startLine, column: startColumn, offset: startPos }
         });
       }
 
@@ -792,7 +793,7 @@ export class EdgeQLLexer {
           parts.join(""),
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
       } else {
         this.advance();
@@ -800,7 +801,7 @@ export class EdgeQLLexer {
     }
 
     throw new SyntaxError(`Unterminated bytes literal`, {
-      location: { line: startLine, column: startColumn, offset: startPos },
+      location: { line: startLine, column: startColumn, offset: startPos }
     });
   }
 
@@ -818,7 +819,7 @@ export class EdgeQLLexer {
 
       if (ch === null) {
         throw new SyntaxError(`Unterminated backtick identifier`, {
-          location: { line: startLine, column: startColumn, offset: startPos },
+          location: { line: startLine, column: startColumn, offset: startPos }
         });
       }
 
@@ -830,7 +831,7 @@ export class EdgeQLLexer {
           value,
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
       }
 
@@ -838,7 +839,7 @@ export class EdgeQLLexer {
     }
 
     throw new SyntaxError(`Unterminated backtick identifier`, {
-      location: { line: startLine, column: startColumn, offset: startPos },
+      location: { line: startLine, column: startColumn, offset: startPos }
     });
   }
 
@@ -882,7 +883,7 @@ export class EdgeQLLexer {
 
       if (!this.isDigit(this.peek())) {
         throw new SyntaxError(`Invalid number format`, {
-          location: { line: startLine, column: startColumn, offset: startPos },
+          location: { line: startLine, column: startColumn, offset: startPos }
         });
       }
 
@@ -903,7 +904,7 @@ export class EdgeQLLexer {
       value,
       startLine,
       startColumn,
-      startPos,
+      startPos
     );
   }
 
@@ -935,7 +936,7 @@ export class EdgeQLLexer {
           value.toLowerCase(),
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
       }
       return createToken(keywordType, value, startLine, startColumn, startPos);
@@ -948,7 +949,7 @@ export class EdgeQLLexer {
         value,
         startLine,
         startColumn,
-        startPos,
+        startPos
       );
     }
 
@@ -957,7 +958,7 @@ export class EdgeQLLexer {
       value,
       startLine,
       startColumn,
-      startPos,
+      startPos
     );
   }
 
@@ -970,7 +971,7 @@ export class EdgeQLLexer {
 
     if (!this.isIdentStart(this.peek()) && !this.isDigit(this.peek())) {
       throw new SyntaxError(`Invalid parameter name`, {
-        location: { line: startLine, column: startColumn, offset: startPos },
+        location: { line: startLine, column: startColumn, offset: startPos }
       });
     }
 
@@ -985,7 +986,7 @@ export class EdgeQLLexer {
       value,
       startLine,
       startColumn,
-      startPos,
+      startPos
     );
   }
 
@@ -1013,8 +1014,8 @@ export class EdgeQLLexer {
           break;
         }
       } else if (
-        !this.isIdentCont(ch) && ch !== ":" && ch !== " " && ch !== "\t"
-        && ch !== ","
+        !this.isIdentCont(ch) && ch !== ":" && ch !== " " && ch !== "\t" &&
+        ch !== ","
       ) {
         break;
       }
@@ -1113,19 +1114,22 @@ export class EdgeQLLexer {
   }
 
   private isDigit(ch: string | null): boolean {
-    if (ch === null) return false;
+    if (ch === null)
+      return false;
     return ch >= "0" && ch <= "9";
   }
 
   private isIdentStart(ch: string | null): boolean {
-    if (ch === null) return false;
-    return (ch >= "a" && ch <= "z")
-      || (ch >= "A" && ch <= "Z")
-      || ch === "_";
+    if (ch === null)
+      return false;
+    return (ch >= "a" && ch <= "z") ||
+      (ch >= "A" && ch <= "Z") ||
+      ch === "_";
   }
 
   private isIdentCont(ch: string | null): boolean {
-    if (ch === null) return false;
+    if (ch === null)
+      return false;
     return this.isIdentStart(ch) || this.isDigit(ch);
   }
 }

@@ -53,8 +53,8 @@ export class SubscriptionClient {
   constructor(config?: DiscClientConfig, options?: SubscriptionClientConfig) {
     this.baseUrl = (config?.baseUrl ?? DEFAULT_BASE_URL).replace(/\/+$/, "");
     this.autoReconnect = options?.autoReconnect ?? DEFAULT_AUTO_RECONNECT;
-    this.maxReconnectAttempts = options?.maxReconnectAttempts
-      ?? DEFAULT_MAX_RECONNECT_ATTEMPTS;
+    this.maxReconnectAttempts = options?.maxReconnectAttempts ??
+      DEFAULT_MAX_RECONNECT_ATTEMPTS;
     this.reconnectDelay = options?.reconnectDelay ?? DEFAULT_RECONNECT_DELAY;
   }
 
@@ -84,8 +84,8 @@ export class SubscriptionClient {
         }
         reject(
           new DiscConnectionError(
-            `WebSocket connect timed out after ${connectTimeoutMs}ms: ${wsUrl}`,
-          ),
+            `WebSocket connect timed out after ${connectTimeoutMs}ms: ${wsUrl}`
+          )
         );
       }, connectTimeoutMs);
 
@@ -95,13 +95,13 @@ export class SubscriptionClient {
         resolve();
       };
 
-      socket.onerror = (event) => {
+      socket.onerror = event => {
         clearTimeout(timeoutId);
         reject(
           new DiscConnectionError(
             `WebSocket connection failed: ${wsUrl}`,
-            event instanceof Error ? event : undefined,
-          ),
+            event instanceof Error ? event : undefined
+          )
         );
       };
 
@@ -123,7 +123,7 @@ export class SubscriptionClient {
   subscribe<T>(
     query: string,
     callbacks: SubscriptionCallbacks<T>,
-    variables?: Record<string, unknown>,
+    variables?: Record<string, unknown>
   ): SubscriptionHandle {
     const id = generateSubscriptionId();
 
@@ -138,7 +138,7 @@ export class SubscriptionClient {
 
     return {
       id,
-      unsubscribe: () => this.unsubscribe(id),
+      unsubscribe: () => this.unsubscribe(id)
     };
   }
 
@@ -208,7 +208,7 @@ export class SubscriptionClient {
     } else if (type === "error") {
       if (callbacks.onError) {
         const err = payload instanceof Error ? payload : new Error(
-          typeof payload === "string" ? payload : JSON.stringify(payload ?? "Subscription error"),
+          typeof payload === "string" ? payload : JSON.stringify(payload ?? "Subscription error")
         );
         callbacks.onError(err);
       }
@@ -226,11 +226,11 @@ export class SubscriptionClient {
     }
 
     if (
-      this.autoReconnect
-      && this.reconnectAttempt < this.maxReconnectAttempts
+      this.autoReconnect &&
+      this.reconnectAttempt < this.maxReconnectAttempts
     ) {
-      const delay = this.reconnectDelay
-        * Math.pow(2, this.reconnectAttempt);
+      const delay = this.reconnectDelay *
+        Math.pow(2, this.reconnectAttempt);
       this.reconnectAttempt++;
 
       this.reconnectTimer = setTimeout(() => {
@@ -240,8 +240,8 @@ export class SubscriptionClient {
       // Notify all subscriptions of the terminal close
       this.notifyAllError(
         new DiscConnectionError(
-          `WebSocket closed (code ${code}) after ${this.reconnectAttempt} reconnect attempt(s)`,
-        ),
+          `WebSocket closed (code ${code}) after ${this.reconnectAttempt} reconnect attempt(s)`
+        )
       );
     }
   }
@@ -256,22 +256,25 @@ export class SubscriptionClient {
     this.subscriptions.clear();
     this.socket = null;
 
-    this.connect().then(() => {
-      // Re-subscribe all active subscriptions
-      for (const [id, sub] of pending) {
-        this.subscriptions.set(id, sub);
-        const payload: Record<string, unknown> = { id, query: sub.query };
-        if (sub.variables !== undefined) {
-          payload["variables"] = sub.variables;
+    this
+      .connect()
+      .then(() => {
+        // Re-subscribe all active subscriptions
+        for (const [id, sub] of pending) {
+          this.subscriptions.set(id, sub);
+          const payload: Record<string, unknown> = { id, query: sub.query };
+          if (sub.variables !== undefined) {
+            payload["variables"] = sub.variables;
+          }
+          this.sendRaw({ type: "subscribe", payload });
         }
-        this.sendRaw({ type: "subscribe", payload });
-      }
-    }).catch(() => {
-      // Restore subscriptions so handleClose can try again
-      for (const [id, sub] of pending) {
-        this.subscriptions.set(id, sub);
-      }
-    });
+      })
+      .catch(() => {
+        // Restore subscriptions so handleClose can try again
+        for (const [id, sub] of pending) {
+          this.subscriptions.set(id, sub);
+        }
+      });
   }
 
   private sendRaw(message: Record<string, unknown>): void {
@@ -299,7 +302,7 @@ export class SubscriptionClient {
 /** Create a SubscriptionClient with the given configuration */
 export function createSubscriptionClient(
   config?: DiscClientConfig,
-  options?: SubscriptionClientConfig,
+  options?: SubscriptionClientConfig
 ): SubscriptionClient {
   return new SubscriptionClient(config, options);
 }

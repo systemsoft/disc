@@ -95,7 +95,7 @@ export class BufferWriter {
   writeUUID(uuid: Uint8Array): void {
     if (uuid.length !== 16) {
       throw new Error(
-        `UUID must be exactly 16 bytes, got ${uuid.length}`,
+        `UUID must be exactly 16 bytes, got ${uuid.length}`
       );
     }
     const copy = new Uint8Array(16);
@@ -233,8 +233,8 @@ export class BufferReader {
   private ensureAvailable(n: number): void {
     if (this.pos + n > this.buf.length) {
       throw new Error(
-        `Buffer underflow: need ${n} bytes at position ${this.pos}, `
-          + `but only ${this.buf.length - this.pos} bytes remain`,
+        `Buffer underflow: need ${n} bytes at position ${this.pos}, ` +
+          `but only ${this.buf.length - this.pos} bytes remain`
       );
     }
   }

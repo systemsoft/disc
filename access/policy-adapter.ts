@@ -17,7 +17,7 @@ import type { AccessAction as RuntimeAccessAction, AccessPolicy as RuntimeAccess
 function adaptAccessAction(sdlAction: SDLAccessAction): RuntimeAccessAction {
   return {
     allow: sdlAction.allow,
-    operations: sdlAction.operations,
+    operations: sdlAction.operations
   };
 }
 
@@ -33,8 +33,8 @@ export function containsColumnReference(expr: AccessExpressionNode): boolean {
     case "AccessGlobal":
       return false;
     case "AccessComparison":
-      return containsColumnReference(expr.left)
-        || containsColumnReference(expr.right);
+      return containsColumnReference(expr.left) ||
+        containsColumnReference(expr.right);
     case "AccessLogical":
       return expr.operands.some(containsColumnReference);
     case "AccessFunction":
@@ -52,7 +52,7 @@ export function containsColumnReference(expr: AccessExpressionNode): boolean {
  * Returns undefined if no globals are referenced (pure column expression).
  */
 export function extractGlobalGuard(
-  expr: AccessExpressionNode,
+  expr: AccessExpressionNode
 ): AccessExpressionNode | undefined {
   const globals: AccessExpressionNode[] = [];
   collectGlobals(expr, globals);
@@ -68,18 +68,18 @@ export function extractGlobalGuard(
   return {
     kind: "AccessLogical",
     operator: "and",
-    operands: globals,
+    operands: globals
   };
 }
 
 function collectGlobals(
   expr: AccessExpressionNode,
-  out: AccessExpressionNode[],
+  out: AccessExpressionNode[]
 ): void {
   switch (expr.kind) {
     case "AccessGlobal": {
       // Avoid duplicates
-      if (!out.some((g) => g.kind === "AccessGlobal" && g.name === expr.name)) {
+      if (!out.some(g => g.kind === "AccessGlobal" && g.name === expr.name)) {
         out.push(expr);
       }
       break;
@@ -131,13 +131,13 @@ function collectGlobals(
  */
 export function adaptAccessPolicies(
   objectType: string,
-  sdlPolicies: SDLAccessPolicy[],
+  sdlPolicies: SDLAccessPolicy[]
 ): RuntimeAccessPolicy[] {
   return sdlPolicies.map((sdl): RuntimeAccessPolicy => {
     const policy: RuntimeAccessPolicy = {
       actions: sdl.actions.map(adaptAccessAction),
       name: sdl.name.value,
-      objectType,
+      objectType
     };
 
     if (sdl.condition !== undefined) {

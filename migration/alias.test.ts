@@ -43,7 +43,7 @@ function generateDDL(operations: Types.MigrationOperation[]): string[] {
 
 /** Generate rollback DDL from migration operations */
 function generateRollbackDDL(
-  operations: Types.MigrationOperation[],
+  operations: Types.MigrationOperation[]
 ): string[] {
   const generator = new DDLGenerator();
   return generator.generateRollbackDDL(operations);
@@ -54,18 +54,18 @@ function generateRollbackDDL(
  * This avoids depending on the SDL parser for edge cases.
  */
 function makeModuleWithAlias(
-  aliases: { name: string; expression: string[]; }[],
+  aliases: { name: string; expression: string[]; }[]
 ): Module[] {
   return [{
     name: "default",
-    items: aliases.map((a) => ({
+    items: aliases.map(a => ({
       kind: "AliasDeclaration" as const,
       name: { kind: "Identifier" as const, value: a.name },
       using: {
         kind: "PathExpression" as const,
-        path: a.expression,
-      },
-    })),
+        path: a.expression
+      }
+    }))
   }];
 }
 
@@ -78,12 +78,12 @@ Deno.test("Differ - detects new alias (CreateAlias)", () => {
   const oldModules: Module[] = [{ name: "default", items: [] }];
   const newModules = makeModuleWithAlias([{
     name: "ActiveUsers",
-    expression: ["select", "User", "filter", ".active", "=", "true"],
+    expression: ["select", "User", "filter", ".active", "=", "true"]
   }]);
 
   const operations = differ.diff(oldModules, newModules);
 
-  const aliasOps = operations.filter((op) => op.kind === "CreateAlias");
+  const aliasOps = operations.filter(op => op.kind === "CreateAlias");
   assertEquals(aliasOps.length, 1);
 
   const createAlias = aliasOps[0] as Types.CreateAliasOperation;
@@ -96,13 +96,13 @@ Deno.test("Differ - detects removed alias (DropAlias)", () => {
   const differ = new SchemaDiffer();
   const oldModules = makeModuleWithAlias([{
     name: "ActiveUsers",
-    expression: ["select", "User", "filter", ".active", "=", "true"],
+    expression: ["select", "User", "filter", ".active", "=", "true"]
   }]);
   const newModules: Module[] = [{ name: "default", items: [] }];
 
   const operations = differ.diff(oldModules, newModules);
 
-  const aliasOps = operations.filter((op) => op.kind === "DropAlias");
+  const aliasOps = operations.filter(op => op.kind === "DropAlias");
   assertEquals(aliasOps.length, 1);
 
   const dropAlias = aliasOps[0] as Types.DropAliasOperation;
@@ -113,7 +113,7 @@ Deno.test("Differ - detects modified alias (DropAlias + CreateAlias)", () => {
   const differ = new SchemaDiffer();
   const oldModules = makeModuleWithAlias([{
     name: "ActiveUsers",
-    expression: ["select", "User", "filter", ".active", "=", "true"],
+    expression: ["select", "User", "filter", ".active", "=", "true"]
   }]);
   const newModules = makeModuleWithAlias([{
     name: "ActiveUsers",
@@ -127,24 +127,24 @@ Deno.test("Differ - detects modified alias (DropAlias + CreateAlias)", () => {
       "and",
       ".name",
       "!=",
-      "'banned'",
-    ],
+      "'banned'"
+    ]
   }]);
 
   const operations = differ.diff(oldModules, newModules);
 
-  const dropOps = operations.filter((op) => op.kind === "DropAlias");
-  const createOps = operations.filter((op) => op.kind === "CreateAlias");
+  const dropOps = operations.filter(op => op.kind === "DropAlias");
+  const createOps = operations.filter(op => op.kind === "CreateAlias");
 
   assertEquals(dropOps.length, 1);
   assertEquals(createOps.length, 1);
   assertEquals(
     (dropOps[0] as Types.DropAliasOperation).aliasName,
-    "ActiveUsers",
+    "ActiveUsers"
   );
   assertEquals(
     (createOps[0] as Types.CreateAliasOperation).aliasName,
-    "ActiveUsers",
+    "ActiveUsers"
   );
 });
 
@@ -152,13 +152,13 @@ Deno.test("Differ - no change when alias is identical", () => {
   const differ = new SchemaDiffer();
   const modules = makeModuleWithAlias([{
     name: "ActiveUsers",
-    expression: ["select", "User", "filter", ".active", "=", "true"],
+    expression: ["select", "User", "filter", ".active", "=", "true"]
   }]);
 
   const operations = differ.diff(modules, modules);
 
   const aliasOps = operations.filter(
-    (op) => op.kind === "CreateAlias" || op.kind === "DropAlias",
+    op => op.kind === "CreateAlias" || op.kind === "DropAlias"
   );
   assertEquals(aliasOps.length, 0);
 });
@@ -171,7 +171,7 @@ Deno.test("DDL - CreateAlias generates no-op comment", () => {
   const operation: Types.CreateAliasOperation = {
     kind: "CreateAlias",
     aliasName: "ActiveUsers",
-    expression: "select User filter .active = true",
+    expression: "select User filter .active = true"
   };
 
   const statements = generateDDL([operation]);
@@ -186,7 +186,7 @@ Deno.test("DDL - CreateAlias generates no-op comment", () => {
 Deno.test("DDL - DropAlias generates no-op comment", () => {
   const operation: Types.DropAliasOperation = {
     kind: "DropAlias",
-    aliasName: "ActiveUsers",
+    aliasName: "ActiveUsers"
   };
 
   const statements = generateDDL([operation]);
@@ -201,12 +201,12 @@ Deno.test("DDL - Rollback generates no-op comment for alias operations", () => {
   const createOp: Types.CreateAliasOperation = {
     kind: "CreateAlias",
     aliasName: "ActiveUsers",
-    expression: "select User filter .active = true",
+    expression: "select User filter .active = true"
   };
 
   const dropOp: Types.DropAliasOperation = {
     kind: "DropAlias",
-    aliasName: "OldAlias",
+    aliasName: "OldAlias"
   };
 
   const createRollback = generateRollbackDDL([createOp]);
@@ -243,13 +243,13 @@ Deno.test("End-to-end - SDL with alias produces CreateAlias operation via parser
   const operations = differ.diff([], modules);
 
   // Should have CreateType for User and CreateAlias for ActiveUsers
-  const createTypeOps = operations.filter((op) => op.kind === "CreateType");
-  const createAliasOps = operations.filter((op) => op.kind === "CreateAlias");
+  const createTypeOps = operations.filter(op => op.kind === "CreateType");
+  const createAliasOps = operations.filter(op => op.kind === "CreateAlias");
 
   assertEquals(createTypeOps.length, 1);
   assertEquals(
     (createTypeOps[0] as Types.CreateTypeOperation).typeName,
-    "User",
+    "User"
   );
 
   assertEquals(createAliasOps.length, 1);

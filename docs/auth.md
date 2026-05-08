@@ -378,10 +378,10 @@ const serverConfig: ServerConfig = {
     passwordMinLength: 12,
     passwordRequireNumbers: true,
     passwordRequireUppercase: true,
-    tokenExpiry: 1800, // 30 minutes
+    tokenExpiry: 1800 // 30 minutes
   },
   enableAuth: true,
-  jwtSecret: "your-secret-key",
+  jwtSecret: "your-secret-key"
 };
 ```
 
@@ -528,7 +528,7 @@ By default `requestMagicLink` for an unknown email mints a token that is _not_ p
 ```typescript
 const config: AuthConfig = {
   jwtSecret: "...",
-  allowImplicitSignup: true, // default false
+  allowImplicitSignup: true // default false
 };
 ```
 
@@ -542,7 +542,7 @@ The default link target is `${emailBaseUrl}/auth/magic?token=<token>`. Override 
 const config: AuthConfig = {
   jwtSecret: "...",
   emailBaseUrl: "https://app.example.com",
-  magicLinkUrlTemplate: "https://app.example.com/login/{token}",
+  magicLinkUrlTemplate: "https://app.example.com/login/{token}"
 };
 ```
 
@@ -591,8 +591,8 @@ const provider = new AuthProvider({
   webauthn: {
     rpId: "example.com", // apex domain credentials are scoped to
     rpName: "Example App", // shown in browser prompts
-    origin: "https://example.com", // expected clientData.origin
-  },
+    origin: "https://example.com" // expected clientData.origin
+  }
 }, db);
 ```
 
@@ -610,7 +610,7 @@ await provider.finishWebAuthnRegistration({
   credentialId: cred.id,
   attestationObject: base64url(cred.response.attestationObject),
   clientDataJSON: base64url(cred.response.clientDataJSON),
-  name: "My iPhone",
+  name: "My iPhone"
 });
 ```
 
@@ -623,7 +623,7 @@ const result = await provider.finishWebAuthnLogin({
   credentialId: cred.id,
   authenticatorData: base64url(cred.response.authenticatorData),
   clientDataJSON: base64url(cred.response.clientDataJSON),
-  signature: base64url(cred.response.signature),
+  signature: base64url(cred.response.signature)
 });
 ```
 
@@ -653,8 +653,8 @@ const config: AuthConfig = {
     rpId: "example.com",
     rpName: "Acme",
     origin: "https://example.com",
-    requireResidentKey: true, // upgrades both residentKey to "required" and the legacy requireResidentKey flag
-  },
+    requireResidentKey: true // upgrades both residentKey to "required" and the legacy requireResidentKey flag
+  }
 };
 ```
 
@@ -672,7 +672,7 @@ const guest = await provider.loginAnonymous();
 // Later, the user signs up — preserve their cart by upgrading.
 const upgraded = await provider.upgradeAnonymous(
   guest.user.id,
-  { email: "ada@example.com", password: "..." },
+  { email: "ada@example.com", password: "..." }
 );
 // Same `id` — every FK pointing to the user row stays valid.
 ```
@@ -700,13 +700,13 @@ const oauth = createOAuthExtension({
     googleProvider({
       clientId: Deno.env.get("GOOGLE_CLIENT_ID")!,
       clientSecret: Deno.env.get("GOOGLE_CLIENT_SECRET")!,
-      redirectUri: "https://app.example.com/auth/oauth/callback",
-    }),
+      redirectUri: "https://app.example.com/auth/oauth/callback"
+    })
   ],
   allowedRedirectUris: [
     "https://app.example.com/*",
-    "https://*.app.example.com/*",
-  ],
+    "https://*.app.example.com/*"
+  ]
 });
 ```
 
@@ -725,7 +725,7 @@ const zitadel = await createOidcProvider({
   issuer: "https://example.zitadel.cloud",
   clientId: "...",
   clientSecret: "...",
-  redirectUri: "https://app.example.com/auth/oauth/callback",
+  redirectUri: "https://app.example.com/auth/oauth/callback"
 });
 ```
 
@@ -742,8 +742,8 @@ const config: AuthConfig = {
     appName: "Acme Cloud", // 1–80 chars, no CR/LF
     logoUrl: "https://acme.example.com/logo.png", // https only, ≤ 2048 chars
     darkLogoUrl: "https://acme.example.com/logo-dark.png",
-    brandColor: "#0066ff", // hex or oklch()
-  },
+    brandColor: "#0066ff" // hex or oklch()
+  }
 };
 ```
 
@@ -766,9 +766,9 @@ const config: AuthConfig = {
     {
       url: "https://example.com/hooks/auth",
       events: ["UserCreated", "PasswordResetRequested", "MagicLinkRequested"],
-      secret: "shared-hmac-secret", // HMAC-SHA256 of the body
-    },
-  ],
+      secret: "shared-hmac-secret" // HMAC-SHA256 of the body
+    }
+  ]
 };
 ```
 
@@ -786,7 +786,7 @@ Event types: `UserCreated`, `EmailVerified`, `PasswordChanged`, `PasswordResetRe
 const server = new DiscServer({
   jwtSecret: "...",
   enableAuth: true,
-  requireAuth: true, // NEW: reject anonymous data-plane requests
+  requireAuth: true // NEW: reject anonymous data-plane requests
 });
 ```
 
@@ -876,8 +876,8 @@ const config: AuthConfig = {
   captcha: {
     provider: "turnstile",
     secret: Deno.env.get("TURNSTILE_SECRET")!,
-    requireOn: ["register", "magic-link"],
-  },
+    requireOn: ["register", "magic-link"]
+  }
 };
 ```
 

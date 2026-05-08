@@ -64,7 +64,7 @@ export const DEFAULT_EXCLUDED_TABLES: ReadonlySet<string> = new Set<string>([
   "magic_link_tokens",
   "magic_code_tokens",
   "mfa_challenges",
-  "webauthn_challenges",
+  "webauthn_challenges"
 ]);
 
 /** SQL to create the change-log table. */
@@ -80,7 +80,8 @@ CREATE TABLE IF NOT EXISTS ${CHANGE_LOG_TABLE} (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_${CHANGE_LOG_TABLE}_id ON ${CHANGE_LOG_TABLE} (id);
-`.trim();
+`
+    .trim();
 }
 
 /** SQL to create the trigger function. */
@@ -98,7 +99,8 @@ BEGIN
   RETURN NULL;
 END;
 $$ LANGUAGE plpgsql;
-`.trim();
+`
+    .trim();
 }
 
 /** SQL to attach the trigger to a single table. */
@@ -114,7 +116,8 @@ DROP TRIGGER IF EXISTS "${triggerName}" ON "${tableName}";
 CREATE TRIGGER "${triggerName}"
 AFTER INSERT OR UPDATE OR DELETE ON "${tableName}"
 FOR EACH STATEMENT EXECUTE FUNCTION ${CHANGE_LOG_FN}();
-`.trim();
+`
+    .trim();
 }
 
 export interface BootstrapDataWatchOptions {
@@ -143,7 +146,7 @@ export interface BootstrapDataWatchOptions {
  * picks them up.
  */
 export async function bootstrapDataWatch(
-  options: BootstrapDataWatchOptions,
+  options: BootstrapDataWatchOptions
 ): Promise<{ wiredTables: string[]; }> {
   const excluded = options.excludedTables ?? DEFAULT_EXCLUDED_TABLES;
   const log = options.log;
@@ -161,20 +164,22 @@ export async function bootstrapDataWatch(
   // because that's where Disc's DDL emits. Custom schemas are
   // out of scope for v1.
   const result = await options.pool.query(
-    `SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename`,
+    `SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename`
   );
   const wired: string[] = [];
   for (const row of result.rows as Array<{ tablename: string; }>) {
     const tableName = row.tablename;
-    if (excluded.has(tableName)) continue;
+    if (excluded.has(tableName))
+      continue;
     // Skip _SQL-internal_ tables that PG itself creates. They never
     // start with a lowercase letter so the heuristic is cheap.
-    if (!/^[a-z]/.test(tableName)) continue;
+    if (!/^[a-z]/.test(tableName))
+      continue;
     await options.pool.execute(createTriggerSql(tableName));
     wired.push(tableName);
   }
   log?.(
-    `wired data-watch triggers on ${wired.length} table(s): ${wired.join(", ")}`,
+    `wired data-watch triggers on ${wired.length} table(s): ${wired.join(", ")}`
   );
 
   return { wiredTables: wired };
@@ -193,11 +198,11 @@ export async function bootstrapDataWatch(
  */
 export async function pruneChangeLog(
   pool: ConnectionPool,
-  lookbackSeconds = 3600,
+  lookbackSeconds = 3600
 ): Promise<number> {
   const result = await pool.query(
     `DELETE FROM ${CHANGE_LOG_TABLE} WHERE created_at < now() - ($1 || ' seconds')::interval`,
-    [String(lookbackSeconds)],
+    [String(lookbackSeconds)]
   );
   return result.rowCount;
 }

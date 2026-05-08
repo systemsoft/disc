@@ -42,16 +42,16 @@ export function buildDiscoveryUrl(issuerUrl: string): string {
  */
 export async function fetchOidcDiscovery(
   issuerUrl: string,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: typeof fetch = fetch
 ): Promise<OidcDiscoveryDoc> {
   const url = buildDiscoveryUrl(issuerUrl);
   const response = await fetchImpl(url, {
-    headers: { "Accept": "application/json" },
+    headers: { Accept: "application/json" }
   });
 
   if (!response.ok) {
     throw new Error(
-      `OIDC discovery failed for ${issuerUrl}: ${response.status} ${response.statusText}`,
+      `OIDC discovery failed for ${issuerUrl}: ${response.status} ${response.statusText}`
     );
   }
 
@@ -62,12 +62,12 @@ export async function fetchOidcDiscovery(
   const tokenEndpoint = doc["token_endpoint"];
 
   if (
-    typeof issuer !== "string"
-    || typeof authorizationEndpoint !== "string"
-    || typeof tokenEndpoint !== "string"
+    typeof issuer !== "string" ||
+    typeof authorizationEndpoint !== "string" ||
+    typeof tokenEndpoint !== "string"
   ) {
     throw new Error(
-      `OIDC discovery doc at ${url} is missing required endpoints (issuer / authorization_endpoint / token_endpoint)`,
+      `OIDC discovery doc at ${url} is missing required endpoints (issuer / authorization_endpoint / token_endpoint)`
     );
   }
 
@@ -77,6 +77,6 @@ export async function fetchOidcDiscovery(
     jwksUri: typeof doc["jwks_uri"] === "string" ? doc["jwks_uri"] : undefined,
     scopesSupported: Array.isArray(doc["scopes_supported"]) ? doc["scopes_supported"].filter((s): s is string => typeof s === "string") : undefined,
     tokenEndpoint,
-    userInfoEndpoint: typeof doc["userinfo_endpoint"] === "string" ? doc["userinfo_endpoint"] : undefined,
+    userInfoEndpoint: typeof doc["userinfo_endpoint"] === "string" ? doc["userinfo_endpoint"] : undefined
   };
 }

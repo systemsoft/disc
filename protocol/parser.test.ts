@@ -14,7 +14,7 @@ Deno.test("ProtocolParser - parse simple messages", () => {
   // Test Sync message
   const syncMessage = builder.buildMessage({
     type: Types.MessageType.Sync,
-    length: 4,
+    length: 4
   });
 
   parser.append(syncMessage);
@@ -36,13 +36,13 @@ Deno.test("ProtocolParser - parse ClientHandshake", () => {
     extensions: [
       {
         name: "test-ext",
-        headers: new Map([["header1", new Uint8Array([1, 2, 3])]]),
-      },
+        headers: new Map([["header1", new Uint8Array([1, 2, 3])]])
+      }
     ],
     parameters: [
       { name: "database", value: "testdb" },
-      { name: "user", value: "testuser" },
-    ],
+      { name: "user", value: "testuser" }
+    ]
   };
 
   const message = builder.buildMessage(handshake);
@@ -67,7 +67,7 @@ Deno.test("ProtocolParser - parse AuthenticationSASL", () => {
     type: Types.MessageType.AuthenticationSASL,
     length: 0,
     authStatus: 10,
-    mechanisms: ["SCRAM-SHA-256", "SCRAM-SHA-256-PLUS"],
+    mechanisms: ["SCRAM-SHA-256", "SCRAM-SHA-256-PLUS"]
   };
 
   const message = builder.buildMessage(authSasl);
@@ -88,7 +88,7 @@ Deno.test("ProtocolParser - parse Parse message", () => {
     type: Types.MessageType.Parse,
     length: 0,
     annotations: [
-      { name: "query_id", value: "123" },
+      { name: "query_id", value: "123" }
     ],
     allowedCapabilities: 0n,
     compilationFlags: 0n,
@@ -96,7 +96,7 @@ Deno.test("ProtocolParser - parse Parse message", () => {
     inputLanguage: Types.InputLanguage.EdgeQL,
     outputFormat: Types.OutputFormat.JSON,
     expectedCardinality: Types.Cardinality.Many,
-    commandText: "SELECT User { name, email }",
+    commandText: "SELECT User { name, email }"
   };
 
   const message = builder.buildMessage(parseMsg);
@@ -126,8 +126,8 @@ Deno.test("ProtocolParser - parse ErrorResponse", () => {
     attributes: new Map([
       [Types.ErrorAttribute.Hint, "Check your query syntax"],
       [Types.ErrorAttribute.LineStart, "1"],
-      [Types.ErrorAttribute.ColumnStart, "10"],
-    ]),
+      [Types.ErrorAttribute.ColumnStart, "10"]
+    ])
   };
 
   const message = builder.buildMessage(error);
@@ -140,7 +140,7 @@ Deno.test("ProtocolParser - parse ErrorResponse", () => {
   assertEquals(parsed?.message, "Syntax error in query");
   assertEquals(
     parsed?.attributes.get(Types.ErrorAttribute.Hint),
-    "Check your query syntax",
+    "Check your query syntax"
   );
   assertEquals(parsed?.attributes.get(Types.ErrorAttribute.LineStart), "1");
 });
@@ -155,8 +155,8 @@ Deno.test("ProtocolParser - parse Data message", () => {
     length: 0,
     dataElements: [
       { data: encoder.encode("{\"id\": 1, \"name\": \"Ada\"}") },
-      { data: encoder.encode("{\"id\": 2, \"name\": \"Billie\"}") },
-    ],
+      { data: encoder.encode("{\"id\": 2, \"name\": \"Billie\"}") }
+    ]
   };
 
   const message = builder.buildMessage(dataMsg);
@@ -169,11 +169,11 @@ Deno.test("ProtocolParser - parse Data message", () => {
   const decoder = new TextDecoder();
   assertEquals(
     decoder.decode(parsed?.dataElements[0].data),
-    "{\"id\": 1, \"name\": \"Ada\"}",
+    "{\"id\": 1, \"name\": \"Ada\"}"
   );
   assertEquals(
     decoder.decode(parsed?.dataElements[1].data),
-    "{\"id\": 2, \"name\": \"Billie\"}",
+    "{\"id\": 2, \"name\": \"Billie\"}"
   );
 });
 
@@ -187,7 +187,7 @@ Deno.test("ProtocolParser - handle fragmented messages", () => {
     majorVersion: 1,
     minorVersion: 0,
     extensions: [],
-    parameters: [{ name: "database", value: "testdb" }],
+    parameters: [{ name: "database", value: "testdb" }]
   };
 
   const message = builder.buildMessage(handshake);
@@ -216,17 +216,17 @@ Deno.test("ProtocolParser - handle multiple messages", () => {
 
   const sync1 = builder.buildMessage({
     type: Types.MessageType.Sync,
-    length: 4,
+    length: 4
   });
 
   const flush = builder.buildMessage({
     type: Types.MessageType.Flush,
-    length: 4,
+    length: 4
   });
 
   const sync2 = builder.buildMessage({
     type: Types.MessageType.Sync,
-    length: 4,
+    length: 4
   });
 
   // Append all messages at once
@@ -287,7 +287,7 @@ Deno.test("ProtocolParser - Execute message with UUIDs", () => {
     encodedStateData: new Uint8Array([1, 2, 3]),
     argumentDataDescriptorId: argId,
     argumentData: new Uint8Array([4, 5, 6]),
-    outputDataDescriptorId: outputId,
+    outputDataDescriptorId: outputId
   };
 
   const message = builder.buildMessage(executeMsg);
@@ -297,14 +297,14 @@ Deno.test("ProtocolParser - Execute message with UUIDs", () => {
   assertEquals(parsed?.type, Types.MessageType.Execute);
   assertEquals(
     Types.bytesToUuid(parsed.stateDataDescriptorId),
-    "11111111-2222-3333-4444-555555555555",
+    "11111111-2222-3333-4444-555555555555"
   );
   assertEquals(
     Types.bytesToUuid(parsed.argumentDataDescriptorId),
-    "66666666-7777-8888-9999-aaaaaaaaaaaa",
+    "66666666-7777-8888-9999-aaaaaaaaaaaa"
   );
   assertEquals(
     Types.bytesToUuid(parsed.outputDataDescriptorId),
-    "bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
+    "bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
   );
 });

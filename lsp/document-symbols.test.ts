@@ -18,13 +18,13 @@ Deno.test("provideDocumentSymbols - returns one symbol per type with members nes
 }`;
   const syms = provideDocumentSymbols(text);
   // Two top-level type symbols
-  const typeNames = syms.map((s) => s.name).sort();
+  const typeNames = syms.map(s => s.name).sort();
   assertEquals(typeNames, ["Post", "User"]);
 
-  const user = syms.find((s) => s.name === "User")!;
+  const user = syms.find(s => s.name === "User")!;
   // User has two children (name + posts)
   assertEquals(user.children?.length, 2);
-  const childNames = (user.children ?? []).map((c) => c.name).sort();
+  const childNames = (user.children ?? []).map(c => c.name).sort();
   assertEquals(childNames, ["name", "posts"]);
 });
 
@@ -41,9 +41,9 @@ Deno.test("provideDocumentSymbols - kind reflects type variety", () => {
   };
 }`;
   const syms = provideDocumentSymbols(text);
-  const user = syms.find((s) => s.name === "User")!;
-  const ts = syms.find((s) => s.name === "Timestamped")!;
-  const stat = syms.find((s) => s.name === "Status")!;
+  const user = syms.find(s => s.name === "User")!;
+  const ts = syms.find(s => s.name === "Timestamped")!;
+  const stat = syms.find(s => s.name === "Status")!;
   // SymbolKind.Class = 5, Interface = 11, Enum = 10 — but we keep
   // them as numeric LSP kinds.
   // Just verify each has *some* kind set, and Status is treated

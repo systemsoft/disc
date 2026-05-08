@@ -24,7 +24,7 @@ Deno.test({
       instanceName,
       pgBinDir: PG_BIN_DIR!,
       socketDir,
-      postgresVersion: "16.4",
+      postgresVersion: "16.4"
     });
 
     await instance.init();
@@ -47,7 +47,7 @@ Deno.test({
 
     // Cleanup
     await Deno.remove(TEST_BASE_DIR, { recursive: true });
-  },
+  }
 });
 
 Deno.test({
@@ -63,7 +63,7 @@ Deno.test({
       instanceName,
       pgBinDir: PG_BIN_DIR!,
       socketDir,
-      port: 0, // Unix socket only
+      port: 0 // Unix socket only
     });
 
     await instance.init();
@@ -87,7 +87,7 @@ Deno.test({
 
     // Cleanup
     await Deno.remove(TEST_BASE_DIR, { recursive: true });
-  },
+  }
 });
 
 Deno.test({
@@ -102,7 +102,7 @@ Deno.test({
       dataDir,
       instanceName,
       pgBinDir: PG_BIN_DIR!,
-      socketDir,
+      socketDir
     });
 
     await instance.init();
@@ -127,7 +127,7 @@ Deno.test({
 
     // Cleanup
     await Deno.remove(TEST_BASE_DIR, { recursive: true });
-  },
+  }
 });
 
 Deno.test("PostgresInstance - DSN generation", () => {
@@ -135,7 +135,7 @@ Deno.test("PostgresInstance - DSN generation", () => {
     dataDir: "/tmp/data",
     instanceName: "test-db",
     socketDir: "/tmp/socket",
-    port: 0,
+    port: 0
   });
 
   const dsn1 = instance1.dsn();
@@ -144,7 +144,7 @@ Deno.test("PostgresInstance - DSN generation", () => {
   const instance2 = new PostgresInstance({
     dataDir: "/tmp/data",
     instanceName: "test-db",
-    port: 5432,
+    port: 5432
   });
 
   const dsn2 = instance2.dsn();
@@ -164,7 +164,7 @@ Deno.test({
       dataDir,
       instanceName,
       pgBinDir: PG_BIN_DIR!,
-      socketDir,
+      socketDir
     });
     await instance1.init();
 
@@ -173,7 +173,7 @@ Deno.test({
       dataDir,
       instanceName,
       pgBinDir: PG_BIN_DIR!,
-      socketDir,
+      socketDir
     });
 
     // Should not throw, should reuse existing data directory
@@ -186,7 +186,7 @@ Deno.test({
 
     // Cleanup
     await Deno.remove(TEST_BASE_DIR, { recursive: true });
-  },
+  }
 });
 
 Deno.test({
@@ -201,7 +201,7 @@ Deno.test({
       dataDir,
       instanceName,
       pgBinDir: PG_BIN_DIR!,
-      socketDir,
+      socketDir
     });
 
     await instance.init();
@@ -219,7 +219,7 @@ Deno.test({
 
     // Cleanup
     await Deno.remove(TEST_BASE_DIR, { recursive: true });
-  },
+  }
 });
 
 Deno.test("PostgresInstance - socket path generation", () => {
@@ -227,7 +227,7 @@ Deno.test("PostgresInstance - socket path generation", () => {
     dataDir: "/tmp/data",
     instanceName: "test",
     socketDir: "/tmp/socket",
-    port: 5433,
+    port: 5433
   });
 
   const socketPath = instance.getSocketPath();
@@ -237,7 +237,7 @@ Deno.test("PostgresInstance - socket path generation", () => {
     dataDir: "/tmp/data",
     instanceName: "test",
     socketDir: "/tmp/socket",
-    port: 0,
+    port: 0
   });
 
   const socketPath2 = instance2.getSocketPath();

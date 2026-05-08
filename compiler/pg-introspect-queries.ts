@@ -29,18 +29,18 @@ export interface IntrospectOptions {
 
 const SYSTEM_SCHEMA_PATTERNS = [
   /^pg_/,
-  /^information_schema$/,
+  /^information_schema$/
 ];
 
 function isSystemSchema(s: string): boolean {
-  return SYSTEM_SCHEMA_PATTERNS.some((p) => p.test(s));
+  return SYSTEM_SCHEMA_PATTERNS.some(p => p.test(s));
 }
 
 export async function introspectDatabase(
   db: DatabaseConnection,
-  opts: IntrospectOptions = {},
+  opts: IntrospectOptions = {}
 ): Promise<IntrospectionData> {
-  const schemas = (opts.schemas ?? ["public"]).filter((s) => !isSystemSchema(s));
+  const schemas = (opts.schemas ?? ["public"]).filter(s => !isSystemSchema(s));
   const tableFilter = opts.tableFilter ?? (() => true);
 
   // ── tables + columns ─────────────────────────────────────────────────
@@ -64,12 +64,13 @@ export async function introspectDatabase(
     WHERE c.table_schema = ANY($1::text[])
     ORDER BY c.table_schema, c.table_name, c.ordinal_position
     `,
-    [schemas],
+    [schemas]
   );
 
   for (const row of colRows.rows) {
     const tableName = row.table_name as string;
-    if (!tableFilter(tableName)) continue;
+    if (!tableFilter(tableName))
+      continue;
     if (!columnsByTable.has(tableName)) {
       columnsByTable.set(tableName, []);
       tableSchema.set(tableName, row.table_schema as string);
@@ -79,11 +80,11 @@ export async function introspectDatabase(
       name: row.column_name as string,
       pgType: normalizePgType(
         row.data_type as string,
-        row.udt_name as string | null,
+        row.udt_name as string | null
       ),
       nullable: row.is_nullable === "YES",
       hasDefault: row.column_default !== null,
-      defaultExpression: row.column_default as string | null ?? undefined,
+      defaultExpression: row.column_default as string | null ?? undefined
     });
   }
 
@@ -104,12 +105,14 @@ export async function introspectDatabase(
       AND tc.table_schema = ANY($1::text[])
     ORDER BY tc.table_name, kcu.ordinal_position
     `,
-    [schemas],
+    [schemas]
   );
   for (const row of pkRows.rows) {
     const tn = row.table_name as string;
-    if (!tableFilter(tn)) continue;
-    if (!pkByTable.has(tn)) pkByTable.set(tn, []);
+    if (!tableFilter(tn))
+      continue;
+    if (!pkByTable.has(tn))
+      pkByTable.set(tn, []);
     pkByTable.get(tn)!.push(row.column_name as string);
   }
 
@@ -132,15 +135,18 @@ export async function introspectDatabase(
       AND tc.table_schema = ANY($1::text[])
     ORDER BY tc.table_name, tc.constraint_name, kcu.ordinal_position
     `,
-    [schemas],
+    [schemas]
   );
   for (const row of uniqueRows.rows) {
     const tn = row.table_name as string;
-    if (!tableFilter(tn)) continue;
-    if (!uniqueByTable.has(tn)) uniqueByTable.set(tn, new Map());
+    if (!tableFilter(tn))
+      continue;
+    if (!uniqueByTable.has(tn))
+      uniqueByTable.set(tn, new Map());
     const byConstraint = uniqueByTable.get(tn)!;
     const cn = row.constraint_name as string;
-    if (!byConstraint.has(cn)) byConstraint.set(cn, []);
+    if (!byConstraint.has(cn))
+      byConstraint.set(cn, []);
     byConstraint.get(cn)!.push(row.column_name as string);
   }
 
@@ -172,17 +178,18 @@ export async function introspectDatabase(
       AND tc.table_schema = ANY($1::text[])
     ORDER BY tc.table_name, kcu.ordinal_position
     `,
-    [schemas],
+    [schemas]
   );
   for (const row of fkRows.rows) {
     const fromTable = row.from_table as string;
-    if (!tableFilter(fromTable)) continue;
+    if (!tableFilter(fromTable))
+      continue;
     fks.push({
       fromTable,
       fromColumn: row.from_column as string,
       toTable: row.to_table as string,
       toColumn: row.to_column as string,
-      onDelete: mapDeleteRule(row.delete_rule as string | null),
+      onDelete: mapDeleteRule(row.delete_rule as string | null)
     });
   }
 
@@ -197,7 +204,7 @@ export async function introspectDatabase(
       tableName: tn,
       columns: cols,
       primaryKey: pk,
-      uniqueConstraints: uniques.length > 0 ? uniques : undefined,
+      uniqueConstraints: uniques.length > 0 ? uniques : undefined
     });
   }
 
@@ -218,15 +225,18 @@ export async function introspectDatabase(
  */
 function normalizePgType(dataType: string, udtName: string | null): string {
   const dt = dataType.toLowerCase();
-  if (dt === "user-defined" && udtName) return udtName.toLowerCase();
-  if (dt === "array" && udtName) return udtName.toLowerCase();
+  if (dt === "user-defined" && udtName)
+    return udtName.toLowerCase();
+  if (dt === "array" && udtName)
+    return udtName.toLowerCase();
   return dt;
 }
 
 function mapDeleteRule(
-  rule: string | null,
+  rule: string | null
 ): IntrospectedForeignKey["onDelete"] | undefined {
-  if (!rule) return undefined;
+  if (!rule)
+    return undefined;
   switch (rule.toUpperCase()) {
     case "CASCADE":
       return "cascade";

@@ -88,7 +88,7 @@ export class QueryCache<T> {
       hits: this.hits,
       maxSize: this.maxSize,
       misses: this.misses,
-      size: this.cache.size,
+      size: this.cache.size
     };
   }
 }
@@ -114,7 +114,7 @@ export function hashString(input: string): string {
  */
 export function makeCompilationCacheKey(
   queryHash: string,
-  accessContextHash?: string,
+  accessContextHash?: string
 ): string {
   if (accessContextHash) {
     return `${queryHash}:${accessContextHash}`;
@@ -137,7 +137,7 @@ export function makeCompilationCacheKey(
  */
 export function hashAccessContext(
   _userId?: string,
-  userRole?: string,
+  userRole?: string
 ): string {
   return hashString(userRole || "");
 }

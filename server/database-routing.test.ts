@@ -27,7 +27,7 @@ function makeSession(overrides: Partial<SessionContext> = {}): SessionContext {
     createdAt: new Date(),
     lastActivity: new Date(),
     variables: {},
-    ...overrides,
+    ...overrides
   };
 }
 
@@ -38,7 +38,7 @@ function makeContext(overrides: Partial<QueryContext> = {}): QueryContext {
     auth: { roles: [], permissions: [] },
     requestId: "req_test_1",
     startedAt: new Date(),
-    ...overrides,
+    ...overrides
   };
 }
 
@@ -47,7 +47,7 @@ function makeContext(overrides: Partial<QueryContext> = {}): QueryContext {
  * We only need getDatabase() for the routing tests.
  */
 function createMockRegistry(
-  databases: Record<string, Partial<DatabaseEntry>>,
+  databases: Record<string, Partial<DatabaseEntry>>
 ): DatabaseRegistry {
   const map = new Map<string, DatabaseEntry>();
   for (const [name, partial] of Object.entries(databases)) {
@@ -56,7 +56,7 @@ function createMockRegistry(
       pool: partial.pool ?? ({} as ConnectionPool),
       schema: partial.schema ?? null,
       migrationTracker: partial.migrationTracker ?? null,
-      databaseUrl: partial.databaseUrl ?? `postgresql://localhost:5432/${name}`,
+      databaseUrl: partial.databaseUrl ?? `postgresql://localhost:5432/${name}`
     });
   }
 
@@ -69,7 +69,7 @@ function createMockRegistry(
     },
     listDatabases(): string[] {
       return Array.from(map.keys());
-    },
+    }
   } as DatabaseRegistry;
 }
 
@@ -81,7 +81,7 @@ function createMockRegistry(
 /** Pure implementation of the resolution logic for isolated testing. */
 function resolveDatabaseName(
   headers: Headers,
-  searchParams: URLSearchParams,
+  searchParams: URLSearchParams
 ): string {
   const headerValue = headers.get("X-Database");
   if (headerValue) {
@@ -167,7 +167,7 @@ Deno.test("resolveDatabaseName - defaults to 'disc' when header and param are ab
 Deno.test("mock registry - getDatabase returns entry for known name", () => {
   const registry = createMockRegistry({
     disc: {},
-    analytics: { databaseUrl: "postgresql://localhost:5432/disc_analytics" },
+    analytics: { databaseUrl: "postgresql://localhost:5432/disc_analytics" }
   });
 
   const entry = registry.getDatabase("analytics");
@@ -189,12 +189,12 @@ Deno.test("pool resolution - uses registry pool when session database matches", 
   const analyticsPool = { _tag: "analytics" } as unknown as ConnectionPool;
   const registry = createMockRegistry({
     disc: {},
-    analytics: { pool: analyticsPool },
+    analytics: { pool: analyticsPool }
   });
 
   // Simulate the resolvePool logic from edgeql-protocol
   const context = makeContext({
-    session: makeSession({ database: "analytics" }),
+    session: makeSession({ database: "analytics" })
   });
 
   const entry = registry.getDatabase(context.session.database);
@@ -205,11 +205,11 @@ Deno.test("pool resolution - uses registry pool when session database matches", 
 Deno.test("pool resolution - falls back to default when database not in registry", () => {
   const defaultPool = { _tag: "default" } as unknown as ConnectionPool;
   const registry = createMockRegistry({
-    disc: { pool: defaultPool },
+    disc: { pool: defaultPool }
   });
 
   const context = makeContext({
-    session: makeSession({ database: "unknown_db" }),
+    session: makeSession({ database: "unknown_db" })
   });
 
   const entry = registry.getDatabase(context.session.database);
@@ -229,7 +229,7 @@ Deno.test("pool resolution - falls back to default when database not in registry
 Deno.test("database validation - unknown database returns undefined from registry", () => {
   const registry = createMockRegistry({
     disc: {},
-    users: {},
+    users: {}
   });
 
   // This is what HttpServer checks before proceeding
@@ -240,7 +240,7 @@ Deno.test("database validation - unknown database returns undefined from registr
 Deno.test("database validation - known database passes validation", () => {
   const registry = createMockRegistry({
     disc: {},
-    users: {},
+    users: {}
   });
 
   const entry = registry.getDatabase("users");
@@ -260,7 +260,7 @@ Deno.test("backward compat - resolvePool returns handler pool when no registry",
   // Simulate resolvePool logic with no registry
   const registry = undefined as DatabaseRegistry | undefined;
   const context = makeContext({
-    session: makeSession({ database: "anything" }),
+    session: makeSession({ database: "anything" })
   });
 
   let resolvedPool: ConnectionPool | undefined;
@@ -285,7 +285,7 @@ Deno.test("backward compat - no registry means all requests use default pool", (
   // resolve to the handler's pool when no registry is set.
   for (const dbName of ["disc", "analytics", "users", ""]) {
     const context = makeContext({
-      session: makeSession({ database: dbName }),
+      session: makeSession({ database: dbName })
     });
 
     const registry = undefined as DatabaseRegistry | undefined;
@@ -329,7 +329,7 @@ Deno.test("session context - database can be mutated after creation", () => {
 
 Deno.test("query context - carries session database through to handler", () => {
   const context = makeContext({
-    session: makeSession({ database: "reporting" }),
+    session: makeSession({ database: "reporting" })
   });
 
   assertEquals(context.session.database, "reporting");
@@ -343,7 +343,7 @@ Deno.test("mock registry - listDatabases returns all registered names", () => {
   const registry = createMockRegistry({
     disc: {},
     alpha: {},
-    beta: {},
+    beta: {}
   });
 
   const names = registry.listDatabases();
@@ -356,7 +356,7 @@ Deno.test("mock registry - listDatabases returns all registered names", () => {
 Deno.test("mock registry - getDefaultDatabase returns the disc entry", () => {
   const registry = createMockRegistry({
     disc: { databaseUrl: "postgresql://localhost:5432/disc" },
-    other: {},
+    other: {}
   });
 
   const defaultDb = registry.getDefaultDatabase();

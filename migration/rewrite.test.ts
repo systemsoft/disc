@@ -41,7 +41,7 @@ function diffFromEmpty(source: string): Types.MigrationOperation[] {
 /** Diff two SDL strings and return migration operations */
 function diffSchemas(
   oldSource: string,
-  newSource: string,
+  newSource: string
 ): Types.MigrationOperation[] {
   const differ = new SchemaDiffer();
   return differ.diff(parseToModules(oldSource), parseToModules(newSource));
@@ -55,7 +55,7 @@ function generateDDL(operations: Types.MigrationOperation[]): string[] {
 
 /** Generate rollback DDL from migration operations */
 function generateRollbackDDL(
-  operations: Types.MigrationOperation[],
+  operations: Types.MigrationOperation[]
 ): string[] {
   const generator = new DDLGenerator();
   return generator.generateRollbackDDL(operations);
@@ -78,15 +78,18 @@ Deno.test("Parser - rewrite with single event (insert)", () => {
 
   const mod = doc.declarations[0];
   assertEquals(mod.kind, "ModuleDeclaration");
-  if (mod.kind !== "ModuleDeclaration") return;
+  if (mod.kind !== "ModuleDeclaration")
+    return;
 
   const postType = mod.declarations[0];
   assertEquals(postType.kind, "TypeDeclaration");
-  if (postType.kind !== "TypeDeclaration") return;
+  if (postType.kind !== "TypeDeclaration")
+    return;
 
-  const prop = postType.members.find((m) => m.kind === "PropertyDeclaration");
+  const prop = postType.members.find(m => m.kind === "PropertyDeclaration");
   assertEquals(prop !== undefined, true);
-  if (!prop || prop.kind !== "PropertyDeclaration") return;
+  if (!prop || prop.kind !== "PropertyDeclaration")
+    return;
 
   assertEquals(prop.rewrites !== undefined, true);
   assertEquals(prop.rewrites!.length, 1);
@@ -107,12 +110,15 @@ Deno.test("Parser - rewrite with multiple events (insert, update)", () => {
   `);
 
   const mod = doc.declarations[0];
-  if (mod.kind !== "ModuleDeclaration") return;
+  if (mod.kind !== "ModuleDeclaration")
+    return;
   const postType = mod.declarations[0];
-  if (postType.kind !== "TypeDeclaration") return;
+  if (postType.kind !== "TypeDeclaration")
+    return;
 
-  const prop = postType.members.find((m) => m.kind === "PropertyDeclaration");
-  if (!prop || prop.kind !== "PropertyDeclaration") return;
+  const prop = postType.members.find(m => m.kind === "PropertyDeclaration");
+  if (!prop || prop.kind !== "PropertyDeclaration")
+    return;
 
   assertEquals(prop.rewrites!.length, 1);
   assertEquals(prop.rewrites![0].events, ["insert", "update"]);
@@ -130,14 +136,17 @@ Deno.test("Parser - rewrite with __old__ reference expression", () => {
   `);
 
   const mod = doc.declarations[0];
-  if (mod.kind !== "ModuleDeclaration") return;
+  if (mod.kind !== "ModuleDeclaration")
+    return;
   const counterType = mod.declarations[0];
-  if (counterType.kind !== "TypeDeclaration") return;
+  if (counterType.kind !== "TypeDeclaration")
+    return;
 
   const prop = counterType.members.find(
-    (m) => m.kind === "PropertyDeclaration",
+    m => m.kind === "PropertyDeclaration"
   );
-  if (!prop || prop.kind !== "PropertyDeclaration") return;
+  if (!prop || prop.kind !== "PropertyDeclaration")
+    return;
 
   assertEquals(prop.rewrites!.length, 1);
   assertEquals(prop.rewrites![0].events, ["update"]);
@@ -157,12 +166,15 @@ Deno.test("Parser - property with both constraint and rewrite", () => {
   `);
 
   const mod = doc.declarations[0];
-  if (mod.kind !== "ModuleDeclaration") return;
+  if (mod.kind !== "ModuleDeclaration")
+    return;
   const postType = mod.declarations[0];
-  if (postType.kind !== "TypeDeclaration") return;
+  if (postType.kind !== "TypeDeclaration")
+    return;
 
-  const prop = postType.members.find((m) => m.kind === "PropertyDeclaration");
-  if (!prop || prop.kind !== "PropertyDeclaration") return;
+  const prop = postType.members.find(m => m.kind === "PropertyDeclaration");
+  if (!prop || prop.kind !== "PropertyDeclaration")
+    return;
 
   assertEquals(prop.constraints !== undefined, true);
   assertEquals(prop.constraints!.length, 1);
@@ -186,19 +198,21 @@ Deno.test("Parser - type with multiple properties having rewrites", () => {
   `);
 
   const mod = doc.declarations[0];
-  if (mod.kind !== "ModuleDeclaration") return;
+  if (mod.kind !== "ModuleDeclaration")
+    return;
   const postType = mod.declarations[0];
-  if (postType.kind !== "TypeDeclaration") return;
+  if (postType.kind !== "TypeDeclaration")
+    return;
 
   const propsWithRewrites = postType.members.filter(
-    (m) => m.kind === "PropertyDeclaration" && m.rewrites && m.rewrites.length > 0,
+    m => m.kind === "PropertyDeclaration" && m.rewrites && m.rewrites.length > 0
   );
   assertEquals(propsWithRewrites.length, 2);
 
   const propsWithoutRewrites = postType.members.filter(
-    (m) =>
-      m.kind === "PropertyDeclaration"
-      && (!m.rewrites || m.rewrites.length === 0),
+    m =>
+      m.kind === "PropertyDeclaration" &&
+      (!m.rewrites || m.rewrites.length === 0)
   );
   assertEquals(propsWithoutRewrites.length, 1);
 });
@@ -222,7 +236,7 @@ Deno.test("Validator - valid rewrite passes validation", () => {
   const result = validator.validate(doc);
 
   const rewriteErrors = (result.errors || []).filter(
-    (e) => e.message.includes("rewrite") || e.message.includes("Rewrite"),
+    e => e.message.includes("rewrite") || e.message.includes("Rewrite")
   );
   assertEquals(rewriteErrors.length, 0);
 });
@@ -245,9 +259,9 @@ Deno.test("Validator - duplicate event across multiple rewrites on same property
   const result = validator.validate(doc);
 
   const dupeErrors = (result.errors || []).filter(
-    (e) =>
-      e.message.includes("Duplicate rewrite event")
-      || e.message.includes("duplicate") && e.message.includes("rewrite"),
+    e =>
+      e.message.includes("Duplicate rewrite event") ||
+      e.message.includes("duplicate") && e.message.includes("rewrite")
   );
   assertEquals(dupeErrors.length >= 1, true);
 });
@@ -272,24 +286,24 @@ Deno.test("Validator - rewrite with empty using expression produces error", () =
           name: { kind: "Identifier" as const, value: "updated_at" },
           type: {
             kind: "TypeRef" as const,
-            name: { kind: "QualifiedName" as const, parts: ["datetime"] },
+            name: { kind: "QualifiedName" as const, parts: ["datetime"] }
           },
           required: true,
           multi: false,
           rewrites: [{
             kind: "RewriteDeclaration" as const,
             events: ["insert" as const],
-            using: "",
-          }],
-        }],
-      }],
-    }],
+            using: ""
+          }]
+        }]
+      }]
+    }]
   };
 
   const result = validator.validate(doc as any);
 
   const emptyErrors = (result.errors || []).filter(
-    (e) => e.message.includes("using") && e.message.includes("expression"),
+    e => e.message.includes("using") && e.message.includes("expression")
   );
   assertEquals(emptyErrors.length >= 1, true);
 });
@@ -317,7 +331,7 @@ Deno.test("Differ - new type with rewrite generates CreateType with rewrite in p
   assertEquals(createOp.typeName, "Post");
 
   const createdAtProp = createOp.properties.find(
-    (p) => p.name === "created_at",
+    p => p.name === "created_at"
   );
   assertEquals(createdAtProp !== undefined, true);
   assertEquals(createdAtProp!.rewrites !== undefined, true);
@@ -325,7 +339,7 @@ Deno.test("Differ - new type with rewrite generates CreateType with rewrite in p
   assertEquals(createdAtProp!.rewrites![0].events, ["insert"]);
   assertStringIncludes(
     createdAtProp!.rewrites![0].body,
-    "datetime_of_statement()",
+    "datetime_of_statement()"
   );
 });
 
@@ -348,16 +362,16 @@ Deno.test("Differ - add rewrite to existing property produces AddRewrite", () =>
         required title: str;
       }
     }
-    `,
+    `
   );
 
   // Find the AlterType that contains AddRewrite
-  const alterOps = operations.filter((op) => op.kind === "AlterType");
+  const alterOps = operations.filter(op => op.kind === "AlterType");
   assertEquals(alterOps.length >= 1, true);
 
   const alterOp = alterOps[0] as Types.AlterTypeOperation;
   const addRewriteOps = alterOp.operations.filter(
-    (op) => op.kind === "AddRewrite",
+    op => op.kind === "AddRewrite"
   );
   assertEquals(addRewriteOps.length, 1);
 
@@ -385,15 +399,15 @@ Deno.test("Differ - remove rewrite from existing property produces DropRewrite",
         required title: str;
       }
     }
-    `,
+    `
   );
 
-  const alterOps = operations.filter((op) => op.kind === "AlterType");
+  const alterOps = operations.filter(op => op.kind === "AlterType");
   assertEquals(alterOps.length >= 1, true);
 
   const alterOp = alterOps[0] as Types.AlterTypeOperation;
   const dropRewriteOps = alterOp.operations.filter(
-    (op) => op.kind === "DropRewrite",
+    op => op.kind === "DropRewrite"
   );
   assertEquals(dropRewriteOps.length, 1);
 
@@ -423,19 +437,19 @@ Deno.test("Differ - modify rewrite body generates DropRewrite + AddRewrite", () 
         required title: str;
       }
     }
-    `,
+    `
   );
 
-  const alterOps = operations.filter((op) => op.kind === "AlterType");
+  const alterOps = operations.filter(op => op.kind === "AlterType");
   assertEquals(alterOps.length >= 1, true);
 
   const alterOp = alterOps[0] as Types.AlterTypeOperation;
 
   const dropRewriteOps = alterOp.operations.filter(
-    (op) => op.kind === "DropRewrite",
+    op => op.kind === "DropRewrite"
   );
   const addRewriteOps = alterOp.operations.filter(
-    (op) => op.kind === "AddRewrite",
+    op => op.kind === "AddRewrite"
   );
 
   // Must have DropRewrite + AddRewrite (rewrites can't be altered in place)
@@ -467,10 +481,10 @@ Deno.test("Differ - multiple rewrites on different properties", () => {
   const createOp = operations[0] as Types.CreateTypeOperation;
 
   const createdAtProp = createOp.properties.find(
-    (p) => p.name === "created_at",
+    p => p.name === "created_at"
   );
   const updatedAtProp = createOp.properties.find(
-    (p) => p.name === "updated_at",
+    p => p.name === "updated_at"
   );
 
   assertEquals(createdAtProp!.rewrites!.length, 1);
@@ -499,9 +513,9 @@ Deno.test("DDL - generateCreateRewrite output for INSERT only event", () => {
         rewrites: [
           {
             events: ["insert"],
-            body: "datetime_of_statement()",
-          },
-        ],
+            body: "datetime_of_statement()"
+          }
+        ]
       },
       {
         name: "title",
@@ -509,17 +523,17 @@ Deno.test("DDL - generateCreateRewrite output for INSERT only event", () => {
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generateDDL([operation]);
 
-  const fnStatements = statements.filter((s) => s.includes("CREATE OR REPLACE FUNCTION") && s.includes("rewrite_fn"));
+  const fnStatements = statements.filter(s => s.includes("CREATE OR REPLACE FUNCTION") && s.includes("rewrite_fn"));
   const trigStatements = statements.filter(
-    (s) => s.includes("CREATE TRIGGER") && s.includes("rewrite"),
+    s => s.includes("CREATE TRIGGER") && s.includes("rewrite")
   );
 
   assertEquals(fnStatements.length, 1);
@@ -547,18 +561,18 @@ Deno.test("DDL - generateCreateRewrite output for UPDATE only event", () => {
         rewrites: [
           {
             events: ["update"],
-            body: "datetime_of_statement()",
-          },
-        ],
-      },
+            body: "datetime_of_statement()"
+          }
+        ]
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generateDDL([operation]);
 
   const trigStatements = statements.filter(
-    (s) => s.includes("CREATE TRIGGER") && s.includes("rewrite"),
+    s => s.includes("CREATE TRIGGER") && s.includes("rewrite")
   );
 
   assertEquals(trigStatements.length, 1);
@@ -582,18 +596,18 @@ Deno.test("DDL - generateCreateRewrite output for INSERT, UPDATE combined", () =
         rewrites: [
           {
             events: ["insert", "update"],
-            body: "datetime_of_statement()",
-          },
-        ],
-      },
+            body: "datetime_of_statement()"
+          }
+        ]
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generateDDL([operation]);
 
   const trigStatements = statements.filter(
-    (s) => s.includes("CREATE TRIGGER") && s.includes("rewrite"),
+    s => s.includes("CREATE TRIGGER") && s.includes("rewrite")
   );
 
   assertEquals(trigStatements.length, 1);
@@ -615,18 +629,18 @@ Deno.test("DDL - variable substitution: datetime_of_statement() -> statement_tim
         rewrites: [
           {
             events: ["insert"],
-            body: "datetime_of_statement()",
-          },
-        ],
-      },
+            body: "datetime_of_statement()"
+          }
+        ]
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generateDDL([operation]);
 
   const fnStatement = statements.find(
-    (s) => s.includes("CREATE OR REPLACE FUNCTION") && s.includes("rewrite_fn"),
+    s => s.includes("CREATE OR REPLACE FUNCTION") && s.includes("rewrite_fn")
   );
 
   assertEquals(fnStatement !== undefined, true);
@@ -649,18 +663,18 @@ Deno.test("DDL - variable substitution: __old__ -> OLD", () => {
         rewrites: [
           {
             events: ["update"],
-            body: "__old__.value + 1",
-          },
-        ],
-      },
+            body: "__old__.value + 1"
+          }
+        ]
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generateDDL([operation]);
 
   const fnStatement = statements.find(
-    (s) => s.includes("CREATE OR REPLACE FUNCTION") && s.includes("rewrite_fn"),
+    s => s.includes("CREATE OR REPLACE FUNCTION") && s.includes("rewrite_fn")
   );
 
   assertEquals(fnStatement !== undefined, true);
@@ -676,15 +690,15 @@ Deno.test("DDL - generateDropRewrite output", () => {
       {
         kind: "DropRewrite",
         propertyName: "created_at",
-        events: ["insert"],
-      } as Types.DropRewriteOperation,
-    ],
+        events: ["insert"]
+      } as Types.DropRewriteOperation
+    ]
   };
 
   const statements = generateDDL([operation]);
 
-  const dropTrigStatements = statements.filter((s) => s.includes("DROP TRIGGER"));
-  const dropFnStatements = statements.filter((s) => s.includes("DROP FUNCTION"));
+  const dropTrigStatements = statements.filter(s => s.includes("DROP TRIGGER"));
+  const dropFnStatements = statements.filter(s => s.includes("DROP FUNCTION"));
 
   assertEquals(dropTrigStatements.length, 1);
   assertEquals(dropFnStatements.length, 1);
@@ -704,7 +718,7 @@ Deno.test("DDL - generateCreateType includes rewrites in output", () => {
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
+        annotations: {}
       },
       {
         name: "created_at",
@@ -716,9 +730,9 @@ Deno.test("DDL - generateCreateType includes rewrites in output", () => {
         rewrites: [
           {
             events: ["insert"],
-            body: "datetime_of_statement()",
-          },
-        ],
+            body: "datetime_of_statement()"
+          }
+        ]
       },
       {
         name: "updated_at",
@@ -730,29 +744,29 @@ Deno.test("DDL - generateCreateType includes rewrites in output", () => {
         rewrites: [
           {
             events: ["insert", "update"],
-            body: "datetime_of_statement()",
-          },
-        ],
-      },
+            body: "datetime_of_statement()"
+          }
+        ]
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generateDDL([operation]);
 
   // Should have CREATE TABLE
-  const createTable = statements.find((s) => s.startsWith("CREATE TABLE"));
+  const createTable = statements.find(s => s.startsWith("CREATE TABLE"));
   assertEquals(createTable !== undefined, true);
 
   // Should have 2 CREATE FUNCTION for rewrite (one for created_at, one for updated_at)
   const createFns = statements.filter(
-    (s) => s.includes("CREATE OR REPLACE FUNCTION") && s.includes("rewrite_fn"),
+    s => s.includes("CREATE OR REPLACE FUNCTION") && s.includes("rewrite_fn")
   );
   assertEquals(createFns.length, 2);
 
   // Should have 2 CREATE TRIGGER for rewrite
   const createTrigs = statements.filter(
-    (s) => s.includes("CREATE TRIGGER") && s.includes("rewrite"),
+    s => s.includes("CREATE TRIGGER") && s.includes("rewrite")
   );
   assertEquals(createTrigs.length, 2);
 });
@@ -771,16 +785,16 @@ Deno.test("DDL - rollback for AddRewrite generates DROP TRIGGER + DROP FUNCTION"
         propertyName: "created_at",
         rewrite: {
           events: ["insert"],
-          body: "datetime_of_statement()",
-        },
-      } as Types.AddRewriteOperation,
-    ],
+          body: "datetime_of_statement()"
+        }
+      } as Types.AddRewriteOperation
+    ]
   };
 
   const statements = generateRollbackDDL([operation]);
 
-  const dropTrigStatements = statements.filter((s) => s.includes("DROP TRIGGER"));
-  const dropFnStatements = statements.filter((s) => s.includes("DROP FUNCTION"));
+  const dropTrigStatements = statements.filter(s => s.includes("DROP TRIGGER"));
+  const dropFnStatements = statements.filter(s => s.includes("DROP FUNCTION"));
 
   assertEquals(dropTrigStatements.length, 1);
   assertEquals(dropFnStatements.length, 1);
@@ -796,14 +810,14 @@ Deno.test("DDL - rollback for DropRewrite produces manual rollback comment", () 
       {
         kind: "DropRewrite",
         propertyName: "created_at",
-        events: ["insert"],
-      } as Types.DropRewriteOperation,
-    ],
+        events: ["insert"]
+      } as Types.DropRewriteOperation
+    ]
   };
 
   const statements = generateRollbackDDL([operation]);
 
-  const manualStatements = statements.filter((s) => s.includes("MANUAL ROLLBACK REQUIRED"));
+  const manualStatements = statements.filter(s => s.includes("MANUAL ROLLBACK REQUIRED"));
   assertEquals(manualStatements.length >= 1, true);
   assertStringIncludes(manualStatements[0], "created_at");
 });
@@ -829,23 +843,23 @@ Deno.test("End-to-end - SDL with insert rewrite produces correct DDL", () => {
   const ddl = generateDDL(operations);
 
   // Should have CREATE TABLE
-  const createTable = ddl.find((s) => s.startsWith("CREATE TABLE"));
+  const createTable = ddl.find(s => s.startsWith("CREATE TABLE"));
   assertEquals(createTable !== undefined, true);
 
   // Should have CREATE FUNCTION for rewrite
   const createFn = ddl.find(
-    (s) =>
-      s.includes("CREATE OR REPLACE FUNCTION")
-      && s.includes("post__created_at__rewrite_fn"),
+    s =>
+      s.includes("CREATE OR REPLACE FUNCTION") &&
+      s.includes("post__created_at__rewrite_fn")
   );
   assertEquals(createFn !== undefined, true);
   assertStringIncludes(createFn!, "statement_timestamp()");
 
   // Should have CREATE TRIGGER for rewrite
   const createTrig = ddl.find(
-    (s) =>
-      s.includes("CREATE TRIGGER")
-      && s.includes("post__created_at__rewrite"),
+    s =>
+      s.includes("CREATE TRIGGER") &&
+      s.includes("post__created_at__rewrite")
   );
   assertEquals(createTrig !== undefined, true);
   assertStringIncludes(createTrig!, "BEFORE INSERT");
@@ -869,9 +883,9 @@ Deno.test("End-to-end - SDL with insert+update rewrite produces correct DDL", ()
   const ddl = generateDDL(operations);
 
   const createTrig = ddl.find(
-    (s) =>
-      s.includes("CREATE TRIGGER")
-      && s.includes("post__updated_at__rewrite"),
+    s =>
+      s.includes("CREATE TRIGGER") &&
+      s.includes("post__updated_at__rewrite")
   );
   assertEquals(createTrig !== undefined, true);
   assertStringIncludes(createTrig!, "BEFORE INSERT OR UPDATE");
@@ -893,7 +907,7 @@ Deno.test("End-to-end - schema with rewrite extracts to compiler context (Rewrit
   `);
 
   const schemaManager = new SchemaManager({
-    dryRun: true,
+    dryRun: true
   });
   const schema = schemaManager.modulesToSchema(modules);
 
@@ -908,7 +922,7 @@ Deno.test("End-to-end - schema with rewrite extracts to compiler context (Rewrit
   assertEquals(createdAtProp!.rewrites![0].events, ["insert"]);
   assertStringIncludes(
     createdAtProp!.rewrites![0].body,
-    "datetime_of_statement()",
+    "datetime_of_statement()"
   );
 
   const updatedAtProp = postType!.properties.get("updated_at");
@@ -942,29 +956,29 @@ Deno.test("End-to-end - full pipeline: SDL -> parse -> diff -> DDL -> verify con
   const ddl = generateDDL(operations);
 
   // Should have CREATE TABLE
-  const createTable = ddl.find((s) => s.startsWith("CREATE TABLE"));
+  const createTable = ddl.find(s => s.startsWith("CREATE TABLE"));
   assertEquals(createTable !== undefined, true);
   assertStringIncludes(createTable!, "article");
 
   // Should have 2 rewrite functions
   const rewriteFns = ddl.filter(
-    (s) => s.includes("CREATE OR REPLACE FUNCTION") && s.includes("rewrite_fn"),
+    s => s.includes("CREATE OR REPLACE FUNCTION") && s.includes("rewrite_fn")
   );
   assertEquals(rewriteFns.length, 2);
 
   // Should have 2 rewrite triggers
   const rewriteTrigs = ddl.filter(
-    (s) => s.includes("CREATE TRIGGER") && s.includes("rewrite"),
+    s => s.includes("CREATE TRIGGER") && s.includes("rewrite")
   );
   assertEquals(rewriteTrigs.length, 2);
 
   // Verify the created_at trigger is INSERT-only
-  const createdAtTrig = rewriteTrigs.find((s) => s.includes("created_at__rewrite"));
+  const createdAtTrig = rewriteTrigs.find(s => s.includes("created_at__rewrite"));
   assertEquals(createdAtTrig !== undefined, true);
   assertStringIncludes(createdAtTrig!, "BEFORE INSERT ON");
 
   // Verify the updated_at trigger is INSERT OR UPDATE
-  const updatedAtTrig = rewriteTrigs.find((s) => s.includes("updated_at__rewrite"));
+  const updatedAtTrig = rewriteTrigs.find(s => s.includes("updated_at__rewrite"));
   assertEquals(updatedAtTrig !== undefined, true);
   assertStringIncludes(updatedAtTrig!, "BEFORE INSERT OR UPDATE ON");
 

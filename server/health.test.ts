@@ -17,7 +17,7 @@ import type { HealthStatus, ProtocolHandler, QueryContext, QueryError, QueryRequ
 // --- Helpers ---
 
 function createTestConfig(
-  overrides: Partial<ServerConfig> = {},
+  overrides: Partial<ServerConfig> = {}
 ): ServerConfig {
   return {
     host: "localhost",
@@ -27,7 +27,7 @@ function createTestConfig(
     requestTimeout: 5000,
     enableCors: false,
     enableWebsockets: false,
-    ...overrides,
+    ...overrides
   };
 }
 
@@ -35,12 +35,12 @@ function createTestConfig(
  * Creates a protocol handler with a configurable health status response.
  */
 function createHealthyProtocolHandler(
-  healthResponse: HealthStatus,
+  healthResponse: HealthStatus
 ): ProtocolHandler {
   return {
     handleRequest(
       _request: QueryRequest,
-      _context: QueryContext,
+      _context: QueryContext
     ): Promise<QueryResponse> {
       return Promise.resolve({ data: { ok: true } });
     },
@@ -57,7 +57,7 @@ function createHealthyProtocolHandler(
       waiters: number;
     } | null {
       return healthResponse.pool ?? null;
-    },
+    }
   };
 }
 
@@ -69,13 +69,13 @@ function createBasicProtocolHandler(): ProtocolHandler {
   return {
     handleRequest(
       _request: QueryRequest,
-      _context: QueryContext,
+      _context: QueryContext
     ): Promise<QueryResponse> {
       return Promise.resolve({ data: { ok: true } });
     },
     validateRequest(_request: QueryRequest): QueryError[] {
       return [];
-    },
+    }
   };
 }
 
@@ -85,7 +85,7 @@ function createBasicProtocolHandler(): ProtocolHandler {
  */
 function withTestServer(
   handler: ProtocolHandler,
-  configOverrides: Partial<ServerConfig> = {},
+  configOverrides: Partial<ServerConfig> = {}
 ): {
   port: number;
   cleanup: () => Promise<void>;
@@ -96,7 +96,7 @@ function withTestServer(
   const config = createTestConfig(configOverrides);
   const server = new HttpServer({
     config,
-    protocolHandler: handler,
+    protocolHandler: handler
   });
 
   const abortController = new AbortController();
@@ -105,11 +105,11 @@ function withTestServer(
       hostname: "127.0.0.1",
       port: 0,
       signal: abortController.signal,
-      onListen() {},
+      onListen() {}
     },
     (request: Request, info: Deno.ServeHandlerInfo) => {
       return (server as any).handleRequest(request, info);
-    },
+    }
   );
 
   const port = testServer.addr.port;
@@ -133,7 +133,7 @@ Deno.test(
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:${port}/health/live`,
+        `http://127.0.0.1:${port}/health/live`
       );
 
       assertEquals(response.status, 200);
@@ -143,7 +143,7 @@ Deno.test(
     } finally {
       await cleanup();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -154,13 +154,13 @@ Deno.test(
     const handler = createHealthyProtocolHandler({
       status: "unhealthy",
       database: { connected: false },
-      pool: { total: 0, idle: 0, active: 0, waiters: 0 },
+      pool: { total: 0, idle: 0, active: 0, waiters: 0 }
     });
     const { port, cleanup } = withTestServer(handler);
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:${port}/health/live`,
+        `http://127.0.0.1:${port}/health/live`
       );
 
       assertEquals(response.status, 200);
@@ -170,7 +170,7 @@ Deno.test(
     } finally {
       await cleanup();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -179,13 +179,13 @@ Deno.test(
     const handler = createHealthyProtocolHandler({
       status: "healthy",
       database: { connected: true, latencyMs: 1 },
-      pool: { total: 5, idle: 3, active: 2, waiters: 0 },
+      pool: { total: 5, idle: 3, active: 2, waiters: 0 }
     });
     const { port, cleanup } = withTestServer(handler);
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:${port}/health/ready`,
+        `http://127.0.0.1:${port}/health/ready`
       );
 
       assertEquals(response.status, 200);
@@ -195,7 +195,7 @@ Deno.test(
     } finally {
       await cleanup();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -204,13 +204,13 @@ Deno.test(
     const handler = createHealthyProtocolHandler({
       status: "unhealthy",
       database: { connected: false },
-      pool: { total: 0, idle: 0, active: 0, waiters: 0 },
+      pool: { total: 0, idle: 0, active: 0, waiters: 0 }
     });
     const { port, cleanup } = withTestServer(handler);
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:${port}/health/ready`,
+        `http://127.0.0.1:${port}/health/ready`
       );
 
       assertEquals(response.status, 503);
@@ -220,7 +220,7 @@ Deno.test(
     } finally {
       await cleanup();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -229,13 +229,13 @@ Deno.test(
     const handler = createHealthyProtocolHandler({
       status: "degraded",
       database: { connected: true, latencyMs: 50 },
-      pool: { total: 10, idle: 0, active: 10, waiters: 3 },
+      pool: { total: 10, idle: 0, active: 10, waiters: 3 }
     });
     const { port, cleanup } = withTestServer(handler);
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:${port}/health/ready`,
+        `http://127.0.0.1:${port}/health/ready`
       );
 
       assertEquals(response.status, 200);
@@ -245,7 +245,7 @@ Deno.test(
     } finally {
       await cleanup();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -254,13 +254,13 @@ Deno.test(
     const handler = createHealthyProtocolHandler({
       status: "healthy",
       database: { connected: true, latencyMs: 2 },
-      pool: { total: 5, idle: 3, active: 2, waiters: 0 },
+      pool: { total: 5, idle: 3, active: 2, waiters: 0 }
     });
     const { port, cleanup } = withTestServer(handler);
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:${port}/health`,
+        `http://127.0.0.1:${port}/health`
       );
 
       assertEquals(response.status, 200);
@@ -280,7 +280,7 @@ Deno.test(
     } finally {
       await cleanup();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -289,13 +289,13 @@ Deno.test(
     const handler = createHealthyProtocolHandler({
       status: "degraded",
       database: { connected: true, latencyMs: 100 },
-      pool: { total: 10, idle: 0, active: 10, waiters: 5 },
+      pool: { total: 10, idle: 0, active: 10, waiters: 5 }
     });
     const { port, cleanup } = withTestServer(handler);
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:${port}/health`,
+        `http://127.0.0.1:${port}/health`
       );
 
       assertEquals(response.status, 200);
@@ -307,7 +307,7 @@ Deno.test(
     } finally {
       await cleanup();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -316,13 +316,13 @@ Deno.test(
     const handler = createHealthyProtocolHandler({
       status: "unhealthy",
       database: { connected: false },
-      pool: { total: 0, idle: 0, active: 0, waiters: 0 },
+      pool: { total: 0, idle: 0, active: 0, waiters: 0 }
     });
     const { port, cleanup } = withTestServer(handler);
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:${port}/health`,
+        `http://127.0.0.1:${port}/health`
       );
 
       assertEquals(response.status, 503);
@@ -333,7 +333,7 @@ Deno.test(
     } finally {
       await cleanup();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -342,13 +342,13 @@ Deno.test(
     // Handler with checkHealth that returns healthy with no DB info
     // (simulates no pool / dry-run mode)
     const handler = createHealthyProtocolHandler({
-      status: "healthy",
+      status: "healthy"
     });
     const { port, cleanup } = withTestServer(handler);
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:${port}/health`,
+        `http://127.0.0.1:${port}/health`
       );
 
       assertEquals(response.status, 200);
@@ -362,7 +362,7 @@ Deno.test(
     } finally {
       await cleanup();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -374,7 +374,7 @@ Deno.test(
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:${port}/health`,
+        `http://127.0.0.1:${port}/health`
       );
 
       assertEquals(response.status, 200);
@@ -386,7 +386,7 @@ Deno.test(
     } finally {
       await cleanup();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -397,7 +397,7 @@ Deno.test(
 
     try {
       const response = await fetch(
-        `http://127.0.0.1:${port}/health/ready`,
+        `http://127.0.0.1:${port}/health/ready`
       );
 
       assertEquals(response.status, 200);
@@ -407,5 +407,5 @@ Deno.test(
     } finally {
       await cleanup();
     }
-  },
+  }
 );

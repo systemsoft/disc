@@ -34,21 +34,21 @@ const RUN_PG = canRunPgTests();
 
 /** Parse a DSN into connection config for the raw deno-postgres Client. */
 function parseDsn(
-  dsn: string,
+  dsn: string
 ): { hostname: string; port: number; user: string; database: string; } {
   const url = new URL(dsn);
   return {
     hostname: url.hostname || "localhost",
     port: url.port ? parseInt(url.port) : 5432,
     user: url.username || "disc",
-    database: url.pathname.slice(1) || "disc_test",
+    database: url.pathname.slice(1) || "disc_test"
   };
 }
 
 /** Get column info for a table via a raw client. */
 async function getColumns(
   dsn: string,
-  tableName: string,
+  tableName: string
 ): Promise<{ column_name: string; data_type: string; udt_name: string; }[]> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
@@ -61,7 +61,7 @@ async function getColumns(
        FROM information_schema.columns
        WHERE table_schema = 'public' AND table_name = $1
        ORDER BY ordinal_position`,
-      [tableName],
+      [tableName]
     );
     return result.rows;
   } finally {
@@ -89,7 +89,7 @@ async function dropTables(
 /** Execute raw SQL via a fresh client connection. */
 async function execRawSQL(
   dsn: string,
-  sql: string,
+  sql: string
 ): Promise<void> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
@@ -104,7 +104,7 @@ async function execRawSQL(
 /** Query raw SQL and return rows via a fresh client connection. */
 async function queryRawSQL(
   dsn: string,
-  sql: string,
+  sql: string
 ): Promise<Record<string, unknown>[]> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
@@ -123,7 +123,7 @@ function makePool(dsn: string): ConnectionPool {
     connectionString: dsn,
     cleanupInterval: 0,
     maxConnections: 3,
-    minConnections: 1,
+    minConnections: 1
   });
 }
 
@@ -170,34 +170,34 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`,
+        `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`
       );
 
       // Verify column type
       const columns = await getColumns(dsn, expectedTable);
-      const tagsCol = columns.find((c) => c.column_name === "tags");
+      const tagsCol = columns.find(c => c.column_name === "tags");
       assertEquals(
         tagsCol !== undefined,
         true,
-        "Table should have a 'tags' column",
+        "Table should have a 'tags' column"
       );
       assertEquals(
         tagsCol!.data_type,
         "ARRAY",
-        "array<str> should map to PostgreSQL ARRAY data_type",
+        "array<str> should map to PostgreSQL ARRAY data_type"
       );
 
       // Insert data with array values
       await execRawSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, name, tags)
-         VALUES (gen_random_uuid(), 'item1', ARRAY['alpha', 'beta', 'gamma'])`,
+         VALUES (gen_random_uuid(), 'item1', ARRAY['alpha', 'beta', 'gamma'])`
       );
 
       // Query back and verify
       const rows = await queryRawSQL(
         dsn,
-        `SELECT name, tags FROM ${expectedTable} WHERE name = 'item1'`,
+        `SELECT name, tags FROM ${expectedTable} WHERE name = 'item1'`
       );
 
       assertEquals(rows.length, 1, "Should have one row");
@@ -219,11 +219,11 @@ Deno.test({
         dsn,
         expectedTable,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -255,34 +255,34 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`,
+        `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`
       );
 
       // Verify column type is JSONB
       const columns = await getColumns(dsn, expectedTable);
-      const pairCol = columns.find((c) => c.column_name === "pair");
+      const pairCol = columns.find(c => c.column_name === "pair");
       assertEquals(
         pairCol !== undefined,
         true,
-        "Table should have a 'pair' column",
+        "Table should have a 'pair' column"
       );
       assertEquals(
         pairCol!.udt_name,
         "jsonb",
-        "tuple<str, int64> should map to PostgreSQL JSONB",
+        "tuple<str, int64> should map to PostgreSQL JSONB"
       );
 
       // Insert a tuple as JSONB
       await execRawSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, label, pair)
-         VALUES (gen_random_uuid(), 'test', '["hello", 42]'::jsonb)`,
+         VALUES (gen_random_uuid(), 'test', '["hello", 42]'::jsonb)`
       );
 
       // Query back and verify
       const rows = await queryRawSQL(
         dsn,
-        `SELECT label, pair FROM ${expectedTable} WHERE label = 'test'`,
+        `SELECT label, pair FROM ${expectedTable} WHERE label = 'test'`
       );
 
       assertEquals(rows.length, 1, "Should have one row");
@@ -306,11 +306,11 @@ Deno.test({
         dsn,
         expectedTable,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -335,7 +335,7 @@ Deno.test({
         `CREATE TABLE ${parentTable} (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           name TEXT NOT NULL
-        )`,
+        )`
       );
 
       await execRawSQL(
@@ -344,54 +344,54 @@ Deno.test({
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           name TEXT NOT NULL,
           parent_id UUID REFERENCES ${parentTable}(id) ON DELETE SET NULL
-        )`,
+        )`
       );
 
       // Insert parent and child
       await execRawSQL(
         dsn,
-        `INSERT INTO ${parentTable} (id, name) VALUES ('11111111-1111-1111-1111-111111111111', 'parent1')`,
+        `INSERT INTO ${parentTable} (id, name) VALUES ('11111111-1111-1111-1111-111111111111', 'parent1')`
       );
 
       await execRawSQL(
         dsn,
         `INSERT INTO ${childTable} (id, name, parent_id)
-         VALUES ('22222222-2222-2222-2222-222222222222', 'child1', '11111111-1111-1111-1111-111111111111')`,
+         VALUES ('22222222-2222-2222-2222-222222222222', 'child1', '11111111-1111-1111-1111-111111111111')`
       );
 
       // Verify child has parent reference
       const beforeRows = await queryRawSQL(
         dsn,
-        `SELECT name, parent_id FROM ${childTable} WHERE name = 'child1'`,
+        `SELECT name, parent_id FROM ${childTable} WHERE name = 'child1'`
       );
       assertEquals(beforeRows.length, 1);
       assertEquals(
         beforeRows[0].parent_id,
-        "11111111-1111-1111-1111-111111111111",
+        "11111111-1111-1111-1111-111111111111"
       );
 
       // Delete the parent
       await execRawSQL(
         dsn,
-        `DELETE FROM ${parentTable} WHERE name = 'parent1'`,
+        `DELETE FROM ${parentTable} WHERE name = 'parent1'`
       );
 
       // Verify child's FK is now NULL (set empty)
       const afterRows = await queryRawSQL(
         dsn,
-        `SELECT name, parent_id FROM ${childTable} WHERE name = 'child1'`,
+        `SELECT name, parent_id FROM ${childTable} WHERE name = 'child1'`
       );
       assertEquals(afterRows.length, 1, "Child should still exist");
       assertEquals(
         afterRows[0].parent_id,
         null,
-        "parent_id should be NULL after parent deletion (set empty)",
+        "parent_id should be NULL after parent deletion (set empty)"
       );
     } finally {
       await dropTables(dsn, childTable, parentTable);
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -416,7 +416,7 @@ Deno.test({
         `CREATE TABLE ${targetTable} (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           name TEXT NOT NULL
-        )`,
+        )`
       );
 
       // Create source table with a reference to target
@@ -426,7 +426,7 @@ Deno.test({
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           name TEXT NOT NULL,
           owned_id UUID REFERENCES ${targetTable}(id)
-        )`,
+        )`
       );
 
       // Create an AFTER DELETE trigger function. AFTER fires once the
@@ -441,7 +441,7 @@ Deno.test({
            DELETE FROM ${targetTable} WHERE id = OLD.owned_id;
            RETURN OLD;
          END;
-         $$ LANGUAGE plpgsql`,
+         $$ LANGUAGE plpgsql`
       );
 
       // Create the trigger
@@ -450,60 +450,61 @@ Deno.test({
         `CREATE TRIGGER trg_delete_owned
          AFTER DELETE ON ${sourceTable}
          FOR EACH ROW
-         EXECUTE FUNCTION delete_owned_on_source_delete()`,
+         EXECUTE FUNCTION delete_owned_on_source_delete()`
       );
 
       // Insert target and source rows
       await execRawSQL(
         dsn,
-        `INSERT INTO ${targetTable} (id, name) VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'target1')`,
+        `INSERT INTO ${targetTable} (id, name) VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'target1')`
       );
 
       await execRawSQL(
         dsn,
         `INSERT INTO ${sourceTable} (id, name, owned_id)
-         VALUES ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'source1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')`,
+         VALUES ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'source1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')`
       );
 
       // Verify both exist
       const targetBefore = await queryRawSQL(
         dsn,
-        `SELECT COUNT(*)::int AS cnt FROM ${targetTable}`,
+        `SELECT COUNT(*)::int AS cnt FROM ${targetTable}`
       );
       assertEquals(
         Number(targetBefore[0].cnt),
         1,
-        "Target should exist before delete",
+        "Target should exist before delete"
       );
 
       // Delete the source row (trigger should delete owned target)
       await execRawSQL(
         dsn,
-        `DELETE FROM ${sourceTable} WHERE name = 'source1'`,
+        `DELETE FROM ${sourceTable} WHERE name = 'source1'`
       );
 
       // Verify target was also deleted
       const targetAfter = await queryRawSQL(
         dsn,
-        `SELECT COUNT(*)::int AS cnt FROM ${targetTable}`,
+        `SELECT COUNT(*)::int AS cnt FROM ${targetTable}`
       );
       assertEquals(
         Number(targetAfter[0].cnt),
         0,
-        "Target should be deleted when source is deleted (on source delete delete target)",
+        "Target should be deleted when source is deleted (on source delete delete target)"
       );
     } finally {
       // Drop trigger function after tables
       await dropTables(dsn, sourceTable, targetTable);
       await execRawSQL(
         dsn,
-        "DROP FUNCTION IF EXISTS delete_owned_on_source_delete() CASCADE",
-      ).catch(() => {
-        // best-effort cleanup
-      });
+        "DROP FUNCTION IF EXISTS delete_owned_on_source_delete() CASCADE"
+      )
+        .catch(() => {
+          // best-effort cleanup
+        });
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -538,7 +539,7 @@ Deno.test({
         `CREATE TABLE person (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           name TEXT NOT NULL
-        )`,
+        )`
       );
 
       await execRawSQL(
@@ -549,7 +550,7 @@ Deno.test({
           since TIMESTAMPTZ,
           strength DOUBLE PRECISION,
           PRIMARY KEY (source_id, target_id)
-        )`,
+        )`
       );
 
       // Insert persons and a friendship
@@ -557,7 +558,7 @@ Deno.test({
         dsn,
         `INSERT INTO person (id, name) VALUES
           ('11111111-1111-1111-1111-111111111111', 'Ada'),
-          ('22222222-2222-2222-2222-222222222222', 'Billie')`,
+          ('22222222-2222-2222-2222-222222222222', 'Billie')`
       );
 
       await execRawSQL(
@@ -568,22 +569,22 @@ Deno.test({
           '22222222-2222-2222-2222-222222222222',
           '2024-01-15 10:00:00+00',
           0.95
-        )`,
+        )`
       );
 
       // Verify the junction table has inherited properties
       const columns = await getColumns(dsn, junctionTable);
-      const columnNames = columns.map((c) => c.column_name);
+      const columnNames = columns.map(c => c.column_name);
 
       assertEquals(
         columnNames.includes("since"),
         true,
-        "Junction table should have inherited 'since' property",
+        "Junction table should have inherited 'since' property"
       );
       assertEquals(
         columnNames.includes("strength"),
         true,
-        "Junction table should have inherited 'strength' property",
+        "Junction table should have inherited 'strength' property"
       );
 
       // Verify data round-trip
@@ -595,7 +596,7 @@ Deno.test({
           j.strength
          FROM ${junctionTable} j
          JOIN person p1 ON j.source_id = p1.id
-         JOIN person p2 ON j.target_id = p2.id`,
+         JOIN person p2 ON j.target_id = p2.id`
       );
 
       assertEquals(rows.length, 1);
@@ -606,7 +607,7 @@ Deno.test({
       await dropTables(dsn, junctionTable, "person");
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -640,14 +641,14 @@ Deno.test({
 
       // Execute SUM against PG (raw SQL, not compiled from EdgeQL)
       const sumResult = await pool.query(
-        "SELECT SUM(val) AS total FROM (VALUES (10), (20), (30)) AS t(val)",
+        "SELECT SUM(val) AS total FROM (VALUES (10), (20), (30)) AS t(val)"
       );
       // pool.query returns `{ rows, rowCount }` — index into rows.
       assertEquals(Number(sumResult.rows[0].total), 60);
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -681,42 +682,42 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`,
+        `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`
       );
 
       // Verify column types
       const columns = await getColumns(dsn, expectedTable);
 
-      const tagsCol = columns.find((c) => c.column_name === "tags");
+      const tagsCol = columns.find(c => c.column_name === "tags");
       assertEquals(tagsCol !== undefined, true, "Should have 'tags' column");
       assertEquals(
         tagsCol!.data_type,
         "ARRAY",
-        "array<str> should be ARRAY",
+        "array<str> should be ARRAY"
       );
 
-      const metaCol = columns.find((c) => c.column_name === "metadata");
+      const metaCol = columns.find(c => c.column_name === "metadata");
       assertEquals(
         metaCol !== undefined,
         true,
-        "Should have 'metadata' column",
+        "Should have 'metadata' column"
       );
       assertEquals(
         metaCol!.udt_name,
         "jsonb",
-        "tuple<str, int64> should be jsonb",
+        "tuple<str, int64> should be jsonb"
       );
 
-      const scoresCol = columns.find((c) => c.column_name === "scores");
+      const scoresCol = columns.find(c => c.column_name === "scores");
       assertEquals(
         scoresCol !== undefined,
         true,
-        "Should have 'scores' column",
+        "Should have 'scores' column"
       );
       assertEquals(
         scoresCol!.data_type,
         "ARRAY",
-        "array<float64> should be ARRAY",
+        "array<float64> should be ARRAY"
       );
 
       // Insert data with all three column types
@@ -729,13 +730,13 @@ Deno.test({
           ARRAY['x', 'y'],
           '["label", 99]'::jsonb,
           ARRAY[1.5, 2.7, 3.14]::DOUBLE PRECISION[]
-        )`,
+        )`
       );
 
       // Query back and verify all data
       const rows = await queryRawSQL(
         dsn,
-        `SELECT name, tags, metadata, scores FROM ${expectedTable} WHERE name = 'combined'`,
+        `SELECT name, tags, metadata, scores FROM ${expectedTable} WHERE name = 'combined'`
       );
 
       assertEquals(rows.length, 1, "Should have one row");
@@ -762,7 +763,7 @@ Deno.test({
         assertEquals(
           Math.abs(Number(scores[0]) - 1.5) < 0.01,
           true,
-          "First score should be ~1.5",
+          "First score should be ~1.5"
         );
       }
 
@@ -772,9 +773,9 @@ Deno.test({
         dsn,
         expectedTable,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });

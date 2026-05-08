@@ -20,7 +20,7 @@ export class PostgresManager {
 
   async createInstance(
     name: string,
-    options?: Partial<PostgresInstanceOptions>,
+    options?: Partial<PostgresInstanceOptions>
   ): Promise<PostgresInstance> {
     if (this.instances.has(name)) {
       throw new Error(`Instance '${name}' already exists`);
@@ -33,14 +33,14 @@ export class PostgresManager {
       dataDir: join(instanceDir, "data"),
       instanceName: name,
       socketDir: join(instanceDir, "socket"),
-      ...options,
+      ...options
     });
 
     await instance.init();
 
     this.instances.set(name, {
       instance,
-      name,
+      name
     });
 
     return instance;
@@ -112,7 +112,7 @@ export class PostgresManager {
 
     return {
       ...status,
-      health: healthStatus,
+      health: healthStatus
     };
   }
 
@@ -126,7 +126,7 @@ export class PostgresManager {
       const instance = new PostgresInstance({
         dataDir,
         instanceName: name,
-        socketDir: join(instanceDir, "socket"),
+        socketDir: join(instanceDir, "socket")
       });
 
       // Resolve pgBinDir (needed by start/stop/status) without re-running
@@ -135,7 +135,7 @@ export class PostgresManager {
 
       this.instances.set(name, {
         instance,
-        name,
+        name
       });
 
       return true;
@@ -167,7 +167,7 @@ export class PostgresManager {
 
     // TODO: Implement full pg_dump/pg_restore upgrade pipeline
     throw new Error(
-      `PostgreSQL upgrade to ${targetVersion} not yet implemented for instance '${name}'`,
+      `PostgreSQL upgrade to ${targetVersion} not yet implemented for instance '${name}'`
     );
   }
 
@@ -189,7 +189,7 @@ export class PostgresManager {
     try {
       // Use pg_basebackup or tar for backup
       const cmd = new Deno.Command("tar", {
-        args: ["-czf", backupPath, "-C", dataDir, "."],
+        args: ["-czf", backupPath, "-C", dataDir, "."]
       });
 
       const output = await cmd.output();
@@ -218,7 +218,7 @@ export class PostgresManager {
 
     // Extract backup
     const cmd = new Deno.Command("tar", {
-      args: ["-xzf", backupPath, "-C", dataDir],
+      args: ["-xzf", backupPath, "-C", dataDir]
     });
 
     const output = await cmd.output();

@@ -59,10 +59,10 @@ Deno.test("DbCommand - create rejects invalid name", async () => {
     () =>
       command.create({
         name: "Invalid_Name",
-        databaseUrl: "postgresql://localhost:5432/disc",
+        databaseUrl: "postgresql://localhost:5432/disc"
       }),
     Error,
-    "Invalid database name",
+    "Invalid database name"
   );
 });
 
@@ -73,10 +73,10 @@ Deno.test("DbCommand - create rejects name starting with digit", async () => {
     () =>
       command.create({
         name: "123abc",
-        databaseUrl: "postgresql://localhost:5432/disc",
+        databaseUrl: "postgresql://localhost:5432/disc"
       }),
     Error,
-    "Invalid database name",
+    "Invalid database name"
   );
 });
 
@@ -92,10 +92,10 @@ Deno.test("DbCommand - drop rejects without force flag", async () => {
       command.drop({
         name: "my_app",
         databaseUrl: "postgresql://localhost:5432/disc",
-        force: false,
+        force: false
       }),
     Error,
-    "--force",
+    "--force"
   );
 });
 
@@ -107,10 +107,10 @@ Deno.test("DbCommand - drop rejects dropping default disc database", async () =>
       command.drop({
         name: "disc",
         databaseUrl: "postgresql://localhost:5432/disc",
-        force: true,
+        force: true
       }),
     Error,
-    "Cannot drop the default \"disc\" database",
+    "Cannot drop the default \"disc\" database"
   );
 });
 
@@ -126,10 +126,10 @@ Deno.test("DbCommand - wipe rejects without force flag", async () => {
       command.wipe({
         databaseUrl: "postgresql://localhost:5432/disc",
         force: false,
-        name: "my_app",
+        name: "my_app"
       }),
     Error,
-    "--force",
+    "--force"
   );
 });
 
@@ -141,10 +141,10 @@ Deno.test("DbCommand - wipe rejects wiping default disc database", async () => {
       command.wipe({
         databaseUrl: "postgresql://localhost:5432/disc",
         force: true,
-        name: "disc",
+        name: "disc"
       }),
     Error,
-    "Cannot wipe the default \"disc\" database",
+    "Cannot wipe the default \"disc\" database"
   );
 });
 
@@ -156,10 +156,10 @@ Deno.test("DbCommand - wipe rejects invalid name", async () => {
       command.wipe({
         databaseUrl: "postgresql://localhost:5432/disc",
         force: true,
-        name: "Bad-Name",
+        name: "Bad-Name"
       }),
     Error,
-    "Invalid database name",
+    "Invalid database name"
   );
 });
 
@@ -174,10 +174,10 @@ Deno.test("DbCommand - dump rejects invalid name", async () => {
     () =>
       command.dump({
         databaseUrl: "postgresql://localhost:5432/disc",
-        name: "Invalid-Name",
+        name: "Invalid-Name"
       }),
     Error,
-    "Invalid database name",
+    "Invalid database name"
   );
 });
 
@@ -192,10 +192,10 @@ Deno.test("DbCommand - restore rejects invalid name", async () => {
     () =>
       command.restore({
         databaseUrl: "postgresql://localhost:5432/disc",
-        name: "Invalid-Name",
+        name: "Invalid-Name"
       }),
     Error,
-    "Invalid database name",
+    "Invalid database name"
   );
 });
 
@@ -213,7 +213,7 @@ Deno.test("buildPgDumpArgs - plain format includes expected flags", () => {
     "--no-owner",
     "--no-acl",
     "--format=plain",
-    "disc_my_app",
+    "disc_my_app"
   ]);
 });
 
@@ -232,7 +232,7 @@ Deno.test("buildPsqlArgs - includes --quiet and --dbname", () => {
     "disc",
     "--dbname",
     "disc_my_app",
-    "--quiet",
+    "--quiet"
   ]);
 });
 

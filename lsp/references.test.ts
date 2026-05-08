@@ -35,7 +35,7 @@ Deno.test("provideReferences - returns the declaration when cursor is on it", ()
 }`;
   const pos = findPos(text, "User");
   const refs = provideReferences(text, pos, "file:///t.disc", {
-    includeDeclaration: true,
+    includeDeclaration: true
   });
   // Just one mention of `User` in this doc; the declaration itself.
   assertEquals(refs.length, 1);
@@ -58,7 +58,7 @@ Deno.test("provideReferences - returns all uses of a type name", () => {
 }`;
   const pos = findPos(text, "User"); // declaration
   const refs = provideReferences(text, pos, "file:///r.disc", {
-    includeDeclaration: true,
+    includeDeclaration: true
   });
   // 1 declaration + 2 references = 3
   assertEquals(refs.length, 3);
@@ -76,7 +76,7 @@ Deno.test("provideReferences - includeDeclaration:false omits the declaration", 
 }`;
   const pos = findPos(text, "User");
   const refs = provideReferences(text, pos, "file:///r.disc", {
-    includeDeclaration: false,
+    includeDeclaration: false
   });
   // 1 reference; declaration excluded.
   assertEquals(refs.length, 1);
@@ -95,7 +95,7 @@ Deno.test("provideReferences - cursor on a reference site finds the same set", (
   // Cursor on the `User` referenced in Post (occurrence 1)
   const pos = findPos(text, "User", 1);
   const refs = provideReferences(text, pos, "file:///r.disc", {
-    includeDeclaration: true,
+    includeDeclaration: true
   });
   assertEquals(refs.length, 2);
 });
@@ -117,7 +117,7 @@ Deno.test("provideReferences - unknown identifier returns []", () => {
   const refs = provideReferences(
     text,
     findPos(text, "name"),
-    "file:///r.disc",
+    "file:///r.disc"
   );
   assertEquals(refs.length, 0);
 });
@@ -152,16 +152,16 @@ Deno.test("provideReferences - cross-file: declaration in one file, uses in anot
     context: {
       documents: [
         { uri: "file:///a.disc", text: aText },
-        { uri: "file:///b.disc", text: bText },
-      ],
-    },
+        { uri: "file:///b.disc", text: bText }
+      ]
+    }
   });
   // 1 declaration in a.disc + 2 references in b.disc = 3 total.
   assertEquals(refs.length, 3);
   // The cross-file refs must carry b.disc's URI, not a.disc's.
-  const bRefs = refs.filter((r) => r.uri === "file:///b.disc");
+  const bRefs = refs.filter(r => r.uri === "file:///b.disc");
   assertEquals(bRefs.length, 2);
-  const aRefs = refs.filter((r) => r.uri === "file:///a.disc");
+  const aRefs = refs.filter(r => r.uri === "file:///a.disc");
   assertEquals(aRefs.length, 1);
 });
 
@@ -183,19 +183,19 @@ Deno.test("provideReferences - cross-file: cursor on a use site finds declaratio
     context: {
       documents: [
         { uri: "file:///a.disc", text: aText },
-        { uri: "file:///b.disc", text: bText },
-      ],
-    },
+        { uri: "file:///b.disc", text: bText }
+      ]
+    }
   });
   // 1 declaration in a.disc + 1 use in b.disc.
   assertEquals(refs.length, 2);
   assertEquals(
-    refs.find((r) => r.uri === "file:///a.disc")?.uri,
-    "file:///a.disc",
+    refs.find(r => r.uri === "file:///a.disc")?.uri,
+    "file:///a.disc"
   );
   assertEquals(
-    refs.find((r) => r.uri === "file:///b.disc")?.uri,
-    "file:///b.disc",
+    refs.find(r => r.uri === "file:///b.disc")?.uri,
+    "file:///b.disc"
   );
 });
 
@@ -216,9 +216,9 @@ Deno.test("provideReferences - cross-file: includeDeclaration:false omits the de
     context: {
       documents: [
         { uri: "file:///a.disc", text: aText },
-        { uri: "file:///b.disc", text: bText },
-      ],
-    },
+        { uri: "file:///b.disc", text: bText }
+      ]
+    }
   });
   // 1 use in b.disc; declaration in a.disc excluded.
   assertEquals(refs.length, 1);
@@ -238,7 +238,7 @@ Deno.test("provideReferences - cross-file: empty context falls back to single-fi
   const pos = findPos(text, "User");
   const refs = provideReferences(text, pos, "file:///t.disc", {
     includeDeclaration: true,
-    context: { documents: [] },
+    context: { documents: [] }
   });
   // Single file: 1 decl + 1 use.
   assertEquals(refs.length, 2);
@@ -256,7 +256,7 @@ Deno.test("provideReferences - cross-file: undefined context behaves like single
   const pos = findPos(text, "User");
   // No `context` key — old call shape stays working.
   const refs = provideReferences(text, pos, "file:///t.disc", {
-    includeDeclaration: true,
+    includeDeclaration: true
   });
   assertEquals(refs.length, 1);
 });

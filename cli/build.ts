@@ -26,7 +26,7 @@ const PLATFORM_MAP: Record<string, string> = {
   "darwin-arm64": "aarch64-apple-darwin",
   "darwin-x64": "x86_64-apple-darwin",
   "linux-arm64": "aarch64-unknown-linux-gnu",
-  "linux-x64": "x86_64-unknown-linux-gnu",
+  "linux-x64": "x86_64-unknown-linux-gnu"
 };
 
 /**
@@ -61,7 +61,7 @@ export class BuildCommand {
    */
   resolveOutputPath(
     output: string | undefined,
-    platform: string | undefined,
+    platform: string | undefined
   ): string {
     if (output) {
       return output;
@@ -105,33 +105,36 @@ export class BuildCommand {
   assertEmbeddedPgPresent(
     options: { platform?: string; lite?: boolean; },
     paths: readonly string[],
-    pgSourceDir: string,
+    pgSourceDir: string
   ): void {
-    if (!options.platform) return;
-    if (options.lite) return;
-    if (Deno.env.get("DISC_BUILD_NO_BUNDLE_PG") === "1") return;
+    if (!options.platform)
+      return;
+    if (options.lite)
+      return;
+    if (Deno.env.get("DISC_BUILD_NO_BUNDLE_PG") === "1")
+      return;
 
-    const opOutHint = `To opt out of PG embedding explicitly, set DISC_BUILD_NO_BUNDLE_PG=1 `
-      + `or pass --lite.`;
+    const opOutHint = `To opt out of PG embedding explicitly, set DISC_BUILD_NO_BUNDLE_PG=1 ` +
+      `or pass --lite.`;
 
     if (paths.length === 0) {
       throw new Error(
-        `Cross-compile build for ${options.platform} produced 0 embedded PG `
-          + `files (source dir: ${pgSourceDir}). This usually means PG staging `
-          + `silently failed — check the build log for `
-          + `"Skipped embedded-PG manifest refresh" or download/extract errors. `
-          + opOutHint,
+        `Cross-compile build for ${options.platform} produced 0 embedded PG ` +
+          `files (source dir: ${pgSourceDir}). This usually means PG staging ` +
+          `silently failed — check the build log for ` +
+          `"Skipped embedded-PG manifest refresh" or download/extract errors. ` +
+          opOutHint
       );
     }
 
-    const hasPostgresBinary = paths.some((p) => p.endsWith("/bin/postgres"));
+    const hasPostgresBinary = paths.some(p => p.endsWith("/bin/postgres"));
     if (!hasPostgresBinary) {
       throw new Error(
-        `Cross-compile build for ${options.platform} produced an embedded PG `
-          + `distribution without bin/postgres (${paths.length} files at `
-          + `${pgSourceDir}). The runtime needs the postgres binary to start. `
-          + `This usually means the JAR → txz extract chain partially failed. `
-          + opOutHint,
+        `Cross-compile build for ${options.platform} produced an embedded PG ` +
+          `distribution without bin/postgres (${paths.length} files at ` +
+          `${pgSourceDir}). The runtime needs the postgres binary to start. ` +
+          `This usually means the JAR → txz extract chain partially failed. ` +
+          opOutHint
       );
     }
 
@@ -142,12 +145,12 @@ export class BuildCommand {
     const MIN_PG_FILES = 50;
     if (paths.length < MIN_PG_FILES) {
       throw new Error(
-        `Cross-compile build for ${options.platform} produced only `
-          + `${paths.length} embedded PG files (source dir: ${pgSourceDir}); `
-          + `a real PG 16 distribution has 600+ files. This is a partial `
-          + `extraction — the binary will fail at runtime when PG init can't `
-          + `find timezone or extension data. `
-          + opOutHint,
+        `Cross-compile build for ${options.platform} produced only ` +
+          `${paths.length} embedded PG files (source dir: ${pgSourceDir}); ` +
+          `a real PG 16 distribution has 600+ files. This is a partial ` +
+          `extraction — the binary will fail at runtime when PG init can't ` +
+          `find timezone or extension data. ` +
+          opOutHint
       );
     }
   }
@@ -159,7 +162,7 @@ export class BuildCommand {
   validatePlatform(platform: string): void {
     if (!PLATFORM_MAP[platform]) {
       throw new Error(
-        `Invalid platform: "${platform}". Valid platforms: ${AVAILABLE_PLATFORMS.join(", ")}`,
+        `Invalid platform: "${platform}". Valid platforms: ${AVAILABLE_PLATFORMS.join(", ")}`
       );
     }
   }
@@ -172,11 +175,11 @@ export class BuildCommand {
    */
   buildCompileArgs(
     options: BuildOptions,
-    embeddedPgPaths: readonly string[] = [],
+    embeddedPgPaths: readonly string[] = []
   ): string[] {
     const outputPath = this.resolveOutputPath(
       options.output,
-      options.platform,
+      options.platform
     );
 
     const args: string[] = [
@@ -191,7 +194,7 @@ export class BuildCommand {
       "--allow-env",
       "--allow-run",
       "--output",
-      outputPath,
+      outputPath
     ];
 
     // P2-35: bundle version.txt so VERSION resolution works at runtime.
@@ -239,7 +242,7 @@ export class BuildCommand {
 
     const outputPath = this.resolveOutputPath(
       options.output,
-      options.platform,
+      options.platform
     );
 
     // Refresh the UI manifest before deno compile picks it up so the
@@ -253,7 +256,7 @@ export class BuildCommand {
         }
       } catch (err) {
         console.warn(
-          `  Skipped UI manifest refresh: ${(err as Error).message}`,
+          `  Skipped UI manifest refresh: ${(err as Error).message}`
         );
       }
     }
@@ -274,32 +277,32 @@ export class BuildCommand {
         let pgSourceOverride: string | undefined;
         if (options.platform) {
           console.log(
-            `  Staging PG for cross-compile target ${options.platform}…`,
+            `  Staging PG for cross-compile target ${options.platform}…`
           );
           pgSourceOverride = await ensurePlatformPgStaging(
             Deno.cwd(),
-            options.platform,
+            options.platform
           );
         }
         const refreshed = await refreshEmbeddedPgManifest(
           Deno.cwd(),
           "16.4",
-          pgSourceOverride,
+          pgSourceOverride
         );
         embeddedPgPaths = refreshed.includePaths;
         embeddedPgSourceDir = refreshed.pgSourceDir;
         if (refreshed.wrote) {
           console.log(
-            `  Refreshed embedded-PG manifest: ${refreshed.fileCount} files from ${refreshed.pgSourceDir}`,
+            `  Refreshed embedded-PG manifest: ${refreshed.fileCount} files from ${refreshed.pgSourceDir}`
           );
         } else if (refreshed.fileCount > 0) {
           console.log(
-            `  Embedded-PG manifest unchanged: ${refreshed.fileCount} files`,
+            `  Embedded-PG manifest unchanged: ${refreshed.fileCount} files`
           );
         } else {
           console.log(
-            `  No embedded PG (no cache at ${refreshed.pgSourceDir}); `
-              + `binary will download PG on first run`,
+            `  No embedded PG (no cache at ${refreshed.pgSourceDir}); ` +
+              `binary will download PG on first run`
           );
         }
       } catch (err) {
@@ -309,11 +312,11 @@ export class BuildCommand {
         if (options.platform) {
           throw new Error(
             `PG staging failed for ${options.platform}: ${(err as Error).message}`,
-            { cause: err },
+            { cause: err }
           );
         }
         console.warn(
-          `  Skipped embedded-PG manifest refresh: ${(err as Error).message}`,
+          `  Skipped embedded-PG manifest refresh: ${(err as Error).message}`
         );
       }
     }
@@ -324,7 +327,7 @@ export class BuildCommand {
     this.assertEmbeddedPgPresent(
       options,
       embeddedPgPaths,
-      embeddedPgSourceDir,
+      embeddedPgSourceDir
     );
 
     const compileArgs = this.buildCompileArgs(options, embeddedPgPaths);
@@ -335,7 +338,7 @@ export class BuildCommand {
     if (options.platform) {
       console.log(`  Platform: ${options.platform}`);
       console.log(
-        `  Target: ${this.mapPlatform(options.platform)}`,
+        `  Target: ${this.mapPlatform(options.platform)}`
       );
     }
 
@@ -348,14 +351,14 @@ export class BuildCommand {
     const command = new Deno.Command("deno", {
       args: compileArgs,
       stdout: "inherit",
-      stderr: "inherit",
+      stderr: "inherit"
     });
 
     const result = await command.output();
 
     if (!result.success) {
       throw new Error(
-        `Build failed with exit code ${result.code}`,
+        `Build failed with exit code ${result.code}`
       );
     }
 
@@ -409,12 +412,12 @@ export async function generateUiManifest(buildDir: string): Promise<string> {
   const files = await listBuildArtifacts(buildDir);
   if (files.length === 0) {
     throw new Error(
-      `No files under ${buildDir} — no UI build artifacts to embed. `
-        + `Run \`bash ui/build.sh\` before \`disc build\` (or pass --lite).`,
+      `No files under ${buildDir} — no UI build artifacts to embed. ` +
+        `Run \`bash ui/build.sh\` before \`disc build\` (or pass --lite).`
     );
   }
 
-  const entries = files.map((p) => `  ${JSON.stringify(p)},`).join("\n");
+  const entries = files.map(p => `  ${JSON.stringify(p)},`).join("\n");
 
   return `/**
  * UI asset manifest.
@@ -445,7 +448,7 @@ export const UI_ASSET_SET: ReadonlySet<string> = new Set(UI_ASSET_MANIFEST);
 async function walkPgSource(
   rootDir: string,
   dir: string,
-  entries: { abs: string; rel: string; mode: number; }[],
+  entries: { abs: string; rel: string; mode: number; }[]
 ): Promise<void> {
   for await (const entry of Deno.readDir(dir)) {
     const full = join(dir, entry.name);
@@ -453,7 +456,8 @@ async function walkPgSource(
       await walkPgSource(rootDir, full, entries);
       continue;
     }
-    if (!entry.isFile) continue;
+    if (!entry.isFile)
+      continue;
     const rel = relative(rootDir, full).split("\\").join("/");
     const mode = rel.startsWith("bin/") ? 0o755 : 0o644;
     entries.push({ abs: full, rel, mode });
@@ -492,7 +496,7 @@ export async function generateEmbeddedPgManifest(options: {
   const body = entries.length === 0 ? "[]" : `[\n${
     entries
       .map(
-        (e) => `  { sourceUrl: new URL("file://${e.abs}"), relPath: ${JSON.stringify(e.rel)}, mode: 0o${e.mode.toString(8)} },`,
+        e => `  { sourceUrl: new URL("file://${e.abs}"), relPath: ${JSON.stringify(e.rel)}, mode: 0o${e.mode.toString(8)} },`
       )
       .join("\n")
   }\n]`;
@@ -525,7 +529,7 @@ export const EMBEDDED_PG_MANIFEST: readonly EmbeddedPgEntry[] = ${body};
  * scope (`!options.lite`).
  */
 export async function refreshUiManifest(
-  rootDir: string = Deno.cwd(),
+  rootDir: string = Deno.cwd()
 ): Promise<{ wrote: boolean; path: string; }> {
   const buildDir = join(rootDir, "ui", "build");
   const manifestPath = join(rootDir, "server", "ui-asset-manifest.ts");
@@ -564,7 +568,8 @@ export async function refreshUiManifest(
  */
 function defaultDiscHome(): string {
   const explicit = Deno.env.get("DISC_HOME");
-  if (explicit) return explicit;
+  if (explicit)
+    return explicit;
   const home = Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE") ?? "/tmp";
   return join(home, ".disc");
 }
@@ -588,7 +593,7 @@ export interface RefreshEmbeddedPgResult {
 export function platformPgStagingDir(
   rootDir: string,
   platform: string,
-  pgVersion: string,
+  pgVersion: string
 ): string {
   return join(rootDir, "dist", "embedded-pg", platform, pgVersion);
 }
@@ -605,12 +610,12 @@ export function platformPgStagingDir(
 export async function ensurePlatformPgStaging(
   rootDir: string,
   platform: string,
-  pgVersion: string = "16.4",
+  pgVersion: string = "16.4"
 ): Promise<string> {
   const stagingBase = join(rootDir, "dist", "embedded-pg", platform);
   const downloader = new PostgresBinaryDownloader({
     baseDir: stagingBase,
-    platform,
+    platform
   });
   return await downloader.download(pgVersion);
 }
@@ -628,7 +633,7 @@ export async function ensurePlatformPgStaging(
 export async function refreshEmbeddedPgManifest(
   rootDir: string = Deno.cwd(),
   pgVersion: string = "16.4",
-  pgSourceDirOverride?: string,
+  pgSourceDirOverride?: string
 ): Promise<RefreshEmbeddedPgResult> {
   const manifestPath = join(rootDir, "postgres", "embedded-pg-manifest.ts");
   const optOut = Deno.env.get("DISC_BUILD_NO_BUNDLE_PG") === "1";
@@ -639,7 +644,7 @@ export async function refreshEmbeddedPgManifest(
 
   const generated = await generateEmbeddedPgManifest({
     pgVersion,
-    sourceDir: pgSourceDir,
+    sourceDir: pgSourceDir
   });
 
   let existing = "";
@@ -668,6 +673,6 @@ export async function refreshEmbeddedPgManifest(
     fileCount: includePaths.length,
     includePaths,
     pgSourceDir,
-    wrote,
+    wrote
   };
 }

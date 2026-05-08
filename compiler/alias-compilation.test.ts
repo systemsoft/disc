@@ -29,12 +29,12 @@ import { AliasDef, createTestSchema, resolveAlias, Schema } from "./context.ts";
  * Build a test schema with aliases added to the base createTestSchema().
  */
 function createSchemaWithAliases(
-  aliases: Map<string, AliasDef>,
+  aliases: Map<string, AliasDef>
 ): Schema {
   const base = createTestSchema();
   return {
     ...base,
-    aliases,
+    aliases
   };
 }
 
@@ -63,8 +63,8 @@ Deno.test("Alias Compilation - basic alias resolves to subquery with WHERE", () 
     ["ActiveUsers", {
       name: "ActiveUsers",
       expression: "select User filter .active = true",
-      targetType: "User",
-    }],
+      targetType: "User"
+    }]
   ]);
   const schema = createSchemaWithAliases(aliases);
 
@@ -87,14 +87,14 @@ Deno.test("Alias Compilation - alias with explicit shape selects named columns",
     ["ActiveUsers", {
       name: "ActiveUsers",
       expression: "select User filter .active = true",
-      targetType: "User",
-    }],
+      targetType: "User"
+    }]
   ]);
   const schema = createSchemaWithAliases(aliases);
 
   const sql = compileWithSchema(
     schema,
-    "select ActiveUsers { name, email }",
+    "select ActiveUsers { name, email }"
   );
 
   // The shape columns should appear in the output
@@ -112,14 +112,14 @@ Deno.test("Alias Compilation - alias with additional filter combines both filter
     ["ActiveUsers", {
       name: "ActiveUsers",
       expression: "select User filter .active = true",
-      targetType: "User",
-    }],
+      targetType: "User"
+    }]
   ]);
   const schema = createSchemaWithAliases(aliases);
 
   const sql = compileWithSchema(
     schema,
-    "select ActiveUsers filter .name = \"Ada\"",
+    "select ActiveUsers filter .name = \"Ada\""
   );
 
   // Both the alias filter (active = true) and the outer filter (name = Ada) should be present
@@ -138,14 +138,14 @@ Deno.test("Alias Compilation - simple type alias resolves to underlying table", 
     ["People", {
       name: "People",
       expression: "User",
-      targetType: "User",
-    }],
+      targetType: "User"
+    }]
   ]);
   const schema = createSchemaWithAliases(aliases);
 
   const sql = compileWithSchema(
     schema,
-    "select People { name }",
+    "select People { name }"
   );
 
   // Should resolve to the users table
@@ -163,8 +163,8 @@ Deno.test("Alias Compilation - alias without shape uses implicit shape", () => {
     ["ActiveUsers", {
       name: "ActiveUsers",
       expression: "select User filter .active = true",
-      targetType: "User",
-    }],
+      targetType: "User"
+    }]
   ]);
   const schema = createSchemaWithAliases(aliases);
 
@@ -187,7 +187,7 @@ Deno.test("Alias Compilation - unknown name still throws CompilationError", () =
   assertThrows(
     () => compileWithSchema(schema, "select NonExistent"),
     CompilationError,
-    "not found",
+    "not found"
   );
 });
 
@@ -273,18 +273,18 @@ Deno.test("Alias Compilation - resolveAlias with module scope", () => {
     ["default::ActiveUsers", {
       name: "default::ActiveUsers",
       expression: "select User filter .active = true",
-      targetType: "User",
+      targetType: "User"
     }],
     ["other::SpecialUsers", {
       name: "other::SpecialUsers",
       expression: "select User filter .name = 'special'",
-      targetType: "User",
-    }],
+      targetType: "User"
+    }]
   ]);
 
   const schema: Schema = {
     ...createTestSchema(),
-    aliases,
+    aliases
   };
 
   // 1. Exact match works

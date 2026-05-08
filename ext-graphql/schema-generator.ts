@@ -15,19 +15,19 @@ import type { GraphQLField, GraphQLType } from "./types.ts";
  * uuid maps to ID as the natural GraphQL identifier type.
  */
 export const SCALAR_TYPE_MAP: Record<string, string> = {
-  "bigint": "String",
-  "bool": "Boolean",
-  "bytes": "String",
-  "datetime": "DateTime",
-  "decimal": "String",
-  "float32": "Float",
-  "float64": "Float",
-  "int16": "Int",
-  "int32": "Int",
-  "int64": "String",
-  "json": "JSON",
-  "str": "String",
-  "uuid": "ID",
+  bigint: "String",
+  bool: "Boolean",
+  bytes: "String",
+  datetime: "DateTime",
+  decimal: "String",
+  float32: "Float",
+  float64: "Float",
+  int16: "Int",
+  int32: "Int",
+  int64: "String",
+  json: "JSON",
+  str: "String",
+  uuid: "ID"
 };
 
 /**
@@ -36,11 +36,12 @@ export const SCALAR_TYPE_MAP: Record<string, string> = {
  */
 export function mapEdgeQLTypeToGraphQL(
   edgeqlType: string,
-  schema: Schema,
+  schema: Schema
 ): string {
   // Check scalar map first
   const mapped = SCALAR_TYPE_MAP[edgeqlType];
-  if (mapped) return mapped;
+  if (mapped)
+    return mapped;
 
   // Check if it is an enum type in the schema
   const typeDef = schema.types.get(edgeqlType);
@@ -69,18 +70,18 @@ function stripModule(name: string): string {
  */
 function propertyToField(
   prop: PropertyDef,
-  schema: Schema,
+  schema: Schema
 ): GraphQLField {
   const graphqlType = mapEdgeQLTypeToGraphQL(
     prop.edgeqlType ?? prop.type,
-    schema,
+    schema
   );
   return {
     description: prop.annotations?.description,
     isList: prop.multi,
     name: prop.name,
     required: prop.required,
-    type: graphqlType,
+    type: graphqlType
   };
 }
 
@@ -94,7 +95,7 @@ function linkToField(link: LinkDef): GraphQLField {
     isList: link.multi,
     name: link.name,
     required: link.required,
-    type: targetName,
+    type: targetName
   };
 }
 
@@ -106,14 +107,16 @@ export function generateGraphQLTypes(schema: Schema): GraphQLType[] {
   const types: GraphQLType[] = [];
 
   for (const [, typeDef] of schema.types) {
-    if (typeDef.abstract) continue;
+    if (typeDef.abstract)
+      continue;
 
     if (typeDef.kind === "object") {
       const fields: GraphQLField[] = [];
 
       for (const [, prop] of typeDef.properties) {
         // Skip computed properties — they are not directly settable
-        if (prop.computed) continue;
+        if (prop.computed)
+          continue;
         fields.push(propertyToField(prop, schema));
       }
 
@@ -124,7 +127,7 @@ export function generateGraphQLTypes(schema: Schema): GraphQLType[] {
       types.push({
         description: typeDef.annotations?.description,
         fields,
-        name: stripModule(typeDef.name),
+        name: stripModule(typeDef.name)
       });
     }
   }
@@ -137,8 +140,10 @@ export function generateGraphQLTypes(schema: Schema): GraphQLType[] {
  */
 function formatFieldType(field: GraphQLField): string {
   let typeStr = field.type;
-  if (field.required) typeStr += "!";
-  if (field.isList) typeStr = `[${typeStr}]`;
+  if (field.required)
+    typeStr += "!";
+  if (field.isList)
+    typeStr = `[${typeStr}]`;
   return typeStr;
 }
 
@@ -155,7 +160,7 @@ function formatFieldType(field: GraphQLField): string {
  */
 export function generateGraphQLSchema(
   schema: Schema,
-  options?: { enableMutations?: boolean; },
+  options?: { enableMutations?: boolean; }
 ): string {
   const enableMutations = options?.enableMutations ?? false;
   const lines: string[] = [];
@@ -199,7 +204,7 @@ export function generateGraphQLSchema(
     const lcName = gqlType.name.charAt(0).toLowerCase() + gqlType.name.slice(1);
     lines.push(`  ${lcName}(id: ID!): ${gqlType.name}`);
     lines.push(
-      `  all${gqlType.name}s(first: Int, offset: Int, filter: String): [${gqlType.name}]`,
+      `  all${gqlType.name}s(first: Int, offset: Int, filter: String): [${gqlType.name}]`
     );
   }
   lines.push("}");
@@ -213,7 +218,8 @@ export function generateGraphQLSchema(
       // Create input — skip id (auto-generated)
       lines.push(`input Create${gqlType.name}Input {`);
       for (const field of gqlType.fields) {
-        if (field.name === "id") continue;
+        if (field.name === "id")
+          continue;
         const typeStr = field.type + (field.required ? "!" : "");
         lines.push(`  ${field.name}: ${typeStr}`);
       }
@@ -223,7 +229,8 @@ export function generateGraphQLSchema(
       // Update input — all fields optional
       lines.push(`input Update${gqlType.name}Input {`);
       for (const field of gqlType.fields) {
-        if (field.name === "id") continue;
+        if (field.name === "id")
+          continue;
         lines.push(`  ${field.name}: ${field.type}`);
       }
       lines.push("}");
@@ -233,13 +240,13 @@ export function generateGraphQLSchema(
     lines.push("type Mutation {");
     for (const gqlType of objectTypes) {
       lines.push(
-        `  create${gqlType.name}(input: Create${gqlType.name}Input!): ${gqlType.name}`,
+        `  create${gqlType.name}(input: Create${gqlType.name}Input!): ${gqlType.name}`
       );
       lines.push(
-        `  update${gqlType.name}(id: ID!, input: Update${gqlType.name}Input!): ${gqlType.name}`,
+        `  update${gqlType.name}(id: ID!, input: Update${gqlType.name}Input!): ${gqlType.name}`
       );
       lines.push(
-        `  delete${gqlType.name}(id: ID!): Boolean`,
+        `  delete${gqlType.name}(id: ID!): Boolean`
       );
     }
     lines.push("}");

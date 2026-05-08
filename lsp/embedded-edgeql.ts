@@ -35,7 +35,7 @@ import {
   type Hover,
   type Location,
   type Position,
-  type Range,
+  type Range
 } from "./protocol.ts";
 import { lookupScalar, SCALAR_TYPES } from "./scalar-info.ts";
 import { buildSymbolIndex } from "./symbol-index.ts";
@@ -104,11 +104,13 @@ export function extractEmbeddedQueries(text: string): EmbeddedQuery[] {
  * skipped — they're a benign no-op rather than a parse error.
  */
 export function analyzeEmbeddedDocument(text: string): Diagnostic[] {
-  if (text.length === 0) return [];
+  if (text.length === 0)
+    return [];
   const queries = extractEmbeddedQueries(text);
   const diagnostics: Diagnostic[] = [];
   for (const q of queries) {
-    if (q.content.trim().length === 0) continue;
+    if (q.content.trim().length === 0)
+      continue;
     const parser = new EdgeQLParser(q.content);
     const { errors } = parser.parseWithRecovery();
     for (const err of errors) {
@@ -133,21 +135,21 @@ function toHostDiagnostic(err: DiscError, query: EmbeddedQuery): Diagnostic {
     const hostChar = eqlLine === 0 ? query.start.character + eqlChar : eqlChar;
     range = {
       start: { line: hostLine, character: hostChar },
-      end: { line: hostLine, character: hostChar + 1 },
+      end: { line: hostLine, character: hostChar + 1 }
     };
   } else {
     // Without a location, point at the start of the embedded string —
     // editors at least surface the file-level summary.
     range = {
       start: query.start,
-      end: { line: query.start.line, character: query.start.character + 1 },
+      end: { line: query.start.line, character: query.start.character + 1 }
     };
   }
   return {
     range,
     severity: DiagnosticSeverity.Error,
     source: SOURCE,
-    message: err.message,
+    message: err.message
   };
 }
 
@@ -202,12 +204,13 @@ export interface EnclosingQuery {
 
 export function findEnclosingEmbeddedQuery(
   text: string,
-  hostPos: Position,
+  hostPos: Position
 ): EnclosingQuery | null {
   // We need character-offset arithmetic against `hostPos`, so convert
   // both the cursor and each query's start into flat offsets up front.
   const cursorOffset = positionToOffset(text, hostPos);
-  if (cursorOffset === null) return null;
+  if (cursorOffset === null)
+    return null;
 
   EQL_TEMPLATE_RE.lastIndex = 0;
   let m: RegExpExecArray | null;
@@ -238,13 +241,15 @@ export function findEnclosingEmbeddedQuery(
 export function provideEmbeddedHover(
   text: string,
   hostPos: Position,
-  ctx?: EmbeddedSdlContext,
+  ctx?: EmbeddedSdlContext
 ): Hover | null {
   const enclosing = findEnclosingEmbeddedQuery(text, hostPos);
-  if (!enclosing) return null;
+  if (!enclosing)
+    return null;
 
   const word = wordAt(enclosing.query.content, enclosing.posInQuery);
-  if (!word) return null;
+  if (!word)
+    return null;
 
   const lower = word.toLowerCase();
   const keywordDoc = EDGEQL_KEYWORD_DOCS[lower];
@@ -252,8 +257,8 @@ export function provideEmbeddedHover(
     return {
       contents: {
         kind: "markdown",
-        value: `**${lower}** _(EdgeQL keyword)_\n\n${keywordDoc}`,
-      },
+        value: `**${lower}** _(EdgeQL keyword)_\n\n${keywordDoc}`
+      }
     };
   }
   // Bare keyword (no description in our table): still acknowledge it
@@ -262,8 +267,8 @@ export function provideEmbeddedHover(
     return {
       contents: {
         kind: "markdown",
-        value: `**${lower}** _(EdgeQL keyword)_`,
-      },
+        value: `**${lower}** _(EdgeQL keyword)_`
+      }
     };
   }
 
@@ -272,8 +277,8 @@ export function provideEmbeddedHover(
     return {
       contents: {
         kind: "markdown",
-        value: `**${scalar.name}** _(scalar)_\n\n${scalar.description}`,
-      },
+        value: `**${scalar.name}** _(scalar)_\n\n${scalar.description}`
+      }
     };
   }
 
@@ -286,7 +291,7 @@ export function provideEmbeddedHover(
       const decl = findUserType(doc.text, word);
       if (decl) {
         return {
-          contents: { kind: "markdown", value: renderUserType(decl) },
+          contents: { kind: "markdown", value: renderUserType(decl) }
         };
       }
     }
@@ -310,10 +315,11 @@ export function provideEmbeddedHover(
 export function provideEmbeddedCompletion(
   text: string,
   hostPos: Position,
-  ctx?: EmbeddedSdlContext,
+  ctx?: EmbeddedSdlContext
 ): CompletionItem[] {
   const enclosing = findEnclosingEmbeddedQuery(text, hostPos);
-  if (!enclosing) return [];
+  if (!enclosing)
+    return [];
 
   const items = new Map<string, CompletionItem>();
   for (const kw of EDGEQL_KEYWORDS) {
@@ -324,7 +330,7 @@ export function provideEmbeddedCompletion(
       label: s.name,
       kind: CompletionItemKind.Class,
       detail: "scalar",
-      documentation: s.description,
+      documentation: s.description
     });
   }
   // Phase 7: pull user-defined type names from open `.disc` documents.
@@ -335,11 +341,12 @@ export function provideEmbeddedCompletion(
     for (const doc of ctx.documents) {
       const idx = buildSymbolIndex(doc.text);
       for (const [name, sym] of idx.types) {
-        if (items.has(name)) continue;
+        if (items.has(name))
+          continue;
         items.set(name, {
           label: name,
           kind: CompletionItemKind.Class,
-          detail: `${sym.kind} (from ${shortenUri(doc.uri)})`,
+          detail: `${sym.kind} (from ${shortenUri(doc.uri)})`
         });
       }
     }
@@ -362,17 +369,22 @@ export function provideEmbeddedCompletion(
 export function provideEmbeddedDefinition(
   text: string,
   hostPos: Position,
-  ctx?: EmbeddedSdlContext,
+  ctx?: EmbeddedSdlContext
 ): Location | null {
   const enclosing = findEnclosingEmbeddedQuery(text, hostPos);
-  if (!enclosing) return null;
+  if (!enclosing)
+    return null;
   const word = wordAt(enclosing.query.content, enclosing.posInQuery);
-  if (!word) return null;
+  if (!word)
+    return null;
   // Don't try to resolve EdgeQL keywords or built-in scalars — those
   // have no source location.
-  if (EDGEQL_KEYWORDS.has(word.toLowerCase())) return null;
-  if (lookupScalar(word)) return null;
-  if (!ctx) return null;
+  if (EDGEQL_KEYWORDS.has(word.toLowerCase()))
+    return null;
+  if (lookupScalar(word))
+    return null;
+  if (!ctx)
+    return null;
 
   for (const doc of ctx.documents) {
     const idx = buildSymbolIndex(doc.text);
@@ -457,7 +469,7 @@ const EDGEQL_KEYWORDS = new Set<string>([
   "false",
   "empty",
   "detached",
-  "global",
+  "global"
 ]);
 
 /**
@@ -491,7 +503,7 @@ const EDGEQL_KEYWORD_DOCS: Record<string, string> = {
   global: "Reference a session-scoped global value.",
   module: "Switch the active module for unqualified name resolution.",
   unless: "Conflict-resolution clause introducer (`insert ... unless conflict on .x`).",
-  conflict: "Conflict-resolution clause introducer (`unless conflict on .x`).",
+  conflict: "Conflict-resolution clause introducer (`unless conflict on .x`)."
 };
 
 // ---------------------------------------------------------------------
@@ -508,15 +520,18 @@ const IDENT = /[A-Za-z_][A-Za-z_0-9]*/g;
  */
 function wordAt(text: string, pos: Position): string | null {
   const lines = text.split("\n");
-  if (pos.line < 0 || pos.line >= lines.length) return null;
+  if (pos.line < 0 || pos.line >= lines.length)
+    return null;
   const line = lines[pos.line];
-  if (pos.character < 0 || pos.character > line.length) return null;
+  if (pos.character < 0 || pos.character > line.length)
+    return null;
   IDENT.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = IDENT.exec(line)) !== null) {
     const start = m.index;
     const end = start + m[0].length;
-    if (pos.character >= start && pos.character <= end) return m[0];
+    if (pos.character >= start && pos.character <= end)
+      return m[0];
   }
   return null;
 }
@@ -527,7 +542,8 @@ function wordAt(text: string, pos: Position): string | null {
  * inverse mapping.
  */
 function positionToOffset(text: string, pos: Position): number | null {
-  if (pos.line < 0 || pos.character < 0) return null;
+  if (pos.line < 0 || pos.character < 0)
+    return null;
   let line = 0;
   let lineStart = 0;
   for (let i = 0; i < text.length; i++) {
@@ -535,7 +551,8 @@ function positionToOffset(text: string, pos: Position): number | null {
       const lineEndCandidate = text.indexOf("\n", lineStart);
       const lineEnd = lineEndCandidate === -1 ? text.length : lineEndCandidate;
       const lineLength = lineEnd - lineStart;
-      if (pos.character > lineLength) return null;
+      if (pos.character > lineLength)
+        return null;
       return lineStart + pos.character;
     }
     if (text.charCodeAt(i) === 0x0a /* \n */) {
@@ -544,7 +561,8 @@ function positionToOffset(text: string, pos: Position): number | null {
     }
   }
   // Cursor on the (empty) trailing line — accept character 0 only.
-  if (line === pos.line && pos.character === 0) return text.length;
+  if (line === pos.line && pos.character === 0)
+    return text.length;
   return null;
 }
 

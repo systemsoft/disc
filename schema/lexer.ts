@@ -26,8 +26,8 @@ export class SDLLexer {
 
       const token = this.nextToken();
       if (
-        token && token.type !== TokenType.WHITESPACE
-        && token.type !== TokenType.COMMENT
+        token && token.type !== TokenType.WHITESPACE &&
+        token.type !== TokenType.COMMENT
       ) {
         this.tokens.push(token);
       }
@@ -38,7 +38,7 @@ export class SDLLexer {
       "",
       this.line,
       this.column,
-      this.pos,
+      this.pos
     ));
 
     return this.tokens;
@@ -99,7 +99,7 @@ export class SDLLexer {
             ":=",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         if (this.peek() === ":") {
@@ -109,7 +109,7 @@ export class SDLLexer {
             "::",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         return createToken(
@@ -117,7 +117,7 @@ export class SDLLexer {
           ":",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "-":
@@ -129,7 +129,7 @@ export class SDLLexer {
             "->",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         return createToken(
@@ -137,7 +137,7 @@ export class SDLLexer {
           "-",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "+":
@@ -149,7 +149,7 @@ export class SDLLexer {
             "++",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         return createToken(
@@ -157,7 +157,7 @@ export class SDLLexer {
           "+",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "=":
@@ -167,7 +167,7 @@ export class SDLLexer {
           "=",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "!":
@@ -179,11 +179,11 @@ export class SDLLexer {
             "!=",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         throw new SyntaxError(`Unexpected character '!'`, {
-          location: { line: startLine, column: startColumn, offset: startPos },
+          location: { line: startLine, column: startColumn, offset: startPos }
         });
 
       case "?":
@@ -195,7 +195,7 @@ export class SDLLexer {
             "?=",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         if (this.peek() === "!" && this.peekAhead(1) === "=") {
@@ -206,11 +206,11 @@ export class SDLLexer {
             "?!=",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         throw new SyntaxError(`Unexpected character '?'`, {
-          location: { line: startLine, column: startColumn, offset: startPos },
+          location: { line: startLine, column: startColumn, offset: startPos }
         });
 
       case "<":
@@ -222,7 +222,7 @@ export class SDLLexer {
             "<=",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         return createToken(
@@ -230,7 +230,7 @@ export class SDLLexer {
           "<",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case ">":
@@ -242,7 +242,7 @@ export class SDLLexer {
             ">=",
             startLine,
             startColumn,
-            startPos,
+            startPos
           );
         }
         return createToken(
@@ -250,7 +250,7 @@ export class SDLLexer {
           ">",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case ";":
@@ -260,7 +260,7 @@ export class SDLLexer {
           ";",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case ",":
@@ -270,7 +270,7 @@ export class SDLLexer {
           ",",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case ".":
@@ -280,7 +280,7 @@ export class SDLLexer {
           ".",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "(":
@@ -290,7 +290,7 @@ export class SDLLexer {
           "(",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case ")":
@@ -300,7 +300,7 @@ export class SDLLexer {
           ")",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "{":
@@ -310,7 +310,7 @@ export class SDLLexer {
           "{",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "}":
@@ -320,7 +320,7 @@ export class SDLLexer {
           "}",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "[":
@@ -330,7 +330,7 @@ export class SDLLexer {
           "[",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "]":
@@ -340,7 +340,7 @@ export class SDLLexer {
           "]",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "*":
@@ -350,7 +350,7 @@ export class SDLLexer {
           "*",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "/":
@@ -360,7 +360,7 @@ export class SDLLexer {
           "/",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "%":
@@ -370,7 +370,7 @@ export class SDLLexer {
           "%",
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
 
       case "@":
@@ -379,7 +379,7 @@ export class SDLLexer {
 
       default:
         throw new SyntaxError(`Unexpected character '${ch}'`, {
-          location: { line: startLine, column: startColumn, offset: startPos },
+          location: { line: startLine, column: startColumn, offset: startPos }
         });
     }
   }
@@ -400,7 +400,7 @@ export class SDLLexer {
 
       if (ch === null) {
         throw new SyntaxError(`Unterminated string literal`, {
-          location: { line: startLine, column: startColumn, offset: startPos },
+          location: { line: startLine, column: startColumn, offset: startPos }
         });
       }
 
@@ -413,12 +413,13 @@ export class SDLLexer {
             throw new SyntaxError(
               `Invalid \\u escape — expected 4 hex digits, got ${JSON.stringify(hex)}`,
               {
-                location: { line: this.line, column: this.column, offset: this.pos },
-              },
+                location: { line: this.line, column: this.column, offset: this.pos }
+              }
             );
           }
           parts.push(String.fromCodePoint(parseInt(hex, 16)));
-          for (let i = 0; i < 4; i++) this.advance();
+          for (let i = 0; i < 4; i++)
+            this.advance();
           escaped = false;
           runStart = this.pos;
           continue;
@@ -445,7 +446,7 @@ export class SDLLexer {
           parts.join(""),
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
       } else {
         this.advance();
@@ -453,7 +454,7 @@ export class SDLLexer {
     }
 
     throw new SyntaxError(`Unterminated string literal`, {
-      location: { line: startLine, column: startColumn, offset: startPos },
+      location: { line: startLine, column: startColumn, offset: startPos }
     });
   }
 
@@ -471,7 +472,7 @@ export class SDLLexer {
 
       if (ch === null) {
         throw new SyntaxError(`Unterminated backtick identifier`, {
-          location: { line: startLine, column: startColumn, offset: startPos },
+          location: { line: startLine, column: startColumn, offset: startPos }
         });
       }
 
@@ -483,7 +484,7 @@ export class SDLLexer {
           value,
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
       }
 
@@ -491,7 +492,7 @@ export class SDLLexer {
     }
 
     throw new SyntaxError(`Unterminated backtick identifier`, {
-      location: { line: startLine, column: startColumn, offset: startPos },
+      location: { line: startLine, column: startColumn, offset: startPos }
     });
   }
 
@@ -503,7 +504,7 @@ export class SDLLexer {
     const quote = this.peek();
     if (!quote || (quote !== "\"" && quote !== "'")) {
       throw new SyntaxError(`Expected quote after 'r'`, {
-        location: { line: startLine, column: startColumn, offset: startPos },
+        location: { line: startLine, column: startColumn, offset: startPos }
       });
     }
 
@@ -516,7 +517,7 @@ export class SDLLexer {
 
       if (ch === null) {
         throw new SyntaxError(`Unterminated raw string literal`, {
-          location: { line: startLine, column: startColumn, offset: startPos },
+          location: { line: startLine, column: startColumn, offset: startPos }
         });
       }
 
@@ -528,7 +529,7 @@ export class SDLLexer {
           value,
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
       }
 
@@ -536,7 +537,7 @@ export class SDLLexer {
     }
 
     throw new SyntaxError(`Unterminated raw string literal`, {
-      location: { line: startLine, column: startColumn, offset: startPos },
+      location: { line: startLine, column: startColumn, offset: startPos }
     });
   }
 
@@ -575,7 +576,7 @@ export class SDLLexer {
 
       if (!this.isDigit(this.peek())) {
         throw new SyntaxError(`Invalid number format`, {
-          location: { line: startLine, column: startColumn, offset: startPos },
+          location: { line: startLine, column: startColumn, offset: startPos }
         });
       }
 
@@ -591,7 +592,7 @@ export class SDLLexer {
       value,
       startLine,
       startColumn,
-      startPos,
+      startPos
     );
   }
 
@@ -616,7 +617,7 @@ export class SDLLexer {
           value.toLowerCase(),
           startLine,
           startColumn,
-          startPos,
+          startPos
         );
       }
       return createToken(keywordType, value, startLine, startColumn, startPos);
@@ -627,7 +628,7 @@ export class SDLLexer {
       value,
       startLine,
       startColumn,
-      startPos,
+      startPos
     );
   }
 
@@ -640,7 +641,7 @@ export class SDLLexer {
 
     if (!this.isIdentStart(this.peek())) {
       throw new SyntaxError(`Invalid parameter name`, {
-        location: { line: startLine, column: startColumn, offset: startPos },
+        location: { line: startLine, column: startColumn, offset: startPos }
       });
     }
 
@@ -655,7 +656,7 @@ export class SDLLexer {
       value,
       startLine,
       startColumn,
-      startPos,
+      startPos
     );
   }
 
@@ -729,17 +730,19 @@ export class SDLLexer {
   }
 
   private isDigit(ch: string | null): boolean {
-    if (ch === null) return false;
+    if (ch === null)
+      return false;
     return ch >= "0" && ch <= "9";
   }
 
   private isIdentStart(ch: string | null): boolean {
-    if (ch === null) return false;
+    if (ch === null)
+      return false;
     // ASCII fast-path
     if (
-      (ch >= "a" && ch <= "z")
-      || (ch >= "A" && ch <= "Z")
-      || ch === "_"
+      (ch >= "a" && ch <= "z") ||
+      (ch >= "A" && ch <= "Z") ||
+      ch === "_"
     ) {
       return true;
     }
@@ -750,7 +753,8 @@ export class SDLLexer {
   }
 
   private isIdentCont(ch: string | null): boolean {
-    if (ch === null) return false;
+    if (ch === null)
+      return false;
     // P2-04: identifier continuation allows letters, digits, and
     // Unicode marks (combining chars like accents).
     return this.isIdentStart(ch) || this.isDigit(ch) || /\p{M}/u.test(ch);

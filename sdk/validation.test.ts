@@ -9,12 +9,12 @@ import { applyValidator } from "./validation.ts";
 // --- Mock fetch helper ---
 
 function mockFetch(
-  handler: (url: string, init?: RequestInit) => Response | Promise<Response>,
+  handler: (url: string, init?: RequestInit) => Response | Promise<Response>
 ): () => void {
   const original = globalThis.fetch;
   globalThis.fetch = (
     input: string | URL | Request,
-    init?: RequestInit,
+    init?: RequestInit
   ): Promise<Response> => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     return Promise.resolve(handler(url, init));
@@ -37,20 +37,20 @@ const userSchema: StandardSchemaV1<User> = {
     vendor: "test",
     validate(value) {
       if (
-        typeof value === "object"
-        && value !== null
-        && typeof (value as { name?: unknown; }).name === "string"
-        && typeof (value as { age?: unknown; }).age === "number"
+        typeof value === "object" &&
+        value !== null &&
+        typeof (value as { name?: unknown; }).name === "string" &&
+        typeof (value as { age?: unknown; }).age === "number"
       ) {
         return { value: value as User };
       }
       return {
         issues: [
-          { message: "expected { name: string, age: number }", path: [] },
-        ],
+          { message: "expected { name: string, age: number }", path: [] }
+        ]
       };
-    },
-  },
+    }
+  }
 };
 
 const asyncUserSchema: StandardSchemaV1<User> = {
@@ -60,8 +60,8 @@ const asyncUserSchema: StandardSchemaV1<User> = {
     async validate(value) {
       await Promise.resolve();
       return userSchema["~standard"].validate(value);
-    },
-  },
+    }
+  }
 };
 
 // --- applyValidator unit tests ---
@@ -69,7 +69,7 @@ const asyncUserSchema: StandardSchemaV1<User> = {
 Deno.test("applyValidator - function returns value", async () => {
   const result = await applyValidator(
     (v: unknown) => v as { ok: true; },
-    { ok: true },
+    { ok: true }
   );
   assertEquals(result.ok, true);
 });
@@ -81,7 +81,7 @@ Deno.test("applyValidator - function throw becomes DiscValidationError", async (
         throw new Error("nope");
       }, {}),
     DiscValidationError,
-    "nope",
+    "nope"
   );
 });
 
@@ -114,13 +114,13 @@ Deno.test("applyValidator - schema throw becomes DiscValidationError", async () 
       vendor: "broken",
       validate() {
         throw new Error("schema crashed");
-      },
-    },
+      }
+    }
   };
   await assertRejects(
     () => applyValidator(throwing, {}),
     DiscValidationError,
-    "schema crashed",
+    "schema crashed"
   );
 });
 
@@ -134,11 +134,11 @@ Deno.test("client.query - validate function transforms data", async () => {
       "select User { name, age } limit 1",
       undefined,
       {
-        validate: (v) => {
+        validate: v => {
           const r = v as { name: string; age: number; };
           return { ...r, name: r.name.toUpperCase() };
-        },
-      },
+        }
+      }
     );
     assertEquals(u.name, "ADA");
   } finally {
@@ -153,9 +153,9 @@ Deno.test("client.query - validate schema rejects mismatched response", async ()
     await assertRejects(
       () =>
         client.query("select User { name } limit 1", undefined, {
-          validate: userSchema,
+          validate: userSchema
         }),
-      DiscValidationError,
+      DiscValidationError
     );
   } finally {
     restore();
@@ -169,10 +169,10 @@ Deno.test("client.query - validate not run on query errors", async () => {
     const client = new DiscClient();
     await assertRejects(() =>
       client.query("bad", undefined, {
-        validate: (v) => {
+        validate: v => {
           validatorCalled = true;
           return v;
-        },
+        }
       })
     );
     assertEquals(validatorCalled, false);
@@ -187,7 +187,7 @@ Deno.test("client.query - omitted validator preserves cast behavior", async () =
     const client = new DiscClient();
     // Intentionally lying about the response shape; cast must succeed.
     const u = await client.query<{ name: string; }>(
-      "select User { name }",
+      "select User { name }"
     );
     assertEquals((u as unknown as { whatever: boolean; }).whatever, true);
   } finally {
@@ -200,7 +200,7 @@ Deno.test("client.query - omitted validator preserves cast behavior", async () =
 Deno.test("client.query - revive: true converts ISO datetime to Date", async () => {
   const restore = mockFetch(() =>
     new Response(JSON.stringify({
-      data: { created_at: "2026-05-05T12:00:00Z", name: "Ada" },
+      data: { created_at: "2026-05-05T12:00:00Z", name: "Ada" }
     }))
   );
   try {
@@ -208,7 +208,7 @@ Deno.test("client.query - revive: true converts ISO datetime to Date", async () 
     const u = await client.query<{ created_at: Date; name: string; }>(
       "select User { created_at, name }",
       undefined,
-      { revive: true },
+      { revive: true }
     );
     assertInstanceOf(u.created_at, Date);
     assertEquals(u.created_at.toISOString(), "2026-05-05T12:00:00.000Z");
@@ -221,7 +221,7 @@ Deno.test("client.query - revive: true converts ISO datetime to Date", async () 
 Deno.test("client.query - revive runs before validator (validator sees Date)", async () => {
   const restore = mockFetch(() =>
     new Response(JSON.stringify({
-      data: { created_at: "2026-05-05T12:00:00Z" },
+      data: { created_at: "2026-05-05T12:00:00Z" }
     }))
   );
   try {
@@ -237,8 +237,8 @@ Deno.test("client.query - revive runs before validator (validator sees Date)", a
             throw new Error("validator did not see Date");
           }
           return v as { created_at: Date; };
-        },
-      },
+        }
+      }
     );
     assertInstanceOf(out.created_at, Date);
   } finally {
@@ -249,13 +249,13 @@ Deno.test("client.query - revive runs before validator (validator sees Date)", a
 Deno.test("client.query - omitted revive leaves strings alone", async () => {
   const restore = mockFetch(() =>
     new Response(JSON.stringify({
-      data: { created_at: "2026-05-05T12:00:00Z" },
+      data: { created_at: "2026-05-05T12:00:00Z" }
     }))
   );
   try {
     const client = new DiscClient();
     const u = await client.query<{ created_at: string; }>(
-      "select User { created_at }",
+      "select User { created_at }"
     );
     assertEquals(typeof u.created_at, "string");
   } finally {
@@ -266,7 +266,7 @@ Deno.test("client.query - omitted revive leaves strings alone", async () => {
 // --- transaction.query<T>() integration ---
 
 Deno.test("transaction.query - validator runs and rejects", async () => {
-  const restore = mockFetch((url) => {
+  const restore = mockFetch(url => {
     if (url.endsWith("/transaction/begin")) {
       return new Response(JSON.stringify({ transactionId: "tx-v" }));
     }
@@ -282,12 +282,12 @@ Deno.test("transaction.query - validator runs and rejects", async () => {
     const client = new DiscClient();
     await assertRejects(
       () =>
-        client.transaction((tx) =>
+        client.transaction(tx =>
           tx.query("select User { name }", undefined, {
-            validate: userSchema,
+            validate: userSchema
           })
         ),
-      DiscValidationError,
+      DiscValidationError
     );
   } finally {
     restore();
@@ -295,13 +295,13 @@ Deno.test("transaction.query - validator runs and rejects", async () => {
 });
 
 Deno.test("transaction.query - validator success", async () => {
-  const restore = mockFetch((url) => {
+  const restore = mockFetch(url => {
     if (url.endsWith("/transaction/begin")) {
       return new Response(JSON.stringify({ transactionId: "tx-v2" }));
     }
     if (url.endsWith("/query")) {
       return new Response(
-        JSON.stringify({ data: { name: "Ada", age: 36 } }),
+        JSON.stringify({ data: { name: "Ada", age: 36 } })
       );
     }
     if (url.includes("/commit")) {
@@ -311,9 +311,9 @@ Deno.test("transaction.query - validator success", async () => {
   });
   try {
     const client = new DiscClient();
-    const u = await client.transaction((tx) =>
+    const u = await client.transaction(tx =>
       tx.query("select User { name, age }", undefined, {
-        validate: userSchema,
+        validate: userSchema
       })
     );
     assertEquals(u.name, "Ada");

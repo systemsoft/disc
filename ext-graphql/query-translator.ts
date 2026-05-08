@@ -165,7 +165,7 @@ class GraphQLParser {
       operationName,
       selections,
       type,
-      fragments: Object.keys(fragments).length > 0 ? fragments : undefined,
+      fragments: Object.keys(fragments).length > 0 ? fragments : undefined
     };
   }
 
@@ -179,7 +179,7 @@ class GraphQLParser {
     this.skipWhitespace();
     if (!this.lookAhead("on")) {
       throw new Error(
-        `GraphQL parse error: expected 'on' after fragment name '${name}'`,
+        `GraphQL parse error: expected 'on' after fragment name '${name}'`
       );
     }
     this.consume("on");
@@ -193,7 +193,7 @@ class GraphQLParser {
       name,
       typeCondition,
       selections,
-      directives: directives.length > 0 ? directives : undefined,
+      directives: directives.length > 0 ? directives : undefined
     };
   }
 
@@ -222,9 +222,9 @@ class GraphQLParser {
 
     // Spread (`...`) — fragment spread or inline fragment.
     if (
-      this.peek() === "."
-      && this.input[this.pos + 1] === "."
-      && this.input[this.pos + 2] === "."
+      this.peek() === "." &&
+      this.input[this.pos + 1] === "." &&
+      this.input[this.pos + 2] === "."
     ) {
       this.pos += 3;
       this.skipWhitespace();
@@ -249,7 +249,7 @@ class GraphQLParser {
           fieldName: typeCondition ?? "<inline>",
           subSelections,
           directives: directives.length > 0 ? directives : undefined,
-          typeCondition,
+          typeCondition
         };
       }
 
@@ -263,7 +263,7 @@ class GraphQLParser {
         arguments: {},
         fieldName: fragmentName,
         directives: directives.length > 0 ? directives : undefined,
-        fragmentName,
+        fragmentName
       };
     }
 
@@ -309,7 +309,7 @@ class GraphQLParser {
       arguments: args,
       fieldName,
       subSelections,
-      directives: directives.length > 0 ? directives : undefined,
+      directives: directives.length > 0 ? directives : undefined
     };
   }
 
@@ -388,13 +388,17 @@ class GraphQLParser {
 
     // Number, boolean, null, or enum value
     const word = this.readName();
-    if (word === "true") return true;
-    if (word === "false") return false;
-    if (word === "null") return null;
+    if (word === "true")
+      return true;
+    if (word === "false")
+      return false;
+    if (word === "null")
+      return null;
 
     // Try to parse as number
     const num = Number(word);
-    if (!isNaN(num)) return num;
+    if (!isNaN(num))
+      return num;
 
     // Enum value
     return word;
@@ -478,8 +482,10 @@ class GraphQLParser {
     let depth = 1;
     while (depth > 0 && this.pos < this.input.length) {
       const ch = this.input[this.pos];
-      if (ch === "(") depth++;
-      else if (ch === ")") depth--;
+      if (ch === "(")
+        depth++;
+      else if (ch === ")")
+        depth--;
       this.pos++;
     }
   }
@@ -507,7 +513,7 @@ class GraphQLParser {
   private expect(ch: string): void {
     if (this.input[this.pos] !== ch) {
       throw new Error(
-        `GraphQL parse error: expected '${ch}' at position ${this.pos}, got '${this.input[this.pos] ?? "EOF"}'`,
+        `GraphQL parse error: expected '${ch}' at position ${this.pos}, got '${this.input[this.pos] ?? "EOF"}'`
       );
     }
     this.pos++;
@@ -517,7 +523,7 @@ class GraphQLParser {
     for (let i = 0; i < word.length; i++) {
       if (this.input[this.pos + i] !== word[i]) {
         throw new Error(
-          `GraphQL parse error: expected '${word}' at position ${this.pos}`,
+          `GraphQL parse error: expected '${word}' at position ${this.pos}`
         );
       }
     }
@@ -526,25 +532,27 @@ class GraphQLParser {
 
   private lookAhead(word: string): boolean {
     for (let i = 0; i < word.length; i++) {
-      if (this.input[this.pos + i] !== word[i]) return false;
+      if (this.input[this.pos + i] !== word[i])
+        return false;
     }
     // Ensure the word ends at a boundary (not part of a longer name)
     const nextChar = this.input[this.pos + word.length];
-    if (nextChar && /[a-zA-Z0-9_]/.test(nextChar)) return false;
+    if (nextChar && /[a-zA-Z0-9_]/.test(nextChar))
+      return false;
     return true;
   }
 
   private readName(): string {
     const start = this.pos;
     while (
-      this.pos < this.input.length
-      && /[a-zA-Z0-9_]/.test(this.input[this.pos])
+      this.pos < this.input.length &&
+      /[a-zA-Z0-9_]/.test(this.input[this.pos])
     ) {
       this.pos++;
     }
     if (this.pos === start) {
       throw new Error(
-        `GraphQL parse error: expected name at position ${this.pos}, got '${this.input[this.pos] ?? "EOF"}'`,
+        `GraphQL parse error: expected name at position ${this.pos}, got '${this.input[this.pos] ?? "EOF"}'`
       );
     }
     return this.input.slice(start, this.pos);
@@ -567,7 +575,7 @@ class GraphQLParser {
  * after the variable is bound.
  */
 export function inlineFragments(
-  parsed: ParsedGraphQLQuery,
+  parsed: ParsedGraphQLQuery
 ): ParsedGraphQLQuery {
   const fragments = parsed.fragments ?? {};
   const seen = new Set<string>();
@@ -575,18 +583,19 @@ export function inlineFragments(
   function expand(selections: GraphQLSelection[]): GraphQLSelection[] {
     const out: GraphQLSelection[] = [];
     for (const sel of selections) {
-      if (!directivePermits(sel)) continue;
+      if (!directivePermits(sel))
+        continue;
 
       if (sel.kind === "FragmentSpread" && sel.fragmentName) {
         const def = fragments[sel.fragmentName];
         if (!def) {
           throw new Error(
-            `Unknown fragment '${sel.fragmentName}'`,
+            `Unknown fragment '${sel.fragmentName}'`
           );
         }
         if (seen.has(sel.fragmentName)) {
           throw new Error(
-            `Cycle in fragment spreads at '${sel.fragmentName}'`,
+            `Cycle in fragment spreads at '${sel.fragmentName}'`
           );
         }
         seen.add(sel.fragmentName);
@@ -620,15 +629,18 @@ export function inlineFragments(
  * argument is a variable reference) — runtime filtering is deferred.
  */
 function directivePermits(sel: GraphQLSelection): boolean {
-  if (!sel.directives || sel.directives.length === 0) return true;
+  if (!sel.directives || sel.directives.length === 0)
+    return true;
   for (const dir of sel.directives) {
     const ifVal = dir.arguments.if;
     // Variable-ref → defer to runtime, keep the field.
     if (typeof ifVal === "object" && ifVal !== null && "__variable" in ifVal) {
       continue;
     }
-    if (dir.name === "skip" && ifVal === true) return false;
-    if (dir.name === "include" && ifVal === false) return false;
+    if (dir.name === "skip" && ifVal === true)
+      return false;
+    if (dir.name === "include" && ifVal === false)
+      return false;
   }
   return true;
 }
@@ -643,7 +655,7 @@ function directivePermits(sel: GraphQLSelection): boolean {
  */
 export function isIntrospectionQuery(parsed: ParsedGraphQLQuery): boolean {
   return parsed.selections.some(
-    (sel) => sel.fieldName === "__schema" || sel.fieldName === "__type",
+    sel => sel.fieldName === "__schema" || sel.fieldName === "__type"
   );
 }
 
@@ -658,7 +670,7 @@ export function isIntrospectionQuery(parsed: ParsedGraphQLQuery): boolean {
  */
 export function resolveIntrospection(
   parsed: ParsedGraphQLQuery,
-  schema: Schema,
+  schema: Schema
 ): Record<string, unknown> {
   const data: Record<string, unknown> = {};
 
@@ -680,7 +692,7 @@ export function resolveIntrospection(
 
 function resolveSchemaIntrospection(
   selection: GraphQLSelection,
-  schema: Schema,
+  schema: Schema
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const sub of selection.subSelections ?? []) {
@@ -698,7 +710,7 @@ function resolveSchemaIntrospection(
       // Disc supports the two GraphQL spec directives.
       result[sub.alias ?? "directives"] = [
         { name: "skip", locations: ["FIELD", "FRAGMENT_SPREAD", "INLINE_FRAGMENT"] },
-        { name: "include", locations: ["FIELD", "FRAGMENT_SPREAD", "INLINE_FRAGMENT"] },
+        { name: "include", locations: ["FIELD", "FRAGMENT_SPREAD", "INLINE_FRAGMENT"] }
       ];
     }
   }
@@ -708,7 +720,7 @@ function resolveSchemaIntrospection(
 function resolveTypeIntrospection(
   selection: GraphQLSelection,
   schema: Schema,
-  typeName: string,
+  typeName: string
 ): Record<string, unknown> | null {
   // Tolerate qualified ("module::Type") and unqualified ("Type") names.
   let def: { name: string; properties: Map<string, unknown>; links?: Map<string, unknown>; } | undefined;
@@ -719,13 +731,14 @@ function resolveTypeIntrospection(
       break;
     }
   }
-  if (!def) return null;
+  if (!def)
+    return null;
   return introspectionTypeShape(selection, def);
 }
 
 function introspectionTypeShape(
   selection: GraphQLSelection,
-  def: { name: string; properties: Map<string, unknown>; links?: Map<string, unknown>; },
+  def: { name: string; properties: Map<string, unknown>; links?: Map<string, unknown>; }
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const sub of selection.subSelections ?? []) {
@@ -762,7 +775,7 @@ function introspectionTypeShape(
  */
 function resolveTypeName(
   fieldName: string,
-  schema: Schema,
+  schema: Schema
 ): string | undefined {
   // Direct PascalCase match
   const pascal = fieldName.charAt(0).toUpperCase() + fieldName.slice(1);
@@ -770,7 +783,8 @@ function resolveTypeName(
   // Try direct match first
   for (const [name] of schema.types) {
     const shortName = name.includes("::") ? name.split("::").pop()! : name;
-    if (shortName === pascal) return shortName;
+    if (shortName === pascal)
+      return shortName;
   }
 
   // "allUsers" -> "User" (strip "all" prefix and trailing "s")
@@ -778,7 +792,8 @@ function resolveTypeName(
     const candidate = fieldName.slice(3, -1);
     for (const [name] of schema.types) {
       const shortName = name.includes("::") ? name.split("::").pop()! : name;
-      if (shortName === candidate) return shortName;
+      if (shortName === candidate)
+        return shortName;
     }
   }
 
@@ -788,7 +803,8 @@ function resolveTypeName(
       const candidate = fieldName.slice(prefix.length);
       for (const [name] of schema.types) {
         const shortName = name.includes("::") ? name.split("::").pop()! : name;
-        if (shortName === candidate) return shortName;
+        if (shortName === candidate)
+          return shortName;
       }
     }
   }
@@ -806,7 +822,8 @@ function resolveTypeName(
 function buildShape(selections: GraphQLSelection[]): string {
   const parts: string[] = [];
   for (const sel of selections) {
-    if (sel.fieldName === "__typename") continue;
+    if (sel.fieldName === "__typename")
+      continue;
     if (sel.subSelections && sel.subSelections.length > 0) {
       parts.push(`${sel.fieldName}: {${buildShape(sel.subSelections)}}`);
     } else {
@@ -820,10 +837,14 @@ function buildShape(selections: GraphQLSelection[]): string {
  * Format a value for use in EdgeQL.
  */
 function formatEdgeQLValue(value: unknown): string {
-  if (typeof value === "string") return `"${value}"`;
-  if (typeof value === "number") return String(value);
-  if (typeof value === "boolean") return String(value);
-  if (value === null) return "{}";
+  if (typeof value === "string")
+    return `"${value}"`;
+  if (typeof value === "number")
+    return String(value);
+  if (typeof value === "boolean")
+    return String(value);
+  if (value === null)
+    return "{}";
   if (
     typeof value === "object" && value !== null && "__variable" in value
   ) {
@@ -854,7 +875,7 @@ function formatEdgeQLValue(value: unknown): string {
  */
 export function translateToEdgeQL(
   parsed: ParsedGraphQLQuery,
-  schema: Schema,
+  schema: Schema
 ): TranslationResult {
   const results: string[] = [];
   const variables: Record<string, unknown> = {};
@@ -863,17 +884,17 @@ export function translateToEdgeQL(
     const typeName = resolveTypeName(selection.fieldName, schema);
     if (!typeName) {
       throw new Error(
-        `Cannot resolve GraphQL field "${selection.fieldName}" to a Disc type`,
+        `Cannot resolve GraphQL field "${selection.fieldName}" to a Disc type`
       );
     }
 
     if (parsed.type === "mutation") {
       results.push(
-        translateMutation(selection, typeName, variables),
+        translateMutation(selection, typeName, variables)
       );
     } else {
       results.push(
-        translateQuery(selection, typeName, variables),
+        translateQuery(selection, typeName, variables)
       );
     }
   }
@@ -884,7 +905,7 @@ export function translateToEdgeQL(
 function translateQuery(
   selection: GraphQLSelection,
   typeName: string,
-  variables: Record<string, unknown>,
+  variables: Record<string, unknown>
 ): string {
   const shape = selection.subSelections ? ` {${buildShape(selection.subSelections)}}` : "";
 
@@ -929,7 +950,7 @@ function translateQuery(
 function translateMutation(
   selection: GraphQLSelection,
   typeName: string,
-  _variables: Record<string, unknown>,
+  _variables: Record<string, unknown>
 ): string {
   const fieldName = selection.fieldName;
   const args = selection.arguments;
@@ -939,7 +960,8 @@ function translateMutation(
     if (!input) {
       throw new Error(`createMutation requires an 'input' argument`);
     }
-    const assignments = Object.entries(input)
+    const assignments = Object
+      .entries(input)
       .map(([k, v]) => `${k} := ${formatEdgeQLValue(v)}`)
       .join(", ");
     return `INSERT ${typeName} {${assignments}}`;
@@ -955,7 +977,8 @@ function translateMutation(
       throw new Error(`updateMutation requires an 'input' argument`);
     }
     const idVal = formatEdgeQLValue(id);
-    const assignments = Object.entries(input)
+    const assignments = Object
+      .entries(input)
       .map(([k, v]) => `${k} := ${formatEdgeQLValue(v)}`)
       .join(", ");
     return `UPDATE ${typeName} FILTER .id = <uuid>${idVal} SET {${assignments}}`;

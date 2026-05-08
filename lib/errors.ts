@@ -137,7 +137,7 @@ export class DatabaseExecutionError extends DiscError {
     message: string,
     sql: string,
     cause: Error,
-    context?: ErrorContext,
+    context?: ErrorContext
   ) {
     super(message, context);
     this.sql = sql;
@@ -159,11 +159,11 @@ export class QueryTimeoutError extends DiscError {
   constructor(
     sql: string,
     timeoutMs: number,
-    context?: ErrorContext,
+    context?: ErrorContext
   ) {
     super(
       `Query timed out after ${timeoutMs}ms`,
-      context,
+      context
     );
     this.sql = sql;
     this.timeoutMs = timeoutMs;

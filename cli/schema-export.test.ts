@@ -71,7 +71,8 @@ Deno.test("schema export - emitted SDL re-parses cleanly", async () => {
     const text = await Deno.readTextFile(schemaOut);
     const mgr = new SchemaManager({ dryRun: true });
     const result = mgr.parseSDL(text);
-    if (!result.ok) throw new Error(`re-parse failed: ${JSON.stringify(result.error)}`);
+    if (!result.ok)
+      throw new Error(`re-parse failed: ${JSON.stringify(result.error)}`);
     const schema = mgr.modulesToSchema(result.value);
     assert(schema.types.has("User") || schema.types.has("default::User"));
     assert(schema.types.has("Post") || schema.types.has("default::Post"));
@@ -99,7 +100,7 @@ Deno.test("schema export - missing schema file fails gracefully", async () => {
     const errorOutput = cap.getErrors().join("\n") + cap.getLogs().join("\n");
     assert(
       threw || /not found|failed|error/i.test(errorOutput),
-      `expected failure indication; got logs:\n${errorOutput}`,
+      `expected failure indication; got logs:\n${errorOutput}`
     );
   } finally {
     await cleanupTempDir(tempDir);

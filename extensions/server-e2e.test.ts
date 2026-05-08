@@ -38,13 +38,13 @@ function makeMockHandler(): ProtocolHandler {
   return {
     handleRequest(
       _request: QueryRequest,
-      _context: QueryContext,
+      _context: QueryContext
     ): Promise<QueryResponse> {
       return Promise.resolve({ data: { ok: true } });
     },
     validateRequest(_request: QueryRequest) {
       return [];
-    },
+    }
   };
 }
 
@@ -55,7 +55,7 @@ const BASE_CONFIG = {
   maxConnections: 5,
   requestTimeout: 5000,
   enableCors: true,
-  enableWebsockets: false,
+  enableWebsockets: false
 };
 
 /** A no-op logger compatible with ExtensionContext.logger. */
@@ -78,9 +78,9 @@ Deno.test({
           name: "my_upper",
           args: [{ name: "input", type: "str", required: true }],
           returnType: "str",
-          implementation: { kind: "sql_name", sqlName: "upper" },
-        },
-      ],
+          implementation: { kind: "sql_name", sqlName: "upper" }
+        }
+      ]
     });
 
     const registry = new ExtensionRegistry();
@@ -89,7 +89,7 @@ Deno.test({
     await registry.initializeAll({
       schema: { types: new Map(), functions: new Map() },
       config: { ...BASE_CONFIG, port },
-      logger: MOCK_LOGGER,
+      logger: MOCK_LOGGER
     });
 
     assertEquals(ext.state, "ready");
@@ -98,11 +98,11 @@ Deno.test({
       config: { ...BASE_CONFIG, port },
       protocolHandler: makeMockHandler(),
       extensionRoutes: registry.getAllRoutes(),
-      extensionHealthGetter: () => registry.getHealthStatus(),
+      extensionHealthGetter: () => registry.getHealthStatus()
     });
 
     void server.start();
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 200));
 
     try {
       const res = await fetch(`http://${TEST_HOST}:${port}/health`);
@@ -114,17 +114,17 @@ Deno.test({
       // Extension health should be present
       assert(
         body.extensions !== undefined,
-        "/health should include extensions key",
+        "/health should include extensions key"
       );
       assert(
         body.extensions["custom-functions"] !== undefined,
-        "custom-functions extension should appear in health",
+        "custom-functions extension should appear in health"
       );
       assertEquals(body.extensions["custom-functions"].healthy, true);
     } finally {
       await server.stop();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -147,7 +147,7 @@ Deno.test({
           authorizeUrl: "https://github.com/login/oauth/authorize",
           tokenUrl: "https://github.com/login/oauth/access_token",
           userInfoUrl: "https://api.github.com/user",
-          scopes: ["read:user", "user:email"],
+          scopes: ["read:user", "user:email"]
         },
         {
           name: "google",
@@ -156,9 +156,9 @@ Deno.test({
           authorizeUrl: "https://accounts.google.com/o/oauth2/v2/auth",
           tokenUrl: "https://oauth2.googleapis.com/token",
           userInfoUrl: "https://www.googleapis.com/oauth2/v3/userinfo",
-          scopes: ["openid", "email", "profile"],
-        },
-      ],
+          scopes: ["openid", "email", "profile"]
+        }
+      ]
     });
 
     const registry = new ExtensionRegistry();
@@ -167,21 +167,21 @@ Deno.test({
     await registry.initializeAll({
       schema: { types: new Map(), functions: new Map() },
       config: { ...BASE_CONFIG, port },
-      logger: MOCK_LOGGER,
+      logger: MOCK_LOGGER
     });
 
     const server = new HttpServer({
       config: { ...BASE_CONFIG, port },
       protocolHandler: makeMockHandler(),
-      extensionRoutes: registry.getAllRoutes(),
+      extensionRoutes: registry.getAllRoutes()
     });
 
     void server.start();
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 200));
 
     try {
       const res = await fetch(
-        `http://${TEST_HOST}:${port}/ext/oauth/providers`,
+        `http://${TEST_HOST}:${port}/ext/oauth/providers`
       );
       assertEquals(res.status, 200);
 
@@ -190,16 +190,16 @@ Deno.test({
       assertEquals(body.providers.length, 2);
       assert(
         body.providers.includes("github"),
-        "github should be in providers",
+        "github should be in providers"
       );
       assert(
         body.providers.includes("google"),
-        "google should be in providers",
+        "google should be in providers"
       );
     } finally {
       await server.stop();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -216,7 +216,7 @@ Deno.test({
 
     const vectorExt = new VectorExtension({
       defaultDimensions: 128,
-      indexType: "ivfflat",
+      indexType: "ivfflat"
     });
 
     const customExt = new CustomFunctionsExtension({
@@ -225,9 +225,9 @@ Deno.test({
           name: "disc_e2e_double",
           args: [{ name: "n", type: "int32", required: true }],
           returnType: "int32",
-          implementation: { kind: "sql_expression", expression: "$1 * 2" },
-        },
-      ],
+          implementation: { kind: "sql_expression", expression: "$1 * 2" }
+        }
+      ]
     });
 
     const registry = new ExtensionRegistry();
@@ -237,7 +237,7 @@ Deno.test({
     await registry.initializeAll({
       schema: { types: new Map(), functions: new Map() },
       config: { ...BASE_CONFIG, port },
-      logger: MOCK_LOGGER,
+      logger: MOCK_LOGGER
     });
 
     // Both extensions should be ready after initialization
@@ -246,25 +246,25 @@ Deno.test({
 
     // Both should contribute functions to the registry
     const functions = registry.getAllFunctions();
-    const funcNames = functions.map((f) => f.name);
+    const funcNames = functions.map(f => f.name);
     assert(
       funcNames.includes("cosine_similarity"),
-      "cosine_similarity from VectorExtension should be registered",
+      "cosine_similarity from VectorExtension should be registered"
     );
     assert(
       funcNames.includes("disc_e2e_double"),
-      "disc_e2e_double from CustomFunctionsExtension should be registered",
+      "disc_e2e_double from CustomFunctionsExtension should be registered"
     );
 
     const server = new HttpServer({
       config: { ...BASE_CONFIG, port },
       protocolHandler: makeMockHandler(),
       extensionRoutes: registry.getAllRoutes(),
-      extensionHealthGetter: () => registry.getHealthStatus(),
+      extensionHealthGetter: () => registry.getHealthStatus()
     });
 
     void server.start();
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 200));
 
     try {
       const res = await fetch(`http://${TEST_HOST}:${port}/health`);
@@ -273,17 +273,17 @@ Deno.test({
       const body = await res.json();
       assert(
         body.extensions !== undefined,
-        "/health should include extensions key",
+        "/health should include extensions key"
       );
 
       // Both extensions should appear in health output
       assert(
         body.extensions["vector"] !== undefined,
-        "vector extension should appear in /health",
+        "vector extension should appear in /health"
       );
       assert(
         body.extensions["custom-functions"] !== undefined,
-        "custom-functions extension should appear in /health",
+        "custom-functions extension should appear in /health"
       );
       assertEquals(body.extensions["vector"].healthy, true);
       assertEquals(body.extensions["custom-functions"].healthy, true);
@@ -291,5 +291,5 @@ Deno.test({
       await server.stop();
       await registry.shutdownAll();
     }
-  },
+  }
 });

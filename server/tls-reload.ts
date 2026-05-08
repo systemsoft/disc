@@ -28,11 +28,11 @@ const log = getLogger("tls-reload");
  */
 export function validatePemEnvelope(
   content: string,
-  kind: "cert" | "key",
+  kind: "cert" | "key"
 ): boolean {
   if (kind === "cert") {
-    return /-----BEGIN CERTIFICATE-----/.test(content)
-      && /-----END CERTIFICATE-----/.test(content);
+    return /-----BEGIN CERTIFICATE-----/.test(content) &&
+      /-----END CERTIFICATE-----/.test(content);
   }
   // key: any of the standard private-key envelopes
   const keyPattern = /-----BEGIN (?:RSA |EC |ENCRYPTED |DSA )?PRIVATE KEY-----/;
@@ -68,17 +68,18 @@ export class TlsCertWatcher {
   constructor(opts: TlsCertWatcherOptions) {
     this.opts = {
       ...opts,
-      debounceMs: opts.debounceMs ?? 500,
+      debounceMs: opts.debounceMs ?? 500
     };
   }
 
   start(): void {
-    if (this.running) return;
+    if (this.running)
+      return;
     this.running = true;
 
     log.info("watching TLS certificate files for changes", {
       certFile: this.opts.certFile,
-      keyFile: this.opts.keyFile,
+      keyFile: this.opts.keyFile
     });
 
     this.watcher = Deno.watchFs([this.opts.certFile, this.opts.keyFile]);
@@ -86,7 +87,8 @@ export class TlsCertWatcher {
   }
 
   async stop(): Promise<void> {
-    if (!this.running) return;
+    if (!this.running)
+      return;
     this.running = false;
 
     if (this.debounceTimer !== undefined) {
@@ -110,10 +112,12 @@ export class TlsCertWatcher {
   }
 
   private async consumeEvents(): Promise<void> {
-    if (!this.watcher) return;
+    if (!this.watcher)
+      return;
     try {
       for await (const event of this.watcher) {
-        if (!this.running) break;
+        if (!this.running)
+          break;
         if (event.kind === "modify" || event.kind === "create") {
           this.scheduleReload();
         }
@@ -121,7 +125,7 @@ export class TlsCertWatcher {
     } catch (err) {
       if (this.running) {
         log.error("TLS file watcher errored", {
-          error: err instanceof Error ? err.message : String(err),
+          error: err instanceof Error ? err.message : String(err)
         });
       }
     }
@@ -143,13 +147,13 @@ export class TlsCertWatcher {
     try {
       [cert, key] = await Promise.all([
         Deno.readTextFile(this.opts.certFile),
-        Deno.readTextFile(this.opts.keyFile),
+        Deno.readTextFile(this.opts.keyFile)
       ]);
     } catch (err) {
       // Mid-rename or partial write — log and bail; another event
       // will trigger us once the rename settles.
       log.warn("TLS reload skipped: failed to read cert/key files", {
-        error: err instanceof Error ? err.message : String(err),
+        error: err instanceof Error ? err.message : String(err)
       });
       return;
     }
@@ -168,7 +172,7 @@ export class TlsCertWatcher {
     } catch (err) {
       // Caller is expected to log critical and keep the old listener.
       log.error("TLS reload callback threw", {
-        error: err instanceof Error ? err.message : String(err),
+        error: err instanceof Error ? err.message : String(err)
       });
     }
   }

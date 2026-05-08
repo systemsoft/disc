@@ -12,7 +12,7 @@ import { parseConnectionString, sslmodeToTlsOptions } from "./database.ts";
 
 Deno.test("parseConnectionString — surfaces sslmode from query string", () => {
   const r = parseConnectionString(
-    "postgresql://u:p@host:5432/db?sslmode=require",
+    "postgresql://u:p@host:5432/db?sslmode=require"
   );
   assertEquals(r.sslmode, "require");
 });
@@ -24,11 +24,11 @@ Deno.test("parseConnectionString — handles each supported sslmode", () => {
       "prefer",
       "require",
       "verify-ca",
-      "verify-full",
+      "verify-full"
     ] as const
   ) {
     const r = parseConnectionString(
-      `postgresql://u:p@host:5432/db?sslmode=${mode}`,
+      `postgresql://u:p@host:5432/db?sslmode=${mode}`
     );
     assertEquals(r.sslmode, mode, `should preserve ${mode}`);
   }
@@ -36,7 +36,7 @@ Deno.test("parseConnectionString — handles each supported sslmode", () => {
 
 Deno.test("parseConnectionString — invalid sslmode is dropped (not coerced)", () => {
   const r = parseConnectionString(
-    "postgresql://u:p@host/db?sslmode=mythical-mode",
+    "postgresql://u:p@host/db?sslmode=mythical-mode"
   );
   // We refuse to forward unknown modes — the driver default applies.
   assertEquals(r.sslmode, undefined);
@@ -44,7 +44,7 @@ Deno.test("parseConnectionString — invalid sslmode is dropped (not coerced)", 
 
 Deno.test("parseConnectionString — sslmode coexists with other query params", () => {
   const r = parseConnectionString(
-    "postgresql://u:p@host/db?application_name=foo&sslmode=verify-full&connect_timeout=10",
+    "postgresql://u:p@host/db?application_name=foo&sslmode=verify-full&connect_timeout=10"
   );
   assertEquals(r.sslmode, "verify-full");
 });
@@ -60,18 +60,18 @@ Deno.test("sslmodeToTlsOptions — maps each mode to driver TLSOptions", () => {
   assertEquals(sslmodeToTlsOptions("disable"), {
     enabled: false,
     enforce: false,
-    caCertificates: [],
+    caCertificates: []
   });
   assertEquals(sslmodeToTlsOptions("prefer"), {
     enabled: true,
     enforce: false,
-    caCertificates: [],
+    caCertificates: []
   });
   for (const mode of ["require", "verify-ca", "verify-full"] as const) {
     assertEquals(
       sslmodeToTlsOptions(mode),
       { enabled: true, enforce: true, caCertificates: [] },
-      `${mode} should enable + enforce`,
+      `${mode} should enable + enforce`
     );
   }
   // Undefined / unknown → driver default (no TLS object emitted).
@@ -84,7 +84,7 @@ Deno.test("parseConnectionString — socket DSN ignores sslmode (never relevant)
   // "socket"` and the client config branch ignores `sslmode`. This
   // test pins the no-TLS-on-socket invariant.
   const r = parseConnectionString(
-    "postgresql://disc@/mydb?host=/tmp/disc.sock&sslmode=require",
+    "postgresql://disc@/mydb?host=/tmp/disc.sock&sslmode=require"
   );
   assertEquals(r.host_type, "socket");
   // `sslmode` is undefined for socket DSNs because the URL parser is

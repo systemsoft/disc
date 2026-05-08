@@ -17,7 +17,7 @@ import type { Schema, TypeDef } from "./context.ts";
 // ---------------------------------------------------------------------------
 
 function makeTypeDef(
-  overrides: Partial<TypeDef> & Pick<TypeDef, "name" | "tableName">,
+  overrides: Partial<TypeDef> & Pick<TypeDef, "name" | "tableName">
 ): TypeDef {
   return {
     kind: "object",
@@ -29,11 +29,11 @@ function makeTypeDef(
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
-      }],
+        hasDefault: true
+      }]
     ]),
     links: new Map(),
-    ...overrides,
+    ...overrides
   };
 }
 
@@ -56,7 +56,7 @@ function createHierarchySchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["color", {
         name: "color",
@@ -64,9 +64,9 @@ function createHierarchySchema(): Schema {
         required: false,
         multi: false,
         columnName: "color",
-        edgeqlType: "str",
-      }],
-    ]),
+        edgeqlType: "str"
+      }]
+    ])
   });
 
   const circle = makeTypeDef({
@@ -81,7 +81,7 @@ function createHierarchySchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["color", {
         name: "color",
@@ -89,7 +89,7 @@ function createHierarchySchema(): Schema {
         required: false,
         multi: false,
         columnName: "color",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["radius", {
         name: "radius",
@@ -97,9 +97,9 @@ function createHierarchySchema(): Schema {
         required: true,
         multi: false,
         columnName: "radius",
-        edgeqlType: "float64",
-      }],
-    ]),
+        edgeqlType: "float64"
+      }]
+    ])
   });
 
   const rectangle = makeTypeDef({
@@ -114,7 +114,7 @@ function createHierarchySchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["color", {
         name: "color",
@@ -122,7 +122,7 @@ function createHierarchySchema(): Schema {
         required: false,
         multi: false,
         columnName: "color",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["width", {
         name: "width",
@@ -130,7 +130,7 @@ function createHierarchySchema(): Schema {
         required: true,
         multi: false,
         columnName: "width",
-        edgeqlType: "float64",
+        edgeqlType: "float64"
       }],
       ["height", {
         name: "height",
@@ -138,18 +138,18 @@ function createHierarchySchema(): Schema {
         required: true,
         multi: false,
         columnName: "height",
-        edgeqlType: "float64",
-      }],
-    ]),
+        edgeqlType: "float64"
+      }]
+    ])
   });
 
   return {
     types: new Map([
       ["Shape", shape],
       ["Circle", circle],
-      ["Rectangle", rectangle],
+      ["Rectangle", rectangle]
     ]),
-    functions: getBuiltinFunctions(),
+    functions: getBuiltinFunctions()
   };
 }
 
@@ -174,7 +174,7 @@ function createMultiLevelSchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["color", {
         name: "color",
@@ -182,9 +182,9 @@ function createMultiLevelSchema(): Schema {
         required: false,
         multi: false,
         columnName: "color",
-        edgeqlType: "str",
-      }],
-    ]),
+        edgeqlType: "str"
+      }]
+    ])
   });
 
   const circle = makeTypeDef({
@@ -200,7 +200,7 @@ function createMultiLevelSchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["color", {
         name: "color",
@@ -208,7 +208,7 @@ function createMultiLevelSchema(): Schema {
         required: false,
         multi: false,
         columnName: "color",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["radius", {
         name: "radius",
@@ -216,9 +216,9 @@ function createMultiLevelSchema(): Schema {
         required: true,
         multi: false,
         columnName: "radius",
-        edgeqlType: "float64",
-      }],
-    ]),
+        edgeqlType: "float64"
+      }]
+    ])
   });
 
   const rectangle = makeTypeDef({
@@ -233,7 +233,7 @@ function createMultiLevelSchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["color", {
         name: "color",
@@ -241,7 +241,7 @@ function createMultiLevelSchema(): Schema {
         required: false,
         multi: false,
         columnName: "color",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["width", {
         name: "width",
@@ -249,9 +249,9 @@ function createMultiLevelSchema(): Schema {
         required: true,
         multi: false,
         columnName: "width",
-        edgeqlType: "float64",
-      }],
-    ]),
+        edgeqlType: "float64"
+      }]
+    ])
   });
 
   const ellipse = makeTypeDef({
@@ -266,7 +266,7 @@ function createMultiLevelSchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["color", {
         name: "color",
@@ -274,7 +274,7 @@ function createMultiLevelSchema(): Schema {
         required: false,
         multi: false,
         columnName: "color",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["radius", {
         name: "radius",
@@ -282,7 +282,7 @@ function createMultiLevelSchema(): Schema {
         required: true,
         multi: false,
         columnName: "radius",
-        edgeqlType: "float64",
+        edgeqlType: "float64"
       }],
       ["eccentricity", {
         name: "eccentricity",
@@ -290,9 +290,9 @@ function createMultiLevelSchema(): Schema {
         required: true,
         multi: false,
         columnName: "eccentricity",
-        edgeqlType: "float64",
-      }],
-    ]),
+        edgeqlType: "float64"
+      }]
+    ])
   });
 
   return {
@@ -300,9 +300,9 @@ function createMultiLevelSchema(): Schema {
       ["Shape", shape],
       ["Circle", circle],
       ["Rectangle", rectangle],
-      ["Ellipse", ellipse],
+      ["Ellipse", ellipse]
     ]),
-    functions: getBuiltinFunctions(),
+    functions: getBuiltinFunctions()
   };
 }
 
@@ -434,7 +434,7 @@ Deno.test("type hierarchy - child properties override parent properties", () => 
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["label", {
         name: "label",
@@ -442,7 +442,7 @@ Deno.test("type hierarchy - child properties override parent properties", () => 
         required: false,
         multi: false,
         columnName: "label",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["score", {
         name: "score",
@@ -450,9 +450,9 @@ Deno.test("type hierarchy - child properties override parent properties", () => 
         required: false,
         multi: false,
         columnName: "score",
-        edgeqlType: "int32",
-      }],
-    ]),
+        edgeqlType: "int32"
+      }]
+    ])
   });
 
   // Child overrides "score" to be required
@@ -468,7 +468,7 @@ Deno.test("type hierarchy - child properties override parent properties", () => 
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["score", {
         name: "score",
@@ -476,17 +476,17 @@ Deno.test("type hierarchy - child properties override parent properties", () => 
         required: true,
         multi: false,
         columnName: "score",
-        edgeqlType: "int32",
-      }],
-    ]),
+        edgeqlType: "int32"
+      }]
+    ])
   });
 
   const schema: Schema = {
     types: new Map([
       ["Base", parent],
-      ["Derived", child],
+      ["Derived", child]
     ]),
-    functions: getBuiltinFunctions(),
+    functions: getBuiltinFunctions()
   };
 
   const derived = schema.types.get("Derived")!;

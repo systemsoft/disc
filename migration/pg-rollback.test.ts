@@ -20,14 +20,14 @@ const RUN_PG = canRunPgTests();
 // ---------------------------------------------------------------------------
 
 function parseDsn(
-  dsn: string,
+  dsn: string
 ): { hostname: string; port: number; user: string; database: string; } {
   const url = new URL(dsn);
   return {
     hostname: url.hostname || "localhost",
     port: url.port ? parseInt(url.port) : 5432,
     user: url.username || "disc",
-    database: url.pathname.slice(1) || "disc_test",
+    database: url.pathname.slice(1) || "disc_test"
   };
 }
 
@@ -41,7 +41,7 @@ async function tableExists(dsn: string, tableName: string): Promise<boolean> {
         SELECT 1 FROM information_schema.tables
         WHERE table_schema = 'public' AND table_name = $1
       ) AS exists`,
-      [tableName],
+      [tableName]
     );
     return result.rows[0]?.exists ?? false;
   } finally {
@@ -67,7 +67,7 @@ function makePool(dsn: string): ConnectionPool {
     connectionString: dsn,
     minConnections: 1,
     maxConnections: 3,
-    cleanupInterval: 0,
+    cleanupInterval: 0
   });
 }
 
@@ -80,7 +80,7 @@ function makeEngine(pool: ConnectionPool): MigrationEngine {
     autoApprove: true,
     backupBeforeMigration: false,
     rollbackOnError: true,
-    connectionPool: pool,
+    connectionPool: pool
   };
   return new MigrationEngine(config);
 }
@@ -92,7 +92,7 @@ function makeEngine(pool: ConnectionPool): MigrationEngine {
 async function applyCreateTableMigration(
   engine: MigrationEngine,
   tableName: string,
-  migrationId?: string,
+  migrationId?: string
 ): Promise<string> {
   const id = migrationId || `test_${tableName}_${Date.now()}`;
   const createOp: Types.CreateTypeOperation = {
@@ -105,10 +105,10 @@ async function applyCreateTableMigration(
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const migration: Types.Migration = {
@@ -117,20 +117,20 @@ async function applyCreateTableMigration(
     description: `Create ${tableName} table`,
     createdAt: new Date(),
     schemaHash: `hash_${tableName}`,
-    operations: [createOp],
+    operations: [createOp]
   };
 
   const plan: Types.MigrationPlan = {
     migrations: [migration],
     targetSchemaHash: `hash_${tableName}`,
-    operationsCount: 1,
+    operationsCount: 1
   };
 
   const result = await engine.executeMigrationWithRollback(plan);
   assertEquals(
     result.ok,
     true,
-    `Failed to apply migration for ${tableName}: ${result.ok ? "" : result.error.message}`,
+    `Failed to apply migration for ${tableName}: ${result.ok ? "" : result.error.message}`
   );
 
   return id;
@@ -166,7 +166,7 @@ Deno.test({
       assertEquals(
         rollbackResult.ok,
         true,
-        `Rollback should succeed: ${rollbackResult.ok ? "" : rollbackResult.error.message}`,
+        `Rollback should succeed: ${rollbackResult.ok ? "" : rollbackResult.error.message}`
       );
 
       // Verify table is dropped
@@ -176,12 +176,12 @@ Deno.test({
       // Verify migration record is removed
       const appliedResult = await pool.query(
         `SELECT id FROM disc_migrations WHERE id = $1`,
-        [migrationId],
+        [migrationId]
       );
       assertEquals(
         appliedResult.rowCount,
         0,
-        "Migration record should be removed after rollback",
+        "Migration record should be removed after rollback"
       );
 
       await engine.close();
@@ -190,11 +190,11 @@ Deno.test({
         dsn,
         tableName,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -216,26 +216,26 @@ Deno.test({
 
       // Apply 3 migrations in sequence with small delays to ensure distinct applied_at
       const id1 = await applyCreateTableMigration(engine, table1);
-      await new Promise((r) => setTimeout(r, 50));
+      await new Promise(r => setTimeout(r, 50));
       await applyCreateTableMigration(engine, table2);
-      await new Promise((r) => setTimeout(r, 50));
+      await new Promise(r => setTimeout(r, 50));
       await applyCreateTableMigration(engine, table3);
 
       // Verify all tables exist
       assertEquals(
         await tableExists(dsn, table1),
         true,
-        "Table 1 should exist",
+        "Table 1 should exist"
       );
       assertEquals(
         await tableExists(dsn, table2),
         true,
-        "Table 2 should exist",
+        "Table 2 should exist"
       );
       assertEquals(
         await tableExists(dsn, table3),
         true,
-        "Table 3 should exist",
+        "Table 3 should exist"
       );
 
       // Rollback to first migration (should rollback 3rd and 2nd)
@@ -243,24 +243,24 @@ Deno.test({
       assertEquals(
         rollbackResult.ok,
         true,
-        `Rollback-to should succeed: ${rollbackResult.ok ? "" : rollbackResult.error.message}`,
+        `Rollback-to should succeed: ${rollbackResult.ok ? "" : rollbackResult.error.message}`
       );
 
       // Verify: first table remains, second and third are dropped
       assertEquals(
         await tableExists(dsn, table1),
         true,
-        "First table should still exist (target preserved)",
+        "First table should still exist (target preserved)"
       );
       assertEquals(
         await tableExists(dsn, table2),
         false,
-        "Second table should be dropped",
+        "Second table should be dropped"
       );
       assertEquals(
         await tableExists(dsn, table3),
         false,
-        "Third table should be dropped",
+        "Third table should be dropped"
       );
 
       await engine.close();
@@ -271,11 +271,11 @@ Deno.test({
         table2,
         table3,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -296,7 +296,7 @@ Deno.test({
 
       // Apply 2 migrations
       await applyCreateTableMigration(engine, table1);
-      await new Promise((r) => setTimeout(r, 50));
+      await new Promise(r => setTimeout(r, 50));
       await applyCreateTableMigration(engine, table2);
 
       // Check status
@@ -306,7 +306,7 @@ Deno.test({
         assertEquals(
           statusResult.value.applied >= 2,
           true,
-          `Should have at least 2 applied migrations, got ${statusResult.value.applied}`,
+          `Should have at least 2 applied migrations, got ${statusResult.value.applied}`
         );
         assertEquals(statusResult.value.latestMigration !== null, true);
         assertEquals(statusResult.value.currentSchemaHash !== null, true);
@@ -319,11 +319,11 @@ Deno.test({
         table1,
         table2,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -344,10 +344,10 @@ Deno.test({
       if (!result.ok) {
         // Should get a "not found" error from the tracker
         assertEquals(
-          result.error.message.includes("not found")
-            || result.error.message.includes("not applied"),
+          result.error.message.includes("not found") ||
+            result.error.message.includes("not applied"),
           true,
-          `Error should mention not found: ${result.error.message}`,
+          `Error should mention not found: ${result.error.message}`
         );
       }
 
@@ -356,11 +356,11 @@ Deno.test({
       await dropTables(
         dsn,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -381,22 +381,22 @@ Deno.test({
 
       // Apply two independent migrations
       await applyCreateTableMigration(engine, preservedTable);
-      await new Promise((r) => setTimeout(r, 50));
+      await new Promise(r => setTimeout(r, 50));
       const rollbackId = await applyCreateTableMigration(
         engine,
-        rolledBackTable,
+        rolledBackTable
       );
 
       // Both tables should exist
       assertEquals(
         await tableExists(dsn, preservedTable),
         true,
-        "Preserved table should exist",
+        "Preserved table should exist"
       );
       assertEquals(
         await tableExists(dsn, rolledBackTable),
         true,
-        "Rolled-back table should exist",
+        "Rolled-back table should exist"
       );
 
       // Rollback only the second migration
@@ -404,21 +404,21 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `Rollback should succeed: ${result.ok ? "" : result.error.message}`,
+        `Rollback should succeed: ${result.ok ? "" : result.error.message}`
       );
 
       // Preserved table should still exist
       assertEquals(
         await tableExists(dsn, preservedTable),
         true,
-        "Preserved table should still exist after rollback",
+        "Preserved table should still exist after rollback"
       );
 
       // Rolled-back table should be gone
       assertEquals(
         await tableExists(dsn, rolledBackTable),
         false,
-        "Rolled-back table should not exist after rollback",
+        "Rolled-back table should not exist after rollback"
       );
 
       await engine.close();
@@ -428,9 +428,9 @@ Deno.test({
         preservedTable,
         rolledBackTable,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });

@@ -13,7 +13,7 @@ import {
   createChangeLogFunctionSql,
   createChangeLogTableSql,
   createTriggerSql,
-  DEFAULT_EXCLUDED_TABLES,
+  DEFAULT_EXCLUDED_TABLES
 } from "./data-watch-ddl.ts";
 
 Deno.test("createChangeLogTableSql — emits idempotent CREATE TABLE IF NOT EXISTS", () => {

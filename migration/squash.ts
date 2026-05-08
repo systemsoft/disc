@@ -45,14 +45,14 @@ export class MigrationSquasher {
   squash(
     migrations: SquashableMigration[],
     fromId?: string,
-    toId?: string,
+    toId?: string
   ): SquashResult {
     if (migrations.length === 0) {
       return {
         statements: [],
         rollbackStatements: [],
         squashedIds: [],
-        name: "empty_squash",
+        name: "empty_squash"
       };
     }
 
@@ -64,7 +64,7 @@ export class MigrationSquasher {
         statements: [],
         rollbackStatements: [],
         squashedIds: [],
-        name: "empty_squash",
+        name: "empty_squash"
       };
     }
 
@@ -83,7 +83,7 @@ export class MigrationSquasher {
       rollbackStatements.push(...filtered[i].rollbackStatements);
     }
 
-    const squashedIds = filtered.map((m) => m.id);
+    const squashedIds = filtered.map(m => m.id);
     const firstId = squashedIds[0];
     const lastId = squashedIds[squashedIds.length - 1];
     const name = `squashed_${firstId}_to_${lastId}`;
@@ -92,7 +92,7 @@ export class MigrationSquasher {
       statements,
       rollbackStatements,
       squashedIds,
-      name,
+      name
     };
   }
 
@@ -113,7 +113,7 @@ export class MigrationSquasher {
   private filterByRange(
     migrations: SquashableMigration[],
     fromId?: string,
-    toId?: string,
+    toId?: string
   ): SquashableMigration[] {
     if (!fromId && !toId) {
       return migrations;
@@ -123,27 +123,27 @@ export class MigrationSquasher {
     let endIndex = migrations.length - 1;
 
     if (fromId) {
-      startIndex = migrations.findIndex((m) => m.id === fromId);
+      startIndex = migrations.findIndex(m => m.id === fromId);
       if (startIndex === -1) {
         throw new MigrationError(
-          `Migration "${fromId}" not found in the provided migrations list`,
+          `Migration "${fromId}" not found in the provided migrations list`
         );
       }
     }
 
     if (toId) {
-      endIndex = migrations.findIndex((m) => m.id === toId);
+      endIndex = migrations.findIndex(m => m.id === toId);
       if (endIndex === -1) {
         throw new MigrationError(
-          `Migration "${toId}" not found in the provided migrations list`,
+          `Migration "${toId}" not found in the provided migrations list`
         );
       }
     }
 
     if (startIndex > endIndex) {
       throw new MigrationError(
-        `Invalid squash range: "${fromId}" comes after "${toId}". `
-          + "The from-migration must precede the to-migration.",
+        `Invalid squash range: "${fromId}" comes after "${toId}". ` +
+          "The from-migration must precede the to-migration."
       );
     }
 
@@ -154,15 +154,15 @@ export class MigrationSquasher {
    * Validate that none of the migrations in the range have data migrations.
    */
   private validateNoDataMigrations(
-    migrations: SquashableMigration[],
+    migrations: SquashableMigration[]
   ): void {
-    const withData = migrations.filter((m) => m.hasDataMigration);
+    const withData = migrations.filter(m => m.hasDataMigration);
     if (withData.length > 0) {
-      const ids = withData.map((m) => m.id).join(", ");
+      const ids = withData.map(m => m.id).join(", ");
       throw new MigrationError(
-        `Cannot squash migrations that include data migrations. `
-          + `The following migrations have data migrations: ${ids}. `
-          + `Remove or manually consolidate the data migrations first.`,
+        `Cannot squash migrations that include data migrations. ` +
+          `The following migrations have data migrations: ${ids}. ` +
+          `Remove or manually consolidate the data migrations first.`
       );
     }
   }

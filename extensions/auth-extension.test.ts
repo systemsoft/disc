@@ -22,7 +22,7 @@ function makeContext(): ExtensionContext {
       maxConnections: 5,
       requestTimeout: 5000,
       enableCors: false,
-      enableWebsockets: false,
+      enableWebsockets: false
     },
     logger: {
       debug: () => {},
@@ -34,8 +34,8 @@ function makeContext(): ExtensionContext {
       },
       withRequest: function() {
         return this;
-      },
-    } as unknown as ExtensionContext["logger"],
+      }
+    } as unknown as ExtensionContext["logger"]
   };
 }
 
@@ -52,10 +52,10 @@ const mockAuthProvider = {
   updatePassword: (
     _userId: string,
     _oldPassword: string,
-    _newPassword: string,
+    _newPassword: string
   ): Promise<void> => Promise.resolve(),
   verifyEmail: (_verificationToken: string): Promise<void> => Promise.resolve(),
-  verifyToken: (_token: string): Promise<TokenPayload> => Promise.reject(new Error("Auth provider not initialized")),
+  verifyToken: (_token: string): Promise<TokenPayload> => Promise.reject(new Error("Auth provider not initialized"))
 };
 
 // Minimal stub for AuthMiddleware.
@@ -64,14 +64,14 @@ const mockAuthMiddleware = {
   optionalAuth: (handler: RequestHandler) => handler,
   requireAuth: (handler: RequestHandler) => handler,
   withCORS: (handler: RequestHandler) => handler,
-  withSecurityHeaders: (handler: RequestHandler) => handler,
+  withSecurityHeaders: (handler: RequestHandler) => handler
 };
 
 // Minimal stub for AuthRoutes — each method returns a handler that returns 200.
 function makeOkHandler() {
   return (_req: Request) =>
     Promise.resolve(
-      new Response(JSON.stringify({ ok: true }), { status: 200 }),
+      new Response(JSON.stringify({ ok: true }), { status: 200 })
     );
 }
 
@@ -84,7 +84,7 @@ const mockAuthRoutes = {
   resetPassword: makeOkHandler,
   resetPasswordRequest: makeOkHandler,
   updatePassword: makeOkHandler,
-  verifyEmail: makeOkHandler,
+  verifyEmail: makeOkHandler
 };
 
 function makeAdapter(): AuthExtensionAdapter {
@@ -97,7 +97,7 @@ function makeAdapter(): AuthExtensionAdapter {
     >[0]["authProvider"],
     authRoutes: mockAuthRoutes as unknown as ConstructorParameters<
       typeof AuthExtensionAdapter
-    >[0]["authRoutes"],
+    >[0]["authRoutes"]
   };
   return new AuthExtensionAdapter(options);
 }
@@ -130,55 +130,55 @@ Deno.test("AuthExtensionAdapter - getRoutes returns exactly 9 routes", () => {
 
 Deno.test("AuthExtensionAdapter - getRoutes includes /auth/register", () => {
   const adapter = makeAdapter();
-  const paths = adapter.getRoutes().map((r) => r.path);
+  const paths = adapter.getRoutes().map(r => r.path);
   assertEquals(paths.includes("/auth/register"), true);
 });
 
 Deno.test("AuthExtensionAdapter - getRoutes includes /auth/login", () => {
   const adapter = makeAdapter();
-  const paths = adapter.getRoutes().map((r) => r.path);
+  const paths = adapter.getRoutes().map(r => r.path);
   assertEquals(paths.includes("/auth/login"), true);
 });
 
 Deno.test("AuthExtensionAdapter - getRoutes includes /auth/logout", () => {
   const adapter = makeAdapter();
-  const paths = adapter.getRoutes().map((r) => r.path);
+  const paths = adapter.getRoutes().map(r => r.path);
   assertEquals(paths.includes("/auth/logout"), true);
 });
 
 Deno.test("AuthExtensionAdapter - getRoutes includes /auth/refresh", () => {
   const adapter = makeAdapter();
-  const paths = adapter.getRoutes().map((r) => r.path);
+  const paths = adapter.getRoutes().map(r => r.path);
   assertEquals(paths.includes("/auth/refresh"), true);
 });
 
 Deno.test("AuthExtensionAdapter - getRoutes includes /auth/profile", () => {
   const adapter = makeAdapter();
-  const paths = adapter.getRoutes().map((r) => r.path);
+  const paths = adapter.getRoutes().map(r => r.path);
   assertEquals(paths.includes("/auth/profile"), true);
 });
 
 Deno.test("AuthExtensionAdapter - getRoutes includes /auth/password", () => {
   const adapter = makeAdapter();
-  const paths = adapter.getRoutes().map((r) => r.path);
+  const paths = adapter.getRoutes().map(r => r.path);
   assertEquals(paths.includes("/auth/password"), true);
 });
 
 Deno.test("AuthExtensionAdapter - getRoutes includes /auth/reset", () => {
   const adapter = makeAdapter();
-  const paths = adapter.getRoutes().map((r) => r.path);
+  const paths = adapter.getRoutes().map(r => r.path);
   assertEquals(paths.includes("/auth/reset"), true);
 });
 
 Deno.test("AuthExtensionAdapter - getRoutes includes /auth/reset/confirm", () => {
   const adapter = makeAdapter();
-  const paths = adapter.getRoutes().map((r) => r.path);
+  const paths = adapter.getRoutes().map(r => r.path);
   assertEquals(paths.includes("/auth/reset/confirm"), true);
 });
 
 Deno.test("AuthExtensionAdapter - getRoutes includes /auth/verify", () => {
   const adapter = makeAdapter();
-  const paths = adapter.getRoutes().map((r) => r.path);
+  const paths = adapter.getRoutes().map(r => r.path);
   assertEquals(paths.includes("/auth/verify"), true);
 });
 
@@ -244,7 +244,7 @@ Deno.test("AuthExtensionAdapter - healthCheck returns healthy after initialize w
       const err = new Error("Invalid token");
       (err as Error & { name: string; }).name = "AuthError";
       return Promise.reject(err);
-    },
+    }
   };
 
   const adapter = new AuthExtensionAdapter({
@@ -256,7 +256,7 @@ Deno.test("AuthExtensionAdapter - healthCheck returns healthy after initialize w
     >[0]["authProvider"],
     authRoutes: mockAuthRoutes as unknown as ConstructorParameters<
       typeof AuthExtensionAdapter
-    >[0]["authRoutes"],
+    >[0]["authRoutes"]
   });
 
   await adapter.initialize(makeContext());

@@ -27,7 +27,7 @@ const schema = createTestSchema();
 function makeCtx(s: Schema = schema): SchemaRouteContext {
   return {
     schemaProvider: () => s,
-    defaultHeaders: () => new Headers({ "Content-Type": "application/json" }),
+    defaultHeaders: () => new Headers({ "Content-Type": "application/json" })
   };
 }
 
@@ -73,7 +73,7 @@ Deno.test("GET /schema - returns JSON content-type", () => {
 Deno.test("GET /schema - returns empty schema when no types defined", async () => {
   const emptySchema: Schema = {
     types: new Map(),
-    functions: new Map(),
+    functions: new Map()
   };
   const ctx = makeCtx(emptySchema);
   const response = handleGetSchema(ctx);
@@ -128,18 +128,18 @@ Deno.test("GET /schema/types - filtered by module query param", async () => {
         type: "uuid",
         required: true,
         multi: false,
-        columnName: "id",
-      }],
+        columnName: "id"
+      }]
     ]),
-    links: new Map(),
+    links: new Map()
   };
 
   const multiModuleSchema: Schema = {
     types: new Map([
       ...schema.types.entries(),
-      ["other::Widget", otherType],
+      ["other::Widget", otherType]
     ]),
-    functions: schema.functions,
+    functions: schema.functions
   };
 
   const ctx = makeCtx(multiModuleSchema);
@@ -211,13 +211,13 @@ Deno.test("GET /schema/types/:name - handles qualified names (default::User)", a
             type: "uuid",
             required: true,
             multi: false,
-            columnName: "id",
-          }],
+            columnName: "id"
+          }]
         ]),
-        links: new Map(),
-      }],
+        links: new Map()
+      }]
     ]),
-    functions: new Map(),
+    functions: new Map()
   };
 
   const ctx = makeCtx(qualifiedSchema);

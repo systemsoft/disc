@@ -164,7 +164,7 @@ export class WebhookSender {
 
   constructor(
     subscriptions: WebhookConfig[],
-    options: WebhookSenderOptions = {},
+    options: WebhookSenderOptions = {}
   ) {
     this.subscriptions = subscriptions;
     this.fetchImpl = options.fetchImpl ?? fetch;
@@ -190,9 +190,10 @@ export class WebhookSender {
    * invocation happen on a microtask in production mode.
    */
   async dispatch(event: WebhookEvent): Promise<void> {
-    const matched = this.subscriptions.filter((s) => s.events.includes(event.eventType));
+    const matched = this.subscriptions.filter(s => s.events.includes(event.eventType));
 
-    if (matched.length === 0 && this.listeners.length === 0) return;
+    if (matched.length === 0 && this.listeners.length === 0)
+      return;
 
     if (this.synchronous) {
       // Tests: serialize so assertions can observe state after dispatch.
@@ -225,31 +226,31 @@ export class WebhookSender {
     } catch (err) {
       log.warn("in-process listener errored", {
         eventType: event.eventType,
-        error: err instanceof Error ? err.message : String(err),
+        error: err instanceof Error ? err.message : String(err)
       });
     }
   }
 
   private async deliver(
     sub: WebhookConfig,
-    event: WebhookEvent,
+    event: WebhookEvent
   ): Promise<void> {
     const body = JSON.stringify(event);
     const headers: Record<string, string> = {
-      "Content-Type": "application/json",
+      "Content-Type": "application/json"
     };
 
     if (sub.secret) {
       headers["x-disc-auth-signature-sha256"] = await signHmacSha256(
         sub.secret,
-        body,
+        body
       );
     }
 
     const controller = new AbortController();
     const timeout = setTimeout(
       () => controller.abort(),
-      sub.timeoutMs ?? 5000,
+      sub.timeoutMs ?? 5000
     );
 
     try {
@@ -257,14 +258,14 @@ export class WebhookSender {
         method: "POST",
         headers,
         body,
-        signal: controller.signal,
+        signal: controller.signal
       });
 
       if (!response.ok) {
         log.warn("webhook delivery returned non-2xx", {
           url: sub.url,
           eventType: event.eventType,
-          status: response.status,
+          status: response.status
         });
       }
       // Drain body so Deno doesn't complain about leaked streams.
@@ -273,7 +274,7 @@ export class WebhookSender {
       log.warn("webhook delivery failed", {
         url: sub.url,
         eventType: event.eventType,
-        error: err instanceof Error ? err.message : String(err),
+        error: err instanceof Error ? err.message : String(err)
       });
     } finally {
       clearTimeout(timeout);
@@ -289,15 +290,15 @@ async function signHmacSha256(secret: string, body: string): Promise<string> {
     textEncoder.encode(secret),
     { name: "HMAC", hash: "SHA-256" },
     false,
-    ["sign"],
+    ["sign"]
   );
   const sig = await crypto.subtle.sign(
     "HMAC",
     key,
-    textEncoder.encode(body),
+    textEncoder.encode(body)
   );
   return [...new Uint8Array(sig)]
-    .map((b) => b.toString(16).padStart(2, "0"))
+    .map(b => b.toString(16).padStart(2, "0"))
     .join("");
 }
 

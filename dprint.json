@@ -6,9 +6,24 @@
     "https://plugins.dprint.dev/toml-0.7.0.wasm"
   ],
   "typescript": {
+    "arrowFunction.useParentheses": "preferNone",
+    "bracePosition": "sameLine",
+    "memberExpression.linePerExpression": true,
     "indentWidth": 2,
     "lineWidth": 160,
+    "nextControlFlowPosition": "sameLine",
+    "newLineKind": "lf",
+    "operatorPosition": "sameLine",
+    "preferHanging": false,
+    "preferSingleLine": false,
+    "quoteProps": "asNeeded",
     "quoteStyle": "alwaysDouble",
-    "semiColons": "always"
+    "semiColons": "always",
+    "singleBodyPosition": "nextLine",
+    "spaceAround": false,
+    "spaceSurroundingProperties": true,
+    "trailingCommas": "never",
+    "useBraces": "maintain",
+    "useTabs": false
   }
 }

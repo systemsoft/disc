@@ -26,7 +26,7 @@ function createPerformanceTestConfig(): Types.MigrationConfig {
     dryRun: true,
     autoApprove: false,
     backupBeforeMigration: true,
-    rollbackOnError: true,
+    rollbackOnError: true
   };
 }
 
@@ -41,46 +41,46 @@ function createLargeSchema(numTypes: number): Module[] {
         name: { kind: "Identifier", value: "id" },
         type: {
           kind: "TypeRef",
-          name: { kind: "QualifiedName", parts: ["uuid"] },
+          name: { kind: "QualifiedName", parts: ["uuid"] }
         },
         required: true,
-        multi: false,
+        multi: false
       },
       {
         kind: "PropertyDeclaration",
         name: { kind: "Identifier", value: "name" },
         type: {
           kind: "TypeRef",
-          name: { kind: "QualifiedName", parts: ["str"] },
+          name: { kind: "QualifiedName", parts: ["str"] }
         },
         required: true,
-        multi: false,
+        multi: false
       },
       {
         kind: "PropertyDeclaration",
         name: { kind: "Identifier", value: "value" },
         type: {
           kind: "TypeRef",
-          name: { kind: "QualifiedName", parts: ["int32"] },
+          name: { kind: "QualifiedName", parts: ["int32"] }
         },
         required: false,
-        multi: false,
+        multi: false
       },
       {
         kind: "PropertyDeclaration",
         name: { kind: "Identifier", value: "createdAt" },
         type: {
           kind: "TypeRef",
-          name: { kind: "QualifiedName", parts: ["datetime"] },
+          name: { kind: "QualifiedName", parts: ["datetime"] }
         },
         required: true,
         multi: false,
         default: {
           kind: "FunctionCall",
           name: { kind: "QualifiedName", parts: ["datetime_current"] },
-          args: [],
-        },
-      },
+          args: []
+        }
+      }
     ];
 
     // Add some multi properties for complexity
@@ -90,10 +90,10 @@ function createLargeSchema(numTypes: number): Module[] {
         name: { kind: "Identifier", value: "tags" },
         type: {
           kind: "TypeRef",
-          name: { kind: "QualifiedName", parts: ["str"] },
+          name: { kind: "QualifiedName", parts: ["str"] }
         },
         required: false,
-        multi: true,
+        multi: true
       });
     }
 
@@ -106,11 +106,11 @@ function createLargeSchema(numTypes: number): Module[] {
           kind: "TypeRef",
           name: {
             kind: "QualifiedName",
-            parts: [`Entity${Math.floor(i / 2)}`],
-          },
+            parts: [`Entity${Math.floor(i / 2)}`]
+          }
         },
         required: false,
-        multi: false,
+        multi: false
       });
     }
 
@@ -121,25 +121,25 @@ function createLargeSchema(numTypes: number): Module[] {
         name: { kind: "Identifier", value: "related" },
         target: {
           kind: "TypeRef",
-          name: { kind: "QualifiedName", parts: [`Entity${i - 1}`] },
+          name: { kind: "QualifiedName", parts: [`Entity${i - 1}`] }
         },
         required: false,
-        multi: true,
+        multi: true
       });
     }
 
     types.push({
       kind: "TypeDeclaration",
       name: { kind: "Identifier", value: `Entity${i}` },
-      members,
+      members
     } as AST.TypeDeclaration);
   }
 
   return [
     {
       name: "default",
-      items: types,
-    },
+      items: types
+    }
   ];
 }
 
@@ -158,15 +158,15 @@ function createModifiedLargeSchema(numTypes: number): Module[] {
       name: { kind: "Identifier", value: "modified_at" },
       type: {
         kind: "TypeRef",
-        name: { kind: "QualifiedName", parts: ["datetime"] },
+        name: { kind: "QualifiedName", parts: ["datetime"] }
       },
       required: false,
-      multi: false,
+      multi: false
     });
 
     // Modify an existing property (make value required)
     const valueProperty = typeDef.members.find(
-      (item): item is AST.PropertyDeclaration => item.kind === "PropertyDeclaration" && item.name.value === "value",
+      (item): item is AST.PropertyDeclaration => item.kind === "PropertyDeclaration" && item.name.value === "value"
     );
     if (valueProperty) {
       valueProperty.required = true;
@@ -184,12 +184,12 @@ function createModifiedLargeSchema(numTypes: number): Module[] {
           name: { kind: "Identifier", value: "name" },
           type: {
             kind: "TypeRef",
-            name: { kind: "QualifiedName", parts: ["str"] },
+            name: { kind: "QualifiedName", parts: ["str"] }
           },
           required: true,
-          multi: false,
-        },
-      ],
+          multi: false
+        }
+      ]
     };
     module.items.push(newType);
   }
@@ -212,7 +212,7 @@ Deno.test("Performance - Large Schema Initial Migration", () => {
 
   const duration = endTime - startTime;
   console.log(
-    `Initial migration planning for ${numTypes} types took ${duration.toFixed(2)}ms`,
+    `Initial migration planning for ${numTypes} types took ${duration.toFixed(2)}ms`
   );
 
   // Should complete within reasonable time
@@ -221,7 +221,7 @@ Deno.test("Performance - Large Schema Initial Migration", () => {
   // Verify correct number of operations
   if (planResult.ok) {
     const operations = planResult.value.migrations[0].operations;
-    const createOps = operations.filter((op) => op.kind === "CreateType");
+    const createOps = operations.filter(op => op.kind === "CreateType");
     assertEquals(createOps.length, numTypes);
   }
 });
@@ -254,19 +254,19 @@ Deno.test("Performance - Initial Migration scales linearly with deep inheritance
             name: { kind: "Identifier", value: "name" },
             type: {
               kind: "TypeRef",
-              name: { kind: "QualifiedName", parts: ["str"] },
+              name: { kind: "QualifiedName", parts: ["str"] }
             },
             required: true,
-            multi: false,
-          },
-        ],
+            multi: false
+          }
+        ]
       };
       if (i > 1) {
         decl.extending = [
           {
             kind: "TypeRef",
-            name: { kind: "QualifiedName", parts: [`Chain${i - 1}`] },
-          },
+            name: { kind: "QualifiedName", parts: [`Chain${i - 1}`] }
+          }
         ];
       }
       items.push(decl);
@@ -281,7 +281,7 @@ Deno.test("Performance - Initial Migration scales linearly with deep inheritance
 
   assertEquals(result.ok, true);
   console.log(
-    `Initial migration with ${numTypes}-deep inheritance chain: ${duration.toFixed(2)}ms`,
+    `Initial migration with ${numTypes}-deep inheritance chain: ${duration.toFixed(2)}ms`
   );
   // 500ms cap is ~200× the post-fix typical and ~1.5× the pre-fix
   // 2000-type baseline → fails loud on quadratic regression.
@@ -301,7 +301,7 @@ Deno.test("Performance - Large Schema Diff", () => {
 
   const duration = endTime - startTime;
   console.log(
-    `Schema diff for ${numTypes} types took ${duration.toFixed(2)}ms`,
+    `Schema diff for ${numTypes} types took ${duration.toFixed(2)}ms`
   );
 
   // Should complete within reasonable time
@@ -311,8 +311,8 @@ Deno.test("Performance - Large Schema Diff", () => {
   assertEquals(operations.length > 0, true);
 
   // Should have alter operations and new type creations
-  const alterOps = operations.filter((op) => op.kind === "AlterType");
-  const createOps = operations.filter((op) => op.kind === "CreateType");
+  const alterOps = operations.filter(op => op.kind === "AlterType");
+  const createOps = operations.filter(op => op.kind === "CreateType");
 
   assertEquals(alterOps.length > 0, true); // Should have alterations
   assertEquals(createOps.length, 10); // Should have 10 new types
@@ -337,7 +337,7 @@ Deno.test("Performance - DDL Generation for Large Schema", () => {
 
     const duration = endTime - startTime;
     console.log(
-      `DDL generation for ${numTypes} types took ${duration.toFixed(2)}ms`,
+      `DDL generation for ${numTypes} types took ${duration.toFixed(2)}ms`
     );
 
     // Should complete within reasonable time
@@ -373,7 +373,7 @@ Deno.test("Performance - Rollback DDL Generation", () => {
 
     const duration = endTime - startTime;
     console.log(
-      `Rollback DDL generation for ${migration.operations.length} operations took ${duration.toFixed(2)}ms`,
+      `Rollback DDL generation for ${migration.operations.length} operations took ${duration.toFixed(2)}ms`
     );
 
     // Should complete within reasonable time
@@ -412,12 +412,12 @@ Deno.test({
                 required: true,
                 multi: false,
                 constraints: [],
-                annotations: {},
-              },
+                annotations: {}
+              }
             ],
-            links: [],
-          } as Types.CreateTypeOperation,
-        ],
+            links: []
+          } as Types.CreateTypeOperation
+        ]
       });
     }
 
@@ -429,7 +429,7 @@ Deno.test({
         success: true,
         migrationId: migration.id,
         appliedAt: new Date(),
-        durationMs: 100,
+        durationMs: 100
       };
 
       const recordResult = await tracker.recordMigration(migration, result);
@@ -440,10 +440,10 @@ Deno.test({
     const duration = endTime - startTime;
 
     console.log(
-      `Recording ${numMigrations} migrations took ${duration.toFixed(2)}ms`,
+      `Recording ${numMigrations} migrations took ${duration.toFixed(2)}ms`
     );
     console.log(
-      `Average per migration: ${(duration / numMigrations).toFixed(2)}ms`,
+      `Average per migration: ${(duration / numMigrations).toFixed(2)}ms`
     );
 
     // Should complete within reasonable time
@@ -457,7 +457,7 @@ Deno.test({
     }
 
     await tracker.close();
-  },
+  }
 });
 
 Deno.test({
@@ -479,14 +479,14 @@ Deno.test({
         description: `History test migration ${i}`,
         createdAt: new Date(Date.now() + i * 1000),
         schemaHash: `hash_${i}`,
-        operations: [],
+        operations: []
       };
 
       const result: Types.MigrationResult = {
         success: true,
         migrationId: migration.id,
         appliedAt: new Date(),
-        durationMs: 100,
+        durationMs: 100
       };
 
       await tracker.recordMigration(migration, result);
@@ -504,14 +504,14 @@ Deno.test({
 
     const duration = endTime - startTime;
     console.log(
-      `Retrieving history for ${numMigrations} migrations took ${duration.toFixed(2)}ms`,
+      `Retrieving history for ${numMigrations} migrations took ${duration.toFixed(2)}ms`
     );
 
     // Should complete quickly
     assertLessOrEqual(duration, 1000); // 1 second
 
     await tracker.close();
-  },
+  }
 });
 
 Deno.test("Performance - Complex Schema with Deep Inheritance", () => {
@@ -522,8 +522,8 @@ Deno.test("Performance - Complex Schema with Deep Inheritance", () => {
   const deepInheritanceSchema: Module[] = [
     {
       name: "default",
-      items: [],
-    },
+      items: []
+    }
   ];
 
   const module = deepInheritanceSchema[0];
@@ -534,12 +534,12 @@ Deno.test("Performance - Complex Schema with Deep Inheritance", () => {
   for (let level = 0; level < numLevels; level++) {
     for (let i = 1; i <= numTypesPerLevel; i++) {
       const typeName = `Level${level}Type${i}`;
-      const extending: AST.TypeRef[] = level > 0
-        ? [{
+      const extending: AST.TypeRef[] = level > 0 ?
+        [{
           kind: "TypeRef",
-          name: { kind: "QualifiedName", parts: [`Level${level - 1}Type${i}`] },
-        }]
-        : [];
+          name: { kind: "QualifiedName", parts: [`Level${level - 1}Type${i}`] }
+        }] :
+        [];
 
       const type: AST.TypeDeclaration = {
         kind: "TypeDeclaration",
@@ -551,12 +551,12 @@ Deno.test("Performance - Complex Schema with Deep Inheritance", () => {
             name: { kind: "Identifier", value: `level_${level}_prop` },
             type: {
               kind: "TypeRef",
-              name: { kind: "QualifiedName", parts: ["str"] },
+              name: { kind: "QualifiedName", parts: ["str"] }
             },
             required: false,
-            multi: false,
-          },
-        ],
+            multi: false
+          }
+        ]
       };
 
       module.items.push(type);
@@ -571,7 +571,7 @@ Deno.test("Performance - Complex Schema with Deep Inheritance", () => {
 
   const duration = endTime - startTime;
   console.log(
-    `Deep inheritance schema (${numLevels} levels, ${numTypesPerLevel} types/level) took ${duration.toFixed(2)}ms`,
+    `Deep inheritance schema (${numLevels} levels, ${numTypesPerLevel} types/level) took ${duration.toFixed(2)}ms`
   );
 
   // Should handle complex inheritance within reasonable time
@@ -603,7 +603,7 @@ Deno.test("Performance - Concurrent Migration Operations", () => {
 
   const duration = endTime - startTime;
   console.log(
-    `${numConcurrentOps} concurrent migration planning operations took ${duration.toFixed(2)}ms`,
+    `${numConcurrentOps} concurrent migration planning operations took ${duration.toFixed(2)}ms`
   );
 
   // Should complete within reasonable time
@@ -673,7 +673,7 @@ Deno.test("Performance - Stress Test with Very Large Schema", () => {
     console.log(`  Planning: ${(planningTime - startTime).toFixed(2)}ms`);
     console.log(`  DDL Generation: ${(ddlTime - planningTime).toFixed(2)}ms`);
     console.log(
-      `  Rollback Generation: ${(rollbackTime - ddlTime).toFixed(2)}ms`,
+      `  Rollback Generation: ${(rollbackTime - ddlTime).toFixed(2)}ms`
     );
     console.log(`  Total: ${(endTime - startTime).toFixed(2)}ms`);
 

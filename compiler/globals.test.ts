@@ -98,13 +98,13 @@ Deno.test("Globals - resolveGlobal with exact qualified name", () => {
       required: false,
       multi: false,
       readonly: false,
-      pgSettingName: "disc.global_default__current_user_id",
-    }],
+      pgSettingName: "disc.global_default__current_user_id"
+    }]
   ]);
 
   const schema: Schema = {
     ...createTestSchema(),
-    globals,
+    globals
   };
 
   const result = resolveGlobal(schema, "default::current_user_id");
@@ -128,13 +128,13 @@ Deno.test("Globals - resolveGlobal with module scope resolution", () => {
       required: false,
       multi: false,
       readonly: false,
-      pgSettingName: "disc.global_auth__current_user_id",
-    }],
+      pgSettingName: "disc.global_auth__current_user_id"
+    }]
   ]);
 
   const schema: Schema = {
     ...createTestSchema(),
-    globals,
+    globals
   };
 
   // Unqualified name resolves via moduleScope
@@ -158,13 +158,13 @@ Deno.test("Globals - resolveGlobal with default fallback", () => {
       required: false,
       multi: false,
       readonly: false,
-      pgSettingName: "disc.global_default__current_user_id",
-    }],
+      pgSettingName: "disc.global_default__current_user_id"
+    }]
   ]);
 
   const schema: Schema = {
     ...createTestSchema(),
-    globals,
+    globals
   };
 
   // Unqualified name falls back to "default::" prefix
@@ -188,13 +188,13 @@ Deno.test("Globals - resolveGlobal returns undefined for unknown global", () => 
       required: false,
       multi: false,
       readonly: false,
-      pgSettingName: "disc.global_default__current_user_id",
-    }],
+      pgSettingName: "disc.global_default__current_user_id"
+    }]
   ]);
 
   const schema: Schema = {
     ...createTestSchema(),
-    globals,
+    globals
   };
 
   const result = resolveGlobal(schema, "nonexistent_global");

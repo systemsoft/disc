@@ -23,7 +23,7 @@ function makeCapture(): {
   const calls: CapturedRequest[] = [];
   const fetchImpl = ((
     input: string | URL | Request,
-    init?: RequestInit,
+    init?: RequestInit
   ) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     const headers: Record<string, string> = {};
@@ -38,7 +38,7 @@ function makeCapture(): {
       url,
       method: init?.method ?? "GET",
       headers,
-      body: typeof init?.body === "string" ? init.body : "",
+      body: typeof init?.body === "string" ? init.body : ""
     });
     return Promise.resolve(new Response("ok", { status: 200 }));
   }) as typeof fetch;
@@ -51,7 +51,7 @@ Deno.test("WebhookSender - dispatches to matching subscription only", async () =
   const { fetchImpl, calls } = makeCapture();
   const subs: WebhookConfig[] = [
     { url: "http://x/identity", events: ["IdentityCreated"] },
-    { url: "http://x/login", events: ["IdentityAuthenticated"] },
+    { url: "http://x/login", events: ["IdentityAuthenticated"] }
   ];
   const sender = new WebhookSender(subs, { fetchImpl, synchronous: true });
 
@@ -59,7 +59,7 @@ Deno.test("WebhookSender - dispatches to matching subscription only", async () =
     eventType: "IdentityCreated",
     eventId: "e1",
     timestamp: "2026-01-01T00:00:00.000Z",
-    identityId: "u1",
+    identityId: "u1"
   });
 
   assertEquals(calls.length, 1);
@@ -75,7 +75,7 @@ Deno.test("WebhookSender - dispatches to multiple subscriptions of same event", 
   const { fetchImpl, calls } = makeCapture();
   const subs: WebhookConfig[] = [
     { url: "http://a/", events: ["IdentityCreated"] },
-    { url: "http://b/", events: ["IdentityCreated", "IdentityAuthenticated"] },
+    { url: "http://b/", events: ["IdentityCreated", "IdentityAuthenticated"] }
   ];
   const sender = new WebhookSender(subs, { fetchImpl, synchronous: true });
 
@@ -83,18 +83,18 @@ Deno.test("WebhookSender - dispatches to multiple subscriptions of same event", 
     eventType: "IdentityCreated",
     eventId: "e1",
     timestamp: "2026-01-01T00:00:00.000Z",
-    identityId: "u1",
+    identityId: "u1"
   });
 
   assertEquals(calls.length, 2);
-  const urls = calls.map((c) => c.url).sort();
+  const urls = calls.map(c => c.url).sort();
   assertEquals(urls, ["http://a/", "http://b/"]);
 });
 
 Deno.test("WebhookSender - skips dispatch when no subscriptions match", async () => {
   const { fetchImpl, calls } = makeCapture();
   const subs: WebhookConfig[] = [
-    { url: "http://x/", events: ["IdentityAuthenticated"] },
+    { url: "http://x/", events: ["IdentityAuthenticated"] }
   ];
   const sender = new WebhookSender(subs, { fetchImpl, synchronous: true });
 
@@ -102,7 +102,7 @@ Deno.test("WebhookSender - skips dispatch when no subscriptions match", async ()
     eventType: "IdentityCreated",
     eventId: "e1",
     timestamp: "2026-01-01T00:00:00.000Z",
-    identityId: "u1",
+    identityId: "u1"
   });
 
   assertEquals(calls.length, 0);
@@ -114,8 +114,8 @@ Deno.test("WebhookSender - signs body with HMAC-SHA256 hex when secret is set", 
     {
       url: "http://x/",
       events: ["IdentityCreated"],
-      secret: "shared-webhook-secret",
-    },
+      secret: "shared-webhook-secret"
+    }
   ];
   const sender = new WebhookSender(subs, { fetchImpl, synchronous: true });
 
@@ -123,7 +123,7 @@ Deno.test("WebhookSender - signs body with HMAC-SHA256 hex when secret is set", 
     eventType: "IdentityCreated",
     eventId: "fixed-event-id",
     timestamp: "2026-01-01T00:00:00.000Z",
-    identityId: "u-fixed",
+    identityId: "u-fixed"
   });
 
   assertEquals(calls.length, 1);
@@ -139,15 +139,15 @@ Deno.test("WebhookSender - signs body with HMAC-SHA256 hex when secret is set", 
     new TextEncoder().encode("shared-webhook-secret"),
     { name: "HMAC", hash: "SHA-256" },
     false,
-    ["sign"],
+    ["sign"]
   );
   const expectedSig = await crypto.subtle.sign(
     "HMAC",
     key,
-    new TextEncoder().encode(calls[0].body),
+    new TextEncoder().encode(calls[0].body)
   );
   const expected = [...new Uint8Array(expectedSig)]
-    .map((b) => b.toString(16).padStart(2, "0"))
+    .map(b => b.toString(16).padStart(2, "0"))
     .join("");
   assertEquals(sig, expected);
 });
@@ -155,7 +155,7 @@ Deno.test("WebhookSender - signs body with HMAC-SHA256 hex when secret is set", 
 Deno.test("WebhookSender - omits signature header when no secret configured", async () => {
   const { fetchImpl, calls } = makeCapture();
   const subs: WebhookConfig[] = [
-    { url: "http://x/", events: ["IdentityCreated"] },
+    { url: "http://x/", events: ["IdentityCreated"] }
   ];
   const sender = new WebhookSender(subs, { fetchImpl, synchronous: true });
 
@@ -163,7 +163,7 @@ Deno.test("WebhookSender - omits signature header when no secret configured", as
     eventType: "IdentityCreated",
     eventId: "e1",
     timestamp: "2026-01-01T00:00:00.000Z",
-    identityId: "u1",
+    identityId: "u1"
   });
 
   assertEquals(calls[0].headers["x-disc-auth-signature-sha256"], undefined);
@@ -172,7 +172,7 @@ Deno.test("WebhookSender - omits signature header when no secret configured", as
 Deno.test("WebhookSender - swallows fetch failures so caller is unaffected", async () => {
   const failing: typeof fetch = (() => Promise.reject(new Error("network down"))) as typeof fetch;
   const sender = new WebhookSender([
-    { url: "http://x/", events: ["IdentityCreated"] },
+    { url: "http://x/", events: ["IdentityCreated"] }
   ], { fetchImpl: failing, synchronous: true });
 
   // Must not throw. (Logged at warn level by the sender.)
@@ -180,7 +180,7 @@ Deno.test("WebhookSender - swallows fetch failures so caller is unaffected", asy
     eventType: "IdentityCreated",
     eventId: "e1",
     timestamp: "2026-01-01T00:00:00.000Z",
-    identityId: "u1",
+    identityId: "u1"
   });
 });
 
@@ -189,7 +189,7 @@ Deno.test("WebhookSender - addListener invokes listener on dispatch (synchronous
   const sender = new WebhookSender([], { fetchImpl, synchronous: true });
 
   const seen: string[] = [];
-  sender.addListener((event) => {
+  sender.addListener(event => {
     seen.push(event.eventType);
     return Promise.resolve();
   });
@@ -198,7 +198,7 @@ Deno.test("WebhookSender - addListener invokes listener on dispatch (synchronous
     eventType: "IdentityCreated",
     eventId: "e1",
     timestamp: "2026-01-01T00:00:00.000Z",
-    identityId: "u1",
+    identityId: "u1"
   });
 
   assertEquals(seen, ["IdentityCreated"]);
@@ -208,11 +208,11 @@ Deno.test("WebhookSender - addListener receives every event regardless of Webhoo
   const { fetchImpl } = makeCapture();
   const sender = new WebhookSender(
     [{ url: "http://x/", events: ["IdentityCreated"] }], // listener should see more than this filter
-    { fetchImpl, synchronous: true },
+    { fetchImpl, synchronous: true }
   );
 
   const seen: string[] = [];
-  sender.addListener((event) => {
+  sender.addListener(event => {
     seen.push(event.eventType);
     return Promise.resolve();
   });
@@ -221,13 +221,13 @@ Deno.test("WebhookSender - addListener receives every event regardless of Webhoo
     eventType: "IdentityCreated",
     eventId: "e1",
     timestamp: "2026-01-01T00:00:00.000Z",
-    identityId: "u1",
+    identityId: "u1"
   });
   await sender.dispatch({
     eventType: "IdentityAuthenticated",
     eventId: "e2",
     timestamp: "2026-01-01T00:00:00.000Z",
-    identityId: "u1",
+    identityId: "u1"
   });
 
   assertEquals(seen.sort(), ["IdentityAuthenticated", "IdentityCreated"]);
@@ -237,7 +237,7 @@ Deno.test("WebhookSender - listener errors don't break HTTP webhook dispatch", a
   const { fetchImpl, calls } = makeCapture();
   const sender = new WebhookSender(
     [{ url: "http://x/", events: ["IdentityCreated"] }],
-    { fetchImpl, synchronous: true },
+    { fetchImpl, synchronous: true }
   );
 
   sender.addListener(() => {
@@ -249,7 +249,7 @@ Deno.test("WebhookSender - listener errors don't break HTTP webhook dispatch", a
     eventType: "IdentityCreated",
     eventId: "e1",
     timestamp: "2026-01-01T00:00:00.000Z",
-    identityId: "u1",
+    identityId: "u1"
   });
 
   // HTTP fan-out still happened.
@@ -260,17 +260,17 @@ Deno.test("WebhookSender - listener errors don't break HTTP webhook dispatch", a
 
 async function makeProvider(
   webhooks: WebhookConfig[],
-  fetchImpl: typeof fetch,
+  fetchImpl: typeof fetch
 ): Promise<{ provider: AuthProvider; db: TestDatabase; }> {
   const db = new TestDatabase();
   await db.connect();
   const provider = new AuthProvider(
     {
       jwtSecret: "test-secret-key-32-bytes-minimum-len",
-      webhooks,
+      webhooks
     },
     db,
-    { fetchImpl, synchronous: true },
+    { fetchImpl, synchronous: true }
   );
   await provider.initialize();
   return { provider, db };
@@ -280,13 +280,13 @@ Deno.test("AuthProvider - register fires IdentityCreated webhook", async () => {
   const { fetchImpl, calls } = makeCapture();
   const { provider, db } = await makeProvider(
     [{ url: "http://x/", events: ["IdentityCreated"] }],
-    fetchImpl,
+    fetchImpl
   );
 
   try {
     await provider.register({
       email: "alice@test.com",
-      password: "password123",
+      password: "password123"
     });
 
     assertEquals(calls.length, 1);
@@ -310,25 +310,25 @@ Deno.test("AuthProvider - register with email verification also fires EmailVerif
       requireEmailVerification: true,
       webhooks: [{
         url: "http://x/",
-        events: ["IdentityCreated", "EmailVerificationRequested"],
-      }],
+        events: ["IdentityCreated", "EmailVerificationRequested"]
+      }]
     },
     db,
-    { fetchImpl, synchronous: true },
+    { fetchImpl, synchronous: true }
   );
   await provider.initialize();
 
   try {
     await provider.register({
       email: "bob@test.com",
-      password: "password123",
+      password: "password123"
     });
 
     assertEquals(calls.length, 2);
-    const types = calls.map((c) => JSON.parse(c.body).eventType).sort();
+    const types = calls.map(c => JSON.parse(c.body).eventType).sort();
     assertEquals(types, ["EmailVerificationRequested", "IdentityCreated"]);
 
-    const verifyCall = calls.find((c) => JSON.parse(c.body).eventType === "EmailVerificationRequested");
+    const verifyCall = calls.find(c => JSON.parse(c.body).eventType === "EmailVerificationRequested");
     assertExists(verifyCall);
     const verifyBody = JSON.parse(verifyCall.body);
     assertExists(verifyBody.verificationToken);
@@ -342,21 +342,21 @@ Deno.test("AuthProvider - login fires IdentityAuthenticated webhook", async () =
   const { provider, db } = await makeProvider(
     [{
       url: "http://x/",
-      events: ["IdentityCreated", "IdentityAuthenticated"],
+      events: ["IdentityCreated", "IdentityAuthenticated"]
     }],
-    fetchImpl,
+    fetchImpl
   );
 
   try {
     await provider.register({
       email: "carol@test.com",
-      password: "password123",
+      password: "password123"
     });
     calls.length = 0; // discard register webhook
 
     await provider.login({
       email: "carol@test.com",
-      password: "password123",
+      password: "password123"
     });
 
     assertEquals(calls.length, 1);
@@ -371,22 +371,22 @@ Deno.test("AuthProvider - failed login does not fire any webhook", async () => {
   const { provider, db } = await makeProvider(
     [{
       url: "http://x/",
-      events: ["IdentityCreated", "IdentityAuthenticated"],
+      events: ["IdentityCreated", "IdentityAuthenticated"]
     }],
-    fetchImpl,
+    fetchImpl
   );
 
   try {
     await provider.register({
       email: "dave@test.com",
-      password: "password123",
+      password: "password123"
     });
     calls.length = 0;
 
     try {
       await provider.login({
         email: "dave@test.com",
-        password: "wrong",
+        password: "wrong"
       });
     } catch {
       // expected
@@ -403,15 +403,15 @@ Deno.test("AuthProvider - resetPasswordRequest fires PasswordResetRequested webh
   const { provider, db } = await makeProvider(
     [{
       url: "http://x/",
-      events: ["IdentityCreated", "PasswordResetRequested"],
+      events: ["IdentityCreated", "PasswordResetRequested"]
     }],
-    fetchImpl,
+    fetchImpl
   );
 
   try {
     await provider.register({
       email: "eve@test.com",
-      password: "password123",
+      password: "password123"
     });
     calls.length = 0;
 
@@ -431,7 +431,7 @@ Deno.test("AuthProvider - resetPasswordRequest for unknown email fires no webhoo
   const { fetchImpl, calls } = makeCapture();
   const { provider, db } = await makeProvider(
     [{ url: "http://x/", events: ["PasswordResetRequested"] }],
-    fetchImpl,
+    fetchImpl
   );
 
   try {
@@ -447,15 +447,15 @@ Deno.test("AuthProvider - requestMagicCode fires MagicCodeRequested webhook with
   const { provider, db } = await makeProvider(
     [{
       url: "http://x/",
-      events: ["IdentityCreated", "MagicCodeRequested"],
+      events: ["IdentityCreated", "MagicCodeRequested"]
     }],
-    fetchImpl,
+    fetchImpl
   );
 
   try {
     await provider.register({
       email: "grace@test.com",
-      password: "password123",
+      password: "password123"
     });
     calls.length = 0;
 
@@ -478,7 +478,7 @@ Deno.test("AuthProvider - requestMagicCode for unknown email fires no webhook", 
   const { fetchImpl, calls } = makeCapture();
   const { provider, db } = await makeProvider(
     [{ url: "http://x/", events: ["MagicCodeRequested"] }],
-    fetchImpl,
+    fetchImpl
   );
 
   try {
@@ -496,7 +496,7 @@ Deno.test("AuthProvider - no webhooks configured = no dispatch attempts", async 
   try {
     await provider.register({
       email: "frank@test.com",
-      password: "password123",
+      password: "password123"
     });
     assertEquals(calls.length, 0);
   } finally {

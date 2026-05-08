@@ -19,9 +19,9 @@ async function makeRoutes(): Promise<{
   const provider = new AuthProvider(
     {
       jwtSecret: "test-secret-key-32-bytes-minimum-len",
-      requireEmailVerification: false,
+      requireEmailVerification: false
     },
-    db,
+    db
   );
   await provider.initialize();
   const middleware = new AuthMiddleware(provider);
@@ -34,7 +34,7 @@ Deno.test("POST /auth/anonymous - mints a guest identity", async () => {
   try {
     const handler = routes.loginAnonymous();
     const req = new Request("http://localhost/auth/anonymous", {
-      method: "POST",
+      method: "POST"
     });
     const res = await handler(req);
     assertEquals(res.status, 201);
@@ -57,8 +57,8 @@ Deno.test("POST /auth/upgrade - rejects unauthenticated request", async () => {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         email: "real@example.com",
-        password: "password123",
-      }),
+        password: "password123"
+      })
     });
     const res = await handler(req);
     // requireAuth returns 401 when no Bearer token is present.
@@ -76,10 +76,10 @@ Deno.test("POST /auth/upgrade - missing fields returns 400", async () => {
     const req = new Request("http://localhost/auth/upgrade", {
       method: "POST",
       headers: {
-        "authorization": `Bearer ${guest.token}`,
-        "content-type": "application/json",
+        authorization: `Bearer ${guest.token}`,
+        "content-type": "application/json"
       },
-      body: JSON.stringify({ email: "only@example.com" }),
+      body: JSON.stringify({ email: "only@example.com" })
     });
     const res = await handler(req);
     assertEquals(res.status, 400);
@@ -98,13 +98,13 @@ Deno.test("POST /auth/upgrade - upgrades a guest into a full user", async () => 
     const req = new Request("http://localhost/auth/upgrade", {
       method: "POST",
       headers: {
-        "authorization": `Bearer ${guest.token}`,
-        "content-type": "application/json",
+        authorization: `Bearer ${guest.token}`,
+        "content-type": "application/json"
       },
       body: JSON.stringify({
         email: "promoted@example.com",
-        password: "password123",
-      }),
+        password: "password123"
+      })
     });
     const res = await handler(req);
     assertEquals(res.status, 200);

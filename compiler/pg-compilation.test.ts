@@ -30,7 +30,7 @@ function makePool(dsn: string): ConnectionPool {
     connectionString: dsn,
     minConnections: 1,
     maxConnections: 3,
-    cleanupInterval: 0,
+    cleanupInterval: 0
   });
 }
 
@@ -57,7 +57,7 @@ async function applyTestSchema(pool: ConnectionPool) {
   assertEquals(
     result.ok,
     true,
-    `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`,
+    `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`
   );
 
   const schema = manager.getSchema();
@@ -72,7 +72,7 @@ async function applyTestSchema(pool: ConnectionPool) {
  */
 function compileEdgeQL(
   edgeql: string,
-  schema: import("./context.ts").Schema,
+  schema: import("./context.ts").Schema
 ): string {
   const parser = new EdgeQLParser(edgeql);
   const ast = parser.parse();
@@ -105,7 +105,7 @@ Deno.test({
 
       // Insert a row with raw SQL
       await pool.query(
-        `INSERT INTO ${TEST_TABLE} (id, name, value) VALUES (gen_random_uuid(), 'alpha', 10)`,
+        `INSERT INTO ${TEST_TABLE} (id, name, value) VALUES (gen_random_uuid(), 'alpha', 10)`
       );
 
       // Compile EdgeQL SELECT
@@ -118,7 +118,7 @@ Deno.test({
       assertEquals(
         result.rowCount >= 1,
         true,
-        "Should return at least one row",
+        "Should return at least one row"
       );
 
       // The result rows contain jsonb_build_object output. Each row has a
@@ -129,8 +129,8 @@ Deno.test({
       // Find the row data - it could be the row itself or nested in a
       // jsonb_build_object column
       const rowData = firstRow.jsonb_build_object ?? firstRow;
-      const name = rowData.name
-        ?? (typeof rowData === "object" ? Object.values(rowData)[0] : undefined);
+      const name = rowData.name ??
+        (typeof rowData === "object" ? Object.values(rowData)[0] : undefined);
       assertExists(name, "Row should contain name data");
 
       await manager.close();
@@ -138,11 +138,11 @@ Deno.test({
       await pool.query(`DROP TABLE IF EXISTS ${TEST_TABLE} CASCADE`);
       await pool.query("DROP TABLE IF EXISTS disc_migrations CASCADE");
       await pool.query(
-        "DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE",
+        "DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -160,25 +160,25 @@ Deno.test({
       // Compile and execute an EdgeQL INSERT
       const insertSql = compileEdgeQL(
         "insert TestItem { name := \"beta\", value := 20 }",
-        schema,
+        schema
       );
       await pool.query(insertSql);
 
       // Verify the row exists with raw SQL
       const verifyResult = await pool.query(
-        `SELECT name, value FROM ${TEST_TABLE} WHERE name = 'beta'`,
+        `SELECT name, value FROM ${TEST_TABLE} WHERE name = 'beta'`
       );
 
       assertEquals(
         verifyResult.rowCount,
         1,
-        "Should have exactly one row named 'beta'",
+        "Should have exactly one row named 'beta'"
       );
       assertEquals(verifyResult.rows[0].name, "beta");
       assertEquals(
         Number(verifyResult.rows[0].value),
         20,
-        "Value should be 20",
+        "Value should be 20"
       );
 
       await manager.close();
@@ -186,11 +186,11 @@ Deno.test({
       await pool.query(`DROP TABLE IF EXISTS ${TEST_TABLE} CASCADE`);
       await pool.query("DROP TABLE IF EXISTS disc_migrations CASCADE");
       await pool.query(
-        "DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE",
+        "DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -210,13 +210,13 @@ Deno.test({
         `INSERT INTO ${TEST_TABLE} (id, name, value) VALUES
           (gen_random_uuid(), 'one', 10),
           (gen_random_uuid(), 'two', 20),
-          (gen_random_uuid(), 'three', 30)`,
+          (gen_random_uuid(), 'three', 30)`
       );
 
       // Compile EdgeQL SELECT with FILTER
       const sql = compileEdgeQL(
         "select TestItem { name, value } filter .value > 15",
-        schema,
+        schema
       );
 
       // Execute the compiled SQL
@@ -226,7 +226,7 @@ Deno.test({
       assertEquals(
         result.rowCount,
         2,
-        "Should return exactly 2 rows with value > 15",
+        "Should return exactly 2 rows with value > 15"
       );
 
       await manager.close();
@@ -234,11 +234,11 @@ Deno.test({
       await pool.query(`DROP TABLE IF EXISTS ${TEST_TABLE} CASCADE`);
       await pool.query("DROP TABLE IF EXISTS disc_migrations CASCADE");
       await pool.query(
-        "DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE",
+        "DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -255,30 +255,30 @@ Deno.test({
 
       // Insert a row with raw SQL
       await pool.query(
-        `INSERT INTO ${TEST_TABLE} (id, name, value) VALUES (gen_random_uuid(), 'gamma', 50)`,
+        `INSERT INTO ${TEST_TABLE} (id, name, value) VALUES (gen_random_uuid(), 'gamma', 50)`
       );
 
       // Compile and execute an EdgeQL UPDATE
       const updateSql = compileEdgeQL(
         "update TestItem filter .name = \"gamma\" set { value := 99 }",
-        schema,
+        schema
       );
       await pool.query(updateSql);
 
       // Verify the update with raw SQL
       const verifyResult = await pool.query(
-        `SELECT name, value FROM ${TEST_TABLE} WHERE name = 'gamma'`,
+        `SELECT name, value FROM ${TEST_TABLE} WHERE name = 'gamma'`
       );
 
       assertEquals(
         verifyResult.rowCount,
         1,
-        "Should still have one 'gamma' row",
+        "Should still have one 'gamma' row"
       );
       assertEquals(
         Number(verifyResult.rows[0].value),
         99,
-        "Value should be updated to 99",
+        "Value should be updated to 99"
       );
 
       await manager.close();
@@ -286,11 +286,11 @@ Deno.test({
       await pool.query(`DROP TABLE IF EXISTS ${TEST_TABLE} CASCADE`);
       await pool.query("DROP TABLE IF EXISTS disc_migrations CASCADE");
       await pool.query(
-        "DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE",
+        "DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -307,34 +307,34 @@ Deno.test({
 
       // Insert a row with raw SQL
       await pool.query(
-        `INSERT INTO ${TEST_TABLE} (id, name, value) VALUES (gen_random_uuid(), 'delta', 77)`,
+        `INSERT INTO ${TEST_TABLE} (id, name, value) VALUES (gen_random_uuid(), 'delta', 77)`
       );
 
       // Verify the row exists before deletion
       const beforeResult = await pool.query(
-        `SELECT count(*)::int AS cnt FROM ${TEST_TABLE} WHERE name = 'delta'`,
+        `SELECT count(*)::int AS cnt FROM ${TEST_TABLE} WHERE name = 'delta'`
       );
       assertEquals(
         Number(beforeResult.rows[0].cnt),
         1,
-        "Row should exist before delete",
+        "Row should exist before delete"
       );
 
       // Compile and execute an EdgeQL DELETE
       const deleteSql = compileEdgeQL(
         "delete TestItem filter .name = \"delta\"",
-        schema,
+        schema
       );
       await pool.query(deleteSql);
 
       // Verify the row is gone with raw SQL
       const afterResult = await pool.query(
-        `SELECT count(*)::int AS cnt FROM ${TEST_TABLE} WHERE name = 'delta'`,
+        `SELECT count(*)::int AS cnt FROM ${TEST_TABLE} WHERE name = 'delta'`
       );
       assertEquals(
         Number(afterResult.rows[0].cnt),
         0,
-        "Row should be gone after delete",
+        "Row should be gone after delete"
       );
 
       await manager.close();
@@ -342,11 +342,11 @@ Deno.test({
       await pool.query(`DROP TABLE IF EXISTS ${TEST_TABLE} CASCADE`);
       await pool.query("DROP TABLE IF EXISTS disc_migrations CASCADE");
       await pool.query(
-        "DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE",
+        "DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -367,7 +367,7 @@ const EMPLOYEE_TABLE = "test_employee";
 
 /** Apply the employee SDL and return the schema for compilation. */
 async function applyEmployeeSchema(
-  pool: ConnectionPool,
+  pool: ConnectionPool
 ): Promise<{ manager: SchemaManager; schema: Schema; }> {
   const manager = new SchemaManager({ pool });
   await manager.initialize();
@@ -376,7 +376,7 @@ async function applyEmployeeSchema(
   assertEquals(
     result.ok,
     true,
-    `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`,
+    `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`
   );
 
   const schema = manager.getSchema();
@@ -424,7 +424,7 @@ Deno.test({
       await cleanupEmployee(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // --- GROUP BY with HAVING ---
@@ -455,7 +455,7 @@ Deno.test({
       // Only eng (3 employees) should pass; sales (2) and ops (1) should be excluded
       const sql = compileEdgeQL(
         "GROUP TestEmployee BY .department FILTER count(TestEmployee) > 2",
-        schema,
+        schema
       );
 
       // Verify the compiled SQL contains HAVING
@@ -467,7 +467,7 @@ Deno.test({
       assertEquals(
         result.rowCount,
         1,
-        "Should return only 1 department group with > 2 employees",
+        "Should return only 1 department group with > 2 employees"
       );
 
       // Verify the returned group is eng
@@ -480,7 +480,7 @@ Deno.test({
       assertEquals(
         key.department,
         "eng",
-        "The only group should be 'eng'",
+        "The only group should be 'eng'"
       );
 
       await manager.close();
@@ -488,7 +488,7 @@ Deno.test({
       await cleanupEmployee(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // --- Aggregate: avg ---
@@ -513,12 +513,12 @@ Deno.test({
 
       // Verify avg works via raw SQL against the migrated table
       const result = await pool.query(
-        `SELECT AVG(salary) AS avg_salary FROM ${EMPLOYEE_TABLE}`,
+        `SELECT AVG(salary) AS avg_salary FROM ${EMPLOYEE_TABLE}`
       );
       assertEquals(
         Number(result.rows[0].avg_salary),
         200,
-        "Average should be 200",
+        "Average should be 200"
       );
 
       await manager.close();
@@ -526,7 +526,7 @@ Deno.test({
       await cleanupEmployee(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // --- Math functions ---
@@ -554,7 +554,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // --- String functions ---
@@ -572,7 +572,7 @@ Deno.test({
       assertEquals(trim.rows[0].val, "hello");
 
       const replace = await pool.query(
-        "SELECT REPLACE('hello world', 'world', 'disc') AS val",
+        "SELECT REPLACE('hello world', 'world', 'disc') AS val"
       );
       assertEquals(replace.rows[0].val, "hello disc");
 
@@ -587,7 +587,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // --- FOR batch INSERT ---
@@ -614,7 +614,7 @@ Deno.test({
              active := true
            }
          )`,
-        schema,
+        schema
       );
 
       // Execute — should be a UNION ALL of 3 INSERTs
@@ -622,12 +622,12 @@ Deno.test({
 
       // Verify all 3 rows created
       const verify = await pool.query(
-        `SELECT count(*)::int AS cnt FROM ${EMPLOYEE_TABLE} WHERE name = 'BatchPerson'`,
+        `SELECT count(*)::int AS cnt FROM ${EMPLOYEE_TABLE} WHERE name = 'BatchPerson'`
       );
       assertEquals(
         Number(verify.rows[0].cnt),
         3,
-        "Should have 3 batch-inserted rows",
+        "Should have 3 batch-inserted rows"
       );
 
       await manager.close();
@@ -635,7 +635,7 @@ Deno.test({
       await cleanupEmployee(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // --- String search functions: contains() and find() ---
@@ -663,25 +663,25 @@ Deno.test({
       // (Ada/Billie/Cher — "li" is a substring of Billie only)
       const containsSql = compileEdgeQL(
         "select TestEmployee { name } filter contains(.name, \"li\")",
-        schema,
+        schema
       );
       const containsResult = await pool.query(containsSql);
       assertEquals(
         containsResult.rowCount,
         1,
-        "contains() should match only Billie",
+        "contains() should match only Billie"
       );
 
       // find(.name, "il") != -1 should match only "Billie"
       const findSql = compileEdgeQL(
         "select TestEmployee { name } filter find(.name, \"il\") != -1",
-        schema,
+        schema
       );
       const findResult = await pool.query(findSql);
       assertEquals(
         findResult.rowCount,
         1,
-        "find() != -1 should match only Billie",
+        "find() != -1 should match only Billie"
       );
 
       await manager.close();
@@ -689,7 +689,7 @@ Deno.test({
       await cleanupEmployee(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // --- Type cast functions: to_str, to_int64, to_float64 ---
@@ -708,7 +708,7 @@ Deno.test({
       assertEquals(
         strResult.rows[0].val,
         "42",
-        "CAST(42 AS text) should be '42'",
+        "CAST(42 AS text) should be '42'"
       );
 
       // to_int64: CAST('123' AS bigint)
@@ -716,23 +716,23 @@ Deno.test({
       assertEquals(
         Number(intResult.rows[0].val),
         123,
-        "CAST('123' AS bigint) should be 123",
+        "CAST('123' AS bigint) should be 123"
       );
 
       // to_float64: CAST('3.14' AS double precision)
       const floatResult = await pool.query(
-        "SELECT CAST('3.14' AS double precision) AS val",
+        "SELECT CAST('3.14' AS double precision) AS val"
       );
       const floatVal = Number(floatResult.rows[0].val);
       assertEquals(
         Math.abs(floatVal - 3.14) < 0.001,
         true,
-        "CAST('3.14' AS double precision) should be approximately 3.14",
+        "CAST('3.14' AS double precision) should be approximately 3.14"
       );
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // --- str_pad functions: LPAD / RPAD ---
@@ -756,7 +756,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // --- FOR with subquery LATERAL JOIN ---
@@ -785,14 +785,14 @@ Deno.test({
       // This should produce a LATERAL JOIN in the compiled SQL
       const sql = compileEdgeQL(
         "FOR x IN (select TestEmployee.department) UNION (select x)",
-        schema,
+        schema
       );
 
       // Verify the compiled SQL contains LATERAL
       assertEquals(
         sql.includes("LATERAL"),
         true,
-        "FOR with subquery should compile to LATERAL JOIN",
+        "FOR with subquery should compile to LATERAL JOIN"
       );
 
       // Execute the compiled SQL — should return department values
@@ -800,7 +800,7 @@ Deno.test({
       assertEquals(
         result.rowCount >= 1,
         true,
-        "LATERAL query should return at least one row",
+        "LATERAL query should return at least one row"
       );
 
       await manager.close();
@@ -808,7 +808,7 @@ Deno.test({
       await cleanupEmployee(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -846,7 +846,7 @@ Deno.test({
       // OFFSET 3 skips Ada, Billie, Cher -> returns Daena, Eve, Farah
       const sql = compileEdgeQL(
         "SELECT TestEmployee { name } ORDER BY .name OFFSET 3 LIMIT 3",
-        schema,
+        schema
       );
 
       // Verify the SQL contains both OFFSET and LIMIT
@@ -860,7 +860,7 @@ Deno.test({
       assertEquals(
         result.rowCount,
         3,
-        "Should return exactly 3 rows with OFFSET 3 LIMIT 3",
+        "Should return exactly 3 rows with OFFSET 3 LIMIT 3"
       );
 
       // Extract names from JSON results and verify they are the correct 3
@@ -872,7 +872,7 @@ Deno.test({
       assertEquals(
         names.sort(),
         ["Daena", "Eve", "Farah"],
-        "OFFSET 3 LIMIT 3 should return Daena, Eve, Farah (alphabetically 4th-6th)",
+        "OFFSET 3 LIMIT 3 should return Daena, Eve, Farah (alphabetically 4th-6th)"
       );
 
       await manager.close();
@@ -880,7 +880,7 @@ Deno.test({
       await cleanupEmployee(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -918,7 +918,7 @@ Deno.test({
          FILTER .department IN (
            SELECT TestEmployee.department FILTER .active = true
          )`,
-        schema,
+        schema
       );
 
       // Verify the SQL contains a subquery with IN
@@ -932,7 +932,7 @@ Deno.test({
       assertEquals(
         result.rowCount,
         5,
-        "All 5 employees should match since all departments have active members",
+        "All 5 employees should match since all departments have active members"
       );
 
       await manager.close();
@@ -940,7 +940,7 @@ Deno.test({
       await cleanupEmployee(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -972,7 +972,7 @@ Deno.test({
       const sql = compileEdgeQL(
         `WITH active_emps := (SELECT TestEmployee FILTER .active = true)
          SELECT active_emps { name }`,
-        schema,
+        schema
       );
 
       // Verify the SQL uses WITH and references the CTE
@@ -980,7 +980,7 @@ Deno.test({
       assertEquals(
         sql.includes("active_emps"),
         true,
-        "SQL should reference the CTE name",
+        "SQL should reference the CTE name"
       );
 
       // Execute and verify only active employees are returned
@@ -988,7 +988,7 @@ Deno.test({
       assertEquals(
         result.rowCount,
         2,
-        "Should return exactly 2 active employees (Ada, Cher)",
+        "Should return exactly 2 active employees (Ada, Cher)"
       );
 
       // Extract names and verify
@@ -999,7 +999,7 @@ Deno.test({
       assertEquals(
         names.sort(),
         ["Ada", "Cher"],
-        "Active employees should be Ada and Cher",
+        "Active employees should be Ada and Cher"
       );
 
       await manager.close();
@@ -1007,7 +1007,7 @@ Deno.test({
       await cleanupEmployee(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -1033,7 +1033,7 @@ Deno.test({
       const sql = compileEdgeQL(
         `WITH high_earners := (SELECT TestEmployee FILTER .salary > 80000)
          SELECT high_earners { name, salary }`,
-        schema,
+        schema
       );
 
       // Execute and verify
@@ -1041,7 +1041,7 @@ Deno.test({
       assertEquals(
         result.rowCount,
         2,
-        "Should return 2 high earners (Billie=100k, Cher=150k)",
+        "Should return 2 high earners (Billie=100k, Cher=150k)"
       );
 
       const names = result.rows.map((row: Record<string, unknown>) => {
@@ -1051,7 +1051,7 @@ Deno.test({
       assertEquals(
         names.sort(),
         ["Billie", "Cher"],
-        "High earners should be Billie and Cher",
+        "High earners should be Billie and Cher"
       );
 
       await manager.close();
@@ -1059,7 +1059,7 @@ Deno.test({
       await cleanupEmployee(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -1095,14 +1095,14 @@ Deno.test({
         `SELECT TestEmployee { name } FILTER .active = true
          INTERSECT
          SELECT TestEmployee { name } FILTER .department = "eng"`,
-        schema,
+        schema
       );
 
       // Verify the SQL contains INTERSECT
       assertEquals(
         sql.includes("INTERSECT"),
         true,
-        "SQL should contain INTERSECT",
+        "SQL should contain INTERSECT"
       );
 
       const result = await pool.query(sql);
@@ -1111,7 +1111,7 @@ Deno.test({
       assertEquals(
         result.rowCount,
         2,
-        "INTERSECT should return 2 employees (active AND eng)",
+        "INTERSECT should return 2 employees (active AND eng)"
       );
 
       const names = result.rows.map((row: Record<string, unknown>) => {
@@ -1121,7 +1121,7 @@ Deno.test({
       assertEquals(
         names.sort(),
         ["Ada", "Daena"],
-        "INTERSECT should return Ada and Daena",
+        "INTERSECT should return Ada and Daena"
       );
 
       await manager.close();
@@ -1129,7 +1129,7 @@ Deno.test({
       await cleanupEmployee(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -1163,24 +1163,24 @@ Deno.test({
           name,
           dept_rank := row_number() OVER (PARTITION BY .department ORDER BY .salary DESC)
         }`,
-        schema,
+        schema
       );
 
       // Verify the SQL contains window function constructs
       assertEquals(
         sql.includes("ROW_NUMBER()"),
         true,
-        "SQL should contain ROW_NUMBER()",
+        "SQL should contain ROW_NUMBER()"
       );
       assertEquals(
         sql.includes("OVER"),
         true,
-        "SQL should contain OVER",
+        "SQL should contain OVER"
       );
       assertEquals(
         sql.includes("PARTITION BY"),
         true,
-        "SQL should contain PARTITION BY",
+        "SQL should contain PARTITION BY"
       );
 
       // Execute the compiled SQL
@@ -1190,7 +1190,7 @@ Deno.test({
       assertEquals(
         result.rowCount,
         5,
-        "Should return all 5 employees with ranks",
+        "Should return all 5 employees with ranks"
       );
 
       // Extract the results and verify ranking within departments
@@ -1200,25 +1200,25 @@ Deno.test({
       });
 
       // eng department: Ada (120k) = rank 1, Cher (110k) = rank 2, Billie (100k) = rank 3
-      const engRows = rows.filter((r) => r.name === "Ada" || r.name === "Billie" || r.name === "Cher");
+      const engRows = rows.filter(r => r.name === "Ada" || r.name === "Billie" || r.name === "Cher");
       assertEquals(engRows.length, 3, "Should have 3 eng employees");
 
       // Find Ada's rank (should be 1 — highest salary in eng)
-      const adaRow = rows.find((r) => r.name === "Ada");
+      const adaRow = rows.find(r => r.name === "Ada");
       assertExists(adaRow, "Ada should exist");
       assertEquals(
         Number(adaRow.dept_rank),
         1,
-        "Ada should be rank 1 in eng (highest salary)",
+        "Ada should be rank 1 in eng (highest salary)"
       );
 
       // sales department: Eve (95k) = rank 1, Daena (90k) = rank 2
-      const eveRow = rows.find((r) => r.name === "Eve");
+      const eveRow = rows.find(r => r.name === "Eve");
       assertExists(eveRow, "Eve should exist");
       assertEquals(
         Number(eveRow.dept_rank),
         1,
-        "Eve should be rank 1 in sales (highest salary)",
+        "Eve should be rank 1 in sales (highest salary)"
       );
 
       await manager.close();
@@ -1226,7 +1226,7 @@ Deno.test({
       await cleanupEmployee(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -1254,7 +1254,7 @@ Deno.test({
           name,
           running_total := sum(.salary) OVER (ORDER BY .name)
         }`,
-        schema,
+        schema
       );
 
       assertEquals(sql.includes("SUM("), true, "SQL should contain SUM(");
@@ -1271,28 +1271,28 @@ Deno.test({
 
       // Alphabetical order: Ada (100), Billie (200), Cher (300)
       // Running totals: Ada=100, Billie=300, Cher=600
-      const adaRow = rows.find((r) => r.name === "Ada");
+      const adaRow = rows.find(r => r.name === "Ada");
       assertExists(adaRow, "Ada should exist");
       assertEquals(
         Number(adaRow.running_total),
         100,
-        "Ada running total should be 100",
+        "Ada running total should be 100"
       );
 
-      const billieRow = rows.find((r) => r.name === "Billie");
+      const billieRow = rows.find(r => r.name === "Billie");
       assertExists(billieRow, "Billie should exist");
       assertEquals(
         Number(billieRow.running_total),
         300,
-        "Billie running total should be 300",
+        "Billie running total should be 300"
       );
 
-      const cherRow = rows.find((r) => r.name === "Cher");
+      const cherRow = rows.find(r => r.name === "Cher");
       assertExists(cherRow, "Cher should exist");
       assertEquals(
         Number(cherRow.running_total),
         600,
-        "Cher running total should be 600",
+        "Cher running total should be 600"
       );
 
       await manager.close();
@@ -1300,7 +1300,7 @@ Deno.test({
       await cleanupEmployee(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -1332,14 +1332,14 @@ Deno.test({
         `SELECT TestEmployee { name } FILTER .active = true
          EXCEPT
          SELECT TestEmployee { name } FILTER .department = "eng"`,
-        schema,
+        schema
       );
 
       // Verify the SQL contains EXCEPT
       assertEquals(
         sql.includes("EXCEPT"),
         true,
-        "SQL should contain EXCEPT",
+        "SQL should contain EXCEPT"
       );
 
       const result = await pool.query(sql);
@@ -1348,7 +1348,7 @@ Deno.test({
       assertEquals(
         result.rowCount,
         1,
-        "EXCEPT should return 1 employee (active but not eng)",
+        "EXCEPT should return 1 employee (active but not eng)"
       );
 
       const names = result.rows.map((row: Record<string, unknown>) => {
@@ -1358,7 +1358,7 @@ Deno.test({
       assertEquals(
         names,
         ["Cher"],
-        "EXCEPT should return only Cher",
+        "EXCEPT should return only Cher"
       );
 
       await manager.close();
@@ -1366,7 +1366,7 @@ Deno.test({
       await cleanupEmployee(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -1398,7 +1398,7 @@ Deno.test({
       const sql = compileEdgeQL(
         `WITH active_emps := (SELECT TestEmployee FILTER .active = true)
          SELECT active_emps { name, department }`,
-        schema,
+        schema
       );
 
       // Verify the SQL uses WITH
@@ -1406,7 +1406,7 @@ Deno.test({
       assertEquals(
         sql.includes("active_emps"),
         true,
-        "SQL should reference CTE alias 'active_emps'",
+        "SQL should reference CTE alias 'active_emps'"
       );
 
       const result = await pool.query(sql);
@@ -1415,7 +1415,7 @@ Deno.test({
       assertEquals(
         result.rowCount,
         3,
-        "CTE should return exactly 3 active employees",
+        "CTE should return exactly 3 active employees"
       );
 
       const names = result.rows.map((row: Record<string, unknown>) => {
@@ -1425,7 +1425,7 @@ Deno.test({
       assertEquals(
         names.sort(),
         ["Ada", "Cher", "Daena"],
-        "CTE should return Ada, Cher, and Daena (active employees)",
+        "CTE should return Ada, Cher, and Daena (active employees)"
       );
 
       await manager.close();
@@ -1433,7 +1433,7 @@ Deno.test({
       await cleanupEmployee(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -1475,14 +1475,14 @@ Deno.test({
       assertEquals(
         Number(result.rows[0].total_count),
         4,
-        "Should count 4 high earners (salary > 50000)",
+        "Should count 4 high earners (salary > 50000)"
       );
 
       const names = result.rows[0].names as string[];
       assertEquals(
         names.sort(),
         ["Ada", "Billie", "Cher", "Eve"],
-        "CTE multi-reference should list Ada, Billie, Cher, Eve",
+        "CTE multi-reference should list Ada, Billie, Cher, Eve"
       );
 
       await manager.close();
@@ -1490,7 +1490,7 @@ Deno.test({
       await cleanupEmployee(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -1550,12 +1550,12 @@ Deno.test({
       assertEquals(
         result.rows[0].name,
         "Ada",
-        "First row should be Ada",
+        "First row should be Ada"
       );
       assertEquals(
         result.rows[0].running_sum,
         null,
-        "Ada running_sum should be NULL (no other rows in frame)",
+        "Ada running_sum should be NULL (no other rows in frame)"
       );
 
       // Billie: only Ada in frame → 100
@@ -1563,19 +1563,19 @@ Deno.test({
       assertEquals(
         Number(result.rows[1].running_sum),
         100,
-        "Billie running_sum should be 100 (Ada only)",
+        "Billie running_sum should be 100 (Ada only)"
       );
 
       // Cher: Ada + Billie in frame → 300
       assertEquals(
         result.rows[2].name,
         "Cher",
-        "Third row should be Cher",
+        "Third row should be Cher"
       );
       assertEquals(
         Number(result.rows[2].running_sum),
         300,
-        "Cher running_sum should be 300 (Ada + Billie)",
+        "Cher running_sum should be 300 (Ada + Billie)"
       );
 
       // Daena: Ada + Billie + Cher in frame → 600
@@ -1583,7 +1583,7 @@ Deno.test({
       assertEquals(
         Number(result.rows[3].running_sum),
         600,
-        "Daena running_sum should be 600 (Ada + Billie + Cher)",
+        "Daena running_sum should be 600 (Ada + Billie + Cher)"
       );
 
       await manager.close();
@@ -1591,7 +1591,7 @@ Deno.test({
       await cleanupEmployee(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -1620,12 +1620,12 @@ Deno.test({
       assertEquals(
         values,
         [1, 2, 3, 4, 5],
-        "Recursive CTE should produce [1, 2, 3, 4, 5]",
+        "Recursive CTE should produce [1, 2, 3, 4, 5]"
       );
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -1648,16 +1648,16 @@ Deno.test({
 
       // Insert hierarchy: CEO → VP → Director → Manager
       await pool.query(
-        "INSERT INTO temp_org (id, name, manager_id) VALUES (1, 'CEO', NULL)",
+        "INSERT INTO temp_org (id, name, manager_id) VALUES (1, 'CEO', NULL)"
       );
       await pool.query(
-        "INSERT INTO temp_org (id, name, manager_id) VALUES (2, 'VP', 1)",
+        "INSERT INTO temp_org (id, name, manager_id) VALUES (2, 'VP', 1)"
       );
       await pool.query(
-        "INSERT INTO temp_org (id, name, manager_id) VALUES (3, 'Director', 2)",
+        "INSERT INTO temp_org (id, name, manager_id) VALUES (3, 'Director', 2)"
       );
       await pool.query(
-        "INSERT INTO temp_org (id, name, manager_id) VALUES (4, 'Manager', 3)",
+        "INSERT INTO temp_org (id, name, manager_id) VALUES (4, 'Manager', 3)"
       );
 
       // Recursive CTE to traverse the hierarchy and compute depth
@@ -1681,7 +1681,7 @@ Deno.test({
       assertEquals(
         Number(result.rows[0].depth),
         0,
-        "CEO should be at depth 0",
+        "CEO should be at depth 0"
       );
 
       assertEquals(result.rows[1].name, "VP", "Depth 1 should be VP");
@@ -1690,28 +1690,28 @@ Deno.test({
       assertEquals(
         result.rows[2].name,
         "Director",
-        "Depth 2 should be Director",
+        "Depth 2 should be Director"
       );
       assertEquals(
         Number(result.rows[2].depth),
         2,
-        "Director should be at depth 2",
+        "Director should be at depth 2"
       );
 
       assertEquals(
         result.rows[3].name,
         "Manager",
-        "Depth 3 should be Manager",
+        "Depth 3 should be Manager"
       );
       assertEquals(
         Number(result.rows[3].depth),
         3,
-        "Manager should be at depth 3",
+        "Manager should be at depth 3"
       );
     } finally {
       // Clean up the temporary table
       await pool.query("DROP TABLE IF EXISTS temp_org CASCADE");
       await pool.close();
     }
-  },
+  }
 });

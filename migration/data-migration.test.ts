@@ -33,12 +33,12 @@ function createMockPool(): {
         },
         execute: async (sql: string, params?: any[]) => {
           calls.push({ method: "tx_execute", args: [sql, params] });
-        },
+        }
       };
       await fn(conn);
     },
     initialize: async () => {},
-    close: async () => {},
+    close: async () => {}
   };
 
   return { pool, calls };
@@ -48,7 +48,7 @@ function createMockPool(): {
  * Create a simple DataMigration for testing.
  */
 function createTestMigration(
-  overrides: Partial<DataMigration> = {},
+  overrides: Partial<DataMigration> = {}
 ): DataMigration {
   return {
     name: "test_migration",
@@ -56,7 +56,7 @@ function createTestMigration(
     up: async (_ctx: DataMigrationContext) => {
       // default no-op
     },
-    ...overrides,
+    ...overrides
   };
 }
 
@@ -65,7 +65,7 @@ function createTestMigration(
 Deno.test("DataMigrationRunner - discoverMigrations returns empty for non-existent directory", async () => {
   const runner = new DataMigrationRunner();
   const result = await runner.discoverMigrations(
-    "/tmp/disc-test-nonexistent-dir-" + Date.now(),
+    "/tmp/disc-test-nonexistent-dir-" + Date.now()
   );
   assertEquals(result, []);
 });
@@ -87,13 +87,13 @@ export default {
 `;
     await Deno.writeTextFile(
       `${tmpDir}/m20240101T120000_seed_users.data.ts`,
-      migrationContent,
+      migrationContent
     );
 
     // Create a non-data-migration file that should be ignored
     await Deno.writeTextFile(
       `${tmpDir}/m20240101T120000_schema.ts`,
-      "export default {};",
+      "export default {};"
     );
 
     const result = await runner.discoverMigrations(tmpDir);
@@ -114,15 +114,15 @@ Deno.test("DataMigrationRunner - discoverMigrations orders by timestamp", async 
     // Create migrations out of order
     await Deno.writeTextFile(
       `${tmpDir}/m20240301T120000_third.data.ts`,
-      `export default { name: "third", timestamp: "20240301T120000", up: async () => {} };`,
+      `export default { name: "third", timestamp: "20240301T120000", up: async () => {} };`
     );
     await Deno.writeTextFile(
       `${tmpDir}/m20240101T120000_first.data.ts`,
-      `export default { name: "first", timestamp: "20240101T120000", up: async () => {} };`,
+      `export default { name: "first", timestamp: "20240101T120000", up: async () => {} };`
     );
     await Deno.writeTextFile(
       `${tmpDir}/m20240201T120000_second.data.ts`,
-      `export default { name: "second", timestamp: "20240201T120000", up: async () => {} };`,
+      `export default { name: "second", timestamp: "20240201T120000", up: async () => {} };`
     );
 
     const result = await runner.discoverMigrations(tmpDir);
@@ -144,15 +144,15 @@ Deno.test("DataMigrationRunner - discoverMigrations ignores non-.data.ts files",
     // Only .data.ts files should be picked up
     await Deno.writeTextFile(
       `${tmpDir}/m20240101T120000_schema.ts`,
-      "export default {};",
+      "export default {};"
     );
     await Deno.writeTextFile(
       `${tmpDir}/m20240101T120000_notes.md`,
-      "# Notes",
+      "# Notes"
     );
     await Deno.writeTextFile(
       `${tmpDir}/m20240101T120000_config.json`,
-      "{}",
+      "{}"
     );
 
     const result = await runner.discoverMigrations(tmpDir);
@@ -174,7 +174,7 @@ Deno.test("DataMigrationRunner - runMigration creates context and calls up()", a
     up: async (ctx: DataMigrationContext) => {
       upCalled = true;
       contextReceived = ctx;
-    },
+    }
   });
 
   await runner.runMigration(migration, pool);
@@ -196,14 +196,14 @@ Deno.test("DataMigrationRunner - runMigration wraps in transaction", async () =>
       // Use the sql helper which should use the transactional connection
       await ctx.sql("SELECT 1");
       sqlCalled = true;
-    },
+    }
   });
 
   await runner.runMigration(migration, pool);
 
   assertEquals(sqlCalled, true);
   // The SQL call inside the transaction should use tx_query
-  const txQueries = calls.filter((c) => c.method === "tx_query");
+  const txQueries = calls.filter(c => c.method === "tx_query");
   assertEquals(txQueries.length, 1);
   assertEquals(txQueries[0].args[0], "SELECT 1");
 });
@@ -215,13 +215,13 @@ Deno.test("DataMigrationRunner - runMigration throws on failure", async () => {
   const migration = createTestMigration({
     up: async () => {
       throw new Error("Data migration failed");
-    },
+    }
   });
 
   await assertRejects(
     () => runner.runMigration(migration, pool),
     Error,
-    "Data migration",
+    "Data migration"
   );
 });
 
@@ -235,7 +235,7 @@ Deno.test("DataMigrationRunner - rollbackMigration calls down() when available",
   const migration = createTestMigration({
     down: async () => {
       downCalled = true;
-    },
+    }
   });
 
   await runner.rollbackMigration(migration, pool);
@@ -253,7 +253,7 @@ Deno.test("DataMigrationRunner - rollbackMigration throws when down() not define
   await assertRejects(
     () => runner.rollbackMigration(migration, pool),
     Error,
-    "does not define a down() function",
+    "does not define a down() function"
   );
 });
 
@@ -267,13 +267,13 @@ Deno.test("DataMigrationContext - sql() delegates to pool via transaction", asyn
   const migration = createTestMigration({
     up: async (ctx: DataMigrationContext) => {
       sqlResult = await ctx.sql("SELECT * FROM users WHERE id = $1", [42]);
-    },
+    }
   });
 
   await runner.runMigration(migration, pool);
 
   // The transactional query should have been called
-  const txQueries = calls.filter((c) => c.method === "tx_query");
+  const txQueries = calls.filter(c => c.method === "tx_query");
   assertEquals(txQueries.length, 1);
   assertEquals(txQueries[0].args[0], "SELECT * FROM users WHERE id = $1");
   assertEquals(txQueries[0].args[1], [42]);
@@ -291,7 +291,7 @@ Deno.test("DataMigrationContext - log() outputs message", async () => {
       // The log function should not throw
       ctx.log("Test log message");
       logCalled = true;
-    },
+    }
   });
 
   await runner.runMigration(migration, pool);
@@ -306,18 +306,18 @@ Deno.test("DataMigrationRunner - findMatchingDataMigration matches by timestamp"
   const migrations: DataMigration[] = [
     createTestMigration({ name: "first", timestamp: "20240101T120000" }),
     createTestMigration({ name: "second", timestamp: "20240201T120000" }),
-    createTestMigration({ name: "third", timestamp: "20240301T120000" }),
+    createTestMigration({ name: "third", timestamp: "20240301T120000" })
   ];
 
   const match = runner.findMatchingDataMigration(
     migrations,
-    "20240201T120000",
+    "20240201T120000"
   );
   assertEquals(match?.name, "second");
 
   const noMatch = runner.findMatchingDataMigration(
     migrations,
-    "20240401T120000",
+    "20240401T120000"
   );
   assertEquals(noMatch, undefined);
 });

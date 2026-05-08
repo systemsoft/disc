@@ -9,7 +9,7 @@ export const schemaError = writable<string | null>(null);
 
 export const typeNames = derived(
   schemaTypes,
-  ($schemaTypes) => $schemaTypes.map((t) => t.name).sort(),
+  $schemaTypes => $schemaTypes.map(t => t.name).sort()
 );
 
 export async function loadSchema() {
@@ -25,7 +25,7 @@ export async function loadSchema() {
     }
   } catch (error) {
     schemaError.set(
-      error instanceof Error ? error.message : "Failed to load schema",
+      error instanceof Error ? error.message : "Failed to load schema"
     );
   } finally {
     schemaLoading.set(false);
@@ -41,7 +41,7 @@ export async function loadSchema() {
 // without subscribing.
 export function selectTypeByName(name: string) {
   const types = get(schemaTypes);
-  const type = types.find((t) => t.name === name);
+  const type = types.find(t => t.name === name);
   if (type) {
     selectedType.set(type);
   }

@@ -12,7 +12,7 @@ describe("Auth Module Smoke Test", () => {
     jwtSecret: "test-secret-key-at-least-32-characters-long",
     bcryptRounds: 4, // Faster for testing
     tokenExpiry: 3600,
-    passwordMinLength: 6, // Shorter for testing
+    passwordMinLength: 6 // Shorter for testing
   };
 
   beforeEach(async () => {
@@ -34,7 +34,7 @@ describe("Auth Module Smoke Test", () => {
     try {
       await provider.register({
         email: "test@example.com",
-        password: "short", // Should fail
+        password: "short" // Should fail
       });
     } catch (error) {
       assertEquals((error as AuthError).code, "PASSWORD_TOO_WEAK");
@@ -45,7 +45,7 @@ describe("Auth Module Smoke Test", () => {
     // Mock bcrypt by reducing rounds and using simple implementation
     const response = await provider.register({
       email: "test@example.com",
-      password: "longenoughpassword",
+      password: "longenoughpassword"
     });
 
     assertExists(response.token);

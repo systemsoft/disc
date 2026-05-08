@@ -24,7 +24,7 @@ function makePool(dsn: string): ConnectionPool {
     connectionString: dsn,
     cleanupInterval: 0,
     maxConnections: 3,
-    minConnections: 1,
+    minConnections: 1
   });
 }
 
@@ -46,7 +46,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -59,18 +59,18 @@ Deno.test({
 
     try {
       const result = await pool.query(
-        "SELECT STRING_TO_ARRAY('a,b,c', ',') AS val",
+        "SELECT STRING_TO_ARRAY('a,b,c', ',') AS val"
       );
       const val = result.rows[0].val;
       // deno-postgres returns PG arrays as JS arrays
       assertEquals(
         Array.isArray(val) ? val : String(val).replace(/[{}]/g, "").split(","),
-        ["a", "b", "c"],
+        ["a", "b", "c"]
       );
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -83,13 +83,13 @@ Deno.test({
 
     try {
       const result = await pool.query(
-        "SELECT STARTS_WITH('hello', 'he') AS val",
+        "SELECT STARTS_WITH('hello', 'he') AS val"
       );
       assertEquals(result.rows[0].val, true);
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -103,19 +103,19 @@ Deno.test({
     try {
       // str_ends_with compiles to: RIGHT(s, LENGTH(suffix)) = suffix
       const result = await pool.query(
-        "SELECT (RIGHT('hello', LENGTH('lo')) = 'lo') AS val",
+        "SELECT (RIGHT('hello', LENGTH('lo')) = 'lo') AS val"
       );
       assertEquals(result.rows[0].val, true);
 
       // Negative case
       const neg = await pool.query(
-        "SELECT (RIGHT('hello', LENGTH('xx')) = 'xx') AS val",
+        "SELECT (RIGHT('hello', LENGTH('xx')) = 'xx') AS val"
       );
       assertEquals(neg.rows[0].val, false);
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -136,7 +136,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -153,7 +153,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -170,7 +170,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -187,12 +187,12 @@ Deno.test({
       assertEquals(
         Math.abs(val - Math.PI) < 0.00001,
         true,
-        `PI() should be close to 3.14159, got ${val}`,
+        `PI() should be close to 3.14159, got ${val}`
       );
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -210,12 +210,12 @@ Deno.test({
       assertEquals(
         Math.abs(val - Math.E) < 0.00001,
         true,
-        `EXP(1) should be close to 2.71828, got ${val}`,
+        `EXP(1) should be close to 2.71828, got ${val}`
       );
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -233,13 +233,13 @@ Deno.test({
     try {
       // re_test compiles to: string ~ pattern
       const result = await pool.query(
-        "SELECT ('hello' ~ '^[a-z]+$') AS val",
+        "SELECT ('hello' ~ '^[a-z]+$') AS val"
       );
       assertEquals(result.rows[0].val, true);
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -252,13 +252,13 @@ Deno.test({
 
     try {
       const result = await pool.query(
-        "SELECT ('hello' ~ '^[0-9]+$') AS val",
+        "SELECT ('hello' ~ '^[0-9]+$') AS val"
       );
       assertEquals(result.rows[0].val, false);
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -273,13 +273,13 @@ Deno.test({
       // re_replace compiles to REGEXP_REPLACE(string, pattern, replacement)
       // Without 'g' flag, only the first match is replaced
       const result = await pool.query(
-        "SELECT REGEXP_REPLACE('a1b2', '[0-9]', 'X') AS val",
+        "SELECT REGEXP_REPLACE('a1b2', '[0-9]', 'X') AS val"
       );
       assertEquals(result.rows[0].val, "aXb2");
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -296,16 +296,16 @@ Deno.test({
 
     try {
       const result = await pool.query(
-        "SELECT TRANSACTION_TIMESTAMP() AS val",
+        "SELECT TRANSACTION_TIMESTAMP() AS val"
       );
       assertExists(
         result.rows[0].val,
-        "TRANSACTION_TIMESTAMP should not be null",
+        "TRANSACTION_TIMESTAMP should not be null"
       );
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -318,7 +318,7 @@ Deno.test({
 
     try {
       const result = await pool.query(
-        "SELECT CAST('2024-01-01T00:00:00Z' AS timestamp with time zone) AS val",
+        "SELECT CAST('2024-01-01T00:00:00Z' AS timestamp with time zone) AS val"
       );
       const val = result.rows[0].val;
       assertExists(val, "CAST to timestamptz should not be null");
@@ -327,12 +327,12 @@ Deno.test({
       assertEquals(
         dateStr.includes("2024-01-01"),
         true,
-        `Timestamp should contain '2024-01-01', got: ${dateStr}`,
+        `Timestamp should contain '2024-01-01', got: ${dateStr}`
       );
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -345,19 +345,19 @@ Deno.test({
 
     try {
       const result = await pool.query(
-        "SELECT CAST('1 hour' AS interval) AS val",
+        "SELECT CAST('1 hour' AS interval) AS val"
       );
       const val = String(result.rows[0].val);
       assertEquals(
-        val.includes("01:00:00") || val.includes("1:00:00")
-          || val.includes("1 hour"),
+        val.includes("01:00:00") || val.includes("1:00:00") ||
+          val.includes("1 hour"),
         true,
-        `Interval should represent 1 hour, got: ${val}`,
+        `Interval should represent 1 hour, got: ${val}`
       );
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -374,7 +374,7 @@ Deno.test({
 
     try {
       const result = await pool.query(
-        "SELECT CAST('2024-06-15' AS date) AS val",
+        "SELECT CAST('2024-06-15' AS date) AS val"
       );
       const val = result.rows[0].val;
       const dateStr = val instanceof Date ? val.toISOString().slice(0, 10) : String(val).slice(0, 10);
@@ -382,7 +382,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -395,18 +395,18 @@ Deno.test({
 
     try {
       const result = await pool.query(
-        "SELECT CAST('14:30:00' AS time without time zone) AS val",
+        "SELECT CAST('14:30:00' AS time without time zone) AS val"
       );
       const val = String(result.rows[0].val);
       assertEquals(
         val.startsWith("14:30:00"),
         true,
-        `Time should start with '14:30:00', got: ${val}`,
+        `Time should start with '14:30:00', got: ${val}`
       );
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -428,12 +428,12 @@ Deno.test({
       assertEquals(
         val === "hello" || JSON.stringify(val) === "\"hello\"",
         true,
-        `TO_JSONB('hello') should return the jsonb string 'hello', got: ${JSON.stringify(val)}`,
+        `TO_JSONB('hello') should return the jsonb string 'hello', got: ${JSON.stringify(val)}`
       );
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -446,13 +446,13 @@ Deno.test({
 
     try {
       const result = await pool.query(
-        "SELECT JSONB_TYPEOF(TO_JSONB(42)) AS val",
+        "SELECT JSONB_TYPEOF(TO_JSONB(42)) AS val"
       );
       assertEquals(result.rows[0].val, "number");
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -473,7 +473,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -486,18 +486,18 @@ Deno.test({
 
     try {
       const result = await pool.query(
-        "SELECT CAST('3.14' AS double precision) AS val",
+        "SELECT CAST('3.14' AS double precision) AS val"
       );
       const val = Number(result.rows[0].val);
       assertEquals(
         Math.abs(val - 3.14) < 0.001,
         true,
-        `CAST('3.14' AS double precision) should be approximately 3.14, got ${val}`,
+        `CAST('3.14' AS double precision) should be approximately 3.14, got ${val}`
       );
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -514,7 +514,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -531,7 +531,7 @@ Deno.test({
 
     try {
       const result = await pool.query(
-        "SELECT GEN_RANDOM_UUID()::text AS val",
+        "SELECT GEN_RANDOM_UUID()::text AS val"
       );
       const val = String(result.rows[0].val);
       assertExists(val, "UUID should not be null");
@@ -541,12 +541,12 @@ Deno.test({
       assertEquals(
         uuidRegex.test(val),
         true,
-        `GEN_RANDOM_UUID() should match UUID format, got: ${val}`,
+        `GEN_RANDOM_UUID() should match UUID format, got: ${val}`
       );
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -567,7 +567,7 @@ Deno.test({
 
       // NEXTVAL should return 1 on a fresh sequence
       const nextResult = await pool.query(
-        "SELECT NEXTVAL('test_stage27_seq') AS val",
+        "SELECT NEXTVAL('test_stage27_seq') AS val"
       );
       const firstVal = Number(nextResult.rows[0].val);
       assertEquals(firstVal, 1, "First NEXTVAL should return 1");
@@ -577,16 +577,16 @@ Deno.test({
 
       // Next NEXTVAL should return 101
       const afterReset = await pool.query(
-        "SELECT NEXTVAL('test_stage27_seq') AS val",
+        "SELECT NEXTVAL('test_stage27_seq') AS val"
       );
       assertEquals(
         Number(afterReset.rows[0].val),
         101,
-        "NEXTVAL after SETVAL(100) should return 101",
+        "NEXTVAL after SETVAL(100) should return 101"
       );
     } finally {
       await pool.query("DROP SEQUENCE IF EXISTS test_stage27_seq");
       await pool.close();
     }
-  },
+  }
 });

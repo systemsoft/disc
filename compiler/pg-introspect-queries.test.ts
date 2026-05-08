@@ -54,7 +54,7 @@ DROP TABLE IF EXISTS introspect_users CASCADE;
 `;
 
 async function withSampleSchema<T>(
-  fn: (db: DatabaseConnection) => Promise<T>,
+  fn: (db: DatabaseConnection) => Promise<T>
 ): Promise<T> {
   const dsn = await getTestDsn();
   const db = new DatabaseConnection(dsn);
@@ -75,29 +75,29 @@ Deno.test({
   name: "introspectDatabase - finds the sample tables",
   ignore: !canRunPgTests(),
   fn: async () => {
-    await withSampleSchema(async (db) => {
+    await withSampleSchema(async db => {
       const data = await introspectDatabase(db, {
-        tableFilter: (t) => t.startsWith("introspect_"),
+        tableFilter: t => t.startsWith("introspect_")
       });
-      const names = new Set(data.tables.map((t) => t.tableName));
+      const names = new Set(data.tables.map(t => t.tableName));
       assert(names.has("introspect_users"));
       assert(names.has("introspect_posts"));
       assert(names.has("introspect_tags"));
       assert(names.has("introspect_posts_tags"));
     });
-  },
+  }
 });
 
 Deno.test({
   name: "introspectDatabase - column metadata: types, nullability, defaults",
   ignore: !canRunPgTests(),
   fn: async () => {
-    await withSampleSchema(async (db) => {
+    await withSampleSchema(async db => {
       const data = await introspectDatabase(db, {
-        tableFilter: (t) => t.startsWith("introspect_"),
+        tableFilter: t => t.startsWith("introspect_")
       });
-      const users = data.tables.find((t) => t.tableName === "introspect_users")!;
-      const cols = new Map(users.columns.map((c) => [c.name, c]));
+      const users = data.tables.find(t => t.tableName === "introspect_users")!;
+      const cols = new Map(users.columns.map(c => [c.name, c]));
 
       assertEquals(cols.get("id")!.pgType, "uuid");
       assertEquals(cols.get("id")!.nullable, false);
@@ -116,66 +116,66 @@ Deno.test({
       assert(ts.pgType.includes("timestamp"));
       assertEquals(ts.hasDefault, true);
     });
-  },
+  }
 });
 
 Deno.test({
   name: "introspectDatabase - primary keys are reported",
   ignore: !canRunPgTests(),
   fn: async () => {
-    await withSampleSchema(async (db) => {
+    await withSampleSchema(async db => {
       const data = await introspectDatabase(db, {
-        tableFilter: (t) => t.startsWith("introspect_"),
+        tableFilter: t => t.startsWith("introspect_")
       });
-      const users = data.tables.find((t) => t.tableName === "introspect_users")!;
+      const users = data.tables.find(t => t.tableName === "introspect_users")!;
       assertEquals(users.primaryKey, ["id"]);
-      const junction = data.tables.find((t) => t.tableName === "introspect_posts_tags")!;
+      const junction = data.tables.find(t => t.tableName === "introspect_posts_tags")!;
       assertEquals(junction.primaryKey?.sort(), ["post_id", "tag_id"]);
     });
-  },
+  }
 });
 
 Deno.test({
   name: "introspectDatabase - unique constraints are reported",
   ignore: !canRunPgTests(),
   fn: async () => {
-    await withSampleSchema(async (db) => {
+    await withSampleSchema(async db => {
       const data = await introspectDatabase(db, {
-        tableFilter: (t) => t.startsWith("introspect_"),
+        tableFilter: t => t.startsWith("introspect_")
       });
-      const users = data.tables.find((t) => t.tableName === "introspect_users")!;
+      const users = data.tables.find(t => t.tableName === "introspect_users")!;
       const hasEmailUnique = (users.uniqueConstraints ?? []).some(
-        (uc) => uc.length === 1 && uc[0] === "email",
+        uc => uc.length === 1 && uc[0] === "email"
       );
       assert(hasEmailUnique, "email UNIQUE not detected");
     });
-  },
+  }
 });
 
 Deno.test({
   name: "introspectDatabase - foreign keys are reported",
   ignore: !canRunPgTests(),
   fn: async () => {
-    await withSampleSchema(async (db) => {
+    await withSampleSchema(async db => {
       const data = await introspectDatabase(db, {
-        tableFilter: (t) => t.startsWith("introspect_"),
+        tableFilter: t => t.startsWith("introspect_")
       });
       const fkPostsAuthor = data.foreignKeys.find(
-        (fk) =>
-          fk.fromTable === "introspect_posts"
-          && fk.fromColumn === "author_id",
+        fk =>
+          fk.fromTable === "introspect_posts" &&
+          fk.fromColumn === "author_id"
       );
       assert(fkPostsAuthor, "posts.author_id FK missing");
       assertEquals(fkPostsAuthor!.toTable, "introspect_users");
       assertEquals(fkPostsAuthor!.toColumn, "id");
 
       const fkJunctionPost = data.foreignKeys.find(
-        (fk) =>
-          fk.fromTable === "introspect_posts_tags"
-          && fk.fromColumn === "post_id",
+        fk =>
+          fk.fromTable === "introspect_posts_tags" &&
+          fk.fromColumn === "post_id"
       );
       assert(fkJunctionPost, "junction post_id FK missing");
       assertEquals(fkJunctionPost!.toTable, "introspect_posts");
     });
-  },
+  }
 });

@@ -24,7 +24,7 @@ import { createTestSchema, GlobalDef, Schema } from "./context.ts";
  * Build a test schema with additional globals merged into the base schema.
  */
 function createSchemaWithGlobals(
-  globals: Map<string, GlobalDef>,
+  globals: Map<string, GlobalDef>
 ): Schema {
   const base = createTestSchema();
   const merged = new Map(base.globals);
@@ -33,7 +33,7 @@ function createSchemaWithGlobals(
   }
   return {
     ...base,
-    globals: merged,
+    globals: merged
   };
 }
 
@@ -54,8 +54,8 @@ Deno.test("Globals Compilation - global ref compiles to current_setting with cas
     kind: "SelectQuery",
     expr: {
       kind: "GlobalRef",
-      name: "current_user_id",
-    },
+      name: "current_user_id"
+    }
   };
 
   const compiler = new EdgeQLCompiler(schema, { enableAccessControl: false });
@@ -88,8 +88,8 @@ Deno.test("Globals Compilation - qualified global ref resolves correctly", () =>
     expr: {
       kind: "GlobalRef",
       name: "current_user_id",
-      module: "default",
-    },
+      module: "default"
+    }
   };
 
   const compiler = new EdgeQLCompiler(schema, { enableAccessControl: false });
@@ -118,8 +118,8 @@ Deno.test("Globals Compilation - SET GLOBAL compiles to SET LOCAL", () => {
     value: {
       kind: "Literal",
       type: "string",
-      value: "some-uuid-value",
-    },
+      value: "some-uuid-value"
+    }
   };
 
   const compiler = new EdgeQLCompiler(schema, { enableAccessControl: false });
@@ -154,8 +154,8 @@ Deno.test("Globals Compilation - SET on readonly global throws CompilationError"
       required: false,
       multi: false,
       readonly: true,
-      pgSettingName: "disc.global_default__app_version",
-    }],
+      pgSettingName: "disc.global_default__app_version"
+    }]
   ]);
   const schema = createSchemaWithGlobals(globals);
 
@@ -165,8 +165,8 @@ Deno.test("Globals Compilation - SET on readonly global throws CompilationError"
     value: {
       kind: "Literal",
       type: "string",
-      value: "2.0",
-    },
+      value: "2.0"
+    }
   };
 
   const compiler = new EdgeQLCompiler(schema, { enableAccessControl: false });
@@ -189,8 +189,8 @@ Deno.test("Globals Compilation - unknown global throws CompilationError", () => 
     kind: "SelectQuery",
     expr: {
       kind: "GlobalRef",
-      name: "nonexistent_global",
-    },
+      name: "nonexistent_global"
+    }
   };
 
   const compiler = new EdgeQLCompiler(schema, { enableAccessControl: false });
@@ -214,7 +214,7 @@ Deno.test("Globals Compilation - global ref in filter expression", () => {
     kind: "SelectQuery",
     expr: {
       kind: "TypeName",
-      name: { kind: "QualifiedName", parts: ["User"] },
+      name: { kind: "QualifiedName", parts: ["User"] }
     },
     filter: {
       kind: "BinaryOp",
@@ -224,14 +224,14 @@ Deno.test("Globals Compilation - global ref in filter expression", () => {
         steps: [{
           kind: "PathStep",
           type: "property",
-          name: "id",
-        }],
+          name: "id"
+        }]
       },
       right: {
         kind: "GlobalRef",
-        name: "current_user_id",
-      },
-    },
+        name: "current_user_id"
+      }
+    }
   };
 
   const compiler = new EdgeQLCompiler(schema, { enableAccessControl: false });

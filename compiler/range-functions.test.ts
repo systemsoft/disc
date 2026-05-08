@@ -141,7 +141,7 @@ Deno.test("Range functions — multirange compiles to int4multirange", () => {
 
 Deno.test("Range functions — range_is_empty in a FILTER clause", () => {
   const sql = compileEdgeQL(
-    `SELECT User { name } FILTER NOT range_is_empty(range(1, 10))`,
+    `SELECT User { name } FILTER NOT range_is_empty(range(1, 10))`
   );
   assertStringIncludes(sql, "ISEMPTY");
   assertStringIncludes(sql, "NOT");

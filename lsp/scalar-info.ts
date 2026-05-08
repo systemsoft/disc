@@ -22,10 +22,10 @@ export const SCALAR_TYPES: ReadonlyArray<{ name: string; description: string; }>
   { name: "local_time", description: "Time-of-day without date." },
   { name: "duration", description: "Interval / span between two datetimes." },
   { name: "bytes", description: "Raw binary blob." },
-  { name: "json", description: "JSON value (object/array/scalar)." },
+  { name: "json", description: "JSON value (object/array/scalar)." }
 ];
 
-const BY_NAME = new Map(SCALAR_TYPES.map((s) => [s.name, s]));
+const BY_NAME = new Map(SCALAR_TYPES.map(s => [s.name, s]));
 
 export function lookupScalar(name: string): { name: string; description: string; } | undefined {
   return BY_NAME.get(name);

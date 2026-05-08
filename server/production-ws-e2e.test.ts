@@ -12,7 +12,7 @@ import type { ProtocolHandler, QueryContext, QueryError, QueryRequest, QueryResp
 // --- Helpers ---
 
 function createTestConfig(
-  overrides: Partial<ServerConfig> = {},
+  overrides: Partial<ServerConfig> = {}
 ): ServerConfig {
   return {
     host: "localhost",
@@ -22,7 +22,7 @@ function createTestConfig(
     requestTimeout: 5000,
     enableCors: false,
     enableWebsockets: true,
-    ...overrides,
+    ...overrides
   };
 }
 
@@ -30,13 +30,13 @@ function createWSProtocolHandler(): ProtocolHandler {
   return {
     handleRequest(
       _request: QueryRequest,
-      _context: QueryContext,
+      _context: QueryContext
     ): Promise<QueryResponse> {
       return Promise.resolve({ data: { result: "ok" } });
     },
     validateRequest(_request: QueryRequest): QueryError[] {
       return [];
-    },
+    }
   };
 }
 
@@ -47,7 +47,7 @@ function createWSProtocolHandler(): ProtocolHandler {
  */
 function withTestServer(
   handler: ProtocolHandler,
-  configOverrides: Partial<ServerConfig> = {},
+  configOverrides: Partial<ServerConfig> = {}
 ): {
   port: number;
   cleanup: () => Promise<void>;
@@ -58,7 +58,7 @@ function withTestServer(
   const config = createTestConfig(configOverrides);
   const server = new HttpServer({
     config,
-    protocolHandler: handler,
+    protocolHandler: handler
   });
 
   const abortController = new AbortController();
@@ -67,11 +67,11 @@ function withTestServer(
       hostname: "127.0.0.1",
       port: 0,
       signal: abortController.signal,
-      onListen() {},
+      onListen() {}
     },
     (request: Request, info: Deno.ServeHandlerInfo) => {
       return (server as any).handleRequest(request, info);
-    },
+    }
   );
 
   const port = testServer.addr.port;
@@ -103,11 +103,11 @@ class WebSocketTestClient {
         resolve();
       };
 
-      this.socket.onerror = (error) => {
+      this.socket.onerror = error => {
         reject(error);
       };
 
-      this.socket.onmessage = (event) => {
+      this.socket.onmessage = event => {
         try {
           this.messages.push(JSON.parse(event.data));
         } catch {
@@ -139,7 +139,7 @@ class WebSocketTestClient {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(
         () => reject(new Error("Message timeout")),
-        timeout,
+        timeout
       );
 
       const check = () => {
@@ -162,7 +162,7 @@ class WebSocketTestClient {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(
         () => reject(new Error(`Message timeout waiting for type: ${type}`)),
-        timeout,
+        timeout
       );
 
       const check = () => {
@@ -182,7 +182,7 @@ class WebSocketTestClient {
 
   closeAndWait(): Promise<void> {
     if (this.socket) {
-      return new Promise((resolve) => {
+      return new Promise(resolve => {
         this.socket!.onclose = () => {
           this.connected = false;
           resolve();
@@ -222,8 +222,8 @@ Deno.test({
         payload: {
           id: "sub1",
           query: "select User { name }",
-          variables: {},
-        },
+          variables: {}
+        }
       });
 
       // Wait for the subscription data response (initial data from SubscriptionHandler)
@@ -234,13 +234,13 @@ Deno.test({
       // Unsubscribe
       client.send({
         type: "unsubscribe",
-        payload: { subscriptionId: "sub1" },
+        payload: { subscriptionId: "sub1" }
       });
 
       // stop_subscription() sends a "subscription" (complete) message first,
       // then the WS handler sends "subscription_stopped". Skip the former.
       const stopResponse = await client.waitForMessageOfType(
-        "subscription_stopped",
+        "subscription_stopped"
       );
       assertExists(stopResponse.payload);
       assertEquals(stopResponse.payload.subscriptionId, "sub1");
@@ -248,7 +248,7 @@ Deno.test({
       await client.closeAndWait();
       await cleanup();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -266,7 +266,7 @@ Deno.test({
       // Send unsubscribe with empty payload (no subscriptionId)
       client.send({
         type: "unsubscribe",
-        payload: {},
+        payload: {}
       });
 
       const response = await client.waitForMessage();
@@ -274,13 +274,13 @@ Deno.test({
       assertExists(response.payload);
       assert(
         response.payload.message.includes("subscriptionId is required"),
-        `Expected error about missing subscriptionId, got: ${response.payload.message}`,
+        `Expected error about missing subscriptionId, got: ${response.payload.message}`
       );
     } finally {
       await client.closeAndWait();
       await cleanup();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -301,8 +301,8 @@ Deno.test({
         payload: {
           id: "sub1",
           query: "select User { name }",
-          variables: {},
-        },
+          variables: {}
+        }
       });
 
       const sub1Response = await client.waitForMessage();
@@ -314,8 +314,8 @@ Deno.test({
         payload: {
           id: "sub2",
           query: "select Post { title }",
-          variables: {},
-        },
+          variables: {}
+        }
       });
 
       const sub2Response = await client.waitForMessage();
@@ -326,7 +326,7 @@ Deno.test({
       // before handler sends "subscription_stopped" — use typed wait)
       client.send({
         type: "unsubscribe",
-        payload: { subscriptionId: "sub1" },
+        payload: { subscriptionId: "sub1" }
       });
 
       const stop1 = await client.waitForMessageOfType("subscription_stopped");
@@ -334,7 +334,7 @@ Deno.test({
 
       client.send({
         type: "unsubscribe",
-        payload: { subscriptionId: "sub2" },
+        payload: { subscriptionId: "sub2" }
       });
 
       const stop2 = await client.waitForMessageOfType("subscription_stopped");
@@ -343,7 +343,7 @@ Deno.test({
       await client.closeAndWait();
       await cleanup();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -364,8 +364,8 @@ Deno.test({
         payload: {
           id: "sub1",
           query: "select User { name }",
-          variables: {},
-        },
+          variables: {}
+        }
       });
 
       // Receive initial subscription data
@@ -376,7 +376,7 @@ Deno.test({
       await client1.closeAndWait();
 
       // Give the server a moment to process the close event
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 100));
 
       // Open a new connection to verify the server is still operational
       const client2 = new WebSocketTestClient();
@@ -386,7 +386,7 @@ Deno.test({
       // Verify the new connection can send and receive
       client2.send({
         type: "query",
-        payload: { query: "select User { name }", variables: {} },
+        payload: { query: "select User { name }", variables: {} }
       });
 
       const queryResponse = await client2.waitForMessage();
@@ -397,7 +397,7 @@ Deno.test({
     } finally {
       await cleanup();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -417,8 +417,8 @@ Deno.test({
         type: "query",
         payload: {
           query: "select User { name }",
-          variables: {},
-        },
+          variables: {}
+        }
       });
 
       const response = await client.waitForMessage();
@@ -430,5 +430,5 @@ Deno.test({
       await client.closeAndWait();
       await cleanup();
     }
-  },
+  }
 });

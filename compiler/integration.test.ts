@@ -25,50 +25,50 @@ function createTestSchema(): Context.Schema {
         type: "uuid",
         required: true,
         multi: false,
-        columnName: "id",
+        columnName: "id"
       }],
       ["name", {
         name: "name",
         type: "str",
         required: true,
         multi: false,
-        columnName: "name",
+        columnName: "name"
       }],
       ["email", {
         name: "email",
         type: "str",
         required: true,
         multi: false,
-        columnName: "email",
+        columnName: "email"
       }],
       ["first_name", {
         name: "first_name",
         type: "str",
         required: false,
         multi: false,
-        columnName: "first_name",
+        columnName: "first_name"
       }],
       ["last_name", {
         name: "last_name",
         type: "str",
         required: false,
         multi: false,
-        columnName: "last_name",
+        columnName: "last_name"
       }],
       ["active", {
         name: "active",
         type: "bool",
         required: false,
         multi: false,
-        columnName: "active",
+        columnName: "active"
       }],
       ["role", {
         name: "role",
         type: "str",
         required: false,
         multi: false,
-        columnName: "role",
-      }],
+        columnName: "role"
+      }]
     ]),
     links: new Map([
       ["posts", {
@@ -76,9 +76,9 @@ function createTestSchema(): Context.Schema {
         target: "Post",
         multi: true,
         required: false,
-        backlink: "author",
-      }],
-    ]),
+        backlink: "author"
+      }]
+    ])
   });
   types.set("Post", {
     name: "Post",
@@ -90,22 +90,22 @@ function createTestSchema(): Context.Schema {
         type: "uuid",
         required: true,
         multi: false,
-        columnName: "id",
+        columnName: "id"
       }],
       ["title", {
         name: "title",
         type: "str",
         required: true,
         multi: false,
-        columnName: "title",
+        columnName: "title"
       }],
       ["createdAt", {
         name: "createdAt",
         type: "datetime",
         required: false,
         multi: false,
-        columnName: "createdAt",
-      }],
+        columnName: "createdAt"
+      }]
     ]),
     links: new Map([
       ["author", {
@@ -113,9 +113,9 @@ function createTestSchema(): Context.Schema {
         target: "User",
         multi: false,
         columnName: "author_id",
-        required: true,
-      }],
-    ]),
+        required: true
+      }]
+    ])
   });
 
   const functions = new Map<string, Context.FunctionDef>();
@@ -123,7 +123,7 @@ function createTestSchema(): Context.Schema {
     name: "count",
     args: [{ name: "set", type: "any", required: false }],
     returnType: "int64",
-    sqlName: "count",
+    sqlName: "count"
   });
 
   return { types, functions };
@@ -151,7 +151,7 @@ function compileToSQL(edgeql: string): string {
     return generator.generate(compileResult.value);
   } catch (error) {
     throw new Error(
-      `Compilation failed: ${error instanceof Error ? error.message : String(error)}`,
+      `Compilation failed: ${error instanceof Error ? error.message : String(error)}`
     );
   }
 }
@@ -221,7 +221,7 @@ Deno.test("EdgeQL to SQL - SELECT with nested shape", () => {
   assertStringIncludes(normalized, "'posts'");
   assertStringIncludes(
     normalized,
-    "jsonb_agg(jsonb_build_object('title', posts.title, 'createdAt', posts.createdAt))",
+    "jsonb_agg(jsonb_build_object('title', posts.title, 'createdAt', posts.createdAt))"
   );
   assertStringIncludes(normalized, "FROM posts");
   assertStringIncludes(normalized, "posts.author_id =");

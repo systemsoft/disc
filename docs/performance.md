@@ -78,7 +78,7 @@ const plan = await client.explain(
   `
   select User { email, name } filter .email = <str>$email
 `,
-  { email: "ada@example.com" },
+  { email: "ada@example.com" }
 );
 console.log(plan);
 ```

@@ -16,23 +16,23 @@ function makeContext(): QueryContext {
       globals: {},
       config: {},
       aliases: {},
-      transaction: null,
+      transaction: null
     } as unknown as QueryContext["session"],
     auth: { roles: [], permissions: [] },
     requestId: "req-1",
-    startedAt: new Date(),
+    startedAt: new Date()
   };
 }
 
 Deno.test("readOnly=true — INSERT rejected with READ_ONLY_MODE", async () => {
   const handler = new SimpleEdgeQLProtocolHandler({
     readOnly: true,
-    dryRun: true,
+    dryRun: true
   });
 
   const result = await handler.handleRequest(
     { query: "INSERT User { name := 'alice' }" },
-    makeContext(),
+    makeContext()
   );
 
   assertEquals(result.errors?.length, 1);
@@ -43,15 +43,15 @@ Deno.test("readOnly=true — INSERT rejected with READ_ONLY_MODE", async () => {
 Deno.test("readOnly=true — UPDATE rejected", async () => {
   const handler = new SimpleEdgeQLProtocolHandler({
     readOnly: true,
-    dryRun: true,
+    dryRun: true
   });
 
   const result = await handler.handleRequest(
     {
       query: "UPDATE User FILTER .id = <uuid>$id SET { name := 'bob' }",
-      variables: { id: "00000000-0000-0000-0000-000000000000" },
+      variables: { id: "00000000-0000-0000-0000-000000000000" }
     },
-    makeContext(),
+    makeContext()
   );
 
   assertEquals(result.errors?.[0].extensions?.code, "READ_ONLY_MODE");
@@ -60,15 +60,15 @@ Deno.test("readOnly=true — UPDATE rejected", async () => {
 Deno.test("readOnly=true — DELETE rejected", async () => {
   const handler = new SimpleEdgeQLProtocolHandler({
     readOnly: true,
-    dryRun: true,
+    dryRun: true
   });
 
   const result = await handler.handleRequest(
     {
       query: "DELETE User FILTER .id = <uuid>$id",
-      variables: { id: "00000000-0000-0000-0000-000000000000" },
+      variables: { id: "00000000-0000-0000-0000-000000000000" }
     },
-    makeContext(),
+    makeContext()
   );
 
   assertEquals(result.errors?.[0].extensions?.code, "READ_ONLY_MODE");
@@ -77,17 +77,17 @@ Deno.test("readOnly=true — DELETE rejected", async () => {
 Deno.test("readOnly=true — SELECT proceeds (compiled, executed in dryRun)", async () => {
   const handler = new SimpleEdgeQLProtocolHandler({
     readOnly: true,
-    dryRun: true,
+    dryRun: true
   });
 
   const result = await handler.handleRequest(
     { query: "SELECT 1" },
-    makeContext(),
+    makeContext()
   );
 
   // Either errors are absent or none of them is the read-only-mode rejection.
   const hasReadOnlyError = (result.errors ?? []).some(
-    (e) => e.extensions?.code === "READ_ONLY_MODE",
+    e => e.extensions?.code === "READ_ONLY_MODE"
   );
   assertEquals(hasReadOnlyError, false);
 });
@@ -97,13 +97,13 @@ Deno.test("readOnly=false — INSERT not rejected by the read-only gate (default
 
   const result = await handler.handleRequest(
     { query: "INSERT User { name := 'alice' }" },
-    makeContext(),
+    makeContext()
   );
 
   // It may fail downstream for other reasons (no real DB in dryRun), but
   // not with the READ_ONLY_MODE code.
   const hasReadOnlyError = (result.errors ?? []).some(
-    (e) => e.extensions?.code === "READ_ONLY_MODE",
+    e => e.extensions?.code === "READ_ONLY_MODE"
   );
   assertEquals(hasReadOnlyError, false);
 });

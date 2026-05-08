@@ -15,7 +15,7 @@ Deno.test("CLI - parseArgs configuration", () => {
     "--output",
     "./test",
     "--target",
-    "client",
+    "client"
   ], {
     boolean: [
       "help",
@@ -26,7 +26,7 @@ Deno.test("CLI - parseArgs configuration", () => {
       "no-queries",
       "no-mutations",
       "no-client",
-      "no-format",
+      "no-format"
     ],
     string: ["port", "config", "schema", "output", "target"],
     alias: {
@@ -36,8 +36,8 @@ Deno.test("CLI - parseArgs configuration", () => {
       c: "config",
       s: "schema",
       o: "output",
-      t: "target",
-    },
+      t: "target"
+    }
   });
 
   assertEquals(args._, ["codegen"]);
@@ -48,7 +48,7 @@ Deno.test("CLI - parseArgs configuration", () => {
 Deno.test("CLI - help flag parsing", () => {
   const args = parseArgs(["-h"], {
     boolean: ["help", "version"],
-    alias: { h: "help", v: "version" },
+    alias: { h: "help", v: "version" }
   });
 
   assertEquals(args.help, true);
@@ -57,7 +57,7 @@ Deno.test("CLI - help flag parsing", () => {
 Deno.test("CLI - version flag parsing", () => {
   const args = parseArgs(["--version"], {
     boolean: ["help", "version"],
-    alias: { h: "help", v: "version" },
+    alias: { h: "help", v: "version" }
   });
 
   assertEquals(args.version, true);
@@ -75,10 +75,10 @@ Deno.test("CLI - `disc --version` prints version, not help", async () => {
       "--allow-env",
       "--allow-run",
       "cli/main.ts",
-      "--version",
+      "--version"
     ],
     stdout: "piped",
-    stderr: "piped",
+    stderr: "piped"
   });
   const { code, stdout } = await cmd.output();
   const out = new TextDecoder().decode(stdout);
@@ -99,10 +99,10 @@ Deno.test("CLI - `disc -v` short flag prints version", async () => {
       "--allow-env",
       "--allow-run",
       "cli/main.ts",
-      "-v",
+      "-v"
     ],
     stdout: "piped",
-    stderr: "piped",
+    stderr: "piped"
   });
   const { code, stdout } = await cmd.output();
   const out = new TextDecoder().decode(stdout);
@@ -121,10 +121,10 @@ Deno.test("CLI - codegen command arguments", () => {
     "--target",
     "both",
     "--no-queries",
-    "--no-client",
+    "--no-client"
   ], {
     boolean: ["no-queries", "no-mutations", "no-client", "no-format"],
-    string: ["schema", "output", "target"],
+    string: ["schema", "output", "target"]
   });
 
   assertEquals(args._[0], "codegen");
@@ -143,10 +143,10 @@ Deno.test("CLI - migrate command arguments", () => {
     "--dry-run",
     "--auto-approve",
     "--schema",
-    "test.disc",
+    "test.disc"
   ], {
     boolean: ["create", "dry-run", "auto-approve"],
-    string: ["schema"],
+    string: ["schema"]
   });
 
   assertEquals(args._[0], "migrate");
@@ -162,9 +162,9 @@ Deno.test("CLI - serve command arguments", () => {
     "--port",
     "8080",
     "--config",
-    "custom.json",
+    "custom.json"
   ], {
-    string: ["port", "config"],
+    string: ["port", "config"]
   });
 
   assertEquals(args._[0], "serve");
@@ -198,7 +198,7 @@ Deno.test("readSchemaFile - nonexistent file", async () => {
   // Test that attempting to read a nonexistent file handles errors gracefully
   await assertRejects(
     () => Deno.stat(nonExistentPath),
-    Deno.errors.NotFound,
+    Deno.errors.NotFound
   );
 });
 
@@ -219,7 +219,7 @@ Deno.test("CLI - environment variable handling", () => {
 // Test default values
 Deno.test("CLI - default configuration values", () => {
   const args = parseArgs(["codegen"], {
-    string: ["output", "target", "schema"],
+    string: ["output", "target", "schema"]
   });
 
   // Test that defaults are applied correctly
@@ -239,9 +239,9 @@ Deno.test("CLI - boolean flag combinations", () => {
     "--no-queries",
     "--no-mutations",
     "--no-client",
-    "--no-format",
+    "--no-format"
   ], {
-    boolean: ["no-queries", "no-mutations", "no-client", "no-format"],
+    boolean: ["no-queries", "no-mutations", "no-client", "no-format"]
   });
 
   assertEquals(args["no-queries"], true);
@@ -260,19 +260,19 @@ Deno.test("CLI - migration config construction", () => {
     const args = {
       schema: "./test.disc",
       "dry-run": true,
-      "auto-approve": false,
+      "auto-approve": false
     };
 
     // Simulate migration config construction
     const config = {
       migrationsDir: "./migrations",
       schemaFile: args.schema || "./schema.disc",
-      databaseUrl: Deno.env.get("DATABASE_URL")
-        || "postgresql://localhost:5432/disc_dev",
+      databaseUrl: Deno.env.get("DATABASE_URL") ||
+        "postgresql://localhost:5432/disc_dev",
       dryRun: args["dry-run"] || false,
       autoApprove: args["auto-approve"] || false,
       backupBeforeMigration: true,
-      rollbackOnError: true,
+      rollbackOnError: true
     };
 
     assertEquals(config.schemaFile, "./test.disc");
@@ -294,7 +294,7 @@ Deno.test("CLI - codegen config construction", () => {
     "no-queries": true,
     "no-mutations": false,
     "no-client": true,
-    "no-format": false,
+    "no-format": false
   };
 
   // Simulate codegen config construction
@@ -304,7 +304,7 @@ Deno.test("CLI - codegen config construction", () => {
     includeQueryBuilders: args["no-queries"] !== true,
     includeMutations: args["no-mutations"] !== true,
     includeClient: args["no-client"] !== true,
-    formatOutput: args["no-format"] !== true,
+    formatOutput: args["no-format"] !== true
   };
 
   assertEquals(config.outputDir, "./custom/types");
@@ -324,14 +324,14 @@ Deno.test("CLI - alias flag handling", () => {
     "-t",
     "both",
     "-s",
-    "custom.disc",
+    "custom.disc"
   ], {
     string: ["output", "target", "schema"],
     alias: {
       o: "output",
       t: "target",
-      s: "schema",
-    },
+      s: "schema"
+    }
   });
 
   assertEquals(args.output, "./out");
@@ -345,10 +345,10 @@ Deno.test("CLI - -H short flag maps to --host", () => {
   const args = parseArgs([
     "shell",
     "-H",
-    "db.example.com",
+    "db.example.com"
   ], {
     string: ["host"],
-    alias: { H: "host" },
+    alias: { H: "host" }
   });
 
   assertEquals(args.host, "db.example.com");
@@ -358,7 +358,7 @@ Deno.test("CLI - -h still triggers help (not host) with -H alias present", () =>
   const args = parseArgs(["-h"], {
     boolean: ["help"],
     string: ["host"],
-    alias: { h: "help", H: "host" },
+    alias: { h: "help", H: "host" }
   });
 
   assertEquals(args.help, true);
@@ -369,10 +369,10 @@ Deno.test("CLI - long --host still works alongside -H", () => {
   const args = parseArgs([
     "serve",
     "--host",
-    "0.0.0.0",
+    "0.0.0.0"
   ], {
     string: ["host"],
-    alias: { H: "host" },
+    alias: { H: "host" }
   });
 
   assertEquals(args.host, "0.0.0.0");
@@ -391,10 +391,10 @@ Deno.test("CLI - `disc shell -h` short flag prints shell help", async () => {
       "--allow-run",
       "cli/main.ts",
       "shell",
-      "-h",
+      "-h"
     ],
     stdout: "piped",
-    stderr: "piped",
+    stderr: "piped"
   });
   const { code, stdout } = await cmd.output();
   const out = new TextDecoder().decode(stdout);
@@ -403,6 +403,6 @@ Deno.test("CLI - `disc shell -h` short flag prints shell help", async () => {
   assertEquals(
     out.includes("Open an interactive EdgeQL REPL"),
     true,
-    out,
+    out
   );
 });

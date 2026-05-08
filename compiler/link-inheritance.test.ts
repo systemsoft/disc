@@ -42,7 +42,7 @@ Deno.test("link inheritance - parser: link with extending parses correctly", () 
 
   // Find the abstract link declaration at the top level
   const abstractLink = doc.declarations.find(
-    (d) => d.kind === "LinkDeclaration",
+    d => d.kind === "LinkDeclaration"
   ) as LinkDeclaration | undefined;
   assertExists(abstractLink, "Abstract link 'friendship' should be parsed");
   assertEquals(abstractLink.name.value, "friendship");
@@ -53,20 +53,20 @@ Deno.test("link inheritance - parser: link with extending parses correctly", () 
 
   // Find the User type
   const userType = doc.declarations.find(
-    (d) => d.kind === "TypeDeclaration" && d.name.value === "User",
+    d => d.kind === "TypeDeclaration" && d.name.value === "User"
   ) as TypeDeclaration | undefined;
   assertExists(userType, "User type should be parsed");
 
   // Find the friends link within User
   const friendsLink = userType.members.find(
-    (m) => m.kind === "LinkDeclaration" && m.name.value === "friends",
+    m => m.kind === "LinkDeclaration" && m.name.value === "friends"
   ) as LinkDeclaration | undefined;
   assertExists(friendsLink, "friends link should exist on User");
   assertExists(friendsLink.extending, "friends link should have extending");
   assertEquals(friendsLink.extending!.length, 1);
   assertEquals(
     friendsLink.extending![0].name.parts.join("::"),
-    "friendship",
+    "friendship"
   );
   assertEquals(friendsLink.target.name.parts.join("::"), "User");
 });
@@ -93,23 +93,23 @@ Deno.test("link inheritance - parser: link with multiple extending targets", () 
   const doc = parseSDL(sdl);
 
   const nodeType = doc.declarations.find(
-    (d) => d.kind === "TypeDeclaration" && d.name.value === "Node",
+    d => d.kind === "TypeDeclaration" && d.name.value === "Node"
   ) as TypeDeclaration | undefined;
   assertExists(nodeType, "Node type should be parsed");
 
   const edgesLink = nodeType.members.find(
-    (m) => m.kind === "LinkDeclaration" && m.name.value === "edges",
+    m => m.kind === "LinkDeclaration" && m.name.value === "edges"
   ) as LinkDeclaration | undefined;
   assertExists(edgesLink, "edges link should exist on Node");
   assertExists(edgesLink.extending, "edges link should have extending");
   assertEquals(edgesLink.extending!.length, 2);
   assertEquals(
     edgesLink.extending![0].name.parts.join("::"),
-    "timestamped_link",
+    "timestamped_link"
   );
   assertEquals(
     edgesLink.extending![1].name.parts.join("::"),
-    "weighted_link",
+    "weighted_link"
   );
 });
 
@@ -132,14 +132,15 @@ Deno.test("link inheritance - schema-manager: abstract link properties merged in
   const manager = new SchemaManager({});
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true, "parseSDL should succeed");
-  if (!parseResult.ok) throw parseResult.error;
+  if (!parseResult.ok)
+    throw parseResult.error;
 
   // Access the raw modules to check link declarations
   const modules = parseResult.value;
 
   // Find the User type
   const userType = modules[0].items.find(
-    (item) => item.kind === "TypeDeclaration" && item.name.value === "User",
+    item => item.kind === "TypeDeclaration" && item.name.value === "User"
   ) as TypeDeclaration | undefined;
   assertExists(userType, "User type should exist in modules");
 
@@ -148,24 +149,24 @@ Deno.test("link inheritance - schema-manager: abstract link properties merged in
 
   // After modulesToSchema, the link declaration should have inherited properties
   const friendsLink = userType.members.find(
-    (m) => m.kind === "LinkDeclaration" && m.name.value === "friends",
+    m => m.kind === "LinkDeclaration" && m.name.value === "friends"
   ) as LinkDeclaration | undefined;
   assertExists(friendsLink, "friends link should exist");
   assertExists(
     friendsLink.properties,
-    "friends link should have inherited properties",
+    "friends link should have inherited properties"
   );
 
-  const propNames = friendsLink.properties!.map((p) => p.name.value);
+  const propNames = friendsLink.properties!.map(p => p.name.value);
   assertEquals(
     propNames.includes("strength"),
     true,
-    "friends link should inherit 'strength' property",
+    "friends link should inherit 'strength' property"
   );
   assertEquals(
     propNames.includes("since"),
     true,
-    "friends link should inherit 'since' property",
+    "friends link should inherit 'since' property"
   );
 });
 
@@ -190,45 +191,46 @@ Deno.test("link inheritance - schema-manager: concrete link properties override 
   const manager = new SchemaManager({});
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true, "parseSDL should succeed");
-  if (!parseResult.ok) throw parseResult.error;
+  if (!parseResult.ok)
+    throw parseResult.error;
 
   const modules = parseResult.value;
   manager.modulesToSchema(modules);
 
   const userType = modules[0].items.find(
-    (item) => item.kind === "TypeDeclaration" && item.name.value === "User",
+    item => item.kind === "TypeDeclaration" && item.name.value === "User"
   ) as TypeDeclaration | undefined;
   assertExists(userType, "User type should exist");
 
   const friendsLink = userType.members.find(
-    (m) => m.kind === "LinkDeclaration" && m.name.value === "friends",
+    m => m.kind === "LinkDeclaration" && m.name.value === "friends"
   ) as LinkDeclaration | undefined;
   assertExists(friendsLink, "friends link should exist");
   assertExists(friendsLink.properties, "friends link should have properties");
 
   // The concrete 'strength' (int64) should win over inherited (float64)
   const strengthProp = friendsLink.properties!.find(
-    (p) => p.name.value === "strength",
+    p => p.name.value === "strength"
   );
   assertExists(strengthProp, "strength property should exist");
   assertEquals(
     strengthProp.type.name.parts.join("::"),
     "int64",
-    "Concrete 'strength' (int64) should override inherited (float64)",
+    "Concrete 'strength' (int64) should override inherited (float64)"
   );
 
   // 'note' should be inherited from abstract link
   const noteProp = friendsLink.properties!.find(
-    (p) => p.name.value === "note",
+    p => p.name.value === "note"
   );
   assertExists(
     noteProp,
-    "note property should be inherited from abstract link",
+    "note property should be inherited from abstract link"
   );
   assertEquals(
     noteProp.type.name.parts.join("::"),
     "str",
-    "Inherited 'note' should have type str",
+    "Inherited 'note' should have type str"
   );
 });
 
@@ -250,17 +252,17 @@ Deno.test("link inheritance - validator: extending non-existent abstract link re
   assertEquals(
     result.ok,
     false,
-    "Validation should fail for non-existent abstract link",
+    "Validation should fail for non-existent abstract link"
   );
   assertExists(result.errors, "There should be validation errors");
 
   const hasLinkError = result.errors!.some(
-    (e) => e.message.includes("nonexistent_link"),
+    e => e.message.includes("nonexistent_link")
   );
   assertEquals(
     hasLinkError,
     true,
-    "Error should mention the non-existent abstract link name",
+    "Error should mention the non-existent abstract link name"
   );
 });
 
@@ -303,7 +305,7 @@ Deno.test("link inheritance - differ: extending change detected", () => {
 
   // There should be an AlterType with AlterLink containing ChangeExtending
   const alterType = operations.find(
-    (op) => op.kind === "AlterType",
+    op => op.kind === "AlterType"
   );
   assertExists(alterType, "There should be an AlterType operation");
 
@@ -319,16 +321,16 @@ Deno.test("link inheritance - differ: extending change detected", () => {
   assertEquals(alterTypeOp.typeName, "User");
 
   const alterLink = alterTypeOp.operations.find(
-    (op) => op.kind === "AlterLink",
+    op => op.kind === "AlterLink"
   );
   assertExists(alterLink, "There should be an AlterLink operation");
 
   const extendingChange = alterLink!.changes!.find(
-    (c) => c.kind === "ChangeExtending",
+    c => c.kind === "ChangeExtending"
   );
   assertExists(
     extendingChange,
-    "AlterLink should contain a ChangeExtending change",
+    "AlterLink should contain a ChangeExtending change"
   );
 });
 
@@ -356,25 +358,25 @@ Deno.test("link inheritance - differ: link with extending extracted correctly", 
 
   // Find the CreateType operation for User
   const createUser = operations.find(
-    (op) =>
-      op.kind === "CreateType"
-      && (op as unknown as { typeName: string; }).typeName === "User",
+    op =>
+      op.kind === "CreateType" &&
+      (op as unknown as { typeName: string; }).typeName === "User"
   );
   assertExists(createUser, "CreateType for User should exist");
 
   const userOp = createUser as unknown as {
     links: { name: string; extending?: string[]; }[];
   };
-  const friendsLink = userOp.links.find((l) => l.name === "friends");
+  const friendsLink = userOp.links.find(l => l.name === "friends");
   assertExists(friendsLink, "friends link should be in CreateType operation");
   assertExists(
     friendsLink.extending,
-    "friends link should have extending field",
+    "friends link should have extending field"
   );
   assertEquals(
     friendsLink.extending,
     ["friendship"],
-    "extending should contain 'friendship'",
+    "extending should contain 'friendship'"
   );
 });
 
@@ -400,7 +402,8 @@ Deno.test("link inheritance - end-to-end: abstract link property inherited in sc
   const manager = new SchemaManager({});
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true, "parseSDL should succeed");
-  if (!parseResult.ok) throw parseResult.error;
+  if (!parseResult.ok)
+    throw parseResult.error;
 
   const modules = parseResult.value;
   const schema = manager.modulesToSchema(modules);
@@ -421,7 +424,7 @@ Deno.test("link inheritance - end-to-end: abstract link property inherited in sc
   assertEquals(
     movieType.properties.has("title"),
     true,
-    "Movie should have title property",
+    "Movie should have title property"
   );
 });
 
@@ -454,55 +457,56 @@ Deno.test("link inheritance - combined: extending + own properties merge correct
   const manager = new SchemaManager({});
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true, "parseSDL should succeed");
-  if (!parseResult.ok) throw parseResult.error;
+  if (!parseResult.ok)
+    throw parseResult.error;
 
   const modules = parseResult.value;
   manager.modulesToSchema(modules);
 
   // Find the User type in the modules
   const userType = modules[0].items.find(
-    (item) => item.kind === "TypeDeclaration" && item.name.value === "User",
+    item => item.kind === "TypeDeclaration" && item.name.value === "User"
   ) as TypeDeclaration | undefined;
   assertExists(userType, "User type should exist");
 
   const docsLink = userType.members.find(
-    (m) => m.kind === "LinkDeclaration" && m.name.value === "documents",
+    m => m.kind === "LinkDeclaration" && m.name.value === "documents"
   ) as LinkDeclaration | undefined;
   assertExists(docsLink, "documents link should exist");
   assertExists(docsLink.properties, "documents link should have properties");
 
-  const propNames = docsLink.properties!.map((p) => p.name.value);
+  const propNames = docsLink.properties!.map(p => p.name.value);
 
   // Own property
   assertEquals(
     propNames.includes("note"),
     true,
-    "documents link should have own 'note' property",
+    "documents link should have own 'note' property"
   );
 
   // Inherited from 'audited'
   assertEquals(
     propNames.includes("created_by"),
     true,
-    "documents link should inherit 'created_by' from audited",
+    "documents link should inherit 'created_by' from audited"
   );
   assertEquals(
     propNames.includes("created_at"),
     true,
-    "documents link should inherit 'created_at' from audited",
+    "documents link should inherit 'created_at' from audited"
   );
 
   // Inherited from 'weighted'
   assertEquals(
     propNames.includes("weight"),
     true,
-    "documents link should inherit 'weight' from weighted",
+    "documents link should inherit 'weight' from weighted"
   );
 
   // Total: note + created_by + created_at + weight = 4
   assertEquals(
     docsLink.properties!.length,
     4,
-    "documents link should have exactly 4 properties (1 own + 3 inherited)",
+    "documents link should have exactly 4 properties (1 own + 3 inherited)"
   );
 });

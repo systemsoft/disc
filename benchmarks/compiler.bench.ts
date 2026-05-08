@@ -14,10 +14,10 @@ const queries: Record<string, string> = {
   "simple select": "SELECT User { name }",
   "filtered select": "SELECT User { name, email } FILTER .name = 'Ada'",
   "nested shape": "SELECT User { name, posts: { title } }",
-  "insert": "INSERT User { name := 'Ada', email := 'ada@example.com' }",
-  "update": "UPDATE User FILTER .name = 'Ada' SET { name := 'Billie' }",
-  "delete": "DELETE User FILTER .name = 'Ada'",
-  "ordered limited": "SELECT User { name } ORDER BY .name DESC LIMIT 10",
+  insert: "INSERT User { name := 'Ada', email := 'ada@example.com' }",
+  update: "UPDATE User FILTER .name = 'Ada' SET { name := 'Billie' }",
+  delete: "DELETE User FILTER .name = 'Ada'",
+  "ordered limited": "SELECT User { name } ORDER BY .name DESC LIMIT 10"
 };
 
 for (const [name, query] of Object.entries(queries)) {

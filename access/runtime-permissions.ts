@@ -51,7 +51,7 @@ const VALID_NAMES = new Set([
   "env",
   "run",
   "sys",
-  "ffi",
+  "ffi"
 ]);
 
 /**
@@ -98,7 +98,7 @@ export function parsePermissionSpec(input: string): PermissionSpec {
  * hot path; making them async would require threading a Promise
  * through every node of the expression tree.
  */
-export const defaultPermissionChecker: PermissionChecker = (spec) => {
+export const defaultPermissionChecker: PermissionChecker = spec => {
   // Cast safety: PermissionSpec mirrors Deno.PermissionDescriptor shape
   // for each name; the field-name conventions match (path/host/variable
   // /command/kind). Any drift in Deno's API would surface as a runtime
@@ -113,7 +113,7 @@ export const defaultPermissionChecker: PermissionChecker = (spec) => {
  */
 export function hasPermission(
   spec: string,
-  checker: PermissionChecker = defaultPermissionChecker,
+  checker: PermissionChecker = defaultPermissionChecker
 ): boolean {
   return checker(parsePermissionSpec(spec)) === "granted";
 }

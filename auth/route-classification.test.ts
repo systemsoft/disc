@@ -26,7 +26,7 @@ Deno.test("classifyAuthRoute — bootstrap routes resolve to public", () => {
       "magic-link/consume",
       "mfa/totp/login",
       "webauthn/login/begin",
-      "webauthn/login/finish",
+      "webauthn/login/finish"
     ]
   ) {
     assertEquals(classifyAuthRoute(route), "public", `${route} should be public`);
@@ -45,13 +45,13 @@ Deno.test("classifyAuthRoute — privileged routes require auth", () => {
       "mfa/recovery-codes/generate",
       "webauthn/register/begin",
       "webauthn/credentials",
-      "webauthn/credentials/delete",
+      "webauthn/credentials/delete"
     ]
   ) {
     assertEquals(
       classifyAuthRoute(route),
       "authenticated",
-      `${route} should require auth`,
+      `${route} should require auth`
     );
   }
 });
@@ -67,7 +67,7 @@ Deno.test("classifyAuthRoute — every dispatched route is classified", async ()
   // A route reachable in the switch but absent from both sets would be
   // a silent shipping bug — pin catches it.
   const httpSrc = await Deno.readTextFile(
-    new URL("../server/http.ts", import.meta.url),
+    new URL("../server/http.ts", import.meta.url)
   );
   const switchStart = httpSrc.indexOf("switch (route) {");
   assert(switchStart > 0, "could not locate auth-route switch");
@@ -75,13 +75,14 @@ Deno.test("classifyAuthRoute — every dispatched route is classified", async ()
   const switchBody = httpSrc.slice(switchStart, switchEnd);
   const caseRe = /case\s+"([^"]+)":/g;
   const routes: string[] = [];
-  for (const m of switchBody.matchAll(caseRe)) routes.push(m[1]);
+  for (const m of switchBody.matchAll(caseRe))
+    routes.push(m[1]);
   assert(routes.length > 10, "expected multiple routes");
   for (const r of routes) {
     assertEquals(
       classifyAuthRoute(r),
       AUTH_PUBLIC_ROUTES.has(r) ? "public" : "authenticated",
-      `route "${r}" appears in dispatcher switch but is not classified`,
+      `route "${r}" appears in dispatcher switch but is not classified`
     );
   }
 });
@@ -98,16 +99,16 @@ Deno.test("classifyAuthRoute — public allowlist excludes mutation surfaces", (
       "mfa/totp/enroll",
       "mfa/totp/disable",
       "webauthn/register/begin",
-      "webauthn/credentials/delete",
+      "webauthn/credentials/delete"
     ]
   ) {
     assert(
       !AUTH_PUBLIC_ROUTES.has(sensitive),
-      `${sensitive} should not be in AUTH_PUBLIC_ROUTES`,
+      `${sensitive} should not be in AUTH_PUBLIC_ROUTES`
     );
     assert(
       AUTH_AUTHENTICATED_ROUTES.has(sensitive),
-      `${sensitive} should be in AUTH_AUTHENTICATED_ROUTES`,
+      `${sensitive} should be in AUTH_AUTHENTICATED_ROUTES`
     );
   }
 });

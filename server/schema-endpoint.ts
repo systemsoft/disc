@@ -28,7 +28,7 @@ export function handleGetSchema(ctx: SchemaRouteContext): Response {
 
   return new Response(JSON.stringify(description, null, 2), {
     status: 200,
-    headers: ctx.defaultHeaders(),
+    headers: ctx.defaultHeaders()
   });
 }
 
@@ -39,7 +39,7 @@ export function handleGetSchema(ctx: SchemaRouteContext): Response {
  */
 export function handleGetSchemaTypes(
   ctx: SchemaRouteContext,
-  url: URL,
+  url: URL
 ): Response {
   const schema = ctx.schemaProvider();
   const description = describeSchema(schema);
@@ -47,12 +47,12 @@ export function handleGetSchemaTypes(
   const moduleFilter = url.searchParams.get("module");
   let types = description.types;
   if (moduleFilter) {
-    types = types.filter((t) => t.module === moduleFilter);
+    types = types.filter(t => t.module === moduleFilter);
   }
 
   return new Response(JSON.stringify(types, null, 2), {
     status: 200,
-    headers: ctx.defaultHeaders(),
+    headers: ctx.defaultHeaders()
   });
 }
 
@@ -63,7 +63,7 @@ export function handleGetSchemaTypes(
  */
 export function handleGetSchemaType(
   ctx: SchemaRouteContext,
-  typeName: string,
+  typeName: string
 ): Response {
   const schema = ctx.schemaProvider();
 
@@ -71,7 +71,7 @@ export function handleGetSchemaType(
     const description = describeType(schema, typeName);
     return new Response(JSON.stringify(description, null, 2), {
       status: 200,
-      headers: ctx.defaultHeaders(),
+      headers: ctx.defaultHeaders()
     });
   } catch (error) {
     if (error instanceof CompilationError) {
@@ -79,8 +79,8 @@ export function handleGetSchemaType(
         JSON.stringify({ error: error.message }),
         {
           status: 404,
-          headers: ctx.defaultHeaders(),
-        },
+          headers: ctx.defaultHeaders()
+        }
       );
     }
     throw error;

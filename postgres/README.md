@@ -16,7 +16,7 @@ import {
   PostgresManager,
   PostgresMonitor,
   startInstance,
-  stopInstance,
+  stopInstance
 } from "disc/postgres/mod.ts";
 ```
 
@@ -54,7 +54,7 @@ const manager = new PostgresManager("/custom/path/instances");
 // Create and initialize a new instance
 const instance = await manager.createInstance("my-project", {
   port: 5433, // optional, 0 = Unix socket only (default)
-  postgresVersion: "16.4", // optional (default: "16.4")
+  postgresVersion: "16.4" // optional (default: "16.4")
 });
 
 // Start with health monitor
@@ -118,7 +118,7 @@ const instance = new PostgresInstance({
   socketDir: "/path/to/socket", // optional
   port: 0, // 0 = Unix socket only
   postgresVersion: "16.4", // optional
-  pgBinDir: "/custom/pg/bin", // optional: skip download, use existing binaries
+  pgBinDir: "/custom/pg/bin" // optional: skip download, use existing binaries
 });
 ```
 
@@ -187,7 +187,7 @@ const content = config.generate({
   socketDir: "/path/to/socket",
   maxConnections: 100, // default: 100
   sharedBuffers: "128MB", // default: "128MB"
-  workMem: "4MB", // default: "4MB"
+  workMem: "4MB" // default: "4MB"
 });
 
 // Generate pg_hba.conf
@@ -217,7 +217,7 @@ const monitor = new PostgresMonitor(instance, {
   checkIntervalMs: 30000, // default: 30 seconds
   autoRestart: true, // default: true
   maxRestartAttempts: 3, // default: 3
-  restartDelayMs: 5000, // default: 5 seconds
+  restartDelayMs: 5000 // default: 5 seconds
 });
 
 await monitor.start();
@@ -261,7 +261,7 @@ import {
   getInstance,
   listInstances,
   startInstance,
-  stopInstance,
+  stopInstance
 } from "disc/postgres/mod.ts";
 
 const instance = await createInstance("test-db");

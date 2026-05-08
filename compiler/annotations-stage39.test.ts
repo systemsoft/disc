@@ -34,7 +34,7 @@ function makeType(
     annotations?: Record<string, string>;
     properties?: Map<string, PropertyDef>;
     links?: Map<string, LinkDef>;
-  },
+  }
 ): TypeDef {
   return {
     name,
@@ -47,11 +47,11 @@ function makeType(
         required: true,
         multi: false,
         columnName: "id",
-        edgeqlType: "uuid",
-      }],
+        edgeqlType: "uuid"
+      }]
     ]),
     links: opts?.links ?? new Map(),
-    annotations: opts?.annotations,
+    annotations: opts?.annotations
   };
 }
 
@@ -62,8 +62,8 @@ function makeType(
 Deno.test("Stage 39 - describeType includes annotations on type", () => {
   const schema = makeSchema([
     makeType("User", {
-      annotations: { description: "A user account", title: "User" },
-    }),
+      annotations: { description: "A user account", title: "User" }
+    })
   ]);
 
   const desc = describeType(schema, "User");
@@ -79,7 +79,7 @@ Deno.test("Stage 39 - describeType includes annotations on properties", () => {
       required: true,
       multi: false,
       columnName: "id",
-      edgeqlType: "uuid",
+      edgeqlType: "uuid"
     }],
     ["email", {
       name: "email",
@@ -88,13 +88,13 @@ Deno.test("Stage 39 - describeType includes annotations on properties", () => {
       multi: false,
       columnName: "email",
       edgeqlType: "str",
-      annotations: { description: "Primary email address" },
-    }],
+      annotations: { description: "Primary email address" }
+    }]
   ]);
 
   const schema = makeSchema([makeType("User", { properties })]);
   const desc = describeType(schema, "User");
-  const emailProp = desc.properties.find((p) => p.name === "email");
+  const emailProp = desc.properties.find(p => p.name === "email");
   assertEquals(emailProp !== undefined, true);
   assertEquals(emailProp!.annotations["description"], "Primary email address");
 });
@@ -106,37 +106,37 @@ Deno.test("Stage 39 - describeType includes annotations on links", () => {
       target: "Post",
       required: false,
       multi: true,
-      annotations: { description: "Blog posts authored by user" },
-    }],
+      annotations: { description: "Blog posts authored by user" }
+    }]
   ]);
 
   const schema = makeSchema([
     makeType("User", { links }),
-    makeType("Post"),
+    makeType("Post")
   ]);
 
   const desc = describeType(schema, "User");
-  const postsLink = desc.links.find((l) => l.name === "posts");
+  const postsLink = desc.links.find(l => l.name === "posts");
   assertEquals(postsLink !== undefined, true);
   assertEquals(
     postsLink!.annotations["description"],
-    "Blog posts authored by user",
+    "Blog posts authored by user"
   );
 });
 
 Deno.test("Stage 39 - describeSchema includes annotations for all types", () => {
   const schema = makeSchema([
     makeType("User", {
-      annotations: { description: "A user account" },
+      annotations: { description: "A user account" }
     }),
     makeType("Post", {
-      annotations: { description: "A blog post" },
-    }),
+      annotations: { description: "A blog post" }
+    })
   ]);
 
   const desc = describeSchema(schema);
-  const userType = desc.types.find((t) => t.name === "User");
-  const postType = desc.types.find((t) => t.name === "Post");
+  const userType = desc.types.find(t => t.name === "User");
+  const postType = desc.types.find(t => t.name === "Post");
   assertEquals(userType!.annotations["description"], "A user account");
   assertEquals(postType!.annotations["description"], "A blog post");
 });
@@ -146,7 +146,7 @@ Deno.test("Stage 39 - empty annotations when none set", () => {
   const desc = describeType(schema, "User");
   assertEquals(Object.keys(desc.annotations).length, 0);
 
-  const idProp = desc.properties.find((p) => p.name === "id");
+  const idProp = desc.properties.find(p => p.name === "id");
   assertEquals(idProp !== undefined, true);
   assertEquals(Object.keys(idProp!.annotations).length, 0);
 });
@@ -157,9 +157,9 @@ Deno.test("Stage 39 - multiple annotations on same element", () => {
       annotations: {
         description: "A user",
         title: "User Entity",
-        deprecated: "Use Person instead",
-      },
-    }),
+        deprecated: "Use Person instead"
+      }
+    })
   ]);
 
   const desc = describeType(schema, "User");
@@ -175,8 +175,8 @@ Deno.test("Stage 39 - multiple annotations on same element", () => {
 Deno.test("Stage 39 - codegen: type-level @description in interface JSDoc", () => {
   const schema = makeSchema([
     makeType("User", {
-      annotations: { description: "A user account" },
-    }),
+      annotations: { description: "A user account" }
+    })
   ]);
 
   const generator = new TypeScriptGenerator(schema, {
@@ -186,18 +186,18 @@ Deno.test("Stage 39 - codegen: type-level @description in interface JSDoc", () =
     outputDir: "./generated",
     formatOutput: true,
     includeQueryBuilders: false,
-    includeClient: false,
+    includeClient: false
   });
 
   const result = generator.generate();
-  const typesFile = result.files.find((f) => f.type === "types");
+  const typesFile = result.files.find(f => f.type === "types");
   assertEquals(typesFile !== undefined, true);
 
   // The JSDoc should include the description
   assertEquals(typesFile!.content.includes("A user account"), true);
   assertEquals(
     typesFile!.content.includes("User type from EdgeQL schema"),
-    true,
+    true
   );
 });
 
@@ -209,7 +209,7 @@ Deno.test("Stage 39 - codegen: property-level @description in JSDoc tag", () => 
       required: true,
       multi: false,
       columnName: "id",
-      edgeqlType: "uuid",
+      edgeqlType: "uuid"
     }],
     ["email", {
       name: "email",
@@ -218,8 +218,8 @@ Deno.test("Stage 39 - codegen: property-level @description in JSDoc tag", () => 
       multi: false,
       columnName: "email",
       edgeqlType: "str",
-      annotations: { description: "Primary email address" },
-    }],
+      annotations: { description: "Primary email address" }
+    }]
   ]);
 
   const schema = makeSchema([makeType("User", { properties })]);
@@ -231,15 +231,15 @@ Deno.test("Stage 39 - codegen: property-level @description in JSDoc tag", () => 
     outputDir: "./generated",
     formatOutput: true,
     includeQueryBuilders: false,
-    includeClient: false,
+    includeClient: false
   });
 
   const result = generator.generate();
-  const typesFile = result.files.find((f) => f.type === "types");
+  const typesFile = result.files.find(f => f.type === "types");
   assertEquals(typesFile !== undefined, true);
   assertEquals(
     typesFile!.content.includes("@description Primary email address"),
-    true,
+    true
   );
 });
 
@@ -253,11 +253,11 @@ Deno.test("Stage 39 - codegen: no @description when no annotations", () => {
     outputDir: "./generated",
     formatOutput: true,
     includeQueryBuilders: false,
-    includeClient: false,
+    includeClient: false
   });
 
   const result = generator.generate();
-  const typesFile = result.files.find((f) => f.type === "types");
+  const typesFile = result.files.find(f => f.type === "types");
   assertEquals(typesFile !== undefined, true);
   assertEquals(typesFile!.content.includes("@description"), false);
 });
@@ -283,7 +283,7 @@ Deno.test("Stage 39 - SDL parsing: abstract annotation parses correctly", () => 
 
   if (mod.kind === "ModuleDeclaration") {
     const annDecl = mod.declarations.find(
-      (d) => d.kind === "AnnotationDeclaration",
+      d => d.kind === "AnnotationDeclaration"
     );
     assertEquals(annDecl !== undefined, true);
     if (annDecl && annDecl.kind === "AnnotationDeclaration") {
@@ -311,7 +311,7 @@ Deno.test("Stage 39 - validator: undeclared annotation usage produces error", ()
   assertEquals(result.ok, false);
   assertEquals(result.errors !== undefined, true);
   const hasAnnotationError = result.errors!.some(
-    (e) => e.message.includes("custom_note") && e.message.includes("not defined"),
+    e => e.message.includes("custom_note") && e.message.includes("not defined")
   );
   assertEquals(hasAnnotationError, true);
 });
@@ -381,7 +381,8 @@ Deno.test("Stage 39 - SchemaManager: annotations extracted from SDL type/propert
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true);
 
-  if (!parseResult.ok) throw parseResult.error;
+  if (!parseResult.ok)
+    throw parseResult.error;
   const schema = manager.modulesToSchema(parseResult.value);
 
   // Check type-level annotation
@@ -416,14 +417,15 @@ Deno.test("Stage 39 - SchemaManager: abstract annotation declarations collected 
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true);
 
-  if (!parseResult.ok) throw parseResult.error;
+  if (!parseResult.ok)
+    throw parseResult.error;
   const schema = manager.modulesToSchema(parseResult.value);
   assertEquals(schema.abstractAnnotations !== undefined, true);
   assertEquals(schema.abstractAnnotations!.has("custom_note"), true);
   assertEquals(schema.abstractAnnotations!.has("severity"), true);
   assertEquals(
     schema.abstractAnnotations!.get("custom_note")!.name,
-    "custom_note",
+    "custom_note"
   );
   assertEquals(schema.abstractAnnotations!.get("severity")!.name, "severity");
 });

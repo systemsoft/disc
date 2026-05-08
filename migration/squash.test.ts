@@ -9,7 +9,7 @@ import { MigrationSquasher, SquashableMigration } from "./squash.ts";
 
 function createMigration(
   id: string,
-  overrides: Partial<SquashableMigration> = {},
+  overrides: Partial<SquashableMigration> = {}
 ): SquashableMigration {
   return {
     id,
@@ -17,7 +17,7 @@ function createMigration(
     statements: [`CREATE TABLE ${id} (id UUID PRIMARY KEY)`],
     rollbackStatements: [`DROP TABLE ${id}`],
     hasDataMigration: false,
-    ...overrides,
+    ...overrides
   };
 }
 
@@ -27,14 +27,14 @@ Deno.test("MigrationSquasher - squash combines DDL from multiple migrations", ()
   const squasher = new MigrationSquasher();
   const migrations = [
     createMigration("m001", {
-      statements: ["CREATE TABLE users (id UUID PRIMARY KEY)"],
+      statements: ["CREATE TABLE users (id UUID PRIMARY KEY)"]
     }),
     createMigration("m002", {
-      statements: ["CREATE TABLE posts (id UUID PRIMARY KEY)"],
+      statements: ["CREATE TABLE posts (id UUID PRIMARY KEY)"]
     }),
     createMigration("m003", {
-      statements: ["ALTER TABLE users ADD COLUMN email TEXT"],
-    }),
+      statements: ["ALTER TABLE users ADD COLUMN email TEXT"]
+    })
   ];
 
   const result = squasher.squash(migrations);
@@ -49,14 +49,14 @@ Deno.test("MigrationSquasher - squash combines rollback SQL in reverse order", (
   const squasher = new MigrationSquasher();
   const migrations = [
     createMigration("m001", {
-      rollbackStatements: ["DROP TABLE users"],
+      rollbackStatements: ["DROP TABLE users"]
     }),
     createMigration("m002", {
-      rollbackStatements: ["DROP TABLE posts"],
+      rollbackStatements: ["DROP TABLE posts"]
     }),
     createMigration("m003", {
-      rollbackStatements: ["ALTER TABLE users DROP COLUMN email"],
-    }),
+      rollbackStatements: ["ALTER TABLE users DROP COLUMN email"]
+    })
   ];
 
   const result = squasher.squash(migrations);
@@ -65,7 +65,7 @@ Deno.test("MigrationSquasher - squash combines rollback SQL in reverse order", (
   // Reverse order: m003 rollback first, then m002, then m001
   assertStringIncludes(
     result.rollbackStatements[0],
-    "ALTER TABLE users DROP COLUMN email",
+    "ALTER TABLE users DROP COLUMN email"
   );
   assertStringIncludes(result.rollbackStatements[1], "DROP TABLE posts");
   assertStringIncludes(result.rollbackStatements[2], "DROP TABLE users");
@@ -78,7 +78,7 @@ Deno.test("MigrationSquasher - squash generates correct name", () => {
   const migrations = [
     createMigration("m001"),
     createMigration("m002"),
-    createMigration("m003"),
+    createMigration("m003")
   ];
 
   const result = squasher.squash(migrations);
@@ -93,13 +93,13 @@ Deno.test("MigrationSquasher - squash rejects range with data migrations", () =>
   const migrations = [
     createMigration("m001"),
     createMigration("m002", { hasDataMigration: true }),
-    createMigration("m003"),
+    createMigration("m003")
   ];
 
   assertThrows(
     () => squasher.squash(migrations),
     Error,
-    "Cannot squash migrations that include data migrations",
+    "Cannot squash migrations that include data migrations"
   );
 });
 
@@ -110,8 +110,8 @@ Deno.test("MigrationSquasher - squash handles single migration", () => {
   const migrations = [
     createMigration("m001", {
       statements: ["CREATE TABLE users (id UUID PRIMARY KEY)"],
-      rollbackStatements: ["DROP TABLE users"],
-    }),
+      rollbackStatements: ["DROP TABLE users"]
+    })
   ];
 
   const result = squasher.squash(migrations);
@@ -129,14 +129,14 @@ Deno.test("MigrationSquasher - squash validates from/to order", () => {
   const migrations = [
     createMigration("m001"),
     createMigration("m002"),
-    createMigration("m003"),
+    createMigration("m003")
   ];
 
   // toId comes before fromId — invalid
   assertThrows(
     () => squasher.squash(migrations, "m003", "m001"),
     Error,
-    "comes after",
+    "comes after"
   );
 });
 
@@ -146,17 +146,17 @@ Deno.test("MigrationSquasher - squash filters by ID range correctly", () => {
   const squasher = new MigrationSquasher();
   const migrations = [
     createMigration("m001", {
-      statements: ["CREATE TABLE a (id UUID PRIMARY KEY)"],
+      statements: ["CREATE TABLE a (id UUID PRIMARY KEY)"]
     }),
     createMigration("m002", {
-      statements: ["CREATE TABLE b (id UUID PRIMARY KEY)"],
+      statements: ["CREATE TABLE b (id UUID PRIMARY KEY)"]
     }),
     createMigration("m003", {
-      statements: ["CREATE TABLE c (id UUID PRIMARY KEY)"],
+      statements: ["CREATE TABLE c (id UUID PRIMARY KEY)"]
     }),
     createMigration("m004", {
-      statements: ["CREATE TABLE d (id UUID PRIMARY KEY)"],
-    }),
+      statements: ["CREATE TABLE d (id UUID PRIMARY KEY)"]
+    })
   ];
 
   const result = squasher.squash(migrations, "m002", "m003");
@@ -175,15 +175,15 @@ Deno.test("MigrationSquasher - squash preserves statement order within migration
     createMigration("m001", {
       statements: [
         "CREATE TABLE users (id UUID PRIMARY KEY)",
-        "CREATE INDEX idx_users_email ON users (email)",
-      ],
+        "CREATE INDEX idx_users_email ON users (email)"
+      ]
     }),
     createMigration("m002", {
       statements: [
         "CREATE TABLE posts (id UUID PRIMARY KEY)",
-        "CREATE INDEX idx_posts_title ON posts (title)",
-      ],
-    }),
+        "CREATE INDEX idx_posts_title ON posts (title)"
+      ]
+    })
   ];
 
   const result = squasher.squash(migrations);
@@ -203,7 +203,7 @@ Deno.test("MigrationSquasher - squash result includes all squashed IDs", () => {
     createMigration("m001"),
     createMigration("m002"),
     createMigration("m003"),
-    createMigration("m004"),
+    createMigration("m004")
   ];
 
   const result = squasher.squash(migrations);
@@ -229,13 +229,13 @@ Deno.test("MigrationSquasher - squash throws for non-existent fromId", () => {
   const squasher = new MigrationSquasher();
   const migrations = [
     createMigration("m001"),
-    createMigration("m002"),
+    createMigration("m002")
   ];
 
   assertThrows(
     () => squasher.squash(migrations, "m999"),
     Error,
-    "not found",
+    "not found"
   );
 });
 
@@ -243,12 +243,12 @@ Deno.test("MigrationSquasher - squash throws for non-existent toId", () => {
   const squasher = new MigrationSquasher();
   const migrations = [
     createMigration("m001"),
-    createMigration("m002"),
+    createMigration("m002")
   ];
 
   assertThrows(
     () => squasher.squash(migrations, undefined, "m999"),
     Error,
-    "not found",
+    "not found"
   );
 });

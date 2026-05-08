@@ -340,11 +340,11 @@ export interface HealthStatus {
 export interface ProtocolHandler {
   handleRequest(
     request: QueryRequest,
-    context: QueryContext,
+    context: QueryContext
   ): Promise<QueryResponse>;
   handleSubscription?(
     request: SubscriptionRequest,
-    context: QueryContext,
+    context: QueryContext
   ): AsyncIterableIterator<SubscriptionMessage>;
   validateRequest(request: QueryRequest): QueryError[];
   /** Initialize the handler (e.g. connect to database, warm up pool). */
@@ -388,7 +388,7 @@ export interface SessionManager {
 export interface TransactionManager {
   beginTransaction(
     sessionId: string,
-    options?: Partial<Transaction>,
+    options?: Partial<Transaction>
   ): Transaction;
   getTransaction(id: string): Transaction | null;
   commitTransaction(id: string): Promise<void>;

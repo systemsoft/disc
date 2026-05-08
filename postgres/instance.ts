@@ -74,14 +74,14 @@ export class PostgresInstance {
       const [label, dir] of [
         ["data dir", this.dataDir],
         ["socket dir", this.socketDir],
-        ["logs dir", join(this.dataDir, "..", "logs")],
+        ["logs dir", join(this.dataDir, "..", "logs")]
       ] as const
     ) {
       try {
         const stat = await Deno.lstat(dir);
         if (!stat.isDirectory) {
           throw new Error(
-            `PostgreSQL ${label} path exists but is not a directory: ${dir}. Remove or rename it and retry.`,
+            `PostgreSQL ${label} path exists but is not a directory: ${dir}. Remove or rename it and retry.`
           );
         }
       } catch (err) {
@@ -111,7 +111,7 @@ export class PostgresInstance {
     const configContent = this.config.generate({
       dataDir: this.dataDir,
       port: this.port,
-      socketDir: this.socketDir,
+      socketDir: this.socketDir
     });
 
     const configPath = join(this.dataDir, "postgresql.conf");
@@ -131,12 +131,12 @@ export class PostgresInstance {
         "--locale=en_US.UTF-8",
         "--username=disc",
         "--auth-local=trust",
-        "--auth-host=trust",
+        "--auth-host=trust"
       ],
       env: {
         ...Deno.env.toObject(),
-        "PGDATA": this.dataDir,
-      },
+        PGDATA: this.dataDir
+      }
     });
 
     const output = await cmd.output();
@@ -181,12 +181,12 @@ export class PostgresInstance {
         this.buildPostgresArgs(),
         "-w", // Wait for startup to complete
         "-t",
-        "60", // 60 second timeout
+        "60" // 60 second timeout
       ],
       env: {
         ...Deno.env.toObject(),
-        "PGDATA": this.dataDir,
-      },
+        PGDATA: this.dataDir
+      }
     });
 
     const output = await cmd.output();
@@ -226,7 +226,7 @@ export class PostgresInstance {
         await admin.connect();
         const exists = await admin.queryObject<{ exists: boolean; }>(
           `SELECT 1 AS exists FROM pg_database WHERE datname = $1`,
-          [this.instanceName],
+          [this.instanceName]
         );
         if (exists.rowCount && exists.rowCount > 0) {
           logger.info(`Database "${this.instanceName}" already exists`);
@@ -247,12 +247,13 @@ export class PostgresInstance {
         }
         const transient = /starting up|not yet accepting|could not connect|ECONNREFUSED/i
           .test(msg);
-        if (!transient || attempt === 2) break;
+        if (!transient || attempt === 2)
+          break;
         const delayMs = 150 * (attempt + 1);
         logger.info(
-          `ensureDatabase transient failure (attempt ${attempt + 1}/3); retrying in ${delayMs}ms`,
+          `ensureDatabase transient failure (attempt ${attempt + 1}/3); retrying in ${delayMs}ms`
         );
-        await new Promise((r) => setTimeout(r, delayMs));
+        await new Promise(r => setTimeout(r, delayMs));
       } finally {
         try {
           await admin.end();
@@ -264,7 +265,7 @@ export class PostgresInstance {
 
     const detail = lastErr instanceof Error ? lastErr.message : String(lastErr);
     throw new Error(
-      `Failed to create database "${this.instanceName}": ${detail}`,
+      `Failed to create database "${this.instanceName}": ${detail}`
     );
   }
 
@@ -277,7 +278,7 @@ export class PostgresInstance {
         host_type: "socket" as const,
         hostname: this.socketDir,
         port: 5432,
-        user: "disc",
+        user: "disc"
       };
     }
     return {
@@ -285,7 +286,7 @@ export class PostgresInstance {
       host_type: "tcp" as const,
       hostname: "localhost",
       port: this.port,
-      user: "disc",
+      user: "disc"
     };
   }
 
@@ -308,12 +309,12 @@ export class PostgresInstance {
         "fast", // Fast shutdown mode
         "-w", // Wait for shutdown to complete
         "-t",
-        "60",
+        "60"
       ],
       env: {
         ...Deno.env.toObject(),
-        "PGDATA": this.dataDir,
-      },
+        PGDATA: this.dataDir
+      }
     });
 
     const output = await cmd.output();
@@ -330,7 +331,8 @@ export class PostgresInstance {
   }
 
   private async forceStop(): Promise<void> {
-    if (!this.pid) return;
+    if (!this.pid)
+      return;
 
     try {
       Deno.kill(this.pid, "SIGTERM");
@@ -355,7 +357,7 @@ export class PostgresInstance {
       if (!await this.isRunning()) {
         return;
       }
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
   }
 
@@ -375,7 +377,7 @@ export class PostgresInstance {
     if (running && this.startedAt === undefined) {
       try {
         const pidContent = await Deno.readTextFile(
-          join(this.dataDir, "postmaster.pid"),
+          join(this.dataDir, "postmaster.pid")
         );
         const lines = pidContent.split("\n");
         if (lines.length >= 3) {
@@ -396,7 +398,7 @@ export class PostgresInstance {
       running,
       socketPath: this.getSocketPath(),
       startedAt: this.startedAt,
-      version: this.postgresVersion,
+      version: this.postgresVersion
     };
   }
 

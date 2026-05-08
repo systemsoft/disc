@@ -54,7 +54,7 @@ const STDLIB_SQL = [
 
   `CREATE OR REPLACE FUNCTION std_base64_decode(data text) RETURNS bytea AS $$
      SELECT decode(data, 'base64');
-   $$ LANGUAGE SQL IMMUTABLE STRICT;`,
+   $$ LANGUAGE SQL IMMUTABLE STRICT;`
 ];
 
 /**
@@ -70,7 +70,7 @@ export async function bootstrapStdlib(pool: ConnectionPool): Promise<void> {
     } catch (err) {
       log.warn("stdlib bootstrap statement failed", {
         error: err instanceof Error ? err.message : String(err),
-        statement: stmt.split("\n")[0].slice(0, 80),
+        statement: stmt.split("\n")[0].slice(0, 80)
       });
     }
   }

@@ -70,13 +70,14 @@ export interface ParsedPublicKey {
  * The object is a CBOR map with `fmt`, `authData`, `attStmt`.
  */
 export function parseAttestationObject(
-  attestationObjectBytes: Uint8Array,
+  attestationObjectBytes: Uint8Array
 ): ParsedAttestation {
   const obj = decodeCbor(attestationObjectBytes) as CborMap;
   const fmt = obj.get("fmt");
   const authData = obj.get("authData");
   const attStmt = obj.get("attStmt");
-  if (typeof fmt !== "string") throw new Error("Invalid attestationObject.fmt");
+  if (typeof fmt !== "string")
+    throw new Error("Invalid attestationObject.fmt");
   if (!(authData instanceof Uint8Array)) {
     throw new Error("Invalid attestationObject.authData");
   }
@@ -92,7 +93,7 @@ export function parseAttestationObject(
     counter: parsed.counter,
     rpIdHash: parsed.rpIdHash,
     authData,
-    attStmt: attStmt as CborMap,
+    attStmt: attStmt as CborMap
   };
 }
 
@@ -103,7 +104,7 @@ export function parseAttestationObject(
  * extensions, which we ignore).
  */
 export function parseAuthenticatorData(
-  authData: Uint8Array,
+  authData: Uint8Array
 ): {
   rpIdHash: Uint8Array;
   flags: number;
@@ -115,12 +116,12 @@ export function parseAuthenticatorData(
   const view = new DataView(
     authData.buffer,
     authData.byteOffset,
-    authData.byteLength,
+    authData.byteLength
   );
   return {
     rpIdHash: authData.slice(0, 32),
     flags: authData[32],
-    counter: view.getUint32(33, false),
+    counter: view.getUint32(33, false)
   };
 }
 
@@ -135,7 +136,7 @@ export async function verifyAssertionSignature(opts: {
   signature: Uint8Array;
 }): Promise<boolean> {
   const clientDataHash = new Uint8Array(
-    await crypto.subtle.digest("SHA-256", opts.clientDataJSON as BufferSource),
+    await crypto.subtle.digest("SHA-256", opts.clientDataJSON as BufferSource)
   );
   const signedData = concat(opts.authData, clientDataHash);
 
@@ -147,7 +148,7 @@ export async function verifyAssertionSignature(opts: {
     { name: "ECDSA", hash: "SHA-256" },
     key,
     rawSig as BufferSource,
-    signedData as BufferSource,
+    signedData as BufferSource
   );
 }
 
@@ -170,12 +171,12 @@ export function verifyClientData(opts: {
   };
   if (parsed.type !== opts.expectedType) {
     throw new Error(
-      `clientData.type mismatch: expected ${opts.expectedType}, got ${parsed.type}`,
+      `clientData.type mismatch: expected ${opts.expectedType}, got ${parsed.type}`
     );
   }
   if (parsed.origin !== opts.expectedOrigin) {
     throw new Error(
-      `clientData.origin mismatch: expected ${opts.expectedOrigin}, got ${parsed.origin}`,
+      `clientData.origin mismatch: expected ${opts.expectedOrigin}, got ${parsed.origin}`
     );
   }
   const decodedChallenge = base64UrlDecode(parsed.challenge);
@@ -198,7 +199,8 @@ export async function hashRpId(rpId: string): Promise<Uint8Array> {
 
 export function base64UrlEncode(bytes: Uint8Array): string {
   let binary = "";
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  for (let i = 0; i < bytes.length; i++)
+    binary += String.fromCharCode(bytes[i]);
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
@@ -207,7 +209,8 @@ export function base64UrlDecode(input: string): Uint8Array {
   const b64 = input.replace(/-/g, "+").replace(/_/g, "/") + pad;
   const binary = atob(b64);
   const out = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+  for (let i = 0; i < binary.length; i++)
+    out[i] = binary.charCodeAt(i);
   return out;
 }
 
@@ -222,7 +225,7 @@ interface AuthDataWithCredential {
 }
 
 function parseAuthenticatorDataWithCredential(
-  authData: Uint8Array,
+  authData: Uint8Array
 ): AuthDataWithCredential {
   if (authData.length < 37) {
     throw new Error("authenticatorData too short");
@@ -230,7 +233,7 @@ function parseAuthenticatorDataWithCredential(
   const view = new DataView(
     authData.buffer,
     authData.byteOffset,
-    authData.byteLength,
+    authData.byteLength
   );
   const rpIdHash = authData.slice(0, 32);
   const flags = authData[32];
@@ -238,7 +241,7 @@ function parseAuthenticatorDataWithCredential(
 
   if (!(flags & FLAG_ATTESTED_CREDENTIAL_DATA)) {
     throw new Error(
-      "authenticatorData missing attested credential data — registration ceremony requires AT flag",
+      "authenticatorData missing attested credential data — registration ceremony requires AT flag"
     );
   }
 
@@ -272,11 +275,13 @@ function parseCoseKey(cose: CborMap): ParsedPublicKey {
   if (alg !== COSE_ALG_ES256) {
     throw new Error(`Unsupported COSE alg: ${alg} (only ES256/-7 supported)`);
   }
-  if (kty !== 2) throw new Error(`Expected EC2 key (kty=2), got ${kty}`);
+  if (kty !== 2)
+    throw new Error(`Expected EC2 key (kty=2), got ${kty}`);
   const crv = cose.get(-1);
   const x = cose.get(-2);
   const y = cose.get(-3);
-  if (crv !== 1) throw new Error(`Expected P-256 curve (crv=1), got ${crv}`);
+  if (crv !== 1)
+    throw new Error(`Expected P-256 curve (crv=1), got ${crv}`);
   if (!(x instanceof Uint8Array) || !(y instanceof Uint8Array)) {
     throw new Error("COSE key x/y must be byte strings");
   }
@@ -288,8 +293,8 @@ function parseCoseKey(cose: CborMap): ParsedPublicKey {
       crv: "P-256",
       x: base64UrlEncode(x),
       y: base64UrlEncode(y),
-      ext: true,
-    },
+      ext: true
+    }
   };
 }
 
@@ -302,7 +307,7 @@ async function importCoseKey(key: ParsedPublicKey): Promise<CryptoKey> {
     key.jwk,
     { name: "ECDSA", namedCurve: "P-256" },
     false,
-    ["verify"],
+    ["verify"]
   );
 }
 
@@ -312,14 +317,17 @@ async function importCoseKey(key: ParsedPublicKey): Promise<CryptoKey> {
  * emit DER per the WebAuthn §6.5 reference.
  */
 function derToRawEcdsaSignature(der: Uint8Array): Uint8Array {
-  if (der[0] !== 0x30) throw new Error("DER signature: missing SEQUENCE");
+  if (der[0] !== 0x30)
+    throw new Error("DER signature: missing SEQUENCE");
   // der[1] = sequence length (we don't validate against bounds; trust trim below)
   let i = 2;
-  if (der[i] !== 0x02) throw new Error("DER signature: missing INTEGER (r)");
+  if (der[i] !== 0x02)
+    throw new Error("DER signature: missing INTEGER (r)");
   const rLen = der[i + 1];
   const rRaw = der.slice(i + 2, i + 2 + rLen);
   i += 2 + rLen;
-  if (der[i] !== 0x02) throw new Error("DER signature: missing INTEGER (s)");
+  if (der[i] !== 0x02)
+    throw new Error("DER signature: missing INTEGER (s)");
   const sLen = der[i + 1];
   const sRaw = der.slice(i + 2, i + 2 + sLen);
 
@@ -332,9 +340,11 @@ function derToRawEcdsaSignature(der: Uint8Array): Uint8Array {
 function stripAndPad(bytes: Uint8Array, length: number): Uint8Array {
   // Strip leading 0x00s introduced by DER sign-bit padding.
   let start = 0;
-  while (start < bytes.length - 1 && bytes[start] === 0) start++;
+  while (start < bytes.length - 1 && bytes[start] === 0)
+    start++;
   const stripped = bytes.slice(start);
-  if (stripped.length === length) return stripped;
+  if (stripped.length === length)
+    return stripped;
   if (stripped.length > length) {
     throw new Error("DER integer too long for fixed-width raw signature");
   }
@@ -344,9 +354,11 @@ function stripAndPad(bytes: Uint8Array, length: number): Uint8Array {
 }
 
 function byteArraysEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false;
+  if (a.length !== b.length)
+    return false;
   let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  for (let i = 0; i < a.length; i++)
+    diff |= a[i] ^ b[i];
   return diff === 0;
 }
 
@@ -407,7 +419,8 @@ class CborReader {
       }
       case 4: { // array
         const out: CborValue[] = [];
-        for (let i = 0; i < value; i++) out.push(this.next());
+        for (let i = 0; i < value; i++)
+          out.push(this.next());
         return out;
       }
       case 5: { // map
@@ -420,9 +433,12 @@ class CborReader {
         return m;
       }
       case 7: // simple
-        if (info === 20) return false;
-        if (info === 21) return true;
-        if (info === 22) return null;
+        if (info === 20)
+          return false;
+        if (info === 21)
+          return true;
+        if (info === 22)
+          return null;
         throw new Error(`Unsupported CBOR simple value: ${info}`);
       default:
         throw new Error(`Unsupported CBOR major type: ${major}`);
@@ -430,8 +446,10 @@ class CborReader {
   }
 
   private readArgument(info: number): number {
-    if (info < 24) return info;
-    if (info === 24) return this.bytes[this.pos++];
+    if (info < 24)
+      return info;
+    if (info === 24)
+      return this.bytes[this.pos++];
     if (info === 25) {
       const v = (this.bytes[this.pos] << 8) | this.bytes[this.pos + 1];
       this.pos += 2;
@@ -441,7 +459,7 @@ class CborReader {
       const view = new DataView(
         this.bytes.buffer,
         this.bytes.byteOffset + this.pos,
-        4,
+        4
       );
       this.pos += 4;
       return view.getUint32(0, false);

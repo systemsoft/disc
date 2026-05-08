@@ -36,7 +36,7 @@ const RUN_PG = canRunPgTests();
  */
 function getPrivateMethod<T>(
   obj: CLICommands,
-  methodName: string,
+  methodName: string
 ): (...args: unknown[]) => T {
   // deno-lint-ignore no-explicit-any
   return (obj as any)[methodName].bind(obj);
@@ -44,14 +44,14 @@ function getPrivateMethod<T>(
 
 /** Parse a DSN into connection config for the raw deno-postgres Client. */
 function parseDsn(
-  dsn: string,
+  dsn: string
 ): { hostname: string; port: number; user: string; database: string; } {
   const url = new URL(dsn);
   return {
     hostname: url.hostname || "localhost",
     port: url.port ? parseInt(url.port) : 5432,
     user: url.username || "disc",
-    database: url.pathname.slice(1) || "disc_test",
+    database: url.pathname.slice(1) || "disc_test"
   };
 }
 
@@ -83,7 +83,7 @@ async function tableExists(dsn: string, tableName: string): Promise<boolean> {
         SELECT 1 FROM information_schema.tables
         WHERE table_schema = 'public' AND table_name = $1
       ) AS exists`,
-      [tableName],
+      [tableName]
     );
     return result.rows[0]?.exists ?? false;
   } finally {
@@ -113,7 +113,7 @@ Deno.test(
   type Widget {
     required name: str;
   }
-}`,
+}`
       );
 
       const commands = new CLICommands();
@@ -122,18 +122,18 @@ Deno.test(
 
       assert(
         result !== null,
-        "readSchemaFile should return non-null for valid SDL",
+        "readSchemaFile should return non-null for valid SDL"
       );
       assert(Array.isArray(result), "readSchemaFile should return an array");
       assert(
         (result as unknown[]).length > 0,
-        "readSchemaFile should return at least one module",
+        "readSchemaFile should return at least one module"
       );
     } finally {
       capture.restore();
       await cleanupTempDir(tempDir);
     }
-  },
+  }
 );
 
 // ---------------------------------------------------------------------------
@@ -153,12 +153,12 @@ Deno.test(
       assertEquals(
         result,
         null,
-        "readSchemaFile should return null for missing file",
+        "readSchemaFile should return null for missing file"
       );
     } finally {
       capture.restore();
     }
-  },
+  }
 );
 
 // ---------------------------------------------------------------------------
@@ -175,7 +175,7 @@ Deno.test(
       const schemaFile = `${tempDir}/bad.disc`;
       await Deno.writeTextFile(
         schemaFile,
-        "this is not valid SDL at all!!!",
+        "this is not valid SDL at all!!!"
       );
 
       const commands = new CLICommands();
@@ -185,13 +185,13 @@ Deno.test(
       assertEquals(
         result,
         null,
-        "readSchemaFile should return null for invalid SDL",
+        "readSchemaFile should return null for invalid SDL"
       );
     } finally {
       capture.restore();
       await cleanupTempDir(tempDir);
     }
-  },
+  }
 );
 
 // ---------------------------------------------------------------------------
@@ -213,27 +213,27 @@ Deno.test(
     required label: str;
     active: bool;
   }
-}`,
+}`
       );
 
       const commands = new CLICommands();
       const readSchema = getPrivateMethod<Promise<Context.Schema | null>>(
         commands,
-        "readSchemaAsCompilerSchema",
+        "readSchemaAsCompilerSchema"
       );
       const schema = await readSchema(schemaFile);
 
       assert(
         schema !== null,
-        "readSchemaAsCompilerSchema should return non-null",
+        "readSchemaAsCompilerSchema should return non-null"
       );
       assertExists(
         (schema as Context.Schema).types,
-        "Schema should have a types map",
+        "Schema should have a types map"
       );
       assert(
         (schema as Context.Schema).types.size > 0,
-        "Schema types map should have entries",
+        "Schema types map should have entries"
       );
 
       const gadget = (schema as Context.Schema).types.get("Gadget");
@@ -241,21 +241,21 @@ Deno.test(
       assertEquals(gadget!.kind, "object");
       assert(
         gadget!.properties.has("label"),
-        "Gadget should have label property",
+        "Gadget should have label property"
       );
       assert(
         gadget!.properties.has("active"),
-        "Gadget should have active property",
+        "Gadget should have active property"
       );
       assert(
         gadget!.properties.has("id"),
-        "Gadget should have implicit id property",
+        "Gadget should have implicit id property"
       );
     } finally {
       capture.restore();
       await cleanupTempDir(tempDir);
     }
-  },
+  }
 );
 
 // ---------------------------------------------------------------------------
@@ -271,19 +271,19 @@ Deno.test(
       const commands = new CLICommands();
       const readSchema = getPrivateMethod(
         commands,
-        "readSchemaAsCompilerSchema",
+        "readSchemaAsCompilerSchema"
       );
       const result = await readSchema("/tmp/nonexistent-schema-file.disc");
 
       assertEquals(
         result,
         null,
-        "readSchemaAsCompilerSchema should return null for missing file",
+        "readSchemaAsCompilerSchema should return null for missing file"
       );
     } finally {
       capture.restore();
     }
-  },
+  }
 );
 
 // ---------------------------------------------------------------------------
@@ -307,7 +307,7 @@ Deno.test(
     required name: str;
     color: str;
   }
-}`,
+}`
       );
 
       const commands = new CLICommands();
@@ -319,7 +319,7 @@ Deno.test(
         "no-queries": false,
         "no-mutations": false,
         "no-client": false,
-        "no-format": false,
+        "no-format": false
       });
 
       // The console output should reference Widget (from the SDL), not
@@ -329,13 +329,13 @@ Deno.test(
 
       assert(
         allOutput.includes("Widget"),
-        `Codegen output should reference 'Widget' from SDL, got:\n${allOutput}`,
+        `Codegen output should reference 'Widget' from SDL, got:\n${allOutput}`
       );
     } finally {
       capture.restore();
       await cleanupTempDir(tempDir);
     }
-  },
+  }
 );
 
 // ---------------------------------------------------------------------------
@@ -350,14 +350,14 @@ Deno.test(
       host: "localhost",
       port: 0,
       schema,
-      dryRun: true,
+      dryRun: true
     });
 
     assertExists(server, "DiscServer should be created with schema option");
 
     const config = server.get_config();
     assertEquals(config.host, "localhost");
-  },
+  }
 );
 
 // ---------------------------------------------------------------------------
@@ -369,14 +369,14 @@ Deno.test(
     const server = new DiscServer({
       host: "localhost",
       port: 0,
-      dryRun: true,
+      dryRun: true
     });
 
     assertExists(server, "DiscServer should be created without schema option");
 
     const config = server.get_config();
     assertEquals(config.host, "localhost");
-  },
+  }
 );
 
 // ---------------------------------------------------------------------------
@@ -392,7 +392,7 @@ Deno.test(
 
     const config = server.get_config();
     assertExists(config, "Server should have a config");
-  },
+  }
 );
 
 // ---------------------------------------------------------------------------
@@ -414,14 +414,14 @@ Deno.test(
     required name: str;
     required serial_number: str;
   }
-}`,
+}`
       );
 
       const commands = new CLICommands();
       await commands.migrate({
         _: ["migrate"],
         schema: schemaFile,
-        "dry-run": true,
+        "dry-run": true
       });
 
       // Dry-run should complete without error. The output should mention
@@ -432,13 +432,13 @@ Deno.test(
       // The command should produce some output about the migration
       assert(
         allOutput.length > 0,
-        "Dry-run migrate should produce console output",
+        "Dry-run migrate should produce console output"
       );
     } finally {
       capture.restore();
       await cleanupTempDir(tempDir);
     }
-  },
+  }
 );
 
 // ---------------------------------------------------------------------------
@@ -460,7 +460,7 @@ Deno.test(
     required name: str;
     weight: float64;
   }
-}`,
+}`
       );
 
       // Use dry-run + create to avoid needing a real database.
@@ -470,7 +470,7 @@ Deno.test(
         _: ["migrate"],
         create: true,
         schema: schemaFile,
-        "dry-run": true,
+        "dry-run": true
       });
 
       // Create mode should show the plan info
@@ -478,17 +478,17 @@ Deno.test(
       const allOutput = logs.join("\n");
 
       assert(
-        allOutput.includes("Migration Plan")
-          || allOutput.includes("Creating new migration")
-          || allOutput.includes("DRY RUN")
-          || allOutput.includes("migration"),
-        `migrate --create should show plan info, got:\n${allOutput}`,
+        allOutput.includes("Migration Plan") ||
+          allOutput.includes("Creating new migration") ||
+          allOutput.includes("DRY RUN") ||
+          allOutput.includes("migration"),
+        `migrate --create should show plan info, got:\n${allOutput}`
       );
     } finally {
       capture.restore();
       await cleanupTempDir(tempDir);
     }
-  },
+  }
 );
 
 // ---------------------------------------------------------------------------
@@ -511,7 +511,8 @@ Deno.test(
     const parseResult = manager.parseSDL(sdl);
 
     assertEquals(parseResult.ok, true, "parseSDL should succeed");
-    if (!parseResult.ok) return;
+    if (!parseResult.ok)
+      return;
 
     const schema = manager.modulesToSchema(parseResult.value);
 
@@ -542,7 +543,7 @@ Deno.test(
     const idProp = doohickey!.properties.get("id");
     assertExists(idProp, "Should have implicit id property");
     assertEquals(idProp!.type, "uuid");
-  },
+  }
 );
 
 // =========================================================================
@@ -561,7 +562,7 @@ Deno.test({
       connectionString: dsn,
       minConnections: 1,
       maxConnections: 3,
-      cleanupInterval: 0,
+      cleanupInterval: 0
     });
     await pool.initialize();
 
@@ -584,7 +585,7 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema should succeed: ${result.ok ? "" : (result as { ok: false; error: Error; }).error.message}`,
+        `applySchema should succeed: ${result.ok ? "" : (result as { ok: false; error: Error; }).error.message}`
       );
 
       // Verify the table was created
@@ -592,7 +593,7 @@ Deno.test({
       assertEquals(
         exists,
         true,
-        `Table '${expectedTable}' should exist after applySchema`,
+        `Table '${expectedTable}' should exist after applySchema`
       );
 
       await manager.close();
@@ -601,11 +602,11 @@ Deno.test({
         dsn,
         expectedTable,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -620,7 +621,7 @@ Deno.test({
       connectionString: dsn,
       minConnections: 1,
       maxConnections: 3,
-      cleanupInterval: 0,
+      cleanupInterval: 0
     });
     await pool.initialize();
 
@@ -642,34 +643,36 @@ Deno.test({
       // Step 1: Plan the schema migration
       const planResult = manager.planSchema(sdl);
       assertEquals(planResult.ok, true, "planSchema should succeed");
-      if (!planResult.ok) return;
+      if (!planResult.ok)
+        return;
 
       const plan = planResult.value;
       assert(
         plan.migrations.length > 0,
-        "Plan should have at least one migration",
+        "Plan should have at least one migration"
       );
       assert(
         plan.operationsCount > 0,
-        "Plan should have at least one operation",
+        "Plan should have at least one operation"
       );
 
       // Step 2: Generate DDL from the plan
       const ddlResult = manager.generateDDL(plan);
       assertEquals(ddlResult.ok, true, "generateDDL should succeed");
-      if (!ddlResult.ok) return;
+      if (!ddlResult.ok)
+        return;
 
       const ddlStatements = ddlResult.value;
       assert(
         ddlStatements.length > 0,
-        "DDL should have at least one statement",
+        "DDL should have at least one statement"
       );
 
       // Check that DDL contains a CREATE TABLE
       const allDDL = ddlStatements.join("\n");
       assert(
         allDDL.includes("CREATE TABLE"),
-        `DDL should contain CREATE TABLE, got:\n${allDDL}`,
+        `DDL should contain CREATE TABLE, got:\n${allDDL}`
       );
 
       // Step 3: Apply the schema
@@ -681,7 +684,7 @@ Deno.test({
       assertEquals(
         exists,
         true,
-        `Table '${expectedTable}' should exist after apply`,
+        `Table '${expectedTable}' should exist after apply`
       );
 
       await manager.close();
@@ -690,11 +693,11 @@ Deno.test({
         dsn,
         expectedTable,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -709,7 +712,7 @@ Deno.test({
       connectionString: dsn,
       minConnections: 1,
       maxConnections: 3,
-      cleanupInterval: 0,
+      cleanupInterval: 0
     });
     await pool.initialize();
 
@@ -752,11 +755,11 @@ Deno.test({
       assertExists(typeDef, "Schema should contain TestCliEvolve");
       assert(
         typeDef!.properties.has("name"),
-        "Should still have name property",
+        "Should still have name property"
       );
       assert(
         typeDef!.properties.has("description"),
-        "Should now have description property",
+        "Should now have description property"
       );
 
       await manager.close();
@@ -765,9 +768,9 @@ Deno.test({
         dsn,
         expectedTable,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });

@@ -32,7 +32,7 @@ import {
   type WebAuthnLoginFinish,
   type WebAuthnLoginOptions,
   type WebAuthnRegistrationFinish,
-  type WebAuthnRegistrationOptions,
+  type WebAuthnRegistrationOptions
 } from "./types.ts";
 import * as webAuthn from "./webauthn.ts";
 import { newEventId, newEventTimestamp, type WebhookEvent, WebhookSender, type WebhookSenderOptions } from "./webhooks.ts";
@@ -93,7 +93,7 @@ const AUTH_CONFIG_DEFAULTS: Omit<Required<AuthConfig>, ConditionalAuthFields> = 
   // Off by default — preserves anti-enumeration on `requestMagicLink`.
   // Operators opt in when they want passwordless first-time signup
   // through the magic-link flow. (gh/geldata#7311)
-  allowImplicitSignup: false,
+  allowImplicitSignup: false
 };
 
 export class AuthProvider implements IAuthProvider {
@@ -124,7 +124,7 @@ export class AuthProvider implements IAuthProvider {
     config: AuthConfig,
     db: DatabaseInterface,
     webhookOptions: WebhookSenderOptions = {},
-    captchaOptions: RemoteCaptchaVerifierOptions = {},
+    captchaOptions: RemoteCaptchaVerifierOptions = {}
   ) {
     // Merge defaults with user config, dropping `undefined` values from
     // `config` so an explicitly-undefined optional doesn't shadow the
@@ -137,7 +137,7 @@ export class AuthProvider implements IAuthProvider {
     }
     this.config = {
       ...AUTH_CONFIG_DEFAULTS,
-      ...overrides,
+      ...overrides
     } as ResolvedAuthConfig;
     // gh/geldata#7938 / #8028: branding + magic-link URL template are
     // validated at construction so a misconfig (CRLF in `appName`,
@@ -148,11 +148,11 @@ export class AuthProvider implements IAuthProvider {
     this.db = db;
     this.webhookSender = new WebhookSender(
       this.config.webhooks ?? [],
-      webhookOptions,
+      webhookOptions
     );
     this.captchaVerifier = createCaptchaVerifier(
       this.config.captcha,
-      captchaOptions,
+      captchaOptions
     );
 
     // Wire the in-process SMTP email listener if either side of the
@@ -166,7 +166,7 @@ export class AuthProvider implements IAuthProvider {
     if (this.config.smtp || this.config.emailBaseUrl) {
       if (!this.config.emailBaseUrl) {
         authLogger.error(
-          "smtp configured without emailBaseUrl — refusing to register email listener (templates need a base URL to construct links)",
+          "smtp configured without emailBaseUrl — refusing to register email listener (templates need a base URL to construct links)"
         );
       } else {
         const mailer = createMailer(this.config.smtp);
@@ -175,8 +175,8 @@ export class AuthProvider implements IAuthProvider {
           branding: this.config.branding,
           magicLinkUrlTemplate: this.config.magicLinkUrlTemplate,
           mailer,
-          resolveRecipient: (identityId) => this.resolveEmailRecipient(identityId),
-          templates: this.config.emailTemplates,
+          resolveRecipient: identityId => this.resolveEmailRecipient(identityId),
+          templates: this.config.emailTemplates
         });
         this.webhookSender.addListener(listener.handle.bind(listener));
       }
@@ -193,11 +193,13 @@ export class AuthProvider implements IAuthProvider {
   private async resolveEmailRecipient(identityId: string): Promise<string | null> {
     const result = await this.db.query(
       "SELECT email, is_anonymous FROM users WHERE id = ?",
-      [identityId],
+      [identityId]
     );
-    if (result.rows.length === 0) return null;
+    if (result.rows.length === 0)
+      return null;
     const row = result.rows[0];
-    if (row.is_anonymous) return null;
+    if (row.is_anonymous)
+      return null;
     return typeof row.email === "string" && row.email.length > 0 ? row.email : null;
   }
 
@@ -218,7 +220,7 @@ export class AuthProvider implements IAuthProvider {
     if (this.config.jwtAlgorithm === "RS256") {
       const { signKey, verifyKey } = await importRsaKeys(
         this.config.jwtPrivateKey,
-        this.config.jwtPublicKey,
+        this.config.jwtPublicKey
       );
       this.signKey = signKey;
       this.verifyKey = verifyKey;
@@ -234,7 +236,7 @@ export class AuthProvider implements IAuthProvider {
     const dummySalt = await bcrypt.genSalt(this.config.bcryptRounds);
     this.dummyPasswordHash = await bcrypt.hash(
       "disc-timing-mitigation-not-a-real-password",
-      dummySalt,
+      dummySalt
     );
 
     // Create tables if they don't exist
@@ -274,7 +276,7 @@ export class AuthProvider implements IAuthProvider {
     // initialize() going (the feature simply won't work).
     try {
       await this.db.execute(
-        `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_anonymous BOOLEAN DEFAULT FALSE`,
+        `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_anonymous BOOLEAN DEFAULT FALSE`
       );
     } catch {
       // pre-existing column, or backend doesn't support IF NOT EXISTS
@@ -498,49 +500,49 @@ export class AuthProvider implements IAuthProvider {
 
     // Indexes
     await this.db.execute(
-      `CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id)`
     );
     await this.db.execute(
-      `CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)`,
+      `CREATE INDEX IF NOT EXISTS idx_sessions_token ON sessions(token)`
     );
     await this.db.execute(
-      `CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`,
+      `CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`
     );
     await this.db.execute(
-      `CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`,
+      `CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)`
     );
     await this.db.execute(
-      `CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON user_roles(user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON user_roles(user_id)`
     );
     await this.db.execute(
-      `CREATE INDEX IF NOT EXISTS idx_user_roles_role_name ON user_roles(role_name)`,
+      `CREATE INDEX IF NOT EXISTS idx_user_roles_role_name ON user_roles(role_name)`
     );
     await this.db.execute(
-      `CREATE INDEX IF NOT EXISTS idx_mfa_challenges_user_id ON mfa_challenges(user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_mfa_challenges_user_id ON mfa_challenges(user_id)`
     );
     await this.db.execute(
-      `CREATE INDEX IF NOT EXISTS idx_mfa_challenges_expires_at ON mfa_challenges(expires_at)`,
+      `CREATE INDEX IF NOT EXISTS idx_mfa_challenges_expires_at ON mfa_challenges(expires_at)`
     );
     await this.db.execute(
-      `CREATE INDEX IF NOT EXISTS idx_magic_link_user_id ON magic_link_tokens(user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_magic_link_user_id ON magic_link_tokens(user_id)`
     );
     await this.db.execute(
-      `CREATE INDEX IF NOT EXISTS idx_magic_link_expires_at ON magic_link_tokens(expires_at)`,
+      `CREATE INDEX IF NOT EXISTS idx_magic_link_expires_at ON magic_link_tokens(expires_at)`
     );
     await this.db.execute(
-      `CREATE INDEX IF NOT EXISTS idx_magic_code_user_id ON magic_code_tokens(user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_magic_code_user_id ON magic_code_tokens(user_id)`
     );
     await this.db.execute(
-      `CREATE INDEX IF NOT EXISTS idx_magic_code_expires_at ON magic_code_tokens(expires_at)`,
+      `CREATE INDEX IF NOT EXISTS idx_magic_code_expires_at ON magic_code_tokens(expires_at)`
     );
     await this.db.execute(
-      `CREATE INDEX IF NOT EXISTS idx_recovery_codes_user_id ON recovery_codes(user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_recovery_codes_user_id ON recovery_codes(user_id)`
     );
     await this.db.execute(
-      `CREATE INDEX IF NOT EXISTS idx_webauthn_credentials_user_id ON webauthn_credentials(user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_webauthn_credentials_user_id ON webauthn_credentials(user_id)`
     );
     await this.db.execute(
-      `CREATE INDEX IF NOT EXISTS idx_webauthn_challenges_expires_at ON webauthn_challenges(expires_at)`,
+      `CREATE INDEX IF NOT EXISTS idx_webauthn_challenges_expires_at ON webauthn_challenges(expires_at)`
     );
   }
 
@@ -549,7 +551,7 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "Registration is disabled",
         AuthErrorCode.REGISTRATION_DISABLED,
-        403,
+        403
       );
     }
 
@@ -559,21 +561,21 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         passwordValidation.errors.join(", "),
         AuthErrorCode.PASSWORD_TOO_WEAK,
-        400,
+        400
       );
     }
 
     // Check if user exists
     const existing = await this.db.query(
       "SELECT id FROM users WHERE email = ? OR (username = ? AND username IS NOT NULL)",
-      [data.email, data.username || null],
+      [data.email, data.username || null]
     );
 
     if (existing.rows.length > 0) {
       throw new AuthError(
         "User already exists",
         AuthErrorCode.USER_ALREADY_EXISTS,
-        409,
+        409
       );
     }
 
@@ -601,8 +603,8 @@ export class AuthProvider implements IAuthProvider {
         passwordHash,
         !this.config.requireEmailVerification,
         data.metadata ? JSON.stringify(data.metadata) : null,
-        verificationTokenHash,
-      ],
+        verificationTokenHash
+      ]
     );
 
     // Get created user
@@ -621,7 +623,7 @@ export class AuthProvider implements IAuthProvider {
     // Update session with tokens
     await this.db.execute(
       "UPDATE sessions SET token = ?, refresh_token = ? WHERE id = ?",
-      [token, refreshToken, session.id],
+      [token, refreshToken, session.id]
     );
 
     session.token = token;
@@ -630,7 +632,7 @@ export class AuthProvider implements IAuthProvider {
     this.auditEvent("registered", userId, {
       sessionId: session.id,
       ipAddress: data.meta?.ipAddress,
-      requireEmailVerification: this.config.requireEmailVerification,
+      requireEmailVerification: this.config.requireEmailVerification
     });
 
     // Webhook: a new identity exists. Fire before EmailVerificationRequested
@@ -640,7 +642,7 @@ export class AuthProvider implements IAuthProvider {
       eventType: "IdentityCreated",
       eventId: newEventId(),
       timestamp: newEventTimestamp(),
-      identityId: userId,
+      identityId: userId
     });
 
     if (verificationToken) {
@@ -649,7 +651,7 @@ export class AuthProvider implements IAuthProvider {
         eventId: newEventId(),
         timestamp: newEventTimestamp(),
         identityId: userId,
-        verificationToken,
+        verificationToken
       });
     }
 
@@ -663,7 +665,7 @@ export class AuthProvider implements IAuthProvider {
       email: user.email,
       createdAt: user.createdAt,
       emailVerified: user.emailVerified,
-      roles,
+      roles
     };
 
     return {
@@ -673,7 +675,7 @@ export class AuthProvider implements IAuthProvider {
       refreshToken: refreshToken,
       identity,
       // Plaintext for the caller to email; DB has the hash.
-      ...(verificationToken ? { verificationToken } : {}),
+      ...(verificationToken ? { verificationToken } : {})
     };
   }
 
@@ -703,7 +705,7 @@ export class AuthProvider implements IAuthProvider {
         id, email, username, password_hash, email_verified, is_anonymous
       ) VALUES (?, ?, ?, ?, ?, ?)
     `,
-      [userId, syntheticEmail, null, syntheticHash, false, true],
+      [userId, syntheticEmail, null, syntheticHash, false, true]
     );
 
     const user = await this.getUser(userId);
@@ -716,28 +718,28 @@ export class AuthProvider implements IAuthProvider {
     const refreshToken = this.generateToken();
     await this.db.execute(
       "UPDATE sessions SET token = ?, refresh_token = ? WHERE id = ?",
-      [token, refreshToken, session.id],
+      [token, refreshToken, session.id]
     );
     session.token = token;
     session.refreshToken = refreshToken;
 
     this.auditEvent("registered_anonymous", userId, {
       sessionId: session.id,
-      ipAddress: meta?.ipAddress,
+      ipAddress: meta?.ipAddress
     });
 
     this.fireWebhook({
       eventType: "IdentityCreated",
       eventId: newEventId(),
       timestamp: newEventTimestamp(),
-      identityId: userId,
+      identityId: userId
     });
 
     return {
       user: this.sanitizeUser(user),
       session,
       token,
-      refreshToken,
+      refreshToken
     };
   }
 
@@ -755,7 +757,7 @@ export class AuthProvider implements IAuthProvider {
    */
   async upgradeAnonymous(
     anonymousUserId: string,
-    data: RegisterData,
+    data: RegisterData
   ): Promise<AuthResponse> {
     // Validate password before doing any work.
     const passwordValidation = this.validatePassword(data.password);
@@ -763,39 +765,39 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         passwordValidation.errors.join(", "),
         AuthErrorCode.PASSWORD_TOO_WEAK,
-        400,
+        400
       );
     }
 
     const lookup = await this.db.query(
       "SELECT id, is_anonymous FROM users WHERE id = ?",
-      [anonymousUserId],
+      [anonymousUserId]
     );
     if (lookup.rows.length === 0) {
       throw new AuthError(
         "Anonymous identity not found",
         AuthErrorCode.USER_NOT_FOUND,
-        404,
+        404
       );
     }
     if (!lookup.rows[0].is_anonymous) {
       throw new AuthError(
         "User is not an anonymous identity",
         AuthErrorCode.INVALID_OPERATION,
-        400,
+        400
       );
     }
 
     // Refuse if the target email is already taken by someone else.
     const existing = await this.db.query(
       "SELECT id FROM users WHERE (email = ? OR (username = ? AND username IS NOT NULL)) AND id != ?",
-      [data.email, data.username || null, anonymousUserId],
+      [data.email, data.username || null, anonymousUserId]
     );
     if (existing.rows.length > 0) {
       throw new AuthError(
         "User already exists",
         AuthErrorCode.USER_ALREADY_EXISTS,
-        409,
+        409
       );
     }
 
@@ -819,8 +821,8 @@ export class AuthProvider implements IAuthProvider {
         !this.config.requireEmailVerification,
         data.metadata ? JSON.stringify(data.metadata) : null,
         verificationTokenHash,
-        anonymousUserId,
-      ],
+        anonymousUserId
+      ]
     );
 
     const user = await this.getUser(anonymousUserId);
@@ -835,14 +837,14 @@ export class AuthProvider implements IAuthProvider {
     const refreshToken = this.generateToken();
     await this.db.execute(
       "UPDATE sessions SET token = ?, refresh_token = ? WHERE id = ?",
-      [token, refreshToken, session.id],
+      [token, refreshToken, session.id]
     );
     session.token = token;
     session.refreshToken = refreshToken;
 
     this.auditEvent("upgraded_anonymous", user.id, {
       sessionId: session.id,
-      ipAddress: data.meta?.ipAddress,
+      ipAddress: data.meta?.ipAddress
     });
 
     if (verificationToken) {
@@ -851,7 +853,7 @@ export class AuthProvider implements IAuthProvider {
         eventId: newEventId(),
         timestamp: newEventTimestamp(),
         identityId: user.id,
-        verificationToken,
+        verificationToken
       });
     }
 
@@ -860,7 +862,7 @@ export class AuthProvider implements IAuthProvider {
       session,
       token,
       refreshToken,
-      ...(verificationToken ? { verificationToken } : {}),
+      ...(verificationToken ? { verificationToken } : {})
     };
   }
 
@@ -879,12 +881,12 @@ export class AuthProvider implements IAuthProvider {
       await this.runDummyCompare(credentials.password);
       this.auditEvent("login_failed", null, {
         reason: "no_such_user",
-        email: credentials.email,
+        email: credentials.email
       });
       throw new AuthError(
         "Invalid credentials",
         AuthErrorCode.INVALID_CREDENTIALS,
-        401,
+        401
       );
     }
 
@@ -897,7 +899,7 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "User account is inactive",
         AuthErrorCode.USER_INACTIVE,
-        403,
+        403
       );
     }
 
@@ -909,7 +911,7 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "Invalid credentials",
         AuthErrorCode.INVALID_CREDENTIALS,
-        401,
+        401
       );
     }
 
@@ -919,20 +921,20 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "Email not verified",
         AuthErrorCode.EMAIL_NOT_VERIFIED,
-        403,
+        403
       );
     }
 
     // Verify password
     const passwordMatch = await bcrypt.compare(
       credentials.password,
-      user.passwordHash,
+      user.passwordHash
     );
     if (!passwordMatch) {
       throw new AuthError(
         "Invalid credentials",
         AuthErrorCode.INVALID_CREDENTIALS,
-        401,
+        401
       );
     }
 
@@ -943,7 +945,7 @@ export class AuthProvider implements IAuthProvider {
     if (await this.hasConfirmedTOTP(user.id)) {
       const challenge = await this.issueMfaChallenge(user.id);
       this.auditEvent("login_mfa_challenge_issued", user.id, {
-        ipAddress: credentials.meta?.ipAddress,
+        ipAddress: credentials.meta?.ipAddress
       });
       return challenge;
     }
@@ -958,49 +960,49 @@ export class AuthProvider implements IAuthProvider {
    */
   private async completeLogin(
     user: User,
-    meta?: RequestMeta,
+    meta?: RequestMeta
   ): Promise<AuthResponse> {
     const session = await this.createSession(user.id, meta);
     const token = await this.generateJWT(user);
     const refreshToken = this.generateToken();
     await this.db.execute(
       "UPDATE sessions SET token = ?, refresh_token = ? WHERE id = ?",
-      [token, refreshToken, session.id],
+      [token, refreshToken, session.id]
     );
     session.token = token;
     session.refreshToken = refreshToken;
 
     this.auditEvent("login_succeeded", user.id, {
       sessionId: session.id,
-      ipAddress: meta?.ipAddress,
+      ipAddress: meta?.ipAddress
     });
 
     this.fireWebhook({
       eventType: "IdentityAuthenticated",
       eventId: newEventId(),
       timestamp: newEventTimestamp(),
-      identityId: user.id,
+      identityId: user.id
     });
 
     return {
       user: this.sanitizeUser(user),
       session,
       token,
-      refreshToken,
+      refreshToken
     };
   }
 
   async logout(sessionId: string): Promise<void> {
     await this.db.execute(
       "UPDATE sessions SET revoked = TRUE WHERE id = ?",
-      [sessionId],
+      [sessionId]
     );
     this.auditEvent("session_revoked", null, { sessionId, reason: "logout" });
   }
 
   async refresh(
     refreshToken: string,
-    meta?: RequestMeta,
+    meta?: RequestMeta
   ): Promise<AuthResponse> {
     // Find session by refresh token. Pull `ip_address` and `user_agent`
     // alongside the rest so we can flag a refresh from a new origin.
@@ -1013,14 +1015,14 @@ export class AuthProvider implements IAuthProvider {
        FROM sessions s
        JOIN users u ON s.user_id = u.id
        WHERE s.refresh_token = ? AND s.revoked = FALSE`,
-      [refreshToken],
+      [refreshToken]
     );
 
     if (result.rows.length === 0) {
       throw new AuthError(
         "Invalid refresh token",
         AuthErrorCode.INVALID_REFRESH_TOKEN,
-        401,
+        401
       );
     }
 
@@ -1039,21 +1041,21 @@ export class AuthProvider implements IAuthProvider {
       this.auditEvent("session_refreshed_from_new_ip", user.id, {
         sessionId: oldSessionId,
         previousIp: prevIp,
-        currentIp: meta.ipAddress,
+        currentIp: meta.ipAddress
       });
     }
     if (meta?.userAgent && prevUa && meta.userAgent !== prevUa) {
       this.auditEvent("session_refreshed_from_new_user_agent", user.id, {
         sessionId: oldSessionId,
         previousUserAgent: prevUa,
-        currentUserAgent: meta.userAgent,
+        currentUserAgent: meta.userAgent
       });
     }
 
     // Revoke old session
     await this.db.execute(
       "UPDATE sessions SET revoked = TRUE WHERE id = ?",
-      [oldSessionId],
+      [oldSessionId]
     );
 
     // Create new session — carry forward the new request's IP/UA so the
@@ -1068,7 +1070,7 @@ export class AuthProvider implements IAuthProvider {
     // Update session with tokens
     await this.db.execute(
       "UPDATE sessions SET token = ?, refresh_token = ? WHERE id = ?",
-      [token, newRefreshToken, session.id],
+      [token, newRefreshToken, session.id]
     );
 
     session.token = token;
@@ -1077,14 +1079,14 @@ export class AuthProvider implements IAuthProvider {
     this.auditEvent("session_refreshed", user.id, {
       sessionId: session.id,
       previousSessionId: oldSessionId,
-      ipAddress: meta?.ipAddress,
+      ipAddress: meta?.ipAddress
     });
 
     return {
       user: this.sanitizeUser(user),
       session,
       token,
-      refreshToken: newRefreshToken,
+      refreshToken: newRefreshToken
     };
   }
 
@@ -1107,14 +1109,14 @@ export class AuthProvider implements IAuthProvider {
            WHERE token = ?
              AND revoked = FALSE
              AND expires_at > CURRENT_TIMESTAMP`,
-        [token],
+        [token]
       );
 
       if (result.rows.length === 0) {
         throw new AuthError(
           "Session expired or revoked",
           AuthErrorCode.SESSION_EXPIRED,
-          401,
+          401
         );
       }
 
@@ -1124,16 +1126,19 @@ export class AuthProvider implements IAuthProvider {
         throw new AuthError(
           "Token expired",
           AuthErrorCode.TOKEN_EXPIRED,
-          401,
+          401
         );
       }
 
       // Stamp last_activity so inactivity-based reaping can work.
       // Best-effort — verification succeeds even if this UPDATE fails.
-      await this.db.execute(
-        "UPDATE sessions SET last_activity = CURRENT_TIMESTAMP WHERE id = ?",
-        [result.rows[0].id],
-      ).catch(() => {});
+      await this
+        .db
+        .execute(
+          "UPDATE sessions SET last_activity = CURRENT_TIMESTAMP WHERE id = ?",
+          [result.rows[0].id]
+        )
+        .catch(() => {});
 
       return payload;
     } catch (error) {
@@ -1142,7 +1147,7 @@ export class AuthProvider implements IAuthProvider {
         // TOKEN_EXPIRED events is visible to operators alongside the
         // other auth-event audit log.
         this.auditEvent("token_verification_failed", null, {
-          code: error.code,
+          code: error.code
         });
         throw error;
       }
@@ -1150,21 +1155,21 @@ export class AuthProvider implements IAuthProvider {
       const errorMsg = error instanceof Error ? error.message.toLowerCase() : "";
       if (errorMsg.includes("expired") || errorMsg.includes("exp")) {
         this.auditEvent("token_verification_failed", null, {
-          code: AuthErrorCode.TOKEN_EXPIRED,
+          code: AuthErrorCode.TOKEN_EXPIRED
         });
         throw new AuthError(
           "Token expired",
           AuthErrorCode.TOKEN_EXPIRED,
-          401,
+          401
         );
       }
       this.auditEvent("token_verification_failed", null, {
-        code: AuthErrorCode.INVALID_TOKEN,
+        code: AuthErrorCode.INVALID_TOKEN
       });
       throw new AuthError(
         "Invalid token",
         AuthErrorCode.INVALID_TOKEN,
-        401,
+        401
       );
     }
   }
@@ -1172,7 +1177,7 @@ export class AuthProvider implements IAuthProvider {
   async getUser(userId: string): Promise<User | null> {
     const result = await this.db.query(
       "SELECT * FROM users WHERE id = ?",
-      [userId],
+      [userId]
     );
 
     if (result.rows.length === 0) {
@@ -1191,27 +1196,27 @@ export class AuthProvider implements IAuthProvider {
    */
   async adminSetPassword(
     userIdOrEmail: string,
-    newPassword: string,
+    newPassword: string
   ): Promise<void> {
     const passwordValidation = this.validatePassword(newPassword);
     if (!passwordValidation.valid) {
       throw new AuthError(
         passwordValidation.errors.join(", "),
         AuthErrorCode.PASSWORD_TOO_WEAK,
-        400,
+        400
       );
     }
 
     // Look up by id or email (email is unique)
     const lookup = await this.db.query(
       "SELECT id FROM users WHERE id = ? OR email = ?",
-      [userIdOrEmail, userIdOrEmail],
+      [userIdOrEmail, userIdOrEmail]
     );
     if (lookup.rows.length === 0) {
       throw new AuthError(
         `User not found: ${userIdOrEmail}`,
         AuthErrorCode.USER_NOT_FOUND,
-        404,
+        404
       );
     }
     const userId = lookup.rows[0].id as string;
@@ -1221,7 +1226,7 @@ export class AuthProvider implements IAuthProvider {
 
     await this.db.execute(
       "UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-      [newPasswordHash, userId],
+      [newPasswordHash, userId]
     );
 
     this.auditEvent("password_admin_set", userId);
@@ -1238,23 +1243,24 @@ export class AuthProvider implements IAuthProvider {
   async resolveUserId(userIdOrEmail: string): Promise<string | null> {
     const result = await this.db.query(
       "SELECT id FROM users WHERE id = ? OR email = ?",
-      [userIdOrEmail, userIdOrEmail],
+      [userIdOrEmail, userIdOrEmail]
     );
-    if (result.rows.length === 0) return null;
+    if (result.rows.length === 0)
+      return null;
     return result.rows[0].id as string;
   }
 
   async updatePassword(
     userId: string,
     oldPassword: string,
-    newPassword: string,
+    newPassword: string
   ): Promise<void> {
     const user = await this.getUser(userId);
     if (!user) {
       throw new AuthError(
         "User not found",
         AuthErrorCode.USER_NOT_FOUND,
-        404,
+        404
       );
     }
 
@@ -1264,7 +1270,7 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "Invalid credentials",
         AuthErrorCode.INVALID_CREDENTIALS,
-        401,
+        401
       );
     }
 
@@ -1274,7 +1280,7 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         passwordValidation.errors.join(", "),
         AuthErrorCode.PASSWORD_TOO_WEAK,
-        400,
+        400
       );
     }
 
@@ -1285,7 +1291,7 @@ export class AuthProvider implements IAuthProvider {
     // Update password
     await this.db.execute(
       "UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-      [newPasswordHash, userId],
+      [newPasswordHash, userId]
     );
 
     this.auditEvent("password_updated", userId);
@@ -1297,7 +1303,7 @@ export class AuthProvider implements IAuthProvider {
   async resetPasswordRequest(email: string): Promise<string> {
     const result = await this.db.query(
       "SELECT id, email_verified FROM users WHERE email = ?",
-      [email],
+      [email]
     );
 
     if (result.rows.length === 0) {
@@ -1307,7 +1313,7 @@ export class AuthProvider implements IAuthProvider {
       // Audit the no-op so brute-force probing is still visible — the
       // event explicitly records `userId: null`.
       this.auditEvent("password_reset_requested", null, {
-        result: "no_such_user",
+        result: "no_such_user"
       });
       return "";
     }
@@ -1320,11 +1326,11 @@ export class AuthProvider implements IAuthProvider {
     // Same silent-return shape as no-such-user so callers can't tell
     // verified-vs-unverified by response.
     if (
-      this.config.requireEmailVerification
-      && !result.rows[0].email_verified
+      this.config.requireEmailVerification &&
+      !result.rows[0].email_verified
     ) {
       this.auditEvent("password_reset_requested", userId, {
-        result: "unverified_account_blocked",
+        result: "unverified_account_blocked"
       });
       return "";
     }
@@ -1335,7 +1341,7 @@ export class AuthProvider implements IAuthProvider {
 
     await this.db.execute(
       "UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE id = ?",
-      [resetTokenHash, expires.toISOString(), userId],
+      [resetTokenHash, expires.toISOString(), userId]
     );
 
     this.auditEvent("password_reset_requested", userId);
@@ -1345,7 +1351,7 @@ export class AuthProvider implements IAuthProvider {
       eventId: newEventId(),
       timestamp: newEventTimestamp(),
       identityId: userId,
-      resetToken,
+      resetToken
     });
 
     // Return plaintext to caller (they send it via email); only the hash
@@ -1357,14 +1363,14 @@ export class AuthProvider implements IAuthProvider {
     const resetTokenHash = await this.hashToken(resetToken);
     const result = await this.db.query(
       "SELECT id FROM users WHERE reset_token = ? AND reset_token_expires > CURRENT_TIMESTAMP",
-      [resetTokenHash],
+      [resetTokenHash]
     );
 
     if (result.rows.length === 0) {
       throw new AuthError(
         "Invalid or expired reset token",
         AuthErrorCode.INVALID_TOKEN,
-        400,
+        400
       );
     }
 
@@ -1376,7 +1382,7 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         passwordValidation.errors.join(", "),
         AuthErrorCode.PASSWORD_TOO_WEAK,
-        400,
+        400
       );
     }
 
@@ -1388,7 +1394,7 @@ export class AuthProvider implements IAuthProvider {
     await this.db.execute(
       `UPDATE users SET password_hash = ?, reset_token = NULL,
        reset_token_expires = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      [passwordHash, userId],
+      [passwordHash, userId]
     );
 
     this.auditEvent("password_reset", userId);
@@ -1411,12 +1417,14 @@ export class AuthProvider implements IAuthProvider {
   async resendVerification(email: string): Promise<string | null> {
     const result = await this.db.query(
       "SELECT id, email_verified FROM users WHERE email = ?",
-      [email],
+      [email]
     );
 
-    if (result.rows.length === 0) return null;
+    if (result.rows.length === 0)
+      return null;
     const row = result.rows[0];
-    if (row.email_verified) return null;
+    if (row.email_verified)
+      return null;
 
     const userId = row.id;
     const verificationToken = this.generateToken();
@@ -1428,7 +1436,7 @@ export class AuthProvider implements IAuthProvider {
     await this.db.execute(
       `UPDATE users SET verification_token = ?,
        updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-      [verificationTokenHash, userId],
+      [verificationTokenHash, userId]
     );
 
     this.auditEvent("email_verification_resent", userId);
@@ -1438,7 +1446,7 @@ export class AuthProvider implements IAuthProvider {
       eventId: newEventId(),
       timestamp: newEventTimestamp(),
       identityId: userId,
-      verificationToken,
+      verificationToken
     });
 
     return verificationToken;
@@ -1448,14 +1456,14 @@ export class AuthProvider implements IAuthProvider {
     const verificationTokenHash = await this.hashToken(verificationToken);
     const result = await this.db.query(
       "SELECT id FROM users WHERE verification_token = ?",
-      [verificationTokenHash],
+      [verificationTokenHash]
     );
 
     if (result.rows.length === 0) {
       throw new AuthError(
         "Invalid verification token",
         AuthErrorCode.INVALID_TOKEN,
-        400,
+        400
       );
     }
 
@@ -1464,7 +1472,7 @@ export class AuthProvider implements IAuthProvider {
     await this.db.execute(
       `UPDATE users SET email_verified = TRUE, verification_token = NULL,
        updated_at = CURRENT_TIMESTAMP WHERE verification_token = ?`,
-      [verificationTokenHash],
+      [verificationTokenHash]
     );
 
     this.auditEvent("email_verified", userId);
@@ -1473,14 +1481,14 @@ export class AuthProvider implements IAuthProvider {
       eventType: "EmailVerified",
       eventId: newEventId(),
       timestamp: newEventTimestamp(),
-      identityId: userId,
+      identityId: userId
     });
   }
 
   async revokeAllSessions(userId: string): Promise<void> {
     await this.db.execute(
       "UPDATE sessions SET revoked = TRUE WHERE user_id = ?",
-      [userId],
+      [userId]
     );
     this.auditEvent("sessions_revoked_all", userId);
   }
@@ -1495,18 +1503,18 @@ export class AuthProvider implements IAuthProvider {
   async createRole(name: string, description?: string): Promise<void> {
     const existing = await this.db.query(
       "SELECT name FROM roles WHERE name = ?",
-      [name],
+      [name]
     );
     if (existing.rows.length > 0) {
       await this.db.execute(
         "UPDATE roles SET description = ? WHERE name = ?",
-        [description ?? null, name],
+        [description ?? null, name]
       );
       return;
     }
     await this.db.execute(
       "INSERT INTO roles (name, description) VALUES (?, ?)",
-      [name, description ?? null],
+      [name, description ?? null]
     );
     this.auditEvent("role_created", null, { role: name });
   }
@@ -1524,11 +1532,11 @@ export class AuthProvider implements IAuthProvider {
   async listRoles(): Promise<Array<{ name: string; description?: string; }>> {
     const result = await this.db.query(
       "SELECT name, description FROM roles ORDER BY name",
-      [],
+      []
     );
-    return result.rows.map((r) => ({
+    return result.rows.map(r => ({
       name: r.name,
-      description: r.description ?? undefined,
+      description: r.description ?? undefined
     }));
   }
 
@@ -1541,34 +1549,35 @@ export class AuthProvider implements IAuthProvider {
   async assignRole(userId: string, roleName: string): Promise<void> {
     const role = await this.db.query(
       "SELECT name FROM roles WHERE name = ?",
-      [roleName],
+      [roleName]
     );
     if (role.rows.length === 0) {
       throw new AuthError(
         `Role not found: ${roleName}`,
         AuthErrorCode.INVALID_OPERATION,
-        404,
+        404
       );
     }
     const user = await this.db.query(
       "SELECT id FROM users WHERE id = ?",
-      [userId],
+      [userId]
     );
     if (user.rows.length === 0) {
       throw new AuthError(
         "User not found",
         AuthErrorCode.USER_NOT_FOUND,
-        404,
+        404
       );
     }
     const existing = await this.db.query(
       "SELECT user_id FROM user_roles WHERE user_id = ? AND role_name = ?",
-      [userId, roleName],
+      [userId, roleName]
     );
-    if (existing.rows.length > 0) return;
+    if (existing.rows.length > 0)
+      return;
     await this.db.execute(
       "INSERT INTO user_roles (user_id, role_name) VALUES (?, ?)",
-      [userId, roleName],
+      [userId, roleName]
     );
     this.auditEvent("role_assigned", userId, { role: roleName });
   }
@@ -1581,7 +1590,7 @@ export class AuthProvider implements IAuthProvider {
   async revokeRole(userId: string, roleName: string): Promise<void> {
     await this.db.execute(
       "DELETE FROM user_roles WHERE user_id = ? AND role_name = ?",
-      [userId, roleName],
+      [userId, roleName]
     );
     this.auditEvent("role_revoked", userId, { role: roleName });
   }
@@ -1590,16 +1599,16 @@ export class AuthProvider implements IAuthProvider {
   async getUserRoles(userId: string): Promise<string[]> {
     const result = await this.db.query(
       "SELECT role_name FROM user_roles WHERE user_id = ? ORDER BY role_name",
-      [userId],
+      [userId]
     );
-    return result.rows.map((r) => r.role_name);
+    return result.rows.map(r => r.role_name);
   }
 
   /** True iff `userId` has been granted `roleName`. */
   async userHasRole(userId: string, roleName: string): Promise<boolean> {
     const result = await this.db.query(
       "SELECT 1 FROM user_roles WHERE user_id = ? AND role_name = ?",
-      [userId, roleName],
+      [userId, roleName]
     );
     return result.rows.length > 0;
   }
@@ -1620,13 +1629,13 @@ export class AuthProvider implements IAuthProvider {
   async enrollTOTP(userId: string): Promise<TotpEnrollment> {
     const userResult = await this.db.query(
       "SELECT id, email, username FROM users WHERE id = ?",
-      [userId],
+      [userId]
     );
     if (userResult.rows.length === 0) {
       throw new AuthError(
         "User not found",
         AuthErrorCode.USER_NOT_FOUND,
-        404,
+        404
       );
     }
     const user = userResult.rows[0];
@@ -1634,24 +1643,24 @@ export class AuthProvider implements IAuthProvider {
 
     const existing = await this.db.query(
       "SELECT user_id FROM mfa_totp WHERE user_id = ?",
-      [userId],
+      [userId]
     );
     if (existing.rows.length > 0) {
       await this.db.execute(
         "UPDATE mfa_totp SET secret = ?, confirmed_at = NULL WHERE user_id = ?",
-        [secret, userId],
+        [secret, userId]
       );
     } else {
       await this.db.execute(
         "INSERT INTO mfa_totp (user_id, secret) VALUES (?, ?)",
-        [userId, secret],
+        [userId, secret]
       );
     }
 
     const otpauthUri = buildOtpauthUri({
       issuer: this.config.jwtIssuer || "Disc",
       accountName: user.username || user.email,
-      secret,
+      secret
     });
     this.auditEvent("totp_enrollment_started", userId);
     return { secret, otpauthUri };
@@ -1668,13 +1677,13 @@ export class AuthProvider implements IAuthProvider {
   async confirmTOTP(userId: string, code: string): Promise<void> {
     const result = await this.db.query(
       "SELECT secret FROM mfa_totp WHERE user_id = ?",
-      [userId],
+      [userId]
     );
     if (result.rows.length === 0) {
       throw new AuthError(
         "TOTP not enrolled",
         AuthErrorCode.INVALID_OPERATION,
-        400,
+        400
       );
     }
     const offset = await verifyTOTP(result.rows[0].secret, code);
@@ -1683,12 +1692,12 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "Invalid TOTP code",
         AuthErrorCode.INVALID_CREDENTIALS,
-        401,
+        401
       );
     }
     await this.db.execute(
       "UPDATE mfa_totp SET confirmed_at = CURRENT_TIMESTAMP WHERE user_id = ?",
-      [userId],
+      [userId]
     );
     this.auditEvent("totp_confirmed", userId);
   }
@@ -1702,7 +1711,7 @@ export class AuthProvider implements IAuthProvider {
   async disableTOTP(userId: string): Promise<void> {
     await this.db.execute(
       "DELETE FROM mfa_totp WHERE user_id = ?",
-      [userId],
+      [userId]
     );
     this.auditEvent("totp_disabled", userId);
   }
@@ -1718,20 +1727,20 @@ export class AuthProvider implements IAuthProvider {
   async loginWithTOTP(
     challengeToken: string,
     code: string,
-    meta?: RequestMeta,
+    meta?: RequestMeta
   ): Promise<AuthResponse> {
     const tokenHash = await this.hashToken(challengeToken);
     const result = await this.db.query(
       `SELECT user_id, expires_at, consumed_at
        FROM mfa_challenges
        WHERE token_hash = ?`,
-      [tokenHash],
+      [tokenHash]
     );
     if (result.rows.length === 0) {
       throw new AuthError(
         "Invalid or expired MFA challenge",
         AuthErrorCode.INVALID_TOKEN,
-        401,
+        401
       );
     }
     const row = result.rows[0];
@@ -1739,7 +1748,7 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "MFA challenge already used",
         AuthErrorCode.INVALID_TOKEN,
-        401,
+        401
       );
     }
     const expiresAt = new Date(row.expires_at);
@@ -1747,13 +1756,13 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "MFA challenge expired",
         AuthErrorCode.TOKEN_EXPIRED,
-        401,
+        401
       );
     }
 
     const totp = await this.db.query(
       "SELECT secret FROM mfa_totp WHERE user_id = ?",
-      [row.user_id],
+      [row.user_id]
     );
     if (totp.rows.length === 0) {
       // User disabled MFA between password-step and code-step. Be
@@ -1761,18 +1770,18 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "MFA not configured",
         AuthErrorCode.INVALID_OPERATION,
-        400,
+        400
       );
     }
     const offset = await verifyTOTP(totp.rows[0].secret, code);
     if (offset === null) {
       this.auditEvent("login_mfa_failed", row.user_id, {
-        ipAddress: meta?.ipAddress,
+        ipAddress: meta?.ipAddress
       });
       throw new AuthError(
         "Invalid TOTP code",
         AuthErrorCode.INVALID_CREDENTIALS,
-        401,
+        401
       );
     }
 
@@ -1780,7 +1789,7 @@ export class AuthProvider implements IAuthProvider {
     // marker keeps the row around for forensics but blocks reuse.
     await this.db.execute(
       "UPDATE mfa_challenges SET consumed_at = CURRENT_TIMESTAMP WHERE token_hash = ?",
-      [tokenHash],
+      [tokenHash]
     );
 
     const user = await this.getUser(row.user_id);
@@ -1788,7 +1797,7 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "User not found",
         AuthErrorCode.USER_NOT_FOUND,
-        404,
+        404
       );
     }
     return await this.completeLogin(user, meta);
@@ -1798,7 +1807,7 @@ export class AuthProvider implements IAuthProvider {
   private async hasConfirmedTOTP(userId: string): Promise<boolean> {
     const result = await this.db.query(
       "SELECT 1 FROM mfa_totp WHERE user_id = ? AND confirmed_at IS NOT NULL",
-      [userId],
+      [userId]
     );
     return result.rows.length > 0;
   }
@@ -1815,12 +1824,12 @@ export class AuthProvider implements IAuthProvider {
     await this.db.execute(
       `INSERT INTO mfa_challenges (token_hash, user_id, expires_at)
        VALUES (?, ?, ?)`,
-      [tokenHash, userId, expiresAt.toISOString()],
+      [tokenHash, userId, expiresAt.toISOString()]
     );
     return {
       mfaRequired: true,
       challengeToken: plaintext,
-      factors: ["totp"],
+      factors: ["totp"]
     };
   }
 
@@ -1840,18 +1849,18 @@ export class AuthProvider implements IAuthProvider {
    */
   async requestMagicLink(
     email: string,
-    meta?: RequestMeta,
+    meta?: RequestMeta
   ): Promise<string> {
     const plaintext = this.generateToken();
     const result = await this.db.query(
       "SELECT id, active, is_anonymous FROM users WHERE email = ?",
-      [email],
+      [email]
     );
     const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 min
     if (
-      result.rows.length > 0
-      && result.rows[0].active
-      && !result.rows[0].is_anonymous
+      result.rows.length > 0 &&
+      result.rows[0].active &&
+      !result.rows[0].is_anonymous
     ) {
       const tokenHash = await this.hashToken(plaintext);
       await this.db.execute(
@@ -1861,18 +1870,18 @@ export class AuthProvider implements IAuthProvider {
           tokenHash,
           result.rows[0].id,
           expiresAt.toISOString(),
-          meta?.ipAddress ?? null,
-        ],
+          meta?.ipAddress ?? null
+        ]
       );
       this.auditEvent("magic_link_requested", result.rows[0].id, {
-        ipAddress: meta?.ipAddress,
+        ipAddress: meta?.ipAddress
       });
       this.fireWebhook({
         eventType: "MagicLinkRequested",
         eventId: newEventId(),
         timestamp: newEventTimestamp(),
         identityId: result.rows[0].id,
-        magicLinkToken: plaintext,
+        magicLinkToken: plaintext
       });
     } else if (this.config.allowImplicitSignup) {
       // Implicit-signup path (gh/geldata#7311). Persist the token bound
@@ -1887,25 +1896,25 @@ export class AuthProvider implements IAuthProvider {
           tokenHash,
           email,
           expiresAt.toISOString(),
-          meta?.ipAddress ?? null,
-        ],
+          meta?.ipAddress ?? null
+        ]
       );
       this.auditEvent("magic_link_signup_requested", null, {
         email,
-        ipAddress: meta?.ipAddress,
+        ipAddress: meta?.ipAddress
       });
       this.fireWebhook({
         eventType: "MagicLinkSignupRequested",
         eventId: newEventId(),
         timestamp: newEventTimestamp(),
         pendingEmail: email,
-        magicLinkToken: plaintext,
+        magicLinkToken: plaintext
       });
     } else {
       this.auditEvent("magic_link_requested", null, {
         result: "no_such_user",
         email,
-        ipAddress: meta?.ipAddress,
+        ipAddress: meta?.ipAddress
       });
     }
     return plaintext;
@@ -1920,14 +1929,14 @@ export class AuthProvider implements IAuthProvider {
    */
   async consumeMagicLink(
     token: string,
-    meta?: RequestMeta,
+    meta?: RequestMeta
   ): Promise<LoginResult> {
     const tokenHash = await this.hashToken(token);
     const result = await this.db.query(
       `SELECT user_id, expires_at, consumed_at
        FROM magic_link_tokens
        WHERE token_hash = ?`,
-      [tokenHash],
+      [tokenHash]
     );
     if (result.rows.length === 0) {
       // Fall through to the implicit-signup table (gh/geldata#7311).
@@ -1940,14 +1949,14 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "Magic link already used",
         AuthErrorCode.INVALID_TOKEN,
-        401,
+        401
       );
     }
     if (new Date(row.expires_at).getTime() < Date.now()) {
       throw new AuthError(
         "Magic link expired",
         AuthErrorCode.TOKEN_EXPIRED,
-        401,
+        401
       );
     }
 
@@ -1955,7 +1964,7 @@ export class AuthProvider implements IAuthProvider {
     // step fails, the link is single-use — the user requests a new one.
     await this.db.execute(
       "UPDATE magic_link_tokens SET consumed_at = CURRENT_TIMESTAMP WHERE token_hash = ?",
-      [tokenHash],
+      [tokenHash]
     );
 
     const user = await this.getUser(row.user_id);
@@ -1963,20 +1972,20 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "User not found",
         AuthErrorCode.USER_NOT_FOUND,
-        404,
+        404
       );
     }
 
     if (await this.hasConfirmedTOTP(user.id)) {
       const challenge = await this.issueMfaChallenge(user.id);
       this.auditEvent("magic_link_mfa_challenge_issued", user.id, {
-        ipAddress: meta?.ipAddress,
+        ipAddress: meta?.ipAddress
       });
       return challenge;
     }
 
     this.auditEvent("magic_link_consumed", user.id, {
-      ipAddress: meta?.ipAddress,
+      ipAddress: meta?.ipAddress
     });
     return await this.completeLogin(user, meta);
   }
@@ -1992,19 +2001,19 @@ export class AuthProvider implements IAuthProvider {
    */
   private async consumeMagicLinkSignup(
     tokenHash: string,
-    meta?: RequestMeta,
+    meta?: RequestMeta
   ): Promise<LoginResult> {
     const result = await this.db.query(
       `SELECT pending_email, expires_at, consumed_at
        FROM magic_link_signup_tokens
        WHERE token_hash = ?`,
-      [tokenHash],
+      [tokenHash]
     );
     if (result.rows.length === 0) {
       throw new AuthError(
         "Invalid or expired magic link",
         AuthErrorCode.INVALID_TOKEN,
-        401,
+        401
       );
     }
     const row = result.rows[0];
@@ -2012,14 +2021,14 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "Magic link already used",
         AuthErrorCode.INVALID_TOKEN,
-        401,
+        401
       );
     }
     if (new Date(row.expires_at).getTime() < Date.now()) {
       throw new AuthError(
         "Magic link expired",
         AuthErrorCode.TOKEN_EXPIRED,
-        401,
+        401
       );
     }
 
@@ -2029,7 +2038,7 @@ export class AuthProvider implements IAuthProvider {
     // call returns "already used".
     await this.db.execute(
       "UPDATE magic_link_signup_tokens SET consumed_at = CURRENT_TIMESTAMP WHERE token_hash = ?",
-      [tokenHash],
+      [tokenHash]
     );
 
     // It's possible the user registered via another path between
@@ -2037,7 +2046,7 @@ export class AuthProvider implements IAuthProvider {
     // the existing record rather than failing the redemption.
     const existing = await this.db.query(
       "SELECT id, active, is_anonymous FROM users WHERE email = ?",
-      [row.pending_email],
+      [row.pending_email]
     );
     let userId: string;
     if (existing.rows.length > 0 && existing.rows[0].active && !existing.rows[0].is_anonymous) {
@@ -2047,17 +2056,17 @@ export class AuthProvider implements IAuthProvider {
       await this.db.execute(
         `INSERT INTO users (id, email, password_hash, email_verified, active)
          VALUES (?, ?, ?, ?, ?)`,
-        [userId, row.pending_email, "", true, true],
+        [userId, row.pending_email, "", true, true]
       );
       this.auditEvent("identity_created", userId, {
         via: "magic_link_signup",
-        ipAddress: meta?.ipAddress,
+        ipAddress: meta?.ipAddress
       });
       this.fireWebhook({
         eventType: "IdentityCreated",
         eventId: newEventId(),
         timestamp: newEventTimestamp(),
-        identityId: userId,
+        identityId: userId
       });
     }
 
@@ -2066,12 +2075,12 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "User not found after signup",
         AuthErrorCode.USER_NOT_FOUND,
-        500,
+        500
       );
     }
 
     this.auditEvent("magic_link_signup_consumed", userId, {
-      ipAddress: meta?.ipAddress,
+      ipAddress: meta?.ipAddress
     });
     return await this.completeLogin(user, meta);
   }
@@ -2093,18 +2102,18 @@ export class AuthProvider implements IAuthProvider {
    */
   async requestMagicCode(
     email: string,
-    meta?: RequestMeta,
+    meta?: RequestMeta
   ): Promise<string> {
     const code = this.generateNumericCode(6);
     const result = await this.db.query(
       "SELECT id, active, is_anonymous FROM users WHERE email = ?",
-      [email],
+      [email]
     );
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min
     if (
-      result.rows.length > 0
-      && result.rows[0].active
-      && !result.rows[0].is_anonymous
+      result.rows.length > 0 &&
+      result.rows[0].active &&
+      !result.rows[0].is_anonymous
     ) {
       const tokenHash = await this.hashToken(code);
       await this.db.execute(
@@ -2116,24 +2125,24 @@ export class AuthProvider implements IAuthProvider {
           result.rows[0].id,
           expiresAt.toISOString(),
           0,
-          meta?.ipAddress ?? null,
-        ],
+          meta?.ipAddress ?? null
+        ]
       );
       this.auditEvent("magic_code_requested", result.rows[0].id, {
-        ipAddress: meta?.ipAddress,
+        ipAddress: meta?.ipAddress
       });
       this.fireWebhook({
         eventType: "MagicCodeRequested",
         eventId: newEventId(),
         timestamp: newEventTimestamp(),
         identityId: result.rows[0].id,
-        magicCode: code,
+        magicCode: code
       });
     } else {
       this.auditEvent("magic_code_requested", null, {
         result: "no_such_user",
         email,
-        ipAddress: meta?.ipAddress,
+        ipAddress: meta?.ipAddress
       });
     }
     return code;
@@ -2160,27 +2169,27 @@ export class AuthProvider implements IAuthProvider {
   async verifyMagicCode(
     email: string,
     code: string,
-    meta?: RequestMeta,
+    meta?: RequestMeta
   ): Promise<LoginResult> {
     const tokenHash = await this.hashToken(code);
     const userResult = await this.db.query(
       "SELECT id, active, is_anonymous FROM users WHERE email = ?",
-      [email],
+      [email]
     );
 
     // Anti-enumeration: do a dummy hash for unknown emails so the
     // wall-clock posture matches the happy path. Same rationale as
     // `runDummyCompare` for password login (P1-35 / gh/geldata#9137).
     if (
-      userResult.rows.length === 0
-      || !userResult.rows[0].active
-      || userResult.rows[0].is_anonymous
+      userResult.rows.length === 0 ||
+      !userResult.rows[0].active ||
+      userResult.rows[0].is_anonymous
     ) {
       await this.hashToken(code);
       throw new AuthError(
         "Invalid or expired code",
         AuthErrorCode.INVALID_TOKEN,
-        401,
+        401
       );
     }
 
@@ -2196,7 +2205,7 @@ export class AuthProvider implements IAuthProvider {
        WHERE user_id = ? AND token_hash = ?
        ORDER BY created_at DESC
        LIMIT 1`,
-      [userId, tokenHash],
+      [userId, tokenHash]
     );
 
     if (codeResult.rows.length === 0) {
@@ -2208,11 +2217,11 @@ export class AuthProvider implements IAuthProvider {
          WHERE user_id = ? AND consumed_at IS NULL
          ORDER BY created_at DESC
          LIMIT 1`,
-        [userId],
+        [userId]
       );
       if (
-        liveResult.rows.length > 0
-        && new Date(liveResult.rows[0].expires_at).getTime() > Date.now()
+        liveResult.rows.length > 0 &&
+        new Date(liveResult.rows[0].expires_at).getTime() > Date.now()
       ) {
         const newAttempts = Number(liveResult.rows[0].attempts) + 1;
         if (newAttempts >= 5) {
@@ -2220,25 +2229,25 @@ export class AuthProvider implements IAuthProvider {
             `UPDATE magic_code_tokens
              SET attempts = ?, consumed_at = CURRENT_TIMESTAMP
              WHERE id = ?`,
-            [newAttempts, liveResult.rows[0].id],
+            [newAttempts, liveResult.rows[0].id]
           );
           this.auditEvent("magic_code_lockout", userId, {
-            ipAddress: meta?.ipAddress,
+            ipAddress: meta?.ipAddress
           });
         } else {
           await this.db.execute(
             "UPDATE magic_code_tokens SET attempts = ? WHERE id = ?",
-            [newAttempts, liveResult.rows[0].id],
+            [newAttempts, liveResult.rows[0].id]
           );
         }
       }
       this.auditEvent("magic_code_invalid", userId, {
-        ipAddress: meta?.ipAddress,
+        ipAddress: meta?.ipAddress
       });
       throw new AuthError(
         "Invalid or expired code",
         AuthErrorCode.INVALID_TOKEN,
-        401,
+        401
       );
     }
 
@@ -2246,23 +2255,23 @@ export class AuthProvider implements IAuthProvider {
     if (row.consumed_at) {
       this.auditEvent("magic_code_invalid", userId, {
         ipAddress: meta?.ipAddress,
-        reason: "consumed",
+        reason: "consumed"
       });
       throw new AuthError(
         "Code already used",
         AuthErrorCode.INVALID_TOKEN,
-        401,
+        401
       );
     }
     if (new Date(row.expires_at).getTime() < Date.now()) {
       this.auditEvent("magic_code_invalid", userId, {
         ipAddress: meta?.ipAddress,
-        reason: "expired",
+        reason: "expired"
       });
       throw new AuthError(
         "Code expired",
         AuthErrorCode.TOKEN_EXPIRED,
-        401,
+        401
       );
     }
 
@@ -2271,7 +2280,7 @@ export class AuthProvider implements IAuthProvider {
     // requests a new one.
     await this.db.execute(
       "UPDATE magic_code_tokens SET consumed_at = CURRENT_TIMESTAMP WHERE id = ?",
-      [row.id],
+      [row.id]
     );
 
     const user = await this.getUser(userId);
@@ -2279,20 +2288,20 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "User not found",
         AuthErrorCode.USER_NOT_FOUND,
-        404,
+        404
       );
     }
 
     if (await this.hasConfirmedTOTP(user.id)) {
       const challenge = await this.issueMfaChallenge(user.id);
       this.auditEvent("magic_code_mfa_challenge_issued", user.id, {
-        ipAddress: meta?.ipAddress,
+        ipAddress: meta?.ipAddress
       });
       return challenge;
     }
 
     this.auditEvent("magic_code_consumed", user.id, {
-      ipAddress: meta?.ipAddress,
+      ipAddress: meta?.ipAddress
     });
     return await this.completeLogin(user, meta);
   }
@@ -2311,24 +2320,24 @@ export class AuthProvider implements IAuthProvider {
    */
   async generateRecoveryCodes(
     userId: string,
-    count = 8,
+    count = 8
   ): Promise<string[]> {
     const userResult = await this.db.query(
       "SELECT id FROM users WHERE id = ?",
-      [userId],
+      [userId]
     );
     if (userResult.rows.length === 0) {
       throw new AuthError(
         "User not found",
         AuthErrorCode.USER_NOT_FOUND,
-        404,
+        404
       );
     }
     if (count < 1 || count > 50) {
       throw new AuthError(
         "count must be between 1 and 50",
         AuthErrorCode.INVALID_OPERATION,
-        400,
+        400
       );
     }
 
@@ -2336,7 +2345,7 @@ export class AuthProvider implements IAuthProvider {
     // "issue a new set", never "append to the existing set".
     await this.db.execute(
       "DELETE FROM recovery_codes WHERE user_id = ?",
-      [userId],
+      [userId]
     );
 
     const plaintext: string[] = [];
@@ -2346,7 +2355,7 @@ export class AuthProvider implements IAuthProvider {
       const hash = await this.hashToken(code);
       await this.db.execute(
         "INSERT INTO recovery_codes (code_hash, user_id) VALUES (?, ?)",
-        [hash, userId],
+        [hash, userId]
       );
     }
 
@@ -2358,7 +2367,7 @@ export class AuthProvider implements IAuthProvider {
   async recoveryCodesRemaining(userId: string): Promise<number> {
     const result = await this.db.query(
       "SELECT code_hash FROM recovery_codes WHERE user_id = ? AND used_at IS NULL",
-      [userId],
+      [userId]
     );
     return result.rows.length;
   }
@@ -2374,20 +2383,23 @@ export class AuthProvider implements IAuthProvider {
    */
   async consumeRecoveryCode(
     userId: string,
-    code: string,
+    code: string
   ): Promise<boolean> {
     const hash = await this.hashToken(normalizeRecoveryCode(code));
     const result = await this.db.query(
       "SELECT user_id, used_at FROM recovery_codes WHERE code_hash = ?",
-      [hash],
+      [hash]
     );
-    if (result.rows.length === 0) return false;
+    if (result.rows.length === 0)
+      return false;
     const row = result.rows[0];
-    if (row.user_id !== userId) return false;
-    if (row.used_at) return false;
+    if (row.user_id !== userId)
+      return false;
+    if (row.used_at)
+      return false;
     await this.db.execute(
       "UPDATE recovery_codes SET used_at = CURRENT_TIMESTAMP WHERE code_hash = ?",
-      [hash],
+      [hash]
     );
     this.auditEvent("recovery_code_consumed", userId);
     return true;
@@ -2401,20 +2413,20 @@ export class AuthProvider implements IAuthProvider {
   async loginWithRecoveryCode(
     challengeToken: string,
     code: string,
-    meta?: RequestMeta,
+    meta?: RequestMeta
   ): Promise<AuthResponse> {
     const tokenHash = await this.hashToken(challengeToken);
     const result = await this.db.query(
       `SELECT user_id, expires_at, consumed_at
        FROM mfa_challenges
        WHERE token_hash = ?`,
-      [tokenHash],
+      [tokenHash]
     );
     if (result.rows.length === 0) {
       throw new AuthError(
         "Invalid or expired MFA challenge",
         AuthErrorCode.INVALID_TOKEN,
-        401,
+        401
       );
     }
     const row = result.rows[0];
@@ -2422,32 +2434,32 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "MFA challenge already used",
         AuthErrorCode.INVALID_TOKEN,
-        401,
+        401
       );
     }
     if (new Date(row.expires_at).getTime() < Date.now()) {
       throw new AuthError(
         "MFA challenge expired",
         AuthErrorCode.TOKEN_EXPIRED,
-        401,
+        401
       );
     }
 
     const burned = await this.consumeRecoveryCode(row.user_id, code);
     if (!burned) {
       this.auditEvent("login_recovery_code_failed", row.user_id, {
-        ipAddress: meta?.ipAddress,
+        ipAddress: meta?.ipAddress
       });
       throw new AuthError(
         "Invalid recovery code",
         AuthErrorCode.INVALID_CREDENTIALS,
-        401,
+        401
       );
     }
 
     await this.db.execute(
       "UPDATE mfa_challenges SET consumed_at = CURRENT_TIMESTAMP WHERE token_hash = ?",
-      [tokenHash],
+      [tokenHash]
     );
 
     const user = await this.getUser(row.user_id);
@@ -2455,7 +2467,7 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "User not found",
         AuthErrorCode.USER_NOT_FOUND,
-        404,
+        404
       );
     }
     return await this.completeLogin(user, meta);
@@ -2474,24 +2486,24 @@ export class AuthProvider implements IAuthProvider {
    * authenticator refuses to re-register the same key.
    */
   async beginWebAuthnRegistration(
-    userId: string,
+    userId: string
   ): Promise<WebAuthnRegistrationOptions> {
     if (!this.config.webauthn) {
       throw new AuthError(
         "WebAuthn not configured (set AuthConfig.webauthn)",
         AuthErrorCode.INVALID_OPERATION,
-        500,
+        500
       );
     }
     const userResult = await this.db.query(
       "SELECT id, email, username FROM users WHERE id = ?",
-      [userId],
+      [userId]
     );
     if (userResult.rows.length === 0) {
       throw new AuthError(
         "User not found",
         AuthErrorCode.USER_NOT_FOUND,
-        404,
+        404
       );
     }
     const user = userResult.rows[0];
@@ -2505,12 +2517,12 @@ export class AuthProvider implements IAuthProvider {
         webAuthn.base64UrlEncode(challenge),
         "register",
         userId,
-        new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-      ],
+        new Date(Date.now() + 5 * 60 * 1000).toISOString()
+      ]
     );
     const existing = await this.db.query(
       "SELECT credential_id FROM webauthn_credentials WHERE user_id = ?",
-      [userId],
+      [userId]
     );
     this.auditEvent("webauthn_registration_started", userId);
     // Discoverable-credential preference (gh/geldata#7196). Defaults to
@@ -2525,12 +2537,12 @@ export class AuthProvider implements IAuthProvider {
       publicKey: {
         rp: {
           id: this.config.webauthn.rpId,
-          name: this.config.webauthn.rpName,
+          name: this.config.webauthn.rpName
         },
         user: {
           id: user.id,
           name: user.email,
-          displayName: user.username || user.email,
+          displayName: user.username || user.email
         },
         challenge: webAuthn.base64UrlEncode(challenge),
         pubKeyCredParams: [{ type: "public-key", alg: webAuthn.COSE_ALG_ES256 }],
@@ -2539,13 +2551,13 @@ export class AuthProvider implements IAuthProvider {
         authenticatorSelection: {
           residentKey: requireResident ? "required" : "preferred",
           requireResidentKey: requireResident,
-          userVerification: "preferred",
+          userVerification: "preferred"
         },
-        excludeCredentials: existing.rows.map((r) => ({
+        excludeCredentials: existing.rows.map(r => ({
           id: r.credential_id,
-          type: "public-key" as const,
-        })),
-      },
+          type: "public-key" as const
+        }))
+      }
     };
   }
 
@@ -2556,24 +2568,24 @@ export class AuthProvider implements IAuthProvider {
    * read it.
    */
   async finishWebAuthnRegistration(
-    finish: WebAuthnRegistrationFinish,
+    finish: WebAuthnRegistrationFinish
   ): Promise<{ credentialId: string; }> {
     if (!this.config.webauthn) {
       throw new AuthError(
         "WebAuthn not configured",
         AuthErrorCode.INVALID_OPERATION,
-        500,
+        500
       );
     }
     const challenge = await this.consumeWebAuthnChallenge(
       finish.challengeId,
-      "register",
+      "register"
     );
     if (!challenge.user_id) {
       throw new AuthError(
         "Registration challenge has no user binding",
         AuthErrorCode.INVALID_TOKEN,
-        401,
+        401
       );
     }
 
@@ -2584,7 +2596,7 @@ export class AuthProvider implements IAuthProvider {
       clientDataJSON: clientDataBytes,
       expectedChallenge: webAuthn.base64UrlDecode(challenge.challenge),
       expectedOrigin: this.config.webauthn.origin,
-      expectedType: "webauthn.create",
+      expectedType: "webauthn.create"
     });
 
     const parsed = webAuthn.parseAttestationObject(attestationBytes);
@@ -2593,14 +2605,14 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "WebAuthn rpIdHash mismatch",
         AuthErrorCode.INVALID_TOKEN,
-        401,
+        401
       );
     }
     if (parsed.fmt !== "none" && parsed.fmt !== "packed") {
       throw new AuthError(
         `Unsupported attestation format: ${parsed.fmt}`,
         AuthErrorCode.INVALID_OPERATION,
-        400,
+        400
       );
     }
 
@@ -2609,7 +2621,7 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "credentialId mismatch between client and authenticatorData",
         AuthErrorCode.INVALID_TOKEN,
-        401,
+        401
       );
     }
 
@@ -2623,11 +2635,11 @@ export class AuthProvider implements IAuthProvider {
         JSON.stringify(parsed.publicKey.jwk),
         parsed.publicKey.alg,
         parsed.counter,
-        finish.name ?? null,
-      ],
+        finish.name ?? null
+      ]
     );
     this.auditEvent("webauthn_registered", challenge.user_id, {
-      credentialId: credentialIdB64,
+      credentialId: credentialIdB64
     });
     return { credentialId: credentialIdB64 };
   }
@@ -2643,7 +2655,7 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "WebAuthn not configured",
         AuthErrorCode.INVALID_OPERATION,
-        500,
+        500
       );
     }
     const challenge = randomBytes(32);
@@ -2654,17 +2666,17 @@ export class AuthProvider implements IAuthProvider {
     if (email) {
       const userResult = await this.db.query(
         "SELECT id FROM users WHERE email = ? AND active = ?",
-        [email, true],
+        [email, true]
       );
       if (userResult.rows.length > 0) {
         userId = userResult.rows[0].id;
         const creds = await this.db.query(
           "SELECT credential_id FROM webauthn_credentials WHERE user_id = ?",
-          [userId],
+          [userId]
         );
-        allowCredentials = creds.rows.map((r) => ({
+        allowCredentials = creds.rows.map(r => ({
           id: r.credential_id,
-          type: "public-key" as const,
+          type: "public-key" as const
         }));
       }
     }
@@ -2677,8 +2689,8 @@ export class AuthProvider implements IAuthProvider {
         webAuthn.base64UrlEncode(challenge),
         "login",
         userId,
-        new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-      ],
+        new Date(Date.now() + 5 * 60 * 1000).toISOString()
+      ]
     );
 
     return {
@@ -2688,8 +2700,8 @@ export class AuthProvider implements IAuthProvider {
         challenge: webAuthn.base64UrlEncode(challenge),
         timeout: 60000,
         allowCredentials: allowCredentials.length > 0 ? allowCredentials : undefined,
-        userVerification: "preferred",
-      },
+        userVerification: "preferred"
+      }
     };
   }
 
@@ -2701,30 +2713,30 @@ export class AuthProvider implements IAuthProvider {
    */
   async finishWebAuthnLogin(
     finish: WebAuthnLoginFinish,
-    meta?: RequestMeta,
+    meta?: RequestMeta
   ): Promise<LoginResult> {
     if (!this.config.webauthn) {
       throw new AuthError(
         "WebAuthn not configured",
         AuthErrorCode.INVALID_OPERATION,
-        500,
+        500
       );
     }
     const challenge = await this.consumeWebAuthnChallenge(
       finish.challengeId,
-      "login",
+      "login"
     );
 
     const credResult = await this.db.query(
       `SELECT user_id, public_key_jwk, alg, counter
        FROM webauthn_credentials WHERE credential_id = ?`,
-      [finish.credentialId],
+      [finish.credentialId]
     );
     if (credResult.rows.length === 0) {
       throw new AuthError(
         "Unknown credential",
         AuthErrorCode.INVALID_TOKEN,
-        401,
+        401
       );
     }
     const cred = credResult.rows[0];
@@ -2734,7 +2746,7 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "Credential does not belong to the challenged user",
         AuthErrorCode.INVALID_TOKEN,
-        401,
+        401
       );
     }
 
@@ -2746,7 +2758,7 @@ export class AuthProvider implements IAuthProvider {
       clientDataJSON,
       expectedChallenge: webAuthn.base64UrlDecode(challenge.challenge),
       expectedOrigin: this.config.webauthn.origin,
-      expectedType: "webauthn.get",
+      expectedType: "webauthn.get"
     });
 
     const parsed = webAuthn.parseAuthenticatorData(authData);
@@ -2755,27 +2767,27 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "WebAuthn rpIdHash mismatch",
         AuthErrorCode.INVALID_TOKEN,
-        401,
+        401
       );
     }
 
     const verified = await webAuthn.verifyAssertionSignature({
       publicKey: {
         alg: cred.alg,
-        jwk: JSON.parse(cred.public_key_jwk),
+        jwk: JSON.parse(cred.public_key_jwk)
       },
       authData,
       clientDataJSON,
-      signature,
+      signature
     });
     if (!verified) {
       this.auditEvent("webauthn_signature_failed", cred.user_id, {
-        ipAddress: meta?.ipAddress,
+        ipAddress: meta?.ipAddress
       });
       throw new AuthError(
         "WebAuthn signature did not verify",
         AuthErrorCode.INVALID_CREDENTIALS,
-        401,
+        401
       );
     }
 
@@ -2786,26 +2798,26 @@ export class AuthProvider implements IAuthProvider {
       if (parsed.counter <= cred.counter) {
         this.auditEvent("webauthn_counter_regression", cred.user_id, {
           stored: cred.counter,
-          received: parsed.counter,
+          received: parsed.counter
         });
         throw new AuthError(
           "WebAuthn counter regression — possible cloned credential",
           AuthErrorCode.INVALID_TOKEN,
-          401,
+          401
         );
       }
       await this.db.execute(
         `UPDATE webauthn_credentials
          SET counter = ?, last_used_at = CURRENT_TIMESTAMP
          WHERE credential_id = ?`,
-        [parsed.counter, finish.credentialId],
+        [parsed.counter, finish.credentialId]
       );
     } else {
       await this.db.execute(
         `UPDATE webauthn_credentials
          SET last_used_at = CURRENT_TIMESTAMP
          WHERE credential_id = ?`,
-        [finish.credentialId],
+        [finish.credentialId]
       );
     }
 
@@ -2814,20 +2826,20 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "User not found",
         AuthErrorCode.USER_NOT_FOUND,
-        404,
+        404
       );
     }
 
     if (await this.hasConfirmedTOTP(user.id)) {
       const challengeOut = await this.issueMfaChallenge(user.id);
       this.auditEvent("webauthn_mfa_challenge_issued", user.id, {
-        ipAddress: meta?.ipAddress,
+        ipAddress: meta?.ipAddress
       });
       return challengeOut;
     }
 
     this.auditEvent("webauthn_login_succeeded", user.id, {
-      ipAddress: meta?.ipAddress,
+      ipAddress: meta?.ipAddress
     });
     return await this.completeLogin(user, meta);
   }
@@ -2835,11 +2847,11 @@ export class AuthProvider implements IAuthProvider {
   /** Remove a passkey from the user's account. */
   async deleteWebAuthnCredential(
     userId: string,
-    credentialId: string,
+    credentialId: string
   ): Promise<void> {
     await this.db.execute(
       "DELETE FROM webauthn_credentials WHERE user_id = ? AND credential_id = ?",
-      [userId, credentialId],
+      [userId, credentialId]
     );
     this.auditEvent("webauthn_credential_deleted", userId, { credentialId });
   }
@@ -2858,13 +2870,13 @@ export class AuthProvider implements IAuthProvider {
        FROM webauthn_credentials
        WHERE user_id = ?
        ORDER BY created_at DESC`,
-      [userId],
+      [userId]
     );
-    return result.rows.map((r) => ({
+    return result.rows.map(r => ({
       credentialId: r.credential_id,
       name: r.name ?? null,
       createdAt: String(r.created_at),
-      lastUsedAt: r.last_used_at ? String(r.last_used_at) : null,
+      lastUsedAt: r.last_used_at ? String(r.last_used_at) : null
     }));
   }
 
@@ -2874,18 +2886,18 @@ export class AuthProvider implements IAuthProvider {
    */
   private async consumeWebAuthnChallenge(
     challengeId: string,
-    purpose: "register" | "login",
+    purpose: "register" | "login"
   ): Promise<{ challenge: string; user_id: string | null; }> {
     const result = await this.db.query(
       `SELECT challenge, purpose, user_id, expires_at, consumed_at
        FROM webauthn_challenges WHERE id = ?`,
-      [challengeId],
+      [challengeId]
     );
     if (result.rows.length === 0) {
       throw new AuthError(
         "Unknown WebAuthn challenge",
         AuthErrorCode.INVALID_TOKEN,
-        401,
+        401
       );
     }
     const row = result.rows[0];
@@ -2893,33 +2905,33 @@ export class AuthProvider implements IAuthProvider {
       throw new AuthError(
         "WebAuthn challenge already used",
         AuthErrorCode.INVALID_TOKEN,
-        401,
+        401
       );
     }
     if (row.purpose !== purpose) {
       throw new AuthError(
         "WebAuthn challenge purpose mismatch",
         AuthErrorCode.INVALID_TOKEN,
-        401,
+        401
       );
     }
     if (new Date(row.expires_at).getTime() < Date.now()) {
       throw new AuthError(
         "WebAuthn challenge expired",
         AuthErrorCode.TOKEN_EXPIRED,
-        401,
+        401
       );
     }
     await this.db.execute(
       "UPDATE webauthn_challenges SET consumed_at = CURRENT_TIMESTAMP WHERE id = ?",
-      [challengeId],
+      [challengeId]
     );
     return { challenge: row.challenge, user_id: row.user_id ?? null };
   }
 
   private async createSession(
     userId: string,
-    meta?: { ipAddress?: string; userAgent?: string; },
+    meta?: { ipAddress?: string; userAgent?: string; }
   ): Promise<Session> {
     const sessionId = this.generateId();
     const expiresAt = new Date(Date.now() + this.config.sessionTimeout * 1000);
@@ -2936,20 +2948,21 @@ export class AuthProvider implements IAuthProvider {
              AND revoked = FALSE
              AND expires_at > CURRENT_TIMESTAMP
            ORDER BY created_at ASC`,
-        [userId],
+        [userId]
       );
       if (active.rows.length >= maxSessions) {
-        const toRevoke = active.rows
+        const toRevoke = active
+          .rows
           .slice(0, active.rows.length - maxSessions + 1)
-          .map((row) => row.id);
+          .map(row => row.id);
         for (const oldId of toRevoke) {
           await this.db.execute(
             "UPDATE sessions SET revoked = TRUE WHERE id = ?",
-            [oldId],
+            [oldId]
           );
           this.auditEvent("session_revoked", userId, {
             sessionId: oldId,
-            reason: "max_sessions_per_user",
+            reason: "max_sessions_per_user"
           });
         }
       }
@@ -2970,15 +2983,15 @@ export class AuthProvider implements IAuthProvider {
         // (and the audit log below) has something to work with. Missing
         // metadata is stored as NULL.
         meta?.ipAddress ?? null,
-        meta?.userAgent ?? null,
-      ],
+        meta?.userAgent ?? null
+      ]
     );
 
     // P2-23: audit the creation. Best-effort — failures in the audit
     // log must never break session creation.
     this.auditEvent("session_created", userId, {
       sessionId,
-      ipAddress: meta?.ipAddress,
+      ipAddress: meta?.ipAddress
     });
 
     return {
@@ -2986,7 +2999,7 @@ export class AuthProvider implements IAuthProvider {
       userId: userId,
       token: "",
       createdAt: new Date(),
-      expiresAt: expiresAt,
+      expiresAt: expiresAt
     };
   }
 
@@ -2998,13 +3011,13 @@ export class AuthProvider implements IAuthProvider {
   private auditEvent(
     event: string,
     userId: string | null,
-    details: Record<string, unknown> = {},
+    details: Record<string, unknown> = {}
   ): void {
     try {
       authLogger.info(`auth.${event}`, {
         event,
         userId: userId ?? "anonymous",
-        ...details,
+        ...details
       });
     } catch {
       // swallow
@@ -3017,10 +3030,10 @@ export class AuthProvider implements IAuthProvider {
    * to the auth caller. (gh/geldata#7484, ports geldata/gel#7813)
    */
   private fireWebhook(event: WebhookEvent): void {
-    void this.webhookSender.dispatch(event).catch((err) => {
+    void this.webhookSender.dispatch(event).catch(err => {
       authLogger.warn("webhook dispatch errored", {
         eventType: event.eventType,
-        error: err instanceof Error ? err.message : String(err),
+        error: err instanceof Error ? err.message : String(err)
       });
     });
   }
@@ -3028,9 +3041,9 @@ export class AuthProvider implements IAuthProvider {
   private async generateJWT(user: User): Promise<string> {
     if (!this.signKey) {
       throw new Error(
-        this.config.jwtAlgorithm === "RS256"
-          ? "Auth provider configured for verify-only (no jwtPrivateKey) — cannot mint tokens"
-          : "Auth provider not initialized",
+        this.config.jwtAlgorithm === "RS256" ?
+          "Auth provider configured for verify-only (no jwtPrivateKey) — cannot mint tokens" :
+          "Auth provider not initialized"
       );
     }
 
@@ -3044,14 +3057,15 @@ export class AuthProvider implements IAuthProvider {
       exp: now + this.config.tokenExpiry,
       iss: this.config.jwtIssuer,
       aud: this.config.jwtAudience,
-      jti: this.generateId(),
+      jti: this.generateId()
     };
-    if (roles.length > 0) payload.roles = roles;
+    if (roles.length > 0)
+      payload.roles = roles;
 
     return await create(
       { alg: this.config.jwtAlgorithm, typ: "JWT" },
       payload as any,
-      this.signKey,
+      this.signKey
     );
   }
 
@@ -3060,7 +3074,7 @@ export class AuthProvider implements IAuthProvider {
 
     if (password.length < this.config.passwordMinLength) {
       errors.push(
-        `Password must be at least ${this.config.passwordMinLength} characters`,
+        `Password must be at least ${this.config.passwordMinLength} characters`
       );
     }
 
@@ -3073,15 +3087,15 @@ export class AuthProvider implements IAuthProvider {
     }
 
     if (
-      this.config.passwordRequireSpecial
-      && !/[!@#$%^&*(),.?":{}|<>]/.test(password)
+      this.config.passwordRequireSpecial &&
+      !/[!@#$%^&*(),.?":{}|<>]/.test(password)
     ) {
       errors.push("Password must contain at least one special character");
     }
 
     return {
       valid: errors.length === 0,
-      errors,
+      errors
     };
   }
 
@@ -3096,7 +3110,7 @@ export class AuthProvider implements IAuthProvider {
       emailVerified: Boolean(row.email_verified),
       active: Boolean(row.active),
       metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
-      isAnonymous: row.is_anonymous === undefined ? false : Boolean(row.is_anonymous),
+      isAnonymous: row.is_anonymous === undefined ? false : Boolean(row.is_anonymous)
     };
   }
 
@@ -3115,7 +3129,8 @@ export class AuthProvider implements IAuthProvider {
    * dummy compare matches; we only care that bcrypt did the work.
    */
   private async runDummyCompare(input: string): Promise<void> {
-    if (!this.dummyPasswordHash) return;
+    if (!this.dummyPasswordHash)
+      return;
     await bcrypt.compare(input, this.dummyPasswordHash);
   }
 
@@ -3126,8 +3141,9 @@ export class AuthProvider implements IAuthProvider {
   private generateToken(): string {
     const bytes = new Uint8Array(32);
     crypto.getRandomValues(bytes);
-    return Array.from(bytes)
-      .map((b) => b.toString(16).padStart(2, "0"))
+    return Array
+      .from(bytes)
+      .map(b => b.toString(16).padStart(2, "0"))
       .join("");
   }
 
@@ -3171,8 +3187,9 @@ export class AuthProvider implements IAuthProvider {
   private async hashToken(plaintext: string): Promise<string> {
     const bytes = new TextEncoder().encode(plaintext);
     const digest = await crypto.subtle.digest("SHA-256", bytes);
-    return Array.from(new Uint8Array(digest))
-      .map((b) => b.toString(16).padStart(2, "0"))
+    return Array
+      .from(new Uint8Array(digest))
+      .map(b => b.toString(16).padStart(2, "0"))
       .join("");
   }
 }
@@ -3186,9 +3203,11 @@ function randomBytes(n: number): Uint8Array {
 }
 
 function byteArraysEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false;
+  if (a.length !== b.length)
+    return false;
   let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  for (let i = 0; i < a.length; i++)
+    diff |= a[i] ^ b[i];
   return diff === 0;
 }
 
@@ -3221,7 +3240,8 @@ function generateRecoveryCode(): string {
  */
 function normalizeRecoveryCode(input: string): string {
   const cleaned = input.toUpperCase().replace(/[^0-9A-Z]/g, "");
-  if (cleaned.length !== 10) return input; // let the lookup fail
+  if (cleaned.length !== 10)
+    return input; // let the lookup fail
   return `${cleaned.slice(0, 5)}-${cleaned.slice(5)}`;
 }
 
@@ -3240,83 +3260,83 @@ function validateAuthConfig(config: ResolvedAuthConfig): void {
   // (rounds=15 is already ~1s/hash on commodity hardware) is what we
   // enforce — beyond that, registration becomes a DoS amplifier.
   if (
-    !Number.isInteger(config.bcryptRounds)
-    || config.bcryptRounds < 4
-    || config.bcryptRounds > 15
+    !Number.isInteger(config.bcryptRounds) ||
+    config.bcryptRounds < 4 ||
+    config.bcryptRounds > 15
   ) {
     throw new Error(
-      `AuthProvider: bcryptRounds must be an integer in [4, 15]; got ${config.bcryptRounds}`,
+      `AuthProvider: bcryptRounds must be an integer in [4, 15]; got ${config.bcryptRounds}`
     );
   }
 
   if (config.tokenExpiry <= 0 || !Number.isFinite(config.tokenExpiry)) {
     throw new Error(
-      `AuthProvider: tokenExpiry must be a positive number of seconds; got ${config.tokenExpiry}`,
+      `AuthProvider: tokenExpiry must be a positive number of seconds; got ${config.tokenExpiry}`
     );
   }
 
   if (
-    config.refreshTokenExpiry <= 0
-    || !Number.isFinite(config.refreshTokenExpiry)
+    config.refreshTokenExpiry <= 0 ||
+    !Number.isFinite(config.refreshTokenExpiry)
   ) {
     throw new Error(
-      `AuthProvider: refreshTokenExpiry must be a positive number of seconds; got ${config.refreshTokenExpiry}`,
+      `AuthProvider: refreshTokenExpiry must be a positive number of seconds; got ${config.refreshTokenExpiry}`
     );
   }
 
   if (config.refreshTokenExpiry < config.tokenExpiry) {
     throw new Error(
-      `AuthProvider: refreshTokenExpiry (${config.refreshTokenExpiry}s) must be ≥ tokenExpiry (${config.tokenExpiry}s) — refresh tokens shorter than access tokens defeat the purpose`,
+      `AuthProvider: refreshTokenExpiry (${config.refreshTokenExpiry}s) must be ≥ tokenExpiry (${config.tokenExpiry}s) — refresh tokens shorter than access tokens defeat the purpose`
     );
   }
 
   if (config.sessionTimeout <= 0 || !Number.isFinite(config.sessionTimeout)) {
     throw new Error(
-      `AuthProvider: sessionTimeout must be a positive number of seconds; got ${config.sessionTimeout}`,
+      `AuthProvider: sessionTimeout must be a positive number of seconds; got ${config.sessionTimeout}`
     );
   }
 
   if (
-    !Number.isInteger(config.passwordMinLength)
-    || config.passwordMinLength < 1
+    !Number.isInteger(config.passwordMinLength) ||
+    config.passwordMinLength < 1
   ) {
     throw new Error(
-      `AuthProvider: passwordMinLength must be a positive integer; got ${config.passwordMinLength}`,
+      `AuthProvider: passwordMinLength must be a positive integer; got ${config.passwordMinLength}`
     );
   }
 
   if (
-    !Number.isInteger(config.maxSessionsPerUser)
-    || config.maxSessionsPerUser < 0
+    !Number.isInteger(config.maxSessionsPerUser) ||
+    config.maxSessionsPerUser < 0
   ) {
     throw new Error(
-      `AuthProvider: maxSessionsPerUser must be a non-negative integer (0 disables the cap); got ${config.maxSessionsPerUser}`,
+      `AuthProvider: maxSessionsPerUser must be a non-negative integer (0 disables the cap); got ${config.maxSessionsPerUser}`
     );
   }
 
   // jwtAlgorithm is type-checked at compile time, but TypeScript's
   // type narrowing doesn't survive untrusted JSON config.
   if (
-    config.jwtAlgorithm !== "HS256"
-    && config.jwtAlgorithm !== "RS256"
+    config.jwtAlgorithm !== "HS256" &&
+    config.jwtAlgorithm !== "RS256"
   ) {
     throw new Error(
-      `AuthProvider: jwtAlgorithm must be "HS256" or "RS256"; got ${JSON.stringify(config.jwtAlgorithm)}`,
+      `AuthProvider: jwtAlgorithm must be "HS256" or "RS256"; got ${JSON.stringify(config.jwtAlgorithm)}`
     );
   }
 
   if (typeof config.jwtIssuer !== "string" || config.jwtIssuer.length === 0) {
     throw new Error(
-      "AuthProvider: jwtIssuer must be a non-empty string",
+      "AuthProvider: jwtIssuer must be a non-empty string"
     );
   }
 
   if (
-    typeof config.jwtAudience !== "string"
-    || config.jwtAudience.length === 0
+    typeof config.jwtAudience !== "string" ||
+    config.jwtAudience.length === 0
   ) {
     throw new Error(
-      "AuthProvider: jwtAudience must be a non-empty string",
+      "AuthProvider: jwtAudience must be a non-empty string"
     );
   }
 }
@@ -3329,13 +3349,13 @@ function validateAuthConfig(config: ResolvedAuthConfig): void {
 async function importHmacKey(secret: string | undefined): Promise<CryptoKey> {
   if (!secret) {
     throw new Error(
-      "AuthProvider: jwtSecret is required when jwtAlgorithm is HS256",
+      "AuthProvider: jwtSecret is required when jwtAlgorithm is HS256"
     );
   }
   const keyData = new TextEncoder().encode(secret);
   if (keyData.length < 32) {
     throw new Error(
-      `AuthProvider: jwtSecret must be at least 32 bytes for HS256; got ${keyData.length}`,
+      `AuthProvider: jwtSecret must be at least 32 bytes for HS256; got ${keyData.length}`
     );
   }
   return await crypto.subtle.importKey(
@@ -3343,7 +3363,7 @@ async function importHmacKey(secret: string | undefined): Promise<CryptoKey> {
     keyData,
     { name: "HMAC", hash: "SHA-256" },
     true,
-    ["sign", "verify"],
+    ["sign", "verify"]
   );
 }
 
@@ -3356,16 +3376,16 @@ async function importHmacKey(secret: string | undefined): Promise<CryptoKey> {
  */
 async function importRsaKeys(
   privateKeyPem: string | undefined,
-  publicKeyPem: string | undefined,
+  publicKeyPem: string | undefined
 ): Promise<{ signKey: CryptoKey; verifyKey: CryptoKey; }> {
   if (!publicKeyPem) {
     throw new Error(
-      "AuthProvider: jwtPublicKey is required when jwtAlgorithm is RS256",
+      "AuthProvider: jwtPublicKey is required when jwtAlgorithm is RS256"
     );
   }
   if (!privateKeyPem) {
     throw new Error(
-      "AuthProvider: jwtPrivateKey is required when jwtAlgorithm is RS256 (verify-only deployments are not yet supported)",
+      "AuthProvider: jwtPrivateKey is required when jwtAlgorithm is RS256 (verify-only deployments are not yet supported)"
     );
   }
 
@@ -3376,14 +3396,14 @@ async function importRsaKeys(
     pemToBytes(privateKeyPem, "PRIVATE KEY"),
     algorithm,
     false,
-    ["sign"],
+    ["sign"]
   );
   const verifyKey = await crypto.subtle.importKey(
     "spki",
     pemToBytes(publicKeyPem, "PUBLIC KEY"),
     algorithm,
     true,
-    ["verify"],
+    ["verify"]
   );
 
   return { signKey, verifyKey };
@@ -3397,7 +3417,7 @@ async function importRsaKeys(
  */
 function pemToBytes(
   pem: string,
-  expectedLabel: string,
+  expectedLabel: string
 ): Uint8Array<ArrayBuffer> {
   const begin = `-----BEGIN ${expectedLabel}-----`;
   const end = `-----END ${expectedLabel}-----`;
@@ -3405,10 +3425,11 @@ function pemToBytes(
   const endIdx = pem.indexOf(end);
   if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) {
     throw new Error(
-      `AuthProvider: PEM key missing '${begin}' / '${end}' armor — got ${pem.slice(0, 30)}…`,
+      `AuthProvider: PEM key missing '${begin}' / '${end}' armor — got ${pem.slice(0, 30)}…`
     );
   }
-  const body = pem.slice(startIdx + begin.length, endIdx)
+  const body = pem
+    .slice(startIdx + begin.length, endIdx)
     .replace(/[\r\n\s]+/g, "");
   const binary = atob(body);
   // Allocate a fresh ArrayBuffer (not ArrayBufferLike) so the returned
@@ -3417,6 +3438,7 @@ function pemToBytes(
   // because its inferred buffer type widens to ArrayBufferLike.
   const buffer = new ArrayBuffer(binary.length);
   const bytes = new Uint8Array(buffer);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  for (let i = 0; i < binary.length; i++)
+    bytes[i] = binary.charCodeAt(i);
   return bytes;
 }

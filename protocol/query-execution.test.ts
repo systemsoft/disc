@@ -22,7 +22,7 @@ import {
   QueryTimeoutError,
   SchemaError,
   SyntaxError,
-  ValidationError,
+  ValidationError
 } from "../lib/errors.ts";
 import { BinaryProtocolServer, GEL_ERROR_CODES, mapErrorToGelCode } from "./binary-server.ts";
 import { Cardinality, InputLanguage, OutputFormat, PROTOCOL_MAJOR_VERSION, PROTOCOL_MINOR_VERSION, TransactionState } from "./enums.ts";
@@ -39,11 +39,12 @@ function createSchema() {
 const ZERO_UUID = new Uint8Array(16);
 
 async function readMessage(
-  conn: Deno.TcpConn,
+  conn: Deno.TcpConn
 ): Promise<{ mtype: number; payload: Uint8Array; } | null> {
   const header = new Uint8Array(5);
   const headerRead = await readExact(conn, header);
-  if (!headerRead) return null;
+  if (!headerRead)
+    return null;
 
   const mtype = header[0];
   const view = new DataView(header.buffer, header.byteOffset);
@@ -53,7 +54,8 @@ async function readMessage(
   const payload = new Uint8Array(payloadLength);
   if (payloadLength > 0) {
     const ok = await readExact(conn, payload);
-    if (!ok) return null;
+    if (!ok)
+      return null;
   }
 
   return { mtype, payload };
@@ -61,12 +63,13 @@ async function readMessage(
 
 async function readExact(
   conn: Deno.TcpConn,
-  buf: Uint8Array,
+  buf: Uint8Array
 ): Promise<boolean> {
   let offset = 0;
   while (offset < buf.length) {
     const n = await conn.read(buf.subarray(offset));
-    if (n === null) return false;
+    if (n === null)
+      return false;
     offset += n;
   }
   return true;
@@ -78,7 +81,7 @@ function decode(raw: { mtype: number; payload: Uint8Array; }): ServerMessage {
 
 async function sendMessage(
   conn: Deno.TcpConn,
-  msg: ClientMessage,
+  msg: ClientMessage
 ): Promise<void> {
   const bytes = encodeClientMessage(msg);
   let offset = 0;
@@ -106,15 +109,15 @@ function clientHandshake(): ClientMessage {
     minorVersion: PROTOCOL_MINOR_VERSION,
     params: [{ name: "user", value: "test" }, {
       name: "database",
-      value: "testdb",
+      value: "testdb"
     }],
-    extensions: [],
+    extensions: []
   };
 }
 
 function executeMsgWithFormat(
   query: string,
-  outputFormat: number,
+  outputFormat: number
 ): ClientMessage {
   return {
     kind: "Execute",
@@ -130,7 +133,7 @@ function executeMsgWithFormat(
     stateData: new Uint8Array(0),
     inputTypedescId: ZERO_UUID,
     outputTypedescId: ZERO_UUID,
-    arguments: new Uint8Array(0),
+    arguments: new Uint8Array(0)
   };
 }
 
@@ -150,28 +153,32 @@ function parseMsg(query: string): ClientMessage {
     expectedCardinality: Cardinality.MANY,
     commandText: query,
     stateTypedescId: ZERO_UUID,
-    stateData: new Uint8Array(0),
+    stateData: new Uint8Array(0)
   };
 }
 
 async function performNoAuthHandshake(
-  conn: Deno.TcpConn,
+  conn: Deno.TcpConn
 ): Promise<ServerMessage[]> {
   const messages: ServerMessage[] = [];
 
   await sendMessage(conn, clientHandshake());
 
   const raw1 = await readMessage(conn);
-  if (raw1) messages.push(decode(raw1));
+  if (raw1)
+    messages.push(decode(raw1));
   const raw2 = await readMessage(conn);
-  if (raw2) messages.push(decode(raw2));
+  if (raw2)
+    messages.push(decode(raw2));
   const raw3 = await readMessage(conn);
-  if (raw3) messages.push(decode(raw3));
+  if (raw3)
+    messages.push(decode(raw3));
 
   // 2x ParameterStatus + StateDataDescription + ReadyForCommand
   for (let i = 0; i < 4; i++) {
     const raw = await readMessage(conn);
-    if (raw) messages.push(decode(raw));
+    if (raw)
+      messages.push(decode(raw));
   }
 
   return messages;
@@ -210,7 +217,7 @@ Deno.test("query-execution - mapErrorToGelCode: DatabaseExecutionError -> Integr
   const err = new DatabaseExecutionError(
     "execution failed",
     "SELECT 1",
-    new Error("pg error"),
+    new Error("pg error")
   );
   assertEquals(mapErrorToGelCode(err), GEL_ERROR_CODES.IntegrityError);
 });
@@ -219,11 +226,11 @@ Deno.test("query-execution - mapErrorToGelCode: DatabaseExecutionError with cons
   const err = new DatabaseExecutionError(
     "constraint violation",
     "INSERT INTO ...",
-    new Error("pg constraint error"),
+    new Error("pg constraint error")
   );
   assertEquals(
     mapErrorToGelCode(err),
-    GEL_ERROR_CODES.ConstraintViolationError,
+    GEL_ERROR_CODES.ConstraintViolationError
   );
 });
 
@@ -254,20 +261,20 @@ Deno.test("query-execution - mapErrorToGelCode: unknown Error -> InternalServerE
 Deno.test("query-execution - Execute with JSON output format returns JSON data", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn);
 
   // Execute with JSON output format
   await sendMessage(
     conn,
-    executeMsgWithFormat("select User { name }", OutputFormat.JSON),
+    executeMsgWithFormat("select User { name }", OutputFormat.JSON)
   );
 
   // Read CommandDataDescription
@@ -306,20 +313,20 @@ Deno.test("query-execution - Execute with JSON output format returns JSON data",
 Deno.test("query-execution - Execute with BINARY output format returns binary data", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn);
 
   // Execute with BINARY output format
   await sendMessage(
     conn,
-    executeMsgWithFormat("select User { name }", OutputFormat.BINARY),
+    executeMsgWithFormat("select User { name }", OutputFormat.BINARY)
   );
 
   // Read CommandDataDescription
@@ -354,13 +361,13 @@ Deno.test("query-execution - Execute with BINARY output format returns binary da
 Deno.test("query-execution - Parse caches compilation, second Parse reuses cache", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn);
 
@@ -380,8 +387,8 @@ Deno.test("query-execution - Parse caches compilation, second Parse reuses cache
 
   // Both should produce the same descriptor IDs
   if (
-    desc1.kind === "CommandDataDescription"
-    && desc2.kind === "CommandDataDescription"
+    desc1.kind === "CommandDataDescription" &&
+    desc2.kind === "CommandDataDescription"
   ) {
     assertEquals(desc1.inputTypedescId, desc2.inputTypedescId);
     assertEquals(desc1.outputTypedescId, desc2.outputTypedescId);
@@ -398,13 +405,13 @@ Deno.test("query-execution - Parse caches compilation, second Parse reuses cache
 Deno.test("query-execution - Execute reuses cached Parse result", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn);
 
@@ -425,8 +432,8 @@ Deno.test("query-execution - Execute reuses cached Parse result", async () => {
   assertEquals(execDesc.kind, "CommandDataDescription");
 
   if (
-    parseDesc.kind === "CommandDataDescription"
-    && execDesc.kind === "CommandDataDescription"
+    parseDesc.kind === "CommandDataDescription" &&
+    execDesc.kind === "CommandDataDescription"
   ) {
     assertEquals(parseDesc.inputTypedescId, execDesc.inputTypedescId);
     assertEquals(parseDesc.outputTypedescId, execDesc.outputTypedescId);
@@ -455,13 +462,13 @@ Deno.test("query-execution - Execute reuses cached Parse result", async () => {
 Deno.test("query-execution - Execute with NONE output format skips Data message", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn);
 
@@ -470,8 +477,8 @@ Deno.test("query-execution - Execute with NONE output format skips Data message"
     conn,
     executeMsgWithFormat(
       "create type Foo { required name: str }",
-      OutputFormat.NONE,
-    ),
+      OutputFormat.NONE
+    )
   );
 
   // Read CommandDataDescription
@@ -501,13 +508,13 @@ Deno.test("query-execution - Execute with NONE output format skips Data message"
 Deno.test("query-execution - Execute CONFIGURE query returns CONFIGURE status", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn);
 
@@ -515,8 +522,8 @@ Deno.test("query-execution - Execute CONFIGURE query returns CONFIGURE status", 
     conn,
     executeMsgWithFormat(
       "configure session set module := 'default'",
-      OutputFormat.NONE,
-    ),
+      OutputFormat.NONE
+    )
   );
 
   // Read CommandDataDescription
@@ -546,19 +553,19 @@ Deno.test("query-execution - Execute CONFIGURE query returns CONFIGURE status", 
 Deno.test("query-execution - Execute INSERT returns INSERT status", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn);
 
   await sendMessage(
     conn,
-    executeMsg("insert User { name := 'Ada', email := 'ada@example.com' }"),
+    executeMsg("insert User { name := 'Ada', email := 'ada@example.com' }")
   );
 
   // CommandDataDescription
@@ -587,13 +594,13 @@ Deno.test("query-execution - Execute INSERT returns INSERT status", async () => 
 Deno.test("query-execution - multiple queries in sequence maintain connection state", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn);
 
@@ -616,7 +623,7 @@ Deno.test("query-execution - multiple queries in sequence maintain connection st
   // Query 2: INSERT
   await sendMessage(
     conn,
-    executeMsg("insert User { name := 'Billie', email := 'billie@example.com' }"),
+    executeMsg("insert User { name := 'Billie', email := 'billie@example.com' }")
   );
   await readMessage(conn); // CommandDataDescription
   await readMessage(conn); // Data
@@ -632,7 +639,7 @@ Deno.test("query-execution - multiple queries in sequence maintain connection st
   // Query 3: DELETE
   await sendMessage(
     conn,
-    executeMsg("delete User filter .name = 'Billie'"),
+    executeMsg("delete User filter .name = 'Billie'")
   );
   await readMessage(conn); // CommandDataDescription
   await readMessage(conn); // Data
@@ -648,7 +655,7 @@ Deno.test("query-execution - multiple queries in sequence maintain connection st
   if (ready3.kind === "ReadyForCommand") {
     assertEquals(
       ready3.transactionState,
-      TransactionState.NOT_IN_TRANSACTION,
+      TransactionState.NOT_IN_TRANSACTION
     );
   }
 
@@ -663,19 +670,19 @@ Deno.test("query-execution - multiple queries in sequence maintain connection st
 Deno.test("query-execution - Execute DESCRIBE TYPE returns DESCRIBE status", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn);
 
   await sendMessage(
     conn,
-    executeMsg("describe type User"),
+    executeMsg("describe type User")
   );
 
   // CommandDataDescription
@@ -708,19 +715,19 @@ Deno.test("query-execution - Execute DESCRIBE TYPE returns DESCRIBE status", asy
 Deno.test("query-execution - Execute with JSON_ELEMENTS output format", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn);
 
   await sendMessage(
     conn,
-    executeMsgWithFormat("select User { name }", OutputFormat.JSON_ELEMENTS),
+    executeMsgWithFormat("select User { name }", OutputFormat.JSON_ELEMENTS)
   );
 
   // CommandDataDescription

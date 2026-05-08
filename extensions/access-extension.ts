@@ -22,7 +22,7 @@ export class AccessExtensionAdapter extends BaseExtension {
   readonly metadata: ExtensionMetadata = {
     description: "Object-level access policies",
     name: "access",
-    version: "1.0.0",
+    version: "1.0.0"
   };
 
   private evaluator: AccessEvaluator;

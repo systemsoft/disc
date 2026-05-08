@@ -49,7 +49,7 @@ export function sqlStringLiteral(value: string): string {
 export function assertSafeIdentifier(identifier: string, context: string): void {
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(identifier)) {
     throw new Error(
-      `Unsafe identifier in ${context}: ${JSON.stringify(identifier)}`,
+      `Unsafe identifier in ${context}: ${JSON.stringify(identifier)}`
     );
   }
 }

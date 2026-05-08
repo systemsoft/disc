@@ -22,7 +22,7 @@ async function freshAuth(dsn: string): Promise<void> {
         "TRUNCATE TABLE user_roles RESTART IDENTITY CASCADE",
         "TRUNCATE TABLE roles RESTART IDENTITY CASCADE",
         "TRUNCATE TABLE sessions RESTART IDENTITY CASCADE",
-        "TRUNCATE TABLE users RESTART IDENTITY CASCADE",
+        "TRUNCATE TABLE users RESTART IDENTITY CASCADE"
       ]
     ) {
       try {
@@ -51,7 +51,7 @@ Deno.test({
         "jwt-secret": JWT_SECRET,
         email: "root@example.com",
         password: "rootRootR00t!!!",
-        name: "Root",
+        name: "Root"
       });
     } finally {
       cap.restore();
@@ -64,27 +64,27 @@ Deno.test({
     try {
       const u = await db.query(
         "SELECT id, email FROM users WHERE email = $1",
-        ["root@example.com"],
+        ["root@example.com"]
       );
       assertEquals(u.rows.length, 1);
       const userId = u.rows[0].id as string;
 
       const r = await db.query(
         "SELECT name FROM roles WHERE name = $1",
-        ["superuser"],
+        ["superuser"]
       );
       assertEquals(r.rows.length, 1);
 
       const ur = await db.query(
         `SELECT role_name AS name FROM user_roles WHERE user_id = $1`,
-        [userId],
+        [userId]
       );
       assertEquals(ur.rows.length, 1);
       assertEquals(ur.rows[0].name, "superuser");
     } finally {
       await db.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -101,7 +101,7 @@ Deno.test({
         "database-url": dsn,
         "jwt-secret": JWT_SECRET,
         email: "u@example.com",
-        password: "",
+        password: ""
       });
     } finally {
       cap.restore();
@@ -114,13 +114,13 @@ Deno.test({
     try {
       const r = await db.query(
         "SELECT 1 FROM users WHERE email = $1",
-        ["u@example.com"],
+        ["u@example.com"]
       );
       assertEquals(r.rows.length, 0);
     } finally {
       await db.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -138,7 +138,7 @@ Deno.test({
         "database-url": dsn,
         "jwt-secret": JWT_SECRET,
         email: "rotate@example.com",
-        password: "OriginalP4ss!!!!",
+        password: "OriginalP4ss!!!!"
       });
 
       // Capture the old hash so we can confirm it actually changed
@@ -149,7 +149,7 @@ Deno.test({
         try {
           const r = await db.query(
             "SELECT password_hash FROM users WHERE email = $1",
-            ["rotate@example.com"],
+            ["rotate@example.com"]
           );
           oldHash = r.rows[0].password_hash as string;
         } finally {
@@ -161,7 +161,7 @@ Deno.test({
         "database-url": dsn,
         "jwt-secret": JWT_SECRET,
         user: "rotate@example.com",
-        password: "RotatedP4ssw0rd!!",
+        password: "RotatedP4ssw0rd!!"
       });
 
       const db = new DatabaseConnection(dsn);
@@ -169,12 +169,12 @@ Deno.test({
       try {
         const r = await db.query(
           "SELECT password_hash FROM users WHERE email = $1",
-          ["rotate@example.com"],
+          ["rotate@example.com"]
         );
         const newHash = r.rows[0].password_hash as string;
         assert(
           newHash !== oldHash,
-          "password_hash unchanged after admin set-password",
+          "password_hash unchanged after admin set-password"
         );
       } finally {
         await db.close();
@@ -182,7 +182,7 @@ Deno.test({
     } finally {
       cap.restore();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -199,14 +199,14 @@ Deno.test({
         "database-url": dsn,
         "jwt-secret": JWT_SECRET,
         user: "ghost@example.com",
-        password: "LegitP4ssw0rd!!",
+        password: "LegitP4ssw0rd!!"
       });
     } finally {
       cap.restore();
     }
     const errors = cap.getErrors().join("\n").toLowerCase();
     assertStringIncludes(errors, "not found");
-  },
+  }
 });
 
 Deno.test({
@@ -223,14 +223,14 @@ Deno.test({
         "database-url": dsn,
         "jwt-secret": JWT_SECRET,
         email: "promote@example.com",
-        password: "InitialP4ss!!!!",
+        password: "InitialP4ss!!!!"
       });
 
       await adminCommand.assignRole({
         "database-url": dsn,
         "jwt-secret": JWT_SECRET,
         user: "promote@example.com",
-        role: "auditor",
+        role: "auditor"
       });
     } finally {
       cap.restore();
@@ -244,30 +244,32 @@ Deno.test({
          JOIN users u ON u.id = ur.user_id
          WHERE u.email = $1
          ORDER BY ur.role_name`,
-        ["promote@example.com"],
+        ["promote@example.com"]
       );
-      const names = r.rows.map((row) => row.name as string);
+      const names = r.rows.map(row => row.name as string);
       assert(names.includes("auditor"));
       assert(names.includes("superuser"));
     } finally {
       await db.close();
     }
-  },
+  }
 });
 
 Deno.test("admin commands - missing DSN reports a clear error", async () => {
   const cap = new ConsoleCapture();
   cap.capture();
   const saved = Deno.env.get("DATABASE_URL");
-  if (saved !== undefined) Deno.env.delete("DATABASE_URL");
+  if (saved !== undefined)
+    Deno.env.delete("DATABASE_URL");
   try {
     await adminCommand.createSuperuser({
       "jwt-secret": JWT_SECRET,
       email: "x@example.com",
-      password: "EnoughP4ssw0rd!",
+      password: "EnoughP4ssw0rd!"
     });
   } finally {
-    if (saved !== undefined) Deno.env.set("DATABASE_URL", saved);
+    if (saved !== undefined)
+      Deno.env.set("DATABASE_URL", saved);
     cap.restore();
   }
   assertStringIncludes(cap.getErrors().join("\n"), "--database-url");
@@ -310,40 +312,40 @@ Deno.test("admin list-policies — collects policies from SDL with action + even
   assertEquals(
     policies.has("Document"),
     true,
-    "Document type should appear in policy list (Gel #6432)",
+    "Document type should appear in policy list (Gel #6432)"
   );
   assertEquals(
     policies.has("User"),
     false,
-    "User has no policies — must not appear in the listing",
+    "User has no policies — must not appear in the listing"
   );
 
   const docPolicies = policies.get("Document")!;
   assertEquals(docPolicies.length, 3, "Document declares 3 policies");
 
-  const ownerRead = docPolicies.find((p) => p.name === "owner_read");
+  const ownerRead = docPolicies.find(p => p.name === "owner_read");
   assert(ownerRead !== undefined, "owner_read policy missing");
   assertEquals(ownerRead.action, "allow");
   assertEquals(ownerRead.events, ["select"]);
   assert(
     typeof ownerRead.condition === "string" && ownerRead.condition.length > 0,
-    "owner_read should carry a condition string",
+    "owner_read should carry a condition string"
   );
 
-  const ownerWrite = docPolicies.find((p) => p.name === "owner_write");
+  const ownerWrite = docPolicies.find(p => p.name === "owner_write");
   assert(ownerWrite !== undefined);
   assertEquals(
     ownerWrite.events.sort(),
     ["delete", "update"],
-    "owner_write should list both update + delete events",
+    "owner_write should list both update + delete events"
   );
 
-  const adminOverride = docPolicies.find((p) => p.name === "admin_override");
+  const adminOverride = docPolicies.find(p => p.name === "admin_override");
   assert(adminOverride !== undefined);
   assertEquals(
     adminOverride.errmessage,
     "Only admins can bypass document policies",
-    "errmessage on admin_override must round-trip from SDL",
+    "errmessage on admin_override must round-trip from SDL"
   );
 });
 
@@ -368,11 +370,11 @@ Deno.test("admin list-policies — schemas with no policies return an empty map"
 
 async function withTempSdl<T>(
   sdl: string,
-  body: (path: string) => Promise<T>,
+  body: (path: string) => Promise<T>
 ): Promise<T> {
   const path = await Deno.makeTempFile({
     prefix: "disc-test-policy-",
-    suffix: ".disc",
+    suffix: ".disc"
   });
   await Deno.writeTextFile(path, sdl);
   try {
@@ -404,13 +406,13 @@ Deno.test("admin test-policy — collectAccessPolicyAst returns the AST nodes fo
   assertEquals(
     map.has("Doc"),
     true,
-    "Doc must surface in the AST policy map",
+    "Doc must surface in the AST policy map"
   );
   const docPolicies = map.get("Doc")!;
   assertEquals(
     docPolicies.length,
     2,
-    "Doc declares 2 access policies",
+    "Doc declares 2 access policies"
   );
   // Pinning AST shape — kind + name access path so a parser refactor
   // that breaks `policy.name.value` trips here.
@@ -420,36 +422,36 @@ Deno.test("admin test-policy — collectAccessPolicyAst returns the AST nodes fo
 });
 
 Deno.test("admin test-policy — single target evaluates only the named policy", async () => {
-  await withTempSdl(TEST_POLICY_SDL, async (path) => {
+  await withTempSdl(TEST_POLICY_SDL, async path => {
     const lines: string[] = [];
     await testPolicyImpl(
       {
         schema: path,
         target: "Doc.owner_only",
         action: "select",
-        userId: "u1",
+        userId: "u1"
       },
-      (line) => lines.push(line),
+      line => lines.push(line)
     );
 
     // First line carries the verdict header.
     const header = lines[0];
     assert(
       header.startsWith("Doc.owner_only (select):"),
-      `Expected header to start with the qualified policy name; got: ${header}`,
+      `Expected header to start with the qualified policy name; got: ${header}`
     );
     // No other policy headers should appear — only owner_only.
-    const policyHeaders = lines.filter((l) => /^Doc\.\w+ \(select\):/.test(l));
+    const policyHeaders = lines.filter(l => /^Doc\.\w+ \(select\):/.test(l));
     assertEquals(
       policyHeaders.length,
       1,
-      "Single-target mode must evaluate exactly one policy",
+      "Single-target mode must evaluate exactly one policy"
     );
   });
 });
 
 Deno.test("admin test-policy — --all mode evaluates every policy on the type", async () => {
-  await withTempSdl(TEST_POLICY_SDL, async (path) => {
+  await withTempSdl(TEST_POLICY_SDL, async path => {
     const lines: string[] = [];
     await testPolicyImpl(
       {
@@ -457,29 +459,29 @@ Deno.test("admin test-policy — --all mode evaluates every policy on the type",
         target: "Doc",
         action: "select",
         userId: "u1",
-        all: true,
+        all: true
       },
-      (line) => lines.push(line),
+      line => lines.push(line)
     );
 
-    const policyHeaders = lines.filter((l) => /^Doc\.\w+ \(select\):/.test(l));
+    const policyHeaders = lines.filter(l => /^Doc\.\w+ \(select\):/.test(l));
     assertEquals(
       policyHeaders.length,
       2,
-      "--all mode must evaluate both policies on Doc",
+      "--all mode must evaluate both policies on Doc"
     );
     // Each header should report ALLOW or DENY.
     for (const h of policyHeaders) {
       assert(
         /\b(ALLOW|DENY)\b/.test(h),
-        `Each verdict line must carry ALLOW or DENY; got: ${h}`,
+        `Each verdict line must carry ALLOW or DENY; got: ${h}`
       );
     }
   });
 });
 
 Deno.test("admin test-policy — denial surfaces the policy's errmessage", async () => {
-  await withTempSdl(TEST_POLICY_SDL, async (path) => {
+  await withTempSdl(TEST_POLICY_SDL, async path => {
     const lines: string[] = [];
     // Force a deny path: the eval path defaults `defaultAllow: false`,
     // and admin_override only allows when `global is_admin` is set.
@@ -491,20 +493,20 @@ Deno.test("admin test-policy — denial surfaces the policy's errmessage", async
         schema: path,
         target: "Doc.admin_override",
         action: "delete",
-        userId: "u1",
+        userId: "u1"
       },
-      (line) => lines.push(line),
+      line => lines.push(line)
     );
 
     const joined = lines.join("\n");
     assert(
       /\bDENY\b/.test(joined),
-      `Expected DENY verdict in: ${joined}`,
+      `Expected DENY verdict in: ${joined}`
     );
     // The `reason:` line should always be present.
     assert(
       /\breason:/.test(joined),
-      `Expected reason line in output: ${joined}`,
+      `Expected reason line in output: ${joined}`
     );
   });
 });
@@ -517,44 +519,44 @@ Deno.test("admin test-policy — type with no policies emits a helpful message",
       }
     }
   `;
-  await withTempSdl(sdl, async (path) => {
+  await withTempSdl(sdl, async path => {
     const lines: string[] = [];
     await testPolicyImpl(
       {
         schema: path,
         target: "Bare",
         action: "select",
-        all: true,
+        all: true
       },
-      (line) => lines.push(line),
+      line => lines.push(line)
     );
     assertStringIncludes(lines.join("\n"), "(no policies on type Bare)");
   });
 });
 
 Deno.test("admin test-policy — bad target shape throws clearly", async () => {
-  await withTempSdl(TEST_POLICY_SDL, async (path) => {
+  await withTempSdl(TEST_POLICY_SDL, async path => {
     let threw = false;
     try {
       await testPolicyImpl(
         {
           schema: path,
           target: "Doc", // missing .<policy>, no --all
-          action: "select",
+          action: "select"
         },
-        () => {},
+        () => {}
       );
     } catch (e) {
       threw = true;
       assertStringIncludes(
         (e as Error).message,
-        "<Type>.<policy>",
+        "<Type>.<policy>"
       );
     }
     assertEquals(
       threw,
       true,
-      "Missing dot in target must throw with the expected hint",
+      "Missing dot in target must throw with the expected hint"
     );
   });
 });

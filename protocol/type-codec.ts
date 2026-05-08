@@ -48,7 +48,7 @@ const textDecoder = new TextDecoder();
  */
 export function encodeScalarValue(
   typeName: string,
-  value: unknown,
+  value: unknown
 ): Uint8Array {
   const normalized = normalizeTypeName(typeName);
 
@@ -82,7 +82,7 @@ export function encodeScalarValue(
       new DataView(buf.buffer).setBigInt64(
         0,
         typeof value === "bigint" ? value : BigInt(value as number),
-        false,
+        false
       );
       return buf;
     }
@@ -133,7 +133,7 @@ export function encodeScalarValue(
       // int32 days since 2000-01-01
       const msUnix = value instanceof Date ? value.getTime() : value as number;
       const daysSinceGelEpoch = Math.floor(
-        (msUnix - GEL_EPOCH_OFFSET_MS) / 86400000,
+        (msUnix - GEL_EPOCH_OFFSET_MS) / 86400000
       );
       const buf = new Uint8Array(4);
       new DataView(buf.buffer).setInt32(0, daysSinceGelEpoch, false);
@@ -205,7 +205,7 @@ export function encodeScalarValue(
  */
 export function decodeScalarValue(
   typeName: string,
-  data: Uint8Array,
+  data: Uint8Array
 ): unknown {
   const normalized = normalizeTypeName(typeName);
 
@@ -240,7 +240,7 @@ export function decodeScalarValue(
     case "datetime": {
       const usGel = new DataView(data.buffer, data.byteOffset).getBigInt64(
         0,
-        false,
+        false
       );
       const msUnix = Number((usGel + GEL_EPOCH_OFFSET_US) / 1000n);
       return new Date(msUnix);
@@ -249,7 +249,7 @@ export function decodeScalarValue(
     case "local_datetime": {
       const usGel = new DataView(data.buffer, data.byteOffset).getBigInt64(
         0,
-        false,
+        false
       );
       const msUnix = Number((usGel + GEL_EPOCH_OFFSET_US) / 1000n);
       return new Date(msUnix);
@@ -258,7 +258,7 @@ export function decodeScalarValue(
     case "local_date": {
       const days = new DataView(data.buffer, data.byteOffset).getInt32(
         0,
-        false,
+        false
       );
       const msUnix = days * 86400000 + GEL_EPOCH_OFFSET_MS;
       return new Date(msUnix);
@@ -313,7 +313,7 @@ export function decodeScalarValue(
 export function encodeObjectValue(
   shape: ObjectShapeDescriptor,
   values: Record<string, unknown>,
-  descriptorMap: Map<string, TypeDescriptor>,
+  descriptorMap: Map<string, TypeDescriptor>
 ): Uint8Array {
   const w = new BufferWriter();
   w.writeUInt32(shape.elements.length);
@@ -343,7 +343,7 @@ export function encodeObjectValue(
         encoded = encodeObjectValue(
           typeDesc as ObjectShapeDescriptor,
           val as Record<string, unknown>,
-          descriptorMap,
+          descriptorMap
         );
       } else {
         // Fallback: try to encode as string
@@ -369,7 +369,8 @@ export function encodeObjectValue(
  */
 function normalizeTypeName(name: string): string {
   const idx = name.lastIndexOf("::");
-  if (idx >= 0) return name.substring(idx + 2);
+  if (idx >= 0)
+    return name.substring(idx + 2);
   return name;
 }
 
@@ -413,10 +414,11 @@ function resolveTypeNameFromId(id: Uint8Array): string {
     ["00000000-0000-0000-0000-00000000010e", "duration"],
     ["00000000-0000-0000-0000-00000000010f", "json"],
     ["00000000-0000-0000-0000-000000000110", "bigint"],
-    ["00000000-0000-0000-0000-000000000130", "memory"],
+    ["00000000-0000-0000-0000-000000000130", "memory"]
   ];
   for (const [knownUuid, name] of knownTypes) {
-    if (uuid === knownUuid) return name;
+    if (uuid === knownUuid)
+      return name;
   }
   return "bytes";
 }
@@ -480,7 +482,8 @@ function decodeBigInt(data: Uint8Array): bigint {
   const sign = view.getUint16(4, false);
   // dscale at offset 6 (not used for bigint)
 
-  if (ndigits === 0) return 0n;
+  if (ndigits === 0)
+    return 0n;
 
   let result = 0n;
   for (let i = 0; i < ndigits; i++) {
@@ -558,8 +561,10 @@ function encodeDecimal(value: string | number): Uint8Array {
     origGroups.push(parseInt(paddedInt.substring(i, i + 4), 10));
   }
   for (const g of origGroups) {
-    if (g === 0) leadingZeroGroups++;
-    else break;
+    if (g === 0)
+      leadingZeroGroups++;
+    else
+      break;
   }
   const weight = intGroupCount - 1 - leadingZeroGroups;
 
@@ -603,7 +608,8 @@ function decodeDecimal(data: Uint8Array): string {
   // weight indicates the power-of-10000 of the first digit group
   // e.g., weight=1 means first group represents 10000^1
   let intGroupCount = weight + 1;
-  if (intGroupCount < 0) intGroupCount = 0;
+  if (intGroupCount < 0)
+    intGroupCount = 0;
 
   let intStr = "";
   for (let i = 0; i < intGroupCount; i++) {
@@ -614,7 +620,8 @@ function decodeDecimal(data: Uint8Array): string {
       intStr += d.toString().padStart(4, "0");
     }
   }
-  if (intStr === "") intStr = "0";
+  if (intStr === "")
+    intStr = "0";
 
   let fracStr = "";
   for (let i = intGroupCount; i < ndigits; i++) {

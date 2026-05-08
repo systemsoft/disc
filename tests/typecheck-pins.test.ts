@@ -20,11 +20,11 @@ async function denoCheck(file: string): Promise<{
     args: ["check", file],
     stdout: "piped",
     stderr: "piped",
-    cwd: new URL("..", import.meta.url).pathname,
+    cwd: new URL("..", import.meta.url).pathname
   });
   const result = await cmd.output();
-  const output = new TextDecoder().decode(result.stderr)
-    + new TextDecoder().decode(result.stdout);
+  const output = new TextDecoder().decode(result.stderr) +
+    new TextDecoder().decode(result.stdout);
   return { ok: result.success, output };
 }
 
@@ -54,14 +54,15 @@ Deno.test("Bundle JJ: PostgresLogger forwards a structured `extra` arg", async (
   // Pin the wrapper signature: a future PostgresLogger refactor that
   // drops the `extra` arg would silently swallow context fields again.
   const src = await Deno.readTextFile(
-    new URL("../postgres/logger.ts", import.meta.url),
+    new URL("../postgres/logger.ts", import.meta.url)
   );
   for (const level of ["debug", "info", "warn", "error"]) {
     assert(
       new RegExp(
-        `${level}\\(message: string, extra\\?: Record<string, unknown>\\)`,
-      ).test(src),
-      `PostgresLogger.${level} must accept the structured 'extra' arg (Bundle JJ pin)`,
+        `${level}\\(message: string, extra\\?: Record<string, unknown>\\)`
+      )
+        .test(src),
+      `PostgresLogger.${level} must accept the structured 'extra' arg (Bundle JJ pin)`
     );
   }
 });
@@ -70,14 +71,14 @@ Deno.test("Bundle JJ: LinkDef carries a `computed` flag", async () => {
   // Pin the field on the compiler-context type so a future
   // re-narrowing doesn't reintroduce the openapi.ts crash.
   const src = await Deno.readTextFile(
-    new URL("../compiler/context.ts", import.meta.url),
+    new URL("../compiler/context.ts", import.meta.url)
   );
   // Locate the LinkDef interface and confirm `computed` lives inside.
   const match = src.match(/export interface LinkDef \{[\s\S]+?\n\}/);
   assert(match, "could not locate LinkDef interface");
   assert(
     /computed\?: boolean/.test(match[0]),
-    "LinkDef must declare `computed?: boolean` (Bundle JJ pin)",
+    "LinkDef must declare `computed?: boolean` (Bundle JJ pin)"
   );
 });
 
@@ -91,7 +92,7 @@ Deno.test("Bundle JJ: production-source files (mod/cli/server entry points) type
     assertEquals(
       ok,
       true,
-      `${f} should pass deno check; output:\n${output.slice(0, 1200)}`,
+      `${f} should pass deno check; output:\n${output.slice(0, 1200)}`
     );
   }
 });

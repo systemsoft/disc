@@ -16,8 +16,8 @@ Deno.test("TLS config - certFile and keyFile are stored in ServerConfig", () => 
   const server = new DiscServer({
     tls: {
       certFile: "/path/to/cert.pem",
-      keyFile: "/path/to/key.pem",
-    },
+      keyFile: "/path/to/key.pem"
+    }
   });
 
   const config = server.get_config();
@@ -40,7 +40,7 @@ Deno.test(
     fn: async () => {
       // Use dryRun: true so no ConnectionPool interval is created
       const protocolHandler = new SimpleEdgeQLProtocolHandler({
-        dryRun: true,
+        dryRun: true
       });
 
       const config: ServerConfig = {
@@ -53,21 +53,21 @@ Deno.test(
         enableWebsockets: false,
         tls: {
           certFile: "/nonexistent/path/to/cert.pem",
-          keyFile: "/nonexistent/path/to/key.pem",
-        },
+          keyFile: "/nonexistent/path/to/key.pem"
+        }
       };
 
       const httpServer = new HttpServer({ config, protocolHandler });
 
       await assertRejects(
         () => httpServer.start(),
-        Deno.errors.NotFound,
+        Deno.errors.NotFound
       );
 
       // Best-effort cleanup of heartbeat interval
       await httpServer.stop();
-    },
-  },
+    }
+  }
 );
 
 // ---------------------------------------------------------------------------
@@ -88,13 +88,13 @@ Deno.test(
       const tmpCert = await Deno.makeTempFile({ suffix: ".pem" });
       await Deno.writeTextFile(
         tmpCert,
-        "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----\n",
+        "-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----\n"
       );
 
       try {
         // Use dryRun: true so no ConnectionPool interval is created
         const protocolHandler = new SimpleEdgeQLProtocolHandler({
-          dryRun: true,
+          dryRun: true
         });
 
         const config: ServerConfig = {
@@ -107,15 +107,15 @@ Deno.test(
           enableWebsockets: false,
           tls: {
             certFile: tmpCert,
-            keyFile: "/nonexistent/path/to/key.pem",
-          },
+            keyFile: "/nonexistent/path/to/key.pem"
+          }
         };
 
         const httpServer = new HttpServer({ config, protocolHandler });
 
         await assertRejects(
           () => httpServer.start(),
-          Deno.errors.NotFound,
+          Deno.errors.NotFound
         );
 
         // Best-effort cleanup of heartbeat interval
@@ -123,8 +123,8 @@ Deno.test(
       } finally {
         await Deno.remove(tmpCert);
       }
-    },
-  },
+    }
+  }
 );
 
 // ---------------------------------------------------------------------------
@@ -135,8 +135,8 @@ Deno.test("TLS config - redirect defaults to undefined when not set", () => {
   const server = new DiscServer({
     tls: {
       certFile: "/path/to/cert.pem",
-      keyFile: "/path/to/key.pem",
-    },
+      keyFile: "/path/to/key.pem"
+    }
   });
 
   const config = server.get_config();
@@ -152,14 +152,14 @@ Deno.test(
         certFile: "/path/to/cert.pem",
         keyFile: "/path/to/key.pem",
         redirect: true,
-        redirectPort: 8080,
-      },
+        redirectPort: 8080
+      }
     });
 
     const config = server.get_config();
     assertEquals(config.tls?.redirect, true);
     assertEquals(config.tls?.redirectPort, 8080);
-  },
+  }
 );
 
 // ---------------------------------------------------------------------------
@@ -191,7 +191,7 @@ Deno.test(
       url.port = String(httpsPort);
       return new Response(null, {
         status: 301,
-        headers: { "Location": url.toString() },
+        headers: { Location: url.toString() }
       });
     };
 
@@ -209,5 +209,5 @@ Deno.test(
 
     // Confirm host is preserved
     assertEquals(redirected.hostname, host);
-  },
+  }
 );

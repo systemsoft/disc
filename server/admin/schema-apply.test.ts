@@ -21,11 +21,11 @@ Deno.test("handleSchemaApply — refuses non-POST", async () => {
   try {
     const res = await handleSchemaApply({
       request: new Request("http://localhost/admin/schema-apply", {
-        method: "GET",
+        method: "GET"
       }),
       url: new URL("http://localhost/admin/schema-apply"),
       schemaFilePath: tmp,
-      databaseUrl: "postgresql://localhost:5432/dummy",
+      databaseUrl: "postgresql://localhost:5432/dummy"
     });
     assertEquals(res.status, 405);
   } finally {
@@ -36,11 +36,11 @@ Deno.test("handleSchemaApply — refuses non-POST", async () => {
 Deno.test("handleSchemaApply — returns 404 when SDL file missing", async () => {
   const res = await handleSchemaApply({
     request: new Request("http://localhost/admin/schema-apply", {
-      method: "POST",
+      method: "POST"
     }),
     url: new URL("http://localhost/admin/schema-apply"),
     schemaFilePath: "/nonexistent/path/should/not/exist.disc",
-    databaseUrl: "postgresql://localhost:5432/dummy",
+    databaseUrl: "postgresql://localhost:5432/dummy"
   });
   assertEquals(res.status, 404);
 });
@@ -54,11 +54,11 @@ Deno.test(
       await Deno.writeTextFile(tmp, "module default {\n  type User {\n    required name: str;\n};");
       const res = await handleSchemaApply({
         request: new Request("http://localhost/admin/schema-apply", {
-          method: "POST",
+          method: "POST"
         }),
         url: new URL("http://localhost/admin/schema-apply"),
         schemaFilePath: tmp,
-        databaseUrl: "postgresql://localhost:5432/dummy",
+        databaseUrl: "postgresql://localhost:5432/dummy"
       });
       assertEquals(res.status, 400);
       const body = await res.json();
@@ -67,7 +67,7 @@ Deno.test(
     } finally {
       await Deno.remove(tmp);
     }
-  },
+  }
 );
 
 Deno.test(
@@ -79,5 +79,5 @@ Deno.test(
     assertEquals(url.searchParams.get("force"), "true");
     const url2 = new URL("http://localhost/admin/schema-apply");
     assertEquals(url2.searchParams.get("force"), null);
-  },
+  }
 );

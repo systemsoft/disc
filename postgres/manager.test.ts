@@ -6,7 +6,7 @@ import { PostgresManager } from "./manager.ts";
 // Use /tmp directly to keep Unix socket paths under the 108-char limit.
 const TEST_BASE_DIR = Deno.makeTempDirSync({
   dir: "/tmp",
-  prefix: "disc-mgr-",
+  prefix: "disc-mgr-"
 });
 
 // Skip guard: tests that require real PostgreSQL binaries
@@ -23,7 +23,7 @@ Deno.test({
     const instance = await manager.createInstance(instanceName, {
       pgBinDir: PG_BIN_DIR!,
       port: 0, // Unix socket only
-      postgresVersion: "16.4",
+      postgresVersion: "16.4"
     });
 
     assertExists(instance);
@@ -35,7 +35,7 @@ Deno.test({
 
     // Cleanup
     await manager.destroyInstance(instanceName, true);
-  },
+  }
 });
 
 Deno.test({
@@ -51,12 +51,12 @@ Deno.test({
     await assertRejects(
       async () => await manager.createInstance(instanceName, { pgBinDir: PG_BIN_DIR! }),
       Error,
-      "already exists",
+      "already exists"
     );
 
     // Cleanup
     await manager.destroyInstance(instanceName, true);
-  },
+  }
 });
 
 Deno.test({
@@ -84,7 +84,7 @@ Deno.test({
 
     // Cleanup
     await manager.destroyInstance(instanceName, true);
-  },
+  }
 });
 
 Deno.test({
@@ -108,7 +108,7 @@ Deno.test({
     await manager.destroyInstance("instance1", true);
     await manager.destroyInstance("instance2", true);
     await manager.destroyInstance("instance3", true);
-  },
+  }
 });
 
 Deno.test({
@@ -141,7 +141,7 @@ Deno.test({
 
     // Instance should not be tracked
     assertEquals(manager.getInstance(instanceName), undefined);
-  },
+  }
 });
 
 Deno.test({
@@ -169,7 +169,7 @@ Deno.test({
     // Cleanup
     await manager1.stopInstance(instanceName);
     await manager1.destroyInstance(instanceName, true);
-  },
+  }
 });
 
 Deno.test({
@@ -188,7 +188,7 @@ Deno.test({
 
     // Health status should be available when monitor is running
     // Note: Initial health check might not be complete immediately
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     const statusWithHealth = await manager.getInstanceStatus(instanceName);
     assertExists(statusWithHealth);
@@ -196,7 +196,7 @@ Deno.test({
 
     await manager.stopInstance(instanceName);
     await manager.destroyInstance(instanceName, true);
-  },
+  }
 });
 
 Deno.test({
@@ -231,7 +231,7 @@ Deno.test({
     await manager.destroyInstance(originalName, true);
     await manager.destroyInstance(restoredName, true);
     await Deno.remove(backupPath);
-  },
+  }
 });
 
 Deno.test({
@@ -246,12 +246,12 @@ Deno.test({
     await assertRejects(
       async () => await manager.upgradeInstance(instanceName, "17.0"),
       Error,
-      "not yet implemented",
+      "not yet implemented"
     );
 
     // Cleanup
     await manager.destroyInstance(instanceName, true);
-  },
+  }
 });
 
 Deno.test("PostgresManager - handles non-existent instance gracefully", async () => {
@@ -261,13 +261,13 @@ Deno.test("PostgresManager - handles non-existent instance gracefully", async ()
   await assertRejects(
     async () => await manager.startInstance("non-existent"),
     Error,
-    "not found",
+    "not found"
   );
 
   await assertRejects(
     async () => await manager.stopInstance("non-existent"),
     Error,
-    "not found",
+    "not found"
   );
 
   const status = await manager.getInstanceStatus("non-existent");

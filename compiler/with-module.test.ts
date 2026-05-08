@@ -32,7 +32,7 @@ function createModuleTestSchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["name", {
         name: "name",
@@ -40,10 +40,10 @@ function createModuleTestSchema(): Schema {
         required: true,
         multi: false,
         columnName: "name",
-        edgeqlType: "str",
-      }],
+        edgeqlType: "str"
+      }]
     ]),
-    links: new Map(),
+    links: new Map()
   };
 
   // Type in "default" module
@@ -59,7 +59,7 @@ function createModuleTestSchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["label", {
         name: "label",
@@ -67,10 +67,10 @@ function createModuleTestSchema(): Schema {
         required: true,
         multi: false,
         columnName: "label",
-        edgeqlType: "str",
-      }],
+        edgeqlType: "str"
+      }]
     ]),
-    links: new Map(),
+    links: new Map()
   };
 
   // Type at top level (unqualified) to ensure existing behavior works
@@ -86,7 +86,7 @@ function createModuleTestSchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["name", {
         name: "name",
@@ -94,7 +94,7 @@ function createModuleTestSchema(): Schema {
         required: true,
         multi: false,
         columnName: "name",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["email", {
         name: "email",
@@ -102,19 +102,19 @@ function createModuleTestSchema(): Schema {
         required: true,
         multi: false,
         columnName: "email",
-        edgeqlType: "str",
-      }],
+        edgeqlType: "str"
+      }]
     ]),
-    links: new Map(),
+    links: new Map()
   };
 
   return {
     types: new Map([
       ["other::Foo", otherFoo],
       ["default::Bar", defaultBar],
-      ["User", userType],
+      ["User", userType]
     ]),
-    functions: getBuiltinFunctions(),
+    functions: getBuiltinFunctions()
   };
 }
 
@@ -152,7 +152,7 @@ Deno.test("WITH MODULE - Parse WITH MODULE only", () => {
 
 Deno.test("WITH MODULE - Parse WITH MODULE + bindings", () => {
   const ast = parseEdgeQL(
-    "WITH MODULE other, x := (SELECT Bar) SELECT x",
+    "WITH MODULE other, x := (SELECT Bar) SELECT x"
   );
   assertEquals(ast.kind, "WithBlock");
   const withBlock = ast as AST.WithBlock;
@@ -195,7 +195,8 @@ Deno.test("WITH MODULE - Module scope does not leak to outer query", () => {
   const ast2 = parser2.parse();
   const result2 = compiler.compile(ast2);
   assertEquals(result2.ok, true);
-  if (!result2.ok) throw result2.error;
+  if (!result2.ok)
+    throw result2.error;
   const sql2 = codegen.generate(result2.value);
   assertStringIncludes(sql2, "users");
 });
@@ -206,13 +207,13 @@ Deno.test("WITH MODULE - Unknown module type produces error", () => {
       compileEdgeQL("WITH MODULE nonexistent SELECT Foo");
     },
     CompilationError,
-    "not found",
+    "not found"
   );
 });
 
 Deno.test("WITH MODULE - Module scope with FILTER", () => {
   const sql = compileEdgeQL(
-    `WITH MODULE other SELECT Foo FILTER .name = 'test'`,
+    `WITH MODULE other SELECT Foo FILTER .name = 'test'`
   );
   assertStringIncludes(sql, "other_foo");
   assertStringIncludes(sql, "WHERE");

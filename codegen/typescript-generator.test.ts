@@ -25,7 +25,7 @@ function createSchemaWithEdgeQLTypes(): Context.Schema {
         required: true,
         multi: false,
         columnName: "id",
-        edgeqlType: "uuid",
+        edgeqlType: "uuid"
       }],
       ["name", {
         name: "name",
@@ -33,7 +33,7 @@ function createSchemaWithEdgeQLTypes(): Context.Schema {
         required: true,
         multi: false,
         columnName: "name",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["email", {
         name: "email",
@@ -41,7 +41,7 @@ function createSchemaWithEdgeQLTypes(): Context.Schema {
         required: true,
         multi: false,
         columnName: "email",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["age", {
         name: "age",
@@ -49,7 +49,7 @@ function createSchemaWithEdgeQLTypes(): Context.Schema {
         required: false,
         multi: false,
         columnName: "age",
-        edgeqlType: "int32",
+        edgeqlType: "int32"
       }],
       ["active", {
         name: "active",
@@ -57,7 +57,7 @@ function createSchemaWithEdgeQLTypes(): Context.Schema {
         required: false,
         multi: false,
         columnName: "active",
-        edgeqlType: "bool",
+        edgeqlType: "bool"
       }],
       ["createdAt", {
         name: "createdAt",
@@ -65,7 +65,7 @@ function createSchemaWithEdgeQLTypes(): Context.Schema {
         required: true,
         multi: false,
         columnName: "created_at",
-        edgeqlType: "datetime",
+        edgeqlType: "datetime"
       }],
       ["score", {
         name: "score",
@@ -73,15 +73,15 @@ function createSchemaWithEdgeQLTypes(): Context.Schema {
         required: false,
         multi: false,
         columnName: "score",
-        edgeqlType: "float64",
-      }],
+        edgeqlType: "float64"
+      }]
     ]),
-    links: new Map(),
+    links: new Map()
   };
 
   return {
     types: new Map([["User", userType]]),
-    functions: new Map(),
+    functions: new Map()
   };
 }
 
@@ -100,29 +100,29 @@ function createSchemaWithoutEdgeQLType(): Context.Schema {
         type: "uuid",
         required: true,
         multi: false,
-        columnName: "id",
+        columnName: "id"
       }],
       ["title", {
         name: "title",
         type: "str",
         required: true,
         multi: false,
-        columnName: "title",
+        columnName: "title"
       }],
       ["count", {
         name: "count",
         type: "int32",
         required: false,
         multi: false,
-        columnName: "count",
-      }],
+        columnName: "count"
+      }]
     ]),
-    links: new Map(),
+    links: new Map()
   };
 
   return {
     types: new Map([["Item", itemType]]),
-    functions: new Map(),
+    functions: new Map()
   };
 }
 
@@ -136,7 +136,7 @@ function createDefaultConfig(): Types.CodegenConfig {
     includeQueryBuilders: true,
     includeMutations: true,
     includeClient: false,
-    formatOutput: true,
+    formatOutput: true
   };
 }
 
@@ -168,12 +168,12 @@ Deno.test("TypeScriptGenerator - mapEdgeQLTypeToTypeScript works with edgeqlType
   // When edgeqlType is "bool", it should resolve to "boolean"
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("bool", true, false),
-    "boolean",
+    "boolean"
   );
   // When edgeqlType is "datetime", it should resolve to "Date"
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("datetime", true, false),
-    "Date",
+    "Date"
   );
 });
 
@@ -184,25 +184,25 @@ Deno.test("TypeScriptGenerator - mapEdgeQLTypeToTypeScript backward compat with 
   assertEquals(Types.mapEdgeQLTypeToTypeScript("text", true, false), "string");
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("integer", true, false),
-    "number",
+    "number"
   );
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("boolean", true, false),
-    "boolean",
+    "boolean"
   );
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("timestamptz", true, false),
-    "Date",
+    "Date"
   );
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("timestamp", true, false),
-    "Date",
+    "Date"
   );
   // "bigint" SQL type maps to "int64" EdgeQL which maps to "bigint" (P1-20:
   // `number` would silently lose precision above 2^53-1).
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("bigint", true, false),
-    "bigint",
+    "bigint"
   );
 });
 
@@ -214,7 +214,7 @@ Deno.test("TypeScriptGenerator - generated query builder has correct _typeCasts 
   const generator = new TypeScriptGenerator(schema, config);
   const result = generator.generate();
 
-  const queryFile = result.files.find((f) => f.type === "queries");
+  const queryFile = result.files.find(f => f.type === "queries");
   assertEquals(queryFile !== undefined, true);
 
   const content = queryFile!.content;
@@ -237,7 +237,7 @@ Deno.test("TypeScriptGenerator - insert method uses _typeCasts lookup", () => {
   const generator = new TypeScriptGenerator(schema, config);
   const result = generator.generate();
 
-  const queryFile = result.files.find((f) => f.type === "queries");
+  const queryFile = result.files.find(f => f.type === "queries");
   assertEquals(queryFile !== undefined, true);
 
   const content = queryFile!.content;
@@ -249,7 +249,7 @@ Deno.test("TypeScriptGenerator - insert method uses _typeCasts lookup", () => {
   // (The fallback `|| "<str>"` is acceptable but the primary path uses _typeCasts)
   const insertSection = content.substring(
     content.indexOf("async insert("),
-    content.indexOf("async update("),
+    content.indexOf("async update(")
   );
   // Should not have the old pattern `\${key} := <str>$\${key}`
   assertEquals(insertSection.includes(":= <str>$"), false);
@@ -263,7 +263,7 @@ Deno.test("TypeScriptGenerator - update method uses _typeCasts lookup", () => {
   const generator = new TypeScriptGenerator(schema, config);
   const result = generator.generate();
 
-  const queryFile = result.files.find((f) => f.type === "queries");
+  const queryFile = result.files.find(f => f.type === "queries");
   assertEquals(queryFile !== undefined, true);
 
   const content = queryFile!.content;
@@ -271,7 +271,7 @@ Deno.test("TypeScriptGenerator - update method uses _typeCasts lookup", () => {
   // Update method should reference _typeCasts
   const updateSection = content.substring(
     content.indexOf("async update("),
-    content.indexOf("async delete("),
+    content.indexOf("async delete(")
   );
   assertStringIncludes(updateSection, "_typeCasts[key]");
   // Should not have the old hardcoded pattern
@@ -286,7 +286,7 @@ Deno.test("TypeScriptGenerator - missing edgeqlType falls back to type field for
   const generator = new TypeScriptGenerator(schema, config);
   const result = generator.generate();
 
-  const queryFile = result.files.find((f) => f.type === "queries");
+  const queryFile = result.files.find(f => f.type === "queries");
   assertEquals(queryFile !== undefined, true);
 
   const content = queryFile!.content;
@@ -304,7 +304,7 @@ Deno.test("TypeScriptGenerator - interface uses edgeqlType for TypeScript type m
   const generator = new TypeScriptGenerator(schema, config);
   const result = generator.generate();
 
-  const typesFile = result.files.find((f) => f.type === "types");
+  const typesFile = result.files.find(f => f.type === "types");
   assertEquals(typesFile !== undefined, true);
 
   const content = typesFile!.content;
@@ -335,7 +335,7 @@ function createSchemaWithMetadata(): Context.Schema {
         required: true,
         multi: false,
         columnName: "id",
-        edgeqlType: "uuid",
+        edgeqlType: "uuid"
       }],
       ["email", {
         name: "email",
@@ -343,7 +343,7 @@ function createSchemaWithMetadata(): Context.Schema {
         required: true,
         multi: false,
         columnName: "email",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["name", {
         name: "name",
@@ -351,7 +351,7 @@ function createSchemaWithMetadata(): Context.Schema {
         required: true,
         multi: false,
         columnName: "name",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["age", {
         name: "age",
@@ -359,7 +359,7 @@ function createSchemaWithMetadata(): Context.Schema {
         required: false,
         multi: false,
         columnName: "age",
-        edgeqlType: "int32",
+        edgeqlType: "int32"
       }],
       ["createdAt", {
         name: "createdAt",
@@ -369,7 +369,7 @@ function createSchemaWithMetadata(): Context.Schema {
         columnName: "created_at",
         edgeqlType: "datetime",
         readonly: true,
-        hasDefault: true,
+        hasDefault: true
       }],
       ["updatedAt", {
         name: "updatedAt",
@@ -378,7 +378,7 @@ function createSchemaWithMetadata(): Context.Schema {
         multi: false,
         columnName: "updated_at",
         edgeqlType: "datetime",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["displayName", {
         name: "displayName",
@@ -387,7 +387,7 @@ function createSchemaWithMetadata(): Context.Schema {
         multi: false,
         columnName: "display_name",
         edgeqlType: "str",
-        computed: true,
+        computed: true
       }],
       ["loginCount", {
         name: "loginCount",
@@ -396,15 +396,15 @@ function createSchemaWithMetadata(): Context.Schema {
         multi: false,
         columnName: "login_count",
         edgeqlType: "int32",
-        readonly: true,
-      }],
+        readonly: true
+      }]
     ]),
-    links: new Map(),
+    links: new Map()
   };
 
   return {
     types: new Map([["User", userType]]),
-    functions: new Map(),
+    functions: new Map()
   };
 }
 
@@ -418,7 +418,7 @@ function createSchemaWithEnum(): Context.Schema {
     tableName: "status",
     properties: new Map(),
     links: new Map(),
-    enumValues: ["active", "inactive", "pending"],
+    enumValues: ["active", "inactive", "pending"]
   };
 
   const userType: Context.TypeDef = {
@@ -432,7 +432,7 @@ function createSchemaWithEnum(): Context.Schema {
         required: true,
         multi: false,
         columnName: "id",
-        edgeqlType: "uuid",
+        edgeqlType: "uuid"
       }],
       ["name", {
         name: "name",
@@ -440,18 +440,18 @@ function createSchemaWithEnum(): Context.Schema {
         required: true,
         multi: false,
         columnName: "name",
-        edgeqlType: "str",
-      }],
+        edgeqlType: "str"
+      }]
     ]),
-    links: new Map(),
+    links: new Map()
   };
 
   return {
     types: new Map([
       ["Status", statusType],
-      ["User", userType],
+      ["User", userType]
     ]),
-    functions: new Map(),
+    functions: new Map()
   };
 }
 
@@ -464,7 +464,7 @@ Deno.test("TypeScriptGenerator - UserInsert requires email and name (no ?)", () 
   const generator = new TypeScriptGenerator(schema, config);
   const result = generator.generate();
 
-  const typesFile = result.files.find((f) => f.type === "types");
+  const typesFile = result.files.find(f => f.type === "types");
   assertEquals(typesFile !== undefined, true);
 
   const content = typesFile!.content;
@@ -489,7 +489,7 @@ Deno.test("TypeScriptGenerator - UserInsert makes createdAt optional when it has
   const generator = new TypeScriptGenerator(schema, config);
   const result = generator.generate();
 
-  const typesFile = result.files.find((f) => f.type === "types");
+  const typesFile = result.files.find(f => f.type === "types");
   assertEquals(typesFile !== undefined, true);
 
   const content = typesFile!.content;
@@ -511,7 +511,7 @@ Deno.test("TypeScriptGenerator - UserInsert excludes id", () => {
   const generator = new TypeScriptGenerator(schema, config);
   const result = generator.generate();
 
-  const typesFile = result.files.find((f) => f.type === "types");
+  const typesFile = result.files.find(f => f.type === "types");
   assertEquals(typesFile !== undefined, true);
 
   const content = typesFile!.content;
@@ -535,7 +535,7 @@ Deno.test("TypeScriptGenerator - UserUpdate excludes readonly properties", () =>
   const generator = new TypeScriptGenerator(schema, config);
   const result = generator.generate();
 
-  const typesFile = result.files.find((f) => f.type === "types");
+  const typesFile = result.files.find(f => f.type === "types");
   assertEquals(typesFile !== undefined, true);
 
   const content = typesFile!.content;
@@ -563,7 +563,7 @@ Deno.test("TypeScriptGenerator - UserUpdate makes all fields optional", () => {
   const generator = new TypeScriptGenerator(schema, config);
   const result = generator.generate();
 
-  const typesFile = result.files.find((f) => f.type === "types");
+  const typesFile = result.files.find(f => f.type === "types");
   assertEquals(typesFile !== undefined, true);
 
   const content = typesFile!.content;
@@ -589,7 +589,7 @@ Deno.test("TypeScriptGenerator - enum type generates union type string", () => {
   const generator = new TypeScriptGenerator(schema, config);
   const result = generator.generate();
 
-  const typesFile = result.files.find((f) => f.type === "types");
+  const typesFile = result.files.find(f => f.type === "types");
   assertEquals(typesFile !== undefined, true);
 
   const content = typesFile!.content;
@@ -597,7 +597,7 @@ Deno.test("TypeScriptGenerator - enum type generates union type string", () => {
   // Should generate a union type for the enum
   assertStringIncludes(
     content,
-    "export type Status = \"active\" | \"inactive\" | \"pending\";",
+    "export type Status = \"active\" | \"inactive\" | \"pending\";"
   );
 
   // Should NOT generate an interface for the enum type
@@ -616,7 +616,7 @@ Deno.test("TypeScriptGenerator - query builder insert method uses ${Type}Insert 
   const generator = new TypeScriptGenerator(schema, config);
   const result = generator.generate();
 
-  const queryFile = result.files.find((f) => f.type === "queries");
+  const queryFile = result.files.find(f => f.type === "queries");
   assertEquals(queryFile !== undefined, true);
 
   const content = queryFile!.content;
@@ -633,7 +633,7 @@ Deno.test("TypeScriptGenerator - query builder update method uses ${Type}Update 
   const generator = new TypeScriptGenerator(schema, config);
   const result = generator.generate();
 
-  const queryFile = result.files.find((f) => f.type === "queries");
+  const queryFile = result.files.find(f => f.type === "queries");
   assertEquals(queryFile !== undefined, true);
 
   const content = queryFile!.content;
@@ -653,7 +653,7 @@ Deno.test("TypeScriptGenerator - UserFilterVars is generated with correct option
   const generator = new TypeScriptGenerator(schema, config);
   const result = generator.generate();
 
-  const typesFile = result.files.find((f) => f.type === "types");
+  const typesFile = result.files.find(f => f.type === "types");
   assertEquals(typesFile !== undefined, true);
 
   const content = typesFile!.content;
@@ -681,7 +681,7 @@ Deno.test("TypeScriptGenerator - FilterVars includes index signature for flexibi
   const generator = new TypeScriptGenerator(schema, config);
   const result = generator.generate();
 
-  const typesFile = result.files.find((f) => f.type === "types");
+  const typesFile = result.files.find(f => f.type === "types");
   assertEquals(typesFile !== undefined, true);
 
   const content = typesFile!.content;
@@ -702,7 +702,7 @@ Deno.test("TypeScriptGenerator - filter method uses Types.${Type}FilterVars para
   const generator = new TypeScriptGenerator(schema, config);
   const result = generator.generate();
 
-  const queryFile = result.files.find((f) => f.type === "queries");
+  const queryFile = result.files.find(f => f.type === "queries");
   assertEquals(queryFile !== undefined, true);
 
   const content = queryFile!.content;
@@ -712,7 +712,7 @@ Deno.test("TypeScriptGenerator - filter method uses Types.${Type}FilterVars para
   // Should NOT use old generic Record<string, any> pattern in filter
   const filterSection = content.substring(
     content.indexOf("async filter("),
-    content.indexOf("async insert("),
+    content.indexOf("async insert(")
   );
   assertEquals(filterSection.includes("Record<string, any>"), false);
 });
@@ -723,7 +723,7 @@ Deno.test("TypeScriptGenerator - count method uses Types.${Type}FilterVars param
   const generator = new TypeScriptGenerator(schema, config);
   const result = generator.generate();
 
-  const queryFile = result.files.find((f) => f.type === "queries");
+  const queryFile = result.files.find(f => f.type === "queries");
   assertEquals(queryFile !== undefined, true);
 
   const content = queryFile!.content;
@@ -731,7 +731,7 @@ Deno.test("TypeScriptGenerator - count method uses Types.${Type}FilterVars param
   // Count method should use UserFilterVars type
   const countSection = content.substring(
     content.indexOf("async count("),
-    content.indexOf("}\n", content.indexOf("async count(")),
+    content.indexOf("}\n", content.indexOf("async count("))
   );
   assertStringIncludes(countSection, "variables?: Types.UserFilterVars");
   // Should NOT use old generic Record<string, any> pattern in count
@@ -745,7 +745,7 @@ Deno.test("TypeScriptGenerator - enum types do not generate FilterVars", () => {
   const generator = new TypeScriptGenerator(schema, config);
   const result = generator.generate();
 
-  const typesFile = result.files.find((f) => f.type === "types");
+  const typesFile = result.files.find(f => f.type === "types");
   assertEquals(typesFile !== undefined, true);
 
   const content = typesFile!.content;
@@ -774,7 +774,7 @@ function createSchemaWithConstraints(): Context.Schema {
         required: true,
         multi: false,
         columnName: "id",
-        edgeqlType: "uuid",
+        edgeqlType: "uuid"
       }],
       ["email", {
         name: "email",
@@ -783,7 +783,7 @@ function createSchemaWithConstraints(): Context.Schema {
         multi: false,
         columnName: "email",
         edgeqlType: "str",
-        constraints: [{ name: "exclusive" }],
+        constraints: [{ name: "exclusive" }]
       }],
       ["name", {
         name: "name",
@@ -794,8 +794,8 @@ function createSchemaWithConstraints(): Context.Schema {
         edgeqlType: "str",
         constraints: [
           { name: "max_length", args: ["100"] },
-          { name: "min_length", args: ["1"] },
-        ],
+          { name: "min_length", args: ["1"] }
+        ]
       }],
       ["bio", {
         name: "bio",
@@ -803,7 +803,7 @@ function createSchemaWithConstraints(): Context.Schema {
         required: false,
         multi: false,
         columnName: "bio",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["createdAt", {
         name: "createdAt",
@@ -813,15 +813,15 @@ function createSchemaWithConstraints(): Context.Schema {
         columnName: "created_at",
         edgeqlType: "datetime",
         readonly: true,
-        hasDefault: true,
-      }],
+        hasDefault: true
+      }]
     ]),
-    links: new Map(),
+    links: new Map()
   };
 
   return {
     types: new Map([["User", userType]]),
-    functions: new Map(),
+    functions: new Map()
   };
 }
 
@@ -832,7 +832,7 @@ Deno.test("TypeScriptGenerator - exclusive constraint appears in JSDoc as @const
   const generator = new TypeScriptGenerator(schema, config);
   const result = generator.generate();
 
-  const typesFile = result.files.find((f) => f.type === "types");
+  const typesFile = result.files.find(f => f.type === "types");
   assertEquals(typesFile !== undefined, true);
 
   const content = typesFile!.content;
@@ -848,7 +848,7 @@ Deno.test("TypeScriptGenerator - constraint with args formats as @constraint nam
   const generator = new TypeScriptGenerator(schema, config);
   const result = generator.generate();
 
-  const typesFile = result.files.find((f) => f.type === "types");
+  const typesFile = result.files.find(f => f.type === "types");
   assertEquals(typesFile !== undefined, true);
 
   const content = typesFile!.content;
@@ -865,7 +865,7 @@ Deno.test("TypeScriptGenerator - properties without constraints have clean singl
   const generator = new TypeScriptGenerator(schema, config);
   const result = generator.generate();
 
-  const typesFile = result.files.find((f) => f.type === "types");
+  const typesFile = result.files.find(f => f.type === "types");
   assertEquals(typesFile !== undefined, true);
 
   const content = typesFile!.content;
@@ -892,7 +892,7 @@ Deno.test("TypeScriptGenerator - readonly and hasDefault metadata appears in JSD
   const generator = new TypeScriptGenerator(schema, config);
   const result = generator.generate();
 
-  const typesFile = result.files.find((f) => f.type === "types");
+  const typesFile = result.files.find(f => f.type === "types");
   assertEquals(typesFile !== undefined, true);
 
   const content = typesFile!.content;
@@ -905,7 +905,7 @@ Deno.test("TypeScriptGenerator - readonly and hasDefault metadata appears in JSD
   // Should contain @readonly and @default tags
   const createdAtSection = content.substring(
     createdAtJsdocStart,
-    content.indexOf("createdAt:", createdAtJsdocStart),
+    content.indexOf("createdAt:", createdAtJsdocStart)
   );
   assertStringIncludes(createdAtSection, "@readonly");
   assertStringIncludes(createdAtSection, "@default");

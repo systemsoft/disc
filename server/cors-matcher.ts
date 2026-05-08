@@ -15,7 +15,7 @@
 
 export function matchCorsOrigin(
   supplied: string,
-  allowlist: ReadonlyArray<string>,
+  allowlist: ReadonlyArray<string>
 ): boolean {
   let parsedSupplied: URL;
   try {
@@ -24,7 +24,8 @@ export function matchCorsOrigin(
     return false;
   }
   // Browsers don't send userinfo in Origin, but reject defensively.
-  if (parsedSupplied.username || parsedSupplied.password) return false;
+  if (parsedSupplied.username || parsedSupplied.password)
+    return false;
   // Origin headers must have an empty path. If the input has a non-empty
   // pathname, treat it as malformed.
   if (parsedSupplied.pathname !== "" && parsedSupplied.pathname !== "/") {
@@ -32,7 +33,8 @@ export function matchCorsOrigin(
   }
 
   for (const pattern of allowlist) {
-    if (matchesPattern(parsedSupplied, pattern)) return true;
+    if (matchesPattern(parsedSupplied, pattern))
+      return true;
   }
   return false;
 }
@@ -48,8 +50,8 @@ function matchesPattern(supplied: URL, pattern: string): boolean {
     return false;
   }
   return (
-    supplied.protocol === parsedPattern.protocol
-    && supplied.host.toLowerCase() === parsedPattern.host.toLowerCase()
+    supplied.protocol === parsedPattern.protocol &&
+    supplied.host.toLowerCase() === parsedPattern.host.toLowerCase()
   );
 }
 
@@ -57,21 +59,27 @@ function matchesWildcardPattern(supplied: URL, pattern: string): boolean {
   // Anchor on `://*.` to reject non-canonical inputs like `*.foo.com`
   // (no scheme) or `https://*foo.com` (wildcard not in label position).
   const schemeIdx = pattern.indexOf("://*.");
-  if (schemeIdx === -1) return false;
+  if (schemeIdx === -1)
+    return false;
   const scheme = pattern.slice(0, schemeIdx); // "https"
   const afterStar = pattern.slice(schemeIdx + "://*.".length); // "example.com" or "example.com:8443"
   // Origin patterns have no path component — reject if one is present.
-  if (afterStar.includes("/")) return false;
+  if (afterStar.includes("/"))
+    return false;
   const baseHost = afterStar.toLowerCase(); // includes port if any
 
-  if (supplied.protocol !== `${scheme}:`) return false;
+  if (supplied.protocol !== `${scheme}:`)
+    return false;
 
   const suppliedHost = supplied.host.toLowerCase(); // includes port if any
   // Pattern host == "*." + baseHost; must match `<one-label>.<baseHost>`.
   const suffix = `.${baseHost}`;
-  if (!suppliedHost.endsWith(suffix)) return false;
+  if (!suppliedHost.endsWith(suffix))
+    return false;
   const prefix = suppliedHost.slice(0, suppliedHost.length - suffix.length);
-  if (prefix.length === 0) return false; // bare baseHost not allowed
-  if (prefix.includes(".")) return false; // only one label deep
+  if (prefix.length === 0)
+    return false; // bare baseHost not allowed
+  if (prefix.includes("."))
+    return false; // only one label deep
   return true;
 }

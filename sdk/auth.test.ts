@@ -8,12 +8,12 @@ import type { AuthResponse, AuthTokens, AuthUser } from "./types.ts";
 // --- Helpers ---
 
 function mockFetch(
-  handler: (url: string, init?: RequestInit) => Response | Promise<Response>,
+  handler: (url: string, init?: RequestInit) => Response | Promise<Response>
 ): () => void {
   const original = globalThis.fetch;
   globalThis.fetch = (
     input: string | URL | Request,
-    init?: RequestInit,
+    init?: RequestInit
   ): Promise<Response> => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     return Promise.resolve(handler(url, init));
@@ -46,7 +46,7 @@ const MOCK_USER: AuthUser = {
   createdAt: "2024-01-01T00:00:00Z",
   updatedAt: "2024-01-01T00:00:00Z",
   emailVerified: true,
-  active: true,
+  active: true
 };
 
 function buildAuthResponse(token?: string): AuthResponse {
@@ -59,10 +59,10 @@ function buildAuthResponse(token?: string): AuthResponse {
       token: accessToken,
       refreshToken: "refresh-abc",
       createdAt: "2024-01-01T00:00:00Z",
-      expiresAt: "2024-01-02T00:00:00Z",
+      expiresAt: "2024-01-02T00:00:00Z"
     },
     token: accessToken,
-    refreshToken: "refresh-abc",
+    refreshToken: "refresh-abc"
   };
 }
 
@@ -70,7 +70,7 @@ function buildAuthResponse(token?: string): AuthResponse {
 
 Deno.test("auth - register returns AuthResponse and stores token", async () => {
   const authResponse = buildAuthResponse();
-  const restore = mockFetch((url) => {
+  const restore = mockFetch(url => {
     if (url.endsWith("/auth/register")) {
       return new Response(JSON.stringify(authResponse));
     }
@@ -81,7 +81,7 @@ Deno.test("auth - register returns AuthResponse and stores token", async () => {
     const auth = new AuthManager(client, { autoRefresh: false });
     const result = await auth.register({
       email: "ada@example.com",
-      password: "secret",
+      password: "secret"
     });
     assertEquals(result.user.email, "ada@example.com");
     assertEquals(client.getAuthToken(), authResponse.token);
@@ -92,7 +92,7 @@ Deno.test("auth - register returns AuthResponse and stores token", async () => {
 
 Deno.test("auth - login returns AuthResponse and stores token", async () => {
   const authResponse = buildAuthResponse();
-  const restore = mockFetch((url) => {
+  const restore = mockFetch(url => {
     if (url.endsWith("/auth/login")) {
       return new Response(JSON.stringify(authResponse));
     }
@@ -103,7 +103,7 @@ Deno.test("auth - login returns AuthResponse and stores token", async () => {
     const auth = new AuthManager(client, { autoRefresh: false });
     const result = await auth.login({
       email: "ada@example.com",
-      password: "secret",
+      password: "secret"
     });
     assertEquals(result.user.id, "user-1");
     assertEquals(client.getAuthToken(), authResponse.token);
@@ -133,7 +133,7 @@ Deno.test("auth - login posts credentials to /auth/login", async () => {
 });
 
 Deno.test("auth - logout clears token and user state", async () => {
-  const restore = mockFetch((url) => {
+  const restore = mockFetch(url => {
     if (url.endsWith("/auth/login")) {
       return new Response(JSON.stringify(buildAuthResponse()));
     }
@@ -160,7 +160,7 @@ Deno.test("auth - refreshTokens posts refresh token and updates client token", a
   const newToken = buildJwt(Math.floor(Date.now() / 1000) + 7200);
   const newTokens: AuthTokens = {
     token: newToken,
-    refreshToken: "refresh-xyz",
+    refreshToken: "refresh-xyz"
   };
   let capturedBody: Record<string, unknown> = {};
 
@@ -196,7 +196,7 @@ Deno.test("auth - refreshTokens throws DiscAuthError when no refresh token", asy
     await assertRejects(
       () => auth.refreshTokens(),
       DiscAuthError,
-      "No refresh token available",
+      "No refresh token available"
     );
   } finally {
     restore();
@@ -204,7 +204,7 @@ Deno.test("auth - refreshTokens throws DiscAuthError when no refresh token", asy
 });
 
 Deno.test("auth - getProfile returns user and updates cache", async () => {
-  const restore = mockFetch((url) => {
+  const restore = mockFetch(url => {
     if (url.endsWith("/auth/login")) {
       return new Response(JSON.stringify(buildAuthResponse()));
     }
@@ -235,7 +235,7 @@ Deno.test("auth - getProfile throws DiscAuthError when not authenticated", async
     await assertRejects(
       () => auth.getProfile(),
       DiscAuthError,
-      "Not authenticated",
+      "Not authenticated"
     );
   } finally {
     restore();
@@ -274,7 +274,7 @@ Deno.test("auth - updatePassword throws DiscAuthError when not authenticated", a
     await assertRejects(
       () => auth.updatePassword("old", "new"),
       DiscAuthError,
-      "Not authenticated",
+      "Not authenticated"
     );
   } finally {
     restore();
@@ -288,7 +288,7 @@ Deno.test("auth - isAuthenticated is false before login", () => {
 });
 
 Deno.test("auth - isAuthenticated is true after login", async () => {
-  const restore = mockFetch((url) => {
+  const restore = mockFetch(url => {
     if (url.endsWith("/auth/login")) {
       return new Response(JSON.stringify(buildAuthResponse()));
     }
@@ -305,7 +305,7 @@ Deno.test("auth - isAuthenticated is true after login", async () => {
 });
 
 Deno.test("auth - isAuthenticated is false after logout", async () => {
-  const restore = mockFetch((url) => {
+  const restore = mockFetch(url => {
     if (url.endsWith("/auth/login")) {
       return new Response(JSON.stringify(buildAuthResponse()));
     }
@@ -332,7 +332,7 @@ Deno.test("auth - getUser returns null before login", () => {
 });
 
 Deno.test("auth - getUser returns cached user after login", async () => {
-  const restore = mockFetch((url) => {
+  const restore = mockFetch(url => {
     if (url.endsWith("/auth/login")) {
       return new Response(JSON.stringify(buildAuthResponse()));
     }
@@ -355,7 +355,7 @@ Deno.test("auth - auto-refresh schedules a timer after login", async () => {
   const futureToken = buildJwt(Math.floor(Date.now() / 1000) + 3600);
   const authResponse = buildAuthResponse(futureToken);
 
-  const restore = mockFetch((url) => {
+  const restore = mockFetch(url => {
     if (url.endsWith("/auth/login")) {
       return new Response(JSON.stringify(authResponse));
     }
@@ -381,7 +381,7 @@ Deno.test("auth - dispose clears refresh timer without error", async () => {
   const futureToken = buildJwt(Math.floor(Date.now() / 1000) + 3600);
   const authResponse = buildAuthResponse(futureToken);
 
-  const restore = mockFetch((url) => {
+  const restore = mockFetch(url => {
     if (url.endsWith("/auth/login")) {
       return new Response(JSON.stringify(authResponse));
     }
@@ -395,7 +395,7 @@ Deno.test("auth - dispose clears refresh timer without error", async () => {
     const client = new DiscClient();
     const auth = new AuthManager(client, {
       autoRefresh: true,
-      refreshBuffer: 3500,
+      refreshBuffer: 3500
     });
     await auth.login({ email: "ada@example.com", password: "secret" });
     // Calling dispose twice must be safe
@@ -408,7 +408,7 @@ Deno.test("auth - dispose clears refresh timer without error", async () => {
 });
 
 Deno.test("auth - login with bad credentials throws DiscAuthError", async () => {
-  const restore = mockFetch((url) => {
+  const restore = mockFetch(url => {
     if (url.endsWith("/auth/login")) {
       return new Response("Invalid credentials", { status: 401 });
     }
@@ -419,12 +419,13 @@ Deno.test("auth - login with bad credentials throws DiscAuthError", async () => 
     const auth = new AuthManager(client, { autoRefresh: false });
     await assertRejects(
       () => auth.login({ email: "ada@example.com", password: "wrong" }),
-      DiscAuthError,
+      DiscAuthError
     );
     assertInstanceOf(
-      await auth.login({ email: "ada@example.com", password: "wrong" })
-        .catch((e) => e),
-      DiscAuthError,
+      await auth
+        .login({ email: "ada@example.com", password: "wrong" })
+        .catch(e => e),
+      DiscAuthError
     );
   } finally {
     restore();
@@ -432,7 +433,7 @@ Deno.test("auth - login with bad credentials throws DiscAuthError", async () => 
 });
 
 Deno.test("auth - register with existing email throws DiscAuthError", async () => {
-  const restore = mockFetch((url) => {
+  const restore = mockFetch(url => {
     if (url.endsWith("/auth/register")) {
       return new Response("Email already in use", { status: 409 });
     }
@@ -448,7 +449,7 @@ Deno.test("auth - register with existing email throws DiscAuthError", async () =
     // real-world "email taken" auth rejection pattern used by the server.
     // Restore and remock with 401 to match spec.
     restore();
-    const restore2 = mockFetch((url2) => {
+    const restore2 = mockFetch(url2 => {
       if (url2.endsWith("/auth/register")) {
         return new Response("Email already in use", { status: 401 });
       }
@@ -459,9 +460,9 @@ Deno.test("auth - register with existing email throws DiscAuthError", async () =
         () =>
           auth.register({
             email: "ada@example.com",
-            password: "secret",
+            password: "secret"
           }),
-        DiscAuthError,
+        DiscAuthError
       );
     } finally {
       restore2();

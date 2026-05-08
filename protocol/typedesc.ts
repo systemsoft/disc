@@ -32,7 +32,7 @@ export const DescriptorTag = {
   OBJECT_INPUT: 0x08,
   COMPOUND: 0x09,
   MULTI_RANGE: 0x0a,
-  TYPE_ANNOTATION: 0xff,
+  TYPE_ANNOTATION: 0xff
 } as const;
 
 export type DescriptorTagValue = (typeof DescriptorTag)[keyof typeof DescriptorTag];
@@ -62,17 +62,17 @@ const WELL_KNOWN_ENTRIES: Array<[string, string]> = [
   ["cal::relative_duration", "00000000-0000-0000-0000-000000000111"],
   ["cal::date_duration", "00000000-0000-0000-0000-000000000112"],
   ["std::memory", "00000000-0000-0000-0000-000000000130"],
-  ["cfg::memory", "00000000-0000-0000-0000-000000000130"],
+  ["cfg::memory", "00000000-0000-0000-0000-000000000130"]
 ];
 
 /** Map from qualified type name to 16-byte UUID. */
 export const WELL_KNOWN_TYPES: Map<string, Uint8Array> = new Map(
-  WELL_KNOWN_ENTRIES.map(([name, uuid]) => [name, uuidToBytes(uuid)]),
+  WELL_KNOWN_ENTRIES.map(([name, uuid]) => [name, uuidToBytes(uuid)])
 );
 
 /** Reverse map from UUID hex string to qualified type name. */
 export const UUID_TO_TYPE: Map<string, string> = new Map(
-  WELL_KNOWN_ENTRIES.map(([name, uuid]) => [uuid, name]),
+  WELL_KNOWN_ENTRIES.map(([name, uuid]) => [uuid, name])
 );
 
 /**
@@ -98,7 +98,7 @@ const SHORT_NAME_MAP: Map<string, string> = new Map([
   ["local_date", "cal::local_date"],
   ["local_time", "cal::local_time"],
   ["relative_duration", "cal::relative_duration"],
-  ["date_duration", "cal::date_duration"],
+  ["date_duration", "cal::date_duration"]
 ]);
 
 /**
@@ -107,9 +107,11 @@ const SHORT_NAME_MAP: Map<string, string> = new Map([
  */
 export function resolveWellKnownType(name: string): Uint8Array | undefined {
   const direct = WELL_KNOWN_TYPES.get(name);
-  if (direct) return direct;
+  if (direct)
+    return direct;
   const qualified = SHORT_NAME_MAP.get(name);
-  if (qualified) return WELL_KNOWN_TYPES.get(qualified);
+  if (qualified)
+    return WELL_KNOWN_TYPES.get(qualified);
   return undefined;
 }
 
@@ -307,7 +309,7 @@ function encodeSingleDescriptor(d: TypeDescriptor): Uint8Array {
       return encodeMultiRange(d);
     default:
       throw new Error(
-        `Unknown descriptor tag: 0x${(d as TypeDescriptor).tag.toString(16)}`,
+        `Unknown descriptor tag: 0x${(d as TypeDescriptor).tag.toString(16)}`
       );
   }
 }
@@ -323,7 +325,7 @@ function encodeSingleDescriptor(d: TypeDescriptor): Uint8Array {
  * so the decoder can step through them sequentially.
  */
 export function encodeTypeDescriptors(
-  descriptors: TypeDescriptor[],
+  descriptors: TypeDescriptor[]
 ): Uint8Array {
   const w = new BufferWriter();
   for (const d of descriptors) {
@@ -393,7 +395,7 @@ export function decodeTypeDescriptors(data: Uint8Array): TypeDescriptor[] {
           tag: DescriptorTag.ARRAY,
           id,
           elementTypeId,
-          dimensions,
+          dimensions
         });
         break;
       }
@@ -433,7 +435,7 @@ export function decodeTypeDescriptors(data: Uint8Array): TypeDescriptor[] {
       }
       default:
         throw new Error(
-          `Unknown descriptor tag during decode: 0x${tag.toString(16)}`,
+          `Unknown descriptor tag during decode: 0x${tag.toString(16)}`
         );
     }
   }
@@ -451,11 +453,11 @@ export function decodeTypeDescriptors(data: Uint8Array): TypeDescriptor[] {
  * same content.
  */
 export async function generateDescriptorId(
-  content: Uint8Array,
+  content: Uint8Array
 ): Promise<Uint8Array> {
   const hash = await crypto.subtle.digest(
     "SHA-256",
-    content as Uint8Array<ArrayBuffer>,
+    content as Uint8Array<ArrayBuffer>
   );
   return new Uint8Array(hash.slice(0, 16));
 }
@@ -494,7 +496,7 @@ export function generateDescriptorIdSync(content: Uint8Array): Uint8Array {
 export const ShapeElementFlags = {
   IMPLICIT: 1 << 0,
   LINK_PROPERTY: 1 << 1,
-  LINK: 1 << 2,
+  LINK: 1 << 2
 } as const;
 
 /**
@@ -513,7 +515,7 @@ export const ShapeElementFlags = {
 export function buildResultDescriptors(
   typeDef: TypeDef,
   shapeFields: string[],
-  schema?: Map<string, TypeDef>,
+  schema?: Map<string, TypeDef>
 ): { descriptors: TypeDescriptor[]; rootId: Uint8Array; } {
   const descriptors: TypeDescriptor[] = [];
   const emittedIds = new Set<string>();
@@ -528,7 +530,7 @@ export function buildResultDescriptors(
       emittedIds.add(idHex);
       descriptors.push({
         tag: DescriptorTag.BASE_SCALAR,
-        id: typeId,
+        id: typeId
       });
     }
     return typeId;
@@ -536,7 +538,7 @@ export function buildResultDescriptors(
 
   function buildShapeForType(
     td: TypeDef,
-    fields: string[],
+    fields: string[]
   ): Uint8Array {
     const elements: ObjectShapeElement[] = [];
 
@@ -574,7 +576,7 @@ export function buildResultDescriptors(
           flags: ShapeElementFlags.LINK,
           cardinality,
           name: fieldName,
-          typeId: linkTypeId,
+          typeId: linkTypeId
         });
         continue;
       }
@@ -601,7 +603,7 @@ export function buildResultDescriptors(
       descriptors.push({
         tag: DescriptorTag.OBJECT_SHAPE,
         id: shapeId,
-        elements,
+        elements
       });
     }
 
@@ -619,7 +621,7 @@ export function buildResultDescriptors(
   descriptors.push({
     tag: DescriptorTag.SET,
     id: setId,
-    elementTypeId: shapeId,
+    elementTypeId: shapeId
   });
 
   return { descriptors, rootId: setId };

@@ -25,14 +25,14 @@ const RUN_PG = canRunPgTests();
 
 /** Parse a DSN into connection config for the raw deno-postgres Client. */
 function parseDsn(
-  dsn: string,
+  dsn: string
 ): { hostname: string; port: number; user: string; database: string; } {
   const url = new URL(dsn);
   return {
     hostname: url.hostname || "localhost",
     port: url.port ? parseInt(url.port) : 5432,
     user: url.username || "disc",
-    database: url.pathname.slice(1) || "disc_test",
+    database: url.pathname.slice(1) || "disc_test"
   };
 }
 
@@ -47,7 +47,7 @@ async function tableExists(dsn: string, tableName: string): Promise<boolean> {
         SELECT 1 FROM information_schema.tables
         WHERE table_schema = 'public' AND table_name = $1
       ) AS exists`,
-      [tableName],
+      [tableName]
     );
     return result.rows[0]?.exists ?? false;
   } finally {
@@ -58,7 +58,7 @@ async function tableExists(dsn: string, tableName: string): Promise<boolean> {
 /** Get column info for a table via a raw client. */
 async function getColumns(
   dsn: string,
-  tableName: string,
+  tableName: string
 ): Promise<{ column_name: string; data_type: string; }[]> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
@@ -71,7 +71,7 @@ async function getColumns(
        FROM information_schema.columns
        WHERE table_schema = 'public' AND table_name = $1
        ORDER BY ordinal_position`,
-      [tableName],
+      [tableName]
     );
     return result.rows;
   } finally {
@@ -99,7 +99,7 @@ function makePool(dsn: string): ConnectionPool {
     connectionString: dsn,
     minConnections: 1,
     maxConnections: 3,
-    cleanupInterval: 0,
+    cleanupInterval: 0
   });
 }
 
@@ -113,7 +113,7 @@ function makeEngine(pool: ConnectionPool, dryRun = false): MigrationEngine {
     autoApprove: true,
     backupBeforeMigration: false,
     rollbackOnError: true,
-    connectionPool: pool,
+    connectionPool: pool
   };
   return new MigrationEngine(config);
 }
@@ -147,7 +147,7 @@ Deno.test({
             required: true,
             multi: false,
             constraints: [],
-            annotations: {},
+            annotations: {}
           },
           {
             name: "email",
@@ -155,10 +155,10 @@ Deno.test({
             required: true,
             multi: false,
             constraints: ["exclusive"],
-            annotations: {},
-          },
+            annotations: {}
+          }
         ],
-        links: [],
+        links: []
       };
 
       // Plan and execute the migration
@@ -168,13 +168,13 @@ Deno.test({
         description: "Test table creation",
         createdAt: new Date(),
         schemaHash: "test_hash",
-        operations: [createOp],
+        operations: [createOp]
       };
 
       const plan: Types.MigrationPlan = {
         migrations: [migration],
         targetSchemaHash: "test_hash",
-        operationsCount: 1,
+        operationsCount: 1
       };
 
       const result = await engine.executeMigration(plan);
@@ -186,17 +186,17 @@ Deno.test({
 
       // Verify columns
       const columns = await getColumns(dsn, tableName);
-      const columnNames = columns.map((c) => c.column_name);
+      const columnNames = columns.map(c => c.column_name);
       assertEquals(columnNames.includes("id"), true, "Should have id column");
       assertEquals(
         columnNames.includes("name"),
         true,
-        "Should have name column",
+        "Should have name column"
       );
       assertEquals(
         columnNames.includes("email"),
         true,
-        "Should have email column",
+        "Should have email column"
       );
 
       await engine.close();
@@ -204,7 +204,7 @@ Deno.test({
       await dropTables(dsn, tableName);
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -232,10 +232,10 @@ Deno.test({
             required: false,
             multi: false,
             constraints: [],
-            annotations: {},
-          },
+            annotations: {}
+          }
         ],
-        links: [],
+        links: []
       };
 
       const migrationId = `track_test_${Date.now()}`;
@@ -245,13 +245,13 @@ Deno.test({
         description: "Migration with tracker recording",
         createdAt: new Date(),
         schemaHash: "track_hash",
-        operations: [createOp],
+        operations: [createOp]
       };
 
       const plan: Types.MigrationPlan = {
         migrations: [migration],
         targetSchemaHash: "track_hash",
-        operationsCount: 1,
+        operationsCount: 1
       };
 
       const result = await engine.executeMigration(plan);
@@ -260,7 +260,7 @@ Deno.test({
       // Query disc_migrations table to verify the record was inserted
       const queryResult = await pool.query(
         `SELECT id, name, description FROM disc_migrations WHERE id = $1`,
-        [migrationId],
+        [migrationId]
       );
       assertEquals(queryResult.rowCount, 1, "Should have one migration record");
       assertEquals(queryResult.rows[0].id, migrationId);
@@ -272,11 +272,11 @@ Deno.test({
         dsn,
         tableName,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -304,10 +304,10 @@ Deno.test({
             required: true,
             multi: false,
             constraints: [],
-            annotations: {},
-          },
+            annotations: {}
+          }
         ],
-        links: [],
+        links: []
       };
 
       const migration: Types.Migration = {
@@ -316,13 +316,13 @@ Deno.test({
         description: "Should not execute",
         createdAt: new Date(),
         schemaHash: "dry_hash",
-        operations: [createOp],
+        operations: [createOp]
       };
 
       const plan: Types.MigrationPlan = {
         migrations: [migration],
         targetSchemaHash: "dry_hash",
-        operationsCount: 1,
+        operationsCount: 1
       };
 
       const result = await engine.executeMigration(plan);
@@ -333,7 +333,7 @@ Deno.test({
       assertEquals(
         exists,
         false,
-        "Table should NOT exist after dry-run migration",
+        "Table should NOT exist after dry-run migration"
       );
 
       await engine.close();
@@ -343,11 +343,11 @@ Deno.test({
         dsn,
         tableName,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -375,10 +375,10 @@ Deno.test({
             required: true,
             multi: false,
             constraints: [],
-            annotations: {},
-          },
+            annotations: {}
+          }
         ],
-        links: [],
+        links: []
       };
 
       // Create a migration whose second operation has invalid SQL
@@ -397,10 +397,10 @@ Deno.test({
               required: true,
               multi: false,
               constraints: [],
-              annotations: {},
-            },
-          } as Types.AddPropertyOperation,
-        ],
+              annotations: {}
+            }
+          } as Types.AddPropertyOperation
+        ]
       };
 
       const migration: Types.Migration = {
@@ -409,13 +409,13 @@ Deno.test({
         description: "First op succeeds, second fails, all rolls back",
         createdAt: new Date(),
         schemaHash: "rollback_hash",
-        operations: [validCreateOp, invalidAlterOp],
+        operations: [validCreateOp, invalidAlterOp]
       };
 
       const plan: Types.MigrationPlan = {
         migrations: [migration],
         targetSchemaHash: "rollback_hash",
-        operationsCount: 2,
+        operationsCount: 2
       };
 
       const result = await engine.executeMigration(plan);
@@ -429,7 +429,7 @@ Deno.test({
       assertEquals(
         exists,
         false,
-        "Table should NOT exist after transactional rollback",
+        "Table should NOT exist after transactional rollback"
       );
 
       await engine.close();
@@ -438,11 +438,11 @@ Deno.test({
         dsn,
         tableName,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -476,7 +476,7 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema should succeed: ${result.ok ? "" : (result as any).error}`,
+        `applySchema should succeed: ${result.ok ? "" : (result as any).error}`
       );
 
       // Verify the table was created
@@ -484,22 +484,22 @@ Deno.test({
       assertEquals(
         exists,
         true,
-        `Table '${expectedTable}' should exist after applySchema`,
+        `Table '${expectedTable}' should exist after applySchema`
       );
 
       // Verify columns
       const columns = await getColumns(dsn, expectedTable);
-      const columnNames = columns.map((c) => c.column_name);
+      const columnNames = columns.map(c => c.column_name);
       assertEquals(columnNames.includes("id"), true, "Should have id column");
       assertEquals(
         columnNames.includes("name"),
         true,
-        "Should have name column",
+        "Should have name column"
       );
       assertEquals(
         columnNames.includes("email"),
         true,
-        "Should have email column",
+        "Should have email column"
       );
 
       await manager.close();
@@ -508,11 +508,11 @@ Deno.test({
         dsn,
         expectedTable,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -541,16 +541,16 @@ Deno.test({
 
       // Verify initial columns
       let columns = await getColumns(dsn, expectedTable);
-      let columnNames = columns.map((c) => c.column_name);
+      let columnNames = columns.map(c => c.column_name);
       assertEquals(
         columnNames.includes("name"),
         true,
-        "Should have name column",
+        "Should have name column"
       );
       assertEquals(
         columnNames.includes("age"),
         false,
-        "Should NOT have age column yet",
+        "Should NOT have age column yet"
       );
 
       // Step 2: Apply evolved schema (add age column)
@@ -566,16 +566,16 @@ Deno.test({
 
       // Verify the new column was added
       columns = await getColumns(dsn, expectedTable);
-      columnNames = columns.map((c) => c.column_name);
+      columnNames = columns.map(c => c.column_name);
       assertEquals(
         columnNames.includes("name"),
         true,
-        "Should still have name column",
+        "Should still have name column"
       );
       assertEquals(
         columnNames.includes("age"),
         true,
-        "Should now have age column",
+        "Should now have age column"
       );
 
       await manager.close();
@@ -584,11 +584,11 @@ Deno.test({
         dsn,
         expectedTable,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -619,7 +619,7 @@ Deno.test({
       const schema = manager.getSchema();
       assertExists(
         schema,
-        "getSchema() should return a Schema after applySchema",
+        "getSchema() should return a Schema after applySchema"
       );
       assertExists(schema!.types, "Schema should have types");
 
@@ -648,9 +648,9 @@ Deno.test({
         dsn,
         expectedTable,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });

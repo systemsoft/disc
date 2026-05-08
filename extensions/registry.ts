@@ -18,7 +18,7 @@ export class ExtensionRegistry {
     if (this.extensions.has(name)) {
       throw new ExtensionInitError(
         name,
-        `Extension "${name}" is already registered`,
+        `Extension "${name}" is already registered`
       );
     }
     this.extensions.set(name, extension);
@@ -49,7 +49,7 @@ export class ExtensionRegistry {
    */
   async initializeAll(
     context: ExtensionContext,
-    options: { onError?: "strict" | "continue"; } = {},
+    options: { onError?: "strict" | "continue"; } = {}
   ): Promise<string[]> {
     const onError = options.onError ?? "strict";
     const sorted = this.topologicalSort();
@@ -75,7 +75,7 @@ export class ExtensionRegistry {
           throw initError;
         }
         log.error(`Extension failed to initialize (continuing): ${name}`, {
-          error: message,
+          error: message
         });
         failed.push(name);
       }
@@ -151,7 +151,7 @@ export class ExtensionRegistry {
       } catch (error) {
         status.set(name, {
           healthy: false,
-          details: error instanceof Error ? error.message : String(error),
+          details: error instanceof Error ? error.message : String(error)
         });
       }
     }
@@ -168,21 +168,23 @@ export class ExtensionRegistry {
     const visiting = new Set<string>();
 
     const visit = (name: string): void => {
-      if (visited.has(name)) return;
+      if (visited.has(name))
+        return;
       if (visiting.has(name)) {
         throw new ExtensionDependencyError(
           name,
-          [`Circular dependency detected involving "${name}"`],
+          [`Circular dependency detected involving "${name}"`]
         );
       }
 
       visiting.add(name);
 
       const ext = this.extensions.get(name);
-      if (!ext) return;
+      if (!ext)
+        return;
 
       const deps = ext.metadata.dependencies || [];
-      const missing = deps.filter((d) => !this.extensions.has(d));
+      const missing = deps.filter(d => !this.extensions.has(d));
       if (missing.length > 0) {
         throw new ExtensionDependencyError(name, missing);
       }

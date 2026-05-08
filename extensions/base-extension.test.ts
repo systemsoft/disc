@@ -12,7 +12,7 @@ class TestExtension extends BaseExtension {
   readonly metadata: ExtensionMetadata = {
     name: "test-ext",
     version: "1.0.0",
-    description: "Test extension",
+    description: "Test extension"
   };
 }
 
@@ -27,7 +27,7 @@ function makeContext(): ExtensionContext {
       maxConnections: 5,
       requestTimeout: 5000,
       enableCors: false,
-      enableWebsockets: false,
+      enableWebsockets: false
     },
     logger: {
       debug: () => {},
@@ -39,8 +39,8 @@ function makeContext(): ExtensionContext {
       },
       withRequest: function() {
         return this;
-      },
-    } as unknown as ExtensionContext["logger"],
+      }
+    } as unknown as ExtensionContext["logger"]
   };
 }
 

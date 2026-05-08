@@ -16,7 +16,7 @@ describe("AuthMiddleware", () => {
     jwtSecret: "test-secret-key-at-least-32-characters-long",
     bcryptRounds: 4,
     tokenExpiry: 3600,
-    passwordMinLength: 6,
+    passwordMinLength: 6
   };
 
   beforeEach(async () => {
@@ -30,7 +30,7 @@ describe("AuthMiddleware", () => {
     // Create a test user and token
     const response = await provider.register({
       email: "test@example.com",
-      password: "TestPass123!",
+      password: "TestPass123!"
     });
     testToken = response.token;
     testUserId = response.user.id;
@@ -44,8 +44,8 @@ describe("AuthMiddleware", () => {
     it("should extract bearer token from Authorization header", async () => {
       const request = new Request("http://localhost/test", {
         headers: {
-          "Authorization": `Bearer ${testToken}`,
-        },
+          Authorization: `Bearer ${testToken}`
+        }
       });
 
       const context = await middleware.authenticate(request);
@@ -58,8 +58,8 @@ describe("AuthMiddleware", () => {
     it("should extract token from cookie", async () => {
       const request = new Request("http://localhost/test", {
         headers: {
-          "Cookie": `auth_token=${testToken}`,
-        },
+          Cookie: `auth_token=${testToken}`
+        }
       });
 
       const context = await middleware.authenticate(request);
@@ -90,8 +90,8 @@ describe("AuthMiddleware", () => {
     it("should return null for invalid token", async () => {
       const request = new Request("http://localhost/test", {
         headers: {
-          "Authorization": "Bearer invalid-token",
-        },
+          Authorization: "Bearer invalid-token"
+        }
       });
 
       const context = await middleware.authenticate(request);
@@ -104,8 +104,8 @@ describe("AuthMiddleware", () => {
     it("should allow authenticated requests to protected routes", async () => {
       const request = new Request("http://localhost/api/protected", {
         headers: {
-          "Authorization": `Bearer ${testToken}`,
-        },
+          Authorization: `Bearer ${testToken}`
+        }
       });
 
       const handler = (_req: Request) => new Response("Success");
@@ -132,8 +132,8 @@ describe("AuthMiddleware", () => {
     it("should pass auth context to handler", async () => {
       const request = new Request("http://localhost/api/protected", {
         headers: {
-          "Authorization": `Bearer ${testToken}`,
-        },
+          Authorization: `Bearer ${testToken}`
+        }
       });
 
       let capturedContext: any;
@@ -155,8 +155,8 @@ describe("AuthMiddleware", () => {
     it("should add context for authenticated requests", async () => {
       const request = new Request("http://localhost/api/public", {
         headers: {
-          "Authorization": `Bearer ${testToken}`,
-        },
+          Authorization: `Bearer ${testToken}`
+        }
       });
 
       let capturedContext: any;
@@ -193,8 +193,8 @@ describe("AuthMiddleware", () => {
     it("should add security headers to responses", async () => {
       const request = new Request("http://localhost/test", {
         headers: {
-          "Authorization": `Bearer ${testToken}`,
-        },
+          Authorization: `Bearer ${testToken}`
+        }
       });
 
       const handler = (_req: Request) => new Response("Success");
@@ -211,15 +211,15 @@ describe("AuthMiddleware", () => {
       const request = new Request("http://localhost/api/test", {
         method: "OPTIONS",
         headers: {
-          "Origin": "http://example.com",
-          "Access-Control-Request-Method": "POST",
-        },
+          Origin: "http://example.com",
+          "Access-Control-Request-Method": "POST"
+        }
       });
 
       const handler = (_req: Request) => new Response("Success");
       const corsHandler = middleware.withCORS(handler, {
         origins: ["http://example.com"],
-        methods: ["GET", "POST"],
+        methods: ["GET", "POST"]
       });
 
       const response = await corsHandler(request);
@@ -227,24 +227,24 @@ describe("AuthMiddleware", () => {
       assertEquals(response.status, 204);
       assertEquals(
         response.headers.get("Access-Control-Allow-Origin"),
-        "http://example.com",
+        "http://example.com"
       );
       assertEquals(
         response.headers.get("Access-Control-Allow-Methods"),
-        "GET, POST",
+        "GET, POST"
       );
     });
 
     it("should reject CORS requests from disallowed origins", async () => {
       const request = new Request("http://localhost/api/test", {
         headers: {
-          "Origin": "http://evil.com",
-        },
+          Origin: "http://evil.com"
+        }
       });
 
       const handler = (_req: Request) => new Response("Success");
       const corsHandler = middleware.withCORS(handler, {
-        origins: ["http://example.com"],
+        origins: ["http://example.com"]
       });
 
       const response = await corsHandler(request);
@@ -254,7 +254,7 @@ describe("AuthMiddleware", () => {
 
     it("default CORS denies all origins until opted in (P0-06)", async () => {
       const request = new Request("http://localhost/api/test", {
-        headers: { "Origin": "http://anything.com" },
+        headers: { Origin: "http://anything.com" }
       });
       const handler = (_req: Request) => new Response("ok");
       // no options — defaults
@@ -263,7 +263,7 @@ describe("AuthMiddleware", () => {
       assertEquals(
         response.headers.get("Access-Control-Allow-Origin"),
         null,
-        "Default CORS config must not echo any Origin header",
+        "Default CORS config must not echo any Origin header"
       );
     });
 
@@ -273,7 +273,7 @@ describe("AuthMiddleware", () => {
       try {
         middleware.withCORS(handler, {
           origins: ["*"],
-          credentials: true,
+          credentials: true
         });
       } catch (_) {
         threw = true;
@@ -281,7 +281,7 @@ describe("AuthMiddleware", () => {
       assertEquals(
         threw,
         true,
-        "The insecure wildcard+credentials combination must be rejected",
+        "The insecure wildcard+credentials combination must be rejected"
       );
     });
   });

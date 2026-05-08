@@ -14,11 +14,11 @@ export function provideDocumentSymbols(text: string): DocumentSymbol[] {
   const out: DocumentSymbol[] = [];
 
   for (const t of idx.types.values()) {
-    const children: DocumentSymbol[] = t.members.map((m) => ({
+    const children: DocumentSymbol[] = t.members.map(m => ({
       name: m.name,
       kind: m.kind === "link" ? SymbolKind.Field : SymbolKind.Property,
       range: m.range,
-      selectionRange: m.range,
+      selectionRange: m.range
     }));
 
     out.push({
@@ -27,14 +27,14 @@ export function provideDocumentSymbols(text: string): DocumentSymbol[] {
       kind: typeKindToSymbolKind(t.kind),
       range: t.fullRange,
       selectionRange: t.range,
-      children: children.length > 0 ? children : undefined,
+      children: children.length > 0 ? children : undefined
     });
   }
 
   // Sort by start line for stable, file-order output.
   out.sort((a, b) =>
-    a.range.start.line - b.range.start.line
-    || a.range.start.character - b.range.start.character
+    a.range.start.line - b.range.start.line ||
+    a.range.start.character - b.range.start.character
   );
   return out;
 }

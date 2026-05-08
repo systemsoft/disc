@@ -49,17 +49,17 @@ async function buildServer(opts: {
       enableWebsockets: false,
       jwtSecret: TEST_JWT_SECRET,
       enableAuth: true,
-      requireAuth: opts.requireAuth,
+      requireAuth: opts.requireAuth
     },
     protocolHandler: {
       handleRequest: () => Promise.resolve({ data: { result: "ok" } }),
-      validateRequest: () => [],
+      validateRequest: () => []
     },
     authProvider: provider,
     ...(opts.withMiddleware === false ? {} : {
       authMiddleware: middleware,
-      authRoutes: routes,
-    }),
+      authRoutes: routes
+    })
   });
 
   return { server, provider, middleware, db };
@@ -68,7 +68,7 @@ async function buildServer(opts: {
 async function startAndWait(server: HttpServer): Promise<void> {
   // Fire start without awaiting (it never returns until stop).
   void server.start();
-  await new Promise((r) => setTimeout(r, 150));
+  await new Promise(r => setTimeout(r, 150));
 }
 
 // ── requireAuth=false (default) — backwards compat ─────────────────────
@@ -82,7 +82,7 @@ Deno.test("requireAuth=false — /query reachable without token (backwards compa
     const res = await fetch(`http://${TEST_HOST}:${port}/query`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: "SELECT 1" }),
+      body: JSON.stringify({ query: "SELECT 1" })
     });
     // Status doesn't matter — just that auth didn't reject it (not 401/503).
     assertEquals(res.status === 401 || res.status === 503, false);
@@ -104,7 +104,7 @@ Deno.test("requireAuth=true — /query rejects unauthenticated request with 401"
     const res = await fetch(`http://${TEST_HOST}:${port}/query`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: "SELECT 1" }),
+      body: JSON.stringify({ query: "SELECT 1" })
     });
 
     assertEquals(res.status, 401);
@@ -122,23 +122,23 @@ Deno.test("requireAuth=true — /query accepts a valid Bearer token", async () =
   const port = pickPort();
   const { server, provider, db } = await buildServer({
     port,
-    requireAuth: true,
+    requireAuth: true
   });
   await startAndWait(server);
 
   try {
     const auth = await provider.register({
       email: "alice@test.com",
-      password: "password123",
+      password: "password123"
     });
 
     const res = await fetch(`http://${TEST_HOST}:${port}/query`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${auth.token}`,
+        Authorization: `Bearer ${auth.token}`
       },
-      body: JSON.stringify({ query: "SELECT 1" }),
+      body: JSON.stringify({ query: "SELECT 1" })
     });
 
     // Pass = anything that isn't the auth-gate's rejection.
@@ -161,9 +161,9 @@ Deno.test("requireAuth=true — /query rejects an invalid Bearer token with 401"
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": "Bearer not-a-real-jwt",
+        Authorization: "Bearer not-a-real-jwt"
       },
-      body: JSON.stringify({ query: "SELECT 1" }),
+      body: JSON.stringify({ query: "SELECT 1" })
     });
 
     assertEquals(res.status, 401);
@@ -200,7 +200,7 @@ Deno.test("requireAuth=true — /auth/login still reachable without token", asyn
     const res = await fetch(`http://${TEST_HOST}:${port}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "x@x.com", password: "wrong" }),
+      body: JSON.stringify({ email: "x@x.com", password: "wrong" })
     });
     // 401 from the auth route itself is fine — what matters is the auth
     // gate didn't intercept (no WWW-Authenticate Bearer challenge).
@@ -243,12 +243,12 @@ Deno.test("requireAuth=true with no authMiddleware — returns 503 on protected 
       requestTimeout: 5000,
       enableCors: true,
       enableWebsockets: false,
-      requireAuth: true,
+      requireAuth: true
     },
     protocolHandler: {
       handleRequest: () => Promise.resolve({ data: { result: "ok" } }),
-      validateRequest: () => [],
-    },
+      validateRequest: () => []
+    }
   });
 
   await startAndWait(server);
@@ -257,14 +257,14 @@ Deno.test("requireAuth=true with no authMiddleware — returns 503 on protected 
     const res = await fetch(`http://${TEST_HOST}:${port}/query`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: "SELECT 1" }),
+      body: JSON.stringify({ query: "SELECT 1" })
     });
 
     assertEquals(res.status, 503);
     const body = await res.json();
     assertEquals(
       body.error,
-      "Authentication required but auth provider not configured",
+      "Authentication required but auth provider not configured"
     );
   } finally {
     await server.stop();

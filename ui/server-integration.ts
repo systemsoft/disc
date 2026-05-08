@@ -20,13 +20,13 @@ export class UIServer {
     this.options = {
       enabled: options.enabled ?? true,
       basePath: options.basePath ?? "/ui",
-      buildDir: options.buildDir,
+      buildDir: options.buildDir
     };
 
     // Default build directory relative to this file
     this.buildPath = this.options.buildDir || join(
       new URL(".", import.meta.url).pathname,
-      "build",
+      "build"
     );
   }
 
@@ -48,7 +48,7 @@ export class UIServer {
     const uiBuilt = await this.isBuilt();
     if (!uiBuilt) {
       console.warn(
-        "UI build not found. Run 'npm run build' in the ui/ directory.",
+        "UI build not found. Run 'npm run build' in the ui/ directory."
       );
       return null;
     }
@@ -80,8 +80,8 @@ export class UIServer {
           const file = await Deno.readFile(indexPath);
           return new Response(file, {
             headers: {
-              "content-type": "text/html; charset=utf-8",
-            },
+              "content-type": "text/html; charset=utf-8"
+            }
           });
         }
 
@@ -92,10 +92,11 @@ export class UIServer {
         return new Response(file, {
           headers: {
             "content-type": contentType,
-            "cache-control": filePath.includes("_app")
-              ? "public, max-age=31536000, immutable" // Cache versioned assets
-              : "public, max-age=3600", // Cache other assets for 1 hour
-          },
+            "cache-control": filePath.includes("_app") ?
+              "public, max-age=31536000, immutable" // Cache versioned assets
+               :
+              "public, max-age=3600" // Cache other assets for 1 hour
+          }
         });
       } catch (error) {
         // If file not found and it's a route, serve index.html (SPA fallback)
@@ -105,8 +106,8 @@ export class UIServer {
             const file = await Deno.readFile(indexPath);
             return new Response(file, {
               headers: {
-                "content-type": "text/html; charset=utf-8",
-              },
+                "content-type": "text/html; charset=utf-8"
+              }
             });
           } catch {
             // Index.html also not found
@@ -139,7 +140,7 @@ export class UIServer {
       woff: "font/woff",
       woff2: "font/woff2",
       ttf: "font/ttf",
-      otf: "font/otf",
+      otf: "font/otf"
     };
 
     return contentTypes[ext || ""] || "application/octet-stream";
@@ -154,7 +155,7 @@ export class UIServer {
     const commands: Record<string, string[]> = {
       darwin: ["open", url],
       linux: ["xdg-open", url],
-      windows: ["cmd", "/c", "start", url],
+      windows: ["cmd", "/c", "start", url]
     };
 
     const cmd = commands[Deno.build.os];
@@ -165,7 +166,7 @@ export class UIServer {
 
     try {
       const process = new Deno.Command(cmd[0], {
-        args: cmd.slice(1),
+        args: cmd.slice(1)
       });
       await process.output();
       console.log(`UI opened in browser: ${url}`);

@@ -31,7 +31,7 @@ function createMockShellSession(options: ShellOptions = {}): ShellSession {
     host: options.host || "localhost",
     port: options.port || 5656,
     queryCount: 0,
-    history: [],
+    history: []
   };
 }
 
@@ -70,7 +70,7 @@ function mockShellCommand(options: ShellOptions = {}): string[] {
     output.push("✅ Query executed, exiting...");
   } else if (options.nonInteractive) {
     output.push(
-      "💡 Use --execute to run a query, or omit --non-interactive for REPL mode",
+      "💡 Use --execute to run a query, or omit --non-interactive for REPL mode"
     );
   } else {
     // Interactive mode simulation
@@ -98,7 +98,7 @@ Deno.test("CLI Shell - basic shell startup", async () => {
     const output = await mockShellCommand();
 
     // Simulate shell output
-    output.forEach((line) => console.log(line));
+    output.forEach(line => console.log(line));
 
     const logs = console.getLogs();
     assertLogContains(logs, "Starting Disc EdgeQL shell");
@@ -118,11 +118,11 @@ Deno.test("CLI Shell - custom connection parameters", async () => {
     const options: ShellOptions = {
       host: "192.168.1.100",
       port: 8080,
-      database: "custom_db",
+      database: "custom_db"
     };
 
     const output = await mockShellCommand(options);
-    output.forEach((line) => console.log(line));
+    output.forEach(line => console.log(line));
 
     const logs = console.getLogs();
     assertLogContains(logs, "Connected to Disc server at 192.168.1.100:8080");
@@ -137,11 +137,11 @@ Deno.test("CLI Shell - execute single query", async () => {
 
   try {
     const options: ShellOptions = {
-      execute: "select User { name, email }",
+      execute: "select User { name, email }"
     };
 
     const output = await mockShellCommand(options);
-    output.forEach((line) => console.log(line));
+    output.forEach(line => console.log(line));
 
     const logs = console.getLogs();
     assertLogContains(logs, "disc> select User { name, email }");
@@ -158,11 +158,11 @@ Deno.test("CLI Shell - non-interactive mode", async () => {
 
   try {
     const options: ShellOptions = {
-      nonInteractive: true,
+      nonInteractive: true
     };
 
     const output = await mockShellCommand(options);
-    output.forEach((line) => console.log(line));
+    output.forEach(line => console.log(line));
 
     const logs = console.getLogs();
     assertLogContains(logs, "non-interactive mode");
@@ -298,10 +298,10 @@ Deno.test("CLI Shell - connection error handling", () => {
     console.error("💡 Check connection parameters: --host, --port, --database");
 
     const errorLogs = console.getErrorLogs();
-    assert(errorLogs.some((log) => log.includes("Failed to connect")));
-    assert(errorLogs.some((log) => log.includes("Could not reach")));
+    assert(errorLogs.some(log => log.includes("Failed to connect")));
+    assert(errorLogs.some(log => log.includes("Could not reach")));
     assert(
-      errorLogs.some((log) => log.includes("Make sure the Disc server is running")),
+      errorLogs.some(log => log.includes("Make sure the Disc server is running"))
     );
   } finally {
     console.restore();
@@ -363,7 +363,7 @@ Deno.test("CLI Shell - command history", () => {
     console.log("  3  select Post { title, author: { name } };");
     console.log("  4  \\timing");
     console.log(
-      "  5  insert User { name := \"Test\", email := \"test@example.com\" };",
+      "  5  insert User { name := \"Test\", email := \"test@example.com\" };"
     );
     console.log("");
     console.log("5 commands in history");
@@ -416,7 +416,7 @@ Deno.test("CLI Shell - multi-line query", () => {
     console.log("...> };");
     console.log("");
     console.log(
-      "[{\"name\": \"Ada\", \"email\": \"ada@example.com\", \"posts\": [{\"title\": \"Hello World\"}]}]",
+      "[{\"name\": \"Ada\", \"email\": \"ada@example.com\", \"posts\": [{\"title\": \"Hello World\"}]}]"
     );
     console.log("(1 row)");
 

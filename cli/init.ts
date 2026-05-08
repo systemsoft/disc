@@ -51,7 +51,7 @@ export class InitCommand {
     if (!this.isValidProjectName(options.name)) {
       console.error(`❌ Invalid project name: ${options.name}`);
       console.error(
-        "💡 Project name must be lowercase letters, numbers, and hyphens only",
+        "💡 Project name must be lowercase letters, numbers, and hyphens only"
       );
       throw new Error(`Invalid project name: ${options.name}`);
     }
@@ -82,10 +82,10 @@ export class InitCommand {
       console.log(`   disc serve`);
     } catch (error) {
       console.error(
-        `❌ Failed to initialize project: ${(error as Error).message}`,
+        `❌ Failed to initialize project: ${(error as Error).message}`
       );
       console.log(
-        `💡 Project files were created at ${projectDir}; re-run 'disc start' from inside the project to finish PostgreSQL setup.`,
+        `💡 Project files were created at ${projectDir}; re-run 'disc start' from inside the project to finish PostgreSQL setup.`
       );
       throw error;
     }
@@ -98,7 +98,7 @@ export class InitCommand {
    * explicit `options.directory`). Bare names pass through unchanged.
    */
   private normalizeNameOrPath(
-    options: InitOptions,
+    options: InitOptions
   ): { name: string; directory?: string; } {
     const raw = options.name;
     if (!raw.includes("/")) {
@@ -112,13 +112,13 @@ export class InitCommand {
   }
 
   private isValidProjectName(name: string): boolean {
-    return /^[a-z0-9-]+$/.test(name) && !name.startsWith("-")
-      && !name.endsWith("-");
+    return /^[a-z0-9-]+$/.test(name) && !name.startsWith("-") &&
+      !name.endsWith("-");
   }
 
   private async createProjectFiles(
     projectDir: string,
-    options: InitOptions,
+    options: InitOptions
   ): Promise<void> {
     const template = options.template || "basic";
 
@@ -150,7 +150,7 @@ export class InitCommand {
 
   private async createDiscToml(
     projectDir: string,
-    options: InitOptions,
+    options: InitOptions
   ): Promise<void> {
     const projectName = options.name;
     const lines: string[] = [
@@ -158,20 +158,20 @@ export class InitCommand {
       `name = "${projectName}"`,
       `version = "0.1.0"`,
       ``,
-      `[database]`,
+      `[database]`
     ];
 
     if (options.backendDsn) {
       lines.push(
         `# External PostgreSQL — disc does not manage the instance lifecycle`,
         `managed = false`,
-        `backend_dsn = "${options.backendDsn}"`,
+        `backend_dsn = "${options.backendDsn}"`
       );
     } else {
       lines.push(
         `# Managed PostgreSQL instance`,
         `managed = true`,
-        `instance_name = "${projectName}"`,
+        `instance_name = "${projectName}"`
       );
     }
 
@@ -182,7 +182,7 @@ export class InitCommand {
 
   private async createSchemaFile(
     projectDir: string,
-    template: string,
+    template: string
   ): Promise<void> {
     let schemaContent = "";
 
@@ -239,13 +239,13 @@ export class InitCommand {
     await Deno.mkdir(`${projectDir}/dbschema`, { recursive: true });
     await Deno.writeTextFile(
       `${projectDir}/dbschema/default.disc`,
-      schemaContent,
+      schemaContent
     );
   }
 
   private async createDenoConfig(
     projectDir: string,
-    projectName: string,
+    projectName: string
   ): Promise<void> {
     // The tasks wrap the `disc` CLI, which must be installed and on $PATH.
     // When there is no generated client yet, mod.ts is a no-op stub; once
@@ -255,41 +255,41 @@ export class InitCommand {
       name: projectName,
       version: "0.1.0",
       exports: {
-        ".": "./mod.ts",
+        ".": "./mod.ts"
       },
       tasks: {
-        "serve": "disc serve",
-        "migrate": "disc migrate",
-        "codegen": "disc codegen",
-        "dev": "disc watch",
-        "shell": "disc shell",
-      },
+        serve: "disc serve",
+        migrate: "disc migrate",
+        codegen: "disc codegen",
+        dev: "disc watch",
+        shell: "disc shell"
+      }
     };
 
     await Deno.writeTextFile(
       `${projectDir}/deno.json`,
-      JSON.stringify(denoConfig, null, 2),
+      JSON.stringify(denoConfig, null, 2)
     );
   }
 
   private async createEnvFile(
     projectDir: string,
-    options: InitOptions,
+    options: InitOptions
   ): Promise<void> {
     // For managed PG, the DSN is derived at runtime from disc.toml (socket
     // path depends on $HOME/$DISC_HOME). We keep .env focused on app config
     // and only write DATABASE_URL when the user explicitly asked for an
     // external DSN. Document the override as a comment in the managed case.
     const header = "# Disc Database Configuration";
-    const appConfig = "DISC_PORT=5656\nDISC_HOST=localhost\n\n"
-      + "# Development settings\nNODE_ENV=development\n";
+    const appConfig = "DISC_PORT=5656\nDISC_HOST=localhost\n\n" +
+      "# Development settings\nNODE_ENV=development\n";
 
     let envContent: string;
     if (options.backendDsn) {
       envContent = `${header}\nDATABASE_URL=${options.backendDsn}\n${appConfig}`;
     } else {
-      envContent = `${header}\n# Managed PostgreSQL — the DSN is resolved from disc.toml.\n`
-        + `# Set DATABASE_URL here only to override with an external database.\n${appConfig}`;
+      envContent = `${header}\n# Managed PostgreSQL — the DSN is resolved from disc.toml.\n` +
+        `# Set DATABASE_URL here only to override with an external database.\n${appConfig}`;
     }
 
     await Deno.writeTextFile(`${projectDir}/.env`, envContent);
@@ -342,14 +342,14 @@ Thumbs.db
 
   private async createReadme(
     projectDir: string,
-    options: InitOptions,
+    options: InitOptions
   ): Promise<void> {
     const projectName = options.name;
 
-    const startStep = options.backendDsn
-      ? `1. **Point at your PostgreSQL** (already configured in \`disc.toml\`):
-   Your backend DSN: \`${options.backendDsn}\``
-      : `1. **Start the bundled PostgreSQL**:
+    const startStep = options.backendDsn ?
+      `1. **Point at your PostgreSQL** (already configured in \`disc.toml\`):
+   Your backend DSN: \`${options.backendDsn}\`` :
+      `1. **Start the bundled PostgreSQL**:
    \`\`\`bash
    disc start
    \`\`\``;
@@ -404,7 +404,7 @@ auto-discovered.
 
   private async createModuleFile(
     projectDir: string,
-    projectName: string,
+    projectName: string
   ): Promise<void> {
     // Placeholder entry point. After `disc codegen` runs, the typical pattern
     // is to re-export from the generated client:

@@ -19,13 +19,13 @@ Deno.test("CLI api: every documented command is an exported function", async () 
     "build",
     "deploy",
     "pgLog",
-    "pgUpgrade",
+    "pgUpgrade"
   ];
   for (const name of expected) {
     assertEquals(
       typeof (api as Record<string, unknown>)[name],
       "function",
-      `cli/api.ts must export ${name}() (Gel #5911)`,
+      `cli/api.ts must export ${name}() (Gel #5911)`
     );
   }
 });
@@ -34,7 +34,7 @@ Deno.test("CLI api: surface is reachable via top-level CLI namespace", async () 
   const mod = await import("../mod.ts");
   assert(
     typeof mod.CLI === "object" && mod.CLI !== null,
-    "mod.ts must re-export CLI namespace (Gel #5911)",
+    "mod.ts must re-export CLI namespace (Gel #5911)"
   );
   // Spot-check a few entries — full coverage is in the per-export
   // function test above.
@@ -42,7 +42,7 @@ Deno.test("CLI api: surface is reachable via top-level CLI namespace", async () 
     assertEquals(
       typeof (mod.CLI as Record<string, unknown>)[name],
       "function",
-      `CLI.${name} must be a function (Gel #5911)`,
+      `CLI.${name} must be a function (Gel #5911)`
     );
   }
 });
@@ -52,7 +52,7 @@ Deno.test("CLI api: typed Options interfaces are re-exported", async () => {
   // asserts the file textually re-exports each Options interface so
   // a refactor that drops them is caught.
   const src = await Deno.readTextFile(
-    new URL("./api.ts", import.meta.url),
+    new URL("./api.ts", import.meta.url)
   );
   for (
     const t of [
@@ -63,13 +63,13 @@ Deno.test("CLI api: typed Options interfaces are re-exported", async () => {
       "PgUpgradeOptions",
       "ShellOptions",
       "WatchOptions",
-      "ServeOptions",
+      "ServeOptions"
     ]
   ) {
     assert(
-      src.includes(`export type { ${t}`)
-        || new RegExp(`export type \\{ [^}]*\\b${t}\\b`).test(src),
-      `cli/api.ts must re-export type ${t} (Gel #5911)`,
+      src.includes(`export type { ${t}`) ||
+        new RegExp(`export type \\{ [^}]*\\b${t}\\b`).test(src),
+      `cli/api.ts must re-export type ${t} (Gel #5911)`
     );
   }
 });

@@ -181,7 +181,7 @@ Deno.test("AccessPolicyParser - error on invalid operation", () => {
   assertThrows(
     () => parser.parseAccessPolicy(),
     SyntaxError,
-    "Invalid access operation",
+    "Invalid access operation"
   );
 });
 

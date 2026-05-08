@@ -67,37 +67,37 @@ export interface IntrospectionData {
 // ---------------------------------------------------------------------------
 
 const PG_TO_EDGEQL: Record<string, string> = {
-  "text": "str",
-  "varchar": "str",
+  text: "str",
+  varchar: "str",
   "character varying": "str",
-  "char": "str",
-  "character": "str",
-  "smallint": "int16",
-  "int2": "int16",
-  "integer": "int32",
-  "int4": "int32",
-  "bigint": "int64",
-  "int8": "int64",
-  "real": "float32",
-  "float4": "float32",
+  char: "str",
+  character: "str",
+  smallint: "int16",
+  int2: "int16",
+  integer: "int32",
+  int4: "int32",
+  bigint: "int64",
+  int8: "int64",
+  real: "float32",
+  float4: "float32",
   "double precision": "float64",
-  "float8": "float64",
-  "boolean": "bool",
-  "bool": "bool",
-  "bytea": "bytes",
-  "timestamptz": "datetime",
+  float8: "float64",
+  boolean: "bool",
+  bool: "bool",
+  bytea: "bytes",
+  timestamptz: "datetime",
   "timestamp with time zone": "datetime",
-  "timestamp": "local_datetime",
+  timestamp: "local_datetime",
   "timestamp without time zone": "local_datetime",
-  "date": "local_date",
-  "time": "local_time",
+  date: "local_date",
+  time: "local_time",
   "time without time zone": "local_time",
-  "interval": "duration",
-  "uuid": "uuid",
-  "numeric": "decimal",
-  "decimal": "decimal",
-  "json": "json",
-  "jsonb": "json",
+  interval: "duration",
+  uuid: "uuid",
+  numeric: "decimal",
+  decimal: "decimal",
+  json: "json",
+  jsonb: "json"
 };
 
 export function pgTypeToEdgeqlType(pgType: string): string {
@@ -113,22 +113,26 @@ function tableToTypeName(tableName: string): string {
   // snake_case → PascalCase, then drop trailing `s` for singular form.
   const pascal = tableName
     .split("_")
-    .filter((s) => s.length > 0)
-    .map((s) => s[0].toUpperCase() + s.slice(1).toLowerCase())
+    .filter(s => s.length > 0)
+    .map(s => s[0].toUpperCase() + s.slice(1).toLowerCase())
     .join("");
   return singularize(pascal);
 }
 
 function singularize(name: string): string {
-  if (name.endsWith("ies")) return name.slice(0, -3) + "y";
-  if (name.endsWith("ses") || name.endsWith("xes")) return name.slice(0, -2);
-  if (name.endsWith("s") && !name.endsWith("ss")) return name.slice(0, -1);
+  if (name.endsWith("ies"))
+    return name.slice(0, -3) + "y";
+  if (name.endsWith("ses") || name.endsWith("xes"))
+    return name.slice(0, -2);
+  if (name.endsWith("s") && !name.endsWith("ss"))
+    return name.slice(0, -1);
   return name;
 }
 
 function fkColumnToLinkName(columnName: string): string {
   // Convention: `<thing>_id` → `<thing>`. Otherwise pass through.
-  if (columnName.endsWith("_id")) return columnName.slice(0, -3);
+  if (columnName.endsWith("_id"))
+    return columnName.slice(0, -3);
   return columnName;
 }
 
@@ -159,20 +163,24 @@ interface JunctionInfo {
 function detectJunctions(data: IntrospectionData): JunctionInfo[] {
   const junctions: JunctionInfo[] = [];
   for (const t of data.tables) {
-    const fks = data.foreignKeys.filter((fk) => fk.fromTable === t.tableName);
-    if (fks.length !== 2) continue;
+    const fks = data.foreignKeys.filter(fk => fk.fromTable === t.tableName);
+    if (fks.length !== 2)
+      continue;
     // Junction table: every column is part of the composite PK and is itself
     // a foreign key. No payload columns allowed (those would mean it's a
     // first-class associative entity, not a pure junction).
     const pk = t.primaryKey ?? [];
-    if (pk.length !== 2) continue;
-    const fkCols = new Set(fks.map((f) => f.fromColumn));
-    if (![...pk].every((c) => fkCols.has(c))) continue;
+    if (pk.length !== 2)
+      continue;
+    const fkCols = new Set(fks.map(f => f.fromColumn));
+    if (![...pk].every(c => fkCols.has(c)))
+      continue;
     // Non-FK, non-PK columns disqualify (e.g. created_at, role)
     const extraCols = t.columns.filter(
-      (c) => !fkCols.has(c.name),
+      c => !fkCols.has(c.name)
     );
-    if (extraCols.length > 0) continue;
+    if (extraCols.length > 0)
+      continue;
 
     // Order by FK source-column position to make the result deterministic.
     const sortedFks = [...fks].sort((a, b) => a.fromColumn.localeCompare(b.fromColumn));
@@ -181,7 +189,7 @@ function detectJunctions(data: IntrospectionData): JunctionInfo[] {
       leftColumn: sortedFks[0].fromColumn,
       leftTarget: sortedFks[0].toTable,
       rightColumn: sortedFks[1].fromColumn,
-      rightTarget: sortedFks[1].toTable,
+      rightTarget: sortedFks[1].toTable
     });
   }
   return junctions;
@@ -192,11 +200,11 @@ function detectJunctions(data: IntrospectionData): JunctionInfo[] {
 // ---------------------------------------------------------------------------
 
 export function buildSchemaFromIntrospection(
-  data: IntrospectionData,
+  data: IntrospectionData
 ): Schema {
   const types = new Map<string, TypeDef>();
   const junctions = detectJunctions(data);
-  const junctionTableNames = new Set(junctions.map((j) => j.tableName));
+  const junctionTableNames = new Set(junctions.map(j => j.tableName));
 
   // Build a lookup: table name → PK→{module, type} so FKs can resolve targets.
   const targetByTable = new Map<
@@ -204,33 +212,38 @@ export function buildSchemaFromIntrospection(
     { module: string; typeName: string; qualified: string; }
   >();
   for (const t of data.tables) {
-    if (isDiscInternal(t.tableName)) continue;
-    if (junctionTableNames.has(t.tableName)) continue;
+    if (isDiscInternal(t.tableName))
+      continue;
+    if (junctionTableNames.has(t.tableName))
+      continue;
     const module = moduleForSchema(t.schemaName);
     const typeName = tableToTypeName(t.tableName);
     targetByTable.set(t.tableName, {
       module,
       typeName,
-      qualified: qualifyTypeName(typeName, module),
+      qualified: qualifyTypeName(typeName, module)
     });
   }
 
   // Index FKs by source table for fast lookup
   const fksByFromTable = new Map<string, IntrospectedForeignKey[]>();
   for (const fk of data.foreignKeys) {
-    if (!fksByFromTable.has(fk.fromTable)) fksByFromTable.set(fk.fromTable, []);
+    if (!fksByFromTable.has(fk.fromTable))
+      fksByFromTable.set(fk.fromTable, []);
     fksByFromTable.get(fk.fromTable)!.push(fk);
   }
 
   // Build object types from tables (skipping junctions and internal tables)
   for (const t of data.tables) {
-    if (isDiscInternal(t.tableName)) continue;
-    if (junctionTableNames.has(t.tableName)) continue;
+    if (isDiscInternal(t.tableName))
+      continue;
+    if (junctionTableNames.has(t.tableName))
+      continue;
 
     const target = targetByTable.get(t.tableName)!;
     const typeDef = buildObjectType(t, target.module, target.typeName, {
       fksByFromTable,
-      targetByTable,
+      targetByTable
     });
     types.set(target.qualified, typeDef);
   }
@@ -242,7 +255,7 @@ export function buildSchemaFromIntrospection(
 
   return {
     types,
-    functions: getBuiltinFunctions(),
+    functions: getBuiltinFunctions()
   };
 }
 
@@ -256,29 +269,31 @@ function buildObjectType(
       string,
       { module: string; typeName: string; qualified: string; }
     >;
-  },
+  }
 ): TypeDef {
   const tableFks = ctx.fksByFromTable.get(table.tableName) ?? [];
-  const fkColumns = new Set(tableFks.map((fk) => fk.fromColumn));
+  const fkColumns = new Set(tableFks.map(fk => fk.fromColumn));
 
   const properties = new Map<string, PropertyDef>();
   for (const col of table.columns) {
-    if (fkColumns.has(col.name)) continue; // FK columns become links, not properties
+    if (fkColumns.has(col.name))
+      continue; // FK columns become links, not properties
     properties.set(col.name, columnToProperty(col, table));
   }
 
   const links = new Map<string, LinkDef>();
   for (const fk of tableFks) {
     const target = ctx.targetByTable.get(fk.toTable);
-    if (!target) continue; // FK pointing to junction or internal table — skip
+    if (!target)
+      continue; // FK pointing to junction or internal table — skip
     const linkName = fkColumnToLinkName(fk.fromColumn);
-    const sourceCol = table.columns.find((c) => c.name === fk.fromColumn);
+    const sourceCol = table.columns.find(c => c.name === fk.fromColumn);
     links.set(linkName, {
       name: linkName,
       target: target.qualified,
       required: sourceCol ? !sourceCol.nullable : true,
       multi: false,
-      columnName: fk.fromColumn,
+      columnName: fk.fromColumn
     });
   }
 
@@ -288,13 +303,13 @@ function buildObjectType(
     tableName: table.tableName,
     properties,
     links,
-    module,
+    module
   };
 }
 
 function columnToProperty(
   col: IntrospectedColumn,
-  table: IntrospectedTable,
+  table: IntrospectedTable
 ): PropertyDef {
   const edgeqlType = pgTypeToEdgeqlType(col.pgType);
 
@@ -314,7 +329,7 @@ function columnToProperty(
     multi: false,
     columnName: col.name,
     hasDefault: col.hasDefault,
-    constraints: constraints.length > 0 ? constraints : undefined,
+    constraints: constraints.length > 0 ? constraints : undefined
   };
 }
 
@@ -324,15 +339,17 @@ function applyJunction(
   targetByTable: Map<
     string,
     { module: string; typeName: string; qualified: string; }
-  >,
+  >
 ): void {
   const left = targetByTable.get(j.leftTarget);
   const right = targetByTable.get(j.rightTarget);
-  if (!left || !right) return;
+  if (!left || !right)
+    return;
 
   const leftType = types.get(left.qualified);
   const rightType = types.get(right.qualified);
-  if (!leftType || !rightType) return;
+  if (!leftType || !rightType)
+    return;
 
   // Link names from the junction-table FK columns: <other_table>_id → <other_table>.
   // E.g. `users_tags(user_id, tag_id)` → User.tags + Tag.users (multi each).
@@ -348,7 +365,7 @@ function applyJunction(
     multi: true,
     junctionTable: j.tableName,
     junctionSourceColumn: j.leftColumn,
-    junctionTargetColumn: j.rightColumn,
+    junctionTargetColumn: j.rightColumn
   });
 
   rightType.links.set(rightLinkName, {
@@ -358,6 +375,6 @@ function applyJunction(
     multi: true,
     junctionTable: j.tableName,
     junctionSourceColumn: j.rightColumn,
-    junctionTargetColumn: j.leftColumn,
+    junctionTargetColumn: j.leftColumn
   });
 }

@@ -45,7 +45,7 @@ Deno.test("DDLGenerator without setEnumScalars: enum-typed property falls back t
     `module default {
       scalar type Status extending enum<draft, published>;
       type Item { status: Status; }
-    }`,
+    }`
   );
   const ddl = new DDLGenerator().generateDDL(ops).join("\n");
   // The diff is just CreateType(Item) — the scalar already existed.
@@ -64,7 +64,7 @@ Deno.test("DDLGenerator with setEnumScalars: enum-typed property resolves to dis
     `module default {
       scalar type Status extending enum<draft, published>;
       type Item { status: Status; }
-    }`,
+    }`
   );
   const gen = new DDLGenerator();
   gen.setEnumScalars(["Status"]);
@@ -74,7 +74,7 @@ Deno.test("DDLGenerator with setEnumScalars: enum-typed property resolves to dis
   // separator — assert the substring rather than an exact format.
   assert(
     ddl.includes("status disc_enum_status"),
-    `expected column to use disc_enum_status; got: ${ddl}`,
+    `expected column to use disc_enum_status; got: ${ddl}`
   );
   // TEXT fallback should NOT appear for the status column.
   assertEquals(ddl.includes("status TEXT"), false);
@@ -89,7 +89,7 @@ Deno.test("DDLGenerator: non-enum scalar names in registry are still subject to 
   // Trigger a column-emission path via a CreateType op.
   const ops = diff(
     "module default {}",
-    "module default { type Item { name: str; } }",
+    "module default { type Item { name: str; } }"
   );
   const ddl = gen.generateDDL(ops).join("\n");
   // Built-in `str` still resolves to TEXT — registry is checked AFTER
@@ -110,14 +110,14 @@ Deno.test("MigrationEngine: planMigration sets enum scalars so generated DDL use
     dryRun: true,
     autoApprove: true,
     backupBeforeMigration: false,
-    rollbackOnError: false,
+    rollbackOnError: false
   } as Types.MigrationConfig);
 
   const newSchema = parseModules(
     `module default {
       scalar type Status extending enum<draft, published>;
       type Article { required title: str; status: Status; }
-    }`,
+    }`
   );
 
   const planResult = engine.planMigration(null, newSchema);
@@ -133,7 +133,7 @@ Deno.test("MigrationEngine: planMigration sets enum scalars so generated DDL use
   // …and the article table's column references it instead of TEXT.
   assert(
     ddl.includes("status disc_enum_status"),
-    `expected disc_enum_status column type; got: ${ddl}`,
+    `expected disc_enum_status column type; got: ${ddl}`
   );
 });
 
@@ -151,15 +151,15 @@ Deno.test("reorderForCascade: CreateScalar comes before CreateType referencing i
     `module default {
       scalar type Status extending enum<draft, published>;
       type Item { status: Status; }
-    }`,
+    }`
   );
-  const createScalarIdx = ops.findIndex((o) => o.kind === "CreateScalar");
-  const createTypeIdx = ops.findIndex((o) => o.kind === "CreateType");
+  const createScalarIdx = ops.findIndex(o => o.kind === "CreateScalar");
+  const createTypeIdx = ops.findIndex(o => o.kind === "CreateType");
   assert(createScalarIdx >= 0, "expected a CreateScalar op");
   assert(createTypeIdx >= 0, "expected a CreateType op");
   assert(
     createScalarIdx < createTypeIdx,
-    `expected CreateScalar (${createScalarIdx}) to come before CreateType (${createTypeIdx})`,
+    `expected CreateScalar (${createScalarIdx}) to come before CreateType (${createTypeIdx})`
   );
 });
 
@@ -171,15 +171,15 @@ Deno.test("reorderForCascade: DropScalar comes after AlterType operations refere
       scalar type Status extending enum<draft, published>;
       type Item { status: Status; }
     }`,
-    "module default { type Item { } }",
+    "module default { type Item { } }"
   );
-  const alterIdx = ops.findIndex((o) => o.kind === "AlterType");
-  const dropScalarIdx = ops.findIndex((o) => o.kind === "DropScalar");
+  const alterIdx = ops.findIndex(o => o.kind === "AlterType");
+  const dropScalarIdx = ops.findIndex(o => o.kind === "DropScalar");
   assert(alterIdx >= 0, "expected an AlterType op (DropProperty)");
   assert(dropScalarIdx >= 0, "expected a DropScalar op");
   assert(
     alterIdx < dropScalarIdx,
-    `expected AlterType (${alterIdx}) to come before DropScalar (${dropScalarIdx})`,
+    `expected AlterType (${alterIdx}) to come before DropScalar (${dropScalarIdx})`
   );
 });
 
@@ -196,15 +196,15 @@ Deno.test("reorderForCascade: RecreateScalar comes after object-type changes in 
     `module default {
       scalar type Status extending enum<draft, published>;
       type Item { }
-    }`,
+    }`
   );
-  const alterIdx = ops.findIndex((o) => o.kind === "AlterType");
-  const recreateIdx = ops.findIndex((o) => o.kind === "RecreateScalar");
+  const alterIdx = ops.findIndex(o => o.kind === "AlterType");
+  const recreateIdx = ops.findIndex(o => o.kind === "RecreateScalar");
   assert(alterIdx >= 0, "expected an AlterType op");
   assert(recreateIdx >= 0, "expected a RecreateScalar op");
   assert(
     alterIdx < recreateIdx,
-    `expected AlterType (${alterIdx}) to come before RecreateScalar (${recreateIdx})`,
+    `expected AlterType (${alterIdx}) to come before RecreateScalar (${recreateIdx})`
   );
 });
 
@@ -223,15 +223,15 @@ Deno.test("reorderForCascade: AddEnumValue groups with creates (runs before midd
     `module default {
       scalar type Status extending enum<draft, published, archived>;
       type Item { name: str; status: Status; }
-    }`,
+    }`
   );
-  const addValueIdx = ops.findIndex((o) => o.kind === "AddEnumValue");
-  const alterIdx = ops.findIndex((o) => o.kind === "AlterType");
+  const addValueIdx = ops.findIndex(o => o.kind === "AddEnumValue");
+  const alterIdx = ops.findIndex(o => o.kind === "AlterType");
   assert(addValueIdx >= 0, "expected an AddEnumValue op");
   assert(alterIdx >= 0, "expected an AlterType op");
   assert(
     addValueIdx < alterIdx,
-    `expected AddEnumValue (${addValueIdx}) to come before AlterType (${alterIdx})`,
+    `expected AddEnumValue (${addValueIdx}) to come before AlterType (${alterIdx})`
   );
 });
 
@@ -246,7 +246,7 @@ Deno.test("SchemaDiffer.enumScalarNames: returns only enum-typed scalars", () =>
       scalar type Status extending enum<draft, published>;
       scalar type Email extending str;
       type User { email: Email; status: Status; }
-    }`,
+    }`
   );
   const names = new SchemaDiffer().enumScalarNames(schema);
   // Both unqualified and qualified forms are present so column

@@ -24,7 +24,7 @@ function makePool(dsn: string): ConnectionPool {
     connectionString: dsn,
     cleanupInterval: 0,
     maxConnections: 3,
-    minConnections: 1,
+    minConnections: 1
   });
 }
 
@@ -52,7 +52,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -69,17 +69,17 @@ Deno.test({
 
     try {
       const result = await pool.query(
-        "SELECT STRING_TO_ARRAY('one,two,three', ',') AS val",
+        "SELECT STRING_TO_ARRAY('one,two,three', ',') AS val"
       );
       const val = result.rows[0].val;
       assertEquals(
         Array.isArray(val) ? val : String(val).replace(/[{}]/g, "").split(","),
-        ["one", "two", "three"],
+        ["one", "two", "three"]
       );
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -96,7 +96,7 @@ Deno.test({
 
     try {
       const result = await pool.query(
-        "SELECT REGEXP_MATCH('abc123def456', '([0-9]+)') AS val",
+        "SELECT REGEXP_MATCH('abc123def456', '([0-9]+)') AS val"
       );
       const val = result.rows[0].val;
       // Should return array with first match
@@ -105,7 +105,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -123,13 +123,13 @@ Deno.test({
     try {
       // Without 'g' flag, only the first match is replaced
       const result = await pool.query(
-        "SELECT REGEXP_REPLACE('a1b2c3', '[0-9]', 'X') AS val",
+        "SELECT REGEXP_REPLACE('a1b2c3', '[0-9]', 'X') AS val"
       );
       assertEquals(result.rows[0].val, "aXb2c3");
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -146,18 +146,18 @@ Deno.test({
 
     try {
       const matches = await pool.query(
-        "SELECT ('hello123' ~ '[0-9]+') AS val",
+        "SELECT ('hello123' ~ '[0-9]+') AS val"
       );
       assertEquals(matches.rows[0].val, true);
 
       const noMatch = await pool.query(
-        "SELECT ('hello' ~ '^[0-9]+$') AS val",
+        "SELECT ('hello' ~ '^[0-9]+$') AS val"
       );
       assertEquals(noMatch.rows[0].val, false);
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -181,7 +181,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -199,7 +199,7 @@ Deno.test({
     try {
       // LOG(10, 100) = 2 (base-10 log of 100)
       const log10 = await pool.query(
-        "SELECT LOG(10, 100::numeric) AS val",
+        "SELECT LOG(10, 100::numeric) AS val"
       );
       assertEquals(Number(log10.rows[0].val), 2);
 
@@ -209,7 +209,7 @@ Deno.test({
       assertEquals(
         Math.abs(log2val - 3) < 0.00001,
         true,
-        `LOG(2, 8) should be 3, got ${log2val}`,
+        `LOG(2, 8) should be 3, got ${log2val}`
       );
 
       // LN(1) = 0 (natural log)
@@ -218,7 +218,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -235,7 +235,7 @@ Deno.test({
 
     try {
       const result = await pool.query(
-        "SELECT GEN_RANDOM_UUID()::text AS val",
+        "SELECT GEN_RANDOM_UUID()::text AS val"
       );
       const val = String(result.rows[0].val);
       assertExists(val, "UUID should not be null");
@@ -244,12 +244,12 @@ Deno.test({
       assertEquals(
         uuidRegex.test(val),
         true,
-        `Should match UUID format, got: ${val}`,
+        `Should match UUID format, got: ${val}`
       );
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -266,25 +266,25 @@ Deno.test({
 
     try {
       const result = await pool.query(
-        "SELECT TRANSACTION_TIMESTAMP() AS val",
+        "SELECT TRANSACTION_TIMESTAMP() AS val"
       );
       assertExists(
         result.rows[0].val,
-        "TRANSACTION_TIMESTAMP should not be null",
+        "TRANSACTION_TIMESTAMP should not be null"
       );
 
       // Also test STATEMENT_TIMESTAMP
       const stmt = await pool.query(
-        "SELECT STATEMENT_TIMESTAMP() AS val",
+        "SELECT STATEMENT_TIMESTAMP() AS val"
       );
       assertExists(
         stmt.rows[0].val,
-        "STATEMENT_TIMESTAMP should not be null",
+        "STATEMENT_TIMESTAMP should not be null"
       );
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -301,38 +301,38 @@ Deno.test({
 
     try {
       const num = await pool.query(
-        "SELECT JSONB_TYPEOF('42'::jsonb) AS val",
+        "SELECT JSONB_TYPEOF('42'::jsonb) AS val"
       );
       assertEquals(num.rows[0].val, "number");
 
       const str = await pool.query(
-        `SELECT JSONB_TYPEOF('"hello"'::jsonb) AS val`,
+        `SELECT JSONB_TYPEOF('"hello"'::jsonb) AS val`
       );
       assertEquals(str.rows[0].val, "string");
 
       const arr = await pool.query(
-        "SELECT JSONB_TYPEOF('[1,2,3]'::jsonb) AS val",
+        "SELECT JSONB_TYPEOF('[1,2,3]'::jsonb) AS val"
       );
       assertEquals(arr.rows[0].val, "array");
 
       const obj = await pool.query(
-        `SELECT JSONB_TYPEOF('{"a":1}'::jsonb) AS val`,
+        `SELECT JSONB_TYPEOF('{"a":1}'::jsonb) AS val`
       );
       assertEquals(obj.rows[0].val, "object");
 
       const bool = await pool.query(
-        "SELECT JSONB_TYPEOF('true'::jsonb) AS val",
+        "SELECT JSONB_TYPEOF('true'::jsonb) AS val"
       );
       assertEquals(bool.rows[0].val, "boolean");
 
       const nul = await pool.query(
-        "SELECT JSONB_TYPEOF('null'::jsonb) AS val",
+        "SELECT JSONB_TYPEOF('null'::jsonb) AS val"
       );
       assertEquals(nul.rows[0].val, "null");
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -350,19 +350,19 @@ Deno.test({
     try {
       // '\xff'::bytea has all bits set to 1
       const result = await pool.query(
-        "SELECT GET_BIT('\\xff'::bytea, 0) AS val",
+        "SELECT GET_BIT('\\xff'::bytea, 0) AS val"
       );
       assertEquals(Number(result.rows[0].val), 1);
 
       // '\x00'::bytea has all bits set to 0
       const zero = await pool.query(
-        "SELECT GET_BIT('\\x00'::bytea, 0) AS val",
+        "SELECT GET_BIT('\\x00'::bytea, 0) AS val"
       );
       assertEquals(Number(zero.rows[0].val), 0);
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -379,11 +379,11 @@ Deno.test({
 
     try {
       const result = await pool.query(
-        "SELECT CONVERT_FROM('\\x68656c6c6f'::bytea, 'UTF8') AS val",
+        "SELECT CONVERT_FROM('\\x68656c6c6f'::bytea, 'UTF8') AS val"
       );
       assertEquals(result.rows[0].val, "hello");
     } finally {
       await pool.close();
     }
-  },
+  }
 });

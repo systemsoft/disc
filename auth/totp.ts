@@ -85,13 +85,13 @@ export async function generateTOTP(
     digits?: number;
     stepSeconds?: number;
     algorithm?: "SHA-1" | "SHA-256" | "SHA-512";
-  } = {},
+  } = {}
 ): Promise<string> {
   const digits = options.digits ?? DEFAULT_DIGITS;
   const stepSeconds = options.stepSeconds ?? DEFAULT_STEP_SECONDS;
   const algorithm = options.algorithm ?? DEFAULT_ALGORITHM;
   const counter = Math.floor(
-    (options.timestampMs ?? Date.now()) / 1000 / stepSeconds,
+    (options.timestampMs ?? Date.now()) / 1000 / stepSeconds
   );
   return await hotp(base32Decode(secret), counter, digits, algorithm);
 }
@@ -110,17 +110,18 @@ export async function verifyTOTP(
     stepSeconds?: number;
     window?: number;
     algorithm?: "SHA-1" | "SHA-256" | "SHA-512";
-  } = {},
+  } = {}
 ): Promise<number | null> {
   const digits = options.digits ?? DEFAULT_DIGITS;
   const stepSeconds = options.stepSeconds ?? DEFAULT_STEP_SECONDS;
   const window = options.window ?? DEFAULT_WINDOW;
   const algorithm = options.algorithm ?? DEFAULT_ALGORITHM;
   const cleaned = code.replace(/\s+/g, "");
-  if (!/^\d+$/.test(cleaned) || cleaned.length !== digits) return null;
+  if (!/^\d+$/.test(cleaned) || cleaned.length !== digits)
+    return null;
 
   const baseCounter = Math.floor(
-    (options.timestampMs ?? Date.now()) / 1000 / stepSeconds,
+    (options.timestampMs ?? Date.now()) / 1000 / stepSeconds
   );
   const key = base32Decode(secret);
 
@@ -130,7 +131,8 @@ export async function verifyTOTP(
   // when they sent it).
   for (let offset = -window; offset <= window; offset++) {
     const candidate = await hotp(key, baseCounter + offset, digits, algorithm);
-    if (constantTimeEqualStr(candidate, cleaned)) return offset;
+    if (constantTimeEqualStr(candidate, cleaned))
+      return offset;
   }
   return null;
 }
@@ -171,7 +173,7 @@ async function hotp(
   key: Uint8Array,
   counter: number,
   digits: number,
-  algorithm: "SHA-1" | "SHA-256" | "SHA-512",
+  algorithm: "SHA-1" | "SHA-256" | "SHA-512"
 ): Promise<string> {
   // Counter as 8-byte big-endian.
   const counterBytes = new Uint8Array(8);
@@ -187,23 +189,24 @@ async function hotp(
     key as BufferSource,
     { name: "HMAC", hash: algorithm },
     false,
-    ["sign"],
+    ["sign"]
   );
   const sig = new Uint8Array(
-    await crypto.subtle.sign("HMAC", cryptoKey, counterBytes as BufferSource),
+    await crypto.subtle.sign("HMAC", cryptoKey, counterBytes as BufferSource)
   );
 
   // Dynamic truncation (RFC 4226 §5.3).
   const offset = sig[sig.length - 1] & 0x0f;
-  const code = ((sig[offset] & 0x7f) << 24)
-    | ((sig[offset + 1] & 0xff) << 16)
-    | ((sig[offset + 2] & 0xff) << 8)
-    | (sig[offset + 3] & 0xff);
+  const code = ((sig[offset] & 0x7f) << 24) |
+    ((sig[offset + 1] & 0xff) << 16) |
+    ((sig[offset + 2] & 0xff) << 8) |
+    (sig[offset + 3] & 0xff);
   return String(code % 10 ** digits).padStart(digits, "0");
 }
 
 function constantTimeEqualStr(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
+  if (a.length !== b.length)
+    return false;
   let diff = 0;
   for (let i = 0; i < a.length; i++) {
     diff |= a.charCodeAt(i) ^ b.charCodeAt(i);

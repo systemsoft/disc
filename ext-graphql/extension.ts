@@ -21,7 +21,7 @@ export class GraphQLExtension extends BaseExtension {
   readonly metadata: ExtensionMetadata = {
     description: "GraphQL API auto-generated from Disc schema",
     name: "graphql",
-    version: "1.0.0",
+    version: "1.0.0"
   };
 
   private schema: Schema | undefined;
@@ -43,10 +43,10 @@ export class GraphQLExtension extends BaseExtension {
     this.schema = context.schema;
     context.logger.info("GraphQL extension initializing", {
       enableMutations: this.enableMutations,
-      maxDepth: this.maxDepth,
+      maxDepth: this.maxDepth
     });
     this.cachedSdl = generateGraphQLSchema(this.schema, {
-      enableMutations: this.enableMutations,
+      enableMutations: this.enableMutations
     });
     this.setState("ready");
     return Promise.resolve();
@@ -57,25 +57,25 @@ export class GraphQLExtension extends BaseExtension {
       {
         handler: this.handleGraphQLQuery.bind(this),
         method: "POST",
-        path: "/graphql",
+        path: "/graphql"
       },
       {
         handler: this.handleGraphQLPlayground.bind(this),
         method: "GET",
-        path: "/graphql",
+        path: "/graphql"
       },
       {
         handler: this.handleGetSchema.bind(this),
         method: "GET",
-        path: "/graphql/schema",
-      },
+        path: "/graphql/schema"
+      }
     ];
   }
 
   override healthCheck(): Promise<{ healthy: boolean; details?: string; }> {
     return Promise.resolve({
       details: this.state === "ready" ? `GraphQL endpoint ready (mutations: ${this.enableMutations})` : undefined,
-      healthy: this.state === "ready",
+      healthy: this.state === "ready"
     });
   }
 
@@ -83,7 +83,7 @@ export class GraphQLExtension extends BaseExtension {
     if (!this.schema) {
       return this.jsonResponse(
         { errors: [{ message: "GraphQL extension not initialized" }] },
-        500,
+        500
       );
     }
 
@@ -97,7 +97,7 @@ export class GraphQLExtension extends BaseExtension {
       if (!body.query) {
         return this.jsonResponse(
           { errors: [{ message: "Missing 'query' in request body" }] },
-          400,
+          400
         );
       }
 
@@ -107,10 +107,10 @@ export class GraphQLExtension extends BaseExtension {
         return this.jsonResponse(
           {
             errors: [{
-              message: `Query depth ${depth} exceeds maximum allowed depth of ${this.maxDepth}`,
-            }],
+              message: `Query depth ${depth} exceeds maximum allowed depth of ${this.maxDepth}`
+            }]
           },
-          400,
+          400
         );
       }
 
@@ -135,8 +135,8 @@ export class GraphQLExtension extends BaseExtension {
       const response: GraphQLResponse = {
         data: {
           __edgeql: result.edgeql,
-          __variables: result.variables,
-        },
+          __variables: result.variables
+        }
       };
 
       return this.jsonResponse(response, 200);
@@ -144,7 +144,7 @@ export class GraphQLExtension extends BaseExtension {
       const message = error instanceof Error ? error.message : String(error);
       return this.jsonResponse(
         { errors: [{ message }] },
-        400,
+        400
       );
     }
   }
@@ -192,27 +192,27 @@ export class GraphQLExtension extends BaseExtension {
 
     return Promise.resolve(
       new Response(html, {
-        headers: { "Content-Type": "text/html; charset=utf-8" },
-      }),
+        headers: { "Content-Type": "text/html; charset=utf-8" }
+      })
     );
   }
 
   private handleGetSchema(_request: Request): Promise<Response> {
     if (!this.schema) {
       return Promise.resolve(
-        new Response("GraphQL extension not initialized", { status: 500 }),
+        new Response("GraphQL extension not initialized", { status: 500 })
       );
     }
 
-    const sdl = this.cachedSdl
-      ?? generateGraphQLSchema(this.schema, {
-        enableMutations: this.enableMutations,
+    const sdl = this.cachedSdl ??
+      generateGraphQLSchema(this.schema, {
+        enableMutations: this.enableMutations
       });
 
     return Promise.resolve(
       new Response(sdl, {
-        headers: { "Content-Type": "text/plain; charset=utf-8" },
-      }),
+        headers: { "Content-Type": "text/plain; charset=utf-8" }
+      })
     );
   }
 
@@ -231,11 +231,13 @@ export class GraphQLExtension extends BaseExtension {
         inString = !inString;
         continue;
       }
-      if (inString) continue;
+      if (inString)
+        continue;
 
       if (ch === "{") {
         depth++;
-        if (depth > maxDepth) maxDepth = depth;
+        if (depth > maxDepth)
+          maxDepth = depth;
       } else if (ch === "}") {
         depth--;
       }
@@ -247,7 +249,7 @@ export class GraphQLExtension extends BaseExtension {
   private jsonResponse(data: unknown, status: number): Response {
     return new Response(JSON.stringify(data), {
       headers: { "Content-Type": "application/json" },
-      status,
+      status
     });
   }
 }

@@ -58,16 +58,17 @@ function planUnsafeDelta(initialSdl: string, nextSdl: string) {
     dryRun: true,
     autoApprove: true,
     backupBeforeMigration: false,
-    rollbackOnError: false,
+    rollbackOnError: false
   });
   const initialModules = validator.convertToModules(
-    new SDLParser(initialSdl).parse(),
+    new SDLParser(initialSdl).parse()
   );
   const nextModules = validator.convertToModules(
-    new SDLParser(nextSdl).parse(),
+    new SDLParser(nextSdl).parse()
   );
   const planResult = engine.planMigration(initialModules, nextModules);
-  if (!planResult.ok) throw new Error(planResult.error.message);
+  if (!planResult.ok)
+    throw new Error(planResult.error.message);
   return { engine, plan: planResult.value };
 }
 
@@ -79,7 +80,8 @@ Deno.test("classifyUnsafeOperations - additive migration is safe", () => {
   assertEquals(flagged.length, 0);
   // Each safe op is annotated on the operation itself.
   for (const op of plan.migrations[0].operations) {
-    if (op.kind !== "AlterType") continue;
+    if (op.kind !== "AlterType")
+      continue;
     assertEquals(op.classification, "safe");
   }
 });
@@ -107,7 +109,7 @@ Deno.test("Gel #1840: ChangeType without explicit cast is ambiguous", () => {
   `;
   const { engine, plan } = planUnsafeDelta(before, after);
   const flagged = engine.classifyUnsafeOperations(plan);
-  const ambiguous = flagged.filter((f) => f.classification === "ambiguous");
+  const ambiguous = flagged.filter(f => f.classification === "ambiguous");
   assertEquals(ambiguous.length >= 1, true, "expected at least one ambiguous flag");
   assertStringIncludes(ambiguous[0].operation, "ChangeType");
   assertStringIncludes(ambiguous[0].reason, "explicit cast");
@@ -130,7 +132,7 @@ Deno.test("Gel #1840: optional → required flip is ambiguous", () => {
   `;
   const { engine, plan } = planUnsafeDelta(before, after);
   const flagged = engine.classifyUnsafeOperations(plan);
-  const ambiguous = flagged.filter((f) => f.classification === "ambiguous");
+  const ambiguous = flagged.filter(f => f.classification === "ambiguous");
   assertEquals(ambiguous.length, 1);
   assertStringIncludes(ambiguous[0].operation, "ChangeRequired");
   assertStringIncludes(ambiguous[0].reason, "NULL");
@@ -180,7 +182,7 @@ Deno.test("classifyUnsafeOperations - DropType is unsafe", () => {
   const unsafe = engine.classifyUnsafeOperations(plan);
   // DropType (User) plus possibly a CreateType (Post) — only the drop
   // is flagged.
-  const drops = unsafe.filter((u) => u.operation.startsWith("DropType"));
+  const drops = unsafe.filter(u => u.operation.startsWith("DropType"));
   assertEquals(drops.length, 1);
   assertStringIncludes(drops[0].operation, "User");
 });
@@ -235,7 +237,7 @@ Deno.test("applySchema - allowUnsafe bypasses the gate", async () => {
   // Even with allowUnsafe, dry-run path executes and returns success —
   // here we just confirm the option doesn't break the call.
   const result = await manager.applySchema(dropProperty, {
-    allowUnsafe: true,
+    allowUnsafe: true
   });
   assertEquals(result.ok, true);
 });

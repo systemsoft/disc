@@ -20,7 +20,7 @@ import {
   RewriteDef,
   Schema,
   TriggerDef,
-  TypeDef,
+  TypeDef
 } from "../compiler/context.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { MigrationError } from "../lib/errors.ts";
@@ -37,7 +37,7 @@ import {
   LinkDeclaration,
   ScalarTypeDeclaration,
   TriggerDeclaration,
-  TypeDeclaration,
+  TypeDeclaration
 } from "../schema/ast.ts";
 import { Module, SDLConverter } from "../schema/converter.ts";
 import { SDLParser } from "../schema/parser.ts";
@@ -48,21 +48,21 @@ import * as Types from "./types.ts";
  * SDL type name to SQL column type mapping
  */
 const SDL_TO_SQL_TYPE_MAP: Record<string, string> = {
-  "str": "text",
-  "bool": "boolean",
-  "int16": "smallint",
-  "int32": "integer",
-  "int64": "bigint",
-  "float32": "real",
-  "float64": "double precision",
-  "bigint": "numeric",
-  "decimal": "numeric",
-  "uuid": "uuid",
-  "datetime": "timestamptz",
-  "duration": "interval",
-  "bytes": "bytea",
-  "json": "jsonb",
-  "sequence": "bigint",
+  str: "text",
+  bool: "boolean",
+  int16: "smallint",
+  int32: "integer",
+  int64: "bigint",
+  float32: "real",
+  float64: "double precision",
+  bigint: "numeric",
+  decimal: "numeric",
+  uuid: "uuid",
+  datetime: "timestamptz",
+  duration: "interval",
+  bytes: "bytea",
+  json: "jsonb",
+  sequence: "bigint",
   "cal::local_datetime": "timestamp",
   "cal::local_date": "date",
   "cal::local_time": "time",
@@ -100,7 +100,7 @@ const SDL_TO_SQL_TYPE_MAP: Record<string, string> = {
   "multirange<decimal>": "nummultirange",
   "multirange<datetime>": "tstzmultirange",
   "multirange<cal::local_date>": "datemultirange",
-  "multirange<cal::local_datetime>": "tsmultirange",
+  "multirange<cal::local_datetime>": "tsmultirange"
 };
 
 /**
@@ -127,19 +127,22 @@ function typeRefToSdlString(
   typeRef: {
     name: { parts: string[]; };
     params?: { name: { parts: string[]; }; params?: unknown[]; }[];
-  },
+  }
 ): string {
   let result = typeRef.name.parts.join("::");
   if (typeRef.params && typeRef.params.length > 0) {
     result += `<${
-      typeRef.params.map((p) =>
-        typeRefToSdlString(
-          p as {
-            name: { parts: string[]; };
-            params?: { name: { parts: string[]; }; params?: unknown[]; }[];
-          },
+      typeRef
+        .params
+        .map(p =>
+          typeRefToSdlString(
+            p as {
+              name: { parts: string[]; };
+              params?: { name: { parts: string[]; }; params?: unknown[]; }[];
+            }
+          )
         )
-      ).join(", ")
+        .join(", ")
     }>`;
   }
   return result;
@@ -153,7 +156,8 @@ function typeRefToSdlString(
 function stringifyExpression(expr: Expression): string {
   switch (expr.kind) {
     case "Literal":
-      if (typeof expr.value === "string") return `'${expr.value}'`;
+      if (typeof expr.value === "string")
+        return `'${expr.value}'`;
       return String(expr.value);
     case "PathExpression": {
       // EdgeQL expression tokens (from parseEdgeQLExpression) are stored as
@@ -167,11 +171,11 @@ function stringifyExpression(expr: Expression): string {
         "delete",
         "with",
         "for",
-        "group",
+        "group"
       ]);
       if (
-        expr.path.length > 0
-        && edgeqlKeywords.has(expr.path[0].toLowerCase())
+        expr.path.length > 0 &&
+        edgeqlKeywords.has(expr.path[0].toLowerCase())
       ) {
         return expr.path.join(" ");
       }
@@ -180,7 +184,7 @@ function stringifyExpression(expr: Expression): string {
       // → `[".", "name"]`). Joining with another `.` would double-up to
       // `..name`. Concatenate without a separator so the dots that the
       // tokenizer already captured stand in as the separators.
-      if (expr.path.some((p) => p === ".")) {
+      if (expr.path.some(p => p === ".")) {
         return expr.path.join("");
       }
       return expr.path.join(".");
@@ -206,15 +210,15 @@ function stringifyExpression(expr: Expression): string {
  * Extract PropertyConstraint[] from SDL Constraint AST nodes.
  */
 function extractPropertyConstraints(
-  sdlConstraints: SDLConstraint[] | undefined,
+  sdlConstraints: SDLConstraint[] | undefined
 ): PropertyConstraint[] | undefined {
   if (!sdlConstraints || sdlConstraints.length === 0) {
     return undefined;
   }
 
-  return sdlConstraints.map((c) => {
+  return sdlConstraints.map(c => {
     const constraint: PropertyConstraint = {
-      name: c.name?.value ?? "unknown",
+      name: c.name?.value ?? "unknown"
     };
     if (c.args && c.args.length > 0) {
       constraint.args = c.args.map(stringifyExpression);
@@ -224,7 +228,7 @@ function extractPropertyConstraints(
 }
 
 function extractAnnotationMap(
-  annotations: SDLAnnotation[] | undefined,
+  annotations: SDLAnnotation[] | undefined
 ): Record<string, string> | undefined {
   if (!annotations || annotations.length === 0) {
     return undefined;
@@ -281,11 +285,11 @@ export class SchemaManager {
       const parser = new SDLParser(source);
       const { document, errors } = parser.parseWithRecovery();
       if (errors.length > 0) {
-        const lines = errors.map((e) => `  • ${e.message}`).join("\n");
+        const lines = errors.map(e => `  • ${e.message}`).join("\n");
         return Err(
           new MigrationError(
-            `Failed to parse SDL (${errors.length} error${errors.length === 1 ? "" : "s"}):\n${lines}`,
-          ),
+            `Failed to parse SDL (${errors.length} error${errors.length === 1 ? "" : "s"}):\n${lines}`
+          )
         );
       }
       const converter = new SDLConverter();
@@ -294,8 +298,8 @@ export class SchemaManager {
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to parse SDL: ${error instanceof Error ? error.message : String(error)}`,
-        ),
+          `Failed to parse SDL: ${error instanceof Error ? error.message : String(error)}`
+        )
       );
     }
   }
@@ -330,8 +334,8 @@ export class SchemaManager {
         }
 
         if (
-          item.kind === "LinkDeclaration"
-          && (item as LinkDeclaration).abstract
+          item.kind === "LinkDeclaration" &&
+          (item as LinkDeclaration).abstract
         ) {
           const linkDecl = item as LinkDeclaration;
           abstractLinks.set(linkDecl.name.value, linkDecl);
@@ -362,9 +366,9 @@ export class SchemaManager {
             if (aliasDecl.using.args.length > 0) {
               const firstArg = aliasDecl.using.args[0];
               if (
-                firstArg.kind === "PathExpression"
-                && firstArg.path[0]
-                && /^[A-Z]/.test(firstArg.path[0])
+                firstArg.kind === "PathExpression" &&
+                firstArg.path[0] &&
+                /^[A-Z]/.test(firstArg.path[0])
               ) {
                 targetType = firstArg.path[0];
               }
@@ -373,7 +377,7 @@ export class SchemaManager {
 
           const aliasDef: AliasDef = {
             name: aliasName,
-            expression,
+            expression
           };
           if (targetType) {
             aliasDef.targetType = targetType;
@@ -401,7 +405,7 @@ export class SchemaManager {
             required: globalDecl.required ?? false,
             multi: globalDecl.multi ?? false,
             readonly: globalDecl.readonly ?? false,
-            pgSettingName: `disc.global_${moduleName}__${globalName}`,
+            pgSettingName: `disc.global_${moduleName}__${globalName}`
           };
 
           if (globalDecl.default) {
@@ -419,7 +423,7 @@ export class SchemaManager {
 
           // Detect enum scalars: scalar type Status extending enum<...>
           // The extending TypeRef name will be "enum" if the parser captured it
-          const isEnum = scalarDecl.extending?.some((ext) => ext.name.parts[0] === "enum") ?? false;
+          const isEnum = scalarDecl.extending?.some(ext => ext.name.parts[0] === "enum") ?? false;
 
           if (isEnum) {
             const enumKey = module.name === "default" ? scalarName : `${module.name}::${scalarName}`;
@@ -430,7 +434,7 @@ export class SchemaManager {
               properties: new Map(),
               links: new Map(),
               enumValues: [],
-              module: module.name,
+              module: module.name
             });
           }
 
@@ -452,7 +456,7 @@ export class SchemaManager {
           type: "uuid",
           required: true,
           multi: false,
-          columnName: "id",
+          columnName: "id"
         });
 
         const links = new Map<string, LinkDef>();
@@ -465,19 +469,19 @@ export class SchemaManager {
           const sqlType = sdlTypeToSqlType(sdlTypeName);
 
           const constraints = extractPropertyConstraints(
-            propDecl.constraints,
+            propDecl.constraints
           );
 
           // Extract rewrites from the property declaration
-          const rewrites: RewriteDef[] | undefined = propDecl.rewrites && propDecl.rewrites.length > 0
-            ? propDecl.rewrites.map((r) => ({
+          const rewrites: RewriteDef[] | undefined = propDecl.rewrites && propDecl.rewrites.length > 0 ?
+            propDecl.rewrites.map(r => ({
               events: [...r.events],
-              body: r.using,
-            }))
-            : undefined;
+              body: r.using
+            })) :
+            undefined;
 
           const propAnnotations = extractAnnotationMap(
-            propDecl.annotations,
+            propDecl.annotations
           );
 
           properties.set(propName, {
@@ -492,7 +496,7 @@ export class SchemaManager {
             computed: propDecl.computed !== undefined,
             constraints,
             rewrites,
-            annotations: propAnnotations,
+            annotations: propAnnotations
           });
         }
 
@@ -505,25 +509,28 @@ export class SchemaManager {
             for (const baseRef of linkDecl.extending) {
               const baseName = baseRef.name.parts.join("::");
               const abstractLink = abstractLinks.get(baseName);
-              if (!abstractLink) continue;
+              if (!abstractLink)
+                continue;
 
               // Merge inherited properties (concrete wins)
               if (abstractLink.properties) {
                 const ownPropNames = new Set(
-                  (linkDecl.properties ?? []).map((p) => p.name.value),
+                  (linkDecl.properties ?? []).map(p => p.name.value)
                 );
                 const inherited = abstractLink.properties.filter(
-                  (p) => !ownPropNames.has(p.name.value),
+                  p => !ownPropNames.has(p.name.value)
                 );
                 if (inherited.length > 0) {
-                  if (!linkDecl.properties) linkDecl.properties = [];
+                  if (!linkDecl.properties)
+                    linkDecl.properties = [];
                   linkDecl.properties.push(...inherited);
                 }
               }
 
               // Merge inherited constraints
               if (abstractLink.constraints) {
-                if (!linkDecl.constraints) linkDecl.constraints = [];
+                if (!linkDecl.constraints)
+                  linkDecl.constraints = [];
                 linkDecl.constraints.push(...abstractLink.constraints);
               }
             }
@@ -534,7 +541,7 @@ export class SchemaManager {
           const isMulti = linkDecl.multi ?? false;
 
           const linkAnnotations = extractAnnotationMap(
-            linkDecl.annotations,
+            linkDecl.annotations
           );
 
           links.set(linkName, {
@@ -544,13 +551,13 @@ export class SchemaManager {
             multi: isMulti,
             columnName: isMulti ? undefined : `${linkName}_id`,
             computed: linkDecl.computed ? true : undefined,
-            annotations: linkAnnotations,
+            annotations: linkAnnotations
           });
         }
 
         // Extract access policies from the type declaration
         const sdlPolicies = typeDecl.members.filter(
-          (m): m is SDLAccessPolicy => m.kind === "AccessPolicy",
+          (m): m is SDLAccessPolicy => m.kind === "AccessPolicy"
         );
         const accessPolicies = sdlPolicies.length > 0 ? adaptAccessPolicies(typeName, sdlPolicies) : undefined;
 
@@ -559,39 +566,39 @@ export class SchemaManager {
         // expression via the existing helper so the EdgeQL compiler and
         // introspection endpoint can both render them.
         const indexDecls = converter.extractIndexes(typeDecl);
-        const indexes: IndexDef[] | undefined = indexDecls.length > 0
-          ? indexDecls.map((idx) => ({
+        const indexes: IndexDef[] | undefined = indexDecls.length > 0 ?
+          indexDecls.map(idx => ({
             name: idx.name?.value,
-            expression: stringifyExpression(idx.on),
-          }))
-          : undefined;
+            expression: stringifyExpression(idx.on)
+          })) :
+          undefined;
 
         // Extract triggers from the type declaration
         const triggerDecls = typeDecl.members.filter(
-          (m): m is TriggerDeclaration => m.kind === "TriggerDeclaration",
+          (m): m is TriggerDeclaration => m.kind === "TriggerDeclaration"
         );
-        const triggers: TriggerDef[] | undefined = triggerDecls.length > 0
-          ? triggerDecls.map((t) => ({
+        const triggers: TriggerDef[] | undefined = triggerDecls.length > 0 ?
+          triggerDecls.map(t => ({
             name: t.name.value,
             timing: t.timing,
             events: [...t.events],
             scope: t.scope,
-            body: stringifyExpression(t.body),
-          }))
-          : undefined;
+            body: stringifyExpression(t.body)
+          })) :
+          undefined;
 
         // Extract inheritance info from SDL AST
         const isAbstract = typeDecl.abstract ?? false;
         const parentTypeNames = typeDecl.extending?.map(
-          (ext) => ext.name.parts.join("::"),
+          ext => ext.name.parts.join("::")
         );
 
         // Extract type-level annotations from type members
         const typeAnnotationMembers = typeDecl.members.filter(
-          (m): m is SDLAnnotation => m.kind === "Annotation",
+          (m): m is SDLAnnotation => m.kind === "Annotation"
         );
         const typeAnnotations = extractAnnotationMap(
-          typeAnnotationMembers.length > 0 ? typeAnnotationMembers : undefined,
+          typeAnnotationMembers.length > 0 ? typeAnnotationMembers : undefined
         );
 
         const typeDef: TypeDef = {
@@ -603,7 +610,7 @@ export class SchemaManager {
           accessPolicies,
           triggers,
           annotations: typeAnnotations,
-          indexes,
+          indexes
         };
 
         if (isAbstract) {
@@ -727,7 +734,7 @@ export class SchemaManager {
 
     const schema: Schema = {
       types,
-      functions: getBuiltinFunctions(),
+      functions: getBuiltinFunctions()
     };
     if (aliases.size > 0) {
       schema.aliases = aliases;
@@ -749,7 +756,7 @@ export class SchemaManager {
    */
   async applySchema(
     sdlSource: string,
-    options?: { allowUnsafe?: boolean; skipHistory?: boolean; },
+    options?: { allowUnsafe?: boolean; skipHistory?: boolean; }
   ): Promise<Result<Types.MigrationResult[], MigrationError>> {
     // Parse SDL
     const parseResult = this.parseSDL(sdlSource);
@@ -762,15 +769,15 @@ export class SchemaManager {
     if (!this.engine) {
       return Err(
         new MigrationError(
-          "SchemaManager not initialized. Call initialize() before applySchema().",
-        ),
+          "SchemaManager not initialized. Call initialize() before applySchema()."
+        )
       );
     }
 
     // Plan migration: diff currentModules vs newModules
     const planResult = this.engine.planMigration(
       this.currentModules,
-      newModules,
+      newModules
     );
     if (!planResult.ok) {
       return planResult;
@@ -785,17 +792,19 @@ export class SchemaManager {
     if (!options?.allowUnsafe && !this.dryRun) {
       const flagged = this.engine.classifyUnsafeOperations(plan);
       if (flagged.length > 0) {
-        const lines = flagged.map((u) => `  - [${u.classification}] ${u.operation}: ${u.reason}`);
-        const unsafeCount = flagged.filter((u) => u.classification === "unsafe").length;
+        const lines = flagged.map(u => `  - [${u.classification}] ${u.operation}: ${u.reason}`);
+        const unsafeCount = flagged.filter(u => u.classification === "unsafe").length;
         const ambiguousCount = flagged.length - unsafeCount;
         const summary = [
           unsafeCount > 0 ? `${unsafeCount} unsafe` : null,
-          ambiguousCount > 0 ? `${ambiguousCount} ambiguous` : null,
-        ].filter(Boolean).join(" + ");
+          ambiguousCount > 0 ? `${ambiguousCount} ambiguous` : null
+        ]
+          .filter(Boolean)
+          .join(" + ");
         return Err(
           new MigrationError(
-            `Migration contains ${summary} operation(s):\n${lines.join("\n")}\n\nPass { allowUnsafe: true } (or --unsafe at the CLI) to apply anyway.`,
-          ),
+            `Migration contains ${summary} operation(s):\n${lines.join("\n")}\n\nPass { allowUnsafe: true } (or --unsafe at the CLI) to apply anyway.`
+          )
         );
       }
     }
@@ -808,11 +817,11 @@ export class SchemaManager {
       this.onSchemaChange?.(this.currentSchema);
 
       // Return synthetic results for each planned migration
-      const results: Types.MigrationResult[] = plan.migrations.map((m) => ({
-        "success": true,
-        "migrationId": m.id,
-        "appliedAt": new Date(),
-        "durationMs": 0,
+      const results: Types.MigrationResult[] = plan.migrations.map(m => ({
+        success: true,
+        migrationId: m.id,
+        appliedAt: new Date(),
+        durationMs: 0
       }));
       return Ok(results);
     }
@@ -821,7 +830,7 @@ export class SchemaManager {
     // the `db push` path — DDL still applies, but the engine doesn't
     // record the migration in `disc_migrations`.
     const execResult = await this.engine.executeMigration(plan, {
-      skipHistory: options?.skipHistory,
+      skipHistory: options?.skipHistory
     });
     if (!execResult.ok) {
       return execResult;
@@ -844,7 +853,7 @@ export class SchemaManager {
    * mutated.
    */
   planSchema(
-    sdlSource: string,
+    sdlSource: string
   ): Result<Types.MigrationPlan, MigrationError> {
     // Parse SDL
     const parseResult = this.parseSDL(sdlSource);
@@ -857,8 +866,8 @@ export class SchemaManager {
     if (!this.engine) {
       return Err(
         new MigrationError(
-          "SchemaManager not initialized. Call initialize() before planSchema().",
-        ),
+          "SchemaManager not initialized. Call initialize() before planSchema()."
+        )
       );
     }
 
@@ -873,13 +882,13 @@ export class SchemaManager {
    * of SQL strings that would be executed if the plan were applied.
    */
   generateDDL(
-    plan: Types.MigrationPlan,
+    plan: Types.MigrationPlan
   ): Result<string[], MigrationError> {
     if (!this.engine) {
       return Err(
         new MigrationError(
-          "SchemaManager not initialized. Call initialize() before generateDDL().",
-        ),
+          "SchemaManager not initialized. Call initialize() before generateDDL()."
+        )
       );
     }
 
@@ -894,13 +903,13 @@ export class SchemaManager {
    * ok(undefined) when the plan passes validation.
    */
   validateMigration(
-    plan: Types.MigrationPlan,
+    plan: Types.MigrationPlan
   ): Result<void, MigrationError> {
     if (!this.engine) {
       return Err(
         new MigrationError(
-          "SchemaManager not initialized. Call initialize() before validateMigration().",
-        ),
+          "SchemaManager not initialized. Call initialize() before validateMigration()."
+        )
       );
     }
 
@@ -924,8 +933,8 @@ export class SchemaManager {
     if (!this.engine) {
       return Err(
         new MigrationError(
-          "SchemaManager not initialized. Call initialize() before rollbackLastMigration().",
-        ),
+          "SchemaManager not initialized. Call initialize() before rollbackLastMigration()."
+        )
       );
     }
 
@@ -937,13 +946,13 @@ export class SchemaManager {
    * The target migration itself is preserved.
    */
   async rollbackToMigration(
-    migrationId: string,
+    migrationId: string
   ): Promise<Result<void, MigrationError>> {
     if (!this.engine) {
       return Err(
         new MigrationError(
-          "SchemaManager not initialized. Call initialize() before rollbackToMigration().",
-        ),
+          "SchemaManager not initialized. Call initialize() before rollbackToMigration()."
+        )
       );
     }
 
@@ -970,8 +979,8 @@ export class SchemaManager {
     if (!this.engine) {
       return Err(
         new MigrationError(
-          "SchemaManager not initialized. Call initialize() before getMigrationStatus().",
-        ),
+          "SchemaManager not initialized. Call initialize() before getMigrationStatus()."
+        )
       );
     }
 
@@ -984,13 +993,13 @@ export class SchemaManager {
     return Ok({
       applied: status.applied,
       currentSchemaHash: status.currentSchemaHash,
-      latestMigration: status.latestMigration
-        ? {
+      latestMigration: status.latestMigration ?
+        {
           id: status.latestMigration.id,
           name: status.latestMigration.name,
-          appliedAt: status.latestMigration.appliedAt,
-        }
-        : null,
+          appliedAt: status.latestMigration.appliedAt
+        } :
+        null
     });
   }
 
@@ -1021,13 +1030,13 @@ export class SchemaManager {
           `SELECT pid, COALESCE(application_name, '') AS application_name
              FROM pg_stat_activity
             WHERE application_name = 'disc-server'
-              AND pid <> pg_backend_pid()`,
+              AND pid <> pg_backend_pid()`
         );
-        const rows = result.rows.map((r) => ({
+        const rows = result.rows.map(r => ({
           pid: Number((r as Record<string, unknown>).pid),
           applicationName: String(
-            (r as Record<string, unknown>).application_name,
-          ),
+            (r as Record<string, unknown>).application_name
+          )
         }));
         return Ok(rows);
       } finally {
@@ -1038,8 +1047,8 @@ export class SchemaManager {
       // fail soft so the migration itself isn't blocked.
       return Err(
         new MigrationError(
-          `running-server probe failed: ${(err as Error).message}`,
-        ),
+          `running-server probe failed: ${(err as Error).message}`
+        )
       );
     }
   }
@@ -1051,27 +1060,30 @@ export class SchemaManager {
    * file on disk and the applied schema (gh/geldata#8899).
    */
   previewMigrationOps(
-    sdlSource: string,
+    sdlSource: string
   ): Result<Types.MigrationOperation[], MigrationError> {
     const parseResult = this.parseSDL(sdlSource);
-    if (!parseResult.ok) return parseResult;
+    if (!parseResult.ok)
+      return parseResult;
 
     if (!this.engine) {
       return Err(
         new MigrationError(
-          "SchemaManager not initialized. Call initialize() before previewMigrationOps().",
-        ),
+          "SchemaManager not initialized. Call initialize() before previewMigrationOps()."
+        )
       );
     }
 
     const planResult = this.engine.planMigration(
       this.currentModules,
-      parseResult.value,
+      parseResult.value
     );
-    if (!planResult.ok) return planResult;
+    if (!planResult.ok)
+      return planResult;
 
     const ops: Types.MigrationOperation[] = [];
-    for (const m of planResult.value.migrations) ops.push(...m.operations);
+    for (const m of planResult.value.migrations)
+      ops.push(...m.operations);
     return Ok(ops);
   }
 
@@ -1084,8 +1096,8 @@ export class SchemaManager {
     if (!this.engine) {
       return Err(
         new MigrationError(
-          "SchemaManager not initialized. Call initialize() before getMigrationHistory().",
-        ),
+          "SchemaManager not initialized. Call initialize() before getMigrationHistory()."
+        )
       );
     }
 
@@ -1149,15 +1161,15 @@ export class SchemaManager {
    */
   async initialize(): Promise<void> {
     const config: Types.MigrationConfig = {
-      "migrationsDir": "",
-      "schemaFile": "",
-      "databaseUrl": "",
-      "dryRun": this.dryRun,
-      "autoApprove": true,
-      "backupBeforeMigration": false,
-      "rollbackOnError": true,
-      "connectionPool": this.pool,
-      "onProgress": this.onProgress,
+      migrationsDir: "",
+      schemaFile: "",
+      databaseUrl: "",
+      dryRun: this.dryRun,
+      autoApprove: true,
+      backupBeforeMigration: false,
+      rollbackOnError: true,
+      connectionPool: this.pool,
+      onProgress: this.onProgress
     };
 
     this.engine = new MigrationEngine(config);

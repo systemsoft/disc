@@ -6,7 +6,7 @@ Deno.test("BuildCommand - maps linux-x64 to x86_64-unknown-linux-gnu", () => {
   const command = new BuildCommand();
   assertEquals(
     command.mapPlatform("linux-x64"),
-    "x86_64-unknown-linux-gnu",
+    "x86_64-unknown-linux-gnu"
   );
 });
 
@@ -14,7 +14,7 @@ Deno.test("BuildCommand - maps darwin-arm64 to aarch64-apple-darwin", () => {
   const command = new BuildCommand();
   assertEquals(
     command.mapPlatform("darwin-arm64"),
-    "aarch64-apple-darwin",
+    "aarch64-apple-darwin"
   );
 });
 
@@ -23,7 +23,7 @@ Deno.test("BuildCommand - rejects invalid platform with helpful message", () => 
   assertThrows(
     () => command.validatePlatform("windows-x64"),
     Error,
-    "Invalid platform",
+    "Invalid platform"
   );
 });
 
@@ -56,7 +56,7 @@ Deno.test("generateUiManifest - emits manifest from build dir contents", async (
     await Deno.writeTextFile(join(buildDir, "_app", "version.json"), "{}");
     await Deno.writeTextFile(
       join(buildDir, "_app", "immutable", "app.abc.js"),
-      "/*js*/",
+      "/*js*/"
     );
 
     const generated = await generateUiManifest(buildDir);
@@ -95,7 +95,7 @@ Deno.test("generateEmbeddedPgManifest - empty manifest when source dir absent", 
   try {
     const generated = await generateEmbeddedPgManifest({
       pgVersion: "16.4",
-      sourceDir: join(tmp, "does-not-exist"),
+      sourceDir: join(tmp, "does-not-exist")
     });
     assertStringIncludes(generated, "EMBEDDED_PG_MANIFEST");
     assertStringIncludes(generated, "[]");
@@ -115,7 +115,7 @@ Deno.test("generateEmbeddedPgManifest - lists files with absolute sourceUrl + co
 
     const generated = await generateEmbeddedPgManifest({
       pgVersion: "16.4",
-      sourceDir,
+      sourceDir
     });
 
     assertStringIncludes(generated, "\"bin/postgres\"");
@@ -135,7 +135,7 @@ Deno.test("BuildCommand.buildCompileArgs - includes PG paths when supplied", () 
   const command = new BuildCommand();
   const args = command.buildCompileArgs({}, [
     "/abs/pg/bin/postgres",
-    "/abs/pg/lib/libpq.dylib",
+    "/abs/pg/lib/libpq.dylib"
   ]);
   assertEquals(args.includes("/abs/pg/bin/postgres"), true);
   assertEquals(args.includes("/abs/pg/lib/libpq.dylib"), true);
@@ -205,7 +205,7 @@ function fakePgPaths(stagingDir: string, fileCount: number): string[] {
     `${stagingDir}/bin/initdb`,
     `${stagingDir}/bin/pg_ctl`,
     `${stagingDir}/share/timezone/UTC`,
-    `${stagingDir}/share/extension/plpgsql.control`,
+    `${stagingDir}/share/extension/plpgsql.control`
   ];
   // Pad with fake share/ files until we hit the target count.
   for (let i = 0; paths.length < fileCount; i++) {
@@ -221,27 +221,27 @@ Deno.test("assertEmbeddedPgPresent - throws when --platform set and 0 files stag
     command.assertEmbeddedPgPresent(
       { platform: "linux-x64" },
       [],
-      "/dist/embedded-pg/linux-x64/16.4",
+      "/dist/embedded-pg/linux-x64/16.4"
     );
   } catch (err) {
     threw = true;
     assertStringIncludes(
       (err as Error).message,
-      "0 embedded PG files",
+      "0 embedded PG files"
     );
     assertStringIncludes(
       (err as Error).message,
-      "linux-x64",
+      "linux-x64"
     );
     assertStringIncludes(
       (err as Error).message,
-      "DISC_BUILD_NO_BUNDLE_PG",
+      "DISC_BUILD_NO_BUNDLE_PG"
     );
   }
   assertEquals(
     threw,
     true,
-    "assertEmbeddedPgPresent must throw when --platform is set and 0 files were staged.",
+    "assertEmbeddedPgPresent must throw when --platform is set and 0 files were staged."
   );
 });
 
@@ -258,7 +258,7 @@ Deno.test("assertEmbeddedPgPresent - throws when --platform set and bin/postgres
     command.assertEmbeddedPgPresent(
       { platform: "linux-x64" },
       paths,
-      "/staging",
+      "/staging"
     );
   } catch (err) {
     threw = true;
@@ -268,7 +268,7 @@ Deno.test("assertEmbeddedPgPresent - throws when --platform set and bin/postgres
   assertEquals(
     threw,
     true,
-    "assertEmbeddedPgPresent must throw when bin/postgres is missing from the embedded paths.",
+    "assertEmbeddedPgPresent must throw when bin/postgres is missing from the embedded paths."
   );
 });
 
@@ -280,14 +280,14 @@ Deno.test("assertEmbeddedPgPresent - throws when --platform set and file count b
   const paths = [
     "/staging/bin/postgres",
     "/staging/bin/initdb",
-    "/staging/bin/pg_ctl",
+    "/staging/bin/pg_ctl"
   ];
   let threw = false;
   try {
     command.assertEmbeddedPgPresent(
       { platform: "linux-x64" },
       paths,
-      "/staging",
+      "/staging"
     );
   } catch (err) {
     threw = true;
@@ -298,7 +298,7 @@ Deno.test("assertEmbeddedPgPresent - throws when --platform set and file count b
   assertEquals(
     threw,
     true,
-    "assertEmbeddedPgPresent must throw when file count is far below a real PG distribution's count.",
+    "assertEmbeddedPgPresent must throw when file count is far below a real PG distribution's count."
   );
 });
 
@@ -308,7 +308,7 @@ Deno.test("assertEmbeddedPgPresent - no-op when --platform set and full PG distr
   command.assertEmbeddedPgPresent(
     { platform: "linux-x64" },
     fakePgPaths("/staging", 137),
-    "/staging",
+    "/staging"
   );
 });
 
@@ -328,7 +328,7 @@ Deno.test("assertEmbeddedPgPresent - no-op when --lite even with --platform", ()
   command.assertEmbeddedPgPresent(
     { platform: "linux-x64", lite: true },
     [],
-    "/dist/embedded-pg/linux-x64/16.4",
+    "/dist/embedded-pg/linux-x64/16.4"
   );
 });
 
@@ -341,11 +341,13 @@ Deno.test("assertEmbeddedPgPresent - no-op when DISC_BUILD_NO_BUNDLE_PG=1 even w
     command.assertEmbeddedPgPresent(
       { platform: "linux-x64" },
       [],
-      "/dist/embedded-pg/linux-x64/16.4",
+      "/dist/embedded-pg/linux-x64/16.4"
     );
   } finally {
-    if (prev === undefined) Deno.env.delete("DISC_BUILD_NO_BUNDLE_PG");
-    else Deno.env.set("DISC_BUILD_NO_BUNDLE_PG", prev);
+    if (prev === undefined)
+      Deno.env.delete("DISC_BUILD_NO_BUNDLE_PG");
+    else
+      Deno.env.set("DISC_BUILD_NO_BUNDLE_PG", prev);
   }
 });
 
@@ -368,7 +370,7 @@ Deno.test("refreshEmbeddedPgManifest - honors pgSourceDirOverride for cross-comp
       const result = await refreshEmbeddedPgManifest(
         fakeRoot,
         "16.4",
-        stagingDir,
+        stagingDir
       );
       assertEquals(result.pgSourceDir, stagingDir);
       assertEquals(result.fileCount, 1);

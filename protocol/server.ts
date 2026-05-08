@@ -46,7 +46,7 @@ export class ProtocolServer {
       port: options.port ?? 5656,
       maxConnections: options.maxConnections ?? 100,
       connectionTimeout: options.connectionTimeout ?? 60000,
-      tls: options.tls,
+      tls: options.tls
     };
   }
 
@@ -63,14 +63,14 @@ export class ProtocolServer {
         storedKey: user.storedKey,
         serverKey: user.serverKey,
         salt: user.salt,
-        iterations: user.iterations ?? 4096,
+        iterations: user.iterations ?? 4096
       };
     } else if (user.password) {
       // Generate keys from password
       const keys = await generateStoredKeys(user.username, user.password);
       credentials = {
         username: user.username,
-        ...keys,
+        ...keys
       };
     } else {
       throw new Error("User must have either password or stored keys");
@@ -92,18 +92,18 @@ export class ProtocolServer {
       this.listener = Deno.listenTls({
         ...this.options.tls,
         hostname: this.options.hostname,
-        port: this.options.port,
+        port: this.options.port
       });
     } else {
       this.listener = Deno.listen({
         hostname: this.options.hostname,
-        port: this.options.port,
+        port: this.options.port
       });
     }
 
     this.running = true;
     console.log(
-      `Protocol server listening on ${this.options.hostname}:${this.options.port}`,
+      `Protocol server listening on ${this.options.hostname}:${this.options.port}`
     );
 
     // Accept connections
@@ -142,11 +142,13 @@ export class ProtocolServer {
    * Accept incoming connections
    */
   private async acceptConnections(): Promise<void> {
-    if (!this.listener) return;
+    if (!this.listener)
+      return;
 
     try {
       for await (const conn of this.listener) {
-        if (!this.running) break;
+        if (!this.running)
+          break;
 
         if (this.connections.size >= this.options.maxConnections) {
           console.warn("Max connections reached, rejecting new connection");
@@ -171,7 +173,7 @@ export class ProtocolServer {
     const remoteAddr = conn.remoteAddr as Deno.NetAddr;
 
     console.log(
-      `New connection ${connectionId} from ${remoteAddr.hostname}:${remoteAddr.port}`,
+      `New connection ${connectionId} from ${remoteAddr.hostname}:${remoteAddr.port}`
     );
 
     // For now, use a default user - in production, this would be determined
@@ -191,8 +193,8 @@ export class ProtocolServer {
         onClose: () => {
           this.connections.delete(connectionId);
           console.log(`Connection ${connectionId} closed`);
-        },
-      },
+        }
+      }
     );
 
     this.connections.set(connectionId, connection);
@@ -204,7 +206,8 @@ export class ProtocolServer {
    */
   private startCleanupTimer(): void {
     const cleanup = async () => {
-      if (!this.running) return;
+      if (!this.running)
+        return;
 
       for (const [id, connection] of this.connections) {
         if (connection.isTimedOut()) {
@@ -235,7 +238,7 @@ export class ProtocolServer {
       running: this.running,
       connections: this.connections.size,
       maxConnections: this.options.maxConnections,
-      address: `${this.options.hostname}:${this.options.port}`,
+      address: `${this.options.hostname}:${this.options.port}`
     };
   }
 }
@@ -257,7 +260,7 @@ class Connection {
     credentials: AuthenticationCredentials,
     options?: {
       onClose?: () => void;
-    },
+    }
   ) {
     this.connectionId = connectionId;
     this.conn = conn;
@@ -266,7 +269,8 @@ class Connection {
   }
 
   async start(): Promise<void> {
-    if (this.running) return;
+    if (this.running)
+      return;
     this.running = true;
 
     try {
@@ -305,7 +309,8 @@ class Connection {
   }
 
   close(): void {
-    if (!this.running) return;
+    if (!this.running)
+      return;
     this.running = false;
 
     try {
@@ -331,14 +336,14 @@ class Connection {
  * Create and start a protocol server with default configuration
  */
 export async function createServer(
-  options?: ServerOptions,
+  options?: ServerOptions
 ): Promise<ProtocolServer> {
   const server = new ProtocolServer(options);
 
   // Add a default test user
   await server.addUser({
     username: "edgedb",
-    password: "edgedb",
+    password: "edgedb"
   });
 
   return server;

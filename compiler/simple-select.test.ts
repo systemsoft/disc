@@ -24,29 +24,29 @@ function createTestSchema(): Context.Schema {
         type: "uuid",
         required: true,
         multi: false,
-        columnName: "id",
+        columnName: "id"
       }],
       ["name", {
         name: "name",
         type: "str",
         required: true,
         multi: false,
-        columnName: "name",
+        columnName: "name"
       }],
       ["email", {
         name: "email",
         type: "str",
         required: true,
         multi: false,
-        columnName: "email",
+        columnName: "email"
       }],
       ["active", {
         name: "active",
         type: "bool",
         required: false,
         multi: false,
-        columnName: "active",
-      }],
+        columnName: "active"
+      }]
     ]),
     links: new Map([
       ["posts", {
@@ -54,9 +54,9 @@ function createTestSchema(): Context.Schema {
         target: "Post",
         required: false,
         multi: true,
-        backlink: "author",
-      }],
-    ]),
+        backlink: "author"
+      }]
+    ])
   });
 
   // Add a simple Post type
@@ -70,29 +70,29 @@ function createTestSchema(): Context.Schema {
         type: "uuid",
         required: true,
         multi: false,
-        columnName: "id",
+        columnName: "id"
       }],
       ["title", {
         name: "title",
         type: "str",
         required: true,
         multi: false,
-        columnName: "title",
+        columnName: "title"
       }],
       ["body", {
         name: "body",
         type: "str",
         required: true,
         multi: false,
-        columnName: "body",
+        columnName: "body"
       }],
       ["createdAt", {
         name: "createdAt",
         type: "datetime",
         required: true,
         multi: false,
-        columnName: "createdAt",
-      }],
+        columnName: "createdAt"
+      }]
     ]),
     links: new Map([
       ["author", {
@@ -101,9 +101,9 @@ function createTestSchema(): Context.Schema {
         required: true,
         multi: false,
         columnName: "author_id",
-        backlink: "posts",
-      }],
-    ]),
+        backlink: "posts"
+      }]
+    ])
   });
 
   const functions = new Map<string, Context.FunctionDef>();
@@ -113,7 +113,7 @@ function createTestSchema(): Context.Schema {
     name: "count",
     args: [{ name: "set", type: "any", required: false }],
     returnType: "int64",
-    sqlName: "count",
+    sqlName: "count"
   });
 
   return { types, functions };
@@ -203,7 +203,7 @@ Deno.test("Simple SELECT - With shape", () => {
   // Should use JSON building for shapes
   assertEquals(
     sql.includes("jsonb_build_object") || sql.includes("json_build_object"),
-    true,
+    true
   );
 });
 

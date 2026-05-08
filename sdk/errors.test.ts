@@ -10,7 +10,7 @@ import {
   DiscQueryError,
   DiscServerError,
   DiscTimeoutError,
-  DiscTransactionError,
+  DiscTransactionError
 } from "./errors.ts";
 
 Deno.test("errors - DiscClientError base", () => {
@@ -33,7 +33,7 @@ Deno.test("errors - DiscQueryError single error", () => {
 Deno.test("errors - DiscQueryError multiple errors", () => {
   const err = new DiscQueryError([
     { message: "Error A" },
-    { message: "Error B" },
+    { message: "Error B" }
   ]);
   assertStringIncludes(err.message, "2 query errors");
   assertStringIncludes(err.message, "Error A");
@@ -45,7 +45,7 @@ Deno.test("errors - DiscQueryError preserves locations and path", () => {
     message: "Bad field",
     locations: [{ line: 3, column: 7 }],
     path: ["users", 0],
-    extensions: { code: "UNKNOWN_FIELD" },
+    extensions: { code: "UNKNOWN_FIELD" }
   }]);
   assertEquals(err.errors[0].locations?.[0].line, 3);
   assertEquals(err.errors[0].path?.[1], 0);

@@ -45,7 +45,7 @@ const server = new DiscServer({
   jwtSecret: "my-secret-key",
   port: 5656,
   protocol: "full",
-  rateLimitRpm: 600,
+  rateLimitRpm: 600
 });
 
 await server.start();
@@ -733,7 +733,7 @@ Or programmatically:
 ```typescript
 const server = new DiscServer({
   binaryPassword: "secret",
-  binaryPort: 5657,
+  binaryPort: 5657
 });
 ```
 
@@ -761,7 +761,7 @@ Or programmatically:
 
 ```typescript
 const server = new DiscServer({
-  enableMultiDatabase: true,
+  enableMultiDatabase: true
 });
 ```
 
@@ -806,7 +806,7 @@ Or programmatically:
 ```typescript
 const server = new DiscServer({
   rateLimitBurst: 100,
-  rateLimitRpm: 600,
+  rateLimitRpm: 600
 });
 ```
 
@@ -838,8 +838,8 @@ Or programmatically:
 const server = new DiscServer({
   tls: {
     certFile: "/path/to/cert.pem",
-    keyFile: "/path/to/key.pem",
-  },
+    keyFile: "/path/to/key.pem"
+  }
 });
 ```
 
@@ -862,8 +862,8 @@ const server = new DiscServer({
     certFile: "/path/to/cert.pem",
     keyFile: "/path/to/key.pem",
     redirect: true,
-    redirectPort: 80,
-  },
+    redirectPort: 80
+  }
 });
 ```
 
@@ -897,7 +897,7 @@ Programmatically:
 
 ```typescript
 const server = new DiscServer({
-  shutdownDrainTimeout: 10000, // 10 seconds
+  shutdownDrainTimeout: 10000 // 10 seconds
 });
 ```
 

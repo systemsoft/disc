@@ -19,7 +19,7 @@ export class FtsExtension extends BaseExtension {
   readonly metadata: ExtensionMetadata = {
     description: "Full-text search using PostgreSQL tsvector/tsquery",
     name: "fts",
-    version: "1.0.0",
+    version: "1.0.0"
   };
 
   private language: string;
@@ -32,7 +32,7 @@ export class FtsExtension extends BaseExtension {
   override initialize(context: ExtensionContext): Promise<void> {
     this.setState("initializing");
     context.logger.info("FTS extension initializing", {
-      language: this.language,
+      language: this.language
     });
     this.setState("ready");
     return Promise.resolve();
@@ -44,14 +44,14 @@ export class FtsExtension extends BaseExtension {
         name: "fts::search",
         args: [{ name: "query", type: "str", required: true }],
         returnType: "bool",
-        sqlName: "fts__search",
+        sqlName: "fts__search"
       },
       {
         name: "fts::rank",
         args: [{ name: "query", type: "str", required: true }],
         returnType: "float64",
-        sqlName: "fts__rank",
-      },
+        sqlName: "fts__rank"
+      }
     ];
   }
 
@@ -67,7 +67,7 @@ export class FtsExtension extends BaseExtension {
         name: "fts-functions",
         transformFunctionCall: (
           funcName: string,
-          args: string[],
+          args: string[]
         ): string | undefined => {
           switch (funcName) {
             case "fts::search":
@@ -79,8 +79,8 @@ export class FtsExtension extends BaseExtension {
             default:
               return undefined;
           }
-        },
-      },
+        }
+      }
     ];
   }
 
@@ -91,7 +91,7 @@ export class FtsExtension extends BaseExtension {
   override healthCheck(): Promise<{ healthy: boolean; details?: string; }> {
     return Promise.resolve({
       healthy: this.state === "ready",
-      details: this.state === "ready" ? `FTS enabled (language: ${this.language})` : undefined,
+      details: this.state === "ready" ? `FTS enabled (language: ${this.language})` : undefined
     });
   }
 }

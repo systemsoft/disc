@@ -18,7 +18,7 @@ function makePool(dsn: string): ConnectionPool {
     connectionString: dsn,
     cleanupInterval: 0,
     maxConnections: 3,
-    minConnections: 1,
+    minConnections: 1
   });
 }
 
@@ -37,13 +37,13 @@ Deno.test({
     try {
       // EdgeQL arr[0] → PG arr[1] (0-based to 1-based)
       const result = await pool.query(
-        "SELECT (ARRAY[10,20,30])[CASE WHEN 0 < 0 THEN CARDINALITY(ARRAY[10,20,30]) + 0 + 1 ELSE 0 + 1 END] AS val",
+        "SELECT (ARRAY[10,20,30])[CASE WHEN 0 < 0 THEN CARDINALITY(ARRAY[10,20,30]) + 0 + 1 ELSE 0 + 1 END] AS val"
       );
       assertEquals(result.rows[0].val, 10);
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -56,13 +56,13 @@ Deno.test({
 
     try {
       const result = await pool.query(
-        "SELECT (ARRAY[10,20,30])[CASE WHEN 2 < 0 THEN CARDINALITY(ARRAY[10,20,30]) + 2 + 1 ELSE 2 + 1 END] AS val",
+        "SELECT (ARRAY[10,20,30])[CASE WHEN 2 < 0 THEN CARDINALITY(ARRAY[10,20,30]) + 2 + 1 ELSE 2 + 1 END] AS val"
       );
       assertEquals(result.rows[0].val, 30);
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -75,13 +75,13 @@ Deno.test({
 
     try {
       const result = await pool.query(
-        "SELECT (ARRAY[10,20,30])[CASE WHEN -1 < 0 THEN CARDINALITY(ARRAY[10,20,30]) + -1 + 1 ELSE -1 + 1 END] AS val",
+        "SELECT (ARRAY[10,20,30])[CASE WHEN -1 < 0 THEN CARDINALITY(ARRAY[10,20,30]) + -1 + 1 ELSE -1 + 1 END] AS val"
       );
       assertEquals(result.rows[0].val, 30);
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -94,13 +94,13 @@ Deno.test({
 
     try {
       const result = await pool.query(
-        "SELECT (ARRAY[10,20,30])[CASE WHEN -2 < 0 THEN CARDINALITY(ARRAY[10,20,30]) + -2 + 1 ELSE -2 + 1 END] AS val",
+        "SELECT (ARRAY[10,20,30])[CASE WHEN -2 < 0 THEN CARDINALITY(ARRAY[10,20,30]) + -2 + 1 ELSE -2 + 1 END] AS val"
       );
       assertEquals(result.rows[0].val, 20);
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -118,13 +118,13 @@ Deno.test({
     try {
       // 'hello'[1:3] → chars at index 1,2 → 'el'
       const result = await pool.query(
-        "SELECT SUBSTRING('hello' FROM 1 + 1 FOR 3 - 1) AS val",
+        "SELECT SUBSTRING('hello' FROM 1 + 1 FOR 3 - 1) AS val"
       );
       assertEquals(result.rows[0].val, "el");
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -137,13 +137,13 @@ Deno.test({
 
     try {
       const result = await pool.query(
-        "SELECT SUBSTRING('hello' FROM 0 + 1 FOR 5 - 0) AS val",
+        "SELECT SUBSTRING('hello' FROM 0 + 1 FOR 5 - 0) AS val"
       );
       assertEquals(result.rows[0].val, "hello");
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -156,13 +156,13 @@ Deno.test({
 
     try {
       const result = await pool.query(
-        "SELECT SUBSTRING('hello' FROM 2 + 1) AS val",
+        "SELECT SUBSTRING('hello' FROM 2 + 1) AS val"
       );
       assertEquals(result.rows[0].val, "llo");
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -175,13 +175,13 @@ Deno.test({
 
     try {
       const result = await pool.query(
-        "SELECT SUBSTRING('hello' FROM 1 FOR 3) AS val",
+        "SELECT SUBSTRING('hello' FROM 1 FOR 3) AS val"
       );
       assertEquals(result.rows[0].val, "hel");
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -198,14 +198,14 @@ Deno.test({
 
     try {
       const result = await pool.query(
-        `SELECT ('{"name":"disc","version":1}'::jsonb) -> 'name' AS val`,
+        `SELECT ('{"name":"disc","version":1}'::jsonb) -> 'name' AS val`
       );
       // jsonb -> returns jsonb (quoted string)
       assertEquals(result.rows[0].val, "disc");
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -218,11 +218,11 @@ Deno.test({
 
     try {
       const result = await pool.query(
-        "SELECT ('[10,20,30]'::jsonb) -> 1 AS val",
+        "SELECT ('[10,20,30]'::jsonb) -> 1 AS val"
       );
       assertEquals(result.rows[0].val, 20);
     } finally {
       await pool.close();
     }
-  },
+  }
 });

@@ -13,17 +13,17 @@ const schema = createTestSchema();
 const codegen = new SQLCodeGenerator();
 
 const queries: Record<string, string> = {
-  "simple": "SELECT User { name }",
-  "complex": "SELECT User { name, email, posts: { title, body } } FILTER .name = 'Ada' ORDER BY .name LIMIT 10",
-  "insert": "INSERT User { name := 'Ada', email := 'ada@example.com' }",
-  "update": "UPDATE User FILTER .name = 'Ada' SET { name := 'Billie' }",
+  simple: "SELECT User { name }",
+  complex: "SELECT User { name, email, posts: { title, body } } FILTER .name = 'Ada' ORDER BY .name LIMIT 10",
+  insert: "INSERT User { name := 'Ada', email := 'ada@example.com' }",
+  update: "UPDATE User FILTER .name = 'Ada' SET { name := 'Billie' }"
 };
 
 // Pre-compile to SQL ASTs
 const sqlAsts: Record<
   string,
-  ReturnType<SQLCodeGenerator["generate"]> extends string ? Parameters<SQLCodeGenerator["generate"]>[0]
-    : never
+  ReturnType<SQLCodeGenerator["generate"]> extends string ? Parameters<SQLCodeGenerator["generate"]>[0] :
+    never
 > = {};
 
 for (const [name, query] of Object.entries(queries)) {
@@ -36,7 +36,7 @@ for (const [name, query] of Object.entries(queries)) {
     sqlAsts[name] = result.value;
   } else {
     throw new Error(
-      `Failed to compile query "${name}": ${result.error.message}`,
+      `Failed to compile query "${name}": ${result.error.message}`
     );
   }
 }

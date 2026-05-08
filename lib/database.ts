@@ -79,7 +79,7 @@ export function parseConnectionString(dsn: string): ParsedConnection {
       user: decodeURIComponent(userPart || "postgres"),
       password: decodeURIComponent(passPart || ""),
       database: decodeURIComponent(database),
-      host_type: "socket",
+      host_type: "socket"
     };
   }
 
@@ -98,15 +98,15 @@ export function parseConnectionString(dsn: string): ParsedConnection {
     user: url.username || "postgres",
     password: url.password || "",
     database: url.pathname.slice(1) || "postgres",
-    sslmode,
+    sslmode
   };
 }
 
 function isValidSslmode(
-  s: string | null,
+  s: string | null
 ): s is "disable" | "prefer" | "require" | "verify-ca" | "verify-full" {
-  return s === "disable" || s === "prefer" || s === "require"
-    || s === "verify-ca" || s === "verify-full";
+  return s === "disable" || s === "prefer" || s === "require" ||
+    s === "verify-ca" || s === "verify-full";
 }
 
 /**
@@ -117,7 +117,7 @@ function isValidSslmode(
  * (gh/geldata#2292)
  */
 export function sslmodeToTlsOptions(
-  sslmode: ParsedConnection["sslmode"],
+  sslmode: ParsedConnection["sslmode"]
 ): { enabled: boolean; enforce: boolean; caCertificates: string[]; } | undefined {
   switch (sslmode) {
     case "disable":
@@ -163,7 +163,7 @@ export class DatabaseConnection {
           password: parsed.password,
           database: parsed.database,
           host_type: "socket" as const,
-          applicationName,
+          applicationName
         };
       }
       // gh/geldata#2292: forward TLS hints derived from `?sslmode=...`
@@ -178,7 +178,7 @@ export class DatabaseConnection {
         password: parsed.password,
         database: parsed.database,
         applicationName,
-        ...(tls ? { tls } : {}),
+        ...(tls ? { tls } : {})
       };
     }
 
@@ -188,12 +188,13 @@ export class DatabaseConnection {
       user: this.config.user || "postgres",
       password: this.config.password || "",
       database: this.config.database || "postgres",
-      applicationName,
+      applicationName
     };
   }
 
   async connect(): Promise<void> {
-    if (this.connected) return;
+    if (this.connected)
+      return;
 
     const maxRetries = this.config.maxRetries || 3;
     const retryDelay = this.config.retryDelay || 1000;
@@ -206,13 +207,13 @@ export class DatabaseConnection {
         return;
       } catch (error) {
         logger.warn(
-          `Connection attempt ${attempt}/${maxRetries} failed: ${error}`,
+          `Connection attempt ${attempt}/${maxRetries} failed: ${error}`
         );
         if (attempt < maxRetries) {
-          await new Promise((resolve) => setTimeout(resolve, retryDelay));
+          await new Promise(resolve => setTimeout(resolve, retryDelay));
         } else {
           throw new Error(
-            `Failed to connect to database after ${maxRetries} attempts: ${error}`,
+            `Failed to connect to database after ${maxRetries} attempts: ${error}`
           );
         }
       }
@@ -228,7 +229,7 @@ export class DatabaseConnection {
       const result = await this.client.queryObject(sql, params);
       return {
         rows: result.rows as Record<string, any>[],
-        rowCount: result.rowCount || 0,
+        rowCount: result.rowCount || 0
       };
     } catch (error) {
       logger.error(`Query failed: ${error}`);
@@ -250,7 +251,7 @@ export class DatabaseConnection {
   }
 
   async transaction<T>(
-    fn: (conn: DatabaseConnection) => Promise<T>,
+    fn: (conn: DatabaseConnection) => Promise<T>
   ): Promise<T> {
     if (!this.connected) {
       await this.connect();
@@ -286,7 +287,7 @@ export class DatabaseConnection {
     // Connect to postgres database to create new database
     const adminClient = new Client({
       ...this.getClientConfig(),
-      database: "postgres",
+      database: "postgres"
     });
 
     try {
@@ -295,7 +296,7 @@ export class DatabaseConnection {
       // Check if database exists
       const result = await adminClient.queryObject(
         `SELECT 1 FROM pg_database WHERE datname = $1`,
-        [dbName],
+        [dbName]
       );
 
       if (result.rowCount === 0) {
@@ -318,7 +319,7 @@ export class DatabaseConnection {
       `SELECT 1 FROM information_schema.tables 
        WHERE table_schema = 'public' 
        AND table_name = $1`,
-      [tableName],
+      [tableName]
     );
     return result.rowCount > 0;
   }
@@ -349,7 +350,7 @@ export function createConnectionFromEnv(): DatabaseConnection {
     port: parseInt(Deno.env.get("DB_PORT") || "5432"),
     database: Deno.env.get("DB_NAME") || "disc",
     user: Deno.env.get("DB_USER") || "disc",
-    password: Deno.env.get("DB_PASSWORD") || "",
+    password: Deno.env.get("DB_PASSWORD") || ""
   });
 }
 
@@ -358,12 +359,12 @@ export function createConnectionFromEnv(): DatabaseConnection {
  */
 export function createDiscConnection(
   instanceName: string,
-  socketDir?: string,
+  socketDir?: string
 ): DatabaseConnection {
   if (socketDir) {
     // Unix socket connection
     return new DatabaseConnection({
-      connectionString: `postgresql://disc@/${instanceName}?host=${socketDir}`,
+      connectionString: `postgresql://disc@/${instanceName}?host=${socketDir}`
     });
   }
 
@@ -372,7 +373,7 @@ export function createDiscConnection(
     host: "localhost",
     port: 5432,
     database: instanceName,
-    user: "disc",
+    user: "disc"
   });
 }
 
@@ -401,7 +402,7 @@ export function replaceDsnDatabase(dsn: string, dbName: string): string {
  */
 export async function createDatabase(
   mainDsn: string,
-  dbName: string,
+  dbName: string
 ): Promise<void> {
   const adminDsn = replaceDsnDatabase(mainDsn, "postgres");
   const adminConn = new DatabaseConnection(adminDsn);
@@ -420,7 +421,7 @@ export async function createDatabase(
  */
 export async function dropDatabase(
   mainDsn: string,
-  dbName: string,
+  dbName: string
 ): Promise<void> {
   const adminDsn = replaceDsnDatabase(mainDsn, "postgres");
   const adminConn = new DatabaseConnection(adminDsn);

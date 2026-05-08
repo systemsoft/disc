@@ -45,7 +45,8 @@ const NUMERIC_STRING_REGEX = /^-?\d+$/;
  * Returns `undefined` if the input is not a valid ISO-8601 datetime.
  */
 export function parseDateTime(value: string): Date | undefined {
-  if (!ISO_DATETIME_REGEX.test(value)) return undefined;
+  if (!ISO_DATETIME_REGEX.test(value))
+    return undefined;
   const ms = Date.parse(value);
   return Number.isNaN(ms) ? undefined : new Date(ms);
 }
@@ -55,7 +56,8 @@ export function parseDateTime(value: string): Date | undefined {
  * Returns `undefined` if the input is not a base-10 integer string.
  */
 export function parseInt64(value: string): bigint | undefined {
-  if (!NUMERIC_STRING_REGEX.test(value)) return undefined;
+  if (!NUMERIC_STRING_REGEX.test(value))
+    return undefined;
   try {
     return BigInt(value);
   } catch {
@@ -71,7 +73,8 @@ export function parseBytes(value: string): Uint8Array | undefined {
   try {
     const binary = atob(value);
     const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    for (let i = 0; i < binary.length; i++)
+      bytes[i] = binary.charCodeAt(i);
     return bytes;
   } catch {
     return undefined;
@@ -106,7 +109,7 @@ export interface ReviveOptions {
  */
 export function reviveResponse<T = unknown>(
   value: unknown,
-  options: ReviveOptions = {},
+  options: ReviveOptions = {}
 ): T {
   const dates = options.dates ?? true;
   const bigints = options.bigints ?? true;
@@ -114,11 +117,13 @@ export function reviveResponse<T = unknown>(
 }
 
 function walk(value: unknown, dates: boolean, bigints: boolean): unknown {
-  if (value === null || value === undefined) return value;
+  if (value === null || value === undefined)
+    return value;
   if (typeof value === "string") {
     if (dates && ISO_DATETIME_REGEX.test(value)) {
       const ms = Date.parse(value);
-      if (!Number.isNaN(ms)) return new Date(ms);
+      if (!Number.isNaN(ms))
+        return new Date(ms);
     }
     if (bigints && NUMERIC_STRING_REGEX.test(value)) {
       try {
@@ -133,7 +138,7 @@ function walk(value: unknown, dates: boolean, bigints: boolean): unknown {
     return value;
   }
   if (Array.isArray(value)) {
-    return value.map((item) => walk(item, dates, bigints));
+    return value.map(item => walk(item, dates, bigints));
   }
   if (typeof value === "object") {
     const out: Record<string, unknown> = {};

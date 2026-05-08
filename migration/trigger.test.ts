@@ -56,7 +56,7 @@ function makeModuleWithTrigger(
     events: ("insert" | "update" | "delete")[];
     scope: "each" | "all";
     bodyPath: string[];
-  }[],
+  }[]
 ): Module[] {
   return [{
     name: "default",
@@ -69,12 +69,12 @@ function makeModuleWithTrigger(
           name: { kind: "Identifier", value: "name" },
           type: {
             kind: "TypeRef",
-            name: { kind: "QualifiedName", parts: ["str"] },
+            name: { kind: "QualifiedName", parts: ["str"] }
           },
           required: true,
-          multi: false,
+          multi: false
         },
-        ...triggers.map((t) => ({
+        ...triggers.map(t => ({
           kind: "TriggerDeclaration" as const,
           name: { kind: "Identifier" as const, value: t.name },
           timing: t.timing,
@@ -82,11 +82,11 @@ function makeModuleWithTrigger(
           scope: t.scope,
           body: {
             kind: "PathExpression" as const,
-            path: t.bodyPath,
-          },
-        })),
-      ],
-    }],
+            path: t.bodyPath
+          }
+        }))
+      ]
+    }]
   }];
 }
 
@@ -108,15 +108,18 @@ Deno.test("Parser - trigger with single event (after insert)", () => {
 
   const mod = doc.declarations[0];
   assertEquals(mod.kind, "ModuleDeclaration");
-  if (mod.kind !== "ModuleDeclaration") return;
+  if (mod.kind !== "ModuleDeclaration")
+    return;
 
   const userType = mod.declarations[0];
   assertEquals(userType.kind, "TypeDeclaration");
-  if (userType.kind !== "TypeDeclaration") return;
+  if (userType.kind !== "TypeDeclaration")
+    return;
 
-  const trigger = userType.members.find((m) => m.kind === "TriggerDeclaration");
+  const trigger = userType.members.find(m => m.kind === "TriggerDeclaration");
   assertEquals(trigger !== undefined, true);
-  if (!trigger || trigger.kind !== "TriggerDeclaration") return;
+  if (!trigger || trigger.kind !== "TriggerDeclaration")
+    return;
 
   assertEquals(trigger.name.value, "audit_log");
   assertEquals(trigger.timing, "after");
@@ -137,12 +140,15 @@ Deno.test("Parser - trigger with multiple events (after insert, update, delete)"
   `);
 
   const mod = doc.declarations[0];
-  if (mod.kind !== "ModuleDeclaration") return;
+  if (mod.kind !== "ModuleDeclaration")
+    return;
   const userType = mod.declarations[0];
-  if (userType.kind !== "TypeDeclaration") return;
+  if (userType.kind !== "TypeDeclaration")
+    return;
 
-  const trigger = userType.members.find((m) => m.kind === "TriggerDeclaration");
-  if (!trigger || trigger.kind !== "TriggerDeclaration") return;
+  const trigger = userType.members.find(m => m.kind === "TriggerDeclaration");
+  if (!trigger || trigger.kind !== "TriggerDeclaration")
+    return;
 
   assertEquals(trigger.name.value, "track_changes");
   assertEquals(trigger.events, ["insert", "update", "delete"]);
@@ -161,12 +167,15 @@ Deno.test("Parser - trigger with before timing", () => {
   `);
 
   const mod = doc.declarations[0];
-  if (mod.kind !== "ModuleDeclaration") return;
+  if (mod.kind !== "ModuleDeclaration")
+    return;
   const userType = mod.declarations[0];
-  if (userType.kind !== "TypeDeclaration") return;
+  if (userType.kind !== "TypeDeclaration")
+    return;
 
-  const trigger = userType.members.find((m) => m.kind === "TriggerDeclaration");
-  if (!trigger || trigger.kind !== "TriggerDeclaration") return;
+  const trigger = userType.members.find(m => m.kind === "TriggerDeclaration");
+  if (!trigger || trigger.kind !== "TriggerDeclaration")
+    return;
 
   assertEquals(trigger.timing, "before");
 });
@@ -184,12 +193,15 @@ Deno.test("Parser - trigger with for all scope (statement-level)", () => {
   `);
 
   const mod = doc.declarations[0];
-  if (mod.kind !== "ModuleDeclaration") return;
+  if (mod.kind !== "ModuleDeclaration")
+    return;
   const userType = mod.declarations[0];
-  if (userType.kind !== "TypeDeclaration") return;
+  if (userType.kind !== "TypeDeclaration")
+    return;
 
-  const trigger = userType.members.find((m) => m.kind === "TriggerDeclaration");
-  if (!trigger || trigger.kind !== "TriggerDeclaration") return;
+  const trigger = userType.members.find(m => m.kind === "TriggerDeclaration");
+  if (!trigger || trigger.kind !== "TriggerDeclaration")
+    return;
 
   assertEquals(trigger.scope, "all");
 });
@@ -210,12 +222,14 @@ Deno.test("Parser - multiple triggers on one type", () => {
   `);
 
   const mod = doc.declarations[0];
-  if (mod.kind !== "ModuleDeclaration") return;
+  if (mod.kind !== "ModuleDeclaration")
+    return;
   const userType = mod.declarations[0];
-  if (userType.kind !== "TypeDeclaration") return;
+  if (userType.kind !== "TypeDeclaration")
+    return;
 
   const triggers = userType.members.filter(
-    (m) => m.kind === "TriggerDeclaration",
+    m => m.kind === "TriggerDeclaration"
   );
   assertEquals(triggers.length, 2);
 
@@ -243,15 +257,17 @@ Deno.test("Parser - trigger alongside properties, links, and constraints", () =>
   `);
 
   const mod = doc.declarations[0];
-  if (mod.kind !== "ModuleDeclaration") return;
+  if (mod.kind !== "ModuleDeclaration")
+    return;
   const postType = mod.declarations[0];
-  if (postType.kind !== "TypeDeclaration") return;
+  if (postType.kind !== "TypeDeclaration")
+    return;
 
   const properties = postType.members.filter(
-    (m) => m.kind === "PropertyDeclaration",
+    m => m.kind === "PropertyDeclaration"
   );
   const triggers = postType.members.filter(
-    (m) => m.kind === "TriggerDeclaration",
+    m => m.kind === "TriggerDeclaration"
   );
 
   assertEquals(properties.length, 2);
@@ -279,7 +295,7 @@ Deno.test("Validator - valid trigger passes validation", () => {
 
   // Filter for trigger-specific errors only
   const triggerErrors = (result.errors || []).filter(
-    (e) => e.message.includes("Trigger") || e.message.includes("trigger"),
+    e => e.message.includes("Trigger") || e.message.includes("trigger")
   );
   assertEquals(triggerErrors.length, 0);
 });
@@ -303,7 +319,7 @@ Deno.test("Validator - duplicate trigger name produces error", () => {
   const result = validator.validate(doc);
 
   const triggerErrors = (result.errors || []).filter(
-    (e) => e.message.includes("audit_log") && e.message.includes("already defined"),
+    e => e.message.includes("audit_log") && e.message.includes("already defined")
   );
   assertEquals(triggerErrors.length, 1);
   assertStringIncludes(triggerErrors[0].message, "audit_log");
@@ -320,7 +336,7 @@ Deno.test("Differ - new type with trigger produces CreateType with trigger", () 
     timing: "after",
     events: ["insert"],
     scope: "each",
-    bodyPath: ["log_action"],
+    bodyPath: ["log_action"]
   }]);
 
   const operations = differ.diff([], schema);
@@ -347,7 +363,7 @@ Deno.test("Differ - trigger added to existing type produces AddTrigger", () => {
     timing: "after",
     events: ["insert"],
     scope: "each",
-    bodyPath: ["log_action"],
+    bodyPath: ["log_action"]
   }]);
 
   const operations = differ.diff(oldSchema, newSchema);
@@ -373,7 +389,7 @@ Deno.test("Differ - trigger removed produces DropTrigger", () => {
     timing: "after",
     events: ["insert"],
     scope: "each",
-    bodyPath: ["log_action"],
+    bodyPath: ["log_action"]
   }]);
   const newSchema = makeModuleWithTrigger("User", []);
 
@@ -398,14 +414,14 @@ Deno.test("Differ - trigger modified (timing changed) produces DropTrigger + Add
     timing: "after",
     events: ["insert"],
     scope: "each",
-    bodyPath: ["log_action"],
+    bodyPath: ["log_action"]
   }]);
   const newSchema = makeModuleWithTrigger("User", [{
     name: "audit_log",
     timing: "before",
     events: ["insert"],
     scope: "each",
-    bodyPath: ["log_action"],
+    bodyPath: ["log_action"]
   }]);
 
   const operations = differ.diff(oldSchema, newSchema);
@@ -417,8 +433,8 @@ Deno.test("Differ - trigger modified (timing changed) produces DropTrigger + Add
   // Must have DropTrigger + AddTrigger (triggers can't be altered in place)
   assertEquals(alterOp.operations.length, 2);
 
-  const dropOp = alterOp.operations.find((op) => op.kind === "DropTrigger");
-  const addOp = alterOp.operations.find((op) => op.kind === "AddTrigger");
+  const dropOp = alterOp.operations.find(op => op.kind === "DropTrigger");
+  const addOp = alterOp.operations.find(op => op.kind === "AddTrigger");
 
   assertEquals(dropOp !== undefined, true);
   assertEquals(addOp !== undefined, true);
@@ -426,7 +442,7 @@ Deno.test("Differ - trigger modified (timing changed) produces DropTrigger + Add
   if (addOp && addOp.kind === "AddTrigger") {
     assertEquals(
       (addOp as Types.AddTriggerOperation).trigger.timing,
-      "before",
+      "before"
     );
   }
 });
@@ -439,7 +455,7 @@ Deno.test("Differ - trigger unchanged produces no operations", () => {
     timing: "after",
     events: ["insert"],
     scope: "each",
-    bodyPath: ["log_action"],
+    bodyPath: ["log_action"]
   }]);
 
   const operations = differ.diff(schema, schema);
@@ -456,22 +472,22 @@ Deno.test("Differ - multiple triggers with mixed changes", () => {
       timing: "after",
       events: ["insert"],
       scope: "each",
-      bodyPath: ["log_action"],
+      bodyPath: ["log_action"]
     },
     {
       name: "to_remove",
       timing: "after",
       events: ["delete"],
       scope: "each",
-      bodyPath: ["log_action"],
+      bodyPath: ["log_action"]
     },
     {
       name: "to_modify",
       timing: "after",
       events: ["update"],
       scope: "each",
-      bodyPath: ["log_action"],
-    },
+      bodyPath: ["log_action"]
+    }
   ]);
 
   const newSchema = makeModuleWithTrigger("User", [
@@ -480,22 +496,22 @@ Deno.test("Differ - multiple triggers with mixed changes", () => {
       timing: "after",
       events: ["insert"],
       scope: "each",
-      bodyPath: ["log_action"],
+      bodyPath: ["log_action"]
     },
     {
       name: "to_modify",
       timing: "before",
       events: ["update"],
       scope: "each",
-      bodyPath: ["log_action"],
+      bodyPath: ["log_action"]
     },
     {
       name: "newly_added",
       timing: "after",
       events: ["insert", "update"],
       scope: "each",
-      bodyPath: ["notify"],
-    },
+      bodyPath: ["notify"]
+    }
   ]);
 
   const operations = differ.diff(oldSchema, newSchema);
@@ -505,8 +521,8 @@ Deno.test("Differ - multiple triggers with mixed changes", () => {
 
   const alterOp = operations[0] as Types.AlterTypeOperation;
 
-  const addOps = alterOp.operations.filter((op) => op.kind === "AddTrigger");
-  const dropOps = alterOp.operations.filter((op) => op.kind === "DropTrigger");
+  const addOps = alterOp.operations.filter(op => op.kind === "AddTrigger");
+  const dropOps = alterOp.operations.filter(op => op.kind === "DropTrigger");
 
   // AddTrigger: newly_added + to_modify (re-added)
   assertEquals(addOps.length, 2);
@@ -514,10 +530,10 @@ Deno.test("Differ - multiple triggers with mixed changes", () => {
   assertEquals(dropOps.length, 2);
 
   const addNames = addOps.map(
-    (op) => (op as Types.AddTriggerOperation).trigger.name,
+    op => (op as Types.AddTriggerOperation).trigger.name
   );
   const dropNames = dropOps.map(
-    (op) => (op as Types.DropTriggerOperation).triggerName,
+    op => (op as Types.DropTriggerOperation).triggerName
   );
 
   assertEquals(addNames.includes("newly_added"), true);
@@ -541,8 +557,8 @@ Deno.test("DDL - CreateType with trigger generates CREATE FUNCTION + CREATE TRIG
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
     links: [],
     triggers: [
@@ -551,15 +567,15 @@ Deno.test("DDL - CreateType with trigger generates CREATE FUNCTION + CREATE TRIG
         timing: "after",
         events: ["insert"],
         scope: "each",
-        body: "insert AuditLog { action := __action__ }",
-      },
-    ],
+        body: "insert AuditLog { action := __action__ }"
+      }
+    ]
   };
 
   const statements = generateDDL([operation]);
 
-  const fnStatements = statements.filter((s) => s.includes("CREATE OR REPLACE FUNCTION"));
-  const trigStatements = statements.filter((s) => s.includes("CREATE TRIGGER"));
+  const fnStatements = statements.filter(s => s.includes("CREATE OR REPLACE FUNCTION"));
+  const trigStatements = statements.filter(s => s.includes("CREATE TRIGGER"));
 
   assertEquals(fnStatements.length, 1);
   assertEquals(trigStatements.length, 1);
@@ -583,16 +599,16 @@ Deno.test("DDL - AddTrigger generates correct DDL output", () => {
           timing: "after",
           events: ["insert", "update"],
           scope: "each",
-          body: "insert ChangeLog { entity := __new__ }",
-        },
-      } as Types.AddTriggerOperation,
-    ],
+          body: "insert ChangeLog { entity := __new__ }"
+        }
+      } as Types.AddTriggerOperation
+    ]
   };
 
   const statements = generateDDL([operation]);
 
-  const fnStatements = statements.filter((s) => s.includes("CREATE OR REPLACE FUNCTION"));
-  const trigStatements = statements.filter((s) => s.includes("CREATE TRIGGER"));
+  const fnStatements = statements.filter(s => s.includes("CREATE OR REPLACE FUNCTION"));
+  const trigStatements = statements.filter(s => s.includes("CREATE TRIGGER"));
 
   assertEquals(fnStatements.length, 1);
   assertEquals(trigStatements.length, 1);
@@ -608,15 +624,15 @@ Deno.test("DDL - DropTrigger generates DROP TRIGGER + DROP FUNCTION", () => {
     operations: [
       {
         kind: "DropTrigger",
-        triggerName: "audit_log",
-      } as Types.DropTriggerOperation,
-    ],
+        triggerName: "audit_log"
+      } as Types.DropTriggerOperation
+    ]
   };
 
   const statements = generateDDL([operation]);
 
-  const dropTrigStatements = statements.filter((s) => s.includes("DROP TRIGGER"));
-  const dropFnStatements = statements.filter((s) => s.includes("DROP FUNCTION"));
+  const dropTrigStatements = statements.filter(s => s.includes("DROP TRIGGER"));
+  const dropFnStatements = statements.filter(s => s.includes("DROP FUNCTION"));
 
   assertEquals(dropTrigStatements.length, 1);
   assertEquals(dropFnStatements.length, 1);
@@ -636,8 +652,8 @@ Deno.test("DDL - BEFORE timing in trigger DDL", () => {
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
     links: [],
     triggers: [
@@ -646,13 +662,13 @@ Deno.test("DDL - BEFORE timing in trigger DDL", () => {
         timing: "before",
         events: ["insert"],
         scope: "each",
-        body: "select validate(__new__)",
-      },
-    ],
+        body: "select validate(__new__)"
+      }
+    ]
   };
 
   const statements = generateDDL([operation]);
-  const trigStatement = statements.find((s) => s.includes("CREATE TRIGGER"));
+  const trigStatement = statements.find(s => s.includes("CREATE TRIGGER"));
 
   assertEquals(trigStatement !== undefined, true);
   assertStringIncludes(trigStatement!, "BEFORE INSERT");
@@ -669,8 +685,8 @@ Deno.test("DDL - multiple events are OR-joined in SQL", () => {
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
     links: [],
     triggers: [
@@ -679,13 +695,13 @@ Deno.test("DDL - multiple events are OR-joined in SQL", () => {
         timing: "after",
         events: ["insert", "update", "delete"],
         scope: "each",
-        body: "insert ChangeLog { action := __action__ }",
-      },
-    ],
+        body: "insert ChangeLog { action := __action__ }"
+      }
+    ]
   };
 
   const statements = generateDDL([operation]);
-  const trigStatement = statements.find((s) => s.includes("CREATE TRIGGER"));
+  const trigStatement = statements.find(s => s.includes("CREATE TRIGGER"));
 
   assertEquals(trigStatement !== undefined, true);
   assertStringIncludes(trigStatement!, "INSERT OR UPDATE OR DELETE");
@@ -704,7 +720,7 @@ Deno.test("DDL - FOR EACH ROW vs FOR EACH STATEMENT", () => {
       required: true,
       multi: false,
       constraints: [],
-      annotations: {},
+      annotations: {}
     }],
     links: [],
     triggers: [{
@@ -712,11 +728,11 @@ Deno.test("DDL - FOR EACH ROW vs FOR EACH STATEMENT", () => {
       timing: "after",
       events: ["insert"],
       scope: "each",
-      body: "select 1",
-    }],
+      body: "select 1"
+    }]
   } as Types.CreateTypeOperation]);
 
-  const rowTrigger = rowStatements.find((s) => s.includes("CREATE TRIGGER"));
+  const rowTrigger = rowStatements.find(s => s.includes("CREATE TRIGGER"));
   assertStringIncludes(rowTrigger!, "FOR EACH ROW");
 
   // scope "all" -> FOR EACH STATEMENT
@@ -729,7 +745,7 @@ Deno.test("DDL - FOR EACH ROW vs FOR EACH STATEMENT", () => {
       required: true,
       multi: false,
       constraints: [],
-      annotations: {},
+      annotations: {}
     }],
     links: [],
     triggers: [{
@@ -737,11 +753,11 @@ Deno.test("DDL - FOR EACH ROW vs FOR EACH STATEMENT", () => {
       timing: "after",
       events: ["insert"],
       scope: "all",
-      body: "select 1",
-    }],
+      body: "select 1"
+    }]
   } as Types.CreateTypeOperation]);
 
-  const stmtTrigger = stmtStatements.find((s) => s.includes("CREATE TRIGGER"));
+  const stmtTrigger = stmtStatements.find(s => s.includes("CREATE TRIGGER"));
   assertStringIncludes(stmtTrigger!, "FOR EACH STATEMENT");
 });
 
@@ -756,8 +772,8 @@ Deno.test("DDL - __new__ / __old__ / __action__ substitution in body", () => {
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
     links: [],
     triggers: [
@@ -766,13 +782,13 @@ Deno.test("DDL - __new__ / __old__ / __action__ substitution in body", () => {
         timing: "after",
         events: ["update"],
         scope: "each",
-        body: "insert ChangeLog { old_val := __old__, new_val := __new__, action := __action__ }",
-      },
-    ],
+        body: "insert ChangeLog { old_val := __old__, new_val := __new__, action := __action__ }"
+      }
+    ]
   };
 
   const statements = generateDDL([operation]);
-  const fnStatement = statements.find((s) => s.includes("CREATE OR REPLACE FUNCTION"));
+  const fnStatement = statements.find(s => s.includes("CREATE OR REPLACE FUNCTION"));
 
   assertEquals(fnStatement !== undefined, true);
   // __new__ -> NEW, __old__ -> OLD, __action__ -> TG_OP
@@ -797,16 +813,16 @@ Deno.test("DDL - rollback for AddTrigger generates DROP TRIGGER + DROP FUNCTION"
           timing: "after",
           events: ["insert"],
           scope: "each",
-          body: "insert AuditLog { action := __action__ }",
-        },
-      } as Types.AddTriggerOperation,
-    ],
+          body: "insert AuditLog { action := __action__ }"
+        }
+      } as Types.AddTriggerOperation
+    ]
   };
 
   const statements = generateRollbackDDL([operation]);
 
-  const dropTrigStatements = statements.filter((s) => s.includes("DROP TRIGGER"));
-  const dropFnStatements = statements.filter((s) => s.includes("DROP FUNCTION"));
+  const dropTrigStatements = statements.filter(s => s.includes("DROP TRIGGER"));
+  const dropFnStatements = statements.filter(s => s.includes("DROP FUNCTION"));
 
   assertEquals(dropTrigStatements.length, 1);
   assertEquals(dropFnStatements.length, 1);
@@ -821,15 +837,15 @@ Deno.test("DDL - rollback for DropTrigger produces manual rollback comment", () 
     operations: [
       {
         kind: "DropTrigger",
-        triggerName: "audit_log",
-      } as Types.DropTriggerOperation,
-    ],
+        triggerName: "audit_log"
+      } as Types.DropTriggerOperation
+    ]
   };
 
   const statements = generateRollbackDDL([operation]);
 
   // DropTrigger rollback should note that it requires manual intervention
-  const manualStatements = statements.filter((s) => s.includes("MANUAL ROLLBACK REQUIRED"));
+  const manualStatements = statements.filter(s => s.includes("MANUAL ROLLBACK REQUIRED"));
   assertEquals(manualStatements.length >= 1, true);
   assertStringIncludes(manualStatements[0], "audit_log");
 });
@@ -855,14 +871,14 @@ Deno.test("End-to-end - SDL with trigger produces correct DDL via parser", () =>
   const ddl = generateDDL(operations);
 
   // Should have CREATE TABLE, CREATE FUNCTION, and CREATE TRIGGER
-  const createTable = ddl.find((s) => s.startsWith("CREATE TABLE"));
+  const createTable = ddl.find(s => s.startsWith("CREATE TABLE"));
   assertEquals(createTable !== undefined, true);
 
-  const createFn = ddl.find((s) => s.includes("CREATE OR REPLACE FUNCTION"));
+  const createFn = ddl.find(s => s.includes("CREATE OR REPLACE FUNCTION"));
   assertEquals(createFn !== undefined, true);
   assertStringIncludes(createFn!, "user__audit_log_fn");
 
-  const createTrig = ddl.find((s) => s.includes("CREATE TRIGGER"));
+  const createTrig = ddl.find(s => s.includes("CREATE TRIGGER"));
   assertEquals(createTrig !== undefined, true);
   assertStringIncludes(createTrig!, "AFTER INSERT OR UPDATE");
   assertStringIncludes(createTrig!, "FOR EACH ROW");
@@ -892,11 +908,11 @@ Deno.test("End-to-end - adding trigger to existing type produces ALTER with corr
   const operations = differ.diff(oldModules, newModules);
   const ddl = generateDDL(operations);
 
-  const createFn = ddl.find((s) => s.includes("CREATE OR REPLACE FUNCTION"));
+  const createFn = ddl.find(s => s.includes("CREATE OR REPLACE FUNCTION"));
   assertEquals(createFn !== undefined, true);
   assertStringIncludes(createFn!, "user__notify_insert_fn");
 
-  const createTrig = ddl.find((s) => s.includes("CREATE TRIGGER"));
+  const createTrig = ddl.find(s => s.includes("CREATE TRIGGER"));
   assertEquals(createTrig !== undefined, true);
   assertStringIncludes(createTrig!, "BEFORE INSERT");
   assertStringIncludes(createTrig!, "FOR EACH STATEMENT");
@@ -926,11 +942,11 @@ Deno.test("Triggers survive SDL → converter → differ → DDL pipeline", asyn
   const ops = new SchemaDiffer().diff([], modules);
   const ddl = new DDLGenerator().generateDDL(ops);
 
-  const triggerDdl = ddl.filter((s) => /CREATE TRIGGER|CREATE OR REPLACE FUNCTION.*TRIGGER/i.test(s));
+  const triggerDdl = ddl.filter(s => /CREATE TRIGGER|CREATE OR REPLACE FUNCTION.*TRIGGER/i.test(s));
   assertEquals(
     triggerDdl.length >= 2,
     true,
-    "Expected at least one CREATE FUNCTION + one CREATE TRIGGER from SDL pipeline",
+    "Expected at least one CREATE FUNCTION + one CREATE TRIGGER from SDL pipeline"
   );
   assertStringIncludes(triggerDdl.join("\n"), "AFTER INSERT");
 });

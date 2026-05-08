@@ -18,7 +18,8 @@ function compileEdgeQL(source: string): string {
   const parser = new EdgeQLParser(source);
   const ast = parser.parse();
   const result = compiler.compile(ast);
-  if (!result.ok) throw result.error;
+  if (!result.ok)
+    throw result.error;
   return codegen.generate(result.value);
 }
 
@@ -100,7 +101,7 @@ Deno.test("enum literal - unknown member throws CompilationError", () => {
       compileEdgeQL(source);
     },
     CompilationError,
-    "is not a member of enum type",
+    "is not a member of enum type"
   );
 });
 
@@ -116,7 +117,7 @@ Deno.test("enum literal - non-enum path is not treated as enum literal", () => {
   assertEquals(
     sql.includes("::"),
     false,
-    "Non-enum path should not have a type cast",
+    "Non-enum path should not have a type cast"
   );
   assertStringIncludes(sql, "name");
   assertStringIncludes(sql, "FROM");
@@ -138,7 +139,7 @@ Deno.test("enum literal - multiple enum references in one query", () => {
   assertEquals(
     matches.length,
     2,
-    "Should contain two enum literal references",
+    "Should contain two enum literal references"
   );
 });
 
@@ -168,6 +169,6 @@ Deno.test("enum literal - case sensitivity (exact match required)", () => {
       compileEdgeQL(source);
     },
     CompilationError,
-    "is not a member of enum type",
+    "is not a member of enum type"
   );
 });

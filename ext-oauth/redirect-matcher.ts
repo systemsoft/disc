@@ -21,7 +21,7 @@
 
 export function matchRedirectUri(
   supplied: string,
-  allowlist: ReadonlyArray<string>,
+  allowlist: ReadonlyArray<string>
 ): boolean {
   let parsedSupplied: URL;
   try {
@@ -31,10 +31,12 @@ export function matchRedirectUri(
   }
   // Reject userinfo (username/password in the authority) outright —
   // attacker-controlled credentials should never round-trip via OAuth.
-  if (parsedSupplied.username || parsedSupplied.password) return false;
+  if (parsedSupplied.username || parsedSupplied.password)
+    return false;
 
   for (const pattern of allowlist) {
-    if (matchesPattern(parsedSupplied, pattern)) return true;
+    if (matchesPattern(parsedSupplied, pattern))
+      return true;
   }
   return false;
 }
@@ -53,9 +55,9 @@ function matchesPattern(supplied: URL, pattern: string): boolean {
     return false;
   }
   return (
-    supplied.protocol === parsedPattern.protocol
-    && supplied.host.toLowerCase() === parsedPattern.host.toLowerCase()
-    && supplied.pathname === parsedPattern.pathname
+    supplied.protocol === parsedPattern.protocol &&
+    supplied.host.toLowerCase() === parsedPattern.host.toLowerCase() &&
+    supplied.pathname === parsedPattern.pathname
   );
 }
 
@@ -64,24 +66,30 @@ function matchesWildcardPattern(supplied: URL, pattern: string): boolean {
   // keeps us safe from inputs like `*.foo.com` (no scheme) or
   // `https://*foo.com` (wildcard not in label position).
   const schemeIdx = pattern.indexOf("://*.");
-  if (schemeIdx === -1) return false;
+  if (schemeIdx === -1)
+    return false;
   const scheme = pattern.slice(0, schemeIdx); // "https"
   const afterStar = pattern.slice(schemeIdx + "://*.".length); // "foo.com/cb"
   const slashIdx = afterStar.indexOf("/");
   const baseHost = (slashIdx === -1 ? afterStar : afterStar.slice(0, slashIdx)).toLowerCase();
   const patternPath = slashIdx === -1 ? "/" : afterStar.slice(slashIdx);
 
-  if (supplied.protocol !== `${scheme}:`) return false;
-  if (supplied.pathname !== patternPath) return false;
+  if (supplied.protocol !== `${scheme}:`)
+    return false;
+  if (supplied.pathname !== patternPath)
+    return false;
 
   const suppliedHost = supplied.host.toLowerCase();
   // Pattern host == "*." + baseHost; must match `<one-label>.<baseHost>`.
   // Reject if the supplied host *is* baseHost (the wildcard requires a
   // subdomain) or if the prefix contains a dot (multi-label).
   const suffix = `.${baseHost}`;
-  if (!suppliedHost.endsWith(suffix)) return false;
+  if (!suppliedHost.endsWith(suffix))
+    return false;
   const prefix = suppliedHost.slice(0, suppliedHost.length - suffix.length);
-  if (prefix.length === 0) return false; // bare baseHost not allowed
-  if (prefix.includes(".")) return false; // only one label deep
+  if (prefix.length === 0)
+    return false; // bare baseHost not allowed
+  if (prefix.includes("."))
+    return false; // only one label deep
   return true;
 }

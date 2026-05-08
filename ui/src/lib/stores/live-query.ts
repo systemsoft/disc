@@ -82,14 +82,14 @@ export interface LiveQueryHandle<T = unknown> {
  * EventSource and a poll subscription).
  */
 export function liveQuery<T = unknown>(
-  options: LiveQueryOptions,
+  options: LiveQueryOptions
 ): LiveQueryHandle<T> {
   const initial: LiveQueryState<T> = {
     data: null,
     status: "idle",
     error: null,
     lastUpdatedAt: null,
-    lastInvalidatedTables: [],
+    lastInvalidatedTables: []
   };
   const store = writable<LiveQueryState<T>>(initial);
 
@@ -101,57 +101,60 @@ export function liveQuery<T = unknown>(
 
   async function runFetch(reason: "initial" | "refetch") {
     const token = ++inFlightToken;
-    store.update((s) => ({
+    store.update(s => ({
       ...s,
       status: reason === "initial" ? "loading" : "refetching",
-      error: null,
+      error: null
     }));
     try {
       const result = await discAPI.executeQuery(
         options.edgeql,
-        options.variables,
+        options.variables
       );
-      if (closed || token !== inFlightToken) return;
+      if (closed || token !== inFlightToken)
+        return;
       if (result.error) {
-        store.update((s) => ({
+        store.update(s => ({
           ...s,
           status: "error",
-          error: result.error ?? "Query failed",
+          error: result.error ?? "Query failed"
         }));
         return;
       }
-      store.update((s) => ({
+      store.update(s => ({
         ...s,
         data: (result.data as unknown as T) ?? null,
         status: "ready",
         error: null,
-        lastUpdatedAt: Date.now(),
+        lastUpdatedAt: Date.now()
       }));
     } catch (err) {
-      if (closed || token !== inFlightToken) return;
+      if (closed || token !== inFlightToken)
+        return;
       const message = err instanceof Error ? err.message : String(err);
-      store.update((s) => ({ ...s, status: "error", error: message }));
+      store.update(s => ({ ...s, status: "error", error: message }));
     }
   }
 
   function openEventSource() {
-    if (closed) return;
+    if (closed)
+      return;
     const params = new URLSearchParams({
-      tables: options.tables.join(","),
+      tables: options.tables.join(",")
     });
     const url = `${options.baseUrl ?? ""}/admin/data-watch?${params}`;
     eventSource = new EventSource(url);
     eventSource.addEventListener("ready", () => {
       // No-op — initial fetch is kicked off below.
     });
-    eventSource.addEventListener("invalidate", (event) => {
+    eventSource.addEventListener("invalidate", event => {
       try {
         const payload = JSON.parse(
-          (event as MessageEvent).data,
+          (event as MessageEvent).data
         ) as { tables?: string[]; };
-        store.update((s) => ({
+        store.update(s => ({
           ...s,
-          lastInvalidatedTables: payload.tables ?? [],
+          lastInvalidatedTables: payload.tables ?? []
         }));
       } catch {
         // payload not JSON — fall through to refetch anyway
@@ -161,9 +164,9 @@ export function liveQuery<T = unknown>(
     eventSource.addEventListener("error", () => {
       // EventSource auto-reconnects on transient errors. Surface a
       // soft signal but don't tear down — wait for `close()`.
-      store.update((s) => ({
+      store.update(s => ({
         ...s,
-        error: s.error ?? "Live connection lost; reconnecting…",
+        error: s.error ?? "Live connection lost; reconnecting…"
       }));
     });
   }
@@ -176,12 +179,13 @@ export function liveQuery<T = unknown>(
     store,
     refetch: () => runFetch("refetch"),
     close: () => {
-      if (closed) return;
+      if (closed)
+        return;
       closed = true;
       if (eventSource) {
         eventSource.close();
         eventSource = null;
       }
-    },
+    }
   };
 }

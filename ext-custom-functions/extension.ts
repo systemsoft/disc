@@ -13,7 +13,7 @@ export class CustomFunctionsExtension extends BaseExtension {
   readonly metadata: ExtensionMetadata = {
     name: "custom-functions",
     version: "1.0.0",
-    description: "User-defined EdgeQL-to-SQL function mappings",
+    description: "User-defined EdgeQL-to-SQL function mappings"
   };
 
   private config: CustomFunctionsConfig;
@@ -23,7 +23,7 @@ export class CustomFunctionsExtension extends BaseExtension {
     if (!config.functions || !Array.isArray(config.functions)) {
       throw new ExtensionConfigError(
         "custom-functions",
-        "functions array is required",
+        "functions array is required"
       );
     }
     this.config = config;
@@ -32,7 +32,7 @@ export class CustomFunctionsExtension extends BaseExtension {
   override async initialize(context: ExtensionContext): Promise<void> {
     this.setState("initializing");
     context.logger.info("Custom functions extension initializing", {
-      count: this.config.functions.length,
+      count: this.config.functions.length
     });
 
     // Run CREATE FUNCTION for PL/pgSQL definitions
@@ -47,7 +47,7 @@ export class CustomFunctionsExtension extends BaseExtension {
   }
 
   override getFunctions(): FunctionDef[] {
-    return this.config.functions.map((def) => this.toFunctionDef(def));
+    return this.config.functions.map(def => this.toFunctionDef(def));
   }
 
   override getDatabaseSetup(): ExtensionDatabaseSetup {
@@ -82,13 +82,13 @@ export class CustomFunctionsExtension extends BaseExtension {
 
     return {
       name: def.name,
-      args: def.args.map((a) => ({
+      args: def.args.map(a => ({
         name: a.name,
         type: a.type,
-        required: a.required ?? true,
+        required: a.required ?? true
       })),
       returnType: def.returnType,
-      sqlName,
+      sqlName
     };
   }
 }

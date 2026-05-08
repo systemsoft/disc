@@ -43,7 +43,7 @@ export interface DispatchRestOptions {
  *   - A `Response` when the request was handled (success or error).
  */
 export async function dispatchRest(
-  options: DispatchRestOptions,
+  options: DispatchRestOptions
 ): Promise<Response | null> {
   const prefix = options.prefix ?? "/api";
   const url = new URL(options.request.url);
@@ -64,7 +64,7 @@ export async function dispatchRest(
   if (!typeDef) {
     return errorJson(
       `Type '${typeName}' is not defined in the schema`,
-      404,
+      404
     );
   }
 
@@ -87,7 +87,7 @@ export async function dispatchRest(
     if (!isValidUuid(id)) {
       return errorJson(
         `Invalid id '${id}' — expected UUID`,
-        400,
+        400
       );
     }
     if (method === "GET") {
@@ -125,7 +125,7 @@ export async function dispatchRest(
 async function handleList(
   opts: DispatchRestOptions,
   typeDef: TypeDef,
-  url: URL,
+  url: URL
 ): Promise<Response> {
   let filter: string | undefined;
   let order: string | undefined;
@@ -143,26 +143,32 @@ async function handleList(
 
   const shape = renderShape(opts.schema, typeDef);
   let edgeql = `select ${typeDef.name} ${shape}`;
-  if (filter) edgeql += ` filter ${filter}`;
-  if (order) edgeql += ` order by ${order}`;
-  if (offset !== undefined) edgeql += ` offset ${offset}`;
-  if (limit !== undefined) edgeql += ` limit ${limit}`;
+  if (filter)
+    edgeql += ` filter ${filter}`;
+  if (order)
+    edgeql += ` order by ${order}`;
+  if (offset !== undefined)
+    edgeql += ` offset ${offset}`;
+  if (limit !== undefined)
+    edgeql += ` limit ${limit}`;
 
   const result = await runEdgeQL(opts, edgeql);
-  if (result instanceof Response) return result;
+  if (result instanceof Response)
+    return result;
   return jsonResponse(coerceArray(result), 200);
 }
 
 async function handleGet(
   opts: DispatchRestOptions,
   typeDef: TypeDef,
-  id: string,
+  id: string
 ): Promise<Response> {
   const shape = renderShape(opts.schema, typeDef);
   const edgeql = `select ${typeDef.name} ${shape} filter .id = <uuid>${edgeqlString(id)}`;
 
   const result = await runEdgeQL(opts, edgeql);
-  if (result instanceof Response) return result;
+  if (result instanceof Response)
+    return result;
   const rows = coerceArray(result);
   if (rows.length === 0) {
     return errorJson(`${typeDef.name} '${id}' not found`, 404);
@@ -172,7 +178,7 @@ async function handleGet(
 
 async function handleInsert(
   opts: DispatchRestOptions,
-  typeDef: TypeDef,
+  typeDef: TypeDef
 ): Promise<Response> {
   let body: Record<string, unknown>;
   try {
@@ -195,7 +201,8 @@ async function handleInsert(
   const edgeql = `insert ${typeDef.name} { ${assignments} }`;
 
   const result = await runEdgeQL(opts, edgeql);
-  if (result instanceof Response) return result;
+  if (result instanceof Response)
+    return result;
   const rows = coerceArray(result);
   return jsonResponse(rows[0] ?? null, 201);
 }
@@ -203,7 +210,7 @@ async function handleInsert(
 async function handleUpdate(
   opts: DispatchRestOptions,
   typeDef: TypeDef,
-  id: string,
+  id: string
 ): Promise<Response> {
   let body: Record<string, unknown>;
   try {
@@ -222,11 +229,12 @@ async function handleUpdate(
     return errorJson("PATCH body must contain at least one field", 400);
   }
 
-  const edgeql = `update ${typeDef.name} filter .id = <uuid>${edgeqlString(id)} `
-    + `set { ${assignments} }`;
+  const edgeql = `update ${typeDef.name} filter .id = <uuid>${edgeqlString(id)} ` +
+    `set { ${assignments} }`;
 
   const result = await runEdgeQL(opts, edgeql);
-  if (result instanceof Response) return result;
+  if (result instanceof Response)
+    return result;
   const rows = coerceArray(result);
   if (rows.length === 0) {
     return errorJson(`${typeDef.name} '${id}' not found`, 404);
@@ -237,11 +245,12 @@ async function handleUpdate(
 async function handleDelete(
   opts: DispatchRestOptions,
   typeDef: TypeDef,
-  id: string,
+  id: string
 ): Promise<Response> {
   const edgeql = `delete ${typeDef.name} filter .id = <uuid>${edgeqlString(id)}`;
   const result = await runEdgeQL(opts, edgeql);
-  if (result instanceof Response) return result;
+  if (result instanceof Response)
+    return result;
   // Return 204 even if the row didn't exist — DELETE is idempotent and
   // callers only need the success signal. Strict 404-on-missing is a
   // future opt-in if it turns out apps want it.
@@ -253,20 +262,20 @@ async function handleLinkedCollection(
   parentType: TypeDef,
   parentId: string,
   linkName: string,
-  url: URL,
+  url: URL
 ): Promise<Response> {
   const link = parentType.links.get(linkName);
   if (!link) {
     return errorJson(
       `${parentType.name} has no link named '${linkName}'`,
-      404,
+      404
     );
   }
   const targetType = resolveType(opts.schema, link.target);
   if (!targetType) {
     return errorJson(
       `Linked target type '${link.target}' is not defined in the schema`,
-      500,
+      500
     );
   }
 
@@ -294,14 +303,17 @@ async function handleLinkedCollection(
 
   const linkShape = renderShape(opts.schema, targetType);
   let linkClause = `${linkName}: ${linkShape}`;
-  if (offset !== undefined) linkClause += ` offset ${offset}`;
-  if (limit !== undefined) linkClause += ` limit ${limit}`;
+  if (offset !== undefined)
+    linkClause += ` offset ${offset}`;
+  if (limit !== undefined)
+    linkClause += ` limit ${limit}`;
 
-  const edgeql = `select ${parentType.name} { ${linkClause} } `
-    + `filter .id = <uuid>${edgeqlString(parentId)}`;
+  const edgeql = `select ${parentType.name} { ${linkClause} } ` +
+    `filter .id = <uuid>${edgeqlString(parentId)}`;
 
   const result = await runEdgeQL(opts, edgeql);
-  if (result instanceof Response) return result;
+  if (result instanceof Response)
+    return result;
   const rows = coerceArray(result);
   if (rows.length === 0) {
     return errorJson(`${parentType.name} '${parentId}' not found`, 404);
@@ -325,14 +337,18 @@ async function handleLinkedCollection(
 function renderShape(schema: Schema, typeDef: TypeDef): string {
   const fields: string[] = [];
   for (const [name, prop] of typeDef.properties) {
-    if (prop.computed) continue;
-    if (isHidden(prop.annotations)) continue;
+    if (prop.computed)
+      continue;
+    if (isHidden(prop.annotations))
+      continue;
     fields.push(name);
   }
   for (const [name, link] of typeDef.links) {
-    if (!isExpand(link.annotations)) continue;
+    if (!isExpand(link.annotations))
+      continue;
     const targetType = resolveType(schema, link.target);
-    if (!targetType) continue;
+    if (!targetType)
+      continue;
     const sub = renderShape(schema, targetType);
     fields.push(`${name}: ${sub}`);
   }
@@ -358,7 +374,7 @@ interface FilterParts {
  */
 function buildFilter(
   typeDef: TypeDef,
-  params: URLSearchParams,
+  params: URLSearchParams
 ): FilterParts {
   const filterClauses: string[] = [];
   let order: string | undefined;
@@ -387,7 +403,7 @@ function buildFilter(
       const propName = desc ? rawValue.slice(1) : rawValue;
       if (!typeDef.properties.has(propName)) {
         throw new Error(
-          `Cannot order by unknown property '${propName}' on type ${typeDef.name}`,
+          `Cannot order by unknown property '${propName}' on type ${typeDef.name}`
         );
       }
       order = `.${propName}${desc ? " desc" : ""}`;
@@ -404,20 +420,20 @@ function buildFilter(
     }
     if (!typeDef.properties.has(propName)) {
       throw new Error(
-        `Unknown filter field '${propName}' on type ${typeDef.name}`,
+        `Unknown filter field '${propName}' on type ${typeDef.name}`
       );
     }
 
     if (op === "eq") {
       filterClauses.push(`.${propName} = ${edgeqlString(rawValue)}`);
     } else if (op === "in") {
-      const values = rawValue.split(",").map((v) => edgeqlString(v));
+      const values = rawValue.split(",").map(v => edgeqlString(v));
       filterClauses.push(`.${propName} in {${values.join(", ")}}`);
     } else if (op === "contains") {
       filterClauses.push(`contains(.${propName}, ${edgeqlString(rawValue)})`);
     } else {
       throw new Error(
-        `Unsupported filter operator '__${op}' (allowed: eq, in, contains)`,
+        `Unsupported filter operator '__${op}' (allowed: eq, in, contains)`
       );
     }
   }
@@ -426,7 +442,7 @@ function buildFilter(
     filter: filterClauses.length > 0 ? filterClauses.join(" and ") : undefined,
     order,
     limit,
-    offset,
+    offset
   };
 }
 
@@ -442,29 +458,31 @@ interface AssignmentOptions {
 function renderAssignments(
   typeDef: TypeDef,
   body: Record<string, unknown>,
-  opts: AssignmentOptions,
+  opts: AssignmentOptions
 ): string {
   const known = new Set<string>();
-  for (const name of typeDef.properties.keys()) known.add(name);
-  for (const name of typeDef.links.keys()) known.add(name);
+  for (const name of typeDef.properties.keys())
+    known.add(name);
+  for (const name of typeDef.links.keys())
+    known.add(name);
 
   const parts: string[] = [];
   for (const [key, value] of Object.entries(body)) {
     if (!known.has(key)) {
       throw new Error(
-        `Unknown field '${key}' for type ${typeDef.name}`,
+        `Unknown field '${key}' for type ${typeDef.name}`
       );
     }
     if (key === "id") {
       throw new Error(
-        "'id' cannot be set via REST body — it's assigned by the server",
+        "'id' cannot be set via REST body — it's assigned by the server"
       );
     }
     parts.push(`${key} := ${renderAssignmentValue(typeDef, key, value)}`);
   }
   if (parts.length === 0 && !opts.allowEmpty) {
     throw new Error(
-      `Request body for type ${typeDef.name} must contain at least one field`,
+      `Request body for type ${typeDef.name} must contain at least one field`
     );
   }
   return parts.join(", ");
@@ -479,18 +497,18 @@ function renderAssignments(
 function renderAssignmentValue(
   typeDef: TypeDef,
   key: string,
-  value: unknown,
+  value: unknown
 ): string {
   const link = typeDef.links.get(key);
   if (link) {
     if (typeof value !== "string") {
       throw new Error(
-        `Link '${key}' must be a UUID string in REST bodies`,
+        `Link '${key}' must be a UUID string in REST bodies`
       );
     }
     if (!isValidUuid(value)) {
       throw new Error(
-        `Link '${key}' must be a UUID, got '${value}'`,
+        `Link '${key}' must be a UUID, got '${value}'`
       );
     }
     return `(select ${link.target} filter .id = <uuid>${edgeqlString(value)})`;
@@ -505,7 +523,8 @@ function renderAssignmentValue(
 }
 
 function renderScalarLiteral(prop: PropertyDef, value: unknown): string {
-  if (value === null) return "{}";
+  if (value === null)
+    return "{}";
   switch (prop.edgeqlType ?? prop.type) {
     case "bool":
       if (typeof value !== "boolean") {
@@ -558,17 +577,17 @@ function renderScalarLiteral(prop: PropertyDef, value: unknown): string {
 
 async function runEdgeQL(
   opts: DispatchRestOptions,
-  query: string,
+  query: string
 ): Promise<unknown | Response> {
   const response = await opts.protocolHandler.handleRequest(
     { query },
-    opts.context,
+    opts.context
   );
 
   // The protocol handler may return errors (parse, compile, access policy
   // denial, read-only mode rejection, etc.). Map them to HTTP statuses.
   const realErrors = (response.errors ?? []).filter(
-    (e) => e.extensions?.code !== "WARNING",
+    e => e.extensions?.code !== "WARNING"
   );
   if (realErrors.length > 0) {
     const code = String(realErrors[0].extensions?.code ?? "");
@@ -576,9 +595,9 @@ async function runEdgeQL(
     return new Response(
       JSON.stringify({
         error: realErrors[0].message,
-        code: code || undefined,
+        code: code || undefined
       }),
-      { status, headers: { "Content-Type": "application/json" } },
+      { status, headers: { "Content-Type": "application/json" } }
     );
   }
 
@@ -608,17 +627,19 @@ function mapErrorCodeToStatus(code: string): number {
 // ---------------------------------------------------------------------------
 
 function resolveType(schema: Schema, name: string): TypeDef | undefined {
-  return schema.types.get(name)
-    ?? schema.types.get(`default::${name}`);
+  return schema.types.get(name) ??
+    schema.types.get(`default::${name}`);
 }
 
 function isHidden(annotations: Record<string, string> | undefined): boolean {
-  if (!annotations) return false;
+  if (!annotations)
+    return false;
   return "rest::hidden" in annotations;
 }
 
 function isExpand(annotations: Record<string, string> | undefined): boolean {
-  if (!annotations) return false;
+  if (!annotations)
+    return false;
   return "rest::expand" in annotations;
 }
 
@@ -657,22 +678,24 @@ async function readJsonBody(request: Request): Promise<Record<string, unknown>> 
 }
 
 function coerceArray(value: unknown): unknown[] {
-  if (Array.isArray(value)) return value;
-  if (value === null || value === undefined) return [];
+  if (Array.isArray(value))
+    return value;
+  if (value === null || value === undefined)
+    return [];
   return [value];
 }
 
 function jsonResponse(value: unknown, status: number): Response {
   return new Response(JSON.stringify(value), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" }
   });
 }
 
 function errorJson(message: string, status: number): Response {
   return new Response(JSON.stringify({ error: message }), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" }
   });
 }
 
@@ -682,7 +705,7 @@ export const _internals = {
   isExpand,
   isHidden,
   renderShape,
-  resolveType,
+  resolveType
 };
 
 // LinkDef export keeps the import side of the import-only-types statement

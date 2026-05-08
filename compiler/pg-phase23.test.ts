@@ -34,7 +34,7 @@ function makePool(dsn: string): ConnectionPool {
     connectionString: dsn,
     minConnections: 1,
     maxConnections: 3,
-    cleanupInterval: 0,
+    cleanupInterval: 0
   });
 }
 
@@ -75,7 +75,7 @@ Deno.test({
       await pool.query("DROP TABLE IF EXISTS items CASCADE");
       await pool.query("DROP TYPE IF EXISTS status CASCADE");
       await pool.query(
-        "CREATE TYPE status AS ENUM ('active', 'inactive', 'pending')",
+        "CREATE TYPE status AS ENUM ('active', 'inactive', 'pending')"
       );
       await pool.query(`
         CREATE TABLE items (
@@ -101,7 +101,7 @@ Deno.test({
         tableName: "status",
         properties: new Map(),
         links: new Map(),
-        enumValues: ["active", "inactive", "pending"],
+        enumValues: ["active", "inactive", "pending"]
       };
 
       const itemType: TypeDef = {
@@ -116,7 +116,7 @@ Deno.test({
             multi: false,
             columnName: "id",
             edgeqlType: "uuid",
-            hasDefault: true,
+            hasDefault: true
           }],
           ["name", {
             name: "name",
@@ -124,7 +124,7 @@ Deno.test({
             required: true,
             multi: false,
             columnName: "name",
-            edgeqlType: "str",
+            edgeqlType: "str"
           }],
           ["status", {
             name: "status",
@@ -132,24 +132,24 @@ Deno.test({
             required: true,
             multi: false,
             columnName: "status",
-            edgeqlType: "str",
-          }],
+            edgeqlType: "str"
+          }]
         ]),
-        links: new Map(),
+        links: new Map()
       };
 
       const schema: Schema = {
         types: new Map([
           ["Status", statusType],
-          ["Item", itemType],
+          ["Item", itemType]
         ]),
-        functions: getBuiltinFunctions(),
+        functions: getBuiltinFunctions()
       };
 
       // Compile EdgeQL: SELECT Item { name } FILTER .status = Status.active
       const sql = compileEdgeQL(
         "SELECT Item { name } FILTER .status = Status.active",
-        schema,
+        schema
       );
 
       // Execute the compiled SQL
@@ -159,7 +159,7 @@ Deno.test({
       assertEquals(
         result.rowCount,
         2,
-        "Should return exactly 2 active items",
+        "Should return exactly 2 active items"
       );
 
       const names = result.rows.map((row: Record<string, unknown>) => {
@@ -169,14 +169,14 @@ Deno.test({
       assertEquals(
         (names as string[]).sort(),
         ["alpha", "gamma"],
-        "Active items should be alpha and gamma",
+        "Active items should be alpha and gamma"
       );
     } finally {
       await pool.query("DROP TABLE IF EXISTS items CASCADE");
       await pool.query("DROP TYPE IF EXISTS status CASCADE");
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -195,7 +195,7 @@ Deno.test({
       // Build a minimal schema (needed for compilation context)
       const schema: Schema = {
         types: new Map(),
-        functions: getBuiltinFunctions(),
+        functions: getBuiltinFunctions()
       };
 
       // Compile: SELECT (1, 2, 3).1
@@ -207,7 +207,7 @@ Deno.test({
       assertEquals(
         result.rowCount >= 1,
         true,
-        "Should return at least one row",
+        "Should return at least one row"
       );
 
       // The result should contain the value 2
@@ -220,7 +220,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -238,13 +238,13 @@ Deno.test({
     try {
       const schema: Schema = {
         types: new Map(),
-        functions: getBuiltinFunctions(),
+        functions: getBuiltinFunctions()
       };
 
       // Compile: SELECT (name := 'hello', age := 42).name
       const sql = compileEdgeQL(
         "SELECT (name := \"hello\", age := 42).name",
-        schema,
+        schema
       );
 
       const result = await pool.query(sql);
@@ -252,7 +252,7 @@ Deno.test({
       assertEquals(
         result.rowCount >= 1,
         true,
-        "Should return at least one row",
+        "Should return at least one row"
       );
 
       const firstRow = result.rows[0];
@@ -262,12 +262,12 @@ Deno.test({
       assertEquals(
         String(values[0]).replace(/"/g, ""),
         "hello",
-        "Named tuple .name should be 'hello'",
+        "Named tuple .name should be 'hello'"
       );
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -292,7 +292,7 @@ Deno.test({
         )
       `);
       await pool.query(
-        "INSERT INTO other_foo (name) VALUES ('test_item')",
+        "INSERT INTO other_foo (name) VALUES ('test_item')"
       );
 
       // Build schema with other::Foo type
@@ -308,7 +308,7 @@ Deno.test({
             multi: false,
             columnName: "id",
             edgeqlType: "uuid",
-            hasDefault: true,
+            hasDefault: true
           }],
           ["name", {
             name: "name",
@@ -316,23 +316,23 @@ Deno.test({
             required: true,
             multi: false,
             columnName: "name",
-            edgeqlType: "str",
-          }],
+            edgeqlType: "str"
+          }]
         ]),
-        links: new Map(),
+        links: new Map()
       };
 
       const schema: Schema = {
         types: new Map([
-          ["other::Foo", otherFoo],
+          ["other::Foo", otherFoo]
         ]),
-        functions: getBuiltinFunctions(),
+        functions: getBuiltinFunctions()
       };
 
       // Compile: WITH MODULE other SELECT Foo { name }
       const sql = compileEdgeQL(
         "WITH MODULE other SELECT Foo { name }",
-        schema,
+        schema
       );
 
       const result = await pool.query(sql);
@@ -344,13 +344,13 @@ Deno.test({
       assertEquals(
         (data as Record<string, unknown>).name,
         "test_item",
-        "Should return the test_item row",
+        "Should return the test_item row"
       );
     } finally {
       await pool.query("DROP TABLE IF EXISTS other_foo CASCADE");
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -396,10 +396,10 @@ Deno.test({
       // 2 circles + 2 rectangles. The default `__type__` value carries
       // the subtype name without the test having to set it explicitly.
       await pool.query(
-        `INSERT INTO circles (color) VALUES ('red'), ('green')`,
+        `INSERT INTO circles (color) VALUES ('red'), ('green')`
       );
       await pool.query(
-        `INSERT INTO rectangles (color) VALUES ('blue'), ('yellow')`,
+        `INSERT INTO rectangles (color) VALUES ('blue'), ('yellow')`
       );
 
       // Build schema with Shape hierarchy. Abstract Shape has no
@@ -425,7 +425,7 @@ Deno.test({
             multi: false,
             columnName: "id",
             edgeqlType: "uuid",
-            hasDefault: true,
+            hasDefault: true
           }],
           ["__type__", {
             name: "__type__",
@@ -433,7 +433,7 @@ Deno.test({
             required: true,
             multi: false,
             columnName: "__type__",
-            edgeqlType: "str",
+            edgeqlType: "str"
           }],
           ["color", {
             name: "color",
@@ -441,10 +441,10 @@ Deno.test({
             required: false,
             multi: false,
             columnName: "color",
-            edgeqlType: "str",
-          }],
+            edgeqlType: "str"
+          }]
         ]),
-        links: new Map(),
+        links: new Map()
       };
 
       const circle: TypeDef = {
@@ -460,7 +460,7 @@ Deno.test({
             multi: false,
             columnName: "id",
             edgeqlType: "uuid",
-            hasDefault: true,
+            hasDefault: true
           }],
           ["__type__", {
             name: "__type__",
@@ -468,7 +468,7 @@ Deno.test({
             required: true,
             multi: false,
             columnName: "__type__",
-            edgeqlType: "str",
+            edgeqlType: "str"
           }],
           ["color", {
             name: "color",
@@ -476,10 +476,10 @@ Deno.test({
             required: false,
             multi: false,
             columnName: "color",
-            edgeqlType: "str",
-          }],
+            edgeqlType: "str"
+          }]
         ]),
-        links: new Map(),
+        links: new Map()
       };
 
       const rectangle: TypeDef = {
@@ -495,7 +495,7 @@ Deno.test({
             multi: false,
             columnName: "id",
             edgeqlType: "uuid",
-            hasDefault: true,
+            hasDefault: true
           }],
           ["__type__", {
             name: "__type__",
@@ -503,7 +503,7 @@ Deno.test({
             required: true,
             multi: false,
             columnName: "__type__",
-            edgeqlType: "str",
+            edgeqlType: "str"
           }],
           ["color", {
             name: "color",
@@ -511,25 +511,25 @@ Deno.test({
             required: false,
             multi: false,
             columnName: "color",
-            edgeqlType: "str",
-          }],
+            edgeqlType: "str"
+          }]
         ]),
-        links: new Map(),
+        links: new Map()
       };
 
       const schema: Schema = {
         types: new Map([
           ["Shape", shape],
           ["Circle", circle],
-          ["Rectangle", rectangle],
+          ["Rectangle", rectangle]
         ]),
-        functions: getBuiltinFunctions(),
+        functions: getBuiltinFunctions()
       };
 
       // Compile: SELECT Shape { color } FILTER .id IS Circle
       const sql = compileEdgeQL(
         "SELECT Shape { color } FILTER .id IS Circle",
-        schema,
+        schema
       );
 
       const result = await pool.query(sql);
@@ -538,7 +538,7 @@ Deno.test({
       assertEquals(
         result.rowCount,
         2,
-        "Should return exactly 2 circles",
+        "Should return exactly 2 circles"
       );
 
       const colors = result.rows.map((row: Record<string, unknown>) => {
@@ -548,14 +548,14 @@ Deno.test({
       assertEquals(
         (colors as string[]).sort(),
         ["green", "red"],
-        "Circle colors should be green and red",
+        "Circle colors should be green and red"
       );
     } finally {
       await pool.query("DROP TABLE IF EXISTS circles CASCADE");
       await pool.query("DROP TABLE IF EXISTS rectangles CASCADE");
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -602,10 +602,10 @@ Deno.test({
 
       // 2 circles + 1 rectangle.
       await pool.query(
-        `INSERT INTO circles (color, radius) VALUES ('red', 5.0), ('green', 10.0)`,
+        `INSERT INTO circles (color, radius) VALUES ('red', 5.0), ('green', 10.0)`
       );
       await pool.query(
-        `INSERT INTO rectangles (color, width, height) VALUES ('blue', 3.0, 4.0)`,
+        `INSERT INTO rectangles (color, width, height) VALUES ('blue', 3.0, 4.0)`
       );
 
       // Build schema with hierarchy. Abstract Shape has no tableName.
@@ -627,7 +627,7 @@ Deno.test({
             multi: false,
             columnName: "id",
             edgeqlType: "uuid",
-            hasDefault: true,
+            hasDefault: true
           }],
           ["__type__", {
             name: "__type__",
@@ -635,7 +635,7 @@ Deno.test({
             required: true,
             multi: false,
             columnName: "__type__",
-            edgeqlType: "str",
+            edgeqlType: "str"
           }],
           ["color", {
             name: "color",
@@ -643,10 +643,10 @@ Deno.test({
             required: false,
             multi: false,
             columnName: "color",
-            edgeqlType: "str",
-          }],
+            edgeqlType: "str"
+          }]
         ]),
-        links: new Map(),
+        links: new Map()
       };
 
       const circle: TypeDef = {
@@ -662,7 +662,7 @@ Deno.test({
             multi: false,
             columnName: "id",
             edgeqlType: "uuid",
-            hasDefault: true,
+            hasDefault: true
           }],
           ["__type__", {
             name: "__type__",
@@ -670,7 +670,7 @@ Deno.test({
             required: true,
             multi: false,
             columnName: "__type__",
-            edgeqlType: "str",
+            edgeqlType: "str"
           }],
           ["color", {
             name: "color",
@@ -678,7 +678,7 @@ Deno.test({
             required: false,
             multi: false,
             columnName: "color",
-            edgeqlType: "str",
+            edgeqlType: "str"
           }],
           ["radius", {
             name: "radius",
@@ -686,10 +686,10 @@ Deno.test({
             required: true,
             multi: false,
             columnName: "radius",
-            edgeqlType: "float64",
-          }],
+            edgeqlType: "float64"
+          }]
         ]),
-        links: new Map(),
+        links: new Map()
       };
 
       const rectangle: TypeDef = {
@@ -705,7 +705,7 @@ Deno.test({
             multi: false,
             columnName: "id",
             edgeqlType: "uuid",
-            hasDefault: true,
+            hasDefault: true
           }],
           ["__type__", {
             name: "__type__",
@@ -713,7 +713,7 @@ Deno.test({
             required: true,
             multi: false,
             columnName: "__type__",
-            edgeqlType: "str",
+            edgeqlType: "str"
           }],
           ["color", {
             name: "color",
@@ -721,7 +721,7 @@ Deno.test({
             required: false,
             multi: false,
             columnName: "color",
-            edgeqlType: "str",
+            edgeqlType: "str"
           }],
           ["width", {
             name: "width",
@@ -729,7 +729,7 @@ Deno.test({
             required: true,
             multi: false,
             columnName: "width",
-            edgeqlType: "float64",
+            edgeqlType: "float64"
           }],
           ["height", {
             name: "height",
@@ -737,25 +737,25 @@ Deno.test({
             required: true,
             multi: false,
             columnName: "height",
-            edgeqlType: "float64",
-          }],
+            edgeqlType: "float64"
+          }]
         ]),
-        links: new Map(),
+        links: new Map()
       };
 
       const schema: Schema = {
         types: new Map([
           ["Shape", shape],
           ["Circle", circle],
-          ["Rectangle", rectangle],
+          ["Rectangle", rectangle]
         ]),
-        functions: getBuiltinFunctions(),
+        functions: getBuiltinFunctions()
       };
 
       // Compile: SELECT Shape { color, [IS Circle].radius }
       const sql = compileEdgeQL(
         "SELECT Shape { color, [IS Circle].radius }",
-        schema,
+        schema
       );
 
       const result = await pool.query(sql);
@@ -764,7 +764,7 @@ Deno.test({
       assertEquals(
         result.rowCount,
         3,
-        "Should return all 3 shapes",
+        "Should return all 3 shapes"
       );
 
       // Extract results
@@ -774,35 +774,35 @@ Deno.test({
       });
 
       // Circles should have radius, rectangles should have null
-      const circleRows = rows.filter((r) => Number(r.radius) > 0);
+      const circleRows = rows.filter(r => Number(r.radius) > 0);
       assertEquals(
         circleRows.length,
         2,
-        "Should have 2 rows with non-null radius (circles)",
+        "Should have 2 rows with non-null radius (circles)"
       );
 
-      const rectRows = rows.filter((r) => r.radius === null || r.radius === undefined);
+      const rectRows = rows.filter(r => r.radius === null || r.radius === undefined);
       assertEquals(
         rectRows.length,
         1,
-        "Should have 1 row with null radius (rectangle)",
+        "Should have 1 row with null radius (rectangle)"
       );
 
       // Verify specific radius values (use numeric sort comparator)
-      const radiusValues = circleRows.map((r) => Number(r.radius)).sort(
-        (a, b) => a - b,
+      const radiusValues = circleRows.map(r => Number(r.radius)).sort(
+        (a, b) => a - b
       );
       assertEquals(
         radiusValues,
         [5, 10],
-        "Circle radii should be 5 and 10",
+        "Circle radii should be 5 and 10"
       );
     } finally {
       await pool.query("DROP TABLE IF EXISTS circles CASCADE");
       await pool.query("DROP TABLE IF EXISTS rectangles CASCADE");
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -831,11 +831,11 @@ Deno.test({
             required: true,
             multi: false,
             constraints: [],
-            annotations: {},
-          },
+            annotations: {}
+          }
         ],
         links: [],
-        subtypes: ["Dog", "Cat"],
+        subtypes: ["Dog", "Cat"]
       };
       const ddlStatements = generator.generateDDL([createOp]);
 
@@ -846,58 +846,58 @@ Deno.test({
 
       // Insert a row without specifying __type__ -- should default to 'Animal'
       await pool.query(
-        "INSERT INTO animal (id, name) VALUES (gen_random_uuid(), 'Generic')",
+        "INSERT INTO animal (id, name) VALUES (gen_random_uuid(), 'Generic')"
       );
 
       // Insert rows with explicit __type__ for subtypes
       await pool.query(
-        "INSERT INTO animal (id, __type__, name) VALUES (gen_random_uuid(), 'Dog', 'Rex')",
+        "INSERT INTO animal (id, __type__, name) VALUES (gen_random_uuid(), 'Dog', 'Rex')"
       );
       await pool.query(
-        "INSERT INTO animal (id, __type__, name) VALUES (gen_random_uuid(), 'Cat', 'Whiskers')",
+        "INSERT INTO animal (id, __type__, name) VALUES (gen_random_uuid(), 'Cat', 'Whiskers')"
       );
 
       // Verify __type__ column values
       const allResult = await pool.query(
-        "SELECT name, __type__ FROM animal ORDER BY name",
+        "SELECT name, __type__ FROM animal ORDER BY name"
       );
       assertEquals(allResult.rowCount, 3, "Should have 3 animals");
 
       // Generic should default to 'Animal'
       const genericRow = allResult.rows.find(
-        (r: Record<string, unknown>) => r.name === "Generic",
+        (r: Record<string, unknown>) => r.name === "Generic"
       ) as Record<string, unknown>;
       assertExists(genericRow, "Generic should exist");
       assertEquals(
         genericRow.__type__,
         "Animal",
-        "Default __type__ should be 'Animal'",
+        "Default __type__ should be 'Animal'"
       );
 
       // Filter by __type__ to get only Dogs
       const dogResult = await pool.query(
-        "SELECT name FROM animal WHERE __type__ = 'Dog'",
+        "SELECT name FROM animal WHERE __type__ = 'Dog'"
       );
       assertEquals(dogResult.rowCount, 1, "Should have 1 dog");
       assertEquals(
         (dogResult.rows[0] as Record<string, unknown>).name,
         "Rex",
-        "Dog should be Rex",
+        "Dog should be Rex"
       );
 
       // Filter by __type__ to get only Cats
       const catResult = await pool.query(
-        "SELECT name FROM animal WHERE __type__ = 'Cat'",
+        "SELECT name FROM animal WHERE __type__ = 'Cat'"
       );
       assertEquals(catResult.rowCount, 1, "Should have 1 cat");
       assertEquals(
         (catResult.rows[0] as Record<string, unknown>).name,
         "Whiskers",
-        "Cat should be Whiskers",
+        "Cat should be Whiskers"
       );
     } finally {
       await pool.query("DROP TABLE IF EXISTS animal CASCADE");
       await pool.close();
     }
-  },
+  }
 });

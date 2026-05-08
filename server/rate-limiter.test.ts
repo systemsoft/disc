@@ -10,7 +10,7 @@ Deno.test("allows requests under limit", () => {
   const limiter = new RateLimiter({
     requestsPerMinute: 60,
     burstSize: 5,
-    nowFn: () => now,
+    nowFn: () => now
   });
 
   // Should allow up to burstSize requests immediately
@@ -26,7 +26,7 @@ Deno.test("rejects requests over limit", () => {
   const limiter = new RateLimiter({
     requestsPerMinute: 60,
     burstSize: 3,
-    nowFn: () => now,
+    nowFn: () => now
   });
 
   // Exhaust the burst
@@ -46,7 +46,7 @@ Deno.test("token refill over time", () => {
     // 60 rpm = 1 token/second = 1 token per 1000ms
     requestsPerMinute: 60,
     burstSize: 3,
-    nowFn: () => now,
+    nowFn: () => now
   });
 
   // Exhaust burst
@@ -68,7 +68,7 @@ Deno.test("burst handling - start with full burst then exhaust it", () => {
   const limiter = new RateLimiter({
     requestsPerMinute: 6,
     burstSize: 4,
-    nowFn: () => now,
+    nowFn: () => now
   });
 
   const results: boolean[] = [];
@@ -77,8 +77,8 @@ Deno.test("burst handling - start with full burst then exhaust it", () => {
   }
 
   // First 4 allowed (burstSize), remaining rejected
-  assertEquals(results.slice(0, 4).every((r) => r === true), true);
-  assertEquals(results.slice(4).every((r) => r === false), true);
+  assertEquals(results.slice(0, 4).every(r => r === true), true);
+  assertEquals(results.slice(4).every(r => r === false), true);
 
   limiter.dispose();
 });
@@ -88,7 +88,7 @@ Deno.test("independent IP buckets", () => {
   const limiter = new RateLimiter({
     requestsPerMinute: 60,
     burstSize: 2,
-    nowFn: () => now,
+    nowFn: () => now
   });
 
   // Exhaust IP A
@@ -109,7 +109,7 @@ Deno.test("stats tracking - rejectedCount and activeClients", () => {
   const limiter = new RateLimiter({
     requestsPerMinute: 60,
     burstSize: 1,
-    nowFn: () => now,
+    nowFn: () => now
   });
 
   limiter.allow("10.0.0.1"); // allowed
@@ -129,7 +129,7 @@ Deno.test("cleanup removes stale entries after idle TTL", () => {
   const limiter = new RateLimiter({
     requestsPerMinute: 60,
     burstSize: 5,
-    nowFn: () => now,
+    nowFn: () => now
   });
 
   limiter.allow("172.16.0.1");
@@ -152,7 +152,7 @@ Deno.test("dispose stops cleanup interval", () => {
   const limiter = new RateLimiter({
     requestsPerMinute: 60,
     burstSize: 5,
-    nowFn: () => now,
+    nowFn: () => now
   });
 
   // dispose() should not throw

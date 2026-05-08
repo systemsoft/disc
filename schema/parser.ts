@@ -80,7 +80,7 @@ export class SDLParser {
 
     return {
       document: { kind: "SDLDocument", declarations },
-      errors: this.collectedErrors,
+      errors: this.collectedErrors
     };
   }
 
@@ -100,7 +100,7 @@ export class SDLParser {
       TokenType.GLOBAL,
       TokenType.LINK,
       TokenType.ANNOTATION,
-      TokenType.ABSTRACT,
+      TokenType.ABSTRACT
     ]);
 
     while (!this.isAtEnd()) {
@@ -112,8 +112,8 @@ export class SDLParser {
       // Stop AT a top-level keyword or closing brace so the caller can
       // start fresh on it.
       if (
-        STARTS.has(this.peek().type)
-        || this.peek().type === TokenType.RBRACE
+        STARTS.has(this.peek().type) ||
+        this.peek().type === TokenType.RBRACE
       ) {
         return;
       }
@@ -124,8 +124,8 @@ export class SDLParser {
   private parseTopLevelDeclaration(): AST.Declaration | null {
     // Skip semicolons and whitespace at top level
     while (
-      this.match(TokenType.SEMICOLON) || this.match(TokenType.WHITESPACE)
-      || this.match(TokenType.NEWLINE)
+      this.match(TokenType.SEMICOLON) || this.match(TokenType.WHITESPACE) ||
+      this.match(TokenType.NEWLINE)
     ) {
       // Do nothing
     }
@@ -184,7 +184,7 @@ export class SDLParser {
 
     const token = this.peek();
     throw this.error(
-      `Unexpected token: '${token.value}' (type: ${token.type})`,
+      `Unexpected token: '${token.value}' (type: ${token.type})`
     );
   }
 
@@ -227,7 +227,7 @@ export class SDLParser {
     } else {
       this.consume(
         TokenType.SEMICOLON,
-        "Expected ';' or '{' after type declaration",
+        "Expected ';' or '{' after type declaration"
       );
     }
 
@@ -235,7 +235,7 @@ export class SDLParser {
   }
 
   private parseScalarTypeDeclaration(
-    abstract?: boolean,
+    abstract?: boolean
   ): AST.ScalarTypeDeclaration {
     const name = this.parseIdentifier();
 
@@ -255,7 +255,7 @@ export class SDLParser {
           annotations.push(this.parseAnnotation());
         } else {
           throw this.error(
-            `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in block body — did you mean a constraint, annotation, or member declaration?`,
+            `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in block body — did you mean a constraint, annotation, or member declaration?`
           );
         }
       }
@@ -263,7 +263,7 @@ export class SDLParser {
     } else {
       this.consume(
         TokenType.SEMICOLON,
-        "Expected ';' or '{' after scalar type declaration",
+        "Expected ';' or '{' after scalar type declaration"
       );
     }
 
@@ -273,7 +273,7 @@ export class SDLParser {
       name,
       extending,
       constraints,
-      annotations,
+      annotations
     };
   }
 
@@ -305,7 +305,7 @@ export class SDLParser {
 
     this.consume(
       TokenType.SEMICOLON,
-      "Expected ';' after function declaration",
+      "Expected ';' after function declaration"
     );
 
     return { kind: "FunctionDeclaration", name, parameters, returnType, using };
@@ -331,23 +331,23 @@ export class SDLParser {
           readonly = this.parseBooleanLiteral();
           this.consume(
             TokenType.SEMICOLON,
-            "Expected ';' after readonly value",
+            "Expected ';' after readonly value"
           );
         } else {
           throw this.error(
-            `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in block body — did you mean a constraint, annotation, or member declaration?`,
+            `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in block body — did you mean a constraint, annotation, or member declaration?`
           );
         }
       }
       this.consume(TokenType.RBRACE, "Expected '}' after global body");
       this.consume(
         TokenType.SEMICOLON,
-        "Expected ';' after global declaration",
+        "Expected ';' after global declaration"
       );
     } else {
       this.consume(
         TokenType.SEMICOLON,
-        "Expected ';' or '{' after global declaration",
+        "Expected ';' or '{' after global declaration"
       );
     }
 
@@ -358,12 +358,12 @@ export class SDLParser {
       required: qualifiers.required,
       multi: qualifiers.multi,
       default: defaultValue,
-      readonly,
+      readonly
     };
   }
 
   private parseAnnotationDeclaration(
-    abstract?: boolean,
+    abstract?: boolean
   ): AST.AnnotationDeclaration {
     const name = this.parseIdentifier();
 
@@ -374,14 +374,14 @@ export class SDLParser {
 
     this.consume(
       TokenType.SEMICOLON,
-      "Expected ';' after annotation declaration",
+      "Expected ';' after annotation declaration"
     );
 
     return { kind: "AnnotationDeclaration", abstract, name, type };
   }
 
   private parseAbstractLinkDeclaration(
-    abstract?: boolean,
+    abstract?: boolean
   ): AST.LinkDeclaration {
     const name = this.parseIdentifier();
 
@@ -405,7 +405,7 @@ export class SDLParser {
       kind: "LinkDeclaration",
       name,
       target,
-      abstract,
+      abstract
     };
 
     if (extending && extending.length > 0) {
@@ -428,16 +428,19 @@ export class SDLParser {
           annotations.push(this.parseAnnotation());
         } else {
           throw this.error(
-            `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in block body — did you mean a constraint, annotation, or member declaration?`,
+            `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in block body — did you mean a constraint, annotation, or member declaration?`
           );
         }
       }
 
       this.consume(TokenType.RBRACE, "Expected '}' after abstract link body");
 
-      if (properties.length > 0) link.properties = properties;
-      if (constraints.length > 0) link.constraints = constraints;
-      if (annotations.length > 0) link.annotations = annotations;
+      if (properties.length > 0)
+        link.properties = properties;
+      if (constraints.length > 0)
+        link.constraints = constraints;
+      if (annotations.length > 0)
+        link.annotations = annotations;
     }
 
     // Consume optional trailing semicolon
@@ -496,7 +499,7 @@ export class SDLParser {
         const computed = this.parseExpression();
         this.consume(
           TokenType.SEMICOLON,
-          "Expected ';' after computed property",
+          "Expected ';' after computed property"
         );
 
         return {
@@ -504,7 +507,7 @@ export class SDLParser {
           name,
           type: AST.createTypeRef(AST.createQualifiedName(["auto"])), // Type will be inferred
           computed,
-          ...qualifiers,
+          ...qualifiers
         };
       } else if (this.match(TokenType.COLON)) {
         // Regular property
@@ -523,7 +526,7 @@ export class SDLParser {
           name,
           extTarget,
           qualifiers,
-          linkExtending,
+          linkExtending
         );
         return extLink;
       } else if (this.match(TokenType.ARROW)) {
@@ -556,13 +559,13 @@ export class SDLParser {
   private parsePropertyBody(
     name: AST.Identifier,
     type: AST.TypeRef,
-    qualifiers: any,
+    qualifiers: any
   ): AST.PropertyDeclaration {
     const property: AST.PropertyDeclaration = {
       kind: "PropertyDeclaration",
       name,
       type,
-      ...qualifiers,
+      ...qualifiers
     };
 
     if (this.match(TokenType.LBRACE)) {
@@ -584,26 +587,29 @@ export class SDLParser {
           property.readonly = this.parseBooleanLiteral();
           this.consume(
             TokenType.SEMICOLON,
-            "Expected ';' after readonly value",
+            "Expected ';' after readonly value"
           );
         } else if (this.match(TokenType.REWRITE)) {
           rewrites.push(this.parseRewriteDeclaration());
         } else {
           throw this.error(
-            `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in block body — did you mean a constraint, annotation, or member declaration?`,
+            `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in block body — did you mean a constraint, annotation, or member declaration?`
           );
         }
       }
 
       this.consume(TokenType.RBRACE, "Expected '}' after property body");
 
-      if (constraints.length > 0) property.constraints = constraints;
-      if (annotations.length > 0) property.annotations = annotations;
-      if (rewrites.length > 0) property.rewrites = rewrites;
+      if (constraints.length > 0)
+        property.constraints = constraints;
+      if (annotations.length > 0)
+        property.annotations = annotations;
+      if (rewrites.length > 0)
+        property.rewrites = rewrites;
     } else {
       this.consume(
         TokenType.SEMICOLON,
-        "Expected ';' or '{' after property declaration",
+        "Expected ';' or '{' after property declaration"
       );
     }
 
@@ -629,13 +635,13 @@ export class SDLParser {
     name: AST.Identifier,
     target: AST.TypeRef,
     qualifiers: any,
-    extending?: AST.TypeRef[],
+    extending?: AST.TypeRef[]
   ): AST.LinkDeclaration {
     const link: AST.LinkDeclaration = {
       kind: "LinkDeclaration",
       name,
       target,
-      ...qualifiers,
+      ...qualifiers
     };
 
     if (extending && extending.length > 0) {
@@ -665,7 +671,7 @@ export class SDLParser {
           link.readonly = this.parseBooleanLiteral();
           this.consume(
             TokenType.SEMICOLON,
-            "Expected ';' after readonly value",
+            "Expected ';' after readonly value"
           );
         } else if (this.match(TokenType.EXTENDING)) {
           // extending inside link body: extending AbstractLink1, AbstractLink2;
@@ -677,18 +683,18 @@ export class SDLParser {
           }
           this.consume(
             TokenType.SEMICOLON,
-            "Expected ';' after extending clause",
+            "Expected ';' after extending clause"
           );
         } else if (this.match(TokenType.ON)) {
           // on target delete ... | on source delete ...
           const directionToken = this.peek();
           if (
-            directionToken.type !== TokenType.IDENT
-            || (directionToken.value !== "target"
-              && directionToken.value !== "source")
+            directionToken.type !== TokenType.IDENT ||
+            (directionToken.value !== "target" &&
+              directionToken.value !== "source")
           ) {
             throw this.error(
-              `Expected 'target' or 'source' after 'on', got '${directionToken.value}'`,
+              `Expected 'target' or 'source' after 'on', got '${directionToken.value}'`
             );
           }
           this.advance(); // consume direction ident
@@ -696,34 +702,37 @@ export class SDLParser {
           if (directionToken.value === "target") {
             this.consume(
               TokenType.DELETE,
-              "Expected 'delete' after 'target'",
+              "Expected 'delete' after 'target'"
             );
             link.onTargetDelete = this.parseDeletePolicy();
           } else {
             // source
             this.consume(
               TokenType.DELETE,
-              "Expected 'delete' after 'source'",
+              "Expected 'delete' after 'source'"
             );
             link.onSourceDelete = this.parseSourceDeletePolicy();
           }
           this.consume(TokenType.SEMICOLON, "Expected ';' after delete policy");
         } else {
           throw this.error(
-            `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in block body — did you mean a constraint, annotation, or member declaration?`,
+            `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in block body — did you mean a constraint, annotation, or member declaration?`
           );
         }
       }
 
       this.consume(TokenType.RBRACE, "Expected '}' after link body");
 
-      if (properties.length > 0) link.properties = properties;
-      if (constraints.length > 0) link.constraints = constraints;
-      if (annotations.length > 0) link.annotations = annotations;
+      if (properties.length > 0)
+        link.properties = properties;
+      if (constraints.length > 0)
+        link.constraints = constraints;
+      if (annotations.length > 0)
+        link.annotations = annotations;
     } else {
       this.consume(
         TokenType.SEMICOLON,
-        "Expected ';' or '{' after link declaration",
+        "Expected ';' or '{' after link declaration"
       );
     }
 
@@ -744,8 +753,8 @@ export class SDLParser {
       const possibleName = this.parseIdentifier();
 
       if (
-        this.check(TokenType.LPAREN) || this.check(TokenType.ON)
-        || this.check(TokenType.SEMICOLON) || this.check(TokenType.LBRACE)
+        this.check(TokenType.LPAREN) || this.check(TokenType.ON) ||
+        this.check(TokenType.SEMICOLON) || this.check(TokenType.LBRACE)
       ) {
         name = possibleName;
       } else {
@@ -772,7 +781,7 @@ export class SDLParser {
       name,
       delegated,
       on,
-      args,
+      args
     };
 
     // Parse constraint body if present
@@ -792,13 +801,14 @@ export class SDLParser {
           }
         } else {
           throw this.error(
-            `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in block body — did you mean a constraint, annotation, or member declaration?`,
+            `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in block body — did you mean a constraint, annotation, or member declaration?`
           );
         }
       }
 
       this.consume(TokenType.RBRACE, "Expected '}' after constraint body");
-      if (annotations.length > 0) constraint.annotations = annotations;
+      if (annotations.length > 0)
+        constraint.annotations = annotations;
     } else {
       this.consume(TokenType.SEMICOLON, "Expected ';' or '{' after constraint");
     }
@@ -838,13 +848,14 @@ export class SDLParser {
           annotations.push(this.parseAnnotation());
         } else {
           throw this.error(
-            `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in block body — did you mean a constraint, annotation, or member declaration?`,
+            `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in block body — did you mean a constraint, annotation, or member declaration?`
           );
         }
       }
 
       this.consume(TokenType.RBRACE, "Expected '}' after index body");
-      if (annotations.length > 0) index.annotations = annotations;
+      if (annotations.length > 0)
+        index.annotations = annotations;
     } else {
       this.consume(TokenType.SEMICOLON, "Expected ';' or '{' after index");
     }
@@ -896,7 +907,7 @@ export class SDLParser {
         this.consume(TokenType.RPAREN, "Expected ')' after expression");
         this.consume(
           TokenType.SEMICOLON,
-          "Expected ';' after with check clause",
+          "Expected ';' after with check clause"
         );
       } else if (this.match(TokenType.ANNOTATION)) {
         annotations.push(this.parseAnnotation());
@@ -911,7 +922,7 @@ export class SDLParser {
         this.consume(TokenType.SEMICOLON, "Expected ';' after errmessage");
       } else {
         throw this.error(
-          `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in access policy body — did you mean 'allow', 'deny', 'using', 'with check', 'errmessage', or 'annotation'?`,
+          `Unexpected token '${this.peek().value}' (type: ${this.peek().type}) in access policy body — did you mean 'allow', 'deny', 'using', 'with check', 'errmessage', or 'annotation'?`
         );
       }
     }
@@ -922,11 +933,14 @@ export class SDLParser {
       kind: "AccessPolicy",
       name,
       actions,
-      condition,
+      condition
     };
-    if (withCheck !== undefined) policy.withCheck = withCheck;
-    if (errmessage !== undefined) policy.errmessage = errmessage;
-    if (annotations.length > 0) policy.annotations = annotations;
+    if (withCheck !== undefined)
+      policy.withCheck = withCheck;
+    if (errmessage !== undefined)
+      policy.errmessage = errmessage;
+    if (annotations.length > 0)
+      policy.annotations = annotations;
 
     return policy;
   }
@@ -938,14 +952,14 @@ export class SDLParser {
     const timingToken = this.peek();
     let timing: AST.TriggerTiming;
     if (
-      timingToken.type === TokenType.IDENT
-      && (timingToken.value === "after" || timingToken.value === "before")
+      timingToken.type === TokenType.IDENT &&
+      (timingToken.value === "after" || timingToken.value === "before")
     ) {
       timing = timingToken.value as AST.TriggerTiming;
       this.advance();
     } else {
       throw this.error(
-        `Expected 'after' or 'before' in trigger declaration, got '${timingToken.value}'`,
+        `Expected 'after' or 'before' in trigger declaration, got '${timingToken.value}'`
       );
     }
 
@@ -956,7 +970,7 @@ export class SDLParser {
     const forToken = this.peek();
     if (forToken.type !== TokenType.IDENT || forToken.value !== "for") {
       throw this.error(
-        `Expected 'for' in trigger declaration, got '${forToken.value}'`,
+        `Expected 'for' in trigger declaration, got '${forToken.value}'`
       );
     }
     this.advance();
@@ -964,14 +978,14 @@ export class SDLParser {
     const scopeToken = this.peek();
     let scope: AST.TriggerScope;
     if (
-      scopeToken.type === TokenType.IDENT
-      && (scopeToken.value === "each" || scopeToken.value === "all")
+      scopeToken.type === TokenType.IDENT &&
+      (scopeToken.value === "each" || scopeToken.value === "all")
     ) {
       scope = scopeToken.value as AST.TriggerScope;
       this.advance();
     } else {
       throw this.error(
-        `Expected 'each' or 'all' after 'for' in trigger declaration, got '${scopeToken.value}'`,
+        `Expected 'each' or 'all' after 'for' in trigger declaration, got '${scopeToken.value}'`
       );
     }
 
@@ -979,7 +993,7 @@ export class SDLParser {
     const doToken = this.peek();
     if (doToken.type !== TokenType.IDENT || doToken.value !== "do") {
       throw this.error(
-        `Expected 'do' in trigger declaration, got '${doToken.value}'`,
+        `Expected 'do' in trigger declaration, got '${doToken.value}'`
       );
     }
     this.advance();
@@ -989,12 +1003,12 @@ export class SDLParser {
     const body = this.parseExpression();
     this.consume(
       TokenType.RPAREN,
-      "Expected ')' after trigger body expression",
+      "Expected ')' after trigger body expression"
     );
 
     this.consume(
       TokenType.SEMICOLON,
-      "Expected ';' after trigger declaration",
+      "Expected ';' after trigger declaration"
     );
 
     return {
@@ -1003,7 +1017,7 @@ export class SDLParser {
       timing,
       events,
       scope,
-      body,
+      body
     };
   }
 
@@ -1024,12 +1038,12 @@ export class SDLParser {
           this.advance();
         } else {
           throw this.error(
-            `Expected trigger event (insert, update, delete), got '${val}'`,
+            `Expected trigger event (insert, update, delete), got '${val}'`
           );
         }
       } else {
         throw this.error(
-          `Expected trigger event (insert, update, delete), got '${this.peek().value}'`,
+          `Expected trigger event (insert, update, delete), got '${this.peek().value}'`
         );
       }
     } while (this.match(TokenType.COMMA));
@@ -1053,12 +1067,12 @@ export class SDLParser {
           this.advance();
         } else {
           throw this.error(
-            `Expected rewrite event (insert, update), got '${val}'`,
+            `Expected rewrite event (insert, update), got '${val}'`
           );
         }
       } else {
         throw this.error(
-          `Expected rewrite event (insert, update), got '${this.peek().value}'`,
+          `Expected rewrite event (insert, update), got '${this.peek().value}'`
         );
       }
     } while (this.match(TokenType.COMMA));
@@ -1072,7 +1086,7 @@ export class SDLParser {
       this.advance();
     } else {
       throw this.error(
-        `Expected 'using' after rewrite events, got '${this.peek().value}'`,
+        `Expected 'using' after rewrite events, got '${this.peek().value}'`
       );
     }
 
@@ -1105,18 +1119,18 @@ export class SDLParser {
 
     this.consume(
       TokenType.RPAREN,
-      "Expected ')' after rewrite expression",
+      "Expected ')' after rewrite expression"
     );
 
     this.consume(
       TokenType.SEMICOLON,
-      "Expected ';' after rewrite declaration",
+      "Expected ';' after rewrite declaration"
     );
 
     return {
       kind: "RewriteDeclaration",
       events,
-      using: exprTokens.join(""),
+      using: exprTokens.join("")
     };
   }
 
@@ -1141,7 +1155,7 @@ export class SDLParser {
           name,
           type,
           typemod,
-          default: defaultValue,
+          default: defaultValue
         });
       } while (this.match(TokenType.COMMA));
     }
@@ -1234,14 +1248,14 @@ export class SDLParser {
           this.advance();
           const nextToken = this.peek();
           if (
-            nextToken.type === TokenType.IDENT
-            && nextToken.value === "empty"
+            nextToken.type === TokenType.IDENT &&
+            nextToken.value === "empty"
           ) {
             this.advance();
             return "set empty";
           }
           throw this.error(
-            `Expected 'empty' after 'set', got '${nextToken.value}'`,
+            `Expected 'empty' after 'set', got '${nextToken.value}'`
           );
         }
       }
@@ -1269,14 +1283,14 @@ export class SDLParser {
       this.advance();
       const targetToken = this.peek();
       if (
-        targetToken.type === TokenType.IDENT
-        && targetToken.value === "target"
+        targetToken.type === TokenType.IDENT &&
+        targetToken.value === "target"
       ) {
         this.advance();
         return "delete target";
       }
       throw this.error(
-        `Expected 'target' after 'delete', got '${targetToken.value}'`,
+        `Expected 'target' after 'delete', got '${targetToken.value}'`
       );
     }
 
@@ -1337,7 +1351,7 @@ export class SDLParser {
         kind: "ConditionalExpression",
         test,
         consequent: expr,
-        alternate,
+        alternate
       };
     }
 
@@ -1374,10 +1388,14 @@ export class SDLParser {
     while (true) {
       let op: string | null = null;
 
-      if (this.match(TokenType.EQUALS)) op = "=";
-      else if (this.match(TokenType.NOTEQUALS)) op = "!=";
-      else if (this.match(TokenType.QUESTIONEQ)) op = "?=";
-      else if (this.match(TokenType.QUESTIONNEQ)) op = "?!=";
+      if (this.match(TokenType.EQUALS))
+        op = "=";
+      else if (this.match(TokenType.NOTEQUALS))
+        op = "!=";
+      else if (this.match(TokenType.QUESTIONEQ))
+        op = "?=";
+      else if (this.match(TokenType.QUESTIONNEQ))
+        op = "?!=";
 
       if (op) {
         const right = this.parseComparisonExpression();
@@ -1396,10 +1414,14 @@ export class SDLParser {
     while (true) {
       let op: string | null = null;
 
-      if (this.match(TokenType.LESS)) op = "<";
-      else if (this.match(TokenType.LESSEQ)) op = "<=";
-      else if (this.match(TokenType.GREATER)) op = ">";
-      else if (this.match(TokenType.GREATEREQ)) op = ">=";
+      if (this.match(TokenType.LESS))
+        op = "<";
+      else if (this.match(TokenType.LESSEQ))
+        op = "<=";
+      else if (this.match(TokenType.GREATER))
+        op = ">";
+      else if (this.match(TokenType.GREATEREQ))
+        op = ">=";
 
       if (op) {
         const right = this.parseAdditiveExpression();
@@ -1418,9 +1440,12 @@ export class SDLParser {
     while (true) {
       let op: string | null = null;
 
-      if (this.match(TokenType.PLUS)) op = "+";
-      else if (this.match(TokenType.MINUS)) op = "-";
-      else if (this.match(TokenType.PLUSPLUS)) op = "++";
+      if (this.match(TokenType.PLUS))
+        op = "+";
+      else if (this.match(TokenType.MINUS))
+        op = "-";
+      else if (this.match(TokenType.PLUSPLUS))
+        op = "++";
 
       if (op) {
         const right = this.parseMultiplicativeExpression();
@@ -1439,9 +1464,12 @@ export class SDLParser {
     while (true) {
       let op: string | null = null;
 
-      if (this.match(TokenType.STAR)) op = "*";
-      else if (this.match(TokenType.SLASH)) op = "/";
-      else if (this.match(TokenType.PERCENT)) op = "%";
+      if (this.match(TokenType.STAR))
+        op = "*";
+      else if (this.match(TokenType.SLASH))
+        op = "/";
+      else if (this.match(TokenType.PERCENT))
+        op = "%";
 
       if (op) {
         const right = this.parseUnaryExpression();
@@ -1585,14 +1613,14 @@ export class SDLParser {
     const parts: string[] = [];
 
     if (
-      this.check(TokenType.IDENT) || this.check(TokenType.BACKTICK_IDENT)
-      || this.check(TokenType.DEFAULT)
+      this.check(TokenType.IDENT) || this.check(TokenType.BACKTICK_IDENT) ||
+      this.check(TokenType.DEFAULT)
     ) {
       // Handle keywords that can be used as identifiers (like "default")
       const token = this.peek();
       if (
-        token.type === TokenType.DEFAULT || token.type === TokenType.IDENT
-        || token.type === TokenType.BACKTICK_IDENT
+        token.type === TokenType.DEFAULT || token.type === TokenType.IDENT ||
+        token.type === TokenType.BACKTICK_IDENT
       ) {
         parts.push(token.value);
         this.advance();
@@ -1645,12 +1673,14 @@ export class SDLParser {
   }
 
   private check(type: TokenType): boolean {
-    if (this.isAtEnd()) return false;
+    if (this.isAtEnd())
+      return false;
     return this.peek().type === type;
   }
 
   private advance(): Token {
-    if (!this.isAtEnd()) this.current++;
+    if (!this.isAtEnd())
+      this.current++;
     return this.previous();
   }
 
@@ -1667,7 +1697,8 @@ export class SDLParser {
   }
 
   private consume(type: TokenType, message: string): Token {
-    if (this.check(type)) return this.advance();
+    if (this.check(type))
+      return this.advance();
     throw this.error(message);
   }
 
@@ -1710,8 +1741,8 @@ export class SDLParser {
       location: {
         line: token.line,
         column: token.column,
-        offset: token.offset,
-      },
+        offset: token.offset
+      }
     });
   }
 }

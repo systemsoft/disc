@@ -26,13 +26,13 @@ import { InitCommand } from "./init.ts";
 async function initProject(
   tempDir: string,
   name: string,
-  extra: Partial<Parameters<InitCommand["execute"]>[0]> = {},
+  extra: Partial<Parameters<InitCommand["execute"]>[0]> = {}
 ): Promise<string> {
   await new InitCommand().execute({
     name,
     skipPostgres: true,
     directory: tempDir,
-    ...extra,
+    ...extra
   });
   return `${tempDir}/${name}`;
 }
@@ -56,24 +56,26 @@ Deno.test("CLI Init - basic project initialization", async () => {
         "README.md",
         "mod.ts",
         "migrations",
-        "disc.toml",
+        "disc.toml"
       ]
     ) {
-      const exists = await Deno.stat(`${projectDir}/${path}`)
-        .then(() => true).catch(() => false);
+      const exists = await Deno
+        .stat(`${projectDir}/${path}`)
+        .then(() => true)
+        .catch(() => false);
       assert(exists, `${path} should be created`);
     }
 
     // Verify schema content (basic template)
     const schemaContent = await Deno.readTextFile(
-      `${projectDir}/dbschema/default.disc`,
+      `${projectDir}/dbschema/default.disc`
     );
     assertStringIncludes(schemaContent, "type User");
     assertStringIncludes(schemaContent, "required email: str");
 
     // Verify deno.json content
     const configContent = JSON.parse(
-      await Deno.readTextFile(`${projectDir}/deno.json`),
+      await Deno.readTextFile(`${projectDir}/deno.json`)
     );
     assertEquals(configContent.name, projectName);
     assertEquals(configContent.tasks.serve, "disc serve");
@@ -86,7 +88,7 @@ Deno.test("CLI Init - basic project initialization", async () => {
     assertEquals(
       /^DATABASE_URL=/m.test(envContent),
       false,
-      "managed-mode .env must not hardcode DATABASE_URL",
+      "managed-mode .env must not hardcode DATABASE_URL"
     );
   } finally {
     Deno.chdir(originalCwd);
@@ -101,11 +103,11 @@ Deno.test("CLI Init - minimal template", async () => {
   try {
     Deno.chdir(tempDir);
     const projectDir = await initProject(tempDir, "minimal-project", {
-      template: "minimal",
+      template: "minimal"
     });
 
     const schemaContent = await Deno.readTextFile(
-      `${projectDir}/dbschema/default.disc`,
+      `${projectDir}/dbschema/default.disc`
     );
 
     // Minimal template should have empty module
@@ -113,7 +115,7 @@ Deno.test("CLI Init - minimal template", async () => {
     assertStringIncludes(schemaContent, "Add your schema definitions here");
     assert(
       !schemaContent.includes("type User"),
-      "Should not include default types",
+      "Should not include default types"
     );
   } finally {
     Deno.chdir(originalCwd);
@@ -128,11 +130,11 @@ Deno.test("CLI Init - full template", async () => {
   try {
     Deno.chdir(tempDir);
     const projectDir = await initProject(tempDir, "full-project", {
-      template: "full",
+      template: "full"
     });
 
     const schemaContent = await Deno.readTextFile(
-      `${projectDir}/dbschema/default.disc`,
+      `${projectDir}/dbschema/default.disc`
     );
 
     // Full template should have multiple types
@@ -159,7 +161,7 @@ Deno.test("CLI Init - external --backend-dsn pins DATABASE_URL", async () => {
     Deno.chdir(tempDir);
     const customDbUrl = "postgresql://custom:5432/custom_db";
     const projectDir = await initProject(tempDir, "custom-db-project", {
-      backendDsn: customDbUrl,
+      backendDsn: customDbUrl
     });
 
     const envContent = await Deno.readTextFile(`${projectDir}/.env`);
@@ -188,7 +190,7 @@ Deno.test("CLI Init - directory already exists error", async () => {
       await new InitCommand().execute({
         name: projectName,
         skipPostgres: true,
-        directory: tempDir,
+        directory: tempDir
       });
     } catch (err) {
       thrown = err;
@@ -196,7 +198,7 @@ Deno.test("CLI Init - directory already exists error", async () => {
     assert(thrown instanceof Error, "execute() must throw on existing dir");
     assertStringIncludes(
       (thrown as Error).message,
-      "already exists",
+      "already exists"
     );
   } finally {
     Deno.chdir(originalCwd);
@@ -221,13 +223,16 @@ Deno.test("CLI Init - force overwrite existing directory", async () => {
       name: projectName,
       skipPostgres: true,
       directory: tempDir,
-      force: true,
+      force: true
     });
 
     // The scaffold's canonical schema path must exist after the run.
-    const schemaExists = await Deno.stat(
-      `${projectDir}/dbschema/default.disc`,
-    ).then(() => true).catch(() => false);
+    const schemaExists = await Deno
+      .stat(
+        `${projectDir}/dbschema/default.disc`
+      )
+      .then(() => true)
+      .catch(() => false);
     assert(schemaExists, "scaffold must overwrite when force=true");
   } finally {
     Deno.chdir(originalCwd);
@@ -250,18 +255,18 @@ Deno.test("CLI Init - rejects invalid project name", async () => {
         await new InitCommand().execute({
           name: badName,
           skipPostgres: true,
-          directory: tempDir,
+          directory: tempDir
         });
       } catch (err) {
         thrown = err;
       }
       assert(
         thrown instanceof Error,
-        `name '${badName}' should be rejected by InitCommand`,
+        `name '${badName}' should be rejected by InitCommand`
       );
       assertStringIncludes(
         (thrown as Error).message,
-        "Invalid project name",
+        "Invalid project name"
       );
     }
 
@@ -271,7 +276,7 @@ Deno.test("CLI Init - rejects invalid project name", async () => {
     await new InitCommand().execute({
       name: "blog-api",
       skipPostgres: true,
-      directory: tempDir,
+      directory: tempDir
     });
   } finally {
     Deno.chdir(originalCwd);
@@ -312,7 +317,7 @@ Deno.test("CLI Init - creates proper gitignore", async () => {
     const projectDir = await initProject(tempDir, "gitignore-test");
 
     const gitignoreContent = await Deno.readTextFile(
-      `${projectDir}/.gitignore`,
+      `${projectDir}/.gitignore`
     );
 
     // Verify common entries are present
@@ -341,14 +346,14 @@ Deno.test("CLI Init - throws on PG setup failure, keeps scaffold resumable", asy
     const failingManager = {
       createInstance: () => {
         throw new Error("simulated PG failure");
-      },
+      }
     } as unknown as import("../postgres/mod.ts").PostgresManager;
 
     let thrown: unknown;
     try {
       await new InitCommand(failingManager).execute({
         name: projectName,
-        directory: tempDir,
+        directory: tempDir
       });
     } catch (e) {
       thrown = e;
@@ -356,18 +361,21 @@ Deno.test("CLI Init - throws on PG setup failure, keeps scaffold resumable", asy
 
     assert(
       thrown instanceof Error,
-      "execute() must throw when PG setup fails (fixes false-success exit 0 bug)",
+      "execute() must throw when PG setup fails (fixes false-success exit 0 bug)"
     );
     assertStringIncludes((thrown as Error).message, "simulated PG failure");
 
     // The scaffold should still exist so the user can re-run `disc start`
     // after fixing the environment.
-    const tomlExists = await Deno.stat(
-      `${tempDir}/${projectName}/disc.toml`,
-    ).then(() => true).catch(() => false);
+    const tomlExists = await Deno
+      .stat(
+        `${tempDir}/${projectName}/disc.toml`
+      )
+      .then(() => true)
+      .catch(() => false);
     assert(
       tomlExists,
-      "disc.toml must be written before PG setup so the project is resumable",
+      "disc.toml must be written before PG setup so the project is resumable"
     );
   } finally {
     Deno.chdir(originalCwd);
@@ -386,19 +394,21 @@ Deno.test("CLI Init - disc.toml written inside project dir, not CWD", async () =
     await new InitCommand().execute({
       name: projectName,
       skipPostgres: true,
-      directory: tempDir,
+      directory: tempDir
     });
 
     const projectDir = `${tempDir}/${projectName}`;
 
     const inProject = await Deno.stat(`${projectDir}/disc.toml`).then(() => true).catch(() => false);
-    const inCwd = await Deno.stat(`${tempDir}/disc.toml`).then(() => true)
+    const inCwd = await Deno
+      .stat(`${tempDir}/disc.toml`)
+      .then(() => true)
       .catch(() => false);
 
     assert(inProject, "disc.toml must be at projectDir/disc.toml");
     assert(
       !inCwd,
-      "disc.toml must NOT leak to CWD (would be shared by sibling projects)",
+      "disc.toml must NOT leak to CWD (would be shared by sibling projects)"
     );
   } finally {
     Deno.chdir(originalCwd);
@@ -417,11 +427,11 @@ Deno.test("CLI Init - disc.toml has correct managed instance config", async () =
     await new InitCommand().execute({
       name: projectName,
       skipPostgres: true,
-      directory: tempDir,
+      directory: tempDir
     });
 
     const tomlContent = await Deno.readTextFile(
-      `${tempDir}/${projectName}/disc.toml`,
+      `${tempDir}/${projectName}/disc.toml`
     );
     assertStringIncludes(tomlContent, `name = "${projectName}"`);
     assertStringIncludes(tomlContent, `managed = true`);
@@ -444,11 +454,11 @@ Deno.test("CLI Init - disc.toml reflects backend DSN", async () => {
     await new InitCommand().execute({
       name: projectName,
       backendDsn,
-      directory: tempDir,
+      directory: tempDir
     });
 
     const tomlContent = await Deno.readTextFile(
-      `${tempDir}/${projectName}/disc.toml`,
+      `${tempDir}/${projectName}/disc.toml`
     );
     assertStringIncludes(tomlContent, `managed = false`);
     assertStringIncludes(tomlContent, `backend_dsn = "${backendDsn}"`);
@@ -469,11 +479,11 @@ Deno.test("CLI Init - deno.json scaffold omits unpublished JSR ref", async () =>
     await new InitCommand().execute({
       name: projectName,
       skipPostgres: true,
-      directory: tempDir,
+      directory: tempDir
     });
 
     const denoJson = JSON.parse(
-      await Deno.readTextFile(`${tempDir}/${projectName}/deno.json`),
+      await Deno.readTextFile(`${tempDir}/${projectName}/deno.json`)
     );
     // Until @disc/db is published on JSR, the scaffold must not reference it
     // — a generated project that cannot resolve its imports is worse than a
@@ -481,7 +491,7 @@ Deno.test("CLI Init - deno.json scaffold omits unpublished JSR ref", async () =>
     assertEquals(
       denoJson.imports?.["@disc/db"],
       undefined,
-      "Scaffold must not reference unpublished @disc/db via jsr:",
+      "Scaffold must not reference unpublished @disc/db via jsr:"
     );
   } finally {
     Deno.chdir(originalCwd);
@@ -500,18 +510,18 @@ Deno.test("CLI Init - README does not reference manual createdb", async () => {
     await new InitCommand().execute({
       name: projectName,
       skipPostgres: true,
-      directory: tempDir,
+      directory: tempDir
     });
 
     const readme = await Deno.readTextFile(
-      `${tempDir}/${projectName}/README.md`,
+      `${tempDir}/${projectName}/README.md`
     );
     // Scaffold used to tell users to `createdb foo_dev` — contradicts the
     // bundled-PG value proposition.
     assertEquals(
       readme.includes("createdb"),
       false,
-      "README must not instruct manual createdb in the bundled-PG flow",
+      "README must not instruct manual createdb in the bundled-PG flow"
     );
     assertStringIncludes(readme, "disc start");
   } finally {
@@ -531,7 +541,7 @@ Deno.test("CLI Init - .env for managed PG omits TCP DATABASE_URL", async () => {
     await new InitCommand().execute({
       name: projectName,
       skipPostgres: true,
-      directory: tempDir,
+      directory: tempDir
     });
 
     const env = await Deno.readTextFile(`${tempDir}/${projectName}/.env`);
@@ -541,7 +551,7 @@ Deno.test("CLI Init - .env for managed PG omits TCP DATABASE_URL", async () => {
     assertEquals(
       /^DATABASE_URL=/m.test(env),
       false,
-      ".env must not hardcode DATABASE_URL in managed mode",
+      ".env must not hardcode DATABASE_URL in managed mode"
     );
   } finally {
     Deno.chdir(originalCwd);
@@ -561,29 +571,35 @@ Deno.test("CLI Init - schema at canonical dbschema/default.disc path", async () 
       name: projectName,
       template: "basic",
       skipPostgres: true,
-      directory: tempDir,
+      directory: tempDir
     });
 
     const projectDir = `${tempDir}/${projectName}`;
 
-    const schemaExists = await Deno.stat(
-      `${projectDir}/dbschema/default.disc`,
-    ).then(() => true).catch(() => false);
+    const schemaExists = await Deno
+      .stat(
+        `${projectDir}/dbschema/default.disc`
+      )
+      .then(() => true)
+      .catch(() => false);
     assert(
       schemaExists,
-      "Schema should be at dbschema/default.disc (canonical path matching migrate/codegen defaults)",
+      "Schema should be at dbschema/default.disc (canonical path matching migrate/codegen defaults)"
     );
 
-    const legacyExists = await Deno.stat(`${projectDir}/schema.disc`).then(
-      () => true,
-    ).catch(() => false);
+    const legacyExists = await Deno
+      .stat(`${projectDir}/schema.disc`)
+      .then(
+        () => true
+      )
+      .catch(() => false);
     assert(
       !legacyExists,
-      "Legacy schema.disc path should not be created",
+      "Legacy schema.disc path should not be created"
     );
 
     const schemaContent = await Deno.readTextFile(
-      `${projectDir}/dbschema/default.disc`,
+      `${projectDir}/dbschema/default.disc`
     );
     assertStringIncludes(schemaContent, "type User");
   } finally {

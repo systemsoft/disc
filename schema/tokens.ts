@@ -93,7 +93,7 @@ export enum TokenType {
   COMMENT = "COMMENT", // # comment
   EOF = "EOF", // End of file
   NEWLINE = "NEWLINE", // Line break
-  WHITESPACE = "WHITESPACE", // Space, tab
+  WHITESPACE = "WHITESPACE" // Space, tab
 }
 
 export const KEYWORDS = new Map<string, TokenType>([
@@ -133,7 +133,7 @@ export const KEYWORDS = new Map<string, TokenType>([
   ["trigger", TokenType.TRIGGER],
   ["rewrite", TokenType.REWRITE],
   ["with", TokenType.WITH],
-  ["check", TokenType.CHECK],
+  ["check", TokenType.CHECK]
 ]);
 
 export interface Token {
@@ -149,7 +149,7 @@ export function createToken(
   value: string,
   line: number,
   column: number,
-  offset: number,
+  offset: number
 ): Token {
   return { type, value, line, column, offset };
 }

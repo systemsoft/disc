@@ -110,7 +110,7 @@ Deno.test("Schema Compilation - SELECT User with shape", () => {
       name,
       email
     }
-  `,
+  `
   );
   assertStringIncludes(sql, "jsonb_build_object");
   assertStringIncludes(sql, "'name'");
@@ -124,7 +124,7 @@ Deno.test("Schema Compilation - SELECT with FILTER", () => {
     `
     SELECT User
     FILTER .name = "Ada"
-  `,
+  `
   );
   assertStringIncludes(sql, "where");
   assertStringIncludes(sql, "name");
@@ -141,7 +141,7 @@ Deno.test("Schema Compilation - SELECT with ORDER BY, LIMIT, OFFSET", () => {
     ORDER BY .name ASC
     OFFSET 5
     LIMIT 10
-  `,
+  `
   );
   assertStringIncludes(sql, "order by");
   assertStringIncludes(sql, "limit 10");
@@ -168,7 +168,7 @@ Deno.test("Schema Compilation - INSERT User", () => {
       name := "Billie",
       email := "billie@test.com"
     }
-  `,
+  `
   );
   assertStringIncludes(sql, "insert into");
   assertStringIncludes(sql, "user");
@@ -186,7 +186,7 @@ Deno.test("Schema Compilation - UPDATE User", () => {
     SET {
       name := "Alicia"
     }
-  `,
+  `
   );
   assertStringIncludes(sql, "update");
   assertStringIncludes(sql, "user");
@@ -203,7 +203,7 @@ Deno.test("Schema Compilation - DELETE User", () => {
     `
     DELETE User
     FILTER .name = "Ada"
-  `,
+  `
   );
   assertStringIncludes(sql, "delete from");
   assertStringIncludes(sql, "user");
@@ -222,7 +222,7 @@ Deno.test("Schema Compilation - SELECT with nested shape uses backlink", () => {
         title
       }
     }
-  `,
+  `
   );
   assertStringIncludes(sql, "jsonb_build_object");
   assertStringIncludes(sql, "'name'");

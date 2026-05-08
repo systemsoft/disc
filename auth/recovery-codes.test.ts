@@ -18,9 +18,9 @@ async function makeProvider(): Promise<{
   const provider = new AuthProvider(
     {
       jwtSecret: "test-secret-key-32-bytes-minimum-len",
-      requireEmailVerification: false,
+      requireEmailVerification: false
     },
-    db,
+    db
   );
   await provider.initialize();
   return { provider, db };
@@ -32,7 +32,7 @@ async function setupTOTP(provider: AuthProvider): Promise<{
 }> {
   const auth = await provider.register({
     email: "u@example.com",
-    password: "password123",
+    password: "password123"
   });
   const enrollment = await provider.enrollTOTP(auth.user.id);
   const code = await generateTOTP(enrollment.secret);
@@ -47,7 +47,7 @@ Deno.test("generateRecoveryCodes — returns the requested count", async () => {
   try {
     const auth = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const codes = await provider.generateRecoveryCodes(auth.user.id, 5);
     assertEquals(codes.length, 5);
@@ -65,7 +65,7 @@ Deno.test("generateRecoveryCodes — defaults to 8 codes", async () => {
   try {
     const auth = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const codes = await provider.generateRecoveryCodes(auth.user.id);
     assertEquals(codes.length, 8);
@@ -79,7 +79,7 @@ Deno.test("generateRecoveryCodes — regenerating invalidates the previous batch
   try {
     const auth = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const first = await provider.generateRecoveryCodes(auth.user.id, 4);
     await provider.generateRecoveryCodes(auth.user.id, 4);
@@ -88,7 +88,7 @@ Deno.test("generateRecoveryCodes — regenerating invalidates the previous batch
     for (const code of first) {
       assertEquals(
         await provider.consumeRecoveryCode(auth.user.id, code),
-        false,
+        false
       );
     }
     // recoveryCodesRemaining = 4 (the new batch, all unused)
@@ -104,9 +104,9 @@ Deno.test("generateRecoveryCodes — rejects unknown user", async () => {
     const err = await assertRejects(
       () =>
         provider.generateRecoveryCodes(
-          "00000000-0000-0000-0000-000000000000",
+          "00000000-0000-0000-0000-000000000000"
         ),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.USER_NOT_FOUND);
   } finally {
@@ -119,15 +119,15 @@ Deno.test("generateRecoveryCodes — rejects out-of-range count", async () => {
   try {
     const auth = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     await assertRejects(
       () => provider.generateRecoveryCodes(auth.user.id, 0),
-      AuthError,
+      AuthError
     );
     await assertRejects(
       () => provider.generateRecoveryCodes(auth.user.id, 100),
-      AuthError,
+      AuthError
     );
   } finally {
     await db.close();
@@ -141,7 +141,7 @@ Deno.test("consumeRecoveryCode — burns a valid code, rejects on replay", async
   try {
     const auth = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const codes = await provider.generateRecoveryCodes(auth.user.id, 3);
 
@@ -159,7 +159,7 @@ Deno.test("consumeRecoveryCode — accepts unformatted input (no dashes, mixed c
   try {
     const auth = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const [c] = await provider.generateRecoveryCodes(auth.user.id, 1);
     const munged = c.replace("-", "").toLowerCase();
@@ -174,11 +174,11 @@ Deno.test("consumeRecoveryCode — rejects code from a different user", async ()
   try {
     const a = await provider.register({
       email: "a@example.com",
-      password: "password123",
+      password: "password123"
     });
     const b = await provider.register({
       email: "b@example.com",
-      password: "password123",
+      password: "password123"
     });
     const [aCode] = await provider.generateRecoveryCodes(a.user.id, 1);
     // User B trying to use A's code — must not work even though the
@@ -196,15 +196,15 @@ Deno.test("consumeRecoveryCode — rejects garbage", async () => {
   try {
     const auth = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     assertEquals(
       await provider.consumeRecoveryCode(auth.user.id, "AAAAA-AAAAA"),
-      false,
+      false
     );
     assertEquals(
       await provider.consumeRecoveryCode(auth.user.id, "definitely not a code"),
-      false,
+      false
     );
   } finally {
     await db.close();
@@ -221,14 +221,15 @@ Deno.test("loginWithRecoveryCode — completes login when TOTP is enrolled", asy
 
     const challenge = await provider.login({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     assert("mfaRequired" in challenge);
-    if (!("mfaRequired" in challenge)) return;
+    if (!("mfaRequired" in challenge))
+      return;
 
     const auth = await provider.loginWithRecoveryCode(
       challenge.challengeToken,
-      codes[0],
+      codes[0]
     );
     assert(auth.token);
     assertEquals(auth.user.id, userId);
@@ -247,24 +248,25 @@ Deno.test("loginWithRecoveryCode — wrong code rejects, challenge stays valid f
 
     const challenge = await provider.login({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
-    if (!("mfaRequired" in challenge)) return;
+    if (!("mfaRequired" in challenge))
+      return;
 
     const err = await assertRejects(
       () =>
         provider.loginWithRecoveryCode(
           challenge.challengeToken,
-          "AAAAA-AAAAA",
+          "AAAAA-AAAAA"
         ),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_CREDENTIALS);
 
     // Real code on the same challenge still works.
     const auth = await provider.loginWithRecoveryCode(
       challenge.challengeToken,
-      codes[0],
+      codes[0]
     );
     assertEquals(auth.user.id, userId);
   } finally {
@@ -280,15 +282,16 @@ Deno.test("loginWithRecoveryCode — single-use challenge: cannot replay after s
 
     const challenge = await provider.login({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
-    if (!("mfaRequired" in challenge)) return;
+    if (!("mfaRequired" in challenge))
+      return;
 
     await provider.loginWithRecoveryCode(challenge.challengeToken, codes[0]);
 
     const err = await assertRejects(
       () => provider.loginWithRecoveryCode(challenge.challengeToken, codes[1]),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_TOKEN);
   } finally {
@@ -303,7 +306,7 @@ Deno.test("loginWithRecoveryCode — rejects unknown challenge token", async () 
     const codes = await provider.generateRecoveryCodes(userId, 1);
     const err = await assertRejects(
       () => provider.loginWithRecoveryCode("ghost-challenge-xxx", codes[0]),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_TOKEN);
   } finally {

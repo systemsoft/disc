@@ -16,7 +16,7 @@ import type { QueryValidator, StandardSchemaIssue, StandardSchemaV1 } from "./ty
  */
 export async function applyValidator<T>(
   validator: QueryValidator<T>,
-  value: unknown,
+  value: unknown
 ): Promise<T> {
   if (isStandardSchema(validator)) {
     let result;
@@ -25,7 +25,7 @@ export async function applyValidator<T>(
     } catch (error) {
       throw new DiscValidationError(
         [{ message: error instanceof Error ? error.message : String(error) }],
-        error instanceof Error ? error : undefined,
+        error instanceof Error ? error : undefined
       );
     }
     if ("issues" in result && result.issues) {
@@ -39,22 +39,22 @@ export async function applyValidator<T>(
     return validator(value);
   } catch (error) {
     const issues: StandardSchemaIssue[] = [{
-      message: error instanceof Error ? error.message : String(error),
+      message: error instanceof Error ? error.message : String(error)
     }];
     throw new DiscValidationError(
       issues,
-      error instanceof Error ? error : undefined,
+      error instanceof Error ? error : undefined
     );
   }
 }
 
 function isStandardSchema<T>(
-  v: QueryValidator<T>,
+  v: QueryValidator<T>
 ): v is StandardSchemaV1<T> {
   return (
-    typeof v === "object"
-    && v !== null
-    && "~standard" in v
-    && typeof (v as StandardSchemaV1<T>)["~standard"]?.validate === "function"
+    typeof v === "object" &&
+    v !== null &&
+    "~standard" in v &&
+    typeof (v as StandardSchemaV1<T>)["~standard"]?.validate === "function"
   );
 }

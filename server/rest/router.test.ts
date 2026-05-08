@@ -29,7 +29,7 @@ function buildSchema(): Schema {
         required: true,
         multi: false,
         columnName: "id",
-        edgeqlType: "uuid",
+        edgeqlType: "uuid"
       }],
       ["email", {
         name: "email",
@@ -38,7 +38,7 @@ function buildSchema(): Schema {
         multi: false,
         columnName: "email",
         edgeqlType: "str",
-        annotations: { "rest::hidden": "true" },
+        annotations: { "rest::hidden": "true" }
       }],
       ["name", {
         name: "name",
@@ -46,17 +46,17 @@ function buildSchema(): Schema {
         required: true,
         multi: false,
         columnName: "name",
-        edgeqlType: "str",
-      }],
+        edgeqlType: "str"
+      }]
     ]),
     links: new Map([
       ["posts", {
         name: "posts",
         target: "Post",
         required: false,
-        multi: true,
-      }],
-    ]),
+        multi: true
+      }]
+    ])
   };
 
   const postType: TypeDef = {
@@ -71,7 +71,7 @@ function buildSchema(): Schema {
         required: true,
         multi: false,
         columnName: "id",
-        edgeqlType: "uuid",
+        edgeqlType: "uuid"
       }],
       ["title", {
         name: "title",
@@ -79,18 +79,18 @@ function buildSchema(): Schema {
         required: true,
         multi: false,
         columnName: "title",
-        edgeqlType: "str",
-      }],
+        edgeqlType: "str"
+      }]
     ]),
-    links: new Map(),
+    links: new Map()
   };
 
   return {
     types: new Map([
       ["default::User", userType],
-      ["default::Post", postType],
+      ["default::Post", postType]
     ]),
-    functions: new Map(),
+    functions: new Map()
   };
 }
 
@@ -100,21 +100,21 @@ interface CapturedQuery {
 }
 
 function makeStubHandler(
-  responder: (q: string) => unknown = () => [],
+  responder: (q: string) => unknown = () => []
 ): {
   handler: Types.ProtocolHandler;
   captured: CapturedQuery[];
 } {
   const captured: CapturedQuery[] = [];
   const handler: Types.ProtocolHandler = {
-    handleRequest: (request) => {
+    handleRequest: request => {
       captured.push({
         query: request.query,
-        variables: request.variables,
+        variables: request.variables
       });
       return Promise.resolve({ data: responder(request.query) });
     },
-    validateRequest: () => [],
+    validateRequest: () => []
   };
   return { handler, captured };
 }
@@ -126,11 +126,11 @@ function makeContext(): Types.QueryContext {
       database: "disc",
       createdAt: new Date(),
       lastActivity: new Date(),
-      variables: {},
+      variables: {}
     },
     auth: { roles: [], permissions: [] },
     requestId: "rest-test",
-    startedAt: new Date(),
+    startedAt: new Date()
   };
 }
 
@@ -144,7 +144,7 @@ Deno.test("dispatchRest returns null for non-/api/* paths", async () => {
     request: new Request("http://localhost/health"),
     schema: buildSchema(),
     protocolHandler: handler,
-    context: makeContext(),
+    context: makeContext()
   });
   assertEquals(result, null);
 });
@@ -155,7 +155,7 @@ Deno.test("dispatchRest returns 404 for unknown type", async () => {
     request: new Request("http://localhost/api/Nonexistent"),
     schema: buildSchema(),
     protocolHandler: handler,
-    context: makeContext(),
+    context: makeContext()
   });
   assert(result instanceof Response);
   assertEquals(result.status, 404);
@@ -168,13 +168,13 @@ Deno.test("dispatchRest returns 404 for unknown type", async () => {
 Deno.test("GET /api/User compiles a SELECT with default shape (no hidden fields)", async () => {
   const { handler, captured } = makeStubHandler(() => [
     { id: "1", name: "Ada" },
-    { id: "2", name: "Billie" },
+    { id: "2", name: "Billie" }
   ]);
   const result = await dispatchRest({
     request: new Request("http://localhost/api/User"),
     schema: buildSchema(),
     protocolHandler: handler,
-    context: makeContext(),
+    context: makeContext()
   });
   assert(result instanceof Response);
   assertEquals(result.status, 200);
@@ -194,7 +194,7 @@ Deno.test("GET /api/User?name=Ada produces a filter clause", async () => {
     request: new Request("http://localhost/api/User?name=Ada"),
     schema: buildSchema(),
     protocolHandler: handler,
-    context: makeContext(),
+    context: makeContext()
   });
   const q = captured[0].query;
   assert(/filter\b/i.test(q), `expected filter, got: ${q}`);
@@ -206,11 +206,11 @@ Deno.test("GET /api/User?limit=10&offset=5&order_by=-name applies pagination", a
   const { handler, captured } = makeStubHandler(() => []);
   await dispatchRest({
     request: new Request(
-      "http://localhost/api/User?limit=10&offset=5&order_by=-name",
+      "http://localhost/api/User?limit=10&offset=5&order_by=-name"
     ),
     schema: buildSchema(),
     protocolHandler: handler,
-    context: makeContext(),
+    context: makeContext()
   });
   const q = captured[0].query;
   assert(/limit\s+10/.test(q), `expected limit 10, got: ${q}`);
@@ -222,11 +222,11 @@ Deno.test("GET /api/User?email__in=a,b uses 'in' operator", async () => {
   const { handler, captured } = makeStubHandler(() => []);
   await dispatchRest({
     request: new Request(
-      "http://localhost/api/User?email__in=a@x.com,b@y.com",
+      "http://localhost/api/User?email__in=a@x.com,b@y.com"
     ),
     schema: buildSchema(),
     protocolHandler: handler,
-    context: makeContext(),
+    context: makeContext()
   });
   const q = captured[0].query;
   assert(/\.email\s+in\s+\{/i.test(q), `expected 'email in {...}', got: ${q}`);
@@ -240,14 +240,14 @@ Deno.test("GET /api/User rejects unknown filter field with 400", async () => {
     request: new Request("http://localhost/api/User?nonexistent=foo"),
     schema: buildSchema(),
     protocolHandler: handler,
-    context: makeContext(),
+    context: makeContext()
   });
   assert(result instanceof Response);
   assertEquals(result.status, 400);
   const body = await result.json();
   assert(
     String(body.error ?? "").includes("nonexistent"),
-    `error should mention 'nonexistent', got: ${JSON.stringify(body)}`,
+    `error should mention 'nonexistent', got: ${JSON.stringify(body)}`
   );
 });
 
@@ -258,13 +258,13 @@ Deno.test("GET /api/User rejects unknown filter field with 400", async () => {
 Deno.test("GET /api/User/<uuid> filters by id and returns single object", async () => {
   const id = "11111111-2222-3333-4444-555555555555";
   const { handler, captured } = makeStubHandler(() => [
-    { id, name: "Ada" },
+    { id, name: "Ada" }
   ]);
   const result = await dispatchRest({
     request: new Request(`http://localhost/api/User/${id}`),
     schema: buildSchema(),
     protocolHandler: handler,
-    context: makeContext(),
+    context: makeContext()
   });
   assert(result instanceof Response);
   assertEquals(result.status, 200);
@@ -283,7 +283,7 @@ Deno.test("GET /api/User/<id> returns 404 when row missing", async () => {
     request: new Request(`http://localhost/api/User/${id}`),
     schema: buildSchema(),
     protocolHandler: handler,
-    context: makeContext(),
+    context: makeContext()
   });
   assert(result instanceof Response);
   assertEquals(result.status, 404);
@@ -295,7 +295,7 @@ Deno.test("GET /api/User rejects malformed UUID id with 400", async () => {
     request: new Request("http://localhost/api/User/not-a-uuid"),
     schema: buildSchema(),
     protocolHandler: handler,
-    context: makeContext(),
+    context: makeContext()
   });
   assert(result instanceof Response);
   assertEquals(result.status, 400);

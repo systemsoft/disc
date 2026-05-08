@@ -13,7 +13,7 @@ import {
   isEmbeddedEqlHost,
   provideEmbeddedCompletion,
   provideEmbeddedDefinition,
-  provideEmbeddedHover,
+  provideEmbeddedHover
 } from "./embedded-edgeql.ts";
 
 // --- isEmbeddedEqlHost ---
@@ -28,7 +28,7 @@ Deno.test("isEmbeddedEqlHost recognises TS/JS extensions", () => {
       "file:///tmp/x.mts",
       "file:///tmp/x.mjs",
       "file:///tmp/x.cts",
-      "file:///tmp/x.cjs",
+      "file:///tmp/x.cjs"
     ]
   ) {
     assert(isEmbeddedEqlHost(uri), `expected ${uri} to be a host file`);
@@ -61,8 +61,9 @@ Deno.test("extractEmbeddedQueries finds a single eql tag", () => {
 Deno.test("extractEmbeddedQueries finds multiple eql tags on different lines", () => {
   const text = [
     "const a = eql`select User`;",
-    "const b = eql`select Post`;",
-  ].join("\n");
+    "const b = eql`select Post`;"
+  ]
+    .join("\n");
   const queries = extractEmbeddedQueries(text);
   assertEquals(queries.length, 2);
   assertEquals(queries[0].content, "select User");
@@ -122,7 +123,7 @@ Deno.test("analyzeEmbeddedDocument flags broken EdgeQL with a host-coordinate di
     assertEquals(d.range.start.line, 0);
     assert(
       d.range.start.character >= 14,
-      `expected diagnostic at col ≥ 14, got ${d.range.start.character}`,
+      `expected diagnostic at col ≥ 14, got ${d.range.start.character}`
     );
   }
 });
@@ -135,13 +136,14 @@ Deno.test("analyzeEmbeddedDocument maps multi-line errors to the correct host li
   // column).
   const text = [
     "const q = eql`select User",
-    "  @@@invalid`;",
-  ].join("\n");
+    "  @@@invalid`;"
+  ]
+    .join("\n");
   const diags = analyzeEmbeddedDocument(text);
   assert(diags.length > 0, "expected at least one diagnostic");
   // First diagnostic should be on the second host line.
-  const onSecondLine = diags.find((d) => d.range.start.line === 1);
-  assert(onSecondLine, `expected at least one diagnostic on host line 1, got ${JSON.stringify(diags.map((d) => d.range.start))}`);
+  const onSecondLine = diags.find(d => d.range.start.line === 1);
+  assert(onSecondLine, `expected at least one diagnostic on host line 1, got ${JSON.stringify(diags.map(d => d.range.start))}`);
 });
 
 Deno.test("analyzeEmbeddedDocument doesn't flag SDL-only files (caller routes by URI)", () => {
@@ -187,8 +189,9 @@ Deno.test("findEnclosingEmbeddedQuery accepts the closing-backtick position (LSP
 Deno.test("findEnclosingEmbeddedQuery picks the right query in a multi-query file", () => {
   const text = [
     "const a = eql`select User`;",
-    "const b = eql`select Post`;",
-  ].join("\n");
+    "const b = eql`select Post`;"
+  ]
+    .join("\n");
   // Cursor inside the second query, on the `P` of `Post`.
   const enclosing = findEnclosingEmbeddedQuery(text, { line: 1, character: 21 });
   assert(enclosing);
@@ -266,7 +269,7 @@ Deno.test("provideEmbeddedCompletion returns EdgeQL keywords + scalars inside an
   const text = "const q = eql`select User`;";
   const items = provideEmbeddedCompletion(text, { line: 0, character: 16 });
   assert(items.length > 0, "expected non-empty completion list");
-  const labels = new Set(items.map((i) => i.label));
+  const labels = new Set(items.map(i => i.label));
   // EdgeQL-specific keywords are present.
   assert(labels.has("select"));
   assert(labels.has("filter"));
@@ -283,7 +286,7 @@ Deno.test("provideEmbeddedCompletion returns EdgeQL keywords + scalars inside an
 Deno.test("provideEmbeddedCompletion sorts items alphabetically", () => {
   const text = "const q = eql`select User`;";
   const items = provideEmbeddedCompletion(text, { line: 0, character: 16 });
-  const labels = items.map((i) => i.label);
+  const labels = items.map(i => i.label);
   const sorted = [...labels].sort((a, b) => a.localeCompare(b));
   assertEquals(labels, sorted);
 });
@@ -303,12 +306,13 @@ const SAMPLE_SDL = [
   "    required title: str;",
   "    body: str;",
   "  }",
-  "}",
-].join("\n");
+  "}"
+]
+  .join("\n");
 
 function ctxFromSdl(sdl: string): EmbeddedSdlContext {
   return {
-    documents: [{ uri: "file:///dbschema/default.disc", text: sdl }],
+    documents: [{ uri: "file:///dbschema/default.disc", text: sdl }]
   };
 }
 
@@ -344,7 +348,7 @@ Deno.test("provideEmbeddedHover returns null for unknown identifiers when ctx pr
 Deno.test("provideEmbeddedCompletion appends user-defined type names from open .disc docs", () => {
   const text = "const q = eql`select `;";
   const items = provideEmbeddedCompletion(text, { line: 0, character: 21 }, ctxFromSdl(SAMPLE_SDL));
-  const labels = new Set(items.map((i) => i.label));
+  const labels = new Set(items.map(i => i.label));
   assert(labels.has("User"), "expected User in completion");
   assert(labels.has("Post"), "expected Post in completion");
   // EdgeQL keywords + scalars still present.
@@ -361,9 +365,9 @@ Deno.test("provideEmbeddedCompletion: built-in scalar wins on label collision wi
   const items = provideEmbeddedCompletion(
     "const q = eql`select `;",
     { line: 0, character: 21 },
-    ctxFromSdl(sdlWithStrCollision),
+    ctxFromSdl(sdlWithStrCollision)
   );
-  const strItem = items.find((i) => i.label === "str");
+  const strItem = items.find(i => i.label === "str");
   assert(strItem, "expected str in completion");
   assertEquals(strItem.detail, "scalar", `expected scalar detail, got: ${strItem.detail}`);
 });
@@ -384,13 +388,13 @@ Deno.test("provideEmbeddedDefinition returns null for EdgeQL keywords and built-
   // `select` is a keyword — no source location.
   assertEquals(
     provideEmbeddedDefinition(text, { line: 0, character: 16 }, ctxFromSdl(SAMPLE_SDL)),
-    null,
+    null
   );
   // `str` (built-in scalar) — no source location.
   const text2 = "const q = eql`select <str>'x'`;";
   assertEquals(
     provideEmbeddedDefinition(text2, { line: 0, character: 23 }, ctxFromSdl(SAMPLE_SDL)),
-    null,
+    null
   );
 });
 
@@ -398,7 +402,7 @@ Deno.test("provideEmbeddedDefinition returns null when ctx is omitted (Phase 6 c
   const text = "const q = eql`select User`;";
   assertEquals(
     provideEmbeddedDefinition(text, { line: 0, character: 22 }),
-    null,
+    null
   );
 });
 
@@ -407,12 +411,12 @@ Deno.test("Phase 7 providers ignore non-.disc context entries silently", () => {
   // providers themselves don't reject non-SDL text — they just won't
   // find any types in it. Confirm with a degenerate ctx.
   const ctx: EmbeddedSdlContext = {
-    documents: [{ uri: "file:///app.ts", text: "const x = 1;" }],
+    documents: [{ uri: "file:///app.ts", text: "const x = 1;" }]
   };
   const hover = provideEmbeddedHover(
     "const q = eql`select User`;",
     { line: 0, character: 22 },
-    ctx,
+    ctx
   );
   assertEquals(hover, null);
 });

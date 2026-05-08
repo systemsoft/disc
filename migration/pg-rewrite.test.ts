@@ -22,14 +22,14 @@ const RUN_PG = canRunPgTests();
 // ---------------------------------------------------------------------------
 
 function parseDsn(
-  dsn: string,
+  dsn: string
 ): { hostname: string; port: number; user: string; database: string; } {
   const url = new URL(dsn);
   return {
     hostname: url.hostname || "localhost",
     port: url.port ? parseInt(url.port) : 5432,
     user: url.username || "disc",
-    database: url.pathname.slice(1) || "disc_test",
+    database: url.pathname.slice(1) || "disc_test"
   };
 }
 
@@ -49,7 +49,7 @@ async function execSQL(dsn: string, sql: string): Promise<void> {
 async function queryRows<T>(
   dsn: string,
   sql: string,
-  params?: unknown[],
+  params?: unknown[]
 ): Promise<T[]> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
@@ -110,7 +110,7 @@ Deno.test({
           title TEXT NOT NULL,
           created_at TIMESTAMPTZ
         );
-      `,
+      `
       );
 
       // Create the rewrite trigger function and trigger manually
@@ -127,7 +127,7 @@ Deno.test({
           RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
-      `,
+      `
       );
 
       await execSQL(
@@ -136,7 +136,7 @@ Deno.test({
         CREATE TRIGGER ${triggerName}
         BEFORE INSERT ON ${tableName}
         FOR EACH ROW EXECUTE FUNCTION ${fnName}();
-      `,
+      `
       );
 
       // Insert a row WITHOUT specifying created_at
@@ -144,13 +144,13 @@ Deno.test({
         dsn,
         `
         INSERT INTO ${tableName} (title) VALUES ('Hello World');
-      `,
+      `
       );
 
       // Verify created_at was auto-set by the rewrite trigger
       const rows = await queryRows<{ title: string; created_at: string; }>(
         dsn,
-        `SELECT title, created_at FROM ${tableName}`,
+        `SELECT title, created_at FROM ${tableName}`
       );
 
       assertEquals(rows.length, 1, "Should have exactly 1 row");
@@ -158,12 +158,12 @@ Deno.test({
       assertEquals(
         rows[0].created_at !== null && rows[0].created_at !== undefined,
         true,
-        "created_at should be auto-set by rewrite trigger",
+        "created_at should be auto-set by rewrite trigger"
       );
     } finally {
       await cleanup(dsn, tableName);
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -188,7 +188,7 @@ Deno.test({
           title TEXT NOT NULL,
           updated_at TIMESTAMPTZ
         );
-      `,
+      `
       );
 
       // Create the rewrite trigger for UPDATE only
@@ -204,7 +204,7 @@ Deno.test({
           RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
-      `,
+      `
       );
 
       await execSQL(
@@ -213,7 +213,7 @@ Deno.test({
         CREATE TRIGGER ${triggerName}
         BEFORE UPDATE ON ${tableName}
         FOR EACH ROW EXECUTE FUNCTION ${fnName}();
-      `,
+      `
       );
 
       // Insert a row — updated_at should remain NULL (trigger is UPDATE-only)
@@ -221,7 +221,7 @@ Deno.test({
         dsn,
         `
         INSERT INTO ${tableName} (title) VALUES ('Original Title');
-      `,
+      `
       );
 
       const insertRows = await queryRows<{
@@ -229,14 +229,14 @@ Deno.test({
         updated_at: string | null;
       }>(
         dsn,
-        `SELECT title, updated_at FROM ${tableName}`,
+        `SELECT title, updated_at FROM ${tableName}`
       );
 
       assertEquals(insertRows.length, 1);
       assertEquals(
         insertRows[0].updated_at,
         null,
-        "updated_at should be NULL after INSERT (UPDATE-only rewrite)",
+        "updated_at should be NULL after INSERT (UPDATE-only rewrite)"
       );
 
       // Update the row — updated_at should be auto-set
@@ -244,7 +244,7 @@ Deno.test({
         dsn,
         `
         UPDATE ${tableName} SET title = 'Updated Title' WHERE title = 'Original Title';
-      `,
+      `
       );
 
       const updateRows = await queryRows<{
@@ -252,21 +252,21 @@ Deno.test({
         updated_at: string | null;
       }>(
         dsn,
-        `SELECT title, updated_at FROM ${tableName}`,
+        `SELECT title, updated_at FROM ${tableName}`
       );
 
       assertEquals(updateRows.length, 1);
       assertEquals(updateRows[0].title, "Updated Title");
       assertEquals(
-        updateRows[0].updated_at !== null
-          && updateRows[0].updated_at !== undefined,
+        updateRows[0].updated_at !== null &&
+          updateRows[0].updated_at !== undefined,
         true,
-        "updated_at should be auto-set by rewrite trigger on UPDATE",
+        "updated_at should be auto-set by rewrite trigger on UPDATE"
       );
     } finally {
       await cleanup(dsn, tableName);
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -291,7 +291,7 @@ Deno.test({
           content TEXT NOT NULL,
           modified_at TIMESTAMPTZ
         );
-      `,
+      `
       );
 
       // Create the rewrite trigger for both INSERT and UPDATE
@@ -307,7 +307,7 @@ Deno.test({
           RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
-      `,
+      `
       );
 
       await execSQL(
@@ -316,7 +316,7 @@ Deno.test({
         CREATE TRIGGER ${triggerName}
         BEFORE INSERT OR UPDATE ON ${tableName}
         FOR EACH ROW EXECUTE FUNCTION ${fnName}();
-      `,
+      `
       );
 
       // Insert a row — modified_at should be set
@@ -324,7 +324,7 @@ Deno.test({
         dsn,
         `
         INSERT INTO ${tableName} (content) VALUES ('First version');
-      `,
+      `
       );
 
       const insertRows = await queryRows<{
@@ -332,7 +332,7 @@ Deno.test({
         modified_at: string;
       }>(
         dsn,
-        `SELECT content, modified_at FROM ${tableName}`,
+        `SELECT content, modified_at FROM ${tableName}`
       );
 
       assertEquals(insertRows.length, 1);
@@ -340,18 +340,18 @@ Deno.test({
       assertEquals(
         insertTimestamp !== null && insertTimestamp !== undefined,
         true,
-        "modified_at should be set on INSERT",
+        "modified_at should be set on INSERT"
       );
 
       // Small delay to ensure timestamps differ
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Update the row — modified_at should change
       await execSQL(
         dsn,
         `
         UPDATE ${tableName} SET content = 'Second version' WHERE content = 'First version';
-      `,
+      `
       );
 
       const updateRows = await queryRows<{
@@ -359,7 +359,7 @@ Deno.test({
         modified_at: string;
       }>(
         dsn,
-        `SELECT content, modified_at FROM ${tableName}`,
+        `SELECT content, modified_at FROM ${tableName}`
       );
 
       assertEquals(updateRows.length, 1);
@@ -368,7 +368,7 @@ Deno.test({
       assertEquals(
         updateTimestamp !== null && updateTimestamp !== undefined,
         true,
-        "modified_at should be updated on UPDATE",
+        "modified_at should be updated on UPDATE"
       );
 
       // The update timestamp should be different from (or equal to) the insert timestamp
@@ -376,7 +376,7 @@ Deno.test({
     } finally {
       await cleanup(dsn, tableName);
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -401,7 +401,7 @@ Deno.test({
           name TEXT NOT NULL,
           counter INTEGER NOT NULL DEFAULT 0
         );
-      `,
+      `
       );
 
       // Create a rewrite trigger that increments counter using OLD reference
@@ -419,7 +419,7 @@ Deno.test({
           RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
-      `,
+      `
       );
 
       await execSQL(
@@ -428,7 +428,7 @@ Deno.test({
         CREATE TRIGGER ${triggerName}
         BEFORE UPDATE ON ${tableName}
         FOR EACH ROW EXECUTE FUNCTION ${fnName}();
-      `,
+      `
       );
 
       // Insert a row with counter=0
@@ -436,7 +436,7 @@ Deno.test({
         dsn,
         `
         INSERT INTO ${tableName} (name, counter) VALUES ('test', 0);
-      `,
+      `
       );
 
       // First update: counter should become 1
@@ -444,19 +444,19 @@ Deno.test({
         dsn,
         `
         UPDATE ${tableName} SET name = 'test1' WHERE name = 'test';
-      `,
+      `
       );
 
       let rows = await queryRows<{ name: string; counter: number; }>(
         dsn,
-        `SELECT name, counter FROM ${tableName}`,
+        `SELECT name, counter FROM ${tableName}`
       );
 
       assertEquals(rows.length, 1);
       assertEquals(
         rows[0].counter,
         1,
-        "Counter should be 1 after first update",
+        "Counter should be 1 after first update"
       );
 
       // Second update: counter should become 2
@@ -464,19 +464,19 @@ Deno.test({
         dsn,
         `
         UPDATE ${tableName} SET name = 'test2' WHERE name = 'test1';
-      `,
+      `
       );
 
       rows = await queryRows<{ name: string; counter: number; }>(
         dsn,
-        `SELECT name, counter FROM ${tableName}`,
+        `SELECT name, counter FROM ${tableName}`
       );
 
       assertEquals(rows.length, 1);
       assertEquals(
         rows[0].counter,
         2,
-        "Counter should be 2 after second update",
+        "Counter should be 2 after second update"
       );
 
       // Third update: counter should become 3
@@ -484,24 +484,24 @@ Deno.test({
         dsn,
         `
         UPDATE ${tableName} SET name = 'test3' WHERE name = 'test2';
-      `,
+      `
       );
 
       rows = await queryRows<{ name: string; counter: number; }>(
         dsn,
-        `SELECT name, counter FROM ${tableName}`,
+        `SELECT name, counter FROM ${tableName}`
       );
 
       assertEquals(rows.length, 1);
       assertEquals(
         rows[0].counter,
         3,
-        "Counter should be 3 after third update",
+        "Counter should be 3 after third update"
       );
     } finally {
       await cleanup(dsn, tableName);
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -526,14 +526,14 @@ Deno.test({
           title TEXT NOT NULL,
           created_at TIMESTAMPTZ
         );
-      `,
+      `
       );
 
       // Use the DDLGenerator to produce rewrite DDL
       const ddl = new DDLGenerator();
       const rewriteDef: RewriteDefinition = {
         events: ["insert"],
-        body: "datetime_of_statement()",
+        body: "datetime_of_statement()"
       };
 
       // Generate DDL using CreateType operation, then extract only rewrite statements
@@ -548,10 +548,10 @@ Deno.test({
             multi: false,
             constraints: [],
             annotations: {},
-            rewrites: [rewriteDef],
-          },
+            rewrites: [rewriteDef]
+          }
         ],
-        links: [],
+        links: []
       };
 
       const allStatements = ddl.generateDDL([createOp]);
@@ -559,16 +559,16 @@ Deno.test({
       // Filter for only the rewrite-related statements
       // (skip CREATE TABLE since we already created the table)
       const rewriteSql = allStatements.filter(
-        (s) =>
-          s.includes("CREATE OR REPLACE FUNCTION")
-            && s.includes("rewrite_fn")
-          || s.includes("CREATE TRIGGER") && s.includes("rewrite"),
+        s =>
+          s.includes("CREATE OR REPLACE FUNCTION") &&
+            s.includes("rewrite_fn") ||
+          s.includes("CREATE TRIGGER") && s.includes("rewrite")
       );
 
       assertEquals(
         rewriteSql.length,
         2,
-        "DDLGenerator should produce exactly 2 rewrite statements (function + trigger)",
+        "DDLGenerator should produce exactly 2 rewrite statements (function + trigger)"
       );
 
       // Execute the generated rewrite SQL against PostgreSQL
@@ -581,7 +581,7 @@ Deno.test({
         dsn,
         `
         INSERT INTO ${tableName} (title) VALUES ('DDL Test Post');
-      `,
+      `
       );
 
       // Verify created_at was populated by the DDL-generated rewrite trigger
@@ -590,7 +590,7 @@ Deno.test({
         created_at: string | null;
       }>(
         dsn,
-        `SELECT title, created_at FROM ${tableName}`,
+        `SELECT title, created_at FROM ${tableName}`
       );
 
       assertEquals(rows.length, 1, "Should have exactly 1 row");
@@ -598,10 +598,10 @@ Deno.test({
       assertEquals(
         rows[0].created_at !== null && rows[0].created_at !== undefined,
         true,
-        "created_at should be auto-set by DDL-generated rewrite trigger",
+        "created_at should be auto-set by DDL-generated rewrite trigger"
       );
     } finally {
       await cleanup(dsn, tableName);
     }
-  },
+  }
 });

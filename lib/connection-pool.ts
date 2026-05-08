@@ -73,7 +73,7 @@ export class ConnectionPool {
     totalReleased: 0,
     totalCreated: 0,
     totalDestroyed: 0,
-    totalErrors: 0,
+    totalErrors: 0
   };
 
   constructor(config: PoolConfig) {
@@ -86,7 +86,7 @@ export class ConnectionPool {
       validateOnAcquire: config.validateOnAcquire ?? true,
       maxWaitQueueSize: config.maxWaitQueueSize ?? 50,
       cleanupInterval: config.cleanupInterval ?? 60000, // 1 minute
-      leakWarningTimeout: config.leakWarningTimeout ?? 30000, // 30 seconds
+      leakWarningTimeout: config.leakWarningTimeout ?? 30000 // 30 seconds
     };
   }
 
@@ -99,18 +99,18 @@ export class ConnectionPool {
     }
 
     logger.info(
-      `Initializing connection pool with min=${this.config.minConnections}, max=${this.config.maxConnections}`,
+      `Initializing connection pool with min=${this.config.minConnections}, max=${this.config.maxConnections}`
     );
 
     // Create minimum connections
     const promises: Promise<void>[] = [];
     for (let i = 0; i < this.config.minConnections!; i++) {
       promises.push(
-        this.createConnection().then((conn) => {
+        this.createConnection().then(conn => {
           if (conn) {
             this.idleConnections.push(conn);
           }
-        }),
+        })
       );
     }
 
@@ -120,12 +120,12 @@ export class ConnectionPool {
     if (this.config.cleanupInterval! > 0) {
       this.cleanupIntervalId = setInterval(
         () => this.cleanupIdleConnections(),
-        this.config.cleanupInterval!,
+        this.config.cleanupInterval!
       );
     }
 
     logger.info(
-      `Connection pool initialized with ${this.connections.size} connections`,
+      `Connection pool initialized with ${this.connections.size} connections`
     );
   }
 
@@ -184,7 +184,7 @@ export class ConnectionPool {
         resolve,
         reject,
         timeoutId: 0,
-        cancelled: false,
+        cancelled: false
       };
       entry.timeoutId = setTimeout(() => {
         if (!entry.cancelled) {
@@ -256,7 +256,7 @@ export class ConnectionPool {
   async queryWithTimeout(
     sql: string,
     params: unknown[],
-    timeoutMs: number,
+    timeoutMs: number
   ): Promise<QueryResult> {
     if (timeoutMs <= 0) {
       return this.query(sql, params as any[]);
@@ -273,7 +273,7 @@ export class ConnectionPool {
     try {
       const result = await Promise.race([
         this.query(sql, params as any[]),
-        timeoutPromise,
+        timeoutPromise
       ]);
       return result;
     } finally {
@@ -293,7 +293,7 @@ export class ConnectionPool {
   }
 
   async transaction<T>(
-    fn: (conn: DatabaseConnection) => Promise<T>,
+    fn: (conn: DatabaseConnection) => Promise<T>
   ): Promise<T> {
     const connection = await this.acquire();
     try {
@@ -348,7 +348,7 @@ export class ConnectionPool {
     const now = new Date();
     const toDestroy: PooledConnection[] = [];
 
-    this.idleConnections = this.idleConnections.filter((pooled) => {
+    this.idleConnections = this.idleConnections.filter(pooled => {
       const idleTime = now.getTime() - pooled.lastUsedAt.getTime();
 
       // Keep minimum connections
@@ -418,7 +418,7 @@ export class ConnectionPool {
           id: this.generateConnectionId(),
           createdAt: new Date(),
           lastUsedAt: new Date(),
-          inUse: false,
+          inUse: false
         };
 
         this.connections.set(pooled.id, pooled);
@@ -427,24 +427,24 @@ export class ConnectionPool {
         this.updateStats();
 
         logger.info(
-          `Created connection ${pooled.id} (${this.connections.size}/${this.config.maxConnections})`,
+          `Created connection ${pooled.id} (${this.connections.size}/${this.config.maxConnections})`
         );
         return pooled;
       } catch (error) {
         this.stats.totalErrors++;
         const delay = Math.min(
           baseDelay * Math.pow(2, attempt - 1),
-          maxDelay,
+          maxDelay
         );
         logger.warn(
-          `Failed to create connection (attempt ${attempt}/${maxRetries}, next retry in ${delay}ms): ${error}`,
+          `Failed to create connection (attempt ${attempt}/${maxRetries}, next retry in ${delay}ms): ${error}`
         );
 
         if (attempt < maxRetries) {
-          await new Promise((resolve) => setTimeout(resolve, delay));
+          await new Promise(resolve => setTimeout(resolve, delay));
         } else {
           throw new Error(
-            `Failed to create connection after ${maxRetries} attempts: ${error}`,
+            `Failed to create connection after ${maxRetries} attempts: ${error}`
           );
         }
       }
@@ -466,12 +466,12 @@ export class ConnectionPool {
     this.updateStats();
 
     logger.info(
-      `Destroyed connection ${pooled.id} (${this.connections.size}/${this.config.maxConnections})`,
+      `Destroyed connection ${pooled.id} (${this.connections.size}/${this.config.maxConnections})`
     );
   }
 
   private async validateConnection(
-    connection: DatabaseConnection,
+    connection: DatabaseConnection
   ): Promise<boolean> {
     try {
       const result = await connection.query("SELECT 1");
@@ -496,8 +496,8 @@ export class ConnectionPool {
     }
 
     // Not healthy if all connections in use and wait queue has waiters
-    const allInUse = this.connections.size >= this.config.maxConnections!
-      && this.idleConnections.length === 0;
+    const allInUse = this.connections.size >= this.config.maxConnections! &&
+      this.idleConnections.length === 0;
     if (allInUse && this.waitQueue.length > 0) {
       return false;
     }
@@ -521,7 +521,7 @@ export class ConnectionPool {
       logger.warn(
         `Potential connection leak detected: connection ${pooled.id} has been held for ${heldMs}ms without being released.\nAcquire stack trace:\n${
           pooled.acquireStackTrace || "unavailable"
-        }`,
+        }`
       );
       this.leakTimers.delete(pooled.id);
     }, timeout);
@@ -552,17 +552,17 @@ export function createPoolFromEnv(): ConnectionPool {
     port: parseInt(Deno.env.get("DB_PORT") || "5432"),
     database: Deno.env.get("DB_NAME") || "disc",
     user: Deno.env.get("DB_USER") || "disc",
-    password: Deno.env.get("DB_PASSWORD") || "",
+    password: Deno.env.get("DB_PASSWORD") || ""
   };
 
   // Add pool-specific configuration from environment
   config.minConnections = parseInt(Deno.env.get("DB_POOL_MIN") || "2");
   config.maxConnections = parseInt(Deno.env.get("DB_POOL_MAX") || "10");
   config.idleTimeout = parseInt(
-    Deno.env.get("DB_POOL_IDLE_TIMEOUT") || "600000",
+    Deno.env.get("DB_POOL_IDLE_TIMEOUT") || "600000"
   );
   config.connectionTimeout = parseInt(
-    Deno.env.get("DB_POOL_CONNECTION_TIMEOUT") || "30000",
+    Deno.env.get("DB_POOL_CONNECTION_TIMEOUT") || "30000"
   );
 
   return new ConnectionPool(config);

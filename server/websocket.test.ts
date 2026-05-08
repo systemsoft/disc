@@ -25,12 +25,12 @@ class WebSocketTestClient {
         resolve();
       };
 
-      this.socket.onerror = (error) => {
+      this.socket.onerror = error => {
         this.errors.push(error);
         reject(error);
       };
 
-      this.socket.onmessage = (event) => {
+      this.socket.onmessage = event => {
         try {
           const message = JSON.parse(event.data);
           this.messages.push(message);
@@ -88,9 +88,9 @@ class WebSocketTestClient {
 
   closeAndWait(): Promise<void> {
     if (this.socket) {
-      return new Promise((resolve) => {
+      return new Promise(resolve => {
         const prevOnClose = this.socket!.onclose;
-        this.socket!.onclose = (ev) => {
+        this.socket!.onclose = ev => {
           this.connected = false;
           if (prevOnClose && typeof prevOnClose === "function") {
             prevOnClose.call(this.socket!, ev);
@@ -131,13 +131,13 @@ class WebSocketServerHarness {
       port: TEST_PORT,
       enableCors: true,
       enableWebsockets: true,
-      dryRun: true,
+      dryRun: true
     });
 
     this.server_promise = this.server.start();
 
     // Wait for server to be ready
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await new Promise(resolve => setTimeout(resolve, 200));
   }
 
   async stop(): Promise<void> {
@@ -171,7 +171,7 @@ Deno.test({
       await client.closeAndWait();
       await harness.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -192,8 +192,8 @@ Deno.test({
         type: "query",
         payload: {
           query: "select User { name, email }",
-          variables: {},
-        },
+          variables: {}
+        }
       });
 
       // Wait for response
@@ -206,7 +206,7 @@ Deno.test({
       await client.closeAndWait();
       await harness.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -227,8 +227,8 @@ Deno.test({
         type: "query",
         payload: {
           query: "", // Empty query
-          variables: {},
-        },
+          variables: {}
+        }
       });
 
       // Wait for error response
@@ -242,7 +242,7 @@ Deno.test({
       await client.closeAndWait();
       await harness.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -262,13 +262,13 @@ Deno.test({
       const queries = [
         "select User { name }",
         "select User { email }",
-        "select User { name, email }",
+        "select User { name, email }"
       ];
 
       for (const query of queries) {
         client.send({
           type: "query",
-          payload: { query, variables: {} },
+          payload: { query, variables: {} }
         });
       }
 
@@ -288,7 +288,7 @@ Deno.test({
       await client.closeAndWait();
       await harness.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -310,8 +310,8 @@ Deno.test({
         payload: {
           id: "sub_ws_test",
           query: "select User { name, email }",
-          variables: {},
-        },
+          variables: {}
+        }
       });
 
       // Should get subscription data response (handler is implemented now)
@@ -321,13 +321,13 @@ Deno.test({
       assertExists(response.payload);
       // The subscription handler sends data or error
       assert(
-        response.payload.type === "data" || response.payload.type === "error",
+        response.payload.type === "data" || response.payload.type === "error"
       );
     } finally {
       await client.closeAndWait();
       await harness.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -346,7 +346,7 @@ Deno.test({
       // Send unknown message type
       client.send({
         type: "unknown",
-        payload: { some: "data" },
+        payload: { some: "data" }
       });
 
       // Should get error response
@@ -359,7 +359,7 @@ Deno.test({
       await client.closeAndWait();
       await harness.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -387,7 +387,7 @@ Deno.test({
       await client.closeAndWait();
       await harness.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -411,7 +411,7 @@ Deno.test({
     } finally {
       await harness.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -444,8 +444,8 @@ Deno.test({
           type: "query",
           payload: {
             query: `select User { name } limit ${i + 1}`,
-            variables: {},
-          },
+            variables: {}
+          }
         });
       }
 
@@ -462,7 +462,7 @@ Deno.test({
       }
       await harness.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -484,9 +484,9 @@ Deno.test({
         payload: {
           query: "select User filter .id = <uuid>$userId { name, email }",
           variables: {
-            userId: "01234567-89ab-cdef-0123-456789abcdef",
-          },
-        },
+            userId: "01234567-89ab-cdef-0123-456789abcdef"
+          }
+        }
       });
 
       // Wait for response
@@ -499,7 +499,7 @@ Deno.test({
       await client.closeAndWait();
       await harness.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -520,8 +520,8 @@ Deno.test({
         type: "query",
         payload: {
           query: "select User { name email }", // Missing comma
-          variables: {},
-        },
+          variables: {}
+        }
       });
 
       // Wait for response
@@ -534,5 +534,5 @@ Deno.test({
       await client.closeAndWait();
       await harness.stop();
     }
-  },
+  }
 });

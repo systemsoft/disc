@@ -21,7 +21,7 @@ function makeContext(): ExtensionContext {
       maxConnections: 5,
       requestTimeout: 5000,
       enableCors: false,
-      enableWebsockets: false,
+      enableWebsockets: false
     },
     logger: {
       debug: () => {},
@@ -33,15 +33,15 @@ function makeContext(): ExtensionContext {
       },
       withRequest: function() {
         return this;
-      },
-    } as unknown as ExtensionContext["logger"],
+      }
+    } as unknown as ExtensionContext["logger"]
   };
 }
 
 function makeConfig(overrides?: Partial<OAuthConfig>): OAuthConfig {
   return {
     providers: [googleProvider("cid", "csecret", "https://example.com/cb")],
-    ...overrides,
+    ...overrides
   };
 }
 
@@ -71,7 +71,7 @@ Deno.test("OAuthExtension - metadata has empty dependencies array", () => {
 Deno.test("OAuthExtension - constructor throws ExtensionConfigError with empty providers array", () => {
   assertThrows(
     () => new OAuthExtension({ providers: [] }),
-    ExtensionConfigError,
+    ExtensionConfigError
   );
 });
 
@@ -79,7 +79,7 @@ Deno.test("OAuthExtension - constructor throws ExtensionConfigError with no prov
   assertThrows(
     // deno-lint-ignore no-explicit-any
     () => new OAuthExtension({} as any),
-    ExtensionConfigError,
+    ExtensionConfigError
   );
 });
 
@@ -101,21 +101,21 @@ Deno.test("OAuthExtension - initialize sets state to ready", async () => {
 Deno.test("OAuthExtension - getRoutes includes /providers route", () => {
   const ext = new OAuthExtension(makeConfig());
   const routes = ext.getRoutes();
-  const found = routes.find((r) => r.path === "/providers" && r.method === "GET");
+  const found = routes.find(r => r.path === "/providers" && r.method === "GET");
   assertEquals(found !== undefined, true);
 });
 
 Deno.test("OAuthExtension - getRoutes includes authorize route per provider", () => {
   const ext = new OAuthExtension(makeConfig());
   const routes = ext.getRoutes();
-  const found = routes.find((r) => r.path === "/authorize/google");
+  const found = routes.find(r => r.path === "/authorize/google");
   assertEquals(found !== undefined, true);
 });
 
 Deno.test("OAuthExtension - getRoutes includes callback route per provider", () => {
   const ext = new OAuthExtension(makeConfig());
   const routes = ext.getRoutes();
-  const found = routes.find((r) => r.path === "/callback/google");
+  const found = routes.find(r => r.path === "/callback/google");
   assertEquals(found !== undefined, true);
 });
 
@@ -123,8 +123,8 @@ Deno.test("OAuthExtension - getRoutes total count is 1 + 2*providers", () => {
   const ext = new OAuthExtension({
     providers: [
       googleProvider("cid", "csecret", "https://example.com/cb"),
-      githubProvider("cid2", "csecret2", "https://example.com/cb"),
-    ],
+      githubProvider("cid2", "csecret2", "https://example.com/cb")
+    ]
   });
   // 1 /providers + 2 authorize + 2 callback = 5
   assertEquals(ext.getRoutes().length, 5);
@@ -136,11 +136,11 @@ Deno.test("OAuthExtension - /providers handler returns configured provider names
   const ext = new OAuthExtension({
     providers: [
       googleProvider("cid", "csecret"),
-      githubProvider("cid2", "csecret2"),
-    ],
+      githubProvider("cid2", "csecret2")
+    ]
   });
   const routes = ext.getRoutes();
-  const route = routes.find((r) => r.path === "/providers")!;
+  const route = routes.find(r => r.path === "/providers")!;
   const response = await route.handler(makeRequest("/providers"));
   const body = await response.json() as { providers: string[]; };
   assertEquals(body.providers.includes("google"), true);
@@ -152,19 +152,19 @@ Deno.test("OAuthExtension - /providers handler returns configured provider names
 Deno.test("OAuthExtension - authorize route returns url with correct base", async () => {
   const ext = new OAuthExtension(makeConfig());
   const routes = ext.getRoutes();
-  const route = routes.find((r) => r.path === "/authorize/google")!;
+  const route = routes.find(r => r.path === "/authorize/google")!;
   const response = await route.handler(makeRequest("/authorize/google"));
   const body = await response.json() as { url: string; state: string; };
   assertEquals(
     body.url.startsWith("https://accounts.google.com/o/oauth2/v2/auth"),
-    true,
+    true
   );
 });
 
 Deno.test("OAuthExtension - authorize route returns state token", async () => {
   const ext = new OAuthExtension(makeConfig());
   const routes = ext.getRoutes();
-  const route = routes.find((r) => r.path === "/authorize/google")!;
+  const route = routes.find(r => r.path === "/authorize/google")!;
   const response = await route.handler(makeRequest("/authorize/google"));
   const body = await response.json() as { url: string; state: string; };
   assertEquals(typeof body.state, "string");
@@ -174,7 +174,7 @@ Deno.test("OAuthExtension - authorize route returns state token", async () => {
 Deno.test("OAuthExtension - authorize URL includes client_id param", async () => {
   const ext = new OAuthExtension(makeConfig());
   const routes = ext.getRoutes();
-  const route = routes.find((r) => r.path === "/authorize/google")!;
+  const route = routes.find(r => r.path === "/authorize/google")!;
   const response = await route.handler(makeRequest("/authorize/google"));
   const body = await response.json() as { url: string; };
   const parsed = new URL(body.url);
@@ -184,7 +184,7 @@ Deno.test("OAuthExtension - authorize URL includes client_id param", async () =>
 Deno.test("OAuthExtension - authorize URL includes scope param", async () => {
   const ext = new OAuthExtension(makeConfig());
   const routes = ext.getRoutes();
-  const route = routes.find((r) => r.path === "/authorize/google")!;
+  const route = routes.find(r => r.path === "/authorize/google")!;
   const response = await route.handler(makeRequest("/authorize/google"));
   const body = await response.json() as { url: string; };
   const parsed = new URL(body.url);
@@ -198,7 +198,7 @@ Deno.test("OAuthExtension - extraAuthorizeParams appended to authorize URL", asy
   provider.extraAuthorizeParams = { access_type: "offline", prompt: "consent" };
   const ext = new OAuthExtension({ providers: [provider] });
   const routes = ext.getRoutes();
-  const route = routes.find((r) => r.path === "/authorize/google")!;
+  const route = routes.find(r => r.path === "/authorize/google")!;
   const response = await route.handler(makeRequest("/authorize/google"));
   const body = await response.json() as { url: string; };
   const parsed = new URL(body.url);
@@ -212,7 +212,7 @@ Deno.test("OAuthExtension - extraAuthorizeParams cannot override reserved client
   assertThrows(
     () => new OAuthExtension({ providers: [provider] }),
     ExtensionConfigError,
-    "client_id",
+    "client_id"
   );
 });
 
@@ -222,7 +222,7 @@ Deno.test("OAuthExtension - extraAuthorizeParams cannot override reserved state"
   assertThrows(
     () => new OAuthExtension({ providers: [provider] }),
     ExtensionConfigError,
-    "state",
+    "state"
   );
 });
 
@@ -232,14 +232,14 @@ Deno.test("OAuthExtension - extraAuthorizeParams cannot override code_challenge"
   assertThrows(
     () => new OAuthExtension({ providers: [provider] }),
     ExtensionConfigError,
-    "code_challenge",
+    "code_challenge"
   );
 });
 
 Deno.test("OAuthExtension - extraAuthorizeParams omitted leaves authorize URL unchanged", async () => {
   const ext = new OAuthExtension(makeConfig());
   const routes = ext.getRoutes();
-  const route = routes.find((r) => r.path === "/authorize/google")!;
+  const route = routes.find(r => r.path === "/authorize/google")!;
   const response = await route.handler(makeRequest("/authorize/google"));
   const body = await response.json() as { url: string; };
   const parsed = new URL(body.url);
@@ -252,9 +252,9 @@ Deno.test("OAuthExtension - extraAuthorizeParams omitted leaves authorize URL un
 Deno.test("OAuthExtension - callback returns 400 when code is missing", async () => {
   const ext = new OAuthExtension(makeConfig());
   const routes = ext.getRoutes();
-  const route = routes.find((r) => r.path === "/callback/google")!;
+  const route = routes.find(r => r.path === "/callback/google")!;
   const response = await route.handler(
-    makeRequest("/callback/google?state=some-state"),
+    makeRequest("/callback/google?state=some-state")
   );
   assertEquals(response.status, 400);
 });
@@ -262,9 +262,9 @@ Deno.test("OAuthExtension - callback returns 400 when code is missing", async ()
 Deno.test("OAuthExtension - callback returns 400 when state is missing", async () => {
   const ext = new OAuthExtension(makeConfig());
   const routes = ext.getRoutes();
-  const route = routes.find((r) => r.path === "/callback/google")!;
+  const route = routes.find(r => r.path === "/callback/google")!;
   const response = await route.handler(
-    makeRequest("/callback/google?code=auth-code"),
+    makeRequest("/callback/google?code=auth-code")
   );
   assertEquals(response.status, 400);
 });
@@ -274,9 +274,9 @@ Deno.test("OAuthExtension - callback returns invalid_state error code", async ()
   // replaces the prior flat `{error: "string"}`.
   const ext = new OAuthExtension(makeConfig());
   const routes = ext.getRoutes();
-  const route = routes.find((r) => r.path === "/callback/google")!;
+  const route = routes.find(r => r.path === "/callback/google")!;
   const response = await route.handler(
-    makeRequest("/callback/google?code=auth-code&state=invalid-state"),
+    makeRequest("/callback/google?code=auth-code&state=invalid-state")
   );
   assertEquals(response.status, 400);
   const body = await response.json() as {
@@ -288,9 +288,9 @@ Deno.test("OAuthExtension - callback returns invalid_state error code", async ()
 Deno.test("OAuthExtension - callback forwards provider error in details", async () => {
   const ext = new OAuthExtension(makeConfig());
   const routes = ext.getRoutes();
-  const route = routes.find((r) => r.path === "/callback/google")!;
+  const route = routes.find(r => r.path === "/callback/google")!;
   const response = await route.handler(
-    makeRequest("/callback/google?error=access_denied"),
+    makeRequest("/callback/google?error=access_denied")
   );
   assertEquals(response.status, 400);
   const body = await response.json() as {
@@ -313,10 +313,10 @@ Deno.test("OAuthExtension - callback completes token exchange + userinfo (gh/gel
           JSON.stringify({
             access_token: "test-access-token",
             token_type: "Bearer",
-            expires_in: 3600,
+            expires_in: 3600
           }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        ),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
       );
     }
     if (u.includes("googleapis.com/oauth2/v3/userinfo")) {
@@ -326,10 +326,10 @@ Deno.test("OAuthExtension - callback completes token exchange + userinfo (gh/gel
             sub: "google-user-123",
             email: "ada@example.com",
             name: "Ada Lovelace",
-            picture: "https://example.com/ada.jpg",
+            picture: "https://example.com/ada.jpg"
           }),
-          { status: 200, headers: { "Content-Type": "application/json" } },
-        ),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
       );
     }
     return Promise.resolve(new Response("not found", { status: 404 }));
@@ -338,13 +338,13 @@ Deno.test("OAuthExtension - callback completes token exchange + userinfo (gh/gel
   try {
     const ext = new OAuthExtension(makeConfig());
     const authRoutes = ext.getRoutes();
-    const authRoute = authRoutes.find((r) => r.path === "/authorize/google")!;
+    const authRoute = authRoutes.find(r => r.path === "/authorize/google")!;
     const authResp = await authRoute.handler(makeRequest("/authorize/google"));
     const authBody = await authResp.json() as { state: string; };
 
-    const cbRoute = authRoutes.find((r) => r.path === "/callback/google")!;
+    const cbRoute = authRoutes.find(r => r.path === "/callback/google")!;
     const response = await cbRoute.handler(
-      makeRequest(`/callback/google?code=real-code&state=${authBody.state}`),
+      makeRequest(`/callback/google?code=real-code&state=${authBody.state}`)
     );
     assertEquals(response.status, 200);
     const body = await response.json() as {
@@ -370,30 +370,30 @@ Deno.test("OAuthExtension - metadata round-trips through authorize → callback 
     if (u.includes("token")) {
       return Promise.resolve(
         new Response(
-          JSON.stringify({ access_token: "tok", token_type: "Bearer" }),
-        ),
+          JSON.stringify({ access_token: "tok", token_type: "Bearer" })
+        )
       );
     }
     return Promise.resolve(
-      new Response(JSON.stringify({ sub: "u1", email: "e@x.com" })),
+      new Response(JSON.stringify({ sub: "u1", email: "e@x.com" }))
     );
   }) as typeof fetch;
 
   try {
     const ext = new OAuthExtension(makeConfig());
     const authRoutes = ext.getRoutes();
-    const authRoute = authRoutes.find((r) => r.path === "/authorize/google")!;
+    const authRoute = authRoutes.find(r => r.path === "/authorize/google")!;
     const meta = encodeURIComponent(
-      JSON.stringify({ next: "/dashboard", csrf: "abc" }),
+      JSON.stringify({ next: "/dashboard", csrf: "abc" })
     );
     const authResp = await authRoute.handler(
-      makeRequest(`/authorize/google?metadata=${meta}`),
+      makeRequest(`/authorize/google?metadata=${meta}`)
     );
     const authBody = await authResp.json() as { state: string; };
 
-    const cbRoute = authRoutes.find((r) => r.path === "/callback/google")!;
+    const cbRoute = authRoutes.find(r => r.path === "/callback/google")!;
     const response = await cbRoute.handler(
-      makeRequest(`/callback/google?code=c&state=${authBody.state}`),
+      makeRequest(`/callback/google?code=c&state=${authBody.state}`)
     );
     const body = await response.json() as {
       metadata: { next: string; csrf: string; };
@@ -408,11 +408,11 @@ Deno.test("OAuthExtension - metadata round-trips through authorize → callback 
 Deno.test("OAuthExtension - rejects oversized metadata (gh/geldata#8841)", async () => {
   const ext = new OAuthExtension(makeConfig());
   const authRoutes = ext.getRoutes();
-  const authRoute = authRoutes.find((r) => r.path === "/authorize/google")!;
+  const authRoute = authRoutes.find(r => r.path === "/authorize/google")!;
   // 3 KB blob — exceeds the 2 KB cap.
   const huge = encodeURIComponent(JSON.stringify({ blob: "x".repeat(3000) }));
   const response = await authRoute.handler(
-    makeRequest(`/authorize/google?metadata=${huge}`),
+    makeRequest(`/authorize/google?metadata=${huge}`)
   );
   assertEquals(response.status, 400);
   const body = await response.json() as { error: { code: string; }; };
@@ -422,9 +422,9 @@ Deno.test("OAuthExtension - rejects oversized metadata (gh/geldata#8841)", async
 Deno.test("OAuthExtension - rejects malformed metadata (gh/geldata#8841)", async () => {
   const ext = new OAuthExtension(makeConfig());
   const authRoutes = ext.getRoutes();
-  const authRoute = authRoutes.find((r) => r.path === "/authorize/google")!;
+  const authRoute = authRoutes.find(r => r.path === "/authorize/google")!;
   const response = await authRoute.handler(
-    makeRequest("/authorize/google?metadata=not-json"),
+    makeRequest("/authorize/google?metadata=not-json")
   );
   assertEquals(response.status, 400);
   const body = await response.json() as { error: { code: string; }; };
@@ -434,10 +434,10 @@ Deno.test("OAuthExtension - rejects malformed metadata (gh/geldata#8841)", async
 Deno.test("OAuthExtension - rejects metadata that is JSON but not an object", async () => {
   const ext = new OAuthExtension(makeConfig());
   const authRoutes = ext.getRoutes();
-  const authRoute = authRoutes.find((r) => r.path === "/authorize/google")!;
+  const authRoute = authRoutes.find(r => r.path === "/authorize/google")!;
   const arr = encodeURIComponent("[1,2,3]");
   const response = await authRoute.handler(
-    makeRequest(`/authorize/google?metadata=${arr}`),
+    makeRequest(`/authorize/google?metadata=${arr}`)
   );
   assertEquals(response.status, 400);
   const body = await response.json() as { error: { code: string; }; };
@@ -450,20 +450,20 @@ Deno.test("OAuthExtension - callback maps token-exchange failure to structured e
     Promise.resolve(
       new Response("Bad client_secret", {
         status: 400,
-        headers: { "Content-Type": "text/plain" },
-      }),
+        headers: { "Content-Type": "text/plain" }
+      })
     )) as typeof fetch;
 
   try {
     const ext = new OAuthExtension(makeConfig());
     const authRoutes = ext.getRoutes();
-    const authRoute = authRoutes.find((r) => r.path === "/authorize/google")!;
+    const authRoute = authRoutes.find(r => r.path === "/authorize/google")!;
     const authResp = await authRoute.handler(makeRequest("/authorize/google"));
     const authBody = await authResp.json() as { state: string; };
 
-    const cbRoute = authRoutes.find((r) => r.path === "/callback/google")!;
+    const cbRoute = authRoutes.find(r => r.path === "/callback/google")!;
     const response = await cbRoute.handler(
-      makeRequest(`/callback/google?code=c&state=${authBody.state}`),
+      makeRequest(`/callback/google?code=c&state=${authBody.state}`)
     );
     assertEquals(response.status, 502);
     const body = await response.json() as {
@@ -488,7 +488,7 @@ Deno.test("OAuthExtension - state manager validates created states", async () =>
   const manager = ext.getStateManager();
   const oauthState = await manager.createState(
     "google",
-    "https://example.com/cb",
+    "https://example.com/cb"
   );
   const validated = manager.validateState(oauthState.state);
   assertEquals(validated !== null, true);
@@ -500,7 +500,7 @@ Deno.test("OAuthExtension - state manager rejects states used twice (one-time us
   const manager = ext.getStateManager();
   const oauthState = await manager.createState(
     "google",
-    "https://example.com/cb",
+    "https://example.com/cb"
   );
   manager.validateState(oauthState.state);
   const second = manager.validateState(oauthState.state);
@@ -512,7 +512,7 @@ Deno.test("OAuthExtension - state manager populates PKCE fields (P1-41)", async 
   const manager = ext.getStateManager();
   const oauthState = await manager.createState(
     "google",
-    "https://example.com/cb",
+    "https://example.com/cb"
   );
   // RFC 7636: verifier is 43-128 URL-safe chars; challenge is base64url
   // of SHA-256(verifier) so it's exactly 43 chars.
@@ -527,7 +527,7 @@ Deno.test("OAuthExtension - state manager populates PKCE fields (P1-41)", async 
 // switches to a short alias (`challenge`, `verifier`) trips the test.
 Deno.test("OAuthExtension - authorize URL uses RFC 7636 PKCE param names", async () => {
   const ext = new OAuthExtension(makeConfig());
-  const route = ext.getRoutes().find((r) => r.path === "/authorize/google")!;
+  const route = ext.getRoutes().find(r => r.path === "/authorize/google")!;
   const response = await route.handler(makeRequest("/authorize/google"));
   const body = await response.json() as { url: string; };
   const parsed = new URL(body.url);
@@ -546,7 +546,7 @@ Deno.test("OAuthExtension - authorize URL uses RFC 7636 PKCE param names", async
 // trailing `=` ever sneaks into the authorize URL.
 Deno.test("OAuthExtension - authorize URL forwards unpadded code_challenge", async () => {
   const ext = new OAuthExtension(makeConfig());
-  const route = ext.getRoutes().find((r) => r.path === "/authorize/google")!;
+  const route = ext.getRoutes().find(r => r.path === "/authorize/google")!;
   const response = await route.handler(makeRequest("/authorize/google"));
   const body = await response.json() as { url: string; };
   const parsed = new URL(body.url);
@@ -559,15 +559,15 @@ Deno.test("OAuthExtension - state manager rejects expired states", async () => {
   // 1 ms expiry so state expires immediately
   const ext = new OAuthExtension({
     providers: [googleProvider("cid", "csecret")],
-    stateExpiryMs: 1,
+    stateExpiryMs: 1
   });
   const manager = ext.getStateManager();
   const oauthState = await manager.createState(
     "google",
-    "https://example.com/cb",
+    "https://example.com/cb"
   );
   // Wait for expiry
-  return new Promise<void>((resolve) => {
+  return new Promise<void>(resolve => {
     setTimeout(() => {
       const result = manager.validateState(oauthState.state);
       assertEquals(result, null);

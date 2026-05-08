@@ -14,14 +14,14 @@ const config = {
       assets: "build",
       fallback: "index.html",
       precompress: false,
-      strict: true,
+      strict: true
     }),
 
     // Set base path for serving from /ui route
     paths: {
-      base: "/ui",
-    },
-  },
+      base: "/ui"
+    }
+  }
 };
 
 export default config;

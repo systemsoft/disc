@@ -34,7 +34,7 @@ function makeScriptedSocket(steps: ScriptStep[]): FakeSocketResult {
   const writtenAll: string[] = [];
 
   const enqueueReply = (lines: string[]): void => {
-    const text = lines.map((l) => l + "\r\n").join("");
+    const text = lines.map(l => l + "\r\n").join("");
     const bytes = encoder.encode(text);
     const merged = new Uint8Array(readQueue.length + bytes.length);
     merged.set(readQueue, 0);
@@ -64,13 +64,13 @@ function makeScriptedSocket(steps: ScriptStep[]): FakeSocketResult {
       const next = stepIdx + 1;
       if (next >= steps.length) {
         throw new Error(
-          `script exhausted; client wrote unexpected line: ${JSON.stringify(line)}`,
+          `script exhausted; client wrote unexpected line: ${JSON.stringify(line)}`
         );
       }
       const step = steps[next];
       if (!line.includes(step.expect) && step.expect !== ".") {
         throw new Error(
-          `script step ${next}: expected ${JSON.stringify(step.expect)}, got ${JSON.stringify(line)}`,
+          `script step ${next}: expected ${JSON.stringify(step.expect)}, got ${JSON.stringify(line)}`
         );
       }
       // Special case for end-of-DATA marker: must be exactly ".".
@@ -87,7 +87,7 @@ function makeScriptedSocket(steps: ScriptStep[]): FakeSocketResult {
   const conn: SmtpConn = {
     close(): void {},
     read(p: Uint8Array): Promise<number | null> {
-      return new Promise((resolve) => {
+      return new Promise(resolve => {
         const tick = (): void => {
           if (readQueue.length > 0) {
             const n = Math.min(p.length, readQueue.length);
@@ -107,12 +107,12 @@ function makeScriptedSocket(steps: ScriptStep[]): FakeSocketResult {
       const chunk = decoder.decode(p);
       advanceFromWrite(chunk);
       return p.length;
-    },
+    }
   };
 
   return {
     conn,
-    written: () => writtenAll.join(""),
+    written: () => writtenAll.join("")
   };
 }
 
@@ -121,7 +121,7 @@ function makeConnectImpl(socket: FakeSocketResult): SmtpConnectImpl {
     // deno-lint-ignore require-await
     connect: async () => socket.conn,
     // deno-lint-ignore require-await
-    startTls: async (conn) => conn, // skip actual TLS layering in tests
+    startTls: async conn => conn // skip actual TLS layering in tests
   };
 }
 
@@ -135,7 +135,7 @@ Deno.test("SmtpClient - happy path: EHLO, MAIL, RCPT, DATA, QUIT", async () => {
     { expect: "RCPT TO:", reply: ["250 Accepted"] },
     { expect: "DATA", reply: ["354 Go ahead"] },
     { expect: ".", reply: ["250 Queued as XYZ"] },
-    { expect: "QUIT", reply: ["221 Bye"] },
+    { expect: "QUIT", reply: ["221 Bye"] }
   ]);
 
   const client = new SmtpClient({
@@ -144,13 +144,13 @@ Deno.test("SmtpClient - happy path: EHLO, MAIL, RCPT, DATA, QUIT", async () => {
     hostname: "client.test",
     port: 25,
     secure: false,
-    timeoutMs: 1000,
+    timeoutMs: 1000
   });
 
   const outcome = await client.send({
     body: "Subject: hi\r\n\r\nhello",
     from: "from@test",
-    to: ["to@test"],
+    to: ["to@test"]
   });
 
   assertEquals(outcome.accepted, ["to@test"]);
@@ -170,7 +170,7 @@ Deno.test("SmtpClient - AUTH PLAIN happy path", async () => {
     { expect: "RCPT TO:", reply: ["250 Accepted"] },
     { expect: "DATA", reply: ["354 Go ahead"] },
     { expect: ".", reply: ["250 Queued"] },
-    { expect: "QUIT", reply: ["221 Bye"] },
+    { expect: "QUIT", reply: ["221 Bye"] }
   ]);
 
   const client = new SmtpClient({
@@ -180,13 +180,13 @@ Deno.test("SmtpClient - AUTH PLAIN happy path", async () => {
     hostname: "client.test",
     port: 587,
     secure: false,
-    timeoutMs: 1000,
+    timeoutMs: 1000
   });
 
   await client.send({
     body: "Subject: hi\r\n\r\nbody",
     from: "from@test",
-    to: ["to@test"],
+    to: ["to@test"]
   });
 
   const wire = socket.written();
@@ -210,7 +210,7 @@ Deno.test("SmtpClient - AUTH LOGIN fallback when PLAIN not advertised", async ()
     { expect: "RCPT TO:", reply: ["250 OK"] },
     { expect: "DATA", reply: ["354 Go"] },
     { expect: ".", reply: ["250 Queued"] },
-    { expect: "QUIT", reply: ["221 Bye"] },
+    { expect: "QUIT", reply: ["221 Bye"] }
   ]);
 
   const client = new SmtpClient({
@@ -220,13 +220,13 @@ Deno.test("SmtpClient - AUTH LOGIN fallback when PLAIN not advertised", async ()
     hostname: "client.test",
     port: 587,
     secure: false,
-    timeoutMs: 1000,
+    timeoutMs: 1000
   });
 
   await client.send({
     body: "Subject: hi\r\n\r\nbody",
     from: "f@x",
-    to: ["t@x"],
+    to: ["t@x"]
   });
 
   const wire = socket.written();
@@ -243,7 +243,7 @@ Deno.test("SmtpClient - skips STARTTLS when secure:true (already TLS)", async ()
     { expect: "RCPT TO:", reply: ["250 OK"] },
     { expect: "DATA", reply: ["354 Go"] },
     { expect: ".", reply: ["250 Queued"] },
-    { expect: "QUIT", reply: ["221 Bye"] },
+    { expect: "QUIT", reply: ["221 Bye"] }
   ]);
 
   const client = new SmtpClient({
@@ -252,13 +252,13 @@ Deno.test("SmtpClient - skips STARTTLS when secure:true (already TLS)", async ()
     hostname: "client.test",
     port: 465,
     secure: true,
-    timeoutMs: 1000,
+    timeoutMs: 1000
   });
 
   await client.send({
     body: "Subject: hi\r\n\r\nb",
     from: "f@x",
-    to: ["t@x"],
+    to: ["t@x"]
   });
 
   const wire = socket.written();
@@ -275,7 +275,7 @@ Deno.test("SmtpClient - multi-recipient: some accepted, one rejected", async () 
     { expect: "RCPT TO:<b@x>", reply: ["250 OK"] },
     { expect: "DATA", reply: ["354 Go"] },
     { expect: ".", reply: ["250 Queued"] },
-    { expect: "QUIT", reply: ["221 Bye"] },
+    { expect: "QUIT", reply: ["221 Bye"] }
   ]);
 
   const client = new SmtpClient({
@@ -284,13 +284,13 @@ Deno.test("SmtpClient - multi-recipient: some accepted, one rejected", async () 
     hostname: "client.test",
     port: 25,
     secure: false,
-    timeoutMs: 1000,
+    timeoutMs: 1000
   });
 
   const outcome = await client.send({
     body: "Subject: hi\r\n\r\nb",
     from: "f@x",
-    to: ["a@x", "bogus@x", "b@x"],
+    to: ["a@x", "bogus@x", "b@x"]
   });
 
   assertEquals(outcome.accepted, ["a@x", "b@x"]);
@@ -303,7 +303,7 @@ Deno.test("SmtpClient - all RCPTs rejected: skips DATA, returns rejected", async
     { expect: "EHLO ", reply: ["250 smtp.test"] },
     { expect: "MAIL FROM:", reply: ["250 OK"] },
     { expect: "RCPT TO:", reply: ["550 No such user"] },
-    { expect: "QUIT", reply: ["221 Bye"] },
+    { expect: "QUIT", reply: ["221 Bye"] }
   ]);
 
   const client = new SmtpClient({
@@ -312,13 +312,13 @@ Deno.test("SmtpClient - all RCPTs rejected: skips DATA, returns rejected", async
     hostname: "client.test",
     port: 25,
     secure: false,
-    timeoutMs: 1000,
+    timeoutMs: 1000
   });
 
   const outcome = await client.send({
     body: "Subject: hi\r\n\r\nb",
     from: "f@x",
-    to: ["nobody@x"],
+    to: ["nobody@x"]
   });
 
   assertEquals(outcome.accepted, []);
@@ -340,7 +340,7 @@ Deno.test("SmtpClient - server hangs up mid-DATA: throws meaningful error", asyn
   const conn: SmtpConn = {
     close(): void {},
     read(p: Uint8Array): Promise<number | null> {
-      return new Promise((resolve) => {
+      return new Promise(resolve => {
         const tick = (): void => {
           if (dropped) {
             resolve(null); // EOF
@@ -379,7 +379,7 @@ Deno.test("SmtpClient - server hangs up mid-DATA: throws meaningful error", asyn
         }
       }
       return p.length;
-    },
+    }
   };
 
   const client = new SmtpClient({
@@ -387,13 +387,13 @@ Deno.test("SmtpClient - server hangs up mid-DATA: throws meaningful error", asyn
       // deno-lint-ignore require-await
       connect: async () => conn,
       // deno-lint-ignore require-await
-      startTls: async (c) => c,
+      startTls: async c => c
     },
     host: "smtp.test",
     hostname: "client.test",
     port: 25,
     secure: false,
-    timeoutMs: 1000,
+    timeoutMs: 1000
   });
 
   await assertRejects(
@@ -401,9 +401,9 @@ Deno.test("SmtpClient - server hangs up mid-DATA: throws meaningful error", asyn
       client.send({
         body: "Subject: hi\r\n\r\nb",
         from: "f@x",
-        to: ["t@x"],
+        to: ["t@x"]
       }),
-    Error,
+    Error
   );
 });
 
@@ -425,7 +425,7 @@ Deno.test("SmtpClient - dot-stuffing escapes lines starting with .", async () =>
   const conn: SmtpConn = {
     close(): void {},
     read(p: Uint8Array): Promise<number | null> {
-      return new Promise((resolve) => {
+      return new Promise(resolve => {
         const tick = (): void => {
           if (readQueue.length > 0) {
             const n = Math.min(p.length, readQueue.length);
@@ -466,7 +466,7 @@ Deno.test("SmtpClient - dot-stuffing escapes lines starting with .", async () =>
         }
       }
       return p.length;
-    },
+    }
   };
 
   const client = new SmtpClient({
@@ -474,13 +474,13 @@ Deno.test("SmtpClient - dot-stuffing escapes lines starting with .", async () =>
       // deno-lint-ignore require-await
       connect: async () => conn,
       // deno-lint-ignore require-await
-      startTls: async (c) => c,
+      startTls: async c => c
     },
     host: "smtp.test",
     hostname: "client.test",
     port: 25,
     secure: false,
-    timeoutMs: 1000,
+    timeoutMs: 1000
   });
 
   // Body has a line starting with "." that must become "..".
@@ -491,6 +491,6 @@ Deno.test("SmtpClient - dot-stuffing escapes lines starting with .", async () =>
   // The dotted line should appear as "..dotted line" on the wire.
   assert(
     wire.includes("\r\n..dotted line\r\n"),
-    `expected dot-stuffed line in wire; got: ${JSON.stringify(wire)}`,
+    `expected dot-stuffed line in wire; got: ${JSON.stringify(wire)}`
   );
 });

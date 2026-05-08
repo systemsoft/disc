@@ -18,6 +18,6 @@ export function handleGetConfig(ctx: ConfigRouteContext): Response {
   const keys = getConfigRegistry();
   return new Response(JSON.stringify({ keys }, null, 2), {
     status: 200,
-    headers: ctx.defaultHeaders(),
+    headers: ctx.defaultHeaders()
   });
 }

@@ -10,7 +10,8 @@ import type { Position } from "./protocol.ts";
 
 function findPos(haystack: string, needle: string): Position {
   const offset = haystack.indexOf(needle);
-  if (offset === -1) throw new Error(`not found: ${needle}`);
+  if (offset === -1)
+    throw new Error(`not found: ${needle}`);
   let line = 0;
   let character = 0;
   for (let i = 0; i < offset; i++) {
@@ -25,7 +26,7 @@ function findPos(haystack: string, needle: string): Position {
 }
 
 function names(items: { label: string; }[]): string[] {
-  return items.map((i) => i.label).sort();
+  return items.map(i => i.label).sort();
 }
 
 // =========================================================================
@@ -99,7 +100,7 @@ Deno.test("provideCompletion - dedupes built-in vs user types of same name", () 
   };
 }`;
   const items = provideCompletion(text, { line: 1, character: 2 });
-  const occurrences = items.filter((i) => i.label === "str").length;
+  const occurrences = items.filter(i => i.label === "str").length;
   assertEquals(occurrences, 1);
 });
 

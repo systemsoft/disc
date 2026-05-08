@@ -160,11 +160,11 @@ Deno.test("Validator - array with 0 params is rejected", () => {
             kind: "PropertyDeclaration",
             name: AST.createIdentifier("tags"),
             type: AST.createTypeRef(AST.createQualifiedName(["array"])),
-            required: true,
-          },
-        ],
-      },
-    ],
+            required: true
+          }
+        ]
+      }
+    ]
   };
 
   const validator = new SchemaValidator();
@@ -191,14 +191,14 @@ Deno.test("Validator - array with 2 params is rejected", () => {
               false,
               [
                 AST.createTypeRef(AST.createQualifiedName(["str"])),
-                AST.createTypeRef(AST.createQualifiedName(["int64"])),
-              ],
+                AST.createTypeRef(AST.createQualifiedName(["int64"]))
+              ]
             ),
-            required: true,
-          },
-        ],
-      },
-    ],
+            required: true
+          }
+        ]
+      }
+    ]
   };
 
   const validator = new SchemaValidator();
@@ -220,11 +220,11 @@ Deno.test("Validator - tuple with 0 params is rejected", () => {
             kind: "PropertyDeclaration",
             name: AST.createIdentifier("value"),
             type: AST.createTypeRef(AST.createQualifiedName(["tuple"])),
-            required: true,
-          },
-        ],
-      },
-    ],
+            required: true
+          }
+        ]
+      }
+    ]
   };
 
   const validator = new SchemaValidator();
@@ -233,7 +233,7 @@ Deno.test("Validator - tuple with 0 params is rejected", () => {
   assertStringIncludes(result.errors![0].message, "tuple");
   assertStringIncludes(
     result.errors![0].message,
-    "at least one type parameter",
+    "at least one type parameter"
   );
 });
 
@@ -254,15 +254,15 @@ Deno.test("DDL - array<str> maps to TEXT[]", () => {
           required: true,
           multi: false,
           constraints: [],
-          annotations: {},
-        },
+          annotations: {}
+        }
       ],
-      links: [],
-    },
+      links: []
+    }
   ];
 
   const statements = ddl.generateDDL(ops);
-  const createStmt = statements.find((s) => s.startsWith("CREATE TABLE"));
+  const createStmt = statements.find(s => s.startsWith("CREATE TABLE"));
   assertStringIncludes(createStmt!, "TEXT[]");
 });
 
@@ -279,15 +279,15 @@ Deno.test("DDL - array<int64> maps to BIGINT[]", () => {
           required: true,
           multi: false,
           constraints: [],
-          annotations: {},
-        },
+          annotations: {}
+        }
       ],
-      links: [],
-    },
+      links: []
+    }
   ];
 
   const statements = ddl.generateDDL(ops);
-  const createStmt = statements.find((s) => s.startsWith("CREATE TABLE"));
+  const createStmt = statements.find(s => s.startsWith("CREATE TABLE"));
   assertStringIncludes(createStmt!, "BIGINT[]");
 });
 
@@ -304,15 +304,15 @@ Deno.test("DDL - tuple<str, int64> maps to JSONB", () => {
           required: true,
           multi: false,
           constraints: [],
-          annotations: {},
-        },
+          annotations: {}
+        }
       ],
-      links: [],
-    },
+      links: []
+    }
   ];
 
   const statements = ddl.generateDDL(ops);
-  const createStmt = statements.find((s) => s.startsWith("CREATE TABLE"));
+  const createStmt = statements.find(s => s.startsWith("CREATE TABLE"));
   assertStringIncludes(createStmt!, "JSONB");
 });
 
@@ -382,10 +382,10 @@ Deno.test("Differ - typeToString serializes array<str> correctly", () => {
 
   const ops = differ.diff(oldMods, newMods);
   const createOp = ops.find(
-    (o) => o.kind === "CreateType",
+    o => o.kind === "CreateType"
   ) as MigrationTypes.CreateTypeOperation;
 
-  const tagsProp = createOp.properties.find((p) => p.name === "tags");
+  const tagsProp = createOp.properties.find(p => p.name === "tags");
   assertEquals(tagsProp !== undefined, true);
   assertEquals(tagsProp!.type, "array<str>");
 });
@@ -404,10 +404,10 @@ Deno.test("Differ - typeToString serializes tuple<int64, str> correctly", () => 
   const differ = new SchemaDiffer();
   const ops = differ.diff(emptyMods, newMods);
   const createOp = ops.find(
-    (o) => o.kind === "CreateType",
+    o => o.kind === "CreateType"
   ) as MigrationTypes.CreateTypeOperation;
 
-  const pairProp = createOp.properties.find((p) => p.name === "pair");
+  const pairProp = createOp.properties.find(p => p.name === "pair");
   assertEquals(pairProp !== undefined, true);
   assertEquals(pairProp!.type, "tuple<int64, str>");
 });
@@ -426,10 +426,10 @@ Deno.test("Differ - typeToString serializes tuple<float64, float64, bool> correc
   const differ = new SchemaDiffer();
   const ops = differ.diff(emptyMods, newMods);
   const createOp = ops.find(
-    (o) => o.kind === "CreateType",
+    o => o.kind === "CreateType"
   ) as MigrationTypes.CreateTypeOperation;
 
-  const positionProp = createOp.properties.find((p) => p.name === "position");
+  const positionProp = createOp.properties.find(p => p.name === "position");
   assertEquals(positionProp !== undefined, true);
   assertEquals(positionProp!.type, "tuple<float64, float64, bool>");
 });

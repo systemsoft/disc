@@ -69,7 +69,8 @@ function parseExpr(source: string): AccessExpressionNode {
   const tokens = lexer.tokenize();
   const parser = new AccessPolicyParser(tokens, wrapped);
   const policy = parser.parseAccessPolicy();
-  if (!policy.using) throw new Error("test setup: expected `using` clause");
+  if (!policy.using)
+    throw new Error("test setup: expected `using` clause");
   return policy.using;
 }
 
@@ -84,16 +85,18 @@ Deno.test("parser accepts scoped permission strings", () => {
   const expr = parseExpr(`runtime::has_permission("read:/etc/secrets")`) as AccessFunctionNode;
   assertEquals(expr.name, "runtime::has_permission");
   const lit = expr.args[0];
-  if (lit.kind !== "AccessLiteral") throw new Error("expected literal");
+  if (lit.kind !== "AccessLiteral")
+    throw new Error("expected literal");
   assertEquals(lit.value, "read:/etc/secrets");
 });
 
 Deno.test("parser composes runtime::has_permission with AND", () => {
   const expr = parseExpr(
-    `runtime::has_permission("net") and current_user.is_admin`,
+    `runtime::has_permission("net") and current_user.is_admin`
   );
   // Top-level should be AccessLogical with operator "and"
-  if (expr.kind !== "AccessLogical") throw new Error("expected logical AND");
+  if (expr.kind !== "AccessLogical")
+    throw new Error("expected logical AND");
   assertEquals(expr.operator, "and");
   assertEquals(expr.operands.length, 2);
   assertEquals(expr.operands[0].kind, "AccessFunction");
@@ -105,7 +108,7 @@ function makeCtx(checker: PermissionChecker): AccessContext {
   return {
     userId: "u1",
     userRole: "admin",
-    permissionChecker: checker,
+    permissionChecker: checker
   };
 }
 
@@ -113,7 +116,7 @@ Deno.test("evaluator: runtime::has_permission returns true when checker grants",
   const ev = new AccessEvaluator({ defaultAllow: false, enableRLS: true, enableAudit: false, mode: "permissive" });
   const expr = parseExpr(`runtime::has_permission("net")`);
   const calls: PermissionSpec[] = [];
-  const checker: PermissionChecker = (s) => {
+  const checker: PermissionChecker = s => {
     calls.push(s);
     return "granted";
   };
@@ -138,7 +141,7 @@ Deno.test("evaluator: rejects non-literal arguments to runtime::has_permission",
   const expr: AccessFunctionNode = {
     kind: "AccessFunction",
     name: "runtime::has_permission",
-    args: [{ kind: "AccessGlobal", name: "current_user" }],
+    args: [{ kind: "AccessGlobal", name: "current_user" }]
   };
   // @ts-expect-error testing private path via the public evaluator
   assertThrows(() => ev.evaluateExpression(expr, makeCtx(() => "granted")), Error, "string literal");
@@ -163,7 +166,7 @@ Deno.test("expressionToSQL: runtime::has_permission inlines FALSE when denied", 
 Deno.test("expressionToSQL: composes with existing globals (admin and granted permission)", () => {
   const ev = new AccessEvaluator({ defaultAllow: false, enableRLS: true, enableAudit: false, mode: "permissive" });
   const expr = parseExpr(
-    `current_user = "alice" and runtime::has_permission("net")`,
+    `current_user = "alice" and runtime::has_permission("net")`
   );
   const sql = ev.expressionToSQL(expr, { ...makeCtx(() => "granted"), userId: "alice" });
   // Both sides resolve to literals; no Deno-side function survives in the SQL.
@@ -173,7 +176,7 @@ Deno.test("expressionToSQL: composes with existing globals (admin and granted pe
 Deno.test("expressionToSQL: denied permission short-circuits to FALSE in composed expression", () => {
   const ev = new AccessEvaluator({ defaultAllow: false, enableRLS: true, enableAudit: false, mode: "permissive" });
   const expr = parseExpr(
-    `current_user = "alice" and runtime::has_permission("ffi")`,
+    `current_user = "alice" and runtime::has_permission("ffi")`
   );
   const sql = ev.expressionToSQL(expr, { ...makeCtx(() => "denied"), userId: "alice" });
   // The AND clause survives, but the runtime check is FALSE, so Postgres will

@@ -6,7 +6,7 @@
 
 import { QueryCache } from "../lib/query-cache.ts";
 
-Deno.bench("cache: hit (populated)", (b) => {
+Deno.bench("cache: hit (populated)", b => {
   const cache = new QueryCache<string>(1000);
 
   for (let i = 0; i < 1000; i++) {
@@ -24,7 +24,7 @@ Deno.bench("cache: hit (populated)", (b) => {
   b.end();
 });
 
-Deno.bench("cache: miss", (b) => {
+Deno.bench("cache: miss", b => {
   const cache = new QueryCache<string>(1000);
 
   b.start();
@@ -36,7 +36,7 @@ Deno.bench("cache: miss", (b) => {
   b.end();
 });
 
-Deno.bench("cache: set (fill)", (b) => {
+Deno.bench("cache: set (fill)", b => {
   const cache = new QueryCache<string>(1000);
 
   b.start();
@@ -48,7 +48,7 @@ Deno.bench("cache: set (fill)", (b) => {
   b.end();
 });
 
-Deno.bench("cache: eviction (overflow)", (b) => {
+Deno.bench("cache: eviction (overflow)", b => {
   const cache = new QueryCache<string>(100);
 
   b.start();
@@ -60,7 +60,7 @@ Deno.bench("cache: eviction (overflow)", (b) => {
   b.end();
 });
 
-Deno.bench("cache: mixed hit/miss", (b) => {
+Deno.bench("cache: mixed hit/miss", b => {
   const cache = new QueryCache<string>(500);
 
   for (let i = 0; i < 250; i++) {

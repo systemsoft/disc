@@ -29,7 +29,7 @@ function buildSchema(): Schema {
         required: true,
         multi: false,
         columnName: "id",
-        edgeqlType: "uuid",
+        edgeqlType: "uuid"
       }],
       ["email", {
         name: "email",
@@ -38,7 +38,7 @@ function buildSchema(): Schema {
         multi: false,
         columnName: "email",
         edgeqlType: "str",
-        annotations: { "rest::hidden": "true" },
+        annotations: { "rest::hidden": "true" }
       }],
       ["name", {
         name: "name",
@@ -46,17 +46,17 @@ function buildSchema(): Schema {
         required: true,
         multi: false,
         columnName: "name",
-        edgeqlType: "str",
-      }],
+        edgeqlType: "str"
+      }]
     ]),
     links: new Map([
       ["posts", {
         name: "posts",
         target: "Post",
         required: false,
-        multi: true,
-      }],
-    ]),
+        multi: true
+      }]
+    ])
   };
 
   const postType: TypeDef = {
@@ -71,7 +71,7 @@ function buildSchema(): Schema {
         required: true,
         multi: false,
         columnName: "id",
-        edgeqlType: "uuid",
+        edgeqlType: "uuid"
       }],
       ["title", {
         name: "title",
@@ -79,34 +79,34 @@ function buildSchema(): Schema {
         required: true,
         multi: false,
         columnName: "title",
-        edgeqlType: "str",
-      }],
+        edgeqlType: "str"
+      }]
     ]),
-    links: new Map(),
+    links: new Map()
   };
 
   return {
     types: new Map([
       ["default::User", userType],
-      ["default::Post", postType],
+      ["default::Post", postType]
     ]),
-    functions: new Map(),
+    functions: new Map()
   };
 }
 
 function makeStubHandler(
-  responder: (q: string) => unknown = () => [],
+  responder: (q: string) => unknown = () => []
 ): {
   handler: Types.ProtocolHandler;
   captured: { query: string; }[];
 } {
   const captured: { query: string; }[] = [];
   const handler: Types.ProtocolHandler = {
-    handleRequest: (request) => {
+    handleRequest: request => {
       captured.push({ query: request.query });
       return Promise.resolve({ data: responder(request.query) });
     },
-    validateRequest: () => [],
+    validateRequest: () => []
   };
   return { handler, captured };
 }
@@ -131,20 +131,20 @@ async function startServer(opts: {
       requestTimeout: 5000,
       enableCors: true,
       enableWebsockets: false,
-      enableRest: opts.enableRest,
+      enableRest: opts.enableRest
     },
     protocolHandler: handler,
-    schemaProvider: () => schema,
+    schemaProvider: () => schema
   });
   const _running = server.start();
-  await new Promise((r) => setTimeout(r, 200));
+  await new Promise(r => setTimeout(r, 200));
   return {
     baseUrl: `http://${TEST_HOST}:${port}`,
     captured,
     cleanup: async () => {
       await server.stop();
       await _running.catch(() => undefined);
-    },
+    }
   };
 }
 
@@ -154,7 +154,7 @@ async function startServer(opts: {
 
 Deno.test("REST integration: GET /api/User round-trips through HTTP", async () => {
   const { baseUrl, captured, cleanup } = await startServer({
-    responder: () => [{ id: "u1", name: "Ada" }],
+    responder: () => [{ id: "u1", name: "Ada" }]
   });
   try {
     const res = await fetch(`${baseUrl}/api/User`);
@@ -210,13 +210,13 @@ Deno.test("REST integration: GET /api/openapi.json emits an OpenAPI spec", async
 
 Deno.test("REST integration: POST /api/Post compiles an insert", async () => {
   const { baseUrl, captured, cleanup } = await startServer({
-    responder: () => [{ id: "p1", title: "hello" }],
+    responder: () => [{ id: "p1", title: "hello" }]
   });
   try {
     const res = await fetch(`${baseUrl}/api/Post`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "hello" }),
+      body: JSON.stringify({ title: "hello" })
     });
     assertEquals(res.status, 201);
     const body = await res.json();
@@ -235,7 +235,7 @@ Deno.test("REST integration: POST /api/Post rejects unknown field with 400", asy
     const res = await fetch(`${baseUrl}/api/Post`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "ok", bogus: 42 }),
+      body: JSON.stringify({ title: "ok", bogus: 42 })
     });
     assertEquals(res.status, 400);
     const body = await res.json();
@@ -250,13 +250,13 @@ Deno.test("REST integration: POST /api/Post rejects unknown field with 400", asy
 Deno.test("REST integration: PATCH /api/Post/{id} compiles an update", async () => {
   const id = "11111111-2222-3333-4444-555555555555";
   const { baseUrl, captured, cleanup } = await startServer({
-    responder: () => [{ id, title: "renamed" }],
+    responder: () => [{ id, title: "renamed" }]
   });
   try {
     const res = await fetch(`${baseUrl}/api/Post/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "renamed" }),
+      body: JSON.stringify({ title: "renamed" })
     });
     assertEquals(res.status, 200);
     const body = await res.json();
@@ -274,11 +274,11 @@ Deno.test("REST integration: PATCH /api/Post/{id} compiles an update", async () 
 Deno.test("REST integration: DELETE /api/Post/{id} returns 204", async () => {
   const id = "11111111-2222-3333-4444-555555555555";
   const { baseUrl, captured, cleanup } = await startServer({
-    responder: () => [{ id }],
+    responder: () => [{ id }]
   });
   try {
     const res = await fetch(`${baseUrl}/api/Post/${id}`, {
-      method: "DELETE",
+      method: "DELETE"
     });
     assertEquals(res.status, 204);
     // Body is empty; no stream to drain.
@@ -301,9 +301,9 @@ Deno.test("REST integration: GET /api/User/{id}/posts returns linked collection"
       {
         id: userId,
         name: "Ada",
-        posts: [{ id: "p1", title: "first" }, { id: "p2", title: "second" }],
-      },
-    ],
+        posts: [{ id: "p1", title: "first" }, { id: "p2", title: "second" }]
+      }
+    ]
   });
   try {
     const res = await fetch(`${baseUrl}/api/User/${userId}/posts`);

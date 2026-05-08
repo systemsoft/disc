@@ -25,7 +25,7 @@ import {
   type TupleDescriptor,
   type TypeDescriptor,
   UUID_TO_TYPE,
-  WELL_KNOWN_TYPES,
+  WELL_KNOWN_TYPES
 } from "./typedesc.ts";
 import { bytesToUuid, uuidToBytes } from "./types.ts";
 
@@ -79,7 +79,7 @@ Deno.test("resolveWellKnownType - returns undefined for unknown", () => {
 Deno.test("BaseScalar - encode/decode round-trip", () => {
   const desc: BaseScalarDescriptor = {
     tag: DescriptorTag.BASE_SCALAR,
-    id: uuidToBytes("00000000-0000-0000-0000-000000000101"),
+    id: uuidToBytes("00000000-0000-0000-0000-000000000101")
   };
 
   const encoded = encodeTypeDescriptors([desc]);
@@ -89,7 +89,7 @@ Deno.test("BaseScalar - encode/decode round-trip", () => {
   assertEquals(decoded[0].tag, DescriptorTag.BASE_SCALAR);
   assertEquals(
     bytesToUuid((decoded[0] as BaseScalarDescriptor).id),
-    "00000000-0000-0000-0000-000000000101",
+    "00000000-0000-0000-0000-000000000101"
   );
 });
 
@@ -110,15 +110,15 @@ Deno.test("ObjectShape - encode/decode with elements", () => {
         flags: 0,
         cardinality: Cardinality.ONE,
         name: "name",
-        typeId: strTypeId,
+        typeId: strTypeId
       },
       {
         flags: ShapeElementFlags.IMPLICIT,
         cardinality: Cardinality.AT_MOST_ONE,
         name: "age",
-        typeId: intTypeId,
-      },
-    ],
+        typeId: intTypeId
+      }
+    ]
   };
 
   const encoded = encodeTypeDescriptors([desc]);
@@ -146,7 +146,7 @@ Deno.test("Enum - encode/decode round-trip", () => {
   const desc: EnumDescriptor = {
     tag: DescriptorTag.ENUM,
     id: uuidToBytes("11111111-2222-3333-4444-555555555555"),
-    members: ["active", "inactive", "pending"],
+    members: ["active", "inactive", "pending"]
   };
 
   const encoded = encodeTypeDescriptors([desc]);
@@ -167,7 +167,7 @@ Deno.test("Array - encode/decode round-trip", () => {
     tag: DescriptorTag.ARRAY,
     id: uuidToBytes("22222222-3333-4444-5555-666666666666"),
     elementTypeId: uuidToBytes("00000000-0000-0000-0000-000000000101"),
-    dimensions: 1,
+    dimensions: 1
   };
 
   const encoded = encodeTypeDescriptors([desc]);
@@ -179,7 +179,7 @@ Deno.test("Array - encode/decode round-trip", () => {
   assertEquals(d.dimensions, 1);
   assertEquals(
     bytesToUuid(d.elementTypeId),
-    "00000000-0000-0000-0000-000000000101",
+    "00000000-0000-0000-0000-000000000101"
   );
 });
 
@@ -188,7 +188,7 @@ Deno.test("Array - multi-dimensional encode/decode", () => {
     tag: DescriptorTag.ARRAY,
     id: uuidToBytes("33333333-4444-5555-6666-777777777777"),
     elementTypeId: uuidToBytes("00000000-0000-0000-0000-000000000104"),
-    dimensions: 3,
+    dimensions: 3
   };
 
   const encoded = encodeTypeDescriptors([desc]);
@@ -211,7 +211,7 @@ Deno.test("Tuple - encode/decode round-trip", () => {
   const desc: TupleDescriptor = {
     tag: DescriptorTag.TUPLE,
     id: uuidToBytes("44444444-5555-6666-7777-888888888888"),
-    elementTypeIds: [strId, intId, boolId],
+    elementTypeIds: [strId, intId, boolId]
   };
 
   const encoded = encodeTypeDescriptors([desc]);
@@ -239,8 +239,8 @@ Deno.test("NamedTuple - encode/decode round-trip", () => {
     id: uuidToBytes("55555555-6666-7777-8888-999999999999"),
     elements: [
       { name: "first_name", typeId: strId },
-      { name: "age", typeId: intId },
-    ],
+      { name: "age", typeId: intId }
+    ]
   };
 
   const encoded = encodeTypeDescriptors([desc]);
@@ -264,7 +264,7 @@ Deno.test("Range - encode/decode round-trip", () => {
   const desc: RangeDescriptor = {
     tag: DescriptorTag.RANGE,
     id: uuidToBytes("66666666-7777-8888-9999-aaaaaaaaaaaa"),
-    elementTypeId: uuidToBytes("00000000-0000-0000-0000-000000000104"),
+    elementTypeId: uuidToBytes("00000000-0000-0000-0000-000000000104")
   };
 
   const encoded = encodeTypeDescriptors([desc]);
@@ -275,7 +275,7 @@ Deno.test("Range - encode/decode round-trip", () => {
   assertEquals(d.tag, DescriptorTag.RANGE);
   assertEquals(
     bytesToUuid(d.elementTypeId),
-    "00000000-0000-0000-0000-000000000104",
+    "00000000-0000-0000-0000-000000000104"
   );
 });
 
@@ -283,7 +283,7 @@ Deno.test("MultiRange - encode/decode round-trip", () => {
   const desc: MultiRangeDescriptor = {
     tag: DescriptorTag.MULTI_RANGE,
     id: uuidToBytes("77777777-8888-9999-aaaa-bbbbbbbbbbbb"),
-    elementTypeId: uuidToBytes("00000000-0000-0000-0000-000000000105"),
+    elementTypeId: uuidToBytes("00000000-0000-0000-0000-000000000105")
   };
 
   const encoded = encodeTypeDescriptors([desc]);
@@ -294,7 +294,7 @@ Deno.test("MultiRange - encode/decode round-trip", () => {
   assertEquals(d.tag, DescriptorTag.MULTI_RANGE);
   assertEquals(
     bytesToUuid(d.elementTypeId),
-    "00000000-0000-0000-0000-000000000105",
+    "00000000-0000-0000-0000-000000000105"
   );
 });
 
@@ -305,12 +305,12 @@ Deno.test("MultiRange - encode/decode round-trip", () => {
 Deno.test("multiple descriptors - encode/decode sequence", () => {
   const strScalar: BaseScalarDescriptor = {
     tag: DescriptorTag.BASE_SCALAR,
-    id: uuidToBytes("00000000-0000-0000-0000-000000000101"),
+    id: uuidToBytes("00000000-0000-0000-0000-000000000101")
   };
 
   const intScalar: BaseScalarDescriptor = {
     tag: DescriptorTag.BASE_SCALAR,
-    id: uuidToBytes("00000000-0000-0000-0000-000000000104"),
+    id: uuidToBytes("00000000-0000-0000-0000-000000000104")
   };
 
   const shape: ObjectShapeDescriptor = {
@@ -321,21 +321,21 @@ Deno.test("multiple descriptors - encode/decode sequence", () => {
         flags: 0,
         cardinality: Cardinality.ONE,
         name: "name",
-        typeId: strScalar.id,
+        typeId: strScalar.id
       },
       {
         flags: 0,
         cardinality: Cardinality.AT_MOST_ONE,
         name: "count",
-        typeId: intScalar.id,
-      },
-    ],
+        typeId: intScalar.id
+      }
+    ]
   };
 
   const setDesc: SetDescriptor = {
     tag: DescriptorTag.SET,
     id: uuidToBytes("bbbbbbbb-cccc-dddd-eeee-ffffffffffff"),
-    elementTypeId: shape.id,
+    elementTypeId: shape.id
   };
 
   const descriptors: TypeDescriptor[] = [strScalar, intScalar, shape, setDesc];
@@ -351,7 +351,7 @@ Deno.test("multiple descriptors - encode/decode sequence", () => {
   const decodedSet = decoded[3] as SetDescriptor;
   assertEquals(
     bytesToUuid(decodedSet.elementTypeId),
-    "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
   );
 });
 
@@ -363,7 +363,7 @@ Deno.test("Set - encode/decode round-trip", () => {
   const desc: SetDescriptor = {
     tag: DescriptorTag.SET,
     id: uuidToBytes("88888888-9999-aaaa-bbbb-cccccccccccc"),
-    elementTypeId: uuidToBytes("00000000-0000-0000-0000-000000000101"),
+    elementTypeId: uuidToBytes("00000000-0000-0000-0000-000000000101")
   };
 
   const encoded = encodeTypeDescriptors([desc]);
@@ -374,7 +374,7 @@ Deno.test("Set - encode/decode round-trip", () => {
   assertEquals(d.tag, DescriptorTag.SET);
   assertEquals(
     bytesToUuid(d.elementTypeId),
-    "00000000-0000-0000-0000-000000000101",
+    "00000000-0000-0000-0000-000000000101"
   );
 });
 
@@ -394,7 +394,7 @@ Deno.test("buildResultDescriptors - simple object", () => {
         required: true,
         multi: false,
         columnName: "name",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["email", {
         name: "email",
@@ -402,10 +402,10 @@ Deno.test("buildResultDescriptors - simple object", () => {
         required: true,
         multi: false,
         columnName: "email",
-        edgeqlType: "str",
-      }],
+        edgeqlType: "str"
+      }]
     ]),
-    links: new Map(),
+    links: new Map()
   };
 
   const result = buildResultDescriptors(userType, ["name", "email"]);
@@ -417,7 +417,7 @@ Deno.test("buildResultDescriptors - simple object", () => {
   assertEquals(result.descriptors[0].tag, DescriptorTag.BASE_SCALAR);
   assertEquals(
     bytesToUuid(result.descriptors[0].id),
-    "00000000-0000-0000-0000-000000000101",
+    "00000000-0000-0000-0000-000000000101"
   );
 
   // Second is the object shape
@@ -442,7 +442,7 @@ Deno.test("buildResultDescriptors - empty shape", () => {
     kind: "object",
     tableName: "empty",
     properties: new Map(),
-    links: new Map(),
+    links: new Map()
   };
 
   const result = buildResultDescriptors(emptyType, []);
@@ -452,7 +452,7 @@ Deno.test("buildResultDescriptors - empty shape", () => {
   assertEquals(result.descriptors[0].tag, DescriptorTag.OBJECT_SHAPE);
   assertEquals(
     (result.descriptors[0] as ObjectShapeDescriptor).elements.length,
-    0,
+    0
   );
   assertEquals(result.descriptors[1].tag, DescriptorTag.SET);
 });
@@ -469,7 +469,7 @@ Deno.test("buildResultDescriptors - mixed scalar types", () => {
         required: true,
         multi: false,
         columnName: "name",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["age", {
         name: "age",
@@ -477,7 +477,7 @@ Deno.test("buildResultDescriptors - mixed scalar types", () => {
         required: false,
         multi: false,
         columnName: "age",
-        edgeqlType: "int32",
+        edgeqlType: "int32"
       }],
       ["active", {
         name: "active",
@@ -485,10 +485,10 @@ Deno.test("buildResultDescriptors - mixed scalar types", () => {
         required: true,
         multi: false,
         columnName: "active",
-        edgeqlType: "bool",
-      }],
+        edgeqlType: "bool"
+      }]
     ]),
-    links: new Map(),
+    links: new Map()
   };
 
   const result = buildResultDescriptors(type, ["name", "age", "active"]);
@@ -497,7 +497,7 @@ Deno.test("buildResultDescriptors - mixed scalar types", () => {
   assertEquals(result.descriptors.length, 5);
 
   const scalars = result.descriptors.filter(
-    (d) => d.tag === DescriptorTag.BASE_SCALAR,
+    d => d.tag === DescriptorTag.BASE_SCALAR
   );
   assertEquals(scalars.length, 3);
 });
@@ -518,10 +518,10 @@ Deno.test("buildResultDescriptors - nested shape with links", () => {
         required: true,
         multi: false,
         columnName: "title",
-        edgeqlType: "str",
-      }],
+        edgeqlType: "str"
+      }]
     ]),
-    links: new Map(),
+    links: new Map()
   };
 
   const userType: TypeDef = {
@@ -535,8 +535,8 @@ Deno.test("buildResultDescriptors - nested shape with links", () => {
         required: true,
         multi: false,
         columnName: "name",
-        edgeqlType: "str",
-      }],
+        edgeqlType: "str"
+      }]
     ]),
     links: new Map([
       ["posts", {
@@ -544,36 +544,36 @@ Deno.test("buildResultDescriptors - nested shape with links", () => {
         target: "Post",
         required: false,
         multi: true,
-        backlink: "author",
-      }],
-    ]),
+        backlink: "author"
+      }]
+    ])
   };
 
   const schema = new Map<string, TypeDef>([
     ["User", userType],
-    ["Post", postType],
+    ["Post", postType]
   ]);
 
   const result = buildResultDescriptors(
     userType,
     ["name", "posts"],
-    schema,
+    schema
   );
 
   // Should include: str scalar, Post ObjectShape, User ObjectShape, Set
   // str is used by both name and title (deduplicated)
   const shapes = result.descriptors.filter(
-    (d) => d.tag === DescriptorTag.OBJECT_SHAPE,
+    d => d.tag === DescriptorTag.OBJECT_SHAPE
   );
   assertEquals(shapes.length, 2); // Post shape + User shape
 
   // User shape should have a link element
-  const userShape = shapes.find((s) => {
+  const userShape = shapes.find(s => {
     const os = s as ObjectShapeDescriptor;
-    return os.elements.some((e) => e.name === "name");
+    return os.elements.some(e => e.name === "name");
   }) as ObjectShapeDescriptor;
   assertEquals(userShape !== undefined, true);
-  const postsEl = userShape.elements.find((e) => e.name === "posts");
+  const postsEl = userShape.elements.find(e => e.name === "posts");
   assertEquals(postsEl !== undefined, true);
   assertEquals(postsEl!.flags, ShapeElementFlags.LINK);
   assertEquals(postsEl!.cardinality, Cardinality.MANY);
@@ -612,7 +612,7 @@ Deno.test("ObjectShape - empty elements", () => {
   const desc: ObjectShapeDescriptor = {
     tag: DescriptorTag.OBJECT_SHAPE,
     id: uuidToBytes("99999999-aaaa-bbbb-cccc-dddddddddddd"),
-    elements: [],
+    elements: []
   };
 
   const encoded = encodeTypeDescriptors([desc]);
@@ -621,7 +621,7 @@ Deno.test("ObjectShape - empty elements", () => {
   assertEquals(decoded.length, 1);
   assertEquals(
     (decoded[0] as ObjectShapeDescriptor).elements.length,
-    0,
+    0
   );
 });
 
@@ -629,7 +629,7 @@ Deno.test("Enum - empty members", () => {
   const desc: EnumDescriptor = {
     tag: DescriptorTag.ENUM,
     id: uuidToBytes("aabbccdd-1122-3344-5566-778899aabbcc"),
-    members: [],
+    members: []
   };
 
   const encoded = encodeTypeDescriptors([desc]);
@@ -643,7 +643,7 @@ Deno.test("Tuple - empty elements", () => {
   const desc: TupleDescriptor = {
     tag: DescriptorTag.TUPLE,
     id: uuidToBytes("dddddddd-eeee-ffff-0000-111111111111"),
-    elementTypeIds: [],
+    elementTypeIds: []
   };
 
   const encoded = encodeTypeDescriptors([desc]);
@@ -652,7 +652,7 @@ Deno.test("Tuple - empty elements", () => {
   assertEquals(decoded.length, 1);
   assertEquals(
     (decoded[0] as TupleDescriptor).elementTypeIds.length,
-    0,
+    0
   );
 });
 

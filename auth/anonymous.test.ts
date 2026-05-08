@@ -16,9 +16,9 @@ async function makeProvider(opts: {
   const provider = new AuthProvider(
     {
       jwtSecret: "test-secret-key-32-bytes-minimum-len",
-      requireEmailVerification: opts.requireEmailVerification ?? false,
+      requireEmailVerification: opts.requireEmailVerification ?? false
     },
-    db,
+    db
   );
   await provider.initialize();
   return { provider, db };
@@ -66,10 +66,10 @@ Deno.test("loginAnonymous - the synthetic password is unusable for login()", asy
       () =>
         provider.login({
           email: guest.user.email,
-          password: "any-guess",
+          password: "any-guess"
         }),
       AuthError,
-      "Invalid credentials",
+      "Invalid credentials"
     );
   } finally {
     await db.close();
@@ -84,7 +84,7 @@ Deno.test("upgradeAnonymous - converts guest into a full user keeping the same i
     const guest = await provider.loginAnonymous();
     const upgraded = await provider.upgradeAnonymous(guest.user.id, {
       email: "real@test.com",
-      password: "password123",
+      password: "password123"
     });
 
     assertEquals(upgraded.user.id, guest.user.id);
@@ -102,14 +102,14 @@ Deno.test("upgradeAnonymous - upgraded user can sign in with the new password", 
     const guest = await provider.loginAnonymous();
     await provider.upgradeAnonymous(guest.user.id, {
       email: "alice@test.com",
-      password: "password123",
+      password: "password123"
     });
 
     const loggedIn = requireAuthResponse(
       await provider.login({
         email: "alice@test.com",
-        password: "password123",
-      }),
+        password: "password123"
+      })
     );
     assertEquals(loggedIn.user.id, guest.user.id);
     assertEquals(loggedIn.user.isAnonymous, false);
@@ -125,9 +125,9 @@ Deno.test("upgradeAnonymous - rejects unknown user id", async () => {
       () =>
         provider.upgradeAnonymous("00000000-0000-0000-0000-000000000000", {
           email: "real@test.com",
-          password: "password123",
+          password: "password123"
         }),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.USER_NOT_FOUND);
   } finally {
@@ -140,15 +140,15 @@ Deno.test("upgradeAnonymous - rejects when target id is already a full user", as
   try {
     const real = await provider.register({
       email: "first@test.com",
-      password: "password123",
+      password: "password123"
     });
     const err = await assertRejects(
       () =>
         provider.upgradeAnonymous(real.user.id, {
           email: "second@test.com",
-          password: "password123",
+          password: "password123"
         }),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_OPERATION);
   } finally {
@@ -161,7 +161,7 @@ Deno.test("upgradeAnonymous - rejects when email is already taken by another use
   try {
     await provider.register({
       email: "taken@test.com",
-      password: "password123",
+      password: "password123"
     });
     const guest = await provider.loginAnonymous();
 
@@ -169,9 +169,9 @@ Deno.test("upgradeAnonymous - rejects when email is already taken by another use
       () =>
         provider.upgradeAnonymous(guest.user.id, {
           email: "taken@test.com",
-          password: "password123",
+          password: "password123"
         }),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.USER_ALREADY_EXISTS);
   } finally {
@@ -187,17 +187,19 @@ Deno.test("upgradeAnonymous - rejects weak passwords before mutating any state",
       () =>
         provider.upgradeAnonymous(guest.user.id, {
           email: "real@test.com",
-          password: "x",
+          password: "x"
         }),
-      AuthError,
+      AuthError
     );
 
     // Confirm: still anonymous, no partial mutation.
     const stillGuest = requireAuthResponse(
-      await provider.login({
-        email: "real@test.com",
-        password: "password123",
-      }).catch((e) => e),
+      await provider
+        .login({
+          email: "real@test.com",
+          password: "password123"
+        })
+        .catch(e => e)
     );
     // No such user, so login throws AuthError — we just want to
     // verify the row wasn't half-written.

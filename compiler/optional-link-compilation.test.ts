@@ -19,7 +19,8 @@ function compileEdgeQL(source: string): string {
   const parser = new EdgeQLParser(source);
   const ast = parser.parse();
   const result = compiler.compile(ast);
-  if (!result.ok) throw result.error;
+  if (!result.ok)
+    throw result.error;
   return codegen.generate(result.value);
 }
 
@@ -32,7 +33,7 @@ Deno.test("optional multi-link gets COALESCE wrapper", () => {
   assertEquals(
     sql.includes("'[]'::jsonb"),
     true,
-    "SQL should contain '[]'::jsonb fallback",
+    "SQL should contain '[]'::jsonb fallback"
   );
 });
 
@@ -44,7 +45,7 @@ Deno.test("required single link does NOT get COALESCE wrapper", () => {
   assertEquals(
     sql.includes("COALESCE"),
     false,
-    "SQL should NOT contain COALESCE for required single link",
+    "SQL should NOT contain COALESCE for required single link"
   );
 });
 
@@ -57,12 +58,12 @@ Deno.test("optional multi-link preserves subquery structure with COALESCE", () =
   assertEquals(
     sql.includes("jsonb_agg"),
     true,
-    "SQL should contain jsonb_agg inside subquery",
+    "SQL should contain jsonb_agg inside subquery"
   );
   // Should have the empty array fallback
   assertEquals(
     sql.includes("'[]'::jsonb"),
     true,
-    "SQL should contain '[]'::jsonb",
+    "SQL should contain '[]'::jsonb"
   );
 });

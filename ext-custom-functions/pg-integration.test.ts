@@ -25,7 +25,7 @@ function makePool(dsn: string): ConnectionPool {
     connectionString: dsn,
     minConnections: 1,
     maxConnections: 3,
-    cleanupInterval: 0,
+    cleanupInterval: 0
   });
 }
 
@@ -40,7 +40,7 @@ function makeContext(pool: ConnectionPool): ExtensionContext {
       maxConnections: 3,
       requestTimeout: 5000,
       enableCors: false,
-      enableWebsockets: false,
+      enableWebsockets: false
     },
     logger: {
       debug: () => {},
@@ -52,8 +52,8 @@ function makeContext(pool: ConnectionPool): ExtensionContext {
       },
       withRequest: function() {
         return this;
-      },
-    } as unknown as ExtensionContext["logger"],
+      }
+    } as unknown as ExtensionContext["logger"]
   };
 }
 
@@ -76,16 +76,16 @@ Deno.test({
             name: "disc_test_add",
             args: [
               { name: "a", type: "int32", required: true },
-              { name: "b", type: "int32", required: true },
+              { name: "b", type: "int32", required: true }
             ],
             returnType: "int32",
             volatility: "immutable",
             implementation: {
               kind: "plpgsql",
-              body: "BEGIN\n  RETURN a + b;\nEND;",
-            },
-          },
-        ],
+              body: "BEGIN\n  RETURN a + b;\nEND;"
+            }
+          }
+        ]
       });
 
       // Run the setupSql directly via pool to create the function
@@ -96,7 +96,7 @@ Deno.test({
 
       // Call the function
       const result = await pool.query(
-        "SELECT disc_test_add(3, 4) AS result",
+        "SELECT disc_test_add(3, 4) AS result"
       );
 
       assertEquals(result.rows.length, 1);
@@ -112,7 +112,7 @@ Deno.test({
       await resetTestDatabase(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -135,7 +135,7 @@ Deno.test({
             args: [
               { name: "val", type: "int64", required: true },
               { name: "lo", type: "int64", required: true },
-              { name: "hi", type: "int64", required: true },
+              { name: "hi", type: "int64", required: true }
             ],
             returnType: "int64",
             volatility: "immutable",
@@ -147,11 +147,12 @@ Deno.test({
                 "  ELSIF val > hi THEN RETURN hi;",
                 "  ELSE RETURN val;",
                 "  END IF;",
-                "END;",
-              ].join("\n"),
-            },
-          },
-        ],
+                "END;"
+              ]
+                .join("\n")
+            }
+          }
+        ]
       });
 
       const setup = ext.getDatabaseSetup();
@@ -161,19 +162,19 @@ Deno.test({
 
       // Below lower bound
       const r1 = await pool.query(
-        "SELECT disc_test_clamp(-5, 0, 100) AS result",
+        "SELECT disc_test_clamp(-5, 0, 100) AS result"
       );
       assertEquals(Number(r1.rows[0]["result"]), 0);
 
       // Within range
       const r2 = await pool.query(
-        "SELECT disc_test_clamp(42, 0, 100) AS result",
+        "SELECT disc_test_clamp(42, 0, 100) AS result"
       );
       assertEquals(Number(r2.rows[0]["result"]), 42);
 
       // Above upper bound
       const r3 = await pool.query(
-        "SELECT disc_test_clamp(200, 0, 100) AS result",
+        "SELECT disc_test_clamp(200, 0, 100) AS result"
       );
       assertEquals(Number(r3.rows[0]["result"]), 100);
 
@@ -187,7 +188,7 @@ Deno.test({
       await resetTestDatabase(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -212,10 +213,10 @@ Deno.test({
             volatility: "immutable",
             implementation: {
               kind: "plpgsql",
-              body: "BEGIN\n  RETURN 'Hello, ' || username;\nEND;",
-            },
-          },
-        ],
+              body: "BEGIN\n  RETURN 'Hello, ' || username;\nEND;"
+            }
+          }
+        ]
       });
 
       const setup = ext.getDatabaseSetup();
@@ -227,7 +228,7 @@ Deno.test({
 
       // Verify it works
       const r1 = await pool.query(
-        "SELECT disc_test_greet('world') AS result",
+        "SELECT disc_test_greet('world') AS result"
       );
       assertEquals(String(r1.rows[0]["result"]), "Hello, world");
 
@@ -241,13 +242,13 @@ Deno.test({
       // Verify function no longer exists — calling it should throw
       await assertRejects(
         () => pool.query("SELECT disc_test_greet('world') AS result"),
-        Error,
+        Error
       );
     } finally {
       await resetTestDatabase(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -272,10 +273,10 @@ Deno.test({
             volatility: "immutable",
             implementation: {
               kind: "plpgsql",
-              body: "BEGIN\n  RETURN n * n;\nEND;",
-            },
-          },
-        ],
+              body: "BEGIN\n  RETURN n * n;\nEND;"
+            }
+          }
+        ]
       });
 
       const ctx = makeContext(pool);
@@ -286,14 +287,14 @@ Deno.test({
 
       // Verify the function was actually created and is callable
       const result = await pool.query(
-        "SELECT disc_test_square(7) AS result",
+        "SELECT disc_test_square(7) AS result"
       );
       assertEquals(result.rows.length, 1);
       assertEquals(Number(result.rows[0]["result"]), 49);
 
       // Verify function exists in pg_proc catalog
       const catalog = await pool.query(
-        `SELECT proname FROM pg_proc WHERE proname = 'disc_test_square'`,
+        `SELECT proname FROM pg_proc WHERE proname = 'disc_test_square'`
       );
       assertEquals(catalog.rows.length, 1);
       assertEquals(String(catalog.rows[0]["proname"]), "disc_test_square");
@@ -309,5 +310,5 @@ Deno.test({
       await resetTestDatabase(pool);
       await pool.close();
     }
-  },
+  }
 });

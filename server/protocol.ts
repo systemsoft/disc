@@ -14,7 +14,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
 
   async handleRequest(
     request: Types.QueryRequest,
-    context: Types.QueryContext,
+    context: Types.QueryContext
   ): Promise<Types.QueryResponse> {
     const startTime = Date.now();
 
@@ -23,7 +23,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       const validationErrors = this.validateRequest(request);
       if (validationErrors.length > 0) {
         return {
-          errors: validationErrors,
+          errors: validationErrors
         };
       }
 
@@ -31,7 +31,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       const result = await this.execute_edgeql_query(
         request.query,
         request.variables || {},
-        context,
+        context
       );
 
       const durationMs = Date.now() - startTime;
@@ -40,12 +40,12 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         data: result,
         extensions: {
           durationMs,
-          queryHash: this.hash_query(request.query),
-        },
+          queryHash: this.hash_query(request.query)
+        }
       };
     } catch (error) {
       log.error("Query execution error", {
-        error: error instanceof Error ? error.message : String(error),
+        error: error instanceof Error ? error.message : String(error)
       });
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
 
@@ -54,9 +54,9 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
           message: errorMessage,
           extensions: {
             code: "EXECUTION_ERROR",
-            durationMs: Date.now() - startTime,
-          },
-        }],
+            durationMs: Date.now() - startTime
+          }
+        }]
       };
     }
   }
@@ -68,7 +68,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     if (!request.query || typeof request.query !== "string") {
       errors.push({
         message: "Query is required and must be a string",
-        extensions: { code: "VALIDATION_ERROR" },
+        extensions: { code: "VALIDATION_ERROR" }
       });
     }
 
@@ -76,7 +76,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     if (request.query && request.query.length > 100_000) {
       errors.push({
         message: "Query too large (max 100KB)",
-        extensions: { code: "QUERY_TOO_LARGE" },
+        extensions: { code: "QUERY_TOO_LARGE" }
       });
     }
 
@@ -84,7 +84,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     if (request.variables && typeof request.variables !== "object") {
       errors.push({
         message: "Variables must be an object",
-        extensions: { code: "VALIDATION_ERROR" },
+        extensions: { code: "VALIDATION_ERROR" }
       });
     }
 
@@ -100,7 +100,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
   private execute_edgeql_query(
     query: string,
     variables: Record<string, any>,
-    context: Types.QueryContext,
+    context: Types.QueryContext
   ): any {
     // Mock implementation - would integrate with real EdgeQL compiler
 
@@ -124,7 +124,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         query: query.substring(0, 100),
         variables,
         sessionId: context.session.sessionId,
-        timestamp: new Date().toISOString(),
+        timestamp: new Date().toISOString()
       };
     }
   }
@@ -138,7 +138,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       errors.push({
         message: `Unbalanced braces at position ${balancedBraces.position}`,
         locations: [{ line: 1, column: balancedBraces.position }],
-        extensions: { code: "SYNTAX_ERROR" },
+        extensions: { code: "SYNTAX_ERROR" }
       });
     }
 
@@ -147,14 +147,14 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       /;\s*(drop|delete|truncate|alter)\s+/i,
       /union\s+select/i,
       /--\s*$/m,
-      /\/\*.*\*\//,
+      /\/\*.*\*\//
     ];
 
     for (const pattern of sqlInjectionPatterns) {
       if (pattern.test(query)) {
         errors.push({
           message: "Query contains potentially dangerous patterns",
-          extensions: { code: "SECURITY_ERROR" },
+          extensions: { code: "SECURITY_ERROR" }
         });
         break;
       }
@@ -170,7 +170,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
   }
 
   private check_balanced_braces(
-    query: string,
+    query: string
   ): { valid: boolean; position: number; } {
     let depth = 0;
     let position = 0;
@@ -205,15 +205,15 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       "with",
       "for",
       "describe",
-      "configure",
+      "configure"
     ];
 
-    const startsWithValid = validStartKeywords.some((keyword) => normalized.startsWith(keyword));
+    const startsWithValid = validStartKeywords.some(keyword => normalized.startsWith(keyword));
 
     if (!startsWithValid && normalized.length > 0) {
       errors.push({
         message: "Query must start with a valid EdgeQL statement",
-        extensions: { code: "SYNTAX_ERROR" },
+        extensions: { code: "SYNTAX_ERROR" }
       });
     }
 
@@ -234,9 +234,9 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
             title: "Hello World",
             content: "This is my first post!",
             published: true,
-            createdAt: "2024-01-16T14:20:00Z",
-          },
-        ],
+            createdAt: "2024-01-16T14:20:00Z"
+          }
+        ]
       },
       {
         id: "user_002",
@@ -244,8 +244,8 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         email: "billie@example.com",
         createdAt: "2024-01-20T09:15:00Z",
         active: true,
-        posts: [],
-      },
+        posts: []
+      }
     ];
   }
 
@@ -255,7 +255,7 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       name: "New User",
       email: "newuser@example.com",
       createdAt: new Date().toISOString(),
-      active: true,
+      active: true
     };
   }
 
@@ -265,14 +265,14 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       id: "user_001",
       name: "Ada Johnson Updated",
       email: "ada.updated@example.com",
-      updatedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
     };
   }
 
   private mock_delete_result(): any {
     return {
       deleted: 1,
-      id: "user_001",
+      id: "user_001"
     };
   }
 
@@ -291,20 +291,20 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
 export class GraphQLProtocolHandler implements Types.ProtocolHandler {
   handleRequest(
     _request: Types.QueryRequest,
-    _context: Types.QueryContext,
+    _context: Types.QueryContext
   ): Promise<Types.QueryResponse> {
     return Promise.resolve({
       errors: [{
         message: "GraphQL protocol not yet implemented",
-        extensions: { code: "NOT_IMPLEMENTED" },
-      }],
+        extensions: { code: "NOT_IMPLEMENTED" }
+      }]
     });
   }
 
   validateRequest(_request: Types.QueryRequest): Types.QueryError[] {
     return [{
       message: "GraphQL protocol not yet implemented",
-      extensions: { code: "NOT_IMPLEMENTED" },
+      extensions: { code: "NOT_IMPLEMENTED" }
     }];
   }
 }

@@ -13,7 +13,7 @@ Deno.test("EdgeQL Protocol - Basic Query Validation", () => {
   // Valid EdgeQL query
   const validRequest = {
     query: "select User { name, email }",
-    variables: {},
+    variables: {}
   };
 
   const validErrors = handler.validateRequest(validRequest);
@@ -22,7 +22,7 @@ Deno.test("EdgeQL Protocol - Basic Query Validation", () => {
   // Invalid query - missing query
   const invalidRequest = {
     query: "",
-    variables: {},
+    variables: {}
   };
 
   const invalidErrors = handler.validateRequest(invalidRequest);
@@ -36,7 +36,7 @@ Deno.test("EdgeQL Protocol - EdgeQL Syntax Validation", () => {
   // Unbalanced braces
   const unbalancedRequest = {
     query: "select User { name, email",
-    variables: {},
+    variables: {}
   };
 
   const errors = handler.validateRequest(unbalancedRequest);
@@ -46,7 +46,7 @@ Deno.test("EdgeQL Protocol - EdgeQL Syntax Validation", () => {
   // Invalid start keyword
   const invalidStartRequest = {
     query: "invalid User { name }",
-    variables: {},
+    variables: {}
   };
 
   const startErrors = handler.validateRequest(invalidStartRequest);
@@ -59,7 +59,7 @@ Deno.test("EdgeQL Protocol - Simple Select Query Execution", async () => {
 
   const request = {
     query: "select User { name, email }",
-    variables: {},
+    variables: {}
   };
 
   const context: Types.QueryContext = {
@@ -68,11 +68,11 @@ Deno.test("EdgeQL Protocol - Simple Select Query Execution", async () => {
       database: "test_db",
       createdAt: new Date(),
       lastActivity: new Date(),
-      variables: {},
+      variables: {}
     },
     auth: { roles: [], permissions: [] },
     requestId: "test_request",
-    startedAt: new Date(),
+    startedAt: new Date()
   };
 
   const response = await handler.handleRequest(request, context);
@@ -89,7 +89,7 @@ Deno.test("EdgeQL Protocol - Query with Variables", async () => {
 
   const request = {
     query: "select User filter .name = <str>$name",
-    variables: { name: "Ada" },
+    variables: { name: "Ada" }
   };
 
   const context: Types.QueryContext = {
@@ -98,11 +98,11 @@ Deno.test("EdgeQL Protocol - Query with Variables", async () => {
       database: "test_db",
       createdAt: new Date(),
       lastActivity: new Date(),
-      variables: {},
+      variables: {}
     },
     auth: { roles: [], permissions: [] },
     requestId: "test_request",
-    startedAt: new Date(),
+    startedAt: new Date()
   };
 
   const response = await handler.handleRequest(request, context);
@@ -118,7 +118,7 @@ Deno.test("EdgeQL Protocol - Insert Query", async () => {
 
   const request = {
     query: "insert User { name := 'John Doe', email := 'john@example.com' }",
-    variables: {},
+    variables: {}
   };
 
   const context: Types.QueryContext = {
@@ -127,11 +127,11 @@ Deno.test("EdgeQL Protocol - Insert Query", async () => {
       database: "test_db",
       createdAt: new Date(),
       lastActivity: new Date(),
-      variables: {},
+      variables: {}
     },
     auth: { roles: [], permissions: [] },
     requestId: "test_request",
-    startedAt: new Date(),
+    startedAt: new Date()
   };
 
   const response = await handler.handleRequest(request, context);
@@ -147,7 +147,7 @@ Deno.test("EdgeQL Protocol - Update Query", async () => {
 
   const request = {
     query: "update User filter .name = 'Ada' set { active := false }",
-    variables: {},
+    variables: {}
   };
 
   const context: Types.QueryContext = {
@@ -156,11 +156,11 @@ Deno.test("EdgeQL Protocol - Update Query", async () => {
       database: "test_db",
       createdAt: new Date(),
       lastActivity: new Date(),
-      variables: {},
+      variables: {}
     },
     auth: { roles: [], permissions: [] },
     requestId: "test_request",
-    startedAt: new Date(),
+    startedAt: new Date()
   };
 
   const response = await handler.handleRequest(request, context);
@@ -175,7 +175,7 @@ Deno.test("EdgeQL Protocol - Delete Query", async () => {
 
   const request = {
     query: "delete User filter .name = 'Billie'",
-    variables: {},
+    variables: {}
   };
 
   const context: Types.QueryContext = {
@@ -184,11 +184,11 @@ Deno.test("EdgeQL Protocol - Delete Query", async () => {
       database: "test_db",
       createdAt: new Date(),
       lastActivity: new Date(),
-      variables: {},
+      variables: {}
     },
     auth: { roles: [], permissions: [] },
     requestId: "test_request",
-    startedAt: new Date(),
+    startedAt: new Date()
   };
 
   const response = await handler.handleRequest(request, context);
@@ -206,7 +206,7 @@ Deno.test("EdgeQL Protocol - Parse Error Handling", async () => {
   // so it passes basic validation but fails during actual parsing
   const request = {
     query: "select User { name, @#$%^ }",
-    variables: {},
+    variables: {}
   };
 
   const context: Types.QueryContext = {
@@ -215,11 +215,11 @@ Deno.test("EdgeQL Protocol - Parse Error Handling", async () => {
       database: "test_db",
       createdAt: new Date(),
       lastActivity: new Date(),
-      variables: {},
+      variables: {}
     },
     auth: { roles: [], permissions: [] },
     requestId: "test_request",
-    startedAt: new Date(),
+    startedAt: new Date()
   };
 
   const response = await handler.handleRequest(request, context);
@@ -231,9 +231,9 @@ Deno.test("EdgeQL Protocol - Parse Error Handling", async () => {
   // Accept either PARSE_ERROR or SYNTAX_ERROR depending on which check catches it first
   const errorCode = response.errors![0].extensions?.code;
   assert(
-    errorCode === "PARSE_ERROR" || errorCode === "SYNTAX_ERROR"
-      || errorCode === "COMPILATION_ERROR",
-    `Expected PARSE_ERROR, SYNTAX_ERROR, or COMPILATION_ERROR but got ${errorCode}`,
+    errorCode === "PARSE_ERROR" || errorCode === "SYNTAX_ERROR" ||
+      errorCode === "COMPILATION_ERROR",
+    `Expected PARSE_ERROR, SYNTAX_ERROR, or COMPILATION_ERROR but got ${errorCode}`
   );
 });
 
@@ -242,7 +242,7 @@ Deno.test("EdgeQL Protocol - Dry Run Mode", async () => {
 
   const request = {
     query: "select User { name, email }",
-    variables: {},
+    variables: {}
   };
 
   const context: Types.QueryContext = {
@@ -251,11 +251,11 @@ Deno.test("EdgeQL Protocol - Dry Run Mode", async () => {
       database: "test_db",
       createdAt: new Date(),
       lastActivity: new Date(),
-      variables: {},
+      variables: {}
     },
     auth: { roles: [], permissions: [] },
     requestId: "test_request",
-    startedAt: new Date(),
+    startedAt: new Date()
   };
 
   const response = await handler.handleRequest(request, context);
@@ -271,7 +271,7 @@ Deno.test("EdgeQL Protocol - Explain Mode", async () => {
 
   const request = {
     query: "select User { name, email }",
-    variables: {},
+    variables: {}
   };
 
   const context: Types.QueryContext = {
@@ -280,11 +280,11 @@ Deno.test("EdgeQL Protocol - Explain Mode", async () => {
       database: "test_db",
       createdAt: new Date(),
       lastActivity: new Date(),
-      variables: {},
+      variables: {}
     },
     auth: { roles: [], permissions: [] },
     requestId: "test_request",
-    startedAt: new Date(),
+    startedAt: new Date()
   };
 
   const response = await handler.handleRequest(request, context);
@@ -310,7 +310,7 @@ Deno.test("EdgeQL Protocol - Schema Management", () => {
     kind: "object",
     tableName: "new_types",
     properties: new Map(),
-    links: new Map(),
+    links: new Map()
   });
 
   handler.updateSchema(newSchema);

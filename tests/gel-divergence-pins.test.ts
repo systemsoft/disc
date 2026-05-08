@@ -30,7 +30,7 @@ import { assert, assertEquals } from "@std/assert";
 // ---------------------------------------------------------------------------
 Deno.test("Gel #4408: Deno-task surface is the lint/fmt/test entry point", async () => {
   const denoJsonText = await Deno.readTextFile(
-    new URL("../deno.json", import.meta.url),
+    new URL("../deno.json", import.meta.url)
   );
   const denoJson = JSON.parse(denoJsonText) as { tasks?: Record<string, string>; };
   const tasks = denoJson.tasks ?? {};
@@ -40,7 +40,7 @@ Deno.test("Gel #4408: Deno-task surface is the lint/fmt/test entry point", async
   for (const requiredTask of ["lint", "fmt", "test", "check"]) {
     assert(
       typeof tasks[requiredTask] === "string",
-      `deno.json:tasks.${requiredTask} is missing — Disc's lint/fmt/test surface relies on it (Gel #4408 pin).`,
+      `deno.json:tasks.${requiredTask} is missing — Disc's lint/fmt/test surface relies on it (Gel #4408 pin).`
     );
   }
 
@@ -49,10 +49,10 @@ Deno.test("Gel #4408: Deno-task surface is the lint/fmt/test entry point", async
   // contract honest.
   const checkTask = tasks.check ?? "";
   assert(
-    checkTask.includes("deno task lint")
-      && checkTask.includes("deno task fmt")
-      && checkTask.includes("deno task test"),
-    `deno.json:tasks.check should compose lint + fmt + test; got: ${checkTask}`,
+    checkTask.includes("deno task lint") &&
+      checkTask.includes("deno task fmt") &&
+      checkTask.includes("deno task test"),
+    `deno.json:tasks.check should compose lint + fmt + test; got: ${checkTask}`
   );
 });
 
@@ -61,20 +61,22 @@ Deno.test("Gel #4408: no .pre-commit-config.yaml in the repo (deliberate non-ado
   // landing one trips this pin and forces a deliberate decision.
   const candidates = [
     new URL("../.pre-commit-config.yaml", import.meta.url),
-    new URL("../.pre-commit-config.yml", import.meta.url),
+    new URL("../.pre-commit-config.yml", import.meta.url)
   ];
   for (const url of candidates) {
     let exists = true;
     try {
       await Deno.stat(url);
     } catch (e) {
-      if (e instanceof Deno.errors.NotFound) exists = false;
-      else throw e;
+      if (e instanceof Deno.errors.NotFound)
+        exists = false;
+      else
+        throw e;
     }
     assertEquals(
       exists,
       false,
-      `${url.pathname} exists — Disc deliberately doesn't adopt the pre-commit framework (Gel #4408). Remove the file or update this pin.`,
+      `${url.pathname} exists — Disc deliberately doesn't adopt the pre-commit framework (Gel #4408). Remove the file or update this pin.`
     );
   }
 });
@@ -94,7 +96,7 @@ Deno.test("Gel #4408: no .pre-commit-config.yaml in the repo (deliberate non-ado
 // ---------------------------------------------------------------------------
 Deno.test("Gel #4172: binary protocol server uses TCP/TLS listening, not HTTP serve", async () => {
   const src = await Deno.readTextFile(
-    new URL("../protocol/binary-server.ts", import.meta.url),
+    new URL("../protocol/binary-server.ts", import.meta.url)
   );
 
   // The current implementation listens via `Deno.listenTls` (TLS-on) or
@@ -104,24 +106,24 @@ Deno.test("Gel #4172: binary protocol server uses TCP/TLS listening, not HTTP se
   // the structural shape captured here.
   assert(
     src.includes("Deno.listenTls"),
-    "BinaryProtocolServer should expose a TLS listener (TCP+TLS+ALPN edgedb-binary)",
+    "BinaryProtocolServer should expose a TLS listener (TCP+TLS+ALPN edgedb-binary)"
   );
   assert(
     !src.includes("Deno.serve"),
-    "BinaryProtocolServer must not use Deno.serve — that would be HTTP tunneling (Gel #4172 pin).",
+    "BinaryProtocolServer must not use Deno.serve — that would be HTTP tunneling (Gel #4172 pin)."
   );
 });
 
 Deno.test("Gel #4172: binary protocol server advertises ALPN edgedb-binary", async () => {
   const src = await Deno.readTextFile(
-    new URL("../protocol/binary-server.ts", import.meta.url),
+    new URL("../protocol/binary-server.ts", import.meta.url)
   );
   // SCRAM is wired through the binary protocol via the TCP+TLS path.
   // ALPN "edgedb-binary" is what gates client negotiation onto that path —
   // dropping it is what would force HTTP tunneling, so we pin it here.
   assert(
     src.includes("\"edgedb-binary\""),
-    "binary-server should advertise ALPN edgedb-binary for upstream client compatibility",
+    "binary-server should advertise ALPN edgedb-binary for upstream client compatibility"
   );
 });
 
@@ -156,22 +158,23 @@ Deno.test("Gel #4172: binary protocol server advertises ALPN edgedb-binary", asy
 // ---------------------------------------------------------------------------
 Deno.test("Gel #7360: login no-such-user response matches wrong-password shape", async () => {
   const src = await Deno.readTextFile(
-    new URL("../auth/provider.ts", import.meta.url),
+    new URL("../auth/provider.ts", import.meta.url)
   );
   // Both branches must throw `INVALID_CREDENTIALS` at status 401 with
   // the literal "Invalid credentials" message — no leaking nuance.
   const noUserMatches = (src.match(
-    /reason:\s*"no_such_user"[\s\S]{0,400}?AuthErrorCode\.INVALID_CREDENTIALS/g,
-  ) ?? []).length;
+    /reason:\s*"no_such_user"[\s\S]{0,400}?AuthErrorCode\.INVALID_CREDENTIALS/g
+  ) ?? [])
+    .length;
   assert(
     noUserMatches >= 1,
-    "no-such-user branch must throw INVALID_CREDENTIALS (anti-enumeration parity)",
+    "no-such-user branch must throw INVALID_CREDENTIALS (anti-enumeration parity)"
   );
   // Both branches must precede the throw with `runDummyCompare` so the
   // wall-clock timing matches a real bcrypt verify.
   assert(
     src.includes("await this.runDummyCompare(credentials.password);"),
-    "no-such-user branch must burn a dummy bcrypt compare for timing parity",
+    "no-such-user branch must burn a dummy bcrypt compare for timing parity"
   );
 });
 
@@ -193,7 +196,7 @@ Deno.test("Gel #3170: CLI does not log 'disconnected' on shutdown", async () => 
   const cliFiles = [
     "../cli/shell.ts",
     "../cli/commands.ts",
-    "../cli/main.ts",
+    "../cli/main.ts"
   ];
   for (const rel of cliFiles) {
     const src = await Deno.readTextFile(new URL(rel, import.meta.url));
@@ -202,11 +205,11 @@ Deno.test("Gel #3170: CLI does not log 'disconnected' on shutdown", async () => 
     // since those don't reach stdout.
     const codeOnly = src.replace(/\/\/.*$/gm, "").replace(
       /\/\*[\s\S]*?\*\//g,
-      "",
+      ""
     );
     assert(
       !/console\.\w+\([^)]*[Dd]isconnected/.test(codeOnly),
-      `${rel} contains a disconnect-style console call — Gel #3170 pin`,
+      `${rel} contains a disconnect-style console call — Gel #3170 pin`
     );
   }
 });
@@ -226,14 +229,14 @@ Deno.test("Gel #3170: CLI does not log 'disconnected' on shutdown", async () => 
 // ---------------------------------------------------------------------------
 Deno.test("Gel #5158: disc init writes project files before PG setup", async () => {
   const src = await Deno.readTextFile(
-    new URL("../cli/init.ts", import.meta.url),
+    new URL("../cli/init.ts", import.meta.url)
   );
   const filesIdx = src.indexOf("await this.createProjectFiles");
   const pgIdx = src.indexOf("await this.initializePostgres");
   assert(filesIdx > 0 && pgIdx > 0, "expected both calls in init.ts");
   assert(
     filesIdx < pgIdx,
-    "createProjectFiles must run before initializePostgres so a PG failure leaves a resumable project",
+    "createProjectFiles must run before initializePostgres so a PG failure leaves a resumable project"
   );
 });
 
@@ -248,20 +251,20 @@ Deno.test("Gel #5158: disc init writes project files before PG setup", async () 
 // ---------------------------------------------------------------------------
 Deno.test("Gel #5480: database connect retries on transient failure", async () => {
   const src = await Deno.readTextFile(
-    new URL("../lib/database.ts", import.meta.url),
+    new URL("../lib/database.ts", import.meta.url)
   );
   // Look for `for (let attempt = 1; attempt <= maxRetries; attempt++)` —
   // the retry loop's structural shape.
   assert(
     /for\s*\(\s*let\s+attempt\s*=\s*1\s*;\s*attempt\s*<=\s*maxRetries/.test(
-      src,
+      src
     ),
-    "DatabaseConnection.connect must keep its retry loop (Gel #5480 pin)",
+    "DatabaseConnection.connect must keep its retry loop (Gel #5480 pin)"
   );
   // Default of 3 attempts — operators can override but the floor stays.
   assert(
     /this\.config\.maxRetries\s*\|\|\s*3/.test(src),
-    "DatabaseConnection retry default must remain 3 (Gel #5480 pin)",
+    "DatabaseConnection retry default must remain 3 (Gel #5480 pin)"
   );
 });
 
@@ -281,13 +284,13 @@ Deno.test("Gel #5480: database connect retries on transient failure", async () =
 // ---------------------------------------------------------------------------
 Deno.test("Gel #8762: disc init resumability hint stays in place", async () => {
   const src = await Deno.readTextFile(
-    new URL("../cli/init.ts", import.meta.url),
+    new URL("../cli/init.ts", import.meta.url)
   );
   // The hint must mention `disc start` and reference the project dir
   // so the operator knows exactly what to run.
   assert(
     /disc start/.test(src) && /Project files were created/.test(src),
-    "init.ts catch block must surface the 'disc start' resume hint (Gel #8762 pin)",
+    "init.ts catch block must surface the 'disc start' resume hint (Gel #8762 pin)"
   );
 });
 
@@ -302,17 +305,17 @@ Deno.test("Gel #8762: disc init resumability hint stays in place", async () => {
 // ---------------------------------------------------------------------------
 Deno.test("Gel #7972: brandColor reaches bgcolor on auth email CTAs", async () => {
   const src = await Deno.readTextFile(
-    new URL("../auth/email-templates.ts", import.meta.url),
+    new URL("../auth/email-templates.ts", import.meta.url)
   );
   // The CTA-button helper must compose the bg via `branding.brandColor`
   // as the source and emit it via `bgcolor="${bg}"` on the `<td>`.
   assert(
     /branding\.brandColor/.test(src),
-    "email-templates.ts must read brandColor from the branding config (Gel #7972 pin)",
+    "email-templates.ts must read brandColor from the branding config (Gel #7972 pin)"
   );
   assert(
     /bgcolor="\$\{[^}]+\}"/.test(src),
-    "email-templates.ts must emit a `bgcolor` attribute on CTA cells (Gel #7972 pin)",
+    "email-templates.ts must emit a `bgcolor` attribute on CTA cells (Gel #7972 pin)"
   );
 });
 
@@ -335,19 +338,19 @@ Deno.test("Gel #7972: brandColor reaches bgcolor on auth email CTAs", async () =
 // ---------------------------------------------------------------------------
 Deno.test("Gel #5713: data migration INSERTs use raw conn.query (no buffering layer)", async () => {
   const src = await Deno.readTextFile(
-    new URL("../migration/data-migration.ts", import.meta.url),
+    new URL("../migration/data-migration.ts", import.meta.url)
   );
   // `runMigration` and `rollbackMigration` must call conn.query(query, params)
   // directly — no per-statement compile/marshal wrapper.
   assert(
     /conn\.query\(query, params\)/.test(src),
-    "data-migration.ts must call conn.query(query, params) directly (Gel #5713 pin)",
+    "data-migration.ts must call conn.query(query, params) directly (Gel #5713 pin)"
   );
   // No internal compilation/buffering machinery — the runner is a thin
   // pass-through. Forbid the obvious wrapper names.
   assert(
     !/compileEdgeQL|recompile|bufferStatement/.test(src),
-    "data-migration.ts must not introduce a compile/buffer layer in the INSERT path (Gel #5713 pin)",
+    "data-migration.ts must not introduce a compile/buffer layer in the INSERT path (Gel #5713 pin)"
   );
 });
 
@@ -362,18 +365,18 @@ Deno.test("Gel #5713: data migration INSERTs use raw conn.query (no buffering la
 // ---------------------------------------------------------------------------
 Deno.test("Gel #4319: migration apply runs in-process (no subprocess fork)", async () => {
   const src = await Deno.readTextFile(
-    new URL("../migration/engine.ts", import.meta.url),
+    new URL("../migration/engine.ts", import.meta.url)
   );
   // Forbid Deno.Command / Deno.run inside engine.ts — those would
   // signal a subprocess-spawning migration applier.
   assert(
     !/new Deno\.Command|Deno\.run\(/.test(src),
-    "engine.ts must not spawn subprocesses for migration apply (Gel #4319 pin)",
+    "engine.ts must not spawn subprocesses for migration apply (Gel #4319 pin)"
   );
   // Single-transaction apply: pool.transaction wraps the whole DDL batch.
   assert(
     /pool\.transaction\(async \(conn\)/.test(src),
-    "engine.ts must apply DDL in a single in-process transaction (Gel #4319 pin)",
+    "engine.ts must apply DDL in a single in-process transaction (Gel #4319 pin)"
   );
 });
 
@@ -396,16 +399,16 @@ Deno.test("Gel #4319: migration apply runs in-process (no subprocess fork)", asy
 // ---------------------------------------------------------------------------
 Deno.test("Gel #5322: differ caches reverse subtype map + inheritance walks", async () => {
   const src = await Deno.readTextFile(
-    new URL("../migration/differ.ts", import.meta.url),
+    new URL("../migration/differ.ts", import.meta.url)
   );
   assert(
     /interface DiffCache/.test(src) && /getCache\(allTypes\)/.test(src),
-    "differ.ts must expose a per-allTypes DiffCache via getCache() (Gel #5322 pin)",
+    "differ.ts must expose a per-allTypes DiffCache via getCache() (Gel #5322 pin)"
   );
   assert(
-    /computePropertiesWithInheritance/.test(src)
-      && /computeLinksWithInheritance/.test(src),
-    "differ.ts must split memoized inheritance walks from compute helpers (Gel #5322 pin)",
+    /computePropertiesWithInheritance/.test(src) &&
+      /computeLinksWithInheritance/.test(src),
+    "differ.ts must split memoized inheritance walks from compute helpers (Gel #5322 pin)"
   );
 });
 
@@ -416,17 +419,17 @@ Deno.test("Gel #3872: Deno.serve TLS surface does not expose cipher selection", 
   // shared listen options). A future API addition like `cipherSuites`
   // or `tlsCiphers` would land as a typed property and trip this pin.
   const httpServerSrc = Deno.readTextFileSync(
-    new URL("../server/http.ts", import.meta.url),
+    new URL("../server/http.ts", import.meta.url)
   );
   // Disc passes only { hostname, port, cert, key } to Deno.serve when TLS
   // is enabled. If a future bundle adds cipher config it has to touch this
   // call site, which is also where the pin lives.
   assert(
-    !httpServerSrc.includes("cipherSuites")
-      && !httpServerSrc.includes("tlsCiphers")
-      && !httpServerSrc.includes("tls_ciphers"),
-    "server/http.ts mentions cipher-suite config — Deno doesn't expose this surface "
-      + "(Gel #3872 pin). Remove the reference or update the divergence note.",
+    !httpServerSrc.includes("cipherSuites") &&
+      !httpServerSrc.includes("tlsCiphers") &&
+      !httpServerSrc.includes("tls_ciphers"),
+    "server/http.ts mentions cipher-suite config — Deno doesn't expose this surface " +
+      "(Gel #3872 pin). Remove the reference or update the divergence note."
   );
 });
 
@@ -445,7 +448,7 @@ Deno.test("Gel #3872: Deno.serve TLS surface does not expose cipher selection", 
 // ---------------------------------------------------------------------------
 Deno.test("Gel #7103: auth tables carry ON DELETE CASCADE on user_id FKs", async () => {
   const src = await Deno.readTextFile(
-    new URL("../auth/provider.ts", import.meta.url),
+    new URL("../auth/provider.ts", import.meta.url)
   );
   // All user-bound auth tables must declare ON DELETE CASCADE.
   const requiredFkPattern = /FOREIGN KEY \(user_id\) REFERENCES users\(id\) ON DELETE CASCADE/g;
@@ -456,19 +459,19 @@ Deno.test("Gel #7103: auth tables carry ON DELETE CASCADE on user_id FKs", async
   // (magic_link_signup_tokens has pending_email instead of user_id.)
   assert(
     matches.length >= 9,
-    `Expected ≥9 user_id ON DELETE CASCADE FKs in auth/provider.ts; found ${matches.length} (Gel #7103 pin).`,
+    `Expected ≥9 user_id ON DELETE CASCADE FKs in auth/provider.ts; found ${matches.length} (Gel #7103 pin).`
   );
   // The Bundle MM gap-fix specifically. If a future refactor moves the
   // webauthn_challenges declaration, the constraint must follow.
   const challengesBlock = src.match(
-    /CREATE TABLE IF NOT EXISTS webauthn_challenges \(([\s\S]*?)\n\s*\)/,
+    /CREATE TABLE IF NOT EXISTS webauthn_challenges \(([\s\S]*?)\n\s*\)/
   );
   assert(
-    challengesBlock !== null
-      && /FOREIGN KEY \(user_id\) REFERENCES users\(id\) ON DELETE CASCADE/.test(
-        challengesBlock[1],
+    challengesBlock !== null &&
+      /FOREIGN KEY \(user_id\) REFERENCES users\(id\) ON DELETE CASCADE/.test(
+        challengesBlock[1]
       ),
-    "webauthn_challenges must declare ON DELETE CASCADE on user_id (Gel #7103 pin).",
+    "webauthn_challenges must declare ON DELETE CASCADE on user_id (Gel #7103 pin)."
   );
 });
 
@@ -491,26 +494,26 @@ Deno.test("Gel #7103: auth tables carry ON DELETE CASCADE on user_id FKs", async
 // ---------------------------------------------------------------------------
 Deno.test("Gel #5504: INSERT access-control is binary allow/deny (no WHERE injection)", async () => {
   const src = await Deno.readTextFile(
-    new URL("../compiler/compiler.ts", import.meta.url),
+    new URL("../compiler/compiler.ts", import.meta.url)
   );
   // Locate the InsertStatement branch of applyAccessControl.
   const insertBranch = src.match(
-    /case "InsertStatement": \{[\s\S]*?return statement;\s*\}/,
+    /case "InsertStatement": \{[\s\S]*?return statement;\s*\}/
   );
   assert(
     insertBranch !== null,
-    "applyAccessControl must have an InsertStatement branch (Gel #5504 pin).",
+    "applyAccessControl must have an InsertStatement branch (Gel #5504 pin)."
   );
   const body = insertBranch![0];
   // Branch must throw on denial (not silently filter) and must not
   // build a WhereClause / mutate `statement.where`.
   assert(
     /CompilationError/.test(body),
-    "INSERT access denial must throw CompilationError, not return a filtered statement (Gel #5504 pin).",
+    "INSERT access denial must throw CompilationError, not return a filtered statement (Gel #5504 pin)."
   );
   assert(
     !/WhereClause/.test(body) && !/where: \{/.test(body),
-    "INSERT branch must not synthesize a WHERE clause — that would break UNLESS CONFLICT detection (Gel #5504 pin).",
+    "INSERT branch must not synthesize a WHERE clause — that would break UNLESS CONFLICT detection (Gel #5504 pin)."
   );
 });
 
@@ -530,27 +533,27 @@ Deno.test("Gel #5504: INSERT access-control is binary allow/deny (no WHERE injec
 // ---------------------------------------------------------------------------
 Deno.test("Gel #8811: stdlib SQL only declares pure scalar wrappers (no table reads)", async () => {
   const src = await Deno.readTextFile(
-    new URL("../lib/stdlib-sql.ts", import.meta.url),
+    new URL("../lib/stdlib-sql.ts", import.meta.url)
   );
   // Every CREATE OR REPLACE FUNCTION block must be marked IMMUTABLE.
   const funcBlocks = src.match(
-    /CREATE OR REPLACE FUNCTION [\s\S]+?LANGUAGE SQL[^;]*;/g,
+    /CREATE OR REPLACE FUNCTION [\s\S]+?LANGUAGE SQL[^;]*;/g
   ) ?? [];
   assert(
     funcBlocks.length > 0,
-    "stdlib-sql.ts should declare at least one wrapper function (Gel #8811 pin).",
+    "stdlib-sql.ts should declare at least one wrapper function (Gel #8811 pin)."
   );
   for (const block of funcBlocks) {
     assert(
       /IMMUTABLE/.test(block),
-      `stdlib function block must be marked IMMUTABLE: ${block.split("\n")[0]} (Gel #8811 pin).`,
+      `stdlib function block must be marked IMMUTABLE: ${block.split("\n")[0]} (Gel #8811 pin).`
     );
     // No FROM clause referencing a real table. SELECT-with-no-FROM is
     // fine ("SELECT decode(...)") — this catches `SELECT ... FROM users`
     // or any other table read inside a stdlib function.
     assert(
       !/FROM\s+(?!\(|VALUES)\w+/i.test(block),
-      `stdlib function must not read tables: ${block.split("\n")[0]} (Gel #8811 pin).`,
+      `stdlib function must not read tables: ${block.split("\n")[0]} (Gel #8811 pin).`
     );
   }
 });
@@ -567,29 +570,29 @@ Deno.test("Gel #8811: stdlib SQL only declares pure scalar wrappers (no table re
 // ---------------------------------------------------------------------------
 Deno.test("Gel #5911: cli/api.ts is reachable through top-level mod.ts", async () => {
   const modSrc = await Deno.readTextFile(
-    new URL("../mod.ts", import.meta.url),
+    new URL("../mod.ts", import.meta.url)
   );
   assert(
     /export \* as CLI from "\.\/cli\/api\.ts"/.test(modSrc),
-    "mod.ts must re-export CLI from ./cli/api.ts (Gel #5911 pin).",
+    "mod.ts must re-export CLI from ./cli/api.ts (Gel #5911 pin)."
   );
   // The api.ts file itself must exist and export at least the core
   // command set. Source-level check so it's caught even if the
   // top-level re-export is wired but the underlying file regresses.
   const apiSrc = await Deno.readTextFile(
-    new URL("../cli/api.ts", import.meta.url),
+    new URL("../cli/api.ts", import.meta.url)
   );
   for (
     const fn of [
       "export function init",
       "export function migrate",
       "export function serve",
-      "export function shell",
+      "export function shell"
     ]
   ) {
     assert(
       apiSrc.includes(fn),
-      `cli/api.ts must declare ${fn}() (Gel #5911 pin).`,
+      `cli/api.ts must declare ${fn}() (Gel #5911 pin).`
     );
   }
 });
@@ -613,21 +616,21 @@ Deno.test("Gel #5911: cli/api.ts is reachable through top-level mod.ts", async (
 // ---------------------------------------------------------------------------
 Deno.test("Gel #3406: downloader honors DISC_PG_BINARY_DIR + DISC_OFFLINE env vars", async () => {
   const src = await Deno.readTextFile(
-    new URL("../postgres/downloader.ts", import.meta.url),
+    new URL("../postgres/downloader.ts", import.meta.url)
   );
   assert(
     /Deno\.env\.get\("DISC_PG_BINARY_DIR"\)/.test(src),
-    "downloader.ts must read DISC_PG_BINARY_DIR (Gel #3406 pin).",
+    "downloader.ts must read DISC_PG_BINARY_DIR (Gel #3406 pin)."
   );
   assert(
     /Deno\.env\.get\("DISC_OFFLINE"\)/.test(src),
-    "downloader.ts must read DISC_OFFLINE (Gel #3406 pin).",
+    "downloader.ts must read DISC_OFFLINE (Gel #3406 pin)."
   );
   // The DISC_OFFLINE error must include the env-var name so operators
   // can grep for it in logs.
   assert(
     /DISC_OFFLINE=1/.test(src),
-    "downloader.ts DISC_OFFLINE error must reference the env var name (Gel #3406 pin).",
+    "downloader.ts DISC_OFFLINE error must reference the env var name (Gel #3406 pin)."
   );
 });
 
@@ -652,28 +655,28 @@ Deno.test("Gel #3406: downloader honors DISC_PG_BINARY_DIR + DISC_OFFLINE env va
 // ---------------------------------------------------------------------------
 Deno.test("Gel #2651: instance name is derived from project context, not a CLI flag", async () => {
   const cliMain = await Deno.readTextFile(
-    new URL("../cli/main.ts", import.meta.url),
+    new URL("../cli/main.ts", import.meta.url)
   );
   // The CLI help text + argv parser shouldn't list a `--instance`
   // flag. (`instance` as a noun in help text is fine — the assertion
   // is specifically against an `--instance` argument.)
   assert(
     !/--instance(?:\s|=|\b)/.test(cliMain),
-    "cli/main.ts must not surface a --instance flag — Disc derives instance from project context (Gel #2651 pin).",
+    "cli/main.ts must not surface a --instance flag — Disc derives instance from project context (Gel #2651 pin)."
   );
   const ctxSrc = await Deno.readTextFile(
-    new URL("../lib/project-context.ts", import.meta.url),
+    new URL("../lib/project-context.ts", import.meta.url)
   );
   // The project-context resolver must derive `instanceName` from
   // either the explicit `instance_name` in disc.toml or the project
   // name fallback. Pinning both means a refactor that drops the
   // fallback (forcing operators to set the field manually) trips here.
   assert(
-    /instanceName: fields\.instanceName \?\? projectName/.test(ctxSrc)
-      || /const instanceName = fields\.instanceName \?\? projectName/.test(
-        ctxSrc,
+    /instanceName: fields\.instanceName \?\? projectName/.test(ctxSrc) ||
+      /const instanceName = fields\.instanceName \?\? projectName/.test(
+        ctxSrc
       ),
-    "project-context.ts must default instanceName to projectName when unset (Gel #2651 pin).",
+    "project-context.ts must default instanceName to projectName when unset (Gel #2651 pin)."
   );
 });
 
@@ -734,12 +737,12 @@ Deno.test("Gel #5641: multi-module schema with cross-module refs compiles cleanl
 
   const ast = new SDLParser(sdl).parse();
   const moduleDecls = ast.declarations.filter(
-    (d) => d.kind === "ModuleDeclaration",
+    d => d.kind === "ModuleDeclaration"
   );
   assertEquals(
     moduleDecls.length,
     3,
-    "Expected 3 modules (default + pass_v1 + chained) (Gel #5641 pin).",
+    "Expected 3 modules (default + pass_v1 + chained) (Gel #5641 pin)."
   );
 
   const conv = new SDLConverter();
@@ -750,11 +753,11 @@ Deno.test("Gel #5641: multi-module schema with cross-module refs compiles cleanl
   // one CreateType operation; a regression that loses one of them
   // (e.g. by dropping the cross-module type reference during
   // converter resolution) trips this assertion.
-  const createTypes = ops.filter((op) => op.kind === "CreateType");
+  const createTypes = ops.filter(op => op.kind === "CreateType");
   assertEquals(
     createTypes.length,
     4,
-    `Expected 4 CreateType ops, got ${createTypes.length} (Gel #5641 pin).`,
+    `Expected 4 CreateType ops, got ${createTypes.length} (Gel #5641 pin).`
   );
 
   // DDL generation must succeed and emit a CREATE TABLE for each
@@ -764,11 +767,11 @@ Deno.test("Gel #5641: multi-module schema with cross-module refs compiles cleanl
   const ddl = new DDLGenerator();
   ddl.setEnumScalars(new SchemaDiffer().enumScalarNames(modules));
   const stmts = ddl.generateDDL(ops);
-  const createTables = stmts.filter((s) => /CREATE TABLE\b/.test(s));
+  const createTables = stmts.filter(s => /CREATE TABLE\b/.test(s));
   assertEquals(
     createTables.length,
     4,
-    `Expected 4 CREATE TABLE statements, got ${createTables.length} (Gel #5641 pin).`,
+    `Expected 4 CREATE TABLE statements, got ${createTables.length} (Gel #5641 pin).`
   );
 });
 
@@ -828,30 +831,30 @@ Deno.test("Gel #4215: dropping `extending A` emits DropProperty for inherited fi
   // carrying at least one DropProperty change for the lost
   // inherited `label` field.
   const alterB = ops.find(
-    (op) => op.kind === "AlterType" && "typeName" in op && op.typeName === "B",
+    op => op.kind === "AlterType" && "typeName" in op && op.typeName === "B"
   ) as
     | { operations: Array<{ kind: string; propertyName?: string; }>; }
     | undefined;
   assert(
     alterB !== undefined,
-    "Differ must emit an AlterType op for B when its extending clause changes (Gel #4215).",
+    "Differ must emit an AlterType op for B when its extending clause changes (Gel #4215)."
   );
   const dropLabel = alterB.operations.find(
-    (sub) => sub.kind === "DropProperty" && sub.propertyName === "label",
+    sub => sub.kind === "DropProperty" && sub.propertyName === "label"
   );
   assert(
     dropLabel !== undefined,
-    "AlterType B must include a DropProperty op for the inherited `label` field (Gel #4215).",
+    "AlterType B must include a DropProperty op for the inherited `label` field (Gel #4215)."
   );
 
   // DDL gen must emit ALTER TABLE … DROP COLUMN for the lost prop.
   const ddl = new DDLGenerator();
   ddl.setEnumScalars(new SchemaDiffer().enumScalarNames(afterMods));
   const stmts = ddl.generateDDL(ops);
-  const dropCol = stmts.find((s) => /ALTER TABLE\s+b\s+DROP COLUMN[\s\S]*\blabel\b/i.test(s));
+  const dropCol = stmts.find(s => /ALTER TABLE\s+b\s+DROP COLUMN[\s\S]*\blabel\b/i.test(s));
   assert(
     dropCol !== undefined,
-    `DDL gen must emit ALTER TABLE b DROP COLUMN label; got: ${stmts.join(" | ")} (Gel #4215).`,
+    `DDL gen must emit ALTER TABLE b DROP COLUMN label; got: ${stmts.join(" | ")} (Gel #4215).`
   );
 });
 
@@ -883,25 +886,25 @@ Deno.test("Gel #4215: dropping `extending A` emits DropProperty for inherited fi
 // ---------------------------------------------------------------------------
 Deno.test("Gel #2204: schema-reload pipeline (SchemaManager → server → protocol) stays wired", async () => {
   const smSrc = await Deno.readTextFile(
-    new URL("../migration/schema-manager.ts", import.meta.url),
+    new URL("../migration/schema-manager.ts", import.meta.url)
   );
   // SchemaManager fires onSchemaChange after each apply.
   assert(
     /onSchemaChange\?\.\(this\.currentSchema\)/.test(smSrc),
-    "schema-manager.ts must invoke onSchemaChange after schema reload (Gel #2204 pin).",
+    "schema-manager.ts must invoke onSchemaChange after schema reload (Gel #2204 pin)."
   );
 
   const serverSrc = await Deno.readTextFile(
-    new URL("../server/server.ts", import.meta.url),
+    new URL("../server/server.ts", import.meta.url)
   );
   // DiscServer wires onSchemaChange to its own updateSchema delegate.
   assert(
     /this\.protocolHandler\.updateSchema/.test(serverSrc),
-    "server.ts must forward updateSchema to the protocol handler (Gel #2204 pin).",
+    "server.ts must forward updateSchema to the protocol handler (Gel #2204 pin)."
   );
 
   const protoSrc = await Deno.readTextFile(
-    new URL("../server/edgeql-protocol.ts", import.meta.url),
+    new URL("../server/edgeql-protocol.ts", import.meta.url)
   );
   // EdgeQLProtocol.updateSchema rebuilds the compiler and clears caches.
   // The order matters — clearing first, then rebuilding, would race
@@ -910,7 +913,7 @@ Deno.test("Gel #2204: schema-reload pipeline (SchemaManager → server → proto
   assert(
     /updateSchema\(schema: Context\.Schema\): void \{[\s\S]*?this\.compiler = this\.createCompiler\(schema\);[\s\S]*?this\.compilationCache\.clear\(\);[\s\S]*?this\.parseCache\.clear\(\);/
       .test(protoSrc),
-    "edgeql-protocol.ts updateSchema must rebuild the compiler and clear both caches (Gel #2204 pin).",
+    "edgeql-protocol.ts updateSchema must rebuild the compiler and clear both caches (Gel #2204 pin)."
   );
 });
 
@@ -933,12 +936,12 @@ Deno.test("Gel #2204: schema-reload pipeline (SchemaManager → server → proto
 // ---------------------------------------------------------------------------
 Deno.test("Gel #4901 + #5699: release CI pushes Docker image to ghcr.io with :version + :latest tags", async () => {
   const wf = await Deno.readTextFile(
-    new URL("../.github/workflows/release.yml", import.meta.url),
+    new URL("../.github/workflows/release.yml", import.meta.url)
   );
   // Workflow must declare a docker job that logs into ghcr.io.
   assert(
     /docker:/.test(wf) && /registry: ghcr\.io/.test(wf),
-    "release.yml must include a docker job that logs into ghcr.io (Gel #5699 pin).",
+    "release.yml must include a docker job that logs into ghcr.io (Gel #5699 pin)."
   );
   // Build-and-push step must tag both `:<version>` and `:latest`
   // from the same image build — this is what closes #4901's lockstep
@@ -946,11 +949,11 @@ Deno.test("Gel #4901 + #5699: release CI pushes Docker image to ghcr.io with :ve
   assert(
     /ghcr\.io\/systemsoft\/disc:\$\{\{ steps\.version\.outputs\.version \}\}/
       .test(wf),
-    "release.yml must tag the image with the version output (Gel #5699 pin).",
+    "release.yml must tag the image with the version output (Gel #5699 pin)."
   );
   assert(
     /ghcr\.io\/systemsoft\/disc:latest/.test(wf),
-    "release.yml must also tag the image with :latest in the same push (Gel #4901 pin).",
+    "release.yml must also tag the image with :latest in the same push (Gel #4901 pin)."
   );
 });
 
@@ -979,7 +982,7 @@ Deno.test("Gel #6598: Logger.child(extra) supports arbitrary structured fields (
   configureLogging({
     level: "INFO",
     format: "json",
-    output: (line) => captured.push(line),
+    output: line => captured.push(line)
   });
 
   const base = new Logger("test");
@@ -989,33 +992,33 @@ Deno.test("Gel #6598: Logger.child(extra) supports arbitrary structured fields (
   assertEquals(
     captured.length,
     1,
-    "Logger should emit exactly one entry (Gel #6598 pin).",
+    "Logger should emit exactly one entry (Gel #6598 pin)."
   );
   const entry = JSON.parse(captured[0]) as Record<string, unknown>;
   assertEquals(
     entry.tenant,
     "acme-corp",
-    "Tenant field from child() must reach the emitted entry (Gel #6598 pin).",
+    "Tenant field from child() must reach the emitted entry (Gel #6598 pin)."
   );
   assertEquals(
     entry.region,
     "us-west",
-    "Other child() fields must also reach the emitted entry (Gel #6598 pin).",
+    "Other child() fields must also reach the emitted entry (Gel #6598 pin)."
   );
   assertEquals(
     entry.durationMs,
     42,
-    "Per-call extras must merge alongside child() fields (Gel #6598 pin).",
+    "Per-call extras must merge alongside child() fields (Gel #6598 pin)."
   );
 
   // Source-level pin so a refactor that removes `child` from the API
   // surface trips here too — captured only via runtime above.
   const src = await Deno.readTextFile(
-    new URL("../lib/logger.ts", import.meta.url),
+    new URL("../lib/logger.ts", import.meta.url)
   );
   assert(
     /child\(extra: Record<string, unknown>\): Logger/.test(src),
-    "lib/logger.ts must keep `child(extra)` on the Logger surface (Gel #6598 pin).",
+    "lib/logger.ts must keep `child(extra)` on the Logger surface (Gel #6598 pin)."
   );
 
   // Restore default config so subsequent tests aren't affected by
@@ -1040,25 +1043,25 @@ Deno.test("Gel #6598: Logger.child(extra) supports arbitrary structured fields (
 Deno.test("Gel #5190: Disc has a single trunk (no semver-major release branches to backport between)", async () => {
   // version.txt must carry a ChronVer-shaped date, not a semver-major.
   const versionRaw = await Deno.readTextFile(
-    new URL("../version.txt", import.meta.url),
+    new URL("../version.txt", import.meta.url)
   );
   const version = versionRaw.trim();
   assert(
     /^\d{4}\.\d{2}\.\d{2}$/.test(version),
-    `version.txt must be ChronVer (YYYY.MM.DD); got "${version}" (Gel #5190 pin).`,
+    `version.txt must be ChronVer (YYYY.MM.DD); got "${version}" (Gel #5190 pin).`
   );
 
   // The CHANGELOG release headers should match the same shape — no
   // `vX.0.0` or `vX.Y.Z` anchors that would suggest a semver-major
   // model. Skip the [Unreleased] line.
   const changelog = await Deno.readTextFile(
-    new URL("../CHANGELOG.md", import.meta.url),
+    new URL("../CHANGELOG.md", import.meta.url)
   );
   const releaseHeaders = changelog.match(/^## v[\d.]+/gm) ?? [];
   for (const header of releaseHeaders) {
     assert(
       /^## v\d{4}\.\d{2}\.\d{2}/.test(header),
-      `CHANGELOG release header "${header}" should be ChronVer-shaped (Gel #5190 pin).`,
+      `CHANGELOG release header "${header}" should be ChronVer-shaped (Gel #5190 pin).`
     );
   }
 });
@@ -1084,7 +1087,7 @@ Deno.test("Gel #5190: Disc has a single trunk (no semver-major release branches 
 // ---------------------------------------------------------------------------
 Deno.test("Gel #6697: stdlib is idempotent CREATE OR REPLACE — no versioned schema swap needed", async () => {
   const src = await Deno.readTextFile(
-    new URL("../lib/stdlib-sql.ts", import.meta.url),
+    new URL("../lib/stdlib-sql.ts", import.meta.url)
   );
   // Every wrapper function must use CREATE OR REPLACE — that's what
   // makes the bootstrap idempotent + version-free. Plain CREATE
@@ -1093,19 +1096,19 @@ Deno.test("Gel #6697: stdlib is idempotent CREATE OR REPLACE — no versioned sc
   const funcDecls = src.match(/CREATE (?:OR REPLACE )?FUNCTION /g) ?? [];
   assert(
     funcDecls.length > 0,
-    "stdlib-sql.ts must declare at least one function (Gel #6697 pin).",
+    "stdlib-sql.ts must declare at least one function (Gel #6697 pin)."
   );
   for (const decl of funcDecls) {
     assert(
       decl.includes("OR REPLACE"),
-      `stdlib function declarations must use CREATE OR REPLACE FUNCTION; got "${decl.trim()}" (Gel #6697 pin).`,
+      `stdlib function declarations must use CREATE OR REPLACE FUNCTION; got "${decl.trim()}" (Gel #6697 pin).`
     );
   }
   // `bootstrapStdlib` runs unconditionally — no `if (currentVersion < N)`
   // gate. The function exists and runs on server boot.
   assert(
     /export async function bootstrapStdlib/.test(src),
-    "lib/stdlib-sql.ts must export bootstrapStdlib() (Gel #6697 pin).",
+    "lib/stdlib-sql.ts must export bootstrapStdlib() (Gel #6697 pin)."
   );
 });
 
@@ -1146,7 +1149,7 @@ Deno.test("Gel #6432: `disc admin list-policies` is a pure SDL introspection com
   assertEquals(
     policies.has("Doc"),
     true,
-    "collectPoliciesFromSdl must surface policies on each type (Gel #6432).",
+    "collectPoliciesFromSdl must surface policies on each type (Gel #6432)."
   );
   const docPolicies = policies.get("Doc")!;
   assertEquals(docPolicies.length >= 1, true);
@@ -1157,11 +1160,11 @@ Deno.test("Gel #6432: `disc admin list-policies` is a pure SDL introspection com
   // Source-level pin for the CLI entry point — cli/main.ts must route
   // `admin list-policies` to `adminCommand.listPolicies(...)`.
   const main = await Deno.readTextFile(
-    new URL("../cli/main.ts", import.meta.url),
+    new URL("../cli/main.ts", import.meta.url)
   );
   assert(
     /case "list-policies":[\s\S]*?adminCommand\.listPolicies/.test(main),
-    "cli/main.ts must route `admin list-policies` to adminCommand.listPolicies (Gel #6432 pin).",
+    "cli/main.ts must route `admin list-policies` to adminCommand.listPolicies (Gel #6432 pin)."
   );
 });
 
@@ -1185,7 +1188,7 @@ Deno.test("Gel #6432: `disc admin list-policies` is a pure SDL introspection com
 // ---------------------------------------------------------------------------
 Deno.test("Gel #8909: auth tables evolve via idempotent CREATE TABLE + post-CREATE migrations", async () => {
   const src = await Deno.readTextFile(
-    new URL("../auth/provider.ts", import.meta.url),
+    new URL("../auth/provider.ts", import.meta.url)
   );
   // Every auth-table create uses CREATE TABLE IF NOT EXISTS — no
   // version-conditional CREATE that would require a major-version
@@ -1193,7 +1196,7 @@ Deno.test("Gel #8909: auth tables evolve via idempotent CREATE TABLE + post-CREA
   const createCount = (src.match(/CREATE TABLE IF NOT EXISTS/g) ?? []).length;
   assert(
     createCount >= 9,
-    `Expected ≥9 CREATE TABLE IF NOT EXISTS statements (sessions, webauthn_*, recovery_codes, magic_*, mfa_*, roles, user_roles); found ${createCount} (Gel #8909 pin).`,
+    `Expected ≥9 CREATE TABLE IF NOT EXISTS statements (sessions, webauthn_*, recovery_codes, magic_*, mfa_*, roles, user_roles); found ${createCount} (Gel #8909 pin).`
   );
 
   // The Bundle MM idempotent FK migration pattern stays in place —
@@ -1203,7 +1206,7 @@ Deno.test("Gel #8909: auth tables evolve via idempotent CREATE TABLE + post-CREA
   assert(
     /DO \$\$[\s\S]*?webauthn_challenges_user_id_fkey[\s\S]*?ALTER TABLE webauthn_challenges/
       .test(src),
-    "auth/provider.ts must keep the idempotent FK-add migration block (Bundle MM pattern; Gel #8909 pin).",
+    "auth/provider.ts must keep the idempotent FK-add migration block (Bundle MM pattern; Gel #8909 pin)."
   );
 });
 
@@ -1222,7 +1225,7 @@ Deno.test("Gel #8909: auth tables evolve via idempotent CREATE TABLE + post-CREA
 // ---------------------------------------------------------------------------
 Deno.test("Gel #1772 + #1461: RFC 1000 op coverage — every required kind exists in migration/types.ts", async () => {
   const src = await Deno.readTextFile(
-    new URL("../migration/types.ts", import.meta.url),
+    new URL("../migration/types.ts", import.meta.url)
   );
   // Required op kinds per RFC 1000:
   //   - object types: CreateType, DropType, AlterType
@@ -1258,13 +1261,13 @@ Deno.test("Gel #1772 + #1461: RFC 1000 op coverage — every required kind exist
     "AddEnumValue",
     "RecreateScalar",
     "CreateGlobal",
-    "DropGlobal",
+    "DropGlobal"
   ];
 
   for (const kind of required) {
     assert(
       new RegExp(`kind: "${kind}"`).test(src),
-      `migration/types.ts must declare a "${kind}" op kind (Gel #1772/#1461 RFC 1000 pin).`,
+      `migration/types.ts must declare a "${kind}" op kind (Gel #1772/#1461 RFC 1000 pin).`
     );
   }
 });
@@ -1284,11 +1287,11 @@ Deno.test("Gel #1772 + #1461: RFC 1000 op coverage — every required kind exist
 // ---------------------------------------------------------------------------
 Deno.test("Gel #6083: docs/migrations.md carries the branch-workflow recipes", async () => {
   const src = await Deno.readTextFile(
-    new URL("../docs/migrations.md", import.meta.url),
+    new URL("../docs/migrations.md", import.meta.url)
   );
   assert(
     /## Branch Workflows \(gh\/geldata#6083\)/.test(src),
-    "docs/migrations.md must keep the 'Branch Workflows' section heading (Gel #6083 pin).",
+    "docs/migrations.md must keep the 'Branch Workflows' section heading (Gel #6083 pin)."
   );
   // Each recipe heading should be present — they're the contract
   // the README + cross-references assume.
@@ -1297,12 +1300,12 @@ Deno.test("Gel #6083: docs/migrations.md carries the branch-workflow recipes", a
       "Recipe: rapid prototyping with `disc db push`",
       "Recipe: feature branch with schema changes",
       "Recipe: combining migrations + data transformations",
-      "Recipe: rolling back a feature branch's migrations",
+      "Recipe: rolling back a feature branch's migrations"
     ]
   ) {
     assert(
       src.includes(heading),
-      `docs/migrations.md must keep '${heading}' recipe (Gel #6083 pin).`,
+      `docs/migrations.md must keep '${heading}' recipe (Gel #6083 pin).`
     );
   }
 });
@@ -1322,45 +1325,45 @@ Deno.test("Gel #6083: docs/migrations.md carries the branch-workflow recipes", a
 // ---------------------------------------------------------------------------
 Deno.test("Gel #6432 slice 3: per-policy disable threads from HTTP header to evaluator", async () => {
   const httpSrc = await Deno.readTextFile(
-    new URL("../server/http.ts", import.meta.url),
+    new URL("../server/http.ts", import.meta.url)
   );
   // The header parser must be admin-gated and produce a Set.
   assert(
-    /X-Disc-Disable-Policies/.test(httpSrc)
-      && /disabledPolicies = new Set\(names\)/.test(httpSrc),
-    "server/http.ts must parse X-Disc-Disable-Policies into a Set (Gel #6432 slice 3 pin).",
+    /X-Disc-Disable-Policies/.test(httpSrc) &&
+      /disabledPolicies = new Set\(names\)/.test(httpSrc),
+    "server/http.ts must parse X-Disc-Disable-Policies into a Set (Gel #6432 slice 3 pin)."
   );
   assert(
     /disableHeader && callerIsAdmin/.test(httpSrc),
-    "server/http.ts must admin-gate the disabled-policies header (Gel #6432 slice 3 pin).",
+    "server/http.ts must admin-gate the disabled-policies header (Gel #6432 slice 3 pin)."
   );
 
   const protoSrc = await Deno.readTextFile(
-    new URL("../server/edgeql-protocol.ts", import.meta.url),
+    new URL("../server/edgeql-protocol.ts", import.meta.url)
   );
   // The protocol handler must thread `disabledPolicies` from
   // QueryContext into the AccessContext so the evaluator sees it.
   assert(
     /accessCtx\.disabledPolicies = context\.disabledPolicies/.test(protoSrc),
-    "edgeql-protocol.ts must thread disabledPolicies into the AccessContext (Gel #6432 slice 3 pin).",
+    "edgeql-protocol.ts must thread disabledPolicies into the AccessContext (Gel #6432 slice 3 pin)."
   );
   // The compilation cache key must include the disabled set so a
   // disabled-policies call doesn't share a cache slot with a regular
   // call.
   assert(
     /\|disabled=/.test(protoSrc),
-    "edgeql-protocol.ts compilation cache key must embed the disabled-policies set (Gel #6432 slice 3 pin).",
+    "edgeql-protocol.ts compilation cache key must embed the disabled-policies set (Gel #6432 slice 3 pin)."
   );
 
   const evalSrc = await Deno.readTextFile(
-    new URL("../access/evaluator.ts", import.meta.url),
+    new URL("../access/evaluator.ts", import.meta.url)
   );
   // The evaluator must filter on the qualified `<TypeName>.<policy_name>`
   // shape and short-circuit before policy evaluation.
   assert(
-    /context\.disabledPolicies/.test(evalSrc)
-      && /\$\{p\.objectType \?\? "__global__"\}\.\$\{p\.name\}/.test(evalSrc),
-    "access/evaluator.ts must filter disabledPolicies via qualified <Type>.<name> matching (Gel #6432 slice 3 pin).",
+    /context\.disabledPolicies/.test(evalSrc) &&
+      /\$\{p\.objectType \?\? "__global__"\}\.\$\{p\.name\}/.test(evalSrc),
+    "access/evaluator.ts must filter disabledPolicies via qualified <Type>.<name> matching (Gel #6432 slice 3 pin)."
   );
 });
 
@@ -1382,27 +1385,27 @@ Deno.test("Gel #6432 slice 3: per-policy disable threads from HTTP header to eva
 // ---------------------------------------------------------------------------
 Deno.test("Gel #6432 slice 4: `disc admin test-policy` runs a policy in isolation", async () => {
   const adminSrc = await Deno.readTextFile(
-    new URL("../cli/admin.ts", import.meta.url),
+    new URL("../cli/admin.ts", import.meta.url)
   );
   // Exported testPolicyImpl is the testable surface — pure function
   // taking opts + an emit callback.
   assert(
     /export async function testPolicyImpl/.test(adminSrc),
-    "cli/admin.ts must export testPolicyImpl (Gel #6432 slice 4 pin).",
+    "cli/admin.ts must export testPolicyImpl (Gel #6432 slice 4 pin)."
   );
   // The AccessPolicy AST collector must also be exported so tests
   // can verify the AST shape independent of the evaluator path.
   assert(
     /export function collectAccessPolicyAst/.test(adminSrc),
-    "cli/admin.ts must export collectAccessPolicyAst (Gel #6432 slice 4 pin).",
+    "cli/admin.ts must export collectAccessPolicyAst (Gel #6432 slice 4 pin)."
   );
 
   const mainSrc = await Deno.readTextFile(
-    new URL("../cli/main.ts", import.meta.url),
+    new URL("../cli/main.ts", import.meta.url)
   );
   assert(
     /case "test-policy":[\s\S]*?adminCommand\.testPolicy/.test(mainSrc),
-    "cli/main.ts must route `admin test-policy` to adminCommand.testPolicy (Gel #6432 slice 4 pin).",
+    "cli/main.ts must route `admin test-policy` to adminCommand.testPolicy (Gel #6432 slice 4 pin)."
   );
 });
 
@@ -1421,21 +1424,21 @@ Deno.test("Gel #6432 slice 4: `disc admin test-policy` runs a policy in isolatio
 // ---------------------------------------------------------------------------
 Deno.test("Bundle ZZ-4: Dockerfile.bundled does not use deprecated apt-key", async () => {
   const src = await Deno.readTextFile(
-    new URL("../Dockerfile.bundled", import.meta.url),
+    new URL("../Dockerfile.bundled", import.meta.url)
   );
   // `apt-key` was deprecated in Debian 11 + removed in Debian 12,
   // which the current denoland/deno:latest base is built on. Using
   // it produces `exit code: 127` ("command not found").
   assert(
     !/apt-key\s+add/.test(src),
-    "Dockerfile.bundled must not use `apt-key add` (deprecated in Debian 11, removed in 12). "
-      + "Use the modern keyring approach with `signed-by=` (Bundle ZZ-4 pin).",
+    "Dockerfile.bundled must not use `apt-key add` (deprecated in Debian 11, removed in 12). " +
+      "Use the modern keyring approach with `signed-by=` (Bundle ZZ-4 pin)."
   );
   // The modern approach uses `signed-by=` in the sources.list entry
   // — pin asserts the new shape stays in place.
   assert(
     /signed-by=/.test(src),
-    "Dockerfile.bundled must declare the PG repo with `signed-by=...` (Bundle ZZ-4 pin).",
+    "Dockerfile.bundled must declare the PG repo with `signed-by=...` (Bundle ZZ-4 pin)."
   );
 });
 
@@ -1456,14 +1459,14 @@ Deno.test("Bundle ZZ-4: Dockerfile.bundled does not use deprecated apt-key", asy
 // ---------------------------------------------------------------------------
 Deno.test("Bundle ZZ-2: Dockerfile.bundled COPY path matches an explicit DENO_DIR", async () => {
   const src = await Deno.readTextFile(
-    new URL("../Dockerfile.bundled", import.meta.url),
+    new URL("../Dockerfile.bundled", import.meta.url)
   );
   // The deps stage must set DENO_DIR explicitly so the cache lives
   // at a known location independent of upstream image defaults.
   const denoDirMatch = src.match(/ENV DENO_DIR=(\S+)/);
   assert(
     denoDirMatch !== null,
-    "Dockerfile.bundled must set ENV DENO_DIR explicitly (Bundle ZZ-2 pin).",
+    "Dockerfile.bundled must set ENV DENO_DIR explicitly (Bundle ZZ-2 pin)."
   );
   const denoDir = denoDirMatch![1];
 
@@ -1471,17 +1474,17 @@ Deno.test("Bundle ZZ-2: Dockerfile.bundled COPY path matches an explicit DENO_DI
   const copyMatch = src.match(/COPY --from=deps (\S+) (\S+)/);
   assert(
     copyMatch !== null,
-    "Dockerfile.bundled must carry a COPY --from=deps line (Bundle ZZ-2 pin).",
+    "Dockerfile.bundled must carry a COPY --from=deps line (Bundle ZZ-2 pin)."
   );
   assertEquals(
     copyMatch![1],
     denoDir,
-    `COPY --from=deps source must match DENO_DIR (${denoDir}) (Bundle ZZ-2 pin).`,
+    `COPY --from=deps source must match DENO_DIR (${denoDir}) (Bundle ZZ-2 pin).`
   );
   assertEquals(
     copyMatch![2],
     denoDir,
-    `COPY --from=deps target must match DENO_DIR (${denoDir}) (Bundle ZZ-2 pin).`,
+    `COPY --from=deps target must match DENO_DIR (${denoDir}) (Bundle ZZ-2 pin).`
   );
 });
 
@@ -1501,24 +1504,24 @@ Deno.test("Bundle ZZ-2: Dockerfile.bundled COPY path matches an explicit DENO_DI
 // ---------------------------------------------------------------------------
 Deno.test("Bundle ZZ: cross-compile build fails loud when PG staging produces 0 files", async () => {
   const src = await Deno.readTextFile(
-    new URL("../cli/build.ts", import.meta.url),
+    new URL("../cli/build.ts", import.meta.url)
   );
   // The gate method must exist on BuildCommand.
   assert(
     /assertEmbeddedPgPresent\(/.test(src),
-    "build.ts must declare assertEmbeddedPgPresent (Bundle ZZ pin).",
+    "build.ts must declare assertEmbeddedPgPresent (Bundle ZZ pin)."
   );
   // It must be invoked from execute() with the file count + source dir.
   assert(
     /this\.assertEmbeddedPgPresent\(/.test(src),
-    "build.ts execute() must call this.assertEmbeddedPgPresent (Bundle ZZ pin).",
+    "build.ts execute() must call this.assertEmbeddedPgPresent (Bundle ZZ pin)."
   );
   // The catch block must re-throw on cross-compile rather than
   // silently swallow.
   assert(
     /if \(options\.platform\) \{[\s\S]*?throw new Error\(\s*\n?\s*`PG staging failed/
       .test(src),
-    "build.ts execute() catch must re-throw when --platform is set (Bundle ZZ pin).",
+    "build.ts execute() catch must re-throw when --platform is set (Bundle ZZ pin)."
   );
 });
 
@@ -1535,12 +1538,12 @@ Deno.test("Bundle ZZ: cross-compile build fails loud when PG staging produces 0 
 // ---------------------------------------------------------------------------
 Deno.test("Gel #9117: postgres downloader fails fast on Windows with a clear message", async () => {
   const src = await Deno.readTextFile(
-    new URL("../postgres/downloader.ts", import.meta.url),
+    new URL("../postgres/downloader.ts", import.meta.url)
   );
   assert(
-    /os === "windows"/.test(src)
-      && /Windows support not yet implemented/.test(src),
-    "downloader.ts must throw an explicit Windows-not-supported error (Gel #9117 pin).",
+    /os === "windows"/.test(src) &&
+      /Windows support not yet implemented/.test(src),
+    "downloader.ts must throw an explicit Windows-not-supported error (Gel #9117 pin)."
   );
 });
 
@@ -1558,21 +1561,21 @@ Deno.test("Gel #9117: postgres downloader fails fast on Windows with a clear mes
 // ---------------------------------------------------------------------------
 Deno.test("Gel #4308: stdlib is single-trunk + idempotent (no minor-upgrade swap needed)", async () => {
   const src = await Deno.readTextFile(
-    new URL("../lib/stdlib-sql.ts", import.meta.url),
+    new URL("../lib/stdlib-sql.ts", import.meta.url)
   );
   // Every function definition must use CREATE OR REPLACE so a
   // re-run picks up the latest body without manual swap.
   const createCount = (src.match(/CREATE OR REPLACE FUNCTION/g) ?? []).length;
   assert(
     createCount > 0,
-    "stdlib-sql.ts must declare CREATE OR REPLACE FUNCTION wrappers (Gel #4308 pin).",
+    "stdlib-sql.ts must declare CREATE OR REPLACE FUNCTION wrappers (Gel #4308 pin)."
   );
   // No bare CREATE FUNCTION (would fail on re-apply).
   const bareCreate = (src.match(/CREATE FUNCTION(?! OR REPLACE)/g) ?? []).length;
   assertEquals(
     bareCreate,
     0,
-    `stdlib-sql.ts must not use bare CREATE FUNCTION — found ${bareCreate} (Gel #4308 pin).`,
+    `stdlib-sql.ts must not use bare CREATE FUNCTION — found ${bareCreate} (Gel #4308 pin).`
   );
   // No version-suffixed siblings — search for files like
   // `stdlib-sql-v1.ts` etc. The lib directory should have a single
@@ -1586,7 +1589,7 @@ Deno.test("Gel #4308: stdlib is single-trunk + idempotent (no minor-upgrade swap
   // Two entries are allowed: stdlib-sql.ts + stdlib-sql.test.ts.
   assert(
     libEntries.length <= 2,
-    `lib/ must not carry version-suffixed stdlib files — found ${libEntries.join(", ")} (Gel #4308 pin).`,
+    `lib/ must not carry version-suffixed stdlib files — found ${libEntries.join(", ")} (Gel #4308 pin).`
   );
 });
 
@@ -1604,24 +1607,24 @@ Deno.test("Gel #4806: PR preview environments are deferred (release pipeline shi
   // The release workflow exists and produces artifacts — that's the
   // structural reality. PR previews would be a separate workflow.
   const releaseSrc = await Deno.readTextFile(
-    new URL("../.github/workflows/release.yml", import.meta.url),
+    new URL("../.github/workflows/release.yml", import.meta.url)
   );
   // Release workflow ships binaries (4 platforms) + Docker image.
   assert(
-    /tags:\s*\n\s*-\s*['"]?v\*['"]?/.test(releaseSrc)
-      || /tags:\s*\[\s*['"]v\*['"]/.test(releaseSrc),
-    "release.yml must trigger on v* tag pushes (Gel #4806 pin — release pipeline shape).",
+    /tags:\s*\n\s*-\s*['"]?v\*['"]?/.test(releaseSrc) ||
+      /tags:\s*\[\s*['"]v\*['"]/.test(releaseSrc),
+    "release.yml must trigger on v* tag pushes (Gel #4806 pin — release pipeline shape)."
   );
   // Docker job from Bundle QQ pushes to ghcr.io.
   assert(
     /ghcr\.io/.test(releaseSrc),
-    "release.yml must push Docker image to ghcr.io (Gel #4806 pin).",
+    "release.yml must push Docker image to ghcr.io (Gel #4806 pin)."
   );
   // No PR-preview workflow file exists — deferred.
   let hasPreviewWorkflow = false;
   for await (
     const entry of Deno.readDir(
-      new URL("../.github/workflows/", import.meta.url),
+      new URL("../.github/workflows/", import.meta.url)
     )
   ) {
     if (/preview|uffizzi|coherence/i.test(entry.name)) {
@@ -1630,7 +1633,7 @@ Deno.test("Gel #4806: PR preview environments are deferred (release pipeline shi
   }
   assert(
     !hasPreviewWorkflow,
-    "no PR-preview workflow file should exist yet (Gel #4806 deferred-pin).",
+    "no PR-preview workflow file should exist yet (Gel #4806 deferred-pin)."
   );
 });
 
@@ -1647,7 +1650,7 @@ Deno.test("Gel #4806: PR preview environments are deferred (release pipeline shi
 // ---------------------------------------------------------------------------
 Deno.test("Gel #3534: server binds one port per protocol (single-port-per-protocol shape)", async () => {
   const binarySrc = await Deno.readTextFile(
-    new URL("../protocol/binary-server.ts", import.meta.url),
+    new URL("../protocol/binary-server.ts", import.meta.url)
   );
   // The binary server uses Deno.listenTls / Deno.listen on a single
   // listener — count is exactly one per call site.
@@ -1657,7 +1660,7 @@ Deno.test("Gel #3534: server binds one port per protocol (single-port-per-protoc
   // `if/else` branch in `start()`); each is referenced once.
   assert(
     tlsListens === 1 && plainListens === 1,
-    `binary-server.ts must bind exactly one listener per branch — found ${tlsListens} TLS / ${plainListens} plain (Gel #3534 pin).`,
+    `binary-server.ts must bind exactly one listener per branch — found ${tlsListens} TLS / ${plainListens} plain (Gel #3534 pin).`
   );
 });
 
@@ -1676,7 +1679,7 @@ Deno.test("Gel #3534: server binds one port per protocol (single-port-per-protoc
 // ---------------------------------------------------------------------------
 Deno.test("Gel #7724: auth extension bootstrap is idempotent (extension upgrade = re-run bootstrap)", async () => {
   const src = await Deno.readTextFile(
-    new URL("../auth/provider.ts", import.meta.url),
+    new URL("../auth/provider.ts", import.meta.url)
   );
   // Strip JS line comments before counting so "// The CREATE TABLE
   // above ..." doesn't count as a SQL statement.
@@ -1688,12 +1691,12 @@ Deno.test("Gel #7724: auth extension bootstrap is idempotent (extension upgrade 
   assertEquals(
     allCreates,
     ifNotExists,
-    `auth/provider.ts must use IF NOT EXISTS on every CREATE TABLE — found ${allCreates} CREATE / ${ifNotExists} IF NOT EXISTS (Gel #7724 pin).`,
+    `auth/provider.ts must use IF NOT EXISTS on every CREATE TABLE — found ${allCreates} CREATE / ${ifNotExists} IF NOT EXISTS (Gel #7724 pin).`
   );
   // At least 9 tables (matches the existing #8909 pin's lower bound).
   assert(
     ifNotExists >= 9,
-    `auth/provider.ts must declare ≥9 idempotent CREATE TABLE blocks (Gel #7724 pin) — found ${ifNotExists}.`,
+    `auth/provider.ts must declare ≥9 idempotent CREATE TABLE blocks (Gel #7724 pin) — found ${ifNotExists}.`
   );
 });
 
@@ -1712,20 +1715,20 @@ Deno.test("Gel #7724: auth extension bootstrap is idempotent (extension upgrade 
 // ---------------------------------------------------------------------------
 Deno.test("Gel #3510: schema-manager auto-registers id as uuid on every type", async () => {
   const src = await Deno.readTextFile(
-    new URL("../migration/schema-manager.ts", import.meta.url),
+    new URL("../migration/schema-manager.ts", import.meta.url)
   );
   // The implicit-id block must declare an `id` property of type
   // `uuid` with `required: true`. The exact phrasing in the comment
   // is also pinned because it documents the guarantee for users.
   assert(
     /Start with implicit id property/.test(src),
-    "schema-manager.ts must keep the implicit-id comment (Gel #3510 pin).",
+    "schema-manager.ts must keep the implicit-id comment (Gel #3510 pin)."
   );
   assert(
     /properties\.set\("id", \{[\s\S]*?type: "uuid"[\s\S]*?required: true/.test(
-      src,
+      src
     ),
-    "schema-manager.ts must auto-register id: uuid required: true (Gel #3510 pin).",
+    "schema-manager.ts must auto-register id: uuid required: true (Gel #3510 pin)."
   );
 });
 
@@ -1744,11 +1747,11 @@ Deno.test("Gel #3510: schema-manager auto-registers id as uuid on every type", a
 // ---------------------------------------------------------------------------
 Deno.test("Gel #5505 + #6517: compilation cache embeds access context (one compile per query+role)", async () => {
   const src = await Deno.readTextFile(
-    new URL("../server/edgeql-protocol.ts", import.meta.url),
+    new URL("../server/edgeql-protocol.ts", import.meta.url)
   );
   assert(
     /this\.compilationCache = new QueryCache/.test(src),
-    "edgeql-protocol.ts must own a QueryCache for compiled SQL (Gel #5505/#6517 pin).",
+    "edgeql-protocol.ts must own a QueryCache for compiled SQL (Gel #5505/#6517 pin)."
   );
   // The cache lookup must include the access context — otherwise two
   // calls with different roles would share the same compiled SQL and
@@ -1756,7 +1759,7 @@ Deno.test("Gel #5505 + #6517: compilation cache embeds access context (one compi
   // mention the access context.
   assert(
     /access context when policies enabled|accessCtx|ctxHash/i.test(src),
-    "edgeql-protocol.ts compilation cache key must include access context (Gel #5505/#6517 pin).",
+    "edgeql-protocol.ts compilation cache key must include access context (Gel #5505/#6517 pin)."
   );
 });
 
@@ -1773,25 +1776,25 @@ Deno.test("Gel #5505 + #6517: compilation cache embeds access context (one compi
 // ---------------------------------------------------------------------------
 Deno.test("Gel #1634: connection pool pre-warms minConnections + reuses idle on acquire", async () => {
   const src = await Deno.readTextFile(
-    new URL("../lib/connection-pool.ts", import.meta.url),
+    new URL("../lib/connection-pool.ts", import.meta.url)
   );
   // The warm-up loop must allocate `minConnections` connections at
   // initialize time, push them onto the idle list, and `Promise.all`
   // them so initialize() doesn't return until they're ready.
   assert(
     /for \(let i = 0; i < this\.config\.minConnections!; i\+\+\)/.test(src),
-    "connection-pool.ts initialize() must loop minConnections times to warm the pool (Gel #1634 pin).",
+    "connection-pool.ts initialize() must loop minConnections times to warm the pool (Gel #1634 pin)."
   );
   assert(
-    /this\.idleConnections\.push\(conn\)/.test(src)
-      && /await Promise\.all\(promises\)/.test(src),
-    "connection-pool.ts initialize() must push warm conns onto idleConnections + await all (Gel #1634 pin).",
+    /this\.idleConnections\.push\(conn\)/.test(src) &&
+      /await Promise\.all\(promises\)/.test(src),
+    "connection-pool.ts initialize() must push warm conns onto idleConnections + await all (Gel #1634 pin)."
   );
   // The acquire path must reuse idle connections before creating new
   // ones — otherwise the warm-up has no effect.
   assert(
     /while \(this\.idleConnections\.length > 0\) \{/.test(src),
-    "connection-pool.ts acquire() must reuse idle connections before creating new ones (Gel #1634 pin).",
+    "connection-pool.ts acquire() must reuse idle connections before creating new ones (Gel #1634 pin)."
   );
 });
 
@@ -1805,7 +1808,7 @@ Deno.test("Gel #1634: connection pool pre-warms minConnections + reuses idle on 
 // ---------------------------------------------------------------------------
 Deno.test("Gel #6127: docs/testing.md carries the test-author guide", async () => {
   const src = await Deno.readTextFile(
-    new URL("../docs/testing.md", import.meta.url),
+    new URL("../docs/testing.md", import.meta.url)
   );
   for (
     const heading of [
@@ -1814,18 +1817,18 @@ Deno.test("Gel #6127: docs/testing.md carries the test-author guide", async () =
       "## Test categories",
       "## Authoring new tests",
       "## Env isolation",
-      "## PG-backed tests",
+      "## PG-backed tests"
     ]
   ) {
     assert(
       src.includes(heading),
-      `docs/testing.md must keep '${heading}' section (Gel #6127 pin).`,
+      `docs/testing.md must keep '${heading}' section (Gel #6127 pin).`
     );
   }
   // Cross-link to the in-repo notes doc must stay in place.
   assert(
     src.includes("tests/TESTING.md"),
-    "docs/testing.md must cross-link to tests/TESTING.md (Gel #6127 pin).",
+    "docs/testing.md must cross-link to tests/TESTING.md (Gel #6127 pin)."
   );
 });
 
@@ -1839,32 +1842,32 @@ Deno.test("Gel #6127: docs/testing.md carries the test-author guide", async () =
 // ---------------------------------------------------------------------------
 Deno.test("Gel #6119/#5820/#5819: every UI nav entry is documented in admin-ui.md", async () => {
   const layoutSrc = await Deno.readTextFile(
-    new URL("../ui/src/routes/+layout.svelte", import.meta.url),
+    new URL("../ui/src/routes/+layout.svelte", import.meta.url)
   );
   const docSrc = await Deno.readTextFile(
-    new URL("../docs/admin-ui.md", import.meta.url),
+    new URL("../docs/admin-ui.md", import.meta.url)
   );
   // Pull every nav `label: '...'` from the layout. Order in the
   // layout determines reading order in the doc — but the pin only
   // asserts presence (each label should be a top-level `## ` or
   // `### ` heading anywhere in the doc).
   const labels = [...layoutSrc.matchAll(/label:\s*['"]([^'"]+)['"]/g)].map(
-    (m) => m[1],
+    m => m[1]
   );
   assert(
     labels.length >= 8,
-    `+layout.svelte must declare at least 8 nav labels (Gel #6119 pin) — found ${labels.length}.`,
+    `+layout.svelte must declare at least 8 nav labels (Gel #6119 pin) — found ${labels.length}.`
   );
   for (const label of labels) {
     // Heading match — case-insensitive, allows `## Dashboard` /
     // `### Dashboard` / `## Dashboard (...)` etc.
     const headingRegex = new RegExp(
       `^#{2,3}\\s+${label.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&")}\\b`,
-      "im",
+      "im"
     );
     assert(
       headingRegex.test(docSrc),
-      `docs/admin-ui.md must document the '${label}' nav entry (Gel #6119/#5820/#5819 pin).`,
+      `docs/admin-ui.md must document the '${label}' nav entry (Gel #6119/#5820/#5819 pin).`
     );
   }
 });
@@ -1884,22 +1887,22 @@ Deno.test("Gel #6119/#5820/#5819: every UI nav entry is documented in admin-ui.m
 // ---------------------------------------------------------------------------
 Deno.test("Gel #7382: docs/index.md carries a Searching section", async () => {
   const src = await Deno.readTextFile(
-    new URL("../docs/index.md", import.meta.url),
+    new URL("../docs/index.md", import.meta.url)
   );
   assert(
     /## Searching/.test(src),
-    "docs/index.md must keep the 'Searching' section (Gel #7382 pin).",
+    "docs/index.md must keep the 'Searching' section (Gel #7382 pin)."
   );
   // The three search affordances callers actually have:
   for (
     const phrase of [
       "GitHub",
-      "grep",
+      "grep"
     ]
   ) {
     assert(
       src.toLowerCase().includes(phrase.toLowerCase()),
-      `docs/index.md Searching section must mention '${phrase}' (Gel #7382 pin).`,
+      `docs/index.md Searching section must mention '${phrase}' (Gel #7382 pin).`
     );
   }
 });

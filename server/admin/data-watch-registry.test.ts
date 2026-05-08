@@ -28,7 +28,7 @@ function makeMockPool(rowsByCall: Array<unknown[]>) {
     },
     execute() {
       return Promise.resolve();
-    },
+    }
   } as unknown as ConnectionPool;
 }
 
@@ -36,13 +36,13 @@ Deno.test("registry — fans invalidate to subscribers whose tables intersect", 
   // Call 1 (cursor read) → empty. Call 2 (poll) → one row on `users`.
   const pool = makeMockPool([
     [{ cur: 0 }], // initial cursor read in start()
-    [{ id: 1, table_name: "users" }],
+    [{ id: 1, table_name: "users" }]
   ]);
   const registry = new DataWatchRegistry({
     pool,
     pollIntervalMs: 1_000_000, // disable real timer
     invalidateDebounceMs: 0, // immediate fire
-    pruneIntervalMs: 1_000_000,
+    pruneIntervalMs: 1_000_000
   });
   await registry.start();
   try {
@@ -50,17 +50,17 @@ Deno.test("registry — fans invalidate to subscribers whose tables intersect", 
     registry.subscribe({
       id: "subA",
       tables: new Set(["users"]),
-      onInvalidate: (t) => events.push(t),
+      onInvalidate: t => events.push(t)
     });
     registry.subscribe({
       id: "subB",
       tables: new Set(["posts"]), // NOT interested in users
-      onInvalidate: (t) => events.push(["from-B:" + t.join(",")]),
+      onInvalidate: t => events.push(["from-B:" + t.join(",")])
     });
 
     await registry.pollOnce();
     // Microtask cycle for the 0ms timer.
-    await new Promise((r) => setTimeout(r, 5));
+    await new Promise(r => setTimeout(r, 5));
 
     // Only subA should have received the invalidate.
     assertEquals(events.length, 1);
@@ -77,13 +77,13 @@ Deno.test("registry — coalesces a burst of invalidations within the debounce w
     [], // start cursor
     [{ id: 1, table_name: "widgets" }],
     [{ id: 2, table_name: "widgets" }],
-    [{ id: 3, table_name: "widgets" }],
+    [{ id: 3, table_name: "widgets" }]
   ]);
   const registry = new DataWatchRegistry({
     pool,
     pollIntervalMs: 1_000_000,
     invalidateDebounceMs: 50,
-    pruneIntervalMs: 1_000_000,
+    pruneIntervalMs: 1_000_000
   });
   await registry.start();
   try {
@@ -92,17 +92,17 @@ Deno.test("registry — coalesces a burst of invalidations within the debounce w
     registry.subscribe({
       id: "sub",
       tables: new Set(["widgets"]),
-      onInvalidate: (t) => {
+      onInvalidate: t => {
         count++;
         lastTables = t;
-      },
+      }
     });
 
     await registry.pollOnce();
     await registry.pollOnce();
     await registry.pollOnce();
     // Wait past the debounce window.
-    await new Promise((r) => setTimeout(r, 75));
+    await new Promise(r => setTimeout(r, 75));
 
     assertEquals(count, 1);
     assertEquals(lastTables, ["widgets"]);
@@ -114,13 +114,13 @@ Deno.test("registry — coalesces a burst of invalidations within the debounce w
 Deno.test("registry — unions affected tables across the debounce window", async () => {
   const pool = makeMockPool([
     [],
-    [{ id: 1, table_name: "users" }, { id: 2, table_name: "posts" }],
+    [{ id: 1, table_name: "users" }, { id: 2, table_name: "posts" }]
   ]);
   const registry = new DataWatchRegistry({
     pool,
     pollIntervalMs: 1_000_000,
     invalidateDebounceMs: 30,
-    pruneIntervalMs: 1_000_000,
+    pruneIntervalMs: 1_000_000
   });
   await registry.start();
   try {
@@ -128,13 +128,13 @@ Deno.test("registry — unions affected tables across the debounce window", asyn
     registry.subscribe({
       id: "sub",
       tables: new Set(["users", "posts"]),
-      onInvalidate: (t) => {
+      onInvalidate: t => {
         received = t;
-      },
+      }
     });
 
     await registry.pollOnce();
-    await new Promise((r) => setTimeout(r, 50));
+    await new Promise(r => setTimeout(r, 50));
 
     assertEquals(received.sort(), ["posts", "users"]);
   } finally {
@@ -145,13 +145,13 @@ Deno.test("registry — unions affected tables across the debounce window", asyn
 Deno.test("registry — unsubscribe cancels pending debounce timer", async () => {
   const pool = makeMockPool([
     [],
-    [{ id: 1, table_name: "users" }],
+    [{ id: 1, table_name: "users" }]
   ]);
   const registry = new DataWatchRegistry({
     pool,
     pollIntervalMs: 1_000_000,
     invalidateDebounceMs: 50,
-    pruneIntervalMs: 1_000_000,
+    pruneIntervalMs: 1_000_000
   });
   await registry.start();
   try {
@@ -161,13 +161,13 @@ Deno.test("registry — unsubscribe cancels pending debounce timer", async () =>
       tables: new Set(["users"]),
       onInvalidate: () => {
         fired = true;
-      },
+      }
     });
 
     await registry.pollOnce();
     // Unsubscribe before the debounce window elapses.
     registry.unsubscribe("sub");
-    await new Promise((r) => setTimeout(r, 75));
+    await new Promise(r => setTimeout(r, 75));
 
     assertEquals(fired, false);
     assertEquals(registry.subscriberCount(), 0);
@@ -194,13 +194,13 @@ Deno.test({
     const pool = new ConnectionPool({
       connectionString: dsn,
       minConnections: 1,
-      maxConnections: 4,
+      maxConnections: 4
     });
     await pool.initialize();
     const registry = new DataWatchRegistry({
       pool,
       pollIntervalMs: 50, // fast for the test
-      invalidateDebounceMs: 50,
+      invalidateDebounceMs: 50
     });
 
     try {
@@ -209,7 +209,7 @@ Deno.test({
 
       // Create a fresh test table — bootstrap again to wire it.
       await pool.execute(
-        `CREATE TABLE IF NOT EXISTS "${TABLE}" (id SERIAL PRIMARY KEY, name TEXT)`,
+        `CREATE TABLE IF NOT EXISTS "${TABLE}" (id SERIAL PRIMARY KEY, name TEXT)`
       );
       await bootstrapDataWatch({ pool });
 
@@ -219,13 +219,13 @@ Deno.test({
       registry.subscribe({
         id: "test-sub",
         tables: new Set([TABLE]),
-        onInvalidate: (t) => received.push(t),
+        onInvalidate: t => received.push(t)
       });
 
       // Mutate.
       await pool.execute(`INSERT INTO "${TABLE}" (name) VALUES ('omega')`);
       // Wait for a poll + debounce window to fire.
-      await new Promise((r) => setTimeout(r, 250));
+      await new Promise(r => setTimeout(r, 250));
 
       assertGreater(received.length, 0);
       assertEquals(received[0].includes(TABLE), true);
@@ -234,12 +234,12 @@ Deno.test({
       try {
         await pool.execute(`DROP TABLE IF EXISTS "${TABLE}" CASCADE`);
         await pool.execute(
-          `DELETE FROM ${CHANGE_LOG_TABLE} WHERE table_name = '${TABLE}'`,
+          `DELETE FROM ${CHANGE_LOG_TABLE} WHERE table_name = '${TABLE}'`
         );
       } catch {
         // best-effort
       }
       await pool.close();
     }
-  },
+  }
 });

@@ -59,7 +59,7 @@ export const enum DiagnosticSeverity {
   Error = 1,
   Warning = 2,
   Information = 3,
-  Hint = 4,
+  Hint = 4
 }
 
 export interface Diagnostic {
@@ -122,7 +122,7 @@ export interface DidCloseTextDocumentParams {
 export const TextDocumentSyncKind = {
   None: 0,
   Full: 1,
-  Incremental: 2,
+  Incremental: 2
 } as const;
 
 export interface InitializeResult {
@@ -225,7 +225,7 @@ export const enum CompletionItemKind {
   Struct = 22,
   Event = 23,
   Operator = 24,
-  TypeParameter = 25,
+  TypeParameter = 25
 }
 
 export interface CompletionItem {
@@ -271,7 +271,7 @@ export const enum SymbolKind {
   Struct = 23,
   Event = 24,
   Operator = 25,
-  TypeParameter = 26,
+  TypeParameter = 26
 }
 
 export interface DocumentSymbol {

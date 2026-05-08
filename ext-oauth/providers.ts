@@ -8,7 +8,7 @@ import type { OAuthProviderConfig } from "./types.ts";
 export function googleProvider(
   clientId: string,
   clientSecret: string,
-  redirectUri?: string,
+  redirectUri?: string
 ): OAuthProviderConfig {
   return {
     name: "google",
@@ -18,14 +18,14 @@ export function googleProvider(
     tokenUrl: "https://oauth2.googleapis.com/token",
     userInfoUrl: "https://www.googleapis.com/oauth2/v3/userinfo",
     scopes: ["openid", "email", "profile"],
-    redirectUri,
+    redirectUri
   };
 }
 
 export function githubProvider(
   clientId: string,
   clientSecret: string,
-  redirectUri?: string,
+  redirectUri?: string
 ): OAuthProviderConfig {
   return {
     name: "github",
@@ -35,14 +35,14 @@ export function githubProvider(
     tokenUrl: "https://github.com/login/oauth/access_token",
     userInfoUrl: "https://api.github.com/user",
     scopes: ["user:email"],
-    redirectUri,
+    redirectUri
   };
 }
 
 export function appleProvider(
   clientId: string,
   clientSecret: string,
-  redirectUri?: string,
+  redirectUri?: string
 ): OAuthProviderConfig {
   return {
     name: "apple",
@@ -52,7 +52,7 @@ export function appleProvider(
     tokenUrl: "https://appleid.apple.com/auth/token",
     userInfoUrl: "https://appleid.apple.com/auth/userinfo",
     scopes: ["name", "email"],
-    redirectUri,
+    redirectUri
   };
 }
 
@@ -64,7 +64,7 @@ export function appleProvider(
 export function twitterProvider(
   clientId: string,
   clientSecret: string,
-  redirectUri?: string,
+  redirectUri?: string
 ): OAuthProviderConfig {
   return {
     name: "twitter",
@@ -74,7 +74,7 @@ export function twitterProvider(
     tokenUrl: "https://api.twitter.com/2/oauth2/token",
     userInfoUrl: "https://api.twitter.com/2/users/me",
     scopes: ["tweet.read", "users.read"],
-    redirectUri,
+    redirectUri
   };
 }
 
@@ -86,7 +86,7 @@ export function twitterProvider(
 export function facebookProvider(
   clientId: string,
   clientSecret: string,
-  redirectUri?: string,
+  redirectUri?: string
 ): OAuthProviderConfig {
   return {
     name: "facebook",
@@ -96,7 +96,7 @@ export function facebookProvider(
     tokenUrl: "https://graph.facebook.com/v18.0/oauth/access_token",
     userInfoUrl: "https://graph.facebook.com/me?fields=id,name,email",
     scopes: ["email", "public_profile"],
-    redirectUri,
+    redirectUri
   };
 }
 
@@ -108,7 +108,7 @@ export function facebookProvider(
 export function linkedinProvider(
   clientId: string,
   clientSecret: string,
-  redirectUri?: string,
+  redirectUri?: string
 ): OAuthProviderConfig {
   return {
     name: "linkedin",
@@ -118,7 +118,7 @@ export function linkedinProvider(
     tokenUrl: "https://www.linkedin.com/oauth/v2/accessToken",
     userInfoUrl: "https://api.linkedin.com/v2/userinfo",
     scopes: ["openid", "profile", "email"],
-    redirectUri,
+    redirectUri
   };
 }
 
@@ -145,7 +145,7 @@ export interface KeycloakProviderOptions {
  * (gh/geldata#7370)
  */
 export function keycloakProvider(
-  opts: KeycloakProviderOptions,
+  opts: KeycloakProviderOptions
 ): OAuthProviderConfig {
   const base = opts.baseUrl.replace(/\/+$/, "");
   const realmBase = `${base}/realms/${opts.realm}/protocol/openid-connect`;
@@ -158,7 +158,7 @@ export function keycloakProvider(
     redirectUri: opts.redirectUri,
     scopes: opts.scopes ?? ["openid", "email", "profile"],
     tokenUrl: `${realmBase}/token`,
-    userInfoUrl: `${realmBase}/userinfo`,
+    userInfoUrl: `${realmBase}/userinfo`
   };
 }
 
@@ -195,7 +195,7 @@ export function genericOidcProvider(
     authorizeUrl: string;
     tokenUrl: string;
     userInfoUrl: string;
-  },
+  }
 ): OAuthProviderConfig {
   return {
     allowedRedirectUris: opts.allowedRedirectUris,
@@ -206,7 +206,7 @@ export function genericOidcProvider(
     redirectUri: opts.redirectUri,
     scopes: opts.scopes ?? ["openid", "email", "profile"],
     tokenUrl: opts.tokenUrl,
-    userInfoUrl: opts.userInfoUrl,
+    userInfoUrl: opts.userInfoUrl
   };
 }
 
@@ -218,13 +218,13 @@ export function genericOidcProvider(
  */
 export async function createOidcProvider(
   opts: OidcProviderOptions,
-  fetchImpl: typeof fetch = fetch,
+  fetchImpl: typeof fetch = fetch
 ): Promise<OAuthProviderConfig> {
   const doc = await fetchOidcDiscovery(opts.issuerUrl, fetchImpl);
 
   if (!doc.userInfoEndpoint) {
     throw new Error(
-      `OIDC provider '${opts.name}' (${opts.issuerUrl}) does not advertise a userinfo_endpoint — disc requires one to resolve user identity`,
+      `OIDC provider '${opts.name}' (${opts.issuerUrl}) does not advertise a userinfo_endpoint — disc requires one to resolve user identity`
     );
   }
 
@@ -232,6 +232,6 @@ export async function createOidcProvider(
     ...opts,
     authorizeUrl: doc.authorizationEndpoint,
     tokenUrl: doc.tokenEndpoint,
-    userInfoUrl: doc.userInfoEndpoint,
+    userInfoUrl: doc.userInfoEndpoint
   });
 }

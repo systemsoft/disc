@@ -50,8 +50,10 @@ export class PgUpgradeCommand {
       const a = currentParts[i] || 0;
       const b = targetParts[i] || 0;
 
-      if (a < b) return -1;
-      if (a > b) return 1;
+      if (a < b)
+        return -1;
+      if (a > b)
+        return 1;
     }
 
     return 0;
@@ -84,7 +86,7 @@ export class PgUpgradeCommand {
     const availableVersions = this.getAvailableVersions();
     if (!availableVersions.includes(targetVersion)) {
       throw new Error(
-        `Unknown PostgreSQL version: ${targetVersion}. Available versions: ${availableVersions.join(", ")}`,
+        `Unknown PostgreSQL version: ${targetVersion}. Available versions: ${availableVersions.join(", ")}`
       );
     }
 
@@ -95,7 +97,7 @@ export class PgUpgradeCommand {
     const instance = this.postgresManager.getInstance(project);
     if (!instance) {
       throw new Error(
-        `No PostgreSQL instance found for project '${project}'. Run 'disc init' first.`,
+        `No PostgreSQL instance found for project '${project}'. Run 'disc init' first.`
       );
     }
 
@@ -107,7 +109,7 @@ export class PgUpgradeCommand {
     const comparison = this.compareVersions(currentVersion, targetVersion);
     if (comparison >= 0) {
       throw new Error(
-        `Target version ${targetVersion} is not newer than current version ${currentVersion}`,
+        `Target version ${targetVersion} is not newer than current version ${currentVersion}`
       );
     }
 
@@ -135,7 +137,7 @@ export class PgUpgradeCommand {
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
     const backupPath = join(
       instanceDir,
-      `backup-${currentVersion}-${timestamp}.tar.gz`,
+      `backup-${currentVersion}-${timestamp}.tar.gz`
     );
 
     let upgradeStarted = false;
@@ -143,7 +145,7 @@ export class PgUpgradeCommand {
     try {
       // Step a: Download target version binary
       console.log(
-        `\nDownloading PostgreSQL ${targetVersion} binary...`,
+        `\nDownloading PostgreSQL ${targetVersion} binary...`
       );
       const newPgDir = await this.downloader.ensurePostgres(targetVersion);
       const newPgBinDir = join(newPgDir, "bin");
@@ -151,7 +153,7 @@ export class PgUpgradeCommand {
 
       // Determine current pg binary directory for pg_dumpall
       const currentPgDir = await this.downloader.ensurePostgres(
-        currentVersion,
+        currentVersion
       );
       const currentPgBinDir = join(currentPgDir, "bin");
 
@@ -168,7 +170,7 @@ export class PgUpgradeCommand {
       const dumpCmd = new Deno.Command(pgDumpAllPath, {
         args: ["-h", socketDir, "-U", "disc"],
         stdout: "piped",
-        stderr: "piped",
+        stderr: "piped"
       });
 
       const dumpOutput = await dumpCmd.output();
@@ -193,7 +195,7 @@ export class PgUpgradeCommand {
 
       // Step f: Init new data dir with new version
       console.log(
-        `\nInitializing new data directory with PostgreSQL ${targetVersion}...`,
+        `\nInitializing new data directory with PostgreSQL ${targetVersion}...`
       );
       await ensureDir(join(instanceDir, "socket"));
 
@@ -202,7 +204,7 @@ export class PgUpgradeCommand {
         instanceName: project,
         pgBinDir: newPgBinDir,
         postgresVersion: targetVersion,
-        socketDir: socketDir,
+        socketDir: socketDir
       });
 
       await newInstance.init();
@@ -219,7 +221,7 @@ export class PgUpgradeCommand {
       const restoreCmd = new Deno.Command(psqlPath, {
         args: ["-h", socketDir, "-U", "disc", "-f", dumpFile],
         stdout: "piped",
-        stderr: "piped",
+        stderr: "piped"
       });
 
       const restoreOutput = await restoreCmd.output();
@@ -235,7 +237,7 @@ export class PgUpgradeCommand {
       const newStatus = await newInstance.status();
       if (!newStatus.running) {
         throw new Error(
-          "New PostgreSQL instance is not running after restore",
+          "New PostgreSQL instance is not running after restore"
         );
       }
       console.log("Instance is running and healthy.");
@@ -244,23 +246,23 @@ export class PgUpgradeCommand {
       const versionInfo = {
         previousVersion: currentVersion,
         upgradedAt: new Date().toISOString(),
-        version: targetVersion,
+        version: targetVersion
       };
 
       await Deno.writeTextFile(
         join(instanceDir, "version.json"),
-        JSON.stringify(versionInfo, null, 2),
+        JSON.stringify(versionInfo, null, 2)
       );
 
       // Step k: Clean up dump file
       await Deno.remove(dumpFile);
 
       console.log(
-        `\nPostgreSQL upgraded successfully from ${currentVersion} to ${targetVersion}.`,
+        `\nPostgreSQL upgraded successfully from ${currentVersion} to ${targetVersion}.`
       );
     } catch (error) {
       console.error(
-        `\nUpgrade failed: ${(error as Error).message}`,
+        `\nUpgrade failed: ${(error as Error).message}`
       );
 
       // Attempt rollback if upgrade had started
@@ -287,7 +289,7 @@ export class PgUpgradeCommand {
             console.log("Data directory restored from backup.");
           } catch {
             console.error(
-              "Could not restore data directory from backup.",
+              "Could not restore data directory from backup."
             );
           }
 
@@ -297,12 +299,12 @@ export class PgUpgradeCommand {
             console.log("Old PostgreSQL instance restarted.");
           } catch (restartError) {
             console.error(
-              `Failed to restart old instance: ${(restartError as Error).message}`,
+              `Failed to restart old instance: ${(restartError as Error).message}`
             );
           }
         } catch (rollbackError) {
           console.error(
-            `Rollback failed: ${(rollbackError as Error).message}`,
+            `Rollback failed: ${(rollbackError as Error).message}`
           );
         }
       }

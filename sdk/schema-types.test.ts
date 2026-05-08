@@ -15,8 +15,8 @@ import type { LinkStub, ResolveSelected, ResolveType } from "./schema-types.ts";
 
 // --- Type-level helpers (compile-time-only) ---
 
-type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true
-  : false;
+type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true :
+  false;
 type Expect<T extends true> = T;
 
 // --- Schema fixtures ---
@@ -28,15 +28,15 @@ const blogSchema = defineSchema({
     active: t.bool(),
     createdAt: t.datetime(),
     bio: t.optional(t.str()),
-    posts: t.multi("Post"),
+    posts: t.multi("Post")
   },
   Post: {
     title: t.str(),
     body: t.str(),
     score: t.int64(),
     author: t.single("User"),
-    publishedAt: t.optional(t.datetime()),
-  },
+    publishedAt: t.optional(t.datetime())
+  }
 });
 
 // --- Runtime: defineSchema() validation ---
@@ -51,12 +51,12 @@ Deno.test("defineSchema rejects non-PascalCase type names", () => {
   assertThrows(
     () => defineSchema({ user: { name: t.str() } }),
     Error,
-    "PascalCase",
+    "PascalCase"
   );
   assertThrows(
     () => defineSchema({ "User; drop": { name: t.str() } }),
     Error,
-    "PascalCase",
+    "PascalCase"
   );
 });
 
@@ -64,7 +64,7 @@ Deno.test("defineSchema rejects invalid field names", () => {
   assertThrows(
     () => defineSchema({ User: { "name; drop": t.str() } }),
     Error,
-    "field name",
+    "field name"
   );
 });
 
@@ -73,7 +73,7 @@ Deno.test("defineSchema rejects malformed markers", () => {
     // deno-lint-ignore no-explicit-any
     () => defineSchema({ User: { name: { kind: "wat" } as any } }),
     Error,
-    "Invalid field marker",
+    "Invalid field marker"
   );
 });
 
@@ -81,13 +81,13 @@ Deno.test("defineSchema catches links to undefined types", () => {
   assertThrows(
     () => defineSchema({ User: { posts: t.multi("MissingType") } }),
     Error,
-    "Link target not found",
+    "Link target not found"
   );
   // Inside an Optional wrapper still works (we walk through it).
   assertThrows(
     () => defineSchema({ User: { manager: t.optional(t.single("Ghost")) } }),
     Error,
-    "Link target not found",
+    "Link target not found"
   );
 });
 
@@ -96,13 +96,13 @@ Deno.test("defineSchema accepts self-referential and mutual links", () => {
     Node: {
       label: t.str(),
       parent: t.optional(t.single("Node")),
-      children: t.multi("Node"),
-    },
+      children: t.multi("Node")
+    }
   });
   assertEquals(Object.keys(recursive.spec.Node).sort(), [
     "children",
     "label",
-    "parent",
+    "parent"
   ]);
 });
 
@@ -110,7 +110,7 @@ Deno.test("defineSchema accepts self-referential and mutual links", () => {
 
 Deno.test("typed createQueryBuilder refuses access to types not in the schema", () => {
   const fakeClient = {
-    query: <T = unknown>(): Promise<T> => Promise.resolve([] as T),
+    query: <T = unknown>(): Promise<T> => Promise.resolve([] as T)
   };
   const qb = createQueryBuilder(fakeClient, blogSchema);
   // Defined types resolve to a chain.
@@ -121,13 +121,13 @@ Deno.test("typed createQueryBuilder refuses access to types not in the schema", 
     // deno-lint-ignore no-explicit-any
     () => (qb as any).Ghost,
     Error,
-    "not defined in the schema",
+    "not defined in the schema"
   );
 });
 
 Deno.test("typed createQueryBuilder runtime emits the same EdgeQL as the untyped path", () => {
   const fakeClient = {
-    query: <T = unknown>(): Promise<T> => Promise.resolve([] as T),
+    query: <T = unknown>(): Promise<T> => Promise.resolve([] as T)
   };
   const qb = createQueryBuilder(fakeClient, blogSchema);
   // deno-lint-ignore no-explicit-any
@@ -157,13 +157,13 @@ declare const _resolveTypeChecks: [
   // otherwise. Full expansion happens via `ResolveSelected` instead.
   Expect<Equal<UserRow["posts"], LinkStub[]>>,
   Expect<Equal<PostRow["author"], LinkStub | null>>,
-  Expect<Equal<PostRow["publishedAt"], Date | null>>,
+  Expect<Equal<PostRow["publishedAt"], Date | null>>
 ];
 
 declare const _resolveSelectedChecks: [
   Expect<Equal<FlatRow, { email: string; name: string; }>>,
   Expect<Equal<NestedRow, { title: string; author: { email: string; } | null; }>>,
-  Expect<Equal<MultiRow, { name: string; posts: { title: string; }[]; }>>,
+  Expect<Equal<MultiRow, { name: string; posts: { title: string; }[]; }>>
 ];
 
 declare const _builderShapeCheck: Expect<
@@ -172,7 +172,7 @@ declare const _builderShapeCheck: Expect<
 
 Deno.test("typed select narrows the awaited row type (compile-time check)", async () => {
   const fakeClient = {
-    query: <T = unknown>(_q: string, _v?: Record<string, unknown>): Promise<T> => Promise.resolve([{ email: "a@b.c", name: "alice" }] as T),
+    query: <T = unknown>(_q: string, _v?: Record<string, unknown>): Promise<T> => Promise.resolve([{ email: "a@b.c", name: "alice" }] as T)
   };
   const qb = createQueryBuilder(fakeClient, blogSchema);
 
@@ -186,7 +186,7 @@ Deno.test("typed select narrows the awaited row type (compile-time check)", asyn
 
 Deno.test("typed first() returns row | null with the inferred shape", async () => {
   const fakeClient = {
-    query: <T = unknown>(_q: string, _v?: Record<string, unknown>): Promise<T> => Promise.resolve([{ title: "hello" }] as T),
+    query: <T = unknown>(_q: string, _v?: Record<string, unknown>): Promise<T> => Promise.resolve([{ title: "hello" }] as T)
   };
   const qb = createQueryBuilder(fakeClient, blogSchema);
   const row = await qb.Post.select({ title: true }).first();
@@ -199,29 +199,32 @@ Deno.test("typed filter predicate gets a typed FieldRef per field", async () => 
     query: <T = unknown>(query: string, variables?: Record<string, unknown>): Promise<T> => {
       calls.push({ query, variables: variables ?? {} });
       return Promise.resolve([] as T);
-    },
+    }
   };
   const qb = createQueryBuilder(fakeClient, blogSchema);
   // u.email.eq("a@b.c") — string accepted; u.score.gt(10) — number accepted.
-  await qb.Post.select({ title: true })
-    .filter((p) => p.score.gt(10))
-    .filter((p) => p.title.eq("hello"));
+  await qb
+    .Post
+    .select({ title: true })
+    .filter(p => p.score.gt(10))
+    .filter(p => p.title.eq("hello"));
   assertEquals(calls.length, 1);
   assertEquals(
     calls[0].query,
-    "select Post { title } filter (.score > <int64>$p0) and (.title = <str>$p1)",
+    "select Post { title } filter (.score > <int64>$p0) and (.title = <str>$p1)"
   );
   assertEquals(calls[0].variables, { p0: 10, p1: "hello" });
 });
 
 Deno.test("typed orderBy + limit + offset chain compose without losing type info", async () => {
   const fakeClient = {
-    query: <T = unknown>(): Promise<T> => Promise.resolve([{ title: "x", score: 5 }] as T),
+    query: <T = unknown>(): Promise<T> => Promise.resolve([{ title: "x", score: 5 }] as T)
   };
   const qb = createQueryBuilder(fakeClient, blogSchema);
-  const rows = await qb.Post
+  const rows = await qb
+    .Post
     .select({ title: true, score: true })
-    .orderBy((p) => p.score.desc())
+    .orderBy(p => p.score.desc())
     .limit(10)
     .offset(0);
   assertEquals(rows[0].title, "x");

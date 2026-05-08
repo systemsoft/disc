@@ -20,14 +20,14 @@ const mailer = createMailer({
   host: "smtp.example.com",
   port: 587,
   auth: { user: "no-reply@example.com", pass: "..." },
-  from: "Disc <no-reply@example.com>",
+  from: "Disc <no-reply@example.com>"
 });
 
 await mailer.send({
   to: "user@example.com",
   subject: "Welcome to Disc",
   text: "Plain text body",
-  html: "<p>HTML body</p>", // optional; triggers multipart/alternative
+  html: "<p>HTML body</p>" // optional; triggers multipart/alternative
 });
 ```
 

@@ -26,7 +26,7 @@ function makeContext(): ExtensionContext {
       maxConnections: 5,
       requestTimeout: 5000,
       enableCors: false,
-      enableWebsockets: false,
+      enableWebsockets: false
     },
     logger: {
       debug: () => {},
@@ -38,8 +38,8 @@ function makeContext(): ExtensionContext {
       },
       withRequest: function() {
         return this;
-      },
-    } as unknown as ExtensionContext["logger"],
+      }
+    } as unknown as ExtensionContext["logger"]
   };
 }
 
@@ -48,7 +48,7 @@ function makeConfig(overrides?: Partial<FtsIndexConfig>): FtsIndexConfig {
     typeName: "default::BlogPost",
     tableName: "blog_posts",
     columns: ["title", "body"],
-    ...overrides,
+    ...overrides
   };
 }
 
@@ -75,7 +75,7 @@ Deno.test("FtsExtension - metadata has correct description", () => {
   const ext = new FtsExtension();
   assertEquals(
     ext.metadata.description,
-    "Full-text search using PostgreSQL tsvector/tsquery",
+    "Full-text search using PostgreSQL tsvector/tsquery"
   );
 });
 
@@ -85,7 +85,7 @@ Deno.test("generateFtsColumn - single column without weight", () => {
   const sql = generateFtsColumn(makeConfig({ columns: ["title"] }));
   assertEquals(
     sql,
-    `ALTER TABLE blog_posts ADD COLUMN ${FTS_VECTOR_COLUMN} tsvector GENERATED ALWAYS AS (to_tsvector('english', coalesce(title, ''))) STORED;`,
+    `ALTER TABLE blog_posts ADD COLUMN ${FTS_VECTOR_COLUMN} tsvector GENERATED ALWAYS AS (to_tsvector('english', coalesce(title, ''))) STORED;`
   );
 });
 
@@ -95,7 +95,7 @@ Deno.test("generateFtsColumn - multiple columns without weights", () => {
   const sql = generateFtsColumn(makeConfig());
   assertEquals(
     sql,
-    `ALTER TABLE blog_posts ADD COLUMN ${FTS_VECTOR_COLUMN} tsvector GENERATED ALWAYS AS (to_tsvector('english', coalesce(title, '')) || to_tsvector('english', coalesce(body, ''))) STORED;`,
+    `ALTER TABLE blog_posts ADD COLUMN ${FTS_VECTOR_COLUMN} tsvector GENERATED ALWAYS AS (to_tsvector('english', coalesce(title, '')) || to_tsvector('english', coalesce(body, ''))) STORED;`
   );
 });
 
@@ -105,12 +105,12 @@ Deno.test("generateFtsColumn - columns with custom weights (A, B, C, D)", () => 
   const sql = generateFtsColumn(
     makeConfig({
       columns: ["title", "body", "summary", "tags"],
-      weights: { title: "A", body: "D", summary: "B", tags: "C" },
-    }),
+      weights: { title: "A", body: "D", summary: "B", tags: "C" }
+    })
   );
   assertEquals(
     sql,
-    `ALTER TABLE blog_posts ADD COLUMN ${FTS_VECTOR_COLUMN} tsvector GENERATED ALWAYS AS (setweight(to_tsvector('english', coalesce(title, '')), 'A') || setweight(to_tsvector('english', coalesce(body, '')), 'D') || setweight(to_tsvector('english', coalesce(summary, '')), 'B') || setweight(to_tsvector('english', coalesce(tags, '')), 'C')) STORED;`,
+    `ALTER TABLE blog_posts ADD COLUMN ${FTS_VECTOR_COLUMN} tsvector GENERATED ALWAYS AS (setweight(to_tsvector('english', coalesce(title, '')), 'A') || setweight(to_tsvector('english', coalesce(body, '')), 'D') || setweight(to_tsvector('english', coalesce(summary, '')), 'B') || setweight(to_tsvector('english', coalesce(tags, '')), 'C')) STORED;`
   );
 });
 
@@ -118,11 +118,11 @@ Deno.test("generateFtsColumn - columns with custom weights (A, B, C, D)", () => 
 
 Deno.test("generateFtsColumn - custom language", () => {
   const sql = generateFtsColumn(
-    makeConfig({ columns: ["title"], language: "spanish" }),
+    makeConfig({ columns: ["title"], language: "spanish" })
   );
   assertEquals(
     sql,
-    `ALTER TABLE blog_posts ADD COLUMN ${FTS_VECTOR_COLUMN} tsvector GENERATED ALWAYS AS (to_tsvector('spanish', coalesce(title, ''))) STORED;`,
+    `ALTER TABLE blog_posts ADD COLUMN ${FTS_VECTOR_COLUMN} tsvector GENERATED ALWAYS AS (to_tsvector('spanish', coalesce(title, ''))) STORED;`
   );
 });
 
@@ -132,7 +132,7 @@ Deno.test("generateFtsIndex - generates GIN index DDL with default name", () => 
   const sql = generateFtsIndex(makeConfig());
   assertEquals(
     sql,
-    `CREATE INDEX blog_posts_fts_idx ON blog_posts USING GIN (${FTS_VECTOR_COLUMN});`,
+    `CREATE INDEX blog_posts_fts_idx ON blog_posts USING GIN (${FTS_VECTOR_COLUMN});`
   );
 });
 
@@ -142,7 +142,7 @@ Deno.test("generateDropFtsIndex - generates DROP statements", () => {
   const sql = generateDropFtsIndex(makeConfig());
   assertEquals(
     sql,
-    `DROP INDEX IF EXISTS blog_posts_fts_idx; ALTER TABLE blog_posts DROP COLUMN IF EXISTS ${FTS_VECTOR_COLUMN};`,
+    `DROP INDEX IF EXISTS blog_posts_fts_idx; ALTER TABLE blog_posts DROP COLUMN IF EXISTS ${FTS_VECTOR_COLUMN};`
   );
 });
 
@@ -153,11 +153,11 @@ Deno.test("FtsExtension - compiler hook transforms fts::search correctly", () =>
   const hook = ext.getCompilerHooks()[0];
   const result = hook.transformFunctionCall?.(
     "fts::search",
-    ["'search query'"],
+    ["'search query'"]
   );
   assertEquals(
     result,
-    `${FTS_VECTOR_COLUMN} @@ plainto_tsquery('english', 'search query')`,
+    `${FTS_VECTOR_COLUMN} @@ plainto_tsquery('english', 'search query')`
   );
 });
 
@@ -168,11 +168,11 @@ Deno.test("FtsExtension - compiler hook transforms fts::rank correctly", () => {
   const hook = ext.getCompilerHooks()[0];
   const result = hook.transformFunctionCall?.(
     "fts::rank",
-    ["'search query'"],
+    ["'search query'"]
   );
   assertEquals(
     result,
-    `ts_rank(${FTS_VECTOR_COLUMN}, plainto_tsquery('english', 'search query'))`,
+    `ts_rank(${FTS_VECTOR_COLUMN}, plainto_tsquery('english', 'search query'))`
   );
 });
 
@@ -182,7 +182,7 @@ Deno.test("validateFtsConfig - throws on empty tableName", () => {
   assertThrows(
     () => validateFtsConfig({ ...makeConfig(), tableName: "" }),
     Error,
-    "non-empty tableName",
+    "non-empty tableName"
   );
 });
 
@@ -190,7 +190,7 @@ Deno.test("validateFtsConfig - throws on empty columns array", () => {
   assertThrows(
     () => validateFtsConfig({ ...makeConfig(), columns: [] }),
     Error,
-    "at least one column",
+    "at least one column"
   );
 });
 
@@ -199,10 +199,10 @@ Deno.test("validateFtsConfig - throws on invalid weight value", () => {
     () =>
       validateFtsConfig({
         ...makeConfig(),
-        weights: { title: "X" as "A" },
+        weights: { title: "X" as "A" }
       }),
     Error,
-    "Invalid weight \"X\"",
+    "Invalid weight \"X\""
   );
 });
 
@@ -221,21 +221,21 @@ Deno.test("DEFAULT_LANGUAGE is english", () => {
 
 Deno.test("generateFtsIndex - custom index name", () => {
   const sql = generateFtsIndex(
-    makeConfig({ indexName: "my_custom_fts_idx" }),
+    makeConfig({ indexName: "my_custom_fts_idx" })
   );
   assertEquals(
     sql,
-    `CREATE INDEX my_custom_fts_idx ON blog_posts USING GIN (${FTS_VECTOR_COLUMN});`,
+    `CREATE INDEX my_custom_fts_idx ON blog_posts USING GIN (${FTS_VECTOR_COLUMN});`
   );
 });
 
 Deno.test("generateDropFtsIndex - custom index name in DROP", () => {
   const sql = generateDropFtsIndex(
-    makeConfig({ indexName: "my_custom_fts_idx" }),
+    makeConfig({ indexName: "my_custom_fts_idx" })
   );
   assertEquals(
     sql,
-    `DROP INDEX IF EXISTS my_custom_fts_idx; ALTER TABLE blog_posts DROP COLUMN IF EXISTS ${FTS_VECTOR_COLUMN};`,
+    `DROP INDEX IF EXISTS my_custom_fts_idx; ALTER TABLE blog_posts DROP COLUMN IF EXISTS ${FTS_VECTOR_COLUMN};`
   );
 });
 
@@ -284,11 +284,11 @@ Deno.test("FtsExtension - custom language applied to compiler hooks", () => {
   const hook = ext.getCompilerHooks()[0];
   const result = hook.transformFunctionCall?.(
     "fts::search",
-    ["'buscar'"],
+    ["'buscar'"]
   );
   assertEquals(
     result,
-    `${FTS_VECTOR_COLUMN} @@ plainto_tsquery('spanish', 'buscar')`,
+    `${FTS_VECTOR_COLUMN} @@ plainto_tsquery('spanish', 'buscar')`
   );
 });
 
@@ -313,14 +313,14 @@ Deno.test("FtsExtension - getFunctions returns 2 functions", () => {
 
 Deno.test("FtsExtension - getFunctions includes fts::search and fts::rank", () => {
   const ext = new FtsExtension();
-  const names = ext.getFunctions().map((f) => f.name);
+  const names = ext.getFunctions().map(f => f.name);
   assertEquals(names.includes("fts::search"), true);
   assertEquals(names.includes("fts::rank"), true);
 });
 
 Deno.test("FtsExtension - fts::search function definition has correct shape", () => {
   const ext = new FtsExtension();
-  const fn = ext.getFunctions().find((f) => f.name === "fts::search");
+  const fn = ext.getFunctions().find(f => f.name === "fts::search");
   assertEquals(fn !== undefined, true);
   assertEquals(fn!.args.length, 1);
   assertEquals(fn!.args[0].name, "query");
@@ -330,7 +330,7 @@ Deno.test("FtsExtension - fts::search function definition has correct shape", ()
 
 Deno.test("FtsExtension - fts::rank function definition has correct shape", () => {
   const ext = new FtsExtension();
-  const fn = ext.getFunctions().find((f) => f.name === "fts::rank");
+  const fn = ext.getFunctions().find(f => f.name === "fts::rank");
   assertEquals(fn !== undefined, true);
   assertEquals(fn!.args.length, 1);
   assertEquals(fn!.args[0].name, "query");
@@ -345,11 +345,11 @@ Deno.test("FtsExtension - compiler hook handles fts__search variant", () => {
   const hook = ext.getCompilerHooks()[0];
   const result = hook.transformFunctionCall?.(
     "fts__search",
-    ["'hello'"],
+    ["'hello'"]
   );
   assertEquals(
     result,
-    `${FTS_VECTOR_COLUMN} @@ plainto_tsquery('english', 'hello')`,
+    `${FTS_VECTOR_COLUMN} @@ plainto_tsquery('english', 'hello')`
   );
 });
 
@@ -358,11 +358,11 @@ Deno.test("FtsExtension - compiler hook handles fts__rank variant", () => {
   const hook = ext.getCompilerHooks()[0];
   const result = hook.transformFunctionCall?.(
     "fts__rank",
-    ["'hello'"],
+    ["'hello'"]
   );
   assertEquals(
     result,
-    `ts_rank(${FTS_VECTOR_COLUMN}, plainto_tsquery('english', 'hello'))`,
+    `ts_rank(${FTS_VECTOR_COLUMN}, plainto_tsquery('english', 'hello'))`
   );
 });
 
@@ -376,11 +376,11 @@ Deno.test("FTS_VECTOR_COLUMN is fts_vector", () => {
 
 Deno.test("generateFtsColumn - partial weight assignment (only some columns weighted)", () => {
   const sql = generateFtsColumn(
-    makeConfig({ weights: { title: "A" } }),
+    makeConfig({ weights: { title: "A" } })
   );
   // title gets weight A, body has no weight
   assertEquals(
     sql,
-    `ALTER TABLE blog_posts ADD COLUMN ${FTS_VECTOR_COLUMN} tsvector GENERATED ALWAYS AS (setweight(to_tsvector('english', coalesce(title, '')), 'A') || to_tsvector('english', coalesce(body, ''))) STORED;`,
+    `ALTER TABLE blog_posts ADD COLUMN ${FTS_VECTOR_COLUMN} tsvector GENERATED ALWAYS AS (setweight(to_tsvector('english', coalesce(title, '')), 'A') || to_tsvector('english', coalesce(body, ''))) STORED;`
   );
 });

@@ -17,7 +17,7 @@ function makeCtx(overrides: Partial<ProjectContext> = {}): ProjectContext {
     serverHost: "localhost",
     serverPort: 5656,
     socketDir: "/tmp/disc-test/socket",
-    ...overrides,
+    ...overrides
   };
 }
 
@@ -33,9 +33,9 @@ Deno.test(
     await assertRejects(
       () => ensurePgRunning(ctx),
       Error,
-      "Not a managed instance",
+      "Not a managed instance"
     );
-  },
+  }
 );
 
 Deno.test(
@@ -45,12 +45,12 @@ Deno.test(
 
     const err = await assertRejects(
       () => ensurePgRunning(ctx),
-      Error,
+      Error
     );
 
     assertEquals(
       (err as Error).message,
-      "Not a managed instance — use backendDsn directly",
+      "Not a managed instance — use backendDsn directly"
     );
-  },
+  }
 );

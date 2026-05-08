@@ -89,8 +89,8 @@ export class DataWatchRegistry {
   constructor(options: DataWatchRegistryOptions) {
     this.pool = options.pool;
     this.pollIntervalMs = options.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
-    this.invalidateDebounceMs = options.invalidateDebounceMs
-      ?? DEFAULT_INVALIDATE_DEBOUNCE_MS;
+    this.invalidateDebounceMs = options.invalidateDebounceMs ??
+      DEFAULT_INVALIDATE_DEBOUNCE_MS;
     this.pruneIntervalMs = options.pruneIntervalMs ?? DEFAULT_PRUNE_INTERVAL_MS;
     this.pruneLookbackSeconds = options.pruneLookbackSeconds ?? 3600;
   }
@@ -103,12 +103,13 @@ export class DataWatchRegistry {
    * after they connect.
    */
   async start(): Promise<void> {
-    if (this.pollTimer !== undefined) return; // already started
+    if (this.pollTimer !== undefined)
+      return; // already started
     this.stopped = false;
 
     try {
       const result = await this.pool.query(
-        `SELECT COALESCE(MAX(id), 0)::bigint AS cur FROM ${CHANGE_LOG_TABLE}`,
+        `SELECT COALESCE(MAX(id), 0)::bigint AS cur FROM ${CHANGE_LOG_TABLE}`
       );
       // Defensive: row may be missing in test mocks. Treat absence
       // as cursor 0 (replay nothing — same outcome as a fresh DB).
@@ -119,17 +120,17 @@ export class DataWatchRegistry {
       // start; the next successful poll (after bootstrap) will pick
       // up invalidations.
       log.warn("data-watch: failed to read initial cursor", {
-        error: err instanceof Error ? err.message : String(err),
+        error: err instanceof Error ? err.message : String(err)
       });
     }
 
     this.pollTimer = setInterval(
       () => void this.pollOnce(),
-      this.pollIntervalMs,
+      this.pollIntervalMs
     );
     this.pruneTimer = setInterval(
       () => void this.runPrune(),
-      this.pruneIntervalMs,
+      this.pruneIntervalMs
     );
   }
 
@@ -144,7 +145,8 @@ export class DataWatchRegistry {
       clearInterval(this.pruneTimer);
       this.pruneTimer = undefined;
     }
-    for (const id of this.debounceTimers.values()) clearTimeout(id);
+    for (const id of this.debounceTimers.values())
+      clearTimeout(id);
     this.debounceTimers.clear();
     this.pendingInvalidations.clear();
     this.subscribers.clear();
@@ -178,15 +180,17 @@ export class DataWatchRegistry {
    * polling (no-op overlap protection).
    */
   async pollOnce(): Promise<void> {
-    if (this.polling || this.stopped) return;
+    if (this.polling || this.stopped)
+      return;
     this.polling = true;
     try {
       const result = await this.pool.query(
         `SELECT id, table_name FROM ${CHANGE_LOG_TABLE}
          WHERE id > $1 ORDER BY id LIMIT 1000`,
-        [String(this.lastSeenId)],
+        [String(this.lastSeenId)]
       );
-      if (result.rows.length === 0) return;
+      if (result.rows.length === 0)
+        return;
 
       // Collect distinct affected tables across this poll.
       const affected = new Set<string>();
@@ -194,7 +198,8 @@ export class DataWatchRegistry {
       for (const row of result.rows as Array<{ id: number | string; table_name: string; }>) {
         affected.add(row.table_name);
         const idNum = Number(row.id);
-        if (idNum > maxId) maxId = idNum;
+        if (idNum > maxId)
+          maxId = idNum;
       }
       this.lastSeenId = maxId;
 
@@ -203,7 +208,8 @@ export class DataWatchRegistry {
       for (const sub of this.subscribers.values()) {
         const intersect: string[] = [];
         for (const t of affected) {
-          if (sub.tables.has(t)) intersect.push(t);
+          if (sub.tables.has(t))
+            intersect.push(t);
         }
         if (intersect.length > 0) {
           this.scheduleInvalidate(sub.id, intersect);
@@ -212,7 +218,7 @@ export class DataWatchRegistry {
     } catch (err) {
       // Don't blow up the timer; just log.
       log.warn("data-watch: poll failed", {
-        error: err instanceof Error ? err.message : String(err),
+        error: err instanceof Error ? err.message : String(err)
       });
     } finally {
       this.polling = false;
@@ -230,10 +236,12 @@ export class DataWatchRegistry {
       pending = new Set();
       this.pendingInvalidations.set(subId, pending);
     }
-    for (const t of tables) pending.add(t);
+    for (const t of tables)
+      pending.add(t);
 
     const existing = this.debounceTimers.get(subId);
-    if (existing !== undefined) clearTimeout(existing);
+    if (existing !== undefined)
+      clearTimeout(existing);
 
     const timer = setTimeout(() => {
       this.debounceTimers.delete(subId);
@@ -245,7 +253,7 @@ export class DataWatchRegistry {
           sub.onInvalidate([...buf]);
         } catch (err) {
           log.warn("data-watch: subscriber callback threw", {
-            error: err instanceof Error ? err.message : String(err),
+            error: err instanceof Error ? err.message : String(err)
           });
         }
       }
@@ -254,12 +262,13 @@ export class DataWatchRegistry {
   }
 
   private async runPrune(): Promise<void> {
-    if (this.stopped) return;
+    if (this.stopped)
+      return;
     try {
       await pruneChangeLog(this.pool, this.pruneLookbackSeconds);
     } catch (err) {
       log.warn("data-watch: prune failed", {
-        error: err instanceof Error ? err.message : String(err),
+        error: err instanceof Error ? err.message : String(err)
       });
     }
   }

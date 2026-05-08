@@ -8,7 +8,7 @@ import type { ConfigRouteContext } from "./config-endpoint.ts";
 
 function makeCtx(): ConfigRouteContext {
   return {
-    defaultHeaders: () => new Headers({ "Content-Type": "application/json" }),
+    defaultHeaders: () => new Headers({ "Content-Type": "application/json" })
   };
 }
 
@@ -39,7 +39,7 @@ Deno.test("GET /config - includes work_mem and other prior CONFIGURE keys", asyn
   const body = JSON.parse(await response.text());
 
   const names = new Set<string>(
-    body.keys.map((k: { name: string; }) => k.name),
+    body.keys.map((k: { name: string; }) => k.name)
   );
   assertEquals(names.has("work_mem"), true);
   assertEquals(names.has("max_connections"), true);

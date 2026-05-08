@@ -23,7 +23,7 @@ function makePool(dsn: string): ConnectionPool {
     connectionString: dsn,
     minConnections: 1,
     maxConnections: 3,
-    cleanupInterval: 0,
+    cleanupInterval: 0
   });
 }
 
@@ -69,18 +69,18 @@ Deno.test({
       const result = await pool.query(
         `SELECT indexname FROM pg_indexes
          WHERE tablename = 'disc_test_fts_articles'
-         AND indexname = 'disc_test_fts_articles_fts_idx'`,
+         AND indexname = 'disc_test_fts_articles_fts_idx'`
       );
       assertEquals(result.rows.length, 1);
       assertEquals(
         String(result.rows[0]["indexname"]),
-        "disc_test_fts_articles_fts_idx",
+        "disc_test_fts_articles_fts_idx"
       );
     } finally {
       await resetTestDatabase(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -112,19 +112,19 @@ Deno.test({
         "INSERT INTO disc_test_fts_docs (title, body) VALUES ($1, $2)",
         [
           "PostgreSQL Tutorial",
-          "Learn how to use PostgreSQL for full-text search",
-        ],
+          "Learn how to use PostgreSQL for full-text search"
+        ]
       );
       await pool.query(
         "INSERT INTO disc_test_fts_docs (title, body) VALUES ($1, $2)",
-        ["Cooking Recipes", "How to bake the perfect sourdough bread"],
+        ["Cooking Recipes", "How to bake the perfect sourdough bread"]
       );
       await pool.query(
         "INSERT INTO disc_test_fts_docs (title, body) VALUES ($1, $2)",
         [
           "Database Indexing",
-          "PostgreSQL GIN indexes speed up text search queries",
-        ],
+          "PostgreSQL GIN indexes speed up text search queries"
+        ]
       );
 
       // Search for "PostgreSQL" -- should match 2 rows
@@ -132,7 +132,7 @@ Deno.test({
         `SELECT title FROM disc_test_fts_docs
          WHERE fts_vector @@ plainto_tsquery('english', $1)
          ORDER BY title`,
-        ["PostgreSQL"],
+        ["PostgreSQL"]
       );
       assertEquals(result.rows.length, 2);
       assertEquals(String(result.rows[0]["title"]), "Database Indexing");
@@ -141,7 +141,7 @@ Deno.test({
       await resetTestDatabase(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -172,12 +172,12 @@ Deno.test({
       // Row with "database" in title (weight A) should rank higher
       await pool.query(
         "INSERT INTO disc_test_fts_ranked (title, body) VALUES ($1, $2)",
-        ["Database Systems", "An introduction to relational systems"],
+        ["Database Systems", "An introduction to relational systems"]
       );
       // Row with "database" only in body (weight D) should rank lower
       await pool.query(
         "INSERT INTO disc_test_fts_ranked (title, body) VALUES ($1, $2)",
-        ["Introduction", "This is about database systems and storage"],
+        ["Introduction", "This is about database systems and storage"]
       );
 
       const result = await pool.query(
@@ -185,7 +185,7 @@ Deno.test({
          FROM disc_test_fts_ranked
          WHERE fts_vector @@ plainto_tsquery('english', $1)
          ORDER BY rank DESC`,
-        ["database"],
+        ["database"]
       );
 
       assertEquals(result.rows.length, 2);
@@ -201,7 +201,7 @@ Deno.test({
       await resetTestDatabase(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -229,21 +229,21 @@ Deno.test({
 
       await pool.query(
         "INSERT INTO disc_test_fts_empty (title) VALUES ($1)",
-        ["PostgreSQL Full-Text Search"],
+        ["PostgreSQL Full-Text Search"]
       );
 
       // Search for a term that does not exist
       const result = await pool.query(
         `SELECT title FROM disc_test_fts_empty
          WHERE fts_vector @@ plainto_tsquery('english', $1)`,
-        ["nonexistent_xyzzy_term"],
+        ["nonexistent_xyzzy_term"]
       );
       assertEquals(result.rows.length, 0);
     } finally {
       await resetTestDatabase(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -274,15 +274,15 @@ Deno.test({
       // "typescript" appears in title of first row
       await pool.query(
         "INSERT INTO disc_test_fts_weighted (title, body) VALUES ($1, $2)",
-        ["TypeScript Guide", "A comprehensive guide to building applications"],
+        ["TypeScript Guide", "A comprehensive guide to building applications"]
       );
       // "typescript" appears only in body of second row
       await pool.query(
         "INSERT INTO disc_test_fts_weighted (title, body) VALUES ($1, $2)",
         [
           "Programming Languages",
-          "Learn TypeScript and JavaScript for web development",
-        ],
+          "Learn TypeScript and JavaScript for web development"
+        ]
       );
 
       const result = await pool.query(
@@ -290,7 +290,7 @@ Deno.test({
          FROM disc_test_fts_weighted
          WHERE fts_vector @@ plainto_tsquery('english', $1)
          ORDER BY rank DESC`,
-        ["typescript"],
+        ["typescript"]
       );
 
       assertEquals(result.rows.length, 2);
@@ -302,11 +302,11 @@ Deno.test({
       const rank2 = Number(result.rows[1]["rank"]);
       assert(
         rank1 > rank2,
-        `Title match rank (${rank1}) should be higher than body match rank (${rank2})`,
+        `Title match rank (${rank1}) should be higher than body match rank (${rank2})`
       );
     } finally {
       await resetTestDatabase(pool);
       await pool.close();
     }
-  },
+  }
 });

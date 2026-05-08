@@ -19,7 +19,7 @@ const log = getLogger("codegen");
  */
 export function generateTypeScript(
   schema: Context.Schema,
-  config: Partial<Types.CodegenConfig> = {},
+  config: Partial<Types.CodegenConfig> = {}
 ): Types.CodegenResult {
   const fullConfig: Types.CodegenConfig = {
     // P2-29: default matches the CLI default (./dbschema/disc-client)
@@ -34,7 +34,7 @@ export function generateTypeScript(
     includeQueryBuilders: config.includeQueryBuilders !== false,
     includeMutations: config.includeMutations !== false,
     includeClient: config.includeClient !== false,
-    formatOutput: config.formatOutput !== false,
+    formatOutput: config.formatOutput !== false
   };
 
   const generator = new TypeScriptGenerator(schema, fullConfig);
@@ -47,7 +47,7 @@ export function generateTypeScript(
 export async function writeGeneratedFiles(
   result: Types.CodegenResult,
   basePath: string = ".",
-  options: { runFmt?: boolean; } = {},
+  options: { runFmt?: boolean; } = {}
 ): Promise<void> {
   // Default: run `deno fmt` over the written files so downstream code
   // matches project conventions. Tests that round-trip content verbatim
@@ -58,7 +58,8 @@ export async function writeGeneratedFiles(
   for (const file of result.files) {
     const fullPath = file.path.startsWith("/") ? file.path : `${basePath}/${file.path}`;
     const dir = fullPath.substring(0, fullPath.lastIndexOf("/"));
-    if (dir) dirs.add(dir);
+    if (dir)
+      dirs.add(dir);
   }
 
   // Ensure all output directories exist
@@ -90,29 +91,29 @@ export async function writeGeneratedFiles(
       const cmd = new Deno.Command("deno", {
         args: ["fmt", "--quiet", ...writtenPaths],
         stdout: "null",
-        stderr: "piped",
+        stderr: "piped"
       });
       const output = await cmd.output();
       if (!output.success) {
         const stderr = new TextDecoder().decode(output.stderr).trim();
         log.warn("deno fmt reported issues (generated files still written)", {
-          stderr,
+          stderr
         });
       }
     } catch (error) {
       log.warn("deno fmt not available — generated files unformatted", {
-        error: error instanceof Error ? error.message : String(error),
+        error: error instanceof Error ? error.message : String(error)
       });
     }
   }
 
   // Report warnings and errors
   if (result.warnings.length > 0) {
-    result.warnings.forEach((warning) => log.warn("Codegen warning", { warning }));
+    result.warnings.forEach(warning => log.warn("Codegen warning", { warning }));
   }
 
   if (result.errors.length > 0) {
-    result.errors.forEach((error) => log.error("Codegen error", { error }));
+    result.errors.forEach(error => log.error("Codegen error", { error }));
   }
 }
 
@@ -179,7 +180,7 @@ export const DEFAULT_CONFIGS = {
     includeQueryBuilders: true,
     includeClient: true,
     includeMutations: true,
-    formatOutput: true,
+    formatOutput: true
   }),
 
   server: (): Partial<Types.CodegenConfig> => ({
@@ -188,7 +189,7 @@ export const DEFAULT_CONFIGS = {
     includeQueryBuilders: false,
     includeClient: false,
     includeMutations: false,
-    formatOutput: true,
+    formatOutput: true
   }),
 
   both: (): Partial<Types.CodegenConfig> => ({
@@ -197,6 +198,6 @@ export const DEFAULT_CONFIGS = {
     includeQueryBuilders: true,
     includeClient: true,
     includeMutations: true,
-    formatOutput: true,
-  }),
+    formatOutput: true
+  })
 };

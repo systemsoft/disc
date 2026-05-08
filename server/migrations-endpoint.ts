@@ -23,25 +23,25 @@ export interface MigrationsRouteContext {
  * initialized because no schema has been applied).
  */
 export async function handleGetMigrations(
-  ctx: MigrationsRouteContext,
+  ctx: MigrationsRouteContext
 ): Promise<Response> {
   try {
     const history = await ctx.migrationsProvider();
     return new Response(JSON.stringify({ migrations: history }, null, 2), {
       status: 200,
-      headers: ctx.defaultHeaders(),
+      headers: ctx.defaultHeaders()
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return new Response(
       JSON.stringify({
         error: "Migration history unavailable",
-        details: message,
+        details: message
       }),
       {
         status: 503,
-        headers: ctx.defaultHeaders(),
-      },
+        headers: ctx.defaultHeaders()
+      }
     );
   }
 }

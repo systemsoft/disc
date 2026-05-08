@@ -42,7 +42,7 @@ export interface StandardSchemaV1<Output = unknown> {
     readonly version: 1;
     readonly vendor: string;
     validate(
-      value: unknown,
+      value: unknown
     ):
       | StandardSchemaResult<Output>
       | Promise<StandardSchemaResult<Output>>;

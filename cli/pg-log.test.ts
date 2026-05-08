@@ -13,7 +13,7 @@ Deno.test("PgLogCommand - resolves log path from project name", () => {
     "instances",
     "test-project",
     "logs",
-    "postgresql.log",
+    "postgresql.log"
   );
   assertEquals(path, expected);
 });
@@ -25,30 +25,30 @@ Deno.test("PgLogCommand - filterByLevel matches correct levels", () => {
   assertEquals(
     filterByLevel(
       "2024-01-15 10:30:00.000 UTC [123] ERROR:  something failed",
-      "ERROR",
+      "ERROR"
     ),
-    true,
+    true
   );
   assertEquals(
     filterByLevel(
       "2024-01-15 10:30:00.000 UTC [123] LOG:  checkpoint starting",
-      "ERROR",
+      "ERROR"
     ),
-    false,
+    false
   );
   assertEquals(
     filterByLevel(
       "2024-01-15 10:30:00.000 UTC [123] WARNING:  setting changed",
-      "WARNING",
+      "WARNING"
     ),
-    true,
+    true
   );
   assertEquals(
     filterByLevel(
       "2024-01-15 10:30:00.000 UTC [123] FATAL:  could not bind",
-      "FATAL",
+      "FATAL"
     ),
-    true,
+    true
   );
 });
 
@@ -59,13 +59,13 @@ Deno.test("PgLogCommand - filterByLevel rejects non-matching levels", () => {
   assertEquals(
     filterByLevel(
       "2024-01-15 10:30:00.000 UTC [123] LOG:  statement ok",
-      "ERROR",
+      "ERROR"
     ),
-    false,
+    false
   );
   assertEquals(
     filterByLevel("some random line without a timestamp", "ERROR"),
-    false,
+    false
   );
 });
 
@@ -78,7 +78,7 @@ Deno.test("PgLogCommand - default lines is 50", async () => {
 
   const lines = Array.from(
     { length: 100 },
-    (_, i) => `2024-01-15 10:30:00.000 UTC [123] LOG:  line ${i + 1}`,
+    (_, i) => `2024-01-15 10:30:00.000 UTC [123] LOG:  line ${i + 1}`
   );
   await Deno.writeTextFile(join(logDir, "postgresql.log"), lines.join("\n"));
 
@@ -104,10 +104,10 @@ Deno.test("PgLogCommand - throws error when no log file exists", async () => {
         lines: 50,
         follow: false,
         level: undefined,
-        project: "nonexistent-project-12345",
+        project: "nonexistent-project-12345"
       }),
     Error,
-    "No log file found",
+    "No log file found"
   );
 });
 
@@ -120,9 +120,9 @@ Deno.test("PgLogCommand - throws helpful message with project name", async () =>
         lines: 50,
         follow: false,
         level: undefined,
-        project: "my-test-project",
+        project: "my-test-project"
       }),
     Error,
-    "my-test-project",
+    "my-test-project"
   );
 });

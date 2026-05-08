@@ -99,21 +99,21 @@ Deno.test("Compiler type mapping - cal::local_time property has edgeqlType set",
 
 Deno.test("Compiler type mapping - cal::local_datetime property has edgeqlType set", () => {
   const prop = calSchema.types.get("Event")!.properties.get(
-    "event_datetime",
+    "event_datetime"
   )!;
   assertEquals(prop.edgeqlType, "cal::local_datetime");
 });
 
 Deno.test("Compiler type mapping - cal::relative_duration property has edgeqlType set", () => {
   const prop = calSchema.types.get("Event")!.properties.get(
-    "event_rel_duration",
+    "event_rel_duration"
   )!;
   assertEquals(prop.edgeqlType, "cal::relative_duration");
 });
 
 Deno.test("Compiler type mapping - cal::date_duration property has edgeqlType set", () => {
   const prop = calSchema.types.get("Event")!.properties.get(
-    "event_date_duration",
+    "event_date_duration"
   )!;
   assertEquals(prop.edgeqlType, "cal::date_duration");
 });
@@ -128,7 +128,7 @@ Deno.test("Compiler type mapping - SELECT with cal-typed properties compiles to 
       event_time,
       event_datetime
     }
-  `,
+  `
   );
   assertStringIncludes(sql, "jsonb_build_object");
   assertStringIncludes(sql, "'title'");
@@ -146,7 +146,7 @@ Deno.test("Compiler type mapping - SELECT with duration-typed properties compile
       event_rel_duration,
       event_date_duration
     }
-  `,
+  `
   );
   assertStringIncludes(sql, "'event_rel_duration'");
   assertStringIncludes(sql, "'event_date_duration'");
@@ -168,14 +168,14 @@ Deno.test("DDL Generator - cal::local_date generates DATE column", () => {
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
-  const createTable = statements.find((s) => s.startsWith("CREATE TABLE"));
+  const createTable = statements.find(s => s.startsWith("CREATE TABLE"));
   assertEquals(createTable !== undefined, true);
   assertStringIncludes(createTable!, "DATE");
 });
@@ -192,14 +192,14 @@ Deno.test("DDL Generator - cal::local_time generates TIME WITHOUT TIME ZONE colu
         required: false,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
-  const createTable = statements.find((s) => s.startsWith("CREATE TABLE"));
+  const createTable = statements.find(s => s.startsWith("CREATE TABLE"));
   assertEquals(createTable !== undefined, true);
   assertStringIncludes(createTable!, "TIME WITHOUT TIME ZONE");
 });
@@ -216,14 +216,14 @@ Deno.test("DDL Generator - cal::local_datetime generates TIMESTAMP WITHOUT TIME 
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
-  const createTable = statements.find((s) => s.startsWith("CREATE TABLE"));
+  const createTable = statements.find(s => s.startsWith("CREATE TABLE"));
   assertEquals(createTable !== undefined, true);
   assertStringIncludes(createTable!, "TIMESTAMP WITHOUT TIME ZONE");
 });
@@ -240,14 +240,14 @@ Deno.test("DDL Generator - cal::relative_duration generates INTERVAL column", ()
         required: false,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
-  const createTable = statements.find((s) => s.startsWith("CREATE TABLE"));
+  const createTable = statements.find(s => s.startsWith("CREATE TABLE"));
   assertEquals(createTable !== undefined, true);
   assertStringIncludes(createTable!, "INTERVAL");
 });
@@ -264,14 +264,14 @@ Deno.test("DDL Generator - cal::date_duration generates INTERVAL column", () => 
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
-  const createTable = statements.find((s) => s.startsWith("CREATE TABLE"));
+  const createTable = statements.find(s => s.startsWith("CREATE TABLE"));
   assertEquals(createTable !== undefined, true);
   assertStringIncludes(createTable!, "INTERVAL");
 });
@@ -288,7 +288,7 @@ Deno.test("DDL Generator - type with all five cal types generates correct column
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
+        annotations: {}
       },
       {
         name: "entry_time",
@@ -296,7 +296,7 @@ Deno.test("DDL Generator - type with all five cal types generates correct column
         required: false,
         multi: false,
         constraints: [],
-        annotations: {},
+        annotations: {}
       },
       {
         name: "entry_datetime",
@@ -304,7 +304,7 @@ Deno.test("DDL Generator - type with all five cal types generates correct column
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
+        annotations: {}
       },
       {
         name: "reminder_offset",
@@ -312,7 +312,7 @@ Deno.test("DDL Generator - type with all five cal types generates correct column
         required: false,
         multi: false,
         constraints: [],
-        annotations: {},
+        annotations: {}
       },
       {
         name: "recurrence_interval",
@@ -320,14 +320,14 @@ Deno.test("DDL Generator - type with all five cal types generates correct column
         required: false,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
-  const createTable = statements.find((s) => s.startsWith("CREATE TABLE"))!;
+  const createTable = statements.find(s => s.startsWith("CREATE TABLE"))!;
 
   assertStringIncludes(createTable, "DATE");
   assertStringIncludes(createTable, "TIME WITHOUT TIME ZONE");
@@ -343,70 +343,70 @@ Deno.test("DDL Generator - type with all five cal types generates correct column
 Deno.test("Codegen - cal::local_datetime maps to Date (required)", () => {
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("cal::local_datetime", true, false),
-    "Date",
+    "Date"
   );
 });
 
 Deno.test("Codegen - cal::local_datetime maps to Date | null (optional)", () => {
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("cal::local_datetime", false, false),
-    "Date | null",
+    "Date | null"
   );
 });
 
 Deno.test("Codegen - cal::local_date maps to string (required)", () => {
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("cal::local_date", true, false),
-    "string",
+    "string"
   );
 });
 
 Deno.test("Codegen - cal::local_date maps to string | null (optional)", () => {
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("cal::local_date", false, false),
-    "string | null",
+    "string | null"
   );
 });
 
 Deno.test("Codegen - cal::local_time maps to string (required)", () => {
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("cal::local_time", true, false),
-    "string",
+    "string"
   );
 });
 
 Deno.test("Codegen - cal::local_time maps to string[] (multi)", () => {
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("cal::local_time", true, true),
-    "string[]",
+    "string[]"
   );
 });
 
 Deno.test("Codegen - cal::relative_duration maps to string (required)", () => {
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("cal::relative_duration", true, false),
-    "string",
+    "string"
   );
 });
 
 Deno.test("Codegen - cal::relative_duration maps to string[] (multi)", () => {
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("cal::relative_duration", true, true),
-    "string[]",
+    "string[]"
   );
 });
 
 Deno.test("Codegen - cal::date_duration maps to string (required)", () => {
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("cal::date_duration", true, false),
-    "string",
+    "string"
   );
 });
 
 Deno.test("Codegen - cal::date_duration maps to string | null (optional)", () => {
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("cal::date_duration", false, false),
-    "string | null",
+    "string | null"
   );
 });
 
@@ -416,7 +416,7 @@ Deno.test("Codegen - getTypeMapping returns mappings for all five cal types", ()
     "cal::local_time",
     "cal::local_datetime",
     "cal::relative_duration",
-    "cal::date_duration",
+    "cal::date_duration"
   ];
 
   for (const calType of calTypes) {
@@ -425,7 +425,7 @@ Deno.test("Codegen - getTypeMapping returns mappings for all five cal types", ()
     assertEquals(
       mapping!.edgeqlType,
       calType,
-      `Mapping edgeqlType mismatch for ${calType}`,
+      `Mapping edgeqlType mismatch for ${calType}`
     );
   }
 });
@@ -437,35 +437,35 @@ Deno.test("Codegen - getTypeMapping returns mappings for all five cal types", ()
 Deno.test("Cast map - cal::local_date casts to <cal::local_date>", () => {
   assertEquals(
     Types.mapEdgeQLTypeToEdgeQLCast("cal::local_date"),
-    "<cal::local_date>",
+    "<cal::local_date>"
   );
 });
 
 Deno.test("Cast map - cal::local_time casts to <cal::local_time>", () => {
   assertEquals(
     Types.mapEdgeQLTypeToEdgeQLCast("cal::local_time"),
-    "<cal::local_time>",
+    "<cal::local_time>"
   );
 });
 
 Deno.test("Cast map - cal::local_datetime casts to <cal::local_datetime>", () => {
   assertEquals(
     Types.mapEdgeQLTypeToEdgeQLCast("cal::local_datetime"),
-    "<cal::local_datetime>",
+    "<cal::local_datetime>"
   );
 });
 
 Deno.test("Cast map - cal::relative_duration casts to <cal::relative_duration>", () => {
   assertEquals(
     Types.mapEdgeQLTypeToEdgeQLCast("cal::relative_duration"),
-    "<cal::relative_duration>",
+    "<cal::relative_duration>"
   );
 });
 
 Deno.test("Cast map - cal::date_duration casts to <cal::date_duration>", () => {
   assertEquals(
     Types.mapEdgeQLTypeToEdgeQLCast("cal::date_duration"),
-    "<cal::date_duration>",
+    "<cal::date_duration>"
   );
 });
 
@@ -572,10 +572,11 @@ Deno.test("Schema validation - max_value constraint allowed on cal::local_dateti
 Deno.test("sdlTypeToSqlType - cal::local_date maps to date", () => {
   const manager = new SchemaManager({ dryRun: true });
   const parseResult = manager.parseSDL(
-    `type T { required d: cal::local_date; }`,
+    `type T { required d: cal::local_date; }`
   );
   assertEquals(parseResult.ok, true);
-  if (!parseResult.ok) throw parseResult.error;
+  if (!parseResult.ok)
+    throw parseResult.error;
   const schema = manager.modulesToSchema(parseResult.value);
   const prop = schema.types.get("T")!.properties.get("d")!;
   assertEquals(prop.type, "date");
@@ -584,10 +585,11 @@ Deno.test("sdlTypeToSqlType - cal::local_date maps to date", () => {
 Deno.test("sdlTypeToSqlType - cal::local_time maps to time", () => {
   const manager = new SchemaManager({ dryRun: true });
   const parseResult = manager.parseSDL(
-    `type T { required t: cal::local_time; }`,
+    `type T { required t: cal::local_time; }`
   );
   assertEquals(parseResult.ok, true);
-  if (!parseResult.ok) throw parseResult.error;
+  if (!parseResult.ok)
+    throw parseResult.error;
   const schema = manager.modulesToSchema(parseResult.value);
   const prop = schema.types.get("T")!.properties.get("t")!;
   assertEquals(prop.type, "time");
@@ -596,10 +598,11 @@ Deno.test("sdlTypeToSqlType - cal::local_time maps to time", () => {
 Deno.test("sdlTypeToSqlType - cal::local_datetime maps to timestamp", () => {
   const manager = new SchemaManager({ dryRun: true });
   const parseResult = manager.parseSDL(
-    `type T { required dt: cal::local_datetime; }`,
+    `type T { required dt: cal::local_datetime; }`
   );
   assertEquals(parseResult.ok, true);
-  if (!parseResult.ok) throw parseResult.error;
+  if (!parseResult.ok)
+    throw parseResult.error;
   const schema = manager.modulesToSchema(parseResult.value);
   const prop = schema.types.get("T")!.properties.get("dt")!;
   assertEquals(prop.type, "timestamp");
@@ -608,10 +611,11 @@ Deno.test("sdlTypeToSqlType - cal::local_datetime maps to timestamp", () => {
 Deno.test("sdlTypeToSqlType - cal::relative_duration maps to interval", () => {
   const manager = new SchemaManager({ dryRun: true });
   const parseResult = manager.parseSDL(
-    `type T { required rd: cal::relative_duration; }`,
+    `type T { required rd: cal::relative_duration; }`
   );
   assertEquals(parseResult.ok, true);
-  if (!parseResult.ok) throw parseResult.error;
+  if (!parseResult.ok)
+    throw parseResult.error;
   const schema = manager.modulesToSchema(parseResult.value);
   const prop = schema.types.get("T")!.properties.get("rd")!;
   assertEquals(prop.type, "interval");
@@ -620,10 +624,11 @@ Deno.test("sdlTypeToSqlType - cal::relative_duration maps to interval", () => {
 Deno.test("sdlTypeToSqlType - cal::date_duration maps to interval", () => {
   const manager = new SchemaManager({ dryRun: true });
   const parseResult = manager.parseSDL(
-    `type T { required dd: cal::date_duration; }`,
+    `type T { required dd: cal::date_duration; }`
   );
   assertEquals(parseResult.ok, true);
-  if (!parseResult.ok) throw parseResult.error;
+  if (!parseResult.ok)
+    throw parseResult.error;
   const schema = manager.modulesToSchema(parseResult.value);
   const prop = schema.types.get("T")!.properties.get("dd")!;
   assertEquals(prop.type, "interval");

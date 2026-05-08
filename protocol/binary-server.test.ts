@@ -26,11 +26,12 @@ const ZERO_UUID = new Uint8Array(16);
  * Returns { mtype, payload } or null if connection closed.
  */
 async function readMessage(
-  conn: Deno.TcpConn,
+  conn: Deno.TcpConn
 ): Promise<{ mtype: number; payload: Uint8Array; } | null> {
   const header = new Uint8Array(5);
   const headerRead = await readExact(conn, header);
-  if (!headerRead) return null;
+  if (!headerRead)
+    return null;
 
   const mtype = header[0];
   const view = new DataView(header.buffer, header.byteOffset);
@@ -40,7 +41,8 @@ async function readMessage(
   const payload = new Uint8Array(payloadLength);
   if (payloadLength > 0) {
     const ok = await readExact(conn, payload);
-    if (!ok) return null;
+    if (!ok)
+      return null;
   }
 
   return { mtype, payload };
@@ -51,12 +53,13 @@ async function readMessage(
  */
 async function readExact(
   conn: Deno.TcpConn,
-  buf: Uint8Array,
+  buf: Uint8Array
 ): Promise<boolean> {
   let offset = 0;
   while (offset < buf.length) {
     const n = await conn.read(buf.subarray(offset));
-    if (n === null) return false;
+    if (n === null)
+      return false;
     offset += n;
   }
   return true;
@@ -74,7 +77,7 @@ function decode(raw: { mtype: number; payload: Uint8Array; }): ServerMessage {
  */
 async function sendMessage(
   conn: Deno.TcpConn,
-  msg: ClientMessage,
+  msg: ClientMessage
 ): Promise<void> {
   const bytes = encodeClientMessage(msg);
   let offset = 0;
@@ -104,9 +107,9 @@ function clientHandshake(): ClientMessage {
     minorVersion: PROTOCOL_MINOR_VERSION,
     params: [{ name: "user", value: "test" }, {
       name: "database",
-      value: "testdb",
+      value: "testdb"
     }],
-    extensions: [],
+    extensions: []
   };
 }
 
@@ -128,7 +131,7 @@ function executeMsg(query: string): ClientMessage {
     stateData: new Uint8Array(0),
     inputTypedescId: ZERO_UUID,
     outputTypedescId: ZERO_UUID,
-    arguments: new Uint8Array(0),
+    arguments: new Uint8Array(0)
   };
 }
 
@@ -147,7 +150,7 @@ function parseMsg(query: string): ClientMessage {
     expectedCardinality: Cardinality.MANY,
     commandText: query,
     stateTypedescId: ZERO_UUID,
-    stateData: new Uint8Array(0),
+    stateData: new Uint8Array(0)
   };
 }
 
@@ -156,7 +159,7 @@ function parseMsg(query: string): ClientMessage {
  * Returns all received messages.
  */
 async function performNoAuthHandshake(
-  conn: Deno.TcpConn,
+  conn: Deno.TcpConn
 ): Promise<ServerMessage[]> {
   const messages: ServerMessage[] = [];
 
@@ -165,20 +168,24 @@ async function performNoAuthHandshake(
 
   // Read ServerHandshake
   const raw1 = await readMessage(conn);
-  if (raw1) messages.push(decode(raw1));
+  if (raw1)
+    messages.push(decode(raw1));
 
   // Read AuthenticationOK
   const raw2 = await readMessage(conn);
-  if (raw2) messages.push(decode(raw2));
+  if (raw2)
+    messages.push(decode(raw2));
 
   // Read ServerKeyData
   const raw3 = await readMessage(conn);
-  if (raw3) messages.push(decode(raw3));
+  if (raw3)
+    messages.push(decode(raw3));
 
   // Read 2 ParameterStatus + StateDataDescription + ReadyForCommand.
   for (let i = 0; i < 4; i++) {
     const raw = await readMessage(conn);
-    if (raw) messages.push(decode(raw));
+    if (raw)
+      messages.push(decode(raw));
   }
 
   return messages;
@@ -191,14 +198,14 @@ async function performNoAuthHandshake(
 Deno.test("binary-server - starts and accepts TCP connection", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   await server.start();
   assertNotEquals(server.port, 0);
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   conn.close();
   await server.stop();
@@ -207,13 +214,13 @@ Deno.test("binary-server - starts and accepts TCP connection", async () => {
 Deno.test("binary-server - no-auth handshake returns correct sequence", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   await server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
 
   const messages = await performNoAuthHandshake(conn);
@@ -240,7 +247,7 @@ Deno.test("binary-server - no-auth handshake returns correct sequence", async ()
   if (messages[6].kind === "ReadyForCommand") {
     assertEquals(
       messages[6].transactionState,
-      TransactionState.NOT_IN_TRANSACTION,
+      TransactionState.NOT_IN_TRANSACTION
     );
   }
 
@@ -253,13 +260,13 @@ Deno.test("binary-server - auth handshake with SCRAM-SHA-256", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
     schema: createSchema(),
-    password,
+    password
   });
   await server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
 
   // 1. Send ClientHandshake
@@ -285,7 +292,7 @@ Deno.test("binary-server - auth handshake with SCRAM-SHA-256", async () => {
   await sendMessage(conn, {
     kind: "AuthenticationSASLInitialResponse",
     method: "SCRAM-SHA-256",
-    saslData: clientFirstMsg,
+    saslData: clientFirstMsg
   });
 
   // 5. Read AuthenticationSASLContinue (server-first-message)
@@ -303,12 +310,12 @@ Deno.test("binary-server - auth handshake with SCRAM-SHA-256", async () => {
     password,
     clientNonce,
     clientFirstMessageBare,
-    serverFirstMessage,
+    serverFirstMessage
   );
 
   await sendMessage(conn, {
     kind: "AuthenticationSASLResponse",
-    saslData: clientFinalMsg,
+    saslData: clientFinalMsg
   });
 
   // 7. Read AuthenticationSASLFinal
@@ -350,13 +357,13 @@ Deno.test("binary-server - wrong password during SCRAM auth", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
     schema: createSchema(),
-    password,
+    password
   });
   await server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
 
   // Handshake
@@ -370,7 +377,7 @@ Deno.test("binary-server - wrong password during SCRAM auth", async () => {
   await sendMessage(conn, {
     kind: "AuthenticationSASLInitialResponse",
     method: "SCRAM-SHA-256",
-    saslData: clientFirstMsg,
+    saslData: clientFirstMsg
   });
 
   // Read server-first
@@ -388,11 +395,11 @@ Deno.test("binary-server - wrong password during SCRAM auth", async () => {
     "wrong-password",
     clientNonce,
     clientFirstMessageBare,
-    serverFirstMessage,
+    serverFirstMessage
   );
   await sendMessage(conn, {
     kind: "AuthenticationSASLResponse",
-    saslData: clientFinalMsg,
+    saslData: clientFinalMsg
   });
 
   // Should get ErrorResponse
@@ -415,13 +422,13 @@ Deno.test("binary-server - wrong password during SCRAM auth", async () => {
 Deno.test("binary-server - Parse message returns CommandDataDescription", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   await server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn);
 
@@ -444,13 +451,13 @@ Deno.test("binary-server - Parse message returns CommandDataDescription", async 
 Deno.test("binary-server - Execute simple query returns Data + CommandComplete + ReadyForCommand", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   await server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn);
 
@@ -487,13 +494,13 @@ Deno.test("binary-server - Execute simple query returns Data + CommandComplete +
 Deno.test("binary-server - Sync message returns ReadyForCommand", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   await server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn);
 
@@ -507,7 +514,7 @@ Deno.test("binary-server - Sync message returns ReadyForCommand", async () => {
   if (ready.kind === "ReadyForCommand") {
     assertEquals(
       ready.transactionState,
-      TransactionState.NOT_IN_TRANSACTION,
+      TransactionState.NOT_IN_TRANSACTION
     );
   }
 
@@ -518,13 +525,13 @@ Deno.test("binary-server - Sync message returns ReadyForCommand", async () => {
 Deno.test("binary-server - Terminate closes connection gracefully", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   await server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn);
 
@@ -532,7 +539,7 @@ Deno.test("binary-server - Terminate closes connection gracefully", async () => 
   await sendMessage(conn, { kind: "Terminate" });
 
   // Wait a moment for the server to process
-  await new Promise((r) => setTimeout(r, 50));
+  await new Promise(r => setTimeout(r, 50));
 
   // Trying to read should get null (connection closed)
   const raw = await readMessage(conn);
@@ -545,13 +552,13 @@ Deno.test("binary-server - Terminate closes connection gracefully", async () => 
 Deno.test("binary-server - Flush is a no-op", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   await server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn);
 
@@ -572,13 +579,13 @@ Deno.test("binary-server - Flush is a no-op", async () => {
 Deno.test("binary-server - multiple sequential queries on same connection", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   await server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn);
 
@@ -613,33 +620,33 @@ Deno.test("binary-server - multiple sequential queries on same connection", asyn
 Deno.test("binary-server - connectionCount tracks active connections", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   await server.start();
   assertEquals(server.connectionCount, 0);
 
   const conn1 = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn1);
 
   // Give the server a moment to register
-  await new Promise((r) => setTimeout(r, 20));
+  await new Promise(r => setTimeout(r, 20));
   assertEquals(server.connectionCount, 1);
 
   const conn2 = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn2);
 
-  await new Promise((r) => setTimeout(r, 20));
+  await new Promise(r => setTimeout(r, 20));
   assertEquals(server.connectionCount, 2);
 
   // Close one connection
   await sendMessage(conn1, { kind: "Terminate" });
-  await new Promise((r) => setTimeout(r, 50));
+  await new Promise(r => setTimeout(r, 50));
   assertEquals(server.connectionCount, 1);
 
   conn1.close();
@@ -659,22 +666,22 @@ Deno.test("binary-server - onConnection and onDisconnect callbacks", async () =>
     },
     onDisconnect: () => {
       disconnected++;
-    },
+    }
   });
   await server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn);
 
-  await new Promise((r) => setTimeout(r, 20));
+  await new Promise(r => setTimeout(r, 20));
   assertEquals(connected, 1);
 
   // Terminate
   await sendMessage(conn, { kind: "Terminate" });
-  await new Promise((r) => setTimeout(r, 50));
+  await new Promise(r => setTimeout(r, 50));
   assertEquals(disconnected, 1);
 
   conn.close();
@@ -684,13 +691,13 @@ Deno.test("binary-server - onConnection and onDisconnect callbacks", async () =>
 Deno.test("binary-server - server stop closes all connections", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   await server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn);
 
@@ -711,13 +718,13 @@ Deno.test("binary-server - server stop closes all connections", async () => {
 Deno.test("binary-server - rejects oversized messages with ErrorResponse (P0-08)", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   await server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
 
   // Fabricate a header whose length field claims a 1 GB payload. A vulnerable
@@ -759,7 +766,7 @@ Deno.test("binary-server - BinaryConnection stmt cache is bounded (P0-09)", asyn
     },
     write() {
       return Promise.resolve(0);
-    },
+    }
   };
   // deno-lint-ignore no-explicit-any
   const bc = new BinaryConnection(fakeConn as any, createSchema());
@@ -778,13 +785,13 @@ Deno.test("binary-server - BinaryConnection stmt cache is bounded (P0-09)", asyn
       resultCardinality: Cardinality.MANY,
       commandStatus: "SELECT",
       params: [],
-      outputShape: { kind: "scalar", isScalar: true },
+      outputShape: { kind: "scalar", isScalar: true }
     });
   }
 
   assertEquals(
     bc.getCacheSize() <= cap,
     true,
-    `Cache must stay within ${cap} entries after inserting ${cap + 10}`,
+    `Cache must stay within ${cap} entries after inserting ${cap + 10}`
   );
 });

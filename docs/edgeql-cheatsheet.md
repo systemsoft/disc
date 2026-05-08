@@ -212,12 +212,12 @@ select { total := count_active, users := active { name } };
 Wrap a multi-statement unit via the SDK (the `disc shell` REPL also exposes `start transaction;` / `commit;` / `rollback;`):
 
 ```typescript
-const result = await client.transaction(async (tx) => {
+const result = await client.transaction(async tx => {
   const post = await tx.querySingle(
     `
     insert Post { title := <str>$t, body := <str>$b, author := <User>$a }
   `,
-    { t: title, b: body, a: authorId },
+    { t: title, b: body, a: authorId }
   );
 
   await tx.execute(
@@ -225,7 +225,7 @@ const result = await client.transaction(async (tx) => {
     update User filter .id = <uuid>$id
     set { post_count := .post_count + 1 }
   `,
-    { id: authorId },
+    { id: authorId }
   );
 
   return post;

@@ -14,7 +14,8 @@ import { type Diagnostic, DiagnosticSeverity, type Position, type Range } from "
 const SOURCE = "disc";
 
 export function analyzeDiscDocument(text: string): Diagnostic[] {
-  if (text.length === 0) return [];
+  if (text.length === 0)
+    return [];
 
   const diagnostics: Diagnostic[] = [];
 
@@ -42,7 +43,7 @@ export function analyzeDiscDocument(text: string): Diagnostic[] {
 function errorToDiagnostic(
   err: DiscError | Error,
   source: string,
-  severity: DiagnosticSeverity,
+  severity: DiagnosticSeverity
 ): Diagnostic {
   const message = "message" in err ? err.message : String(err);
   const range = errorToRange(err, source);
@@ -50,7 +51,7 @@ function errorToDiagnostic(
     range,
     severity,
     source: SOURCE,
-    message,
+    message
   };
 }
 
@@ -63,7 +64,7 @@ function errorToRange(err: DiscError | Error, source: string): Range {
     const startChar = Math.max(0, ctx.location.column - 1);
     return {
       start: { line: startLine, character: startChar },
-      end: extendToEndOfTokenOrLine(source, startLine, startChar),
+      end: extendToEndOfTokenOrLine(source, startLine, startChar)
     };
   }
   // Without a location, point at the start of the document. Editors
@@ -75,20 +76,21 @@ function errorToRange(err: DiscError | Error, source: string): Range {
 function extendToEndOfTokenOrLine(
   source: string,
   line: number,
-  character: number,
+  character: number
 ): Position {
   const lines = source.split("\n");
-  if (line >= lines.length) return { line, character };
+  if (line >= lines.length)
+    return { line, character };
   const lineText = lines[line];
   // Find the next whitespace or end-of-line after `character` so the
   // squiggle covers a meaningful chunk rather than a zero-width caret.
   let end = character;
   while (
-    end < lineText.length
-    && !/\s/.test(lineText[end])
-    && lineText[end] !== ";"
-    && lineText[end] !== "{"
-    && lineText[end] !== "}"
+    end < lineText.length &&
+    !/\s/.test(lineText[end]) &&
+    lineText[end] !== ";" &&
+    lineText[end] !== "{" &&
+    lineText[end] !== "}"
   ) {
     end++;
   }

@@ -36,7 +36,7 @@ function parseDsn(dsn: string): {
     database: url.pathname.slice(1) || "disc_test",
     hostname: url.hostname || "localhost",
     port: url.port ? parseInt(url.port) : 5432,
-    user: url.username || "disc",
+    user: url.username || "disc"
   };
 }
 
@@ -59,11 +59,11 @@ async function pgDump(dsn: string, pgBinDir: string): Promise<Uint8Array> {
       "--clean",
       "--if-exists",
       "--format=plain",
-      cfg.database,
+      cfg.database
     ],
     stderr: "piped",
     stdin: "null",
-    stdout: "piped",
+    stdout: "piped"
   });
   const { code, stdout, stderr } = await child.output();
   if (code !== 0) {
@@ -76,7 +76,7 @@ async function pgDump(dsn: string, pgBinDir: string): Promise<Uint8Array> {
 async function pgRestore(
   dsn: string,
   pgBinDir: string,
-  sql: Uint8Array,
+  sql: Uint8Array
 ): Promise<void> {
   const cfg = parseDsn(dsn);
   const child = new Deno.Command(join(pgBinDir, "psql"), {
@@ -91,12 +91,13 @@ async function pgRestore(
       cfg.database,
       "--quiet",
       "--set",
-      "ON_ERROR_STOP=1",
+      "ON_ERROR_STOP=1"
     ],
     stderr: "piped",
     stdin: "piped",
-    stdout: "piped",
-  }).spawn();
+    stdout: "piped"
+  })
+    .spawn();
 
   const writer = child.stdin.getWriter();
   await writer.write(sql);
@@ -139,7 +140,7 @@ Deno.test({
       connectionString: dsn,
       minConnections: 1,
       maxConnections: 3,
-      cleanupInterval: 0,
+      cleanupInterval: 0
     });
 
     try {
@@ -147,7 +148,7 @@ Deno.test({
 
       // 1. Create a real domain table + record a migration in the tracker.
       await pool.execute(
-        `CREATE TABLE ${userTable} (id uuid PRIMARY KEY, name text NOT NULL)`,
+        `CREATE TABLE ${userTable} (id uuid PRIMARY KEY, name text NOT NULL)`
       );
 
       const tracker = new MigrationTracker(pool);
@@ -161,14 +162,14 @@ Deno.test({
         createdAt: new Date(),
         appliedAt: new Date(),
         schemaHash: "round_trip_hash",
-        operations: [],
+        operations: []
       };
 
       const recordRes = await tracker.recordMigration(migration, {
         appliedAt: new Date(),
         durationMs: 5,
         migrationId,
-        success: true,
+        success: true
       });
       assertEquals(recordRes.ok, true, "record should succeed");
 
@@ -179,12 +180,12 @@ Deno.test({
       assertEquals(
         dumpText.includes("disc_migrations"),
         true,
-        "dump must include the migration tracker table",
+        "dump must include the migration tracker table"
       );
       assertEquals(
         dumpText.includes(userTable),
         true,
-        "dump must include the domain table",
+        "dump must include the domain table"
       );
 
       // 3. Drop the tables and tracker, simulating a wipe-then-restore.
@@ -193,7 +194,7 @@ Deno.test({
         dsn,
         userTable,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
 
       // 4. Restore.
@@ -207,12 +208,12 @@ Deno.test({
           { id: string; name: string; schema_hash: string; }
         >(
           `SELECT id, name, schema_hash FROM disc_migrations WHERE id = $1`,
-          [migrationId],
+          [migrationId]
         );
         assertEquals(
           result.rows.length,
           1,
-          "tracker row must be restored — Gel #2071 regression check",
+          "tracker row must be restored — Gel #2071 regression check"
         );
         assertEquals(result.rows[0].name, "dump_test_migration");
         assertEquals(result.rows[0].schema_hash, "round_trip_hash");
@@ -224,8 +225,8 @@ Deno.test({
         dsn,
         userTable,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
     }
-  },
+  }
 });

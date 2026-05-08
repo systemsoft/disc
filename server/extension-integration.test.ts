@@ -33,13 +33,13 @@ function makeMockHandler(): ProtocolHandler {
   return {
     handleRequest(
       _request: QueryRequest,
-      _context: QueryContext,
+      _context: QueryContext
     ): Promise<QueryResponse> {
       return Promise.resolve({ data: { ok: true } });
     },
     validateRequest(_request: QueryRequest) {
       return [];
-    },
+    }
   };
 }
 
@@ -51,7 +51,7 @@ class MinimalExtension extends BaseExtension {
   readonly metadata: ExtensionMetadata = {
     name: "minimal",
     version: "1.0.0",
-    description: "Minimal test extension",
+    description: "Minimal test extension"
   };
 }
 
@@ -81,14 +81,14 @@ class TrackingExtension extends BaseExtension {
 class FunctionExtension extends BaseExtension {
   readonly metadata: ExtensionMetadata = {
     name: "functions",
-    version: "1.0.0",
+    version: "1.0.0"
   };
 
   private readonly extraFunction: FunctionDef = {
     name: "ext_greet",
     args: [{ name: "name", type: "str", required: true }],
     returnType: "str",
-    sqlName: "ext_greet",
+    sqlName: "ext_greet"
   };
 
   override getFunctions(): FunctionDef[] {
@@ -99,7 +99,7 @@ class FunctionExtension extends BaseExtension {
 class RouteExtension extends BaseExtension {
   readonly metadata: ExtensionMetadata = {
     name: "routes",
-    version: "1.0.0",
+    version: "1.0.0"
   };
 
   override getRoutes(): ExtensionRoute[] {
@@ -107,28 +107,28 @@ class RouteExtension extends BaseExtension {
       {
         method: "GET",
         path: "/ping",
-        handler: async (_req) => {
+        handler: async _req => {
           await Promise.resolve();
           return new Response(
             JSON.stringify({ pong: true }),
             {
               status: 200,
-              headers: { "Content-Type": "application/json" },
-            },
+              headers: { "Content-Type": "application/json" }
+            }
           );
-        },
+        }
       },
       {
         method: "POST",
         path: "/echo",
-        handler: async (req) => {
+        handler: async req => {
           const body = await req.text();
           return new Response(body, {
             status: 200,
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json" }
           });
-        },
-      },
+        }
+      }
     ];
   }
 }
@@ -136,7 +136,7 @@ class RouteExtension extends BaseExtension {
 class FailingExtension extends BaseExtension {
   readonly metadata: ExtensionMetadata = {
     name: "failing",
-    version: "1.0.0",
+    version: "1.0.0"
   };
 
   override initialize(_ctx: ExtensionContext): Promise<void> {
@@ -150,7 +150,7 @@ class FailingExtension extends BaseExtension {
 
 function createExtHttpServer(
   port: number,
-  ext: RouteExtension,
+  ext: RouteExtension
 ): HttpServer {
   const routes = new Map<string, ExtensionRoute[]>();
   routes.set(ext.metadata.name, ext.getRoutes());
@@ -163,10 +163,10 @@ function createExtHttpServer(
       maxConnections: 10,
       requestTimeout: 5000,
       enableCors: true,
-      enableWebsockets: false,
+      enableWebsockets: false
     },
     protocolHandler: makeMockHandler(),
-    extensionRoutes: routes,
+    extensionRoutes: routes
   });
 }
 
@@ -178,7 +178,7 @@ function createHealthHttpServer(
   port: number,
   healthGetter: () => Promise<
     Map<string, { healthy: boolean; details?: string; }>
-  >,
+  >
 ): HttpServer {
   return new HttpServer({
     config: {
@@ -188,10 +188,10 @@ function createHealthHttpServer(
       maxConnections: 10,
       requestTimeout: 5000,
       enableCors: true,
-      enableWebsockets: false,
+      enableWebsockets: false
     },
     protocolHandler: makeMockHandler(),
-    extensionHealthGetter: healthGetter,
+    extensionHealthGetter: healthGetter
   });
 }
 
@@ -213,14 +213,14 @@ Deno.test({
         maxConnections: 10,
         requestTimeout: 5000,
         enableCors: true,
-        enableWebsockets: false,
+        enableWebsockets: false
       },
-      protocolHandler: makeMockHandler(),
+      protocolHandler: makeMockHandler()
       // No extensionRoutes — should default to empty map
     });
 
     void server.start();
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 200));
 
     try {
       const res = await fetch(`http://${TEST_HOST}:${port}/`);
@@ -232,7 +232,7 @@ Deno.test({
     } finally {
       await server.stop();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -258,14 +258,14 @@ Deno.test({
         maxConnections: 10,
         requestTimeout: 5000,
         enableCors: true,
-        enableWebsockets: false,
+        enableWebsockets: false
       },
-      logger: getLogger("test"),
+      logger: getLogger("test")
     });
 
     assert(ext.initializeCalled, "initialize() should have been called");
     assertEquals(ext.state, "ready");
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -288,9 +288,9 @@ Deno.test({
         maxConnections: 10,
         requestTimeout: 5000,
         enableCors: true,
-        enableWebsockets: false,
+        enableWebsockets: false
       },
-      logger: getLogger("test"),
+      logger: getLogger("test")
     });
 
     assertEquals(ext.shutdownCalled, false);
@@ -298,7 +298,7 @@ Deno.test({
 
     assert(ext.shutdownCalled, "shutdown() should have been called");
     assertEquals(ext.state, "shutdown");
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -315,12 +315,12 @@ Deno.test({
     const server = createExtHttpServer(port, ext);
 
     void server.start();
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 200));
 
     try {
       // GET /ext/routes/ping
       const pingRes = await fetch(
-        `http://${TEST_HOST}:${port}/ext/routes/ping`,
+        `http://${TEST_HOST}:${port}/ext/routes/ping`
       );
       assertEquals(pingRes.status, 200);
       const pingBody = await pingRes.json();
@@ -332,8 +332,8 @@ Deno.test({
         {
           method: "POST",
           body: JSON.stringify({ hello: "world" }),
-          headers: { "Content-Type": "application/json" },
-        },
+          headers: { "Content-Type": "application/json" }
+        }
       );
       assertEquals(echoRes.status, 200);
       const echoBody = await echoRes.json();
@@ -341,7 +341,7 @@ Deno.test({
     } finally {
       await server.stop();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -358,22 +358,22 @@ Deno.test({
     const server = createExtHttpServer(port, ext);
 
     void server.start();
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 200));
 
     try {
       const res = await fetch(
-        `http://${TEST_HOST}:${port}/ext/nonexistent/ping`,
+        `http://${TEST_HOST}:${port}/ext/nonexistent/ping`
       );
       assertEquals(res.status, 404);
       const body = await res.json();
       assert(
         body.error.includes("nonexistent"),
-        `Error "${body.error}" should mention extension name`,
+        `Error "${body.error}" should mention extension name`
       );
     } finally {
       await server.stop();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -392,11 +392,11 @@ Deno.test({
 
     const server = createHealthHttpServer(
       port,
-      () => Promise.resolve(healthMap),
+      () => Promise.resolve(healthMap)
     );
 
     void server.start();
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 200));
 
     try {
       const res = await fetch(`http://${TEST_HOST}:${port}/health`);
@@ -405,14 +405,14 @@ Deno.test({
       const body = await res.json();
       assert(
         body.extensions !== undefined,
-        "extensions key should be present in /health",
+        "extensions key should be present in /health"
       );
       assertEquals(body.extensions["my-ext"].healthy, false);
       assertEquals(body.extensions["my-ext"].details, "always broken");
     } finally {
       await server.stop();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -437,14 +437,14 @@ Deno.test({
             maxConnections: 10,
             requestTimeout: 5000,
             enableCors: true,
-            enableWebsockets: false,
+            enableWebsockets: false
           },
-          logger: getLogger("test"),
+          logger: getLogger("test")
         }),
       Error,
-      "failing",
+      "failing"
     );
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -467,15 +467,15 @@ Deno.test({
         maxConnections: 10,
         requestTimeout: 5000,
         enableCors: true,
-        enableWebsockets: false,
+        enableWebsockets: false
       },
-      logger: getLogger("test"),
+      logger: getLogger("test")
     });
 
     const functions = registry.getAllFunctions();
-    const names = functions.map((f) => f.name);
+    const names = functions.map(f => f.name);
     assert(names.includes("ext_greet"), "ext_greet should be in registry");
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -505,9 +505,9 @@ Deno.test({
         maxConnections: 10,
         requestTimeout: 5000,
         enableCors: true,
-        enableWebsockets: false,
+        enableWebsockets: false
       },
-      logger: getLogger("test"),
+      logger: getLogger("test")
     };
 
     await registry.initializeAll(ctx);
@@ -522,7 +522,7 @@ Deno.test({
 
     assert(ext1.shutdownCalled, "ext-alpha shutdown() should be called");
     assert(ext2.shutdownCalled, "ext-beta shutdown() should be called");
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -539,7 +539,7 @@ Deno.test({
     const server = createExtHttpServer(port, ext);
 
     void server.start();
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 200));
 
     try {
       const res = await fetch(`http://${TEST_HOST}:${port}/`);
@@ -548,19 +548,19 @@ Deno.test({
 
       assert(
         body.endpoints.extensions !== undefined,
-        "extensions should appear in root endpoint listing",
+        "extensions should appear in root endpoint listing"
       );
       assert(
         Array.isArray(body.endpoints.extensions["routes"]),
-        "routes extension should be listed",
+        "routes extension should be listed"
       );
       const routeList: string[] = body.endpoints.extensions["routes"];
       assert(
         routeList.some((r: string) => r.includes("GET") && r.includes("/ping")),
-        "GET /ping should be listed",
+        "GET /ping should be listed"
       );
     } finally {
       await server.stop();
     }
-  },
+  }
 });

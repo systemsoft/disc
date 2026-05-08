@@ -54,18 +54,18 @@ export function handleDataWatch(options: DataWatchOptions): Response {
   if (!tablesParam) {
     return new Response(
       JSON.stringify({
-        error: "Missing required `tables` query parameter (comma-separated PG table names)",
+        error: "Missing required `tables` query parameter (comma-separated PG table names)"
       }),
       {
         status: 400,
-        headers: { "Content-Type": "application/json" },
-      },
+        headers: { "Content-Type": "application/json" }
+      }
     );
   }
 
   const requestedTables = tablesParam
     .split(",")
-    .map((t) => t.trim())
+    .map(t => t.trim())
     .filter(Boolean);
 
   if (requestedTables.length === 0) {
@@ -73,19 +73,19 @@ export function handleDataWatch(options: DataWatchOptions): Response {
       JSON.stringify({ error: "`tables` must include at least one name" }),
       {
         status: 400,
-        headers: { "Content-Type": "application/json" },
-      },
+        headers: { "Content-Type": "application/json" }
+      }
     );
   }
   if (requestedTables.length > MAX_TABLES_PER_SUB) {
     return new Response(
       JSON.stringify({
-        error: `Too many tables (${requestedTables.length} > ${MAX_TABLES_PER_SUB})`,
+        error: `Too many tables (${requestedTables.length} > ${MAX_TABLES_PER_SUB})`
       }),
       {
         status: 400,
-        headers: { "Content-Type": "application/json" },
-      },
+        headers: { "Content-Type": "application/json" }
+      }
     );
   }
 
@@ -103,25 +103,25 @@ export function handleDataWatch(options: DataWatchOptions): Response {
       // subscribed to (so any client-side mismatch surfaces fast).
       controller.enqueue(encoder.encode(formatSseEvent({
         event: "ready",
-        data: { tables: requestedTables, subscriptionId: subId },
+        data: { tables: requestedTables, subscriptionId: subId }
       })));
 
       registry.subscribe({
         id: subId,
         tables: tableSet,
-        onInvalidate: (affectedTables) => {
+        onInvalidate: affectedTables => {
           try {
             controller.enqueue(encoder.encode(formatSseEvent({
               event: "invalidate",
-              data: { tables: affectedTables, at: Date.now() },
+              data: { tables: affectedTables, at: Date.now() }
             })));
           } catch (err) {
             // Stream already closed — best-effort.
             log.debug("data-watch: invalidate enqueue failed", {
-              error: err instanceof Error ? err.message : String(err),
+              error: err instanceof Error ? err.message : String(err)
             });
           }
-        },
+        }
       });
 
       // Heartbeat: comment frame every 30s.
@@ -140,14 +140,14 @@ export function handleDataWatch(options: DataWatchOptions): Response {
         clearInterval(heartbeatTimer);
         heartbeatTimer = undefined;
       }
-    },
+    }
   });
 
   const headers = new Headers({
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
-    "Connection": "keep-alive",
-    "X-Accel-Buffering": "no",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no"
   });
 
   return new Response(stream, { status: 200, headers });

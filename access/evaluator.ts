@@ -35,7 +35,7 @@ export class AccessEvaluator {
   evaluate(
     objectType: string,
     operation: AccessOperation,
-    context: AccessContext,
+    context: AccessContext
   ): AccessDecision {
     const appliedPolicies: string[] = [];
     const sqlConditions: string[] = [];
@@ -53,7 +53,7 @@ export class AccessEvaluator {
     // declared, which is the expected mental model for testing.
     const disabled = context.disabledPolicies;
     if (disabled && disabled.size > 0) {
-      allPolicies = allPolicies.filter((p) => {
+      allPolicies = allPolicies.filter(p => {
         const qualifiedName = `${p.objectType ?? "__global__"}.${p.name}`;
         return !disabled.has(qualifiedName);
       });
@@ -64,7 +64,7 @@ export class AccessEvaluator {
       return {
         allowed: this.config.defaultAllow,
         appliedPolicies: [],
-        reason: this.config.defaultAllow ? "No policies defined, default allow" : "No policies defined, default deny",
+        reason: this.config.defaultAllow ? "No policies defined, default allow" : "No policies defined, default deny"
       };
     }
 
@@ -101,7 +101,7 @@ export class AccessEvaluator {
             allowed: false,
             appliedPolicies,
             denialMessage: policy.errmessage,
-            reason: `Denied by policy: ${policy.name}`,
+            reason: `Denied by policy: ${policy.name}`
           };
         }
       }
@@ -127,7 +127,7 @@ export class AccessEvaluator {
       appliedPolicies,
       denialMessage: !allowed ? denialMessage : undefined,
       reason,
-      sqlConditions: sqlConditions.length > 0 ? sqlConditions : undefined,
+      sqlConditions: sqlConditions.length > 0 ? sqlConditions : undefined
     };
   }
 
@@ -137,7 +137,7 @@ export class AccessEvaluator {
   private evaluatePolicy(
     policy: AccessPolicy,
     operation: AccessOperation,
-    context: AccessContext,
+    context: AccessContext
   ): { allowed: boolean; denied: boolean; sqlCondition?: string; } {
     let allowed = false;
     let denied = false;
@@ -153,7 +153,7 @@ export class AccessEvaluator {
       if (policy.condition) {
         const conditionMet = this.evaluateExpression(
           policy.condition,
-          context,
+          context
         );
 
         if (!conditionMet) {
@@ -182,7 +182,7 @@ export class AccessEvaluator {
    */
   private operationMatches(
     operation: AccessOperation,
-    operations: AccessOperation[],
+    operations: AccessOperation[]
   ): boolean {
     return operations.includes(operation) || operations.includes("all");
   }
@@ -192,7 +192,7 @@ export class AccessEvaluator {
    */
   private evaluateExpression(
     expr: AccessExpressionNode,
-    context: AccessContext,
+    context: AccessContext
   ): boolean {
     switch (expr.kind) {
       case "AccessLiteral": {
@@ -221,7 +221,7 @@ export class AccessEvaluator {
 
       default: {
         throw new ValidationError(
-          `Unknown expression kind: ${(expr as any).kind}`,
+          `Unknown expression kind: ${(expr as any).kind}`
         );
       }
     }
@@ -278,7 +278,7 @@ export class AccessEvaluator {
    */
   private evaluateComparison(
     comp: AccessComparisonNode,
-    context: AccessContext,
+    context: AccessContext
   ): boolean {
     const left = this.evaluateExpression(comp.left, context);
     const right = this.evaluateExpression(comp.right, context);
@@ -333,15 +333,15 @@ export class AccessEvaluator {
    */
   private evaluateLogical(
     logical: AccessLogicalNode,
-    context: AccessContext,
+    context: AccessContext
   ): boolean {
     switch (logical.operator) {
       case "and": {
-        return logical.operands.every((op) => this.evaluateExpression(op, context));
+        return logical.operands.every(op => this.evaluateExpression(op, context));
       }
 
       case "or": {
-        return logical.operands.some((op) => this.evaluateExpression(op, context));
+        return logical.operands.some(op => this.evaluateExpression(op, context));
       }
 
       case "not": {
@@ -359,13 +359,13 @@ export class AccessEvaluator {
    */
   private evaluateFunction(
     func: AccessFunctionNode,
-    context: AccessContext,
+    context: AccessContext
   ): boolean {
     // Built-in functions
     switch (func.name) {
       case "has_role": {
         const requiredRole = String(
-          this.evaluateExpression(func.args[0], context),
+          this.evaluateExpression(func.args[0], context)
         );
         return context.userRole === requiredRole;
       }
@@ -383,7 +383,7 @@ export class AccessEvaluator {
         const arg = func.args[0];
         if (!arg || arg.kind !== "AccessLiteral" || arg.type !== "string") {
           throw new ValidationError(
-            "runtime::has_permission requires a string literal argument",
+            "runtime::has_permission requires a string literal argument"
           );
         }
         const checker = context.permissionChecker ?? defaultPermissionChecker;
@@ -401,7 +401,7 @@ export class AccessEvaluator {
    */
   expressionToSQL(
     expr: AccessExpressionNode,
-    context: AccessContext,
+    context: AccessContext
   ): string {
     switch (expr.kind) {
       case "AccessLiteral": {
@@ -458,7 +458,7 @@ export class AccessEvaluator {
           return `NOT (${this.expressionToSQL(expr.operands[0], context)})`;
         }
 
-        const parts = expr.operands.map((op) => this.expressionToSQL(op, context));
+        const parts = expr.operands.map(op => this.expressionToSQL(op, context));
         return `(${parts.join(` ${expr.operator.toUpperCase()} `)})`;
       }
 
@@ -473,7 +473,7 @@ export class AccessEvaluator {
           const arg = expr.args[0];
           if (!arg || arg.kind !== "AccessLiteral" || arg.type !== "string") {
             throw new ValidationError(
-              "runtime::has_permission requires a string literal argument",
+              "runtime::has_permission requires a string literal argument"
             );
           }
           const checker = context.permissionChecker ?? defaultPermissionChecker;
@@ -481,7 +481,9 @@ export class AccessEvaluator {
           return granted ? "TRUE" : "FALSE";
         }
 
-        const args = expr.args.map((arg) => this.expressionToSQL(arg, context))
+        const args = expr
+          .args
+          .map(arg => this.expressionToSQL(arg, context))
           .join(", ");
 
         return `${expr.name}(${args})`;
@@ -489,7 +491,7 @@ export class AccessEvaluator {
 
       default: {
         throw new ValidationError(
-          `Cannot convert ${(expr as any).kind} to SQL`,
+          `Cannot convert ${(expr as any).kind} to SQL`
         );
       }
     }

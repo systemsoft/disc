@@ -64,7 +64,7 @@ export class DiscClient {
   async query<T = unknown>(
     query: string,
     variables?: Record<string, unknown>,
-    options?: QueryOptions<T>,
+    options?: QueryOptions<T>
   ): Promise<T> {
     const response = await this.queryRaw<T>(query, variables);
 
@@ -81,7 +81,7 @@ export class DiscClient {
     if (options?.validate) {
       return await applyValidator(
         options.validate as QueryValidator<T>,
-        data,
+        data
       );
     }
 
@@ -94,15 +94,15 @@ export class DiscClient {
    */
   async queryRaw<T = unknown>(
     query: string,
-    variables?: Record<string, unknown>,
+    variables?: Record<string, unknown>
   ): Promise<QueryResponse<T>> {
     const body = JSON.stringify(
-      variables ? { query, variables } : { query },
+      variables ? { query, variables } : { query }
     );
 
     const response = await this.fetch("/query", {
       method: "POST",
-      body,
+      body
     });
 
     return await response.json() as QueryResponse<T>;
@@ -160,11 +160,11 @@ export class DiscClient {
    * Automatically commits on success and rolls back on error.
    */
   async transaction<T>(
-    fn: (tx: Transaction) => Promise<T>,
+    fn: (tx: Transaction) => Promise<T>
   ): Promise<T> {
     // Begin transaction
     const beginResponse = await this.fetch("/transaction/begin", {
-      method: "POST",
+      method: "POST"
     });
     const { transactionId } = await beginResponse.json() as {
       transactionId: string;
@@ -204,12 +204,12 @@ export class DiscClient {
    */
   async fetch(
     path: string,
-    init?: RequestInit,
+    init?: RequestInit
   ): Promise<Response> {
     const url = `${this.baseUrl}${path}`;
     const headers = new Headers({
       "Content-Type": "application/json",
-      ...this.customHeaders,
+      ...this.customHeaders
     });
 
     if (this.authToken) {
@@ -229,7 +229,7 @@ export class DiscClient {
         const response = await fetch(url, {
           ...init,
           headers,
-          signal: init?.signal ?? AbortSignal.timeout(this.timeout),
+          signal: init?.signal ?? AbortSignal.timeout(this.timeout)
         });
 
         // Classify HTTP errors
@@ -237,7 +237,7 @@ export class DiscClient {
           const body = await response.text();
           throw new DiscAuthError(
             body || response.statusText,
-            response.status,
+            response.status
           );
         }
 
@@ -245,7 +245,7 @@ export class DiscClient {
           const body = await response.text();
           throw new DiscServerError(
             body || response.statusText,
-            response.status,
+            response.status
           );
         }
 
@@ -253,9 +253,9 @@ export class DiscClient {
       } catch (error) {
         // Don't retry auth, query, protocol, or server errors
         if (
-          error instanceof DiscAuthError
-          || error instanceof DiscQueryError
-          || error instanceof DiscProtocolError
+          error instanceof DiscAuthError ||
+          error instanceof DiscQueryError ||
+          error instanceof DiscProtocolError
         ) {
           throw error;
         }
@@ -267,13 +267,13 @@ export class DiscClient {
             this.logger?.warn?.("retrying after server error", {
               attempt: attempt + 1,
               max: this.retries,
-              status: (error as { statusCode?: number; }).statusCode,
+              status: (error as { statusCode?: number; }).statusCode
             });
             await this.delay(this.backoffDelay(attempt));
             continue;
           }
           this.logger?.error?.("server error exhausted retries", {
-            status: error.statusCode,
+            status: error.statusCode
           });
           throw error;
         }
@@ -292,7 +292,7 @@ export class DiscClient {
         if (error instanceof TypeError) {
           lastError = new DiscConnectionError(
             `Connection failed: ${error.message}`,
-            error,
+            error
           );
           if (attempt < this.retries) {
             await this.delay(this.backoffDelay(attempt));
@@ -318,7 +318,7 @@ export class DiscClient {
   }
 
   private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   /**

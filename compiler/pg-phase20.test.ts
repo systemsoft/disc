@@ -33,7 +33,7 @@ function makePool(dsn: string): ConnectionPool {
     connectionString: dsn,
     minConnections: 1,
     maxConnections: 3,
-    cleanupInterval: 0,
+    cleanupInterval: 0
   });
 }
 
@@ -61,7 +61,7 @@ function compileEdgeQL(edgeql: string, schema: Schema): string {
  */
 async function applySchema(
   pool: ConnectionPool,
-  sdl: string,
+  sdl: string
 ): Promise<{ manager: SchemaManager; schema: Schema; }> {
   const manager = new SchemaManager({ pool });
   await manager.initialize();
@@ -70,7 +70,7 @@ async function applySchema(
   assertEquals(
     result.ok,
     true,
-    `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`,
+    `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`
   );
 
   const schema = manager.getSchema();
@@ -82,7 +82,7 @@ async function applySchema(
 /** Drop specified tables plus disc migration tracking tables. */
 async function cleanup(
   pool: ConnectionPool,
-  tables: string[],
+  tables: string[]
 ): Promise<void> {
   for (const table of tables) {
     await pool.query(`DROP TABLE IF EXISTS ${table} CASCADE`);
@@ -119,20 +119,20 @@ Deno.test({
       await pool.query(
         `INSERT INTO ${PERSON_TABLE} (id, name, active) VALUES
           (gen_random_uuid(), 'Ada', true),
-          (gen_random_uuid(), 'Billie', false)`,
+          (gen_random_uuid(), 'Billie', false)`
       );
 
       // Compile EdgeQL with IF/ELSE in a computed shape field
       const sql = compileEdgeQL(
         "SELECT TestPerson { name, status := \"active\" IF .active ELSE \"inactive\" } ORDER BY .name",
-        schema,
+        schema
       );
 
       // The compiled SQL should use CASE/WHEN
       assertEquals(
         sql.includes("CASE") || sql.includes("case"),
         true,
-        "Compiled SQL should contain CASE expression",
+        "Compiled SQL should contain CASE expression"
       );
 
       // Execute the compiled SQL
@@ -141,7 +141,7 @@ Deno.test({
       assertEquals(
         result.rowCount,
         2,
-        "Should return exactly 2 rows",
+        "Should return exactly 2 rows"
       );
 
       // Extract results — rows are ordered by name (Ada, Billie)
@@ -151,21 +151,21 @@ Deno.test({
       });
 
       // Ada is active → status should be "active"
-      const adaRow = rows.find((r) => r.name === "Ada");
+      const adaRow = rows.find(r => r.name === "Ada");
       assertExists(adaRow, "Ada should exist in results");
       assertEquals(
         adaRow.status,
         "active",
-        "Ada (active=true) should have status 'active'",
+        "Ada (active=true) should have status 'active'"
       );
 
       // Billie is inactive → status should be "inactive"
-      const billieRow = rows.find((r) => r.name === "Billie");
+      const billieRow = rows.find(r => r.name === "Billie");
       assertExists(billieRow, "Billie should exist in results");
       assertEquals(
         billieRow.status,
         "inactive",
-        "Billie (active=false) should have status 'inactive'",
+        "Billie (active=false) should have status 'inactive'"
       );
 
       await manager.close();
@@ -173,7 +173,7 @@ Deno.test({
       await cleanup(pool, [PERSON_TABLE]);
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -192,7 +192,7 @@ Deno.test({
         `INSERT INTO ${PERSON_TABLE} (id, name, active) VALUES
           (gen_random_uuid(), 'admin', true),
           (gen_random_uuid(), 'guest', false),
-          (gen_random_uuid(), 'other', true)`,
+          (gen_random_uuid(), 'other', true)`
       );
 
       // Compile EdgeQL: FILTER where the comparison target depends on .active
@@ -200,7 +200,7 @@ Deno.test({
       // For active=false rows, compare .name to "guest"
       const sql = compileEdgeQL(
         "SELECT TestPerson { name } FILTER .name = (\"admin\" IF .active ELSE \"guest\")",
-        schema,
+        schema
       );
 
       // Execute the compiled SQL
@@ -212,7 +212,7 @@ Deno.test({
       assertEquals(
         result.rowCount,
         2,
-        "Should return 2 rows (admin and guest)",
+        "Should return 2 rows (admin and guest)"
       );
 
       const names = result.rows.map((row: Record<string, unknown>) => {
@@ -222,7 +222,7 @@ Deno.test({
       assertEquals(
         (names as string[]).sort(),
         ["admin", "guest"],
-        "Should return admin (active, matches 'admin') and guest (inactive, matches 'guest')",
+        "Should return admin (active, matches 'admin') and guest (inactive, matches 'guest')"
       );
 
       await manager.close();
@@ -230,7 +230,7 @@ Deno.test({
       await cleanup(pool, [PERSON_TABLE]);
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -268,7 +268,7 @@ Deno.test({
       assertEquals(
         result.rowCount >= 1,
         true,
-        "Should return at least one row",
+        "Should return at least one row"
       );
 
       // The result should contain an array with [1, 2, 3].
@@ -298,16 +298,16 @@ Deno.test({
         if (typeof singleVal === "string") {
           // Could be a stringified array like "{1,2,3}"
           assertEquals(
-            singleVal.includes("1") && singleVal.includes("2")
-              && singleVal.includes("3"),
+            singleVal.includes("1") && singleVal.includes("2") &&
+              singleVal.includes("3"),
             true,
-            "Stringified array should contain 1, 2, 3",
+            "Stringified array should contain 1, 2, 3"
           );
         } else if (Array.isArray(singleVal)) {
           assertEquals(
             singleVal.map(Number),
             [1, 2, 3],
-            "Array should contain [1, 2, 3]",
+            "Array should contain [1, 2, 3]"
           );
         }
       }
@@ -317,7 +317,7 @@ Deno.test({
       await cleanup(pool, [ITEM_TABLE]);
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -339,7 +339,7 @@ Deno.test({
       // Compile a named tuple expression
       const sql = compileEdgeQL(
         "SELECT (label := \"hello\", count := 42)",
-        schema,
+        schema
       );
 
       // Execute the compiled SQL
@@ -348,7 +348,7 @@ Deno.test({
       assertEquals(
         result.rowCount >= 1,
         true,
-        "Should return at least one row",
+        "Should return at least one row"
       );
 
       // The result should be a JSON object with label and count fields
@@ -384,7 +384,7 @@ Deno.test({
       await cleanup(pool, [ITEM_TABLE]);
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -416,7 +416,7 @@ Deno.test({
       // Insert an initial row via raw SQL
       await pool.query(
         `INSERT INTO ${ACCOUNT_TABLE} (id, email, name) VALUES
-          (gen_random_uuid(), 'ada@test.com', 'Ada')`,
+          (gen_random_uuid(), 'ada@test.com', 'Ada')`
       );
 
       // Compile and execute an UPSERT: same email, different name
@@ -428,25 +428,25 @@ Deno.test({
         ELSE (
           UPDATE TestAccount SET { name := "Ada Updated" }
         )`,
-        schema,
+        schema
       );
 
       await pool.query(sql);
 
       // Verify via raw SQL: name should now be "Ada Updated"
       const verifyResult = await pool.query(
-        `SELECT name FROM ${ACCOUNT_TABLE} WHERE email = 'ada@test.com'`,
+        `SELECT name FROM ${ACCOUNT_TABLE} WHERE email = 'ada@test.com'`
       );
 
       assertEquals(
         verifyResult.rowCount,
         1,
-        "Should still have exactly one row for ada@test.com",
+        "Should still have exactly one row for ada@test.com"
       );
       assertEquals(
         verifyResult.rows[0].name,
         "Ada Updated",
-        "Name should be updated to 'Ada Updated' via UPSERT",
+        "Name should be updated to 'Ada Updated' via UPSERT"
       );
 
       await manager.close();
@@ -454,7 +454,7 @@ Deno.test({
       await cleanup(pool, [ACCOUNT_TABLE]);
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -475,7 +475,7 @@ Deno.test({
       // Insert an initial row via raw SQL
       await pool.query(
         `INSERT INTO ${ACCOUNT_TABLE} (id, email, name) VALUES
-          (gen_random_uuid(), 'billie@test.com', 'Billie')`,
+          (gen_random_uuid(), 'billie@test.com', 'Billie')`
       );
 
       // Compile and execute an INSERT with UNLESS CONFLICT but no ELSE
@@ -485,25 +485,25 @@ Deno.test({
           email := "billie@test.com",
           name := "Billie New"
         } UNLESS CONFLICT ON .email`,
-        schema,
+        schema
       );
 
       await pool.query(sql);
 
       // Verify via raw SQL: name should still be "Billie" (unchanged)
       const verifyResult = await pool.query(
-        `SELECT name FROM ${ACCOUNT_TABLE} WHERE email = 'billie@test.com'`,
+        `SELECT name FROM ${ACCOUNT_TABLE} WHERE email = 'billie@test.com'`
       );
 
       assertEquals(
         verifyResult.rowCount,
         1,
-        "Should still have exactly one row for billie@test.com",
+        "Should still have exactly one row for billie@test.com"
       );
       assertEquals(
         verifyResult.rows[0].name,
         "Billie",
-        "Name should remain 'Billie' (DO NOTHING on conflict)",
+        "Name should remain 'Billie' (DO NOTHING on conflict)"
       );
 
       await manager.close();
@@ -511,7 +511,7 @@ Deno.test({
       await cleanup(pool, [ACCOUNT_TABLE]);
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -557,15 +557,15 @@ Deno.test({
       assertEquals(
         Array.isArray(articles),
         true,
-        "Articles should be an empty array (COALESCE with '[]'::jsonb), not null",
+        "Articles should be an empty array (COALESCE with '[]'::jsonb), not null"
       );
       assertEquals(
         (articles as unknown[]).length,
         0,
-        "Articles array should be empty",
+        "Articles array should be empty"
       );
     } finally {
       await pool.close();
     }
-  },
+  }
 });

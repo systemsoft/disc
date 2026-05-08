@@ -6,7 +6,7 @@ Deno.test("DeployCommand - rejects invalid format with helpful message", () => {
   assertThrows(
     () => command.validateFormat("kubernetes"),
     Error,
-    "Invalid format",
+    "Invalid format"
   );
   // Verify the error message includes valid formats
   try {
@@ -88,7 +88,7 @@ Deno.test("DeployCommand - env format generates .env.production with all vars", 
     "DISC_SLOW_QUERY_MS",
     "DISC_TLS_CERT",
     "DISC_TLS_KEY",
-    "DISC_ENABLE_METRICS",
+    "DISC_ENABLE_METRICS"
   ];
 
   for (const varName of requiredVars) {

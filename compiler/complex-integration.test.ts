@@ -161,8 +161,8 @@ Deno.test("Query complexity analysis - simple vs complex ASTs", () => {
     kind: "SelectQuery",
     expr: EdgeQLAST.createTypeName(["User"]),
     shape: EdgeQLAST.createShape([
-      EdgeQLAST.createShapeElement(EdgeQLAST.createIdentifier("name")),
-    ]),
+      EdgeQLAST.createShapeElement(EdgeQLAST.createIdentifier("name"))
+    ])
   };
 
   const simpleComplexity = compiler.analyzeComplexity(simpleQuery);
@@ -178,24 +178,24 @@ Deno.test("Query complexity analysis - simple vs complex ASTs", () => {
       {
         kind: "WithBinding",
         name: EdgeQLAST.createIdentifier("cte1"),
-        value: { kind: "Subquery", query: simpleQuery },
+        value: { kind: "Subquery", query: simpleQuery }
       },
       {
         kind: "WithBinding",
         name: EdgeQLAST.createIdentifier("cte2"),
-        value: { kind: "Subquery", query: simpleQuery },
+        value: { kind: "Subquery", query: simpleQuery }
       },
       {
         kind: "WithBinding",
         name: EdgeQLAST.createIdentifier("cte3"),
-        value: { kind: "Subquery", query: simpleQuery },
-      },
+        value: { kind: "Subquery", query: simpleQuery }
+      }
     ],
     body: {
       kind: "SelectQuery",
       expr: EdgeQLAST.createTypeName(["User"]),
-      filter: { kind: "Subquery", query: simpleQuery },
-    },
+      filter: { kind: "Subquery", query: simpleQuery }
+    }
   };
 
   const complexComplexity = compiler.analyzeComplexity(complexQuery);
@@ -237,22 +237,22 @@ Deno.test("Complex query integration - compileWindowFunction produces valid SQL"
       EdgeQLAST.createPath([{
         kind: "PathStep" as const,
         type: "property" as const,
-        name: "active",
-      }]),
+        name: "active"
+      }])
     ],
     orderBy: [{
       expression: EdgeQLAST.createPath([{
         kind: "PathStep" as const,
         type: "property" as const,
-        name: "createdAt",
+        name: "createdAt"
       }]),
-      direction: "DESC",
+      direction: "DESC"
     }],
     frame: {
       mode: "ROWS",
       start: "UNBOUNDED PRECEDING",
-      end: "CURRENT ROW",
-    },
+      end: "CURRENT ROW"
+    }
   };
 
   const windowExpr = compiler.compileWindowFunction(windowFunc);
@@ -260,8 +260,8 @@ Deno.test("Complex query integration - compileWindowFunction produces valid SQL"
   // Wrap in SELECT for codegen
   const stmt = SQL.createSelectStatement({
     select: SQL.createSelectClause([
-      SQL.createSelectItem(windowExpr, "rank"),
-    ]),
+      SQL.createSelectItem(windowExpr, "rank")
+    ])
   });
   const sql = codegen.generate(stmt);
 
@@ -281,18 +281,18 @@ Deno.test("Complex query integration - compileAggregate with filter", () => {
     expression: EdgeQLAST.createPath([{
       kind: "PathStep" as const,
       type: "property" as const,
-      name: "age",
+      name: "age"
     }]),
     filter: EdgeQLAST.createBinaryOp(
       "=",
       EdgeQLAST.createPath([{
         kind: "PathStep" as const,
         type: "property" as const,
-        name: "active",
+        name: "active"
       }]),
-      EdgeQLAST.createLiteral("boolean", true),
+      EdgeQLAST.createLiteral("boolean", true)
     ),
-    distinct: false,
+    distinct: false
   };
 
   const aggExpr = compiler.compileAggregate(aggregate);
@@ -304,8 +304,8 @@ Deno.test("Complex query integration - compileAggregate with filter", () => {
   // Wrap in SELECT for codegen
   const stmt = SQL.createSelectStatement({
     select: SQL.createSelectClause([
-      SQL.createSelectItem(aggExpr, "total"),
-    ]),
+      SQL.createSelectItem(aggExpr, "total")
+    ])
   });
   const sql = codegen.generate(stmt);
 

@@ -107,25 +107,25 @@ export const DEFAULT_TYPE_MAPPINGS: TypeMapping[] = [
     edgeqlType: "str",
     typescriptType: "string",
     nullableType: "string | null",
-    arrayType: "string[]",
+    arrayType: "string[]"
   },
   {
     edgeqlType: "bool",
     typescriptType: "boolean",
     nullableType: "boolean | null",
-    arrayType: "boolean[]",
+    arrayType: "boolean[]"
   },
   {
     edgeqlType: "int16",
     typescriptType: "number",
     nullableType: "number | null",
-    arrayType: "number[]",
+    arrayType: "number[]"
   },
   {
     edgeqlType: "int32",
     typescriptType: "number",
     nullableType: "number | null",
-    arrayType: "number[]",
+    arrayType: "number[]"
   },
   {
     // P1-20: `int64` values can exceed JS `Number.MAX_SAFE_INTEGER` (2^53-1).
@@ -134,91 +134,91 @@ export const DEFAULT_TYPE_MAPPINGS: TypeMapping[] = [
     edgeqlType: "int64",
     typescriptType: "bigint",
     nullableType: "bigint | null",
-    arrayType: "bigint[]",
+    arrayType: "bigint[]"
   },
   {
     edgeqlType: "float32",
     typescriptType: "number",
     nullableType: "number | null",
-    arrayType: "number[]",
+    arrayType: "number[]"
   },
   {
     edgeqlType: "float64",
     typescriptType: "number",
     nullableType: "number | null",
-    arrayType: "number[]",
+    arrayType: "number[]"
   },
   {
     edgeqlType: "decimal",
     typescriptType: "number",
     nullableType: "number | null",
-    arrayType: "number[]",
+    arrayType: "number[]"
   },
   {
     edgeqlType: "uuid",
     typescriptType: "string",
     nullableType: "string | null",
-    arrayType: "string[]",
+    arrayType: "string[]"
   },
   {
     edgeqlType: "datetime",
     typescriptType: "Date",
     nullableType: "Date | null",
-    arrayType: "Date[]",
+    arrayType: "Date[]"
   },
   {
     edgeqlType: "duration",
     typescriptType: "string",
     nullableType: "string | null",
-    arrayType: "string[]",
+    arrayType: "string[]"
   },
   {
     edgeqlType: "bytes",
     typescriptType: "Uint8Array",
     nullableType: "Uint8Array | null",
     arrayType: "Uint8Array[]",
-    importRequired: "// Note: Uint8Array is built-in",
+    importRequired: "// Note: Uint8Array is built-in"
   },
   {
     edgeqlType: "json",
     typescriptType: "unknown",
     nullableType: "unknown | null",
-    arrayType: "unknown[]",
+    arrayType: "unknown[]"
   },
   {
     edgeqlType: "cal::local_datetime",
     typescriptType: "Date",
     nullableType: "Date | null",
-    arrayType: "Date[]",
+    arrayType: "Date[]"
   },
   {
     edgeqlType: "cal::local_date",
     typescriptType: "string",
     nullableType: "string | null",
-    arrayType: "string[]",
+    arrayType: "string[]"
   },
   {
     edgeqlType: "cal::local_time",
     typescriptType: "string",
     nullableType: "string | null",
-    arrayType: "string[]",
+    arrayType: "string[]"
   },
   {
     edgeqlType: "cal::relative_duration",
     typescriptType: "string",
     nullableType: "string | null",
-    arrayType: "string[]",
+    arrayType: "string[]"
   },
   {
     edgeqlType: "cal::date_duration",
     typescriptType: "string",
     nullableType: "string | null",
-    arrayType: "string[]",
-  },
+    arrayType: "string[]"
+  }
 ];
 
 export function getTypeMapping(edgeqlType: string): TypeMapping | null {
-  return DEFAULT_TYPE_MAPPINGS.find((mapping) => mapping.edgeqlType === edgeqlType) || null;
+  return DEFAULT_TYPE_MAPPINGS.find(mapping => mapping.edgeqlType === edgeqlType) || null;
 }
 
 /**
@@ -227,22 +227,22 @@ export function getTypeMapping(edgeqlType: string): TypeMapping | null {
  * (e.g., "text", "integer") instead of EdgeQL types (e.g., "str", "int32").
  */
 const SQL_TO_EDGEQL_TYPE_MAP: Record<string, string> = {
-  "text": "str",
-  "boolean": "bool",
-  "smallint": "int16",
-  "integer": "int32",
-  "bigint": "int64",
-  "real": "float32",
+  text: "str",
+  boolean: "bool",
+  smallint: "int16",
+  integer: "int32",
+  bigint: "int64",
+  real: "float32",
   "double precision": "float64",
-  "numeric": "decimal",
-  "uuid": "uuid",
-  "timestamptz": "datetime",
-  "timestamp": "cal::local_datetime",
-  "interval": "duration",
-  "bytea": "bytes",
-  "jsonb": "json",
-  "date": "cal::local_date",
-  "time": "cal::local_time",
+  numeric: "decimal",
+  uuid: "uuid",
+  timestamptz: "datetime",
+  timestamp: "cal::local_datetime",
+  interval: "duration",
+  bytea: "bytes",
+  jsonb: "json",
+  date: "cal::local_date",
+  time: "cal::local_time"
 };
 
 /**
@@ -250,26 +250,26 @@ const SQL_TO_EDGEQL_TYPE_MAP: Record<string, string> = {
  */
 export function mapEdgeQLTypeToEdgeQLCast(edgeqlType: string): string {
   const castMap: Record<string, string> = {
-    "str": "<str>",
-    "int16": "<int16>",
-    "int32": "<int32>",
-    "int64": "<int64>",
-    "float32": "<float32>",
-    "float64": "<float64>",
-    "bool": "<bool>",
-    "datetime": "<datetime>",
-    "duration": "<duration>",
-    "uuid": "<uuid>",
-    "bytes": "<bytes>",
-    "json": "<json>",
-    "bigint": "<bigint>",
-    "decimal": "<decimal>",
-    "sequence": "<sequence>",
+    str: "<str>",
+    int16: "<int16>",
+    int32: "<int32>",
+    int64: "<int64>",
+    float32: "<float32>",
+    float64: "<float64>",
+    bool: "<bool>",
+    datetime: "<datetime>",
+    duration: "<duration>",
+    uuid: "<uuid>",
+    bytes: "<bytes>",
+    json: "<json>",
+    bigint: "<bigint>",
+    decimal: "<decimal>",
+    sequence: "<sequence>",
     "cal::local_datetime": "<cal::local_datetime>",
     "cal::local_date": "<cal::local_date>",
     "cal::local_time": "<cal::local_time>",
     "cal::relative_duration": "<cal::relative_duration>",
-    "cal::date_duration": "<cal::date_duration>",
+    "cal::date_duration": "<cal::date_duration>"
   };
   return castMap[edgeqlType] || `<${edgeqlType}>`;
 }
@@ -277,7 +277,7 @@ export function mapEdgeQLTypeToEdgeQLCast(edgeqlType: string): string {
 export function mapEdgeQLTypeToTypeScript(
   edgeqlType: string,
   required: boolean = true,
-  multi: boolean = false,
+  multi: boolean = false
 ): string {
   // Try direct EdgeQL type mapping first
   let mapping = getTypeMapping(edgeqlType);

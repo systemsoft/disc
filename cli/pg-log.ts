@@ -24,7 +24,7 @@ export class PgLogCommand {
       "instances",
       project,
       "logs",
-      "postgresql.log",
+      "postgresql.log"
     );
   }
 
@@ -34,7 +34,7 @@ export class PgLogCommand {
   private filterByLevel(line: string, level: string): boolean {
     const pattern = new RegExp(
       `^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}.*\\b${level}\\b`,
-      "i",
+      "i"
     );
     return pattern.test(line);
   }
@@ -51,7 +51,7 @@ export class PgLogCommand {
       await Deno.stat(logPath);
     } catch {
       throw new Error(
-        `No log file found at ${logPath}. Is PostgreSQL running for project '${project}'?`,
+        `No log file found at ${logPath}. Is PostgreSQL running for project '${project}'?`
       );
     }
 
@@ -61,7 +61,7 @@ export class PgLogCommand {
 
     // Filter by level if provided
     if (options.level) {
-      lines = lines.filter((line) => this.filterByLevel(line, options.level!));
+      lines = lines.filter(line => this.filterByLevel(line, options.level!));
     }
 
     // Show last N lines
@@ -115,7 +115,7 @@ export class PgLogCommand {
             }
           } else {
             // No new data; wait before polling again
-            await new Promise((resolve) => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 500));
           }
         }
       } finally {

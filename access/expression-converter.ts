@@ -20,15 +20,15 @@ export function convertExpression(expr: Expression): AccessExpressionNode {
   switch (expr.kind) {
     case "Literal": {
       const lit = expr as Literal;
-      const mappedType = lit.type === "integer"
-          || lit.type === "float"
-        ? "number"
-        : lit.type; // "string" | "boolean"
+      const mappedType = lit.type === "integer" ||
+          lit.type === "float" ?
+        "number" :
+        lit.type; // "string" | "boolean"
 
       return {
         kind: "AccessLiteral",
         type: mappedType,
-        value: lit.value,
+        value: lit.value
       };
     }
 
@@ -38,20 +38,20 @@ export function convertExpression(expr: Expression): AccessExpressionNode {
       if (path.path[0] === "global") {
         return {
           kind: "AccessGlobal",
-          name: path.path[1],
+          name: path.path[1]
         };
       }
 
       if (path.path[0] === ".") {
         return {
           kind: "AccessPath",
-          path: path.path.slice(1),
+          path: path.path.slice(1)
         };
       }
 
       return {
         kind: "AccessPath",
-        path: path.path,
+        path: path.path
       };
     }
 
@@ -62,20 +62,22 @@ export function convertExpression(expr: Expression): AccessExpressionNode {
         return {
           kind: "AccessLogical",
           operator: bin.op,
-          operands: [convertExpression(bin.left), convertExpression(bin.right)],
+          operands: [convertExpression(bin.left), convertExpression(bin.right)]
         };
       }
 
       // Map optional comparison operators
       let operator: string = bin.op;
-      if (bin.op === "?=") operator = "=";
-      if (bin.op === "?!=") operator = "!=";
+      if (bin.op === "?=")
+        operator = "=";
+      if (bin.op === "?!=")
+        operator = "!=";
 
       return {
         kind: "AccessComparison",
         operator: operator as "=" | "!=" | "<" | ">" | "<=" | ">=",
         left: convertExpression(bin.left),
-        right: convertExpression(bin.right),
+        right: convertExpression(bin.right)
       };
     }
 
@@ -86,12 +88,12 @@ export function convertExpression(expr: Expression): AccessExpressionNode {
         return {
           kind: "AccessLogical",
           operator: "not",
-          operands: [convertExpression(un.operand)],
+          operands: [convertExpression(un.operand)]
         };
       }
 
       throw new ValidationError(
-        `Unsupported unary operator in access policy: ${un.op}`,
+        `Unsupported unary operator in access policy: ${un.op}`
       );
     }
 
@@ -100,7 +102,7 @@ export function convertExpression(expr: Expression): AccessExpressionNode {
       return {
         kind: "AccessFunction",
         name: func.name.parts.join("::"),
-        args: func.args.map(convertExpression),
+        args: func.args.map(convertExpression)
       };
     }
 
@@ -121,8 +123,8 @@ export function convertExpression(expr: Expression): AccessExpressionNode {
             operator: "and",
             operands: [
               convertExpression(cond.test),
-              convertExpression(cond.consequent),
-            ],
+              convertExpression(cond.consequent)
+            ]
           },
           {
             kind: "AccessLogical",
@@ -131,24 +133,24 @@ export function convertExpression(expr: Expression): AccessExpressionNode {
               {
                 kind: "AccessLogical",
                 operator: "not",
-                operands: [convertExpression(cond.test)],
+                operands: [convertExpression(cond.test)]
               },
-              convertExpression(cond.alternate),
-            ],
-          },
-        ],
+              convertExpression(cond.alternate)
+            ]
+          }
+        ]
       };
     }
 
     case "Parameter": {
       throw new ValidationError(
-        "Parameter expressions are not valid in access policies",
+        "Parameter expressions are not valid in access policies"
       );
     }
 
     default: {
       throw new ValidationError(
-        `Unsupported expression kind in access policy: ${(expr as any).kind}`,
+        `Unsupported expression kind in access policy: ${(expr as any).kind}`
       );
     }
   }

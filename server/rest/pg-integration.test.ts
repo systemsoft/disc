@@ -29,7 +29,7 @@ function parseDsn(dsn: string) {
     hostname: url.hostname || "localhost",
     port: url.port ? parseInt(url.port) : 5432,
     user: url.username || "disc",
-    database: url.pathname.slice(1) || "disc_test",
+    database: url.pathname.slice(1) || "disc_test"
   };
 }
 
@@ -81,7 +81,7 @@ function buildSchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["name", {
         name: "name",
@@ -89,7 +89,7 @@ function buildSchema(): Schema {
         required: true,
         multi: false,
         columnName: "name",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["email", {
         name: "email",
@@ -97,10 +97,10 @@ function buildSchema(): Schema {
         required: true,
         multi: false,
         columnName: "email",
-        edgeqlType: "str",
-      }],
+        edgeqlType: "str"
+      }]
     ]),
-    links: new Map(),
+    links: new Map()
   };
 
   const postType: TypeDef = {
@@ -116,7 +116,7 @@ function buildSchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["title", {
         name: "title",
@@ -124,8 +124,8 @@ function buildSchema(): Schema {
         required: true,
         multi: false,
         columnName: "title",
-        edgeqlType: "str",
-      }],
+        edgeqlType: "str"
+      }]
     ]),
     links: new Map([
       ["author", {
@@ -133,17 +133,17 @@ function buildSchema(): Schema {
         target: "User",
         required: true,
         multi: false,
-        columnName: "author_id",
-      }],
-    ]),
+        columnName: "author_id"
+      }]
+    ])
   };
 
   return {
     types: new Map([
       ["default::User", userType],
-      ["default::Post", postType],
+      ["default::Post", postType]
     ]),
-    functions: new Map(),
+    functions: new Map()
   };
 }
 
@@ -159,11 +159,11 @@ Deno.test({
     const pool = new ConnectionPool({
       connectionString: dsn,
       minConnections: 1,
-      maxConnections: 4,
+      maxConnections: 4
     });
     const handler = new EdgeQLProtocolHandler({
       schema,
-      connectionPool: pool,
+      connectionPool: pool
     });
     const port = 35000 + Math.floor(Math.random() * 5000);
     const server = new HttpServer({
@@ -174,13 +174,13 @@ Deno.test({
         maxConnections: 10,
         requestTimeout: 5000,
         enableCors: false,
-        enableWebsockets: false,
+        enableWebsockets: false
       },
       protocolHandler: handler,
-      schemaProvider: () => schema,
+      schemaProvider: () => schema
     });
     const _running = server.start();
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 200));
 
     try {
       const baseUrl = `http://${TEST_HOST}:${port}`;
@@ -197,8 +197,8 @@ Deno.test({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "Ada Lovelace",
-          email: "ada@example.com",
-        }),
+          email: "ada@example.com"
+        })
       });
       assertEquals(res.status, 201);
       const inserted = await res.json();
@@ -221,7 +221,7 @@ Deno.test({
 
       // 5. DELETE — idempotent
       res = await fetch(`${baseUrl}/api/User/${inserted.id}`, {
-        method: "DELETE",
+        method: "DELETE"
       });
       assertEquals(res.status, 204);
 
@@ -235,5 +235,5 @@ Deno.test({
       await pool.close();
       await teardownTables(dsn);
     }
-  },
+  }
 });

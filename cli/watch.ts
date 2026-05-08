@@ -50,7 +50,7 @@ export class WatchCommand {
     try {
       // Verify schema file exists
       const schemaExists = await Deno.stat(schemaFile).then(() => true).catch(
-        () => false,
+        () => false
       );
       if (!schemaExists) {
         console.log(`⚠️  Schema file not found: ${schemaFile}`);
@@ -79,7 +79,7 @@ export class WatchCommand {
         console.log("\n🛑 File watcher stopped");
       } else {
         console.error(
-          `❌ Failed to start file watcher: ${(error as Error).message}`,
+          `❌ Failed to start file watcher: ${(error as Error).message}`
         );
         throw error;
       }
@@ -89,7 +89,7 @@ export class WatchCommand {
   private async startFileWatcher(
     schemaFile: string,
     outputDir: string,
-    delayMs: number,
+    delayMs: number
   ): Promise<void> {
     if (!this.abortController) {
       throw new Error("AbortController not initialized");
@@ -100,20 +100,22 @@ export class WatchCommand {
       const schemaDir = schemaFile.includes("/") ? schemaFile.substring(0, schemaFile.lastIndexOf("/")) : ".";
 
       const watcher = Deno.watchFs([schemaDir], {
-        recursive: false,
+        recursive: false
       });
 
       for await (const event of watcher) {
-        if (!this.isWatching) break;
+        if (!this.isWatching)
+          break;
 
         // Check if this is our schema file
-        const changedFile = event.paths.find((path) => path.endsWith(".disc"));
-        if (!changedFile) continue;
+        const changedFile = event.paths.find(path => path.endsWith(".disc"));
+        if (!changedFile)
+          continue;
 
         const changeEvent: FileChangeEvent = {
           path: changedFile,
           type: this.getChangeType(event.kind),
-          timestamp: new Date(),
+          timestamp: new Date()
         };
 
         console.log(`📝 Detected ${changeEvent.type} in ${changeEvent.path}`);
@@ -132,7 +134,7 @@ export class WatchCommand {
   private debounceSchemaChange(
     schemaFile: string,
     outputDir: string,
-    delayMs: number,
+    delayMs: number
   ): void {
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
@@ -143,7 +145,7 @@ export class WatchCommand {
         await this.processSchemaChanges(schemaFile, outputDir);
       } catch (error) {
         console.error(
-          `❌ Failed to process schema changes: ${(error as Error).message}`,
+          `❌ Failed to process schema changes: ${(error as Error).message}`
         );
       }
     }, delayMs);
@@ -151,7 +153,7 @@ export class WatchCommand {
 
   private async processSchemaChanges(
     schemaFile: string,
-    outputDir: string,
+    outputDir: string
   ): Promise<void> {
     console.log("🔄 Processing schema changes...");
 
@@ -164,7 +166,7 @@ export class WatchCommand {
       const { document: ast, errors } = parser.parseWithRecovery();
       if (errors.length > 0) {
         console.log(
-          `⚠️  ${errors.length} SDL syntax error${errors.length === 1 ? "" : "s"}:`,
+          `⚠️  ${errors.length} SDL syntax error${errors.length === 1 ? "" : "s"}:`
         );
         for (const e of errors) {
           console.log(`   • ${e.message}`);
@@ -173,9 +175,10 @@ export class WatchCommand {
         // If the parser couldn't recover anything, bail; otherwise carry
         // on with the partial AST so codegen/migration plan can still run
         // against whatever did parse cleanly.
-        if (ast.declarations.length === 0) return;
+        if (ast.declarations.length === 0)
+          return;
         console.log(
-          `   (Continuing with the ${ast.declarations.length} declaration${ast.declarations.length === 1 ? "" : "s"} that did parse.)\n`,
+          `   (Continuing with the ${ast.declarations.length} declaration${ast.declarations.length === 1 ? "" : "s"} that did parse.)\n`
         );
       }
       const converter = new SDLConverter();
@@ -183,8 +186,8 @@ export class WatchCommand {
       const currentHash = this.hashSchema(modules);
 
       // Check for migration changes
-      const migrationNeeded = currentHash !== this.lastSchemaHash
-        && this.lastSchemaHash !== undefined;
+      const migrationNeeded = currentHash !== this.lastSchemaHash &&
+        this.lastSchemaHash !== undefined;
 
       if (migrationNeeded) {
         console.log("📋 Schema changes detected, creating migration...");
@@ -214,11 +217,11 @@ export class WatchCommand {
       // specific message so the user knows why we stopped working.
       if (error instanceof Deno.errors.NotFound) {
         console.error(
-          `⚠️  Schema file disappeared: ${schemaFile}. Restore it or run 'disc watch' again to pick up a different path.`,
+          `⚠️  Schema file disappeared: ${schemaFile}. Restore it or run 'disc watch' again to pick up a different path.`
         );
       } else {
         console.error(
-          `❌ Schema processing failed: ${(error as Error).message}`,
+          `❌ Schema processing failed: ${(error as Error).message}`
         );
       }
       console.log("");
@@ -238,19 +241,19 @@ export class WatchCommand {
 
   private async runMigration(
     newModules: Module[],
-    dryRun = false,
+    dryRun = false
   ): Promise<void> {
     try {
       // Get database URL
-      const databaseUrl = Deno.env.get("DATABASE_URL")
-        || "postgresql://localhost:5432/disc";
+      const databaseUrl = Deno.env.get("DATABASE_URL") ||
+        "postgresql://localhost:5432/disc";
 
       // Initialize tracker
       const tracker = new MigrationTracker(databaseUrl);
       const initResult = await tracker.initialize();
       if (!initResult.ok) {
         console.log(
-          "   ⚠️  Migration tracker not initialized, skipping migration",
+          "   ⚠️  Migration tracker not initialized, skipping migration"
         );
         return;
       }
@@ -271,7 +274,7 @@ export class WatchCommand {
         migrationsDir: "./migrations",
         schemaFile: "./dbschema/default.disc",
         backupBeforeMigration: false,
-        rollbackOnError: true,
+        rollbackOnError: true
       };
       const engine = new MigrationEngine(config);
 
@@ -279,7 +282,7 @@ export class WatchCommand {
       const planResult = engine.planMigration(oldModules, newModules);
       if (!planResult.ok) {
         console.error(
-          `   ❌ Migration planning failed: ${planResult.error.message}`,
+          `   ❌ Migration planning failed: ${planResult.error.message}`
         );
         return;
       }
@@ -304,7 +307,7 @@ export class WatchCommand {
         const execResult = await engine.executeMigration(plan);
         if (execResult.ok) {
           console.log(
-            `   ✅ Migration applied successfully (${execResult.value[0].durationMs}ms)`,
+            `   ✅ Migration applied successfully (${execResult.value[0].durationMs}ms)`
           );
 
           // Record migration
@@ -342,7 +345,7 @@ export class WatchCommand {
 
   private async runCodegen(
     outputDir: string,
-    modules?: Module[],
+    modules?: Module[]
   ): Promise<void> {
     try {
       // Create output directory
@@ -360,7 +363,7 @@ export class WatchCommand {
         schema = Context.createTestSchema();
       }
       const result = generateTypeScript(schema, {
-        outputDir: outputDir,
+        outputDir: outputDir
       });
 
       // Write generated files
@@ -431,7 +434,7 @@ export class WatchCommand {
     return {
       watching: this.isWatching,
       files: [], // Would track watched files in real implementation
-      uptime: 0, // Would track uptime in real implementation
+      uptime: 0 // Would track uptime in real implementation
     };
   }
 }

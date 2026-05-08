@@ -83,7 +83,7 @@ backend_dsn = "postgresql://user:pass@host:5432/mydb"
 [server]
 port = 8080
 host = "0.0.0.0"
-`,
+`
     );
 
     const result = resolveProjectContext(dir);
@@ -143,7 +143,7 @@ enable_websockets = false
 enable_metrics = true
 trust_proxy = true
 cors_allow_credentials = true
-`,
+`
     );
 
     const result = resolveProjectContext(dir);
@@ -172,7 +172,7 @@ Deno.test("resolveProjectContext - parses [server] integers into overrides", asy
 max_request_body_bytes = 16777216
 request_timeout = 30000
 rate_limit_rpm = 600
-`,
+`
     );
 
     const result = resolveProjectContext(dir);
@@ -195,14 +195,14 @@ Deno.test("resolveProjectContext - parses cors_origins inline array", async () =
       `name = "cors-project"
 [server]
 cors_origins = ["https://app.example.com", "https://*.example.com"]
-`,
+`
     );
 
     const result = resolveProjectContext(dir);
     assertNotEquals(result, null);
     assertEquals(
       result!.serverOverrides?.corsOrigins,
-      ["https://app.example.com", "https://*.example.com"],
+      ["https://app.example.com", "https://*.example.com"]
     );
   } finally {
     await Deno.remove(dir, { recursive: true });
@@ -217,7 +217,7 @@ Deno.test("resolveProjectContext - parses empty cors_origins array", async () =>
       `name = "empty-cors"
 [server]
 cors_origins = []
-`,
+`
     );
 
     const result = resolveProjectContext(dir);
@@ -240,7 +240,7 @@ Deno.test("resolveProjectContext - drops malformed boolean and integer values", 
 require_auth = "yes"
 max_request_body_bytes = "not-a-number"
 rate_limit_rpm = -5
-`,
+`
     );
 
     const result = resolveProjectContext(dir);
@@ -262,7 +262,7 @@ Deno.test("resolveProjectContext - boolean parser is case-insensitive", async ()
 [server]
 require_auth = TRUE
 read_only = False
-`,
+`
     );
 
     const result = resolveProjectContext(dir);
@@ -288,7 +288,7 @@ Deno.test("resolveDsn - returns backendDsn when set", () => {
     projectRoot: "/home/user/projects/my-project",
     serverHost: "localhost",
     serverPort: 5656,
-    socketDir: "/home/user/.disc/instances/my-project/socket",
+    socketDir: "/home/user/.disc/instances/my-project/socket"
   };
 
   const dsn = resolveDsn(ctx);
@@ -304,13 +304,13 @@ Deno.test("resolveDsn - builds socket DSN for managed instance", () => {
     projectRoot: "/home/user/projects/my-project",
     serverHost: "localhost",
     serverPort: 5656,
-    socketDir: "/home/user/.disc/instances/my-project/socket",
+    socketDir: "/home/user/.disc/instances/my-project/socket"
   };
 
   const dsn = resolveDsn(ctx);
   assertEquals(
     dsn,
-    "postgresql://disc@/my-project?host=/home/user/.disc/instances/my-project/socket",
+    "postgresql://disc@/my-project?host=/home/user/.disc/instances/my-project/socket"
   );
 });
 
@@ -329,7 +329,7 @@ Deno.test("isPgRunning - returns false when no postmaster.pid", async () => {
       projectRoot: dir,
       serverHost: "localhost",
       serverPort: 5656,
-      socketDir: join(dir, "socket"),
+      socketDir: join(dir, "socket")
     };
 
     const running = await isPgRunning(ctx);

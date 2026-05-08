@@ -161,8 +161,8 @@ export class DiscServer {
   constructor(config: DiscServerOptions = {}) {
     // If a PostgresInstance is provided, derive databaseUrl from its DSN
     // unless the caller explicitly set a databaseUrl.
-    const databaseUrl = config.databaseUrl
-      || (config.postgresInstance ? config.postgresInstance.dsn() : "postgresql://localhost:5432/disc");
+    const databaseUrl = config.databaseUrl ||
+      (config.postgresInstance ? config.postgresInstance.dsn() : "postgresql://localhost:5432/disc");
 
     this.config = {
       host: config.host || "localhost",
@@ -191,7 +191,7 @@ export class DiscServer {
       tls: config.tls,
       databases: config.databases,
       enableMultiDatabase: config.enableMultiDatabase,
-      binaryPort: config.binaryPort,
+      binaryPort: config.binaryPort
     };
 
     this.postgresInstance = config.postgresInstance;
@@ -218,7 +218,7 @@ export class DiscServer {
       enableAccessPolicies: config.enableAccessPolicies,
       cacheMaxSize: config.cacheMaxSize,
       slowQueryThresholdMs: config.slowQueryThresholdMs,
-      readOnly: config.readOnly ?? false,
+      readOnly: config.readOnly ?? false
     };
 
     if (config.protocol === "full") {
@@ -284,11 +284,11 @@ export class DiscServer {
       // Initialize extensions
       if (this.extensionRegistry.size > 0) {
         const extCtx = createExtensionContext({
-          schema: this.config.extensions
-            ? (this.protocolHandler as any).schema
-              || { types: new Map(), functions: new Map() }
-            : { types: new Map(), functions: new Map() },
-          config: this.config,
+          schema: this.config.extensions ?
+            (this.protocolHandler as any).schema ||
+            { types: new Map(), functions: new Map() } :
+            { types: new Map(), functions: new Map() },
+          config: this.config
         });
         await this.extensionRegistry.initializeAll(extCtx);
 
@@ -296,30 +296,30 @@ export class DiscServer {
         const extFunctions = this.extensionRegistry.getAllFunctions();
         const extTypes = this.extensionRegistry.getAllTypes();
         if (
-          (extFunctions.length > 0 || extTypes.length > 0)
-          && this.protocolHandler.updateSchema
+          (extFunctions.length > 0 || extTypes.length > 0) &&
+          this.protocolHandler.updateSchema
         ) {
           const handlerSchema: {
             types: Map<string, any>;
             functions: Map<string, any>;
-          } = (this.protocolHandler as any).schema
-            || { types: new Map(), functions: new Map() };
+          } = (this.protocolHandler as any).schema ||
+            { types: new Map(), functions: new Map() };
           const merged = mergeSchemaAdditions(
             handlerSchema,
             extFunctions,
-            extTypes,
+            extTypes
           );
           this.protocolHandler.updateSchema(merged);
           logger.info(
-            `Merged ${extFunctions.length} extension function(s) and ${extTypes.length} extension type(s) into schema`,
+            `Merged ${extFunctions.length} extension function(s) and ${extTypes.length} extension type(s) into schema`
           );
         }
       }
 
       // Initialize binary protocol server if binaryPort is configured
       if (this.config.binaryPort !== undefined) {
-        const handlerSchema = (this.protocolHandler as any).schema
-          || { types: new Map(), functions: new Map() };
+        const handlerSchema = (this.protocolHandler as any).schema ||
+          { types: new Map(), functions: new Map() };
         // Bind a stable executor that delegates to whatever protocol
         // handler is currently configured. Calling `.bind` here so the
         // closure captures the EdgeQL handler's `this`, since some
@@ -328,7 +328,7 @@ export class DiscServer {
         const handler = this.protocolHandler as {
           executeBinaryQuery?: (
             commandText: string,
-            args: Record<string, unknown>,
+            args: Record<string, unknown>
           ) => Promise<{
             rows: Record<string, unknown>[];
             status: string;
@@ -342,11 +342,11 @@ export class DiscServer {
           schema: handlerSchema,
           password: this.binaryPassword,
           tls: this.binaryTls,
-          executor,
+          executor
         });
         this.binaryServer.start();
         logger.info(
-          `Binary protocol server listening on port ${this.binaryServer.port}`,
+          `Binary protocol server listening on port ${this.binaryServer.port}`
         );
       }
 
@@ -363,15 +363,15 @@ export class DiscServer {
         // Live-schema-diff (Bundle K — Disc #3a). When the CLI passed a
         // schemaFilePath, HttpServer mounts `/admin/schema-watch` and
         // `/admin/schema-apply`; otherwise both 404.
-        adminSchemaWatch: this.schemaFilePath
-          ? {
+        adminSchemaWatch: this.schemaFilePath ?
+          {
             schemaFilePath: this.schemaFilePath,
             appliedSdlProvider: () => this.appliedSdl ?? "",
-            onApplied: (newSdl) => {
+            onApplied: newSdl => {
               this.appliedSdl = newSdl;
-            },
-          }
-          : undefined,
+            }
+          } :
+          undefined,
         dataWatchRegistry: this.dataWatchRegistry,
         schemaProvider: () => {
           // Access the handler's current schema (may be updated at runtime)
@@ -396,7 +396,7 @@ export class DiscServer {
             throw new Error(result.error.message);
           }
           return result.value;
-        },
+        }
       });
 
       // Register signal handlers for graceful shutdown
@@ -413,15 +413,15 @@ export class DiscServer {
           // Don't await — signal handlers must return quickly. The reload
           // runs as its own task; errors are caught + logged inside.
           // (gh/geldata#4278)
-          void this.reloadConfig().catch((err) => {
+          void this.reloadConfig().catch(err => {
             logger.error(
-              `SIGHUP config reload failed: ${err instanceof Error ? err.message : String(err)}`,
+              `SIGHUP config reload failed: ${err instanceof Error ? err.message : String(err)}`
             );
           });
         };
         Deno.addSignalListener("SIGHUP", this.sighup_handler);
         logger.info(
-          "SIGHUP handler registered; send SIGHUP to reload safe-to-change config without restart",
+          "SIGHUP handler registered; send SIGHUP to reload safe-to-change config without restart"
         );
       } else {
         logger.info("SIGHUP config reload is not available on Windows; restart required for config changes");
@@ -480,7 +480,7 @@ export class DiscServer {
       // Drain in-flight requests before shutting down
       const drainTimeout = this.config.shutdownDrainTimeout ?? 30000;
       logger.info(
-        `Draining in-flight requests (timeout: ${drainTimeout}ms)`,
+        `Draining in-flight requests (timeout: ${drainTimeout}ms)`
       );
       await this.httpServer.drain(drainTimeout);
 
@@ -540,7 +540,7 @@ export class DiscServer {
     };
     if (!handler.pool) {
       logger.info(
-        "data-watch: skipped — protocol handler has no connection pool",
+        "data-watch: skipped — protocol handler has no connection pool"
       );
       return;
     }
@@ -555,18 +555,19 @@ export class DiscServer {
       this.dataWatchRegistry = new DataWatchRegistry({ pool: handler.pool });
       await this.dataWatchRegistry.start();
       logger.info(
-        `data-watch: ready (${result.wiredTables.length} table(s) wired)`,
+        `data-watch: ready (${result.wiredTables.length} table(s) wired)`
       );
     } catch (err) {
       this.dataWatchRegistry = undefined;
       logger.warn(
-        `data-watch: bootstrap failed; live data subscriptions disabled — ${err instanceof Error ? err.message : String(err)}`,
+        `data-watch: bootstrap failed; live data subscriptions disabled — ${err instanceof Error ? err.message : String(err)}`
       );
     }
   }
 
   private async initializeAuth(): Promise<void> {
-    if (!this.config.jwtSecret) return;
+    if (!this.config.jwtSecret)
+      return;
 
     logger.info("Initializing authentication system");
 
@@ -586,9 +587,11 @@ export class DiscServer {
       bcryptRounds: this.config.authConfig?.bcryptRounds,
       sessionTimeout: this.config.authConfig?.sessionTimeout,
       allowRegistration: this.config.authConfig?.allowRegistration,
-      requireEmailVerification: this.config.authConfig
+      requireEmailVerification: this
+        .config
+        .authConfig
         ?.requireEmailVerification,
-      passwordMinLength: this.config.authConfig?.passwordMinLength,
+      passwordMinLength: this.config.authConfig?.passwordMinLength
     };
 
     // Initialize provider (creates tables + crypto key)
@@ -598,7 +601,7 @@ export class DiscServer {
     // Create middleware and routes
     this.authMiddleware = new AuthMiddleware(this.authProvider);
     this.authRoutes = new AuthRoutes(this.authProvider, this.authMiddleware, {
-      trustProxy: this.config.trustProxy,
+      trustProxy: this.config.trustProxy
     });
 
     logger.info("Authentication system initialized");
@@ -630,7 +633,7 @@ export class DiscServer {
     const next = buildEnvOptions(
       this.postgresInstance,
       undefined,
-      undefined,
+      undefined
     );
     const cur = this.config;
 
@@ -643,7 +646,7 @@ export class DiscServer {
     };
     const noteIgnored = (field: string, oldVal: unknown, newVal: unknown): void => {
       logger.warn(
-        `config reload: ${field} changed (${String(oldVal)} -> ${String(newVal)}) but cannot be hot-reloaded — restart required`,
+        `config reload: ${field} changed (${String(oldVal)} -> ${String(newVal)}) but cannot be hot-reloaded — restart required`
       );
       ignored++;
     };
@@ -665,20 +668,20 @@ export class DiscServer {
       noteApplied(
         "corsOrigins",
         cur.corsOrigins?.join(",") ?? "(none)",
-        next.corsOrigins?.join(",") ?? "(none)",
+        next.corsOrigins?.join(",") ?? "(none)"
       );
       cur.corsOrigins = next.corsOrigins;
       this.httpServer?.updateCorsAllowedOrigins(next.corsOrigins);
     }
 
     if (
-      next.slowQueryThresholdMs !== undefined
-      && next.slowQueryThresholdMs !== cur.slowQueryThresholdMs
+      next.slowQueryThresholdMs !== undefined &&
+      next.slowQueryThresholdMs !== cur.slowQueryThresholdMs
     ) {
       noteApplied(
         "slowQueryThresholdMs",
         cur.slowQueryThresholdMs,
-        next.slowQueryThresholdMs,
+        next.slowQueryThresholdMs
       );
       cur.slowQueryThresholdMs = next.slowQueryThresholdMs;
       this.httpServer?.updateSlowQueryThreshold(next.slowQueryThresholdMs);
@@ -687,8 +690,8 @@ export class DiscServer {
     const curExplain = (cur as Types.ServerConfig & { explainCacheTtlMs?: number; })
       .explainCacheTtlMs;
     if (
-      next.explainCacheTtlMs !== undefined
-      && next.explainCacheTtlMs !== curExplain
+      next.explainCacheTtlMs !== undefined &&
+      next.explainCacheTtlMs !== curExplain
     ) {
       noteApplied("explainCacheTtlMs", curExplain, next.explainCacheTtlMs);
       const ttl = next.explainCacheTtlMs;
@@ -699,13 +702,13 @@ export class DiscServer {
     // Logging — reconfigure the global logger if either knob changed.
     const nextLogging = readLoggingEnv();
     if (
-      nextLogging.level !== this.last_log_level
-      || nextLogging.format !== this.last_log_format
+      nextLogging.level !== this.last_log_level ||
+      nextLogging.format !== this.last_log_format
     ) {
       noteApplied(
         "logLevel/format",
         `${this.last_log_level}/${this.last_log_format}`,
-        `${nextLogging.level}/${nextLogging.format}`,
+        `${nextLogging.level}/${nextLogging.format}`
       );
       configureLogging({ format: nextLogging.format, level: nextLogging.level });
       this.last_log_level = nextLogging.level;
@@ -729,18 +732,18 @@ export class DiscServer {
       noteIgnored("enableAuth", cur.enableAuth, next.enableAuth);
     }
     if (
-      next.enableAccessPolicies !== undefined
-      && next.enableAccessPolicies !== cur.enableAccessPolicies
+      next.enableAccessPolicies !== undefined &&
+      next.enableAccessPolicies !== cur.enableAccessPolicies
     ) {
       noteIgnored(
         "enableAccessPolicies",
         cur.enableAccessPolicies,
-        next.enableAccessPolicies,
+        next.enableAccessPolicies
       );
     }
     if (
-      next.enableWebsockets !== undefined
-      && next.enableWebsockets !== cur.enableWebsockets
+      next.enableWebsockets !== undefined &&
+      next.enableWebsockets !== cur.enableWebsockets
     ) {
       noteIgnored("enableWebsockets", cur.enableWebsockets, next.enableWebsockets);
     }
@@ -748,8 +751,8 @@ export class DiscServer {
       noteIgnored("enableMetrics", cur.enableMetrics, next.enableMetrics);
     }
     if (
-      next.maxConnections !== undefined
-      && next.maxConnections !== cur.maxConnections
+      next.maxConnections !== undefined &&
+      next.maxConnections !== cur.maxConnections
     ) {
       noteIgnored("maxConnections", cur.maxConnections, next.maxConnections);
     }
@@ -772,13 +775,13 @@ export class DiscServer {
         logger.info("config reload: TLS listener reloaded from on-disk cert/key");
       } catch (err) {
         logger.error(
-          `config reload: TLS reload failed: ${err instanceof Error ? err.message : String(err)}`,
+          `config reload: TLS reload failed: ${err instanceof Error ? err.message : String(err)}`
         );
       }
     }
 
     logger.info(
-      `SIGHUP reload complete: ${applied} applied, ${ignored} ignored (unsafe)`,
+      `SIGHUP reload complete: ${applied} applied, ${ignored} ignored (unsafe)`
     );
   }
 
@@ -826,10 +829,13 @@ export class DiscServer {
 function arraysEqual(a?: string[], b?: string[]): boolean {
   const la = a?.length ?? 0;
   const lb = b?.length ?? 0;
-  if (la !== lb) return false;
-  if (la === 0) return true;
+  if (la !== lb)
+    return false;
+  if (la === 0)
+    return true;
   for (let i = 0; i < la; i++) {
-    if (a![i] !== b![i]) return false;
+    if (a![i] !== b![i])
+      return false;
   }
   return true;
 }
@@ -838,12 +844,12 @@ export function createDefaultConfig(): Types.ServerConfig {
   return {
     host: "localhost",
     port: 5656,
-    databaseUrl: Deno.env.get("DATABASE_URL")
-      || "postgresql://localhost:5432/disc",
+    databaseUrl: Deno.env.get("DATABASE_URL") ||
+      "postgresql://localhost:5432/disc",
     maxConnections: 100,
     requestTimeout: 30000,
     enableCors: true,
-    enableWebsockets: true,
+    enableWebsockets: true
   };
 }
 
@@ -858,7 +864,7 @@ export function createDefaultConfig(): Types.ServerConfig {
 export function buildEnvOptions(
   postgresInstance?: PostgresInstance,
   schema?: Schema,
-  extensions?: Extension[],
+  extensions?: Extension[]
 ): DiscServerOptions {
   const enableAuth = Deno.env.get("DISC_ENABLE_AUTH");
   const enableAccessPolicies = Deno.env.get("DISC_ENABLE_ACCESS_POLICIES");
@@ -875,16 +881,16 @@ export function buildEnvOptions(
     enableAccessPolicies: enableAccessPolicies !== undefined ? enableAccessPolicies !== "false" : undefined,
     cacheMaxSize: parseInt(Deno.env.get("DISC_CACHE_MAX_SIZE") || "1000"),
     explainCacheTtlMs: parseInt(
-      Deno.env.get("DISC_EXPLAIN_CACHE_TTL") || "300000",
+      Deno.env.get("DISC_EXPLAIN_CACHE_TTL") || "300000"
     ),
     slowQueryThresholdMs: parseInt(
-      Deno.env.get("DISC_SLOW_QUERY_MS") || "1000",
+      Deno.env.get("DISC_SLOW_QUERY_MS") || "1000"
     ),
     enableMetrics: Deno.env.get("DISC_ENABLE_METRICS") === "true",
-    rateLimitRpm: parseInt(Deno.env.get("DISC_RATE_LIMIT_RPM") || "0")
-      || undefined,
-    rateLimitBurst: parseInt(Deno.env.get("DISC_RATE_LIMIT_BURST") || "0")
-      || undefined,
+    rateLimitRpm: parseInt(Deno.env.get("DISC_RATE_LIMIT_RPM") || "0") ||
+      undefined,
+    rateLimitBurst: parseInt(Deno.env.get("DISC_RATE_LIMIT_BURST") || "0") ||
+      undefined,
     postgresInstance,
     // Default to the full EdgeQL compiler. The "simple" path is a hand-rolled
     // stub that omits FROM/LIMIT/ORDER and bypasses the real compiler — kept
@@ -892,13 +898,13 @@ export function buildEnvOptions(
     // suitable for serving real queries. Set DISC_PROTOCOL=simple to opt in.
     protocol: Deno.env.get("DISC_PROTOCOL") === "simple" ? "simple" : "full",
     schema,
-    extensions,
+    extensions
   };
 
   // Parse CORS origins if provided
   const corsOriginsEnv = Deno.env.get("DISC_CORS_ORIGINS");
   if (corsOriginsEnv) {
-    config.corsOrigins = corsOriginsEnv.split(",").map((origin) => origin.trim());
+    config.corsOrigins = corsOriginsEnv.split(",").map(origin => origin.trim());
   }
 
   // Shutdown drain timeout. Documented in `docs/production-deployment.md`
@@ -919,24 +925,29 @@ export function buildEnvOptions(
   // `docs/server.md#disc-toml-keys-vs-env-vars-vs-cli-flags`.
   // (gh/geldata#5234, #7563).
   const requireAuth = parseBoolEnv("DISC_REQUIRE_AUTH");
-  if (requireAuth !== undefined) config.requireAuth = requireAuth;
+  if (requireAuth !== undefined)
+    config.requireAuth = requireAuth;
 
   const readOnly = parseBoolEnv("DISC_READ_ONLY");
-  if (readOnly !== undefined) config.readOnly = readOnly;
+  if (readOnly !== undefined)
+    config.readOnly = readOnly;
 
   const trustProxy = parseBoolEnv("DISC_TRUST_PROXY");
-  if (trustProxy !== undefined) config.trustProxy = trustProxy;
+  if (trustProxy !== undefined)
+    config.trustProxy = trustProxy;
 
   // Schema-derived REST surface (Bundle J). Defaults to true; opt-out
   // via env or `disc.toml` `enable_rest = false` in the server section.
   const enableRest = parseBoolEnv("DISC_ENABLE_REST");
-  if (enableRest !== undefined) config.enableRest = enableRest;
+  if (enableRest !== undefined)
+    config.enableRest = enableRest;
 
   // Live data subscriptions (Bundle L). Defaults to true; opt-out via
   // `DISC_ENABLE_DATA_WATCH=false` or `disc.toml` `enable_data_watch
   // = false`.
   const enableDataWatch = parseBoolEnv("DISC_ENABLE_DATA_WATCH");
-  if (enableDataWatch !== undefined) config.enableDataWatch = enableDataWatch;
+  if (enableDataWatch !== undefined)
+    config.enableDataWatch = enableDataWatch;
 
   // Parse TLS config if provided.
   // `DISC_TLS_CERT` / `DISC_TLS_KEY` accept on-disk paths.
@@ -951,18 +962,18 @@ export function buildEnvOptions(
       certFile: tlsCert,
       keyFile: tlsKey,
       redirect: Deno.env.get("DISC_TLS_REDIRECT") === "true",
-      redirectPort: parseInt(Deno.env.get("DISC_TLS_REDIRECT_PORT") || "80"),
+      redirectPort: parseInt(Deno.env.get("DISC_TLS_REDIRECT_PORT") || "80")
     };
   }
 
   // Binary protocol TLS — required for upstream Gel client compatibility.
   const binaryTlsCert = resolveTlsMaterial(
     "DISC_BINARY_TLS_CERT",
-    "DISC_BINARY_TLS_CERT_ENV",
+    "DISC_BINARY_TLS_CERT_ENV"
   );
   const binaryTlsKey = resolveTlsMaterial(
     "DISC_BINARY_TLS_KEY",
-    "DISC_BINARY_TLS_KEY_ENV",
+    "DISC_BINARY_TLS_KEY_ENV"
   );
   if (binaryTlsCert && binaryTlsKey) {
     config.binaryTls = { certFile: binaryTlsCert, keyFile: binaryTlsKey };
@@ -992,7 +1003,8 @@ export function buildEnvOptions(
  */
 function parseBoolEnv(key: string): boolean | undefined {
   const raw = Deno.env.get(key);
-  if (raw === undefined || raw === "") return undefined;
+  if (raw === undefined || raw === "")
+    return undefined;
   const normalized = raw.trim().toLowerCase();
   if (normalized === "1" || normalized === "true" || normalized === "yes") {
     return true;
@@ -1021,11 +1033,14 @@ function parseBoolEnv(key: string): boolean | undefined {
  */
 function resolveTlsMaterial(pathKey: string, envKey: string): string | undefined {
   const direct = Deno.env.get(pathKey);
-  if (direct) return direct;
+  if (direct)
+    return direct;
   const indirectName = Deno.env.get(envKey);
-  if (!indirectName) return undefined;
+  if (!indirectName)
+    return undefined;
   const pem = Deno.env.get(indirectName);
-  if (!pem) return undefined;
+  if (!pem)
+    return undefined;
   const tempFile = Deno.makeTempFileSync({ prefix: "disc-tls-", suffix: ".pem" });
   Deno.writeTextFileSync(tempFile, pem);
   // Best-effort lock down the perms; failure is logged elsewhere.
@@ -1061,7 +1076,7 @@ function readLoggingEnv(): { format: "json" | "text"; level: "DEBUG" | "INFO" | 
 export function createServerFromEnv(
   postgresInstance?: PostgresInstance,
   schema?: Schema,
-  extensions?: Extension[],
+  extensions?: Extension[]
 ): DiscServer {
   // Configure structured logging from env vars
   const { format, level } = readLoggingEnv();

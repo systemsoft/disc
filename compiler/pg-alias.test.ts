@@ -33,7 +33,7 @@ function makePool(dsn: string): ConnectionPool {
     connectionString: dsn,
     minConnections: 1,
     maxConnections: 3,
-    cleanupInterval: 0,
+    cleanupInterval: 0
   });
 }
 
@@ -58,7 +58,7 @@ const TEST_TABLE = "test_account";
  */
 async function applyTestSchema(
   pool: ConnectionPool,
-  aliases?: Map<string, AliasDef>,
+  aliases?: Map<string, AliasDef>
 ): Promise<{ manager: SchemaManager; schema: Schema; }> {
   const manager = new SchemaManager({ pool });
   await manager.initialize();
@@ -67,7 +67,7 @@ async function applyTestSchema(
   assertEquals(
     result.ok,
     true,
-    `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`,
+    `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`
   );
 
   const baseSchema = manager.getSchema();
@@ -76,7 +76,7 @@ async function applyTestSchema(
   // Add aliases to the schema (aliases are compile-time only, not stored in DB)
   const schema: Schema = {
     ...baseSchema!,
-    aliases: aliases ?? new Map(),
+    aliases: aliases ?? new Map()
   };
 
   return { manager, schema };
@@ -126,8 +126,8 @@ Deno.test({
         ["ActiveAccounts", {
           name: "ActiveAccounts",
           expression: "select TestAccount filter .active = true",
-          targetType: "TestAccount",
-        }],
+          targetType: "TestAccount"
+        }]
       ]);
 
       const { manager, schema } = await applyTestSchema(pool, aliases);
@@ -137,13 +137,13 @@ Deno.test({
         `INSERT INTO ${TEST_TABLE} (id, name, email, active) VALUES
           (gen_random_uuid(), 'Ada', 'ada@test.com', true),
           (gen_random_uuid(), 'Billie', 'billie@test.com', false),
-          (gen_random_uuid(), 'Cher', 'cher@test.com', true)`,
+          (gen_random_uuid(), 'Cher', 'cher@test.com', true)`
       );
 
       // Compile and execute alias query with shape
       const sql = compileEdgeQL(
         "select ActiveAccounts { name, email }",
-        schema,
+        schema
       );
       const result = await pool.query(sql);
 
@@ -151,14 +151,14 @@ Deno.test({
       assertEquals(
         result.rowCount,
         2,
-        "Should return exactly 2 active accounts",
+        "Should return exactly 2 active accounts"
       );
 
       await cleanup(pool, manager);
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -174,8 +174,8 @@ Deno.test({
         ["ActiveAccounts", {
           name: "ActiveAccounts",
           expression: "select TestAccount filter .active = true",
-          targetType: "TestAccount",
-        }],
+          targetType: "TestAccount"
+        }]
       ]);
 
       const { manager, schema } = await applyTestSchema(pool, aliases);
@@ -185,13 +185,13 @@ Deno.test({
         `INSERT INTO ${TEST_TABLE} (id, name, email, active) VALUES
           (gen_random_uuid(), 'Ada', 'ada@test.com', true),
           (gen_random_uuid(), 'Billie', 'billie@test.com', false),
-          (gen_random_uuid(), 'Cher', 'cher@test.com', true)`,
+          (gen_random_uuid(), 'Cher', 'cher@test.com', true)`
       );
 
       // Compile and execute alias query with additional filter
       const sql = compileEdgeQL(
         "select ActiveAccounts { name } filter .name = \"Ada\"",
-        schema,
+        schema
       );
       const result = await pool.query(sql);
 
@@ -199,21 +199,21 @@ Deno.test({
       assertEquals(
         result.rowCount,
         1,
-        "Should return exactly 1 account (Ada)",
+        "Should return exactly 1 account (Ada)"
       );
 
       // Verify it's Ada
       const row = result.rows[0];
       const rowData = row.jsonb_build_object ?? row;
-      const name = rowData.name
-        ?? (typeof rowData === "object" ? Object.values(rowData)[0] : undefined);
+      const name = rowData.name ??
+        (typeof rowData === "object" ? Object.values(rowData)[0] : undefined);
       assertExists(name, "Row should contain name data");
 
       await cleanup(pool, manager);
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -229,8 +229,8 @@ Deno.test({
         ["People", {
           name: "People",
           expression: "TestAccount",
-          targetType: "TestAccount",
-        }],
+          targetType: "TestAccount"
+        }]
       ]);
 
       const { manager, schema } = await applyTestSchema(pool, aliases);
@@ -239,13 +239,13 @@ Deno.test({
       await pool.query(
         `INSERT INTO ${TEST_TABLE} (id, name, email, active) VALUES
           (gen_random_uuid(), 'Ada', 'ada@test.com', true),
-          (gen_random_uuid(), 'Billie', 'billie@test.com', false)`,
+          (gen_random_uuid(), 'Billie', 'billie@test.com', false)`
       );
 
       // Compile and execute type alias query
       const sql = compileEdgeQL(
         "select People { name }",
-        schema,
+        schema
       );
       const result = await pool.query(sql);
 
@@ -253,14 +253,14 @@ Deno.test({
       assertEquals(
         result.rowCount,
         2,
-        "Should return all 2 accounts via type alias",
+        "Should return all 2 accounts via type alias"
       );
 
       await cleanup(pool, manager);
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -276,13 +276,13 @@ Deno.test({
         ["ActiveAccounts", {
           name: "ActiveAccounts",
           expression: "select TestAccount filter .active = true",
-          targetType: "TestAccount",
+          targetType: "TestAccount"
         }],
         ["People", {
           name: "People",
           expression: "TestAccount",
-          targetType: "TestAccount",
-        }],
+          targetType: "TestAccount"
+        }]
       ]);
 
       const { manager, schema } = await applyTestSchema(pool, aliases);
@@ -292,36 +292,36 @@ Deno.test({
         `INSERT INTO ${TEST_TABLE} (id, name, email, active) VALUES
           (gen_random_uuid(), 'Ada', 'ada@test.com', true),
           (gen_random_uuid(), 'Billie', 'billie@test.com', false),
-          (gen_random_uuid(), 'Cher', 'cher@test.com', true)`,
+          (gen_random_uuid(), 'Cher', 'cher@test.com', true)`
       );
 
       // Test ActiveAccounts alias (should return 2)
       const activeSql = compileEdgeQL(
         "select ActiveAccounts { name }",
-        schema,
+        schema
       );
       const activeResult = await pool.query(activeSql);
       assertEquals(
         activeResult.rowCount,
         2,
-        "ActiveAccounts should return 2 active accounts",
+        "ActiveAccounts should return 2 active accounts"
       );
 
       // Test People alias (should return all 3)
       const peopleSql = compileEdgeQL(
         "select People { name }",
-        schema,
+        schema
       );
       const peopleResult = await pool.query(peopleSql);
       assertEquals(
         peopleResult.rowCount,
         3,
-        "People should return all 3 accounts",
+        "People should return all 3 accounts"
       );
 
       await cleanup(pool, manager);
     } finally {
       await pool.close();
     }
-  },
+  }
 });

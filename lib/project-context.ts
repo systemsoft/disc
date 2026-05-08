@@ -260,8 +260,10 @@ function parseBool(value: string | undefined): boolean | undefined {
     return undefined;
   }
   const normalized = value.toLowerCase();
-  if (normalized === "true") return true;
-  if (normalized === "false") return false;
+  if (normalized === "true")
+    return true;
+  if (normalized === "false")
+    return false;
   return undefined;
 }
 
@@ -290,13 +292,16 @@ function buildServerOverrides(fields: TomlFields): ServerOverrides | undefined {
   const overrides: ServerOverrides = {};
 
   const requireAuth = parseBool(fields.requireAuth);
-  if (requireAuth !== undefined) overrides.requireAuth = requireAuth;
+  if (requireAuth !== undefined)
+    overrides.requireAuth = requireAuth;
 
   const readOnly = parseBool(fields.readOnly);
-  if (readOnly !== undefined) overrides.readOnly = readOnly;
+  if (readOnly !== undefined)
+    overrides.readOnly = readOnly;
 
   const enableCors = parseBool(fields.enableCors);
-  if (enableCors !== undefined) overrides.enableCors = enableCors;
+  if (enableCors !== undefined)
+    overrides.enableCors = enableCors;
 
   const enableWebsockets = parseBool(fields.enableWebsockets);
   if (enableWebsockets !== undefined) {
@@ -304,10 +309,12 @@ function buildServerOverrides(fields: TomlFields): ServerOverrides | undefined {
   }
 
   const enableMetrics = parseBool(fields.enableMetrics);
-  if (enableMetrics !== undefined) overrides.enableMetrics = enableMetrics;
+  if (enableMetrics !== undefined)
+    overrides.enableMetrics = enableMetrics;
 
   const enableRest = parseBool(fields.enableRest);
-  if (enableRest !== undefined) overrides.enableRest = enableRest;
+  if (enableRest !== undefined)
+    overrides.enableRest = enableRest;
 
   const enableDataWatch = parseBool(fields.enableDataWatch);
   if (enableDataWatch !== undefined) {
@@ -315,7 +322,8 @@ function buildServerOverrides(fields: TomlFields): ServerOverrides | undefined {
   }
 
   const trustProxy = parseBool(fields.trustProxy);
-  if (trustProxy !== undefined) overrides.trustProxy = trustProxy;
+  if (trustProxy !== undefined)
+    overrides.trustProxy = trustProxy;
 
   const corsAllowCredentials = parseBool(fields.corsAllowCredentials);
   if (corsAllowCredentials !== undefined) {
@@ -332,10 +340,12 @@ function buildServerOverrides(fields: TomlFields): ServerOverrides | undefined {
   }
 
   const requestTimeout = parsePositiveInt(fields.requestTimeout);
-  if (requestTimeout !== undefined) overrides.requestTimeout = requestTimeout;
+  if (requestTimeout !== undefined)
+    overrides.requestTimeout = requestTimeout;
 
   const rateLimitRpm = parsePositiveInt(fields.rateLimitRpm);
-  if (rateLimitRpm !== undefined) overrides.rateLimitRpm = rateLimitRpm;
+  if (rateLimitRpm !== undefined)
+    overrides.rateLimitRpm = rateLimitRpm;
 
   return Object.keys(overrides).length > 0 ? overrides : undefined;
 }
@@ -416,7 +426,7 @@ export function resolveProjectContext(cwd?: string): ProjectContext | null {
   // key was missing or blank.
   if (!projectName) {
     throw new Error(
-      `disc.toml at ${tomlPath} is missing the required 'name' field`,
+      `disc.toml at ${tomlPath} is missing the required 'name' field`
     );
   }
   const instanceName = fields.instanceName ?? projectName;
@@ -436,7 +446,7 @@ export function resolveProjectContext(cwd?: string): ProjectContext | null {
     projectRoot,
     serverHost,
     serverPort,
-    socketDir,
+    socketDir
   };
 
   if (fields.backendDsn) {

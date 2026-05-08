@@ -16,12 +16,12 @@ interface CapturedRequest {
 }
 
 function makeFetch(
-  responder: (body: string) => Response,
+  responder: (body: string) => Response
 ): { fetchImpl: typeof fetch; calls: CapturedRequest[]; } {
   const calls: CapturedRequest[] = [];
   const fetchImpl = ((
     input: string | URL | Request,
-    init?: RequestInit,
+    init?: RequestInit
   ) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     const body = typeof init?.body === "string" ? init.body : "";
@@ -33,7 +33,7 @@ function makeFetch(
 
 async function makeRoutes(
   captcha?: CaptchaConfig,
-  fetchImpl?: typeof fetch,
+  fetchImpl?: typeof fetch
 ): Promise<{
   provider: AuthProvider;
   routes: AuthRoutes;
@@ -45,11 +45,11 @@ async function makeRoutes(
     {
       jwtSecret: "test-secret-key-32-bytes-minimum-len",
       requireEmailVerification: false,
-      captcha,
+      captcha
     },
     db,
     {},
-    fetchImpl ? { fetchImpl } : {},
+    fetchImpl ? { fetchImpl } : {}
   );
   await provider.initialize();
   const middleware = new AuthMiddleware(provider);
@@ -69,9 +69,9 @@ Deno.test("register/login — no captcha configured: requests proceed without ca
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           email: "noop@example.com",
-          password: "password123",
-        }),
-      }),
+          password: "password123"
+        })
+      })
     );
     assertEquals(regRes.status, 201);
     await regRes.body?.cancel();
@@ -83,9 +83,9 @@ Deno.test("register/login — no captcha configured: requests proceed without ca
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           email: "noop@example.com",
-          password: "password123",
-        }),
-      }),
+          password: "password123"
+        })
+      })
     );
     assertEquals(loginRes.status, 200);
     await loginRes.body?.cancel();
@@ -100,7 +100,7 @@ Deno.test("register — missing captchaToken returns 400 CAPTCHA_REQUIRED", asyn
   const { fetchImpl } = makeFetch(() => new Response(JSON.stringify({ success: true }), { status: 200 }));
   const { routes, db } = await makeRoutes(
     { provider: "hcaptcha", secret: "shh" },
-    fetchImpl,
+    fetchImpl
   );
   try {
     const handler = routes.register();
@@ -110,9 +110,9 @@ Deno.test("register — missing captchaToken returns 400 CAPTCHA_REQUIRED", asyn
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           email: "user@example.com",
-          password: "password123",
-        }),
-      }),
+          password: "password123"
+        })
+      })
     );
     assertEquals(res.status, 400);
     const body = await res.json();
@@ -126,7 +126,7 @@ Deno.test("register — valid captcha (verifier returns success) proceeds to 201
   const { fetchImpl, calls } = makeFetch(() => new Response(JSON.stringify({ success: true }), { status: 200 }));
   const { routes, db } = await makeRoutes(
     { provider: "hcaptcha", secret: "shh" },
-    fetchImpl,
+    fetchImpl
   );
   try {
     const handler = routes.register();
@@ -137,9 +137,9 @@ Deno.test("register — valid captcha (verifier returns success) proceeds to 201
         body: JSON.stringify({
           email: "user@example.com",
           password: "password123",
-          captchaToken: "good-token",
-        }),
-      }),
+          captchaToken: "good-token"
+        })
+      })
     );
     assertEquals(res.status, 201);
     assertEquals(calls.length, 1);
@@ -155,12 +155,12 @@ Deno.test("register — invalid captcha (verifier returns success: false) return
   const { fetchImpl } = makeFetch(() =>
     new Response(
       JSON.stringify({ success: false, "error-codes": ["invalid-input-response"] }),
-      { status: 200 },
+      { status: 200 }
     )
   );
   const { routes, db } = await makeRoutes(
     { provider: "hcaptcha", secret: "shh" },
-    fetchImpl,
+    fetchImpl
   );
   try {
     const handler = routes.register();
@@ -171,9 +171,9 @@ Deno.test("register — invalid captcha (verifier returns success: false) return
         body: JSON.stringify({
           email: "user@example.com",
           password: "password123",
-          captchaToken: "bad-token",
-        }),
-      }),
+          captchaToken: "bad-token"
+        })
+      })
     );
     assertEquals(res.status, 403);
     const body = await res.json();
@@ -191,13 +191,13 @@ Deno.test("login — missing captchaToken returns 400 CAPTCHA_REQUIRED", async (
   const { fetchImpl } = makeFetch(() => new Response(JSON.stringify({ success: true }), { status: 200 }));
   const { provider, routes, db } = await makeRoutes(
     { provider: "hcaptcha", secret: "shh" },
-    fetchImpl,
+    fetchImpl
   );
   try {
     // Pre-register a user so login could otherwise proceed.
     await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const handler = routes.login();
     const res = await handler(
@@ -206,9 +206,9 @@ Deno.test("login — missing captchaToken returns 400 CAPTCHA_REQUIRED", async (
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           email: "u@example.com",
-          password: "password123",
-        }),
-      }),
+          password: "password123"
+        })
+      })
     );
     assertEquals(res.status, 400);
     const body = await res.json();
@@ -222,12 +222,12 @@ Deno.test("login — valid captchaToken proceeds and returns 200", async () => {
   const { fetchImpl } = makeFetch(() => new Response(JSON.stringify({ success: true }), { status: 200 }));
   const { provider, routes, db } = await makeRoutes(
     { provider: "hcaptcha", secret: "shh" },
-    fetchImpl,
+    fetchImpl
   );
   try {
     await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const handler = routes.login();
     const res = await handler(
@@ -237,9 +237,9 @@ Deno.test("login — valid captchaToken proceeds and returns 200", async () => {
         body: JSON.stringify({
           email: "u@example.com",
           password: "password123",
-          captchaToken: "good-token",
-        }),
-      }),
+          captchaToken: "good-token"
+        })
+      })
     );
     assertEquals(res.status, 200);
     await res.body?.cancel();
@@ -252,12 +252,12 @@ Deno.test("login — invalid captchaToken returns 403 CAPTCHA_FAILED", async () 
   const { fetchImpl } = makeFetch(() => new Response(JSON.stringify({ success: false }), { status: 200 }));
   const { provider, routes, db } = await makeRoutes(
     { provider: "hcaptcha", secret: "shh" },
-    fetchImpl,
+    fetchImpl
   );
   try {
     await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const handler = routes.login();
     const res = await handler(
@@ -267,9 +267,9 @@ Deno.test("login — invalid captchaToken returns 403 CAPTCHA_FAILED", async () 
         body: JSON.stringify({
           email: "u@example.com",
           password: "password123",
-          captchaToken: "bad-token",
-        }),
-      }),
+          captchaToken: "bad-token"
+        })
+      })
     );
     assertEquals(res.status, 403);
     const body = await res.json();
@@ -286,12 +286,12 @@ Deno.test("gate config — endpoints not listed bypass the captcha check", async
   const { fetchImpl, calls } = makeFetch(() => new Response(JSON.stringify({ success: true }), { status: 200 }));
   const { provider, routes, db } = await makeRoutes(
     { provider: "hcaptcha", secret: "shh", gate: ["register"] },
-    fetchImpl,
+    fetchImpl
   );
   try {
     await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
       // captchaToken expected here too — verify with a token to register.
     } as never); // bypass typing: register doesn't take captchaToken on the data type
     // Direct provider register skipped captcha entirely (it's a route-layer gate).
@@ -303,9 +303,9 @@ Deno.test("gate config — endpoints not listed bypass the captcha check", async
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           email: "u@example.com",
-          password: "password123",
-        }),
-      }),
+          password: "password123"
+        })
+      })
     );
     assertEquals(res.status, 200);
     // login isn't gated → no fetch to verifier

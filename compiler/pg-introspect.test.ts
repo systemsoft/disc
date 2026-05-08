@@ -60,12 +60,12 @@ Deno.test("buildSchemaFromIntrospection - simple table becomes object type", () 
       columns: [
         { name: "id", pgType: "uuid", nullable: false, hasDefault: true },
         { name: "name", pgType: "text", nullable: false, hasDefault: false },
-        { name: "email", pgType: "text", nullable: false, hasDefault: false },
+        { name: "email", pgType: "text", nullable: false, hasDefault: false }
       ],
       primaryKey: ["id"],
-      uniqueConstraints: [["email"]],
+      uniqueConstraints: [["email"]]
     }],
-    foreignKeys: [],
+    foreignKeys: []
   };
 
   const schema = buildSchemaFromIntrospection(data);
@@ -86,8 +86,8 @@ Deno.test("buildSchemaFromIntrospection - simple table becomes object type", () 
   const email = user!.properties.get("email")!;
   // Unique constraint maps to `constraint exclusive`
   assertEquals(
-    email.constraints?.some((c) => c.name === "exclusive"),
-    true,
+    email.constraints?.some(c => c.name === "exclusive"),
+    true
   );
 });
 
@@ -98,11 +98,11 @@ Deno.test("buildSchemaFromIntrospection - nullable column → optional property"
       tableName: "users",
       columns: [
         { name: "id", pgType: "uuid", nullable: false, hasDefault: true },
-        { name: "nickname", pgType: "text", nullable: true, hasDefault: false },
+        { name: "nickname", pgType: "text", nullable: true, hasDefault: false }
       ],
-      primaryKey: ["id"],
+      primaryKey: ["id"]
     }],
-    foreignKeys: [],
+    foreignKeys: []
   };
   const schema = buildSchemaFromIntrospection(data);
   const user = schema.types.get("User")!;
@@ -121,12 +121,12 @@ Deno.test("buildSchemaFromIntrospection - column with default sets hasDefault", 
           pgType: "timestamptz",
           nullable: false,
           hasDefault: true,
-          defaultExpression: "now()",
-        },
+          defaultExpression: "now()"
+        }
       ],
-      primaryKey: ["id"],
+      primaryKey: ["id"]
     }],
-    foreignKeys: [],
+    foreignKeys: []
   };
   const schema = buildSchemaFromIntrospection(data);
   const ts = schema.types.get("User")!.properties.get("createdAt")!;
@@ -144,9 +144,9 @@ Deno.test("buildSchemaFromIntrospection - FK column becomes single link", () => 
         schemaName: "public",
         tableName: "users",
         columns: [
-          { name: "id", pgType: "uuid", nullable: false, hasDefault: true },
+          { name: "id", pgType: "uuid", nullable: false, hasDefault: true }
         ],
-        primaryKey: ["id"],
+        primaryKey: ["id"]
       },
       {
         schemaName: "public",
@@ -154,19 +154,19 @@ Deno.test("buildSchemaFromIntrospection - FK column becomes single link", () => 
         columns: [
           { name: "id", pgType: "uuid", nullable: false, hasDefault: true },
           { name: "title", pgType: "text", nullable: false, hasDefault: false },
-          { name: "author_id", pgType: "uuid", nullable: false, hasDefault: false },
+          { name: "author_id", pgType: "uuid", nullable: false, hasDefault: false }
         ],
-        primaryKey: ["id"],
-      },
+        primaryKey: ["id"]
+      }
     ],
     foreignKeys: [
       {
         fromTable: "posts",
         fromColumn: "author_id",
         toTable: "users",
-        toColumn: "id",
-      },
-    ],
+        toColumn: "id"
+      }
+    ]
   };
 
   const schema = buildSchemaFromIntrospection(data);
@@ -188,28 +188,28 @@ Deno.test("buildSchemaFromIntrospection - nullable FK becomes optional link", ()
         schemaName: "public",
         tableName: "users",
         columns: [
-          { name: "id", pgType: "uuid", nullable: false, hasDefault: true },
+          { name: "id", pgType: "uuid", nullable: false, hasDefault: true }
         ],
-        primaryKey: ["id"],
+        primaryKey: ["id"]
       },
       {
         schemaName: "public",
         tableName: "posts",
         columns: [
           { name: "id", pgType: "uuid", nullable: false, hasDefault: true },
-          { name: "editor_id", pgType: "uuid", nullable: true, hasDefault: false },
+          { name: "editor_id", pgType: "uuid", nullable: true, hasDefault: false }
         ],
-        primaryKey: ["id"],
-      },
+        primaryKey: ["id"]
+      }
     ],
     foreignKeys: [
       {
         fromTable: "posts",
         fromColumn: "editor_id",
         toTable: "users",
-        toColumn: "id",
-      },
-    ],
+        toColumn: "id"
+      }
+    ]
   };
 
   const schema = buildSchemaFromIntrospection(data);
@@ -224,18 +224,18 @@ Deno.test("buildSchemaFromIntrospection - junction table becomes multi link on b
         schemaName: "public",
         tableName: "users",
         columns: [
-          { name: "id", pgType: "uuid", nullable: false, hasDefault: true },
+          { name: "id", pgType: "uuid", nullable: false, hasDefault: true }
         ],
-        primaryKey: ["id"],
+        primaryKey: ["id"]
       },
       {
         schemaName: "public",
         tableName: "tags",
         columns: [
           { name: "id", pgType: "uuid", nullable: false, hasDefault: true },
-          { name: "name", pgType: "text", nullable: false, hasDefault: false },
+          { name: "name", pgType: "text", nullable: false, hasDefault: false }
         ],
-        primaryKey: ["id"],
+        primaryKey: ["id"]
       },
       // Junction: only the two FK columns, both PK members.
       {
@@ -243,25 +243,25 @@ Deno.test("buildSchemaFromIntrospection - junction table becomes multi link on b
         tableName: "users_tags",
         columns: [
           { name: "user_id", pgType: "uuid", nullable: false, hasDefault: false },
-          { name: "tag_id", pgType: "uuid", nullable: false, hasDefault: false },
+          { name: "tag_id", pgType: "uuid", nullable: false, hasDefault: false }
         ],
-        primaryKey: ["user_id", "tag_id"],
-      },
+        primaryKey: ["user_id", "tag_id"]
+      }
     ],
     foreignKeys: [
       {
         fromTable: "users_tags",
         fromColumn: "user_id",
         toTable: "users",
-        toColumn: "id",
+        toColumn: "id"
       },
       {
         fromTable: "users_tags",
         fromColumn: "tag_id",
         toTable: "tags",
-        toColumn: "id",
-      },
-    ],
+        toColumn: "id"
+      }
+    ]
   };
 
   const schema = buildSchemaFromIntrospection(data);
@@ -294,11 +294,11 @@ Deno.test("buildSchemaFromIntrospection - snake_case table → PascalCase type",
       schemaName: "public",
       tableName: "user_profiles",
       columns: [
-        { name: "id", pgType: "uuid", nullable: false, hasDefault: true },
+        { name: "id", pgType: "uuid", nullable: false, hasDefault: true }
       ],
-      primaryKey: ["id"],
+      primaryKey: ["id"]
     }],
-    foreignKeys: [],
+    foreignKeys: []
   };
   const schema = buildSchemaFromIntrospection(data);
   assertEquals(schema.types.has("UserProfile"), true);
@@ -311,28 +311,28 @@ Deno.test("buildSchemaFromIntrospection - skips disc-internal tables", () => {
         schemaName: "public",
         tableName: "disc_migrations",
         columns: [
-          { name: "id", pgType: "text", nullable: false, hasDefault: false },
+          { name: "id", pgType: "text", nullable: false, hasDefault: false }
         ],
-        primaryKey: ["id"],
+        primaryKey: ["id"]
       },
       {
         schemaName: "public",
         tableName: "disc_config",
         columns: [
-          { name: "key", pgType: "text", nullable: false, hasDefault: false },
+          { name: "key", pgType: "text", nullable: false, hasDefault: false }
         ],
-        primaryKey: ["key"],
+        primaryKey: ["key"]
       },
       {
         schemaName: "public",
         tableName: "users",
         columns: [
-          { name: "id", pgType: "uuid", nullable: false, hasDefault: true },
+          { name: "id", pgType: "uuid", nullable: false, hasDefault: true }
         ],
-        primaryKey: ["id"],
-      },
+        primaryKey: ["id"]
+      }
     ],
-    foreignKeys: [],
+    foreignKeys: []
   };
 
   const schema = buildSchemaFromIntrospection(data);
@@ -348,20 +348,20 @@ Deno.test("buildSchemaFromIntrospection - non-public schemas are namespaced into
         schemaName: "public",
         tableName: "users",
         columns: [
-          { name: "id", pgType: "uuid", nullable: false, hasDefault: true },
+          { name: "id", pgType: "uuid", nullable: false, hasDefault: true }
         ],
-        primaryKey: ["id"],
+        primaryKey: ["id"]
       },
       {
         schemaName: "billing",
         tableName: "invoices",
         columns: [
-          { name: "id", pgType: "uuid", nullable: false, hasDefault: true },
+          { name: "id", pgType: "uuid", nullable: false, hasDefault: true }
         ],
-        primaryKey: ["id"],
-      },
+        primaryKey: ["id"]
+      }
     ],
-    foreignKeys: [],
+    foreignKeys: []
   };
   const schema = buildSchemaFromIntrospection(data);
   // public.users → default::User

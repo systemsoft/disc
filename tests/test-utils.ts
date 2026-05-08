@@ -28,7 +28,7 @@ export async function cleanupTempDir(dir: string): Promise<void> {
  */
 export async function createTestSchema(
   dir: string,
-  content: string,
+  content: string
 ): Promise<string> {
   const schemaPath = join(dir, "schema.disc");
   await Deno.writeTextFile(schemaPath, content);
@@ -149,11 +149,11 @@ export class ConsoleCapture {
   }
 
   hasLog(pattern: string | RegExp): boolean {
-    return this.logs.some((log) => typeof pattern === "string" ? log.includes(pattern) : pattern.test(log));
+    return this.logs.some(log => typeof pattern === "string" ? log.includes(pattern) : pattern.test(log));
   }
 
   hasError(pattern: string | RegExp): boolean {
-    return this.errors.some((error) => typeof pattern === "string" ? error.includes(pattern) : pattern.test(error));
+    return this.errors.some(error => typeof pattern === "string" ? error.includes(pattern) : pattern.test(error));
   }
 }
 
@@ -196,7 +196,7 @@ export class EnvMock {
  */
 export function assertLogContains(
   source: ConsoleCapture | string[],
-  pattern: string | RegExp,
+  pattern: string | RegExp
 ): void {
   if (source instanceof ConsoleCapture) {
     if (!source.hasLog(pattern)) {
@@ -204,10 +204,10 @@ export function assertLogContains(
       throw new Error(`Expected log to contain ${pattern}, but got:\n${logs}`);
     }
   } else {
-    const found = source.some((log) => typeof pattern === "string" ? log.includes(pattern) : pattern.test(log));
+    const found = source.some(log => typeof pattern === "string" ? log.includes(pattern) : pattern.test(log));
     if (!found) {
       throw new Error(
-        `Expected logs to contain ${pattern}, but got:\n${source.join("\n")}`,
+        `Expected logs to contain ${pattern}, but got:\n${source.join("\n")}`
       );
     }
   }
@@ -215,20 +215,20 @@ export function assertLogContains(
 
 export function assertErrorContains(
   source: ConsoleCapture | string[],
-  pattern: string | RegExp,
+  pattern: string | RegExp
 ): void {
   if (source instanceof ConsoleCapture) {
     if (!source.hasError(pattern)) {
       const errors = source.getErrors().join("\n");
       throw new Error(
-        `Expected error to contain ${pattern}, but got:\n${errors}`,
+        `Expected error to contain ${pattern}, but got:\n${errors}`
       );
     }
   } else {
-    const found = source.some((err) => typeof pattern === "string" ? err.includes(pattern) : pattern.test(err));
+    const found = source.some(err => typeof pattern === "string" ? err.includes(pattern) : pattern.test(err));
     if (!found) {
       throw new Error(
-        `Expected errors to contain ${pattern}, but got:\n${source.join("\n")}`,
+        `Expected errors to contain ${pattern}, but got:\n${source.join("\n")}`
       );
     }
   }
@@ -257,7 +257,7 @@ export function mockCliArgs(args: string[]): () => void {
  */
 export async function waitFor(
   condition: () => boolean | Promise<boolean>,
-  timeout = 1000,
+  timeout = 1000
 ): Promise<void> {
   const start = Date.now();
 
@@ -265,7 +265,7 @@ export async function waitFor(
     if (await condition()) {
       return;
     }
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await new Promise(resolve => setTimeout(resolve, 10));
   }
 
   throw new Error(`Timeout waiting for condition after ${timeout}ms`);

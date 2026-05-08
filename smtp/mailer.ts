@@ -44,10 +44,10 @@ export class SmtpMailer implements Mailer {
       // `--unsafely-ignore-certificate-errors=<host>` on the Deno CLI.
       // See smtp/README.md.
       log.warn(
-        "tlsRejectUnauthorized=false is informational only; pass "
-          + "--unsafely-ignore-certificate-errors=<host> to Deno to actually "
-          + "disable TLS cert validation",
-        { host: cfg.host },
+        "tlsRejectUnauthorized=false is informational only; pass " +
+          "--unsafely-ignore-certificate-errors=<host> to Deno to actually " +
+          "disable TLS cert validation",
+        { host: cfg.host }
       );
     }
   }
@@ -68,7 +68,7 @@ export class SmtpMailer implements Mailer {
       from,
       messageId,
       replyTo,
-      to: recipients,
+      to: recipients
     });
 
     const secure = this.cfg.secure ?? false;
@@ -83,13 +83,13 @@ export class SmtpMailer implements Mailer {
       hostname,
       port,
       secure,
-      timeoutMs,
+      timeoutMs
     });
 
     const envelope: SendEnvelope = {
       body,
       from: extractAddr(from),
-      to: recipients.map(extractAddr),
+      to: recipients.map(extractAddr)
     };
 
     const outcome = await client.send(envelope);
@@ -97,7 +97,7 @@ export class SmtpMailer implements Mailer {
     return {
       accepted: outcome.accepted,
       messageId,
-      rejected: outcome.rejected,
+      rejected: outcome.rejected
     };
   }
 }
@@ -121,12 +121,12 @@ export class NoopMailer implements Mailer {
     log.info("smtp not configured; skipping send", {
       to: recipients,
       subject: email.subject,
-      messageId,
+      messageId
     });
     return {
       accepted: recipients,
       messageId,
-      rejected: [],
+      rejected: []
     };
   }
 }
@@ -139,9 +139,10 @@ export class NoopMailer implements Mailer {
  */
 export function createMailer(
   config: SmtpConfig | undefined,
-  options: SmtpClientOptions = {},
+  options: SmtpClientOptions = {}
 ): Mailer {
-  if (!config) return new NoopMailer();
+  if (!config)
+    return new NoopMailer();
   return new SmtpMailer(config, options);
 }
 
@@ -171,7 +172,8 @@ function buildMimeMessage(args: MimeArgs): string {
 
   pushHeader("From", args.from);
   pushHeader("To", args.to.join(", "));
-  if (args.replyTo) pushHeader("Reply-To", args.replyTo);
+  if (args.replyTo)
+    pushHeader("Reply-To", args.replyTo);
   pushHeader("Subject", encodeHeaderValue(args.email.subject));
   pushHeader("Date", formatRfc5322Date(args.date));
   pushHeader("Message-ID", `<${args.messageId}>`);
@@ -183,12 +185,12 @@ function buildMimeMessage(args: MimeArgs): string {
     const boundary = `--disc-${crypto.randomUUID()}`;
     pushHeader(
       "Content-Type",
-      `multipart/alternative; boundary="${boundary}"`,
+      `multipart/alternative; boundary="${boundary}"`
     );
     body = buildMultipartAlternative(
       args.email.text,
       args.email.html,
-      boundary,
+      boundary
     );
   } else {
     pushHeader("Content-Type", "text/plain; charset=utf-8");
@@ -213,7 +215,7 @@ function buildMimeMessage(args: MimeArgs): string {
 function buildMultipartAlternative(
   text: string,
   html: string,
-  boundary: string,
+  boundary: string
 ): string {
   const parts: string[] = [];
   parts.push(`--${boundary}`);
@@ -239,7 +241,8 @@ function buildMultipartAlternative(
  */
 function encodeHeaderValue(value: string): string {
   // deno-lint-ignore no-control-regex
-  if (/^[\x00-\x7F]*$/.test(value)) return value;
+  if (/^[\x00-\x7F]*$/.test(value))
+    return value;
   const encoded = encodeBase64(new TextEncoder().encode(value));
   return `=?utf-8?B?${encoded}?=`;
 }
@@ -263,7 +266,7 @@ function formatRfc5322Date(d: Date): string {
     "Sep",
     "Oct",
     "Nov",
-    "Dec",
+    "Dec"
   ];
   const pad = (n: number, w = 2): string => String(n).padStart(w, "0");
   return `${days[d.getUTCDay()]}, ${pad(d.getUTCDate())} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${
@@ -289,7 +292,8 @@ function extractAddr(addr: string): string {
 }
 
 function normalizeRecipients(to: string | string[]): string[] {
-  if (Array.isArray(to)) return to.filter((r) => r.length > 0);
+  if (Array.isArray(to))
+    return to.filter(r => r.length > 0);
   return to.length > 0 ? [to] : [];
 }
 
@@ -298,5 +302,5 @@ export const _testing = {
   encodeHeaderValue,
   extractAddr,
   formatRfc5322Date,
-  newMessageId,
+  newMessageId
 };

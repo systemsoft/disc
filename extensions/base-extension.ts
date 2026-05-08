@@ -11,7 +11,7 @@ import type {
   ExtensionMetadata,
   ExtensionMiddleware,
   ExtensionRoute,
-  ExtensionState,
+  ExtensionState
 } from "./types.ts";
 
 export abstract class BaseExtension implements Extension {

@@ -19,6 +19,6 @@ export function createExtensionContext(options: {
     pool: options.pool,
     schema: options.schema,
     config: options.config,
-    logger: options.logger || getLogger("extensions"),
+    logger: options.logger || getLogger("extensions")
   };
 }

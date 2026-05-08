@@ -61,8 +61,8 @@ Deno.test("previewMigrationOps — initial schema (no prior apply) lists CREATE 
   assert(preview.ok);
   assert(preview.value.length > 0);
   assert(
-    preview.value.some((op) => op.kind === "CreateType"),
-    `expected CreateType in initial migration ops, got: ${preview.value.map((o) => o.kind).join(", ")}`,
+    preview.value.some(op => op.kind === "CreateType"),
+    `expected CreateType in initial migration ops, got: ${preview.value.map(o => o.kind).join(", ")}`
   );
 });
 

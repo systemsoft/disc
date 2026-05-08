@@ -20,7 +20,7 @@ const server = new DiscServer({
   databaseUrl: "postgresql://localhost:5432/disc",
   protocol: "full", // "simple" (default) or "full" (real EdgeQL compiler)
   enableAuth: true,
-  jwtSecret: "my-secret",
+  jwtSecret: "my-secret"
 });
 await server.start();
 await server.stop();
@@ -287,8 +287,8 @@ const server = new DiscServer({
     certFile: "/path/to/cert.pem",
     keyFile: "/path/to/key.pem",
     redirect: true, // optional: redirect HTTP to HTTPS
-    redirectPort: 80, // optional: HTTP redirect listen port
-  },
+    redirectPort: 80 // optional: HTTP redirect listen port
+  }
 });
 ```
 

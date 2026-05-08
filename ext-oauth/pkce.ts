@@ -45,7 +45,7 @@ export function normalizePkceParam(value: string): string {
 export function pickPkceParam(
   source: URLSearchParams | Record<string, string | undefined>,
   rfcName: string,
-  legacyAlias?: string,
+  legacyAlias?: string
 ): string | null {
   const get = (name: string): string | undefined => {
     if (source instanceof URLSearchParams) {

@@ -40,7 +40,8 @@ function encode(value: unknown, out: Uint8Array[]): void {
   }
   if (Array.isArray(value)) {
     out.push(encodeHead(4, value.length));
-    for (const v of value) encode(v, out);
+    for (const v of value)
+      encode(v, out);
     return;
   }
   if (value instanceof Map) {
@@ -67,8 +68,10 @@ function encode(value: unknown, out: Uint8Array[]): void {
 }
 
 function encodeHead(major: number, n: number): Uint8Array {
-  if (n < 24) return new Uint8Array([(major << 5) | n]);
-  if (n < 0x100) return new Uint8Array([(major << 5) | 24, n]);
+  if (n < 24)
+    return new Uint8Array([(major << 5) | n]);
+  if (n < 0x100)
+    return new Uint8Array([(major << 5) | 24, n]);
   if (n < 0x10000) {
     return new Uint8Array([(major << 5) | 25, n >> 8, n & 0xff]);
   }
@@ -105,7 +108,7 @@ export async function generateTestKeyPair(): Promise<TestKeyPair> {
   const pair = await crypto.subtle.generateKey(
     { name: "ECDSA", namedCurve: "P-256" },
     true,
-    ["sign", "verify"],
+    ["sign", "verify"]
   );
   const jwk = await crypto.subtle.exportKey("jwk", pair.publicKey);
   const x = base64UrlDecodeStrict(jwk.x!);
@@ -115,12 +118,12 @@ export async function generateTestKeyPair(): Promise<TestKeyPair> {
     [3, -7], // alg: ES256
     [-1, 1], // crv: P-256
     [-2, x],
-    [-3, y],
+    [-3, y]
   ]);
   return {
     privateKey: pair.privateKey,
     publicKeyJwk: jwk,
-    cosePublicKey: encodeCbor(cose),
+    cosePublicKey: encodeCbor(cose)
   };
 }
 
@@ -139,17 +142,18 @@ export interface BuildAuthDataOpts {
 }
 
 export async function buildAuthenticatorData(
-  opts: BuildAuthDataOpts,
+  opts: BuildAuthDataOpts
 ): Promise<Uint8Array> {
   const rpIdHash = new Uint8Array(
     await crypto.subtle.digest(
       "SHA-256",
-      new TextEncoder().encode(opts.rpId) as BufferSource,
-    ),
+      new TextEncoder().encode(opts.rpId) as BufferSource
+    )
   );
   // UP=1 + (AT=1 if registration) + UV=1 (we always say verified for tests).
   let flags = opts.flags ?? 0x05; // UP + UV
-  if (opts.attestedCredential) flags |= 0x40; // AT
+  if (opts.attestedCredential)
+    flags |= 0x40; // AT
   const counter = opts.counter ?? 0;
   const counterBytes = new Uint8Array(4);
   new DataView(counterBytes.buffer).setUint32(0, counter, false);
@@ -161,14 +165,14 @@ export async function buildAuthenticatorData(
     new DataView(credLenBytes.buffer).setUint16(
       0,
       opts.attestedCredential.credentialId.length,
-      false,
+      false
     );
     out = concat(
       out,
       aaguid,
       credLenBytes,
       opts.attestedCredential.credentialId,
-      opts.attestedCredential.cosePublicKey,
+      opts.attestedCredential.cosePublicKey
     );
   }
   return out;
@@ -184,7 +188,7 @@ export function buildAttestationObject(opts: {
   const obj = new Map<string, unknown>([
     ["fmt", fmt],
     ["attStmt", attStmt],
-    ["authData", opts.authData],
+    ["authData", opts.authData]
   ]);
   return encodeCbor(obj);
 }
@@ -197,7 +201,7 @@ export function buildClientDataJSON(opts: {
   const obj = {
     type: opts.type,
     challenge: base64UrlEncode(opts.challenge),
-    origin: opts.origin,
+    origin: opts.origin
   };
   return new TextEncoder().encode(JSON.stringify(obj));
 }
@@ -208,15 +212,15 @@ export async function signAssertion(opts: {
   clientDataJSON: Uint8Array;
 }): Promise<Uint8Array> {
   const clientDataHash = new Uint8Array(
-    await crypto.subtle.digest("SHA-256", opts.clientDataJSON as BufferSource),
+    await crypto.subtle.digest("SHA-256", opts.clientDataJSON as BufferSource)
   );
   const signed = concat(opts.authData, clientDataHash);
   const raw = new Uint8Array(
     await crypto.subtle.sign(
       { name: "ECDSA", hash: "SHA-256" },
       opts.privateKey,
-      signed as BufferSource,
-    ),
+      signed as BufferSource
+    )
   );
   // WebCrypto returns raw r||s, but real authenticators emit DER. Re-
   // encode so we exercise the parser.
@@ -238,7 +242,8 @@ function derInteger(bytes: Uint8Array): Uint8Array {
   let val = bytes;
   // Strip leading zeros first (DER prefers minimal length).
   let start = 0;
-  while (start < val.length - 1 && val[start] === 0) start++;
+  while (start < val.length - 1 && val[start] === 0)
+    start++;
   val = val.slice(start);
   if (val[0] & 0x80) {
     val = concat(new Uint8Array([0x00]), val);
@@ -251,6 +256,7 @@ function base64UrlDecodeStrict(s: string): Uint8Array {
   const b64 = s.replace(/-/g, "+").replace(/_/g, "/") + pad;
   const binary = atob(b64);
   const out = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+  for (let i = 0; i < binary.length; i++)
+    out[i] = binary.charCodeAt(i);
   return out;
 }

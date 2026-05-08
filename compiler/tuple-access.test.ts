@@ -99,12 +99,12 @@ Deno.test("Tuple Access - Compile .0 on tuple produces jsonb_build_array -> 0", 
   assertEquals(
     sql.includes("jsonb_build_array("),
     true,
-    "SQL should contain jsonb_build_array(",
+    "SQL should contain jsonb_build_array("
   );
   assertEquals(
     sql.includes("-> 0"),
     true,
-    "SQL should contain -> 0 for index access",
+    "SQL should contain -> 0 for index access"
   );
 });
 
@@ -114,12 +114,12 @@ Deno.test("Tuple Access - Compile .2 on tuple for third element", () => {
   assertEquals(
     sql.includes("jsonb_build_array("),
     true,
-    "SQL should contain jsonb_build_array(",
+    "SQL should contain jsonb_build_array("
   );
   assertEquals(
     sql.includes("-> 2"),
     true,
-    "SQL should contain -> 2 for third element access",
+    "SQL should contain -> 2 for third element access"
   );
 });
 
@@ -133,12 +133,12 @@ Deno.test("Tuple Access - Named tuple .name access produces ->> 'name'", () => {
   assertEquals(
     sql.includes("jsonb_build_object("),
     true,
-    "SQL should contain jsonb_build_object( for named tuple",
+    "SQL should contain jsonb_build_object( for named tuple"
   );
   assertEquals(
     sql.includes("->> 'name'"),
     true,
-    "SQL should contain ->> 'name' for named field access",
+    "SQL should contain ->> 'name' for named field access"
   );
 });
 
@@ -148,12 +148,12 @@ Deno.test("Tuple Access - Named tuple .age access produces ->> 'age'", () => {
   assertEquals(
     sql.includes("jsonb_build_object("),
     true,
-    "SQL should contain jsonb_build_object(",
+    "SQL should contain jsonb_build_object("
   );
   assertEquals(
     sql.includes("->> 'age'"),
     true,
-    "SQL should contain ->> 'age' for named field access",
+    "SQL should contain ->> 'age' for named field access"
   );
 });
 
@@ -167,17 +167,17 @@ Deno.test("Tuple Access - Tuple access in SELECT expression", () => {
   assertEquals(
     sql.includes("SELECT"),
     true,
-    "SQL should contain SELECT",
+    "SQL should contain SELECT"
   );
   assertEquals(
     sql.includes("jsonb_build_array(1, 2, 3)"),
     true,
-    "SQL should contain the full jsonb_build_array call",
+    "SQL should contain the full jsonb_build_array call"
   );
   assertEquals(
     sql.includes("-> 1"),
     true,
-    "SQL should contain -> 1 for second element access",
+    "SQL should contain -> 1 for second element access"
   );
 });
 
@@ -187,12 +187,12 @@ Deno.test("Tuple Access - Nested tuple access: outer tuple first element", () =>
   assertEquals(
     sql.includes("jsonb_build_array("),
     true,
-    "SQL should contain jsonb_build_array( for nested tuples",
+    "SQL should contain jsonb_build_array( for nested tuples"
   );
   assertEquals(
     sql.includes("-> 0"),
     true,
-    "SQL should contain -> 0 for outer tuple first element access",
+    "SQL should contain -> 0 for outer tuple first element access"
   );
 });
 
@@ -215,20 +215,20 @@ Deno.test("Tuple Access - Codegen: JsonbAccessExpression with ->", () => {
             name: "jsonb_build_array",
             args: [
               { kind: "LiteralExpression", type: "number", value: 1 },
-              { kind: "LiteralExpression", type: "number", value: 2 },
-            ],
+              { kind: "LiteralExpression", type: "number", value: 2 }
+            ]
           },
           operator: "->",
-          accessor: { kind: "LiteralExpression", type: "number", value: 0 },
-        },
-      }],
-    },
+          accessor: { kind: "LiteralExpression", type: "number", value: 0 }
+        }
+      }]
+    }
   });
 
   assertEquals(
     sql.includes("jsonb_build_array(1, 2)") && sql.includes("-> 0"),
     true,
-    "Codegen should render jsonb_build_array(...) -> 0",
+    "Codegen should render jsonb_build_array(...) -> 0"
   );
 });
 
@@ -247,23 +247,23 @@ Deno.test("Tuple Access - Codegen: JsonbAccessExpression with ->>", () => {
             name: "jsonb_build_object",
             args: [
               { kind: "LiteralExpression", type: "string", value: "name" },
-              { kind: "LiteralExpression", type: "string", value: "test" },
-            ],
+              { kind: "LiteralExpression", type: "string", value: "test" }
+            ]
           },
           operator: "->>",
           accessor: {
             kind: "LiteralExpression",
             type: "string",
-            value: "name",
-          },
-        },
-      }],
-    },
+            value: "name"
+          }
+        }
+      }]
+    }
   });
 
   assertEquals(
     sql.includes("->> 'name'"),
     true,
-    "Codegen should render ->> 'name' for named field access",
+    "Codegen should render ->> 'name' for named field access"
   );
 });

@@ -29,13 +29,13 @@ export enum MessageType {
   CommandDataDescription = 0x54, // 'T'
   LogMessage = 0x4c, // 'L'
   ParameterStatus = 0x53, // 'S'
-  ServerKeyData = 0x4b, // 'K'
+  ServerKeyData = 0x4b // 'K'
 }
 
 // Protocol version
 export const PROTOCOL_VERSION = {
   major: 1,
-  minor: 0,
+  minor: 0
 };
 
 // Cardinality values
@@ -44,7 +44,7 @@ export enum Cardinality {
   AtMostOne = 0x6f, // 'o'
   One = 0x41, // 'A'
   Many = 0x6d, // 'm'
-  AtLeastOne = 0x4d, // 'M'
+  AtLeastOne = 0x4d // 'M'
 }
 
 // Output format
@@ -52,20 +52,20 @@ export enum OutputFormat {
   Binary = 0x62, // 'b'
   JSON = 0x6a, // 'j'
   JSONElements = 0x4a, // 'J'
-  None = 0x6e, // 'n'
+  None = 0x6e // 'n'
 }
 
 // Input language
 export enum InputLanguage {
   EdgeQL = 0x00,
-  SQL = 0x01,
+  SQL = 0x01
 }
 
 // Error severity
 export enum ErrorSeverity {
   Error = 0x78, // 'x'
   Fatal = 0xc8, // 'È'
-  Panic = 0xff, // 'ÿ'
+  Panic = 0xff // 'ÿ'
 }
 
 // Error attribute codes
@@ -77,7 +77,7 @@ export enum ErrorAttribute {
   PositionEnd = 0xfff2,
   LineStart = 0xfff3,
   ColumnStart = 0xfff4,
-  UTF16ColumnStart = 0xfff5,
+  UTF16ColumnStart = 0xfff5
 }
 
 // Base message interface
@@ -216,7 +216,7 @@ export interface ReadyForCommand extends Message {
 export enum TransactionState {
   Idle = 0x49, // 'I'
   InTransaction = 0x54, // 'T'
-  Error = 0x45, // 'E'
+  Error = 0x45 // 'E'
 }
 
 // Fundamental type UUIDs as strings (will be converted to bytes)
@@ -234,7 +234,7 @@ export const FUNDAMENTAL_TYPE_IDS = {
   datetime: "00000000-0000-0000-0000-00000000010a",
   duration: "00000000-0000-0000-0000-00000000010e",
   json: "00000000-0000-0000-0000-00000000010f",
-  bigint: "00000000-0000-0000-0000-000000000110",
+  bigint: "00000000-0000-0000-0000-000000000110"
 };
 
 // Type descriptor types
@@ -298,13 +298,16 @@ export function uuidToBytes(uuid: string): Uint8Array {
 
 // Utility function to convert bytes to UUID string
 export function bytesToUuid(bytes: Uint8Array): string {
-  const hex = Array.from(bytes).map((b) => b.toString(16).padStart(2, "0"))
+  const hex = Array
+    .from(bytes)
+    .map(b => b.toString(16).padStart(2, "0"))
     .join("");
   return [
     hex.substring(0, 8),
     hex.substring(8, 12),
     hex.substring(12, 16),
     hex.substring(16, 20),
-    hex.substring(20, 32),
-  ].join("-");
+    hex.substring(20, 32)
+  ]
+    .join("-");
 }

@@ -37,7 +37,7 @@ export const UI_ASSET_MANIFEST: readonly string[] = [
   "_app/immutable/nodes/6.YXaEUa5h.js",
   "_app/immutable/nodes/7.BkQQR3wo.js",
   "_app/version.json",
-  "index.html",
+  "index.html"
 ];
 
 export const UI_ASSET_SET: ReadonlySet<string> = new Set(UI_ASSET_MANIFEST);

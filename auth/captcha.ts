@@ -66,7 +66,7 @@ const DEFAULT_GATE: CaptchaEndpoint[] = ["register", "login"];
 const DEFAULT_TIMEOUT_MS = 5000;
 const VERIFY_URLS: Record<CaptchaProvider, string> = {
   hcaptcha: "https://api.hcaptcha.com/siteverify",
-  turnstile: "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+  turnstile: "https://challenges.cloudflare.com/turnstile/v0/siteverify"
 };
 
 /** Always passes; used when no captcha is configured. */
@@ -113,7 +113,8 @@ export class RemoteCaptchaVerifier implements CaptchaVerifier {
     const params = new URLSearchParams();
     params.set("secret", this.config.secret);
     params.set("response", token);
-    if (remoteIp) params.set("remoteip", remoteIp);
+    if (remoteIp)
+      params.set("remoteip", remoteIp);
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
@@ -123,13 +124,13 @@ export class RemoteCaptchaVerifier implements CaptchaVerifier {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: params.toString(),
-        signal: controller.signal,
+        signal: controller.signal
       });
 
       if (!response.ok) {
         log.warn("captcha verify returned non-2xx", {
           provider: this.config.provider,
-          status: response.status,
+          status: response.status
         });
         await response.body?.cancel().catch(() => {});
         return { success: false, errorCodes: ["non-2xx-response"] };
@@ -144,14 +145,14 @@ export class RemoteCaptchaVerifier implements CaptchaVerifier {
       if (!success) {
         log.warn("captcha verify reported failure", {
           provider: this.config.provider,
-          errorCodes,
+          errorCodes
         });
       }
       return errorCodes && errorCodes.length > 0 ? { success, errorCodes } : { success };
     } catch (err) {
       log.warn("captcha verify network error", {
         provider: this.config.provider,
-        error: err instanceof Error ? err.message : String(err),
+        error: err instanceof Error ? err.message : String(err)
       });
       return { success: false, errorCodes: ["network-error"] };
     } finally {
@@ -166,8 +167,9 @@ export class RemoteCaptchaVerifier implements CaptchaVerifier {
  */
 export function createCaptchaVerifier(
   config: CaptchaConfig | undefined,
-  opts?: RemoteCaptchaVerifierOptions,
+  opts?: RemoteCaptchaVerifierOptions
 ): CaptchaVerifier {
-  if (!config) return new NoopCaptchaVerifier();
+  if (!config)
+    return new NoopCaptchaVerifier();
   return new RemoteCaptchaVerifier(config, opts);
 }

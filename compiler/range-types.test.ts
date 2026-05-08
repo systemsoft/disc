@@ -155,10 +155,10 @@ Deno.test("Differ - typeToString() serializes range<int32> correctly", () => {
   const ops = differ.diff([], modules);
 
   // The CreateType operation should have a property with type "range<int32>"
-  const createOp = ops.find((op) => op.kind === "CreateType") as MigrationTypes.CreateTypeOperation;
+  const createOp = ops.find(op => op.kind === "CreateType") as MigrationTypes.CreateTypeOperation;
   assertEquals(createOp !== undefined, true);
 
-  const valProp = createOp.properties.find((p) => p.name === "val");
+  const valProp = createOp.properties.find(p => p.name === "val");
   assertEquals(valProp !== undefined, true);
   assertEquals(valProp!.type, "range<int32>");
 });
@@ -177,8 +177,8 @@ Deno.test("Differ - typeToString() serializes multirange<cal::local_date> correc
   const differ = new SchemaDiffer();
   const ops = differ.diff([], modules);
 
-  const createOp = ops.find((op) => op.kind === "CreateType") as MigrationTypes.CreateTypeOperation;
-  const datesProp = createOp.properties.find((p) => p.name === "dates");
+  const createOp = ops.find(op => op.kind === "CreateType") as MigrationTypes.CreateTypeOperation;
+  const datesProp = createOp.properties.find(p => p.name === "dates");
   assertEquals(datesProp!.type, "multirange<cal::local_date>");
 });
 
@@ -198,14 +198,14 @@ Deno.test("DDL Generator - range<int32> generates INT4RANGE column", () => {
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
-  const createTable = statements.find((s) => s.startsWith("CREATE TABLE"));
+  const createTable = statements.find(s => s.startsWith("CREATE TABLE"));
   assertEquals(createTable !== undefined, true);
   assertStringIncludes(createTable!, "INT4RANGE");
 });
@@ -222,14 +222,14 @@ Deno.test("DDL Generator - range<int64> generates INT8RANGE column", () => {
         required: false,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
-  const createTable = statements.find((s) => s.startsWith("CREATE TABLE"));
+  const createTable = statements.find(s => s.startsWith("CREATE TABLE"));
   assertStringIncludes(createTable!, "INT8RANGE");
 });
 
@@ -245,14 +245,14 @@ Deno.test("DDL Generator - range<datetime> generates TSTZRANGE column", () => {
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
-  const createTable = statements.find((s) => s.startsWith("CREATE TABLE"));
+  const createTable = statements.find(s => s.startsWith("CREATE TABLE"));
   assertStringIncludes(createTable!, "TSTZRANGE");
 });
 
@@ -268,14 +268,14 @@ Deno.test("DDL Generator - multirange<int32> generates INT4MULTIRANGE column", (
         required: false,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
-  const createTable = statements.find((s) => s.startsWith("CREATE TABLE"));
+  const createTable = statements.find(s => s.startsWith("CREATE TABLE"));
   assertStringIncludes(createTable!, "INT4MULTIRANGE");
 });
 
@@ -291,14 +291,14 @@ Deno.test("DDL Generator - multirange<cal::local_date> generates DATEMULTIRANGE 
         required: false,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
-  const createTable = statements.find((s) => s.startsWith("CREATE TABLE"));
+  const createTable = statements.find(s => s.startsWith("CREATE TABLE"));
   assertStringIncludes(createTable!, "DATEMULTIRANGE");
 });
 

@@ -23,14 +23,14 @@ const RUN_PG = canRunPgTests();
 // ---------------------------------------------------------------------------
 
 function parseDsn(
-  dsn: string,
+  dsn: string
 ): { hostname: string; port: number; user: string; database: string; } {
   const url = new URL(dsn);
   return {
     hostname: url.hostname || "localhost",
     port: url.port ? parseInt(url.port) : 5432,
     user: url.username || "disc",
-    database: url.pathname.slice(1) || "disc_test",
+    database: url.pathname.slice(1) || "disc_test"
   };
 }
 
@@ -44,7 +44,7 @@ async function tableExists(dsn: string, tableName: string): Promise<boolean> {
         SELECT 1 FROM information_schema.tables
         WHERE table_schema = 'public' AND table_name = $1
       ) AS exists`,
-      [tableName],
+      [tableName]
     );
     return result.rows[0]?.exists ?? false;
   } finally {
@@ -54,7 +54,7 @@ async function tableExists(dsn: string, tableName: string): Promise<boolean> {
 
 async function getColumns(
   dsn: string,
-  tableName: string,
+  tableName: string
 ): Promise<{ column_name: string; data_type: string; is_nullable: string; }[]> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
@@ -67,7 +67,7 @@ async function getColumns(
        FROM information_schema.columns
        WHERE table_schema = 'public' AND table_name = $1
        ORDER BY ordinal_position`,
-      [tableName],
+      [tableName]
     );
     return result.rows;
   } finally {
@@ -77,7 +77,7 @@ async function getColumns(
 
 async function getCheckConstraints(
   dsn: string,
-  tableName: string,
+  tableName: string
 ): Promise<{ constraint_name: string; check_clause: string; }[]> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
@@ -92,7 +92,7 @@ async function getCheckConstraints(
          ON cc.constraint_name = tc.constraint_name
        WHERE tc.table_schema = 'public' AND tc.table_name = $1
        ORDER BY cc.constraint_name`,
-      [tableName],
+      [tableName]
     );
     return result.rows;
   } finally {
@@ -102,7 +102,7 @@ async function getCheckConstraints(
 
 async function getTriggers(
   dsn: string,
-  tableName: string,
+  tableName: string
 ): Promise<
   { trigger_name: string; event_manipulation: string; action_timing: string; }[]
 > {
@@ -121,7 +121,7 @@ async function getTriggers(
        FROM information_schema.triggers
        WHERE trigger_schema = 'public' AND event_object_table = $1
        ORDER BY trigger_name`,
-      [tableName],
+      [tableName]
     );
     return result.rows;
   } finally {
@@ -132,7 +132,7 @@ async function getTriggers(
 async function execSQL(
   dsn: string,
   sql: string,
-  params?: unknown[],
+  params?: unknown[]
 ): Promise<void> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
@@ -151,7 +151,7 @@ async function execSQL(
 async function queryRows<T>(
   dsn: string,
   sql: string,
-  params?: unknown[],
+  params?: unknown[]
 ): Promise<T[]> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
@@ -197,7 +197,7 @@ function makePool(dsn: string): ConnectionPool {
     connectionString: dsn,
     minConnections: 1,
     maxConnections: 3,
-    cleanupInterval: 0,
+    cleanupInterval: 0
   });
 }
 
@@ -275,184 +275,184 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema should succeed: ${result.ok ? "" : (result as any).error}`,
+        `applySchema should succeed: ${result.ok ? "" : (result as any).error}`
       );
 
       // Verify tables exist
       assertEquals(
         await tableExists(dsn, "user"),
         true,
-        "User table should exist",
+        "User table should exist"
       );
       assertEquals(
         await tableExists(dsn, "post"),
         true,
-        "Post table should exist",
+        "Post table should exist"
       );
       assertEquals(
         await tableExists(dsn, "comment"),
         true,
-        "Comment table should exist",
+        "Comment table should exist"
       );
 
       // Verify User columns
       const userColumns = await getColumns(dsn, "user");
-      const userColNames = userColumns.map((c) => c.column_name);
+      const userColNames = userColumns.map(c => c.column_name);
       assertEquals(
         userColNames.includes("id"),
         true,
-        "User should have id column",
+        "User should have id column"
       );
       assertEquals(
         userColNames.includes("name"),
         true,
-        "User should have inherited name column",
+        "User should have inherited name column"
       );
       assertEquals(
         userColNames.includes("email"),
         true,
-        "User should have email column",
+        "User should have email column"
       );
       assertEquals(
         userColNames.includes("age"),
         true,
-        "User should have age column",
+        "User should have age column"
       );
       assertEquals(
         userColNames.includes("bio"),
         true,
-        "User should have bio column",
+        "User should have bio column"
       );
       assertEquals(
         userColNames.includes("tags"),
         true,
-        "User should have tags (array) column",
+        "User should have tags (array) column"
       );
       assertEquals(
         userColNames.includes("created_at"),
         true,
-        "User should have inherited created_at column",
+        "User should have inherited created_at column"
       );
       assertEquals(
         userColNames.includes("updated_at"),
         true,
-        "User should have inherited updated_at column",
+        "User should have inherited updated_at column"
       );
 
       // Verify Post columns
       const postColumns = await getColumns(dsn, "post");
-      const postColNames = postColumns.map((c) => c.column_name);
+      const postColNames = postColumns.map(c => c.column_name);
       assertEquals(
         postColNames.includes("id"),
         true,
-        "Post should have id column",
+        "Post should have id column"
       );
       assertEquals(
         postColNames.includes("title"),
         true,
-        "Post should have title column",
+        "Post should have title column"
       );
       assertEquals(
         postColNames.includes("body"),
         true,
-        "Post should have body column",
+        "Post should have body column"
       );
       assertEquals(
         postColNames.includes("author_id"),
         true,
-        "Post should have author_id FK column",
+        "Post should have author_id FK column"
       );
       assertEquals(
         postColNames.includes("status"),
         true,
-        "Post should have status column",
+        "Post should have status column"
       );
       assertEquals(
         postColNames.includes("created_at"),
         true,
-        "Post should have inherited created_at column",
+        "Post should have inherited created_at column"
       );
 
       // Verify Comment columns
       const commentColumns = await getColumns(dsn, "comment");
-      const commentColNames = commentColumns.map((c) => c.column_name);
+      const commentColNames = commentColumns.map(c => c.column_name);
       assertEquals(
         commentColNames.includes("id"),
         true,
-        "Comment should have id column",
+        "Comment should have id column"
       );
       assertEquals(
         commentColNames.includes("text"),
         true,
-        "Comment should have text column",
+        "Comment should have text column"
       );
       assertEquals(
         commentColNames.includes("post_id"),
         true,
-        "Comment should have post_id FK column",
+        "Comment should have post_id FK column"
       );
       assertEquals(
         commentColNames.includes("author_id"),
         true,
-        "Comment should have author_id FK column",
+        "Comment should have author_id FK column"
       );
 
       // Verify User junction table for multi-link posts
       assertEquals(
         await tableExists(dsn, "user_posts"),
         true,
-        "User multi-link posts junction table should exist",
+        "User multi-link posts junction table should exist"
       );
 
       // Verify CHECK constraints on User
       const userChecks = await getCheckConstraints(dsn, "user");
-      const userCheckNames = userChecks.map((c) => c.constraint_name);
-      const hasNameLenCheck = userCheckNames.some((n) => n.includes("name") && n.includes("max_len"));
+      const userCheckNames = userChecks.map(c => c.constraint_name);
+      const hasNameLenCheck = userCheckNames.some(n => n.includes("name") && n.includes("max_len"));
       assertEquals(
         hasNameLenCheck,
         true,
-        "User should have max_len_value CHECK on name (inherited)",
+        "User should have max_len_value CHECK on name (inherited)"
       );
 
-      const hasAgeMinCheck = userCheckNames.some((n) => n.includes("age") && n.includes("min_value"));
+      const hasAgeMinCheck = userCheckNames.some(n => n.includes("age") && n.includes("min_value"));
       assertEquals(
         hasAgeMinCheck,
         true,
-        "User should have min_value CHECK on age",
+        "User should have min_value CHECK on age"
       );
 
-      const hasAgeMaxCheck = userCheckNames.some((n) => n.includes("age") && n.includes("max_value"));
+      const hasAgeMaxCheck = userCheckNames.some(n => n.includes("age") && n.includes("max_value"));
       assertEquals(
         hasAgeMaxCheck,
         true,
-        "User should have max_value CHECK on age",
+        "User should have max_value CHECK on age"
       );
 
       // Verify CHECK constraints on Post
       const postChecks = await getCheckConstraints(dsn, "post");
-      const postCheckNames = postChecks.map((c) => c.constraint_name);
-      const hasStatusOneOf = postCheckNames.some((n) => n.includes("status") && n.includes("one_of"));
+      const postCheckNames = postChecks.map(c => c.constraint_name);
+      const hasStatusOneOf = postCheckNames.some(n => n.includes("status") && n.includes("one_of"));
       assertEquals(
         hasStatusOneOf,
         true,
-        "Post should have one_of CHECK on status",
+        "Post should have one_of CHECK on status"
       );
 
       // Verify rewrite triggers exist on User (for created_at and updated_at)
       const userTriggers = await getTriggers(dsn, "user");
-      const userTriggerNames = userTriggers.map((t) => t.trigger_name);
-      const hasCreatedAtRewrite = userTriggerNames.some((n) => n.includes("created_at") && n.includes("rewrite"));
+      const userTriggerNames = userTriggers.map(t => t.trigger_name);
+      const hasCreatedAtRewrite = userTriggerNames.some(n => n.includes("created_at") && n.includes("rewrite"));
       assertEquals(
         hasCreatedAtRewrite,
         true,
-        "User should have created_at rewrite trigger",
+        "User should have created_at rewrite trigger"
       );
 
-      const hasUpdatedAtRewrite = userTriggerNames.some((n) => n.includes("updated_at") && n.includes("rewrite"));
+      const hasUpdatedAtRewrite = userTriggerNames.some(n => n.includes("updated_at") && n.includes("rewrite"));
       assertEquals(
         hasUpdatedAtRewrite,
         true,
-        "User should have updated_at rewrite trigger",
+        "User should have updated_at rewrite trigger"
       );
 
       // Verify the schema object
@@ -460,27 +460,27 @@ Deno.test({
       assertExists(schema, "Schema should be available after applySchema");
       assertExists(
         schema!.types.get("User"),
-        "Schema should contain User type",
+        "Schema should contain User type"
       );
       assertExists(
         schema!.types.get("Post"),
-        "Schema should contain Post type",
+        "Schema should contain Post type"
       );
       assertExists(
         schema!.types.get("Comment"),
-        "Schema should contain Comment type",
+        "Schema should contain Comment type"
       );
 
       const userDef = schema!.types.get("User")!;
       assertEquals(
         userDef.parentTypes?.includes("Named"),
         true,
-        "User should extend Named",
+        "User should extend Named"
       );
       assertEquals(
         userDef.parentTypes?.includes("Timestamped"),
         true,
-        "User should extend Timestamped",
+        "User should extend Timestamped"
       );
 
       await manager.close();
@@ -492,11 +492,11 @@ Deno.test({
         "post",
         "user",
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -522,7 +522,7 @@ Deno.test({
       await execSQL(
         dsn,
         `INSERT INTO "user" (id, name, email, age, bio, tags) VALUES (gen_random_uuid(), $1, $2, $3, $4, $5)`,
-        ["Ada", "ada@example.com", 30, "A developer", "{typescript,deno}"],
+        ["Ada", "ada@example.com", 30, "A developer", "{typescript,deno}"]
       );
 
       // Verify the row was inserted
@@ -530,7 +530,7 @@ Deno.test({
         { name: string; email: string; age: number; }
       >(
         dsn,
-        `SELECT name, email, age FROM "user"`,
+        `SELECT name, email, age FROM "user"`
       );
       assertEquals(users.length, 1, "Should have 1 user");
       assertEquals(users[0].name, "Ada");
@@ -543,7 +543,7 @@ Deno.test({
         await execSQL(
           dsn,
           `INSERT INTO "user" (id, name, email) VALUES (gen_random_uuid(), $1, $2)`,
-          [longName, "long@example.com"],
+          [longName, "long@example.com"]
         );
       } catch {
         nameViolated = true;
@@ -551,7 +551,7 @@ Deno.test({
       assertEquals(
         nameViolated,
         true,
-        "101-char name should violate max_len_value(100)",
+        "101-char name should violate max_len_value(100)"
       );
 
       // Violate min_value(0) on age
@@ -560,7 +560,7 @@ Deno.test({
         await execSQL(
           dsn,
           `INSERT INTO "user" (id, name, email, age) VALUES (gen_random_uuid(), $1, $2, $3)`,
-          ["Billie", "billie@example.com", -1],
+          ["Billie", "billie@example.com", -1]
         );
       } catch {
         ageMinViolated = true;
@@ -568,7 +568,7 @@ Deno.test({
       assertEquals(
         ageMinViolated,
         true,
-        "Negative age should violate min_value(0)",
+        "Negative age should violate min_value(0)"
       );
 
       // Violate max_value(150) on age
@@ -577,7 +577,7 @@ Deno.test({
         await execSQL(
           dsn,
           `INSERT INTO "user" (id, name, email, age) VALUES (gen_random_uuid(), $1, $2, $3)`,
-          ["Cher", "cher@example.com", 200],
+          ["Cher", "cher@example.com", 200]
         );
       } catch {
         ageMaxViolated = true;
@@ -585,7 +585,7 @@ Deno.test({
       assertEquals(
         ageMaxViolated,
         true,
-        "Age 200 should violate max_value(150)",
+        "Age 200 should violate max_value(150)"
       );
 
       // Violate exclusive constraint on email (duplicate)
@@ -594,7 +594,7 @@ Deno.test({
         await execSQL(
           dsn,
           `INSERT INTO "user" (id, name, email) VALUES (gen_random_uuid(), $1, $2)`,
-          ["Duplicate", "ada@example.com"],
+          ["Duplicate", "ada@example.com"]
         );
       } catch {
         emailDuplicated = true;
@@ -602,20 +602,20 @@ Deno.test({
       assertEquals(
         emailDuplicated,
         true,
-        "Duplicate email should violate exclusive constraint",
+        "Duplicate email should violate exclusive constraint"
       );
 
       // Insert a valid Post with status constraint
       const userRows = await queryRows<{ id: string; }>(
         dsn,
-        `SELECT id FROM "user" LIMIT 1`,
+        `SELECT id FROM "user" LIMIT 1`
       );
       const userId = userRows[0].id;
 
       await execSQL(
         dsn,
         `INSERT INTO post (id, title, body, author_id, status) VALUES (gen_random_uuid(), $1, $2, $3, $4)`,
-        ["My Post", "Post body", userId, "draft"],
+        ["My Post", "Post body", userId, "draft"]
       );
 
       // Violate one_of constraint on Post.status
@@ -624,7 +624,7 @@ Deno.test({
         await execSQL(
           dsn,
           `INSERT INTO post (id, title, body, author_id, status) VALUES (gen_random_uuid(), $1, $2, $3, $4)`,
-          ["Bad Post", "Body", userId, "deleted"],
+          ["Bad Post", "Body", userId, "deleted"]
         );
       } catch {
         statusViolated = true;
@@ -632,7 +632,7 @@ Deno.test({
       assertEquals(
         statusViolated,
         true,
-        "Status 'deleted' should violate one_of constraint",
+        "Status 'deleted' should violate one_of constraint"
       );
 
       await manager.close();
@@ -644,11 +644,11 @@ Deno.test({
         "post",
         "user",
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -674,7 +674,7 @@ Deno.test({
       await execSQL(
         dsn,
         `INSERT INTO "user" (id, name, email) VALUES (gen_random_uuid(), $1, $2)`,
-        ["Ada", "ada@test.com"],
+        ["Ada", "ada@test.com"]
       );
 
       // Verify created_at was auto-set
@@ -688,23 +688,23 @@ Deno.test({
       assertEquals(
         insertRows[0].created_at !== null,
         true,
-        "created_at should be auto-set by INSERT rewrite trigger",
+        "created_at should be auto-set by INSERT rewrite trigger"
       );
       // updated_at should be NULL after INSERT (only fires on UPDATE)
       assertEquals(
         insertRows[0].updated_at,
         null,
-        "updated_at should be NULL after INSERT (UPDATE-only rewrite)",
+        "updated_at should be NULL after INSERT (UPDATE-only rewrite)"
       );
 
       // Small delay to ensure timestamps differ
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise(resolve => setTimeout(resolve, 50));
 
       // Update the user — updated_at rewrite should fire
       await execSQL(
         dsn,
         `UPDATE "user" SET bio = $1 WHERE name = $2`,
-        ["Updated bio", "Ada"],
+        ["Updated bio", "Ada"]
       );
 
       const updateRows = await queryRows<{
@@ -717,20 +717,20 @@ Deno.test({
       assertEquals(
         updateRows[0].updated_at !== null,
         true,
-        "updated_at should be auto-set by UPDATE rewrite trigger",
+        "updated_at should be auto-set by UPDATE rewrite trigger"
       );
 
       // Similarly test Post rewrite triggers
       const userRows = await queryRows<{ id: string; }>(
         dsn,
-        `SELECT id FROM "user" LIMIT 1`,
+        `SELECT id FROM "user" LIMIT 1`
       );
       const userId = userRows[0].id;
 
       await execSQL(
         dsn,
         `INSERT INTO post (id, title, body, author_id) VALUES (gen_random_uuid(), $1, $2, $3)`,
-        ["Test Post", "Body text", userId],
+        ["Test Post", "Body text", userId]
       );
 
       const postRows = await queryRows<{
@@ -742,7 +742,7 @@ Deno.test({
       assertEquals(
         postRows[0].created_at !== null,
         true,
-        "Post.created_at should be auto-set by INSERT rewrite trigger",
+        "Post.created_at should be auto-set by INSERT rewrite trigger"
       );
 
       await manager.close();
@@ -754,11 +754,11 @@ Deno.test({
         "post",
         "user",
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -791,12 +791,12 @@ Deno.test({
       const timestampedType = schema!.types.get("Timestamped");
       assertExists(
         timestampedType,
-        "Timestamped abstract type should be in schema",
+        "Timestamped abstract type should be in schema"
       );
       assertEquals(
         timestampedType!.abstract,
         true,
-        "Timestamped should be abstract",
+        "Timestamped should be abstract"
       );
 
       // Verify User type properties
@@ -808,28 +808,28 @@ Deno.test({
       assertExists(emailProp, "User should have email property");
       assertEquals(emailProp!.required, true, "email should be required");
       assertEquals(
-        emailProp!.constraints?.some((c) => c.name === "exclusive"),
+        emailProp!.constraints?.some(c => c.name === "exclusive"),
         true,
-        "email should have exclusive constraint",
+        "email should have exclusive constraint"
       );
       assertEquals(
-        emailProp!.constraints?.some((c) => c.name === "max_len_value"),
+        emailProp!.constraints?.some(c => c.name === "max_len_value"),
         true,
-        "email should have max_len_value constraint",
+        "email should have max_len_value constraint"
       );
 
       const ageProp = userType!.properties.get("age");
       assertExists(ageProp, "User should have age property");
       assertEquals(ageProp!.required, false, "age should be optional");
       assertEquals(
-        ageProp!.constraints?.some((c) => c.name === "min_value"),
+        ageProp!.constraints?.some(c => c.name === "min_value"),
         true,
-        "age should have min_value constraint",
+        "age should have min_value constraint"
       );
       assertEquals(
-        ageProp!.constraints?.some((c) => c.name === "max_value"),
+        ageProp!.constraints?.some(c => c.name === "max_value"),
         true,
-        "age should have max_value constraint",
+        "age should have max_value constraint"
       );
 
       // Verify inherited properties
@@ -838,13 +838,13 @@ Deno.test({
       assertEquals(
         nameProp!.required,
         true,
-        "inherited name should be required",
+        "inherited name should be required"
       );
 
       const createdAtProp = userType!.properties.get("created_at");
       assertExists(
         createdAtProp,
-        "User should have inherited created_at property",
+        "User should have inherited created_at property"
       );
 
       // Verify tags (array type)
@@ -868,9 +868,9 @@ Deno.test({
       const statusProp = postType!.properties.get("status");
       assertExists(statusProp, "Post should have status property");
       assertEquals(
-        statusProp!.constraints?.some((c) => c.name === "one_of"),
+        statusProp!.constraints?.some(c => c.name === "one_of"),
         true,
-        "status should have one_of constraint",
+        "status should have one_of constraint"
       );
 
       // Verify Comment type
@@ -884,12 +884,12 @@ Deno.test({
       assertEquals(
         userType!.parentTypes?.includes("Named"),
         true,
-        "User should list Named as parent type",
+        "User should list Named as parent type"
       );
       assertEquals(
         userType!.parentTypes?.includes("Timestamped"),
         true,
-        "User should list Timestamped as parent type",
+        "User should list Timestamped as parent type"
       );
 
       await manager.close();
@@ -901,11 +901,11 @@ Deno.test({
         "post",
         "user",
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -934,19 +934,19 @@ Deno.test({
         schema_hash: string;
       }>(
         dsn,
-        `SELECT id, name, schema_hash FROM disc_migrations ORDER BY applied_at DESC LIMIT 1`,
+        `SELECT id, name, schema_hash FROM disc_migrations ORDER BY applied_at DESC LIMIT 1`
       );
 
       assertEquals(
         migrations.length >= 1,
         true,
-        "Should have at least 1 migration recorded",
+        "Should have at least 1 migration recorded"
       );
       assertExists(migrations[0].id, "Migration should have an ID");
       assertExists(migrations[0].name, "Migration should have a name");
       assertExists(
         migrations[0].schema_hash,
-        "Migration should have a schema hash",
+        "Migration should have a schema hash"
       );
 
       // Verify migration status via engine
@@ -956,11 +956,11 @@ Deno.test({
         assertEquals(
           statusResult.value.applied >= 1,
           true,
-          "Should report at least 1 applied migration",
+          "Should report at least 1 applied migration"
         );
         assertExists(
           statusResult.value.latestMigration,
-          "Should have a latest migration",
+          "Should have a latest migration"
         );
       }
 
@@ -973,9 +973,9 @@ Deno.test({
         "post",
         "user",
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });

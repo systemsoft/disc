@@ -10,7 +10,8 @@ function findPos(haystack: string, needle: string, occurrence = 0): Position {
   let offset = -1;
   for (let i = 0; i <= occurrence; i++) {
     offset = haystack.indexOf(needle, offset + 1);
-    if (offset === -1) throw new Error(`not found: ${needle}`);
+    if (offset === -1)
+      throw new Error(`not found: ${needle}`);
   }
   let line = 0;
   let character = 0;
@@ -96,7 +97,7 @@ Deno.test("provideRename - returns null when cursor isn't on a renameable token"
     text,
     findPos(text, "module"),
     "Mod",
-    "file:///t.disc",
+    "file:///t.disc"
   );
   assertEquals(result, null);
 });
@@ -109,7 +110,7 @@ Deno.test("provideRename - rejects new name that isn't a valid identifier", () =
     text,
     findPos(text, "User"),
     "1bad-name",
-    "file:///t.disc",
+    "file:///t.disc"
   );
   assertEquals(result, null);
 });
@@ -123,7 +124,7 @@ Deno.test("provideRename - rejects rename to an existing type name (collision)",
     text,
     findPos(text, "User"),
     "Member",
-    "file:///t.disc",
+    "file:///t.disc"
   );
   // Collision detected.
   assertEquals(result, null);
@@ -157,9 +158,9 @@ Deno.test("provideRename - cross-file: edits land in every file that uses the ty
     context: {
       documents: [
         { uri: "file:///a.disc", text: aText },
-        { uri: "file:///b.disc", text: bText },
-      ],
-    },
+        { uri: "file:///b.disc", text: bText }
+      ]
+    }
   });
   assert(edit !== null);
   // a.disc gets the declaration edit.
@@ -187,9 +188,9 @@ Deno.test("provideRename - cross-file: collision with a type in a sibling file",
     context: {
       documents: [
         { uri: "file:///a.disc", text: aText },
-        { uri: "file:///b.disc", text: bText },
-      ],
-    },
+        { uri: "file:///b.disc", text: bText }
+      ]
+    }
   });
   assertEquals(result, null);
 });
@@ -207,9 +208,9 @@ Deno.test("provideRename - cross-file: cursor on a use site in one file edits th
     context: {
       documents: [
         { uri: "file:///a.disc", text: aText },
-        { uri: "file:///b.disc", text: bText },
-      ],
-    },
+        { uri: "file:///b.disc", text: bText }
+      ]
+    }
   });
   assert(edit !== null);
   // a.disc declaration must be renamed.

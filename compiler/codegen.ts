@@ -37,7 +37,7 @@ export class SQLCodeGenerator {
     "END",
     "NULL",
     "TRUE",
-    "FALSE",
+    "FALSE"
   ]);
 
   private indentLevel = 0;
@@ -65,7 +65,7 @@ export class SQLCodeGenerator {
         return stmt.sql;
       default:
         throw new Error(
-          `Unsupported statement type: ${(stmt as never as { kind: string; }).kind}`,
+          `Unsupported statement type: ${(stmt as never as { kind: string; }).kind}`
         );
     }
   }
@@ -86,39 +86,39 @@ export class SQLCodeGenerator {
     // FROM clause
     if (stmt.from && stmt.from.tables.length > 0) {
       parts.push(
-        "\nFROM\n" + this.indent() + this.generateFromClause(stmt.from),
+        "\nFROM\n" + this.indent() + this.generateFromClause(stmt.from)
       );
     }
 
     // WHERE clause
     if (stmt.where) {
       parts.push(
-        "\nWHERE\n" + this.indent()
-          + this.generateExpression(stmt.where.condition),
+        "\nWHERE\n" + this.indent() +
+          this.generateExpression(stmt.where.condition)
       );
     }
 
     // GROUP BY clause
     if (stmt.groupBy) {
       parts.push(
-        "\nGROUP BY\n" + this.indent()
-          + this.generateGroupByClause(stmt.groupBy),
+        "\nGROUP BY\n" + this.indent() +
+          this.generateGroupByClause(stmt.groupBy)
       );
     }
 
     // HAVING clause
     if (stmt.having) {
       parts.push(
-        "\nHAVING\n" + this.indent()
-          + this.generateExpression(stmt.having.condition),
+        "\nHAVING\n" + this.indent() +
+          this.generateExpression(stmt.having.condition)
       );
     }
 
     // ORDER BY clause
     if (stmt.orderBy) {
       parts.push(
-        "\nORDER BY\n" + this.indent()
-          + this.generateOrderByClause(stmt.orderBy),
+        "\nORDER BY\n" + this.indent() +
+          this.generateOrderByClause(stmt.orderBy)
       );
     }
 
@@ -136,8 +136,8 @@ export class SQLCodeGenerator {
   }
 
   private generateSelectClause(select: SQL.SelectClause): string {
-    return select.columns.map((col) => this.generateSelectItem(col)).join(
-      ",\n" + this.indent(),
+    return select.columns.map(col => this.generateSelectItem(col)).join(
+      ",\n" + this.indent()
     );
   }
 
@@ -150,8 +150,8 @@ export class SQLCodeGenerator {
   }
 
   private generateFromClause(from: SQL.FromClause): string {
-    return from.tables.map((table) => this.generateTableReference(table)).join(
-      ",\n" + this.indent(),
+    return from.tables.map(table => this.generateTableReference(table)).join(
+      ",\n" + this.indent()
     );
   }
 
@@ -164,7 +164,7 @@ export class SQLCodeGenerator {
       const subSql = this.generateStatement(table.subquery);
       this.indentLevel--;
       parts.push(
-        `${lateral}(\n${this.indent()}  ${subSql}\n${this.indent()})`,
+        `${lateral}(\n${this.indent()}  ${subSql}\n${this.indent()})`
       );
     } else {
       parts.push(this.escapeIdentifier(table.name));
@@ -174,11 +174,11 @@ export class SQLCodeGenerator {
       parts.push(" AS " + this.escapeIdentifier(table.alias));
       if (table.columnAliases && table.columnAliases.length > 0) {
         parts.push(
-          "("
-            + table.columnAliases.map((c) => this.escapeIdentifier(c)).join(
-              ", ",
-            )
-            + ")",
+          "(" +
+            table.columnAliases.map(c => this.escapeIdentifier(c)).join(
+              ", "
+            ) +
+            ")"
         );
       }
     }
@@ -199,14 +199,19 @@ export class SQLCodeGenerator {
   }
 
   private generateGroupByClause(groupBy: SQL.GroupByClause): string {
-    return groupBy.expressions.map((expr) => this.generateExpression(expr))
+    return groupBy
+      .expressions
+      .map(expr => this.generateExpression(expr))
       .join(", ");
   }
 
   private generateOrderByClause(orderBy: SQL.OrderByClause): string {
-    return orderBy.items.map((item) => {
-      return this.generateExpression(item.expression) + " " + item.direction;
-    }).join(", ");
+    return orderBy
+      .items
+      .map(item => {
+        return this.generateExpression(item.expression) + " " + item.direction;
+      })
+      .join(", ");
   }
 
   private generateInsertStatement(stmt: SQL.InsertStatement): string {
@@ -216,18 +221,19 @@ export class SQLCodeGenerator {
 
     if (stmt.columns.length > 0) {
       parts.push(
-        " (" + stmt.columns.map((col) => this.escapeIdentifier(col)).join(", ")
-          + ")",
+        " (" + stmt.columns.map(col => this.escapeIdentifier(col)).join(", ") +
+          ")"
       );
     }
 
     parts.push("\nVALUES");
 
     for (let i = 0; i < stmt.values.length; i++) {
-      if (i > 0) parts.push(",");
+      if (i > 0)
+        parts.push(",");
       parts.push(
-        "\n" + this.indent() + "(" + stmt.values[i].map((expr) => this.generateExpression(expr)).join(", ")
-          + ")",
+        "\n" + this.indent() + "(" + stmt.values[i].map(expr => this.generateExpression(expr)).join(", ") +
+          ")"
       );
     }
 
@@ -237,10 +243,10 @@ export class SQLCodeGenerator {
 
     if (stmt.returning) {
       parts.push(
-        "\nRETURNING "
-          + stmt.returning.map((item) => this.generateSelectItem(item)).join(
-            ", ",
-          ),
+        "\nRETURNING " +
+          stmt.returning.map(item => this.generateSelectItem(item)).join(
+            ", "
+          )
       );
     }
 
@@ -251,16 +257,16 @@ export class SQLCodeGenerator {
     let sql = "ON CONFLICT";
 
     if (onConflict.target && onConflict.target.length > 0) {
-      sql += " (" + onConflict.target.map((col) => this.escapeIdentifier(col)).join(", ")
-        + ")";
+      sql += " (" + onConflict.target.map(col => this.escapeIdentifier(col)).join(", ") +
+        ")";
     }
 
     if (onConflict.action === "DO NOTHING") {
       sql += " DO NOTHING";
     } else if (onConflict.action.kind === "UpdateAction") {
-      sql += " DO UPDATE SET "
-        + onConflict.action.set.map((set) => this.generateSetClause(set)).join(
-          ", ",
+      sql += " DO UPDATE SET " +
+        onConflict.action.set.map(set => this.generateSetClause(set)).join(
+          ", "
         );
     }
 
@@ -269,24 +275,24 @@ export class SQLCodeGenerator {
 
   private generateUpdateStatement(stmt: SQL.UpdateStatement): string {
     let sql = "UPDATE " + this.escapeIdentifier(stmt.table);
-    sql += "\nSET "
-      + stmt.set.map((set) => this.generateSetClause(set)).join(", ");
+    sql += "\nSET " +
+      stmt.set.map(set => this.generateSetClause(set)).join(", ");
 
     if (stmt.where) {
       sql += "\nWHERE " + this.generateExpression(stmt.where.condition);
     }
 
     if (stmt.returning) {
-      sql += "\nRETURNING "
-        + stmt.returning.map((item) => this.generateSelectItem(item)).join(", ");
+      sql += "\nRETURNING " +
+        stmt.returning.map(item => this.generateSelectItem(item)).join(", ");
     }
 
     return sql;
   }
 
   private generateSetClause(set: SQL.SetClause): string {
-    return this.escapeIdentifier(set.column) + " = "
-      + this.generateExpression(set.value);
+    return this.escapeIdentifier(set.column) + " = " +
+      this.generateExpression(set.value);
   }
 
   private generateDeleteStatement(stmt: SQL.DeleteStatement): string {
@@ -297,8 +303,8 @@ export class SQLCodeGenerator {
     }
 
     if (stmt.returning) {
-      sql += "\nRETURNING "
-        + stmt.returning.map((item) => this.generateSelectItem(item)).join(", ");
+      sql += "\nRETURNING " +
+        stmt.returning.map(item => this.generateSelectItem(item)).join(", ");
     }
 
     return sql;
@@ -338,15 +344,15 @@ export class SQLCodeGenerator {
         return this.generateJsonbAccessExpression(expr);
       default:
         throw new Error(
-          `Unsupported expression type: ${(expr as never as { kind: string; }).kind}`,
+          `Unsupported expression type: ${(expr as never as { kind: string; }).kind}`
         );
     }
   }
 
   private generateColumnReference(expr: SQL.ColumnReference): string {
     if (expr.table) {
-      return this.escapeIdentifier(expr.table) + "."
-        + this.escapeIdentifier(expr.column);
+      return this.escapeIdentifier(expr.table) + "." +
+        this.escapeIdentifier(expr.column);
     }
     return this.escapeIdentifier(expr.column);
   }
@@ -389,8 +395,8 @@ export class SQLCodeGenerator {
   }
 
   private generateFunctionCall(expr: SQL.FunctionCall): string {
-    const args = expr.args.map((arg) => this.generateExpression(arg)).join(
-      ", ",
+    const args = expr.args.map(arg => this.generateExpression(arg)).join(
+      ", "
     );
     // Special case: ARRAY uses bracket syntax in PostgreSQL
     if (expr.name === "ARRAY") {
@@ -413,16 +419,16 @@ export class SQLCodeGenerator {
 
     for (const whenClause of expr.when) {
       parts.push(
-        "\n" + this.indent() + "WHEN "
-          + this.generateExpression(whenClause.condition),
+        "\n" + this.indent() + "WHEN " +
+          this.generateExpression(whenClause.condition)
       );
       parts.push(" THEN " + this.generateExpression(whenClause.then));
     }
 
     if (expr.else) {
       parts.push(
-        "\n" + this.indent() + "ELSE "
-          + this.generateExpression(expr.else),
+        "\n" + this.indent() + "ELSE " +
+          this.generateExpression(expr.else)
       );
     }
 
@@ -431,11 +437,14 @@ export class SQLCodeGenerator {
   }
 
   private generateJsonBuildObject(expr: SQL.JsonBuildObject): string {
-    const fields = expr.fields.map((field) => {
-      const key = "'" + this.escapeString(field.key) + "'";
-      const value = this.generateExpression(field.value);
-      return `${key}, ${value}`;
-    }).join(", ");
+    const fields = expr
+      .fields
+      .map(field => {
+        const key = "'" + this.escapeString(field.key) + "'";
+        const value = this.generateExpression(field.value);
+        return `${key}, ${value}`;
+      })
+      .join(", ");
 
     return `jsonb_build_object(${fields})`;
   }
@@ -454,12 +463,15 @@ export class SQLCodeGenerator {
   }
 
   private generateCTEStatement(stmt: SQL.CTEStatement): string {
-    const ctes = stmt.ctes.map((cte) => {
-      const recursive = cte.recursive ? "RECURSIVE " : "";
-      const cols = cte.columns.length > 0 ? ` (${cte.columns.join(", ")})` : "";
-      const query = this.generateStatement(cte.query);
-      return `${recursive}${this.escapeIdentifier(cte.name)}${cols} AS (\n${this.indent()}  ${query}\n${this.indent()})`;
-    }).join(",\n" + this.indent());
+    const ctes = stmt
+      .ctes
+      .map(cte => {
+        const recursive = cte.recursive ? "RECURSIVE " : "";
+        const cols = cte.columns.length > 0 ? ` (${cte.columns.join(", ")})` : "";
+        const query = this.generateStatement(cte.query);
+        return `${recursive}${this.escapeIdentifier(cte.name)}${cols} AS (\n${this.indent()}  ${query}\n${this.indent()})`;
+      })
+      .join(",\n" + this.indent());
 
     const main = this.generateStatement(stmt.query);
     return `WITH ${ctes}\n${main}`;
@@ -467,8 +479,8 @@ export class SQLCodeGenerator {
 
   private generateUnionAllStatement(stmt: SQL.UnionAllStatement): string {
     const op = stmt.operator ?? "UNION ALL";
-    return stmt.queries.map((q) => this.generateStatement(q)).join(
-      `\n${op}\n`,
+    return stmt.queries.map(q => this.generateStatement(q)).join(
+      `\n${op}\n`
     );
   }
 
@@ -483,24 +495,24 @@ export class SQLCodeGenerator {
   }
 
   private generateWindowFunctionExpression(
-    expr: SQL.WindowFunctionExpression,
+    expr: SQL.WindowFunctionExpression
   ): string {
-    const args = expr.args.map((a) => this.generateExpression(a)).join(", ");
+    const args = expr.args.map(a => this.generateExpression(a)).join(", ");
     const overParts: string[] = [];
 
     if (expr.over.partitionBy && expr.over.partitionBy.length > 0) {
       overParts.push(
-        "PARTITION BY "
-          + expr.over.partitionBy.map((e) => this.generateExpression(e)).join(
-            ", ",
-          ),
+        "PARTITION BY " +
+          expr.over.partitionBy.map(e => this.generateExpression(e)).join(
+            ", "
+          )
       );
     }
 
     if (expr.over.orderBy && expr.over.orderBy.length > 0) {
       overParts.push(
-        "ORDER BY "
-          + expr.over.orderBy.map((item) => `${this.generateExpression(item.expression)} ${item.direction}`).join(", "),
+        "ORDER BY " +
+          expr.over.orderBy.map(item => `${this.generateExpression(item.expression)} ${item.direction}`).join(", ")
       );
     }
 
@@ -520,7 +532,7 @@ export class SQLCodeGenerator {
   }
 
   private generateJsonbAccessExpression(
-    expr: SQL.JsonbAccessExpression,
+    expr: SQL.JsonbAccessExpression
   ): string {
     const base = this.generateExpression(expr.expression);
     const accessor = this.generateExpression(expr.accessor);
@@ -534,9 +546,9 @@ export class SQLCodeGenerator {
   }
 
   private isComplex(expr: SQL.SQLExpression): boolean {
-    return expr.kind === "FunctionCall" || expr.kind === "JsonBuildObject"
-      || expr.kind === "SubqueryExpression" || expr.kind === "CaseExpression"
-      || expr.kind === "JsonbAccessExpression";
+    return expr.kind === "FunctionCall" || expr.kind === "JsonBuildObject" ||
+      expr.kind === "SubqueryExpression" || expr.kind === "CaseExpression" ||
+      expr.kind === "JsonbAccessExpression";
   }
 
   private needsParentheses(expr: SQL.SQLExpression): boolean {
@@ -550,8 +562,8 @@ export class SQLCodeGenerator {
     }
     // Simple identifier escaping - in production, this should be more robust
     if (
-      /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(identifier)
-      && !this.isReservedKeyword(identifier)
+      /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(identifier) &&
+      !this.isReservedKeyword(identifier)
     ) {
       return identifier;
     }

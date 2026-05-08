@@ -7,12 +7,12 @@ import { DiscAuthError, DiscConnectionError, DiscQueryError, DiscServerError } f
 // --- Mock fetch helper ---
 
 function mockFetch(
-  handler: (url: string, init?: RequestInit) => Response | Promise<Response>,
+  handler: (url: string, init?: RequestInit) => Response | Promise<Response>
 ): () => void {
   const original = globalThis.fetch;
   globalThis.fetch = (
     input: string | URL | Request,
-    init?: RequestInit,
+    init?: RequestInit
   ): Promise<Response> => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     return Promise.resolve(handler(url, init));
@@ -41,11 +41,11 @@ Deno.test("client - strips trailing slash from baseUrl", () => {
 });
 
 Deno.test("client - query returns data", async () => {
-  const restore = mockFetch((_url) => new Response(JSON.stringify({ data: [{ name: "Ada" }] })));
+  const restore = mockFetch(_url => new Response(JSON.stringify({ data: [{ name: "Ada" }] })));
   try {
     const client = new DiscClient();
     const result = await client.query<{ name: string; }[]>(
-      "select User { name }",
+      "select User { name }"
     );
     assertEquals(result, [{ name: "Ada" }]);
   } finally {
@@ -72,7 +72,7 @@ Deno.test("client - query passes variables", async () => {
 Deno.test("client - query throws DiscQueryError on server errors", async () => {
   const restore = mockFetch(() =>
     new Response(JSON.stringify({
-      errors: [{ message: "Unknown type 'Foo'" }],
+      errors: [{ message: "Unknown type 'Foo'" }]
     }))
   );
   try {
@@ -80,7 +80,7 @@ Deno.test("client - query throws DiscQueryError on server errors", async () => {
     await assertRejects(
       () => client.query("select Foo"),
       DiscQueryError,
-      "Unknown type 'Foo'",
+      "Unknown type 'Foo'"
     );
   } finally {
     restore();
@@ -91,7 +91,7 @@ Deno.test("client - queryRaw returns full envelope", async () => {
   const restore = mockFetch(() =>
     new Response(JSON.stringify({
       data: [1, 2, 3],
-      extensions: { parseMs: 1.5 },
+      extensions: { parseMs: 1.5 }
     }))
   );
   try {
@@ -107,7 +107,7 @@ Deno.test("client - queryRaw returns full envelope", async () => {
 Deno.test("client - queryRaw does not throw on errors", async () => {
   const restore = mockFetch(() =>
     new Response(JSON.stringify({
-      errors: [{ message: "Some error" }],
+      errors: [{ message: "Some error" }]
     }))
   );
   try {
@@ -120,7 +120,7 @@ Deno.test("client - queryRaw does not throw on errors", async () => {
 });
 
 Deno.test("client - health endpoint", async () => {
-  const restore = mockFetch((url) => {
+  const restore = mockFetch(url => {
     if (url.endsWith("/health")) {
       return new Response(JSON.stringify({ status: "healthy" }));
     }
@@ -229,7 +229,7 @@ Deno.test("client - 401 throws DiscAuthError", async () => {
     const client = new DiscClient();
     await assertRejects(
       () => client.query("select 1"),
-      DiscAuthError,
+      DiscAuthError
     );
   } finally {
     restore();
@@ -242,7 +242,7 @@ Deno.test("client - 403 throws DiscAuthError", async () => {
     const client = new DiscClient();
     await assertRejects(
       () => client.query("select 1"),
-      DiscAuthError,
+      DiscAuthError
     );
   } finally {
     restore();
@@ -255,7 +255,7 @@ Deno.test("client - 500 throws DiscServerError", async () => {
     const client = new DiscClient();
     await assertRejects(
       () => client.query("select 1"),
-      DiscServerError,
+      DiscServerError
     );
   } finally {
     restore();
@@ -270,7 +270,7 @@ Deno.test("client - network error throws DiscConnectionError", async () => {
     const client = new DiscClient();
     await assertRejects(
       () => client.query("select 1"),
-      DiscConnectionError,
+      DiscConnectionError
     );
   } finally {
     restore();
@@ -304,7 +304,7 @@ Deno.test("client - retries exhausted throws", async () => {
     const client = new DiscClient({ retries: 1, retryDelay: 10 });
     await assertRejects(
       () => client.query("select 1"),
-      DiscConnectionError,
+      DiscConnectionError
     );
   } finally {
     restore();
@@ -319,7 +319,7 @@ Deno.test("client - custom headers are sent", async () => {
   });
   try {
     const client = new DiscClient({
-      headers: { "X-Custom": "test-value" },
+      headers: { "X-Custom": "test-value" }
     });
     await client.query("select 1");
     assertEquals(capturedHeaders?.get("X-Custom"), "test-value");
@@ -347,7 +347,7 @@ Deno.test("client - transaction commits on success", async () => {
   });
   try {
     const client = new DiscClient();
-    const result = await client.transaction(async (tx) => {
+    const result = await client.transaction(async tx => {
       return await tx.query<number>("select 42");
     });
     assertEquals(result, 42);
@@ -359,7 +359,7 @@ Deno.test("client - transaction commits on success", async () => {
 
 Deno.test("client - transaction rolls back on error", async () => {
   const calls: string[] = [];
-  const restore = mockFetch((url) => {
+  const restore = mockFetch(url => {
     if (url.endsWith("/transaction/begin")) {
       calls.push("begin");
       return new Response(JSON.stringify({ transactionId: "tx-2" }));
@@ -371,7 +371,7 @@ Deno.test("client - transaction rolls back on error", async () => {
     if (url.endsWith("/query")) {
       calls.push("query");
       return new Response(JSON.stringify({
-        errors: [{ message: "fail" }],
+        errors: [{ message: "fail" }]
       }));
     }
     return new Response("not found", { status: 404 });
@@ -380,10 +380,10 @@ Deno.test("client - transaction rolls back on error", async () => {
     const client = new DiscClient();
     await assertRejects(
       () =>
-        client.transaction(async (tx) => {
+        client.transaction(async tx => {
           return await tx.query("bad query");
         }),
-      DiscQueryError,
+      DiscQueryError
     );
     assertEquals(calls, ["begin", "query", "rollback"]);
   } finally {

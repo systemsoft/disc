@@ -22,7 +22,7 @@ import type {
   MigrationPlan,
   MigrationResult,
   MigrationState,
-  PropertyDefinition,
+  PropertyDefinition
 } from "disc/migration/types.ts";
 ```
 
@@ -40,10 +40,10 @@ await pool.initialize();
 const manager = new SchemaManager({
   pool,
   dryRun: false,
-  onSchemaChange: (schema) => {
+  onSchemaChange: schema => {
     // Notify the server to update its compiler schema
     server.updateSchema(schema);
-  },
+  }
 });
 
 await manager.initialize();
@@ -98,7 +98,7 @@ const result = await manager.applySchema(sdlSource);
 if (result.ok) {
   for (const migrationResult of result.value) {
     console.log(
-      `Applied: ${migrationResult.migrationId} in ${migrationResult.durationMs}ms`,
+      `Applied: ${migrationResult.migrationId} in ${migrationResult.durationMs}ms`
     );
   }
 }
@@ -115,7 +115,7 @@ const planResult = manager.planSchema(sdlSource);
 if (planResult.ok) {
   const plan = planResult.value;
   console.log(
-    `${plan.operationsCount} operations, estimated ${plan.estimatedDuration}ms`,
+    `${plan.operationsCount} operations, estimated ${plan.estimatedDuration}ms`
   );
 }
 ```
@@ -164,7 +164,7 @@ const engine = new MigrationEngine({
   autoApprove: true,
   backupBeforeMigration: false,
   rollbackOnError: true,
-  connectionPool: pool, // optional, preferred over databaseUrl
+  connectionPool: pool // optional, preferred over databaseUrl
 });
 
 await engine.initialize();

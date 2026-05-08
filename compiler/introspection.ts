@@ -77,7 +77,7 @@ export interface SchemaDescription {
  */
 export function describeType(
   schema: Schema,
-  typeName: string,
+  typeName: string
 ): TypeDescription {
   // Try exact match first, then try common qualified lookups
   let typeDef = schema.types.get(typeName);
@@ -88,7 +88,7 @@ export function describeType(
 
   if (!typeDef) {
     throw new CompilationError(
-      `Type '${typeName}' not found in schema`,
+      `Type '${typeName}' not found in schema`
     );
   }
 
@@ -130,11 +130,13 @@ export function describeSchema(schema: Schema): SchemaDescription {
 // ---------------------------------------------------------------------------
 
 function isSecretAnnotation(
-  annotations: Record<string, string> | undefined,
+  annotations: Record<string, string> | undefined
 ): boolean {
-  if (!annotations) return false;
+  if (!annotations)
+    return false;
   const raw = annotations["secret"] ?? annotations["std::secret"];
-  if (raw === undefined) return false;
+  if (raw === undefined)
+    return false;
   // SchemaManager preserves SDL string literal quotes (e.g. `'true'`),
   // while synthetic test fixtures pass raw `"true"`. Accept both.
   const stripped = raw.replace(/^['"]|['"]$/g, "");
@@ -182,7 +184,7 @@ function buildTypeDescription(typeDef: TypeDef): TypeDescription {
     accessPolicies,
     indexes,
     annotations: typeDef.annotations ?? {},
-    secret: isSecretAnnotation(typeDef.annotations),
+    secret: isSecretAnnotation(typeDef.annotations)
   };
 }
 
@@ -207,7 +209,7 @@ function buildPropertyDescription(prop: PropertyDef): PropertyDescription {
     computed: prop.computed ?? false,
     constraints,
     annotations: prop.annotations ?? {},
-    secret: isSecretAnnotation(prop.annotations),
+    secret: isSecretAnnotation(prop.annotations)
   };
 }
 
@@ -219,12 +221,12 @@ function buildLinkDescription(link: LinkDef): LinkDescription {
     required: link.required,
     readonly: false,
     annotations: link.annotations ?? {},
-    secret: isSecretAnnotation(link.annotations),
+    secret: isSecretAnnotation(link.annotations)
   };
 }
 
 function buildFunctionDescription(funcDef: FunctionDef): FunctionDescription {
-  const params = funcDef.args.map((arg) => {
+  const params = funcDef.args.map(arg => {
     const req = arg.required ? "required " : "";
     return `${req}${arg.name}: ${arg.type}`;
   });
@@ -232,7 +234,7 @@ function buildFunctionDescription(funcDef: FunctionDef): FunctionDescription {
   return {
     name: funcDef.name,
     params,
-    returnType: funcDef.returnType,
+    returnType: funcDef.returnType
   };
 }
 

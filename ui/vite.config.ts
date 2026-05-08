@@ -17,9 +17,9 @@ export default defineConfig({
       // SvelteKit page routes like `/schema` and `/query`.
       "/api": {
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ""),
-        target: "http://localhost:5656",
-      },
-    },
-  },
+        rewrite: path => path.replace(/^\/api/, ""),
+        target: "http://localhost:5656"
+      }
+    }
+  }
 });

@@ -20,7 +20,7 @@ function makeContext(): ExtensionContext {
       maxConnections: 5,
       requestTimeout: 5000,
       enableCors: false,
-      enableWebsockets: false,
+      enableWebsockets: false
     },
     logger: {
       debug: () => {},
@@ -32,8 +32,8 @@ function makeContext(): ExtensionContext {
       },
       withRequest: function() {
         return this;
-      },
-    } as unknown as ExtensionContext["logger"],
+      }
+    } as unknown as ExtensionContext["logger"]
   };
 }
 
@@ -55,7 +55,7 @@ Deno.test("CustomFunctionsExtension - constructor throws ExtensionConfigError wh
   assertThrows(
     () => new CustomFunctionsExtension({} as CustomFunctionsConfig),
     ExtensionConfigError,
-    "functions array is required",
+    "functions array is required"
   );
 });
 
@@ -63,10 +63,10 @@ Deno.test("CustomFunctionsExtension - constructor throws ExtensionConfigError wh
   assertThrows(
     () =>
       new CustomFunctionsExtension(
-        { functions: "not-an-array" } as unknown as CustomFunctionsConfig,
+        { functions: "not-an-array" } as unknown as CustomFunctionsConfig
       ),
     ExtensionConfigError,
-    "functions array is required",
+    "functions array is required"
   );
 });
 
@@ -87,9 +87,9 @@ Deno.test("CustomFunctionsExtension - getFunctions returns FunctionDef for sql_n
         name: "my_lower",
         args: [{ name: "input", type: "str", required: true }],
         returnType: "str",
-        implementation: { kind: "sql_name", sqlName: "lower" },
-      },
-    ],
+        implementation: { kind: "sql_name", sqlName: "lower" }
+      }
+    ]
   });
 
   const fns = ext.getFunctions();
@@ -110,9 +110,9 @@ Deno.test("CustomFunctionsExtension - getFunctions returns FunctionDef for sql_e
         name: "double_val",
         args: [{ name: "n", type: "int64" }],
         returnType: "int64",
-        implementation: { kind: "sql_expression", expression: "$1 * 2" },
-      },
-    ],
+        implementation: { kind: "sql_expression", expression: "$1 * 2" }
+      }
+    ]
   });
 
   const fns = ext.getFunctions();
@@ -129,10 +129,10 @@ Deno.test("CustomFunctionsExtension - getFunctions returns FunctionDef for plpgs
         returnType: "str",
         implementation: {
           kind: "plpgsql",
-          body: "BEGIN\n  RETURN 'Hello, ' || username;\nEND;",
-        },
-      },
-    ],
+          body: "BEGIN\n  RETURN 'Hello, ' || username;\nEND;"
+        }
+      }
+    ]
   });
 
   const fns = ext.getFunctions();
@@ -148,9 +148,9 @@ Deno.test("CustomFunctionsExtension - getFunctions defaults required to true whe
         name: "noop",
         args: [{ name: "val", type: "str" }], // required omitted
         returnType: "str",
-        implementation: { kind: "sql_name", sqlName: "noop" },
-      },
-    ],
+        implementation: { kind: "sql_name", sqlName: "noop" }
+      }
+    ]
   });
 
   const fns = ext.getFunctions();
@@ -173,23 +173,23 @@ Deno.test("CustomFunctionsExtension - getDatabaseSetup returns CREATE SQL only f
         returnType: "str",
         implementation: {
           kind: "plpgsql",
-          body: "BEGIN\n  RETURN 'ok';\nEND;",
-        },
+          body: "BEGIN\n  RETURN 'ok';\nEND;"
+        }
       },
       {
         name: "sql_alias",
         args: [],
         returnType: "str",
-        implementation: { kind: "sql_name", sqlName: "lower" },
-      },
-    ],
+        implementation: { kind: "sql_name", sqlName: "lower" }
+      }
+    ]
   });
 
   const setup = ext.getDatabaseSetup();
   assertEquals(setup.setupSql.length, 1);
   assertEquals(
     setup.setupSql[0].includes("CREATE OR REPLACE FUNCTION pg_func"),
-    true,
+    true
   );
 });
 
@@ -202,27 +202,27 @@ Deno.test("CustomFunctionsExtension - getDatabaseSetup returns DROP SQL for all 
         returnType: "str",
         implementation: {
           kind: "plpgsql",
-          body: "BEGIN\n  RETURN 'ok';\nEND;",
-        },
+          body: "BEGIN\n  RETURN 'ok';\nEND;"
+        }
       },
       {
         name: "sql_alias",
         args: [{ name: "input", type: "str" }],
         returnType: "str",
-        implementation: { kind: "sql_name", sqlName: "lower" },
-      },
-    ],
+        implementation: { kind: "sql_name", sqlName: "lower" }
+      }
+    ]
   });
 
   const setup = ext.getDatabaseSetup();
   assertEquals(setup.teardownSql?.length, 2);
   assertEquals(
-    setup.teardownSql?.some((s) => s.includes("DROP FUNCTION IF EXISTS pg_func")),
-    true,
+    setup.teardownSql?.some(s => s.includes("DROP FUNCTION IF EXISTS pg_func")),
+    true
   );
   assertEquals(
-    setup.teardownSql?.some((s) => s.includes("DROP FUNCTION IF EXISTS sql_alias")),
-    true,
+    setup.teardownSql?.some(s => s.includes("DROP FUNCTION IF EXISTS sql_alias")),
+    true
   );
 });
 
@@ -233,9 +233,9 @@ Deno.test("CustomFunctionsExtension - getDatabaseSetup returns empty setup for s
         name: "my_upper",
         args: [{ name: "input", type: "str" }],
         returnType: "str",
-        implementation: { kind: "sql_name", sqlName: "upper" },
-      },
-    ],
+        implementation: { kind: "sql_name", sqlName: "upper" }
+      }
+    ]
   });
 
   const setup = ext.getDatabaseSetup();

@@ -33,12 +33,12 @@ export class EdgeQLAnalyzer {
     schema?: Map<
       string,
       SchemaAST.TypeDeclaration | SchemaAST.ScalarTypeDeclaration
-    >,
+    >
   ) {
     this.context = {
       schema: schema || new Map(),
       variables: new Map(),
-      errors: [],
+      errors: []
     };
   }
 
@@ -214,7 +214,7 @@ export class EdgeQLAnalyzer {
     if (iterType) {
       this.context.variables.set(query.variable.name, {
         ...iterType,
-        cardinality: { required: true, multi: false },
+        cardinality: { required: true, multi: false }
       });
     }
 
@@ -271,7 +271,7 @@ export class EdgeQLAnalyzer {
 
   private analyzeShapeElement(
     element: AST.ShapeElement,
-    contextType: TypeInfo,
+    contextType: TypeInfo
   ): void {
     // Analyze the expression
     const exprType = this.analyzeExpression(element.expr);
@@ -281,9 +281,9 @@ export class EdgeQLAnalyzer {
       const propName = this.getPropertyName(element.expr);
 
       if (
-        propName && contextType.properties
-        && !contextType.properties.has(propName)
-        && contextType.links && !contextType.links.has(propName)
+        propName && contextType.properties &&
+        !contextType.properties.has(propName) &&
+        contextType.links && !contextType.links.has(propName)
       ) {
         this.addError(`Property or link '${propName}' not found in type`);
       }
@@ -303,7 +303,7 @@ export class EdgeQLAnalyzer {
       case "Parameter":
         return {
           name: "any",
-          cardinality: { required: true, multi: false },
+          cardinality: { required: true, multi: false }
         };
 
       case "Identifier":
@@ -335,13 +335,13 @@ export class EdgeQLAnalyzer {
       case "NamedTuple":
         return {
           name: "tuple",
-          cardinality: { required: true, multi: false },
+          cardinality: { required: true, multi: false }
         };
 
       case "Introspection":
         return {
           name: "schema::Type",
-          cardinality: { required: true, multi: false },
+          cardinality: { required: true, multi: false }
         };
 
       case "Detached":
@@ -395,7 +395,7 @@ export class EdgeQLAnalyzer {
 
     return {
       name: typeName,
-      cardinality: { required: true, multi: false },
+      cardinality: { required: true, multi: false }
     };
   }
 
@@ -409,7 +409,7 @@ export class EdgeQLAnalyzer {
     // Otherwise, it might be a type name or property
     return {
       name: ident.name,
-      cardinality: { required: false, multi: false },
+      cardinality: { required: false, multi: false }
     };
   }
 
@@ -442,12 +442,12 @@ export class EdgeQLAnalyzer {
 
     return {
       name: typeName,
-      cardinality: cast.cardinality
-        ? {
+      cardinality: cast.cardinality ?
+        {
           required: cast.cardinality.required ?? true,
-          multi: cast.cardinality.multi ?? false,
-        }
-        : { required: true, multi: false },
+          multi: cast.cardinality.multi ?? false
+        } :
+        { required: true, multi: false }
     };
   }
 
@@ -463,27 +463,27 @@ export class EdgeQLAnalyzer {
     if (funcName === "count" || funcName === "sum") {
       return {
         name: "int64",
-        cardinality: { required: true, multi: false },
+        cardinality: { required: true, multi: false }
       };
     } else if (funcName === "min" || funcName === "max" || funcName === "avg") {
       return {
         name: "float64",
-        cardinality: { required: true, multi: false },
+        cardinality: { required: true, multi: false }
       };
     } else if (
-      funcName === "str_trim" || funcName === "str_lower"
-      || funcName === "str_upper"
+      funcName === "str_trim" || funcName === "str_lower" ||
+      funcName === "str_upper"
     ) {
       return {
         name: "str",
-        cardinality: { required: true, multi: false },
+        cardinality: { required: true, multi: false }
       };
     }
 
     // Default to any type
     return {
       name: "any",
-      cardinality: { required: false, multi: false },
+      cardinality: { required: false, multi: false }
     };
   }
 
@@ -511,7 +511,7 @@ export class EdgeQLAnalyzer {
       case "IS NOT":
         return {
           name: "bool",
-          cardinality: { required: true, multi: false },
+          cardinality: { required: true, multi: false }
         };
 
       case "+":
@@ -527,21 +527,21 @@ export class EdgeQLAnalyzer {
         }
         return {
           name: "float64",
-          cardinality: { required: true, multi: false },
+          cardinality: { required: true, multi: false }
         };
 
       case "++":
         // String concatenation
         return {
           name: "str",
-          cardinality: { required: true, multi: false },
+          cardinality: { required: true, multi: false }
         };
 
       case "??":
         // Coalesce - returns left type or right type
         return leftType || rightType || {
           name: "any",
-          cardinality: { required: false, multi: false },
+          cardinality: { required: false, multi: false }
         };
 
       case "UNION":
@@ -551,18 +551,18 @@ export class EdgeQLAnalyzer {
         if (leftType) {
           return {
             ...leftType,
-            cardinality: { ...leftType.cardinality, multi: true },
+            cardinality: { ...leftType.cardinality, multi: true }
           };
         }
         return {
           name: "any",
-          cardinality: { required: false, multi: true },
+          cardinality: { required: false, multi: true }
         };
 
       default:
         return {
           name: "any",
-          cardinality: { required: false, multi: false },
+          cardinality: { required: false, multi: false }
         };
     }
   }
@@ -576,39 +576,39 @@ export class EdgeQLAnalyzer {
         // Numeric operations
         return operandType || {
           name: "float64",
-          cardinality: { required: true, multi: false },
+          cardinality: { required: true, multi: false }
         };
 
       case "NOT":
         return {
           name: "bool",
-          cardinality: { required: true, multi: false },
+          cardinality: { required: true, multi: false }
         };
 
       case "DISTINCT":
         // Removes duplicates, maintains type
         return operandType || {
           name: "any",
-          cardinality: { required: false, multi: true },
+          cardinality: { required: false, multi: true }
         };
 
       case "EXISTS":
         return {
           name: "bool",
-          cardinality: { required: true, multi: false },
+          cardinality: { required: true, multi: false }
         };
 
       case "DETACHED":
         // Detached maintains type
         return operandType || {
           name: "any",
-          cardinality: { required: false, multi: false },
+          cardinality: { required: false, multi: false }
         };
 
       default:
         return {
           name: "any",
-          cardinality: { required: false, multi: false },
+          cardinality: { required: false, multi: false }
         };
     }
   }
@@ -641,7 +641,7 @@ export class EdgeQLAnalyzer {
 
     return {
       name: elementType?.name || "any",
-      cardinality: { required: true, multi: true },
+      cardinality: { required: true, multi: true }
     };
   }
 
@@ -655,18 +655,18 @@ export class EdgeQLAnalyzer {
 
     return {
       name,
-      cardinality: { required: true, multi: false },
+      cardinality: { required: true, multi: false }
     };
   }
 
   private createTypeInfo(
-    typeDecl: SchemaAST.TypeDeclaration | SchemaAST.ScalarTypeDeclaration,
+    typeDecl: SchemaAST.TypeDeclaration | SchemaAST.ScalarTypeDeclaration
   ): TypeInfo {
     const info: TypeInfo = {
       name: typeDecl.name.value,
       cardinality: { required: true, multi: false },
       properties: new Map(),
-      links: new Map(),
+      links: new Map()
     };
 
     if (typeDecl.kind === "TypeDeclaration") {
@@ -676,16 +676,16 @@ export class EdgeQLAnalyzer {
             name: member.type.name.parts.join("::"),
             cardinality: {
               required: member.required || false,
-              multi: member.multi || false,
-            },
+              multi: member.multi || false
+            }
           });
         } else if (member.kind === "LinkDeclaration") {
           info.links?.set(member.name.value, {
             name: member.target.name.parts.join("::"),
             cardinality: {
               required: member.required || false,
-              multi: member.multi || false,
-            },
+              multi: member.multi || false
+            }
           });
         }
       }
@@ -711,8 +711,9 @@ export class EdgeQLAnalyzer {
       "float32",
       "float64",
       "decimal",
-      "bigint",
-    ].includes(typeName);
+      "bigint"
+    ]
+      .includes(typeName);
   }
 
   private addError(message: string): void {

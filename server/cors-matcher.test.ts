@@ -17,21 +17,21 @@ import { matchCorsOrigin } from "./cors-matcher.ts";
 Deno.test("cors-matcher - exact-match allowed", () => {
   assertEquals(
     matchCorsOrigin("https://app.example.com", ["https://app.example.com"]),
-    true,
+    true
   );
 });
 
 Deno.test("cors-matcher - exact-match different host rejected", () => {
   assertEquals(
     matchCorsOrigin("https://evil.example.com", ["https://app.example.com"]),
-    false,
+    false
   );
 });
 
 Deno.test("cors-matcher - exact-match different scheme rejected", () => {
   assertEquals(
     matchCorsOrigin("http://app.example.com", ["https://app.example.com"]),
-    false,
+    false
   );
 });
 
@@ -39,16 +39,16 @@ Deno.test("cors-matcher - exact-match different port rejected", () => {
   assertEquals(
     matchCorsOrigin(
       "https://app.example.com:8443",
-      ["https://app.example.com"],
+      ["https://app.example.com"]
     ),
-    false,
+    false
   );
 });
 
 Deno.test("cors-matcher - case-insensitive host comparison", () => {
   assertEquals(
     matchCorsOrigin("https://APP.example.com", ["https://app.example.com"]),
-    true,
+    true
   );
 });
 
@@ -57,7 +57,7 @@ Deno.test("cors-matcher - case-insensitive host comparison", () => {
 Deno.test("cors-matcher - wildcard matches one-label subdomain", () => {
   assertEquals(
     matchCorsOrigin("https://tenant1.example.com", ["https://*.example.com"]),
-    true,
+    true
   );
 });
 
@@ -67,7 +67,7 @@ Deno.test("cors-matcher - wildcard does NOT match two-label subdomain", () => {
   // surface small (matches matchRedirectUri semantics).
   assertEquals(
     matchCorsOrigin("https://a.b.example.com", ["https://*.example.com"]),
-    false,
+    false
   );
 });
 
@@ -75,21 +75,21 @@ Deno.test("cors-matcher - wildcard does NOT match bare base host", () => {
   // `*.example.com` requires a subdomain label — bare `example.com` rejected.
   assertEquals(
     matchCorsOrigin("https://example.com", ["https://*.example.com"]),
-    false,
+    false
   );
 });
 
 Deno.test("cors-matcher - wildcard with mismatched scheme rejected", () => {
   assertEquals(
     matchCorsOrigin("http://tenant.example.com", ["https://*.example.com"]),
-    false,
+    false
   );
 });
 
 Deno.test("cors-matcher - wildcard with mismatched base host rejected", () => {
   assertEquals(
     matchCorsOrigin("https://tenant.attacker.com", ["https://*.example.com"]),
-    false,
+    false
   );
 });
 
@@ -97,16 +97,16 @@ Deno.test("cors-matcher - wildcard preserves port match", () => {
   assertEquals(
     matchCorsOrigin(
       "https://tenant.example.com:8443",
-      ["https://*.example.com:8443"],
+      ["https://*.example.com:8443"]
     ),
-    true,
+    true
   );
   assertEquals(
     matchCorsOrigin(
       "https://tenant.example.com",
-      ["https://*.example.com:8443"],
+      ["https://*.example.com:8443"]
     ),
-    false,
+    false
   );
 });
 
@@ -115,12 +115,12 @@ Deno.test("cors-matcher - wildcard preserves port match", () => {
 Deno.test("cors-matcher - allowlist mixing exact and wildcard", () => {
   const allowlist = [
     "https://app.example.com",
-    "https://*.staging.example.com",
+    "https://*.staging.example.com"
   ];
   assertEquals(matchCorsOrigin("https://app.example.com", allowlist), true);
   assertEquals(
     matchCorsOrigin("https://t1.staging.example.com", allowlist),
-    true,
+    true
   );
   assertEquals(matchCorsOrigin("https://other.example.com", allowlist), false);
 });
@@ -130,7 +130,7 @@ Deno.test("cors-matcher - allowlist mixing exact and wildcard", () => {
 Deno.test("cors-matcher - malformed origin rejected", () => {
   assertEquals(
     matchCorsOrigin("not a url", ["https://app.example.com"]),
-    false,
+    false
   );
 });
 
@@ -143,8 +143,8 @@ Deno.test("cors-matcher - origin with userinfo rejected", () => {
   assertEquals(
     matchCorsOrigin(
       "https://user:pass@app.example.com",
-      ["https://app.example.com"],
+      ["https://app.example.com"]
     ),
-    false,
+    false
   );
 });

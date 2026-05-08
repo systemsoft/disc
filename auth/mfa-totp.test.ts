@@ -19,20 +19,20 @@ async function makeProvider(): Promise<{
     {
       jwtSecret: "test-secret-key-32-bytes-minimum-len",
       jwtIssuer: "TestApp",
-      requireEmailVerification: false,
+      requireEmailVerification: false
     },
-    db,
+    db
   );
   await provider.initialize();
   return { provider, db };
 }
 
 async function registerAndCode(
-  provider: AuthProvider,
+  provider: AuthProvider
 ): Promise<{ userId: string; secret: string; firstCode: string; }> {
   const auth = await provider.register({
     email: "u@example.com",
-    password: "password123",
+    password: "password123"
   });
   const enrollment = await provider.enrollTOTP(auth.user.id);
   const firstCode = await generateTOTP(enrollment.secret);
@@ -40,7 +40,7 @@ async function registerAndCode(
   return {
     userId: auth.user.id,
     secret: enrollment.secret,
-    firstCode,
+    firstCode
   };
 }
 
@@ -51,7 +51,7 @@ Deno.test("enrollTOTP — returns secret + otpauth URI", async () => {
   try {
     const auth = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const enrollment = await provider.enrollTOTP(auth.user.id);
     assert(enrollment.secret.length > 0);
@@ -68,7 +68,7 @@ Deno.test("enrollTOTP — re-enrollment rotates the secret", async () => {
   try {
     const auth = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const a = await provider.enrollTOTP(auth.user.id);
     const b = await provider.enrollTOTP(auth.user.id);
@@ -83,13 +83,13 @@ Deno.test("confirmTOTP — accepts a valid code, rejects garbage", async () => {
   try {
     const auth = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const enrollment = await provider.enrollTOTP(auth.user.id);
 
     const err = await assertRejects(
       () => provider.confirmTOTP(auth.user.id, "000000"),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_CREDENTIALS);
 
@@ -106,11 +106,11 @@ Deno.test("confirmTOTP — fails when not enrolled", async () => {
   try {
     const auth = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const err = await assertRejects(
       () => provider.confirmTOTP(auth.user.id, "123456"),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_OPERATION);
   } finally {
@@ -126,7 +126,7 @@ Deno.test("login — when TOTP confirmed, returns MfaChallenge instead of sessio
     await registerAndCode(provider);
     const result = await provider.login({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     assert("mfaRequired" in result, "expected MFA challenge");
     if ("mfaRequired" in result) {
@@ -144,14 +144,14 @@ Deno.test("login — when TOTP enrolled but not confirmed, password alone still 
   try {
     const auth = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     // Enroll but DO NOT confirm — pending enrollments must not gate login.
     await provider.enrollTOTP(auth.user.id);
 
     const result = await provider.login({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     assert(!("mfaRequired" in result));
     if (!("mfaRequired" in result)) {
@@ -168,10 +168,11 @@ Deno.test("loginWithTOTP — completes login with a valid code", async () => {
     const enrolled = await registerAndCode(provider);
     const challenge = await provider.login({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     assert("mfaRequired" in challenge);
-    if (!("mfaRequired" in challenge)) return;
+    if (!("mfaRequired" in challenge))
+      return;
 
     const code = await generateTOTP(enrolled.secret);
     const auth = await provider.loginWithTOTP(challenge.challengeToken, code);
@@ -188,13 +189,14 @@ Deno.test("loginWithTOTP — rejects wrong code (challenge stays valid for retry
     await registerAndCode(provider);
     const challenge = await provider.login({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
-    if (!("mfaRequired" in challenge)) return;
+    if (!("mfaRequired" in challenge))
+      return;
 
     const err = await assertRejects(
       () => provider.loginWithTOTP(challenge.challengeToken, "000000"),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_CREDENTIALS);
   } finally {
@@ -208,7 +210,7 @@ Deno.test("loginWithTOTP — rejects unknown challenge token", async () => {
     await registerAndCode(provider);
     const err = await assertRejects(
       () => provider.loginWithTOTP("ghost-challenge-xxx", "123456"),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_TOKEN);
   } finally {
@@ -222,16 +224,17 @@ Deno.test("loginWithTOTP — single-use: a consumed challenge cannot be replayed
     const enrolled = await registerAndCode(provider);
     const challenge = await provider.login({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
-    if (!("mfaRequired" in challenge)) return;
+    if (!("mfaRequired" in challenge))
+      return;
 
     const code = await generateTOTP(enrolled.secret);
     await provider.loginWithTOTP(challenge.challengeToken, code);
 
     const err = await assertRejects(
       () => provider.loginWithTOTP(challenge.challengeToken, code),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_TOKEN);
   } finally {
@@ -249,7 +252,7 @@ Deno.test("disableTOTP — login no longer requires the second factor", async ()
     // Sanity: still gates today
     const gated = await provider.login({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     assert("mfaRequired" in gated);
 
@@ -257,7 +260,7 @@ Deno.test("disableTOTP — login no longer requires the second factor", async ()
 
     const open = await provider.login({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     assert(!("mfaRequired" in open));
   } finally {

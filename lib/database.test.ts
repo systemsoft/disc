@@ -3,7 +3,7 @@ import { parseConnectionString, replaceDsnDatabase } from "./database.ts";
 
 Deno.test("parseConnectionString - TCP DSN", () => {
   const result = parseConnectionString(
-    "postgresql://myuser:mypass@localhost:5432/mydb",
+    "postgresql://myuser:mypass@localhost:5432/mydb"
   );
   assertEquals(result.hostname, "localhost");
   assertEquals(result.port, 5432);
@@ -15,7 +15,7 @@ Deno.test("parseConnectionString - TCP DSN", () => {
 
 Deno.test("parseConnectionString - TCP DSN without password", () => {
   const result = parseConnectionString(
-    "postgresql://disc@localhost:5432/disc_dev",
+    "postgresql://disc@localhost:5432/disc_dev"
   );
   assertEquals(result.hostname, "localhost");
   assertEquals(result.port, 5432);
@@ -26,11 +26,11 @@ Deno.test("parseConnectionString - TCP DSN without password", () => {
 
 Deno.test("parseConnectionString - Unix socket DSN", () => {
   const result = parseConnectionString(
-    "postgresql://disc@/disc-project?host=/Users/me/.disc/instances/disc-project/socket",
+    "postgresql://disc@/disc-project?host=/Users/me/.disc/instances/disc-project/socket"
   );
   assertEquals(
     result.hostname,
-    "/Users/me/.disc/instances/disc-project/socket",
+    "/Users/me/.disc/instances/disc-project/socket"
   );
   assertEquals(result.user, "disc");
   assertEquals(result.password, "");
@@ -40,7 +40,7 @@ Deno.test("parseConnectionString - Unix socket DSN", () => {
 
 Deno.test("parseConnectionString - Unix socket DSN with password", () => {
   const result = parseConnectionString(
-    "postgresql://disc:secret@/mydb?host=/tmp",
+    "postgresql://disc:secret@/mydb?host=/tmp"
   );
   assertEquals(result.hostname, "/tmp");
   assertEquals(result.user, "disc");
@@ -52,7 +52,7 @@ Deno.test("parseConnectionString - Unix socket DSN with password", () => {
 Deno.test("replaceDsnDatabase - TCP DSN", () => {
   const result = replaceDsnDatabase(
     "postgresql://user:pass@localhost:5432/mydb",
-    "other",
+    "other"
   );
   assertEquals(result, "postgresql://user:pass@localhost:5432/other");
 });
@@ -60,7 +60,7 @@ Deno.test("replaceDsnDatabase - TCP DSN", () => {
 Deno.test("replaceDsnDatabase - Unix socket DSN", () => {
   const result = replaceDsnDatabase(
     "postgresql://disc@/disc-project?host=/tmp/socket",
-    "postgres",
+    "postgres"
   );
   assertEquals(result, "postgresql://disc@/postgres?host=/tmp/socket");
 });

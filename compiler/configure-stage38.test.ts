@@ -49,7 +49,7 @@ Deno.test("CONFIGURE parser — SESSION SET parses", () => {
 
 Deno.test("CONFIGURE parser — DATABASE SET parses", () => {
   const ast = parseConfig(
-    "CONFIGURE DATABASE SET query_execution_timeout := 30000",
+    "CONFIGURE DATABASE SET query_execution_timeout := 30000"
   );
   assertEquals(ast.kind, "ConfigureQuery");
   assertEquals(ast.scope, "DATABASE");
@@ -59,7 +59,7 @@ Deno.test("CONFIGURE parser — DATABASE SET parses", () => {
 
 Deno.test("CONFIGURE parser — INSTANCE SET parses", () => {
   const ast = parseConfig(
-    "CONFIGURE INSTANCE SET max_connections := 100",
+    "CONFIGURE INSTANCE SET max_connections := 100"
   );
   assertEquals(ast.kind, "ConfigureQuery");
   assertEquals(ast.scope, "INSTANCE");
@@ -101,7 +101,7 @@ Deno.test("CONFIGURE parser — invalid scope throws", () => {
   assertThrows(
     () => parseConfig("CONFIGURE INVALID SET foo := 1"),
     Error,
-    "Expected 'SESSION'",
+    "Expected 'SESSION'"
   );
 });
 
@@ -118,7 +118,7 @@ Deno.test("CONFIGURE compile — SESSION SET compiles to SET LOCAL", () => {
 
 Deno.test("CONFIGURE compile — SESSION SET maps known key", () => {
   const sql = compileEdgeQL(
-    "CONFIGURE SESSION SET query_execution_timeout := 30000",
+    "CONFIGURE SESSION SET query_execution_timeout := 30000"
   );
   assertStringIncludes(sql, "SET LOCAL");
   assertStringIncludes(sql, "statement_timeout");
@@ -145,7 +145,7 @@ Deno.test("CONFIGURE compile — SYSTEM RESET compiles to ALTER SYSTEM RESET", (
 
 Deno.test("CONFIGURE compile — DATABASE SET compiles to disc_config upsert", () => {
   const sql = compileEdgeQL(
-    "CONFIGURE DATABASE SET query_execution_timeout := 30000",
+    "CONFIGURE DATABASE SET query_execution_timeout := 30000"
   );
   assertStringIncludes(sql, "INSERT INTO disc_config");
   assertStringIncludes(sql, "ON CONFLICT");
@@ -158,7 +158,7 @@ Deno.test("CONFIGURE compile — DATABASE SET compiles to disc_config upsert", (
 
 Deno.test("CONFIGURE compile — DATABASE RESET deletes from disc_config", () => {
   const sql = compileEdgeQL(
-    "CONFIGURE DATABASE RESET query_execution_timeout",
+    "CONFIGURE DATABASE RESET query_execution_timeout"
   );
   assertStringIncludes(sql, "DELETE FROM disc_config");
   assertStringIncludes(sql, "'DATABASE'");
@@ -166,7 +166,7 @@ Deno.test("CONFIGURE compile — DATABASE RESET deletes from disc_config", () =>
 
 Deno.test("CONFIGURE compile — INSTANCE SET uses INSTANCE scope", () => {
   const sql = compileEdgeQL(
-    "CONFIGURE INSTANCE SET max_connections := 200",
+    "CONFIGURE INSTANCE SET max_connections := 200"
   );
   assertStringIncludes(sql, "INSERT INTO disc_config");
   assertStringIncludes(sql, "'INSTANCE'");
@@ -174,7 +174,7 @@ Deno.test("CONFIGURE compile — INSTANCE SET uses INSTANCE scope", () => {
 
 Deno.test("CONFIGURE compile — INSTANCE RESET deletes from disc_config", () => {
   const sql = compileEdgeQL(
-    "CONFIGURE INSTANCE RESET max_connections",
+    "CONFIGURE INSTANCE RESET max_connections"
   );
   assertStringIncludes(sql, "DELETE FROM disc_config");
   assertStringIncludes(sql, "'INSTANCE'");
@@ -182,7 +182,7 @@ Deno.test("CONFIGURE compile — INSTANCE RESET deletes from disc_config", () =>
 
 Deno.test("CONFIGURE compile — unknown key passes through unchanged", () => {
   const sql = compileEdgeQL(
-    "CONFIGURE SESSION SET custom_setting := 42",
+    "CONFIGURE SESSION SET custom_setting := 42"
   );
   assertStringIncludes(sql, "SET LOCAL");
   assertStringIncludes(sql, "custom_setting");

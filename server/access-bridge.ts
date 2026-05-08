@@ -7,7 +7,7 @@ import type { AuthContext } from "./types.ts";
 
 export function authContextToAccessContext(
   auth: AuthContext,
-  sessionGlobals?: Map<string, unknown>,
+  sessionGlobals?: Map<string, unknown>
 ): AccessContext {
   return {
     globals: sessionGlobals,
@@ -16,7 +16,7 @@ export function authContextToAccessContext(
     sessionData: auth.jwtClaims as Record<string, unknown> | undefined,
     requestContext: {
       roles: auth.roles,
-      permissions: auth.permissions,
-    },
+      permissions: auth.permissions
+    }
   };
 }

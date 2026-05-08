@@ -88,7 +88,7 @@ Deno.test("polymorphic types - POLYMORPHIC_TYPES contains all 9 abstract types",
     "anyreal",
     "anyint",
     "anyfloat",
-    "anynumeric",
+    "anynumeric"
   ];
 
   assertEquals(POLYMORPHIC_TYPES.size, 9);
@@ -97,7 +97,7 @@ Deno.test("polymorphic types - POLYMORPHIC_TYPES contains all 9 abstract types",
     assertEquals(
       POLYMORPHIC_TYPES.has(typeName),
       true,
-      `POLYMORPHIC_TYPES should contain '${typeName}'`,
+      `POLYMORPHIC_TYPES should contain '${typeName}'`
     );
   }
 });
@@ -117,7 +117,7 @@ Deno.test("polymorphic types - validator accepts anytype in function parameter",
   assertEquals(
     result.ok,
     true,
-    `Validation should pass for anytype: ${JSON.stringify(result.errors)}`,
+    `Validation should pass for anytype: ${JSON.stringify(result.errors)}`
   );
 });
 
@@ -136,7 +136,7 @@ Deno.test("polymorphic types - validator accepts anyscalar in function parameter
   assertEquals(
     result.ok,
     true,
-    `Validation should pass for anyscalar: ${JSON.stringify(result.errors)}`,
+    `Validation should pass for anyscalar: ${JSON.stringify(result.errors)}`
   );
 });
 
@@ -155,17 +155,17 @@ Deno.test("polymorphic types - validator rejects unknown type 'foobar'", () => {
   assertEquals(
     result.ok,
     false,
-    "Validation should fail for unknown type 'foobar'",
+    "Validation should fail for unknown type 'foobar'"
   );
   assertEquals(
     result.errors !== undefined,
     true,
-    "Should have validation errors",
+    "Should have validation errors"
   );
   assertEquals(
     result.errors!.length > 0,
     true,
-    "Should have at least one error",
+    "Should have at least one error"
   );
 });
 
@@ -211,14 +211,14 @@ Deno.test("polymorphic types - all polymorphic types return true from isPolymorp
     "anyreal",
     "anyint",
     "anyfloat",
-    "anynumeric",
+    "anynumeric"
   ];
 
   for (const typeName of allTypes) {
     assertEquals(
       isPolymorphicType(typeName),
       true,
-      `isPolymorphicType('${typeName}') should return true`,
+      `isPolymorphicType('${typeName}') should return true`
     );
   }
 });
@@ -241,14 +241,14 @@ Deno.test("polymorphic types - concrete types return false from isPolymorphicTyp
     "bigint",
     "User",
     "Post",
-    "any", // "any" is NOT a polymorphic type; "anytype" is
+    "any" // "any" is NOT a polymorphic type; "anytype" is
   ];
 
   for (const typeName of concreteTypes) {
     assertEquals(
       isPolymorphicType(typeName),
       false,
-      `isPolymorphicType('${typeName}') should return false`,
+      `isPolymorphicType('${typeName}') should return false`
     );
   }
 });

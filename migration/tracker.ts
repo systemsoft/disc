@@ -18,7 +18,7 @@ export class MigrationTracker {
       this.pool = new ConnectionPool({
         connectionString: databaseUrlOrPool,
         minConnections: 1,
-        maxConnections: 5,
+        maxConnections: 5
       });
     } else {
       this.pool = databaseUrlOrPool;
@@ -113,8 +113,8 @@ export class MigrationTracker {
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to initialize migration tracker: ${error instanceof Error ? error.message : String(error)}`,
-        ),
+          `Failed to initialize migration tracker: ${error instanceof Error ? error.message : String(error)}`
+        )
       );
     }
   }
@@ -124,7 +124,7 @@ export class MigrationTracker {
    */
   async recordMigration(
     migration: Types.Migration,
-    result: Types.MigrationResult,
+    result: Types.MigrationResult
   ): Promise<Result<void, MigrationError>> {
     if (!this.initialized) {
       return Err(new MigrationError("Migration tracker not initialized"));
@@ -158,16 +158,16 @@ export class MigrationTracker {
           result.rollbackSql || [],
           this.calculateMigrationChecksum(migration),
           migration.createdAt,
-          !!migration.dataMigrationFile,
-        ],
+          !!migration.dataMigrationFile
+        ]
       );
 
       return Ok(void 0);
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to record migration: ${error instanceof Error ? error.message : String(error)}`,
-        ),
+          `Failed to record migration: ${error instanceof Error ? error.message : String(error)}`
+        )
       );
     }
   }
@@ -176,7 +176,7 @@ export class MigrationTracker {
    * Remove a migration record (for rollbacks)
    */
   async removeMigration(
-    migrationId: string,
+    migrationId: string
   ): Promise<Result<void, MigrationError>> {
     if (!this.initialized) {
       return Err(new MigrationError("Migration tracker not initialized"));
@@ -186,7 +186,7 @@ export class MigrationTracker {
       // First check if migration exists
       const exists = await this.pool.query(
         `SELECT 1 FROM disc_migrations WHERE id = $1`,
-        [migrationId],
+        [migrationId]
       );
 
       if (exists.rowCount === 0) {
@@ -195,15 +195,15 @@ export class MigrationTracker {
 
       await this.pool.execute(
         `DELETE FROM disc_migrations WHERE id = $1`,
-        [migrationId],
+        [migrationId]
       );
 
       return Ok(void 0);
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to remove migration: ${error instanceof Error ? error.message : String(error)}`,
-        ),
+          `Failed to remove migration: ${error instanceof Error ? error.message : String(error)}`
+        )
       );
     }
   }
@@ -227,8 +227,8 @@ export class MigrationTracker {
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to get applied migrations: ${error instanceof Error ? error.message : String(error)}`,
-        ),
+          `Failed to get applied migrations: ${error instanceof Error ? error.message : String(error)}`
+        )
       );
     }
   }
@@ -256,8 +256,8 @@ export class MigrationTracker {
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to get migration history: ${error instanceof Error ? error.message : String(error)}`,
-        ),
+          `Failed to get migration history: ${error instanceof Error ? error.message : String(error)}`
+        )
       );
     }
   }
@@ -266,7 +266,7 @@ export class MigrationTracker {
    * Check if a migration has been applied
    */
   async isMigrationApplied(
-    migrationId: string,
+    migrationId: string
   ): Promise<Result<boolean, MigrationError>> {
     if (!this.initialized) {
       return Err(new MigrationError("Migration tracker not initialized"));
@@ -277,15 +277,15 @@ export class MigrationTracker {
         `
         SELECT 1 FROM disc_migrations WHERE id = $1 LIMIT 1
       `,
-        [migrationId],
+        [migrationId]
       );
 
       return Ok(result.rows.length > 0);
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to check migration status: ${error instanceof Error ? error.message : String(error)}`,
-        ),
+          `Failed to check migration status: ${error instanceof Error ? error.message : String(error)}`
+        )
       );
     }
   }
@@ -319,15 +319,15 @@ export class MigrationTracker {
         appliedMigrations: appliedResult.value,
         currentSchemaHash: lastMigration?.schema_hash || "initial",
         lastMigrationId: lastMigration?.id,
-        lastAppliedAt: lastMigration?.applied_at,
+        lastAppliedAt: lastMigration?.applied_at
       };
 
       return Ok(state);
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to get migration state: ${error instanceof Error ? error.message : String(error)}`,
-        ),
+          `Failed to get migration state: ${error instanceof Error ? error.message : String(error)}`
+        )
       );
     }
   }
@@ -336,7 +336,7 @@ export class MigrationTracker {
    * Save a checkpoint
    */
   async saveCheckpoint(
-    checkpoint: Types.MigrationCheckpoint,
+    checkpoint: Types.MigrationCheckpoint
   ): Promise<Result<void, MigrationError>> {
     if (!this.initialized) {
       return Err(new MigrationError("Migration tracker not initialized"));
@@ -356,16 +356,16 @@ export class MigrationTracker {
           checkpoint.name,
           checkpoint.createdAt,
           JSON.stringify(checkpoint.schemaState),
-          JSON.stringify(checkpoint.migrationState),
-        ],
+          JSON.stringify(checkpoint.migrationState)
+        ]
       );
 
       return Ok(void 0);
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to save checkpoint: ${error instanceof Error ? error.message : String(error)}`,
-        ),
+          `Failed to save checkpoint: ${error instanceof Error ? error.message : String(error)}`
+        )
       );
     }
   }
@@ -374,7 +374,7 @@ export class MigrationTracker {
    * Load a checkpoint
    */
   async loadCheckpoint(
-    checkpointId: string,
+    checkpointId: string
   ): Promise<Result<Types.MigrationCheckpoint, MigrationError>> {
     if (!this.initialized) {
       return Err(new MigrationError("Migration tracker not initialized"));
@@ -387,7 +387,7 @@ export class MigrationTracker {
         FROM disc_migration_checkpoints
         WHERE id = $1
       `,
-        [checkpointId],
+        [checkpointId]
       );
 
       if (result.rows.length === 0) {
@@ -400,15 +400,15 @@ export class MigrationTracker {
         name: row.name,
         createdAt: row.created_at,
         schemaState: typeof row.schema_state === "string" ? JSON.parse(row.schema_state) : row.schema_state,
-        migrationState: typeof row.migration_state === "string" ? JSON.parse(row.migration_state) : row.migration_state,
+        migrationState: typeof row.migration_state === "string" ? JSON.parse(row.migration_state) : row.migration_state
       };
 
       return Ok(checkpoint);
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to load checkpoint: ${error instanceof Error ? error.message : String(error)}`,
-        ),
+          `Failed to load checkpoint: ${error instanceof Error ? error.message : String(error)}`
+        )
       );
     }
   }
@@ -435,15 +435,15 @@ export class MigrationTracker {
         name: row.name,
         createdAt: row.created_at,
         schemaState: typeof row.schema_state === "string" ? JSON.parse(row.schema_state) : row.schema_state,
-        migrationState: typeof row.migration_state === "string" ? JSON.parse(row.migration_state) : row.migration_state,
+        migrationState: typeof row.migration_state === "string" ? JSON.parse(row.migration_state) : row.migration_state
       }));
 
       return Ok(checkpoints);
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to list checkpoints: ${error instanceof Error ? error.message : String(error)}`,
-        ),
+          `Failed to list checkpoints: ${error instanceof Error ? error.message : String(error)}`
+        )
       );
     }
   }
@@ -474,8 +474,8 @@ export class MigrationTracker {
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to get latest migration: ${error instanceof Error ? error.message : String(error)}`,
-        ),
+          `Failed to get latest migration: ${error instanceof Error ? error.message : String(error)}`
+        )
       );
     }
   }
@@ -484,7 +484,7 @@ export class MigrationTracker {
    * Get all migrations applied after the given migration ID, ordered by applied_at DESC
    */
   async getMigrationsAfter(
-    migrationId: string,
+    migrationId: string
   ): Promise<Result<Types.MigrationHistoryEntry[], MigrationError>> {
     if (!this.initialized) {
       return Err(new MigrationError("Migration tracker not initialized"));
@@ -494,12 +494,12 @@ export class MigrationTracker {
       // First get the applied_at timestamp for the reference migration
       const refResult = await this.pool.query(
         `SELECT applied_at FROM disc_migrations WHERE id = $1`,
-        [migrationId],
+        [migrationId]
       );
 
       if (refResult.rows.length === 0) {
         return Err(
-          new MigrationError(`Migration ${migrationId} not found`),
+          new MigrationError(`Migration ${migrationId} not found`)
         );
       }
 
@@ -513,7 +513,7 @@ export class MigrationTracker {
         WHERE applied_at > $1
         ORDER BY applied_at DESC
       `,
-        [refAppliedAt],
+        [refAppliedAt]
       );
 
       const migrations = result.rows.map((row: any) => this.mapRowToHistoryEntry(row));
@@ -522,8 +522,8 @@ export class MigrationTracker {
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to get migrations after ${migrationId}: ${error instanceof Error ? error.message : String(error)}`,
-        ),
+          `Failed to get migrations after ${migrationId}: ${error instanceof Error ? error.message : String(error)}`
+        )
       );
     }
   }
@@ -532,7 +532,7 @@ export class MigrationTracker {
    * Get rollback SQL for a migration
    */
   async getRollbackSQL(
-    migrationId: string,
+    migrationId: string
   ): Promise<Result<string[], MigrationError>> {
     if (!this.initialized) {
       return Err(new MigrationError("Migration tracker not initialized"));
@@ -543,7 +543,7 @@ export class MigrationTracker {
         `
         SELECT rollback_sql FROM disc_migrations WHERE id = $1
       `,
-        [migrationId],
+        [migrationId]
       );
 
       if (result.rows.length === 0) {
@@ -554,8 +554,8 @@ export class MigrationTracker {
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to get rollback SQL: ${error instanceof Error ? error.message : String(error)}`,
-        ),
+          `Failed to get rollback SQL: ${error instanceof Error ? error.message : String(error)}`
+        )
       );
     }
   }
@@ -584,8 +584,8 @@ export class MigrationTracker {
         if (!row.schema_hash || String(row.schema_hash).trim() === "") {
           return Err(
             new MigrationError(
-              `Migration "${row.name}" (${row.id}) has empty schemaHash — possible data corruption`,
-            ),
+              `Migration "${row.name}" (${row.id}) has empty schemaHash — possible data corruption`
+            )
           );
         }
       }
@@ -594,8 +594,8 @@ export class MigrationTracker {
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to verify migration integrity: ${error instanceof Error ? error.message : String(error)}`,
-        ),
+          `Failed to verify migration integrity: ${error instanceof Error ? error.message : String(error)}`
+        )
       );
     }
   }
@@ -606,7 +606,7 @@ export class MigrationTracker {
    */
   async getMigrationsInRange(
     fromId: string,
-    toId: string,
+    toId: string
   ): Promise<Result<Types.MigrationHistoryEntry[], MigrationError>> {
     if (!this.initialized) {
       return Err(new MigrationError("Migration tracker not initialized"));
@@ -616,21 +616,21 @@ export class MigrationTracker {
       // Get the applied_at timestamps for both boundary migrations
       const fromResult = await this.pool.query(
         `SELECT applied_at FROM disc_migrations WHERE id = $1`,
-        [fromId],
+        [fromId]
       );
       if (fromResult.rows.length === 0) {
         return Err(
-          new MigrationError(`Migration ${fromId} not found`),
+          new MigrationError(`Migration ${fromId} not found`)
         );
       }
 
       const toResult = await this.pool.query(
         `SELECT applied_at FROM disc_migrations WHERE id = $1`,
-        [toId],
+        [toId]
       );
       if (toResult.rows.length === 0) {
         return Err(
-          new MigrationError(`Migration ${toId} not found`),
+          new MigrationError(`Migration ${toId} not found`)
         );
       }
 
@@ -644,7 +644,7 @@ export class MigrationTracker {
         WHERE applied_at >= $1 AND applied_at <= $2
         ORDER BY applied_at ASC
       `,
-        [fromAppliedAt, toAppliedAt],
+        [fromAppliedAt, toAppliedAt]
       );
 
       const migrations = result.rows.map((row: any) => this.mapRowToHistoryEntry(row));
@@ -653,8 +653,8 @@ export class MigrationTracker {
     } catch (error) {
       return Err(
         new MigrationError(
-          `Failed to get migrations in range ${fromId}..${toId}: ${error instanceof Error ? error.message : String(error)}`,
-        ),
+          `Failed to get migrations in range ${fromId}..${toId}: ${error instanceof Error ? error.message : String(error)}`
+        )
       );
     }
   }
@@ -681,7 +681,7 @@ export class MigrationTracker {
       durationMs: row.duration_ms,
       createdAt: row.created_at,
       dataMigration: row.data_migration ?? false,
-      appliedOrder: row.applied_order ?? 0,
+      appliedOrder: row.applied_order ?? 0
     };
   }
 
@@ -698,7 +698,7 @@ export class MigrationTracker {
       id: migration.id,
       name: migration.name,
       operations: migration.operations,
-      createdAt: migration.createdAt.toISOString(),
+      createdAt: migration.createdAt.toISOString()
     });
 
     const bytes = new TextEncoder().encode(content);
@@ -709,8 +709,9 @@ export class MigrationTracker {
     const cryptoLike = crypto as any;
     if (typeof cryptoLike.subtle?.digestSync === "function") {
       const buf = cryptoLike.subtle.digestSync("SHA-256", bytes);
-      return Array.from(new Uint8Array(buf))
-        .map((b) => b.toString(16).padStart(2, "0"))
+      return Array
+        .from(new Uint8Array(buf))
+        .map(b => b.toString(16).padStart(2, "0"))
         .join("");
     }
     // Fallback: a deterministic, non-cryptographic hash is still better than
@@ -724,8 +725,8 @@ export class MigrationTracker {
     h1 = Math.imul(h1 ^ (h1 >>> 16), 0x85ebca6b);
     h2 = Math.imul(h2 ^ (h2 >>> 13), 0xc2b2ae35);
     return (
-      (h2 >>> 0).toString(16).padStart(8, "0")
-      + (h1 >>> 0).toString(16).padStart(8, "0")
+      (h2 >>> 0).toString(16).padStart(8, "0") +
+      (h1 >>> 0).toString(16).padStart(8, "0")
     );
   }
 }

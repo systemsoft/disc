@@ -22,7 +22,7 @@ function makeContext(): ExtensionContext {
       maxConnections: 5,
       requestTimeout: 5000,
       enableCors: false,
-      enableWebsockets: false,
+      enableWebsockets: false
     },
     logger: {
       debug: () => {},
@@ -34,8 +34,8 @@ function makeContext(): ExtensionContext {
       },
       withRequest: function() {
         return this;
-      },
-    } as unknown as ExtensionContext["logger"],
+      }
+    } as unknown as ExtensionContext["logger"]
   };
 }
 
@@ -43,7 +43,7 @@ const defaultAccessConfig: AccessConfig = {
   defaultAllow: true,
   enableAudit: false,
   enableRLS: false,
-  mode: "permissive",
+  mode: "permissive"
 };
 
 function makeAdapter(): AccessExtensionAdapter {

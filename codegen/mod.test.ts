@@ -18,7 +18,7 @@ Deno.test("Codegen - generateTypeScript with default config", () => {
   assertEquals(result.files.length > 0, true);
 
   // Should have at least types file
-  const hasTypesFile = result.files.some((f) => f.type === "types");
+  const hasTypesFile = result.files.some(f => f.type === "types");
   assertEquals(hasTypesFile, true);
 });
 
@@ -29,7 +29,7 @@ Deno.test("Codegen - generateTypeScript with custom config", () => {
     target: "server",
     includeQueryBuilders: false,
     includeClient: false,
-    typePrefix: "Db",
+    typePrefix: "Db"
   };
 
   const result = Codegen.generateTypeScript(schema, config);
@@ -38,11 +38,11 @@ Deno.test("Codegen - generateTypeScript with custom config", () => {
   assertEquals(result.errors.length, 0);
 
   // Should not have client files when includeClient is false
-  const hasClientFile = result.files.some((f) => f.type === "client");
+  const hasClientFile = result.files.some(f => f.type === "client");
   assertEquals(hasClientFile, false);
 
   // Should not have query files when includeQueryBuilders is false
-  const hasQueryFile = result.files.some((f) => f.type === "queries");
+  const hasQueryFile = result.files.some(f => f.type === "queries");
   assertEquals(hasQueryFile, false);
 });
 
@@ -51,7 +51,7 @@ Deno.test("Codegen - generateTypeScript client target", () => {
   const config: Partial<Types.CodegenConfig> = {
     target: "client",
     includeQueryBuilders: true,
-    includeClient: true,
+    includeClient: true
   };
 
   const result = Codegen.generateTypeScript(schema, config);
@@ -60,11 +60,11 @@ Deno.test("Codegen - generateTypeScript client target", () => {
   assertEquals(result.errors.length, 0);
 
   // Should have client files
-  const hasClientFile = result.files.some((f) => f.type === "client");
+  const hasClientFile = result.files.some(f => f.type === "client");
   assertEquals(hasClientFile, true);
 
   // Should have query builders
-  const hasQueryFile = result.files.some((f) => f.type === "queries");
+  const hasQueryFile = result.files.some(f => f.type === "queries");
   assertEquals(hasQueryFile, true);
 });
 
@@ -73,7 +73,7 @@ Deno.test("Codegen - generateTypeScript server target", () => {
   const config: Partial<Types.CodegenConfig> = {
     target: "server",
     includeQueryBuilders: false,
-    includeClient: false,
+    includeClient: false
   };
 
   const result = Codegen.generateTypeScript(schema, config);
@@ -82,10 +82,10 @@ Deno.test("Codegen - generateTypeScript server target", () => {
   assertEquals(result.errors.length, 0);
 
   // Should have types but not client
-  const hasTypesFile = result.files.some((f) => f.type === "types");
+  const hasTypesFile = result.files.some(f => f.type === "types");
   assertEquals(hasTypesFile, true);
 
-  const hasClientFile = result.files.some((f) => f.type === "client");
+  const hasClientFile = result.files.some(f => f.type === "client");
   assertEquals(hasClientFile, false);
 });
 
@@ -95,7 +95,7 @@ Deno.test("Codegen - generateTypeScript both target", () => {
     target: "both",
     includeQueryBuilders: true,
     includeClient: true,
-    includeMutations: true,
+    includeMutations: true
   };
 
   const result = Codegen.generateTypeScript(schema, config);
@@ -104,10 +104,10 @@ Deno.test("Codegen - generateTypeScript both target", () => {
   assertEquals(result.errors.length, 0);
 
   // Should have all file types
-  const hasTypesFile = result.files.some((f) => f.type === "types");
-  const hasClientFile = result.files.some((f) => f.type === "client");
-  const hasQueryFile = result.files.some((f) => f.type === "queries");
-  const hasIndexFile = result.files.some((f) => f.type === "index");
+  const hasTypesFile = result.files.some(f => f.type === "types");
+  const hasClientFile = result.files.some(f => f.type === "client");
+  const hasQueryFile = result.files.some(f => f.type === "queries");
+  const hasIndexFile = result.files.some(f => f.type === "index");
 
   assertEquals(hasTypesFile, true);
   assertEquals(hasClientFile, true);
@@ -121,7 +121,7 @@ Deno.test("Codegen - writeGeneratedFiles creates files", async () => {
   try {
     const schema = Context.createTestSchema();
     const result = Codegen.generateTypeScript(schema, {
-      outputDir: "generated",
+      outputDir: "generated"
     });
 
     await Codegen.writeGeneratedFiles(result, tempDir, { runFmt: false });
@@ -146,7 +146,7 @@ Deno.test("Codegen - writeGeneratedFiles creates output directory", async () => 
   try {
     const schema = Context.createTestSchema();
     const result = Codegen.generateTypeScript(schema, {
-      outputDir: "custom-dir",
+      outputDir: "custom-dir"
     });
 
     await Codegen.writeGeneratedFiles(result, tempDir, { runFmt: false });
@@ -185,7 +185,7 @@ Deno.test("Codegen - generated TypeScript content validation", () => {
   const result = Codegen.generateTypeScript(schema);
 
   // Find the types file
-  const typesFile = result.files.find((f) => f.type === "types");
+  const typesFile = result.files.find(f => f.type === "types");
   assertExists(typesFile);
 
   // Should contain interface definitions
@@ -203,13 +203,13 @@ Deno.test("Codegen - generated client content validation", () => {
   const schema = Context.createTestSchema();
   const config: Partial<Types.CodegenConfig> = {
     target: "client",
-    includeClient: true,
+    includeClient: true
   };
 
   const result = Codegen.generateTypeScript(schema, config);
 
   // Find the client file
-  const clientFile = result.files.find((f) => f.type === "client");
+  const clientFile = result.files.find(f => f.type === "client");
   assertExists(clientFile);
 
   // Should contain client class
@@ -223,19 +223,19 @@ Deno.test("Codegen - generated index file validation", () => {
   const result = Codegen.generateTypeScript(schema);
 
   // Find the index file
-  const indexFile = result.files.find((f) => f.type === "index");
+  const indexFile = result.files.find(f => f.type === "index");
   assertExists(indexFile);
 
   // Should contain exports
   assertStringIncludes(indexFile.content, "export");
 
   // Should export types
-  if (result.files.some((f) => f.type === "types")) {
+  if (result.files.some(f => f.type === "types")) {
     assertStringIncludes(indexFile.content, "./types");
   }
 
   // Should export client if included
-  if (result.files.some((f) => f.type === "client")) {
+  if (result.files.some(f => f.type === "client")) {
     assertStringIncludes(indexFile.content, "./client");
   }
 });
@@ -244,7 +244,7 @@ Deno.test("Codegen - error handling for empty schema", () => {
   // Create empty schema
   const emptySchema: Context.Schema = {
     types: new Map(),
-    functions: new Map(),
+    functions: new Map()
   };
 
   const result = Codegen.generateTypeScript(emptySchema);
@@ -254,7 +254,7 @@ Deno.test("Codegen - error handling for empty schema", () => {
   assertEquals(result.files.length > 0, true);
 
   // Should have index file at minimum
-  const hasIndexFile = result.files.some((f) => f.type === "index");
+  const hasIndexFile = result.files.some(f => f.type === "index");
   assertEquals(hasIndexFile, true);
 });
 
@@ -262,7 +262,7 @@ Deno.test("Codegen - config merging with defaults", () => {
   const schema = Context.createTestSchema();
   const partialConfig: Partial<Types.CodegenConfig> = {
     outputDir: "./test-output",
-    includeMutations: false,
+    includeMutations: false
   };
 
   const result = Codegen.generateTypeScript(schema, partialConfig);
@@ -271,14 +271,14 @@ Deno.test("Codegen - config merging with defaults", () => {
   assertExists(result);
 
   // Mutations should be disabled
-  const hasMutationsFile = result.files.some((f) => f.type === "mutations");
+  const hasMutationsFile = result.files.some(f => f.type === "mutations");
   assertEquals(hasMutationsFile, false);
 });
 
 Deno.test("Codegen - file path generation", () => {
   const schema = Context.createTestSchema();
   const config: Partial<Types.CodegenConfig> = {
-    outputDir: "custom/nested/path",
+    outputDir: "custom/nested/path"
   };
 
   const result = Codegen.generateTypeScript(schema, config);
@@ -295,12 +295,12 @@ Deno.test("Codegen - full pipeline with enriched test schema", () => {
   const schema = Context.createTestSchema();
   const result = Codegen.generateTypeScript(schema, {
     includeQueryBuilders: true,
-    includeClient: false,
+    includeClient: false
   });
 
   assertEquals(result.errors.length, 0);
 
-  const typesFile = result.files.find((f) => f.type === "types");
+  const typesFile = result.files.find(f => f.type === "types");
   assertExists(typesFile);
   const typesContent = typesFile.content;
 
@@ -317,7 +317,7 @@ Deno.test("Codegen - full pipeline with enriched test schema", () => {
   // Enum union type generated
   assertStringIncludes(
     typesContent,
-    "export type Status = \"active\" | \"inactive\" | \"pending\";",
+    "export type Status = \"active\" | \"inactive\" | \"pending\";"
   );
 
   // Smart Insert type: excludes id, excludes computed (postCount),
@@ -363,7 +363,7 @@ Deno.test("Codegen - full pipeline with enriched test schema", () => {
   assertStringIncludes(typesContent, "@constraint max_length(255)");
 
   // Query builders should have correct _typeCasts
-  const queryFile = result.files.find((f) => f.type === "queries");
+  const queryFile = result.files.find(f => f.type === "queries");
   assertExists(queryFile);
   const queryContent = queryFile.content;
 
@@ -390,38 +390,38 @@ Deno.test("Codegen - backward compatibility with minimal PropertyDef", () => {
             type: "uuid",
             required: true,
             multi: false,
-            columnName: "id",
+            columnName: "id"
           }],
           ["title", {
             name: "title",
             type: "str",
             required: true,
             multi: false,
-            columnName: "title",
+            columnName: "title"
           }],
           ["count", {
             name: "count",
             type: "int32",
             required: false,
             multi: false,
-            columnName: "count",
-          }],
+            columnName: "count"
+          }]
         ]),
-        links: new Map(),
-      }],
+        links: new Map()
+      }]
     ]),
-    functions: new Map(),
+    functions: new Map()
   };
 
   const result = Codegen.generateTypeScript(minimalSchema, {
     includeQueryBuilders: true,
-    includeClient: false,
+    includeClient: false
   });
 
   // Should generate without errors
   assertEquals(result.errors.length, 0);
 
-  const typesFile = result.files.find((f) => f.type === "types");
+  const typesFile = result.files.find(f => f.type === "types");
   assertExists(typesFile);
 
   // Interface should still generate correct types via type field fallback
@@ -433,7 +433,7 @@ Deno.test("Codegen - backward compatibility with minimal PropertyDef", () => {
   assertStringIncludes(typesFile.content, "export interface ItemUpdate");
 
   // Query builders should still work with type field fallback
-  const queryFile = result.files.find((f) => f.type === "queries");
+  const queryFile = result.files.find(f => f.type === "queries");
   assertExists(queryFile);
   assertStringIncludes(queryFile.content, "title: \"<str>\"");
   assertStringIncludes(queryFile.content, "count: \"<int32>\"");
@@ -443,19 +443,19 @@ Deno.test("Codegen - mixed schema with enum and object types", () => {
   const schema = Context.createTestSchema();
   const result = Codegen.generateTypeScript(schema, {
     includeQueryBuilders: true,
-    includeClient: false,
+    includeClient: false
   });
 
   assertEquals(result.errors.length, 0);
 
-  const typesFile = result.files.find((f) => f.type === "types");
+  const typesFile = result.files.find(f => f.type === "types");
   assertExists(typesFile);
   const content = typesFile.content;
 
   // Enum type generates a union type
   assertStringIncludes(
     content,
-    "export type Status = \"active\" | \"inactive\" | \"pending\";",
+    "export type Status = \"active\" | \"inactive\" | \"pending\";"
   );
 
   // Object types generate interfaces
@@ -477,7 +477,7 @@ Deno.test("Codegen - mixed schema with enum and object types", () => {
   assertStringIncludes(content, "export interface PostFilterVars");
 
   // Query builders should only exist for object types, not enums
-  const queryFile = result.files.find((f) => f.type === "queries");
+  const queryFile = result.files.find(f => f.type === "queries");
   assertExists(queryFile);
   assertStringIncludes(queryFile.content, "UserQueryBuilder");
   assertStringIncludes(queryFile.content, "PostQueryBuilder");
@@ -490,13 +490,13 @@ Deno.test("Codegen - multi-module schema generates namespaces", () => {
   const schema = Context.createMultiModuleTestSchema();
   const result = Codegen.generateTypeScript(schema, {
     includeQueryBuilders: true,
-    includeClient: false,
+    includeClient: false
   });
 
   assertEquals(result.errors.length, 0);
 
   // Types file should be named interfaces.ts in multi-module mode
-  const typesFile = result.files.find((f) => f.type === "interfaces");
+  const typesFile = result.files.find(f => f.type === "interfaces");
   assertExists(typesFile);
   assertStringIncludes(typesFile.path, "interfaces.ts");
 
@@ -512,12 +512,12 @@ Deno.test("Codegen - multi-module cross-module link references", () => {
   const schema = Context.createMultiModuleTestSchema();
   const result = Codegen.generateTypeScript(schema, {
     includeQueryBuilders: false,
-    includeClient: false,
+    includeClient: false
   });
 
   assertEquals(result.errors.length, 0);
 
-  const typesFile = result.files.find((f) => f.type === "interfaces");
+  const typesFile = result.files.find(f => f.type === "interfaces");
   assertExists(typesFile);
   const content = typesFile.content;
 
@@ -535,24 +535,24 @@ Deno.test("Codegen - multi-module enums inside namespaces", () => {
   const schema = Context.createMultiModuleTestSchema();
   const result = Codegen.generateTypeScript(schema, {
     includeQueryBuilders: false,
-    includeClient: false,
+    includeClient: false
   });
 
   assertEquals(result.errors.length, 0);
 
-  const typesFile = result.files.find((f) => f.type === "interfaces");
+  const typesFile = result.files.find(f => f.type === "interfaces");
   assertExists(typesFile);
   const content = typesFile.content;
 
   // MerchantStatus enum in $default namespace
   assertStringIncludes(
     content,
-    "export type MerchantStatus = \"active\" | \"suspended\" | \"pending\"",
+    "export type MerchantStatus = \"active\" | \"suspended\" | \"pending\""
   );
   // PaymentStatus enum in payment namespace
   assertStringIncludes(
     content,
-    "export type PaymentStatus = \"pending\" | \"completed\" | \"failed\" | \"refunded\"",
+    "export type PaymentStatus = \"pending\" | \"completed\" | \"failed\" | \"refunded\""
   );
 });
 
@@ -560,12 +560,12 @@ Deno.test("Codegen - multi-module Insert/Update/FilterVars in namespaces", () =>
   const schema = Context.createMultiModuleTestSchema();
   const result = Codegen.generateTypeScript(schema, {
     includeQueryBuilders: false,
-    includeClient: false,
+    includeClient: false
   });
 
   assertEquals(result.errors.length, 0);
 
-  const typesFile = result.files.find((f) => f.type === "interfaces");
+  const typesFile = result.files.find(f => f.type === "interfaces");
   assertExists(typesFile);
   const content = typesFile.content;
 
@@ -583,12 +583,12 @@ Deno.test("Codegen - multi-module query builders use qualified EdgeQL names", ()
   const schema = Context.createMultiModuleTestSchema();
   const result = Codegen.generateTypeScript(schema, {
     includeQueryBuilders: true,
-    includeClient: false,
+    includeClient: false
   });
 
   assertEquals(result.errors.length, 0);
 
-  const queryFile = result.files.find((f) => f.type === "queries");
+  const queryFile = result.files.find(f => f.type === "queries");
   assertExists(queryFile);
   const content = queryFile.content;
 
@@ -611,12 +611,12 @@ Deno.test("Codegen - multi-module index exports from interfaces.ts", () => {
   const schema = Context.createMultiModuleTestSchema();
   const result = Codegen.generateTypeScript(schema, {
     includeQueryBuilders: true,
-    includeClient: true,
+    includeClient: true
   });
 
   assertEquals(result.errors.length, 0);
 
-  const indexFile = result.files.find((f) => f.type === "index");
+  const indexFile = result.files.find(f => f.type === "index");
   assertExists(indexFile);
   assertStringIncludes(indexFile.content, "./interfaces.ts");
 });
@@ -626,13 +626,13 @@ Deno.test("Codegen - backward compat: schema without module field generates flat
   const schema = Context.createTestSchema();
   const result = Codegen.generateTypeScript(schema, {
     includeQueryBuilders: true,
-    includeClient: false,
+    includeClient: false
   });
 
   assertEquals(result.errors.length, 0);
 
   // Should use types.ts (not interfaces.ts)
-  const typesFile = result.files.find((f) => f.type === "types");
+  const typesFile = result.files.find(f => f.type === "types");
   assertExists(typesFile);
   assertStringIncludes(typesFile.path, "types.ts");
 
@@ -703,7 +703,7 @@ Deno.test("Codegen - discoverSchemaFiles returns empty for empty dir", async () 
 
 Deno.test("Codegen - discoverSchemaFiles returns empty for nonexistent dir", async () => {
   const files = await Codegen.discoverSchemaFiles(
-    "/nonexistent/dir/that/does/not/exist",
+    "/nonexistent/dir/that/does/not/exist"
   );
   assertEquals(files.length, 0);
 });
@@ -712,12 +712,12 @@ Deno.test("Codegen - all features combined in single generated file", () => {
   const schema = Context.createTestSchema();
   const result = Codegen.generateTypeScript(schema, {
     includeQueryBuilders: true,
-    includeClient: false,
+    includeClient: false
   });
 
   assertEquals(result.errors.length, 0);
 
-  const typesFile = result.files.find((f) => f.type === "types");
+  const typesFile = result.files.find(f => f.type === "types");
   assertExists(typesFile);
   const content = typesFile.content;
 
@@ -754,7 +754,7 @@ Deno.test("Codegen - all features combined in single generated file", () => {
   assertStringIncludes(content, "@default");
 
   // Query builders file
-  const queryFile = result.files.find((f) => f.type === "queries");
+  const queryFile = result.files.find(f => f.type === "queries");
   assertExists(queryFile);
   const queryContent = queryFile.content;
 

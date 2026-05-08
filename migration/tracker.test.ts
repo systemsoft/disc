@@ -31,12 +31,12 @@ function createTestMigration(): Types.Migration {
             required: true,
             multi: false,
             constraints: [],
-            annotations: {},
-          },
+            annotations: {}
+          }
         ],
-        links: [],
-      } as Types.CreateTypeOperation,
-    ],
+        links: []
+      } as Types.CreateTypeOperation
+    ]
   };
 }
 
@@ -47,7 +47,7 @@ function createTestMigrationResult(): Types.MigrationResult {
     migrationId: "test-migration-001",
     appliedAt: new Date("2024-01-01T10:01:00Z"),
     durationMs: 150,
-    rollbackSql: ["DROP TABLE IF EXISTS user CASCADE;"],
+    rollbackSql: ["DROP TABLE IF EXISTS user CASCADE;"]
   };
 }
 
@@ -63,7 +63,7 @@ Deno.test({
     assertEquals(result.ok, true);
 
     await tracker.close();
-  },
+  }
 });
 
 Deno.test({
@@ -80,12 +80,12 @@ Deno.test({
 
     const recordResult = await tracker.recordMigration(
       migration,
-      migrationResult,
+      migrationResult
     );
     assertEquals(recordResult.ok, true);
 
     await tracker.close();
-  },
+  }
 });
 
 Deno.test({
@@ -111,7 +111,7 @@ Deno.test({
     }
 
     await tracker.close();
-  },
+  }
 });
 
 Deno.test({
@@ -144,7 +144,7 @@ Deno.test({
     }
 
     await tracker.close();
-  },
+  }
 });
 
 Deno.test({
@@ -179,7 +179,7 @@ Deno.test({
     }
 
     await tracker.close();
-  },
+  }
 });
 
 Deno.test({
@@ -211,12 +211,12 @@ Deno.test({
       assertEquals(stateResult.value.lastMigrationId, migration.id);
       assertEquals(
         stateResult.value.currentSchemaHash,
-        migration.schemaHash,
+        migration.schemaHash
       );
     }
 
     await tracker.close();
-  },
+  }
 });
 
 Deno.test({
@@ -234,12 +234,12 @@ Deno.test({
       createdAt: new Date("2024-01-01T09:00:00Z"),
       schemaState: {
         version: "1.0",
-        tables: ["existing_table"],
+        tables: ["existing_table"]
       },
       migrationState: {
         appliedMigrations: [],
-        currentSchemaHash: "initial",
-      },
+        currentSchemaHash: "initial"
+      }
     };
 
     // Save checkpoint
@@ -255,7 +255,7 @@ Deno.test({
     }
 
     await tracker.close();
-  },
+  }
 });
 
 Deno.test({
@@ -276,8 +276,8 @@ Deno.test({
         schemaState: { version: "1.0" },
         migrationState: {
           appliedMigrations: [],
-          currentSchemaHash: "initial",
-        },
+          currentSchemaHash: "initial"
+        }
       },
       {
         id: "checkpoint-002",
@@ -286,9 +286,9 @@ Deno.test({
         schemaState: { version: "1.1" },
         migrationState: {
           appliedMigrations: ["migration-001"],
-          currentSchemaHash: "hash123",
-        },
-      },
+          currentSchemaHash: "hash123"
+        }
+      }
     ];
 
     // Save checkpoints
@@ -308,7 +308,7 @@ Deno.test({
     }
 
     await tracker.close();
-  },
+  }
 });
 
 Deno.test({
@@ -325,14 +325,14 @@ Deno.test({
       {
         ...createTestMigration(),
         id: "migration-001",
-        name: "create_users",
+        name: "create_users"
       },
       {
         ...createTestMigration(),
         id: "migration-002",
         name: "add_posts",
-        createdAt: new Date("2024-01-01T11:00:00Z"),
-      },
+        createdAt: new Date("2024-01-01T11:00:00Z")
+      }
     ];
 
     for (let i = 0; i < migrations.length; i++) {
@@ -340,7 +340,7 @@ Deno.test({
       const result = {
         ...createTestMigrationResult(),
         migrationId: migration.id,
-        appliedAt: new Date(`2024-01-01T${10 + i}:01:00Z`),
+        appliedAt: new Date(`2024-01-01T${10 + i}:01:00Z`)
       };
       await tracker.recordMigration(migration, result);
     }
@@ -363,7 +363,7 @@ Deno.test({
     }
 
     await tracker.close();
-  },
+  }
 });
 
 Deno.test({
@@ -379,12 +379,12 @@ Deno.test({
       const migration = {
         ...createTestMigration(),
         id: `m-order-${i}`,
-        name: `step_${i}`,
+        name: `step_${i}`
       };
       const result = {
         ...createTestMigrationResult(),
         migrationId: migration.id,
-        appliedAt: new Date(`2024-01-01T10:${String(i).padStart(2, "0")}:00Z`),
+        appliedAt: new Date(`2024-01-01T10:${String(i).padStart(2, "0")}:00Z`)
       };
       await tracker.recordMigration(migration, result);
     }
@@ -400,7 +400,7 @@ Deno.test({
     }
 
     await tracker.close();
-  },
+  }
 });
 
 Deno.test({
@@ -425,12 +425,12 @@ Deno.test({
       assertEquals(rollbackResult.value.length, 1);
       assertEquals(
         rollbackResult.value[0],
-        "DROP TABLE IF EXISTS user CASCADE;",
+        "DROP TABLE IF EXISTS user CASCADE;"
       );
     }
 
     await tracker.close();
-  },
+  }
 });
 
 Deno.test({
@@ -455,7 +455,7 @@ Deno.test({
     }
 
     await tracker.close();
-  },
+  }
 });
 
 Deno.test("Migration Tracker - Error Handling - Not Initialized", async () => {
@@ -468,7 +468,7 @@ Deno.test("Migration Tracker - Error Handling - Not Initialized", async () => {
   // Try to record migration without initialization
   const recordResult = await tracker.recordMigration(
     migration,
-    migrationResult,
+    migrationResult
   );
   assertEquals(recordResult.ok, false);
   if (!recordResult.ok) {
@@ -507,7 +507,7 @@ Deno.test({
     }
 
     await tracker.close();
-  },
+  }
 });
 
 Deno.test({
@@ -526,11 +526,11 @@ Deno.test({
       const migration = {
         ...createTestMigration(),
         id: migrationIds[i],
-        name: `migration_${i + 1}`,
+        name: `migration_${i + 1}`
       };
       const result = {
         ...createTestMigrationResult(),
-        migrationId: migration.id,
+        migrationId: migration.id
       };
 
       await tracker.recordMigration(migration, result);
@@ -559,7 +559,7 @@ Deno.test({
     }
 
     await tracker.close();
-  },
+  }
 });
 
 Deno.test({
@@ -578,11 +578,11 @@ Deno.test({
       const migration = {
         ...createTestMigration(),
         id: `concurrent-migration-${i}`,
-        name: `concurrent_migration_${i}`,
+        name: `concurrent_migration_${i}`
       };
       const result = {
         ...createTestMigrationResult(),
-        migrationId: migration.id,
+        migrationId: migration.id
       };
 
       operations.push(tracker.recordMigration(migration, result));
@@ -604,5 +604,5 @@ Deno.test({
     }
 
     await tracker.close();
-  },
+  }
 });

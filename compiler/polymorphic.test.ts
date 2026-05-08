@@ -23,7 +23,7 @@ import type { Schema, TypeDef } from "./context.ts";
 // ---------------------------------------------------------------------------
 
 function makeTypeDef(
-  overrides: Partial<TypeDef> & Pick<TypeDef, "name" | "tableName">,
+  overrides: Partial<TypeDef> & Pick<TypeDef, "name" | "tableName">
 ): TypeDef {
   return {
     kind: "object",
@@ -35,7 +35,7 @@ function makeTypeDef(
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["__type__", {
         name: "__type__",
@@ -43,11 +43,11 @@ function makeTypeDef(
         required: true,
         multi: false,
         columnName: "__type__",
-        edgeqlType: "str",
-      }],
+        edgeqlType: "str"
+      }]
     ]),
     links: new Map(),
-    ...overrides,
+    ...overrides
   };
 }
 
@@ -70,7 +70,7 @@ function createPolymorphicSchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["__type__", {
         name: "__type__",
@@ -78,7 +78,7 @@ function createPolymorphicSchema(): Schema {
         required: true,
         multi: false,
         columnName: "__type__",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["color", {
         name: "color",
@@ -86,9 +86,9 @@ function createPolymorphicSchema(): Schema {
         required: false,
         multi: false,
         columnName: "color",
-        edgeqlType: "str",
-      }],
-    ]),
+        edgeqlType: "str"
+      }]
+    ])
   });
 
   const circle = makeTypeDef({
@@ -103,7 +103,7 @@ function createPolymorphicSchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["__type__", {
         name: "__type__",
@@ -111,7 +111,7 @@ function createPolymorphicSchema(): Schema {
         required: true,
         multi: false,
         columnName: "__type__",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["color", {
         name: "color",
@@ -119,7 +119,7 @@ function createPolymorphicSchema(): Schema {
         required: false,
         multi: false,
         columnName: "color",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["radius", {
         name: "radius",
@@ -127,9 +127,9 @@ function createPolymorphicSchema(): Schema {
         required: true,
         multi: false,
         columnName: "radius",
-        edgeqlType: "float64",
-      }],
-    ]),
+        edgeqlType: "float64"
+      }]
+    ])
   });
 
   const rectangle = makeTypeDef({
@@ -144,7 +144,7 @@ function createPolymorphicSchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["__type__", {
         name: "__type__",
@@ -152,7 +152,7 @@ function createPolymorphicSchema(): Schema {
         required: true,
         multi: false,
         columnName: "__type__",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["color", {
         name: "color",
@@ -160,7 +160,7 @@ function createPolymorphicSchema(): Schema {
         required: false,
         multi: false,
         columnName: "color",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["width", {
         name: "width",
@@ -168,7 +168,7 @@ function createPolymorphicSchema(): Schema {
         required: true,
         multi: false,
         columnName: "width",
-        edgeqlType: "float64",
+        edgeqlType: "float64"
       }],
       ["height", {
         name: "height",
@@ -176,18 +176,18 @@ function createPolymorphicSchema(): Schema {
         required: true,
         multi: false,
         columnName: "height",
-        edgeqlType: "float64",
-      }],
-    ]),
+        edgeqlType: "float64"
+      }]
+    ])
   });
 
   return {
     types: new Map([
       ["Shape", shape],
       ["Circle", circle],
-      ["Rectangle", rectangle],
+      ["Rectangle", rectangle]
     ]),
-    functions: getBuiltinFunctions(),
+    functions: getBuiltinFunctions()
   };
 }
 
@@ -216,7 +216,7 @@ function createMultiLevelSchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["__type__", {
         name: "__type__",
@@ -224,7 +224,7 @@ function createMultiLevelSchema(): Schema {
         required: true,
         multi: false,
         columnName: "__type__",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["color", {
         name: "color",
@@ -232,7 +232,7 @@ function createMultiLevelSchema(): Schema {
         required: false,
         multi: false,
         columnName: "color",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["radius", {
         name: "radius",
@@ -240,7 +240,7 @@ function createMultiLevelSchema(): Schema {
         required: true,
         multi: false,
         columnName: "radius",
-        edgeqlType: "float64",
+        edgeqlType: "float64"
       }],
       ["eccentricity", {
         name: "eccentricity",
@@ -248,9 +248,9 @@ function createMultiLevelSchema(): Schema {
         required: true,
         multi: false,
         columnName: "eccentricity",
-        edgeqlType: "float64",
-      }],
-    ]),
+        edgeqlType: "float64"
+      }]
+    ])
   });
   types.set("Ellipse", ellipse);
 
@@ -419,7 +419,7 @@ Deno.test("polymorphic - IS with unknown type throws CompilationError", () => {
   assertThrows(
     () => compileEdgeQL("SELECT Shape FILTER .id IS UnknownType"),
     CompilationError,
-    "not found",
+    "not found"
   );
 });
 
@@ -429,7 +429,7 @@ Deno.test("polymorphic - IS with unknown type throws CompilationError", () => {
 
 Deno.test("polymorphic - multiple polymorphic fields in same shape", () => {
   const sql = compileEdgeQL(
-    "SELECT Shape { [IS Circle].radius, [IS Rectangle].width }",
+    "SELECT Shape { [IS Circle].radius, [IS Rectangle].width }"
   );
 
   // Should have two CASE WHEN expressions
@@ -438,7 +438,7 @@ Deno.test("polymorphic - multiple polymorphic fields in same shape", () => {
   assertEquals(
     caseCount >= 2,
     true,
-    `Expected at least 2 CASE expressions, got ${caseCount}`,
+    `Expected at least 2 CASE expressions, got ${caseCount}`
   );
 
   assertStringIncludes(sql, "radius");
@@ -521,7 +521,7 @@ Deno.test("polymorphic - polymorphic shape field with unknown type throws error"
   assertThrows(
     () => compileEdgeQL("SELECT Shape { [IS Triangle].sides }"),
     CompilationError,
-    "not found",
+    "not found"
   );
 });
 
@@ -554,7 +554,7 @@ function createPolymorphicLinkSchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["handle", {
         name: "handle",
@@ -562,9 +562,9 @@ function createPolymorphicLinkSchema(): Schema {
         required: true,
         multi: false,
         columnName: "handle",
-        edgeqlType: "str",
-      }],
-    ]),
+        edgeqlType: "str"
+      }]
+    ])
   });
 
   const animal = makeTypeDef({
@@ -581,7 +581,7 @@ function createPolymorphicLinkSchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["__type__", {
         name: "__type__",
@@ -589,7 +589,7 @@ function createPolymorphicLinkSchema(): Schema {
         required: true,
         multi: false,
         columnName: "__type__",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["name", {
         name: "name",
@@ -597,9 +597,9 @@ function createPolymorphicLinkSchema(): Schema {
         required: false,
         multi: false,
         columnName: "name",
-        edgeqlType: "str",
-      }],
-    ]),
+        edgeqlType: "str"
+      }]
+    ])
   });
 
   const dog = makeTypeDef({
@@ -614,7 +614,7 @@ function createPolymorphicLinkSchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["__type__", {
         name: "__type__",
@@ -622,7 +622,7 @@ function createPolymorphicLinkSchema(): Schema {
         required: true,
         multi: false,
         columnName: "__type__",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["name", {
         name: "name",
@@ -630,8 +630,8 @@ function createPolymorphicLinkSchema(): Schema {
         required: false,
         multi: false,
         columnName: "name",
-        edgeqlType: "str",
-      }],
+        edgeqlType: "str"
+      }]
     ]),
     links: new Map([
       ["owner", {
@@ -639,9 +639,9 @@ function createPolymorphicLinkSchema(): Schema {
         target: "User",
         required: false,
         multi: false,
-        columnName: "owner_id",
-      }],
-    ]),
+        columnName: "owner_id"
+      }]
+    ])
   });
 
   const cat = makeTypeDef({
@@ -656,7 +656,7 @@ function createPolymorphicLinkSchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["__type__", {
         name: "__type__",
@@ -664,7 +664,7 @@ function createPolymorphicLinkSchema(): Schema {
         required: true,
         multi: false,
         columnName: "__type__",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["name", {
         name: "name",
@@ -672,9 +672,9 @@ function createPolymorphicLinkSchema(): Schema {
         required: false,
         multi: false,
         columnName: "name",
-        edgeqlType: "str",
-      }],
-    ]),
+        edgeqlType: "str"
+      }]
+    ])
   });
 
   return {
@@ -682,16 +682,16 @@ function createPolymorphicLinkSchema(): Schema {
       ["User", user],
       ["Animal", animal],
       ["Dog", dog],
-      ["Cat", cat],
+      ["Cat", cat]
     ]),
-    functions: getBuiltinFunctions(),
+    functions: getBuiltinFunctions()
   };
 }
 
 Deno.test("polymorphic - shape field [IS Subtype].link (single FK) produces CASE WHEN", () => {
   const sql = compileEdgeQL(
     "SELECT Animal { name, [IS Dog].owner }",
-    createPolymorphicLinkSchema(),
+    createPolymorphicLinkSchema()
   );
   // CASE expression for the polymorphic link
   assertStringIncludes(sql, "CASE");
@@ -708,7 +708,7 @@ Deno.test("polymorphic - shape field [IS Subtype].link (single FK) produces CASE
 Deno.test("polymorphic - subtype FK column is projected from owning branch + NULL from non-owning branches", () => {
   const sql = compileEdgeQL(
     "SELECT Animal { [IS Dog].owner }",
-    createPolymorphicLinkSchema(),
+    createPolymorphicLinkSchema()
   );
   // Dog branch: real owner_id projection.
   // Cat branch: NULL::uuid AS owner_id (so the UNION column unifies).
@@ -726,16 +726,16 @@ Deno.test("polymorphic - shape field [IS Subtype].link with non-existent link th
     () =>
       compileEdgeQL(
         "SELECT Animal { [IS Dog].paws }",
-        createPolymorphicLinkSchema(),
+        createPolymorphicLinkSchema()
       ),
-    CompilationError,
+    CompilationError
   );
 });
 
 Deno.test("polymorphic - shape field [IS Subtype].link mixes with regular polymorphic properties", () => {
   const sql = compileEdgeQL(
     "SELECT Animal { name, [IS Dog].owner }",
-    createPolymorphicLinkSchema(),
+    createPolymorphicLinkSchema()
   );
   // The non-polymorphic `name` field should still appear in the output.
   assertStringIncludes(sql, "'name'");
@@ -744,7 +744,7 @@ Deno.test("polymorphic - shape field [IS Subtype].link mixes with regular polymo
   assertEquals(
     caseCount >= 1,
     true,
-    `Expected at least 1 CASE for polymorphic link; got ${caseCount}`,
+    `Expected at least 1 CASE for polymorphic link; got ${caseCount}`
   );
 });
 
@@ -763,7 +763,7 @@ Deno.test("polymorphic - shape field [IS Subtype].multiLink (junction) errors wi
     multi: true,
     junctionTable: "dog_vet_visits",
     junctionSourceColumn: "source_id",
-    junctionTargetColumn: "target_id",
+    junctionTargetColumn: "target_id"
   });
   schema.types.set("Dog", { ...dog, links: updatedLinks });
 
@@ -771,9 +771,9 @@ Deno.test("polymorphic - shape field [IS Subtype].multiLink (junction) errors wi
     () =>
       compileEdgeQL(
         "SELECT Animal { [IS Dog].vetVisits }",
-        schema,
+        schema
       ),
     CompilationError,
-    "multi-cardinality",
+    "multi-cardinality"
   );
 });

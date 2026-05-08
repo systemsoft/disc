@@ -24,7 +24,7 @@ function makePool(dsn: string): ConnectionPool {
     connectionString: dsn,
     minConnections: 1,
     maxConnections: 3,
-    cleanupInterval: 0,
+    cleanupInterval: 0
   });
 }
 
@@ -60,13 +60,13 @@ Deno.test({
       // The result is logged via the boolean itself.
       assert(
         typeof available === "boolean",
-        "hasPgvector should return boolean",
+        "hasPgvector should return boolean"
       );
     } finally {
       await resetTestDatabase(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -98,22 +98,22 @@ Deno.test({
 
       await pool.query(
         "INSERT INTO disc_test_vectors (label, embedding) VALUES ($1, $2)",
-        ["alpha", "[1, 2, 3]"],
+        ["alpha", "[1, 2, 3]"]
       );
       await pool.query(
         "INSERT INTO disc_test_vectors (label, embedding) VALUES ($1, $2)",
-        ["beta", "[4, 5, 6]"],
+        ["beta", "[4, 5, 6]"]
       );
 
       const result = await pool.query(
-        "SELECT COUNT(*)::integer AS cnt FROM disc_test_vectors",
+        "SELECT COUNT(*)::integer AS cnt FROM disc_test_vectors"
       );
       assertEquals(Number(result.rows[0]["cnt"]), 2);
     } finally {
       await resetTestDatabase(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -143,16 +143,16 @@ Deno.test({
 
       await pool.query(
         "INSERT INTO disc_test_cosine (embedding) VALUES ($1)",
-        ["[1, 0, 0]"],
+        ["[1, 0, 0]"]
       );
       await pool.query(
         "INSERT INTO disc_test_cosine (embedding) VALUES ($1)",
-        ["[0, 1, 0]"],
+        ["[0, 1, 0]"]
       );
 
       // Cosine distance between [1,0,0] and the query [1,0,0] should be 0
       const result = await pool.query(
-        "SELECT embedding <=> '[1, 0, 0]' AS dist FROM disc_test_cosine ORDER BY dist LIMIT 1",
+        "SELECT embedding <=> '[1, 0, 0]' AS dist FROM disc_test_cosine ORDER BY dist LIMIT 1"
       );
       assertEquals(result.rows.length, 1);
 
@@ -163,7 +163,7 @@ Deno.test({
       await resetTestDatabase(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -195,15 +195,15 @@ Deno.test({
       // Insert vectors at known distances from [0,0,0]
       await pool.query(
         "INSERT INTO disc_test_l2 (label, embedding) VALUES ($1, $2)",
-        ["near", "[1, 0, 0]"],
+        ["near", "[1, 0, 0]"]
       );
       await pool.query(
         "INSERT INTO disc_test_l2 (label, embedding) VALUES ($1, $2)",
-        ["far", "[10, 10, 10]"],
+        ["far", "[10, 10, 10]"]
       );
 
       const result = await pool.query(
-        "SELECT label, embedding <-> '[0, 0, 0]' AS dist FROM disc_test_l2 ORDER BY dist",
+        "SELECT label, embedding <-> '[0, 0, 0]' AS dist FROM disc_test_l2 ORDER BY dist"
       );
 
       assertEquals(result.rows.length, 2);
@@ -214,7 +214,7 @@ Deno.test({
       await resetTestDatabase(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -244,13 +244,13 @@ Deno.test({
 
       await pool.query(
         "INSERT INTO disc_test_ip (embedding) VALUES ($1)",
-        ["[1, 2, 3]"],
+        ["[1, 2, 3]"]
       );
 
       // Inner product: [1,2,3] · [1,2,3] = 1 + 4 + 9 = 14
       // pgvector returns negative inner product for <#> operator
       const result = await pool.query(
-        "SELECT embedding <#> '[1, 2, 3]' AS ip FROM disc_test_ip",
+        "SELECT embedding <#> '[1, 2, 3]' AS ip FROM disc_test_ip"
       );
 
       assertEquals(result.rows.length, 1);
@@ -262,7 +262,7 @@ Deno.test({
       await resetTestDatabase(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -294,7 +294,7 @@ Deno.test({
       for (let i = 0; i < 10; i++) {
         await pool.query(
           "INSERT INTO disc_test_ivfflat (embedding) VALUES ($1)",
-          [`[${i}, ${i + 1}, ${i + 2}]`],
+          [`[${i}, ${i + 1}, ${i + 2}]`]
         );
       }
 
@@ -310,16 +310,16 @@ Deno.test({
       const result = await pool.query(
         `SELECT indexname FROM pg_indexes
          WHERE tablename = 'disc_test_ivfflat'
-         AND indexname = 'disc_test_ivfflat_idx'`,
+         AND indexname = 'disc_test_ivfflat_idx'`
       );
       assertEquals(result.rows.length, 1);
       assertEquals(
         String(result.rows[0]["indexname"]),
-        "disc_test_ivfflat_idx",
+        "disc_test_ivfflat_idx"
       );
     } finally {
       await resetTestDatabase(pool);
       await pool.close();
     }
-  },
+  }
 });

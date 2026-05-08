@@ -24,31 +24,31 @@ function createTestSchema(): Context.Schema {
         type: "uuid",
         required: true,
         multi: false,
-        columnName: "id",
+        columnName: "id"
       }],
       ["name", {
         name: "name",
         type: "str",
         required: true,
         multi: false,
-        columnName: "name",
+        columnName: "name"
       }],
       ["email", {
         name: "email",
         type: "str",
         required: true,
         multi: false,
-        columnName: "email",
+        columnName: "email"
       }],
       ["role", {
         name: "role",
         type: "str",
         required: false,
         multi: false,
-        columnName: "role",
-      }],
+        columnName: "role"
+      }]
     ]),
-    links: new Map(),
+    links: new Map()
   });
 
   return { types, functions: new Map() };
@@ -62,7 +62,7 @@ Deno.test("Default compiler - Access control enabled by default", () => {
   const policy: AccessPolicy = {
     name: "deny_all",
     objectType: "User",
-    actions: [{ allow: false, operations: ["select"] }],
+    actions: [{ allow: false, operations: ["select"] }]
   };
 
   compiler.registerAccessPolicy(policy);
@@ -94,7 +94,7 @@ Deno.test("Default compiler - Can disable access control", () => {
   const policy: AccessPolicy = {
     name: "deny_all",
     objectType: "User",
-    actions: [{ allow: false, operations: ["select"] }],
+    actions: [{ allow: false, operations: ["select"] }]
   };
 
   compiler.registerAccessPolicy(policy);
@@ -123,8 +123,8 @@ Deno.test("Default compiler - Works with access context", () => {
   const compiler = new EdgeQLCompiler(schema, {
     accessContext: {
       userId: "user123",
-      userRole: "admin",
-    },
+      userRole: "admin"
+    }
   });
 
   // Register role-based policy
@@ -136,8 +136,8 @@ Deno.test("Default compiler - Works with access context", () => {
       kind: "AccessComparison",
       operator: "=",
       left: { kind: "AccessGlobal", name: "current_role" },
-      right: { kind: "AccessLiteral", value: "admin", type: "string" },
-    } as any,
+      right: { kind: "AccessLiteral", value: "admin", type: "string" }
+    } as any
   };
 
   compiler.registerAccessPolicy(policy);
@@ -173,8 +173,8 @@ Deno.test("Default compiler - Can update access context", () => {
       kind: "AccessComparison",
       operator: "=",
       left: { kind: "AccessGlobal", name: "current_role" },
-      right: { kind: "AccessLiteral", value: "admin", type: "string" },
-    } as any,
+      right: { kind: "AccessLiteral", value: "admin", type: "string" }
+    } as any
   };
 
   compiler.registerAccessPolicy(policy);
@@ -182,7 +182,7 @@ Deno.test("Default compiler - Can update access context", () => {
   // First try without admin role
   compiler.setAccessContext({
     userId: "user123",
-    userRole: "viewer",
+    userRole: "viewer"
   });
 
   const edgeql = "SELECT User";
@@ -204,7 +204,7 @@ Deno.test("Default compiler - Can update access context", () => {
   // Now update context to admin
   compiler.setAccessContext({
     userId: "user123",
-    userRole: "admin",
+    userRole: "admin"
   });
 
   result = compiler.compile(ast);

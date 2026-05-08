@@ -55,14 +55,14 @@ export const MIN_SCRAM_ITERATIONS = 4096;
  */
 async function hmacSha256(
   key: Uint8Array,
-  data: Uint8Array,
+  data: Uint8Array
 ): Promise<Uint8Array> {
   const cryptoKey = await crypto.subtle.importKey(
     "raw",
     asBuf(key),
     { name: "HMAC", hash: "SHA-256" },
     false,
-    ["sign"],
+    ["sign"]
   );
   const sig = await crypto.subtle.sign("HMAC", cryptoKey, asBuf(data));
   return new Uint8Array(sig);
@@ -83,24 +83,24 @@ async function sha256(data: Uint8Array): Promise<Uint8Array> {
 async function hi(
   password: Uint8Array,
   salt: Uint8Array,
-  iterations: number,
+  iterations: number
 ): Promise<Uint8Array> {
   const key = await crypto.subtle.importKey(
     "raw",
     asBuf(password),
     "PBKDF2",
     false,
-    ["deriveBits"],
+    ["deriveBits"]
   );
   const bits = await crypto.subtle.deriveBits(
     {
       name: "PBKDF2",
       hash: "SHA-256",
       salt: asBuf(salt),
-      iterations: iterations,
+      iterations: iterations
     },
     key,
-    256,
+    256
   );
   return new Uint8Array(bits);
 }
@@ -111,7 +111,7 @@ async function hi(
 function xorBytes(a: Uint8Array, b: Uint8Array): Uint8Array {
   if (a.length !== b.length) {
     throw new Error(
-      `xorBytes: length mismatch (${a.length} vs ${b.length})`,
+      `xorBytes: length mismatch (${a.length} vs ${b.length})`
     );
   }
   const result = new Uint8Array(a.length);
@@ -160,7 +160,8 @@ function generateNonce(): string {
  * Constant-time comparison of two byte arrays.
  */
 function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false;
+  if (a.length !== b.length)
+    return false;
   let diff = 0;
   for (let i = 0; i < a.length; i++) {
     diff |= a[i] ^ b[i];
@@ -208,7 +209,7 @@ export function parseClientFirstMessage(data: Uint8Array): {
   const secondComma = str.indexOf(",", firstComma + 1);
   if (secondComma === -1) {
     throw new Error(
-      "SCRAM: malformed client-first-message (missing second comma)",
+      "SCRAM: malformed client-first-message (missing second comma)"
     );
   }
 
@@ -248,7 +249,7 @@ export function parseClientFirstMessage(data: Uint8Array): {
 export function generateServerFirstMessage(
   clientNonce: string,
   salt: Uint8Array,
-  iterations: number,
+  iterations: number
 ): { serverNonce: string; serverFirstMessage: string; } {
   const serverNonce = generateNonce();
   const combinedNonce = clientNonce + serverNonce;
@@ -275,7 +276,7 @@ export async function verifyClientFinalMessage(
   data: Uint8Array,
   state: ScramServerState,
   storedKey: Uint8Array,
-  serverKey: Uint8Array,
+  serverKey: Uint8Array
 ): Promise<{ valid: boolean; serverSignature: string; }> {
   const str = textDecoder.decode(data);
 
@@ -342,7 +343,7 @@ export async function verifyClientFinalMessage(
   // Compute ServerSignature for server-final-message
   const serverSignatureBytes = await hmacSha256(
     serverKey,
-    authMessageBytes,
+    authMessageBytes
   );
   const serverSignature = toBase64(serverSignatureBytes);
 
@@ -360,11 +361,11 @@ export async function verifyClientFinalMessage(
 export async function deriveKeys(
   password: string,
   salt: Uint8Array,
-  iterations: number,
+  iterations: number
 ): Promise<{ storedKey: Uint8Array; serverKey: Uint8Array; }> {
   if (iterations < MIN_SCRAM_ITERATIONS) {
     throw new Error(
-      `SCRAM iteration count ${iterations} is below the minimum of ${MIN_SCRAM_ITERATIONS}`,
+      `SCRAM iteration count ${iterations} is below the minimum of ${MIN_SCRAM_ITERATIONS}`
     );
   }
   const passwordBytes = textEncoder.encode(password);
@@ -373,7 +374,7 @@ export async function deriveKeys(
   // ClientKey = HMAC(SaltedPassword, "Client Key")
   const clientKey = await hmacSha256(
     saltedPassword,
-    textEncoder.encode("Client Key"),
+    textEncoder.encode("Client Key")
   );
 
   // StoredKey = SHA-256(ClientKey)
@@ -382,7 +383,7 @@ export async function deriveKeys(
   // ServerKey = HMAC(SaltedPassword, "Server Key")
   const serverKey = await hmacSha256(
     saltedPassword,
-    textEncoder.encode("Server Key"),
+    textEncoder.encode("Server Key")
   );
 
   return { storedKey, serverKey };
@@ -398,7 +399,7 @@ export async function deriveKeys(
  */
 export function buildClientFirstMessage(
   username: string,
-  clientNonce: string,
+  clientNonce: string
 ): { message: Uint8Array; clientFirstMessageBare: string; } {
   const clientFirstMessageBare = `n=${username},r=${clientNonce}`;
   const message = textEncoder.encode(`n,,${clientFirstMessageBare}`);
@@ -412,7 +413,7 @@ export async function buildClientFinalMessage(
   password: string,
   clientNonce: string,
   clientFirstMessageBare: string,
-  serverFirstMessage: string,
+  serverFirstMessage: string
 ): Promise<Uint8Array> {
   // Parse server-first-message to get combined nonce, salt, iterations
   const serverAttrs = serverFirstMessage.split(",");
@@ -451,7 +452,7 @@ export async function buildClientFinalMessage(
   const saltedPassword = await hi(passwordBytes, salt, iterations);
   const clientKey = await hmacSha256(
     saltedPassword,
-    textEncoder.encode("Client Key"),
+    textEncoder.encode("Client Key")
   );
   const storedKey = await sha256(clientKey);
 
@@ -480,7 +481,7 @@ export { fromBase64, generateNonce, toBase64 };
 
 export async function generateStoredKeys(
   _username: string,
-  password: string,
+  password: string
 ): Promise<{
   storedKey: Uint8Array;
   serverKey: Uint8Array;
@@ -492,7 +493,7 @@ export async function generateStoredKeys(
   const { storedKey, serverKey } = await deriveKeys(
     password,
     salt,
-    iterations,
+    iterations
   );
   return { storedKey, serverKey, salt, iterations };
 }
@@ -502,18 +503,18 @@ export class ScramServer {
     public readonly storedKey: unknown,
     public readonly serverKey: unknown,
     public readonly salt: unknown,
-    public readonly iterations: number,
+    public readonly iterations: number
   ) {}
 
   processClientFirst(_clientFirst: string): string {
     throw new Error(
-      "ScramServer.processClientFirst: legacy SCRAM API; use generateServerFirstMessage from this module instead",
+      "ScramServer.processClientFirst: legacy SCRAM API; use generateServerFirstMessage from this module instead"
     );
   }
 
   processClientFinal(_clientFinal: string): string {
     throw new Error(
-      "ScramServer.processClientFinal: legacy SCRAM API; use verifyClientFinalMessage from this module instead",
+      "ScramServer.processClientFinal: legacy SCRAM API; use verifyClientFinalMessage from this module instead"
     );
   }
 }

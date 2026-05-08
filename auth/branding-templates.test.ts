@@ -11,7 +11,7 @@ import { type BrandingCtx, renderMagicCodeEmail, renderMagicLinkEmail, renderPas
 const branding: BrandingCtx = {
   appName: "Acme",
   brandColor: "#0af",
-  logoUrl: "https://cdn.acme.com/logo.png",
+  logoUrl: "https://cdn.acme.com/logo.png"
 };
 
 // ── Template-level branding ───────────────────────────────────────────
@@ -21,7 +21,7 @@ Deno.test("renderVerificationEmail: branded subject + appName in body", () => {
     baseUrl: "https://app.acme.com",
     branding,
     recipient: "alice@example.com",
-    verificationToken: "tok",
+    verificationToken: "tok"
   });
   assertEquals(r.subject, "Verify your email for Acme");
   assertStringIncludes(r.text, "Acme account");
@@ -33,7 +33,7 @@ Deno.test("renderVerificationEmail: logoUrl appears in HTML when set", () => {
     baseUrl: "https://app.acme.com",
     branding,
     recipient: "alice@example.com",
-    verificationToken: "tok",
+    verificationToken: "tok"
   });
   assertStringIncludes(r.html, "https://cdn.acme.com/logo.png");
 });
@@ -43,7 +43,7 @@ Deno.test("renderVerificationEmail: brandColor appears in button CSS", () => {
     baseUrl: "https://app.acme.com",
     branding,
     recipient: "alice@example.com",
-    verificationToken: "tok",
+    verificationToken: "tok"
   });
   assertStringIncludes(r.html, "background: #0af");
 });
@@ -53,7 +53,7 @@ Deno.test("renderPasswordResetEmail: branded subject", () => {
     baseUrl: "https://app.acme.com",
     branding,
     recipient: "bob@example.com",
-    resetToken: "reset",
+    resetToken: "reset"
   });
   assertEquals(r.subject, "Reset your Acme password");
 });
@@ -62,7 +62,7 @@ Deno.test("renderMagicCodeEmail: branded subject + brandColor on code box", () =
   const r = renderMagicCodeEmail({
     branding,
     code: "482917",
-    recipient: "carol@example.com",
+    recipient: "carol@example.com"
   });
   assertEquals(r.subject, "Your Acme sign-in code");
   // brandColor flows into the bulletproof code box. The `<td bgcolor>`
@@ -75,7 +75,7 @@ Deno.test("renderMagicLinkEmail: branded subject", () => {
     baseUrl: "https://app.acme.com",
     branding,
     magicLinkToken: "tok",
-    recipient: "carol@example.com",
+    recipient: "carol@example.com"
   });
   assertEquals(r.subject, "Sign in to Acme");
 });
@@ -86,7 +86,7 @@ Deno.test("renderMagicLinkEmail: prefers ctx.link when supplied (template path)"
     branding,
     link: "https://other.acme.com/login/tok",
     magicLinkToken: "tok",
-    recipient: "carol@example.com",
+    recipient: "carol@example.com"
   });
   assertStringIncludes(r.text, "https://other.acme.com/login/tok");
   assertStringIncludes(r.html, "https://other.acme.com/login/tok");
@@ -103,9 +103,9 @@ function makeStubMailer(): { mailer: Mailer; sends: Email[]; } {
       return Promise.resolve({
         accepted: Array.isArray(email.to) ? email.to : [email.to],
         messageId: "stub@disc.local",
-        rejected: [],
+        rejected: []
       });
-    },
+    }
   };
   return { mailer, sends };
 }
@@ -116,7 +116,7 @@ Deno.test("EmailEventListener: branding flows into rendered emails", async () =>
     baseUrl: "https://app.acme.com",
     branding: { appName: "Acme", brandColor: "#0af" },
     mailer,
-    resolveRecipient: () => Promise.resolve("alice@example.com"),
+    resolveRecipient: () => Promise.resolve("alice@example.com")
   });
 
   await listener.handle({
@@ -124,7 +124,7 @@ Deno.test("EmailEventListener: branding flows into rendered emails", async () =>
     eventType: "EmailVerificationRequested",
     identityId: "u-1",
     timestamp: "2026-01-01T00:00:00.000Z",
-    verificationToken: "tok-v",
+    verificationToken: "tok-v"
   });
 
   assertEquals(sends.length, 1);
@@ -138,7 +138,7 @@ Deno.test("EmailEventListener: magicLinkUrlTemplate replaces default URL shape",
     baseUrl: "https://app.acme.com",
     magicLinkUrlTemplate: "https://other.acme.com/login/{token}",
     mailer,
-    resolveRecipient: () => Promise.resolve("carol@example.com"),
+    resolveRecipient: () => Promise.resolve("carol@example.com")
   });
 
   await listener.handle({
@@ -146,7 +146,7 @@ Deno.test("EmailEventListener: magicLinkUrlTemplate replaces default URL shape",
     eventType: "MagicLinkRequested",
     identityId: "u-1",
     magicLinkToken: "tok-m",
-    timestamp: "2026-01-01T00:00:00.000Z",
+    timestamp: "2026-01-01T00:00:00.000Z"
   });
 
   assertEquals(sends.length, 1);
@@ -160,7 +160,7 @@ Deno.test("EmailEventListener: no branding falls back to historical wording", as
   const listener = new EmailEventListener({
     baseUrl: "https://app.acme.com",
     mailer,
-    resolveRecipient: () => Promise.resolve("alice@example.com"),
+    resolveRecipient: () => Promise.resolve("alice@example.com")
   });
 
   await listener.handle({
@@ -168,7 +168,7 @@ Deno.test("EmailEventListener: no branding falls back to historical wording", as
     eventType: "EmailVerificationRequested",
     identityId: "u-1",
     timestamp: "2026-01-01T00:00:00.000Z",
-    verificationToken: "tok",
+    verificationToken: "tok"
   });
 
   // Subject reverts to the unbranded form when no operator branding

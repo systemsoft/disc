@@ -16,7 +16,8 @@ function compileEdgeQL(source: string): string {
   const parser = new EdgeQLParser(source);
   const ast = parser.parse();
   const result = compiler.compile(ast);
-  if (!result.ok) throw result.error;
+  if (!result.ok)
+    throw result.error;
   return codegen.generate(result.value);
 }
 
@@ -34,33 +35,33 @@ Deno.test("UPSERT - simple upsert with single SET column", () => {
   assertEquals(
     sql.includes("INSERT INTO"),
     true,
-    "SQL should contain INSERT INTO",
+    "SQL should contain INSERT INTO"
   );
   assertEquals(
     sql.includes("ON CONFLICT"),
     true,
-    "SQL should contain ON CONFLICT",
+    "SQL should contain ON CONFLICT"
   );
   assertEquals(
     sql.includes("DO UPDATE SET"),
     true,
-    "SQL should contain DO UPDATE SET",
+    "SQL should contain DO UPDATE SET"
   );
   assertEquals(
     sql.includes("name ="),
     true,
-    "SQL should reference the name column in SET clause",
+    "SQL should reference the name column in SET clause"
   );
   assertEquals(
     sql.includes("'Ada Updated'"),
     true,
-    "SQL should contain the updated value",
+    "SQL should contain the updated value"
   );
   // Should NOT contain DO NOTHING
   assertEquals(
     sql.includes("DO NOTHING"),
     false,
-    "SQL should NOT contain DO NOTHING for upsert",
+    "SQL should NOT contain DO NOTHING for upsert"
   );
 });
 
@@ -78,23 +79,23 @@ Deno.test("UPSERT - multi-column SET", () => {
   assertEquals(
     sql.includes("ON CONFLICT"),
     true,
-    "SQL should contain ON CONFLICT",
+    "SQL should contain ON CONFLICT"
   );
   assertEquals(
     sql.includes("DO UPDATE SET"),
     true,
-    "SQL should contain DO UPDATE SET",
+    "SQL should contain DO UPDATE SET"
   );
   // Both SET columns should appear in the SQL
   assertEquals(
     sql.includes("'Billie Updated'"),
     true,
-    "SQL should contain the updated name value",
+    "SQL should contain the updated name value"
   );
   assertEquals(
     sql.includes("active"),
     true,
-    "SQL should reference the active column",
+    "SQL should reference the active column"
   );
   // Verify both SET clauses are comma-separated
   const setMatch = sql.match(/DO UPDATE SET (.+)/);
@@ -103,7 +104,7 @@ Deno.test("UPSERT - multi-column SET", () => {
     assertEquals(
       setMatch[1].includes(","),
       true,
-      "Multiple SET clauses should be comma-separated",
+      "Multiple SET clauses should be comma-separated"
     );
   }
 });
@@ -123,22 +124,22 @@ Deno.test("UPSERT - with Post type conflict on title", () => {
   assertEquals(
     sql.includes("ON CONFLICT"),
     true,
-    "SQL should contain ON CONFLICT",
+    "SQL should contain ON CONFLICT"
   );
   assertEquals(
     sql.includes("DO UPDATE SET"),
     true,
-    "SQL should contain DO UPDATE SET",
+    "SQL should contain DO UPDATE SET"
   );
   assertEquals(
     sql.includes("body"),
     true,
-    "SQL should reference the body column",
+    "SQL should reference the body column"
   );
   assertEquals(
     sql.includes("'Updated Content'"),
     true,
-    "SQL should contain the updated body value",
+    "SQL should contain the updated body value"
   );
 });
 
@@ -155,22 +156,22 @@ Deno.test("UPSERT - DO NOTHING still works (regression)", () => {
   assertEquals(
     sql.includes("INSERT INTO"),
     true,
-    "SQL should contain INSERT INTO",
+    "SQL should contain INSERT INTO"
   );
   assertEquals(
     sql.includes("ON CONFLICT"),
     true,
-    "SQL should contain ON CONFLICT",
+    "SQL should contain ON CONFLICT"
   );
   assertEquals(
     sql.includes("DO NOTHING"),
     true,
-    "SQL should contain DO NOTHING",
+    "SQL should contain DO NOTHING"
   );
   assertEquals(
     sql.includes("DO UPDATE"),
     false,
-    "SQL should NOT contain DO UPDATE for DO NOTHING case",
+    "SQL should NOT contain DO UPDATE for DO NOTHING case"
   );
 });
 
@@ -189,11 +190,11 @@ Deno.test("UPSERT - conflict target column is included", () => {
   assertEquals(
     sql.includes("ON CONFLICT (email)"),
     true,
-    "SQL should contain ON CONFLICT with email column target",
+    "SQL should contain ON CONFLICT with email column target"
   );
   assertEquals(
     sql.includes("DO UPDATE SET"),
     true,
-    "SQL should contain DO UPDATE SET",
+    "SQL should contain DO UPDATE SET"
   );
 });

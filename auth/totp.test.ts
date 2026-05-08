@@ -39,14 +39,14 @@ const RFC_VECTORS: Array<{ timestampSeconds: number; expected: string; }> = [
   { timestampSeconds: 1111111109, expected: "07081804" },
   { timestampSeconds: 1111111111, expected: "14050471" },
   { timestampSeconds: 1234567890, expected: "89005924" },
-  { timestampSeconds: 2000000000, expected: "69279037" },
+  { timestampSeconds: 2000000000, expected: "69279037" }
 ];
 
 for (const v of RFC_VECTORS) {
   Deno.test(`RFC 6238 vector: SHA-1, t=${v.timestampSeconds}`, async () => {
     const code = await generateTOTP(RFC_SECRET_SHA1, {
       timestampMs: v.timestampSeconds * 1000,
-      digits: 8,
+      digits: 8
     });
     assertEquals(code, v.expected);
   });
@@ -124,7 +124,7 @@ Deno.test("buildOtpauthUri — has issuer, account, secret, defaults to SHA1/6/3
   const uri = buildOtpauthUri({
     issuer: "Disc",
     accountName: "user@example.com",
-    secret: "JBSWY3DPEHPK3PXP",
+    secret: "JBSWY3DPEHPK3PXP"
   });
   assert(uri.startsWith("otpauth://totp/Disc:user%40example.com?"));
   assert(uri.includes("secret=JBSWY3DPEHPK3PXP"));
@@ -139,7 +139,7 @@ Deno.test("buildOtpauthUri — URL-encodes spaces in issuer", () => {
   const uri = buildOtpauthUri({
     issuer: "My App",
     accountName: "alice",
-    secret: "ABCDEFGH",
+    secret: "ABCDEFGH"
   });
   assert(uri.includes("totp/My%20App:alice"));
   assert(uri.includes("issuer=My+App") || uri.includes("issuer=My%20App"));

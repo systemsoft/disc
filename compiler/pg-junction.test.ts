@@ -31,7 +31,7 @@ function makePool(dsn: string): ConnectionPool {
     connectionString: dsn,
     minConnections: 1,
     maxConnections: 3,
-    cleanupInterval: 0,
+    cleanupInterval: 0
   });
 }
 
@@ -51,7 +51,7 @@ function compileEdgeQL(edgeql: string, schema: Schema): string {
 
 async function applySchema(
   pool: ConnectionPool,
-  sdl: string,
+  sdl: string
 ): Promise<{ manager: SchemaManager; schema: Schema; }> {
   const manager = new SchemaManager({ pool });
   await manager.initialize();
@@ -60,7 +60,7 @@ async function applySchema(
   assertEquals(
     result.ok,
     true,
-    `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`,
+    `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`
   );
 
   const schema = manager.getSchema();
@@ -71,7 +71,7 @@ async function applySchema(
 
 async function cleanup(
   pool: ConnectionPool,
-  tables: string[],
+  tables: string[]
 ): Promise<void> {
   for (const table of tables) {
     await pool.query(`DROP TABLE IF EXISTS ${table} CASCADE`);
@@ -113,19 +113,19 @@ Deno.test({
         JUNCTION_TABLE,
         "test_course_students",
         STUDENT_TABLE,
-        COURSE_TABLE,
+        COURSE_TABLE
       ]);
 
       const { schema } = await applySchema(pool, STUDENT_COURSE_SDL);
 
       // Verify junction table was created
       const tableCheck = await pool.query(
-        `SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename = '${JUNCTION_TABLE}'`,
+        `SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename = '${JUNCTION_TABLE}'`
       );
       assertEquals(
         tableCheck.rows.length,
         1,
-        `Junction table ${JUNCTION_TABLE} should exist`,
+        `Junction table ${JUNCTION_TABLE} should exist`
       );
 
       // Insert test data
@@ -136,24 +136,24 @@ Deno.test({
 
       await pool.query(
         `INSERT INTO ${STUDENT_TABLE} (id, name) VALUES ($1, 'Ada'), ($2, 'Billie')`,
-        [adaId, billieId],
+        [adaId, billieId]
       );
       await pool.query(
         `INSERT INTO ${COURSE_TABLE} (id, title) VALUES ($1, 'Math'), ($2, 'Science')`,
-        [mathId, scienceId],
+        [mathId, scienceId]
       );
 
       // Link: Ada -> Math, Science; Billie -> Math
       await pool.query(
         `INSERT INTO ${JUNCTION_TABLE} (source_id, target_id) VALUES ($1, $2), ($1, $3), ($4, $2)`,
-        [adaId, mathId, scienceId, billieId],
+        [adaId, mathId, scienceId, billieId]
       );
 
       // Compile and run: SELECT TestStudent { name, courses: { title } }
       // filtering for Ada
       const sql = compileEdgeQL(
         `SELECT TestStudent { name, courses: { title } } FILTER .name = "Ada"`,
-        schema,
+        schema
       );
 
       const result = await pool.query(sql);
@@ -165,7 +165,8 @@ Deno.test({
       assertEquals(data.name, "Ada");
       assertExists(data.courses, "Should have courses field");
 
-      const courseTitles = data.courses
+      const courseTitles = data
+        .courses
         .map((c: { title: string; }) => c.title)
         .sort();
       assertEquals(courseTitles, ["Math", "Science"]);
@@ -174,11 +175,11 @@ Deno.test({
         JUNCTION_TABLE,
         "test_course_students",
         STUDENT_TABLE,
-        COURSE_TABLE,
+        COURSE_TABLE
       ]);
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -193,7 +194,7 @@ Deno.test({
         JUNCTION_TABLE,
         "test_course_students",
         STUDENT_TABLE,
-        COURSE_TABLE,
+        COURSE_TABLE
       ]);
 
       const { schema } = await applySchema(pool, STUDENT_COURSE_SDL);
@@ -205,18 +206,18 @@ Deno.test({
 
       await pool.query(
         `INSERT INTO ${STUDENT_TABLE} (id, name) VALUES ($1, 'Ada'), ($2, 'Billie')`,
-        [adaId, billieId],
+        [adaId, billieId]
       );
       await pool.query(
         `INSERT INTO ${COURSE_TABLE} (id, title) VALUES ($1, 'Math')`,
-        [mathId],
+        [mathId]
       );
 
       // Link both students to Math — use the course's junction table
       // The SchemaManager assigns test_course_students for TestCourse.students
       const courseJunction = "test_course_students";
       const courseJunctionCheck = await pool.query(
-        `SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename = '${courseJunction}'`,
+        `SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename = '${courseJunction}'`
       );
 
       // If the deduplication suppressed the second junction table, use the
@@ -225,19 +226,19 @@ Deno.test({
         // Reciprocal uses test_student_courses with swapped columns
         await pool.query(
           `INSERT INTO ${JUNCTION_TABLE} (source_id, target_id) VALUES ($1, $2), ($3, $2)`,
-          [adaId, mathId, billieId],
+          [adaId, mathId, billieId]
         );
       } else {
         await pool.query(
           `INSERT INTO ${courseJunction} (source_id, target_id) VALUES ($1, $2), ($1, $3)`,
-          [mathId, adaId, billieId],
+          [mathId, adaId, billieId]
         );
       }
 
       // Query from Course side: SELECT TestCourse { title, students: { name } }
       const sql = compileEdgeQL(
         `SELECT TestCourse { title, students: { name } } FILTER .title = "Math"`,
-        schema,
+        schema
       );
 
       const result = await pool.query(sql);
@@ -249,7 +250,8 @@ Deno.test({
       assertEquals(data.title, "Math");
       assertExists(data.students, "Should have students field");
 
-      const studentNames = data.students
+      const studentNames = data
+        .students
         .map((s: { name: string; }) => s.name)
         .sort();
       assertEquals(studentNames, ["Ada", "Billie"]);
@@ -258,11 +260,11 @@ Deno.test({
         JUNCTION_TABLE,
         "test_course_students",
         STUDENT_TABLE,
-        COURSE_TABLE,
+        COURSE_TABLE
       ]);
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -295,17 +297,17 @@ Deno.test({
       const authorId = crypto.randomUUID();
       await pool.query(
         `INSERT INTO ${AUTHOR_TABLE} (id, name) VALUES ($1, 'Ada')`,
-        [authorId],
+        [authorId]
       );
       await pool.query(
         `INSERT INTO ${ARTICLE_TABLE} (id, title, author_id) VALUES ($1, 'Paper A', $3), ($2, 'Paper B', $3)`,
-        [crypto.randomUUID(), crypto.randomUUID(), authorId],
+        [crypto.randomUUID(), crypto.randomUUID(), authorId]
       );
 
       // One-to-many via backlink (not junction table)
       const sql = compileEdgeQL(
         `SELECT TestAuthor { name, articles: { title } } FILTER .name = "Ada"`,
-        schema,
+        schema
       );
 
       const result = await pool.query(sql);
@@ -315,7 +317,8 @@ Deno.test({
       const data = typeof row.jsonb_build_object === "string" ? JSON.parse(row.jsonb_build_object) : row.jsonb_build_object;
 
       assertEquals(data.name, "Ada");
-      const titles = data.articles
+      const titles = data
+        .articles
         .map((a: { title: string; }) => a.title)
         .sort();
       assertEquals(titles, ["Paper A", "Paper B"]);
@@ -323,7 +326,7 @@ Deno.test({
       await cleanup(pool, [ARTICLE_TABLE, AUTHOR_TABLE]);
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -359,22 +362,22 @@ Deno.test({
              active := true
            }
          )`,
-        schema,
+        schema
       );
 
       await pool.query(sql);
 
       const verify = await pool.query(
-        `SELECT count(*)::int AS cnt FROM ${EMP_TABLE} WHERE name = 'BatchPerson'`,
+        `SELECT count(*)::int AS cnt FROM ${EMP_TABLE} WHERE name = 'BatchPerson'`
       );
       assertEquals(
         Number(verify.rows[0].cnt),
         3,
-        "Should have 3 batch-inserted rows",
+        "Should have 3 batch-inserted rows"
       );
     } finally {
       await cleanup(pool, [EMP_TABLE]);
       await pool.close();
     }
-  },
+  }
 });

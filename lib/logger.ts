@@ -20,13 +20,13 @@ const LEVEL_ORDER: Record<LogLevel, number> = {
   DEBUG: 0,
   INFO: 1,
   WARN: 2,
-  ERROR: 3,
+  ERROR: 3
 };
 
 // Global config - defaults
 let globalConfig: LogConfig = {
   level: "INFO",
-  format: "json",
+  format: "json"
 };
 
 export function configureLogging(config: Partial<LogConfig>): void {
@@ -69,9 +69,10 @@ export class Logger {
   private log(
     level: LogLevel,
     message: string,
-    extra?: Record<string, unknown>,
+    extra?: Record<string, unknown>
   ): void {
-    if (LEVEL_ORDER[level] < LEVEL_ORDER[globalConfig.level]) return;
+    if (LEVEL_ORDER[level] < LEVEL_ORDER[globalConfig.level])
+      return;
 
     const entry: LogEntry = {
       timestamp: new Date().toISOString(),
@@ -79,7 +80,7 @@ export class Logger {
       module: this.module,
       message,
       ...this.extra,
-      ...extra,
+      ...extra
     };
 
     // deno-lint-ignore no-console
@@ -91,9 +92,10 @@ export class Logger {
       // Text format: TIMESTAMP [LEVEL] [module] message key=value
       // P1-42: quote values that would break logfmt parsing (spaces, equals,
       // quotes). Previously `key=multi word` merged into adjacent pairs.
-      const kvPairs = Object.entries(entry)
+      const kvPairs = Object
+        .entries(entry)
         .filter(
-          ([k]) => !["timestamp", "level", "module", "message"].includes(k),
+          ([k]) => !["timestamp", "level", "module", "message"].includes(k)
         )
         .map(([k, v]) => `${k}=${formatLogValue(v)}`)
         .join(" ");
@@ -113,8 +115,10 @@ export function getLogger(module: string): Logger {
  * spec and keeps logs parseable by common tools (lnav, grafana loki, etc.).
  */
 function formatLogValue(v: unknown): string {
-  if (v === null || v === undefined) return String(v);
-  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  if (v === null || v === undefined)
+    return String(v);
+  if (typeof v === "number" || typeof v === "boolean")
+    return String(v);
   const s = typeof v === "string" ? v : JSON.stringify(v);
   // Needs quoting if it contains whitespace, a literal quote, or an `=`.
   if (/[\s"=]/.test(s)) {

@@ -7,12 +7,12 @@ import { Transaction } from "./transaction.ts";
 // --- Mock fetch helper ---
 
 function mockFetch(
-  handler: (url: string, init?: RequestInit) => Response | Promise<Response>,
+  handler: (url: string, init?: RequestInit) => Response | Promise<Response>
 ): () => void {
   const original = globalThis.fetch;
   globalThis.fetch = (
     input: string | URL | Request,
-    init?: RequestInit,
+    init?: RequestInit
   ): Promise<Response> => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     return Promise.resolve(handler(url, init));
@@ -86,7 +86,7 @@ Deno.test("transaction - query returns data on success", async () => {
 Deno.test("transaction - query throws DiscQueryError on server errors", async () => {
   const restore = mockFetch(() =>
     new Response(JSON.stringify({
-      errors: [{ message: "Unknown type 'Foo'" }],
+      errors: [{ message: "Unknown type 'Foo'" }]
     }))
   );
   try {
@@ -94,7 +94,7 @@ Deno.test("transaction - query throws DiscQueryError on server errors", async ()
     await assertRejects(
       () => tx.query("select Foo"),
       DiscQueryError,
-      "Unknown type 'Foo'",
+      "Unknown type 'Foo'"
     );
   } finally {
     restore();
@@ -114,7 +114,7 @@ Deno.test("transaction - commit sends POST to /transaction/{id}/commit", async (
     await tx.commit();
     assertEquals(
       capturedUrl,
-      "http://localhost:5656/transaction/tx-123/commit",
+      "http://localhost:5656/transaction/tx-123/commit"
     );
   } finally {
     restore();
@@ -145,7 +145,7 @@ Deno.test("transaction - rollback sends POST to /transaction/{id}/rollback", asy
     await tx.rollback();
     assertEquals(
       capturedUrl,
-      "http://localhost:5656/transaction/tx-123/rollback",
+      "http://localhost:5656/transaction/tx-123/rollback"
     );
   } finally {
     restore();
@@ -171,7 +171,7 @@ Deno.test("transaction - query after commit throws DiscTransactionError", async 
     await assertRejects(
       () => tx.query("select 1"),
       DiscTransactionError,
-      "Transaction is committed",
+      "Transaction is committed"
     );
   } finally {
     restore();
@@ -186,7 +186,7 @@ Deno.test("transaction - query after rollback throws DiscTransactionError", asyn
     await assertRejects(
       () => tx.query("select 1"),
       DiscTransactionError,
-      "Transaction is rolled_back",
+      "Transaction is rolled_back"
     );
   } finally {
     restore();
@@ -201,7 +201,7 @@ Deno.test("transaction - commit after commit throws DiscTransactionError", async
     await assertRejects(
       () => tx.commit(),
       DiscTransactionError,
-      "Transaction is committed",
+      "Transaction is committed"
     );
   } finally {
     restore();
@@ -216,7 +216,7 @@ Deno.test("transaction - rollback after commit throws DiscTransactionError", asy
     await assertRejects(
       () => tx.rollback(),
       DiscTransactionError,
-      "Transaction is committed",
+      "Transaction is committed"
     );
   } finally {
     restore();

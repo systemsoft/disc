@@ -49,7 +49,8 @@ export interface ResolveEmbeddedOptions {
  */
 function defaultDiscHome(): string {
   const explicit = Deno.env.get("DISC_HOME");
-  if (explicit) return explicit;
+  if (explicit)
+    return explicit;
   const home = Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE") ?? "/tmp";
   return join(home, ".disc");
 }
@@ -61,7 +62,7 @@ function defaultDiscHome(): string {
  * signalling to the caller "fall back to the network downloader".
  */
 export async function resolveEmbeddedPgBinDir(
-  options: ResolveEmbeddedOptions,
+  options: ResolveEmbeddedOptions
 ): Promise<string | null> {
   if (options.manifestEntries.length === 0) {
     return null;
@@ -73,7 +74,7 @@ export async function resolveEmbeddedPgBinDir(
   const result = await extractEmbeddedPg(targetDir, options.manifestEntries);
   if (!result.alreadyExtracted) {
     logger.info(
-      `Extracted embedded PostgreSQL ${options.version} (${result.extracted} files) to ${targetDir}`,
+      `Extracted embedded PostgreSQL ${options.version} (${result.extracted} files) to ${targetDir}`
     );
   }
 

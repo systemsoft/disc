@@ -23,7 +23,8 @@ function decodePemBase64(pem: string): Uint8Array {
     throw new Error("PEM envelope missing BEGIN/END CERTIFICATE markers");
   }
   const beginEnd = beginMatch.index! + beginMatch[0].length;
-  const body = pem.slice(beginEnd, endMatch.index)
+  const body = pem
+    .slice(beginEnd, endMatch.index)
     .replace(/\s+/g, "");
   const binary = atob(body);
   const out = new Uint8Array(binary.length);
@@ -99,8 +100,10 @@ function parseGeneralizedTime(s: string): Date {
 function decodeDerTime(buf: Uint8Array, h: DerHeader): Date {
   const slice = buf.slice(h.contentStart, h.totalEnd);
   const text = new TextDecoder("ascii").decode(slice);
-  if (h.tag === 0x17) return parseUtcTime(text);
-  if (h.tag === 0x18) return parseGeneralizedTime(text);
+  if (h.tag === 0x17)
+    return parseUtcTime(text);
+  if (h.tag === 0x18)
+    return parseGeneralizedTime(text);
   throw new Error(`Unexpected DER time tag 0x${h.tag.toString(16)}`);
 }
 
@@ -192,7 +195,7 @@ export interface TlsCertExpiry {
  */
 export async function readCertExpiry(
   certFile: string,
-  now: Date = new Date(),
+  now: Date = new Date()
 ): Promise<TlsCertExpiry> {
   const pem = await Deno.readTextFile(certFile);
   return computeCertExpiry(pem, now);
@@ -204,7 +207,7 @@ export async function readCertExpiry(
  */
 export function computeCertExpiry(
   pem: string,
-  now: Date = new Date(),
+  now: Date = new Date()
 ): TlsCertExpiry {
   const notAfter = extractNotAfter(pem);
   const notAfterUnix = Math.floor(notAfter.getTime() / 1000);
@@ -212,6 +215,6 @@ export function computeCertExpiry(
   return {
     notAfter,
     notAfterUnix,
-    secondsUntilExpiry: notAfterUnix - nowUnix,
+    secondsUntilExpiry: notAfterUnix - nowUnix
   };
 }

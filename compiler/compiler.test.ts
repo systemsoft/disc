@@ -107,10 +107,10 @@ Deno.test("SQL Code Generator - Column Reference", () => {
         expression: {
           kind: "ColumnReference",
           table: "u",
-          column: "name",
-        },
-      }],
-    },
+          column: "name"
+        }
+      }]
+    }
   });
 
   assertEquals(sql.includes("u.name"), true);
@@ -129,16 +129,16 @@ Deno.test("SQL Code Generator - Binary Expression", () => {
           operator: "=",
           left: {
             kind: "ColumnReference",
-            column: "active",
+            column: "active"
           },
           right: {
             kind: "LiteralExpression",
             type: "boolean",
-            value: true,
-          },
-        },
-      }],
-    },
+            value: true
+          }
+        }
+      }]
+    }
   });
 
   assertEquals(sql.includes("active = TRUE"), true);
@@ -160,21 +160,21 @@ Deno.test("SQL Code Generator - JSON Build Object", () => {
               key: "name",
               value: {
                 kind: "ColumnReference",
-                column: "name",
-              },
+                column: "name"
+              }
             },
             {
               kind: "JsonField",
               key: "email",
               value: {
                 kind: "ColumnReference",
-                column: "email",
-              },
-            },
-          ],
-        },
-      }],
-    },
+                column: "email"
+              }
+            }
+          ]
+        }
+      }]
+    }
   });
 
   assertEquals(sql.includes("jsonb_build_object"), true);
@@ -196,11 +196,11 @@ Deno.test("SQL Code Generator - Function Call", () => {
           args: [{
             kind: "LiteralExpression",
             type: "string",
-            value: "*",
-          }],
-        },
-      }],
-    },
+            value: "*"
+          }]
+        }
+      }]
+    }
   });
 
   assertEquals(sql.includes("COUNT('*')"), true);
@@ -216,17 +216,17 @@ Deno.test("SQL Code Generator - WHERE Clause", () => {
         kind: "SelectItem",
         expression: {
           kind: "ColumnReference",
-          column: "name",
-        },
-      }],
+          column: "name"
+        }
+      }]
     },
     from: {
       kind: "FromClause",
       tables: [{
         kind: "TableReference",
         name: "users",
-        alias: "u",
-      }],
+        alias: "u"
+      }]
     },
     where: {
       kind: "WhereClause",
@@ -236,15 +236,15 @@ Deno.test("SQL Code Generator - WHERE Clause", () => {
         left: {
           kind: "ColumnReference",
           table: "u",
-          column: "active",
+          column: "active"
         },
         right: {
           kind: "LiteralExpression",
           type: "boolean",
-          value: true,
-        },
-      },
-    },
+          value: true
+        }
+      }
+    }
   });
 
   assertEquals(sql.includes("FROM"), true);
@@ -263,9 +263,9 @@ Deno.test("SQL Code Generator - ORDER BY and LIMIT", () => {
         kind: "SelectItem",
         expression: {
           kind: "ColumnReference",
-          column: "name",
-        },
-      }],
+          column: "name"
+        }
+      }]
     },
     orderBy: {
       kind: "OrderByClause",
@@ -273,19 +273,19 @@ Deno.test("SQL Code Generator - ORDER BY and LIMIT", () => {
         kind: "OrderByItem",
         expression: {
           kind: "ColumnReference",
-          column: "name",
+          column: "name"
         },
-        direction: "ASC",
-      }],
+        direction: "ASC"
+      }]
     },
     limit: {
       kind: "LimitClause",
       count: {
         kind: "LiteralExpression",
         type: "number",
-        value: 10,
-      },
-    },
+        value: 10
+      }
+    }
   });
 
   assertEquals(sql.includes("ORDER BY"), true);
@@ -303,10 +303,10 @@ Deno.test("SQL Code Generator - Identifier Escaping", () => {
         kind: "SelectItem",
         expression: {
           kind: "ColumnReference",
-          column: "order", // Reserved keyword
-        },
-      }],
-    },
+          column: "order" // Reserved keyword
+        }
+      }]
+    }
   });
 
   assertEquals(sql.includes("\"order\""), true);
@@ -323,10 +323,10 @@ Deno.test("SQL Code Generator - String Escaping", () => {
         expression: {
           kind: "LiteralExpression",
           type: "string",
-          value: "It's a test",
-        },
-      }],
-    },
+          value: "It's a test"
+        }
+      }]
+    }
   });
 
   assertEquals(sql.includes("'It''s a test'"), true);
@@ -586,10 +586,10 @@ Deno.test("SQL Code Generator - CastExpression", () => {
         expression: {
           kind: "CastExpression",
           expression: { kind: "LiteralExpression", type: "number", value: 42 },
-          targetType: "text",
-        },
-      }],
-    },
+          targetType: "text"
+        }
+      }]
+    }
   });
 
   assertEquals(sql.includes("CAST(42 AS text)"), true);
@@ -608,9 +608,9 @@ Deno.test("SQL Code Generator - UnionAllStatement", () => {
           kind: "SelectClause",
           columns: [{
             kind: "SelectItem",
-            expression: { kind: "LiteralExpression", type: "number", value: 1 },
-          }],
-        },
+            expression: { kind: "LiteralExpression", type: "number", value: 1 }
+          }]
+        }
       },
       {
         kind: "SelectStatement",
@@ -618,11 +618,11 @@ Deno.test("SQL Code Generator - UnionAllStatement", () => {
           kind: "SelectClause",
           columns: [{
             kind: "SelectItem",
-            expression: { kind: "LiteralExpression", type: "number", value: 2 },
-          }],
-        },
-      },
-    ],
+            expression: { kind: "LiteralExpression", type: "number", value: 2 }
+          }]
+        }
+      }
+    ]
   });
 
   assertEquals(sql.includes("UNION ALL"), true);
@@ -701,9 +701,9 @@ Deno.test("SQL Code Generator - OFFSET Clause", () => {
         kind: "SelectItem",
         expression: {
           kind: "ColumnReference",
-          column: "name",
-        },
-      }],
+          column: "name"
+        }
+      }]
     },
     orderBy: {
       kind: "OrderByClause",
@@ -711,27 +711,27 @@ Deno.test("SQL Code Generator - OFFSET Clause", () => {
         kind: "OrderByItem",
         expression: {
           kind: "ColumnReference",
-          column: "name",
+          column: "name"
         },
-        direction: "ASC",
-      }],
+        direction: "ASC"
+      }]
     },
     offset: {
       kind: "OffsetClause",
       count: {
         kind: "LiteralExpression",
         type: "number",
-        value: 5,
-      },
+        value: 5
+      }
     },
     limit: {
       kind: "LimitClause",
       count: {
         kind: "LiteralExpression",
         type: "number",
-        value: 10,
-      },
-    },
+        value: 10
+      }
+    }
   });
 
   assertEquals(sql.includes("ORDER BY"), true);
@@ -756,19 +756,19 @@ Deno.test("SQL Compiler - WITH CTE body references CTE name with shape", () => {
   assertEquals(
     sql.includes("FROM"),
     true,
-    "Body query should have a FROM clause",
+    "Body query should have a FROM clause"
   );
   // The shape should resolve the 'name' property
   assertEquals(
     sql.includes("'name'"),
     true,
-    "Shape should resolve the 'name' property",
+    "Shape should resolve the 'name' property"
   );
   // The CTE name should be used in FROM
   assertEquals(
     sql.includes("active"),
     true,
-    "SQL should reference the CTE alias 'active'",
+    "SQL should reference the CTE alias 'active'"
   );
 });
 
@@ -787,12 +787,12 @@ Deno.test("SQL Compiler - WITH multiple CTEs, body references second CTE", () =>
   assertEquals(
     sql.includes("seniors"),
     true,
-    "SQL should contain 'seniors' CTE",
+    "SQL should contain 'seniors' CTE"
   );
   assertEquals(
     sql.includes("youngsters"),
     true,
-    "SQL should contain 'youngsters' CTE",
+    "SQL should contain 'youngsters' CTE"
   );
   // The body should reference youngsters as a table
   assertEquals(sql.includes("FROM"), true, "Body should have FROM clause");
@@ -814,13 +814,13 @@ Deno.test("SQL Compiler - WITH CTE without shape selects all columns", () => {
   assertEquals(
     sql.includes("active"),
     true,
-    "SQL should reference the CTE alias",
+    "SQL should reference the CTE alias"
   );
   // Should use implicit shape (jsonb_build_object with all columns)
   assertEquals(
     sql.includes("jsonb_build_object"),
     true,
-    "Implicit shape should produce jsonb_build_object",
+    "Implicit shape should produce jsonb_build_object"
   );
 });
 
@@ -838,13 +838,13 @@ Deno.test("SQL Compiler - INTERSECT produces SQL INTERSECT", () => {
   assertEquals(
     sql.includes("INTERSECT"),
     true,
-    "SQL should contain INTERSECT",
+    "SQL should contain INTERSECT"
   );
   // Should NOT contain UNION ALL
   assertEquals(
     sql.includes("UNION ALL"),
     false,
-    "SQL should not contain UNION ALL for INTERSECT",
+    "SQL should not contain UNION ALL for INTERSECT"
   );
 });
 
@@ -860,13 +860,13 @@ Deno.test("SQL Compiler - EXCEPT produces SQL EXCEPT", () => {
   assertEquals(
     sql.includes("EXCEPT"),
     true,
-    "SQL should contain EXCEPT",
+    "SQL should contain EXCEPT"
   );
   // Should NOT contain UNION ALL
   assertEquals(
     sql.includes("UNION ALL"),
     false,
-    "SQL should not contain UNION ALL for EXCEPT",
+    "SQL should not contain UNION ALL for EXCEPT"
   );
 });
 
@@ -882,7 +882,7 @@ Deno.test("SQL Compiler - UNION produces SQL UNION ALL", () => {
   assertEquals(
     sql.includes("UNION ALL"),
     true,
-    "EdgeQL UNION should produce SQL UNION ALL",
+    "EdgeQL UNION should produce SQL UNION ALL"
   );
 });
 
@@ -897,9 +897,9 @@ Deno.test("SQL Code Generator - UnionAllStatement with INTERSECT operator", () =
           kind: "SelectClause",
           columns: [{
             kind: "SelectItem",
-            expression: { kind: "LiteralExpression", type: "number", value: 1 },
-          }],
-        },
+            expression: { kind: "LiteralExpression", type: "number", value: 1 }
+          }]
+        }
       },
       {
         kind: "SelectStatement",
@@ -907,19 +907,19 @@ Deno.test("SQL Code Generator - UnionAllStatement with INTERSECT operator", () =
           kind: "SelectClause",
           columns: [{
             kind: "SelectItem",
-            expression: { kind: "LiteralExpression", type: "number", value: 2 },
-          }],
-        },
-      },
+            expression: { kind: "LiteralExpression", type: "number", value: 2 }
+          }]
+        }
+      }
     ],
-    operator: "INTERSECT",
+    operator: "INTERSECT"
   });
 
   assertEquals(sql.includes("INTERSECT"), true, "SQL should contain INTERSECT");
   assertEquals(
     sql.includes("UNION ALL"),
     false,
-    "SQL should not contain UNION ALL",
+    "SQL should not contain UNION ALL"
   );
 });
 
@@ -934,9 +934,9 @@ Deno.test("SQL Code Generator - UnionAllStatement with EXCEPT operator", () => {
           kind: "SelectClause",
           columns: [{
             kind: "SelectItem",
-            expression: { kind: "LiteralExpression", type: "number", value: 1 },
-          }],
-        },
+            expression: { kind: "LiteralExpression", type: "number", value: 1 }
+          }]
+        }
       },
       {
         kind: "SelectStatement",
@@ -944,19 +944,19 @@ Deno.test("SQL Code Generator - UnionAllStatement with EXCEPT operator", () => {
           kind: "SelectClause",
           columns: [{
             kind: "SelectItem",
-            expression: { kind: "LiteralExpression", type: "number", value: 2 },
-          }],
-        },
-      },
+            expression: { kind: "LiteralExpression", type: "number", value: 2 }
+          }]
+        }
+      }
     ],
-    operator: "EXCEPT",
+    operator: "EXCEPT"
   });
 
   assertEquals(sql.includes("EXCEPT"), true, "SQL should contain EXCEPT");
   assertEquals(
     sql.includes("UNION ALL"),
     false,
-    "SQL should not contain UNION ALL",
+    "SQL should not contain UNION ALL"
   );
 });
 
@@ -971,9 +971,9 @@ Deno.test("SQL Code Generator - UnionAllStatement defaults to UNION ALL when no 
           kind: "SelectClause",
           columns: [{
             kind: "SelectItem",
-            expression: { kind: "LiteralExpression", type: "number", value: 1 },
-          }],
-        },
+            expression: { kind: "LiteralExpression", type: "number", value: 1 }
+          }]
+        }
       },
       {
         kind: "SelectStatement",
@@ -981,11 +981,11 @@ Deno.test("SQL Code Generator - UnionAllStatement defaults to UNION ALL when no 
           kind: "SelectClause",
           columns: [{
             kind: "SelectItem",
-            expression: { kind: "LiteralExpression", type: "number", value: 2 },
-          }],
-        },
-      },
-    ],
+            expression: { kind: "LiteralExpression", type: "number", value: 2 }
+          }]
+        }
+      }
+    ]
     // No operator field — should default to UNION ALL
   });
 
@@ -1008,27 +1008,27 @@ Deno.test("SQL Compiler - Window function: row_number() OVER (PARTITION BY ... O
   assertEquals(
     sql.includes("ROW_NUMBER()"),
     true,
-    "SQL should contain ROW_NUMBER()",
+    "SQL should contain ROW_NUMBER()"
   );
   assertEquals(
     sql.includes("OVER"),
     true,
-    "SQL should contain OVER clause",
+    "SQL should contain OVER clause"
   );
   assertEquals(
     sql.includes("PARTITION BY"),
     true,
-    "SQL should contain PARTITION BY",
+    "SQL should contain PARTITION BY"
   );
   assertEquals(
     sql.includes("ORDER BY"),
     true,
-    "SQL should contain ORDER BY in OVER clause",
+    "SQL should contain ORDER BY in OVER clause"
   );
   assertEquals(
     sql.includes("DESC"),
     true,
-    "SQL should contain DESC direction",
+    "SQL should contain DESC direction"
   );
 });
 
@@ -1044,17 +1044,17 @@ Deno.test("SQL Compiler - Aggregate as window: sum(.salary) OVER (ORDER BY .name
   assertEquals(
     sql.includes("SUM("),
     true,
-    "SQL should contain SUM(",
+    "SQL should contain SUM("
   );
   assertEquals(
     sql.includes("OVER"),
     true,
-    "SQL should contain OVER clause",
+    "SQL should contain OVER clause"
   );
   assertEquals(
     sql.includes("ORDER BY"),
     true,
-    "SQL should contain ORDER BY in OVER clause",
+    "SQL should contain ORDER BY in OVER clause"
   );
 });
 
@@ -1075,29 +1075,29 @@ Deno.test("SQL Code Generator - WindowFunctionExpression with frame", () => {
             orderBy: [{
               kind: "OrderByItem",
               expression: { kind: "ColumnReference", column: "id" },
-              direction: "ASC",
+              direction: "ASC"
             }],
             frame: {
               kind: "WindowFrame",
               mode: "ROWS",
               start: "UNBOUNDED PRECEDING",
-              end: "CURRENT ROW",
-            },
-          },
-        },
-      }],
-    },
+              end: "CURRENT ROW"
+            }
+          }
+        }
+      }]
+    }
   });
 
   assertEquals(
     sql.includes("ROW_NUMBER() OVER"),
     true,
-    "SQL should contain ROW_NUMBER() OVER",
+    "SQL should contain ROW_NUMBER() OVER"
   );
   assertEquals(
     sql.includes("ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW"),
     true,
-    "SQL should contain frame spec",
+    "SQL should contain frame spec"
   );
 });
 
@@ -1113,7 +1113,7 @@ Deno.test("OVER enforcement - window-only function without OVER throws error", (
       compileEdgeQL(source);
     },
     CompilationError,
-    "requires an OVER clause",
+    "requires an OVER clause"
   );
 });
 
@@ -1131,7 +1131,7 @@ Deno.test("OVER enforcement - non-window function with OVER throws error", () =>
       args: [{
         kind: "FunctionArg",
         name: undefined,
-        value: { kind: "Literal", type: "string", value: "hello" },
+        value: { kind: "Literal", type: "string", value: "hello" }
       }],
       over: {
         kind: "WindowOverClause",
@@ -1139,12 +1139,12 @@ Deno.test("OVER enforcement - non-window function with OVER throws error", () =>
           kind: "OrderByClause",
           expr: {
             kind: "Path",
-            steps: [{ kind: "PathStep", type: "property", name: "name" }],
+            steps: [{ kind: "PathStep", type: "property", name: "name" }]
           },
-          direction: "ASC",
-        }],
-      },
-    },
+          direction: "ASC"
+        }]
+      }
+    }
   };
 
   const result = testCompiler.compile(ast);
@@ -1153,7 +1153,7 @@ Deno.test("OVER enforcement - non-window function with OVER throws error", () =>
     assertEquals(
       result.error.message.includes("cannot be used with an OVER clause"),
       true,
-      "Error should mention OVER clause restriction",
+      "Error should mention OVER clause restriction"
     );
   }
 });
@@ -1170,17 +1170,17 @@ Deno.test("OVER enforcement - aggregate function with OVER succeeds", () => {
   assertEquals(
     sql.includes("COUNT("),
     true,
-    "SQL should contain COUNT(",
+    "SQL should contain COUNT("
   );
   assertEquals(
     sql.includes("OVER"),
     true,
-    "SQL should contain OVER clause",
+    "SQL should contain OVER clause"
   );
   assertEquals(
     sql.includes("PARTITION BY"),
     true,
-    "SQL should contain PARTITION BY",
+    "SQL should contain PARTITION BY"
   );
 });
 
@@ -1196,12 +1196,12 @@ Deno.test("Frame exclusion compiles to correct SQL", () => {
   assertEquals(
     sql.includes("EXCLUDE CURRENT ROW"),
     true,
-    "SQL should contain EXCLUDE CURRENT ROW",
+    "SQL should contain EXCLUDE CURRENT ROW"
   );
   assertEquals(
     sql.includes("ROWS BETWEEN"),
     true,
-    "SQL should contain frame spec",
+    "SQL should contain frame spec"
   );
 });
 
@@ -1223,12 +1223,12 @@ Deno.test("SQL Compiler - WITH RECURSIVE generates SQL WITH RECURSIVE", () => {
   assertEquals(
     sql.includes("WITH RECURSIVE"),
     true,
-    "SQL should contain WITH RECURSIVE",
+    "SQL should contain WITH RECURSIVE"
   );
   assertEquals(
     sql.includes("nums"),
     true,
-    "SQL should contain the CTE name 'nums'",
+    "SQL should contain the CTE name 'nums'"
   );
 });
 
@@ -1242,12 +1242,12 @@ Deno.test("SQL Compiler - WITH without RECURSIVE does not produce WITH RECURSIVE
   assertEquals(
     sql.includes("WITH"),
     true,
-    "SQL should contain WITH",
+    "SQL should contain WITH"
   );
   assertEquals(
     sql.includes("WITH RECURSIVE"),
     false,
-    "SQL should NOT contain WITH RECURSIVE",
+    "SQL should NOT contain WITH RECURSIVE"
   );
 });
 
@@ -1260,7 +1260,7 @@ Deno.test("SQL Compiler - recursive CTE requires UNION ALL", () => {
   assertThrows(
     () => compileEdgeQL(source),
     CompilationError,
-    "must contain a UNION ALL between base case and recursive case",
+    "must contain a UNION ALL between base case and recursive case"
   );
 });
 
@@ -1277,7 +1277,7 @@ Deno.test("SQL Compiler - recursive CTE rejects INTERSECT", () => {
   assertThrows(
     () => compileEdgeQL(source),
     CompilationError,
-    "must contain a UNION ALL between base case and recursive case",
+    "must contain a UNION ALL between base case and recursive case"
   );
 });
 
@@ -1295,12 +1295,12 @@ Deno.test("SQL Compiler - valid recursive CTE with UNION compiles", () => {
   assertEquals(
     sql.includes("WITH RECURSIVE"),
     true,
-    "SQL should contain WITH RECURSIVE",
+    "SQL should contain WITH RECURSIVE"
   );
   assertEquals(
     sql.includes("UNION ALL"),
     true,
-    "SQL should contain UNION ALL",
+    "SQL should contain UNION ALL"
   );
 });
 
@@ -1321,7 +1321,7 @@ Deno.test("SQL Compiler - WITH CTE referenced once generates valid SQL with CTE 
   assertEquals(
     sql.includes("active"),
     true,
-    "SQL should reference CTE alias 'active'",
+    "SQL should reference CTE alias 'active'"
   );
   // The body query should produce a FROM clause referencing the CTE
   assertEquals(sql.includes("FROM"), true, "Body should have FROM clause");

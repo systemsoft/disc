@@ -7,22 +7,22 @@ import { renderMetrics } from "./metrics.ts";
 import type { MetricsSource } from "./metrics.ts";
 
 function makeSource(
-  overrides: Partial<MetricsSource> = {},
+  overrides: Partial<MetricsSource> = {}
 ): MetricsSource {
   return {
     http: {
       total_requests: 100,
       successful_requests: 95,
       failed_requests: 5,
-      total_duration_ms: 50000,
+      total_duration_ms: 50000
     },
     uptimeMs: 120000,
     memory: {
       heapUsed: 1024 * 1024 * 10,
       heapTotal: 1024 * 1024 * 50,
-      external: 1024 * 512,
+      external: 1024 * 512
     },
-    ...overrides,
+    ...overrides
   };
 }
 
@@ -33,16 +33,16 @@ Deno.test("renderMetrics includes HELP and TYPE comments for HTTP counters", () 
   assertStringIncludes(output, "# TYPE disc_http_requests_total counter");
   assertStringIncludes(
     output,
-    "# HELP disc_http_requests_successful_total",
+    "# HELP disc_http_requests_successful_total"
   );
   assertStringIncludes(
     output,
-    "# TYPE disc_http_requests_successful_total counter",
+    "# TYPE disc_http_requests_successful_total counter"
   );
   assertStringIncludes(output, "# HELP disc_http_requests_failed_total");
   assertStringIncludes(
     output,
-    "# TYPE disc_http_requests_failed_total counter",
+    "# TYPE disc_http_requests_failed_total counter"
   );
 });
 
@@ -52,8 +52,8 @@ Deno.test("renderMetrics outputs correct HTTP request counter values", () => {
       total_requests: 42,
       successful_requests: 40,
       failed_requests: 2,
-      total_duration_ms: 9000,
-    },
+      total_duration_ms: 9000
+    }
   });
   const output = renderMetrics(source);
 
@@ -66,8 +66,8 @@ Deno.test("renderMetrics includes cache stats when cache is provided", () => {
   const source = makeSource({
     cache: {
       compilation: { hits: 50, misses: 10, evictions: 2, size: 48 },
-      parse: { hits: 30, misses: 5, evictions: 1, size: 29 },
-    },
+      parse: { hits: 30, misses: 5, evictions: 1, size: 29 }
+    }
   });
   const output = renderMetrics(source);
 
@@ -91,7 +91,7 @@ Deno.test("renderMetrics omits cache stats when cache is undefined", () => {
 
 Deno.test("renderMetrics includes pool stats when pool is provided", () => {
   const source = makeSource({
-    pool: { total: 10, idle: 7, active: 3, waiters: 1 },
+    pool: { total: 10, idle: 7, active: 3, waiters: 1 }
   });
   const output = renderMetrics(source);
 
@@ -111,7 +111,7 @@ Deno.test("renderMetrics omits pool stats when pool is null", () => {
 
 Deno.test("renderMetrics includes rate limit stats when rateLimit is provided", () => {
   const source = makeSource({
-    rateLimit: { rejectedCount: 15, activeClients: 8 },
+    rateLimit: { rejectedCount: 15, activeClients: 8 }
   });
   const output = renderMetrics(source);
 
@@ -125,18 +125,18 @@ Deno.test("renderMetrics always includes memory and uptime metrics", () => {
     memory: {
       heapUsed: 1000,
       heapTotal: 2000,
-      external: 500,
-    },
+      external: 500
+    }
   });
   const output = renderMetrics(source);
 
   assertStringIncludes(
     output,
-    "disc_process_memory_heap_used_bytes 1000",
+    "disc_process_memory_heap_used_bytes 1000"
   );
   assertStringIncludes(
     output,
-    "disc_process_memory_heap_total_bytes 2000",
+    "disc_process_memory_heap_total_bytes 2000"
   );
   assertStringIncludes(output, "disc_process_memory_external_bytes 500");
   // 60000ms / 1000 = 60 seconds
@@ -167,26 +167,26 @@ Deno.test("renderMetrics emits TLS expiry gauges when tls is provided", () => {
   const source = makeSource({
     tls: {
       notAfterUnix: 1893456000, // 2030-01-01T00:00:00Z
-      secondsUntilExpiry: 60 * 60 * 24 * 30, // 30 days
-    },
+      secondsUntilExpiry: 60 * 60 * 24 * 30 // 30 days
+    }
   });
   const output = renderMetrics(source);
 
   assertStringIncludes(
     output,
-    "# TYPE disc_tls_certificate_expiration_time gauge",
+    "# TYPE disc_tls_certificate_expiration_time gauge"
   );
   assertStringIncludes(
     output,
-    "disc_tls_certificate_expiration_time 1893456000",
+    "disc_tls_certificate_expiration_time 1893456000"
   );
   assertStringIncludes(
     output,
-    "# TYPE disc_tls_certificate_seconds_until_expiry gauge",
+    "# TYPE disc_tls_certificate_seconds_until_expiry gauge"
   );
   assertStringIncludes(
     output,
-    "disc_tls_certificate_seconds_until_expiry 2592000",
+    "disc_tls_certificate_seconds_until_expiry 2592000"
   );
 });
 
@@ -212,14 +212,14 @@ Deno.test("no gauge other than tls_certificate_expiration_time reports a unix-ep
   const source = makeSource({
     cache: {
       compilation: { hits: 1, misses: 1, evictions: 0, size: 1 },
-      parse: { hits: 1, misses: 1, evictions: 0, size: 1 },
+      parse: { hits: 1, misses: 1, evictions: 0, size: 1 }
     },
     pool: { total: 5, idle: 4, active: 1, waiters: 0 },
     rateLimit: { rejectedCount: 0, activeClients: 0 },
     tls: {
       notAfterUnix: 1893456000,
-      secondsUntilExpiry: 100,
-    },
+      secondsUntilExpiry: 100
+    }
   });
   const output = renderMetrics(source);
 
@@ -227,35 +227,42 @@ Deno.test("no gauge other than tls_certificate_expiration_time reports a unix-ep
   const UNIX_LOW = 1_577_836_800;
   const UNIX_HIGH = 2_524_608_000;
   const ALLOWED_TIMESTAMP_GAUGES = new Set([
-    "disc_tls_certificate_expiration_time",
+    "disc_tls_certificate_expiration_time"
   ]);
 
   let currentType: "gauge" | "counter" | undefined;
   let currentName: string | undefined;
   for (const rawLine of output.split("\n")) {
     const line = rawLine.trim();
-    if (!line) continue;
+    if (!line)
+      continue;
     if (line.startsWith("# TYPE ")) {
       const [, , name, kind] = line.split(/\s+/);
       currentName = name;
       currentType = kind === "gauge" ? "gauge" : "counter";
       continue;
     }
-    if (line.startsWith("#")) continue;
-    if (currentType !== "gauge") continue;
-    if (!currentName) continue;
-    if (ALLOWED_TIMESTAMP_GAUGES.has(currentName)) continue;
+    if (line.startsWith("#"))
+      continue;
+    if (currentType !== "gauge")
+      continue;
+    if (!currentName)
+      continue;
+    if (ALLOWED_TIMESTAMP_GAUGES.has(currentName))
+      continue;
 
     // Sample line: "disc_query_cache_size 48"
     const match = line.match(/^(\S+)\s+(\S+)$/);
-    if (!match) continue;
+    if (!match)
+      continue;
     const value = Number(match[2]);
-    if (!Number.isFinite(value)) continue;
+    if (!Number.isFinite(value))
+      continue;
     const looksLikeEpoch = value >= UNIX_LOW && value <= UNIX_HIGH;
     assertEquals(
       looksLikeEpoch,
       false,
-      `gauge ${currentName}=${value} looks like a unix epoch — see geldata/gel#5405`,
+      `gauge ${currentName}=${value} looks like a unix epoch — see geldata/gel#5405`
     );
   }
 });

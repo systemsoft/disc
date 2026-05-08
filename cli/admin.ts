@@ -57,23 +57,25 @@ class AdminCommand {
    * apply), ensures the superuser role exists, then assigns it.
    */
   async createSuperuser(opts: CreateSuperuserOptions): Promise<void> {
-    if (rejectEmptyPassword(opts.password)) return;
+    if (rejectEmptyPassword(opts.password))
+      return;
 
     const ctx = await openAuth(opts);
-    if (!ctx) return;
+    if (!ctx)
+      return;
     try {
       const roleName = opts.role ?? DEFAULT_SUPERUSER_ROLE;
       const result = await ctx.provider.register({
         email: opts.email,
         password: opts.password,
-        username: opts.name ?? opts.email.split("@")[0],
+        username: opts.name ?? opts.email.split("@")[0]
       });
       const userId = result.user.id;
 
       // createRole is idempotent — duplicate name updates the description.
       await ctx.provider.createRole(
         roleName,
-        opts.role ? `Custom role created via 'disc admin create-superuser --role ${roleName}'` : "Top-level admin role with all permissions",
+        opts.role ? `Custom role created via 'disc admin create-superuser --role ${roleName}'` : "Top-level admin role with all permissions"
       );
       await ctx.provider.assignRole(userId, roleName);
 
@@ -92,10 +94,12 @@ class AdminCommand {
    * sessions are revoked so the new password is the only credential.
    */
   async setPassword(opts: SetPasswordOptions): Promise<void> {
-    if (rejectEmptyPassword(opts.password)) return;
+    if (rejectEmptyPassword(opts.password))
+      return;
 
     const ctx = await openAuth(opts);
-    if (!ctx) return;
+    if (!ctx)
+      return;
     try {
       await ctx.provider.adminSetPassword(opts.user, opts.password);
       console.log(`✅ Password rotated for ${opts.user}`);
@@ -116,7 +120,8 @@ class AdminCommand {
    */
   async assignRole(opts: AssignRoleOptions): Promise<void> {
     const ctx = await openAuth(opts);
-    if (!ctx) return;
+    if (!ctx)
+      return;
     try {
       const userId = await ctx.provider.resolveUserId(opts.user);
       if (!userId) {
@@ -138,7 +143,8 @@ class AdminCommand {
    */
   async listRoles(opts: BaseOptions): Promise<void> {
     const ctx = await openAuth(opts);
-    if (!ctx) return;
+    if (!ctx)
+      return;
     try {
       const roles = await ctx.provider.listRoles();
       if (roles.length === 0) {
@@ -172,14 +178,14 @@ class AdminCommand {
    * Reads `--schema <file>` (default `./dbschema/default.disc`).
    */
   async listPolicies(
-    opts: { schema?: string; type?: string; },
+    opts: { schema?: string; type?: string; }
   ): Promise<void> {
     const schemaFile = opts.schema ?? "./dbschema/default.disc";
     const sdl = await Deno.readTextFile(schemaFile);
 
     const policiesByType = collectPoliciesFromSdl(sdl);
 
-    const targetTypes = opts.type ? [opts.type].filter((t) => policiesByType.has(t)) : Array.from(policiesByType.keys()).sort();
+    const targetTypes = opts.type ? [opts.type].filter(t => policiesByType.has(t)) : Array.from(policiesByType.keys()).sort();
 
     if (opts.type && !policiesByType.has(opts.type)) {
       console.log(`(no policies on type ${opts.type})`);
@@ -230,7 +236,7 @@ class AdminCommand {
     globals?: Record<string, unknown>;
     all?: boolean;
   }): Promise<void> {
-    return testPolicyImpl(opts, (line) => console.log(line));
+    return testPolicyImpl(opts, line => console.log(line));
   }
 }
 
@@ -250,7 +256,7 @@ export async function testPolicyImpl(
     globals?: Record<string, unknown>;
     all?: boolean;
   },
-  emit: (line: string) => void,
+  emit: (line: string) => void
 ): Promise<void> {
   const schemaFile = opts.schema ?? "./dbschema/default.disc";
   const sdl = await Deno.readTextFile(schemaFile);
@@ -263,14 +269,14 @@ export async function testPolicyImpl(
     typeName = target;
     if (!typeName) {
       throw new Error(
-        "test-policy --all requires a type name (e.g. `disc admin test-policy Doc --all`)",
+        "test-policy --all requires a type name (e.g. `disc admin test-policy Doc --all`)"
       );
     }
   } else {
     const dot = target.indexOf(".");
     if (dot < 1 || dot === target.length - 1) {
       throw new Error(
-        "test-policy target must be `<Type>.<policy>` (e.g. `Doc.owner_only`)",
+        "test-policy target must be `<Type>.<policy>` (e.g. `Doc.owner_only`)"
       );
     }
     typeName = target.slice(0, dot);
@@ -284,7 +290,7 @@ export async function testPolicyImpl(
     return;
   }
 
-  const targets = policyName ? sdlPolicies.filter((p) => p.name.value === policyName) : sdlPolicies;
+  const targets = policyName ? sdlPolicies.filter(p => p.name.value === policyName) : sdlPolicies;
 
   if (targets.length === 0) {
     emit(`(no policy named ${policyName} on type ${typeName})`);
@@ -294,7 +300,7 @@ export async function testPolicyImpl(
   const ctx: AccessContext = {
     userId: opts.userId,
     userRole: opts.userRole,
-    globals: opts.globals ? new Map(Object.entries(opts.globals)) : undefined,
+    globals: opts.globals ? new Map(Object.entries(opts.globals)) : undefined
   };
 
   // Evaluate each target policy in isolation against a fresh
@@ -306,7 +312,7 @@ export async function testPolicyImpl(
       mode: "permissive",
       defaultAllow: false,
       enableRLS: true,
-      enableAudit: false,
+      enableAudit: false
     });
     evaluator.registerPolicy(runtimePolicy);
 
@@ -315,7 +321,7 @@ export async function testPolicyImpl(
     const durationUs = Math.round((performance.now() - start) * 1000);
 
     emit(
-      `${typeName}.${sdlPolicy.name.value} (${action}): ${decision.allowed ? "ALLOW" : "DENY"} (${durationUs}µs)`,
+      `${typeName}.${sdlPolicy.name.value} (${action}): ${decision.allowed ? "ALLOW" : "DENY"} (${durationUs}µs)`
     );
     emit(`  reason: ${decision.reason}`);
     if (decision.denialMessage) {
@@ -334,7 +340,7 @@ export async function testPolicyImpl(
  * (gh/geldata#6432 slice 4)
  */
 export function collectAccessPolicyAst(
-  sdl: string,
+  sdl: string
 ): Map<string, AST.AccessPolicy[]> {
   const out = new Map<string, AST.AccessPolicy[]>();
   const doc = new SDLParser(sdl).parse();
@@ -350,15 +356,18 @@ export function collectAccessPolicyAst(
 
 function collectAccessPolicyAstFromDecls(
   decls: ReadonlyArray<AST.Declaration>,
-  out: Map<string, AST.AccessPolicy[]>,
+  out: Map<string, AST.AccessPolicy[]>
 ): void {
   for (const d of decls) {
-    if (d.kind !== "TypeDeclaration") continue;
+    if (d.kind !== "TypeDeclaration")
+      continue;
     const policies: AST.AccessPolicy[] = [];
     for (const m of d.members ?? []) {
-      if (m.kind === "AccessPolicy") policies.push(m);
+      if (m.kind === "AccessPolicy")
+        policies.push(m);
     }
-    if (policies.length > 0) out.set(d.name.value, policies);
+    if (policies.length > 0)
+      out.set(d.name.value, policies);
   }
 }
 
@@ -376,7 +385,7 @@ interface ListedPolicy {
  * of the live database. (gh/geldata#6432)
  */
 export function collectPoliciesFromSdl(
-  sdl: string,
+  sdl: string
 ): Map<string, ListedPolicy[]> {
   const out = new Map<string, ListedPolicy[]>();
   const ast = new SDLParser(sdl).parse();
@@ -393,17 +402,19 @@ export function collectPoliciesFromSdl(
 
 function collectFromTypeDecls(
   decls: ReadonlyArray<{ kind: string; }>,
-  out: Map<string, ListedPolicy[]>,
+  out: Map<string, ListedPolicy[]>
 ): void {
   for (const d of decls) {
-    if (d.kind !== "TypeDeclaration") continue;
+    if (d.kind !== "TypeDeclaration")
+      continue;
     const td = d as unknown as {
       name: { value: string; };
       members?: Array<{ kind: string; [key: string]: unknown; }>;
     };
     const policies: ListedPolicy[] = [];
     for (const m of td.members ?? []) {
-      if (m.kind !== "AccessPolicy") continue;
+      if (m.kind !== "AccessPolicy")
+        continue;
       // AccessPolicy carries `actions: AccessAction[]` where each
       // action has `allow: boolean` + `operations: AccessOperation[]`.
       // Flatten to one ListedPolicy per AccessAction so the listing
@@ -415,7 +426,7 @@ function collectFromTypeDecls(
           action: action.allow ? "allow" : "deny",
           events: action.operations.slice(),
           condition: m.condition ? stringifyExpr(m.condition as Record<string, unknown>) : undefined,
-          errmessage: m.errmessage as string | undefined,
+          errmessage: m.errmessage as string | undefined
         });
       }
     }
@@ -428,7 +439,8 @@ function collectFromTypeDecls(
 function stringifyExpr(expr: Record<string, unknown>): string {
   // Best-effort textualization of the AST node — enough for human
   // inspection at the CLI. Not a full SDL re-serialization.
-  if (expr.kind === "Literal") return String(expr.value);
+  if (expr.kind === "Literal")
+    return String(expr.value);
   if (expr.kind === "PathExpression") {
     return ((expr.path as string[]) ?? []).join(".");
   }
@@ -460,12 +472,12 @@ async function openAuth(opts: BaseOptions): Promise<AuthCtx | null> {
     console.error("❌ --database-url is required (or set DATABASE_URL env var)");
     return null;
   }
-  const jwtSecret = opts["jwt-secret"]
-    ?? Deno.env.get("DISC_JWT_SECRET")
-    ?? Deno.env.get("JWT_SECRET");
+  const jwtSecret = opts["jwt-secret"] ??
+    Deno.env.get("DISC_JWT_SECRET") ??
+    Deno.env.get("JWT_SECRET");
   if (!jwtSecret || jwtSecret.length < 32) {
     console.error(
-      "❌ --jwt-secret is required (or set DISC_JWT_SECRET / JWT_SECRET); must be ≥32 bytes",
+      "❌ --jwt-secret is required (or set DISC_JWT_SECRET / JWT_SECRET); must be ≥32 bytes"
     );
     return null;
   }
@@ -480,7 +492,7 @@ async function openAuth(opts: BaseOptions): Promise<AuthCtx | null> {
     provider,
     close: async () => {
       await db.close();
-    },
+    }
   };
 }
 

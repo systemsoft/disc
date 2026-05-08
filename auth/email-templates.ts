@@ -117,7 +117,8 @@ export function defaultBranding(): BrandingCtx {
  */
 function logoHtml(branding: BrandingCtx): string {
   const url = branding.logoUrl;
-  if (!url) return "";
+  if (!url)
+    return "";
   return `<p style="margin: 0 0 16px 0;"><img src="${escapeHtml(url)}" alt="${escapeHtml(branding.appName)}" style="max-height: 48px;"></p>`;
 }
 
@@ -166,8 +167,9 @@ function buttonHtml(href: string, label: string, branding: BrandingCtx): string 
     `<a href="${escapedHref}" style="display: inline-block; padding: 12px 20px; background: ${bg}; color: #fff; text-decoration: none; border-radius: 4px; font-weight: 600;">${escapedLabel}</a>`,
     "</td>",
     "</tr>",
-    "</table>",
-  ].join("");
+    "</table>"
+  ]
+    .join("");
 }
 
 /**
@@ -200,8 +202,9 @@ function htmlShell(title: string, bodyHtml: string): string {
     "<body style=\"font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.5; color: #111; max-width: 560px; margin: 24px auto; padding: 0 16px;\">",
     bodyHtml,
     "</body>",
-    "</html>",
-  ].join("\n");
+    "</html>"
+  ]
+    .join("\n");
 }
 
 export function renderVerificationEmail(ctx: VerificationCtx): RenderedEmail {
@@ -213,12 +216,12 @@ export function renderVerificationEmail(ctx: VerificationCtx): RenderedEmail {
   // appName interpolated so the email is unambiguous about which
   // service it's coming from. (gh/geldata#6731)
   const subject = branded ? `Verify your email for ${branding.appName}` : "Verify your email";
-  const intro = branded
-    ? `Confirm your email address to finish setting up your ${branding.appName} account:`
-    : "Confirm your email address to finish setting up your account:";
-  const introHtml = branded
-    ? `Confirm your email address to finish setting up your ${escapeHtml(branding.appName)} account:`
-    : "Confirm your email address to finish setting up your account:";
+  const intro = branded ?
+    `Confirm your email address to finish setting up your ${branding.appName} account:` :
+    "Confirm your email address to finish setting up your account:";
+  const introHtml = branded ?
+    `Confirm your email address to finish setting up your ${escapeHtml(branding.appName)} account:` :
+    "Confirm your email address to finish setting up your account:";
 
   const text = [
     `Hi ${ctx.recipient},`,
@@ -227,8 +230,9 @@ export function renderVerificationEmail(ctx: VerificationCtx): RenderedEmail {
     "",
     link,
     "",
-    "If you didn't create this account, you can safely ignore this message.",
-  ].join("\n");
+    "If you didn't create this account, you can safely ignore this message."
+  ]
+    .join("\n");
 
   const html = htmlShell(
     subject,
@@ -238,8 +242,10 @@ export function renderVerificationEmail(ctx: VerificationCtx): RenderedEmail {
       `<p>${introHtml}</p>`,
       buttonHtml(link, "Verify email", branding),
       `<p style="font-size: 13px; color: #555;">Or paste this link into your browser:<br><span style="word-break: break-all;">${escapeHtml(link)}</span></p>`,
-      "<p style=\"font-size: 13px; color: #555;\">If you didn't create this account, you can safely ignore this message.</p>",
-    ].filter((s) => s.length > 0).join("\n"),
+      "<p style=\"font-size: 13px; color: #555;\">If you didn't create this account, you can safely ignore this message.</p>"
+    ]
+      .filter(s => s.length > 0)
+      .join("\n")
   );
 
   return { html, subject, text };
@@ -250,12 +256,12 @@ export function renderPasswordResetEmail(ctx: PasswordResetCtx): RenderedEmail {
   const branded = branding.appName !== DEFAULT_APP_NAME;
   const link = `${trimBase(ctx.baseUrl)}/auth/reset?token=${encodeURIComponent(ctx.resetToken)}`;
   const subject = branded ? `Reset your ${branding.appName} password` : "Reset your password";
-  const intro = branded
-    ? `We received a request to reset your ${branding.appName} password. Use the link below to choose a new one:`
-    : "We received a request to reset your password. Use the link below to choose a new one:";
-  const introHtml = branded
-    ? `We received a request to reset your ${escapeHtml(branding.appName)} password. Click the button below to choose a new one:`
-    : "We received a request to reset your password. Click the button below to choose a new one:";
+  const intro = branded ?
+    `We received a request to reset your ${branding.appName} password. Use the link below to choose a new one:` :
+    "We received a request to reset your password. Use the link below to choose a new one:";
+  const introHtml = branded ?
+    `We received a request to reset your ${escapeHtml(branding.appName)} password. Click the button below to choose a new one:` :
+    "We received a request to reset your password. Click the button below to choose a new one:";
 
   const text = [
     `Hi ${ctx.recipient},`,
@@ -264,8 +270,9 @@ export function renderPasswordResetEmail(ctx: PasswordResetCtx): RenderedEmail {
     "",
     link,
     "",
-    "If you didn't request a password reset, you can safely ignore this message — your password will stay the same.",
-  ].join("\n");
+    "If you didn't request a password reset, you can safely ignore this message — your password will stay the same."
+  ]
+    .join("\n");
 
   const html = htmlShell(
     subject,
@@ -275,8 +282,10 @@ export function renderPasswordResetEmail(ctx: PasswordResetCtx): RenderedEmail {
       `<p>${introHtml}</p>`,
       buttonHtml(link, "Reset password", branding),
       `<p style="font-size: 13px; color: #555;">Or paste this link into your browser:<br><span style="word-break: break-all;">${escapeHtml(link)}</span></p>`,
-      "<p style=\"font-size: 13px; color: #555;\">If you didn't request a password reset, you can safely ignore this message — your password will stay the same.</p>",
-    ].filter((s) => s.length > 0).join("\n"),
+      "<p style=\"font-size: 13px; color: #555;\">If you didn't request a password reset, you can safely ignore this message — your password will stay the same.</p>"
+    ]
+      .filter(s => s.length > 0)
+      .join("\n")
   );
 
   return { html, subject, text };
@@ -286,12 +295,12 @@ export function renderMagicCodeEmail(ctx: MagicCodeCtx): RenderedEmail {
   const branding = ctx.branding ?? defaultBranding();
   const branded = branding.appName !== DEFAULT_APP_NAME;
   const subject = branded ? `Your ${branding.appName} sign-in code` : "Your sign-in code";
-  const intro = branded
-    ? `Use the code below to sign in to ${branding.appName}. It will expire in 10 minutes:`
-    : "Use the code below to sign in. It will expire in 10 minutes:";
-  const introHtml = branded
-    ? `Use the code below to sign in to ${escapeHtml(branding.appName)}. It will expire in 10 minutes:`
-    : "Use the code below to sign in. It will expire in 10 minutes:";
+  const intro = branded ?
+    `Use the code below to sign in to ${branding.appName}. It will expire in 10 minutes:` :
+    "Use the code below to sign in. It will expire in 10 minutes:";
+  const introHtml = branded ?
+    `Use the code below to sign in to ${escapeHtml(branding.appName)}. It will expire in 10 minutes:` :
+    "Use the code below to sign in. It will expire in 10 minutes:";
   const codeBg = branding.brandColor ?? "#111";
 
   const text = [
@@ -301,8 +310,9 @@ export function renderMagicCodeEmail(ctx: MagicCodeCtx): RenderedEmail {
     "",
     `    ${ctx.code}`,
     "",
-    "If you didn't request this, you can safely ignore this email.",
-  ].join("\n");
+    "If you didn't request this, you can safely ignore this email."
+  ]
+    .join("\n");
 
   const html = htmlShell(
     subject,
@@ -321,10 +331,13 @@ export function renderMagicCodeEmail(ctx: MagicCodeCtx): RenderedEmail {
         escapeHtml(ctx.code),
         "</td>",
         "</tr>",
-        "</table>",
-      ].join(""),
-      "<p style=\"font-size: 13px; color: #555;\">If you didn't request this, you can safely ignore this email.</p>",
-    ].filter((s) => s.length > 0).join("\n"),
+        "</table>"
+      ]
+        .join(""),
+      "<p style=\"font-size: 13px; color: #555;\">If you didn't request this, you can safely ignore this email.</p>"
+    ]
+      .filter(s => s.length > 0)
+      .join("\n")
   );
 
   return { html, subject, text };
@@ -336,16 +349,16 @@ export function renderMagicLinkEmail(ctx: MagicLinkCtx): RenderedEmail {
   // `magicLinkUrlTemplate`); fall back to the historical
   // `${baseUrl}/auth/magic?token=…` shape so direct callers of this
   // renderer keep working without setting up a template.
-  const link = ctx.link
-    ?? `${trimBase(ctx.baseUrl)}/auth/magic?token=${encodeURIComponent(ctx.magicLinkToken)}`;
+  const link = ctx.link ??
+    `${trimBase(ctx.baseUrl)}/auth/magic?token=${encodeURIComponent(ctx.magicLinkToken)}`;
   const branded = branding.appName !== DEFAULT_APP_NAME;
   const subject = branded ? `Sign in to ${branding.appName}` : "Sign in to your account";
-  const intro = branded
-    ? `Click the link below to sign in to ${branding.appName}. The link is single-use and will expire shortly:`
-    : "Click the link below to sign in. The link is single-use and will expire shortly:";
-  const introHtml = branded
-    ? `Click the button below to sign in to ${escapeHtml(branding.appName)}. The link is single-use and will expire shortly:`
-    : "Click the button below to sign in. The link is single-use and will expire shortly:";
+  const intro = branded ?
+    `Click the link below to sign in to ${branding.appName}. The link is single-use and will expire shortly:` :
+    "Click the link below to sign in. The link is single-use and will expire shortly:";
+  const introHtml = branded ?
+    `Click the button below to sign in to ${escapeHtml(branding.appName)}. The link is single-use and will expire shortly:` :
+    "Click the button below to sign in. The link is single-use and will expire shortly:";
 
   const text = [
     `Hi ${ctx.recipient},`,
@@ -354,8 +367,9 @@ export function renderMagicLinkEmail(ctx: MagicLinkCtx): RenderedEmail {
     "",
     link,
     "",
-    "If you didn't request this, you can safely ignore this message.",
-  ].join("\n");
+    "If you didn't request this, you can safely ignore this message."
+  ]
+    .join("\n");
 
   const html = htmlShell(
     subject,
@@ -365,8 +379,10 @@ export function renderMagicLinkEmail(ctx: MagicLinkCtx): RenderedEmail {
       `<p>${introHtml}</p>`,
       buttonHtml(link, "Sign in", branding),
       `<p style="font-size: 13px; color: #555;">Or paste this link into your browser:<br><span style="word-break: break-all;">${escapeHtml(link)}</span></p>`,
-      "<p style=\"font-size: 13px; color: #555;\">If you didn't request this, you can safely ignore this message.</p>",
-    ].filter((s) => s.length > 0).join("\n"),
+      "<p style=\"font-size: 13px; color: #555;\">If you didn't request this, you can safely ignore this message.</p>"
+    ]
+      .filter(s => s.length > 0)
+      .join("\n")
   );
 
   return { html, subject, text };

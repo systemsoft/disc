@@ -14,12 +14,12 @@ interface CapturedRequest {
 }
 
 function makeFetch(
-  responder: (req: CapturedRequest) => Response | Promise<Response>,
+  responder: (req: CapturedRequest) => Response | Promise<Response>
 ): { fetchImpl: typeof fetch; calls: CapturedRequest[]; } {
   const calls: CapturedRequest[] = [];
   const fetchImpl = ((
     input: string | URL | Request,
-    init?: RequestInit,
+    init?: RequestInit
   ) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     const headers: Record<string, string> = {};
@@ -34,7 +34,7 @@ function makeFetch(
       url,
       method: init?.method ?? "GET",
       headers,
-      body: typeof init?.body === "string" ? init.body : "",
+      body: typeof init?.body === "string" ? init.body : ""
     };
     calls.push(captured);
     return Promise.resolve(responder(captured));
@@ -82,7 +82,7 @@ Deno.test("RemoteCaptchaVerifier — explicit gate config narrows or expands", (
   const v = new RemoteCaptchaVerifier({
     provider: "turnstile",
     secret: "x",
-    gate: ["login", "magicLink"],
+    gate: ["login", "magicLink"]
   });
   assertEquals(v.isGated("register"), false);
   assertEquals(v.isGated("login"), true);
@@ -96,12 +96,12 @@ Deno.test("RemoteCaptchaVerifier — happy path POSTs form-encoded body and pars
   const { fetchImpl, calls } = makeFetch(() =>
     new Response(JSON.stringify({ success: true }), {
       status: 200,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json" }
     })
   );
   const v = new RemoteCaptchaVerifier(
     { provider: "hcaptcha", secret: "shh" },
-    { fetchImpl },
+    { fetchImpl }
   );
   const result = await v.verify("user-token", "203.0.113.5");
   assertEquals(result.success, true);
@@ -110,7 +110,7 @@ Deno.test("RemoteCaptchaVerifier — happy path POSTs form-encoded body and pars
   assertEquals(calls[0].method, "POST");
   assertEquals(
     calls[0].headers["content-type"],
-    "application/x-www-form-urlencoded",
+    "application/x-www-form-urlencoded"
   );
   const params = new URLSearchParams(calls[0].body);
   assertEquals(params.get("secret"), "shh");
@@ -122,7 +122,7 @@ Deno.test("RemoteCaptchaVerifier — omits remoteip when not provided", async ()
   const { fetchImpl, calls } = makeFetch(() => new Response(JSON.stringify({ success: true }), { status: 200 }));
   const v = new RemoteCaptchaVerifier(
     { provider: "hcaptcha", secret: "shh" },
-    { fetchImpl },
+    { fetchImpl }
   );
   await v.verify("token");
   const params = new URLSearchParams(calls[0].body);
@@ -135,12 +135,12 @@ Deno.test("RemoteCaptchaVerifier — turnstile uses Cloudflare verify URL by def
   const { fetchImpl, calls } = makeFetch(() => new Response(JSON.stringify({ success: true }), { status: 200 }));
   const v = new RemoteCaptchaVerifier(
     { provider: "turnstile", secret: "shh" },
-    { fetchImpl },
+    { fetchImpl }
   );
   await v.verify("token");
   assertEquals(
     calls[0].url,
-    "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+    "https://challenges.cloudflare.com/turnstile/v0/siteverify"
   );
 });
 
@@ -150,9 +150,9 @@ Deno.test("RemoteCaptchaVerifier — verifyUrl override wins", async () => {
     {
       provider: "hcaptcha",
       secret: "shh",
-      verifyUrl: "https://hcaptcha.example.com/verify",
+      verifyUrl: "https://hcaptcha.example.com/verify"
     },
-    { fetchImpl },
+    { fetchImpl }
   );
   await v.verify("token");
   assertEquals(calls[0].url, "https://hcaptcha.example.com/verify");
@@ -164,7 +164,7 @@ Deno.test("RemoteCaptchaVerifier — non-2xx response returns failure", async ()
   const { fetchImpl } = makeFetch(() => new Response("nope", { status: 502 }));
   const v = new RemoteCaptchaVerifier(
     { provider: "hcaptcha", secret: "x" },
-    { fetchImpl },
+    { fetchImpl }
   );
   const result = await v.verify("token");
   assertEquals(result.success, false);
@@ -175,7 +175,7 @@ Deno.test("RemoteCaptchaVerifier — fetch throw is folded into network-error re
   const fetchImpl = (() => Promise.reject(new Error("ECONNREFUSED"))) as typeof fetch;
   const v = new RemoteCaptchaVerifier(
     { provider: "hcaptcha", secret: "x" },
-    { fetchImpl },
+    { fetchImpl }
   );
   const result = await v.verify("token");
   assertEquals(result.success, false);
@@ -195,7 +195,7 @@ Deno.test("RemoteCaptchaVerifier — timeout aborts and returns network-error", 
   }) as typeof fetch;
   const v = new RemoteCaptchaVerifier(
     { provider: "hcaptcha", secret: "x", timeoutMs: 10 },
-    { fetchImpl },
+    { fetchImpl }
   );
   const result = await v.verify("token");
   assertEquals(result.success, false);
@@ -206,12 +206,12 @@ Deno.test("RemoteCaptchaVerifier — provider success: false propagates with err
   const { fetchImpl } = makeFetch(() =>
     new Response(
       JSON.stringify({ success: false, "error-codes": ["invalid-input-response"] }),
-      { status: 200 },
+      { status: 200 }
     )
   );
   const v = new RemoteCaptchaVerifier(
     { provider: "hcaptcha", secret: "x" },
-    { fetchImpl },
+    { fetchImpl }
   );
   const result = await v.verify("token");
   assertEquals(result.success, false);
@@ -226,7 +226,7 @@ Deno.test("RemoteCaptchaVerifier — config object literal type sanity", () => {
     secret: "x",
     gate: ["register", "login", "magicLink", "magicCode", "passwordReset"],
     timeoutMs: 1234,
-    verifyUrl: "https://example.com/verify",
+    verifyUrl: "https://example.com/verify"
   };
   const v = new RemoteCaptchaVerifier(cfg);
   assertEquals(v.isGated("passwordReset"), true);

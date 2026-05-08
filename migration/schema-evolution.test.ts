@@ -22,14 +22,14 @@ const RUN_PG = canRunPgTests();
 // ---------------------------------------------------------------------------
 
 function parseDsn(
-  dsn: string,
+  dsn: string
 ): { hostname: string; port: number; user: string; database: string; } {
   const url = new URL(dsn);
   return {
     hostname: url.hostname || "localhost",
     port: url.port ? parseInt(url.port) : 5432,
     user: url.username || "disc",
-    database: url.pathname.slice(1) || "disc_test",
+    database: url.pathname.slice(1) || "disc_test"
   };
 }
 
@@ -43,7 +43,7 @@ async function tableExists(dsn: string, tableName: string): Promise<boolean> {
         SELECT 1 FROM information_schema.tables
         WHERE table_schema = 'public' AND table_name = $1
       ) AS exists`,
-      [tableName],
+      [tableName]
     );
     return result.rows[0]?.exists ?? false;
   } finally {
@@ -53,7 +53,7 @@ async function tableExists(dsn: string, tableName: string): Promise<boolean> {
 
 async function getColumns(
   dsn: string,
-  tableName: string,
+  tableName: string
 ): Promise<{ column_name: string; data_type: string; }[]> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
@@ -66,7 +66,7 @@ async function getColumns(
        FROM information_schema.columns
        WHERE table_schema = 'public' AND table_name = $1
        ORDER BY ordinal_position`,
-      [tableName],
+      [tableName]
     );
     return result.rows;
   } finally {
@@ -76,7 +76,7 @@ async function getColumns(
 
 async function getTriggers(
   dsn: string,
-  tableName: string,
+  tableName: string
 ): Promise<string[]> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
@@ -87,9 +87,9 @@ async function getTriggers(
        FROM information_schema.triggers
        WHERE trigger_schema = 'public' AND event_object_table = $1
        ORDER BY trigger_name`,
-      [tableName],
+      [tableName]
     );
-    return result.rows.map((r) => r.trigger_name);
+    return result.rows.map(r => r.trigger_name);
   } finally {
     await client.end();
   }
@@ -98,7 +98,7 @@ async function getTriggers(
 async function execSQL(
   dsn: string,
   sql: string,
-  params?: unknown[],
+  params?: unknown[]
 ): Promise<void> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
@@ -117,7 +117,7 @@ async function execSQL(
 async function queryRows<T>(
   dsn: string,
   sql: string,
-  params?: unknown[],
+  params?: unknown[]
 ): Promise<T[]> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
@@ -161,7 +161,7 @@ function makePool(dsn: string): ConnectionPool {
     connectionString: dsn,
     minConnections: 1,
     maxConnections: 3,
-    cleanupInterval: 0,
+    cleanupInterval: 0
   });
 }
 
@@ -196,16 +196,16 @@ Deno.test({
       await execSQL(
         dsn,
         `INSERT INTO evo_article (id, title) VALUES (gen_random_uuid(), $1)`,
-        ["Existing Article"],
+        ["Existing Article"]
       );
 
       // Verify no rewrite trigger
       const triggersV1 = await getTriggers(dsn, "evo_article");
-      const hasRewriteV1 = triggersV1.some((t) => t.includes("rewrite"));
+      const hasRewriteV1 = triggersV1.some(t => t.includes("rewrite"));
       assertEquals(
         hasRewriteV1,
         false,
-        "Should NOT have rewrite trigger initially",
+        "Should NOT have rewrite trigger initially"
       );
 
       // Step 2: Add rewrite rule
@@ -222,22 +222,22 @@ Deno.test({
       assertEquals(
         resultV2.ok,
         true,
-        "applySchema with rewrite should succeed",
+        "applySchema with rewrite should succeed"
       );
 
       // Verify rewrite trigger now exists
       const triggersV2 = await getTriggers(dsn, "evo_article");
-      const hasRewriteV2 = triggersV2.some((t) => t.includes("rewrite"));
+      const hasRewriteV2 = triggersV2.some(t => t.includes("rewrite"));
       assertEquals(
         hasRewriteV2,
         true,
-        "Should have rewrite trigger after evolution",
+        "Should have rewrite trigger after evolution"
       );
 
       // Verify existing data is intact
       const rows = await queryRows<{ title: string; }>(
         dsn,
-        `SELECT title FROM evo_article`,
+        `SELECT title FROM evo_article`
       );
       assertEquals(rows.length, 1, "Existing row should still be there");
       assertEquals(rows[0].title, "Existing Article");
@@ -246,7 +246,7 @@ Deno.test({
       await execSQL(
         dsn,
         `INSERT INTO evo_article (id, title) VALUES (gen_random_uuid(), $1)`,
-        ["New Article"],
+        ["New Article"]
       );
 
       const newRows = await queryRows<
@@ -254,13 +254,13 @@ Deno.test({
       >(
         dsn,
         `SELECT title, created_at FROM evo_article WHERE title = $1`,
-        ["New Article"],
+        ["New Article"]
       );
       assertEquals(newRows.length, 1);
       assertEquals(
         newRows[0].created_at !== null,
         true,
-        "New article should have created_at auto-set by rewrite",
+        "New article should have created_at auto-set by rewrite"
       );
 
       await manager.close();
@@ -269,11 +269,11 @@ Deno.test({
         dsn,
         "evo_article",
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -307,17 +307,17 @@ Deno.test({
       await execSQL(
         dsn,
         `INSERT INTO evo_product (id, name, price) VALUES (gen_random_uuid(), $1, $2)`,
-        ["Widget", 19.99],
+        ["Widget", 19.99]
       );
 
       // Verify initial columns
       let columns = await getColumns(dsn, "evo_product");
-      let colNames = columns.map((c) => c.column_name);
+      let colNames = columns.map(c => c.column_name);
       assertEquals(colNames.includes("name"), true, "Should have name column");
       assertEquals(
         colNames.includes("description"),
         false,
-        "Should NOT have description yet",
+        "Should NOT have description yet"
       );
 
       // Step 2: Add description property
@@ -335,16 +335,16 @@ Deno.test({
 
       // Verify new columns added
       columns = await getColumns(dsn, "evo_product");
-      colNames = columns.map((c) => c.column_name);
+      colNames = columns.map(c => c.column_name);
       assertEquals(
         colNames.includes("description"),
         true,
-        "Should now have description column",
+        "Should now have description column"
       );
       assertEquals(
         colNames.includes("in_stock"),
         true,
-        "Should now have in_stock column",
+        "Should now have in_stock column"
       );
 
       // Verify existing data preserved
@@ -358,7 +358,7 @@ Deno.test({
       assertEquals(
         rows[0].description,
         null,
-        "New column should be NULL for existing rows",
+        "New column should be NULL for existing rows"
       );
 
       await manager.close();
@@ -367,11 +367,11 @@ Deno.test({
         dsn,
         "evo_product",
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -405,7 +405,7 @@ Deno.test({
 
       // Verify rewrite trigger exists
       const triggersV1 = await getTriggers(dsn, "evo_log");
-      const hasRewriteV1 = triggersV1.some((t) => t.includes("rewrite"));
+      const hasRewriteV1 = triggersV1.some(t => t.includes("rewrite"));
       assertEquals(hasRewriteV1, true, "Should have rewrite trigger initially");
 
       // Step 2: Remove rewrite rule
@@ -420,16 +420,16 @@ Deno.test({
       assertEquals(
         resultV2.ok,
         true,
-        "applySchema without rewrite should succeed",
+        "applySchema without rewrite should succeed"
       );
 
       // Verify rewrite trigger was dropped
       const triggersV2 = await getTriggers(dsn, "evo_log");
-      const hasRewriteV2 = triggersV2.some((t) => t.includes("rewrite"));
+      const hasRewriteV2 = triggersV2.some(t => t.includes("rewrite"));
       assertEquals(
         hasRewriteV2,
         false,
-        "Rewrite trigger should be dropped after removal",
+        "Rewrite trigger should be dropped after removal"
       );
 
       await manager.close();
@@ -438,11 +438,11 @@ Deno.test({
         dsn,
         "evo_log",
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -476,10 +476,10 @@ Deno.test({
       const catV1 = schemaV1?.types.get("EvoCategory");
       assertExists(catV1, "EvoCategory should exist in schema");
       assertEquals(
-        catV1!.annotations === undefined
-          || Object.keys(catV1!.annotations).length === 0,
+        catV1!.annotations === undefined ||
+          Object.keys(catV1!.annotations).length === 0,
         true,
-        "Should have no annotations initially",
+        "Should have no annotations initially"
       );
 
       // Step 2: Add @description annotation
@@ -494,7 +494,7 @@ Deno.test({
       assertEquals(
         resultV2.ok,
         true,
-        "applySchema with annotation should succeed",
+        "applySchema with annotation should succeed"
       );
 
       // Verify annotation in schema introspection
@@ -505,14 +505,14 @@ Deno.test({
       assertEquals(
         catV2!.annotations!["description"] !== undefined,
         true,
-        "Should have @description annotation",
+        "Should have @description annotation"
       );
 
       // Table should still be intact
       assertEquals(
         await tableExists(dsn, "evo_category"),
         true,
-        "Table should still exist",
+        "Table should still exist"
       );
 
       await manager.close();
@@ -521,11 +521,11 @@ Deno.test({
         dsn,
         "evo_category",
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -564,32 +564,32 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema should succeed: ${result.ok ? "" : (result as any).error}`,
+        `applySchema should succeed: ${result.ok ? "" : (result as any).error}`
       );
 
       // Verify the table has inherited columns
       const columns = await getColumns(dsn, "evo_document");
-      const colNames = columns.map((c) => c.column_name);
+      const colNames = columns.map(c => c.column_name);
 
       assertEquals(
         colNames.includes("title"),
         true,
-        "Should have title column",
+        "Should have title column"
       );
       assertEquals(
         colNames.includes("content"),
         true,
-        "Should have content column",
+        "Should have content column"
       );
       assertEquals(
         colNames.includes("audit_note"),
         true,
-        "Should have inherited audit_note from Auditable",
+        "Should have inherited audit_note from Auditable"
       );
       assertEquals(
         colNames.includes("version"),
         true,
-        "Should have inherited version from Versioned",
+        "Should have inherited version from Versioned"
       );
 
       // Verify in schema introspection
@@ -599,12 +599,12 @@ Deno.test({
       assertEquals(
         docType!.parentTypes?.includes("Auditable"),
         true,
-        "EvoDocument should extend Auditable",
+        "EvoDocument should extend Auditable"
       );
       assertEquals(
         docType!.parentTypes?.includes("Versioned"),
         true,
-        "EvoDocument should extend Versioned",
+        "EvoDocument should extend Versioned"
       );
 
       // Verify inherited properties exist in the TypeDef
@@ -618,14 +618,14 @@ Deno.test({
       await execSQL(
         dsn,
         `INSERT INTO evo_document (id, title, content, audit_note, version) VALUES (gen_random_uuid(), $1, $2, $3, $4)`,
-        ["My Doc", "Some content", "Initial creation", 1],
+        ["My Doc", "Some content", "Initial creation", 1]
       );
 
       const rows = await queryRows<
         { title: string; audit_note: string; version: number; }
       >(
         dsn,
-        `SELECT title, audit_note, version FROM evo_document`,
+        `SELECT title, audit_note, version FROM evo_document`
       );
       assertEquals(rows.length, 1);
       assertEquals(rows[0].title, "My Doc");
@@ -639,9 +639,9 @@ Deno.test({
         dsn,
         "evo_document",
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });

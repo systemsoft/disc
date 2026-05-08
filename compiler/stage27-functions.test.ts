@@ -117,7 +117,7 @@ Deno.test("Stage 27 — re_match compiles to REGEXP_MATCH with args swapped", ()
   assertEquals(
     helloIdx < patternIdx,
     true,
-    "string arg should come before pattern arg (swapped from EdgeQL order)",
+    "string arg should come before pattern arg (swapped from EdgeQL order)"
   );
 });
 
@@ -137,7 +137,7 @@ Deno.test("Stage 27 — re_replace compiles to REGEXP_REPLACE with args reordere
   assertEquals(
     stringIdx < patternIdx,
     true,
-    "string arg should come before pattern arg (reordered from EdgeQL order)",
+    "string arg should come before pattern arg (reordered from EdgeQL order)"
   );
 });
 
@@ -163,7 +163,7 @@ Deno.test("Stage 27 — datetime_get compiles to EXTRACT", () => {
 
 Deno.test("Stage 27 — datetime_truncate compiles to DATE_TRUNC", () => {
   const sql = compileEdgeQL(
-    `SELECT datetime_truncate(datetime_current(), 'month')`,
+    `SELECT datetime_truncate(datetime_current(), 'month')`
   );
   assertStringIncludes(sql, "DATE_TRUNC");
 });
@@ -198,7 +198,7 @@ Deno.test("Stage 27 — cal::to_local_time compiles to CAST with time without ti
 
 Deno.test("Stage 27 — cal::to_local_datetime compiles to CAST with timestamp without time zone", () => {
   const sql = compileEdgeQL(
-    `SELECT cal::to_local_datetime('2024-01-01T12:00:00')`,
+    `SELECT cal::to_local_datetime('2024-01-01T12:00:00')`
   );
   assertStringIncludes(sql, "CAST");
   assertStringIncludes(sql, "timestamp without time zone");
@@ -294,7 +294,7 @@ Deno.test("Stage 27 — to_bool compiles to CAST with boolean", () => {
 
 Deno.test("Stage 27 — to_uuid compiles to CAST with uuid", () => {
   const sql = compileEdgeQL(
-    `SELECT to_uuid('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11')`,
+    `SELECT to_uuid('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11')`
   );
   assertStringIncludes(sql, "CAST");
   assertStringIncludes(sql, "uuid");

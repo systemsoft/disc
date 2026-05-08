@@ -121,7 +121,7 @@ const RESERVED_PG_KEYWORDS = new Set<string>([
   "restrict",
   "update",
   "delete",
-  "insert",
+  "insert"
 ]);
 
 export class DDLGenerator {
@@ -194,78 +194,78 @@ export class DDLGenerator {
   }
 
   private generateRollbackOperationDDL(
-    operation: Types.MigrationOperation,
+    operation: Types.MigrationOperation
   ): string[] {
     switch (operation.kind) {
       case "CreateType":
         return this.generateRollbackCreateType(
-          operation as Types.CreateTypeOperation,
+          operation as Types.CreateTypeOperation
         );
       case "DropType":
         return this.generateRollbackDropType(
-          operation as Types.DropTypeOperation,
+          operation as Types.DropTypeOperation
         );
       case "AlterType":
         return this.generateRollbackAlterType(
-          operation as Types.AlterTypeOperation,
+          operation as Types.AlterTypeOperation
         );
       case "CreateTable":
         return this.generateRollbackCreateTable(
-          operation as Types.CreateTableOperation,
+          operation as Types.CreateTableOperation
         );
       case "DropTable":
         return this.generateRollbackDropTable(
-          operation as Types.DropTableOperation,
+          operation as Types.DropTableOperation
         );
       case "AlterTable":
         return this.generateRollbackAlterTable(
-          operation as Types.AlterTableOperation,
+          operation as Types.AlterTableOperation
         );
       case "CreateIndex":
         return this.generateRollbackCreateIndex(
-          operation as Types.CreateIndexOperation,
+          operation as Types.CreateIndexOperation
         );
       case "DropIndex":
         return this.generateRollbackDropIndex(
-          operation as Types.DropIndexOperation,
+          operation as Types.DropIndexOperation
         );
       case "CreateAlias":
         return [
-          `-- Rollback: Alias "${(operation as Types.CreateAliasOperation).aliasName}" was compile-time only (no DDL to rollback)`,
+          `-- Rollback: Alias "${(operation as Types.CreateAliasOperation).aliasName}" was compile-time only (no DDL to rollback)`
         ];
       case "DropAlias":
         return [
-          `-- Rollback: Alias "${(operation as Types.DropAliasOperation).aliasName}" was compile-time only (no DDL to rollback)`,
+          `-- Rollback: Alias "${(operation as Types.DropAliasOperation).aliasName}" was compile-time only (no DDL to rollback)`
         ];
       case "CreateGlobal":
         return [
           `-- Rollback: Global "${(operation as Types.CreateGlobalOperation).module}::${
             (operation as Types.CreateGlobalOperation).name
-          }" was compile-time only (no DDL to rollback)`,
+          }" was compile-time only (no DDL to rollback)`
         ];
       case "DropGlobal":
         return [
           `-- Rollback: Global "${(operation as Types.DropGlobalOperation).module}::${
             (operation as Types.DropGlobalOperation).name
-          }" was compile-time only (no DDL to rollback)`,
+          }" was compile-time only (no DDL to rollback)`
         ];
       case "CreateScalar": {
         const op = operation as Types.CreateScalarOperation;
         if (op.baseType !== "enum") {
           return [
-            `-- Rollback: scalar ${op.module}::${op.scalarName} was compile-time only`,
+            `-- Rollback: scalar ${op.module}::${op.scalarName} was compile-time only`
           ];
         }
         const typeName = this.enumTypeName(op.scalarName);
         return [
-          `DROP TYPE IF EXISTS ${this.escapeIdentifier(typeName)};`,
+          `DROP TYPE IF EXISTS ${this.escapeIdentifier(typeName)};`
         ];
       }
       case "DropScalar": {
         const op = operation as Types.DropScalarOperation;
         return [
           `-- MANUAL ROLLBACK REQUIRED: enum type ${op.module}::${op.scalarName} was dropped — original values lost`,
-          `-- Restore from backup or recreate the CREATE TYPE statement manually.`,
+          `-- Restore from backup or recreate the CREATE TYPE statement manually.`
         ];
       }
       case "AddEnumValue": {
@@ -273,20 +273,21 @@ export class DDLGenerator {
         return [
           `-- MANUAL ROLLBACK REQUIRED: PG has no DROP VALUE`,
           `-- Removing '${op.value}' from enum '${op.scalarName}' requires recreating the type.`,
-          `-- See RecreateScalar for the cascade-aware path.`,
+          `-- See RecreateScalar for the cascade-aware path.`
         ];
       }
       case "RecreateScalar": {
         const op = operation as Types.RecreateScalarOperation;
         const typeName = this.enumTypeName(op.scalarName);
         const escaped = this.escapeIdentifier(typeName);
-        const values = op.oldEnumValues
-          .map((v) => `'${v.replace(/'/g, "''")}'`)
+        const values = op
+          .oldEnumValues
+          .map(v => `'${v.replace(/'/g, "''")}'`)
           .join(", ");
         return [
           `-- Rollback: restore previous enum values for ${typeName}`,
           `DROP TYPE IF EXISTS ${escaped};`,
-          `CREATE TYPE ${escaped} AS ENUM (${values});`,
+          `CREATE TYPE ${escaped} AS ENUM (${values});`
         ];
       }
       default:
@@ -304,7 +305,7 @@ export class DDLGenerator {
         return this.generateAlterType(operation as Types.AlterTypeOperation);
       case "CreateTable":
         return this.generateCreateTable(
-          operation as Types.CreateTableOperation,
+          operation as Types.CreateTableOperation
         );
       case "DropTable":
         return this.generateDropTable(operation as Types.DropTableOperation);
@@ -312,28 +313,28 @@ export class DDLGenerator {
         return this.generateAlterTable(operation as Types.AlterTableOperation);
       case "CreateIndex":
         return this.generateCreateIndex(
-          operation as Types.CreateIndexOperation,
+          operation as Types.CreateIndexOperation
         );
       case "DropIndex":
         return this.generateDropIndex(operation as Types.DropIndexOperation);
       case "CreateAlias":
         return [
-          `-- Alias "${(operation as Types.CreateAliasOperation).aliasName}" is a compile-time expression alias (no DDL required)`,
+          `-- Alias "${(operation as Types.CreateAliasOperation).aliasName}" is a compile-time expression alias (no DDL required)`
         ];
       case "DropAlias":
         return [
-          `-- Alias "${(operation as Types.DropAliasOperation).aliasName}" removed (no DDL required, was compile-time only)`,
+          `-- Alias "${(operation as Types.DropAliasOperation).aliasName}" removed (no DDL required, was compile-time only)`
         ];
       case "CreateGlobal": {
         const createGlobalOp = operation as Types.CreateGlobalOperation;
         return [
-          `-- global ${createGlobalOp.module}::${createGlobalOp.name}: ${createGlobalOp.type} (compile-time only)`,
+          `-- global ${createGlobalOp.module}::${createGlobalOp.name}: ${createGlobalOp.type} (compile-time only)`
         ];
       }
       case "DropGlobal": {
         const dropGlobalOp = operation as Types.DropGlobalOperation;
         return [
-          `-- drop global ${dropGlobalOp.module}::${dropGlobalOp.name} (compile-time only)`,
+          `-- drop global ${dropGlobalOp.module}::${dropGlobalOp.name} (compile-time only)`
         ];
       }
       case "CreateScalar":
@@ -342,11 +343,11 @@ export class DDLGenerator {
         return this.generateDropScalar(operation as Types.DropScalarOperation);
       case "AddEnumValue":
         return this.generateAddEnumValue(
-          operation as Types.AddEnumValueOperation,
+          operation as Types.AddEnumValueOperation
         );
       case "RecreateScalar":
         return this.generateRecreateScalar(
-          operation as Types.RecreateScalarOperation,
+          operation as Types.RecreateScalarOperation
         );
       default:
         throw new Error(`Unsupported operation: ${operation.kind}`);
@@ -368,36 +369,36 @@ export class DDLGenerator {
   }
 
   private generateCreateScalar(
-    operation: Types.CreateScalarOperation,
+    operation: Types.CreateScalarOperation
   ): string[] {
     if (operation.baseType !== "enum") {
       // Non-enum scalars are compile-time only today (Disc maps them to
       // the underlying PG type at column emission). No DDL needed.
       return [
-        `-- scalar ${operation.module}::${operation.scalarName} extends ${operation.baseType} (compile-time only)`,
+        `-- scalar ${operation.module}::${operation.scalarName} extends ${operation.baseType} (compile-time only)`
       ];
     }
     const typeName = this.enumTypeName(operation.scalarName);
     const values = (operation.enumValues ?? [])
-      .map((v) => `'${v.replace(/'/g, "''")}'`)
+      .map(v => `'${v.replace(/'/g, "''")}'`)
       .join(", ");
     return [
-      `CREATE TYPE ${this.escapeIdentifier(typeName)} AS ENUM (${values});`,
+      `CREATE TYPE ${this.escapeIdentifier(typeName)} AS ENUM (${values});`
     ];
   }
 
   private generateDropScalar(
-    operation: Types.DropScalarOperation,
+    operation: Types.DropScalarOperation
   ): string[] {
     const typeName = this.enumTypeName(operation.scalarName);
     return [
       `-- WARNING: DROP TYPE removes the enum and is destructive if any column still references it`,
-      `DROP TYPE IF EXISTS ${this.escapeIdentifier(typeName)};`,
+      `DROP TYPE IF EXISTS ${this.escapeIdentifier(typeName)};`
     ];
   }
 
   private generateAddEnumValue(
-    operation: Types.AddEnumValueOperation,
+    operation: Types.AddEnumValueOperation
   ): string[] {
     const typeName = this.enumTypeName(operation.scalarName);
     const value = `'${operation.value.replace(/'/g, "''")}'`;
@@ -410,7 +411,7 @@ export class DDLGenerator {
     // PG ≥12 supports ADD VALUE inside a transaction. Disc bundles
     // PG16+ so this is always safe (Zonky's distribution channel).
     return [
-      `ALTER TYPE ${this.escapeIdentifier(typeName)} ADD VALUE IF NOT EXISTS ${value}${placement};`,
+      `ALTER TYPE ${this.escapeIdentifier(typeName)} ADD VALUE IF NOT EXISTS ${value}${placement};`
     ];
   }
 
@@ -426,16 +427,17 @@ export class DDLGenerator {
    * `MigrationEngine.classifyUnsafeOperations`).
    */
   private generateRecreateScalar(
-    operation: Types.RecreateScalarOperation,
+    operation: Types.RecreateScalarOperation
   ): string[] {
     const typeName = this.enumTypeName(operation.scalarName);
     const escaped = this.escapeIdentifier(typeName);
-    const values = operation.enumValues
-      .map((v) => `'${v.replace(/'/g, "''")}'`)
+    const values = operation
+      .enumValues
+      .map(v => `'${v.replace(/'/g, "''")}'`)
       .join(", ");
-    const reasonComment = operation.reason === "removed-values"
-      ? "Removing enum values requires recreating the type (PG has no DROP VALUE)"
-      : "Reordering enum values requires recreating the type (PG enum order is positional)";
+    const reasonComment = operation.reason === "removed-values" ?
+      "Removing enum values requires recreating the type (PG has no DROP VALUE)" :
+      "Reordering enum values requires recreating the type (PG enum order is positional)";
     return [
       `-- WARNING: ${reasonComment}`,
       `-- Any column referencing ${typeName} must be migrated through a temporary text column.`,
@@ -453,7 +455,7 @@ BEGIN
   END IF;
 END $$;`,
       `DROP TYPE IF EXISTS ${escaped};`,
-      `CREATE TYPE ${escaped} AS ENUM (${values});`,
+      `CREATE TYPE ${escaped} AS ENUM (${values});`
     ];
   }
 
@@ -470,15 +472,15 @@ END $$;`,
         nullable: false,
         primaryKey: true,
         unique: false,
-        default: "gen_random_uuid()",
-      },
+        default: "gen_random_uuid()"
+      }
     ];
 
     // Add __type__ discriminator column for types participating in a hierarchy
     // (types that have subtypes OR types that have parentTypes)
     if (
-      (operation.subtypes && operation.subtypes.length > 0)
-      || (operation.parentTypes && operation.parentTypes.length > 0)
+      (operation.subtypes && operation.subtypes.length > 0) ||
+      (operation.parentTypes && operation.parentTypes.length > 0)
     ) {
       columns.push({
         name: "__type__",
@@ -486,13 +488,14 @@ END $$;`,
         nullable: false,
         primaryKey: false,
         unique: false,
-        default: `'${operation.typeName}'`,
+        default: `'${operation.typeName}'`
       });
     }
 
     // Add property columns (skip computed properties — they're virtual, evaluated at query time)
     for (const property of operation.properties) {
-      if (property.computed) continue;
+      if (property.computed)
+        continue;
 
       columns.push({
         name: propNameToColumnName(property.name),
@@ -500,7 +503,7 @@ END $$;`,
         nullable: !property.required,
         primaryKey: false,
         unique: property.constraints.includes("exclusive"),
-        default: property.default ? this.formatDefaultValue(property.default, property.type) : undefined,
+        default: property.default ? this.formatDefaultValue(property.default, property.type) : undefined
       });
     }
 
@@ -517,8 +520,8 @@ END $$;`,
           references: {
             table: typeNameToTableName(link.target),
             column: "id",
-            onDelete: link.onTargetDelete || "RESTRICT",
-          },
+            onDelete: link.onTargetDelete || "RESTRICT"
+          }
         });
       }
     }
@@ -529,15 +532,15 @@ END $$;`,
     // "relation does not exist" on a forward reference.
     statements.push(
       this.generateCreateTableFromColumns(tableName, columns, {
-        inlineFKs: false,
-      }),
+        inlineFKs: false
+      })
     );
 
     // Defer single-link FKs to the second phase.
     for (const column of columns) {
       if (column.references) {
         this.deferredStatements.push(
-          this.generateAddForeignKey(tableName, column),
+          this.generateAddForeignKey(tableName, column)
         );
       }
     }
@@ -578,8 +581,8 @@ END $$;`,
             references: {
               table: tableName,
               column: "id",
-              onDelete: "CASCADE",
-            },
+              onDelete: "CASCADE"
+            }
           },
           {
             name: "target_id",
@@ -590,9 +593,9 @@ END $$;`,
             references: {
               table: targetTable,
               column: "id",
-              onDelete: "CASCADE",
-            },
-          },
+              onDelete: "CASCADE"
+            }
+          }
         ];
 
         // Defer junction-table creation: it references base tables on
@@ -603,15 +606,15 @@ END $$;`,
           this.generateCreateTableFromColumns(
             junctionTableName,
             junctionColumns,
-            { inlineFKs: true },
-          ),
+            { inlineFKs: true }
+          )
         );
 
         // Add unique constraint to prevent duplicate links
         this.deferredStatements.push(
           `ALTER TABLE ${this.escapeIdentifier(junctionTableName)} ADD CONSTRAINT ${
             this.escapeIdentifier(`uk_${junctionTableName}_source_target`)
-          } UNIQUE (source_id, target_id);`,
+          } UNIQUE (source_id, target_id);`
         );
       }
     }
@@ -624,21 +627,21 @@ END $$;`,
         this.deferredStatements.push(
           `CREATE INDEX ${this.escapeIdentifier(`idx_${tableName}_${column.name}`)} ON ${this.escapeIdentifier(tableName)} (${
             this.escapeIdentifier(column.name)
-          });`,
+          });`
         );
       }
       if (column.unique && !column.primaryKey) {
         statements.push(
           `CREATE UNIQUE INDEX ${this.escapeIdentifier(`uk_${tableName}_${column.name}`)} ON ${this.escapeIdentifier(tableName)} (${
             this.escapeIdentifier(column.name)
-          });`,
+          });`
         );
       }
     }
 
     // Generate CHECK constraints from property constraints
     statements.push(
-      ...this.generateCheckConstraints(tableName, operation.properties),
+      ...this.generateCheckConstraints(tableName, operation.properties)
     );
 
     // Generate triggers
@@ -653,7 +656,7 @@ END $$;`,
       if (property.rewrites) {
         for (const rewrite of property.rewrites) {
           statements.push(
-            ...this.generateCreateRewrite(tableName, property.name, rewrite),
+            ...this.generateCreateRewrite(tableName, property.name, rewrite)
           );
         }
       }
@@ -663,7 +666,7 @@ END $$;`,
     for (const link of operation.links) {
       if (link.onSourceDelete === "DELETE TARGET") {
         statements.push(
-          ...this.generateSourceDeleteTrigger(tableName, link),
+          ...this.generateSourceDeleteTrigger(tableName, link)
         );
       }
     }
@@ -674,7 +677,7 @@ END $$;`,
   private generateDropType(operation: Types.DropTypeOperation): string[] {
     const tableName = typeNameToTableName(operation.typeName);
     return [
-      `DROP TABLE IF EXISTS ${this.escapeIdentifier(tableName)} CASCADE;`,
+      `DROP TABLE IF EXISTS ${this.escapeIdentifier(tableName)} CASCADE;`
     ];
   }
 
@@ -691,55 +694,55 @@ END $$;`,
 
   private generateTypeOperationDDL(
     tableName: string,
-    operation: Types.TypeOperation,
+    operation: Types.TypeOperation
   ): string[] {
     switch (operation.kind) {
       case "AddProperty":
         return this.generateAddProperty(
           tableName,
-          operation as Types.AddPropertyOperation,
+          operation as Types.AddPropertyOperation
         );
       case "DropProperty":
         return this.generateDropProperty(
           tableName,
-          operation as Types.DropPropertyOperation,
+          operation as Types.DropPropertyOperation
         );
       case "AlterProperty":
         return this.generateAlterProperty(
           tableName,
-          operation as Types.AlterPropertyOperation,
+          operation as Types.AlterPropertyOperation
         );
       case "AddLink":
         return this.generateAddLink(
           tableName,
-          operation as Types.AddLinkOperation,
+          operation as Types.AddLinkOperation
         );
       case "DropLink":
         return this.generateDropLink(
           tableName,
-          operation as Types.DropLinkOperation,
+          operation as Types.DropLinkOperation
         );
       case "AlterLink":
         return this.generateAlterLink(
           tableName,
-          operation as Types.AlterLinkOperation,
+          operation as Types.AlterLinkOperation
         );
       case "AddTrigger":
         return this.generateCreateTrigger(
           tableName,
-          (operation as Types.AddTriggerOperation).trigger,
+          (operation as Types.AddTriggerOperation).trigger
         );
       case "DropTrigger":
         return this.generateDropTrigger(
           tableName,
-          (operation as Types.DropTriggerOperation).triggerName,
+          (operation as Types.DropTriggerOperation).triggerName
         );
       case "AddRewrite": {
         const addRewriteOp = operation as Types.AddRewriteOperation;
         return this.generateCreateRewrite(
           tableName,
           addRewriteOp.propertyName,
-          addRewriteOp.rewrite,
+          addRewriteOp.rewrite
         );
       }
       case "DropRewrite": {
@@ -747,7 +750,7 @@ END $$;`,
         return this.generateDropRewrite(
           tableName,
           dropRewriteOp.propertyName,
-          dropRewriteOp.events,
+          dropRewriteOp.events
         );
       }
       default:
@@ -757,14 +760,14 @@ END $$;`,
 
   private generateAddProperty(
     tableName: string,
-    operation: Types.AddPropertyOperation,
+    operation: Types.AddPropertyOperation
   ): string[] {
     const property = operation.property;
 
     // Skip computed properties — they're virtual, no column needed
     if (property.computed) {
       return [
-        `-- Computed property '${property.name}' is virtual, no column needed`,
+        `-- Computed property '${property.name}' is virtual, no column needed`
       ];
     }
 
@@ -775,12 +778,12 @@ END $$;`,
     const statements = [
       `ALTER TABLE ${this.escapeIdentifier(tableName)} ADD COLUMN ${
         this.escapeIdentifier(propNameToColumnName(property.name))
-      } ${columnType} ${nullable}${defaultClause};`,
+      } ${columnType} ${nullable}${defaultClause};`
     ];
 
     // Generate CHECK constraints for the new property
     statements.push(
-      ...this.generateCheckConstraints(tableName, [property]),
+      ...this.generateCheckConstraints(tableName, [property])
     );
 
     return statements;
@@ -788,7 +791,7 @@ END $$;`,
 
   private generateDropProperty(
     tableName: string,
-    operation: Types.DropPropertyOperation,
+    operation: Types.DropPropertyOperation
   ): string[] {
     // P1-09: prefix destructive DROP COLUMN with a SQL comment so migration
     // history and logs flag the data-loss step. Production callers should
@@ -797,13 +800,13 @@ END $$;`,
     const colName = propNameToColumnName(operation.propertyName);
     return [
       `-- WARNING: DROP COLUMN is destructive — data in ${tableName}.${colName} will be lost on apply`,
-      `ALTER TABLE ${this.escapeIdentifier(tableName)} DROP COLUMN IF EXISTS ${this.escapeIdentifier(colName)};`,
+      `ALTER TABLE ${this.escapeIdentifier(tableName)} DROP COLUMN IF EXISTS ${this.escapeIdentifier(colName)};`
     ];
   }
 
   private generateAlterProperty(
     tableName: string,
-    operation: Types.AlterPropertyOperation,
+    operation: Types.AlterPropertyOperation
   ): string[] {
     const statements: string[] = [];
     const colName = propNameToColumnName(operation.propertyName);
@@ -814,41 +817,41 @@ END $$;`,
       switch (change.kind) {
         case "ChangeType":
           statements.push(
-            `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} TYPE ${this.mapEdgeQLTypeToPostgreSQL(change.newValue)};`,
+            `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} TYPE ${this.mapEdgeQLTypeToPostgreSQL(change.newValue)};`
           );
           break;
         case "ChangeRequired":
           if (change.newValue) {
             statements.push(
-              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET NOT NULL;`,
+              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET NOT NULL;`
             );
           } else {
             statements.push(
-              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} DROP NOT NULL;`,
+              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} DROP NOT NULL;`
             );
           }
           break;
         case "ChangeDefault":
           if (change.newValue !== undefined) {
             statements.push(
-              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET DEFAULT ${this.formatDefaultValue(change.newValue, "unknown")};`,
+              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET DEFAULT ${this.formatDefaultValue(change.newValue, "unknown")};`
             );
           } else {
             statements.push(
-              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} DROP DEFAULT;`,
+              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} DROP DEFAULT;`
             );
           }
           break;
         case "AddConstraint": {
           const checkExpr = this.constraintToCheckExpression(
             colName,
-            change.newValue,
+            change.newValue
           );
           if (checkExpr) {
             const safeName = change.newValue.replace(/[^a-zA-Z0-9_]/g, "_");
             const constraintName = `chk_${tableName}_${operation.propertyName}_${safeName}`;
             statements.push(
-              `ALTER TABLE ${tableRef} ADD CONSTRAINT ${this.escapeIdentifier(constraintName)} CHECK (${checkExpr});`,
+              `ALTER TABLE ${tableRef} ADD CONSTRAINT ${this.escapeIdentifier(constraintName)} CHECK (${checkExpr});`
             );
           }
           // Handle exclusive constraint as UNIQUE index
@@ -856,9 +859,9 @@ END $$;`,
             statements.push(
               `CREATE UNIQUE INDEX ${
                 this.escapeIdentifier(
-                  `idx_${tableName}_${operation.propertyName}_unique`,
+                  `idx_${tableName}_${operation.propertyName}_unique`
                 )
-              } ON ${tableRef} (${columnName});`,
+              } ON ${tableRef} (${columnName});`
             );
           }
           break;
@@ -867,16 +870,16 @@ END $$;`,
           const safeName = change.oldValue.replace(/[^a-zA-Z0-9_]/g, "_");
           const constraintName = `chk_${tableName}_${operation.propertyName}_${safeName}`;
           statements.push(
-            `ALTER TABLE ${tableRef} DROP CONSTRAINT IF EXISTS ${this.escapeIdentifier(constraintName)};`,
+            `ALTER TABLE ${tableRef} DROP CONSTRAINT IF EXISTS ${this.escapeIdentifier(constraintName)};`
           );
           // Handle exclusive constraint UNIQUE index removal
           if (change.oldValue === "exclusive") {
             statements.push(
               `DROP INDEX IF EXISTS ${
                 this.escapeIdentifier(
-                  `idx_${tableName}_${operation.propertyName}_unique`,
+                  `idx_${tableName}_${operation.propertyName}_unique`
                 )
-              };`,
+              };`
             );
           }
           break;
@@ -889,7 +892,7 @@ END $$;`,
 
   private generateAddLink(
     tableName: string,
-    operation: Types.AddLinkOperation,
+    operation: Types.AddLinkOperation
   ): string[] {
     const statements: string[] = [];
     const link = operation.link;
@@ -922,8 +925,8 @@ END $$;`,
           references: {
             table: tableName,
             column: "id",
-            onDelete: "CASCADE",
-          },
+            onDelete: "CASCADE"
+          }
         },
         {
           name: "target_id",
@@ -934,18 +937,18 @@ END $$;`,
           references: {
             table: targetTable,
             column: "id",
-            onDelete: link.onTargetDelete || "CASCADE",
-          },
-        },
+            onDelete: link.onTargetDelete || "CASCADE"
+          }
+        }
       ];
 
       statements.push(
-        this.generateCreateTableFromColumns(junctionTableName, junctionColumns),
+        this.generateCreateTableFromColumns(junctionTableName, junctionColumns)
       );
       statements.push(
         `ALTER TABLE ${this.escapeIdentifier(junctionTableName)} ADD CONSTRAINT ${
           this.escapeIdentifier(`uk_${junctionTableName}_source_target`)
-        } UNIQUE (source_id, target_id);`,
+        } UNIQUE (source_id, target_id);`
       );
     } else {
       // Single-valued link - add foreign key column
@@ -954,24 +957,22 @@ END $$;`,
       const targetTable = typeNameToTableName(link.target);
 
       statements.push(
-        `ALTER TABLE ${this.escapeIdentifier(tableName)} ADD COLUMN ${this.escapeIdentifier(columnName)} UUID ${nullable};`,
+        `ALTER TABLE ${this.escapeIdentifier(tableName)} ADD COLUMN ${this.escapeIdentifier(columnName)} UUID ${nullable};`
       );
       statements.push(
         `ALTER TABLE ${this.escapeIdentifier(tableName)} ADD CONSTRAINT ${this.escapeIdentifier(`fk_${tableName}_${columnName}`)} FOREIGN KEY (${
           this.escapeIdentifier(columnName)
-        }) REFERENCES ${this.escapeIdentifier(targetTable)} (id) ON DELETE ${link.onTargetDelete || "RESTRICT"};`,
+        }) REFERENCES ${this.escapeIdentifier(targetTable)} (id) ON DELETE ${link.onTargetDelete || "RESTRICT"};`
       );
       statements.push(
-        `CREATE INDEX ${this.escapeIdentifier(`idx_${tableName}_${columnName}`)} ON ${this.escapeIdentifier(tableName)} (${
-          this.escapeIdentifier(columnName)
-        });`,
+        `CREATE INDEX ${this.escapeIdentifier(`idx_${tableName}_${columnName}`)} ON ${this.escapeIdentifier(tableName)} (${this.escapeIdentifier(columnName)});`
       );
     }
 
     // Generate source delete trigger if needed
     if (link.onSourceDelete === "DELETE TARGET") {
       statements.push(
-        ...this.generateSourceDeleteTrigger(tableName, link),
+        ...this.generateSourceDeleteTrigger(tableName, link)
       );
     }
 
@@ -980,7 +981,7 @@ END $$;`,
 
   private generateDropLink(
     tableName: string,
-    operation: Types.DropLinkOperation,
+    operation: Types.DropLinkOperation
   ): string[] {
     const statements: string[] = [];
     const linkName = operation.linkName;
@@ -988,13 +989,13 @@ END $$;`,
     // Drop junction table if it exists
     const junctionTableName = `${tableName}_${linkName}`;
     statements.push(
-      `DROP TABLE IF EXISTS ${this.escapeIdentifier(junctionTableName)} CASCADE;`,
+      `DROP TABLE IF EXISTS ${this.escapeIdentifier(junctionTableName)} CASCADE;`
     );
 
     // Drop foreign key column if it exists
     const columnName = `${linkName}_id`;
     statements.push(
-      `ALTER TABLE ${this.escapeIdentifier(tableName)} DROP COLUMN IF EXISTS ${this.escapeIdentifier(columnName)};`,
+      `ALTER TABLE ${this.escapeIdentifier(tableName)} DROP COLUMN IF EXISTS ${this.escapeIdentifier(columnName)};`
     );
 
     return statements;
@@ -1002,7 +1003,7 @@ END $$;`,
 
   private generateAlterLink(
     tableName: string,
-    operation: Types.AlterLinkOperation,
+    operation: Types.AlterLinkOperation
   ): string[] {
     const statements: string[] = [];
 
@@ -1013,7 +1014,7 @@ END $$;`,
           change.oldValue === "DELETE TARGET"
         ) {
           statements.push(
-            ...this.dropSourceDeleteTrigger(tableName, operation.linkName),
+            ...this.dropSourceDeleteTrigger(tableName, operation.linkName)
           );
         }
         // Create new source delete trigger if needed
@@ -1024,20 +1025,20 @@ END $$;`,
           // so we generate a comment about manual target check
           statements.push(
             `-- Source delete trigger for link '${operation.linkName}' on table '${tableName}' requires target table name`,
-            `-- Please verify the generated trigger targets the correct table`,
+            `-- Please verify the generated trigger targets the correct table`
           );
         }
       } else {
         // Other link changes still need manual handling
         statements.push(
-          `-- ALTER LINK ${operation.linkName}: ${change.kind} requires manual handling`,
+          `-- ALTER LINK ${operation.linkName}: ${change.kind} requires manual handling`
         );
       }
     }
 
     if (statements.length === 0) {
       statements.push(
-        `-- ALTER LINK ${operation.linkName}: No changes to apply`,
+        `-- ALTER LINK ${operation.linkName}: No changes to apply`
       );
     }
 
@@ -1048,14 +1049,14 @@ END $$;`,
     return [
       this.generateCreateTableFromColumns(
         operation.tableName,
-        operation.columns,
-      ),
+        operation.columns
+      )
     ];
   }
 
   private generateDropTable(operation: Types.DropTableOperation): string[] {
     return [
-      `DROP TABLE IF EXISTS ${this.escapeIdentifier(operation.tableName)} CASCADE;`,
+      `DROP TABLE IF EXISTS ${this.escapeIdentifier(operation.tableName)} CASCADE;`
     ];
   }
 
@@ -1064,7 +1065,7 @@ END $$;`,
 
     for (const tableOp of operation.operations) {
       statements.push(
-        ...this.generateTableOperationDDL(operation.tableName, tableOp),
+        ...this.generateTableOperationDDL(operation.tableName, tableOp)
       );
     }
 
@@ -1073,23 +1074,23 @@ END $$;`,
 
   private generateTableOperationDDL(
     tableName: string,
-    operation: Types.TableOperation,
+    operation: Types.TableOperation
   ): string[] {
     switch (operation.kind) {
       case "AddColumn":
         return this.generateAddColumn(
           tableName,
-          operation as Types.AddColumnOperation,
+          operation as Types.AddColumnOperation
         );
       case "DropColumn":
         return this.generateDropColumn(
           tableName,
-          operation as Types.DropColumnOperation,
+          operation as Types.DropColumnOperation
         );
       case "AlterColumn":
         return this.generateAlterColumn(
           tableName,
-          operation as Types.AlterColumnOperation,
+          operation as Types.AlterColumnOperation
         );
       default:
         throw new Error(`Unsupported table operation: ${operation.kind}`);
@@ -1098,29 +1099,29 @@ END $$;`,
 
   private generateAddColumn(
     tableName: string,
-    operation: Types.AddColumnOperation,
+    operation: Types.AddColumnOperation
   ): string[] {
     const column = operation.column;
     const nullable = column.nullable ? "NULL" : "NOT NULL";
     const defaultClause = column.default ? ` DEFAULT ${column.default}` : "";
 
     return [
-      `ALTER TABLE ${this.escapeIdentifier(tableName)} ADD COLUMN ${this.escapeIdentifier(column.name)} ${column.type} ${nullable}${defaultClause};`,
+      `ALTER TABLE ${this.escapeIdentifier(tableName)} ADD COLUMN ${this.escapeIdentifier(column.name)} ${column.type} ${nullable}${defaultClause};`
     ];
   }
 
   private generateDropColumn(
     tableName: string,
-    operation: Types.DropColumnOperation,
+    operation: Types.DropColumnOperation
   ): string[] {
     return [
-      `ALTER TABLE ${this.escapeIdentifier(tableName)} DROP COLUMN IF EXISTS ${this.escapeIdentifier(operation.columnName)};`,
+      `ALTER TABLE ${this.escapeIdentifier(tableName)} DROP COLUMN IF EXISTS ${this.escapeIdentifier(operation.columnName)};`
     ];
   }
 
   private generateAlterColumn(
     tableName: string,
-    operation: Types.AlterColumnOperation,
+    operation: Types.AlterColumnOperation
   ): string[] {
     const statements: string[] = [];
     const columnName = this.escapeIdentifier(operation.columnName);
@@ -1130,28 +1131,28 @@ END $$;`,
       switch (change.kind) {
         case "ChangeType":
           statements.push(
-            `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} TYPE ${change.newValue};`,
+            `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} TYPE ${change.newValue};`
           );
           break;
         case "ChangeNullable":
           if (change.newValue) {
             statements.push(
-              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} DROP NOT NULL;`,
+              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} DROP NOT NULL;`
             );
           } else {
             statements.push(
-              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET NOT NULL;`,
+              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET NOT NULL;`
             );
           }
           break;
         case "ChangeDefault":
           if (change.newValue !== undefined) {
             statements.push(
-              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET DEFAULT ${change.newValue};`,
+              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET DEFAULT ${change.newValue};`
             );
           } else {
             statements.push(
-              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} DROP DEFAULT;`,
+              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} DROP DEFAULT;`
             );
           }
           break;
@@ -1166,33 +1167,33 @@ END $$;`,
     const unique = index.unique ? "UNIQUE " : "";
     const method = index.method ? ` USING ${index.method.toUpperCase()}` : "";
     const partial = index.partial ? ` WHERE ${index.partial}` : "";
-    const columns = index.columns.map((col) => this.escapeIdentifier(col)).join(
-      ", ",
+    const columns = index.columns.map(col => this.escapeIdentifier(col)).join(
+      ", "
     );
 
     return [
-      `CREATE ${unique}INDEX ${this.escapeIdentifier(index.name)} ON ${this.escapeIdentifier(index.table)}${method} (${columns})${partial};`,
+      `CREATE ${unique}INDEX ${this.escapeIdentifier(index.name)} ON ${this.escapeIdentifier(index.table)}${method} (${columns})${partial};`
     ];
   }
 
   private generateDropIndex(operation: Types.DropIndexOperation): string[] {
     return [
-      `DROP INDEX IF EXISTS ${this.escapeIdentifier(operation.indexName)};`,
+      `DROP INDEX IF EXISTS ${this.escapeIdentifier(operation.indexName)};`
     ];
   }
 
   private generateCreateTableFromColumns(
     tableName: string,
     columns: Types.ColumnDefinition[],
-    options: { inlineFKs?: boolean; } = {},
+    options: { inlineFKs?: boolean; } = {}
   ): string {
     const inlineFKs = options.inlineFKs ?? true;
-    const columnDefs = columns.map((col) => this.generateColumnDefinition(col));
-    const constraints = inlineFKs
-      ? columns
-        .filter((col) => col.references)
-        .map((col) => this.generateForeignKeyConstraint(tableName, col))
-      : [];
+    const columnDefs = columns.map(col => this.generateColumnDefinition(col));
+    const constraints = inlineFKs ?
+      columns
+        .filter(col => col.references)
+        .map(col => this.generateForeignKeyConstraint(tableName, col)) :
+      [];
 
     const allDefs = [...columnDefs, ...constraints];
 
@@ -1207,7 +1208,7 @@ END $$;`,
    */
   private generateAddForeignKey(
     tableName: string,
-    column: Types.ColumnDefinition,
+    column: Types.ColumnDefinition
   ): string {
     return `ALTER TABLE ${this.escapeIdentifier(tableName)} ADD ${this.generateForeignKeyConstraint(tableName, column)};`;
   }
@@ -1236,7 +1237,7 @@ END $$;`,
 
   private generateForeignKeyConstraint(
     tableName: string,
-    column: Types.ColumnDefinition,
+    column: Types.ColumnDefinition
   ): string {
     if (!column.references) {
       throw new Error("Column does not have foreign key reference");
@@ -1257,7 +1258,7 @@ END $$;`,
    */
   private generateCheckConstraints(
     tableName: string,
-    properties: Types.PropertyDefinition[],
+    properties: Types.PropertyDefinition[]
   ): string[] {
     const statements: string[] = [];
 
@@ -1266,7 +1267,7 @@ END $$;`,
       for (const constraint of property.constraints) {
         const checkExpr = this.constraintToCheckExpression(
           colName,
-          constraint,
+          constraint
         );
 
         if (checkExpr) {
@@ -1274,7 +1275,7 @@ END $$;`,
           const constraintName = `chk_${tableName}_${colName}_${safeName}`;
 
           statements.push(
-            `ALTER TABLE ${this.escapeIdentifier(tableName)} ADD CONSTRAINT ${this.escapeIdentifier(constraintName)} CHECK (${checkExpr});`,
+            `ALTER TABLE ${this.escapeIdentifier(tableName)} ADD CONSTRAINT ${this.escapeIdentifier(constraintName)} CHECK (${checkExpr});`
           );
         }
       }
@@ -1289,7 +1290,7 @@ END $$;`,
    */
   private constraintToCheckExpression(
     columnName: string,
-    constraint: string,
+    constraint: string
   ): string | null {
     const col = this.escapeIdentifier(columnName);
 
@@ -1305,25 +1306,32 @@ END $$;`,
 
     switch (name) {
       case "max_len_value":
-        if (arg) return `length(${col}) <= ${arg}`;
+        if (arg)
+          return `length(${col}) <= ${arg}`;
         break;
       case "min_len_value":
-        if (arg) return `length(${col}) >= ${arg}`;
+        if (arg)
+          return `length(${col}) >= ${arg}`;
         break;
       case "max_value":
-        if (arg) return `${col} <= ${arg}`;
+        if (arg)
+          return `${col} <= ${arg}`;
         break;
       case "min_value":
-        if (arg) return `${col} >= ${arg}`;
+        if (arg)
+          return `${col} >= ${arg}`;
         break;
       case "regexp":
-        if (arg) return `${col} ~ '${arg.replace(/'/g, "''")}'`;
+        if (arg)
+          return `${col} ~ '${arg.replace(/'/g, "''")}'`;
         break;
       case "max_ex_value":
-        if (arg) return `${col} < ${arg}`;
+        if (arg)
+          return `${col} < ${arg}`;
         break;
       case "min_ex_value":
-        if (arg) return `${col} > ${arg}`;
+        if (arg)
+          return `${col} > ${arg}`;
         break;
       case "one_of":
         if (arg) {
@@ -1335,7 +1343,8 @@ END $$;`,
               return trimmed;
             }
             // Numeric values don't need quoting
-            if (/^-?\d+(\.\d+)?$/.test(trimmed)) return trimmed;
+            if (/^-?\d+(\.\d+)?$/.test(trimmed))
+              return trimmed;
             // String values need single-quote wrapping
             return `'${trimmed.replace(/'/g, "''")}'`;
           });
@@ -1362,19 +1371,19 @@ END $$;`,
 
   private mapEdgeQLTypeToPostgreSQL(edgeqlType: string): string {
     const typeMap: Record<string, string> = {
-      "str": "TEXT",
-      "int16": "SMALLINT",
-      "int32": "INTEGER",
-      "int64": "BIGINT",
-      "float32": "REAL",
-      "float64": "DOUBLE PRECISION",
-      "decimal": "DECIMAL",
-      "bool": "BOOLEAN",
-      "uuid": "UUID",
-      "datetime": "TIMESTAMP WITH TIME ZONE",
-      "duration": "INTERVAL",
-      "bytes": "BYTEA",
-      "json": "JSONB",
+      str: "TEXT",
+      int16: "SMALLINT",
+      int32: "INTEGER",
+      int64: "BIGINT",
+      float32: "REAL",
+      float64: "DOUBLE PRECISION",
+      decimal: "DECIMAL",
+      bool: "BOOLEAN",
+      uuid: "UUID",
+      datetime: "TIMESTAMP WITH TIME ZONE",
+      duration: "INTERVAL",
+      bytes: "BYTEA",
+      json: "JSONB",
       "cal::local_date": "DATE",
       "cal::local_time": "TIME WITHOUT TIME ZONE",
       "cal::local_datetime": "TIMESTAMP WITHOUT TIME ZONE",
@@ -1412,7 +1421,7 @@ END $$;`,
       "multirange<decimal>": "NUMMULTIRANGE",
       "multirange<datetime>": "TSTZMULTIRANGE",
       "multirange<cal::local_date>": "DATEMULTIRANGE",
-      "multirange<cal::local_datetime>": "TSMULTIRANGE",
+      "multirange<cal::local_datetime>": "TSMULTIRANGE"
     };
 
     if (typeMap[edgeqlType]) {
@@ -1455,8 +1464,8 @@ END $$;`,
       // e.g., 0.0 should render as "0.0" not "0" in SQL
       const str = String(value);
       if (
-        Number.isFinite(value) && !str.includes(".") && !str.includes("e")
-        && !str.includes("E")
+        Number.isFinite(value) && !str.includes(".") && !str.includes("e") &&
+        !str.includes("E")
       ) {
         return str + ".0";
       }
@@ -1495,39 +1504,40 @@ END $$;`,
 
   private generateCreateTrigger(
     tableName: string,
-    trigger: Types.TriggerDefinition,
+    trigger: Types.TriggerDefinition
   ): string[] {
     const fnName = `${tableName}__${trigger.name}_fn`;
     const triggerName = `${tableName}__${trigger.name}`;
 
     // Replace EdgeQL trigger variables with PostgreSQL equivalents
-    const body = trigger.body
+    const body = trigger
+      .body
       .replace(/__new__/g, "NEW")
       .replace(/__old__/g, "OLD")
       .replace(/__action__/g, "TG_OP");
 
     const timing = trigger.timing.toUpperCase();
-    const events = trigger.events.map((e) => e.toUpperCase()).join(" OR ");
+    const events = trigger.events.map(e => e.toUpperCase()).join(" OR ");
     const scope = trigger.scope === "each" ? "ROW" : "STATEMENT";
 
     return [
       `CREATE OR REPLACE FUNCTION ${this.escapeIdentifier(fnName)}() RETURNS TRIGGER AS $$ BEGIN ${body}; RETURN NEW; END; $$ LANGUAGE plpgsql;`,
       `CREATE TRIGGER ${this.escapeIdentifier(triggerName)} ${timing} ${events} ON ${this.escapeIdentifier(tableName)} FOR EACH ${scope} EXECUTE FUNCTION ${
         this.escapeIdentifier(fnName)
-      }();`,
+      }();`
     ];
   }
 
   private generateDropTrigger(
     tableName: string,
-    triggerName: string,
+    triggerName: string
   ): string[] {
     const pgTriggerName = `${tableName}__${triggerName}`;
     const fnName = `${tableName}__${triggerName}_fn`;
 
     return [
       `DROP TRIGGER IF EXISTS ${this.escapeIdentifier(pgTriggerName)} ON ${this.escapeIdentifier(tableName)};`,
-      `DROP FUNCTION IF EXISTS ${this.escapeIdentifier(fnName)}();`,
+      `DROP FUNCTION IF EXISTS ${this.escapeIdentifier(fnName)}();`
     ];
   }
 
@@ -1541,7 +1551,7 @@ END $$;`,
    */
   private generateSourceDeleteTrigger(
     tableName: string,
-    link: Types.LinkDefinition,
+    link: Types.LinkDefinition
   ): string[] {
     const targetTable = typeNameToTableName(link.target);
     const fnName = `disc_source_delete_${tableName}_${link.name}`;
@@ -1556,7 +1566,7 @@ END $$;`,
         } WHERE id IN (SELECT target_id FROM ${this.escapeIdentifier(junctionTable)} WHERE source_id = OLD.id); RETURN OLD; END; $$ LANGUAGE plpgsql;`,
         `CREATE TRIGGER ${this.escapeIdentifier(triggerName)} BEFORE DELETE ON ${this.escapeIdentifier(tableName)} FOR EACH ROW EXECUTE FUNCTION ${
           this.escapeIdentifier(fnName)
-        }();`,
+        }();`
       ];
     }
 
@@ -1568,7 +1578,7 @@ END $$;`,
       } WHERE id = OLD.${this.escapeIdentifier(columnName)}; RETURN OLD; END; $$ LANGUAGE plpgsql;`,
       `CREATE TRIGGER ${this.escapeIdentifier(triggerName)} BEFORE DELETE ON ${this.escapeIdentifier(tableName)} FOR EACH ROW EXECUTE FUNCTION ${
         this.escapeIdentifier(fnName)
-      }();`,
+      }();`
     ];
   }
 
@@ -1577,14 +1587,14 @@ END $$;`,
    */
   private dropSourceDeleteTrigger(
     tableName: string,
-    linkName: string,
+    linkName: string
   ): string[] {
     const fnName = `disc_source_delete_${tableName}_${linkName}`;
     const triggerName = `trg_source_delete_${tableName}_${linkName}`;
 
     return [
       `DROP TRIGGER IF EXISTS ${this.escapeIdentifier(triggerName)} ON ${this.escapeIdentifier(tableName)};`,
-      `DROP FUNCTION IF EXISTS ${this.escapeIdentifier(fnName)}();`,
+      `DROP FUNCTION IF EXISTS ${this.escapeIdentifier(fnName)}();`
     ];
   }
 
@@ -1599,7 +1609,7 @@ END $$;`,
   private generateCreateRewrite(
     tableName: string,
     propertyName: string,
-    rewrite: Types.RewriteDefinition,
+    rewrite: Types.RewriteDefinition
   ): string[] {
     const colName = propNameToColumnName(propertyName);
     const fnName = `${tableName}__${colName}__rewrite_fn`;
@@ -1609,7 +1619,7 @@ END $$;`,
     const compiledExpr = this.compileRewriteExpression(rewrite.body);
 
     // Build event list from rewrite events
-    const eventList = rewrite.events.map((e) => e.toUpperCase()).join(" OR ");
+    const eventList = rewrite.events.map(e => e.toUpperCase()).join(" OR ");
 
     return [
       `CREATE OR REPLACE FUNCTION ${this.escapeIdentifier(fnName)}() RETURNS TRIGGER AS $$ BEGIN NEW.${
@@ -1617,7 +1627,7 @@ END $$;`,
       } := ${compiledExpr}; RETURN NEW; END; $$ LANGUAGE plpgsql;`,
       `CREATE TRIGGER ${this.escapeIdentifier(triggerName)} BEFORE ${eventList} ON ${this.escapeIdentifier(tableName)} FOR EACH ROW EXECUTE FUNCTION ${
         this.escapeIdentifier(fnName)
-      }();`,
+      }();`
     ];
   }
 
@@ -1627,7 +1637,7 @@ END $$;`,
   private generateDropRewrite(
     tableName: string,
     propertyName: string,
-    _events: ("insert" | "update")[],
+    _events: ("insert" | "update")[]
   ): string[] {
     const colName = propNameToColumnName(propertyName);
     const triggerName = `${tableName}__${colName}__rewrite`;
@@ -1635,7 +1645,7 @@ END $$;`,
 
     return [
       `DROP TRIGGER IF EXISTS ${this.escapeIdentifier(triggerName)} ON ${this.escapeIdentifier(tableName)};`,
-      `DROP FUNCTION IF EXISTS ${this.escapeIdentifier(fnName)}();`,
+      `DROP FUNCTION IF EXISTS ${this.escapeIdentifier(fnName)}();`
     ];
   }
 
@@ -1657,17 +1667,17 @@ END $$;`,
   // ========================================
 
   private generateRollbackCreateType(
-    operation: Types.CreateTypeOperation,
+    operation: Types.CreateTypeOperation
   ): string[] {
     // To rollback CreateType, we drop the table
     const tableName = typeNameToTableName(operation.typeName);
     return [
-      `DROP TABLE IF EXISTS ${this.escapeIdentifier(tableName)} CASCADE;`,
+      `DROP TABLE IF EXISTS ${this.escapeIdentifier(tableName)} CASCADE;`
     ];
   }
 
   private generateRollbackDropType(
-    operation: Types.DropTypeOperation,
+    operation: Types.DropTypeOperation
   ): string[] {
     // P1-10: DropType rollback is fundamentally impossible without the
     // pre-drop schema snapshot (which we don't persist). Emit a SQL-level
@@ -1680,12 +1690,12 @@ END $$;`,
       `-- Please restore from backup or recreate the table manually.`,
       `DO $$ BEGIN
   RAISE EXCEPTION 'Cannot auto-rollback DropType for "${tableName}" — restore from backup or edit this migration to provide CREATE TABLE DDL.';
-END $$;`,
+END $$;`
     ];
   }
 
   private generateRollbackAlterType(
-    operation: Types.AlterTypeOperation,
+    operation: Types.AlterTypeOperation
   ): string[] {
     const statements: string[] = [];
     const tableName = typeNameToTableName(operation.typeName);
@@ -1700,51 +1710,51 @@ END $$;`,
 
   private generateRollbackTypeOperation(
     tableName: string,
-    operation: Types.TypeOperation,
+    operation: Types.TypeOperation
   ): string[] {
     switch (operation.kind) {
       case "AddProperty":
         return this.generateRollbackAddProperty(
           tableName,
-          operation as Types.AddPropertyOperation,
+          operation as Types.AddPropertyOperation
         );
       case "DropProperty":
         return this.generateRollbackDropProperty(
           tableName,
-          operation as Types.DropPropertyOperation,
+          operation as Types.DropPropertyOperation
         );
       case "AlterProperty":
         return this.generateRollbackAlterProperty(
           tableName,
-          operation as Types.AlterPropertyOperation,
+          operation as Types.AlterPropertyOperation
         );
       case "AddLink":
         return this.generateRollbackAddLink(
           tableName,
-          operation as Types.AddLinkOperation,
+          operation as Types.AddLinkOperation
         );
       case "DropLink":
         return this.generateRollbackDropLink(
           tableName,
-          operation as Types.DropLinkOperation,
+          operation as Types.DropLinkOperation
         );
       case "AlterLink":
         return this.generateRollbackAlterLink(
           tableName,
-          operation as Types.AlterLinkOperation,
+          operation as Types.AlterLinkOperation
         );
       case "AddTrigger":
         // Rollback AddTrigger = DropTrigger
         return this.generateDropTrigger(
           tableName,
-          (operation as Types.AddTriggerOperation).trigger.name,
+          (operation as Types.AddTriggerOperation).trigger.name
         );
       case "DropTrigger":
         // Can't restore trigger body from just the name
         return [
           `-- MANUAL ROLLBACK REQUIRED: Recreate trigger '${(operation as Types.DropTriggerOperation).triggerName}' on table '${tableName}'`,
           `-- The original trigger body was lost when it was dropped.`,
-          `-- Please refer to backup or documentation for the original trigger definition.`,
+          `-- Please refer to backup or documentation for the original trigger definition.`
         ];
       case "AddRewrite": {
         // Rollback AddRewrite = DropRewrite
@@ -1752,7 +1762,7 @@ END $$;`,
         return this.generateDropRewrite(
           tableName,
           addRewriteOp.propertyName,
-          addRewriteOp.rewrite.events,
+          addRewriteOp.rewrite.events
         );
       }
       case "DropRewrite": {
@@ -1762,36 +1772,36 @@ END $$;`,
           `-- MANUAL ROLLBACK REQUIRED: Recreate rewrite rule for property '${dropRewriteOp.propertyName}' on table '${tableName}'`,
           `-- Events: ${dropRewriteOp.events.join(", ")}`,
           `-- The original rewrite body was lost when it was dropped.`,
-          `-- Please refer to backup or documentation for the original rewrite definition.`,
+          `-- Please refer to backup or documentation for the original rewrite definition.`
         ];
       }
       default:
         throw new Error(
-          `Unsupported rollback type operation: ${operation.kind}`,
+          `Unsupported rollback type operation: ${operation.kind}`
         );
     }
   }
 
   private generateRollbackAddProperty(
     tableName: string,
-    operation: Types.AddPropertyOperation,
+    operation: Types.AddPropertyOperation
   ): string[] {
     // Computed properties have no column — nothing to roll back
     if (operation.property.computed) {
       return [
-        `-- Computed property '${operation.property.name}' was virtual, no column to drop`,
+        `-- Computed property '${operation.property.name}' was virtual, no column to drop`
       ];
     }
 
     // To rollback AddProperty, we drop the column
     return [
-      `ALTER TABLE ${this.escapeIdentifier(tableName)} DROP COLUMN IF EXISTS ${this.escapeIdentifier(operation.property.name)};`,
+      `ALTER TABLE ${this.escapeIdentifier(tableName)} DROP COLUMN IF EXISTS ${this.escapeIdentifier(operation.property.name)};`
     ];
   }
 
   private generateRollbackDropProperty(
     tableName: string,
-    operation: Types.DropPropertyOperation,
+    operation: Types.DropPropertyOperation
   ): string[] {
     // P1-10: DropProperty rollback can't restore data without a backup.
     // The RAISE EXCEPTION ensures a dry-run or automated rollback fails
@@ -1802,13 +1812,13 @@ END $$;`,
       `-- Please determine the correct type and constraints from backup or documentation.`,
       `DO $$ BEGIN
   RAISE EXCEPTION 'Cannot auto-rollback DropProperty "${tableName}.${operation.propertyName}" — original column definition and data not preserved.';
-END $$;`,
+END $$;`
     ];
   }
 
   private generateRollbackAlterProperty(
     tableName: string,
-    operation: Types.AlterPropertyOperation,
+    operation: Types.AlterPropertyOperation
   ): string[] {
     const statements: string[] = [];
     const columnName = this.escapeIdentifier(operation.propertyName);
@@ -1819,28 +1829,28 @@ END $$;`,
       switch (change.kind) {
         case "ChangeType":
           statements.push(
-            `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} TYPE ${this.mapEdgeQLTypeToPostgreSQL(change.oldValue)};`,
+            `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} TYPE ${this.mapEdgeQLTypeToPostgreSQL(change.oldValue)};`
           );
           break;
         case "ChangeRequired":
           if (change.oldValue) {
             statements.push(
-              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET NOT NULL;`,
+              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET NOT NULL;`
             );
           } else {
             statements.push(
-              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} DROP NOT NULL;`,
+              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} DROP NOT NULL;`
             );
           }
           break;
         case "ChangeDefault":
           if (change.oldValue !== undefined) {
             statements.push(
-              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET DEFAULT ${this.formatDefaultValue(change.oldValue, "unknown")};`,
+              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET DEFAULT ${this.formatDefaultValue(change.oldValue, "unknown")};`
             );
           } else {
             statements.push(
-              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} DROP DEFAULT;`,
+              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} DROP DEFAULT;`
             );
           }
           break;
@@ -1849,7 +1859,7 @@ END $$;`,
           const safeName = change.newValue.replace(/[^a-zA-Z0-9_]/g, "_");
           const constraintName = `chk_${tableName}_${operation.propertyName}_${safeName}`;
           statements.push(
-            `ALTER TABLE ${tableRef} DROP CONSTRAINT IF EXISTS ${this.escapeIdentifier(constraintName)};`,
+            `ALTER TABLE ${tableRef} DROP CONSTRAINT IF EXISTS ${this.escapeIdentifier(constraintName)};`
           );
           break;
         }
@@ -1857,13 +1867,13 @@ END $$;`,
           // Rollback: re-add the constraint that was dropped
           const checkExpr = this.constraintToCheckExpression(
             operation.propertyName,
-            change.oldValue,
+            change.oldValue
           );
           if (checkExpr) {
             const safeName = change.oldValue.replace(/[^a-zA-Z0-9_]/g, "_");
             const constraintName = `chk_${tableName}_${operation.propertyName}_${safeName}`;
             statements.push(
-              `ALTER TABLE ${tableRef} ADD CONSTRAINT ${this.escapeIdentifier(constraintName)} CHECK (${checkExpr});`,
+              `ALTER TABLE ${tableRef} ADD CONSTRAINT ${this.escapeIdentifier(constraintName)} CHECK (${checkExpr});`
             );
           }
           break;
@@ -1876,7 +1886,7 @@ END $$;`,
 
   private generateRollbackAddLink(
     tableName: string,
-    operation: Types.AddLinkOperation,
+    operation: Types.AddLinkOperation
   ): string[] {
     const statements: string[] = [];
     const linkName = operation.link.name;
@@ -1885,13 +1895,13 @@ END $$;`,
     if (operation.link.multi) {
       const junctionTableName = `${tableName}_${linkName}`;
       statements.push(
-        `DROP TABLE IF EXISTS ${this.escapeIdentifier(junctionTableName)} CASCADE;`,
+        `DROP TABLE IF EXISTS ${this.escapeIdentifier(junctionTableName)} CASCADE;`
       );
     } else {
       // Drop foreign key column if it was a single-link
       const columnName = `${linkName}_id`;
       statements.push(
-        `ALTER TABLE ${this.escapeIdentifier(tableName)} DROP COLUMN IF EXISTS ${this.escapeIdentifier(columnName)};`,
+        `ALTER TABLE ${this.escapeIdentifier(tableName)} DROP COLUMN IF EXISTS ${this.escapeIdentifier(columnName)};`
       );
     }
 
@@ -1900,56 +1910,56 @@ END $$;`,
 
   private generateRollbackDropLink(
     tableName: string,
-    operation: Types.DropLinkOperation,
+    operation: Types.DropLinkOperation
   ): string[] {
     // To rollback DropLink, we would need to recreate the link
     // This requires the original link definition which we don't have
     return [
       `-- MANUAL ROLLBACK REQUIRED: Recreate link '${operation.linkName}' on table '${tableName}'`,
       `-- This may involve creating a junction table or adding a foreign key column.`,
-      `-- Please refer to backup or documentation for the original link structure.`,
+      `-- Please refer to backup or documentation for the original link structure.`
     ];
   }
 
   private generateRollbackAlterLink(
     tableName: string,
-    operation: Types.AlterLinkOperation,
+    operation: Types.AlterLinkOperation
   ): string[] {
     // Link alteration rollback is complex and requires the original link definition
     return [
       `-- MANUAL ROLLBACK REQUIRED: Revert changes to link '${operation.linkName}' on table '${tableName}'`,
       `-- Link alterations may involve changing junction tables or foreign key constraints.`,
-      `-- Please refer to backup or documentation for the original link configuration.`,
+      `-- Please refer to backup or documentation for the original link configuration.`
     ];
   }
 
   private generateRollbackCreateTable(
-    operation: Types.CreateTableOperation,
+    operation: Types.CreateTableOperation
   ): string[] {
     return [
-      `DROP TABLE IF EXISTS ${this.escapeIdentifier(operation.tableName)} CASCADE;`,
+      `DROP TABLE IF EXISTS ${this.escapeIdentifier(operation.tableName)} CASCADE;`
     ];
   }
 
   private generateRollbackDropTable(
-    operation: Types.DropTableOperation,
+    operation: Types.DropTableOperation
   ): string[] {
     return [
       `-- MANUAL ROLLBACK REQUIRED: Recreate table '${operation.tableName}'`,
       `-- The original table structure was lost when it was dropped.`,
-      `-- Please restore from backup or recreate the table manually.`,
+      `-- Please restore from backup or recreate the table manually.`
     ];
   }
 
   private generateRollbackAlterTable(
-    operation: Types.AlterTableOperation,
+    operation: Types.AlterTableOperation
   ): string[] {
     const statements: string[] = [];
 
     // Process table operations in reverse order
     for (const tableOp of operation.operations.reverse()) {
       statements.push(
-        ...this.generateRollbackTableOperation(operation.tableName, tableOp),
+        ...this.generateRollbackTableOperation(operation.tableName, tableOp)
       );
     }
 
@@ -1958,54 +1968,54 @@ END $$;`,
 
   private generateRollbackTableOperation(
     tableName: string,
-    operation: Types.TableOperation,
+    operation: Types.TableOperation
   ): string[] {
     switch (operation.kind) {
       case "AddColumn":
         return this.generateRollbackAddColumn(
           tableName,
-          operation as Types.AddColumnOperation,
+          operation as Types.AddColumnOperation
         );
       case "DropColumn":
         return this.generateRollbackDropColumn(
           tableName,
-          operation as Types.DropColumnOperation,
+          operation as Types.DropColumnOperation
         );
       case "AlterColumn":
         return this.generateRollbackAlterColumn(
           tableName,
-          operation as Types.AlterColumnOperation,
+          operation as Types.AlterColumnOperation
         );
       default:
         throw new Error(
-          `Unsupported rollback table operation: ${operation.kind}`,
+          `Unsupported rollback table operation: ${operation.kind}`
         );
     }
   }
 
   private generateRollbackAddColumn(
     tableName: string,
-    operation: Types.AddColumnOperation,
+    operation: Types.AddColumnOperation
   ): string[] {
     return [
-      `ALTER TABLE ${this.escapeIdentifier(tableName)} DROP COLUMN IF EXISTS ${this.escapeIdentifier(operation.column.name)};`,
+      `ALTER TABLE ${this.escapeIdentifier(tableName)} DROP COLUMN IF EXISTS ${this.escapeIdentifier(operation.column.name)};`
     ];
   }
 
   private generateRollbackDropColumn(
     tableName: string,
-    operation: Types.DropColumnOperation,
+    operation: Types.DropColumnOperation
   ): string[] {
     return [
       `-- MANUAL ROLLBACK REQUIRED: Add column '${operation.columnName}' back to table '${tableName}'`,
       `-- ALTER TABLE ${this.escapeIdentifier(tableName)} ADD COLUMN ${this.escapeIdentifier(operation.columnName)} <TYPE> <CONSTRAINTS>;`,
-      `-- Please determine the correct type and constraints from backup or documentation.`,
+      `-- Please determine the correct type and constraints from backup or documentation.`
     ];
   }
 
   private generateRollbackAlterColumn(
     tableName: string,
-    operation: Types.AlterColumnOperation,
+    operation: Types.AlterColumnOperation
   ): string[] {
     const statements: string[] = [];
     const columnName = this.escapeIdentifier(operation.columnName);
@@ -2016,28 +2026,28 @@ END $$;`,
       switch (change.kind) {
         case "ChangeType":
           statements.push(
-            `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} TYPE ${change.oldValue};`,
+            `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} TYPE ${change.oldValue};`
           );
           break;
         case "ChangeNullable":
           if (change.oldValue) {
             statements.push(
-              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} DROP NOT NULL;`,
+              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} DROP NOT NULL;`
             );
           } else {
             statements.push(
-              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET NOT NULL;`,
+              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET NOT NULL;`
             );
           }
           break;
         case "ChangeDefault":
           if (change.oldValue !== undefined) {
             statements.push(
-              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET DEFAULT ${change.oldValue};`,
+              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} SET DEFAULT ${change.oldValue};`
             );
           } else {
             statements.push(
-              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} DROP DEFAULT;`,
+              `ALTER TABLE ${tableRef} ALTER COLUMN ${columnName} DROP DEFAULT;`
             );
           }
           break;
@@ -2048,20 +2058,20 @@ END $$;`,
   }
 
   private generateRollbackCreateIndex(
-    operation: Types.CreateIndexOperation,
+    operation: Types.CreateIndexOperation
   ): string[] {
     return [
-      `DROP INDEX IF EXISTS ${this.escapeIdentifier(operation.index.name)};`,
+      `DROP INDEX IF EXISTS ${this.escapeIdentifier(operation.index.name)};`
     ];
   }
 
   private generateRollbackDropIndex(
-    operation: Types.DropIndexOperation,
+    operation: Types.DropIndexOperation
   ): string[] {
     return [
       `-- MANUAL ROLLBACK REQUIRED: Recreate index '${operation.indexName}'`,
       `-- The original index definition was lost when it was dropped.`,
-      `-- Please refer to backup or documentation for the original index structure.`,
+      `-- Please refer to backup or documentation for the original index structure.`
     ];
   }
 }

@@ -20,17 +20,18 @@ const RESERVED_AUTHORIZE_PARAMS = new Set([
   "scope",
   "state",
   "code_challenge",
-  "code_challenge_method",
+  "code_challenge_method"
 ]);
 
 function validateExtraAuthorizeParams(provider: OAuthProviderConfig): void {
   const extras = provider.extraAuthorizeParams;
-  if (!extras) return;
+  if (!extras)
+    return;
   for (const key of Object.keys(extras)) {
     if (RESERVED_AUTHORIZE_PARAMS.has(key)) {
       throw new ExtensionConfigError(
         "oauth",
-        `provider "${provider.name}" extraAuthorizeParams cannot override reserved param "${key}"`,
+        `provider "${provider.name}" extraAuthorizeParams cannot override reserved param "${key}"`
       );
     }
   }
@@ -40,14 +41,14 @@ function jsonError(
   code: OAuthErrorResponse["error"]["code"],
   message: string,
   status: number,
-  details?: string,
+  details?: string
 ): Response {
   const body: OAuthErrorResponse = {
-    error: { code, message, ...(details ? { details } : {}) },
+    error: { code, message, ...(details ? { details } : {}) }
   };
   return new Response(JSON.stringify(body), {
     headers: { "Content-Type": "application/json" },
-    status,
+    status
   });
 }
 
@@ -56,7 +57,7 @@ export class OAuthExtension extends BaseExtension {
     dependencies: [],
     description: "OAuth 2.0 provider integration",
     name: "oauth",
-    version: "1.0.0",
+    version: "1.0.0"
   };
 
   private config: OAuthConfig;
@@ -68,7 +69,7 @@ export class OAuthExtension extends BaseExtension {
     if (!config.providers || config.providers.length === 0) {
       throw new ExtensionConfigError(
         "oauth",
-        "At least one provider is required",
+        "At least one provider is required"
       );
     }
     this.config = config;
@@ -83,7 +84,7 @@ export class OAuthExtension extends BaseExtension {
   override async initialize(context: ExtensionContext): Promise<void> {
     this.setState("initializing");
     context.logger.info("OAuth extension initializing", {
-      providers: Array.from(this.providers.keys()),
+      providers: Array.from(this.providers.keys())
     });
     await super.initialize(context);
   }
@@ -95,13 +96,13 @@ export class OAuthExtension extends BaseExtension {
           const providers = Array.from(this.providers.keys());
           return Promise.resolve(
             new Response(JSON.stringify({ providers }), {
-              headers: { "Content-Type": "application/json" },
-            }),
+              headers: { "Content-Type": "application/json" }
+            })
           );
         },
         method: "GET",
-        path: "/providers",
-      },
+        path: "/providers"
+      }
     ];
 
     // Add per-provider authorize and callback routes
@@ -111,7 +112,7 @@ export class OAuthExtension extends BaseExtension {
           return this.handleAuthorize(request, provider);
         },
         method: "GET",
-        path: `/authorize/${name}`,
+        path: `/authorize/${name}`
       });
 
       routes.push({
@@ -119,7 +120,7 @@ export class OAuthExtension extends BaseExtension {
           return this.handleCallback(request, provider);
         },
         method: "GET",
-        path: `/callback/${name}`,
+        path: `/callback/${name}`
       });
     }
 
@@ -149,12 +150,12 @@ export class OAuthExtension extends BaseExtension {
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(provider, provider_user_id)
-);`,
+);`
       ],
       teardownSql: [
         "DROP TABLE IF EXISTS disc_oauth_identities;",
-        "DROP TABLE IF EXISTS disc_oauth_states;",
-      ],
+        "DROP TABLE IF EXISTS disc_oauth_states;"
+      ]
     };
   }
 
@@ -168,7 +169,7 @@ export class OAuthExtension extends BaseExtension {
 
   private async handleAuthorize(
     request: Request,
-    provider: OAuthProviderConfig,
+    provider: OAuthProviderConfig
   ): Promise<Response> {
     // gh/geldata#7468: when `allowedRedirectUris` is configured, accept a
     // caller-supplied `?redirect_uri=…` query param after validating it
@@ -185,7 +186,7 @@ export class OAuthExtension extends BaseExtension {
         return jsonError(
           "redirect_uri_not_allowed",
           "redirect_uri not in allowlist",
-          400,
+          400
         );
       }
       redirectUri = callerSuppliedUri;
@@ -196,12 +197,12 @@ export class OAuthExtension extends BaseExtension {
       return jsonError(
         "redirect_uri_override_disabled",
         "redirect_uri override not permitted — provider has no allowedRedirectUris",
-        400,
+        400
       );
     } else {
-      redirectUri = provider.redirectUri
-        ?? this.config.defaultRedirectUri
-        ?? "";
+      redirectUri = provider.redirectUri ??
+        this.config.defaultRedirectUri ??
+        "";
     }
 
     // gh/geldata#8841: caller-supplied opaque metadata carried through
@@ -215,7 +216,7 @@ export class OAuthExtension extends BaseExtension {
         return jsonError(
           "metadata_too_large",
           `metadata exceeds ${MAX_METADATA_BYTES}-byte cap`,
-          400,
+          400
         );
       }
       try {
@@ -231,7 +232,7 @@ export class OAuthExtension extends BaseExtension {
           "metadata_invalid",
           "metadata must be a JSON-encoded object",
           400,
-          error instanceof Error ? error.message : String(error),
+          error instanceof Error ? error.message : String(error)
         );
       }
     }
@@ -239,7 +240,7 @@ export class OAuthExtension extends BaseExtension {
     const oauthState = await this.stateManager.createState(
       provider.name,
       redirectUri,
-      metadata,
+      metadata
     );
 
     const params = new URLSearchParams({
@@ -247,7 +248,7 @@ export class OAuthExtension extends BaseExtension {
       redirect_uri: redirectUri,
       response_type: "code",
       scope: provider.scopes.join(" "),
-      state: oauthState.state,
+      state: oauthState.state
     });
 
     // P1-41: include PKCE challenge in the authorize redirect. Providers
@@ -262,7 +263,7 @@ export class OAuthExtension extends BaseExtension {
       // hand us a padded challenge.
       params.set(
         "code_challenge",
-        normalizePkceParam(oauthState.codeChallenge),
+        normalizePkceParam(oauthState.codeChallenge)
       );
       params.set("code_challenge_method", "S256");
     }
@@ -282,15 +283,15 @@ export class OAuthExtension extends BaseExtension {
       new Response(
         JSON.stringify({ state: oauthState.state, url: authorizeUrl }),
         {
-          headers: { "Content-Type": "application/json" },
-        },
-      ),
+          headers: { "Content-Type": "application/json" }
+        }
+      )
     );
   }
 
   private async handleCallback(
     request: Request,
-    provider: OAuthProviderConfig,
+    provider: OAuthProviderConfig
   ): Promise<Response> {
     const url = new URL(request.url);
     const code = url.searchParams.get("code");
@@ -304,7 +305,7 @@ export class OAuthExtension extends BaseExtension {
         "oauth_provider_error",
         "The OAuth provider returned an error",
         400,
-        providerError,
+        providerError
       );
     }
 
@@ -312,7 +313,7 @@ export class OAuthExtension extends BaseExtension {
       return jsonError(
         "missing_parameter",
         "Missing required `code` or `state` parameter",
-        400,
+        400
       );
     }
 
@@ -321,7 +322,7 @@ export class OAuthExtension extends BaseExtension {
       return jsonError(
         "invalid_state",
         "OAuth session expired or already used — please retry login",
-        400,
+        400
       );
     }
 
@@ -335,14 +336,14 @@ export class OAuthExtension extends BaseExtension {
         provider,
         code,
         storedState.redirectUri,
-        storedState.codeVerifier,
+        storedState.codeVerifier
       );
     } catch (error) {
       return jsonError(
         "token_exchange_failed",
         "Could not complete OAuth token exchange",
         502,
-        error instanceof Error ? error.message : String(error),
+        error instanceof Error ? error.message : String(error)
       );
     }
 
@@ -354,7 +355,7 @@ export class OAuthExtension extends BaseExtension {
         "userinfo_failed",
         "Could not fetch user profile from OAuth provider",
         502,
-        error instanceof Error ? error.message : String(error),
+        error instanceof Error ? error.message : String(error)
       );
     }
 
@@ -365,9 +366,9 @@ export class OAuthExtension extends BaseExtension {
         user: userInfo,
         // gh/geldata#8841: round-trip the caller-supplied metadata.
         // Calling app uses this for post-login redirects, etc.
-        metadata: storedState.metadata,
+        metadata: storedState.metadata
       }),
-      { headers: { "Content-Type": "application/json" } },
+      { headers: { "Content-Type": "application/json" } }
     );
   }
 }

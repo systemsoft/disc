@@ -22,7 +22,7 @@ import * as Types from "./types.ts";
  */
 function createMockPool(
   queryResponses: Map<string, { rows: any[]; rowCount: number; }>,
-  executedStatements: string[] = [],
+  executedStatements: string[] = []
 ): ConnectionPool {
   const pool = {
     initialize: () => Promise.resolve(),
@@ -52,9 +52,9 @@ function createMockPool(
             }
           }
           return Promise.resolve({ rows: [], rowCount: 0 });
-        },
+        }
       });
-    },
+    }
   } as unknown as ConnectionPool;
 
   return pool;
@@ -65,7 +65,7 @@ function createMockPool(
  */
 function createTestConfig(
   pool: ConnectionPool,
-  overrides: Partial<Types.MigrationConfig> = {},
+  overrides: Partial<Types.MigrationConfig> = {}
 ): Types.MigrationConfig {
   return {
     migrationsDir: "./migrations",
@@ -76,7 +76,7 @@ function createTestConfig(
     backupBeforeMigration: false,
     rollbackOnError: true,
     connectionPool: pool,
-    ...overrides,
+    ...overrides
   };
 }
 
@@ -99,9 +99,9 @@ Deno.test("Tracker - getLatestMigration returns most recent migration", async ()
       schema_hash: "hash123",
       applied_at: new Date("2024-06-01T10:00:00Z"),
       duration_ms: 150,
-      created_at: new Date("2024-06-01T09:55:00Z"),
+      created_at: new Date("2024-06-01T09:55:00Z")
     }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   const pool = createMockPool(responses);
@@ -147,7 +147,7 @@ Deno.test("Tracker - getMigrationsAfter returns correct subset in reverse order"
   // Response for the reference migration lookup
   responses.set("SELECT applied_at FROM disc_migrations WHERE id", {
     rows: [{ applied_at: new Date("2024-01-01T10:00:00Z") }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   // Response for migrations after the reference
@@ -160,7 +160,7 @@ Deno.test("Tracker - getMigrationsAfter returns correct subset in reverse order"
         schema_hash: "hash3",
         applied_at: new Date("2024-01-03T10:00:00Z"),
         duration_ms: 100,
-        created_at: new Date("2024-01-03T09:00:00Z"),
+        created_at: new Date("2024-01-03T09:00:00Z")
       },
       {
         id: "m002",
@@ -169,10 +169,10 @@ Deno.test("Tracker - getMigrationsAfter returns correct subset in reverse order"
         schema_hash: "hash2",
         applied_at: new Date("2024-01-02T10:00:00Z"),
         duration_ms: 80,
-        created_at: new Date("2024-01-02T09:00:00Z"),
-      },
+        created_at: new Date("2024-01-02T09:00:00Z")
+      }
     ],
-    rowCount: 2,
+    rowCount: 2
   });
 
   const pool = createMockPool(responses);
@@ -199,10 +199,10 @@ Deno.test("Tracker - getRollbackSQL returns stored SQL array", async () => {
     rows: [{
       rollback_sql: [
         "DROP TABLE IF EXISTS user CASCADE;",
-        "DROP INDEX IF EXISTS idx_user_email;",
-      ],
+        "DROP INDEX IF EXISTS idx_user_email;"
+      ]
     }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   const pool = createMockPool(responses);
@@ -227,7 +227,7 @@ Deno.test("Tracker - getRollbackSQL throws for unknown migration", async () => {
   // Empty result for unknown migration
   responses.set("SELECT rollback_sql FROM disc_migrations", {
     rows: [],
-    rowCount: 0,
+    rowCount: 0
   });
 
   const pool = createMockPool(responses);
@@ -251,7 +251,7 @@ Deno.test("Tracker - removeMigration deletes record", async () => {
   // Migration exists
   responses.set("SELECT 1 FROM disc_migrations WHERE id", {
     rows: [{ "1": 1 }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   const pool = createMockPool(responses, executedStatements);
@@ -262,7 +262,7 @@ Deno.test("Tracker - removeMigration deletes record", async () => {
   assertEquals(result.ok, true);
 
   // Verify DELETE was executed
-  const deleteStatement = executedStatements.find((s) => s.includes("DELETE FROM disc_migrations"));
+  const deleteStatement = executedStatements.find(s => s.includes("DELETE FROM disc_migrations"));
   assertExists(deleteStatement);
 
   await tracker.close();
@@ -280,21 +280,21 @@ Deno.test("Engine - executeRollback executes rollback SQL in transaction", async
   // getAppliedMigrations (for initialize)
   responses.set("SELECT id FROM disc_migrations", {
     rows: [{ id: "m001" }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   // getRollbackSQL
   responses.set("SELECT rollback_sql FROM disc_migrations", {
     rows: [{
-      rollback_sql: ["DROP TABLE IF EXISTS user CASCADE;"],
+      rollback_sql: ["DROP TABLE IF EXISTS user CASCADE;"]
     }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   // removeMigration - SELECT check
   responses.set("SELECT 1 FROM disc_migrations WHERE id", {
     rows: [{ "1": 1 }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   const pool = createMockPool(responses, executedStatements);
@@ -306,7 +306,7 @@ Deno.test("Engine - executeRollback executes rollback SQL in transaction", async
   assertEquals(result.ok, true);
 
   // Verify the rollback SQL was executed
-  const dropStatement = executedStatements.find((s) => s.includes("DROP TABLE IF EXISTS user CASCADE"));
+  const dropStatement = executedStatements.find(s => s.includes("DROP TABLE IF EXISTS user CASCADE"));
   assertExists(dropStatement);
 });
 
@@ -317,19 +317,19 @@ Deno.test("Engine - executeRollback removes migration record after execution", a
 
   responses.set("SELECT id FROM disc_migrations", {
     rows: [{ id: "m001" }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   responses.set("SELECT rollback_sql FROM disc_migrations", {
     rows: [{
-      rollback_sql: ["DROP TABLE IF EXISTS user CASCADE;"],
+      rollback_sql: ["DROP TABLE IF EXISTS user CASCADE;"]
     }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   responses.set("SELECT 1 FROM disc_migrations WHERE id", {
     rows: [{ "1": 1 }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   const pool = createMockPool(responses, executedStatements);
@@ -340,7 +340,7 @@ Deno.test("Engine - executeRollback removes migration record after execution", a
   await engine.executeRollback("m001");
 
   // Verify DELETE was executed (migration record removal)
-  const deleteStatement = executedStatements.find((s) => s.includes("DELETE FROM disc_migrations"));
+  const deleteStatement = executedStatements.find(s => s.includes("DELETE FROM disc_migrations"));
   assertExists(deleteStatement);
 });
 
@@ -350,13 +350,13 @@ Deno.test("Engine - executeRollback throws when no rollback SQL available", asyn
 
   responses.set("SELECT id FROM disc_migrations", {
     rows: [{ id: "m001" }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   // Empty rollback_sql
   responses.set("SELECT rollback_sql FROM disc_migrations", {
     rows: [{ rollback_sql: [] }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   const pool = createMockPool(responses);
@@ -378,13 +378,13 @@ Deno.test("Engine - executeRollbackTo rolls back all migrations after target", a
 
   responses.set("SELECT id FROM disc_migrations", {
     rows: [{ id: "m001" }, { id: "m002" }, { id: "m003" }],
-    rowCount: 3,
+    rowCount: 3
   });
 
   // getMigrationsAfter - reference lookup
   responses.set("SELECT applied_at FROM disc_migrations WHERE id", {
     rows: [{ applied_at: new Date("2024-01-01T10:00:00Z") }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   // getMigrationsAfter - results (DESC order)
@@ -397,7 +397,7 @@ Deno.test("Engine - executeRollbackTo rolls back all migrations after target", a
         schema_hash: "hash3",
         applied_at: new Date("2024-01-03T10:00:00Z"),
         duration_ms: 100,
-        created_at: new Date("2024-01-03T09:00:00Z"),
+        created_at: new Date("2024-01-03T09:00:00Z")
       },
       {
         id: "m002",
@@ -406,24 +406,24 @@ Deno.test("Engine - executeRollbackTo rolls back all migrations after target", a
         schema_hash: "hash2",
         applied_at: new Date("2024-01-02T10:00:00Z"),
         duration_ms: 80,
-        created_at: new Date("2024-01-02T09:00:00Z"),
-      },
+        created_at: new Date("2024-01-02T09:00:00Z")
+      }
     ],
-    rowCount: 2,
+    rowCount: 2
   });
 
   // getRollbackSQL for each migration
   responses.set("SELECT rollback_sql FROM disc_migrations", {
     rows: [{
-      rollback_sql: ["DROP TABLE IF EXISTS test CASCADE;"],
+      rollback_sql: ["DROP TABLE IF EXISTS test CASCADE;"]
     }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   // removeMigration
   responses.set("SELECT 1 FROM disc_migrations WHERE id", {
     rows: [{ "1": 1 }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   const pool = createMockPool(responses, executedStatements);
@@ -435,7 +435,7 @@ Deno.test("Engine - executeRollbackTo rolls back all migrations after target", a
   assertEquals(result.ok, true);
 
   // Should have executed DROP TABLE for each rolled back migration
-  const dropStatements = executedStatements.filter((s) => s.includes("DROP TABLE IF EXISTS test CASCADE"));
+  const dropStatements = executedStatements.filter(s => s.includes("DROP TABLE IF EXISTS test CASCADE"));
   assertEquals(dropStatements.length, 2);
 });
 
@@ -446,13 +446,13 @@ Deno.test("Engine - executeRollbackTo preserves target migration", async () => {
 
   responses.set("SELECT id FROM disc_migrations", {
     rows: [{ id: "m001" }, { id: "m002" }],
-    rowCount: 2,
+    rowCount: 2
   });
 
   // getMigrationsAfter - reference lookup
   responses.set("SELECT applied_at FROM disc_migrations WHERE id", {
     rows: [{ applied_at: new Date("2024-01-01T10:00:00Z") }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   // Only m002 is after m001
@@ -464,21 +464,21 @@ Deno.test("Engine - executeRollbackTo preserves target migration", async () => {
       schema_hash: "hash2",
       applied_at: new Date("2024-01-02T10:00:00Z"),
       duration_ms: 80,
-      created_at: new Date("2024-01-02T09:00:00Z"),
+      created_at: new Date("2024-01-02T09:00:00Z")
     }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   responses.set("SELECT rollback_sql FROM disc_migrations", {
     rows: [{
-      rollback_sql: ["DROP TABLE IF EXISTS post CASCADE;"],
+      rollback_sql: ["DROP TABLE IF EXISTS post CASCADE;"]
     }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   responses.set("SELECT 1 FROM disc_migrations WHERE id", {
     rows: [{ "1": 1 }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   const pool = createMockPool(responses, executedStatements);
@@ -491,7 +491,7 @@ Deno.test("Engine - executeRollbackTo preserves target migration", async () => {
 
   // Only m002 should have been rolled back, not m001
   // The DELETE should only have been called once
-  const deleteStatements = executedStatements.filter((s) => s.includes("DELETE FROM disc_migrations"));
+  const deleteStatements = executedStatements.filter(s => s.includes("DELETE FROM disc_migrations"));
   assertEquals(deleteStatements.length, 1);
 
   // m001 should still be in the applied set
@@ -505,7 +505,7 @@ Deno.test("Engine - getMigrationStatus returns correct counts", async () => {
   // getAppliedMigrations
   responses.set("SELECT id FROM disc_migrations", {
     rows: [{ id: "m001" }, { id: "m002" }, { id: "m003" }],
-    rowCount: 3,
+    rowCount: 3
   });
 
   // getLatestMigration
@@ -517,9 +517,9 @@ Deno.test("Engine - getMigrationStatus returns correct counts", async () => {
       schema_hash: "hash3",
       applied_at: new Date("2024-01-03T10:00:00Z"),
       duration_ms: 100,
-      created_at: new Date("2024-01-03T09:00:00Z"),
+      created_at: new Date("2024-01-03T09:00:00Z")
     }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   const pool = createMockPool(responses);
@@ -549,7 +549,7 @@ Deno.test("SchemaManager - rollbackLastMigration delegates to engine", async () 
   // getAppliedMigrations (for engine.initialize)
   responses.set("SELECT id FROM disc_migrations", {
     rows: [{ id: "m001" }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   // getLatestMigration (for getLatestMigrationId)
@@ -561,23 +561,23 @@ Deno.test("SchemaManager - rollbackLastMigration delegates to engine", async () 
       schema_hash: "hash1",
       applied_at: new Date("2024-01-01T10:00:00Z"),
       duration_ms: 100,
-      created_at: new Date("2024-01-01T09:00:00Z"),
+      created_at: new Date("2024-01-01T09:00:00Z")
     }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   // getRollbackSQL
   responses.set("SELECT rollback_sql FROM disc_migrations", {
     rows: [{
-      rollback_sql: ["DROP TABLE IF EXISTS user CASCADE;"],
+      rollback_sql: ["DROP TABLE IF EXISTS user CASCADE;"]
     }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   // removeMigration
   responses.set("SELECT 1 FROM disc_migrations WHERE id", {
     rows: [{ "1": 1 }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   const pool = createMockPool(responses, executedStatements);
@@ -588,7 +588,7 @@ Deno.test("SchemaManager - rollbackLastMigration delegates to engine", async () 
   assertEquals(result.ok, true);
 
   // Verify rollback SQL was executed
-  const dropStatement = executedStatements.find((s) => s.includes("DROP TABLE IF EXISTS user CASCADE"));
+  const dropStatement = executedStatements.find(s => s.includes("DROP TABLE IF EXISTS user CASCADE"));
   assertExists(dropStatement);
 
   await manager.close();
@@ -601,13 +601,13 @@ Deno.test("SchemaManager - rollbackToMigration delegates to engine", async () =>
 
   responses.set("SELECT id FROM disc_migrations", {
     rows: [{ id: "m001" }, { id: "m002" }],
-    rowCount: 2,
+    rowCount: 2
   });
 
   // getMigrationsAfter
   responses.set("SELECT applied_at FROM disc_migrations WHERE id", {
     rows: [{ applied_at: new Date("2024-01-01T10:00:00Z") }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   responses.set("WHERE applied_at > $1", {
@@ -618,21 +618,21 @@ Deno.test("SchemaManager - rollbackToMigration delegates to engine", async () =>
       schema_hash: "hash2",
       applied_at: new Date("2024-01-02T10:00:00Z"),
       duration_ms: 80,
-      created_at: new Date("2024-01-02T09:00:00Z"),
+      created_at: new Date("2024-01-02T09:00:00Z")
     }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   responses.set("SELECT rollback_sql FROM disc_migrations", {
     rows: [{
-      rollback_sql: ["DROP TABLE IF EXISTS post CASCADE;"],
+      rollback_sql: ["DROP TABLE IF EXISTS post CASCADE;"]
     }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   responses.set("SELECT 1 FROM disc_migrations WHERE id", {
     rows: [{ "1": 1 }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   const pool = createMockPool(responses, executedStatements);
@@ -651,7 +651,7 @@ Deno.test("SchemaManager - getMigrationStatus returns formatted status", async (
 
   responses.set("SELECT id FROM disc_migrations", {
     rows: [{ id: "m001" }, { id: "m002" }],
-    rowCount: 2,
+    rowCount: 2
   });
 
   responses.set("ORDER BY applied_at DESC", {
@@ -662,9 +662,9 @@ Deno.test("SchemaManager - getMigrationStatus returns formatted status", async (
       schema_hash: "hash2",
       applied_at: new Date("2024-01-02T10:00:00Z"),
       duration_ms: 100,
-      created_at: new Date("2024-01-02T09:00:00Z"),
+      created_at: new Date("2024-01-02T09:00:00Z")
     }],
-    rowCount: 1,
+    rowCount: 1
   });
 
   const pool = createMockPool(responses);
@@ -692,7 +692,7 @@ Deno.test("CLI - --status flag is recognized as boolean", () => {
   // Verify that the args shape used by commands.migrate handles the status flag
   const args = {
     _: ["migrate"],
-    status: true,
+    status: true
   };
   assertEquals(args.status, true);
 });
@@ -704,7 +704,7 @@ Deno.test("CLI - --rollback requires --force (documented behavior)", () => {
   const args = {
     _: ["migrate"],
     rollback: true,
-    force: false,
+    force: false
   };
 
   // The force check happens inside handleRollback
@@ -717,7 +717,7 @@ Deno.test("CLI - --rollback-to requires --force (documented behavior)", () => {
   const args = {
     _: ["migrate"],
     "rollback-to": "m001",
-    force: false,
+    force: false
   };
 
   assertEquals(args["rollback-to"], "m001");

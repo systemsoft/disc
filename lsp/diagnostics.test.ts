@@ -56,8 +56,8 @@ Deno.test("analyzeDiscDocument - validator error produces an Error diagnostic", 
   const diags = analyzeDiscDocument(source);
   assert(diags.length > 0, "expected validation diagnostic");
   assert(
-    diags.some((d) => d.message.includes("custom_note")),
-    `expected a diagnostic mentioning custom_note; got: ${JSON.stringify(diags)}`,
+    diags.some(d => d.message.includes("custom_note")),
+    `expected a diagnostic mentioning custom_note; got: ${JSON.stringify(diags)}`
   );
 });
 
@@ -74,10 +74,10 @@ Deno.test("analyzeDiscDocument - LSP positions are 0-indexed", () => {
     assert(d.range.start.character >= 0);
     // End position must not be before start.
     assert(
-      d.range.end.line > d.range.start.line
-        || (d.range.end.line === d.range.start.line
-          && d.range.end.character >= d.range.start.character),
-      `range invalid: ${JSON.stringify(d.range)}`,
+      d.range.end.line > d.range.start.line ||
+        (d.range.end.line === d.range.start.line &&
+          d.range.end.character >= d.range.start.character),
+      `range invalid: ${JSON.stringify(d.range)}`
     );
   }
 });

@@ -28,7 +28,7 @@ function stubHandler(): ProtocolHandler {
     },
     validateRequest(_r: QueryRequest) {
       return [];
-    },
+    }
   };
 }
 
@@ -48,7 +48,7 @@ function attachHttpServer(server: DiscServer): {
 } {
   const http = new HttpServer({
     config: server.get_config(),
-    protocolHandler: stubHandler(),
+    protocolHandler: stubHandler()
   });
   (server as unknown as { httpServer: HttpServer; }).httpServer = http;
   const cleanup = () => {
@@ -67,20 +67,24 @@ function attachHttpServer(server: DiscServer): {
  */
 async function withEnv(
   vars: Record<string, string | undefined>,
-  fn: () => Promise<void> | void,
+  fn: () => Promise<void> | void
 ): Promise<void> {
   const restore: Array<[string, string | undefined]> = [];
   for (const [k, v] of Object.entries(vars)) {
     restore.push([k, Deno.env.get(k)]);
-    if (v === undefined) Deno.env.delete(k);
-    else Deno.env.set(k, v);
+    if (v === undefined)
+      Deno.env.delete(k);
+    else
+      Deno.env.set(k, v);
   }
   try {
     await fn();
   } finally {
     for (const [k, prev] of restore) {
-      if (prev === undefined) Deno.env.delete(k);
-      else Deno.env.set(k, prev);
+      if (prev === undefined)
+        Deno.env.delete(k);
+      else
+        Deno.env.set(k, prev);
     }
   }
 }
@@ -99,7 +103,7 @@ Deno.test("reloadConfig - applies new requestTimeout from env", async () => {
       // HttpServer's view of the value (used per-request) was also updated.
       assertEquals(
         (http as unknown as { config: { requestTimeout: number; }; }).config.requestTimeout,
-        9999,
+        9999
       );
     } finally {
       cleanup();
@@ -118,7 +122,7 @@ Deno.test("reloadConfig - applies new enableCors toggle", async () => {
       assertEquals(server.get_config().enableCors, false);
       assertEquals(
         (http as unknown as { config: { enableCors: boolean; }; }).config.enableCors,
-        false,
+        false
       );
     } finally {
       cleanup();
@@ -133,7 +137,7 @@ Deno.test("reloadConfig - updates corsOrigins allowlist", async () => {
     try {
       Deno.env.set(
         "DISC_CORS_ORIGINS",
-        "https://new.example, https://other.example",
+        "https://new.example, https://other.example"
       );
       await server.reloadConfig();
 
@@ -141,7 +145,7 @@ Deno.test("reloadConfig - updates corsOrigins allowlist", async () => {
       assertEquals(origins, ["https://new.example", "https://other.example"]);
       assertEquals(
         (http as unknown as { config: { corsOrigins?: string[]; }; }).config.corsOrigins,
-        ["https://new.example", "https://other.example"],
+        ["https://new.example", "https://other.example"]
       );
     } finally {
       cleanup();
@@ -159,9 +163,10 @@ Deno.test("reloadConfig - updates slowQueryThresholdMs", async () => {
 
       assertEquals(server.get_config().slowQueryThresholdMs, 2500);
       assertEquals(
-        (http as unknown as { config: { slowQueryThresholdMs?: number; }; }).config
+        (http as unknown as { config: { slowQueryThresholdMs?: number; }; })
+          .config
           .slowQueryThresholdMs,
-        2500,
+        2500
       );
     } finally {
       cleanup();
@@ -283,12 +288,12 @@ Deno.test("reloadConfig - no-op when nothing changed", async () => {
   await withEnv(
     {
       DISC_ENABLE_CORS: "true",
-      DISC_REQUEST_TIMEOUT: "30000",
+      DISC_REQUEST_TIMEOUT: "30000"
     },
     async () => {
       const server = new DiscServer({
         enableCors: true,
-        requestTimeout: 30000,
+        requestTimeout: 30000
       });
       const { cleanup } = attachHttpServer(server);
       try {
@@ -300,6 +305,6 @@ Deno.test("reloadConfig - no-op when nothing changed", async () => {
       } finally {
         cleanup();
       }
-    },
+    }
   );
 });

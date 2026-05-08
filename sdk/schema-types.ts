@@ -64,13 +64,13 @@ export const t = {
   single: <TargetName extends string>(target: TargetName): Link<TargetName, "single"> => ({
     kind: "link",
     target,
-    cardinality: "single",
+    cardinality: "single"
   }),
   multi: <TargetName extends string>(target: TargetName): Link<TargetName, "multi"> => ({
     kind: "link",
     target,
-    cardinality: "multi",
-  }),
+    cardinality: "multi"
+  })
 } as const;
 
 // --- Schema spec + DiscSchema wrapper ---
@@ -99,11 +99,11 @@ export interface DiscSchema<S extends SchemaSpec> {
 export type LinkStub = { id: string; };
 
 /** Resolve a single field marker to its TS type. */
-export type FieldType<S extends SchemaSpec, F> = F extends Scalar<string, infer T> ? T
-  : F extends Optional<infer Inner> ? FieldType<S, Inner> | null
-  : F extends Link<string, "single"> ? LinkStub | null
-  : F extends Link<string, "multi"> ? LinkStub[]
-  : never;
+export type FieldType<S extends SchemaSpec, F> = F extends Scalar<string, infer T> ? T :
+  F extends Optional<infer Inner> ? FieldType<S, Inner> | null :
+  F extends Link<string, "single"> ? LinkStub | null :
+  F extends Link<string, "multi"> ? LinkStub[] :
+  never;
 
 /**
  * Resolve a whole type spec to its row shape. Scalars resolve to their
@@ -131,8 +131,8 @@ export type LinkCardinality<F> = F extends Link<string, infer C> ? C : never;
  *   without a sub-shape would emit `posts: { ... }` with no fields).
  */
 export type SelectShape<S extends SchemaSpec, K extends keyof S> = {
-  [F in keyof S[K]]?: S[K][F] extends Link<infer Target, "single" | "multi"> ? Target extends keyof S ? SelectShape<S, Target> | true : never
-    : true;
+  [F in keyof S[K]]?: S[K][F] extends Link<infer Target, "single" | "multi"> ? Target extends keyof S ? SelectShape<S, Target> | true : never :
+    true;
 };
 
 /**
@@ -141,11 +141,11 @@ export type SelectShape<S extends SchemaSpec, K extends keyof S> = {
  * into the link target.
  */
 export type ResolveSelected<S extends SchemaSpec, K extends keyof S, Sh> = {
-  [F in keyof Sh & keyof S[K]]: Sh[F] extends true ? FieldType<S, S[K][F]>
-    : Sh[F] extends Record<string, unknown> ? S[K][F] extends Link<infer T, "single"> ? T extends keyof S ? ResolveSelected<S, T, Sh[F]> | null : never
-      : S[K][F] extends Link<infer T, "multi"> ? T extends keyof S ? ResolveSelected<S, T, Sh[F]>[] : never
-      : never
-    : never;
+  [F in keyof Sh & keyof S[K]]: Sh[F] extends true ? FieldType<S, S[K][F]> :
+    Sh[F] extends Record<string, unknown> ? S[K][F] extends Link<infer T, "single"> ? T extends keyof S ? ResolveSelected<S, T, Sh[F]> | null : never :
+      S[K][F] extends Link<infer T, "multi"> ? T extends keyof S ? ResolveSelected<S, T, Sh[F]>[] : never :
+      never :
+    never;
 };
 
 // --- defineSchema() ---
@@ -154,7 +154,8 @@ const TYPE_NAME_RE = /^[A-Z][a-zA-Z0-9_]*$/;
 const FIELD_NAME_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
 function isFieldMarker(value: unknown): value is FieldMarker {
-  if (typeof value !== "object" || value === null) return false;
+  if (typeof value !== "object" || value === null)
+    return false;
   const kind = (value as { kind?: unknown; }).kind;
   return kind === "scalar" || kind === "optional" || kind === "link";
 }
@@ -178,7 +179,8 @@ export function defineSchema<S extends SchemaSpec>(spec: S): DiscSchema<S> {
       }
       // Walk into Optional to find the underlying marker.
       let cursor: FieldMarker = marker;
-      while (cursor.kind === "optional") cursor = cursor.inner;
+      while (cursor.kind === "optional")
+        cursor = cursor.inner;
       if (cursor.kind === "link" && !(cursor.target in spec)) {
         throw new Error(`Link target not found in schema: ${typeName}.${fieldName} → ${cursor.target}`);
       }

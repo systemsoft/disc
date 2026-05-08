@@ -32,7 +32,7 @@ Deno.test("buildSymbolIndex - records each type declaration with its range", () 
   assertEquals(user.range.start.line, 1);
   assert(
     text.split("\n")[1].slice(user.range.start.character).startsWith("User"),
-    `range start should land on 'User'; got line: ${JSON.stringify(text.split("\n")[1])}, char: ${user.range.start.character}`,
+    `range start should land on 'User'; got line: ${JSON.stringify(text.split("\n")[1])}, char: ${user.range.start.character}`
   );
 
   const ts = idx.types.get("Timestamped")!;
@@ -53,7 +53,7 @@ Deno.test("buildSymbolIndex - records type members (properties + links)", () => 
   const user = idx.types.get("User")!;
   // members is a list keyed by their position in the source
   assertEquals(user.members.length, 2);
-  const memberNames = user.members.map((m) => m.name).sort();
+  const memberNames = user.members.map(m => m.name).sort();
   assertEquals(memberNames, ["name", "posts"]);
   // Each has its own range
   for (const m of user.members) {

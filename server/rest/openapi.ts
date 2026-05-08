@@ -103,14 +103,16 @@ interface SecurityScheme {
 
 export function renderOpenApiSpec(
   schema: Schema,
-  options: OpenApiOptions,
+  options: OpenApiOptions
 ): OpenApiSpec {
   const paths: Record<string, PathItem> = {};
   const componentSchemas: Record<string, JsonSchema> = {};
 
   for (const typeDef of schema.types.values()) {
-    if (typeDef.kind !== "object") continue;
-    if (typeDef.abstract) continue;
+    if (typeDef.kind !== "object")
+      continue;
+    if (typeDef.abstract)
+      continue;
     addTypePaths(paths, typeDef, schema);
     componentSchemas[typeDef.name] = buildTypeSchema(typeDef, schema);
   }
@@ -119,17 +121,17 @@ export function renderOpenApiSpec(
     openapi: "3.1.0",
     info: {
       title: "Disc Schema-Derived REST API",
-      description: "Auto-generated from the database schema. Every object type "
-        + "exposes list/get/insert/update/delete and per-link collection "
-        + "endpoints. All routes pass through the standard EdgeQL "
-        + "pipeline, so access policies, read-only mode, and the auth "
-        + "gate apply.",
-      version: options.version ?? "0.1.0",
+      description: "Auto-generated from the database schema. Every object type " +
+        "exposes list/get/insert/update/delete and per-link collection " +
+        "endpoints. All routes pass through the standard EdgeQL " +
+        "pipeline, so access policies, read-only mode, and the auth " +
+        "gate apply.",
+      version: options.version ?? "0.1.0"
     },
     paths,
     components: {
-      schemas: componentSchemas,
-    },
+      schemas: componentSchemas
+    }
   };
 
   if (options.requireAuth) {
@@ -137,8 +139,8 @@ export function renderOpenApiSpec(
       bearerAuth: {
         type: "http",
         scheme: "bearer",
-        bearerFormat: "JWT",
-      },
+        bearerFormat: "JWT"
+      }
     };
     spec.security = [{ bearerAuth: [] }];
   }
@@ -149,7 +151,7 @@ export function renderOpenApiSpec(
 function addTypePaths(
   paths: Record<string, PathItem>,
   typeDef: TypeDef,
-  schema: Schema,
+  schema: Schema
 ): void {
   const typeName = typeDef.name;
   const ref: JsonSchema = { $ref: `#/components/schemas/${typeName}` };
@@ -166,28 +168,28 @@ function addTypePaths(
           name: "limit",
           in: "query",
           description: "Maximum number of rows to return.",
-          schema: { type: "integer", format: "int32" },
+          schema: { type: "integer", format: "int32" }
         },
         {
           name: "offset",
           in: "query",
           description: "Skip this many rows before returning results.",
-          schema: { type: "integer", format: "int32" },
+          schema: { type: "integer", format: "int32" }
         },
         {
           name: "order_by",
           in: "query",
           description: "Property to order by. Prefix with `-` for descending.",
-          schema: { type: "string" },
-        },
+          schema: { type: "string" }
+        }
       ],
       responses: {
         "200": {
           description: `An array of ${typeName} objects.`,
-          content: { "application/json": { schema: arrayOfRef } },
+          content: { "application/json": { schema: arrayOfRef } }
         },
-        "400": { description: "Bad request — unknown filter or pagination." },
-      },
+        "400": { description: "Bad request — unknown filter or pagination." }
+      }
     },
     post: {
       summary: `Insert a ${typeName}`,
@@ -195,17 +197,17 @@ function addTypePaths(
       requestBody: {
         required: true,
         content: {
-          "application/json": { schema: buildInputSchema(typeDef, schema) },
-        },
+          "application/json": { schema: buildInputSchema(typeDef, schema) }
+        }
       },
       responses: {
         "201": {
           description: `The inserted ${typeName}.`,
-          content: { "application/json": { schema: ref } },
+          content: { "application/json": { schema: ref } }
         },
-        "400": { description: "Validation or compile error." },
-      },
-    },
+        "400": { description: "Validation or compile error." }
+      }
+    }
   };
 
   // Item: GET / PATCH / DELETE
@@ -215,8 +217,8 @@ function addTypePaths(
         name: "id",
         in: "path",
         required: true,
-        schema: { type: "string", format: "uuid" },
-      },
+        schema: { type: "string", format: "uuid" }
+      }
     ],
     get: {
       summary: `Fetch a single ${typeName} by id`,
@@ -224,10 +226,10 @@ function addTypePaths(
       responses: {
         "200": {
           description: `The ${typeName} object.`,
-          content: { "application/json": { schema: ref } },
+          content: { "application/json": { schema: ref } }
         },
-        "404": { description: `${typeName} not found.` },
-      },
+        "404": { description: `${typeName} not found.` }
+      }
     },
     patch: {
       summary: `Update a ${typeName}`,
@@ -235,35 +237,37 @@ function addTypePaths(
       requestBody: {
         required: true,
         content: {
-          "application/json": { schema: buildInputSchema(typeDef, schema) },
-        },
+          "application/json": { schema: buildInputSchema(typeDef, schema) }
+        }
       },
       responses: {
         "200": {
           description: `The updated ${typeName}.`,
-          content: { "application/json": { schema: ref } },
+          content: { "application/json": { schema: ref } }
         },
         "404": { description: `${typeName} not found.` },
-        "400": { description: "Unknown field or compile error." },
-      },
+        "400": { description: "Unknown field or compile error." }
+      }
     },
     delete: {
       summary: `Delete a ${typeName}`,
       operationId: `delete${typeName}`,
       responses: {
-        "204": { description: "Deleted." },
-      },
-    },
+        "204": { description: "Deleted." }
+      }
+    }
   };
 
   // Linked-collection: GET /api/<Type>/{id}/<linkName>
   for (const [linkName, link] of typeDef.links) {
-    if (link.computed) continue;
-    const targetType = schema.types.get(link.target)
-      ?? schema.types.get(`default::${link.target}`);
-    if (!targetType) continue;
+    if (link.computed)
+      continue;
+    const targetType = schema.types.get(link.target) ??
+      schema.types.get(`default::${link.target}`);
+    if (!targetType)
+      continue;
     const targetRef: JsonSchema = {
-      $ref: `#/components/schemas/${targetType.name}`,
+      $ref: `#/components/schemas/${targetType.name}`
     };
     paths[`/api/${typeName}/{id}/${linkName}`] = {
       parameters: [
@@ -271,8 +275,8 @@ function addTypePaths(
           name: "id",
           in: "path",
           required: true,
-          schema: { type: "string", format: "uuid" },
-        },
+          schema: { type: "string", format: "uuid" }
+        }
       ],
       get: {
         summary: `Fetch the ${linkName} linked from ${typeName}`,
@@ -281,26 +285,26 @@ function addTypePaths(
           {
             name: "limit",
             in: "query",
-            schema: { type: "integer", format: "int32" },
+            schema: { type: "integer", format: "int32" }
           },
           {
             name: "offset",
             in: "query",
-            schema: { type: "integer", format: "int32" },
-          },
+            schema: { type: "integer", format: "int32" }
+          }
         ],
         responses: {
           "200": {
             description: `Array of linked ${targetType.name} objects.`,
             content: {
               "application/json": {
-                schema: link.multi ? { type: "array", items: targetRef } : targetRef,
-              },
-            },
+                schema: link.multi ? { type: "array", items: targetRef } : targetRef
+              }
+            }
           },
-          "404": { description: `${typeName} not found.` },
-        },
-      },
+          "404": { description: `${typeName} not found.` }
+        }
+      }
     };
   }
 }
@@ -308,15 +312,17 @@ function addTypePaths(
 function filterParametersFor(typeDef: TypeDef): Parameter[] {
   const params: Parameter[] = [];
   for (const [name, prop] of typeDef.properties) {
-    if (isHidden(prop.annotations)) continue;
-    if (prop.computed) continue;
+    if (isHidden(prop.annotations))
+      continue;
+    if (prop.computed)
+      continue;
     params.push({
       name,
       in: "query",
-      description: `Filter rows where ${name} = the given value. `
-        + `Pair as \`${name}__in=a,b,c\` for set membership or `
-        + `\`${name}__contains=x\` for substring.`,
-      schema: jsonSchemaForProperty(prop),
+      description: `Filter rows where ${name} = the given value. ` +
+        `Pair as \`${name}__in=a,b,c\` for set membership or ` +
+        `\`${name}__contains=x\` for substring.`,
+      schema: jsonSchemaForProperty(prop)
     });
   }
   return params;
@@ -326,26 +332,32 @@ function buildTypeSchema(typeDef: TypeDef, schema: Schema): JsonSchema {
   const properties: Record<string, JsonSchema> = {};
   const required: string[] = [];
   for (const [name, prop] of typeDef.properties) {
-    if (isHidden(prop.annotations)) continue;
-    if (prop.computed) continue;
+    if (isHidden(prop.annotations))
+      continue;
+    if (prop.computed)
+      continue;
     properties[name] = jsonSchemaForProperty(prop);
-    if (prop.required) required.push(name);
+    if (prop.required)
+      required.push(name);
   }
   for (const [name, link] of typeDef.links) {
-    if (!isExpand(link.annotations)) continue;
-    const targetType = schema.types.get(link.target)
-      ?? schema.types.get(`default::${link.target}`);
-    if (!targetType) continue;
+    if (!isExpand(link.annotations))
+      continue;
+    const targetType = schema.types.get(link.target) ??
+      schema.types.get(`default::${link.target}`);
+    if (!targetType)
+      continue;
     const targetRef: JsonSchema = {
-      $ref: `#/components/schemas/${targetType.name}`,
+      $ref: `#/components/schemas/${targetType.name}`
     };
     properties[name] = link.multi ? { type: "array", items: targetRef } : targetRef;
   }
   const out: JsonSchema = {
     type: "object",
-    properties,
+    properties
   };
-  if (required.length > 0) out.required = required;
+  if (required.length > 0)
+    out.required = required;
   return out;
 }
 
@@ -353,22 +365,29 @@ function buildInputSchema(typeDef: TypeDef, _schema: Schema): JsonSchema {
   const properties: Record<string, JsonSchema> = {};
   const required: string[] = [];
   for (const [name, prop] of typeDef.properties) {
-    if (name === "id") continue;
-    if (prop.computed) continue;
-    if (prop.readonly) continue;
+    if (name === "id")
+      continue;
+    if (prop.computed)
+      continue;
+    if (prop.readonly)
+      continue;
     properties[name] = jsonSchemaForProperty(prop);
-    if (prop.required && !prop.hasDefault) required.push(name);
+    if (prop.required && !prop.hasDefault)
+      required.push(name);
   }
   for (const [name, link] of typeDef.links) {
-    if (link.computed) continue;
+    if (link.computed)
+      continue;
     properties[name] = { type: "string", format: "uuid" };
-    if (link.required) required.push(name);
+    if (link.required)
+      required.push(name);
   }
   const out: JsonSchema = {
     type: "object",
-    properties,
+    properties
   };
-  if (required.length > 0) out.required = required;
+  if (required.length > 0)
+    out.required = required;
   return out;
 }
 
@@ -406,12 +425,14 @@ function jsonSchemaForProperty(prop: PropertyDef): JsonSchema {
 }
 
 function isHidden(annotations: Record<string, string> | undefined): boolean {
-  if (!annotations) return false;
+  if (!annotations)
+    return false;
   return "rest::hidden" in annotations;
 }
 
 function isExpand(annotations: Record<string, string> | undefined): boolean {
-  if (!annotations) return false;
+  if (!annotations)
+    return false;
   return "rest::expand" in annotations;
 }
 

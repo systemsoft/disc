@@ -12,13 +12,13 @@ function createTestConfig(overrides?: Partial<AccessConfig>): AccessConfig {
     defaultAllow: false,
     enableRLS: true,
     enableAudit: false,
-    ...overrides,
+    ...overrides
   };
 }
 
 Deno.test("AccessEvaluator - allow with no policies uses default", () => {
   const evaluator = new AccessEvaluator(
-    createTestConfig({ defaultAllow: true }),
+    createTestConfig({ defaultAllow: true })
   );
   const context: AccessContext = { userId: "user1" };
 
@@ -30,7 +30,7 @@ Deno.test("AccessEvaluator - allow with no policies uses default", () => {
 
 Deno.test("AccessEvaluator - deny with no policies uses default", () => {
   const evaluator = new AccessEvaluator(
-    createTestConfig({ defaultAllow: false }),
+    createTestConfig({ defaultAllow: false })
   );
   const context: AccessContext = { userId: "user1" };
 
@@ -45,7 +45,7 @@ Deno.test("AccessEvaluator - simple allow policy", () => {
   const policy: AccessPolicy = {
     name: "allow_select",
     objectType: "User",
-    actions: [{ allow: true, operations: ["select"] }],
+    actions: [{ allow: true, operations: ["select"] }]
   };
 
   evaluator.registerPolicy(policy);
@@ -62,7 +62,7 @@ Deno.test("AccessEvaluator - simple deny policy", () => {
   const policy: AccessPolicy = {
     name: "deny_delete",
     objectType: "User",
-    actions: [{ allow: false, operations: ["delete"] }],
+    actions: [{ allow: false, operations: ["delete"] }]
   };
 
   evaluator.registerPolicy(policy);
@@ -78,7 +78,7 @@ Deno.test("AccessEvaluator - all operation matches any", () => {
   const policy: AccessPolicy = {
     name: "allow_all",
     objectType: "Post",
-    actions: [{ allow: true, operations: ["all"] }],
+    actions: [{ allow: true, operations: ["all"] }]
   };
 
   evaluator.registerPolicy(policy);
@@ -93,19 +93,19 @@ Deno.test("AccessEvaluator - all operation matches any", () => {
 
 Deno.test("AccessEvaluator - multiple policies combine in permissive mode", () => {
   const evaluator = new AccessEvaluator(
-    createTestConfig({ mode: "permissive" }),
+    createTestConfig({ mode: "permissive" })
   );
 
   evaluator.registerPolicy({
     name: "allow_read",
     objectType: "Document",
-    actions: [{ allow: true, operations: ["select"] }],
+    actions: [{ allow: true, operations: ["select"] }]
   });
 
   evaluator.registerPolicy({
     name: "allow_write",
     objectType: "Document",
-    actions: [{ allow: true, operations: ["insert", "update"] }],
+    actions: [{ allow: true, operations: ["insert", "update"] }]
   });
 
   const context: AccessContext = { userId: "user1" };
@@ -114,25 +114,25 @@ Deno.test("AccessEvaluator - multiple policies combine in permissive mode", () =
   assertEquals(evaluator.evaluate("Document", "update", context).allowed, true);
   assertEquals(
     evaluator.evaluate("Document", "delete", context).allowed,
-    false,
+    false
   );
 });
 
 Deno.test("AccessEvaluator - deny overrides allow in permissive mode", () => {
   const evaluator = new AccessEvaluator(
-    createTestConfig({ mode: "permissive" }),
+    createTestConfig({ mode: "permissive" })
   );
 
   evaluator.registerPolicy({
     name: "allow_all",
     objectType: "Secret",
-    actions: [{ allow: true, operations: ["all"] }],
+    actions: [{ allow: true, operations: ["all"] }]
   });
 
   evaluator.registerPolicy({
     name: "deny_delete",
     objectType: "Secret",
-    actions: [{ allow: false, operations: ["delete"] }],
+    actions: [{ allow: false, operations: ["delete"] }]
   });
 
   const context: AccessContext = { userId: "user1" };
@@ -143,13 +143,13 @@ Deno.test("AccessEvaluator - deny overrides allow in permissive mode", () => {
 
 Deno.test("AccessEvaluator - restrictive mode requires explicit allow", () => {
   const evaluator = new AccessEvaluator(
-    createTestConfig({ mode: "restrictive" }),
+    createTestConfig({ mode: "restrictive" })
   );
 
   evaluator.registerPolicy({
     name: "allow_select",
     objectType: "Private",
-    actions: [{ allow: true, operations: ["select"] }],
+    actions: [{ allow: true, operations: ["select"] }]
   });
 
   const context: AccessContext = { userId: "user1" };
@@ -160,19 +160,19 @@ Deno.test("AccessEvaluator - restrictive mode requires explicit allow", () => {
 
 Deno.test("AccessEvaluator - restrictive mode with early deny", () => {
   const evaluator = new AccessEvaluator(
-    createTestConfig({ mode: "restrictive" }),
+    createTestConfig({ mode: "restrictive" })
   );
 
   evaluator.registerPolicy({
     name: "deny_all",
     objectType: "Forbidden",
-    actions: [{ allow: false, operations: ["all"] }],
+    actions: [{ allow: false, operations: ["all"] }]
   });
 
   evaluator.registerPolicy({
     name: "allow_select",
     objectType: "Forbidden",
-    actions: [{ allow: true, operations: ["select"] }],
+    actions: [{ allow: true, operations: ["select"] }]
   });
 
   const context: AccessContext = { userId: "user1" };
@@ -193,8 +193,8 @@ Deno.test("AccessEvaluator - global policy applies to all types", () => {
       kind: "AccessComparison",
       operator: "=",
       left: { kind: "AccessGlobal", name: "current_user" },
-      right: { kind: "AccessLiteral", value: null, type: "null" },
-    } as any,
+      right: { kind: "AccessLiteral", value: null, type: "null" }
+    } as any
   };
 
   evaluator.registerPolicy(globalPolicy);
@@ -203,7 +203,7 @@ Deno.test("AccessEvaluator - global policy applies to all types", () => {
   const noAuthContext: AccessContext = {};
   assertEquals(
     evaluator.evaluate("AnyType", "select", noAuthContext).allowed,
-    false,
+    false
   );
 
   // With user, condition not met, so policy doesn't apply
@@ -211,20 +211,20 @@ Deno.test("AccessEvaluator - global policy applies to all types", () => {
   // Since no other policies and defaultAllow is false, should still be denied
   assertEquals(
     evaluator.evaluate("AnyType", "select", authContext).allowed,
-    false,
+    false
   );
 });
 
 Deno.test("AccessEvaluator - deny in restrictive mode surfaces policy errmessage (Gel #4095)", () => {
   const evaluator = new AccessEvaluator(
-    createTestConfig({ mode: "restrictive" }),
+    createTestConfig({ mode: "restrictive" })
   );
 
   evaluator.registerPolicy({
     name: "admin_only",
     objectType: "Secret",
     actions: [{ allow: false, operations: ["update"] }],
-    errmessage: "Only admins can modify this record",
+    errmessage: "Only admins can modify this record"
   });
 
   const decision = evaluator.evaluate("Secret", "update", { userId: "u1" });
@@ -235,20 +235,20 @@ Deno.test("AccessEvaluator - deny in restrictive mode surfaces policy errmessage
 
 Deno.test("AccessEvaluator - deny in permissive mode surfaces policy errmessage (Gel #4095)", () => {
   const evaluator = new AccessEvaluator(
-    createTestConfig({ mode: "permissive" }),
+    createTestConfig({ mode: "permissive" })
   );
 
   evaluator.registerPolicy({
     name: "allow_all",
     objectType: "Doc",
-    actions: [{ allow: true, operations: ["all"] }],
+    actions: [{ allow: true, operations: ["all"] }]
   });
 
   evaluator.registerPolicy({
     name: "no_delete",
     objectType: "Doc",
     actions: [{ allow: false, operations: ["delete"] }],
-    errmessage: "Documents are append-only and cannot be deleted",
+    errmessage: "Documents are append-only and cannot be deleted"
   });
 
   const decision = evaluator.evaluate("Doc", "delete", { userId: "u1" });
@@ -256,7 +256,7 @@ Deno.test("AccessEvaluator - deny in permissive mode surfaces policy errmessage 
   assertEquals(decision.allowed, false);
   assertEquals(
     decision.denialMessage,
-    "Documents are append-only and cannot be deleted",
+    "Documents are append-only and cannot be deleted"
   );
 });
 
@@ -267,7 +267,7 @@ Deno.test("AccessEvaluator - allow verdict has no denialMessage", () => {
     name: "allow_select",
     objectType: "User",
     actions: [{ allow: true, operations: ["select"] }],
-    errmessage: "should not be surfaced",
+    errmessage: "should not be surfaced"
   });
 
   const decision = evaluator.evaluate("User", "select", { userId: "u1" });
@@ -278,13 +278,13 @@ Deno.test("AccessEvaluator - allow verdict has no denialMessage", () => {
 
 Deno.test("AccessEvaluator - deny without errmessage leaves denialMessage undefined", () => {
   const evaluator = new AccessEvaluator(
-    createTestConfig({ mode: "restrictive" }),
+    createTestConfig({ mode: "restrictive" })
   );
 
   evaluator.registerPolicy({
     name: "deny_select",
     objectType: "User",
-    actions: [{ allow: false, operations: ["select"] }],
+    actions: [{ allow: false, operations: ["select"] }]
   });
 
   const decision = evaluator.evaluate("User", "select", { userId: "u1" });
@@ -299,19 +299,19 @@ Deno.test("AccessEvaluator - getPolicies returns registered policies", () => {
   evaluator.registerPolicy({
     name: "policy1",
     objectType: "Type1",
-    actions: [{ allow: true, operations: ["select"] }],
+    actions: [{ allow: true, operations: ["select"] }]
   });
 
   evaluator.registerPolicy({
     name: "policy2",
     objectType: "Type1",
-    actions: [{ allow: true, operations: ["insert"] }],
+    actions: [{ allow: true, operations: ["insert"] }]
   });
 
   evaluator.registerPolicy({
     name: "policy3",
     objectType: "Type2",
-    actions: [{ allow: true, operations: ["select"] }],
+    actions: [{ allow: true, operations: ["select"] }]
   });
 
   const type1Policies = evaluator.getPolicies("Type1");
@@ -330,7 +330,7 @@ Deno.test("AccessEvaluator - clearPolicies removes all policies", () => {
   evaluator.registerPolicy({
     name: "policy1",
     objectType: "Type1",
-    actions: [{ allow: true, operations: ["select"] }],
+    actions: [{ allow: true, operations: ["select"] }]
   });
 
   assertEquals(evaluator.getPolicies().length, 1);
@@ -355,8 +355,8 @@ Deno.test("AccessEvaluator - evaluateGlobal returns custom global value from con
     actions: [{ allow: true, operations: ["select"] }],
     condition: {
       kind: "AccessGlobal",
-      name: "is_admin",
-    } as any,
+      name: "is_admin"
+    } as any
   };
 
   evaluator.registerPolicy(policy);
@@ -373,7 +373,7 @@ Deno.test("AccessEvaluator - expressionToSQL generates current_setting for custo
 
   const expr = {
     kind: "AccessGlobal" as const,
-    name: "tenant_id",
+    name: "tenant_id"
   };
 
   const context: AccessContext = { userId: "user1" };
@@ -388,7 +388,7 @@ Deno.test("AccessEvaluator - built-in globals still work with backward compatibi
   const context: AccessContext = {
     userId: "user-123",
     userRole: "admin",
-    sessionData: { foo: "bar" },
+    sessionData: { foo: "bar" }
   };
 
   // current_user SQL generation (E'…' escape-literal form, safe against
@@ -403,7 +403,7 @@ Deno.test("AccessEvaluator - built-in globals still work with backward compatibi
   // current_session SQL generation
   const sessionExpr = {
     kind: "AccessGlobal" as const,
-    name: "current_session",
+    name: "current_session"
   };
   assertEquals(evaluator.expressionToSQL(sessionExpr, context), "'true'");
 
@@ -414,8 +414,8 @@ Deno.test("AccessEvaluator - built-in globals still work with backward compatibi
     actions: [{ allow: true, operations: ["select"] }],
     condition: {
       kind: "AccessGlobal",
-      name: "current_user",
-    } as any,
+      name: "current_user"
+    } as any
   };
 
   evaluator.registerPolicy(policy);
@@ -424,7 +424,7 @@ Deno.test("AccessEvaluator - built-in globals still work with backward compatibi
   const withUser: AccessContext = { userId: "user-123" };
   assertEquals(
     evaluator.evaluate("Resource", "select", withUser).allowed,
-    true,
+    true
   );
 
   // Without userId, condition should fail
@@ -440,13 +440,13 @@ Deno.test("AccessEvaluator - expressionToSQL escapes single quotes in userId", (
   const evaluator = new AccessEvaluator(createTestConfig());
   const sql = evaluator.expressionToSQL(
     { kind: "AccessGlobal", name: "current_user" },
-    { userId: "admin'; DROP TABLE users; --" },
+    { userId: "admin'; DROP TABLE users; --" }
   );
   // The unescaped attack substring must not leak through.
   assertEquals(
     sql.includes("DROP TABLE users"),
     true,
-    "input literally contains the phrase, but it must be INSIDE a quoted E'…' literal",
+    "input literally contains the phrase, but it must be INSIDE a quoted E'…' literal"
   );
   // The first character of the injection — the single quote — must be
   // doubled, so the SQL stays inside a single string literal.
@@ -459,13 +459,13 @@ Deno.test("AccessEvaluator - expressionToSQL escapes backslashes in userId", () 
   const evaluator = new AccessEvaluator(createTestConfig());
   const sql = evaluator.expressionToSQL(
     { kind: "AccessGlobal", name: "current_user" },
-    { userId: "evil\\'; DROP TABLE x; --" },
+    { userId: "evil\\'; DROP TABLE x; --" }
   );
   // Backslash must be doubled — defends against standard_conforming_strings=off
   assertEquals(
     sql.includes("evil\\\\"),
     true,
-    `Expected doubled backslash in ${sql}`,
+    `Expected doubled backslash in ${sql}`
   );
 });
 
@@ -473,7 +473,7 @@ Deno.test("AccessEvaluator - expressionToSQL escapes userRole the same way", () 
   const evaluator = new AccessEvaluator(createTestConfig());
   const sql = evaluator.expressionToSQL(
     { kind: "AccessGlobal", name: "current_role" },
-    { userRole: "admin'--" },
+    { userRole: "admin'--" }
   );
   assertEquals(sql.startsWith("E'"), true);
   assertEquals(sql.includes("admin''--"), true);
@@ -485,7 +485,7 @@ Deno.test("AccessEvaluator - custom global with unsafe name is rejected", () => 
   try {
     evaluator.expressionToSQL(
       { kind: "AccessGlobal", name: "evil'); DROP TABLE x; --" },
-      {},
+      {}
     );
   } catch (_) {
     threw = true;
@@ -508,7 +508,7 @@ Deno.test("AccessEvaluator - disabledPolicies skips matching policies (Bundle UU
   const denyPolicy: AccessPolicy = {
     name: "no_delete",
     objectType: "Doc",
-    actions: [{ allow: false, operations: ["delete"] }],
+    actions: [{ allow: false, operations: ["delete"] }]
   };
   evaluator.registerPolicy(denyPolicy);
 
@@ -521,17 +521,17 @@ Deno.test("AccessEvaluator - disabledPolicies skips matching policies (Bundle UU
   // with `defaultAllow: true`, that means the operation is allowed.
   const withDisable = evaluator.evaluate("Doc", "delete", {
     userId: "u1",
-    disabledPolicies: new Set(["Doc.no_delete"]),
+    disabledPolicies: new Set(["Doc.no_delete"])
   });
   assertEquals(
     withDisable.allowed,
     true,
-    "disabledPolicies must skip the deny policy and fall back to default",
+    "disabledPolicies must skip the deny policy and fall back to default"
   );
   assertEquals(
     withDisable.reason,
     "No policies defined, default allow",
-    "Disabling every policy on a type should match the no-policies-defined path",
+    "Disabling every policy on a type should match the no-policies-defined path"
   );
 });
 
@@ -540,31 +540,31 @@ Deno.test("AccessEvaluator - disabledPolicies only matches the named policy (Bun
   evaluator.registerPolicy({
     name: "owner_select",
     objectType: "Doc",
-    actions: [{ allow: true, operations: ["select"] }],
+    actions: [{ allow: true, operations: ["select"] }]
   });
   evaluator.registerPolicy({
     name: "admin_select",
     objectType: "Doc",
-    actions: [{ allow: true, operations: ["select"] }],
+    actions: [{ allow: true, operations: ["select"] }]
   });
 
   // Disable only owner_select. The other allow-policy still applies,
   // so the request remains allowed.
   const decision = evaluator.evaluate("Doc", "select", {
     userId: "u1",
-    disabledPolicies: new Set(["Doc.owner_select"]),
+    disabledPolicies: new Set(["Doc.owner_select"])
   });
   assertEquals(decision.allowed, true, "Request still allowed via admin_select");
   // appliedPolicies should not list the disabled one.
   assertEquals(
     decision.appliedPolicies.includes("owner_select"),
     false,
-    "Disabled policy must not appear in appliedPolicies",
+    "Disabled policy must not appear in appliedPolicies"
   );
   assertEquals(
     decision.appliedPolicies.includes("admin_select"),
     true,
-    "Non-disabled policy must still appear in appliedPolicies",
+    "Non-disabled policy must still appear in appliedPolicies"
   );
 });
 
@@ -573,14 +573,14 @@ Deno.test("AccessEvaluator - disabledPolicies on a different type is a no-op (Bu
   evaluator.registerPolicy({
     name: "owner_select",
     objectType: "Doc",
-    actions: [{ allow: true, operations: ["select"] }],
+    actions: [{ allow: true, operations: ["select"] }]
   });
 
   // Disabling `User.owner_select` should not affect `Doc.owner_select`
   // — qualified names mean the type binding matters.
   const decision = evaluator.evaluate("Doc", "select", {
     userId: "u1",
-    disabledPolicies: new Set(["User.owner_select"]),
+    disabledPolicies: new Set(["User.owner_select"])
   });
   assertEquals(decision.allowed, true);
   assertEquals(decision.appliedPolicies, ["owner_select"]);

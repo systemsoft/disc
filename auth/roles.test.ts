@@ -17,9 +17,9 @@ async function makeProvider(): Promise<{
   const provider = new AuthProvider(
     {
       jwtSecret: "test-secret-key-32-bytes-minimum-len",
-      requireEmailVerification: false,
+      requireEmailVerification: false
     },
-    db,
+    db
   );
   await provider.initialize();
   return { provider, db };
@@ -70,7 +70,7 @@ Deno.test("assignRole — grants the role to the user", async () => {
     await provider.createRole("admin");
     const auth = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     await provider.assignRole(auth.user.id, "admin");
 
@@ -87,7 +87,7 @@ Deno.test("assignRole — idempotent on repeat", async () => {
     await provider.createRole("admin");
     const auth = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     await provider.assignRole(auth.user.id, "admin");
     await provider.assignRole(auth.user.id, "admin");
@@ -102,11 +102,11 @@ Deno.test("assignRole — rejects unknown role", async () => {
   try {
     const auth = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const err = await assertRejects(
       () => provider.assignRole(auth.user.id, "ghost"),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_OPERATION);
   } finally {
@@ -122,9 +122,9 @@ Deno.test("assignRole — rejects unknown user", async () => {
       () =>
         provider.assignRole(
           "00000000-0000-0000-0000-000000000000",
-          "admin",
+          "admin"
         ),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.USER_NOT_FOUND);
   } finally {
@@ -138,7 +138,7 @@ Deno.test("revokeRole — removes the assignment", async () => {
     await provider.createRole("admin");
     const auth = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     await provider.assignRole(auth.user.id, "admin");
     await provider.revokeRole(auth.user.id, "admin");
@@ -154,7 +154,7 @@ Deno.test("revokeRole — no-op when role wasn't held", async () => {
     await provider.createRole("admin");
     const auth = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     // Should not throw
     await provider.revokeRole(auth.user.id, "admin");
@@ -173,7 +173,7 @@ Deno.test("login — JWT carries the user's roles", async () => {
     await provider.createRole("viewer");
     const auth = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     await provider.assignRole(auth.user.id, "admin");
     await provider.assignRole(auth.user.id, "viewer");
@@ -181,8 +181,8 @@ Deno.test("login — JWT carries the user's roles", async () => {
     const login = requireAuthResponse(
       await provider.login({
         email: "u@example.com",
-        password: "password123",
-      }),
+        password: "password123"
+      })
     );
     const payload = await provider.verifyToken(login.token);
     assert(payload.roles, "roles must be present in token payload");
@@ -197,13 +197,13 @@ Deno.test("login — JWT omits roles claim when user has none", async () => {
   try {
     const auth = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const login = requireAuthResponse(
       await provider.login({
         email: "u@example.com",
-        password: "password123",
-      }),
+        password: "password123"
+      })
     );
     const payload = await provider.verifyToken(login.token);
     // Either undefined or an empty array — both signal "no roles"
@@ -222,13 +222,13 @@ Deno.test("token snapshot — roles assigned after login do not affect existing 
     await provider.createRole("admin");
     const auth = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const login = requireAuthResponse(
       await provider.login({
         email: "u@example.com",
-        password: "password123",
-      }),
+        password: "password123"
+      })
     );
     // Assign role AFTER token issued
     await provider.assignRole(auth.user.id, "admin");
@@ -242,8 +242,8 @@ Deno.test("token snapshot — roles assigned after login do not affect existing 
     const refreshed = requireAuthResponse(
       await provider.login({
         email: "u@example.com",
-        password: "password123",
-      }),
+        password: "password123"
+      })
     );
     const refreshedPayload = await provider.verifyToken(refreshed.token);
     assert(refreshedPayload.roles?.includes("admin"));

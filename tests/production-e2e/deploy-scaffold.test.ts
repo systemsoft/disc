@@ -15,7 +15,7 @@ Deno.test("Production E2E: Generated Dockerfile has FROM before EXPOSE", () => {
   assert(exposeIndex !== -1, "Dockerfile must contain EXPOSE");
   assert(
     fromIndex < exposeIndex,
-    `FROM (index ${fromIndex}) must appear before EXPOSE (index ${exposeIndex})`,
+    `FROM (index ${fromIndex}) must appear before EXPOSE (index ${exposeIndex})`
   );
 });
 
@@ -28,7 +28,7 @@ Deno.test("Production E2E: Dockerfile CMD references cli/main.ts serve", () => {
   // Find lines starting with CMD
   const cmdLine = content
     .split("\n")
-    .find((line) => line.startsWith("CMD"));
+    .find(line => line.startsWith("CMD"));
 
   assert(cmdLine !== undefined, "Dockerfile must contain a CMD instruction");
   assertStringIncludes(cmdLine, "cli/main.ts");
@@ -45,7 +45,7 @@ Deno.test(
 
     assertStringIncludes(content, "depends_on:");
     assertStringIncludes(content, "condition: service_healthy");
-  },
+  }
 );
 
 // ---------------------------------------------------------------------------
@@ -57,7 +57,7 @@ Deno.test(
     const content = cmd.generateCompose("test-app");
 
     assertStringIncludes(content, "pg_isready");
-  },
+  }
 );
 
 // ---------------------------------------------------------------------------
@@ -70,7 +70,7 @@ Deno.test(
 
     assertStringIncludes(content, "volumes:");
     assertStringIncludes(content, "pgdata");
-  },
+  }
 );
 
 // ---------------------------------------------------------------------------
@@ -105,17 +105,17 @@ Deno.test(
       "DISC_CACHE_MAX_SIZE",
       "DISC_TLS_CERT",
       "DISC_TLS_KEY",
-      "DISC_ENABLE_METRICS",
+      "DISC_ENABLE_METRICS"
     ];
 
     for (const varName of requiredVars) {
       assertStringIncludes(
         content,
         varName,
-        `Env template must include ${varName}`,
+        `Env template must include ${varName}`
       );
     }
-  },
+  }
 );
 
 // ---------------------------------------------------------------------------
@@ -133,7 +133,7 @@ Deno.test(
       { name: "docker", fn: () => cmd.generateDockerfile(projectName) },
       { name: "compose", fn: () => cmd.generateCompose(projectName) },
       { name: "systemd", fn: () => cmd.generateSystemd(projectName) },
-      { name: "env", fn: () => cmd.generateEnv(projectName) },
+      { name: "env", fn: () => cmd.generateEnv(projectName) }
     ];
 
     for (const { name, fn } of generators) {
@@ -141,13 +141,13 @@ Deno.test(
 
       assert(
         content.length > 0,
-        `${name} generator must produce non-empty content`,
+        `${name} generator must produce non-empty content`
       );
       assertStringIncludes(
         content,
         projectName,
-        `${name} output must contain project name "${projectName}"`,
+        `${name} output must contain project name "${projectName}"`
       );
     }
-  },
+  }
 );

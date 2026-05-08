@@ -33,7 +33,7 @@ function makePool(dsn: string): ConnectionPool {
     connectionString: dsn,
     minConnections: 1,
     maxConnections: 3,
-    cleanupInterval: 0,
+    cleanupInterval: 0
   });
 }
 
@@ -43,7 +43,7 @@ function makePool(dsn: string): ConnectionPool {
  */
 async function applySDL(
   pool: ConnectionPool,
-  sdl: string,
+  sdl: string
 ): Promise<{ manager: SchemaManager; schema: Schema; }> {
   const manager = new SchemaManager({ pool });
   await manager.initialize();
@@ -52,7 +52,7 @@ async function applySDL(
   assertEquals(
     result.ok,
     true,
-    `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`,
+    `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`
   );
 
   const schema = manager.getSchema();
@@ -120,14 +120,14 @@ Deno.test({
       // created_at should get a default value from datetime_current()
       const insertSql = compileEdgeQL(
         "INSERT BlogPost { author_name := \"Jane Doe\", title := \"Hello World\", body := \"First post content\" }",
-        schema,
+        schema
       );
       await pool.query(insertSql);
 
       // SELECT BlogPost with shape {title, author_name, created_at}
       const selectSql = compileEdgeQL(
         "SELECT BlogPost { title, author_name, created_at }",
-        schema,
+        schema
       );
       const result = await pool.query(selectSql);
 
@@ -135,29 +135,29 @@ Deno.test({
       assertEquals(
         result.rowCount >= 1,
         true,
-        "Should return at least one BlogPost row",
+        "Should return at least one BlogPost row"
       );
 
       // Extract data from JSON result
       const firstRow = result.rows[0];
-      const data = (firstRow as Record<string, unknown>).jsonb_build_object
-        ?? firstRow;
+      const data = (firstRow as Record<string, unknown>).jsonb_build_object ??
+        firstRow;
       const rowData = data as Record<string, unknown>;
 
       // Verify all properties are present (including inherited ones)
       assertEquals(
         rowData.title,
         "Hello World",
-        "title should be 'Hello World'",
+        "title should be 'Hello World'"
       );
       assertEquals(
         rowData.author_name,
         "Jane Doe",
-        "author_name (inherited from Authored) should be 'Jane Doe'",
+        "author_name (inherited from Authored) should be 'Jane Doe'"
       );
       assertExists(
         rowData.created_at,
-        "created_at (inherited from Timestamped) should be present",
+        "created_at (inherited from Timestamped) should be present"
       );
 
       await manager.close();
@@ -165,7 +165,7 @@ Deno.test({
       await cleanup(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -201,27 +201,27 @@ Deno.test({
       // INSERT an Item with all properties
       const insertSql = compileEdgeQL(
         "INSERT Item { name := \"Widget\", category := \"Hardware\", tag := \"sale\", price := 999 }",
-        schema,
+        schema
       );
       await pool.query(insertSql);
 
       // SELECT Item with all 4 properties
       const selectSql = compileEdgeQL(
         "SELECT Item { name, category, tag, price }",
-        schema,
+        schema
       );
       const result = await pool.query(selectSql);
 
       assertEquals(
         result.rowCount,
         1,
-        "Should return exactly 1 Item row",
+        "Should return exactly 1 Item row"
       );
 
       // Extract data
       const firstRow = result.rows[0];
-      const data = (firstRow as Record<string, unknown>).jsonb_build_object
-        ?? firstRow;
+      const data = (firstRow as Record<string, unknown>).jsonb_build_object ??
+        firstRow;
       const rowData = data as Record<string, unknown>;
 
       // Verify all 4 properties are returned
@@ -229,7 +229,7 @@ Deno.test({
       assertEquals(
         rowData.category,
         "Hardware",
-        "category should be 'Hardware'",
+        "category should be 'Hardware'"
       );
       assertEquals(rowData.tag, "sale", "tag should be 'sale'");
       assertEquals(Number(rowData.price), 999, "price should be 999");
@@ -246,7 +246,7 @@ Deno.test({
       assertEquals(
         Number(colCountResult.rows[0].cnt),
         1,
-        "The 'name' column should appear exactly once in the item table (no duplicates from diamond)",
+        "The 'name' column should appear exactly once in the item table (no duplicates from diamond)"
       );
 
       await manager.close();
@@ -254,7 +254,7 @@ Deno.test({
       await cleanup(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -275,55 +275,55 @@ Deno.test({
       // INSERT a BlogPost row
       const insertSql = compileEdgeQL(
         "INSERT BlogPost { author_name := \"Ada\", title := \"Test Post\", body := \"Some body text\" }",
-        schema,
+        schema
       );
       await pool.query(insertSql);
 
       // SELECT Timestamped — should return BlogPost rows since BlogPost extends Timestamped
       const tsSelectSql = compileEdgeQL(
         "SELECT Timestamped { created_at }",
-        schema,
+        schema
       );
       const tsResult = await pool.query(tsSelectSql);
 
       assertEquals(
         tsResult.rowCount >= 1,
         true,
-        "SELECT Timestamped should return BlogPost rows (polymorphic query)",
+        "SELECT Timestamped should return BlogPost rows (polymorphic query)"
       );
 
       // SELECT Authored — should also return BlogPost rows
       const authSelectSql = compileEdgeQL(
         "SELECT Authored { author_name }",
-        schema,
+        schema
       );
       const authResult = await pool.query(authSelectSql);
 
       assertEquals(
         authResult.rowCount >= 1,
         true,
-        "SELECT Authored should return BlogPost rows (polymorphic query)",
+        "SELECT Authored should return BlogPost rows (polymorphic query)"
       );
 
       // Verify inherited property value via Authored query
       const authFirstRow = authResult.rows[0];
-      const authData = (authFirstRow as Record<string, unknown>).jsonb_build_object
-        ?? authFirstRow;
+      const authData = (authFirstRow as Record<string, unknown>).jsonb_build_object ??
+        authFirstRow;
       assertEquals(
         (authData as Record<string, unknown>).author_name,
         "Ada",
-        "author_name should be 'Ada' when queried through Authored",
+        "author_name should be 'Ada' when queried through Authored"
       );
 
       // Verify the __type__ discriminator is 'BlogPost' in the underlying table
       const typeResult = await pool.query(
-        "SELECT __type__ FROM blog_post LIMIT 1",
+        "SELECT __type__ FROM blog_post LIMIT 1"
       );
       if (typeResult.rowCount > 0) {
         assertEquals(
           (typeResult.rows[0] as Record<string, unknown>).__type__,
           "BlogPost",
-          "__type__ column should be 'BlogPost'",
+          "__type__ column should be 'BlogPost'"
         );
       }
 
@@ -332,7 +332,7 @@ Deno.test({
       await cleanup(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -371,61 +371,61 @@ Deno.test({
       // INSERT an Article
       const insertArticleSql = compileEdgeQL(
         "INSERT Article { author_name := \"Billie\", headline := \"Breaking News\" }",
-        schema,
+        schema
       );
       await pool.query(insertArticleSql);
 
       // INSERT a Review
       const insertReviewSql = compileEdgeQL(
         "INSERT Review { author_name := \"Cher\", rating := 5, comment := \"Excellent!\" }",
-        schema,
+        schema
       );
       await pool.query(insertReviewSql);
 
       // Query Article — verify it has inherited + own properties
       const articleSql = compileEdgeQL(
         "SELECT Article { headline, author_name, created_at }",
-        schema,
+        schema
       );
       const articleResult = await pool.query(articleSql);
 
       assertEquals(
         articleResult.rowCount,
         1,
-        "Should return exactly 1 Article",
+        "Should return exactly 1 Article"
       );
 
       const articleRow = articleResult.rows[0];
-      const articleData = (articleRow as Record<string, unknown>).jsonb_build_object
-        ?? articleRow;
+      const articleData = (articleRow as Record<string, unknown>).jsonb_build_object ??
+        articleRow;
       const article = articleData as Record<string, unknown>;
 
       assertEquals(
         article.headline,
         "Breaking News",
-        "Article headline should be 'Breaking News'",
+        "Article headline should be 'Breaking News'"
       );
       assertEquals(
         article.author_name,
         "Billie",
-        "Article author_name (inherited) should be 'Billie'",
+        "Article author_name (inherited) should be 'Billie'"
       );
       assertExists(
         article.created_at,
-        "Article created_at (inherited from Timestamped) should be present",
+        "Article created_at (inherited from Timestamped) should be present"
       );
 
       // Query Review — verify it has inherited + own properties
       const reviewSql = compileEdgeQL(
         "SELECT Review { rating, comment, author_name, created_at }",
-        schema,
+        schema
       );
       const reviewResult = await pool.query(reviewSql);
 
       assertEquals(
         reviewResult.rowCount,
         1,
-        "Should return exactly 1 Review",
+        "Should return exactly 1 Review"
       );
 
       const reviewRow = reviewResult.rows[0];
@@ -435,41 +435,41 @@ Deno.test({
       assertEquals(
         Number(review.rating),
         5,
-        "Review rating should be 5",
+        "Review rating should be 5"
       );
       assertEquals(
         review.comment,
         "Excellent!",
-        "Review comment should be 'Excellent!'",
+        "Review comment should be 'Excellent!'"
       );
       assertEquals(
         review.author_name,
         "Cher",
-        "Review author_name (inherited) should be 'Cher'",
+        "Review author_name (inherited) should be 'Cher'"
       );
       assertExists(
         review.created_at,
-        "Review created_at (inherited from Timestamped) should be present",
+        "Review created_at (inherited from Timestamped) should be present"
       );
 
       // Verify that Article and Review are independent —
       // querying one does not return the other
       const articleCount = await pool.query(
-        "SELECT COUNT(*)::int AS cnt FROM article",
+        "SELECT COUNT(*)::int AS cnt FROM article"
       );
       assertEquals(
         Number(articleCount.rows[0].cnt),
         1,
-        "article table should have exactly 1 row",
+        "article table should have exactly 1 row"
       );
 
       const reviewCount = await pool.query(
-        "SELECT COUNT(*)::int AS cnt FROM review",
+        "SELECT COUNT(*)::int AS cnt FROM review"
       );
       assertEquals(
         Number(reviewCount.rows[0].cnt),
         1,
-        "review table should have exactly 1 row",
+        "review table should have exactly 1 row"
       );
 
       await manager.close();
@@ -477,5 +477,5 @@ Deno.test({
       await cleanup(pool);
       await pool.close();
     }
-  },
+  }
 });

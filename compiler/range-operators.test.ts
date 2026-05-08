@@ -89,7 +89,7 @@ Deno.test("Range operators — r1 -|- r2 compiles to -|-", () => {
 
 Deno.test("Range operators — @> in FILTER clause", () => {
   const sql = compileEdgeQL(
-    `SELECT User FILTER range(1, 100) @> 50`,
+    `SELECT User FILTER range(1, 100) @> 50`
   );
   assertStringIncludes(sql, "@>");
   assertStringIncludes(sql, "WHERE");
@@ -101,7 +101,7 @@ Deno.test("Range operators — @> in FILTER clause", () => {
 
 Deno.test("Range operators — combined with AND", () => {
   const sql = compileEdgeQL(
-    `SELECT range(1, 10) @> 5 AND range(1, 10) && range(5, 15)`,
+    `SELECT range(1, 10) @> 5 AND range(1, 10) && range(5, 15)`
   );
   assertStringIncludes(sql, "@>");
   assertStringIncludes(sql, "&&");

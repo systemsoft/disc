@@ -46,7 +46,7 @@ export class DatabaseRegistry {
   async initialize(defaultDatabaseUrl: string): Promise<void> {
     if (this.initialized) {
       throw new DatabaseRegistryError(
-        "DatabaseRegistry is already initialized",
+        "DatabaseRegistry is already initialized"
       );
     }
 
@@ -56,7 +56,7 @@ export class DatabaseRegistry {
     const pool = new ConnectionPool({
       connectionString: defaultDatabaseUrl,
       minConnections: 2,
-      maxConnections: 10,
+      maxConnections: 10
     });
 
     await pool.initialize();
@@ -66,14 +66,14 @@ export class DatabaseRegistry {
       pool,
       schema: null,
       migrationTracker: null,
-      databaseUrl: defaultDatabaseUrl,
+      databaseUrl: defaultDatabaseUrl
     };
 
     this.databases.set(DEFAULT_DATABASE_NAME, entry);
     this.initialized = true;
 
     logger.info(
-      `DatabaseRegistry initialized with default database "${DEFAULT_DATABASE_NAME}"`,
+      `DatabaseRegistry initialized with default database "${DEFAULT_DATABASE_NAME}"`
     );
   }
 
@@ -87,20 +87,20 @@ export class DatabaseRegistry {
 
     if (!VALID_NAME_RE.test(name)) {
       throw new DatabaseRegistryError(
-        `Invalid database name "${name}": must start with a lowercase letter and contain only lowercase letters, digits, and underscores`,
+        `Invalid database name "${name}": must start with a lowercase letter and contain only lowercase letters, digits, and underscores`
       );
     }
 
     if (this.databases.has(name)) {
       throw new DatabaseRegistryError(
-        `Database "${name}" already exists in the registry`,
+        `Database "${name}" already exists in the registry`
       );
     }
 
     const pgDatabaseName = `${DATABASE_PREFIX}${name}`;
     const databaseUrl = replaceDsnDatabase(
       this.defaultDatabaseUrl,
-      pgDatabaseName,
+      pgDatabaseName
     );
 
     // Create the PostgreSQL database via the admin (postgres) database
@@ -110,7 +110,7 @@ export class DatabaseRegistry {
     const pool = new ConnectionPool({
       connectionString: databaseUrl,
       minConnections: 2,
-      maxConnections: 10,
+      maxConnections: 10
     });
 
     const entry: DatabaseEntry = {
@@ -118,13 +118,13 @@ export class DatabaseRegistry {
       pool,
       schema: null,
       migrationTracker: null,
-      databaseUrl,
+      databaseUrl
     };
 
     this.databases.set(name, entry);
 
     logger.info(
-      `Created database "${name}" (PG: ${pgDatabaseName})`,
+      `Created database "${name}" (PG: ${pgDatabaseName})`
     );
 
     return entry;
@@ -142,14 +142,14 @@ export class DatabaseRegistry {
 
     if (name === DEFAULT_DATABASE_NAME) {
       throw new DatabaseRegistryError(
-        "Cannot drop the default database",
+        "Cannot drop the default database"
       );
     }
 
     const entry = this.databases.get(name);
     if (!entry) {
       throw new DatabaseRegistryError(
-        `Database "${name}" not found in the registry`,
+        `Database "${name}" not found in the registry`
       );
     }
 
@@ -163,7 +163,7 @@ export class DatabaseRegistry {
     await dropDatabase(this.defaultDatabaseUrl, pgDatabaseName);
 
     logger.info(
-      `Dropped database "${name}" (PG: ${pgDatabaseName})`,
+      `Dropped database "${name}" (PG: ${pgDatabaseName})`
     );
   }
 
@@ -212,7 +212,7 @@ export class DatabaseRegistry {
   private ensureInitialized(): void {
     if (!this.initialized) {
       throw new DatabaseRegistryError(
-        "DatabaseRegistry has not been initialized — call initialize() first",
+        "DatabaseRegistry has not been initialized — call initialize() first"
       );
     }
   }

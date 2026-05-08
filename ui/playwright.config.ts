@@ -28,14 +28,14 @@ export default defineConfig({
 
   use: {
     baseURL: "http://localhost:5173",
-    trace: "retain-on-failure",
+    trace: "retain-on-failure"
   },
 
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
-    },
+      use: { ...devices["Desktop Chrome"] }
+    }
   ],
 
   webServer: [
@@ -49,13 +49,13 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
       stdout: "pipe",
-      stderr: "pipe",
+      stderr: "pipe"
     },
     {
       command: "bun run dev",
       url: "http://localhost:5173/ui",
       reuseExistingServer: !process.env.CI,
-      timeout: 30_000,
-    },
-  ],
+      timeout: 30_000
+    }
+  ]
 });

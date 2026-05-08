@@ -20,7 +20,7 @@ export interface QueryRunner {
   query<T = unknown>(
     query: string,
     variables?: Record<string, unknown>,
-    options?: QueryOptions<T>,
+    options?: QueryOptions<T>
   ): Promise<T>;
 }
 
@@ -97,24 +97,30 @@ class FieldRef {
 function makeTypeRef(): TypeRef {
   return new Proxy({} as TypeRef, {
     get(_target, prop) {
-      if (typeof prop !== "string") return undefined;
+      if (typeof prop !== "string")
+        return undefined;
       return new FieldRef(prop);
-    },
+    }
   });
 }
 
 /** Infer the EdgeQL cast for a JS variable. Conservative — unknown types throw. */
 function inferCast(value: unknown): string {
-  if (typeof value === "string") return "str";
-  if (typeof value === "boolean") return "bool";
-  if (typeof value === "bigint") return "bigint";
+  if (typeof value === "string")
+    return "str";
+  if (typeof value === "boolean")
+    return "bool";
+  if (typeof value === "bigint")
+    return "bigint";
   if (typeof value === "number") {
     return Number.isInteger(value) ? "int64" : "float64";
   }
-  if (value instanceof Date) return "datetime";
-  if (value instanceof Uint8Array) return "bytes";
+  if (value instanceof Date)
+    return "datetime";
+  if (value instanceof Uint8Array)
+    return "bytes";
   throw new Error(
-    `Cannot infer EdgeQL cast for filter value of type ${typeof value}`,
+    `Cannot infer EdgeQL cast for filter value of type ${typeof value}`
   );
 }
 
@@ -133,9 +139,9 @@ function compileExpr(expr: Expr, ctx: CompileCtx): string {
     case "exists":
       return `exists .${expr.field}`;
     case "and":
-      return expr.exprs.map((e) => `(${compileExpr(e, ctx)})`).join(" and ");
+      return expr.exprs.map(e => `(${compileExpr(e, ctx)})`).join(" and ");
     case "or":
-      return expr.exprs.map((e) => `(${compileExpr(e, ctx)})`).join(" or ");
+      return expr.exprs.map(e => `(${compileExpr(e, ctx)})`).join(" or ");
     case "not":
       return `not (${compileExpr(expr.expr, ctx)})`;
   }
@@ -193,7 +199,8 @@ export class SelectChain<T = unknown> implements PromiseLike<T> {
 
   select(shape: Shape): this {
     // Validate keys eagerly so injection-shaped names fail fast, not at run time.
-    for (const key of Object.keys(shape)) assertIdent(key, "shape field");
+    for (const key of Object.keys(shape))
+      assertIdent(key, "shape field");
     this.shape = shape;
     return this;
   }
@@ -233,13 +240,15 @@ export class SelectChain<T = unknown> implements PromiseLike<T> {
     const ctx: CompileCtx = { vars: {}, nextN: 0 };
     const parts: string[] = [`select ${this.typeName}`];
 
-    if (this.shape) parts.push(compileShape(this.shape));
+    if (this.shape)
+      parts.push(compileShape(this.shape));
 
     if (this.filters.length === 1) {
       parts.push(`filter ${compileExpr(this.filters[0], ctx)}`);
     } else if (this.filters.length > 1) {
-      const combined = this.filters
-        .map((e) => `(${compileExpr(e, ctx)})`)
+      const combined = this
+        .filters
+        .map(e => `(${compileExpr(e, ctx)})`)
         .join(" and ");
       parts.push(`filter ${combined}`);
     }
@@ -249,8 +258,10 @@ export class SelectChain<T = unknown> implements PromiseLike<T> {
       parts.push(`order by .${this.order.field}${dir}`);
     }
 
-    if (this.limitN !== null) parts.push(`limit ${this.limitN}`);
-    if (this.offsetN !== null) parts.push(`offset ${this.offsetN}`);
+    if (this.limitN !== null)
+      parts.push(`limit ${this.limitN}`);
+    if (this.offsetN !== null)
+      parts.push(`offset ${this.offsetN}`);
 
     return { query: parts.join(" "), variables: ctx.vars };
   }
@@ -259,14 +270,14 @@ export class SelectChain<T = unknown> implements PromiseLike<T> {
   async run<R = T>(options?: QueryOptions<R>): Promise<R> {
     if (!this.client) {
       throw new Error(
-        "SelectChain has no client attached — call toEdgeQL() and run it manually, or use createQueryBuilder(client).",
+        "SelectChain has no client attached — call toEdgeQL() and run it manually, or use createQueryBuilder(client)."
       );
     }
     const compiled = this.toEdgeQL();
     return await this.client.query<R>(
       compiled.query,
       compiled.variables,
-      options,
+      options
     );
   }
 
@@ -284,7 +295,7 @@ export class SelectChain<T = unknown> implements PromiseLike<T> {
   // deno-lint-ignore no-explicit-any
   then<TResult1 = T, TResult2 = never>(
     onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | null,
-    onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null,
+    onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null
   ): Promise<TResult1 | TResult2> {
     return this.run().then(onfulfilled as never, onrejected);
   }
@@ -331,7 +342,7 @@ export type TypedRef<S extends SchemaSpec, K extends keyof S> = {
 export type TypedSelectChain<
   S extends SchemaSpec,
   K extends keyof S,
-  Sel = ResolveType<S, S[K]>,
+  Sel = ResolveType<S, S[K]>
 > =
   & Omit<SelectChain<Sel[]>, "select" | "filter" | "orderBy" | "limit" | "offset" | "first" | "then" | "run">
   & {
@@ -345,7 +356,7 @@ export type TypedSelectChain<
     then<TResult1 = Sel[], TResult2 = never>(
       onfulfilled?: ((value: Sel[]) => TResult1 | PromiseLike<TResult1>) | null,
       // deno-lint-ignore no-explicit-any
-      onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null,
+      onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null
     ): Promise<TResult1 | TResult2>;
   };
 
@@ -366,24 +377,25 @@ export type TypedQueryBuilder<S extends SchemaSpec> = {
 export function createQueryBuilder(client: QueryRunner): QueryBuilder;
 export function createQueryBuilder<S extends SchemaSpec>(
   client: QueryRunner,
-  schema: DiscSchema<S>,
+  schema: DiscSchema<S>
 ): TypedQueryBuilder<S>;
 export function createQueryBuilder(
   client: QueryRunner,
-  schema?: DiscSchema<SchemaSpec>,
+  schema?: DiscSchema<SchemaSpec>
   // deno-lint-ignore no-explicit-any
 ): any {
   return new Proxy({} as QueryBuilder, {
     get(_target, prop) {
-      if (typeof prop !== "string") return undefined;
+      if (typeof prop !== "string")
+        return undefined;
       // When a schema is provided, refuse access to undeclared types
       // at runtime — catches typos that would otherwise hit the server.
       if (schema && !(prop in schema.spec)) {
         throw new Error(
-          `Type ${JSON.stringify(prop)} is not defined in the schema. Available: ${Object.keys(schema.spec).join(", ")}`,
+          `Type ${JSON.stringify(prop)} is not defined in the schema. Available: ${Object.keys(schema.spec).join(", ")}`
         );
       }
       return new SelectChain(prop, client);
-    },
+    }
   });
 }

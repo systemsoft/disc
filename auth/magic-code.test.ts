@@ -18,9 +18,9 @@ async function makeProvider(): Promise<{
   const provider = new AuthProvider(
     {
       jwtSecret: "test-secret-key-32-bytes-minimum-len",
-      requireEmailVerification: false,
+      requireEmailVerification: false
     },
-    db,
+    db
   );
   await provider.initialize();
   return { provider, db };
@@ -33,7 +33,7 @@ Deno.test("requestMagicCode — returns a 6-digit zero-padded code for a real us
   try {
     await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const code = await provider.requestMagicCode("u@example.com");
     assertEquals(code.length, 6);
@@ -52,7 +52,7 @@ Deno.test("requestMagicCode — anti-enumeration: unknown email still returns a 
 
     const err = await assertRejects(
       () => provider.verifyMagicCode("nobody@example.com", code),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_TOKEN);
   } finally {
@@ -67,7 +67,7 @@ Deno.test("requestMagicCode — anonymous identities don't get a magic code", as
     const code = await provider.requestMagicCode(guest.user.email);
     const err = await assertRejects(
       () => provider.verifyMagicCode(guest.user.email, code),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_TOKEN);
   } finally {
@@ -82,7 +82,7 @@ Deno.test("verifyMagicCode — completes login and returns AuthResponse", async 
   try {
     const reg = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const code = await provider.requestMagicCode("u@example.com");
     const result = await provider.verifyMagicCode("u@example.com", code);
@@ -101,18 +101,18 @@ Deno.test("verifyMagicCode — wrong code throws INVALID_TOKEN and increments at
   try {
     await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     await provider.requestMagicCode("u@example.com");
 
     const err = await assertRejects(
       () => provider.verifyMagicCode("u@example.com", "000000"),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_TOKEN);
 
     const row = await db.query(
-      `SELECT attempts FROM magic_code_tokens WHERE consumed_at IS NULL ORDER BY created_at DESC LIMIT 1`,
+      `SELECT attempts FROM magic_code_tokens WHERE consumed_at IS NULL ORDER BY created_at DESC LIMIT 1`
     );
     assertEquals(row.rows.length, 1);
     assertEquals(Number(row.rows[0].attempts), 1);
@@ -126,7 +126,7 @@ Deno.test("verifyMagicCode — 5 wrong attempts locks the row; correct code afte
   try {
     await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const realCode = await provider.requestMagicCode("u@example.com");
 
@@ -136,14 +136,14 @@ Deno.test("verifyMagicCode — 5 wrong attempts locks the row; correct code afte
       const guess = realCode === "000001" ? "000002" : "000001";
       await assertRejects(
         () => provider.verifyMagicCode("u@example.com", guess),
-        AuthError,
+        AuthError
       );
     }
 
     // Now the real code should be rejected too — row is consumed.
     const err = await assertRejects(
       () => provider.verifyMagicCode("u@example.com", realCode),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_TOKEN);
   } finally {
@@ -156,19 +156,19 @@ Deno.test("verifyMagicCode — expired code throws TOKEN_EXPIRED", async () => {
   try {
     await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const code = await provider.requestMagicCode("u@example.com");
 
     // Hand-roll the row into the past.
     await db.execute(
       "UPDATE magic_code_tokens SET expires_at = ? WHERE consumed_at IS NULL",
-      [new Date(Date.now() - 60_000).toISOString()],
+      [new Date(Date.now() - 60_000).toISOString()]
     );
 
     const err = await assertRejects(
       () => provider.verifyMagicCode("u@example.com", code),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.TOKEN_EXPIRED);
   } finally {
@@ -181,14 +181,14 @@ Deno.test("verifyMagicCode — already-consumed code throws INVALID_TOKEN", asyn
   try {
     await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const code = await provider.requestMagicCode("u@example.com");
     await provider.verifyMagicCode("u@example.com", code);
 
     const err = await assertRejects(
       () => provider.verifyMagicCode("u@example.com", code),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_TOKEN);
   } finally {
@@ -201,7 +201,7 @@ Deno.test("verifyMagicCode — when user has TOTP, returns MfaChallenge and burn
   try {
     const reg = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const enrollment = await provider.enrollTOTP(reg.user.id);
     const totp = await generateTOTP(enrollment.secret);
@@ -219,7 +219,7 @@ Deno.test("verifyMagicCode — when user has TOTP, returns MfaChallenge and burn
     // re-verifying must fail.
     const err = await assertRejects(
       () => provider.verifyMagicCode("u@example.com", code),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_TOKEN);
   } finally {
@@ -245,7 +245,7 @@ Deno.test("generateNumericCode — leading-digit distribution is roughly uniform
     for (let d = 0; d < 10; d++) {
       assert(
         Math.abs(buckets[d] - expected) < tolerance,
-        `digit ${d} appeared ${buckets[d]} times; expected ~${expected} ± ${tolerance}`,
+        `digit ${d} appeared ${buckets[d]} times; expected ~${expected} ± ${tolerance}`
       );
     }
   } finally {

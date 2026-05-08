@@ -47,7 +47,7 @@ Deno.test(
     const bytes = w.toBytes();
     assertEquals(bytes[0], 0x01);
     assertEquals(bytes[1], 0x02);
-  },
+  }
 );
 
 // ---------------------------------------------------------------------------
@@ -79,7 +79,7 @@ Deno.test(
     assertEquals(bytes[1], 0x02);
     assertEquals(bytes[2], 0x03);
     assertEquals(bytes[3], 0x04);
-  },
+  }
 );
 
 // ---------------------------------------------------------------------------
@@ -133,7 +133,7 @@ Deno.test(
     const r = new BufferReader(w.toBytes());
     assertEquals(r.readString(), text);
     assertEquals(r.remaining, 0);
-  },
+  }
 );
 
 Deno.test(
@@ -149,7 +149,7 @@ Deno.test(
     const byteLen = r.readUInt32();
     // 世 = 3 bytes, 界 = 3 bytes, 😀 = 4 bytes => 10 bytes
     assertEquals(byteLen, 10);
-  },
+  }
 );
 
 // ---------------------------------------------------------------------------
@@ -173,7 +173,7 @@ Deno.test("BufferWriter/Reader - round-trip UUID", () => {
     0x0d,
     0x0e,
     0x0f,
-    0x10,
+    0x10
   ]);
 
   const w = new BufferWriter();
@@ -192,14 +192,14 @@ Deno.test(
     assertThrows(
       () => w.writeUUID(new Uint8Array(15)),
       Error,
-      "UUID must be exactly 16 bytes",
+      "UUID must be exactly 16 bytes"
     );
     assertThrows(
       () => w.writeUUID(new Uint8Array(17)),
       Error,
-      "UUID must be exactly 16 bytes",
+      "UUID must be exactly 16 bytes"
     );
-  },
+  }
 );
 
 // ---------------------------------------------------------------------------
@@ -217,7 +217,7 @@ Deno.test(
     const result = r.readLenPrefixedBytes();
     assertEquals(result, data);
     assertEquals(r.remaining, 0);
-  },
+  }
 );
 
 Deno.test(
@@ -230,7 +230,7 @@ Deno.test(
     const result = r.readLenPrefixedBytes();
     assertEquals(result.length, 0);
     assertEquals(r.remaining, 0);
-  },
+  }
 );
 
 // ---------------------------------------------------------------------------
@@ -264,7 +264,7 @@ Deno.test(
     assertEquals(readUuid[0], 0xaa);
     assertEquals(readUuid[15], 0xbb);
     assertEquals(r.remaining, 0);
-  },
+  }
 );
 
 // ---------------------------------------------------------------------------
@@ -315,7 +315,7 @@ Deno.test(
     w.writeString("hi");
     // 4 bytes length prefix + 2 bytes for "hi"
     assertEquals(w.length, 11);
-  },
+  }
 );
 
 Deno.test(
@@ -330,7 +330,7 @@ Deno.test(
     const r = new BufferReader(bytes, 1);
     assertEquals(r.readUInt16(), 12345);
     assertEquals(r.remaining, 0);
-  },
+  }
 );
 
 Deno.test("BufferWriter - writeBytes copies data", () => {

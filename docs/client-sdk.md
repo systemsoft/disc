@@ -13,7 +13,7 @@ import {
   AuthManager,
   createClient,
   createSubscriptionClient,
-  DiscClient,
+  DiscClient
 } from "disc/sdk/mod.ts";
 ```
 
@@ -38,7 +38,7 @@ const client = createClient({
   headers: { "X-Custom-Header": "value" },
   retries: 3,
   retryDelay: 1000,
-  timeout: 30000,
+  timeout: 30000
 });
 ```
 
@@ -76,7 +76,7 @@ const users = await client.query<User[]>("select User { email, name }");
 const user = await client.query<User>(
   `select User { email, name }
    filter .email = <str>$email`,
-  { email: "ada@example.com" },
+  { email: "ada@example.com" }
 );
 
 // Insert
@@ -85,7 +85,7 @@ const newUser = await client.query<User>(
     email := <str>$email,
     name := <str>$name
   }`,
-  { email: "billie@example.com", name: "Billie" },
+  { email: "billie@example.com", name: "Billie" }
 );
 
 // Update
@@ -93,13 +93,13 @@ await client.query(
   `update User
    filter .email = <str>$email
    set { name := <str>$name }`,
-  { email: "billie@example.com", name: "Robert" },
+  { email: "billie@example.com", name: "Robert" }
 );
 
 // Delete
 await client.query(
   `delete User filter .email = <str>$email`,
-  { email: "billie@example.com" },
+  { email: "billie@example.com" }
 );
 ```
 
@@ -237,7 +237,7 @@ const client = createClient({ baseUrl: "http://localhost:5656" });
 
 const auth = new AuthManager(client, {
   autoRefresh: true, // automatically refresh tokens before expiry (default: true)
-  refreshBuffer: 60, // seconds before expiry to trigger refresh (default: 60)
+  refreshBuffer: 60 // seconds before expiry to trigger refresh (default: 60)
 });
 ```
 
@@ -248,7 +248,7 @@ const response = await auth.register({
   email: "ada@example.com",
   metadata: { department: "engineering" }, // optional
   password: "secure-password-123",
-  username: "ada", // optional
+  username: "ada" // optional
 });
 
 // response contains:
@@ -266,13 +266,13 @@ After registration, the client is automatically authenticated. All subsequent qu
 // Login with email
 const response = await auth.login({
   email: "ada@example.com",
-  password: "secure-password-123",
+  password: "secure-password-123"
 });
 
 // Login with username
 const response = await auth.login({
   password: "secure-password-123",
-  username: "ada",
+  username: "ada"
 });
 ```
 
@@ -346,10 +346,10 @@ Transactions execute multiple queries atomically. The SDK uses a callback patter
 ### Basic Usage
 
 ```typescript
-const result = await client.transaction(async (tx) => {
+const result = await client.transaction(async tx => {
   const user = await tx.query<User>(
     `insert User { email := <str>$email, name := <str>$name }`,
-    { email: "cher@example.com", name: "Cher" },
+    { email: "cher@example.com", name: "Cher" }
   );
 
   await tx.query(
@@ -358,7 +358,7 @@ const result = await client.transaction(async (tx) => {
       body := <str>$body,
       title := <str>$title
     }`,
-    { body: "Written atomically.", title: "First Post", userId: user.id },
+    { body: "Written atomically.", title: "First Post", userId: user.id }
   );
 
   return user;
@@ -418,8 +418,8 @@ const sub = createSubscriptionClient(
   {
     autoReconnect: true, // reconnect on disconnect (default: true)
     maxReconnectAttempts: 5, // max reconnect attempts (default: 5)
-    reconnectDelay: 1000, // base delay in ms (default: 1000)
-  },
+    reconnectDelay: 1000 // base delay in ms (default: 1000)
+  }
 );
 
 await sub.connect();
@@ -436,14 +436,14 @@ const handle = sub.subscribe<User[]>(
     onComplete: () => {
       console.log("Subscription stream ended");
     },
-    onData: (data) => {
+    onData: data => {
       console.log("Received update:", data);
     },
-    onError: (error) => {
+    onError: error => {
       console.error("Subscription error:", error.message);
-    },
+    }
   },
-  { status: "active" }, // optional variables
+  { status: "active" } // optional variables
 );
 ```
 
@@ -522,7 +522,7 @@ import {
   DiscErrorCode,
   DiscQueryError,
   DiscServerError,
-  DiscTimeoutError,
+  DiscTimeoutError
 } from "disc/sdk/mod.ts";
 
 try {
@@ -632,7 +632,7 @@ When the server has multi-database support enabled, you can target a specific da
 ```typescript
 const client = createClient({
   baseUrl: "http://localhost:5656",
-  headers: { "X-Database": "analytics" },
+  headers: { "X-Database": "analytics" }
 });
 
 const data = await client.query("select Event { name, timestamp }");
@@ -649,7 +649,7 @@ const users = await client.query("select User { name }");
 // Different database via a second client
 const analyticsClient = createClient({
   baseUrl: "http://localhost:5656",
-  headers: { "X-Database": "analytics" },
+  headers: { "X-Database": "analytics" }
 });
 
 const events = await analyticsClient.query("select Event { name }");
@@ -679,13 +679,13 @@ export const schema = defineSchema({
     email: t.str(),
     name: t.optional(t.str()),
     score: t.int64(),
-    posts: t.multi("Post"),
+    posts: t.multi("Post")
   },
   Post: {
     title: t.str(),
     body: t.optional(t.str()),
-    author: t.single("User"),
-  },
+    author: t.single("User")
+  }
 });
 ```
 
@@ -703,9 +703,10 @@ const client = createClient();
 const qb = createQueryBuilder(client, schema);
 
 // Awaiting the chain runs the query through `client.query()`.
-const users = await qb.User
+const users = await qb
+  .User
   .select({ email: true, name: true })
-  .filter((u) => u.email.eq("alice@example.com"))
+  .filter(u => u.email.eq("alice@example.com"))
   .first();
 //    ^? { email: string; name: string | null } | null
 ```
@@ -735,10 +736,10 @@ const users = await client.query<User[]>("select User { email, name }");
 // users is typed as User[]
 
 // Type-safe within transactions
-const result = await client.transaction(async (tx) => {
+const result = await client.transaction(async tx => {
   const user = await tx.query<User>(
     `insert User { email := <str>$email, name := <str>$name }`,
-    { email: "daena@example.com", name: "Daena" },
+    { email: "daena@example.com", name: "Daena" }
   );
 
   return user; // typed as User
@@ -750,13 +751,13 @@ await sub.connect();
 sub.subscribe<User[]>(
   "select User { email, name }",
   {
-    onData: (users) => {
+    onData: users => {
       // users is typed as User[]
       for (const user of users) {
         console.log(user.email, user.name);
       }
-    },
-  },
+    }
+  }
 );
 ```
 

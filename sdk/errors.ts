@@ -23,7 +23,7 @@ export enum DiscErrorCode {
   /** Server returned 5xx */
   SERVER_ERROR = "SERVER_ERROR",
   /** Response data failed user-supplied runtime validation */
-  VALIDATION_ERROR = "VALIDATION_ERROR",
+  VALIDATION_ERROR = "VALIDATION_ERROR"
 }
 
 /** Base error class for all SDK errors */
@@ -123,7 +123,7 @@ export class DiscValidationError extends DiscClientError {
 
   constructor(
     issues: ReadonlyArray<StandardSchemaIssue>,
-    cause?: Error,
+    cause?: Error
   ) {
     const summary = issues.length === 1 ? issues[0].message : `${issues.length} validation issues: ${issues[0]?.message ?? ""}`;
     super(summary, DiscErrorCode.VALIDATION_ERROR);

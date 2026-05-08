@@ -28,7 +28,7 @@ async function createAuthServer(): Promise<{
 
   const provider = new AuthProvider(
     { jwtSecret: TEST_JWT_SECRET },
-    db,
+    db
   );
   await provider.initialize();
 
@@ -48,15 +48,15 @@ async function createAuthServer(): Promise<{
       enableCors: true,
       enableWebsockets: false,
       jwtSecret: TEST_JWT_SECRET,
-      enableAuth: true,
+      enableAuth: true
     },
     protocolHandler: {
       handleRequest: () => Promise.resolve({ data: { result: "ok" } }),
-      validateRequest: () => [],
+      validateRequest: () => []
     },
     authProvider: provider,
     authMiddleware: middleware,
-    authRoutes: routes,
+    authRoutes: routes
   });
 
   return { server, provider, db, port };
@@ -72,12 +72,12 @@ function createNoAuthServer(port: number): HttpServer {
       maxConnections: 10,
       requestTimeout: 5000,
       enableCors: true,
-      enableWebsockets: false,
+      enableWebsockets: false
     },
     protocolHandler: {
       handleRequest: () => Promise.resolve({ data: { result: "ok" } }),
-      validateRequest: () => [],
-    },
+      validateRequest: () => []
+    }
   });
 }
 
@@ -91,7 +91,7 @@ Deno.test("auth routes return 404 when auth not configured", async () => {
   void server.start();
 
   // Wait for server to start
-  await new Promise((r) => setTimeout(r, 200));
+  await new Promise(r => setTimeout(r, 200));
 
   try {
     const res = await fetch(`http://${TEST_HOST}:${port}/auth/register`, {
@@ -99,8 +99,8 @@ Deno.test("auth routes return 404 when auth not configured", async () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         email: "test@test.com",
-        password: "password123",
-      }),
+        password: "password123"
+      })
     });
 
     assertEquals(res.status, 404);
@@ -116,7 +116,7 @@ Deno.test("root endpoint excludes auth when not configured", async () => {
   const server = createNoAuthServer(port);
 
   void server.start();
-  await new Promise((r) => setTimeout(r, 200));
+  await new Promise(r => setTimeout(r, 200));
 
   try {
     const res = await fetch(`http://${TEST_HOST}:${port}/`);
@@ -134,7 +134,7 @@ Deno.test("root endpoint includes auth endpoints when configured", async () => {
   const { server, db, port } = await createAuthServer();
 
   void server.start();
-  await new Promise((r) => setTimeout(r, 200));
+  await new Promise(r => setTimeout(r, 200));
 
   try {
     const res = await fetch(`http://${TEST_HOST}:${port}/`);
@@ -155,7 +155,7 @@ Deno.test("register and login flow via HTTP", async () => {
   const { server, db, port } = await createAuthServer();
 
   void server.start();
-  await new Promise((r) => setTimeout(r, 200));
+  await new Promise(r => setTimeout(r, 200));
 
   try {
     // Register
@@ -166,9 +166,9 @@ Deno.test("register and login flow via HTTP", async () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: "newuser@test.com",
-          password: "password123",
-        }),
-      },
+          password: "password123"
+        })
+      }
     );
 
     assertEquals(registerRes.status, 201);
@@ -183,8 +183,8 @@ Deno.test("register and login flow via HTTP", async () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         email: "newuser@test.com",
-        password: "password123",
-      }),
+        password: "password123"
+      })
     });
 
     assertEquals(loginRes.status, 200);
@@ -205,7 +205,7 @@ Deno.test({
     const { server, db, port } = await createAuthServer();
 
     void server.start();
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 200));
 
     try {
       // Profile without token should fail
@@ -221,9 +221,9 @@ Deno.test({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             email: "authuser@test.com",
-            password: "password123",
-          }),
-        },
+            password: "password123"
+          })
+        }
       );
 
       const registerBody = await registerRes.json();
@@ -234,8 +234,8 @@ Deno.test({
       const profileRes = await fetch(
         `http://${TEST_HOST}:${port}/auth/profile`,
         {
-          headers: { Authorization: `Bearer ${token}` },
-        },
+          headers: { Authorization: `Bearer ${token}` }
+        }
       );
 
       assertEquals(profileRes.status, 200);
@@ -245,7 +245,7 @@ Deno.test({
       await server.stop();
       await db.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -260,7 +260,7 @@ Deno.test({
 
     const provider = new AuthProvider(
       { jwtSecret: TEST_JWT_SECRET },
-      db,
+      db
     );
     await provider.initialize();
 
@@ -279,22 +279,22 @@ Deno.test({
         enableCors: true,
         enableWebsockets: false,
         jwtSecret: TEST_JWT_SECRET,
-        enableAuth: true,
+        enableAuth: true
       },
       protocolHandler: {
         handleRequest: (_req: any, ctx: any) => {
           capturedContext = ctx;
           return Promise.resolve({ data: { result: "ok" } });
         },
-        validateRequest: () => [],
+        validateRequest: () => []
       },
       authProvider: provider,
       authMiddleware: middleware,
-      authRoutes: routes,
+      authRoutes: routes
     });
 
     void server.start();
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 200));
 
     try {
       // Register to get a token
@@ -305,9 +305,9 @@ Deno.test({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             email: "queryuser@test.com",
-            password: "password123",
-          }),
-        },
+            password: "password123"
+          })
+        }
       );
 
       const registerBody = await registerRes.json();
@@ -318,9 +318,9 @@ Deno.test({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${token}`
         },
-        body: JSON.stringify({ query: "SELECT User { name }" }),
+        body: JSON.stringify({ query: "SELECT User { name }" })
       });
 
       assertEquals(queryRes.status, 200);
@@ -335,20 +335,20 @@ Deno.test({
       await server.stop();
       await db.close();
     }
-  },
+  }
 });
 
 Deno.test("query endpoint works without token (optional auth)", async () => {
   const { server, db, port } = await createAuthServer();
 
   void server.start();
-  await new Promise((r) => setTimeout(r, 200));
+  await new Promise(r => setTimeout(r, 200));
 
   try {
     const queryRes = await fetch(`http://${TEST_HOST}:${port}/query`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query: "SELECT User { name }" }),
+      body: JSON.stringify({ query: "SELECT User { name }" })
     });
 
     assertEquals(queryRes.status, 200);
@@ -364,11 +364,11 @@ Deno.test("unknown auth endpoint returns 404", async () => {
   const { server, db, port } = await createAuthServer();
 
   void server.start();
-  await new Promise((r) => setTimeout(r, 200));
+  await new Promise(r => setTimeout(r, 200));
 
   try {
     const res = await fetch(`http://${TEST_HOST}:${port}/auth/nonexistent`, {
-      method: "POST",
+      method: "POST"
     });
 
     assertEquals(res.status, 404);

@@ -76,7 +76,7 @@ Deno.test("parseBytes - rejects malformed base64", () => {
 Deno.test("reviveResponse - revives ISO-8601 dates in a flat object", () => {
   const out = reviveResponse<{ created_at: Date; name: string; }>({
     created_at: "2026-05-05T12:34:56Z",
-    name: "Alice",
+    name: "Alice"
   });
   assert(out.created_at instanceof Date);
   assertEquals(out.created_at.toISOString(), "2026-05-05T12:34:56.000Z");
@@ -86,7 +86,7 @@ Deno.test("reviveResponse - revives ISO-8601 dates in a flat object", () => {
 Deno.test("reviveResponse - revives bigints beyond safe range", () => {
   const out = reviveResponse<{ id: bigint; small: number; }>({
     id: "9007199254740993", // 2^53 + 1
-    small: 42, // already a number, untouched
+    small: 42 // already a number, untouched
   });
   assertEquals(typeof out.id, "bigint");
   assertEquals(out.id, 9007199254740993n);
@@ -108,7 +108,7 @@ Deno.test("reviveResponse - leaves date-only strings alone", () => {
 Deno.test("reviveResponse - walks arrays", () => {
   const out = reviveResponse<Array<{ created_at: Date; }>>([
     { created_at: "2026-05-05T00:00:00Z" },
-    { created_at: "2026-05-06T00:00:00Z" },
+    { created_at: "2026-05-06T00:00:00Z" }
   ]);
   assert(out[0].created_at instanceof Date);
   assert(out[1].created_at instanceof Date);
@@ -117,8 +117,8 @@ Deno.test("reviveResponse - walks arrays", () => {
 Deno.test("reviveResponse - walks nested structures", () => {
   const out = reviveResponse<{ user: { posts: Array<{ at: Date; }>; }; }>({
     user: {
-      posts: [{ at: "2026-05-05T12:00:00Z" }],
-    },
+      posts: [{ at: "2026-05-05T12:00:00Z" }]
+    }
   });
   assert(out.user.posts[0].at instanceof Date);
 });
@@ -126,7 +126,7 @@ Deno.test("reviveResponse - walks nested structures", () => {
 Deno.test("reviveResponse - dates: false disables date revival", () => {
   const out = reviveResponse<{ at: string; }>(
     { at: "2026-05-05T12:00:00Z" },
-    { dates: false },
+    { dates: false }
   );
   assertEquals(typeof out.at, "string");
 });
@@ -134,7 +134,7 @@ Deno.test("reviveResponse - dates: false disables date revival", () => {
 Deno.test("reviveResponse - bigints: false disables bigint revival", () => {
   const out = reviveResponse<{ id: string; }>(
     { id: "9007199254740993" },
-    { bigints: false },
+    { bigints: false }
   );
   assertEquals(typeof out.id, "string");
 });

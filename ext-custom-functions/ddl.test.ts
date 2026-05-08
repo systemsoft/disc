@@ -41,7 +41,7 @@ Deno.test("mapEdgeqlTypeToPg - throws ExtensionConfigError for unknown type", ()
   assertThrows(
     () => mapEdgeqlTypeToPg("notatype"),
     ExtensionConfigError,
-    "Unknown EdgeQL type: notatype",
+    "Unknown EdgeQL type: notatype"
   );
 });
 
@@ -52,7 +52,7 @@ Deno.test("generateCreateFunction - returns empty string for sql_name implementa
     name: "my_func",
     args: [],
     returnType: "str",
-    implementation: { kind: "sql_name", sqlName: "lower" },
+    implementation: { kind: "sql_name", sqlName: "lower" }
   };
   assertEquals(generateCreateFunction(def), "");
 });
@@ -62,7 +62,7 @@ Deno.test("generateCreateFunction - returns empty string for sql_expression impl
     name: "my_func",
     args: [{ name: "val", type: "int64" }],
     returnType: "int64",
-    implementation: { kind: "sql_expression", expression: "$1 * 2" },
+    implementation: { kind: "sql_expression", expression: "$1 * 2" }
   };
   assertEquals(generateCreateFunction(def), "");
 });
@@ -72,7 +72,7 @@ Deno.test("generateCreateFunction - generates PL/pgSQL DDL with no args", () => 
     name: "get_version",
     args: [],
     returnType: "str",
-    implementation: { kind: "plpgsql", body: "BEGIN\n  RETURN '1.0';\nEND;" },
+    implementation: { kind: "plpgsql", body: "BEGIN\n  RETURN '1.0';\nEND;" }
   };
   const sql = generateCreateFunction(def);
   assertEquals(sql.includes("CREATE OR REPLACE FUNCTION get_version()"), true);
@@ -88,14 +88,14 @@ Deno.test("generateCreateFunction - generates DDL with IMMUTABLE volatility", ()
     name: "add_ints",
     args: [
       { name: "a", type: "int32" },
-      { name: "b", type: "int32" },
+      { name: "b", type: "int32" }
     ],
     returnType: "int32",
     implementation: {
       kind: "plpgsql",
-      body: "BEGIN\n  RETURN a + b;\nEND;",
+      body: "BEGIN\n  RETURN a + b;\nEND;"
     },
-    volatility: "immutable",
+    volatility: "immutable"
   };
   const sql = generateCreateFunction(def);
   assertEquals(sql.includes("IMMUTABLE"), true);
@@ -109,9 +109,9 @@ Deno.test("generateCreateFunction - generates DDL with STABLE volatility", () =>
     returnType: "str",
     implementation: {
       kind: "plpgsql",
-      body: "BEGIN\n  RETURN 'user';\nEND;",
+      body: "BEGIN\n  RETURN 'user';\nEND;"
     },
-    volatility: "stable",
+    volatility: "stable"
   };
   const sql = generateCreateFunction(def);
   assertEquals(sql.includes("STABLE"), true);
@@ -123,20 +123,20 @@ Deno.test("generateCreateFunction - generates DDL with multiple args", () => {
     args: [
       { name: "first", type: "str" },
       { name: "second", type: "str" },
-      { name: "count", type: "int64" },
+      { name: "count", type: "int64" }
     ],
     returnType: "str",
     implementation: {
       kind: "plpgsql",
-      body: "BEGIN\n  RETURN first || second;\nEND;",
-    },
+      body: "BEGIN\n  RETURN first || second;\nEND;"
+    }
   };
   const sql = generateCreateFunction(def);
   assertEquals(
     sql.includes(
-      "CREATE OR REPLACE FUNCTION combine(first text, second text, count bigint)",
+      "CREATE OR REPLACE FUNCTION combine(first text, second text, count bigint)"
     ),
-    true,
+    true
   );
   assertEquals(sql.includes("RETURNS text"), true);
 });
@@ -148,11 +148,11 @@ Deno.test("generateDropFunction - generates DROP FUNCTION for no-arg function", 
     name: "get_version",
     args: [],
     returnType: "str",
-    implementation: { kind: "plpgsql", body: "BEGIN\n  RETURN '1.0';\nEND;" },
+    implementation: { kind: "plpgsql", body: "BEGIN\n  RETURN '1.0';\nEND;" }
   };
   assertEquals(
     generateDropFunction(def),
-    "DROP FUNCTION IF EXISTS get_version();",
+    "DROP FUNCTION IF EXISTS get_version();"
   );
 });
 
@@ -161,14 +161,14 @@ Deno.test("generateDropFunction - generates DROP FUNCTION with arg types", () =>
     name: "add_ints",
     args: [
       { name: "a", type: "int32" },
-      { name: "b", type: "int32" },
+      { name: "b", type: "int32" }
     ],
     returnType: "int32",
-    implementation: { kind: "sql_name", sqlName: "pg_add" },
+    implementation: { kind: "sql_name", sqlName: "pg_add" }
   };
   assertEquals(
     generateDropFunction(def),
-    "DROP FUNCTION IF EXISTS add_ints(integer, integer);",
+    "DROP FUNCTION IF EXISTS add_ints(integer, integer);"
   );
 });
 
@@ -177,10 +177,10 @@ Deno.test("generateDropFunction - generates DROP FUNCTION for sql_name implement
     name: "my_lower",
     args: [{ name: "input", type: "str" }],
     returnType: "str",
-    implementation: { kind: "sql_name", sqlName: "lower" },
+    implementation: { kind: "sql_name", sqlName: "lower" }
   };
   assertEquals(
     generateDropFunction(def),
-    "DROP FUNCTION IF EXISTS my_lower(text);",
+    "DROP FUNCTION IF EXISTS my_lower(text);"
   );
 });

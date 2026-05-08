@@ -108,7 +108,7 @@ export class HttpServer {
   private tls_not_after_unix?: number;
   private request_handler?: (
     request: Request,
-    info: Deno.ServeHandlerInfo,
+    info: Deno.ServeHandlerInfo
   ) => Response | Promise<Response>;
   private cleanup_interval_ids: number[] = [];
   private startTime: Date;
@@ -118,7 +118,7 @@ export class HttpServer {
     total_requests: 0,
     successful_requests: 0,
     failed_requests: 0,
-    total_duration_ms: 0,
+    total_duration_ms: 0
   };
 
   constructor(options: HttpServerOptions) {
@@ -146,8 +146,8 @@ export class HttpServer {
     ) {
       this.rate_limiter = new RateLimiter({
         requestsPerMinute: options.config.rateLimitRpm,
-        burstSize: options.config.rateLimitBurst
-          || options.config.rateLimitRpm,
+        burstSize: options.config.rateLimitBurst ||
+          options.config.rateLimitRpm
       });
     }
   }
@@ -155,12 +155,12 @@ export class HttpServer {
   async start(): Promise<void> {
     log.info("Starting Disc HTTP server", {
       host: this.config.host,
-      port: this.config.port,
+      port: this.config.port
     });
 
     const handler = (
       request: Request,
-      info: Deno.ServeHandlerInfo,
+      info: Deno.ServeHandlerInfo
     ): Response | Promise<Response> => {
       return this.handleRequest(request, info);
     };
@@ -173,7 +173,7 @@ export class HttpServer {
         hostname: this.config.host,
         port: this.config.port,
         cert,
-        key,
+        key
       }, handler);
       this.refreshTlsCertExpiry(cert);
 
@@ -185,14 +185,14 @@ export class HttpServer {
           certFile: this.config.tls.certFile,
           keyFile: this.config.tls.keyFile,
           debounceMs: this.config.tls.reloadDebounceMs,
-          onReload: (newCert, newKey) => this.swapTlsListener(newCert, newKey),
+          onReload: (newCert, newKey) => this.swapTlsListener(newCert, newKey)
         });
         this.tls_watcher.start();
       }
     } else {
       this.server = Deno.serve({
         hostname: this.config.host,
-        port: this.config.port,
+        port: this.config.port
       }, handler);
     }
 
@@ -211,9 +211,9 @@ export class HttpServer {
           url.port = String(httpsPort);
           return new Response(null, {
             status: 301,
-            headers: { "Location": url.toString() },
+            headers: { Location: url.toString() }
           });
-        },
+        }
       });
     }
 
@@ -222,16 +222,16 @@ export class HttpServer {
 
     const protocol = this.config.tls ? "https" : "http";
     log.info("Disc server is running", {
-      url: `${protocol}://${this.config.host}:${this.config.port}`,
+      url: `${protocol}://${this.config.host}:${this.config.port}`
     });
     log.info("Server configuration", {
       cors: this.config.enableCors,
-      websockets: this.config.enableWebsockets,
+      websockets: this.config.enableWebsockets
     });
 
     await Promise.all([
       this.server.finished,
-      ...(this.redirect_server ? [this.redirect_server.finished] : []),
+      ...(this.redirect_server ? [this.redirect_server.finished] : [])
     ]);
   }
 
@@ -315,19 +315,19 @@ export class HttpServer {
         hostname: this.config.host,
         port: this.config.port,
         cert,
-        key,
+        key
       }, this.request_handler);
 
       this.server = newServer;
       this.refreshTlsCertExpiry(cert);
       log.info("TLS hot-reload: new listener up", {
         host: this.config.host,
-        port: this.config.port,
+        port: this.config.port
       });
     } catch (err) {
       log.error(
         "TLS hot-reload failed; old listener has already been drained",
-        { error: err instanceof Error ? err.message : String(err) },
+        { error: err instanceof Error ? err.message : String(err) }
       );
       // Best-effort recovery: try to restart with the *previous* cert
       // we know was valid.
@@ -338,12 +338,12 @@ export class HttpServer {
           hostname: this.config.host,
           port: this.config.port,
           cert: fallbackCert,
-          key: fallbackKey,
+          key: fallbackKey
         }, this.request_handler);
         log.warn("TLS hot-reload: recovered listener with on-disk cert/key");
       } catch (recoveryErr) {
         log.error("TLS hot-reload: recovery failed; server is now down", {
-          error: recoveryErr instanceof Error ? recoveryErr.message : String(recoveryErr),
+          error: recoveryErr instanceof Error ? recoveryErr.message : String(recoveryErr)
         });
         throw recoveryErr;
       }
@@ -362,12 +362,12 @@ export class HttpServer {
       this.tls_not_after_unix = expiry.notAfterUnix;
       log.info("TLS certificate expiry refreshed", {
         notAfter: expiry.notAfter.toISOString(),
-        secondsUntilExpiry: expiry.secondsUntilExpiry,
+        secondsUntilExpiry: expiry.secondsUntilExpiry
       });
     } catch (err) {
       this.tls_not_after_unix = undefined;
       log.warn("Failed to decode TLS leaf certificate notAfter", {
-        error: err instanceof Error ? err.message : String(err),
+        error: err instanceof Error ? err.message : String(err)
       });
     }
   }
@@ -391,7 +391,7 @@ export class HttpServer {
   updateCorsAllowedOrigins(origins: string[] | undefined): void {
     this.config.corsOrigins = origins;
     log.info("config reload: corsOrigins updated", {
-      value: origins ?? null,
+      value: origins ?? null
     });
   }
 
@@ -419,7 +419,7 @@ export class HttpServer {
 
     const deadline = Date.now() + timeoutMs;
     while (this.in_flight_requests > 0 && Date.now() < deadline) {
-      await new Promise<void>((resolve) => setTimeout(resolve, 100));
+      await new Promise<void>(resolve => setTimeout(resolve, 100));
     }
   }
 
@@ -432,7 +432,7 @@ export class HttpServer {
 
   private async handleRequest(
     request: Request,
-    info: Deno.ServeHandlerInfo,
+    info: Deno.ServeHandlerInfo
   ): Promise<Response> {
     // Reject new requests during shutdown
     if (this.shutting_down) {
@@ -440,8 +440,8 @@ export class HttpServer {
         JSON.stringify({ error: "Server is shutting down" }),
         {
           status: 503,
-          headers: this.get_default_headers("application/json"),
-        },
+          headers: this.get_default_headers("application/json")
+        }
       );
     }
 
@@ -453,7 +453,7 @@ export class HttpServer {
         headers.set("Retry-After", "60");
         return new Response(
           JSON.stringify({ error: "Rate limit exceeded" }),
-          { status: 429, headers },
+          { status: 429, headers }
         );
       }
     }
@@ -472,8 +472,8 @@ export class HttpServer {
 
       // Handle WebSocket upgrade
       if (
-        this.config.enableWebsockets
-        && request.headers.get("upgrade") === "websocket"
+        this.config.enableWebsockets &&
+        request.headers.get("upgrade") === "websocket"
       ) {
         return this.handle_websocket_upgrade(request, info);
       }
@@ -516,7 +516,8 @@ export class HttpServer {
       // the static manifest. Falls back to `index.html` for SPA routes.
       if (url.pathname === "/ui" || url.pathname.startsWith("/ui/")) {
         const uiResponse = await this.uiAssetHandler(request);
-        if (uiResponse) return uiResponse;
+        if (uiResponse)
+          return uiResponse;
       }
 
       // Live-schema-diff admin endpoints (Bundle K — Disc-original
@@ -525,14 +526,14 @@ export class HttpServer {
       // the request; these routes are sensitive (write path), so
       // operators should also enable `requireAuth` in production.
       if (
-        this.adminSchemaWatch
-        && (url.pathname === "/admin/schema-watch"
-          || url.pathname === "/admin/schema-apply")
+        this.adminSchemaWatch &&
+        (url.pathname === "/admin/schema-watch" ||
+          url.pathname === "/admin/schema-apply")
       ) {
         return await this.handleAdminSchemaRoute(
           request,
           url,
-          authedContext,
+          authedContext
         );
       }
 
@@ -541,16 +542,16 @@ export class HttpServer {
       // mounted only when a registry was wired (DiscServer
       // bootstraps it after PG is ready).
       if (
-        this.config.enableDataWatch !== false
-        && this.dataWatchRegistry
-        && url.pathname === "/admin/data-watch"
+        this.config.enableDataWatch !== false &&
+        this.dataWatchRegistry &&
+        url.pathname === "/admin/data-watch"
       ) {
         if (request.method !== "GET") {
           return this.create_error_response("Method Not Allowed", 405);
         }
         return handleDataWatch({
           registry: this.dataWatchRegistry,
-          url,
+          url
         });
       }
 
@@ -560,8 +561,8 @@ export class HttpServer {
       // and the auth gate compose for free. Disabled when
       // `config.enableRest === false`.
       if (
-        this.config.enableRest !== false
-        && (url.pathname === "/api" || url.pathname.startsWith("/api/"))
+        this.config.enableRest !== false &&
+        (url.pathname === "/api" || url.pathname.startsWith("/api/"))
       ) {
         if (url.pathname === "/api/openapi.json") {
           return this.handleOpenApi(request);
@@ -569,9 +570,10 @@ export class HttpServer {
         const restResponse = await this.handleRestRoute(
           request,
           requestId,
-          authedContext,
+          authedContext
         );
-        if (restResponse) return restResponse;
+        if (restResponse)
+          return restResponse;
       }
 
       // Route handling
@@ -594,7 +596,7 @@ export class HttpServer {
           return await this.handle_migrations(request);
         case "/config":
           return handleGetConfig({
-            defaultHeaders: () => this.get_default_headers("application/json"),
+            defaultHeaders: () => this.get_default_headers("application/json")
           });
         default:
           return this.create_error_response("Not Found", 404, request);
@@ -603,7 +605,7 @@ export class HttpServer {
       this.stats.failed_requests++;
       log.error("Request failed", {
         requestId,
-        error: error instanceof Error ? error.message : String(error),
+        error: error instanceof Error ? error.message : String(error)
       });
       return this.create_error_response("Internal Server Error", 500, request);
     } finally {
@@ -621,14 +623,18 @@ export class HttpServer {
    * (gh/geldata#6345, ports geldata/gel#6352)
    */
   private isPublicRoute(pathname: string): boolean {
-    if (pathname === "/") return true;
-    if (pathname.startsWith("/auth/")) return true;
-    if (pathname === "/health" || pathname.startsWith("/health/")) return true;
+    if (pathname === "/")
+      return true;
+    if (pathname.startsWith("/auth/"))
+      return true;
+    if (pathname === "/health" || pathname.startsWith("/health/"))
+      return true;
     // Admin UI assets are public; users sign in *through* the UI, so
     // the bundle has to load before authentication. The UI's own
     // network calls (e.g. /query, /schema) still go through gateAuth
     // when `requireAuth` is on.
-    if (pathname === "/ui" || pathname.startsWith("/ui/")) return true;
+    if (pathname === "/ui" || pathname.startsWith("/ui/"))
+      return true;
     return false;
   }
 
@@ -644,29 +650,31 @@ export class HttpServer {
    */
   private async gateAuth(
     request: Request,
-    url: URL,
+    url: URL
   ): Promise<import("../auth/middleware.ts").AuthContext | null | Response> {
     if (!this.config.requireAuth) {
       // Permissive mode — populate context if we can, but don't reject.
-      if (!this.authMiddleware) return null;
+      if (!this.authMiddleware)
+        return null;
       return await this.authMiddleware.authenticate(request);
     }
 
-    if (this.isPublicRoute(url.pathname)) return null;
+    if (this.isPublicRoute(url.pathname))
+      return null;
 
     if (!this.authMiddleware) {
       log.error(
         "requireAuth=true but no authMiddleware configured — rejecting request",
-        { path: url.pathname },
+        { path: url.pathname }
       );
       return new Response(
         JSON.stringify({
-          error: "Authentication required but auth provider not configured",
+          error: "Authentication required but auth provider not configured"
         }),
         {
           status: 503,
-          headers: this.get_default_headers("application/json"),
-        },
+          headers: this.get_default_headers("application/json")
+        }
       );
     }
 
@@ -678,7 +686,7 @@ export class HttpServer {
       headers.set("WWW-Authenticate", "Bearer realm=\"disc\"");
       return new Response(
         JSON.stringify({ error: "Authentication required" }),
-        { status: 401, headers },
+        { status: 401, headers }
       );
     }
     return ctx;
@@ -691,7 +699,7 @@ export class HttpServer {
       healthLive: "/health/live",
       healthReady: "/health/ready",
       stats: "/stats",
-      websocket: this.config.enableWebsockets ? "ws://upgrade" : null,
+      websocket: this.config.enableWebsockets ? "ws://upgrade" : null
     };
 
     if (this.config.enableMetrics) {
@@ -726,7 +734,7 @@ export class HttpServer {
         webauthn_login_begin: "/auth/webauthn/login/begin",
         webauthn_login_finish: "/auth/webauthn/login/finish",
         webauthn_credentials: "/auth/webauthn/credentials",
-        webauthn_credentials_delete: "/auth/webauthn/credentials/delete",
+        webauthn_credentials_delete: "/auth/webauthn/credentials/delete"
       };
     }
 
@@ -736,7 +744,7 @@ export class HttpServer {
         list: "GET /files",
         get: "GET /files/:id",
         meta: "GET /files/:id/meta",
-        delete: "DELETE /files/:id",
+        delete: "DELETE /files/:id"
       };
     }
 
@@ -744,7 +752,7 @@ export class HttpServer {
       endpoints.schema = {
         describe: "/schema",
         types: "/schema/types",
-        type: "/schema/types/:name",
+        type: "/schema/types/:name"
       };
     }
 
@@ -753,7 +761,7 @@ export class HttpServer {
     if (this.extensionRoutes.size > 0) {
       const extEndpoints: Record<string, string[]> = {};
       for (const [name, routes] of this.extensionRoutes) {
-        extEndpoints[name] = routes.map((r) => `${r.method} /ext/${name}${r.path}`);
+        extEndpoints[name] = routes.map(r => `${r.method} /ext/${name}${r.path}`);
       }
       endpoints.extensions = extEndpoints;
     }
@@ -762,18 +770,18 @@ export class HttpServer {
       name: "Disc Database",
       version: "0.1.0",
       protocol: "HTTP/JSON",
-      endpoints,
+      endpoints
     };
 
     return new Response(JSON.stringify(info, null, 2), {
-      headers: this.get_default_headers("application/json", request),
+      headers: this.get_default_headers("application/json", request)
     });
   }
 
   private async handle_query(
     request: Request,
     info: Deno.ServeHandlerInfo,
-    requestId: string,
+    requestId: string
   ): Promise<Response> {
     if (request.method !== "POST") {
       return this.create_error_response("Method Not Allowed", 405, request);
@@ -782,8 +790,8 @@ export class HttpServer {
     // P1-12: cap request body size BEFORE reading it into memory. Without
     // this a malicious client can stream multi-gigabyte payloads and OOM
     // the server.
-    const MAX_QUERY_BODY_BYTES = this.config.maxRequestBodyBytes
-      ?? 4 * 1024 * 1024; // 4 MiB default
+    const MAX_QUERY_BODY_BYTES = this.config.maxRequestBodyBytes ??
+      4 * 1024 * 1024; // 4 MiB default
     const contentLengthHeader = request.headers.get("content-length");
     if (contentLengthHeader !== null) {
       const declared = Number(contentLengthHeader);
@@ -791,7 +799,7 @@ export class HttpServer {
         return this.create_error_response(
           `Request body exceeds maximum of ${MAX_QUERY_BODY_BYTES} bytes`,
           413,
-          request,
+          request
         );
       }
     }
@@ -803,7 +811,7 @@ export class HttpServer {
         return this.create_error_response(
           `Request body exceeds maximum of ${MAX_QUERY_BODY_BYTES} bytes`,
           413,
-          request,
+          request
         );
       }
       let queryRequest: Types.QueryRequest;
@@ -816,17 +824,17 @@ export class HttpServer {
 
       // Validate request
       const validationErrors = this.protocolHandler.validateRequest(
-        queryRequest,
+        queryRequest
       );
       if (validationErrors.length > 0) {
         return new Response(
           JSON.stringify({
-            errors: validationErrors,
+            errors: validationErrors
           }),
           {
             status: 400,
-            headers: this.get_default_headers("application/json"),
-          },
+            headers: this.get_default_headers("application/json")
+          }
         );
       }
 
@@ -836,12 +844,12 @@ export class HttpServer {
 
       // Validate the database exists in the registry (if registry is available)
       if (
-        this.databaseRegistry
-        && !this.databaseRegistry.getDatabase(databaseName)
+        this.databaseRegistry &&
+        !this.databaseRegistry.getDatabase(databaseName)
       ) {
         return this.create_error_response(
           `Unknown database: "${databaseName}"`,
-          400,
+          400
         );
       }
 
@@ -851,7 +859,7 @@ export class HttpServer {
         "http",
         remoteAddr,
         undefined,
-        request.headers.get("user-agent") || undefined,
+        request.headers.get("user-agent") || undefined
       );
 
       // Set the resolved database name on the session
@@ -874,7 +882,7 @@ export class HttpServer {
             username: authResult.username,
             iss: authResult.iss,
             aud: authResult.aud,
-            roles: authResult.roles,
+            roles: authResult.roles
           };
         }
       }
@@ -884,10 +892,11 @@ export class HttpServer {
       // mirroring `apply_access_policies := false` in EdgeQL. Only
       // admins may exercise it; for any other role the flag is dropped
       // so a regular user setting the header can't escalate.
-      const bypassHeader = request.headers
+      const bypassHeader = request
+        .headers
         .get("X-Disc-Apply-Access-Policies");
-      const bypassRequested = bypassHeader !== null
-        && /^(false|0|no)$/i.test(bypassHeader.trim());
+      const bypassRequested = bypassHeader !== null &&
+        /^(false|0|no)$/i.test(bypassHeader.trim());
       const callerIsAdmin = authContext.roles.includes("admin");
       const bypassAccessPolicies = bypassRequested && callerIsAdmin;
 
@@ -897,15 +906,17 @@ export class HttpServer {
       // versus the all-or-nothing `bypassAccessPolicies` above. Same
       // admin-gate so a non-admin can't disable a policy that protects
       // them.
-      const disableHeader = request.headers
+      const disableHeader = request
+        .headers
         .get("X-Disc-Disable-Policies");
       let disabledPolicies: Set<string> | undefined;
       if (disableHeader && callerIsAdmin) {
         const names = disableHeader
           .split(",")
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0);
-        if (names.length > 0) disabledPolicies = new Set(names);
+          .map(s => s.trim())
+          .filter(s => s.length > 0);
+        if (names.length > 0)
+          disabledPolicies = new Set(names);
       }
 
       // Create query context
@@ -916,7 +927,7 @@ export class HttpServer {
         startedAt: new Date(),
         clientInfo: this.parse_client_info(request),
         bypassAccessPolicies,
-        disabledPolicies,
+        disabledPolicies
       };
 
       // Execute query with optional HTTP-level timeout safety net
@@ -931,31 +942,31 @@ export class HttpServer {
             timerId = setTimeout(() => {
               reject(new Error("__HTTP_TIMEOUT__"));
             }, timeoutMs);
-          },
+          }
         );
 
         try {
           response = await Promise.race([
             this.protocolHandler.handleRequest(queryRequest, context),
-            timeoutPromise,
+            timeoutPromise
           ]);
         } catch (error) {
           if (
-            error instanceof Error
-            && error.message === "__HTTP_TIMEOUT__"
+            error instanceof Error &&
+            error.message === "__HTTP_TIMEOUT__"
           ) {
             this.stats.failed_requests++;
             return new Response(
               JSON.stringify({
                 errors: [{
                   message: `Request timed out after ${timeoutMs}ms`,
-                  extensions: { code: "TIMEOUT" },
-                }],
+                  extensions: { code: "TIMEOUT" }
+                }]
               }),
               {
                 status: 408,
-                headers: this.get_default_headers("application/json"),
-              },
+                headers: this.get_default_headers("application/json")
+              }
             );
           }
           throw error;
@@ -967,7 +978,7 @@ export class HttpServer {
       } else {
         response = await this.protocolHandler.handleRequest(
           queryRequest,
-          context,
+          context
         );
       }
 
@@ -977,38 +988,38 @@ export class HttpServer {
       // Determine HTTP status based on response content
       // Errors with code "WARNING" are not real errors (e.g. dry-run mode)
       const hasRealErrors = response.errors?.some(
-        (e) => e.extensions?.code !== "WARNING",
+        e => e.extensions?.code !== "WARNING"
       );
 
       if (hasRealErrors && !response.data) {
         this.stats.failed_requests++;
         return new Response(JSON.stringify(response), {
           status: 400,
-          headers: this.get_default_headers("application/json"),
+          headers: this.get_default_headers("application/json")
         });
       }
 
       this.stats.successful_requests++;
 
       return new Response(JSON.stringify(response), {
-        headers: this.get_default_headers("application/json"),
+        headers: this.get_default_headers("application/json")
       });
     } catch (error) {
       log.error("Query execution failed", {
         requestId,
-        error: error instanceof Error ? error.message : String(error),
+        error: error instanceof Error ? error.message : String(error)
       });
 
       const errorResponse: Types.QueryResponse = {
         errors: [{
           message: "Internal server error",
-          extensions: { code: "INTERNAL_ERROR" },
-        }],
+          extensions: { code: "INTERNAL_ERROR" }
+        }]
       };
 
       return new Response(JSON.stringify(errorResponse), {
         status: 500,
-        headers: this.get_default_headers("application/json"),
+        headers: this.get_default_headers("application/json")
       });
     }
   }
@@ -1018,8 +1029,8 @@ export class HttpServer {
       JSON.stringify({ status: "alive" }),
       {
         status: 200,
-        headers: this.get_default_headers("application/json", request),
-      },
+        headers: this.get_default_headers("application/json", request)
+      }
     );
   }
 
@@ -1032,8 +1043,8 @@ export class HttpServer {
         JSON.stringify({ status: health.status }),
         {
           status: httpStatus,
-          headers: this.get_default_headers("application/json", request),
-        },
+          headers: this.get_default_headers("application/json", request)
+        }
       );
     }
 
@@ -1042,8 +1053,8 @@ export class HttpServer {
       JSON.stringify({ status: "healthy" }),
       {
         status: 200,
-        headers: this.get_default_headers("application/json", request),
-      },
+        headers: this.get_default_headers("application/json", request)
+      }
     );
   }
 
@@ -1066,7 +1077,7 @@ export class HttpServer {
       const body: Record<string, unknown> = {
         ...health,
         timestamp: new Date().toISOString(),
-        uptimeMs: Date.now() - this.startTime.getTime(),
+        uptimeMs: Date.now() - this.startTime.getTime()
       };
 
       if (extensionHealth !== undefined) {
@@ -1075,7 +1086,7 @@ export class HttpServer {
 
       return new Response(JSON.stringify(body, null, 2), {
         status: httpStatus,
-        headers: this.get_default_headers("application/json", request),
+        headers: this.get_default_headers("application/json", request)
       });
     }
 
@@ -1085,7 +1096,7 @@ export class HttpServer {
       timestamp: new Date().toISOString(),
       uptimeMs: Date.now() - this.startTime.getTime(),
       connections: this.connection_manager.get_stats(),
-      memory: this.get_memory_stats(),
+      memory: this.get_memory_stats()
     };
 
     if (extensionHealth !== undefined) {
@@ -1093,12 +1104,13 @@ export class HttpServer {
     }
 
     return new Response(JSON.stringify(body, null, 2), {
-      headers: this.get_default_headers("application/json", request),
+      headers: this.get_default_headers("application/json", request)
     });
   }
 
   private handle_stats(request?: Request): Response {
-    const subscriptionStats = this.subscription_handler
+    const subscriptionStats = this
+      .subscription_handler
       .get_subscription_stats();
 
     // Gather handler-level cache/metrics stats if available
@@ -1112,7 +1124,7 @@ export class HttpServer {
         total: this.stats.total_requests,
         successful: this.stats.successful_requests,
         failed: this.stats.failed_requests,
-        avgDurationMs: this.stats.total_requests > 0 ? this.stats.total_duration_ms / this.stats.total_requests : 0,
+        avgDurationMs: this.stats.total_requests > 0 ? this.stats.total_duration_ms / this.stats.total_requests : 0
       },
       transactions: this.transaction_manager.get_stats(),
       memoryUsage: this.get_memory_stats(),
@@ -1120,11 +1132,11 @@ export class HttpServer {
       subscriptions: subscriptionStats,
       cache: handlerStats?.cache,
       queryMetrics: handlerStats?.queryMetrics,
-      rateLimit: this.rate_limiter?.stats(),
+      rateLimit: this.rate_limiter?.stats()
     };
 
     return new Response(JSON.stringify(stats, null, 2), {
-      headers: this.get_default_headers("application/json", request),
+      headers: this.get_default_headers("application/json", request)
     });
   }
 
@@ -1141,7 +1153,7 @@ export class HttpServer {
         total_requests: this.stats.total_requests,
         successful_requests: this.stats.successful_requests,
         failed_requests: this.stats.failed_requests,
-        total_duration_ms: this.stats.total_duration_ms,
+        total_duration_ms: this.stats.total_duration_ms
       },
       cache: handlerStats?.cache,
       queryMetrics: handlerStats?.queryMetrics,
@@ -1149,18 +1161,18 @@ export class HttpServer {
       rateLimit: this.rate_limiter?.stats(),
       uptimeMs: Date.now() - this.startTime.getTime(),
       memory: this.get_memory_stats(),
-      tls: this.tls_not_after_unix !== undefined
-        ? {
+      tls: this.tls_not_after_unix !== undefined ?
+        {
           notAfterUnix: this.tls_not_after_unix,
-          secondsUntilExpiry: this.tls_not_after_unix
-            - Math.floor(Date.now() / 1000),
-        }
-        : undefined,
+          secondsUntilExpiry: this.tls_not_after_unix -
+            Math.floor(Date.now() / 1000)
+        } :
+        undefined
     };
 
     const body = renderMetrics(source);
     const headers = new Headers({
-      "Content-Type": "text/plain; version=0.0.4; charset=utf-8",
+      "Content-Type": "text/plain; version=0.0.4; charset=utf-8"
     });
     if (this.config.enableCors) {
       const origin = this.resolve_allowed_origin(request);
@@ -1186,16 +1198,16 @@ export class HttpServer {
     headers.set("Access-Control-Allow-Origin", allowedOrigin);
     headers.set(
       "Access-Control-Allow-Methods",
-      (this.config.corsAllowedMethods ?? DEFAULT_CORS_METHODS).join(", "),
+      (this.config.corsAllowedMethods ?? DEFAULT_CORS_METHODS).join(", ")
     );
     headers.set(
       "Access-Control-Allow-Headers",
-      (this.config.corsAllowedHeaders ?? DEFAULT_CORS_HEADERS).join(", "),
+      (this.config.corsAllowedHeaders ?? DEFAULT_CORS_HEADERS).join(", ")
     );
     if (this.config.corsExposeHeaders?.length) {
       headers.set(
         "Access-Control-Expose-Headers",
-        this.config.corsExposeHeaders.join(", "),
+        this.config.corsExposeHeaders.join(", ")
       );
     }
     if (this.config.corsAllowCredentials && allowedOrigin !== "*") {
@@ -1203,7 +1215,7 @@ export class HttpServer {
     }
     headers.set(
       "Access-Control-Max-Age",
-      String(this.config.corsMaxAge ?? DEFAULT_CORS_MAX_AGE),
+      String(this.config.corsMaxAge ?? DEFAULT_CORS_MAX_AGE)
     );
 
     return new Response(null, { status: 204, headers });
@@ -1211,7 +1223,7 @@ export class HttpServer {
 
   private handle_websocket_upgrade(
     request: Request,
-    info: Deno.ServeHandlerInfo,
+    info: Deno.ServeHandlerInfo
   ): Response {
     const { socket, response } = Deno.upgradeWebSocket(request);
 
@@ -1220,24 +1232,24 @@ export class HttpServer {
       "websocket",
       remoteAddr,
       undefined,
-      request.headers.get("user-agent") || undefined,
+      request.headers.get("user-agent") || undefined
     );
 
     socket.onopen = () => {
       log.info("WebSocket connection opened", { connectionId: connection.id });
     };
 
-    socket.onmessage = async (event) => {
+    socket.onmessage = async event => {
       try {
         const message = JSON.parse(event.data);
         await this.handle_websocket_message(socket, connection, message);
       } catch (error) {
         log.error("WebSocket message error", {
-          error: error instanceof Error ? error.message : String(error),
+          error: error instanceof Error ? error.message : String(error)
         });
         socket.send(JSON.stringify({
           type: "error",
-          payload: { message: "Invalid message format" },
+          payload: { message: "Invalid message format" }
         }));
       }
     };
@@ -1245,12 +1257,12 @@ export class HttpServer {
     socket.onclose = () => {
       log.info("WebSocket connection closed", { connectionId: connection.id });
       this.subscription_handler.cleanup_connection(
-        connection.session.sessionId,
+        connection.session.sessionId
       );
       this.connection_manager.closeConnection(connection.id);
     };
 
-    socket.onerror = (_error) => {
+    socket.onerror = _error => {
       log.error("WebSocket error", { connectionId: connection.id });
     };
 
@@ -1260,7 +1272,7 @@ export class HttpServer {
   private async handle_websocket_message(
     socket: WebSocket,
     connection: Types.Connection,
-    message: any,
+    message: any
   ): Promise<void> {
     const { type, payload } = message;
 
@@ -1271,26 +1283,26 @@ export class HttpServer {
           auth: {
             roles: [],
             permissions: [],
-            ...connection.session.variables?._auth_context,
+            ...connection.session.variables?._auth_context
           },
           requestId: this.generate_request_id(),
-          startedAt: new Date(),
+          startedAt: new Date()
         };
 
         try {
           const response = await this.protocolHandler.handleRequest(
             payload,
-            context,
+            context
           );
           socket.send(JSON.stringify({
             type: "query_result",
-            payload: response,
+            payload: response
           }));
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : "Unknown error";
           socket.send(JSON.stringify({
             type: "error",
-            payload: { message: errorMessage },
+            payload: { message: errorMessage }
           }));
         }
         break;
@@ -1301,20 +1313,20 @@ export class HttpServer {
           session: connection.session,
           auth: { roles: [], permissions: [] },
           requestId: this.generate_request_id(),
-          startedAt: new Date(),
+          startedAt: new Date()
         };
 
         try {
           await this.subscription_handler.handleSubscription(
             payload,
             context,
-            socket,
+            socket
           );
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : "Unknown subscription error";
           socket.send(JSON.stringify({
             type: "error",
-            payload: { message: errorMessage },
+            payload: { message: errorMessage }
           }));
         }
         break;
@@ -1326,12 +1338,12 @@ export class HttpServer {
           this.subscription_handler.stop_subscription(subscriptionId);
           socket.send(JSON.stringify({
             type: "subscription_stopped",
-            payload: { subscriptionId },
+            payload: { subscriptionId }
           }));
         } else {
           socket.send(JSON.stringify({
             type: "error",
-            payload: { message: "subscriptionId is required for unsubscribe" },
+            payload: { message: "subscriptionId is required for unsubscribe" }
           }));
         }
         break;
@@ -1340,7 +1352,7 @@ export class HttpServer {
       default:
         socket.send(JSON.stringify({
           type: "error",
-          payload: { message: `Unknown message type: ${type}` },
+          payload: { message: `Unknown message type: ${type}` }
         }));
     }
   }
@@ -1348,7 +1360,7 @@ export class HttpServer {
   private async handleExtensionRoute(
     request: Request,
     url: URL,
-    authContext?: import("../auth/middleware.ts").AuthContext | null,
+    authContext?: import("../auth/middleware.ts").AuthContext | null
   ): Promise<Response> {
     // Parse /ext/<name>/<path>
     const parts = url.pathname.slice(5).split("/"); // strip "/ext/"
@@ -1359,12 +1371,12 @@ export class HttpServer {
     if (!routes) {
       return this.create_error_response(
         `Extension "${extName}" not found`,
-        404,
+        404
       );
     }
 
     const route = routes.find(
-      (r) => r.path === extPath && r.method === request.method,
+      r => r.path === extPath && r.method === request.method
     );
     if (!route) {
       return this.create_error_response("Extension route not found", 404);
@@ -1378,7 +1390,7 @@ export class HttpServer {
       log.error("Extension route error", {
         extension: extName,
         path: extPath,
-        error: error instanceof Error ? error.message : String(error),
+        error: error instanceof Error ? error.message : String(error)
       });
       return this.create_error_response("Extension error", 500);
     }
@@ -1400,7 +1412,7 @@ export class HttpServer {
   private async handle_files_route(
     request: Request,
     url: URL,
-    context: import("../auth/middleware.ts").AuthContext | null,
+    context: import("../auth/middleware.ts").AuthContext | null
   ): Promise<Response> {
     if (!this.fileManager) {
       return this.create_error_response("File storage not configured", 404);
@@ -1413,8 +1425,8 @@ export class HttpServer {
         JSON.stringify({ error: "Authentication required" }),
         {
           status: 401,
-          headers: { "Content-Type": "application/json" },
-        },
+          headers: { "Content-Type": "application/json" }
+        }
       );
     }
 
@@ -1429,18 +1441,18 @@ export class HttpServer {
             ownerUserId: userId,
             name: request.headers.get("x-file-name") ?? undefined,
             contentType: request.headers.get("content-type") ?? undefined,
-            body,
+            body
           });
           return new Response(JSON.stringify(meta), {
             status: 201,
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json" }
           });
         }
         if (request.method === "GET") {
           const list = await this.fileManager.list(userId);
           return new Response(JSON.stringify({ files: list }), {
             status: 200,
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json" }
           });
         }
         return this.create_error_response("Method not allowed", 405);
@@ -1456,12 +1468,12 @@ export class HttpServer {
             headers: {
               "Content-Type": metadata.contentType,
               "Content-Length": String(metadata.size),
-              ...(metadata.name
-                ? {
-                  "Content-Disposition": `inline; filename="${metadata.name.replace(/"/g, "")}"`,
-                }
-                : {}),
-            },
+              ...(metadata.name ?
+                {
+                  "Content-Disposition": `inline; filename="${metadata.name.replace(/"/g, "")}"`
+                } :
+                {})
+            }
           });
         }
         if (request.method === "DELETE") {
@@ -1479,7 +1491,7 @@ export class HttpServer {
         const meta = await this.fileManager.readMetadata(segments[1], userId);
         return new Response(JSON.stringify(meta), {
           status: 200,
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json" }
         });
       }
 
@@ -1495,12 +1507,12 @@ export class HttpServer {
       if (name === "FileTooLargeError") {
         return this.create_error_response(
           err instanceof Error ? err.message : "File too large",
-          413,
+          413
         );
       }
       log.error("Files route error", {
         path: url.pathname,
-        error: err instanceof Error ? err.message : String(err),
+        error: err instanceof Error ? err.message : String(err)
       });
       return this.create_error_response("Internal error", 500);
     }
@@ -1521,7 +1533,7 @@ export class HttpServer {
   private async handleAdminSchemaRoute(
     request: Request,
     url: URL,
-    _authContext: import("../auth/middleware.ts").AuthContext | null,
+    _authContext: import("../auth/middleware.ts").AuthContext | null
   ): Promise<Response> {
     if (!this.adminSchemaWatch) {
       return this.create_error_response("Admin endpoints not configured", 404);
@@ -1533,7 +1545,7 @@ export class HttpServer {
       }
       return handleSchemaWatch({
         schemaFilePath: this.adminSchemaWatch.schemaFilePath,
-        appliedSdlProvider: this.adminSchemaWatch.appliedSdlProvider,
+        appliedSdlProvider: this.adminSchemaWatch.appliedSdlProvider
       });
     }
 
@@ -1547,7 +1559,7 @@ export class HttpServer {
         schemaFilePath: this.adminSchemaWatch.schemaFilePath,
         databaseUrl: this.config.databaseUrl,
         appliedSdl: this.adminSchemaWatch.appliedSdlProvider(),
-        onApplied: this.adminSchemaWatch.onApplied,
+        onApplied: this.adminSchemaWatch.onApplied
       });
     }
 
@@ -1565,12 +1577,12 @@ export class HttpServer {
   private async handleRestRoute(
     request: Request,
     requestId: string,
-    authContext: import("../auth/middleware.ts").AuthContext | null,
+    authContext: import("../auth/middleware.ts").AuthContext | null
   ): Promise<Response | null> {
     if (!this.schemaProvider) {
       return this.create_error_response(
         "REST surface not available — no schema provider configured",
-        503,
+        503
       );
     }
     const schema = this.schemaProvider();
@@ -1578,35 +1590,35 @@ export class HttpServer {
       roles: authContext?.roles ?? [],
       permissions: [],
       userId: authContext?.userId,
-      jwtClaims: authContext
-        ? {
+      jwtClaims: authContext ?
+        {
           sub: authContext.sub,
           email: authContext.email,
           username: authContext.username,
           iss: authContext.iss,
           aud: authContext.aud,
-          roles: authContext.roles,
-        }
-        : undefined,
+          roles: authContext.roles
+        } :
+        undefined
     };
     const session: Types.SessionContext = {
       sessionId: requestId,
       database: "disc",
       createdAt: new Date(),
       lastActivity: new Date(),
-      variables: {},
+      variables: {}
     };
     const context: Types.QueryContext = {
       session,
       auth: sessionAuth,
       requestId,
-      startedAt: new Date(),
+      startedAt: new Date()
     };
     return await dispatchRest({
       request,
       schema,
       protocolHandler: this.protocolHandler,
-      context,
+      context
     });
   }
 
@@ -1617,16 +1629,16 @@ export class HttpServer {
     if (!this.schemaProvider) {
       return this.create_error_response(
         "REST surface not available — no schema provider configured",
-        503,
+        503
       );
     }
     const schema = this.schemaProvider();
     const spec = renderOpenApiSpec(schema, {
-      requireAuth: this.config.requireAuth === true,
+      requireAuth: this.config.requireAuth === true
     });
     return new Response(JSON.stringify(spec, null, 2), {
       status: 200,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json" }
     });
   }
 
@@ -1634,13 +1646,13 @@ export class HttpServer {
     if (!this.schemaProvider) {
       return this.create_error_response(
         "Schema introspection not configured",
-        404,
+        404
       );
     }
 
     const routeCtx = {
       schemaProvider: this.schemaProvider,
-      defaultHeaders: () => this.get_default_headers("application/json"),
+      defaultHeaders: () => this.get_default_headers("application/json")
     };
 
     // Exact match: /schema
@@ -1656,7 +1668,7 @@ export class HttpServer {
     // Pattern match: /schema/types/:name
     if (url.pathname.startsWith("/schema/types/")) {
       const typeName = decodeURIComponent(
-        url.pathname.slice("/schema/types/".length),
+        url.pathname.slice("/schema/types/".length)
       );
       if (typeName) {
         return handleGetSchemaType(routeCtx, typeName);
@@ -1670,19 +1682,19 @@ export class HttpServer {
     if (!this.migrationsProvider) {
       return this.create_error_response(
         "Migration history not configured",
-        404,
+        404
       );
     }
 
     return await handleGetMigrations({
       migrationsProvider: this.migrationsProvider,
-      defaultHeaders: () => this.get_default_headers("application/json"),
+      defaultHeaders: () => this.get_default_headers("application/json")
     });
   }
 
   private async handle_auth_route(
     request: Request,
-    url: URL,
+    url: URL
   ): Promise<Response> {
     if (!this.authRoutes) {
       return this.create_error_response("Authentication not configured", 404);
@@ -1707,9 +1719,9 @@ export class HttpServer {
       if (!this.authMiddleware) {
         return new Response(
           JSON.stringify({
-            error: "Authentication required but auth provider not configured",
+            error: "Authentication required but auth provider not configured"
           }),
-          { status: 503, headers: this.get_default_headers("application/json") },
+          { status: 503, headers: this.get_default_headers("application/json") }
         );
       }
       const ctx = await this.authMiddleware.authenticate(request);
@@ -1718,7 +1730,7 @@ export class HttpServer {
         headers.set("WWW-Authenticate", "Bearer realm=\"disc\"");
         return new Response(
           JSON.stringify({ error: "Authentication required" }),
-          { status: 401, headers },
+          { status: 401, headers }
         );
       }
     }
@@ -1796,16 +1808,16 @@ export class HttpServer {
         headers.set("Access-Control-Allow-Origin", origin);
         headers.set(
           "Access-Control-Allow-Methods",
-          (this.config.corsAllowedMethods ?? DEFAULT_CORS_METHODS).join(", "),
+          (this.config.corsAllowedMethods ?? DEFAULT_CORS_METHODS).join(", ")
         );
         headers.set(
           "Access-Control-Allow-Headers",
-          (this.config.corsAllowedHeaders ?? DEFAULT_CORS_HEADERS).join(", "),
+          (this.config.corsAllowedHeaders ?? DEFAULT_CORS_HEADERS).join(", ")
         );
         if (this.config.corsExposeHeaders?.length) {
           headers.set(
             "Access-Control-Expose-Headers",
-            this.config.corsExposeHeaders.join(", "),
+            this.config.corsExposeHeaders.join(", ")
           );
         }
         // `Access-Control-Allow-Credentials: true` is forbidden with the
@@ -1852,11 +1864,11 @@ export class HttpServer {
   private create_error_response(
     message: string,
     status: number,
-    request?: Request,
+    request?: Request
   ): Response {
     return new Response(JSON.stringify({ error: message }), {
       status,
-      headers: this.get_default_headers("application/json", request),
+      headers: this.get_default_headers("application/json", request)
     });
   }
 
@@ -1879,24 +1891,25 @@ export class HttpServer {
   }
 
   private parse_client_info(
-    request: Request,
+    request: Request
   ): Types.QueryContext["clientInfo"] {
     const userAgent = request.headers.get("user-agent");
-    if (!userAgent) return undefined;
+    if (!userAgent)
+      return undefined;
 
     // Parse common client patterns
     if (userAgent.includes("disc-client")) {
       return {
         name: "disc-client",
         version: "unknown",
-        library: "disc-ts",
+        library: "disc-ts"
       };
     }
 
     return {
       name: "unknown",
       version: "unknown",
-      library: "http",
+      library: "http"
     };
   }
 
@@ -1905,7 +1918,7 @@ export class HttpServer {
     return {
       heapUsed: memoryUsage.heapUsed,
       heapTotal: memoryUsage.heapTotal,
-      external: memoryUsage.external,
+      external: memoryUsage.external
     };
   }
 

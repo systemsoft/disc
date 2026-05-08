@@ -32,11 +32,11 @@ export class SubscriptionHandler {
 
   constructor(options: SubscriptionOptions = {}) {
     this.options = {
-      maxSubscriptionsPerConnection: options.maxSubscriptionsPerConnection
-        || 10,
-      subscriptionTimeoutMs: options.subscriptionTimeoutMs
-        || 30 * 60 * 1000, // 30 minutes
-      heartbeatIntervalMs: options.heartbeatIntervalMs || 30 * 1000, // 30 seconds
+      maxSubscriptionsPerConnection: options.maxSubscriptionsPerConnection ||
+        10,
+      subscriptionTimeoutMs: options.subscriptionTimeoutMs ||
+        30 * 60 * 1000, // 30 minutes
+      heartbeatIntervalMs: options.heartbeatIntervalMs || 30 * 1000 // 30 seconds
     };
 
     this.start_heartbeat();
@@ -45,13 +45,13 @@ export class SubscriptionHandler {
   async handleSubscription(
     subscription: Types.SubscriptionRequest,
     context: Types.QueryContext,
-    websocket: WebSocket,
+    websocket: WebSocket
   ): Promise<void> {
     const connectionId = context.session.sessionId;
 
     // Check subscription limits
-    const existingSubs = this.connection_subscriptions.get(connectionId)
-      || new Set();
+    const existingSubs = this.connection_subscriptions.get(connectionId) ||
+      new Set();
     if (existingSubs.size >= this.options.maxSubscriptionsPerConnection) {
       this.send_error(websocket, subscription.id, "Too many subscriptions");
       return;
@@ -59,11 +59,11 @@ export class SubscriptionHandler {
 
     // Validate subscription query
     const validationErrors = this.validate_subscription_query(
-      subscription.query,
+      subscription.query
     );
     if (validationErrors.length > 0) {
       // Send all validation errors concatenated for better diagnostics
-      const combined = validationErrors.map((e) => e.message).join("; ");
+      const combined = validationErrors.map(e => e.message).join("; ");
       this.send_error(websocket, subscription.id, combined);
       return;
     }
@@ -79,7 +79,7 @@ export class SubscriptionHandler {
         context,
         createdAt: new Date(),
         lastPing: new Date(),
-        status: "active",
+        status: "active"
       };
 
       // Store subscription
@@ -97,7 +97,8 @@ export class SubscriptionHandler {
 
   stop_subscription(subscriptionId: string): void {
     const subscription = this.subscriptions.get(subscriptionId);
-    if (!subscription) return;
+    if (!subscription)
+      return;
 
     subscription.status = "stopped";
     this.subscriptions.delete(subscriptionId);
@@ -113,7 +114,7 @@ export class SubscriptionHandler {
     }
 
     const connectionSubs = this.connection_subscriptions.get(
-      subscription.connectionId,
+      subscription.connectionId
     );
     if (connectionSubs) {
       connectionSubs.delete(subscriptionId);
@@ -124,7 +125,8 @@ export class SubscriptionHandler {
 
   cleanup_connection(connectionId: string): void {
     const subscriptionIds = this.connection_subscriptions.get(connectionId);
-    if (!subscriptionIds) return;
+    if (!subscriptionIds)
+      return;
 
     for (const subscriptionId of subscriptionIds) {
       this.stop_subscription(subscriptionId);
@@ -160,7 +162,7 @@ export class SubscriptionHandler {
   }
 
   private start_subscription(
-    subscription: ActiveSubscription,
+    subscription: ActiveSubscription
   ): void {
     // Send initial data
     const initialData = this.generate_mock_initial_data(subscription.query);
@@ -178,7 +180,8 @@ export class SubscriptionHandler {
     };
 
     const sendUpdate = () => {
-      if (subscription.status !== "active") return;
+      if (subscription.status !== "active")
+        return;
 
       const mockData = this.generate_mock_update(subscription.query);
       this.send_data(subscription.websocket, subscription.id, mockData);
@@ -209,7 +212,7 @@ export class SubscriptionHandler {
       ) {
         errors.push({
           message: `Subscription queries cannot contain '${keyword}'`,
-          extensions: { code: "INVALID_SUBSCRIPTION" },
+          extensions: { code: "INVALID_SUBSCRIPTION" }
         });
       }
     }
@@ -218,7 +221,7 @@ export class SubscriptionHandler {
     if (errors.length === 0 && !normalized.startsWith("select")) {
       errors.push({
         message: "Subscriptions only support SELECT queries",
-        extensions: { code: "INVALID_SUBSCRIPTION" },
+        extensions: { code: "INVALID_SUBSCRIPTION" }
       });
     }
 
@@ -234,15 +237,15 @@ export class SubscriptionHandler {
           name: "Ada Johnson",
           email: "ada@example.com",
           status: "online",
-          last_seen: new Date().toISOString(),
+          last_seen: new Date().toISOString()
         },
         {
           id: "user_002",
           name: "Billie Smith",
           email: "billie@example.com",
           status: "offline",
-          last_seen: new Date(Date.now() - 300000).toISOString(),
-        },
+          last_seen: new Date(Date.now() - 300000).toISOString()
+        }
       ];
     } else if (query.includes("Post")) {
       return [
@@ -251,15 +254,15 @@ export class SubscriptionHandler {
           title: "Welcome to Disc Database",
           content: "This is the first post in our new database!",
           author: "Ada Johnson",
-          createdAt: new Date().toISOString(),
-        },
+          createdAt: new Date().toISOString()
+        }
       ];
     }
 
     return {
       message: "Subscription active",
       query,
-      timestamp: new Date().toISOString(),
+      timestamp: new Date().toISOString()
     };
   }
 
@@ -272,8 +275,8 @@ export class SubscriptionHandler {
           type: "user_updated",
           userId: "user_001",
           field: "status",
-          value: "busy",
-        },
+          value: "busy"
+        }
       ];
       return updates[Math.floor(Math.random() * updates.length)];
     } else if (query.includes("Post")) {
@@ -282,26 +285,26 @@ export class SubscriptionHandler {
         id: `post_${Date.now()}`,
         title: `New Post ${new Date().toLocaleTimeString()}`,
         author: "System",
-        createdAt: new Date().toISOString(),
+        createdAt: new Date().toISOString()
       };
     }
 
     return {
       type: "heartbeat",
       timestamp: new Date().toISOString(),
-      subscriptionId: Math.random().toString(36).substring(7),
+      subscriptionId: Math.random().toString(36).substring(7)
     };
   }
 
   private send_data(
     websocket: WebSocket,
     subscriptionId: string,
-    data: any,
+    data: any
   ): void {
     const message: Types.SubscriptionMessage = {
       id: subscriptionId,
       type: "data",
-      payload: data,
+      payload: data
     };
 
     this.send_message(websocket, message);
@@ -310,12 +313,12 @@ export class SubscriptionHandler {
   private send_error(
     websocket: WebSocket,
     subscriptionId: string,
-    errorMessage: string,
+    errorMessage: string
   ): void {
     const message: Types.SubscriptionMessage = {
       id: subscriptionId,
       type: "error",
-      payload: { message: errorMessage },
+      payload: { message: errorMessage }
     };
 
     this.send_message(websocket, message);
@@ -324,7 +327,7 @@ export class SubscriptionHandler {
   private send_complete(websocket: WebSocket, subscriptionId: string): void {
     const message: Types.SubscriptionMessage = {
       id: subscriptionId,
-      type: "complete",
+      type: "complete"
     };
 
     this.send_message(websocket, message);
@@ -332,13 +335,13 @@ export class SubscriptionHandler {
 
   private send_message(
     websocket: WebSocket,
-    message: Types.SubscriptionMessage,
+    message: Types.SubscriptionMessage
   ): void {
     // Use numeric constant for readyState check (works with both real WebSocket and mocks)
     if (websocket.readyState === WS_OPEN) {
       websocket.send(JSON.stringify({
         type: "subscription",
-        payload: message,
+        payload: message
       }));
     }
   }
@@ -353,7 +356,7 @@ export class SubscriptionHandler {
 
         if (inactiveTime > this.options.subscriptionTimeoutMs) {
           log.debug("Cleaning up inactive subscription", {
-            subscriptionId: id,
+            subscriptionId: id
           });
           this.stop_subscription(id);
           continue;
@@ -365,7 +368,7 @@ export class SubscriptionHandler {
           this.send_message(subscription.websocket, {
             id: subscription.id,
             type: "data",
-            payload: { type: "heartbeat", timestamp: now.toISOString() },
+            payload: { type: "heartbeat", timestamp: now.toISOString() }
           });
         } else {
           // WebSocket is closed, clean up subscription
@@ -382,18 +385,19 @@ export class SubscriptionHandler {
       { connectionId: string; count: number; }
     >;
   } {
-    const connectionsWithSubs = Array.from(
-      this.connection_subscriptions.entries(),
-    )
+    const connectionsWithSubs = Array
+      .from(
+        this.connection_subscriptions.entries()
+      )
       .map(([connectionId, subs]) => ({
         connectionId,
-        count: subs.size,
+        count: subs.size
       }));
 
     return {
       active_subscriptions: this.subscriptions.size,
       total_connections_with_subscriptions: this.connection_subscriptions.size,
-      subscriptions_by_connection: connectionsWithSubs,
+      subscriptions_by_connection: connectionsWithSubs
     };
   }
 }

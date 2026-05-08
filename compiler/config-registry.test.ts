@@ -23,7 +23,8 @@ function compileEdgeQL(source: string): string {
   const parser = new EdgeQLParser(source);
   const ast = parser.parse();
   const result = compiler.compile(ast);
-  if (!result.ok) throw result.error;
+  if (!result.ok)
+    throw result.error;
   return codegen.generate(result.value);
 }
 
@@ -50,7 +51,7 @@ Deno.test("config-registry - lookupConfigKey returns undefined for unknown key",
 });
 
 Deno.test("config-registry - getConfigRegistry covers prior CONFIGURE_KEY_MAP entries", () => {
-  const names = new Set(getConfigRegistry().map((d) => d.name));
+  const names = new Set(getConfigRegistry().map(d => d.name));
   // Every key from the prior flat map must still be present —
   // existing CONFIGURE statements would otherwise stop compiling.
   const priorKeys = [
@@ -63,7 +64,7 @@ Deno.test("config-registry - getConfigRegistry covers prior CONFIGURE_KEY_MAP en
     "max_connections",
     "log_min_duration_statement",
     "idle_in_transaction_session_timeout",
-    "lock_timeout",
+    "lock_timeout"
   ];
   for (const k of priorKeys) {
     assertEquals(names.has(k), true, `missing prior key: ${k}`);
@@ -75,7 +76,7 @@ Deno.test("config-registry - all current keys are non-secret (Postgres tuning kn
     assertEquals(
       def.secret,
       false,
-      `key ${def.name} unexpectedly marked secret`,
+      `key ${def.name} unexpectedly marked secret`
     );
   }
 });
@@ -104,13 +105,14 @@ Deno.test("config-registry - maskIfSecret returns null for explicitly secret key
     pgName: synthetic,
     edgeqlType: "str",
     defaultScope: "system",
-    secret: true,
+    secret: true
   });
   try {
     assertEquals(maskIfSecret(synthetic, "swordfish"), null);
   } finally {
-    const idx = CONFIG_REGISTRY.findIndex((d) => d.name === synthetic);
-    if (idx >= 0) CONFIG_REGISTRY.splice(idx, 1);
+    const idx = CONFIG_REGISTRY.findIndex(d => d.name === synthetic);
+    if (idx >= 0)
+      CONFIG_REGISTRY.splice(idx, 1);
   }
 });
 
@@ -125,7 +127,7 @@ Deno.test("config-registry - CONFIGURE SESSION SET work_mem still compiles via r
 
 Deno.test("config-registry - CONFIGURE renames query_execution_timeout to statement_timeout", () => {
   const sql = compileEdgeQL(
-    "CONFIGURE SESSION SET query_execution_timeout := 30000",
+    "CONFIGURE SESSION SET query_execution_timeout := 30000"
   );
   assertEquals(sql.includes("statement_timeout"), true);
 });

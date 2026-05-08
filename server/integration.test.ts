@@ -17,7 +17,7 @@ const SAMPLE_QUERIES = {
   validUpdate: "update User filter .id = <uuid>$id set { name := 'Ada Updated' }",
   validDelete: "delete User filter .id = <uuid>$id",
   invalidSyntax: "select User { name email }", // Missing comma
-  emptyQuery: "",
+  emptyQuery: ""
 };
 
 // Helper function to make HTTP requests
@@ -27,19 +27,19 @@ async function makeRequest(
     method?: string;
     headers?: Record<string, string>;
     body?: string;
-  } = {},
+  } = {}
 ): Promise<Response> {
   const { method = "GET", headers = {}, body } = options;
 
   const requestHeaders = new Headers({
     "Content-Type": "application/json",
-    ...headers,
+    ...headers
   });
 
   return await fetch(`${BASE_URL}${path}`, {
     method,
     headers: requestHeaders,
-    body,
+    body
   });
 }
 
@@ -47,7 +47,7 @@ async function makeRequest(
 async function queryEdgeQL(
   query: string,
   variables: Record<string, any> = {},
-  headers: Record<string, string> = {},
+  headers: Record<string, string> = {}
 ): Promise<{
   ok: boolean;
   status: number;
@@ -58,14 +58,14 @@ async function queryEdgeQL(
   const response = await makeRequest("/query", {
     method: "POST",
     headers,
-    body: JSON.stringify({ query, variables }),
+    body: JSON.stringify({ query, variables })
   });
 
   const result = await response.json();
   return {
     ok: response.ok,
     status: response.status,
-    ...result,
+    ...result
   };
 }
 
@@ -81,13 +81,13 @@ class ServerTestHarness {
       enableCors: true,
       enableWebsockets: true,
       dryRun: true,
-      enableExplain: true,
+      enableExplain: true
     });
 
     this.server_promise = this.server.start();
 
     // Wait for server to be ready
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await new Promise(resolve => setTimeout(resolve, 200));
   }
 
   async stop(): Promise<void> {
@@ -102,7 +102,7 @@ class ServerTestHarness {
       }
     }
     // Extra delay to ensure port is freed
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise(resolve => setTimeout(resolve, 50));
   }
 }
 
@@ -126,7 +126,7 @@ Deno.test({
     } finally {
       await harness.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -149,7 +149,7 @@ Deno.test({
     } finally {
       await harness.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -173,7 +173,7 @@ Deno.test({
     } finally {
       await harness.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -189,10 +189,10 @@ Deno.test({
       const preflight = await fetch(`${BASE_URL}/query`, {
         method: "OPTIONS",
         headers: {
-          "Origin": "http://localhost:3000",
+          Origin: "http://localhost:3000",
           "Access-Control-Request-Method": "POST",
-          "Access-Control-Request-Headers": "Content-Type",
-        },
+          "Access-Control-Request-Headers": "Content-Type"
+        }
       });
 
       assertEquals(preflight.ok, true);
@@ -200,16 +200,16 @@ Deno.test({
       assertEquals(preflight.headers.get("Access-Control-Allow-Origin"), "*");
       assertEquals(
         preflight.headers.get("Access-Control-Allow-Methods"),
-        "GET, POST, OPTIONS",
+        "GET, POST, OPTIONS"
       );
       assertEquals(
         preflight.headers.get("Access-Control-Allow-Headers"),
-        "Content-Type, Authorization",
+        "Content-Type, Authorization"
       );
     } finally {
       await harness.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -239,7 +239,7 @@ Deno.test({
     } finally {
       await harness.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -259,7 +259,7 @@ Deno.test({
     } finally {
       await harness.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -272,7 +272,7 @@ Deno.test({
 
     try {
       const variables = {
-        id: "01234567-89ab-cdef-0123-456789abcdef",
+        id: "01234567-89ab-cdef-0123-456789abcdef"
       };
 
       const result = await queryEdgeQL(SAMPLE_QUERIES.validUpdate, variables);
@@ -283,7 +283,7 @@ Deno.test({
     } finally {
       await harness.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -304,7 +304,7 @@ Deno.test({
     } finally {
       await harness.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -326,7 +326,7 @@ Deno.test({
     } finally {
       await harness.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -349,7 +349,7 @@ Deno.test({
     } finally {
       await harness.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -363,7 +363,7 @@ Deno.test({
     try {
       const response = await makeRequest("/query", {
         method: "POST",
-        body: "{ invalid json }",
+        body: "{ invalid json }"
       });
 
       assertEquals(response.ok, false);
@@ -374,7 +374,7 @@ Deno.test({
     } finally {
       await harness.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -387,7 +387,7 @@ Deno.test({
 
     try {
       const response = await makeRequest("/query", {
-        method: "GET",
+        method: "GET"
       });
 
       assertEquals(response.ok, false);
@@ -398,7 +398,7 @@ Deno.test({
     } finally {
       await harness.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -419,7 +419,7 @@ Deno.test({
     } finally {
       await harness.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -440,7 +440,7 @@ Deno.test({
     } finally {
       await harness.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -467,7 +467,7 @@ Deno.test({
     } finally {
       await harness.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -480,7 +480,7 @@ Deno.test({
 
     try {
       const result = await queryEdgeQL(SAMPLE_QUERIES.validSelect, {}, {
-        "User-Agent": "disc-client/1.0.0",
+        "User-Agent": "disc-client/1.0.0"
       });
 
       assertEquals(result.ok, true);
@@ -488,7 +488,7 @@ Deno.test({
     } finally {
       await harness.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -513,7 +513,7 @@ Deno.test({
     } finally {
       await harness.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -538,5 +538,5 @@ Deno.test({
     } finally {
       await harness.stop();
     }
-  },
+  }
 });

@@ -32,13 +32,15 @@ export class SchemaDiffer {
   >();
 
   private getCache(
-    allTypes: Map<string, AST.TypeDeclaration>,
+    allTypes: Map<string, AST.TypeDeclaration>
   ): DiffCache {
     let cache = this.caches.get(allTypes);
-    if (cache) return cache;
+    if (cache)
+      return cache;
     const subtypes = new Map<string, string[]>();
     for (const [childName, child] of allTypes) {
-      if (!child.extending) continue;
+      if (!child.extending)
+        continue;
       for (const ext of child.extending) {
         const parentName = ext.name.parts.join("::");
         let bucket = subtypes.get(parentName);
@@ -52,7 +54,7 @@ export class SchemaDiffer {
     cache = {
       subtypes,
       props: new Map(),
-      links: new Map(),
+      links: new Map()
     };
     this.caches.set(allTypes, cache);
     return cache;
@@ -87,13 +89,13 @@ export class SchemaDiffer {
           oldTypeDef,
           newTypeDef,
           oldTypes,
-          newTypes,
+          newTypes
         );
         if (alterOps.length > 0) {
           operations.push({
             kind: "AlterType",
             typeName: typeName,
-            operations: alterOps,
+            operations: alterOps
           } as Types.AlterTypeOperation);
         }
       }
@@ -113,7 +115,7 @@ export class SchemaDiffer {
           scalarName: scalarDef.decl.name.value,
           module: scalarDef.module,
           baseType: this.scalarBaseType(scalarDef.decl),
-          enumValues: this.scalarEnumValues(scalarDef.decl),
+          enumValues: this.scalarEnumValues(scalarDef.decl)
         };
         operations.push(op);
       }
@@ -125,7 +127,7 @@ export class SchemaDiffer {
         const op: Types.DropScalarOperation = {
           kind: "DropScalar",
           scalarName: scalarDef.decl.name.value,
-          module: scalarDef.module,
+          module: scalarDef.module
         };
         operations.push(op);
       }
@@ -136,7 +138,8 @@ export class SchemaDiffer {
     // surface as a no-op with a comment in DDL emission.
     for (const [scalarName, newScalarDef] of newScalars) {
       const oldScalarDef = oldScalars.get(scalarName);
-      if (!oldScalarDef) continue;
+      if (!oldScalarDef)
+        continue;
 
       const oldValues = this.scalarEnumValues(oldScalarDef.decl) ?? [];
       const newValues = this.scalarEnumValues(newScalarDef.decl) ?? [];
@@ -144,15 +147,16 @@ export class SchemaDiffer {
       // Only compare enum value lists when both sides are enum-like.
       const oldIsEnum = this.isEnumScalar(oldScalarDef.decl);
       const newIsEnum = this.isEnumScalar(newScalarDef.decl);
-      if (!oldIsEnum || !newIsEnum) continue;
+      if (!oldIsEnum || !newIsEnum)
+        continue;
 
       operations.push(
         ...this.diffEnumValues(
           newScalarDef.decl.name.value,
           newScalarDef.module,
           oldValues,
-          newValues,
-        ),
+          newValues
+        )
       );
     }
 
@@ -166,8 +170,8 @@ export class SchemaDiffer {
         operations.push(
           Types.createAliasOperation(
             aliasName,
-            this.extractExpressionString(aliasDef.using),
-          ),
+            this.extractExpressionString(aliasDef.using)
+          )
         );
       }
     }
@@ -213,9 +217,9 @@ export class SchemaDiffer {
               required: globalDef.decl.required,
               multi: globalDef.decl.multi,
               default: globalDef.decl.default ? this.extractExpressionString(globalDef.decl.default) : undefined,
-              readonly: globalDef.decl.readonly,
-            },
-          ),
+              readonly: globalDef.decl.readonly
+            }
+          )
         );
       }
     }
@@ -226,8 +230,8 @@ export class SchemaDiffer {
         operations.push(
           Types.dropGlobalOperation(
             globalDef.decl.name.value,
-            globalDef.module,
-          ),
+            globalDef.module
+          )
         );
       }
     }
@@ -248,17 +252,17 @@ export class SchemaDiffer {
         const newReadonly = newGlobalDef.decl.readonly ?? false;
 
         if (
-          oldType !== newType
-          || oldRequired !== newRequired
-          || oldMulti !== newMulti
-          || oldDefault !== newDefault
-          || oldReadonly !== newReadonly
+          oldType !== newType ||
+          oldRequired !== newRequired ||
+          oldMulti !== newMulti ||
+          oldDefault !== newDefault ||
+          oldReadonly !== newReadonly
         ) {
           operations.push(
             Types.dropGlobalOperation(
               oldGlobalDef.decl.name.value,
-              oldGlobalDef.module,
-            ),
+              oldGlobalDef.module
+            )
           );
           const pgType = this.edgeqlTypeToPgType(newType);
           operations.push(
@@ -271,9 +275,9 @@ export class SchemaDiffer {
                 required: newGlobalDef.decl.required,
                 multi: newGlobalDef.decl.multi,
                 default: newDefault,
-                readonly: newGlobalDef.decl.readonly,
-              },
-            ),
+                readonly: newGlobalDef.decl.readonly
+              }
+            )
           );
         }
       }
@@ -301,7 +305,7 @@ export class SchemaDiffer {
    * doing it before columns reference the new value is always safe.
    */
   private reorderForCascade(
-    operations: Types.MigrationOperation[],
+    operations: Types.MigrationOperation[]
   ): Types.MigrationOperation[] {
     const creates: Types.MigrationOperation[] = [];
     const middle: Types.MigrationOperation[] = [];
@@ -364,7 +368,7 @@ export class SchemaDiffer {
   }
 
   private extractAliases(
-    modules: Module[],
+    modules: Module[]
   ): Map<string, AST.AliasDeclaration> {
     const aliases = new Map<string, AST.AliasDeclaration>();
 
@@ -380,7 +384,7 @@ export class SchemaDiffer {
   }
 
   private extractGlobals(
-    modules: Module[],
+    modules: Module[]
   ): Map<string, { decl: AST.GlobalDeclaration; module: string; }> {
     const globals = new Map<
       string,
@@ -405,27 +409,27 @@ export class SchemaDiffer {
    */
   private edgeqlTypeToPgType(edgeqlType: string): string {
     const typeMap: Record<string, string> = {
-      "str": "text",
-      "int16": "smallint",
-      "int32": "integer",
-      "int64": "bigint",
-      "float32": "real",
-      "float64": "double precision",
-      "bool": "boolean",
-      "uuid": "uuid",
-      "datetime": "timestamptz",
-      "duration": "interval",
-      "bytes": "bytea",
-      "json": "jsonb",
-      "decimal": "numeric",
-      "bigint": "numeric",
+      str: "text",
+      int16: "smallint",
+      int32: "integer",
+      int64: "bigint",
+      float32: "real",
+      float64: "double precision",
+      bool: "boolean",
+      uuid: "uuid",
+      datetime: "timestamptz",
+      duration: "interval",
+      bytes: "bytea",
+      json: "jsonb",
+      decimal: "numeric",
+      bigint: "numeric"
     };
     return typeMap[edgeqlType] || "text";
   }
 
   createTypeOperation(
     typeDef: AST.TypeDeclaration,
-    allTypes?: Map<string, AST.TypeDeclaration>,
+    allTypes?: Map<string, AST.TypeDeclaration>
   ): Types.CreateTypeOperation {
     const properties = this.extractPropertiesWithInheritance(typeDef, allTypes);
     const links = this.extractLinksWithInheritance(typeDef, allTypes);
@@ -435,7 +439,7 @@ export class SchemaDiffer {
       kind: "CreateType",
       typeName: typeDef.name.value,
       properties,
-      links,
+      links
     };
 
     // Populate hierarchy fields for DDL discriminator column generation
@@ -444,7 +448,7 @@ export class SchemaDiffer {
     }
 
     if (typeDef.extending && typeDef.extending.length > 0) {
-      op.parentTypes = typeDef.extending.map((ext) => ext.name.parts.join("::"));
+      op.parentTypes = typeDef.extending.map(ext => ext.name.parts.join("::"));
     }
 
     // Compute direct subtypes via the cached reverse parent→child map.
@@ -468,12 +472,13 @@ export class SchemaDiffer {
    */
   private extractPropertiesWithInheritance(
     typeDef: AST.TypeDeclaration,
-    allTypes?: Map<string, AST.TypeDeclaration>,
+    allTypes?: Map<string, AST.TypeDeclaration>
   ): Types.PropertyDefinition[] {
     if (allTypes) {
       const cache = this.getCache(allTypes);
       const cached = cache.props.get(typeDef);
-      if (cached) return [...cached];
+      if (cached)
+        return [...cached];
       const resolved = this.computePropertiesWithInheritance(typeDef, allTypes);
       cache.props.set(typeDef, resolved);
       return [...resolved];
@@ -483,10 +488,10 @@ export class SchemaDiffer {
 
   private computePropertiesWithInheritance(
     typeDef: AST.TypeDeclaration,
-    allTypes?: Map<string, AST.TypeDeclaration>,
+    allTypes?: Map<string, AST.TypeDeclaration>
   ): Types.PropertyDefinition[] {
     const properties = this.extractProperties(typeDef);
-    const seenNames = new Set(properties.map((p) => p.name));
+    const seenNames = new Set(properties.map(p => p.name));
 
     if (allTypes && typeDef.extending) {
       for (const baseRef of typeDef.extending) {
@@ -495,7 +500,7 @@ export class SchemaDiffer {
         if (baseType) {
           const inheritedProps = this.extractPropertiesWithInheritance(
             baseType,
-            allTypes,
+            allTypes
           );
           for (const prop of inheritedProps) {
             if (!seenNames.has(prop.name)) {
@@ -515,12 +520,13 @@ export class SchemaDiffer {
    */
   private extractLinksWithInheritance(
     typeDef: AST.TypeDeclaration,
-    allTypes?: Map<string, AST.TypeDeclaration>,
+    allTypes?: Map<string, AST.TypeDeclaration>
   ): Types.LinkDefinition[] {
     if (allTypes) {
       const cache = this.getCache(allTypes);
       const cached = cache.links.get(typeDef);
-      if (cached) return [...cached];
+      if (cached)
+        return [...cached];
       const resolved = this.computeLinksWithInheritance(typeDef, allTypes);
       cache.links.set(typeDef, resolved);
       return [...resolved];
@@ -530,10 +536,10 @@ export class SchemaDiffer {
 
   private computeLinksWithInheritance(
     typeDef: AST.TypeDeclaration,
-    allTypes?: Map<string, AST.TypeDeclaration>,
+    allTypes?: Map<string, AST.TypeDeclaration>
   ): Types.LinkDefinition[] {
     const links = this.extractLinks(typeDef);
-    const seenNames = new Set(links.map((l) => l.name));
+    const seenNames = new Set(links.map(l => l.name));
 
     if (allTypes && typeDef.extending) {
       for (const baseRef of typeDef.extending) {
@@ -542,7 +548,7 @@ export class SchemaDiffer {
         if (baseType) {
           const inheritedLinks = this.extractLinksWithInheritance(
             baseType,
-            allTypes,
+            allTypes
           );
           for (const link of inheritedLinks) {
             if (!seenNames.has(link.name)) {
@@ -558,7 +564,7 @@ export class SchemaDiffer {
   }
 
   private extractProperties(
-    typeDef: AST.TypeDeclaration,
+    typeDef: AST.TypeDeclaration
   ): Types.PropertyDefinition[] {
     const properties: Types.PropertyDefinition[] = [];
 
@@ -573,7 +579,7 @@ export class SchemaDiffer {
           default: member.default ? this.extractDefaultValue(member.default) : undefined,
           computed: member.computed ? this.extractExpressionString(member.computed) : undefined,
           constraints: this.extractConstraints(member.constraints || []),
-          annotations: this.extractAnnotations(member.annotations || []),
+          annotations: this.extractAnnotations(member.annotations || [])
         };
         if (rewrites.length > 0) {
           propDef.rewrites = rewrites;
@@ -598,12 +604,12 @@ export class SchemaDiffer {
           cardinality: member.multi ? "many" : "one",
           onTargetDelete: this.mapOnTargetDelete(member.onTargetDelete),
           onSourceDelete: this.mapOnSourceDelete(member.onSourceDelete),
-          annotations: this.extractAnnotations(member.annotations || []),
+          annotations: this.extractAnnotations(member.annotations || [])
         };
 
         // Extract extending references
         if (member.extending && member.extending.length > 0) {
-          linkDef.extending = member.extending.map((ext) => ext.name.parts.join("::"));
+          linkDef.extending = member.extending.map(ext => ext.name.parts.join("::"));
         }
 
         links.push(linkDef);
@@ -619,9 +625,10 @@ export class SchemaDiffer {
       | "cascade"
       | "allow"
       | "deferred restrict"
-      | "set empty",
+      | "set empty"
   ): Types.LinkDefinition["onTargetDelete"] {
-    if (!value) return undefined;
+    if (!value)
+      return undefined;
     switch (value) {
       case "restrict":
       case "deferred restrict":
@@ -638,9 +645,10 @@ export class SchemaDiffer {
   }
 
   private mapOnSourceDelete(
-    value?: "allow" | "delete target",
+    value?: "allow" | "delete target"
   ): Types.LinkDefinition["onSourceDelete"] {
-    if (!value) return undefined;
+    if (!value)
+      return undefined;
     switch (value) {
       case "allow":
         return "ALLOW";
@@ -655,7 +663,7 @@ export class SchemaDiffer {
     oldType: AST.TypeDeclaration,
     newType: AST.TypeDeclaration,
     oldAllTypes?: Map<string, AST.TypeDeclaration>,
-    newAllTypes?: Map<string, AST.TypeDeclaration>,
+    newAllTypes?: Map<string, AST.TypeDeclaration>
   ): Types.TypeOperation[] {
     const operations: Types.TypeOperation[] = [];
     const typeName = oldType.name.value;
@@ -674,8 +682,8 @@ export class SchemaDiffer {
     // declared on the parent.
     const oldOwnProps = this.extractProperties(oldType);
     const newOwnProps = this.extractProperties(newType);
-    const oldPropsMap = new Map(oldOwnProps.map((p) => [p.name, p]));
-    const newPropsMap = new Map(newOwnProps.map((p) => [p.name, p]));
+    const oldPropsMap = new Map(oldOwnProps.map(p => [p.name, p]));
+    const newPropsMap = new Map(newOwnProps.map(p => [p.name, p]));
 
     for (const [propName, newProp] of newPropsMap) {
       const oldProp = oldPropsMap.get(propName);
@@ -685,8 +693,8 @@ export class SchemaDiffer {
             typeName,
             propName,
             oldProp.rewrites || [],
-            newProp.rewrites || [],
-          ),
+            newProp.rewrites || []
+          )
         );
       }
     }
@@ -706,7 +714,7 @@ export class SchemaDiffer {
     const newTriggers = this.extractTriggers(newType);
 
     operations.push(
-      ...this.diffTriggers(typeName, oldTriggers, newTriggers),
+      ...this.diffTriggers(typeName, oldTriggers, newTriggers)
     );
 
     return operations;
@@ -714,12 +722,12 @@ export class SchemaDiffer {
 
   private diffProperties(
     oldProps: Types.PropertyDefinition[],
-    newProps: Types.PropertyDefinition[],
+    newProps: Types.PropertyDefinition[]
   ): Types.TypeOperation[] {
     const operations: Types.TypeOperation[] = [];
 
-    const oldPropsMap = new Map(oldProps.map((p) => [p.name, p]));
-    const newPropsMap = new Map(newProps.map((p) => [p.name, p]));
+    const oldPropsMap = new Map(oldProps.map(p => [p.name, p]));
+    const newPropsMap = new Map(newProps.map(p => [p.name, p]));
 
     // Added properties
     for (const [propName, propDef] of newPropsMap) {
@@ -744,7 +752,7 @@ export class SchemaDiffer {
           operations.push({
             kind: "AlterProperty",
             propertyName: propName,
-            changes,
+            changes
           } as Types.AlterPropertyOperation);
         }
       }
@@ -755,7 +763,7 @@ export class SchemaDiffer {
 
   private diffProperty(
     oldProp: Types.PropertyDefinition,
-    newProp: Types.PropertyDefinition,
+    newProp: Types.PropertyDefinition
   ): Types.PropertyChange[] {
     const changes: Types.PropertyChange[] = [];
 
@@ -763,7 +771,7 @@ export class SchemaDiffer {
       changes.push({
         kind: "ChangeType",
         oldValue: oldProp.type,
-        newValue: newProp.type,
+        newValue: newProp.type
       });
     }
 
@@ -771,7 +779,7 @@ export class SchemaDiffer {
       changes.push({
         kind: "ChangeRequired",
         oldValue: oldProp.required,
-        newValue: newProp.required,
+        newValue: newProp.required
       });
     }
 
@@ -779,7 +787,7 @@ export class SchemaDiffer {
       changes.push({
         kind: "ChangeMulti",
         oldValue: oldProp.multi,
-        newValue: newProp.multi,
+        newValue: newProp.multi
       });
     }
 
@@ -787,7 +795,7 @@ export class SchemaDiffer {
       changes.push({
         kind: "ChangeDefault",
         oldValue: oldProp.default,
-        newValue: newProp.default,
+        newValue: newProp.default
       });
     }
 
@@ -799,7 +807,7 @@ export class SchemaDiffer {
       if (!oldConstraints.has(constraint)) {
         changes.push({
           kind: "AddConstraint",
-          newValue: constraint,
+          newValue: constraint
         });
       }
     }
@@ -808,7 +816,7 @@ export class SchemaDiffer {
       if (!newConstraints.has(constraint)) {
         changes.push({
           kind: "DropConstraint",
-          oldValue: constraint,
+          oldValue: constraint
         });
       }
     }
@@ -818,7 +826,7 @@ export class SchemaDiffer {
       changes.push({
         kind: "ChangeComputed",
         oldValue: oldProp.computed,
-        newValue: newProp.computed,
+        newValue: newProp.computed
       });
     }
 
@@ -827,7 +835,7 @@ export class SchemaDiffer {
     const newAnns = newProp.annotations ?? {};
     const annNames = new Set([
       ...Object.keys(oldAnns),
-      ...Object.keys(newAnns),
+      ...Object.keys(newAnns)
     ]);
     for (const name of annNames) {
       const oldVal = oldAnns[name];
@@ -836,20 +844,20 @@ export class SchemaDiffer {
         changes.push({
           kind: "AddAnnotation",
           annotationName: name,
-          newValue: newVal,
+          newValue: newVal
         });
       } else if (oldVal !== undefined && newVal === undefined) {
         changes.push({
           kind: "DropAnnotation",
           annotationName: name,
-          oldValue: oldVal,
+          oldValue: oldVal
         });
       } else if (oldVal !== newVal) {
         changes.push({
           kind: "ChangeAnnotation",
           annotationName: name,
           oldValue: oldVal,
-          newValue: newVal,
+          newValue: newVal
         });
       }
     }
@@ -859,19 +867,19 @@ export class SchemaDiffer {
 
   private diffLinks(
     oldLinks: Types.LinkDefinition[],
-    newLinks: Types.LinkDefinition[],
+    newLinks: Types.LinkDefinition[]
   ): Types.TypeOperation[] {
     const operations: Types.TypeOperation[] = [];
 
-    const oldLinksMap = new Map(oldLinks.map((l) => [l.name, l]));
-    const newLinksMap = new Map(newLinks.map((l) => [l.name, l]));
+    const oldLinksMap = new Map(oldLinks.map(l => [l.name, l]));
+    const newLinksMap = new Map(newLinks.map(l => [l.name, l]));
 
     // Added links
     for (const [linkName, linkDef] of newLinksMap) {
       if (!oldLinksMap.has(linkName)) {
         operations.push({
           kind: "AddLink",
-          link: linkDef,
+          link: linkDef
         } as Types.AddLinkOperation);
       }
     }
@@ -881,7 +889,7 @@ export class SchemaDiffer {
       if (!newLinksMap.has(linkName)) {
         operations.push({
           kind: "DropLink",
-          linkName: linkName,
+          linkName: linkName
         } as Types.DropLinkOperation);
       }
     }
@@ -895,7 +903,7 @@ export class SchemaDiffer {
           operations.push({
             kind: "AlterLink",
             linkName: linkName,
-            changes,
+            changes
           } as Types.AlterLinkOperation);
         }
       }
@@ -905,7 +913,7 @@ export class SchemaDiffer {
   }
 
   private extractTriggers(
-    typeDef: AST.TypeDeclaration,
+    typeDef: AST.TypeDeclaration
   ): Types.TriggerDefinition[] {
     const triggers: Types.TriggerDefinition[] = [];
 
@@ -916,7 +924,7 @@ export class SchemaDiffer {
           timing: member.timing,
           events: [...member.events],
           scope: member.scope,
-          body: this.extractExpressionString(member.body),
+          body: this.extractExpressionString(member.body)
         });
       }
     }
@@ -927,12 +935,12 @@ export class SchemaDiffer {
   private diffTriggers(
     typeName: string,
     oldTriggers: Types.TriggerDefinition[],
-    newTriggers: Types.TriggerDefinition[],
+    newTriggers: Types.TriggerDefinition[]
   ): Types.TypeOperation[] {
     const operations: Types.TypeOperation[] = [];
 
-    const oldTriggersMap = new Map(oldTriggers.map((t) => [t.name, t]));
-    const newTriggersMap = new Map(newTriggers.map((t) => [t.name, t]));
+    const oldTriggersMap = new Map(oldTriggers.map(t => [t.name, t]));
+    const newTriggersMap = new Map(newTriggers.map(t => [t.name, t]));
 
     // Added triggers
     for (const [triggerName, triggerDef] of newTriggersMap) {
@@ -953,8 +961,8 @@ export class SchemaDiffer {
       const oldTrigger = oldTriggersMap.get(triggerName);
       if (oldTrigger) {
         const timingChanged = oldTrigger.timing !== newTrigger.timing;
-        const eventsChanged = JSON.stringify([...oldTrigger.events].sort())
-          !== JSON.stringify([...newTrigger.events].sort());
+        const eventsChanged = JSON.stringify([...oldTrigger.events].sort()) !==
+          JSON.stringify([...newTrigger.events].sort());
         const scopeChanged = oldTrigger.scope !== newTrigger.scope;
         const bodyChanged = oldTrigger.body !== newTrigger.body;
 
@@ -969,7 +977,7 @@ export class SchemaDiffer {
   }
 
   private extractRewrites(
-    propDecl: AST.PropertyDeclaration,
+    propDecl: AST.PropertyDeclaration
   ): Types.RewriteDefinition[] {
     const rewrites: Types.RewriteDefinition[] = [];
 
@@ -977,7 +985,7 @@ export class SchemaDiffer {
       for (const rewrite of propDecl.rewrites) {
         rewrites.push({
           events: [...rewrite.events],
-          body: rewrite.using,
+          body: rewrite.using
         });
       }
     }
@@ -989,7 +997,7 @@ export class SchemaDiffer {
     typeName: string,
     propertyName: string,
     oldRewrites: Types.RewriteDefinition[],
-    newRewrites: Types.RewriteDefinition[],
+    newRewrites: Types.RewriteDefinition[]
   ): Types.TypeOperation[] {
     const operations: Types.TypeOperation[] = [];
 
@@ -997,17 +1005,17 @@ export class SchemaDiffer {
     const eventKey = (events: ("insert" | "update")[]): string => [...events].sort().join(",");
 
     const oldRewritesMap = new Map(
-      oldRewrites.map((r) => [eventKey(r.events), r]),
+      oldRewrites.map(r => [eventKey(r.events), r])
     );
     const newRewritesMap = new Map(
-      newRewrites.map((r) => [eventKey(r.events), r]),
+      newRewrites.map(r => [eventKey(r.events), r])
     );
 
     // Added rewrites
     for (const [key, rewriteDef] of newRewritesMap) {
       if (!oldRewritesMap.has(key)) {
         operations.push(
-          Types.createAddRewriteOperation(typeName, propertyName, rewriteDef),
+          Types.createAddRewriteOperation(typeName, propertyName, rewriteDef)
         );
       }
     }
@@ -1019,8 +1027,8 @@ export class SchemaDiffer {
           Types.createDropRewriteOperation(
             typeName,
             propertyName,
-            rewriteDef.events,
-          ),
+            rewriteDef.events
+          )
         );
       }
     }
@@ -1034,15 +1042,15 @@ export class SchemaDiffer {
             Types.createDropRewriteOperation(
               typeName,
               propertyName,
-              oldRewrite.events,
-            ),
+              oldRewrite.events
+            )
           );
           operations.push(
             Types.createAddRewriteOperation(
               typeName,
               propertyName,
-              newRewrite,
-            ),
+              newRewrite
+            )
           );
         }
       }
@@ -1053,7 +1061,7 @@ export class SchemaDiffer {
 
   private diffLink(
     oldLink: Types.LinkDefinition,
-    newLink: Types.LinkDefinition,
+    newLink: Types.LinkDefinition
   ): Types.LinkChange[] {
     const changes: Types.LinkChange[] = [];
 
@@ -1061,7 +1069,7 @@ export class SchemaDiffer {
       changes.push({
         kind: "ChangeTarget",
         oldValue: oldLink.target,
-        newValue: newLink.target,
+        newValue: newLink.target
       });
     }
 
@@ -1069,7 +1077,7 @@ export class SchemaDiffer {
       changes.push({
         kind: "ChangeRequired",
         oldValue: oldLink.required,
-        newValue: newLink.required,
+        newValue: newLink.required
       });
     }
 
@@ -1077,7 +1085,7 @@ export class SchemaDiffer {
       changes.push({
         kind: "ChangeMulti",
         oldValue: oldLink.multi,
-        newValue: newLink.multi,
+        newValue: newLink.multi
       });
     }
 
@@ -1085,7 +1093,7 @@ export class SchemaDiffer {
       changes.push({
         kind: "ChangeCardinality",
         oldValue: oldLink.cardinality,
-        newValue: newLink.cardinality,
+        newValue: newLink.cardinality
       });
     }
 
@@ -1093,7 +1101,7 @@ export class SchemaDiffer {
       changes.push({
         kind: "ChangeOnDelete",
         oldValue: oldLink.onTargetDelete,
-        newValue: newLink.onTargetDelete,
+        newValue: newLink.onTargetDelete
       });
     }
 
@@ -1101,22 +1109,22 @@ export class SchemaDiffer {
       changes.push({
         kind: "ChangeOnSourceDelete",
         oldValue: oldLink.onSourceDelete,
-        newValue: newLink.onSourceDelete,
+        newValue: newLink.onSourceDelete
       });
     }
 
     // Compare extending arrays
     const oldExtending = JSON.stringify(
-      (oldLink.extending ?? []).sort(),
+      (oldLink.extending ?? []).sort()
     );
     const newExtending = JSON.stringify(
-      (newLink.extending ?? []).sort(),
+      (newLink.extending ?? []).sort()
     );
     if (oldExtending !== newExtending) {
       changes.push({
         kind: "ChangeExtending",
         oldValue: oldLink.extending,
-        newValue: newLink.extending,
+        newValue: newLink.extending
       });
     }
 
@@ -1126,7 +1134,7 @@ export class SchemaDiffer {
   private typeToString(type: AST.TypeRef): string {
     let result = type.name.parts.join("::");
     if (type.params && type.params.length > 0) {
-      result += `<${type.params.map((p) => this.typeToString(p)).join(", ")}>`;
+      result += `<${type.params.map(p => this.typeToString(p)).join(", ")}>`;
     }
     return result;
   }
@@ -1145,10 +1153,11 @@ export class SchemaDiffer {
   private extractExpressionString(expr: AST.Expression): string {
     switch (expr.kind) {
       case "Literal":
-        if (typeof expr.value === "string") return `'${expr.value}'`;
+        if (typeof expr.value === "string")
+          return `'${expr.value}'`;
         return String(expr.value);
       case "FunctionCall":
-        return `${expr.name.parts.join("::")}(${expr.args.map((a) => this.extractExpressionString(a)).join(", ")})`;
+        return `${expr.name.parts.join("::")}(${expr.args.map(a => this.extractExpressionString(a)).join(", ")})`;
       case "PathExpression":
         return expr.path.join(".");
       case "BinaryOp":
@@ -1169,7 +1178,7 @@ export class SchemaDiffer {
   }
 
   private extractConstraints(constraints: AST.Constraint[]): string[] {
-    return constraints.map((constraint) => {
+    return constraints.map(constraint => {
       const name = constraint.name?.value || "unnamed";
 
       // Handle "expression on (...)" constraints
@@ -1179,13 +1188,16 @@ export class SchemaDiffer {
       }
 
       if (constraint.args && constraint.args.length > 0) {
-        const args = constraint.args.map((arg) => {
-          if (arg.kind === "Literal") {
-            return String(arg.value);
-          }
+        const args = constraint
+          .args
+          .map(arg => {
+            if (arg.kind === "Literal") {
+              return String(arg.value);
+            }
 
-          return String(arg);
-        }).join(",");
+            return String(arg);
+          })
+          .join(",");
 
         return `${name}(${args})`;
       }
@@ -1195,7 +1207,7 @@ export class SchemaDiffer {
   }
 
   private extractAnnotations(
-    annotations: AST.Annotation[],
+    annotations: AST.Annotation[]
   ): Record<string, any> {
     const result: Record<string, any> = {};
     for (const annotation of annotations) {
@@ -1210,7 +1222,7 @@ export class SchemaDiffer {
   // ──────────────────────────────────────────────────────────────────────
 
   private extractScalars(
-    modules: Module[],
+    modules: Module[]
   ): Map<string, { decl: AST.ScalarTypeDeclaration; module: string; }> {
     const scalars = new Map<
       string,
@@ -1236,7 +1248,7 @@ export class SchemaDiffer {
    */
   private isEnumScalar(decl: AST.ScalarTypeDeclaration): boolean {
     return (decl.extending ?? []).some(
-      (ext) => ext.name.parts[0] === "enum",
+      ext => ext.name.parts[0] === "enum"
     );
   }
 
@@ -1245,14 +1257,16 @@ export class SchemaDiffer {
    * for non-enum scalars.
    */
   private scalarEnumValues(
-    decl: AST.ScalarTypeDeclaration,
+    decl: AST.ScalarTypeDeclaration
   ): string[] | undefined {
-    if (!this.isEnumScalar(decl)) return undefined;
+    if (!this.isEnumScalar(decl))
+      return undefined;
     const enumExt = (decl.extending ?? []).find(
-      (ext) => ext.name.parts[0] === "enum",
+      ext => ext.name.parts[0] === "enum"
     );
-    if (!enumExt || !enumExt.params) return [];
-    return enumExt.params.map((p) => p.name.parts.join("::"));
+    if (!enumExt || !enumExt.params)
+      return [];
+    return enumExt.params.map(p => p.name.parts.join("::"));
   }
 
   /**
@@ -1261,10 +1275,13 @@ export class SchemaDiffer {
    * the literal `"enum"` string (values live separately).
    */
   private scalarBaseType(decl: AST.ScalarTypeDeclaration): string {
-    if (this.isEnumScalar(decl)) return "enum";
-    if (!decl.extending || decl.extending.length === 0) return "anyscalar";
-    return decl.extending
-      .map((ext) => ext.name.parts.join("::"))
+    if (this.isEnumScalar(decl))
+      return "enum";
+    if (!decl.extending || decl.extending.length === 0)
+      return "anyscalar";
+    return decl
+      .extending
+      .map(ext => ext.name.parts.join("::"))
       .join(", ");
   }
 
@@ -1285,15 +1302,16 @@ export class SchemaDiffer {
     scalarName: string,
     moduleName: string,
     oldValues: string[],
-    newValues: string[],
+    newValues: string[]
   ): Types.MigrationOperation[] {
-    if (oldValues.length === 0 && newValues.length === 0) return [];
+    if (oldValues.length === 0 && newValues.length === 0)
+      return [];
 
     const oldSet = new Set(oldValues);
     const newSet = new Set(newValues);
 
-    const removed = oldValues.filter((v) => !newSet.has(v));
-    const added = newValues.filter((v) => !oldSet.has(v));
+    const removed = oldValues.filter(v => !newSet.has(v));
+    const added = newValues.filter(v => !oldSet.has(v));
 
     // If anything was removed, this is a recreate (PG has no DROP VALUE).
     if (removed.length > 0) {
@@ -1304,16 +1322,16 @@ export class SchemaDiffer {
           module: moduleName,
           enumValues: newValues,
           oldEnumValues: oldValues,
-          reason: "removed-values",
-        } as Types.RecreateScalarOperation,
+          reason: "removed-values"
+        } as Types.RecreateScalarOperation
       ];
     }
 
     // No removals — check whether the *retained* values kept their order.
-    const retainedOld = oldValues.filter((v) => newSet.has(v));
-    const retainedNew = newValues.filter((v) => oldSet.has(v));
-    const reordered = retainedOld.length > 0
-      && retainedOld.some((v, i) => v !== retainedNew[i]);
+    const retainedOld = oldValues.filter(v => newSet.has(v));
+    const retainedNew = newValues.filter(v => oldSet.has(v));
+    const reordered = retainedOld.length > 0 &&
+      retainedOld.some((v, i) => v !== retainedNew[i]);
 
     if (reordered) {
       return [
@@ -1323,8 +1341,8 @@ export class SchemaDiffer {
           module: moduleName,
           enumValues: newValues,
           oldEnumValues: oldValues,
-          reason: "reordered-values",
-        } as Types.RecreateScalarOperation,
+          reason: "reordered-values"
+        } as Types.RecreateScalarOperation
       ];
     }
 
@@ -1347,7 +1365,7 @@ export class SchemaDiffer {
         scalarName,
         module: moduleName,
         value,
-        ...(anchorBefore ? { before: anchorBefore } : {}),
+        ...(anchorBefore ? { before: anchorBefore } : {})
       });
     }
     return ops;

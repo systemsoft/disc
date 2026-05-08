@@ -26,12 +26,12 @@ export class ExtensionDependencyError extends ExtensionError {
   constructor(
     extensionName: string,
     missingDependencies: string[],
-    context?: ErrorContext,
+    context?: ErrorContext
   ) {
     super(
       extensionName,
       `Missing dependencies: ${missingDependencies.join(", ")}`,
-      context,
+      context
     );
     this.missingDependencies = missingDependencies;
   }

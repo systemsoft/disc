@@ -21,7 +21,7 @@ export {
   PROTOCOL_MAJOR_VERSION,
   PROTOCOL_MINOR_VERSION,
   ServerMessageType,
-  TransactionState,
+  TransactionState
 } from "./enums.ts";
 
 // Message types and codec
@@ -51,7 +51,7 @@ export type {
   ServerKeyDataMsg,
   ServerMessage,
   SyncMsg,
-  TerminateMsg,
+  TerminateMsg
 } from "./messages.ts";
 
 export { decodeClientMessage, decodeServerMessage, encodeClientMessage, encodeServerMessage, splitWireMessage } from "./messages.ts";
@@ -67,7 +67,7 @@ export {
   resolveWellKnownType,
   ShapeElementFlags,
   UUID_TO_TYPE,
-  WELL_KNOWN_TYPES,
+  WELL_KNOWN_TYPES
 } from "./typedesc.ts";
 
 export type {
@@ -81,7 +81,7 @@ export type {
   RangeDescriptor,
   SetDescriptor,
   TupleDescriptor,
-  TypeDescriptor,
+  TypeDescriptor
 } from "./typedesc.ts";
 
 // Type codecs
@@ -94,7 +94,7 @@ export {
   deriveKeys,
   generateServerFirstMessage,
   parseClientFirstMessage,
-  verifyClientFinalMessage,
+  verifyClientFinalMessage
 } from "./scram.ts";
 
 export type { ScramServerState } from "./scram.ts";

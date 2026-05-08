@@ -28,11 +28,11 @@ Deno.test("SchemaManager - parseSDL - valid SDL produces modules", () => {
   if (result.ok) {
     assertNotEquals(result.value.length, 0);
 
-    const defaultModule = result.value.find((m) => m.name === "default");
+    const defaultModule = result.value.find(m => m.name === "default");
     assert(defaultModule !== undefined, "Expected a 'default' module");
 
     const userType = defaultModule.items.find(
-      (item) => item.kind === "TypeDeclaration" && item.name.value === "User",
+      item => item.kind === "TypeDeclaration" && item.name.value === "User"
     );
     assert(userType !== undefined, "Expected a 'User' type declaration");
   }
@@ -91,7 +91,7 @@ Deno.test("SchemaManager - parseSDL - lexable multi-error SDL surfaces every err
     const msg = result.error.message;
     assert(
       msg.includes("2 error") || msg.includes("3 error"),
-      `Expected multi-error message, got: ${msg}`,
+      `Expected multi-error message, got: ${msg}`
     );
   }
 });
@@ -110,7 +110,8 @@ Deno.test("SchemaManager - modulesToSchema - correct TypeDef with tableName and 
 
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true);
-  if (!parseResult.ok) return;
+  if (!parseResult.ok)
+    return;
 
   const schema = manager.modulesToSchema(parseResult.value);
   const userType = schema.types.get("User");
@@ -140,7 +141,8 @@ Deno.test("SchemaManager - modulesToSchema - SDL type to SQL column type mapping
 
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true);
-  if (!parseResult.ok) return;
+  if (!parseResult.ok)
+    return;
 
   const schema = manager.modulesToSchema(parseResult.value);
   const typeDef = schema.types.get("AllTypes");
@@ -148,12 +150,18 @@ Deno.test("SchemaManager - modulesToSchema - SDL type to SQL column type mapping
   assert(typeDef !== undefined, "Expected an 'AllTypes' TypeDef");
 
   const expectedMappings: Record<string, string> = {
+    // dprint-ignore
     "str_field": "text",
+    // dprint-ignore
     "int32_field": "integer",
+    // dprint-ignore
     "bool_field": "boolean",
+    // dprint-ignore
     "datetime_field": "timestamptz",
+    // dprint-ignore
     "uuid_field": "uuid",
-    "float64_field": "double precision",
+    // dprint-ignore
+    "float64_field": "double precision"
   };
 
   for (const [propName, expectedSqlType] of Object.entries(expectedMappings)) {
@@ -162,7 +170,7 @@ Deno.test("SchemaManager - modulesToSchema - SDL type to SQL column type mapping
     assertEquals(
       prop.type,
       expectedSqlType,
-      `Expected '${propName}' to map to '${expectedSqlType}', got '${prop.type}'`,
+      `Expected '${propName}' to map to '${expectedSqlType}', got '${prop.type}'`
     );
   }
 });
@@ -184,7 +192,8 @@ Deno.test("SchemaManager - modulesToSchema - single link gets _id columnName, mu
 
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true);
-  if (!parseResult.ok) return;
+  if (!parseResult.ok)
+    return;
 
   const schema = manager.modulesToSchema(parseResult.value);
 
@@ -218,7 +227,8 @@ Deno.test("SchemaManager - modulesToSchema - implicit id property added", () => 
 
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true);
-  if (!parseResult.ok) return;
+  if (!parseResult.ok)
+    return;
 
   const schema = manager.modulesToSchema(parseResult.value);
   const widgetType = schema.types.get("Widget");
@@ -252,7 +262,8 @@ Deno.test("SchemaManager - modulesToSchema - camelCase property name → snake_c
 
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true);
-  if (!parseResult.ok) return;
+  if (!parseResult.ok)
+    return;
 
   const schema = manager.modulesToSchema(parseResult.value);
   const itemType = schema.types.get("Item");
@@ -261,12 +272,12 @@ Deno.test("SchemaManager - modulesToSchema - camelCase property name → snake_c
   assertEquals(itemType.properties.get("createdAt")?.columnName, "created_at");
   assertEquals(
     itemType.properties.get("lastModifiedBy")?.columnName,
-    "last_modified_by",
+    "last_modified_by"
   );
   assertEquals(
     itemType.properties.get("already_snake")?.columnName,
     "already_snake",
-    "snake_case input should be idempotent",
+    "snake_case input should be idempotent"
   );
 });
 
@@ -302,11 +313,11 @@ Deno.test("SchemaManager - applySchema - dryRun mode returns ok without DB", asy
     const schema = manager.getSchema();
     assert(
       schema !== null,
-      "Expected schema to be set after dry-run applySchema",
+      "Expected schema to be set after dry-run applySchema"
     );
     assert(
       schema.types.has("User"),
-      "Expected schema to contain 'User' type after dry-run apply",
+      "Expected schema to contain 'User' type after dry-run apply"
     );
   }
 
@@ -328,7 +339,7 @@ Deno.test({
 
     const pool = new ConnectionPool({
       connectionString: dsn,
-      applicationName: "disc-test-push",
+      applicationName: "disc-test-push"
     });
     await pool.initialize();
 
@@ -346,29 +357,29 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        "applySchema with skipHistory should succeed",
+        "applySchema with skipHistory should succeed"
       );
 
       // Verify the table was created (DDL ran).
       const widgetExists = await pool.query(
-        "SELECT 1 FROM information_schema.tables WHERE table_name = 'widget'",
+        "SELECT 1 FROM information_schema.tables WHERE table_name = 'widget'"
       );
       assertEquals(
         widgetExists.rowCount,
         1,
-        "Widget table must exist (DDL ran)",
+        "Widget table must exist (DDL ran)"
       );
 
       // Verify NO row landed in disc_migrations. The tracker creates
       // the table on initialize, so a zero-count select is the right
       // assertion.
       const migrationCount = await pool.query(
-        "SELECT COUNT(*)::int AS c FROM disc_migrations",
+        "SELECT COUNT(*)::int AS c FROM disc_migrations"
       );
       assertEquals(
         (migrationCount.rows[0] as { c: number; }).c,
         0,
-        "disc_migrations must be empty after a skipHistory apply (Gel #3761)",
+        "disc_migrations must be empty after a skipHistory apply (Gel #3761)"
       );
 
       // Sanity: a second apply *without* skipHistory records normally.
@@ -385,20 +396,20 @@ Deno.test({
       assertEquals(
         result2.ok,
         true,
-        "applySchema without skipHistory should succeed",
+        "applySchema without skipHistory should succeed"
       );
 
       const migrationCount2 = await pool.query(
-        "SELECT COUNT(*)::int AS c FROM disc_migrations",
+        "SELECT COUNT(*)::int AS c FROM disc_migrations"
       );
       assertEquals(
         (migrationCount2.rows[0] as { c: number; }).c,
         1,
-        "disc_migrations must record the non-skip apply (1 row)",
+        "disc_migrations must record the non-skip apply (1 row)"
       );
     } finally {
       await pool.close();
       await cleanupTestTables(dsn);
     }
-  },
+  }
 });

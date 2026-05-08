@@ -14,7 +14,8 @@ import { lookupScalar } from "./scalar-info.ts";
 
 export function provideHover(text: string, pos: Position): Hover | null {
   const word = wordAt(text, pos);
-  if (!word) return null;
+  if (!word)
+    return null;
 
   // Built-in scalar?
   const scalar = lookupScalar(word);
@@ -22,8 +23,8 @@ export function provideHover(text: string, pos: Position): Hover | null {
     return {
       contents: {
         kind: "markdown",
-        value: `**${scalar.name}** _(scalar)_\n\n${scalar.description}`,
-      },
+        value: `**${scalar.name}** _(scalar)_\n\n${scalar.description}`
+      }
     };
   }
 
@@ -33,8 +34,8 @@ export function provideHover(text: string, pos: Position): Hover | null {
     return {
       contents: {
         kind: "markdown",
-        value: renderUserType(userType),
-      },
+        value: renderUserType(userType)
+      }
     };
   }
 
@@ -49,9 +50,11 @@ const IDENT = /[A-Za-z_][A-Za-z_0-9]*/g;
 
 function wordAt(text: string, pos: Position): string | null {
   const lines = text.split("\n");
-  if (pos.line < 0 || pos.line >= lines.length) return null;
+  if (pos.line < 0 || pos.line >= lines.length)
+    return null;
   const line = lines[pos.line];
-  if (pos.character < 0 || pos.character > line.length) return null;
+  if (pos.character < 0 || pos.character > line.length)
+    return null;
 
   IDENT.lastIndex = 0;
   let m: RegExpExecArray | null;
@@ -92,11 +95,13 @@ export function findUserType(text: string, name: string): AST.TypeDeclaration | 
     if (decl.kind === "ModuleDeclaration") {
       for (const inner of decl.declarations) {
         const found = matchType(inner, name);
-        if (found) return found;
+        if (found)
+          return found;
       }
     } else {
       const found = matchType(decl, name);
-      if (found) return found;
+      if (found)
+        return found;
     }
   }
   return null;
@@ -121,7 +126,7 @@ export function renderUserType(t: AST.TypeDeclaration): string {
   lines.push(`**${t.name.value}** _(${kind})_`);
 
   if (t.extending && t.extending.length > 0) {
-    const parents = t.extending.map((e) => e.name.parts.join("::")).join(", ");
+    const parents = t.extending.map(e => e.name.parts.join("::")).join(", ");
     lines.push("");
     lines.push(`Extends: \`${parents}\``);
   }

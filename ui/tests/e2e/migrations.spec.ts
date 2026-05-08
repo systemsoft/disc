@@ -4,11 +4,13 @@ test.describe("Migrations page", () => {
   test("shows the heading and a Refresh button", async ({ page }) => {
     await page.goto("/ui/migrations");
     await expect(
-      page.getByRole("heading", { name: "Migration History" }),
-    ).toBeVisible();
+      page.getByRole("heading", { name: "Migration History" })
+    )
+      .toBeVisible();
     await expect(
-      page.getByRole("button", { name: /Refresh|Loading/ }),
-    ).toBeVisible();
+      page.getByRole("button", { name: /Refresh|Loading/ })
+    )
+      .toBeVisible();
   });
 
   test("renders the auto-applied initial migration row", async ({ page }) => {
@@ -17,8 +19,9 @@ test.describe("Migrations page", () => {
     // The fixture project's first `disc serve` auto-applies a migration
     // creating the Item type. Wait for the table to populate.
     await expect(
-      page.getByRole("cell", { name: "create_item" }),
-    ).toBeVisible({ timeout: 10_000 });
+      page.getByRole("cell", { name: "create_item" })
+    )
+      .toBeVisible({ timeout: 10_000 });
 
     // Header row is present.
     await expect(page.getByRole("columnheader", { name: "Applied" }))
@@ -32,7 +35,7 @@ test.describe("Migrations page", () => {
   test("Refresh button re-fetches without a page reload", async ({ page }) => {
     await page.goto("/ui/migrations");
     await expect(page.getByRole("cell", { name: "create_item" })).toBeVisible({
-      timeout: 10_000,
+      timeout: 10_000
     });
 
     // Track navigations — Refresh must NOT trigger a full navigation.

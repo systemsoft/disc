@@ -70,7 +70,7 @@ export interface MetricsConfig {
 
 export function renderMetrics(
   source: MetricsSource,
-  config: MetricsConfig = {},
+  config: MetricsConfig = {}
 ): string {
   const prefix = config.prefix || "disc";
   const lines: string[] = [];
@@ -91,17 +91,17 @@ export function renderMetrics(
   counter(
     `${prefix}_http_requests_total`,
     "Total HTTP requests",
-    source.http.total_requests,
+    source.http.total_requests
   );
   counter(
     `${prefix}_http_requests_successful_total`,
     "Successful HTTP requests",
-    source.http.successful_requests,
+    source.http.successful_requests
   );
   counter(
     `${prefix}_http_requests_failed_total`,
     "Failed HTTP requests",
-    source.http.failed_requests,
+    source.http.failed_requests
   );
 
   // Cache metrics
@@ -109,38 +109,38 @@ export function renderMetrics(
     counter(
       `${prefix}_query_cache_hits_total`,
       "Query compilation cache hits",
-      source.cache.compilation.hits,
+      source.cache.compilation.hits
     );
     counter(
       `${prefix}_query_cache_misses_total`,
       "Query compilation cache misses",
-      source.cache.compilation.misses,
+      source.cache.compilation.misses
     );
     counter(
       `${prefix}_query_cache_evictions_total`,
       "Query compilation cache evictions",
-      source.cache.compilation.evictions,
+      source.cache.compilation.evictions
     );
     gauge(
       `${prefix}_query_cache_size`,
       "Current query compilation cache size",
-      source.cache.compilation.size,
+      source.cache.compilation.size
     );
 
     counter(
       `${prefix}_parse_cache_hits_total`,
       "Parse cache hits",
-      source.cache.parse.hits,
+      source.cache.parse.hits
     );
     counter(
       `${prefix}_parse_cache_misses_total`,
       "Parse cache misses",
-      source.cache.parse.misses,
+      source.cache.parse.misses
     );
     gauge(
       `${prefix}_parse_cache_size`,
       "Current parse cache size",
-      source.cache.parse.size,
+      source.cache.parse.size
     );
   }
 
@@ -149,22 +149,22 @@ export function renderMetrics(
     gauge(
       `${prefix}_pool_connections_total`,
       "Total pool connections",
-      source.pool.total,
+      source.pool.total
     );
     gauge(
       `${prefix}_pool_connections_idle`,
       "Idle pool connections",
-      source.pool.idle,
+      source.pool.idle
     );
     gauge(
       `${prefix}_pool_connections_active`,
       "Active pool connections",
-      source.pool.active,
+      source.pool.active
     );
     gauge(
       `${prefix}_pool_waiters`,
       "Pool connection waiters",
-      source.pool.waiters,
+      source.pool.waiters
     );
   }
 
@@ -173,12 +173,12 @@ export function renderMetrics(
     counter(
       `${prefix}_rate_limit_rejected_total`,
       "Rate-limited requests rejected",
-      source.rateLimit.rejectedCount,
+      source.rateLimit.rejectedCount
     );
     gauge(
       `${prefix}_rate_limit_active_clients`,
       "Active rate limit client buckets",
-      source.rateLimit.activeClients,
+      source.rateLimit.activeClients
     );
   }
 
@@ -191,12 +191,12 @@ export function renderMetrics(
     gauge(
       `${prefix}_tls_certificate_expiration_time`,
       "TLS leaf certificate notAfter as unix epoch seconds",
-      source.tls.notAfterUnix,
+      source.tls.notAfterUnix
     );
     gauge(
       `${prefix}_tls_certificate_seconds_until_expiry`,
       "Seconds until TLS leaf certificate expires (negative if expired)",
-      source.tls.secondsUntilExpiry,
+      source.tls.secondsUntilExpiry
     );
   }
 
@@ -204,22 +204,22 @@ export function renderMetrics(
   gauge(
     `${prefix}_process_memory_heap_used_bytes`,
     "Process heap memory used",
-    source.memory.heapUsed,
+    source.memory.heapUsed
   );
   gauge(
     `${prefix}_process_memory_heap_total_bytes`,
     "Process heap memory total",
-    source.memory.heapTotal,
+    source.memory.heapTotal
   );
   gauge(
     `${prefix}_process_memory_external_bytes`,
     "Process external memory",
-    source.memory.external,
+    source.memory.external
   );
   gauge(
     `${prefix}_uptime_seconds`,
     "Server uptime in seconds",
-    source.uptimeMs / 1000,
+    source.uptimeMs / 1000
   );
 
   return lines.join("\n") + "\n";

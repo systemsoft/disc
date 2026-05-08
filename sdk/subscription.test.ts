@@ -66,7 +66,7 @@ function installMockWebSocket(): () => void {
 
 /** Wait for the mock socket to open (one macrotask) */
 function nextTick(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
+  return new Promise(resolve => setTimeout(resolve, 0));
 }
 
 // --- Tests ---
@@ -89,7 +89,7 @@ Deno.test(
     const restore = installMockWebSocket();
     try {
       const client = new SubscriptionClient({
-        baseUrl: "https://db.example.com",
+        baseUrl: "https://db.example.com"
       });
       await client.connect();
       const ws = MockWebSocket.instances[0];
@@ -97,7 +97,7 @@ Deno.test(
     } finally {
       restore();
     }
-  },
+  }
 );
 
 Deno.test("subscription - connect() resolves when socket opens", async () => {
@@ -121,7 +121,7 @@ Deno.test(
       await client.connect();
 
       client.subscribe("select User { name }", {
-        onData: (_data: unknown) => {},
+        onData: (_data: unknown) => {}
       });
 
       const ws = MockWebSocket.instances[0];
@@ -137,7 +137,7 @@ Deno.test(
     } finally {
       restore();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -149,7 +149,7 @@ Deno.test(
       await client.connect();
 
       const handle = client.subscribe("select 1", {
-        onData: (_data: unknown) => {},
+        onData: (_data: unknown) => {}
       });
 
       assertExists(handle.id);
@@ -158,7 +158,7 @@ Deno.test(
     } finally {
       restore();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -173,14 +173,14 @@ Deno.test(
       const handle = client.subscribe("select User { name }", {
         onData: (data: unknown) => {
           received.push(data);
-        },
+        }
       });
 
       const ws = MockWebSocket.instances[0];
       ws.simulateMessage({
         id: handle.id,
         type: "data",
-        payload: { name: "Ada" },
+        payload: { name: "Ada" }
       });
 
       assertEquals(received.length, 1);
@@ -188,7 +188,7 @@ Deno.test(
     } finally {
       restore();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -202,16 +202,16 @@ Deno.test(
       const errors: Error[] = [];
       const handle = client.subscribe("select User { name }", {
         onData: (_data: unknown) => {},
-        onError: (err) => {
+        onError: err => {
           errors.push(err);
-        },
+        }
       });
 
       const ws = MockWebSocket.instances[0];
       ws.simulateMessage({
         id: handle.id,
         type: "error",
-        payload: "Query failed",
+        payload: "Query failed"
       });
 
       assertEquals(errors.length, 1);
@@ -219,7 +219,7 @@ Deno.test(
     } finally {
       restore();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -235,7 +235,7 @@ Deno.test(
         onData: (_data: unknown) => {},
         onComplete: () => {
           completed = true;
-        },
+        }
       });
 
       const ws = MockWebSocket.instances[0];
@@ -245,7 +245,7 @@ Deno.test(
     } finally {
       restore();
     }
-  },
+  }
 );
 
 Deno.test("subscription - unsubscribe() sends unsubscribe message", async () => {
@@ -255,7 +255,7 @@ Deno.test("subscription - unsubscribe() sends unsubscribe message", async () => 
     await client.connect();
 
     const handle = client.subscribe("select 1", {
-      onData: (_data: unknown) => {},
+      onData: (_data: unknown) => {}
     });
 
     const ws = MockWebSocket.instances[0];
@@ -288,7 +288,7 @@ Deno.test(
       const handle = client.subscribe("select 1", {
         onData: (data: unknown) => {
           received.push(data);
-        },
+        }
       });
 
       const ws = MockWebSocket.instances[0];
@@ -305,7 +305,7 @@ Deno.test(
     } finally {
       restore();
     }
-  },
+  }
 );
 
 Deno.test("subscription - close() closes the WebSocket", async () => {
@@ -331,7 +331,7 @@ Deno.test("subscription - close() prevents auto-reconnect", async () => {
   try {
     const client = new SubscriptionClient(
       { baseUrl: "http://localhost:5656" },
-      { autoReconnect: true, reconnectDelay: 10 },
+      { autoReconnect: true, reconnectDelay: 10 }
     );
     await client.connect();
 
@@ -380,7 +380,7 @@ Deno.test(
       client.subscribe(
         "select User filter .id = <uuid>$id",
         { onData: (_data: unknown) => {} },
-        { id: "user-uuid-123" },
+        { id: "user-uuid-123" }
       );
 
       const ws = MockWebSocket.instances[0];
@@ -398,7 +398,7 @@ Deno.test(
     } finally {
       restore();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -407,7 +407,7 @@ Deno.test(
     const restore = installMockWebSocket();
     try {
       const client = createSubscriptionClient({
-        baseUrl: "http://localhost:5656",
+        baseUrl: "http://localhost:5656"
       });
       await client.connect();
       assertExists(client);
@@ -415,5 +415,5 @@ Deno.test(
     } finally {
       restore();
     }
-  },
+  }
 );

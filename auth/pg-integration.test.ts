@@ -20,7 +20,7 @@ async function cleanupAuthTables(dsn: string): Promise<void> {
     hostname: url.hostname || "localhost",
     port: url.port ? parseInt(url.port) : 5432,
     user: url.username || "disc",
-    database: url.pathname.slice(1) || "disc_test",
+    database: url.pathname.slice(1) || "disc_test"
   });
 
   try {
@@ -48,25 +48,25 @@ Deno.test({
     try {
       const provider = new AuthProvider(
         { jwtSecret: "pg-test-secret-must-be-at-least-32-bytes-long" },
-        adapter,
+        adapter
       );
       await provider.initialize();
 
       // Verify tables exist
       const usersResult = await conn.query(
-        "SELECT 1 FROM information_schema.tables WHERE table_name = 'users'",
+        "SELECT 1 FROM information_schema.tables WHERE table_name = 'users'"
       );
       assertEquals(usersResult.rowCount, 1);
 
       const sessionsResult = await conn.query(
-        "SELECT 1 FROM information_schema.tables WHERE table_name = 'sessions'",
+        "SELECT 1 FROM information_schema.tables WHERE table_name = 'sessions'"
       );
       assertEquals(sessionsResult.rowCount, 1);
     } finally {
       await conn.close();
       await cleanupAuthTables(dsn);
     }
-  },
+  }
 });
 
 Deno.test({
@@ -85,14 +85,14 @@ Deno.test({
     try {
       const provider = new AuthProvider(
         { jwtSecret: "pg-test-secret-must-be-at-least-32-bytes-long" },
-        adapter,
+        adapter
       );
       await provider.initialize();
 
       const response = await provider.register({
         email: "pgtest@example.com",
         password: "securepassword123",
-        username: "pguser",
+        username: "pguser"
       });
 
       assertExists(response.token);
@@ -103,21 +103,21 @@ Deno.test({
       // Verify in database
       const usersResult = await conn.query(
         "SELECT email, username FROM users WHERE email = $1",
-        ["pgtest@example.com"],
+        ["pgtest@example.com"]
       );
       assertEquals(usersResult.rowCount, 1);
       assertEquals(usersResult.rows[0].email, "pgtest@example.com");
 
       const sessionsResult = await conn.query(
         "SELECT user_id FROM sessions WHERE user_id = $1",
-        [response.user.id],
+        [response.user.id]
       );
       assertEquals(sessionsResult.rowCount, 1);
     } finally {
       await conn.close();
       await cleanupAuthTables(dsn);
     }
-  },
+  }
 });
 
 Deno.test({
@@ -136,22 +136,22 @@ Deno.test({
     try {
       const provider = new AuthProvider(
         { jwtSecret: "pg-test-secret-must-be-at-least-32-bytes-long" },
-        adapter,
+        adapter
       );
       await provider.initialize();
 
       // Register
       await provider.register({
         email: "login-test@example.com",
-        password: "mypassword123",
+        password: "mypassword123"
       });
 
       // Login
       const loginResponse = requireAuthResponse(
         await provider.login({
           email: "login-test@example.com",
-          password: "mypassword123",
-        }),
+          password: "mypassword123"
+        })
       );
 
       assertExists(loginResponse.token);
@@ -160,7 +160,7 @@ Deno.test({
       await conn.close();
       await cleanupAuthTables(dsn);
     }
-  },
+  }
 });
 
 Deno.test({
@@ -179,13 +179,13 @@ Deno.test({
     try {
       const provider = new AuthProvider(
         { jwtSecret: "pg-test-secret-must-be-at-least-32-bytes-long" },
-        adapter,
+        adapter
       );
       await provider.initialize();
 
       const registerResponse = await provider.register({
         email: "jwt-test@example.com",
-        password: "password123",
+        password: "password123"
       });
 
       // Verify token
@@ -197,7 +197,7 @@ Deno.test({
       await conn.close();
       await cleanupAuthTables(dsn);
     }
-  },
+  }
 });
 
 Deno.test({
@@ -216,20 +216,20 @@ Deno.test({
     try {
       const provider = new AuthProvider(
         { jwtSecret: "pg-test-secret-must-be-at-least-32-bytes-long" },
-        adapter,
+        adapter
       );
       await provider.initialize();
 
       const registerResponse = await provider.register({
         email: "refresh-test@example.com",
-        password: "password123",
+        password: "password123"
       });
 
       assertExists(registerResponse.refreshToken);
 
       // Refresh
       const refreshResponse = await provider.refresh(
-        registerResponse.refreshToken!,
+        registerResponse.refreshToken!
       );
 
       assertExists(refreshResponse.token);
@@ -239,13 +239,13 @@ Deno.test({
       // Old refresh token should be invalid (session revoked)
       await assertRejects(
         () => provider.refresh(registerResponse.refreshToken!),
-        AuthError,
+        AuthError
       );
     } finally {
       await conn.close();
       await cleanupAuthTables(dsn);
     }
-  },
+  }
 });
 
 Deno.test({
@@ -264,13 +264,13 @@ Deno.test({
     try {
       const provider = new AuthProvider(
         { jwtSecret: "pg-test-secret-must-be-at-least-32-bytes-long" },
-        adapter,
+        adapter
       );
       await provider.initialize();
 
       const registerResponse = await provider.register({
         email: "logout-test@example.com",
-        password: "password123",
+        password: "password123"
       });
 
       // Logout
@@ -279,7 +279,7 @@ Deno.test({
       // Verify session is revoked in DB
       const result = await conn.query(
         "SELECT revoked FROM sessions WHERE id = $1",
-        [registerResponse.session.id],
+        [registerResponse.session.id]
       );
       assertEquals(result.rowCount, 1);
       assertEquals(result.rows[0].revoked, true);
@@ -287,13 +287,13 @@ Deno.test({
       // Token should fail verification (session revoked)
       await assertRejects(
         () => provider.verifyToken(registerResponse.token),
-        AuthError,
+        AuthError
       );
     } finally {
       await conn.close();
       await cleanupAuthTables(dsn);
     }
-  },
+  }
 });
 
 Deno.test({
@@ -312,19 +312,19 @@ Deno.test({
     try {
       const provider = new AuthProvider(
         { jwtSecret: "pg-test-secret-must-be-at-least-32-bytes-long" },
-        adapter,
+        adapter
       );
       await provider.initialize();
 
       // Register
       await provider.register({
         email: "reset-test@example.com",
-        password: "oldpassword123",
+        password: "oldpassword123"
       });
 
       // Request reset
       const resetToken = await provider.resetPasswordRequest(
-        "reset-test@example.com",
+        "reset-test@example.com"
       );
       assertExists(resetToken);
 
@@ -335,8 +335,8 @@ Deno.test({
       const loginResponse = requireAuthResponse(
         await provider.login({
           email: "reset-test@example.com",
-          password: "newpassword456",
-        }),
+          password: "newpassword456"
+        })
       );
       assertExists(loginResponse.token);
 
@@ -345,15 +345,15 @@ Deno.test({
         () =>
           provider.login({
             email: "reset-test@example.com",
-            password: "oldpassword123",
+            password: "oldpassword123"
           }),
-        AuthError,
+        AuthError
       );
     } finally {
       await conn.close();
       await cleanupAuthTables(dsn);
     }
-  },
+  }
 });
 
 // gh/geldata#7103 — auth-extension cascade deletes. The Gel issue
@@ -385,15 +385,15 @@ Deno.test({
     try {
       const provider = new AuthProvider(
         { jwtSecret: "pg-test-secret-must-be-at-least-32-bytes-long" },
-        adapter,
+        adapter
       );
       await provider.initialize();
 
       const registered = requireAuthResponse(
         await provider.register({
           email: "cascade-test@example.com",
-          password: "password123",
-        }),
+          password: "password123"
+        })
       );
       const userId = registered.user.id;
 
@@ -402,13 +402,13 @@ Deno.test({
       await conn.query(
         `INSERT INTO webauthn_challenges (id, challenge, purpose, user_id, expires_at)
          VALUES ($1, $2, 'register', $3, NOW() + INTERVAL '5 minutes')`,
-        ["c1", "challenge-bytes", userId],
+        ["c1", "challenge-bytes", userId]
       );
 
       // Sanity: the row landed.
       const before = await conn.query(
         "SELECT 1 FROM webauthn_challenges WHERE id = $1",
-        ["c1"],
+        ["c1"]
       );
       assertEquals(before.rowCount, 1);
 
@@ -417,12 +417,12 @@ Deno.test({
 
       const after = await conn.query(
         "SELECT 1 FROM webauthn_challenges WHERE id = $1",
-        ["c1"],
+        ["c1"]
       );
       assertEquals(after.rowCount, 0);
     } finally {
       await conn.close();
       await cleanupAuthTables(dsn);
     }
-  },
+  }
 });

@@ -19,7 +19,7 @@ Deno.test("SEMANTIC_TOKEN_LEGEND - declares the expected token type ordering", (
     "string",
     "number",
     "comment",
-    "operator",
+    "operator"
   ]);
 });
 
@@ -73,7 +73,7 @@ Deno.test("provideSemanticTokens - multiple tokens on same line use column delta
     5,
     4,
     tokenTypeIdx("type"),
-    0,
+    0
   ]);
 });
 
@@ -91,7 +91,7 @@ Deno.test("provideSemanticTokens - tokens on different lines use line deltas", (
     0,
     4,
     tokenTypeIdx("keyword"),
-    0,
+    0
   ]);
 });
 

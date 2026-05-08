@@ -51,7 +51,7 @@ export interface SchemaApplyOptions {
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json" }
   });
 }
 
@@ -62,7 +62,7 @@ function jsonResponse(status: number, body: unknown): Response {
  * advisory lock inside the migration engine.
  */
 export async function handleSchemaApply(
-  options: SchemaApplyOptions,
+  options: SchemaApplyOptions
 ): Promise<Response> {
   const { request, url, schemaFilePath, databaseUrl, onApplied } = options;
 
@@ -77,11 +77,11 @@ export async function handleSchemaApply(
   } catch (err) {
     if (err instanceof Deno.errors.NotFound) {
       return jsonResponse(404, {
-        error: `Schema file not found: ${schemaFilePath}`,
+        error: `Schema file not found: ${schemaFilePath}`
       });
     }
     log.error("schema-apply: failed to read schema file", {
-      error: err instanceof Error ? err.message : String(err),
+      error: err instanceof Error ? err.message : String(err)
     });
     return jsonResponse(500, { error: "Failed to read schema file" });
   }
@@ -90,11 +90,11 @@ export async function handleSchemaApply(
   // structured error before opening a DB connection.
   const parsePreview = computeSchemaDiff("module default {};", onDiskSdl);
   if (parsePreview.errors.length > 0) {
-    const onDiskParseErrors = parsePreview.errors.filter((e) => e.source === "onDisk");
+    const onDiskParseErrors = parsePreview.errors.filter(e => e.source === "onDisk");
     if (onDiskParseErrors.length > 0) {
       return jsonResponse(400, {
         error: "Schema file has parse errors",
-        parseErrors: onDiskParseErrors,
+        parseErrors: onDiskParseErrors
       });
     }
   }
@@ -120,7 +120,7 @@ export async function handleSchemaApply(
       const baselineResult = manager.loadBaseline(options.appliedSdl);
       if (!baselineResult.ok) {
         log.warn("schema-apply: applied-SDL baseline failed to parse", {
-          error: baselineResult.error.message,
+          error: baselineResult.error.message
         });
         // Don't fail the request — proceed with no baseline (treats
         // everything as additive). The user can re-bake the server
@@ -130,7 +130,7 @@ export async function handleSchemaApply(
     }
 
     const applyResult = await manager.applySchema(onDiskSdl, {
-      allowUnsafe: force,
+      allowUnsafe: force
     });
 
     if (!applyResult.ok) {
@@ -142,7 +142,7 @@ export async function handleSchemaApply(
       return jsonResponse(isGateRefusal ? 400 : 500, {
         error: message,
         gateRefusal: isGateRefusal,
-        force,
+        force
       });
     }
 
@@ -151,19 +151,19 @@ export async function handleSchemaApply(
 
     return jsonResponse(200, {
       ok: true,
-      applied: results.map((r) => ({
+      applied: results.map(r => ({
         migrationId: r.migrationId,
         appliedAt: r.appliedAt,
-        durationMs: r.durationMs,
+        durationMs: r.durationMs
       })),
-      force,
+      force
     });
   } catch (err) {
     log.error("schema-apply: unexpected error", {
-      error: err instanceof Error ? err.message : String(err),
+      error: err instanceof Error ? err.message : String(err)
     });
     return jsonResponse(500, {
-      error: err instanceof Error ? err.message : String(err),
+      error: err instanceof Error ? err.message : String(err)
     });
   } finally {
     if (manager) {

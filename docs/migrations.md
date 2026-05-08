@@ -219,7 +219,7 @@ When `rollbackOnError` is enabled in the migration configuration (the default), 
 ```typescript
 const engine = new MigrationEngine({
   // ...
-  rollbackOnError: true,
+  rollbackOnError: true
 });
 
 // If any DDL statement fails, the engine automatically
@@ -455,7 +455,7 @@ export default {
     `);
 
     ctx.log("Backfilled default roles for all users");
-  },
+  }
 };
 ```
 
@@ -653,7 +653,7 @@ import { ConnectionPool } from "disc/lib/connection-pool.ts";
 
 const pool = new ConnectionPool({
   connectionString: process.env.DATABASE_URL!,
-  max: 10,
+  max: 10
 });
 await pool.initialize();
 
@@ -784,7 +784,7 @@ export async function migrate(opts: {
     }
     return {
       migrationsApplied: result.value.length,
-      durationMs: Date.now() - start,
+      durationMs: Date.now() - start
     };
   } finally {
     await manager.close();
@@ -830,7 +830,7 @@ const result = await manager.applySchema(`
 if (result.ok) {
   for (const migration of result.value) {
     console.log(
-      `Applied ${migration.migrationId} in ${migration.durationMs}ms`,
+      `Applied ${migration.migrationId} in ${migration.durationMs}ms`
     );
   }
 }
@@ -913,7 +913,7 @@ const engine = new MigrationEngine({
   autoApprove: true,
   backupBeforeMigration: false,
   rollbackOnError: true,
-  connectionPool: pool,
+  connectionPool: pool
 });
 
 await engine.initialize();
@@ -1077,7 +1077,7 @@ export default {
   },
   async down({ sql }) {
     await sql(`UPDATE users SET status = NULL WHERE status = 'active'`);
-  },
+  }
 };
 ```
 
@@ -1154,7 +1154,7 @@ export default {
       SET full_name = first_name || ' ' || last_name
       WHERE first_name IS NOT NULL
     `);
-  },
+  }
 };
 ```
 

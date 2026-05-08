@@ -275,7 +275,7 @@ export class UserQueryBuilder {
     bio: "<str>",
     created_at: "<datetime>",
     email: "<str>",
-    name: "<str>",
+    name: "<str>"
   };
 
   constructor(private client: DiscClient) {}
@@ -288,9 +288,9 @@ export class UserQueryBuilder {
 
   /** Select User by ID */
   async selectById(id: string, shape?: string): Promise<Types.User | null> {
-    const query = shape
-      ? `select User ${shape} filter .id = <uuid>$id`
-      : `select User { * } filter .id = <uuid>$id`;
+    const query = shape ?
+      `select User ${shape} filter .id = <uuid>$id` :
+      `select User { * } filter .id = <uuid>$id`;
     const results = await this.client.query<Types.User[]>(query, { id });
     return results[0] || null;
   }
@@ -299,17 +299,18 @@ export class UserQueryBuilder {
   async filter(
     condition: string,
     variables?: Types.UserFilterVars,
-    shape?: string,
+    shape?: string
   ): Promise<Types.User[]> {
-    const query = shape
-      ? `select User ${shape} filter ${condition}`
-      : `select User { * } filter ${condition}`;
+    const query = shape ?
+      `select User ${shape} filter ${condition}` :
+      `select User { * } filter ${condition}`;
     return await this.client.query<Types.User[]>(query, variables);
   }
 
   /** Insert new User */
   async insert(data: Types.UserInsert): Promise<Types.User> {
-    const assignments = Object.entries(data)
+    const assignments = Object
+      .entries(data)
       .map(([key, value]) =>
         `${key} := ${UserQueryBuilder._typeCasts[key] || "<str>"}$${key}`
       )
@@ -320,7 +321,8 @@ export class UserQueryBuilder {
 
   /** Update User by ID */
   async update(id: string, data: Types.UserUpdate): Promise<Types.User> {
-    const assignments = Object.entries(data)
+    const assignments = Object
+      .entries(data)
       .map(([key, value]) =>
         `${key} := ${UserQueryBuilder._typeCasts[key] || "<str>"}$${key}`
       )
@@ -338,11 +340,11 @@ export class UserQueryBuilder {
   /** Count User objects */
   async count(
     condition?: string,
-    variables?: Types.UserFilterVars,
+    variables?: Types.UserFilterVars
   ): Promise<number> {
-    const query = condition
-      ? `select count(User filter ${condition})`
-      : `select count(User)`;
+    const query = condition ?
+      `select count(User filter ${condition})` :
+      `select count(User)`;
     return await this.client.query<number>(query, variables);
   }
 }
@@ -363,7 +365,7 @@ const user = await client.user.selectById(
   email,
   name,
   posts: { created_at, title }
-}`,
+}`
 );
 ```
 
@@ -391,12 +393,12 @@ Usage:
 ```typescript
 const activeUsers = await client.user.filter(
   ".active = <bool>$active AND .age > <int32>$minAge",
-  { active: true, minAge: 18 },
+  { active: true, minAge: 18 }
 );
 
 const count = await client.user.count(
   ".email LIKE <str>$pattern",
-  { pattern: "%@example.com" },
+  { pattern: "%@example.com" }
 );
 ```
 

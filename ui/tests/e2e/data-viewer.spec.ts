@@ -154,7 +154,7 @@ test.describe("Data viewer — CRUD", () => {
     await expect(page.getByRole("cell", { name: "Sark v2" })).toBeVisible();
 
     const rows = await runQuery(
-      "select default::Item { name } filter .name = 'Sark v2';",
+      "select default::Item { name } filter .name = 'Sark v2';"
     );
     expect(Array.isArray(rows.data) ? rows.data.length : 0).toBe(1);
   });
@@ -163,7 +163,7 @@ test.describe("Data viewer — CRUD", () => {
     await insertItem("CLU", 9);
     await page.goto("/ui/data");
 
-    page.once("dialog", (dialog) => dialog.accept());
+    page.once("dialog", dialog => dialog.accept());
     await page.getByRole("button", { name: "Delete" }).click();
 
     // Row gone from UI and DB.

@@ -78,8 +78,8 @@ export class TestDatabase implements DatabaseInterface {
     // Extract column names and values from INSERT ... (...) VALUES (...)
     const columnsMatch = sql.match(/\(([^)]+)\)\s*values\s*\(([^)]+)\)/i);
     if (columnsMatch) {
-      const columns = columnsMatch[1].split(",").map((c) => c.trim());
-      const values = columnsMatch[2].split(",").map((v) => v.trim());
+      const columns = columnsMatch[1].split(",").map(c => c.trim());
+      const values = columnsMatch[2].split(",").map(v => v.trim());
 
       columns.forEach((col, index) => {
         const val = values[index] ? values[index].trim() : "null";
@@ -97,14 +97,20 @@ export class TestDatabase implements DatabaseInterface {
 
     // Apply default values for columns not in INSERT
     if (tableName === "users") {
-      if (!("active" in row)) row.active = true;
-      if (!("email_verified" in row)) row.email_verified = false;
-      if (!("created_at" in row)) row.created_at = new Date().toISOString();
-      if (!("updated_at" in row)) row.updated_at = new Date().toISOString();
+      if (!("active" in row))
+        row.active = true;
+      if (!("email_verified" in row))
+        row.email_verified = false;
+      if (!("created_at" in row))
+        row.created_at = new Date().toISOString();
+      if (!("updated_at" in row))
+        row.updated_at = new Date().toISOString();
     }
     if (tableName === "sessions") {
-      if (!("revoked" in row)) row.revoked = false;
-      if (!("created_at" in row)) row.created_at = new Date().toISOString();
+      if (!("revoked" in row))
+        row.revoked = false;
+      if (!("created_at" in row))
+        row.created_at = new Date().toISOString();
     }
 
     table.push(row);
@@ -140,7 +146,7 @@ export class TestDatabase implements DatabaseInterface {
   private handleSelectWithJoin(sql: string, params: any[]): QueryResult {
     // Parse: SELECT ... FROM sessions s JOIN users u ON s.userId = u.id WHERE ...
     const fromMatch = sql.match(
-      /from\s+(\w+)\s+(\w+)\s+join\s+(\w+)\s+(\w+)\s+on\s+(\w+)\.(\w+)\s*=\s*(\w+)\.(\w+)/i,
+      /from\s+(\w+)\s+(\w+)\s+join\s+(\w+)\s+(\w+)\s+on\s+(\w+)\.(\w+)\s*=\s*(\w+)\.(\w+)/i
     );
     if (!fromMatch) {
       return { rows: [], rowCount: 0 };
@@ -202,8 +208,8 @@ export class TestDatabase implements DatabaseInterface {
     // Separate SET params from WHERE params
     // Count ? placeholders in SET clause to know which params go where
     const normalized = sql.replace(/\s+/g, " ").trim();
-    const setMatch = normalized.match(/set (.+?) where/i)
-      || normalized.match(/set (.+)$/i);
+    const setMatch = normalized.match(/set (.+?) where/i) ||
+      normalized.match(/set (.+)$/i);
 
     let setParamCount = 0;
     if (setMatch) {
@@ -224,11 +230,12 @@ export class TestDatabase implements DatabaseInterface {
       const assignments = this.splitSetClause(setClause);
       const setIdx = 0;
 
-      rowsToUpdate.forEach((row) => {
+      rowsToUpdate.forEach(row => {
         let localSetIdx = setIdx;
-        assignments.forEach((assignment) => {
+        assignments.forEach(assignment => {
           const eqPos = assignment.indexOf("=");
-          if (eqPos === -1) return;
+          if (eqPos === -1)
+            return;
           const column = assignment.substring(0, eqPos).trim();
           const value = assignment.substring(eqPos + 1).trim();
 
@@ -261,8 +268,10 @@ export class TestDatabase implements DatabaseInterface {
     let depth = 0;
 
     for (const char of setClause) {
-      if (char === "(" || char === "{") depth++;
-      else if (char === ")" || char === "}") depth--;
+      if (char === "(" || char === "{")
+        depth++;
+      else if (char === ")" || char === "}")
+        depth--;
       else if (char === "," && depth === 0) {
         parts.push(current.trim());
         current = "";
@@ -270,7 +279,8 @@ export class TestDatabase implements DatabaseInterface {
       }
       current += char;
     }
-    if (current.trim()) parts.push(current.trim());
+    if (current.trim())
+      parts.push(current.trim());
     return parts;
   }
 
@@ -284,7 +294,7 @@ export class TestDatabase implements DatabaseInterface {
     const table = this.tables.get(tableName) || [];
 
     const rowsToDelete = this.applyWhereClause(table, sql, params);
-    const remainingRows = table.filter((row) => !rowsToDelete.includes(row));
+    const remainingRows = table.filter(row => !rowsToDelete.includes(row));
 
     this.tables.set(tableName, remainingRows);
 
@@ -293,7 +303,7 @@ export class TestDatabase implements DatabaseInterface {
 
   private applyWhereClause(table: any[], sql: string, params: any[]): any[] {
     const whereMatch = sql.match(
-      /where\s+(.+?)(?:\s+group by|\s+order by|\s+limit|$)/is,
+      /where\s+(.+?)(?:\s+group by|\s+order by|\s+limit|$)/is
     );
     if (!whereMatch) {
       return table;
@@ -309,7 +319,7 @@ export class TestDatabase implements DatabaseInterface {
     // Track parameter index as a mutable reference
     const paramRef = { index: 0 };
 
-    return table.filter((row) => {
+    return table.filter(row => {
       // Reset param index for each row evaluation
       const savedIndex = paramRef.index;
       paramRef.index = 0;
@@ -317,7 +327,7 @@ export class TestDatabase implements DatabaseInterface {
         row,
         whereClause,
         params,
-        paramRef,
+        paramRef
       );
       // After first row, keep the param count we discovered
       if (savedIndex === 0) {
@@ -332,7 +342,7 @@ export class TestDatabase implements DatabaseInterface {
     row: any,
     expr: string,
     params: any[],
-    paramRef: { index: number; },
+    paramRef: { index: number; }
   ): boolean {
     const trimmed = expr.trim();
 
@@ -340,12 +350,12 @@ export class TestDatabase implements DatabaseInterface {
     // But first try splitting by AND/OR at the top level (not inside parens)
     const andParts = this.splitByKeyword(trimmed, " and ");
     if (andParts.length > 1) {
-      return andParts.every((part) => this.evaluateWhereExpression(row, part, params, paramRef));
+      return andParts.every(part => this.evaluateWhereExpression(row, part, params, paramRef));
     }
 
     const orParts = this.splitByKeyword(trimmed, " or ");
     if (orParts.length > 1) {
-      return orParts.some((part) => this.evaluateWhereExpression(row, part, params, paramRef));
+      return orParts.some(part => this.evaluateWhereExpression(row, part, params, paramRef));
     }
 
     // Strip outer parens
@@ -354,7 +364,7 @@ export class TestDatabase implements DatabaseInterface {
         row,
         trimmed.slice(1, -1),
         params,
-        paramRef,
+        paramRef
       );
     }
 
@@ -372,12 +382,14 @@ export class TestDatabase implements DatabaseInterface {
 
     let i = 0;
     while (i < expr.length) {
-      if (expr[i] === "(") depth++;
-      else if (expr[i] === ")") depth--;
+      if (expr[i] === "(")
+        depth++;
+      else if (expr[i] === ")")
+        depth--;
 
       if (
-        depth === 0
-        && lowerExpr.substring(i, i + lowerKeyword.length) === lowerKeyword
+        depth === 0 &&
+        lowerExpr.substring(i, i + lowerKeyword.length) === lowerKeyword
       ) {
         parts.push(current.trim());
         current = "";
@@ -388,7 +400,8 @@ export class TestDatabase implements DatabaseInterface {
       current += expr[i];
       i++;
     }
-    if (current.trim()) parts.push(current.trim());
+    if (current.trim())
+      parts.push(current.trim());
 
     return parts;
   }
@@ -397,7 +410,7 @@ export class TestDatabase implements DatabaseInterface {
     row: any,
     condition: string,
     params: any[],
-    paramRef: { index: number; },
+    paramRef: { index: number; }
   ): boolean {
     const trimmed = condition.trim();
     const lower = trimmed.toLowerCase();
@@ -416,7 +429,7 @@ export class TestDatabase implements DatabaseInterface {
 
     // Handle "column > CURRENT_TIMESTAMP" or "column > value"
     if (trimmed.includes(">")) {
-      const parts = trimmed.split(">").map((s) => s.trim());
+      const parts = trimmed.split(">").map(s => s.trim());
       if (parts.length === 2) {
         const col = parts[0].trim();
         const valuePart = parts[1].trim();
@@ -429,17 +442,18 @@ export class TestDatabase implements DatabaseInterface {
           compareValue = valuePart.replace(/'/g, "");
         }
         const rowVal = row[col];
-        if (rowVal === null || rowVal === undefined) return false;
+        if (rowVal === null || rowVal === undefined)
+          return false;
         return new Date(rowVal) > new Date(compareValue);
       }
     }
 
     // Handle "column < value"
     if (
-      trimmed.includes("<") && !trimmed.includes("<=")
-      && !trimmed.includes("<>")
+      trimmed.includes("<") && !trimmed.includes("<=") &&
+      !trimmed.includes("<>")
     ) {
-      const parts = trimmed.split("<").map((s) => s.trim());
+      const parts = trimmed.split("<").map(s => s.trim());
       if (parts.length === 2) {
         const col = parts[0].trim();
         const valuePart = parts[1].trim();
@@ -452,7 +466,8 @@ export class TestDatabase implements DatabaseInterface {
           compareValue = valuePart.replace(/'/g, "");
         }
         const rowVal = row[col];
-        if (rowVal === null || rowVal === undefined) return false;
+        if (rowVal === null || rowVal === undefined)
+          return false;
         return new Date(rowVal) < new Date(compareValue);
       }
     }
@@ -467,8 +482,8 @@ export class TestDatabase implements DatabaseInterface {
       if (valuePart === "?") {
         expectedValue = params[paramRef.index++];
       } else if (
-        valuePart.toLowerCase() === "true"
-        || valuePart.toLowerCase() === "false"
+        valuePart.toLowerCase() === "true" ||
+        valuePart.toLowerCase() === "false"
       ) {
         expectedValue = valuePart.toLowerCase() === "true";
       } else if (valuePart.toLowerCase() === "null") {

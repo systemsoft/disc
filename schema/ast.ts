@@ -322,7 +322,7 @@ export function createTypeRef(
   name: QualifiedName,
   optional = false,
   array = false,
-  params?: TypeRef[],
+  params?: TypeRef[]
 ): TypeRef {
   const ref: TypeRef = { kind: "TypeRef", name, optional, array };
   if (params && params.length > 0) {
@@ -333,7 +333,7 @@ export function createTypeRef(
 
 export function createLiteral(
   type: Literal["type"],
-  value: string | number | boolean,
+  value: string | number | boolean
 ): Literal {
   return { kind: "Literal", type, value };
 }

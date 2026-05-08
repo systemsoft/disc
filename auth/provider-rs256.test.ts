@@ -23,31 +23,33 @@ async function generateRsaPemPair(): Promise<
       name: "RSASSA-PKCS1-v1_5",
       modulusLength: 2048,
       publicExponent: new Uint8Array([0x01, 0x00, 0x01]),
-      hash: "SHA-256",
+      hash: "SHA-256"
     },
     true,
-    ["sign", "verify"],
+    ["sign", "verify"]
   );
 
   const privatePkcs8 = new Uint8Array(
-    await crypto.subtle.exportKey("pkcs8", keyPair.privateKey),
+    await crypto.subtle.exportKey("pkcs8", keyPair.privateKey)
   );
   const publicSpki = new Uint8Array(
-    await crypto.subtle.exportKey("spki", keyPair.publicKey),
+    await crypto.subtle.exportKey("spki", keyPair.publicKey)
   );
 
   return {
     privatePem: derToPem(privatePkcs8, "PRIVATE KEY"),
-    publicPem: derToPem(publicSpki, "PUBLIC KEY"),
+    publicPem: derToPem(publicSpki, "PUBLIC KEY")
   };
 }
 
 function derToPem(der: Uint8Array, label: string): string {
   let bin = "";
-  for (let i = 0; i < der.length; i++) bin += String.fromCharCode(der[i]);
+  for (let i = 0; i < der.length; i++)
+    bin += String.fromCharCode(der[i]);
   const b64 = btoa(bin);
   const lines: string[] = [];
-  for (let i = 0; i < b64.length; i += 64) lines.push(b64.slice(i, i + 64));
+  for (let i = 0; i < b64.length; i += 64)
+    lines.push(b64.slice(i, i + 64));
   return `-----BEGIN ${label}-----\n${lines.join("\n")}\n-----END ${label}-----\n`;
 }
 
@@ -76,22 +78,22 @@ describe("AuthProvider — RS256", () => {
         jwtAlgorithm: "RS256",
         jwtPrivateKey: privatePem,
         jwtPublicKey: publicPem,
-        bcryptRounds: 4,
+        bcryptRounds: 4
       },
-      db as any,
+      db as any
     );
     await provider.initialize();
 
     const response = await provider.register({
       email: "rs@example.com",
-      password: "SecurePass123!",
+      password: "SecurePass123!"
     });
 
     assertExists(response.token);
     // RS256 JWT header decodes to {"alg":"RS256","typ":"JWT"}
     const headerB64 = response.token.split(".")[0];
     const header = JSON.parse(
-      atob(headerB64.replace(/-/g, "+").replace(/_/g, "/")),
+      atob(headerB64.replace(/-/g, "+").replace(/_/g, "/"))
     );
     assertEquals(header.alg, "RS256");
   });
@@ -102,15 +104,15 @@ describe("AuthProvider — RS256", () => {
         jwtAlgorithm: "RS256",
         jwtPrivateKey: privatePem,
         jwtPublicKey: publicPem,
-        bcryptRounds: 4,
+        bcryptRounds: 4
       },
-      db as any,
+      db as any
     );
     await provider.initialize();
 
     const response = await provider.register({
       email: "verify@example.com",
-      password: "SecurePass123!",
+      password: "SecurePass123!"
     });
 
     const payload = await provider.verifyToken(response.token);
@@ -125,14 +127,14 @@ describe("AuthProvider — RS256", () => {
     const hsProvider = new AuthProvider(
       {
         jwtSecret: "test-secret-key-for-testing-only-32+",
-        bcryptRounds: 4,
+        bcryptRounds: 4
       },
-      db as any,
+      db as any
     );
     await hsProvider.initialize();
     const hsResponse = await hsProvider.register({
       email: "cross@example.com",
-      password: "SecurePass123!",
+      password: "SecurePass123!"
     });
 
     const rsProvider = new AuthProvider(
@@ -140,9 +142,9 @@ describe("AuthProvider — RS256", () => {
         jwtAlgorithm: "RS256",
         jwtPrivateKey: privatePem,
         jwtPublicKey: publicPem,
-        bcryptRounds: 4,
+        bcryptRounds: 4
       },
-      db as any,
+      db as any
     );
     await rsProvider.initialize();
 
@@ -155,22 +157,22 @@ describe("AuthProvider — RS256", () => {
         jwtAlgorithm: "RS256",
         jwtPrivateKey: privatePem,
         jwtPublicKey: publicPem,
-        bcryptRounds: 4,
+        bcryptRounds: 4
       },
-      db as any,
+      db as any
     );
     await rsProvider.initialize();
     const rsResponse = await rsProvider.register({
       email: "rev@example.com",
-      password: "SecurePass123!",
+      password: "SecurePass123!"
     });
 
     const hsProvider = new AuthProvider(
       {
         jwtSecret: "test-secret-key-for-testing-only-32+",
-        bcryptRounds: 4,
+        bcryptRounds: 4
       },
-      db as any,
+      db as any
     );
     await hsProvider.initialize();
 
@@ -182,9 +184,9 @@ describe("AuthProvider — RS256", () => {
       {
         jwtAlgorithm: "RS256",
         jwtPrivateKey: privatePem,
-        bcryptRounds: 4,
+        bcryptRounds: 4
       },
-      db as any,
+      db as any
     );
     await assertRejects(() => provider.initialize(), Error, "jwtPublicKey");
   });
@@ -194,9 +196,9 @@ describe("AuthProvider — RS256", () => {
       {
         jwtAlgorithm: "RS256",
         jwtPublicKey: publicPem,
-        bcryptRounds: 4,
+        bcryptRounds: 4
       },
-      db as any,
+      db as any
     );
     await assertRejects(() => provider.initialize(), Error, "jwtPrivateKey");
   });
@@ -207,14 +209,14 @@ describe("AuthProvider — RS256", () => {
         jwtAlgorithm: "RS256",
         jwtPrivateKey: "not a real pem block",
         jwtPublicKey: publicPem,
-        bcryptRounds: 4,
+        bcryptRounds: 4
       },
-      db as any,
+      db as any
     );
     await assertRejects(
       () => provider.initialize(),
       Error,
-      "PEM key missing",
+      "PEM key missing"
     );
   });
 
@@ -222,9 +224,9 @@ describe("AuthProvider — RS256", () => {
     const provider = new AuthProvider(
       {
         // No jwtSecret, no jwtAlgorithm → defaults to HS256
-        bcryptRounds: 4,
+        bcryptRounds: 4
       } as AuthConfig,
-      db as any,
+      db as any
     );
     await assertRejects(() => provider.initialize(), Error, "jwtSecret");
   });
@@ -233,19 +235,19 @@ describe("AuthProvider — RS256", () => {
     const provider = new AuthProvider(
       {
         jwtSecret: "test-secret-key-for-testing-only-32+",
-        bcryptRounds: 4,
+        bcryptRounds: 4
       },
-      db as any,
+      db as any
     );
     await provider.initialize();
 
     const response = await provider.register({
       email: "default@example.com",
-      password: "SecurePass123!",
+      password: "SecurePass123!"
     });
     const headerB64 = response.token.split(".")[0];
     const header = JSON.parse(
-      atob(headerB64.replace(/-/g, "+").replace(/_/g, "/")),
+      atob(headerB64.replace(/-/g, "+").replace(/_/g, "/"))
     );
     assertEquals(header.alg, "HS256");
     assert(response.token.length > 0);

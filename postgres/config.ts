@@ -14,7 +14,7 @@ export class PostgresConfig {
       port = 0,
       sharedBuffers = "128MB",
       socketDir,
-      workMem = "4MB",
+      workMem = "4MB"
     } = options;
 
     const lines: string[] = [
@@ -25,7 +25,7 @@ export class PostgresConfig {
       `listen_addresses = ''  # Unix socket only by default`,
       `port = ${port === 0 ? 5432 : port}  # Default port for socket file naming`,
       `max_connections = ${maxConnections}`,
-      `superuser_reserved_connections = 3`,
+      `superuser_reserved_connections = 3`
     ];
 
     if (socketDir) {
@@ -77,7 +77,7 @@ export class PostgresConfig {
       `lc_monetary = 'en_US.UTF-8'`,
       `lc_numeric = 'en_US.UTF-8'`,
       `lc_time = 'en_US.UTF-8'`,
-      `default_text_search_config = 'pg_catalog.english'`,
+      `default_text_search_config = 'pg_catalog.english'`
     );
 
     return lines.join("\n");
@@ -101,7 +101,7 @@ export class PostgresConfig {
       "",
       "# Disc application connections",
       "local   disc            disc                                    trust",
-      "host    disc            disc            127.0.0.1/32            trust",
+      "host    disc            disc            127.0.0.1/32            trust"
     ];
 
     return lines.join("\n");
@@ -112,7 +112,7 @@ export class PostgresConfig {
       "# Recovery configuration for streaming replication",
       `primary_conninfo = 'host=${primaryHost} port=${primaryPort} user=replication'`,
       `primary_slot_name = 'disc_replica_slot'`,
-      `recovery_target_timeline = 'latest'`,
+      `recovery_target_timeline = 'latest'`
     ];
 
     return lines.join("\n");
@@ -123,7 +123,7 @@ export class PostgresConfig {
     // These are conservative settings suitable for development
     const sharedBuffers = Math.min(
       Math.floor(totalMemoryMB * 0.25),
-      2048,
+      2048
     );
 
     const workMem = Math.max(4, Math.floor(totalMemoryMB / 100));
@@ -131,7 +131,7 @@ export class PostgresConfig {
     return {
       maxConnections: totalMemoryMB < 1024 ? 50 : 100,
       sharedBuffers: `${sharedBuffers}MB`,
-      workMem: `${workMem}MB`,
+      workMem: `${workMem}MB`
     };
   }
 

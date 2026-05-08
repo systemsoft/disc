@@ -44,7 +44,7 @@ Deno.test("computeSchemaDiff — flags an added type", () => {
   const diff = computeSchemaDiff(applied, onDisk);
   assertEquals(diff.changed, true);
   assertEquals(diff.errors, []);
-  assertEquals(diff.added.map((t) => t.name), ["Post"]);
+  assertEquals(diff.added.map(t => t.name), ["Post"]);
   assertEquals(diff.removed, []);
   assertEquals(diff.modified, []);
 });
@@ -66,7 +66,7 @@ Deno.test("computeSchemaDiff — flags a removed type", () => {
 
   const diff = computeSchemaDiff(applied, onDisk);
   assertEquals(diff.changed, true);
-  assertEquals(diff.removed.map((t) => t.name), ["Post"]);
+  assertEquals(diff.removed.map(t => t.name), ["Post"]);
   assertEquals(diff.added, []);
   assertEquals(diff.modified, []);
 });
@@ -95,9 +95,9 @@ Deno.test("computeSchemaDiff — flags a modified type with property add/remove/
 
   const userMod = diff.modified[0];
   assertEquals(userMod.name, "User");
-  assertEquals(userMod.addedProperties.map((p) => p.name), ["bio"]);
-  assertEquals(userMod.removedProperties.map((p) => p.name), ["legacy"]);
-  assertEquals(userMod.changedProperties.map((p) => p.name), ["email"]);
+  assertEquals(userMod.addedProperties.map(p => p.name), ["bio"]);
+  assertEquals(userMod.removedProperties.map(p => p.name), ["legacy"]);
+  assertEquals(userMod.changedProperties.map(p => p.name), ["email"]);
   // The `email` change — optional → required — should be carried.
   const emailChange = userMod.changedProperties[0];
   assertEquals(emailChange.before.required, false);
@@ -147,7 +147,7 @@ Deno.test("computeSchemaDiff — explicit `link` keyword change shows in modifie
 
   const diff = computeSchemaDiff(applied, onDisk);
   assertEquals(diff.changed, true);
-  const postMod = diff.modified.find((m) => m.name === "Post");
+  const postMod = diff.modified.find(m => m.name === "Post");
   assertEquals(postMod !== undefined, true);
-  assertEquals(postMod!.changedLinks.map((l) => l.name), ["author"]);
+  assertEquals(postMod!.changedLinks.map(l => l.name), ["author"]);
 });

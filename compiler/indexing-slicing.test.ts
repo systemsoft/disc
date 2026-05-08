@@ -183,7 +183,7 @@ Deno.test("indexing-slicing - [IS Type] still produces Path with type_intersecti
     assertEquals(expr.kind, "Path");
     if (expr.kind === "Path") {
       const intersectionStep = expr.steps.find(
-        (s) => s.type === "type_intersection",
+        s => s.type === "type_intersection"
       );
       assertEquals(intersectionStep !== undefined, true);
       if (intersectionStep) {

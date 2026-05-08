@@ -59,15 +59,15 @@ function createTestContext(auth?: Partial<AuthContext>): QueryContext {
       database: "test",
       createdAt: new Date(),
       lastActivity: new Date(),
-      variables: {},
+      variables: {}
     },
     auth: {
       roles: [],
       permissions: [],
-      ...auth,
+      ...auth
     },
     requestId: "test-request",
-    startedAt: new Date(),
+    startedAt: new Date()
   };
 }
 
@@ -96,7 +96,7 @@ Deno.test("E2E Access - SDL with allow policy produces valid response", async ()
     schema,
     dryRun: true,
     enableExplain: true,
-    enableAccessPolicies: true,
+    enableAccessPolicies: true
   });
 
   const request: QueryRequest = { query: "SELECT User { name, email }" };
@@ -113,12 +113,12 @@ Deno.test("E2E Access - SDL with allow policy produces valid response", async ()
   // Any errors must not be of type EXECUTION_ERROR (which would indicate
   // an unhandled server crash, not a policy denial).
   const fatalErrors = (response.errors ?? []).filter(
-    (e) => e.extensions?.code === "EXECUTION_ERROR",
+    e => e.extensions?.code === "EXECUTION_ERROR"
   );
   assertEquals(
     fatalErrors.length,
     0,
-    `Expected no EXECUTION_ERROR for authenticated request with allow policy: ${JSON.stringify(fatalErrors)}`,
+    `Expected no EXECUTION_ERROR for authenticated request with allow policy: ${JSON.stringify(fatalErrors)}`
   );
 });
 
@@ -133,7 +133,7 @@ Deno.test("E2E Access - SDL without policy returns normal response", async () =>
     schema,
     dryRun: true,
     enableExplain: true,
-    enableAccessPolicies: false,
+    enableAccessPolicies: false
   });
 
   const request: QueryRequest = { query: "SELECT User { name, email }" };
@@ -146,12 +146,12 @@ Deno.test("E2E Access - SDL without policy returns normal response", async () =>
   // Dry-run mode emits a WARNING into response.errors; filter it out and
   // ensure there are no real errors (COMPILATION_ERROR, EXECUTION_ERROR, etc.)
   const realErrors = (response.errors ?? []).filter(
-    (e) => e.extensions?.code !== "WARNING",
+    e => e.extensions?.code !== "WARNING"
   );
   assertEquals(
     realErrors.length,
     0,
-    `Expected no real errors for schema without policies, got: ${JSON.stringify(realErrors)}`,
+    `Expected no real errors for schema without policies, got: ${JSON.stringify(realErrors)}`
   );
 
   // Dry-run response includes the SQL string in data
@@ -160,7 +160,7 @@ Deno.test("E2E Access - SDL without policy returns normal response", async () =>
   assertEquals(
     sql.includes("WHERE FALSE"),
     false,
-    "Expected no WHERE FALSE in SQL when no policies are defined",
+    "Expected no WHERE FALSE in SQL when no policies are defined"
   );
 });
 
@@ -175,11 +175,11 @@ Deno.test("E2E Access - deny INSERT policy blocks insert query", async () => {
     schema,
     dryRun: true,
     enableExplain: true,
-    enableAccessPolicies: true,
+    enableAccessPolicies: true
   });
 
   const request: QueryRequest = {
-    query: `INSERT User { name := "Hacker", email := "hacker@example.com" }`,
+    query: `INSERT User { name := "Hacker", email := "hacker@example.com" }`
   };
   const context = createTestContext();
 
@@ -189,12 +189,12 @@ Deno.test("E2E Access - deny INSERT policy blocks insert query", async () => {
   // The deny insert policy should result in an error response
   assertExists(
     response.errors,
-    "Expected errors when INSERT is denied by policy",
+    "Expected errors when INSERT is denied by policy"
   );
   assertEquals(
     response.errors!.length > 0,
     true,
-    "Expected at least one error for denied INSERT",
+    "Expected at least one error for denied INSERT"
   );
 });
 
@@ -209,7 +209,7 @@ Deno.test("E2E Access - auth context flows through to policy evaluation", async 
     schema,
     dryRun: true,
     enableExplain: true,
-    enableAccessPolicies: true,
+    enableAccessPolicies: true
   });
 
   const request: QueryRequest = { query: "SELECT User { name, email }" };
@@ -217,7 +217,7 @@ Deno.test("E2E Access - auth context flows through to policy evaluation", async 
   // Authenticated context with a userId
   const authContext = createTestContext({
     userId: "user-xyz-789",
-    roles: ["member"],
+    roles: ["member"]
   });
 
   const response = await handler.handleRequest(request, authContext);
@@ -226,12 +226,12 @@ Deno.test("E2E Access - auth context flows through to policy evaluation", async 
 
   // The handler must not throw an internal error due to missing auth context
   const executionErrors = (response.errors ?? []).filter(
-    (e) => e.extensions?.code === "EXECUTION_ERROR",
+    e => e.extensions?.code === "EXECUTION_ERROR"
   );
   assertEquals(
     executionErrors.length,
     0,
-    `Expected no EXECUTION_ERROR when auth context is provided: ${JSON.stringify(executionErrors)}`,
+    `Expected no EXECUTION_ERROR when auth context is provided: ${JSON.stringify(executionErrors)}`
   );
 
   // Dry-run data should carry the userId through the access context bridge
@@ -239,7 +239,7 @@ Deno.test("E2E Access - auth context flows through to policy evaluation", async 
   if (response.extensions?.sql) {
     assertExists(
       response.extensions.sql,
-      "Expected SQL string in explain output",
+      "Expected SQL string in explain output"
     );
   }
 });
@@ -256,19 +256,19 @@ Deno.test("E2E Access - schema reload updates active policies", async () => {
     schema: schemaA,
     dryRun: true,
     enableExplain: true,
-    enableAccessPolicies: true,
+    enableAccessPolicies: true
   });
 
   const insertRequest: QueryRequest = {
-    query: `INSERT User { name := "Test", email := "test@example.com" }`,
+    query: `INSERT User { name := "Test", email := "test@example.com" }`
   };
   const context = createTestContext();
 
   // With schema A (no policies), INSERT should succeed in dry-run mode
   const responseA = await handler.handleRequest(insertRequest, context);
   assertExists(responseA, "Expected response from schema A");
-  const hasErrorA = responseA.errors !== undefined
-    && responseA.errors.length > 0;
+  const hasErrorA = responseA.errors !== undefined &&
+    responseA.errors.length > 0;
 
   // Schema B: deny insert policy
   const schemaB = await schemaFromSDL(SDL_WITH_DENY_INSERT);
@@ -282,12 +282,12 @@ Deno.test("E2E Access - schema reload updates active policies", async () => {
   // outcome than schema A which had no policies).  We check that B has errors.
   assertExists(
     responseB.errors,
-    "Expected errors after schema reload with deny INSERT policy",
+    "Expected errors after schema reload with deny INSERT policy"
   );
   assertEquals(
     responseB.errors!.length > 0,
     true,
-    "Expected at least one error for denied INSERT after schema reload",
+    "Expected at least one error for denied INSERT after schema reload"
   );
 
   // If schema A had no errors, schema B must differ
@@ -295,7 +295,7 @@ Deno.test("E2E Access - schema reload updates active policies", async () => {
     assertEquals(
       responseB.errors!.length > 0,
       true,
-      "Expected schema B to produce errors that schema A did not",
+      "Expected schema B to produce errors that schema A did not"
     );
   }
 });

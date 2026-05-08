@@ -28,14 +28,17 @@ export function serializeSchema(schema: Schema): string {
   const byModule = new Map<string, TypeDef[]>();
   for (const t of schema.types.values()) {
     const mod = resolveModule(t);
-    if (!byModule.has(mod)) byModule.set(mod, []);
+    if (!byModule.has(mod))
+      byModule.set(mod, []);
     byModule.get(mod)!.push(t);
   }
 
   const moduleNames = [...byModule.keys()].sort((a, b) => {
     // 'default' first, then alphabetical — matches conventional layouts.
-    if (a === "default") return -1;
-    if (b === "default") return 1;
+    if (a === "default")
+      return -1;
+    if (b === "default")
+      return 1;
     return a.localeCompare(b);
   });
 
@@ -43,7 +46,7 @@ export function serializeSchema(schema: Schema): string {
   for (const mod of moduleNames) {
     const types = byModule.get(mod)!.slice().sort((a, b) => stripModule(a.name).localeCompare(stripModule(b.name)));
     const body = types
-      .map((t) => indent(serializeTypeAt(t, INDENT), INDENT))
+      .map(t => indent(serializeTypeAt(t, INDENT), INDENT))
       .join("\n\n");
     blocks.push(`module ${mod} {\n${body}\n};`);
   }
@@ -64,8 +67,10 @@ export function serializeType(typeDef: TypeDef): string {
 // ---------------------------------------------------------------------------
 
 function serializeTypeAt(typeDef: TypeDef, _baseIndent: string): string {
-  if (typeDef.kind === "enum") return serializeEnum(typeDef);
-  if (typeDef.kind === "scalar") return serializeScalar(typeDef);
+  if (typeDef.kind === "enum")
+    return serializeEnum(typeDef);
+  if (typeDef.kind === "scalar")
+    return serializeScalar(typeDef);
   return serializeObject(typeDef);
 }
 
@@ -85,10 +90,11 @@ function serializeScalar(typeDef: TypeDef): string {
 function serializeObject(typeDef: TypeDef): string {
   const name = stripModule(typeDef.name);
   const header: string[] = [];
-  if (typeDef.abstract) header.push("abstract");
+  if (typeDef.abstract)
+    header.push("abstract");
   header.push("type", name);
 
-  const parents = (typeDef.parentTypes ?? []).filter((p) => p !== "std::BaseObject" && p !== "BaseObject");
+  const parents = (typeDef.parentTypes ?? []).filter(p => p !== "std::BaseObject" && p !== "BaseObject");
   if (parents.length > 0) {
     header.push("extending", parents.map(stripModule).join(", "));
   }
@@ -105,7 +111,8 @@ function serializeObject(typeDef: TypeDef): string {
   // Properties (sorted for determinism)
   const props = [...typeDef.properties.values()].sort((a, b) => a.name.localeCompare(b.name));
   for (const p of props) {
-    if (p.name === "id") continue; // implicit in disc/gel
+    if (p.name === "id")
+      continue; // implicit in disc/gel
     lines.push(serializeProperty(p));
   }
 
@@ -121,15 +128,17 @@ function serializeObject(typeDef: TypeDef): string {
   // Each line may itself be a multi-line block (a property with a body).
   // Indent every contained line to keep nested braces readable.
   const body = lines
-    .map((l) => l.split("\n").map((sub) => INDENT + sub).join("\n"))
+    .map(l => l.split("\n").map(sub => INDENT + sub).join("\n"))
     .join("\n");
   return `${header.join(" ")} {\n${body}\n};`;
 }
 
 function serializeProperty(prop: PropertyDef): string {
   const parts: string[] = [];
-  if (prop.required) parts.push("required");
-  if (prop.multi) parts.push("multi");
+  if (prop.required)
+    parts.push("required");
+  if (prop.multi)
+    parts.push("multi");
   parts.push(prop.name);
   parts.push(":", prop.edgeqlType ?? prop.type);
 
@@ -137,13 +146,14 @@ function serializeProperty(prop: PropertyDef): string {
   if (body.length === 0) {
     return `${parts.join(" ").replace(" :", ":")};`;
   }
-  const lines = body.map((l) => INDENT + l).join("\n");
+  const lines = body.map(l => INDENT + l).join("\n");
   return `${parts.join(" ").replace(" :", ":")} {\n${lines}\n};`;
 }
 
 function collectPropertyBodyLines(prop: PropertyDef): string[] {
   const out: string[] = [];
-  if (prop.readonly) out.push("readonly := true;");
+  if (prop.readonly)
+    out.push("readonly := true;");
   if (prop.annotations) {
     for (const [k, v] of orderedEntries(prop.annotations)) {
       out.push(`annotation ${k} := ${formatAnnotationValue(v)};`);
@@ -171,8 +181,10 @@ function serializeLink(link: LinkDef): string {
   // SDL link syntax requires the `link` keyword and `->` arrow:
   // `[required] [multi] link <name> -> <Target>;`
   const parts: string[] = [];
-  if (link.required) parts.push("required");
-  if (link.multi) parts.push("multi");
+  if (link.required)
+    parts.push("required");
+  if (link.multi)
+    parts.push("multi");
   parts.push("link", link.name, "->", stripModule(link.target));
 
   const body: string[] = [];
@@ -185,12 +197,13 @@ function serializeLink(link: LinkDef): string {
   if (body.length === 0) {
     return `${parts.join(" ")};`;
   }
-  const lines = body.map((l) => INDENT + l).join("\n");
+  const lines = body.map(l => INDENT + l).join("\n");
   return `${parts.join(" ")} {\n${lines}\n};`;
 }
 
 function resolveModule(typeDef: TypeDef): string {
-  if (typeDef.module) return typeDef.module;
+  if (typeDef.module)
+    return typeDef.module;
   if (typeDef.name.includes("::")) {
     return typeDef.name.split("::")[0];
   }
@@ -211,8 +224,8 @@ function stripModule(name: string): string {
  */
 function formatAnnotationValue(value: string): string {
   if (
-    (value.startsWith("'") && value.endsWith("'"))
-    || (value.startsWith("\"") && value.endsWith("\""))
+    (value.startsWith("'") && value.endsWith("'")) ||
+    (value.startsWith("\"") && value.endsWith("\""))
   ) {
     return value;
   }
@@ -222,12 +235,12 @@ function formatAnnotationValue(value: string): string {
 }
 
 function orderedEntries(o: Record<string, string>): Array<[string, string]> {
-  return Object.keys(o).sort().map((k) => [k, o[k]] as [string, string]);
+  return Object.keys(o).sort().map(k => [k, o[k]] as [string, string]);
 }
 
 function indent(text: string, prefix: string): string {
   return text
     .split("\n")
-    .map((line) => (line.length === 0 ? line : prefix + line))
+    .map(line => (line.length === 0 ? line : prefix + line))
     .join("\n");
 }

@@ -11,7 +11,7 @@ export type {
   ExtensionMetadata,
   ExtensionMiddleware,
   ExtensionRoute,
-  ExtensionState,
+  ExtensionState
 } from "./types.ts";
 
 export { BaseExtension } from "./base-extension.ts";

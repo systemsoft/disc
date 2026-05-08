@@ -52,20 +52,22 @@ export class PostgresMonitor {
     logger.info("Starting PostgreSQL health monitor");
 
     // Startup grace period — let PG finish initializing before first check
-    await new Promise((resolve) => setTimeout(resolve, this.startupGraceMs));
+    await new Promise(resolve => setTimeout(resolve, this.startupGraceMs));
 
     // Initial health check
     await this.checkHealth();
 
     // Schedule periodic checks
     this.monitorHandle = setInterval(async () => {
-      if (!this.isMonitoring) return;
+      if (!this.isMonitoring)
+        return;
       await this.checkHealth();
     }, this.checkInterval);
   }
 
   stop(): void {
-    if (!this.isMonitoring) return;
+    if (!this.isMonitoring)
+      return;
 
     logger.info("Stopping PostgreSQL health monitor");
     this.isMonitoring = false;
@@ -84,7 +86,7 @@ export class PostgresMonitor {
       this.lastHealthStatus = {
         connections: 0,
         healthy: false,
-        lastCheck: new Date(),
+        lastCheck: new Date()
       };
 
       if (this.autoRestart) {
@@ -103,7 +105,7 @@ export class PostgresMonitor {
           connections: 0,
           healthy: true,
           lastCheck: new Date(),
-          latencyMs: Date.now() - startTime,
+          latencyMs: Date.now() - startTime
         };
         this.restartAttempts = 0;
         this.isFirstCheck = false;
@@ -118,9 +120,9 @@ export class PostgresMonitor {
       // When port is 0, PG uses -p 5432 for the socket file name
       const effectivePort = port === 0 ? 5432 : port;
 
-      const args: string[] = port === 0
-        ? ["-h", socketDir, "-p", String(effectivePort), "-U", "disc", "-q"]
-        : ["-h", "localhost", "-p", String(port), "-U", "disc", "-q"];
+      const args: string[] = port === 0 ?
+        ["-h", socketDir, "-p", String(effectivePort), "-U", "disc", "-q"] :
+        ["-h", "localhost", "-p", String(port), "-U", "disc", "-q"];
 
       const cmd = new Deno.Command(pgIsReady, { args });
       const output = await cmd.output();
@@ -131,7 +133,7 @@ export class PostgresMonitor {
           connections: 0,
           healthy: true,
           lastCheck: new Date(),
-          latencyMs,
+          latencyMs
         };
         this.restartAttempts = 0;
         this.isFirstCheck = false;
@@ -141,21 +143,21 @@ export class PostgresMonitor {
       // pg_isready returned non-zero: not accepting connections
       const stderr = new TextDecoder().decode(output.stderr).trim();
       throw new Error(
-        `pg_isready: not accepting connections${stderr ? ` (${stderr})` : ""}`,
+        `pg_isready: not accepting connections${stderr ? ` (${stderr})` : ""}`
       );
     } catch (error) {
       // On the first check, don't count toward restart attempts —
       // PG may still be finishing startup even after pg_ctl -w returns.
       if (this.isFirstCheck) {
         logger.info(
-          `First health check failed (startup grace): ${error}`,
+          `First health check failed (startup grace): ${error}`
         );
         this.isFirstCheck = false;
         this.lastHealthStatus = {
           connections: 0,
           healthy: false,
           lastCheck: new Date(),
-          latencyMs: Date.now() - startTime,
+          latencyMs: Date.now() - startTime
         };
         return this.lastHealthStatus;
       }
@@ -166,7 +168,7 @@ export class PostgresMonitor {
         connections: 0,
         healthy: false,
         lastCheck: new Date(),
-        latencyMs: Date.now() - startTime,
+        latencyMs: Date.now() - startTime
       };
 
       if (this.autoRestart) {
@@ -180,7 +182,7 @@ export class PostgresMonitor {
   private async handleUnhealthy(): Promise<void> {
     if (this.restartAttempts >= this.maxRestartAttempts) {
       logger.error(
-        `PostgreSQL failed after ${this.maxRestartAttempts} restart attempts. Manual intervention required.`,
+        `PostgreSQL failed after ${this.maxRestartAttempts} restart attempts. Manual intervention required.`
       );
       this.stop();
       return;
@@ -188,11 +190,11 @@ export class PostgresMonitor {
 
     this.restartAttempts++;
     logger.info(
-      `Attempting to restart PostgreSQL (attempt ${this.restartAttempts}/${this.maxRestartAttempts})`,
+      `Attempting to restart PostgreSQL (attempt ${this.restartAttempts}/${this.maxRestartAttempts})`
     );
 
     // Wait before restarting
-    await new Promise((resolve) => setTimeout(resolve, this.restartDelayMs));
+    await new Promise(resolve => setTimeout(resolve, this.restartDelayMs));
 
     try {
       await this.instance.restart();
@@ -237,7 +239,7 @@ export class PostgresMonitor {
       `;
 
       const cmd = new Deno.Command(psql, {
-        args: [...connArgs, "-d", "disc", "-t", "-A", "-c", query],
+        args: [...connArgs, "-d", "disc", "-t", "-A", "-c", query]
       });
 
       const output = await cmd.output();
@@ -253,15 +255,15 @@ export class PostgresMonitor {
         connections: {
           active: data.connections_active,
           idle: data.connections_idle,
-          total: data.connections_total,
+          total: data.connections_total
         },
         database: {
-          size: data.database_size,
+          size: data.database_size
         },
         tables: {
           count: data.table_count,
-          totalSize: data.tables_total_size,
-        },
+          totalSize: data.tables_total_size
+        }
       };
     } catch (error) {
       throw new Error(`Failed to get metrics: ${error}`);
@@ -286,7 +288,7 @@ export class PostgresMonitor {
     try {
       // ANALYZE
       const analyzeCmd = new Deno.Command(psql, {
-        args: [...connArgs, "-c", "ANALYZE"],
+        args: [...connArgs, "-c", "ANALYZE"]
       });
       const analyzeOutput = await analyzeCmd.output();
       if (!analyzeOutput.success) {
@@ -296,7 +298,7 @@ export class PostgresMonitor {
 
       // VACUUM
       const vacuumCmd = new Deno.Command(psql, {
-        args: [...connArgs, "-c", "VACUUM"],
+        args: [...connArgs, "-c", "VACUUM"]
       });
       const vacuumOutput = await vacuumCmd.output();
       if (!vacuumOutput.success) {

@@ -179,7 +179,7 @@ export enum TokenType {
   EOF = "EOF", // End of file
   NEWLINE = "NEWLINE", // Line break
   WHITESPACE = "WHITESPACE", // Space, tab
-  COMMENT = "COMMENT", // # comment
+  COMMENT = "COMMENT" // # comment
 }
 
 export const KEYWORDS = new Map<string, TokenType>([
@@ -272,7 +272,7 @@ export const KEYWORDS = new Map<string, TokenType>([
   ["reset", TokenType.RESET],
   ["true", TokenType.TRUE],
   ["false", TokenType.FALSE],
-  ["empty", TokenType.EMPTY],
+  ["empty", TokenType.EMPTY]
 ]);
 
 // Reserved keywords that cannot be used as identifiers
@@ -297,7 +297,7 @@ export const RESERVED_KEYWORDS = new Set([
   "in",
   "union",
   "except",
-  "intersect",
+  "intersect"
 ]);
 
 export interface Token {
@@ -313,7 +313,7 @@ export function createToken(
   value: string,
   line: number,
   column: number,
-  offset: number,
+  offset: number
 ): Token {
   return { type, value, line, column, offset };
 }

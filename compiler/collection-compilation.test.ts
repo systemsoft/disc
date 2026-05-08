@@ -36,18 +36,18 @@ Deno.test("Collection Compilation - Array of integers", () => {
   assertEquals(
     sql.includes("ARRAY["),
     true,
-    "SQL should contain ARRAY[ bracket syntax",
+    "SQL should contain ARRAY[ bracket syntax"
   );
   assertEquals(
     sql.includes("1, 2, 3"),
     true,
-    "SQL should contain the integer elements",
+    "SQL should contain the integer elements"
   );
   // Should NOT use parentheses syntax
   assertEquals(
     sql.includes("ARRAY("),
     false,
-    "SQL should not use ARRAY() parentheses syntax",
+    "SQL should not use ARRAY() parentheses syntax"
   );
 });
 
@@ -58,22 +58,22 @@ Deno.test("Collection Compilation - Array of strings", () => {
   assertEquals(
     sql.includes("ARRAY["),
     true,
-    "SQL should contain ARRAY[ bracket syntax",
+    "SQL should contain ARRAY[ bracket syntax"
   );
   assertEquals(
     sql.includes("'a'"),
     true,
-    "SQL should contain string element 'a'",
+    "SQL should contain string element 'a'"
   );
   assertEquals(
     sql.includes("'b'"),
     true,
-    "SQL should contain string element 'b'",
+    "SQL should contain string element 'b'"
   );
   assertEquals(
     sql.includes("'c'"),
     true,
-    "SQL should contain string element 'c'",
+    "SQL should contain string element 'c'"
   );
 });
 
@@ -84,7 +84,7 @@ Deno.test("Collection Compilation - Single element array", () => {
   assertEquals(
     sql.includes("ARRAY[1]"),
     true,
-    "SQL should contain ARRAY[1]",
+    "SQL should contain ARRAY[1]"
   );
 });
 
@@ -95,12 +95,12 @@ Deno.test("Collection Compilation - Array with mixed expressions", () => {
   assertEquals(
     sql.includes("ARRAY["),
     true,
-    "SQL should contain ARRAY[ bracket syntax",
+    "SQL should contain ARRAY[ bracket syntax"
   );
   assertEquals(
     sql.includes("2 + 3"),
     true,
-    "SQL should contain the binary expression",
+    "SQL should contain the binary expression"
   );
 });
 
@@ -115,12 +115,12 @@ Deno.test("Collection Compilation - Tuple of integers", () => {
   assertEquals(
     sql.includes("jsonb_build_array("),
     true,
-    "SQL should contain jsonb_build_array( function call",
+    "SQL should contain jsonb_build_array( function call"
   );
   assertEquals(
     sql.includes("1, 2, 3"),
     true,
-    "SQL should contain the integer elements",
+    "SQL should contain the integer elements"
   );
 });
 
@@ -131,22 +131,22 @@ Deno.test("Collection Compilation - Tuple with mixed types", () => {
   assertEquals(
     sql.includes("jsonb_build_array("),
     true,
-    "SQL should contain jsonb_build_array(",
+    "SQL should contain jsonb_build_array("
   );
   assertEquals(
     sql.includes("1"),
     true,
-    "SQL should contain integer element",
+    "SQL should contain integer element"
   );
   assertEquals(
     sql.includes("'hello'"),
     true,
-    "SQL should contain string element",
+    "SQL should contain string element"
   );
   assertEquals(
     sql.includes("TRUE"),
     true,
-    "SQL should contain boolean element",
+    "SQL should contain boolean element"
   );
 });
 
@@ -157,17 +157,17 @@ Deno.test("Collection Compilation - Two-element tuple", () => {
   assertEquals(
     sql.includes("jsonb_build_array("),
     true,
-    "SQL should contain jsonb_build_array(",
+    "SQL should contain jsonb_build_array("
   );
   assertEquals(
     sql.includes("42"),
     true,
-    "SQL should contain 42",
+    "SQL should contain 42"
   );
   assertEquals(
     sql.includes("'test'"),
     true,
-    "SQL should contain 'test'",
+    "SQL should contain 'test'"
   );
 });
 
@@ -182,27 +182,27 @@ Deno.test("Collection Compilation - Named tuple", () => {
   assertEquals(
     sql.includes("jsonb_build_object"),
     true,
-    "SQL should contain jsonb_build_object for named tuple",
+    "SQL should contain jsonb_build_object for named tuple"
   );
   assertEquals(
     sql.includes("'name'"),
     true,
-    "SQL should contain field key 'name'",
+    "SQL should contain field key 'name'"
   );
   assertEquals(
     sql.includes("'John'"),
     true,
-    "SQL should contain field value 'John'",
+    "SQL should contain field value 'John'"
   );
   assertEquals(
     sql.includes("'age'"),
     true,
-    "SQL should contain field key 'age'",
+    "SQL should contain field key 'age'"
   );
   assertEquals(
     sql.includes("30"),
     true,
-    "SQL should contain field value 30",
+    "SQL should contain field value 30"
   );
 });
 
@@ -213,27 +213,27 @@ Deno.test("Collection Compilation - Named tuple with boolean", () => {
   assertEquals(
     sql.includes("jsonb_build_object"),
     true,
-    "SQL should contain jsonb_build_object",
+    "SQL should contain jsonb_build_object"
   );
   assertEquals(
     sql.includes("'active'"),
     true,
-    "SQL should contain field key 'active'",
+    "SQL should contain field key 'active'"
   );
   assertEquals(
     sql.includes("TRUE"),
     true,
-    "SQL should contain TRUE",
+    "SQL should contain TRUE"
   );
   assertEquals(
     sql.includes("'count'"),
     true,
-    "SQL should contain field key 'count'",
+    "SQL should contain field key 'count'"
   );
   assertEquals(
     sql.includes("5"),
     true,
-    "SQL should contain 5",
+    "SQL should contain 5"
   );
 });
 
@@ -244,17 +244,17 @@ Deno.test("Collection Compilation - Named tuple single field", () => {
   assertEquals(
     sql.includes("jsonb_build_object"),
     true,
-    "SQL should contain jsonb_build_object",
+    "SQL should contain jsonb_build_object"
   );
   assertEquals(
     sql.includes("'label'"),
     true,
-    "SQL should contain field key 'label'",
+    "SQL should contain field key 'label'"
   );
   assertEquals(
     sql.includes("'hello'"),
     true,
-    "SQL should contain field value 'hello'",
+    "SQL should contain field value 'hello'"
   );
 });
 
@@ -276,22 +276,22 @@ Deno.test("SQL Code Generator - ARRAY function call uses bracket syntax", () => 
           args: [
             { kind: "LiteralExpression", type: "number", value: 1 },
             { kind: "LiteralExpression", type: "number", value: 2 },
-            { kind: "LiteralExpression", type: "number", value: 3 },
-          ],
-        },
-      }],
-    },
+            { kind: "LiteralExpression", type: "number", value: 3 }
+          ]
+        }
+      }]
+    }
   });
 
   assertEquals(
     sql.includes("ARRAY[1, 2, 3]"),
     true,
-    "Codegen should render ARRAY with brackets",
+    "Codegen should render ARRAY with brackets"
   );
   assertEquals(
     sql.includes("ARRAY("),
     false,
-    "Codegen should not use parentheses for ARRAY",
+    "Codegen should not use parentheses for ARRAY"
   );
 });
 
@@ -308,17 +308,17 @@ Deno.test("SQL Code Generator - jsonb_build_array function call uses parentheses
           name: "jsonb_build_array",
           args: [
             { kind: "LiteralExpression", type: "number", value: 1 },
-            { kind: "LiteralExpression", type: "string", value: "hi" },
-          ],
-        },
-      }],
-    },
+            { kind: "LiteralExpression", type: "string", value: "hi" }
+          ]
+        }
+      }]
+    }
   });
 
   assertEquals(
     sql.includes("jsonb_build_array(1, 'hi')"),
     true,
-    "Codegen should render jsonb_build_array with parentheses",
+    "Codegen should render jsonb_build_array with parentheses"
   );
 });
 
@@ -334,16 +334,16 @@ Deno.test("SQL Code Generator - Non-ARRAY function still uses parentheses", () =
           kind: "FunctionCall",
           name: "COUNT",
           args: [
-            { kind: "ColumnReference", column: "*" },
-          ],
-        },
-      }],
-    },
+            { kind: "ColumnReference", column: "*" }
+          ]
+        }
+      }]
+    }
   });
 
   assertEquals(
     sql.includes("COUNT(*)"),
     true,
-    "Non-ARRAY functions should still use parentheses",
+    "Non-ARRAY functions should still use parentheses"
   );
 });

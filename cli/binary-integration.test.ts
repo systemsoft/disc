@@ -30,7 +30,7 @@ async function findBinary(): Promise<string | null> {
       join(REPO_ROOT, "disc-darwin-arm64"),
       join(REPO_ROOT, "disc-darwin-x64"),
       join(REPO_ROOT, "disc-linux-arm64"),
-      join(REPO_ROOT, "disc-linux-x64"),
+      join(REPO_ROOT, "disc-linux-x64")
     ]
   ) {
     try {
@@ -53,15 +53,16 @@ Deno.test({
     const out = await new Deno.Command(binary, {
       args: ["--version"],
       stdout: "piped",
-      stderr: "piped",
-    }).output();
+      stderr: "piped"
+    })
+      .output();
     assertEquals(out.success, true);
     const stdout = new TextDecoder().decode(out.stdout);
     // Match either "Disc Database v…" (current) or
     // "Disc Database CLI v…" (older binaries that may still be on disk).
     assertStringIncludes(stdout, "Disc Database");
     assertStringIncludes(stdout, "v");
-  },
+  }
 });
 
 Deno.test({
@@ -72,13 +73,14 @@ Deno.test({
     const out = await new Deno.Command(binary, {
       args: ["--help"],
       stdout: "piped",
-      stderr: "piped",
-    }).output();
+      stderr: "piped"
+    })
+      .output();
     assertEquals(out.success, true);
     const stdout = new TextDecoder().decode(out.stdout);
     // Sanity-check that the help output mentions a few core commands.
     for (const cmd of ["init", "serve", "migrate", "build"]) {
       assertStringIncludes(stdout, cmd);
     }
-  },
+  }
 });

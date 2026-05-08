@@ -60,7 +60,7 @@ export class FileManager {
 
   constructor(
     private db: DatabaseInterface,
-    options: FileManagerOptions,
+    options: FileManagerOptions
   ) {
     this.backend = options.backend;
     this.maxUploadBytes = options.maxUploadBytes ?? 100 * 1024 * 1024;
@@ -83,10 +83,10 @@ export class FileManager {
       )
     `);
     await this.db.execute(
-      `CREATE INDEX IF NOT EXISTS idx_files_owner ON files(owner_user_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_files_owner ON files(owner_user_id)`
     );
     await this.db.execute(
-      `CREATE INDEX IF NOT EXISTS idx_files_sha256 ON files(sha256)`,
+      `CREATE INDEX IF NOT EXISTS idx_files_sha256 ON files(sha256)`
     );
   }
 
@@ -102,7 +102,7 @@ export class FileManager {
     // — `delete` is reference-counted by hash.
     const existing = await this.db.query(
       "SELECT storage_key FROM files WHERE sha256 = ? LIMIT 1",
-      [sha256],
+      [sha256]
     );
     let storageKey: string;
     if (existing.rows.length > 0) {
@@ -125,22 +125,23 @@ export class FileManager {
         input.body.length,
         sha256,
         storageKey,
-        input.metadata ? JSON.stringify(input.metadata) : null,
-      ],
+        input.metadata ? JSON.stringify(input.metadata) : null
+      ]
     );
     log.info("file.uploaded", {
       id,
       owner: input.ownerUserId,
       size: input.body.length,
       sha256,
-      reused: existing.rows.length > 0,
+      reused: existing.rows.length > 0
     });
     return await this.requireRow(id);
   }
 
   async readMetadata(id: string, requestingUserId: string): Promise<FileMetadata> {
     const row = await this.lookupRow(id);
-    if (!row) throw new FileNotFoundError(id);
+    if (!row)
+      throw new FileNotFoundError(id);
     if (row.ownerUserId !== requestingUserId) {
       throw new FileAccessDeniedError(id);
     }
@@ -163,14 +164,15 @@ export class FileManager {
        FROM files
        WHERE owner_user_id = ?
        ORDER BY created_at DESC`,
-      [ownerUserId],
+      [ownerUserId]
     );
     return result.rows.map(rowToMetadata);
   }
 
   async delete(id: string, requestingUserId: string): Promise<void> {
     const row = await this.lookupRow(id);
-    if (!row) throw new FileNotFoundError(id);
+    if (!row)
+      throw new FileNotFoundError(id);
     if (row.ownerUserId !== requestingUserId) {
       throw new FileAccessDeniedError(id);
     }
@@ -181,7 +183,7 @@ export class FileManager {
     // other metadata row still references this hash.
     const remaining = await this.db.query(
       "SELECT id FROM files WHERE sha256 = ? LIMIT 1",
-      [row.sha256],
+      [row.sha256]
     );
     if (remaining.rows.length === 0) {
       await this.backend.delete(row.storageKey);
@@ -189,7 +191,7 @@ export class FileManager {
     log.info("file.deleted", {
       id,
       owner: row.ownerUserId,
-      blobRetained: remaining.rows.length > 0,
+      blobRetained: remaining.rows.length > 0
     });
   }
 
@@ -200,15 +202,17 @@ export class FileManager {
       `SELECT id, owner_user_id, name, content_type, size, sha256,
               storage_key, metadata, created_at, updated_at
        FROM files WHERE id = ?`,
-      [id],
+      [id]
     );
-    if (result.rows.length === 0) return null;
+    if (result.rows.length === 0)
+      return null;
     return rowToMetadata(result.rows[0]);
   }
 
   private async requireRow(id: string): Promise<FileMetadata> {
     const row = await this.lookupRow(id);
-    if (!row) throw new FileNotFoundError(id);
+    if (!row)
+      throw new FileNotFoundError(id);
     return row;
   }
 }
@@ -224,13 +228,14 @@ function rowToMetadata(row: Record<string, unknown>): FileMetadata {
     storageKey: String(row.storage_key),
     metadata: row.metadata ? JSON.parse(String(row.metadata)) as Record<string, unknown> : null,
     createdAt: String(row.created_at),
-    updatedAt: String(row.updated_at),
+    updatedAt: String(row.updated_at)
   };
 }
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", bytes as BufferSource);
-  return Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, "0"))
+  return Array
+    .from(new Uint8Array(digest))
+    .map(b => b.toString(16).padStart(2, "0"))
     .join("");
 }

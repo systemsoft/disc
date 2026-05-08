@@ -31,7 +31,7 @@ Deno.test({
       connectionString: dsn,
       applicationName: "disc-server",
       minConnections: 1,
-      maxConnections: 2,
+      maxConnections: 2
     });
     await serverPool.initialize();
     const heldConn = await serverPool.acquire();
@@ -41,7 +41,7 @@ Deno.test({
       connectionString: dsn,
       applicationName: "disc-cli",
       minConnections: 1,
-      maxConnections: 2,
+      maxConnections: 2
     });
     await cliPool.initialize();
 
@@ -52,7 +52,7 @@ Deno.test({
       const result = await mgr.detectRunningServers();
       assert(
         result.ok,
-        `preflight should succeed: ${!result.ok && result.error.message}`,
+        `preflight should succeed: ${!result.ok && result.error.message}`
       );
       // At least one disc-server-tagged connection should be reported.
       // The preflight excludes the caller's own pid via
@@ -60,7 +60,7 @@ Deno.test({
       // doesn't count.
       assert(
         result.value.length >= 1,
-        `expected at least 1 disc-server connection; got ${result.value.length}`,
+        `expected at least 1 disc-server connection; got ${result.value.length}`
       );
       assertEquals(result.value[0].applicationName, "disc-server");
     } finally {
@@ -68,7 +68,7 @@ Deno.test({
       await serverPool.close();
       await cliPool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -81,7 +81,7 @@ Deno.test({
       connectionString: dsn,
       applicationName: "disc-cli",
       minConnections: 1,
-      maxConnections: 2,
+      maxConnections: 2
     });
     await cliPool.initialize();
 
@@ -94,12 +94,12 @@ Deno.test({
       assertEquals(
         result.value.length,
         0,
-        `expected no disc-server connections; got ${result.value.map((r) => `${r.pid}/${r.applicationName}`).join(", ")}`,
+        `expected no disc-server connections; got ${result.value.map(r => `${r.pid}/${r.applicationName}`).join(", ")}`
       );
     } finally {
       await cliPool.close();
     }
-  },
+  }
 });
 
 Deno.test("detectRunningServers — dry-run manager returns empty list (no pool)", async () => {

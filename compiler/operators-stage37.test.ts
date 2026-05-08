@@ -33,7 +33,7 @@ function compileEdgeQL(source: string): string {
 
 function tokenize(source: string): { type: TokenType; value: string; }[] {
   const lexer = new EdgeQLLexer(source);
-  return lexer.tokenize().map((t) => ({ type: t.type, value: t.value }));
+  return lexer.tokenize().map(t => ({ type: t.type, value: t.value }));
 }
 
 // ===========================================================================
@@ -42,43 +42,43 @@ function tokenize(source: string): { type: TokenType; value: string; }[] {
 
 Deno.test("Bitwise lexer — & tokenizes as AMPERSAND", () => {
   const tokens = tokenize("a & b");
-  const ampToken = tokens.find((t) => t.type === TokenType.AMPERSAND);
+  const ampToken = tokens.find(t => t.type === TokenType.AMPERSAND);
   assertEquals(ampToken?.value, "&");
 });
 
 Deno.test("Bitwise lexer — && still tokenizes as RANGE_OVERLAPS", () => {
   const tokens = tokenize("a && b");
-  const overlapToken = tokens.find((t) => t.type === TokenType.RANGE_OVERLAPS);
+  const overlapToken = tokens.find(t => t.type === TokenType.RANGE_OVERLAPS);
   assertEquals(overlapToken?.value, "&&");
 });
 
 Deno.test("Bitwise lexer — | tokenizes as PIPE", () => {
   const tokens = tokenize("a | b");
-  const pipeToken = tokens.find((t) => t.type === TokenType.PIPE);
+  const pipeToken = tokens.find(t => t.type === TokenType.PIPE);
   assertEquals(pipeToken?.value, "|");
 });
 
 Deno.test("Bitwise lexer — ^ tokenizes as CARET", () => {
   const tokens = tokenize("a ^ b");
-  const caretToken = tokens.find((t) => t.type === TokenType.CARET);
+  const caretToken = tokens.find(t => t.type === TokenType.CARET);
   assertEquals(caretToken?.value, "^");
 });
 
 Deno.test("Bitwise lexer — << tokenizes as LSHIFT", () => {
   const tokens = tokenize("a << b");
-  const lshiftToken = tokens.find((t) => t.type === TokenType.LSHIFT);
+  const lshiftToken = tokens.find(t => t.type === TokenType.LSHIFT);
   assertEquals(lshiftToken?.value, "<<");
 });
 
 Deno.test("Bitwise lexer — >> tokenizes as RSHIFT", () => {
   const tokens = tokenize("a >> b");
-  const rshiftToken = tokens.find((t) => t.type === TokenType.RSHIFT);
+  const rshiftToken = tokens.find(t => t.type === TokenType.RSHIFT);
   assertEquals(rshiftToken?.value, ">>");
 });
 
 Deno.test("Bitwise lexer — ~ tokenizes as TILDE", () => {
   const tokens = tokenize("~a");
-  const tildeToken = tokens.find((t) => t.type === TokenType.TILDE);
+  const tildeToken = tokens.find(t => t.type === TokenType.TILDE);
   assertEquals(tildeToken?.value, "~");
 });
 
@@ -149,19 +149,19 @@ Deno.test("Bitwise — precedence: bitwise lower than arithmetic", () => {
 
 Deno.test("Regex lexer — !~ tokenizes as REGEX_NOT_MATCH", () => {
   const tokens = tokenize("a !~ b");
-  const token = tokens.find((t) => t.type === TokenType.REGEX_NOT_MATCH);
+  const token = tokens.find(t => t.type === TokenType.REGEX_NOT_MATCH);
   assertEquals(token?.value, "!~");
 });
 
 Deno.test("Regex lexer — ~* tokenizes as REGEX_IMATCH", () => {
   const tokens = tokenize("a ~* b");
-  const token = tokens.find((t) => t.type === TokenType.REGEX_IMATCH);
+  const token = tokens.find(t => t.type === TokenType.REGEX_IMATCH);
   assertEquals(token?.value, "~*");
 });
 
 Deno.test("Regex lexer — !~* tokenizes as REGEX_NOT_IMATCH", () => {
   const tokens = tokenize("a !~* b");
-  const token = tokens.find((t) => t.type === TokenType.REGEX_NOT_IMATCH);
+  const token = tokens.find(t => t.type === TokenType.REGEX_NOT_IMATCH);
   assertEquals(token?.value, "!~*");
 });
 
@@ -239,7 +239,7 @@ Deno.test("EXPLAIN — EXPLAIN ANALYZE parses", () => {
 
 Deno.test("EXPLAIN — EXPLAIN ANALYZE BUFFERS parses", () => {
   const parser = new EdgeQLParser(
-    "EXPLAIN ANALYZE BUFFERS SELECT User { name }",
+    "EXPLAIN ANALYZE BUFFERS SELECT User { name }"
   );
   const ast = parser.parse();
   assertEquals(ast.kind, "ExplainQuery");
@@ -267,7 +267,7 @@ Deno.test("EXPLAIN ANALYZE — includes ANALYZE in options", () => {
 
 Deno.test("EXPLAIN ANALYZE BUFFERS — includes both options", () => {
   const sql = compileEdgeQL(
-    "EXPLAIN ANALYZE BUFFERS SELECT User { name }",
+    "EXPLAIN ANALYZE BUFFERS SELECT User { name }"
   );
   assertStringIncludes(sql, "EXPLAIN");
   assertStringIncludes(sql, "ANALYZE");

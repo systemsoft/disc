@@ -110,7 +110,7 @@ function findPgBinDirUncached(): string | undefined {
     "/opt/homebrew/opt/postgresql@16/bin",
     "/opt/homebrew/opt/postgresql/bin",
     "/usr/local/opt/postgresql@16/bin",
-    "/usr/local/opt/postgresql/bin",
+    "/usr/local/opt/postgresql/bin"
   ];
 
   for (const p of brewPaths) {
@@ -124,7 +124,7 @@ function findPgBinDirUncached(): string | undefined {
     const cmd = new Deno.Command("which", {
       args: ["pg_ctl"],
       stdout: "piped",
-      stderr: "piped",
+      stderr: "piped"
     });
     const output = cmd.outputSync();
 
@@ -207,8 +207,8 @@ export async function getTestDsn(): Promise<string> {
 
   if (!pgBinDir) {
     throw new Error(
-      "Cannot start test PostgreSQL: no PG binaries found. "
-        + "Set DISC_PG_BINARY_PATH or install PostgreSQL locally.",
+      "Cannot start test PostgreSQL: no PG binaries found. " +
+        "Set DISC_PG_BINARY_PATH or install PostgreSQL locally."
     );
   }
 
@@ -237,7 +237,7 @@ export async function getTestDsn(): Promise<string> {
     instanceName: "disc_test",
     pgBinDir,
     port,
-    socketDir,
+    socketDir
   });
 
   await tempInstance.init();
@@ -287,10 +287,10 @@ export async function cleanupTestTables(dsn: string): Promise<void> {
   try {
     await client.connect();
     await client.queryArray(
-      "DROP TABLE IF EXISTS disc_migrations CASCADE;",
+      "DROP TABLE IF EXISTS disc_migrations CASCADE;"
     );
     await client.queryArray(
-      "DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE;",
+      "DROP TABLE IF EXISTS disc_migration_checkpoints CASCADE;"
     );
   } finally {
     await client.end();
@@ -306,7 +306,7 @@ export async function cleanupTestTables(dsn: string): Promise<void> {
  * entire database.
  */
 export async function resetTestDatabase(
-  pool: ConnectionPool | DatabaseConnection,
+  pool: ConnectionPool | DatabaseConnection
 ): Promise<void> {
   const result = await pool.query(`
     SELECT tablename FROM pg_tables
@@ -346,7 +346,7 @@ async function findFreePort(): Promise<number> {
   listener.close();
 
   // Small delay to ensure the OS fully releases the port
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await new Promise(resolve => setTimeout(resolve, 50));
   return port;
 }
 
@@ -369,8 +369,9 @@ function buildTestPgConf(port: number, socketDir: string): string {
     `full_page_writes = off`,
     `logging_collector = off`,
     `log_statement = 'none'`,
-    `jit = off`,
-  ].join("\n");
+    `jit = off`
+  ]
+    .join("\n");
 }
 
 /**
@@ -381,7 +382,7 @@ function buildTestPgConf(port: number, socketDir: string): string {
  */
 async function waitForPg(
   port: number,
-  timeoutMs = 30_000,
+  timeoutMs = 30_000
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   let delay = 100;
@@ -398,19 +399,20 @@ async function waitForPg(
       attempts++;
       const remaining = deadline - Date.now();
 
-      if (remaining <= 0) break;
+      if (remaining <= 0)
+        break;
 
       const wait = Math.min(delay, maxDelay, remaining);
       debugLog(
-        `Waiting ${wait}ms for PG on port ${port} (attempt ${attempts})`,
+        `Waiting ${wait}ms for PG on port ${port} (attempt ${attempts})`
       );
-      await new Promise((resolve) => setTimeout(resolve, wait));
+      await new Promise(resolve => setTimeout(resolve, wait));
       delay = Math.min(delay * 2, maxDelay);
     }
   }
 
   throw new Error(
-    `Timed out waiting for PostgreSQL on port ${port} after ${timeoutMs}ms`,
+    `Timed out waiting for PostgreSQL on port ${port} after ${timeoutMs}ms`
   );
 }
 
@@ -422,7 +424,7 @@ async function createTestDatabase(port: number): Promise<void> {
     hostname: "localhost",
     port,
     user: "disc",
-    database: "postgres",
+    database: "postgres"
   });
 
   try {
@@ -430,7 +432,7 @@ async function createTestDatabase(port: number): Promise<void> {
 
     // Check if the database already exists
     const result = await client.queryObject<{ exists: boolean; }>(
-      `SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = 'disc_test') AS exists`,
+      `SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = 'disc_test') AS exists`
     );
 
     const row = result.rows[0];
@@ -447,14 +449,14 @@ async function createTestDatabase(port: number): Promise<void> {
  * Parse a postgresql:// DSN into Client connection options.
  */
 function parseDsn(
-  dsn: string,
+  dsn: string
 ): { hostname: string; port: number; user: string; database: string; } {
   const url = new URL(dsn);
   return {
     hostname: url.hostname || "localhost",
     port: url.port ? parseInt(url.port) : 5432,
     user: url.username || "disc",
-    database: url.pathname.slice(1) || "disc_test",
+    database: url.pathname.slice(1) || "disc_test"
   };
 }
 
@@ -466,7 +468,8 @@ function parseDsn(
  * mask test failures.
  */
 function registerCleanup(): void {
-  if (cleanupRegistered) return;
+  if (cleanupRegistered)
+    return;
   cleanupRegistered = true;
 
   globalThis.addEventListener("unload", () => {
@@ -491,16 +494,16 @@ function registerCleanup(): void {
               "immediate",
               "-w",
               "-t",
-              "10",
+              "10"
             ],
             stdout: "piped",
-            stderr: "piped",
+            stderr: "piped"
           });
 
           try {
             const out = cmd.outputSync();
             debugLog(
-              `pg_ctl stop exited with code ${out.code}`,
+              `pg_ctl stop exited with code ${out.code}`
             );
           } catch (stopErr) {
             debugLog(`pg_ctl stop failed: ${stopErr}`);

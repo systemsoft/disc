@@ -127,13 +127,13 @@ export function createAccessPolicy(
     span?: Span;
     using?: AccessExpressionNode;
     withCheck?: AccessExpressionNode;
-  },
+  }
 ): AccessPolicyNode {
   return {
     kind: "AccessPolicy",
     name,
     rules,
-    ...options,
+    ...options
   };
 }
 
@@ -141,26 +141,26 @@ export function createAccessRule(
   action: "allow" | "deny",
   operations: AccessOperationNode[],
   condition?: AccessExpressionNode,
-  span?: Span,
+  span?: Span
 ): AccessRuleNode {
   return {
     action,
     condition,
     kind: "AccessRule",
     operations,
-    span,
+    span
   };
 }
 
 export function createAccessOperation(
   operation: AccessOperationNode["operation"],
   columns?: string[],
-  span?: Span,
+  span?: Span
 ): AccessOperationNode {
   return {
     columns,
     kind: "AccessOperation",
     operation,
-    span,
+    span
   };
 }

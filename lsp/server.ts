@@ -23,7 +23,7 @@ import {
   isEmbeddedEqlHost,
   provideEmbeddedCompletion,
   provideEmbeddedDefinition,
-  provideEmbeddedHover,
+  provideEmbeddedHover
 } from "./embedded-edgeql.ts";
 import { provideFormatting } from "./formatting.ts";
 import { provideHover } from "./hover.ts";
@@ -44,7 +44,7 @@ import {
   type SemanticTokensParams,
   type TextDocumentIdentifier,
   type TextDocumentPositionParams,
-  TextDocumentSyncKind,
+  TextDocumentSyncKind
 } from "./protocol.ts";
 import { provideReferences } from "./references.ts";
 import { prepareRename, provideRename } from "./rename.ts";
@@ -107,10 +107,10 @@ export class LanguageServer {
             documentFormattingProvider: true,
             semanticTokensProvider: {
               legend: SEMANTIC_TOKEN_LEGEND,
-              full: true,
-            },
+              full: true
+            }
           },
-          serverInfo: { name: "disc-lsp", version: "0.1.0" },
+          serverInfo: { name: "disc-lsp", version: "0.1.0" }
         };
         this.respond(req.id, result);
         return;
@@ -129,9 +129,9 @@ export class LanguageServer {
         // `.disc` document are surfaced too. Outside any literal
         // returns null so we don't surface SDL-flavored hover in
         // plain TS code.
-        const hover = isEmbeddedEqlHost(params.textDocument.uri)
-          ? provideEmbeddedHover(doc.text, params.position, this.collectSdlContext())
-          : provideHover(doc.text, params.position);
+        const hover = isEmbeddedEqlHost(params.textDocument.uri) ?
+          provideEmbeddedHover(doc.text, params.position, this.collectSdlContext()) :
+          provideHover(doc.text, params.position);
         this.respond(req.id, hover);
         return;
       }
@@ -143,9 +143,9 @@ export class LanguageServer {
           this.respond(req.id, []);
           return;
         }
-        const completion = isEmbeddedEqlHost(params.textDocument.uri)
-          ? provideEmbeddedCompletion(doc.text, params.position, this.collectSdlContext())
-          : provideCompletion(doc.text, params.position);
+        const completion = isEmbeddedEqlHost(params.textDocument.uri) ?
+          provideEmbeddedCompletion(doc.text, params.position, this.collectSdlContext()) :
+          provideCompletion(doc.text, params.position);
         this.respond(req.id, completion);
         return;
       }
@@ -161,9 +161,9 @@ export class LanguageServer {
         // definition provider so a user-defined type in `eql\`...\``
         // jumps to its `.disc` declaration. SDL files keep the
         // existing same-file resolution.
-        const definition = isEmbeddedEqlHost(params.textDocument.uri)
-          ? provideEmbeddedDefinition(doc.text, params.position, this.collectSdlContext())
-          : provideDefinition(doc.text, params.position, params.textDocument.uri);
+        const definition = isEmbeddedEqlHost(params.textDocument.uri) ?
+          provideEmbeddedDefinition(doc.text, params.position, this.collectSdlContext()) :
+          provideDefinition(doc.text, params.position, params.textDocument.uri);
         this.respond(req.id, definition);
         return;
       }
@@ -196,9 +196,9 @@ export class LanguageServer {
             params.textDocument.uri,
             {
               includeDeclaration: params.context?.includeDeclaration ?? true,
-              context: this.collectSdlContext(),
-            },
-          ),
+              context: this.collectSdlContext()
+            }
+          )
         );
         return;
       }
@@ -231,8 +231,8 @@ export class LanguageServer {
             params.position,
             params.newName,
             params.textDocument.uri,
-            { context: this.collectSdlContext() },
-          ),
+            { context: this.collectSdlContext() }
+          )
         );
         return;
       }
@@ -285,7 +285,7 @@ export class LanguageServer {
         this.send({
           jsonrpc: "2.0",
           id: req.id,
-          error: { code: -32601, message: `Method not found: ${req.method}` },
+          error: { code: -32601, message: `Method not found: ${req.method}` }
         });
         return;
       }
@@ -360,7 +360,8 @@ export class LanguageServer {
     const uri = params.textDocument.uri;
     // Phase 1 sync mode is Full — the last entry contains the full new text.
     const change = params.contentChanges[params.contentChanges.length - 1];
-    if (!change) return;
+    if (!change)
+      return;
     const text = change.text;
     const version = params.textDocument.version;
     this.docs.set(uri, { text, version });
@@ -378,7 +379,7 @@ export class LanguageServer {
   private publishDiagnostics(
     uri: DocumentUri,
     version: number | undefined,
-    text: string,
+    text: string
   ): void {
     // SDL diagnostics for `.disc`; embedded-EdgeQL diagnostics for any
     // TS/JS host file (Phase 5). Other URIs get an empty diagnostic
@@ -387,12 +388,12 @@ export class LanguageServer {
     const params: PublishDiagnosticsParams = {
       uri,
       version,
-      diagnostics,
+      diagnostics
     };
     this.send({
       jsonrpc: "2.0",
       method: "textDocument/publishDiagnostics",
-      params,
+      params
     });
   }
 
@@ -400,7 +401,7 @@ export class LanguageServer {
     const resp: RpcSuccessResponse = {
       jsonrpc: "2.0",
       id,
-      result,
+      result
     };
     this.send(resp);
   }
@@ -447,7 +448,8 @@ export async function runStdio(): Promise<number> {
     let chunk: Uint8Array;
     try {
       const { value, done } = await reader.read();
-      if (done) break;
+      if (done)
+        break;
       chunk = value;
     } catch {
       break;
@@ -462,7 +464,8 @@ export async function runStdio(): Promise<number> {
     // Drain as many full messages as the buffer holds.
     while (true) {
       const headerEnd = findHeaderEnd(buffer);
-      if (headerEnd === -1) break;
+      if (headerEnd === -1)
+        break;
       const headerText = decoder.decode(buffer.subarray(0, headerEnd));
       const contentLength = parseContentLength(headerText);
       if (contentLength === null) {
@@ -471,9 +474,10 @@ export async function runStdio(): Promise<number> {
         continue;
       }
       const totalNeeded = headerEnd + 4 + contentLength;
-      if (buffer.byteLength < totalNeeded) break;
+      if (buffer.byteLength < totalNeeded)
+        break;
       const body = decoder.decode(
-        buffer.subarray(headerEnd + 4, totalNeeded),
+        buffer.subarray(headerEnd + 4, totalNeeded)
       );
       buffer = buffer.subarray(totalNeeded);
 
@@ -487,9 +491,9 @@ export async function runStdio(): Promise<number> {
 
       // The `exit` notification ends the loop after a prior shutdown.
       if (
-        "method" in msg
-        && msg.method === "exit"
-        && !("id" in msg)
+        "method" in msg &&
+        msg.method === "exit" &&
+        !("id" in msg)
       ) {
         return server.isShutdownRequested() ? 0 : 1;
       }
@@ -503,10 +507,10 @@ function findHeaderEnd(buf: Uint8Array): number {
   // Look for `\r\n\r\n` (0x0D 0x0A 0x0D 0x0A).
   for (let i = 0; i + 3 < buf.byteLength; i++) {
     if (
-      buf[i] === 0x0d
-      && buf[i + 1] === 0x0a
-      && buf[i + 2] === 0x0d
-      && buf[i + 3] === 0x0a
+      buf[i] === 0x0d &&
+      buf[i + 1] === 0x0a &&
+      buf[i + 2] === 0x0d &&
+      buf[i + 3] === 0x0a
     ) {
       return i;
     }
@@ -517,7 +521,8 @@ function findHeaderEnd(buf: Uint8Array): number {
 function parseContentLength(headerText: string): number | null {
   for (const line of headerText.split(/\r\n/)) {
     const m = line.match(/^Content-Length:\s*(\d+)$/i);
-    if (m) return parseInt(m[1], 10);
+    if (m)
+      return parseInt(m[1], 10);
   }
   return null;
 }

@@ -55,14 +55,16 @@ export class DataMigrationRunner {
 
     try {
       for await (const entry of Deno.readDir(dir)) {
-        if (!entry.isFile) continue;
-        if (!entry.name.endsWith(".data.ts")) continue;
+        if (!entry.isFile)
+          continue;
+        if (!entry.name.endsWith(".data.ts"))
+          continue;
 
         // Extract timestamp from filename: m<timestamp>_<name>.data.ts
         const match = entry.name.match(/^m(\d{8,}T?\d*)_/);
         if (!match) {
           logger.warn(
-            `Skipping data migration file with invalid name format: ${entry.name}`,
+            `Skipping data migration file with invalid name format: ${entry.name}`
           );
           continue;
         }
@@ -77,7 +79,7 @@ export class DataMigrationRunner {
 
           if (!migration || typeof migration.up !== "function") {
             logger.warn(
-              `Skipping ${entry.name}: missing default export or up() function`,
+              `Skipping ${entry.name}: missing default export or up() function`
             );
             continue;
           }
@@ -87,12 +89,12 @@ export class DataMigrationRunner {
             timestamp,
             migration: {
               ...migration,
-              timestamp: migration.timestamp || timestamp,
-            },
+              timestamp: migration.timestamp || timestamp
+            }
           });
         } catch (error) {
           logger.warn(
-            `Failed to import data migration ${entry.name}: ${error instanceof Error ? error.message : String(error)}`,
+            `Failed to import data migration ${entry.name}: ${error instanceof Error ? error.message : String(error)}`
           );
         }
       }
@@ -107,7 +109,7 @@ export class DataMigrationRunner {
     // Sort by timestamp ascending
     discovered.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 
-    return discovered.map((d) => d.migration);
+    return discovered.map(d => d.migration);
   }
 
   /**
@@ -115,24 +117,24 @@ export class DataMigrationRunner {
    */
   async runMigration(
     migration: DataMigration,
-    pool: ConnectionPool,
+    pool: ConnectionPool
   ): Promise<void> {
     const context = this.createContext(pool);
 
     logger.info(`Running data migration: ${migration.name}`);
 
     try {
-      await pool.transaction(async (conn) => {
+      await pool.transaction(async conn => {
         // Override context.sql to use the transactional connection
         const txContext: DataMigrationContext = {
           ...context,
           sql: async (
             query: string,
-            params?: unknown[],
+            params?: unknown[]
           ): Promise<unknown[]> => {
             const result = await conn.query(query, params);
             return result.rows;
-          },
+          }
         };
 
         await migration.up(txContext);
@@ -141,7 +143,7 @@ export class DataMigrationRunner {
       logger.info(`Data migration ${migration.name} completed successfully`);
     } catch (error) {
       throw new MigrationError(
-        `Data migration "${migration.name}" failed: ${error instanceof Error ? error.message : String(error)}`,
+        `Data migration "${migration.name}" failed: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
@@ -152,11 +154,11 @@ export class DataMigrationRunner {
    */
   async rollbackMigration(
     migration: DataMigration,
-    pool: ConnectionPool,
+    pool: ConnectionPool
   ): Promise<void> {
     if (!migration.down) {
       throw new MigrationError(
-        `Data migration "${migration.name}" does not define a down() function and cannot be rolled back`,
+        `Data migration "${migration.name}" does not define a down() function and cannot be rolled back`
       );
     }
 
@@ -165,27 +167,27 @@ export class DataMigrationRunner {
     logger.info(`Rolling back data migration: ${migration.name}`);
 
     try {
-      await pool.transaction(async (conn) => {
+      await pool.transaction(async conn => {
         const txContext: DataMigrationContext = {
           ...context,
           sql: async (
             query: string,
-            params?: unknown[],
+            params?: unknown[]
           ): Promise<unknown[]> => {
             const result = await conn.query(query, params);
             return result.rows;
-          },
+          }
         };
 
         await migration.down!(txContext);
       });
 
       logger.info(
-        `Data migration ${migration.name} rolled back successfully`,
+        `Data migration ${migration.name} rolled back successfully`
       );
     } catch (error) {
       throw new MigrationError(
-        `Data migration "${migration.name}" rollback failed: ${error instanceof Error ? error.message : String(error)}`,
+        `Data migration "${migration.name}" rollback failed: ${error instanceof Error ? error.message : String(error)}`
       );
     }
   }
@@ -195,9 +197,9 @@ export class DataMigrationRunner {
    */
   findMatchingDataMigration(
     dataMigrations: DataMigration[],
-    schemaTimestamp: string,
+    schemaTimestamp: string
   ): DataMigration | undefined {
-    return dataMigrations.find((dm) => dm.timestamp === schemaTimestamp);
+    return dataMigrations.find(dm => dm.timestamp === schemaTimestamp);
   }
 
   /**
@@ -211,19 +213,19 @@ export class DataMigrationRunner {
       },
       edgeql: (
         _query: string,
-        _params?: unknown[],
+        _params?: unknown[]
       ): Promise<unknown> => {
         // EdgeQL execution is a placeholder — requires EdgeQL compiler integration
         return Promise.reject(
           new MigrationError(
-            "EdgeQL execution in data migrations is not yet supported. Use sql() instead.",
-          ),
+            "EdgeQL execution in data migrations is not yet supported. Use sql() instead."
+          )
         );
       },
       pool,
       log: (message: string): void => {
         logger.info(`[data-migration] ${message}`);
-      },
+      }
     };
   }
 }

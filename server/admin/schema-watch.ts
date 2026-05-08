@@ -55,7 +55,8 @@ export interface SseFrame<T = unknown> {
  */
 export function formatSseEvent(frame: SseFrame): string {
   let out = "";
-  if (frame.id) out += `id: ${frame.id}\n`;
+  if (frame.id)
+    out += `id: ${frame.id}\n`;
   out += `event: ${frame.event}\n`;
   out += `data: ${JSON.stringify(frame.data)}\n`;
   out += "\n";
@@ -80,13 +81,13 @@ async function emitDiff(
   ctx: WatchContext,
   controller: ReadableStreamDefaultController<Uint8Array>,
   encoder: TextEncoder,
-  eventName: string,
+  eventName: string
 ): Promise<SchemaDiffSummary | null> {
   const onDiskSdl = await readOnDiskSdl(ctx.schemaFilePath);
   if (onDiskSdl === null) {
     controller.enqueue(encoder.encode(formatSseEvent({
       event: "error",
-      data: { message: `Schema file not found: ${ctx.schemaFilePath}` },
+      data: { message: `Schema file not found: ${ctx.schemaFilePath}` }
     })));
     return null;
   }
@@ -96,7 +97,7 @@ async function emitDiff(
   controller.enqueue(encoder.encode(formatSseEvent({
     event: eventName,
     data: diff,
-    id: String(Date.now()),
+    id: String(Date.now())
   })));
   return diff;
 }
@@ -110,7 +111,7 @@ export function handleSchemaWatch(options: SchemaWatchOptions): Response {
   const ctx: WatchContext = {
     schemaFilePath: options.schemaFilePath,
     appliedSdlProvider: options.appliedSdlProvider,
-    debounceMs: options.debounceMs ?? DEFAULT_DEBOUNCE_MS,
+    debounceMs: options.debounceMs ?? DEFAULT_DEBOUNCE_MS
   };
   const runLoop = options.runWatchLoop ?? true;
   const encoder = new TextEncoder();
@@ -128,7 +129,7 @@ export function handleSchemaWatch(options: SchemaWatchOptions): Response {
         await emitDiff(ctx, controller, encoder, "snapshot");
       } catch (err) {
         log.warn("schema-watch: initial snapshot failed", {
-          error: err instanceof Error ? err.message : String(err),
+          error: err instanceof Error ? err.message : String(err)
         });
       }
 
@@ -149,8 +150,8 @@ export function handleSchemaWatch(options: SchemaWatchOptions): Response {
         controller.enqueue(encoder.encode(formatSseEvent({
           event: "error",
           data: {
-            message: `watch failed: ${err instanceof Error ? err.message : String(err)}`,
-          },
+            message: `watch failed: ${err instanceof Error ? err.message : String(err)}`
+          }
         })));
         controller.close();
         return;
@@ -161,13 +162,14 @@ export function handleSchemaWatch(options: SchemaWatchOptions): Response {
           await emitDiff(ctx, controller, encoder, "delta");
         } catch (err) {
           log.warn("schema-watch: delta emission failed", {
-            error: err instanceof Error ? err.message : String(err),
+            error: err instanceof Error ? err.message : String(err)
           });
         }
       };
 
       const debounceDelta = () => {
-        if (debounceTimer !== undefined) clearTimeout(debounceTimer);
+        if (debounceTimer !== undefined)
+          clearTimeout(debounceTimer);
         debounceTimer = setTimeout(enqueueDelta, ctx.debounceMs);
       };
 
@@ -175,20 +177,23 @@ export function handleSchemaWatch(options: SchemaWatchOptions): Response {
       (async () => {
         try {
           for await (const event of watcher!) {
-            if (abortController.signal.aborted) break;
+            if (abortController.signal.aborted)
+              break;
             // Filter for our SDL file and any peer .disc files in the dir.
-            const matchedPath = event.paths.find((p) => p === ctx.schemaFilePath || p.endsWith(".disc"));
-            if (!matchedPath) continue;
+            const matchedPath = event.paths.find(p => p === ctx.schemaFilePath || p.endsWith(".disc"));
+            if (!matchedPath)
+              continue;
             debounceDelta();
           }
         } catch (err) {
           if (!abortController.signal.aborted) {
             log.warn("schema-watch: watch loop terminated", {
-              error: err instanceof Error ? err.message : String(err),
+              error: err instanceof Error ? err.message : String(err)
             });
           }
         } finally {
-          if (debounceTimer !== undefined) clearTimeout(debounceTimer);
+          if (debounceTimer !== undefined)
+            clearTimeout(debounceTimer);
           try {
             controller.close();
           } catch {
@@ -200,7 +205,8 @@ export function handleSchemaWatch(options: SchemaWatchOptions): Response {
     cancel() {
       // Client disconnected — stop the watcher.
       abortController.abort();
-      if (debounceTimer !== undefined) clearTimeout(debounceTimer);
+      if (debounceTimer !== undefined)
+        clearTimeout(debounceTimer);
       if (watcher) {
         try {
           watcher.close();
@@ -208,15 +214,15 @@ export function handleSchemaWatch(options: SchemaWatchOptions): Response {
           // already closed
         }
       }
-    },
+    }
   });
 
   const headers = new Headers({
     "Content-Type": "text/event-stream",
     "Cache-Control": "no-cache",
-    "Connection": "keep-alive",
+    Connection: "keep-alive",
     // Disable proxy buffering so events flush immediately.
-    "X-Accel-Buffering": "no",
+    "X-Accel-Buffering": "no"
   });
 
   return new Response(stream, { status: 200, headers });

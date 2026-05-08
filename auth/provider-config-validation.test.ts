@@ -18,7 +18,7 @@ describe("AuthProvider — config validation (gh/geldata#7006)", () => {
   let db: TestDatabase;
   const baseConfig: AuthConfig = {
     jwtSecret: "test-secret-key-for-testing-only-32+",
-    bcryptRounds: 4,
+    bcryptRounds: 4
   };
 
   beforeEach(async () => {
@@ -33,55 +33,55 @@ describe("AuthProvider — config validation (gh/geldata#7006)", () => {
   it("rejects bcryptRounds below 4", async () => {
     const provider = new AuthProvider(
       { ...baseConfig, bcryptRounds: 3 },
-      db as any,
+      db as any
     );
     await assertRejects(
       () => provider.initialize(),
       Error,
-      "bcryptRounds must be an integer in [4, 15]",
+      "bcryptRounds must be an integer in [4, 15]"
     );
   });
 
   it("rejects bcryptRounds above 15 (DoS amplifier)", async () => {
     const provider = new AuthProvider(
       { ...baseConfig, bcryptRounds: 20 },
-      db as any,
+      db as any
     );
     await assertRejects(
       () => provider.initialize(),
       Error,
-      "bcryptRounds must be an integer in [4, 15]",
+      "bcryptRounds must be an integer in [4, 15]"
     );
   });
 
   it("rejects non-integer bcryptRounds", async () => {
     const provider = new AuthProvider(
       { ...baseConfig, bcryptRounds: 10.5 },
-      db as any,
+      db as any
     );
     await assertRejects(
       () => provider.initialize(),
       Error,
-      "bcryptRounds must be an integer in [4, 15]",
+      "bcryptRounds must be an integer in [4, 15]"
     );
   });
 
   it("rejects tokenExpiry of zero", async () => {
     const provider = new AuthProvider(
       { ...baseConfig, tokenExpiry: 0 },
-      db as any,
+      db as any
     );
     await assertRejects(
       () => provider.initialize(),
       Error,
-      "tokenExpiry must be a positive number of seconds",
+      "tokenExpiry must be a positive number of seconds"
     );
   });
 
   it("rejects negative tokenExpiry", async () => {
     const provider = new AuthProvider(
       { ...baseConfig, tokenExpiry: -1 },
-      db as any,
+      db as any
     );
     await assertRejects(() => provider.initialize(), Error, "tokenExpiry");
   });
@@ -89,43 +89,43 @@ describe("AuthProvider — config validation (gh/geldata#7006)", () => {
   it("rejects refreshTokenExpiry shorter than tokenExpiry", async () => {
     const provider = new AuthProvider(
       { ...baseConfig, tokenExpiry: 3600, refreshTokenExpiry: 1800 },
-      db as any,
+      db as any
     );
     await assertRejects(
       () => provider.initialize(),
       Error,
-      "refresh tokens shorter than access tokens",
+      "refresh tokens shorter than access tokens"
     );
   });
 
   it("rejects passwordMinLength of 0", async () => {
     const provider = new AuthProvider(
       { ...baseConfig, passwordMinLength: 0 },
-      db as any,
+      db as any
     );
     await assertRejects(
       () => provider.initialize(),
       Error,
-      "passwordMinLength must be a positive integer",
+      "passwordMinLength must be a positive integer"
     );
   });
 
   it("rejects negative maxSessionsPerUser", async () => {
     const provider = new AuthProvider(
       { ...baseConfig, maxSessionsPerUser: -1 },
-      db as any,
+      db as any
     );
     await assertRejects(
       () => provider.initialize(),
       Error,
-      "maxSessionsPerUser must be a non-negative integer",
+      "maxSessionsPerUser must be a non-negative integer"
     );
   });
 
   it("accepts maxSessionsPerUser=0 (unlimited, the default)", async () => {
     const provider = new AuthProvider(
       { ...baseConfig, maxSessionsPerUser: 0 },
-      db as any,
+      db as any
     );
     // Should NOT throw.
     await provider.initialize();
@@ -134,12 +134,12 @@ describe("AuthProvider — config validation (gh/geldata#7006)", () => {
   it("rejects empty jwtIssuer", async () => {
     const provider = new AuthProvider(
       { ...baseConfig, jwtIssuer: "" },
-      db as any,
+      db as any
     );
     await assertRejects(
       () => provider.initialize(),
       Error,
-      "jwtIssuer must be a non-empty string",
+      "jwtIssuer must be a non-empty string"
     );
   });
 
@@ -149,12 +149,12 @@ describe("AuthProvider — config validation (gh/geldata#7006)", () => {
     // smuggle through any string.
     const provider = new AuthProvider(
       { ...baseConfig, jwtAlgorithm: "ES256" as unknown as "HS256" },
-      db as any,
+      db as any
     );
     await assertRejects(
       () => provider.initialize(),
       Error,
-      "jwtAlgorithm must be \"HS256\" or \"RS256\"",
+      "jwtAlgorithm must be \"HS256\" or \"RS256\""
     );
   });
 
@@ -164,7 +164,7 @@ describe("AuthProvider — config validation (gh/geldata#7006)", () => {
     // (more actionable) rather than the cryptic key-import failure.
     const provider = new AuthProvider(
       { jwtSecret: undefined, bcryptRounds: -1 } as AuthConfig,
-      db as any,
+      db as any
     );
     await assertRejects(() => provider.initialize(), Error, "bcryptRounds");
   });
@@ -183,9 +183,9 @@ describe("AuthProvider — config validation (gh/geldata#7006)", () => {
       new AuthProvider(
         {
           ...baseConfig,
-          branding: { appName: "Acme\r\nBcc: attacker@evil" },
+          branding: { appName: "Acme\r\nBcc: attacker@evil" }
         },
-        db as any,
+        db as any
       );
     } catch (e) {
       err = e;
@@ -201,9 +201,9 @@ describe("AuthProvider — config validation (gh/geldata#7006)", () => {
       new AuthProvider(
         {
           ...baseConfig,
-          branding: { logoUrl: "javascript:alert(1)" },
+          branding: { logoUrl: "javascript:alert(1)" }
         },
-        db as any,
+        db as any
       );
     } catch (e) {
       err = e;
@@ -219,9 +219,9 @@ describe("AuthProvider — config validation (gh/geldata#7006)", () => {
       new AuthProvider(
         {
           ...baseConfig,
-          branding: { brandColor: "rgb(0,0,0)" },
+          branding: { brandColor: "rgb(0,0,0)" }
         },
-        db as any,
+        db as any
       );
     } catch (e) {
       err = e;
@@ -238,10 +238,10 @@ describe("AuthProvider — config validation (gh/geldata#7006)", () => {
         branding: {
           appName: "Acme",
           brandColor: "#0af",
-          logoUrl: "https://cdn.acme.com/logo.png",
-        },
+          logoUrl: "https://cdn.acme.com/logo.png"
+        }
       },
-      db as any,
+      db as any
     );
     // No throw → pass.
   });
@@ -252,9 +252,9 @@ describe("AuthProvider — config validation (gh/geldata#7006)", () => {
       new AuthProvider(
         {
           ...baseConfig,
-          magicLinkUrlTemplate: "https://example.com/login",
+          magicLinkUrlTemplate: "https://example.com/login"
         },
-        db as any,
+        db as any
       );
     } catch (e) {
       err = e;
@@ -270,9 +270,9 @@ describe("AuthProvider — config validation (gh/geldata#7006)", () => {
       new AuthProvider(
         {
           ...baseConfig,
-          magicLinkUrlTemplate: "http://example.com/login?t={token}",
+          magicLinkUrlTemplate: "http://example.com/login?t={token}"
         },
-        db as any,
+        db as any
       );
     } catch (e) {
       err = e;
@@ -286,9 +286,9 @@ describe("AuthProvider — config validation (gh/geldata#7006)", () => {
     new AuthProvider(
       {
         ...baseConfig,
-        magicLinkUrlTemplate: "http://localhost:3000/login?t={token}",
+        magicLinkUrlTemplate: "http://localhost:3000/login?t={token}"
       },
-      db as any,
+      db as any
     );
   });
 });

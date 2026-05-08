@@ -17,7 +17,7 @@ Deno.test("resolveEmbeddedPgBinDir - returns null when manifest is empty (no emb
     const result = await resolveEmbeddedPgBinDir({
       discHome: tmp,
       manifestEntries: [],
-      version: "16.4",
+      version: "16.4"
     });
     assertEquals(result, null);
   } finally {
@@ -39,10 +39,10 @@ Deno.test("resolveEmbeddedPgBinDir - extracts then returns bin dir on first call
         {
           sourceUrl: new URL(`file://${fakePostgres}`),
           relPath: "bin/postgres",
-          mode: 0o755,
-        },
+          mode: 0o755
+        }
       ],
-      version: "16.4",
+      version: "16.4"
     });
 
     assertEquals(result, join(tmp, "embedded-postgres", "16.4", "bin"));
@@ -65,13 +65,13 @@ Deno.test("resolveEmbeddedPgBinDir - second call is fast (no re-extract)", async
       {
         sourceUrl: new URL(`file://${fakePostgres}`),
         relPath: "bin/postgres",
-        mode: 0o755,
-      },
+        mode: 0o755
+      }
     ];
     await resolveEmbeddedPgBinDir({
       discHome: tmp,
       manifestEntries: entries,
-      version: "16.4",
+      version: "16.4"
     });
 
     // Tamper to prove we don't re-extract.
@@ -80,7 +80,7 @@ Deno.test("resolveEmbeddedPgBinDir - second call is fast (no re-extract)", async
     const result = await resolveEmbeddedPgBinDir({
       discHome: tmp,
       manifestEntries: entries,
-      version: "16.4",
+      version: "16.4"
     });
 
     const stillOriginal = await Deno.readFile(join(result!, "postgres"));

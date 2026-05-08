@@ -23,7 +23,7 @@ Deno.test("zero counts → empty orbits, only center", () => {
     cy: CY,
     radius: R,
     outgoingCount: 0,
-    incomingCount: 0,
+    incomingCount: 0
   });
   assertEquals(layout.center, { x: CX, y: CY });
   assertEquals(layout.outgoing, []);
@@ -36,7 +36,7 @@ Deno.test("single outgoing sits straight right (3 o'clock)", () => {
     cy: CY,
     radius: R,
     outgoingCount: 1,
-    incomingCount: 0,
+    incomingCount: 0
   });
   assertEquals(layout.outgoing.length, 1);
   near(layout.outgoing[0].angle, 90);
@@ -50,7 +50,7 @@ Deno.test("single incoming sits straight left (9 o'clock)", () => {
     cy: CY,
     radius: R,
     outgoingCount: 0,
-    incomingCount: 1,
+    incomingCount: 1
   });
   assertEquals(layout.incoming.length, 1);
   near(layout.incoming[0].angle, 270);
@@ -64,9 +64,9 @@ Deno.test("two outgoing fill the arc endpoints (30° and 150°)", () => {
     cy: CY,
     radius: R,
     outgoingCount: 2,
-    incomingCount: 0,
+    incomingCount: 0
   });
-  assertEquals(layout.outgoing.map((p) => p.angle), [30, 150]);
+  assertEquals(layout.outgoing.map(p => p.angle), [30, 150]);
   // 30° is upper-right; 150° is lower-right. Both must be on the right semicircle.
   for (const p of layout.outgoing) {
     assert(p.x > CX, `outgoing at ${p.angle}° must be on the right side`);
@@ -79,9 +79,9 @@ Deno.test("two incoming fill the arc endpoints (210° and 330°)", () => {
     cy: CY,
     radius: R,
     outgoingCount: 0,
-    incomingCount: 2,
+    incomingCount: 2
   });
-  assertEquals(layout.incoming.map((p) => p.angle), [210, 330]);
+  assertEquals(layout.incoming.map(p => p.angle), [210, 330]);
   for (const p of layout.incoming) {
     assert(p.x < CX, `incoming at ${p.angle}° must be on the left side`);
   }
@@ -93,9 +93,9 @@ Deno.test("four outgoing distribute evenly across the 120° arc", () => {
     cy: CY,
     radius: R,
     outgoingCount: 4,
-    incomingCount: 0,
+    incomingCount: 0
   });
-  assertEquals(layout.outgoing.map((p) => p.angle), [30, 70, 110, 150]);
+  assertEquals(layout.outgoing.map(p => p.angle), [30, 70, 110, 150]);
 });
 
 Deno.test("orbital points lie on the radius circle", () => {
@@ -104,7 +104,7 @@ Deno.test("orbital points lie on the radius circle", () => {
     cy: CY,
     radius: R,
     outgoingCount: 5,
-    incomingCount: 3,
+    incomingCount: 3
   });
   for (const p of [...layout.outgoing, ...layout.incoming]) {
     const dx = p.x - CX;
@@ -120,7 +120,7 @@ Deno.test("outgoing and incoming halves don't overlap", () => {
     cy: CY,
     radius: R,
     outgoingCount: 6,
-    incomingCount: 6,
+    incomingCount: 6
   });
   for (const p of layout.outgoing) {
     assert(p.x >= CX - 1e-6, `outgoing leaked left at ${p.angle}°`);
@@ -138,7 +138,7 @@ Deno.test("rejects negative radius / counts", () => {
       cy: 0,
       radius: 100,
       outgoingCount: -1,
-      incomingCount: 0,
+      incomingCount: 0
     })
   );
   assertThrows(() =>
@@ -147,7 +147,7 @@ Deno.test("rejects negative radius / counts", () => {
       cy: 0,
       radius: 100,
       outgoingCount: 0,
-      incomingCount: -1,
+      incomingCount: -1
     })
   );
 });

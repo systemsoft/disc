@@ -29,12 +29,12 @@ Deno.test(
   "ConnectionPool hardening - default minConnections is 2",
   async () => {
     const pool = new ConnectionPool({
-      connectionString: "postgresql://test@localhost/test",
+      connectionString: "postgresql://test@localhost/test"
     });
 
     assertEquals(pool.getMinConnections(), 2);
     await pool.close();
-  },
+  }
 );
 
 Deno.test(
@@ -44,7 +44,7 @@ Deno.test(
     const pool = new ConnectionPool({
       connectionString: "postgresql://test@localhost/test",
       minConnections: 1,
-      maxConnections: 5,
+      maxConnections: 5
     });
 
     const restoreConnect = mockConnect();
@@ -71,7 +71,7 @@ Deno.test(
       restoreConnect();
       await pool.close();
     }
-  },
+  }
 );
 
 // --- Leak detection tests ---
@@ -93,7 +93,7 @@ Deno.test(
       minConnections: 0,
       maxConnections: 5,
       leakWarningTimeout: 50, // 50ms for fast test
-      validateOnAcquire: false,
+      validateOnAcquire: false
     });
 
     const restoreConnect = mockConnect();
@@ -104,12 +104,12 @@ Deno.test(
       assertExists(conn);
 
       // Wait for leak warning to fire
-      await new Promise((resolve) => setTimeout(resolve, 120));
+      await new Promise(resolve => setTimeout(resolve, 120));
 
-      const leakWarning = warnings.find((w) => w.includes("Potential connection leak detected"));
+      const leakWarning = warnings.find(w => w.includes("Potential connection leak detected"));
       assertExists(
         leakWarning,
-        "Expected a leak warning to be logged",
+        "Expected a leak warning to be logged"
       );
 
       pool.release(conn);
@@ -118,7 +118,7 @@ Deno.test(
       restoreConnect();
       await pool.close();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -137,7 +137,7 @@ Deno.test(
       minConnections: 0,
       maxConnections: 5,
       leakWarningTimeout: 200,
-      validateOnAcquire: false,
+      validateOnAcquire: false
     });
 
     const restoreConnect = mockConnect();
@@ -151,20 +151,20 @@ Deno.test(
       pool.release(conn);
 
       // Wait past the timeout to make sure no warning fires
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await new Promise(resolve => setTimeout(resolve, 300));
 
-      const leakWarning = warnings.find((w) => w.includes("Potential connection leak detected"));
+      const leakWarning = warnings.find(w => w.includes("Potential connection leak detected"));
       assertEquals(
         leakWarning,
         undefined,
-        "No leak warning should be logged when connection is released in time",
+        "No leak warning should be logged when connection is released in time"
       );
     } finally {
       logger.warn = originalWarn;
       restoreConnect();
       await pool.close();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -183,7 +183,7 @@ Deno.test(
       minConnections: 0,
       maxConnections: 5,
       leakWarningTimeout: 0, // disabled
-      validateOnAcquire: false,
+      validateOnAcquire: false
     });
 
     const restoreConnect = mockConnect();
@@ -193,13 +193,13 @@ Deno.test(
       const conn = await pool.acquire();
 
       // Wait a bit - no warning should fire because detection is disabled
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise(resolve => setTimeout(resolve, 100));
 
-      const leakWarning = warnings.find((w) => w.includes("Potential connection leak detected"));
+      const leakWarning = warnings.find(w => w.includes("Potential connection leak detected"));
       assertEquals(
         leakWarning,
         undefined,
-        "No leak warning should fire when leakWarningTimeout is 0",
+        "No leak warning should fire when leakWarningTimeout is 0"
       );
 
       pool.release(conn);
@@ -208,7 +208,7 @@ Deno.test(
       restoreConnect();
       await pool.close();
     }
-  },
+  }
 );
 
 // --- Exponential backoff tests ---
@@ -225,7 +225,7 @@ Deno.test(
       maxConnections: 5,
       maxRetries: 4,
       retryDelay: 50, // 50ms base delay for fast test
-      validateOnAcquire: false,
+      validateOnAcquire: false
     });
 
     // Mock connect to always fail and record timing
@@ -262,35 +262,35 @@ Deno.test(
       assertEquals(
         delays[0] >= 50 - tolerance,
         true,
-        `First delay ${delays[0]}ms should be ~50ms`,
+        `First delay ${delays[0]}ms should be ~50ms`
       );
       assertEquals(
         delays[1] >= 100 - tolerance,
         true,
-        `Second delay ${delays[1]}ms should be ~100ms`,
+        `Second delay ${delays[1]}ms should be ~100ms`
       );
       assertEquals(
         delays[2] >= 200 - tolerance,
         true,
-        `Third delay ${delays[2]}ms should be ~200ms`,
+        `Third delay ${delays[2]}ms should be ~200ms`
       );
 
       // Verify exponential growth: each delay should be roughly 2x the previous
       assertEquals(
         delays[1] > delays[0],
         true,
-        "Second delay should be longer than first",
+        "Second delay should be longer than first"
       );
       assertEquals(
         delays[2] > delays[1],
         true,
-        "Third delay should be longer than second",
+        "Third delay should be longer than second"
       );
     } finally {
       DatabaseConnection.prototype.connect = originalConnect;
       await pool.close();
     }
-  },
+  }
 );
 
 // --- isHealthy() tests ---
@@ -302,7 +302,7 @@ Deno.test(
       connectionString: "postgresql://test@localhost/test",
       minConnections: 0,
       maxConnections: 5,
-      validateOnAcquire: false,
+      validateOnAcquire: false
     });
 
     const restoreConnect = mockConnect();
@@ -314,7 +314,7 @@ Deno.test(
       restoreConnect();
       await pool.close();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -324,7 +324,7 @@ Deno.test(
       connectionString: "postgresql://test@localhost/test",
       minConnections: 0,
       maxConnections: 5,
-      validateOnAcquire: false,
+      validateOnAcquire: false
     });
 
     const restoreConnect = mockConnect();
@@ -339,7 +339,7 @@ Deno.test(
     } finally {
       restoreConnect();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -349,7 +349,7 @@ Deno.test(
       connectionString: "postgresql://test@localhost/test",
       minConnections: 0,
       maxConnections: 2,
-      validateOnAcquire: false,
+      validateOnAcquire: false
     });
 
     const restoreConnect = mockConnect();
@@ -366,7 +366,7 @@ Deno.test(
       restoreConnect();
       await pool.close();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -378,7 +378,7 @@ Deno.test(
       maxConnections: 1,
       maxWaitQueueSize: 10,
       connectionTimeout: 500,
-      validateOnAcquire: false,
+      validateOnAcquire: false
     });
 
     const restoreConnect = mockConnect();
@@ -394,7 +394,7 @@ Deno.test(
       const waiterPromise = pool.acquire();
 
       // Give the event loop a tick so the waiter enters the queue
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await new Promise(resolve => setTimeout(resolve, 10));
 
       // Pool is at max connections with a waiter - should be unhealthy
       assertEquals(pool.isHealthy(), false);
@@ -407,5 +407,5 @@ Deno.test(
       restoreConnect();
       await pool.close();
     }
-  },
+  }
 );

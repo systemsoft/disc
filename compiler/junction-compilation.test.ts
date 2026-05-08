@@ -65,7 +65,7 @@ function createUserTeamSchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["name", {
         name: "name",
@@ -73,10 +73,10 @@ function createUserTeamSchema(): Schema {
         required: true,
         multi: false,
         columnName: "name",
-        edgeqlType: "str",
-      }],
+        edgeqlType: "str"
+      }]
     ]),
-    links: new Map<string, LinkDef>(),
+    links: new Map<string, LinkDef>()
   };
 
   // Add a memberships multi-link to User that uses a junction table
@@ -89,12 +89,12 @@ function createUserTeamSchema(): Schema {
     multi: true,
     junctionTable: "user_memberships",
     junctionSourceColumn: "source_id",
-    junctionTargetColumn: "target_id",
+    junctionTargetColumn: "target_id"
   });
 
   const updatedUser: TypeDef = {
     ...userType,
-    links: updatedLinks,
+    links: updatedLinks
   };
 
   const types = new Map(baseSchema.types);
@@ -124,12 +124,12 @@ function createReciprocalSchema(): Schema {
     // Same junction table, columns swapped for the reverse direction
     junctionTable: "user_memberships",
     junctionSourceColumn: "target_id",
-    junctionTargetColumn: "source_id",
+    junctionTargetColumn: "source_id"
   });
 
   const updatedTeam: TypeDef = {
     ...teamType,
-    links: updatedTeamLinks,
+    links: updatedTeamLinks
   };
 
   const types = new Map(schema.types);
@@ -147,7 +147,7 @@ Deno.test("Junction compilation - SELECT User { name, memberships: { name } } us
 
   const sql = compileWithSchema(
     schema,
-    "SELECT User { name, memberships: { name } }",
+    "SELECT User { name, memberships: { name } }"
   );
 
   const lower = sql.toLowerCase();
@@ -156,42 +156,42 @@ Deno.test("Junction compilation - SELECT User { name, memberships: { name } } us
   assertStringIncludes(
     lower,
     "user_memberships",
-    "SQL should reference junction table user_memberships",
+    "SQL should reference junction table user_memberships"
   );
 
   // An INNER JOIN must be present to traverse the junction table
   assertEquals(
     lower.includes("inner join"),
     true,
-    "SQL should contain an INNER JOIN clause to traverse the junction table",
+    "SQL should contain an INNER JOIN clause to traverse the junction table"
   );
 
   // The ON condition should join the junction table to the target (teams)
   assertStringIncludes(
     lower,
     "target_id",
-    "SQL should reference target_id from junction table in ON condition",
+    "SQL should reference target_id from junction table in ON condition"
   );
 
   // The WHERE condition should correlate the junction back to the parent (users)
   assertStringIncludes(
     lower,
     "source_id",
-    "SQL should reference source_id from junction table in WHERE condition",
+    "SQL should reference source_id from junction table in WHERE condition"
   );
 
   // The shape fields should appear in the output
   assertStringIncludes(
     lower,
     "'name'",
-    "SQL should include the name shape field",
+    "SQL should include the name shape field"
   );
 
   // The subquery should aggregate results via jsonb_agg
   assertStringIncludes(
     lower,
     "jsonb_agg",
-    "SQL should aggregate junction results with jsonb_agg",
+    "SQL should aggregate junction results with jsonb_agg"
   );
 });
 
@@ -204,7 +204,7 @@ Deno.test("Junction compilation - SELECT User { memberships } without shape gene
 
   const sql = compileWithSchema(
     schema,
-    "SELECT User { name, memberships }",
+    "SELECT User { name, memberships }"
   );
 
   const lower = sql.toLowerCase();
@@ -213,21 +213,21 @@ Deno.test("Junction compilation - SELECT User { memberships } without shape gene
   assertStringIncludes(
     lower,
     "user_memberships",
-    "SQL should reference junction table user_memberships",
+    "SQL should reference junction table user_memberships"
   );
 
   // source_id must be referenced for the WHERE correlation to the parent
   assertStringIncludes(
     lower,
     "source_id",
-    "SQL should reference source_id from junction table",
+    "SQL should reference source_id from junction table"
   );
 
   // The output should still be JSON
   assertStringIncludes(
     lower,
     "jsonb_build_object",
-    "SQL should produce jsonb_build_object output",
+    "SQL should produce jsonb_build_object output"
   );
 });
 
@@ -240,7 +240,7 @@ Deno.test("Junction compilation - SELECT Team { name, members: { name } } uses s
 
   const sql = compileWithSchema(
     schema,
-    "SELECT Team { name, members: { name } }",
+    "SELECT Team { name, members: { name } }"
   );
 
   const lower = sql.toLowerCase();
@@ -249,14 +249,14 @@ Deno.test("Junction compilation - SELECT Team { name, members: { name } } uses s
   assertStringIncludes(
     lower,
     "user_memberships",
-    "SQL should reference the shared junction table user_memberships",
+    "SQL should reference the shared junction table user_memberships"
   );
 
   // An INNER JOIN must be present
   assertEquals(
     lower.includes("inner join"),
     true,
-    "SQL should contain an INNER JOIN clause",
+    "SQL should contain an INNER JOIN clause"
   );
 
   // The reciprocal direction uses target_id as the junction source (Team side)
@@ -264,33 +264,33 @@ Deno.test("Junction compilation - SELECT Team { name, members: { name } } uses s
   assertStringIncludes(
     lower,
     "target_id",
-    "SQL should reference target_id (Team side of junction in ON condition)",
+    "SQL should reference target_id (Team side of junction in ON condition)"
   );
   assertStringIncludes(
     lower,
     "source_id",
-    "SQL should reference source_id (User side of junction in WHERE condition)",
+    "SQL should reference source_id (User side of junction in WHERE condition)"
   );
 
   // The members shape should yield the name field from User
   assertStringIncludes(
     lower,
     "'name'",
-    "SQL should include the name shape field from User members",
+    "SQL should include the name shape field from User members"
   );
 
   // Results should be aggregated
   assertStringIncludes(
     lower,
     "jsonb_agg",
-    "SQL should aggregate members with jsonb_agg",
+    "SQL should aggregate members with jsonb_agg"
   );
 
   // The FROM clause should query the users table (not teams) for the subquery
   assertStringIncludes(
     lower,
     "users",
-    "SQL subquery should select from users table for the members link",
+    "SQL subquery should select from users table for the members link"
   );
 });
 
@@ -314,8 +314,8 @@ Deno.test("DDL deduplication - reciprocal multi-links create exactly one junctio
           required: true,
           multi: false,
           constraints: [],
-          annotations: {},
-        },
+          annotations: {}
+        }
       ],
       links: [
         {
@@ -323,9 +323,9 @@ Deno.test("DDL deduplication - reciprocal multi-links create exactly one junctio
           target: "Course",
           required: false,
           multi: true,
-          annotations: {},
-        },
-      ],
+          annotations: {}
+        }
+      ]
     },
     {
       kind: "CreateType" as const,
@@ -337,8 +337,8 @@ Deno.test("DDL deduplication - reciprocal multi-links create exactly one junctio
           required: true,
           multi: false,
           constraints: [],
-          annotations: {},
-        },
+          annotations: {}
+        }
       ],
       links: [
         {
@@ -346,10 +346,10 @@ Deno.test("DDL deduplication - reciprocal multi-links create exactly one junctio
           target: "Student",
           required: false,
           multi: true,
-          annotations: {},
-        },
-      ],
-    },
+          annotations: {}
+        }
+      ]
+    }
   ];
 
   const ddl = generator.generateDDL(operations);
@@ -366,7 +366,7 @@ Deno.test("DDL deduplication - reciprocal multi-links create exactly one junctio
   assertEquals(
     createTableMatches.length,
     3,
-    `Expected exactly 3 CREATE TABLE statements (student, course, one junction), got ${createTableMatches.length}:\n${combinedDDL}`,
+    `Expected exactly 3 CREATE TABLE statements (student, course, one junction), got ${createTableMatches.length}:\n${combinedDDL}`
   );
 
   // Verify the junction table is created under exactly one canonical name.
@@ -375,14 +375,14 @@ Deno.test("DDL deduplication - reciprocal multi-links create exactly one junctio
   assertStringIncludes(
     combinedDDL.toLowerCase(),
     "create table student_courses",
-    "DDL should create the junction table student_courses (named after the first type)",
+    "DDL should create the junction table student_courses (named after the first type)"
   );
 
   // The reverse name must NOT also have a CREATE TABLE — that would be a duplicate.
   assertEquals(
     combinedDDL.toLowerCase().includes("create table course_students"),
     false,
-    "DDL must not create course_students — deduplication should suppress the second junction table",
+    "DDL must not create course_students — deduplication should suppress the second junction table"
   );
 });
 
@@ -409,7 +409,7 @@ Deno.test("SchemaManager - M2M detection sets junctionTable on both LinkDefs", (
   assertEquals(
     parseResult.ok,
     true,
-    `SDL parsing should succeed: ${parseResult.ok ? "" : parseResult.error?.message}`,
+    `SDL parsing should succeed: ${parseResult.ok ? "" : parseResult.error?.message}`
   );
 
   if (!parseResult.ok) {
@@ -424,12 +424,12 @@ Deno.test("SchemaManager - M2M detection sets junctionTable on both LinkDefs", (
   assertEquals(
     studentType !== undefined,
     true,
-    "Student type should exist in schema",
+    "Student type should exist in schema"
   );
   assertEquals(
     courseType !== undefined,
     true,
-    "Course type should exist in schema",
+    "Course type should exist in schema"
   );
 
   if (!studentType || !courseType) {
@@ -442,12 +442,12 @@ Deno.test("SchemaManager - M2M detection sets junctionTable on both LinkDefs", (
   assertEquals(
     coursesLink !== undefined,
     true,
-    "Student.courses link should exist",
+    "Student.courses link should exist"
   );
   assertEquals(
     studentsLink !== undefined,
     true,
-    "Course.students link should exist",
+    "Course.students link should exist"
   );
 
   if (!coursesLink || !studentsLink) {
@@ -458,12 +458,12 @@ Deno.test("SchemaManager - M2M detection sets junctionTable on both LinkDefs", (
   assertEquals(
     coursesLink.junctionTable !== undefined,
     true,
-    "Student.courses should have junctionTable set",
+    "Student.courses should have junctionTable set"
   );
   assertEquals(
     studentsLink.junctionTable !== undefined,
     true,
-    "Course.students should have junctionTable set",
+    "Course.students should have junctionTable set"
   );
 
   // The forward direction (Student -> Course) is processed first and
@@ -475,33 +475,33 @@ Deno.test("SchemaManager - M2M detection sets junctionTable on both LinkDefs", (
   assertEquals(
     coursesLink.junctionTable,
     "student_courses",
-    "Student.courses junctionTable should follow the ${sourceTable}_${linkName} convention",
+    "Student.courses junctionTable should follow the ${sourceTable}_${linkName} convention"
   );
   assertEquals(
     coursesLink.junctionSourceColumn,
     "source_id",
-    "Student.courses junctionSourceColumn should be source_id",
+    "Student.courses junctionSourceColumn should be source_id"
   );
   assertEquals(
     coursesLink.junctionTargetColumn,
     "target_id",
-    "Student.courses junctionTargetColumn should be target_id",
+    "Student.courses junctionTargetColumn should be target_id"
   );
 
   // Course.students shares the same physical table with swapped columns.
   assertEquals(
     studentsLink.junctionTable,
     "student_courses",
-    "Course.students should reuse the canonical Student-side junction table",
+    "Course.students should reuse the canonical Student-side junction table"
   );
   assertEquals(
     studentsLink.junctionSourceColumn,
     "target_id",
-    "Course.students junctionSourceColumn should be target_id (swapped)",
+    "Course.students junctionSourceColumn should be target_id (swapped)"
   );
   assertEquals(
     studentsLink.junctionTargetColumn,
     "source_id",
-    "Course.students junctionTargetColumn should be source_id (swapped)",
+    "Course.students junctionTargetColumn should be source_id (swapped)"
   );
 });

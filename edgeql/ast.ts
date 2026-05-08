@@ -489,7 +489,7 @@ export function createTypeName(parts: string[]): TypeName {
 
 export function createLiteral(
   type: Literal["type"],
-  value: string | number | boolean | null,
+  value: string | number | boolean | null
 ): Literal {
   return { kind: "Literal", type, value };
 }
@@ -501,14 +501,14 @@ export function createPath(steps: PathStep[]): Path {
 export function createBinaryOp(
   op: BinaryOperator,
   left: Expression,
-  right: Expression,
+  right: Expression
 ): BinaryOp {
   return { kind: "BinaryOp", op, left, right };
 }
 
 export function createUnaryOp(
   op: UnaryOperator,
-  operand: Expression,
+  operand: Expression
 ): UnaryOp {
   return { kind: "UnaryOp", op, operand };
 }
@@ -519,7 +519,7 @@ export function createParameter(name: string, type?: TypeName): Parameter {
 
 export function createFunctionCall(
   name: QualifiedName,
-  args: FunctionArg[],
+  args: FunctionArg[]
 ): FunctionCall {
   return { kind: "FunctionCall", name, args };
 }
@@ -535,18 +535,18 @@ export function createShapeElement(
     computable?: boolean;
     cardinality?: Cardinality;
     shape?: Shape;
-  },
+  }
 ): ShapeElement {
   return {
     kind: "ShapeElement",
     expr,
-    ...options,
+    ...options
   };
 }
 
 export function createIndexExpression(
   expr: Expression,
-  index: Expression,
+  index: Expression
 ): IndexExpression {
   return { kind: "IndexExpression", expr, index };
 }
@@ -554,7 +554,7 @@ export function createIndexExpression(
 export function createSliceExpression(
   expr: Expression,
   start?: Expression,
-  end?: Expression,
+  end?: Expression
 ): SliceExpression {
   return { kind: "SliceExpression", expr, start, end };
 }
@@ -566,7 +566,7 @@ export function createGlobalRef(name: string, module?: string): GlobalRef {
 export function createSetGlobalQuery(
   name: string,
   value: Expression,
-  module?: string,
+  module?: string
 ): SetGlobalQuery {
   return { kind: "SetGlobalQuery", name, module, value };
 }

@@ -23,21 +23,21 @@ const RUN_PG = canRunPgTests();
 
 /** Parse a DSN into connection config for the raw deno-postgres Client. */
 function parseDsn(
-  dsn: string,
+  dsn: string
 ): { hostname: string; port: number; user: string; database: string; } {
   const url = new URL(dsn);
   return {
     hostname: url.hostname || "localhost",
     port: url.port ? parseInt(url.port) : 5432,
     user: url.username || "disc",
-    database: url.pathname.slice(1) || "disc_test",
+    database: url.pathname.slice(1) || "disc_test"
   };
 }
 
 /** Get column info for a table via a raw client. */
 async function getColumns(
   dsn: string,
-  tableName: string,
+  tableName: string
 ): Promise<{ column_name: string; data_type: string; }[]> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
@@ -50,7 +50,7 @@ async function getColumns(
        FROM information_schema.columns
        WHERE table_schema = 'public' AND table_name = $1
        ORDER BY ordinal_position`,
-      [tableName],
+      [tableName]
     );
     return result.rows;
   } finally {
@@ -79,7 +79,7 @@ async function dropTables(
 async function execRawSQL(
   dsn: string,
   sql: string,
-  params?: unknown[],
+  params?: unknown[]
 ): Promise<void> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
@@ -101,7 +101,7 @@ function makePool(dsn: string): ConnectionPool {
     connectionString: dsn,
     minConnections: 1,
     maxConnections: 3,
-    cleanupInterval: 0,
+    cleanupInterval: 0
   });
 }
 
@@ -135,14 +135,14 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema should succeed: ${result.ok ? "" : (result as any).error}`,
+        `applySchema should succeed: ${result.ok ? "" : (result as any).error}`
       );
 
       // Insert a short string (5 chars) -- should succeed
       await execRawSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, username) VALUES (gen_random_uuid(), $1)`,
-        ["ada"],
+        ["ada"]
       );
 
       // Insert a long string (25 chars) -- should fail with CHECK violation
@@ -151,24 +151,24 @@ Deno.test({
         await execRawSQL(
           dsn,
           `INSERT INTO ${expectedTable} (id, username) VALUES (gen_random_uuid(), $1)`,
-          ["a".repeat(25)],
+          ["a".repeat(25)]
         );
       } catch (error: unknown) {
         checkViolated = true;
         const message = error instanceof Error ? error.message : String(error);
         assertEquals(
-          message.toLowerCase().includes("check")
-            || message.toLowerCase().includes("constraint")
-            || message.toLowerCase().includes("violates"),
+          message.toLowerCase().includes("check") ||
+            message.toLowerCase().includes("constraint") ||
+            message.toLowerCase().includes("violates"),
           true,
-          `Error should mention CHECK/constraint/violates, got: ${message}`,
+          `Error should mention CHECK/constraint/violates, got: ${message}`
         );
       }
 
       assertEquals(
         checkViolated,
         true,
-        "Inserting a 25-char string should violate max_len_value(20) CHECK constraint",
+        "Inserting a 25-char string should violate max_len_value(20) CHECK constraint"
       );
 
       await manager.close();
@@ -177,11 +177,11 @@ Deno.test({
         dsn,
         expectedTable,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -214,14 +214,14 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema should succeed: ${result.ok ? "" : (result as any).error}`,
+        `applySchema should succeed: ${result.ok ? "" : (result as any).error}`
       );
 
       // Insert score=10 -- should succeed
       await execRawSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, score) VALUES (gen_random_uuid(), $1)`,
-        [10],
+        [10]
       );
 
       // Insert score=-5 -- should fail with CHECK violation
@@ -230,24 +230,24 @@ Deno.test({
         await execRawSQL(
           dsn,
           `INSERT INTO ${expectedTable} (id, score) VALUES (gen_random_uuid(), $1)`,
-          [-5],
+          [-5]
         );
       } catch (error: unknown) {
         checkViolated = true;
         const message = error instanceof Error ? error.message : String(error);
         assertEquals(
-          message.toLowerCase().includes("check")
-            || message.toLowerCase().includes("constraint")
-            || message.toLowerCase().includes("violates"),
+          message.toLowerCase().includes("check") ||
+            message.toLowerCase().includes("constraint") ||
+            message.toLowerCase().includes("violates"),
           true,
-          `Error should mention CHECK/constraint/violates, got: ${message}`,
+          `Error should mention CHECK/constraint/violates, got: ${message}`
         );
       }
 
       assertEquals(
         checkViolated,
         true,
-        "Inserting score=-5 should violate min_value(0) CHECK constraint",
+        "Inserting score=-5 should violate min_value(0) CHECK constraint"
       );
 
       await manager.close();
@@ -256,11 +256,11 @@ Deno.test({
         dsn,
         expectedTable,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -293,14 +293,14 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema should succeed: ${result.ok ? "" : (result as any).error}`,
+        `applySchema should succeed: ${result.ok ? "" : (result as any).error}`
       );
 
       // Insert rating=50 -- should succeed
       await execRawSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, rating) VALUES (gen_random_uuid(), $1)`,
-        [50],
+        [50]
       );
 
       // Insert rating=150 -- should fail with CHECK violation
@@ -309,24 +309,24 @@ Deno.test({
         await execRawSQL(
           dsn,
           `INSERT INTO ${expectedTable} (id, rating) VALUES (gen_random_uuid(), $1)`,
-          [150],
+          [150]
         );
       } catch (error: unknown) {
         checkViolated = true;
         const message = error instanceof Error ? error.message : String(error);
         assertEquals(
-          message.toLowerCase().includes("check")
-            || message.toLowerCase().includes("constraint")
-            || message.toLowerCase().includes("violates"),
+          message.toLowerCase().includes("check") ||
+            message.toLowerCase().includes("constraint") ||
+            message.toLowerCase().includes("violates"),
           true,
-          `Error should mention CHECK/constraint/violates, got: ${message}`,
+          `Error should mention CHECK/constraint/violates, got: ${message}`
         );
       }
 
       assertEquals(
         checkViolated,
         true,
-        "Inserting rating=150 should violate max_value(100) CHECK constraint",
+        "Inserting rating=150 should violate max_value(100) CHECK constraint"
       );
 
       await manager.close();
@@ -335,11 +335,11 @@ Deno.test({
         dsn,
         expectedTable,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -372,35 +372,35 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema should succeed: ${result.ok ? "" : (result as any).error}`,
+        `applySchema should succeed: ${result.ok ? "" : (result as any).error}`
       );
 
       // Use getColumns() to verify the table schema
       const columns = await getColumns(dsn, expectedTable);
-      const columnNames = columns.map((c) => c.column_name);
+      const columnNames = columns.map(c => c.column_name);
 
       // Should have id, first_name, last_name
       assertEquals(
         columnNames.includes("id"),
         true,
-        "Should have id column",
+        "Should have id column"
       );
       assertEquals(
         columnNames.includes("first_name"),
         true,
-        "Should have first_name column",
+        "Should have first_name column"
       );
       assertEquals(
         columnNames.includes("last_name"),
         true,
-        "Should have last_name column",
+        "Should have last_name column"
       );
 
       // Should NOT have full_name (it is a computed virtual property)
       assertEquals(
         columnNames.includes("full_name"),
         false,
-        "Should NOT have full_name column (computed properties are virtual)",
+        "Should NOT have full_name column (computed properties are virtual)"
       );
 
       await manager.close();
@@ -409,11 +409,11 @@ Deno.test({
         dsn,
         expectedTable,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -451,14 +451,14 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema should succeed: ${result.ok ? "" : (result as any).error}`,
+        `applySchema should succeed: ${result.ok ? "" : (result as any).error}`
       );
 
       // Insert valid data: username="ada" (5 chars), age=25 -- should succeed
       await execRawSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, username, age) VALUES (gen_random_uuid(), $1, $2)`,
-        ["ada", 25],
+        ["ada", 25]
       );
 
       // Insert invalid username: "ab" (2 chars, less than min 3) -- should fail
@@ -467,24 +467,24 @@ Deno.test({
         await execRawSQL(
           dsn,
           `INSERT INTO ${expectedTable} (id, username, age) VALUES (gen_random_uuid(), $1, $2)`,
-          ["ab", 25],
+          ["ab", 25]
         );
       } catch (error: unknown) {
         usernameCheckViolated = true;
         const message = error instanceof Error ? error.message : String(error);
         assertEquals(
-          message.toLowerCase().includes("check")
-            || message.toLowerCase().includes("constraint")
-            || message.toLowerCase().includes("violates"),
+          message.toLowerCase().includes("check") ||
+            message.toLowerCase().includes("constraint") ||
+            message.toLowerCase().includes("violates"),
           true,
-          `Error should mention CHECK/constraint/violates, got: ${message}`,
+          `Error should mention CHECK/constraint/violates, got: ${message}`
         );
       }
 
       assertEquals(
         usernameCheckViolated,
         true,
-        "Inserting username='ab' (2 chars) should violate min_len_value(3) CHECK constraint",
+        "Inserting username='ab' (2 chars) should violate min_len_value(3) CHECK constraint"
       );
 
       // Insert invalid age: 200 (more than max 150) -- should fail
@@ -493,24 +493,24 @@ Deno.test({
         await execRawSQL(
           dsn,
           `INSERT INTO ${expectedTable} (id, username, age) VALUES (gen_random_uuid(), $1, $2)`,
-          ["billie", 200],
+          ["billie", 200]
         );
       } catch (error: unknown) {
         ageCheckViolated = true;
         const message = error instanceof Error ? error.message : String(error);
         assertEquals(
-          message.toLowerCase().includes("check")
-            || message.toLowerCase().includes("constraint")
-            || message.toLowerCase().includes("violates"),
+          message.toLowerCase().includes("check") ||
+            message.toLowerCase().includes("constraint") ||
+            message.toLowerCase().includes("violates"),
           true,
-          `Error should mention CHECK/constraint/violates, got: ${message}`,
+          `Error should mention CHECK/constraint/violates, got: ${message}`
         );
       }
 
       assertEquals(
         ageCheckViolated,
         true,
-        "Inserting age=200 should violate max_value(150) CHECK constraint",
+        "Inserting age=200 should violate max_value(150) CHECK constraint"
       );
 
       await manager.close();
@@ -519,9 +519,9 @@ Deno.test({
         dsn,
         expectedTable,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });

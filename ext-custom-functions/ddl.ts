@@ -16,7 +16,7 @@ const EDGEQL_TO_PG_TYPE: Record<string, string> = {
   int64: "bigint",
   json: "jsonb",
   str: "text",
-  uuid: "uuid",
+  uuid: "uuid"
 };
 
 export function mapEdgeqlTypeToPg(edgeqlType: string): string {
@@ -24,7 +24,7 @@ export function mapEdgeqlTypeToPg(edgeqlType: string): string {
   if (!mapped) {
     throw new ExtensionConfigError(
       "custom-functions",
-      `Unknown EdgeQL type: ${edgeqlType}`,
+      `Unknown EdgeQL type: ${edgeqlType}`
     );
   }
   return mapped;
@@ -35,8 +35,9 @@ export function generateCreateFunction(def: CustomFunctionDef): string {
     return ""; // Only PL/pgSQL functions need DDL
   }
 
-  const args = def.args
-    .map((a) => `${a.name} ${mapEdgeqlTypeToPg(a.type)}`)
+  const args = def
+    .args
+    .map(a => `${a.name} ${mapEdgeqlTypeToPg(a.type)}`)
     .join(", ");
   const returnType = mapEdgeqlTypeToPg(def.returnType);
   const volatility = mapVolatility(def.volatility ?? "volatile");
@@ -51,8 +52,9 @@ $func$;`;
 }
 
 export function generateDropFunction(def: CustomFunctionDef): string {
-  const args = def.args
-    .map((a) => mapEdgeqlTypeToPg(a.type))
+  const args = def
+    .args
+    .map(a => mapEdgeqlTypeToPg(a.type))
     .join(", ");
   return `DROP FUNCTION IF EXISTS ${def.name}(${args});`;
 }

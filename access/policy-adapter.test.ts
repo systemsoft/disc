@@ -29,9 +29,9 @@ Deno.test("policy-adapter: single allow policy with one operation", () => {
       {
         kind: "AccessAction",
         allow: true,
-        operations: ["select"],
-      },
-    ],
+        operations: ["select"]
+      }
+    ]
   };
 
   const result = adaptAccessPolicies("Post", [sdlPolicy]);
@@ -59,9 +59,9 @@ Deno.test("policy-adapter: deny and allow policies on same type", () => {
         {
           kind: "AccessAction",
           allow: false,
-          operations: ["delete"],
-        },
-      ],
+          operations: ["delete"]
+        }
+      ]
     },
     {
       kind: "AccessPolicy",
@@ -70,10 +70,10 @@ Deno.test("policy-adapter: deny and allow policies on same type", () => {
         {
           kind: "AccessAction",
           allow: true,
-          operations: ["select"],
-        },
-      ],
-    },
+          operations: ["select"]
+        }
+      ]
+    }
   ];
 
   const result = adaptAccessPolicies("AuditLog", sdlPolicies);
@@ -102,12 +102,12 @@ Deno.test("policy-adapter: column-referencing condition separates condition from
     op: "=",
     left: {
       kind: "PathExpression" as const,
-      path: [".", "author"],
+      path: [".", "author"]
     },
     right: {
       kind: "PathExpression" as const,
-      path: ["global", "current_user"],
-    },
+      path: ["global", "current_user"]
+    }
   };
 
   const sdlPolicy: SDLAccessPolicy = {
@@ -117,10 +117,10 @@ Deno.test("policy-adapter: column-referencing condition separates condition from
       {
         kind: "AccessAction",
         allow: true,
-        operations: ["select"],
-      },
+        operations: ["select"]
+      }
     ],
-    condition: conditionExpr,
+    condition: conditionExpr
   };
 
   const result = adaptAccessPolicies("Document", [sdlPolicy]);
@@ -155,13 +155,13 @@ Deno.test("policy-adapter: pure context condition sets both condition and using"
     op: "=",
     left: {
       kind: "PathExpression" as const,
-      path: ["global", "current_role"],
+      path: ["global", "current_role"]
     },
     right: {
       kind: "Literal" as const,
       type: "string" as const,
-      value: "admin",
-    },
+      value: "admin"
+    }
   };
 
   const sdlPolicy: SDLAccessPolicy = {
@@ -171,10 +171,10 @@ Deno.test("policy-adapter: pure context condition sets both condition and using"
       {
         kind: "AccessAction",
         allow: true,
-        operations: ["all"],
-      },
+        operations: ["all"]
+      }
     ],
-    condition: conditionExpr,
+    condition: conditionExpr
   };
 
   const result = adaptAccessPolicies("AdminPanel", [sdlPolicy]);
@@ -199,13 +199,13 @@ Deno.test("policy-adapter: pure column expression sets using only", () => {
     op: "=",
     left: {
       kind: "PathExpression" as const,
-      path: [".", "status"],
+      path: [".", "status"]
     },
     right: {
       kind: "Literal" as const,
       type: "string" as const,
-      value: "active",
-    },
+      value: "active"
+    }
   };
 
   const sdlPolicy: SDLAccessPolicy = {
@@ -215,10 +215,10 @@ Deno.test("policy-adapter: pure column expression sets using only", () => {
       {
         kind: "AccessAction",
         allow: true,
-        operations: ["select"],
-      },
+        operations: ["select"]
+      }
     ],
-    condition: conditionExpr,
+    condition: conditionExpr
   };
 
   const result = adaptAccessPolicies("Item", [sdlPolicy]);
@@ -247,9 +247,9 @@ Deno.test("policy-adapter: policy with all operations", () => {
       {
         kind: "AccessAction",
         allow: true,
-        operations: ["all"],
-      },
-    ],
+        operations: ["all"]
+      }
+    ]
   };
 
   const result = adaptAccessPolicies("SystemConfig", [sdlPolicy]);
@@ -272,9 +272,9 @@ Deno.test("policy-adapter: multiple policies on same type", () => {
         {
           kind: "AccessAction",
           allow: true,
-          operations: ["select"],
-        },
-      ],
+          operations: ["select"]
+        }
+      ]
     },
     {
       kind: "AccessPolicy",
@@ -283,9 +283,9 @@ Deno.test("policy-adapter: multiple policies on same type", () => {
         {
           kind: "AccessAction",
           allow: true,
-          operations: ["insert", "update"],
-        },
-      ],
+          operations: ["insert", "update"]
+        }
+      ]
     },
     {
       kind: "AccessPolicy",
@@ -294,10 +294,10 @@ Deno.test("policy-adapter: multiple policies on same type", () => {
         {
           kind: "AccessAction",
           allow: false,
-          operations: ["delete"],
-        },
-      ],
-    },
+          operations: ["delete"]
+        }
+      ]
+    }
   ];
 
   const result = adaptAccessPolicies("Article", sdlPolicies);
@@ -327,14 +327,14 @@ Deno.test("policy-adapter: policy with multiple actions", () => {
       {
         kind: "AccessAction",
         allow: true,
-        operations: ["select"],
+        operations: ["select"]
       },
       {
         kind: "AccessAction",
         allow: false,
-        operations: ["delete"],
-      },
-    ],
+        operations: ["delete"]
+      }
+    ]
   };
 
   const result = adaptAccessPolicies("Report", [sdlPolicy]);
@@ -362,13 +362,13 @@ Deno.test("policy-adapter: with check expression is forwarded to runtime.withChe
     op: "=",
     left: {
       kind: "PathExpression" as const,
-      path: [".", "status"],
+      path: [".", "status"]
     },
     right: {
       kind: "Literal" as const,
       value: "draft",
-      type: "string" as const,
-    },
+      type: "string" as const
+    }
   };
 
   const sdlPolicy: SDLAccessPolicy = {
@@ -378,10 +378,10 @@ Deno.test("policy-adapter: with check expression is forwarded to runtime.withChe
       {
         kind: "AccessAction",
         allow: true,
-        operations: ["insert", "update"],
-      },
+        operations: ["insert", "update"]
+      }
     ],
-    withCheck: checkExpr,
+    withCheck: checkExpr
   };
 
   const result = adaptAccessPolicies("Post", [sdlPolicy]);
@@ -400,8 +400,8 @@ Deno.test("policy-adapter: omitted with check leaves runtime.withCheck undefined
     kind: "AccessPolicy",
     name: createIdentifier("plain"),
     actions: [
-      { kind: "AccessAction", allow: true, operations: ["select"] },
-    ],
+      { kind: "AccessAction", allow: true, operations: ["select"] }
+    ]
   };
   const result = adaptAccessPolicies("Post", [sdlPolicy]);
   assertEquals(result[0].withCheck, undefined);
@@ -416,9 +416,9 @@ Deno.test("policy-adapter: errmessage is forwarded to runtime policy (Gel #4095)
     kind: "AccessPolicy",
     name: createIdentifier("admin_only"),
     actions: [
-      { kind: "AccessAction", allow: false, operations: ["update"] },
+      { kind: "AccessAction", allow: false, operations: ["update"] }
     ],
-    errmessage: "Only admins can modify this record",
+    errmessage: "Only admins can modify this record"
   };
 
   const result = adaptAccessPolicies("Doc", [sdlPolicy]);
@@ -431,8 +431,8 @@ Deno.test("policy-adapter: omitted errmessage leaves runtime.errmessage undefine
     kind: "AccessPolicy",
     name: createIdentifier("plain"),
     actions: [
-      { kind: "AccessAction", allow: true, operations: ["select"] },
-    ],
+      { kind: "AccessAction", allow: true, operations: ["select"] }
+    ]
   };
 
   const result = adaptAccessPolicies("Post", [sdlPolicy]);

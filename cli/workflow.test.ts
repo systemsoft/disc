@@ -25,22 +25,27 @@ Deno.test("CLI Workflow - Complete project initialization", async () => {
       name: projectName,
       template: "basic",
       directory: tempDir,
-      skipPostgres: true,
+      skipPostgres: true
     });
 
     // Verify project directory was created
     const projectDir = `${tempDir}/${projectName}`;
     const projectExists = await Deno.stat(projectDir).then(() => true).catch(
-      () => false,
+      () => false
     );
     assert(projectExists, "Project directory should be created");
 
     // Verify essential files exist (canonical schema path: dbschema/default.disc)
-    const schemaExists = await Deno.stat(
-      `${projectDir}/dbschema/default.disc`,
-    ).then(() => true).catch(() => false);
+    const schemaExists = await Deno
+      .stat(
+        `${projectDir}/dbschema/default.disc`
+      )
+      .then(() => true)
+      .catch(() => false);
     const configExists = await Deno.stat(`${projectDir}/deno.json`).then(() => true).catch(() => false);
-    const envExists = await Deno.stat(`${projectDir}/.env`).then(() => true)
+    const envExists = await Deno
+      .stat(`${projectDir}/.env`)
+      .then(() => true)
       .catch(() => false);
 
     assert(schemaExists, "Schema file should be created");
@@ -69,7 +74,7 @@ Deno.test("CLI Workflow - Migration planning and execution", async () => {
     required name: str;
     required email: str;
   };
-};`,
+};`
     );
 
     // Test migration create (dry-run to avoid needing a real database)
@@ -78,7 +83,7 @@ Deno.test("CLI Workflow - Migration planning and execution", async () => {
       create: true,
       schema: schemaFile,
       "dry-run": true,
-      "auto-approve": false,
+      "auto-approve": false
     });
 
     // Test migration apply (dry run)
@@ -86,7 +91,7 @@ Deno.test("CLI Workflow - Migration planning and execution", async () => {
       _: ["migrate"],
       schema: schemaFile,
       "dry-run": true,
-      "auto-approve": true,
+      "auto-approve": true
     });
 
     // Should not throw errors
@@ -114,7 +119,7 @@ Deno.test("CLI Workflow - Code generation", async () => {
     required title: str;
     required content: str;
   };
-};`,
+};`
     );
 
     // Test codegen command
@@ -126,7 +131,7 @@ Deno.test("CLI Workflow - Code generation", async () => {
       "no-queries": false,
       "no-mutations": false,
       "no-client": false,
-      "no-format": false,
+      "no-format": false
     });
 
     // Should not throw errors
@@ -150,7 +155,7 @@ Deno.test("CLI Workflow - Server configuration", () => {
     const serverOptions = {
       port: 9000,
       host: "localhost",
-      config: undefined,
+      config: undefined
     };
 
     // Validate configuration
@@ -173,7 +178,7 @@ Deno.test("CLI Workflow - Shell connection options", () => {
     port: 8080,
     database: "custom_db",
     nonInteractive: true,
-    execute: "select User { name }",
+    execute: "select User { name }"
   };
 
   assertEquals(shellOptions.host, "192.168.1.100");
@@ -206,14 +211,14 @@ Deno.test("CLI Workflow - Watch command setup", async () => {
   type Item {
     required name: str;
   };
-};`,
+};`
     );
 
     // Test watch configuration (without actually starting watcher)
     const watchOptions = {
       schemaFile: schemaFile,
       outputDir: outputDir,
-      delayMs: 500,
+      delayMs: 500
     };
 
     // This would start file watching in real usage
@@ -239,7 +244,7 @@ Deno.test("CLI Workflow - Error handling for missing files", async () => {
       await commands.migrate({
         _: ["migrate"],
         schema: nonExistentSchema,
-        "dry-run": true,
+        "dry-run": true
       });
       assert(false, "Should throw error for missing schema");
     } catch (error) {
@@ -252,7 +257,7 @@ Deno.test("CLI Workflow - Error handling for missing files", async () => {
       await commands.codegen({
         _: ["codegen"],
         schema: nonExistentSchema,
-        output: `${tempDir}/output`,
+        output: `${tempDir}/output`
       });
       // Should not throw since codegen uses test schema as fallback
       assert(true, "Codegen should handle missing schema gracefully");
@@ -274,7 +279,7 @@ Deno.test("CLI Workflow - Command argument validation", async () => {
     try {
       await commands.init({
         name: "Invalid-Project-Name", // Contains uppercase
-        template: "basic",
+        template: "basic"
       });
       assert(false, "Should reject invalid project name");
     } catch (error) {
@@ -284,7 +289,7 @@ Deno.test("CLI Workflow - Command argument validation", async () => {
     try {
       await commands.init({
         name: "-invalid-start", // Starts with dash
-        template: "basic",
+        template: "basic"
       });
       assert(false, "Should reject project name starting with dash");
     } catch (error) {
@@ -296,8 +301,8 @@ Deno.test("CLI Workflow - Command argument validation", async () => {
     for (const name of validNames) {
       // Should not throw
       assert(
-        /^[a-z0-9-]+$/.test(name) && !name.startsWith("-")
-          && !name.endsWith("-"),
+        /^[a-z0-9-]+$/.test(name) && !name.startsWith("-") &&
+          !name.endsWith("-")
       );
     }
   } finally {
@@ -311,13 +316,13 @@ Deno.test("CLI Workflow - Environment variable integration", () => {
   try {
     // Test DATABASE_URL handling
     env.clear("DATABASE_URL");
-    let dbUrl = Deno.env.get("DATABASE_URL")
-      || "postgresql://localhost:5432/disc_dev";
+    let dbUrl = Deno.env.get("DATABASE_URL") ||
+      "postgresql://localhost:5432/disc_dev";
     assertEquals(dbUrl, "postgresql://localhost:5432/disc_dev");
 
     env.set("DATABASE_URL", "postgresql://custom:5432/custom_db");
-    dbUrl = Deno.env.get("DATABASE_URL")
-      || "postgresql://localhost:5432/disc_dev";
+    dbUrl = Deno.env.get("DATABASE_URL") ||
+      "postgresql://localhost:5432/disc_dev";
     assertEquals(dbUrl, "postgresql://custom:5432/custom_db");
 
     // Test server environment variables

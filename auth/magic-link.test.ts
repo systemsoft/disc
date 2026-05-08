@@ -18,9 +18,9 @@ async function makeProvider(): Promise<{
   const provider = new AuthProvider(
     {
       jwtSecret: "test-secret-key-32-bytes-minimum-len",
-      requireEmailVerification: false,
+      requireEmailVerification: false
     },
-    db,
+    db
   );
   await provider.initialize();
   return { provider, db };
@@ -33,7 +33,7 @@ Deno.test("requestMagicLink — returns a plaintext token for a real user", asyn
   try {
     await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const token = await provider.requestMagicLink("u@example.com");
     assert(token.length > 0);
@@ -52,7 +52,7 @@ Deno.test("requestMagicLink — anti-enumeration: unknown email still returns a 
     // Trying to redeem it must fail just like a totally invented token.
     const err = await assertRejects(
       () => provider.consumeMagicLink(token),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_TOKEN);
   } finally {
@@ -68,7 +68,7 @@ Deno.test("requestMagicLink — anonymous identities don't get a magic link", as
     // Same anti-enumeration shape — token returned but not persisted.
     const err = await assertRejects(
       () => provider.consumeMagicLink(token),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_TOKEN);
   } finally {
@@ -81,17 +81,17 @@ Deno.test("requestMagicLink — inactive user gets the same anti-enumeration tre
   try {
     const auth = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     // Mark user inactive directly via test DB (no public API for this in tests)
     await db.execute("UPDATE users SET active = ? WHERE id = ?", [
       false,
-      auth.user.id,
+      auth.user.id
     ]);
     const token = await provider.requestMagicLink("u@example.com");
     const err = await assertRejects(
       () => provider.consumeMagicLink(token),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_TOKEN);
   } finally {
@@ -106,7 +106,7 @@ Deno.test("consumeMagicLink — completes login and returns AuthResponse", async
   try {
     const reg = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const token = await provider.requestMagicLink("u@example.com");
     const result = await provider.consumeMagicLink(token);
@@ -125,14 +125,14 @@ Deno.test("consumeMagicLink — single-use: a consumed link cannot be replayed",
   try {
     await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const token = await provider.requestMagicLink("u@example.com");
     await provider.consumeMagicLink(token);
 
     const err = await assertRejects(
       () => provider.consumeMagicLink(token),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_TOKEN);
   } finally {
@@ -145,7 +145,7 @@ Deno.test("consumeMagicLink — rejects unknown token", async () => {
   try {
     const err = await assertRejects(
       () => provider.consumeMagicLink("ghost-magic-token-xxx"),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_TOKEN);
   } finally {
@@ -160,7 +160,7 @@ Deno.test("consumeMagicLink — when user has TOTP, returns MfaChallenge instead
   try {
     const reg = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     // Enroll + confirm TOTP so subsequent logins gate on it.
     const enrollment = await provider.enrollTOTP(reg.user.id);
@@ -179,7 +179,7 @@ Deno.test("consumeMagicLink — when user has TOTP, returns MfaChallenge instead
     // be replayable.
     const err = await assertRejects(
       () => provider.consumeMagicLink(token),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_TOKEN);
   } finally {
@@ -199,9 +199,9 @@ async function makeImplicitSignupProvider(): Promise<{
     {
       jwtSecret: "test-secret-key-32-bytes-minimum-len",
       requireEmailVerification: false,
-      allowImplicitSignup: true,
+      allowImplicitSignup: true
     },
-    db,
+    db
   );
   await provider.initialize();
   return { provider, db };
@@ -229,7 +229,7 @@ Deno.test("implicit signup — token is single-use even on the signup path", asy
     await provider.consumeMagicLink(token); // first redemption ok
     const err = await assertRejects(
       () => provider.consumeMagicLink(token),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_TOKEN);
   } finally {
@@ -244,7 +244,7 @@ Deno.test("implicit signup — flag off keeps anti-enumeration: unknown email to
     const token = await provider.requestMagicLink("nobody@example.com");
     const err = await assertRejects(
       () => provider.consumeMagicLink(token),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_TOKEN);
   } finally {
@@ -257,7 +257,7 @@ Deno.test("implicit signup — known email follows the standard path even with f
   try {
     const reg = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const token = await provider.requestMagicLink("u@example.com");
     const result = await provider.consumeMagicLink(token);

@@ -22,7 +22,7 @@ Deno.test("validatePemEnvelope - rejects empty cert content", () => {
 Deno.test("validatePemEnvelope - rejects cert without END marker", () => {
   assertEquals(
     validatePemEnvelope("-----BEGIN CERTIFICATE-----\nABC\n", "cert"),
-    false,
+    false
   );
 });
 
@@ -79,16 +79,16 @@ async function makeTempPair(): Promise<{
   // here; the watcher only inspects the envelope.
   await Deno.writeTextFile(
     certFile,
-    "-----BEGIN CERTIFICATE-----\nseed\n-----END CERTIFICATE-----\n",
+    "-----BEGIN CERTIFICATE-----\nseed\n-----END CERTIFICATE-----\n"
   );
   await Deno.writeTextFile(
     keyFile,
-    "-----BEGIN PRIVATE KEY-----\nseed\n-----END PRIVATE KEY-----\n",
+    "-----BEGIN PRIVATE KEY-----\nseed\n-----END PRIVATE KEY-----\n"
   );
   return {
     certFile,
     keyFile,
-    cleanup: () => Deno.remove(dir, { recursive: true }),
+    cleanup: () => Deno.remove(dir, { recursive: true })
   };
 }
 
@@ -109,16 +109,16 @@ Deno.test("TlsCertWatcher - fires onReload after debounce when cert is rewritten
       lastKey = key;
       fired.resolve();
       return Promise.resolve();
-    },
+    }
   });
 
   watcher.start();
   // Give the watcher a tick to subscribe.
-  await new Promise((r) => setTimeout(r, 50));
+  await new Promise(r => setTimeout(r, 50));
 
   await Deno.writeTextFile(
     certFile,
-    "-----BEGIN CERTIFICATE-----\nnew-cert\n-----END CERTIFICATE-----\n",
+    "-----BEGIN CERTIFICATE-----\nnew-cert\n-----END CERTIFICATE-----\n"
   );
 
   let timeoutId: number | undefined;
@@ -127,11 +127,12 @@ Deno.test("TlsCertWatcher - fires onReload after debounce when cert is rewritten
     new Promise<void>((_, rej) => {
       timeoutId = setTimeout(
         () => rej(new Error("watcher didn't fire in 2s")),
-        2000,
+        2000
       );
-    }),
+    })
   ]);
-  if (timeoutId !== undefined) clearTimeout(timeoutId);
+  if (timeoutId !== undefined)
+    clearTimeout(timeoutId);
 
   assertEquals(callCount, 1);
   assertEquals(lastCert?.includes("new-cert"), true);
@@ -154,26 +155,26 @@ Deno.test("TlsCertWatcher - debounces a burst of writes into a single reload", a
       callCount++;
       fired.resolve();
       return Promise.resolve();
-    },
+    }
   });
 
   watcher.start();
-  await new Promise((r) => setTimeout(r, 50));
+  await new Promise(r => setTimeout(r, 50));
 
   // Three rapid rewrites — should collapse to one reload.
   for (let i = 0; i < 3; i++) {
     await Deno.writeTextFile(
       certFile,
-      `-----BEGIN CERTIFICATE-----\nrev${i}\n-----END CERTIFICATE-----\n`,
+      `-----BEGIN CERTIFICATE-----\nrev${i}\n-----END CERTIFICATE-----\n`
     );
-    await new Promise((r) => setTimeout(r, 20));
+    await new Promise(r => setTimeout(r, 20));
   }
   for (let i = 0; i < 3; i++) {
     await Deno.writeTextFile(
       keyFile,
-      `-----BEGIN PRIVATE KEY-----\nrev${i}\n-----END PRIVATE KEY-----\n`,
+      `-----BEGIN PRIVATE KEY-----\nrev${i}\n-----END PRIVATE KEY-----\n`
     );
-    await new Promise((r) => setTimeout(r, 20));
+    await new Promise(r => setTimeout(r, 20));
   }
 
   let timeoutId: number | undefined;
@@ -182,14 +183,15 @@ Deno.test("TlsCertWatcher - debounces a burst of writes into a single reload", a
     new Promise<void>((_, rej) => {
       timeoutId = setTimeout(
         () => rej(new Error("watcher didn't fire in 2s")),
-        2000,
+        2000
       );
-    }),
+    })
   ]);
-  if (timeoutId !== undefined) clearTimeout(timeoutId);
+  if (timeoutId !== undefined)
+    clearTimeout(timeoutId);
 
   // Allow the debounce window to fully close so a second fire would have happened.
-  await new Promise((r) => setTimeout(r, 400));
+  await new Promise(r => setTimeout(r, 400));
 
   assertEquals(callCount, 1);
   await watcher.stop();
@@ -207,15 +209,15 @@ Deno.test("TlsCertWatcher - skips reload when cert content is invalid PEM", asyn
     onReload: () => {
       callCount++;
       return Promise.resolve();
-    },
+    }
   });
 
   watcher.start();
-  await new Promise((r) => setTimeout(r, 50));
+  await new Promise(r => setTimeout(r, 50));
 
   await Deno.writeTextFile(certFile, "not a pem cert");
   // Wait well beyond debounce window.
-  await new Promise((r) => setTimeout(r, 400));
+  await new Promise(r => setTimeout(r, 400));
 
   assertEquals(callCount, 0);
   await watcher.stop();
@@ -228,7 +230,7 @@ Deno.test("TlsCertWatcher - stop() is idempotent", async () => {
     certFile,
     keyFile,
     debounceMs: 50,
-    onReload: () => Promise.resolve(),
+    onReload: () => Promise.resolve()
   });
 
   watcher.start();

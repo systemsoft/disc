@@ -19,7 +19,7 @@ function makePool(dsn: string): ConnectionPool {
     connectionString: dsn,
     cleanupInterval: 0,
     maxConnections: 3,
-    minConnections: 1,
+    minConnections: 1
   });
 }
 
@@ -41,7 +41,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -63,7 +63,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -83,7 +83,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -114,16 +114,16 @@ Deno.test({
 
       // Verify
       const result = await pool.query(
-        "SELECT value FROM disc_config WHERE key = 'test_key'",
+        "SELECT value FROM disc_config WHERE key = 'test_key'"
       );
       assertEquals(result.rows[0].value, 42);
 
       // Delete (RESET)
       await pool.query(
-        "DELETE FROM disc_config WHERE key = 'test_key' AND scope = 'DATABASE'",
+        "DELETE FROM disc_config WHERE key = 'test_key' AND scope = 'DATABASE'"
       );
       const after = await pool.query(
-        "SELECT count(*) AS cnt FROM disc_config WHERE key = 'test_key'",
+        "SELECT count(*) AS cnt FROM disc_config WHERE key = 'test_key'"
       );
       assertEquals(Number(after.rows[0].cnt), 0);
 
@@ -132,5 +132,5 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });

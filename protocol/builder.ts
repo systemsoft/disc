@@ -19,23 +19,23 @@ export class ProtocolBuilder {
         return this.buildAuthenticationOK(message as Types.AuthenticationOK);
       case Types.MessageType.AuthenticationSASL:
         return this.buildAuthenticationSASL(
-          message as Types.AuthenticationSASL,
+          message as Types.AuthenticationSASL
         );
       case Types.MessageType.AuthenticationSASLContinue:
         return this.buildAuthenticationSASLContinue(
-          message as Types.AuthenticationSASLContinue,
+          message as Types.AuthenticationSASLContinue
         );
       case Types.MessageType.AuthenticationSASLFinal:
         return this.buildAuthenticationSASLFinal(
-          message as Types.AuthenticationSASLFinal,
+          message as Types.AuthenticationSASLFinal
         );
       case Types.MessageType.AuthenticationSASLInitialResponse:
         return this.buildAuthenticationSASLInitialResponse(
-          message as Types.AuthenticationSASLInitialResponse,
+          message as Types.AuthenticationSASLInitialResponse
         );
       case Types.MessageType.AuthenticationSASLResponse:
         return this.buildAuthenticationSASLResponse(
-          message as Types.AuthenticationSASLResponse,
+          message as Types.AuthenticationSASLResponse
         );
       case Types.MessageType.Parse:
         return this.buildParseMessage(message as Types.ParseMessage);
@@ -91,7 +91,7 @@ export class ProtocolBuilder {
 
     return this.wrapMessage(
       Types.MessageType.ClientHandshake,
-      writer.getBuffer(),
+      writer.getBuffer()
     );
   }
 
@@ -114,7 +114,7 @@ export class ProtocolBuilder {
 
     return this.wrapMessage(
       Types.MessageType.ServerHandshake,
-      writer.getBuffer(),
+      writer.getBuffer()
     );
   }
 
@@ -123,12 +123,12 @@ export class ProtocolBuilder {
     writer.writeUInt32(message.authStatus);
     return this.wrapMessage(
       Types.MessageType.AuthenticationOK,
-      writer.getBuffer(),
+      writer.getBuffer()
     );
   }
 
   private buildAuthenticationSASL(
-    message: Types.AuthenticationSASL,
+    message: Types.AuthenticationSASL
   ): Uint8Array {
     const writer = new MessageWriter();
     writer.writeUInt32(message.authStatus);
@@ -140,54 +140,54 @@ export class ProtocolBuilder {
 
     return this.wrapMessage(
       Types.MessageType.AuthenticationSASL,
-      writer.getBuffer(),
+      writer.getBuffer()
     );
   }
 
   private buildAuthenticationSASLContinue(
-    message: Types.AuthenticationSASLContinue,
+    message: Types.AuthenticationSASLContinue
   ): Uint8Array {
     const writer = new MessageWriter();
     writer.writeUInt32(message.authStatus);
     writer.writeBytes(message.saslData);
     return this.wrapMessage(
       Types.MessageType.AuthenticationSASLContinue,
-      writer.getBuffer(),
+      writer.getBuffer()
     );
   }
 
   private buildAuthenticationSASLFinal(
-    message: Types.AuthenticationSASLFinal,
+    message: Types.AuthenticationSASLFinal
   ): Uint8Array {
     const writer = new MessageWriter();
     writer.writeUInt32(message.authStatus);
     writer.writeBytes(message.saslData);
     return this.wrapMessage(
       Types.MessageType.AuthenticationSASLFinal,
-      writer.getBuffer(),
+      writer.getBuffer()
     );
   }
 
   private buildAuthenticationSASLInitialResponse(
-    message: Types.AuthenticationSASLInitialResponse,
+    message: Types.AuthenticationSASLInitialResponse
   ): Uint8Array {
     const writer = new MessageWriter();
     writer.writeString(message.mechanism);
     writer.writeBytes(message.initialResponse);
     return this.wrapMessage(
       Types.MessageType.AuthenticationSASLInitialResponse,
-      writer.getBuffer(),
+      writer.getBuffer()
     );
   }
 
   private buildAuthenticationSASLResponse(
-    message: Types.AuthenticationSASLResponse,
+    message: Types.AuthenticationSASLResponse
   ): Uint8Array {
     const writer = new MessageWriter();
     writer.writeBytes(message.response);
     return this.wrapMessage(
       Types.MessageType.AuthenticationSASLResponse,
-      writer.getBuffer(),
+      writer.getBuffer()
     );
   }
 
@@ -252,7 +252,7 @@ export class ProtocolBuilder {
 
     return this.wrapMessage(
       Types.MessageType.CommandComplete,
-      writer.getBuffer(),
+      writer.getBuffer()
     );
   }
 
@@ -282,7 +282,7 @@ export class ProtocolBuilder {
 
     return this.wrapMessage(
       Types.MessageType.ErrorResponse,
-      writer.getBuffer(),
+      writer.getBuffer()
     );
   }
 
@@ -298,7 +298,7 @@ export class ProtocolBuilder {
 
     return this.wrapMessage(
       Types.MessageType.ReadyForCommand,
-      writer.getBuffer(),
+      writer.getBuffer()
     );
   }
 

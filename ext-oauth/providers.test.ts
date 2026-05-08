@@ -12,7 +12,7 @@ import {
   googleProvider,
   keycloakProvider,
   linkedinProvider,
-  twitterProvider,
+  twitterProvider
 } from "./providers.ts";
 
 // ── googleProvider ────────────────────────────────────────────────────
@@ -26,12 +26,12 @@ Deno.test("googleProvider - returns correct authorize and token URLs", () => {
   const p = googleProvider("cid", "csecret");
   assertEquals(
     p.authorizeUrl,
-    "https://accounts.google.com/o/oauth2/v2/auth",
+    "https://accounts.google.com/o/oauth2/v2/auth"
   );
   assertEquals(p.tokenUrl, "https://oauth2.googleapis.com/token");
   assertEquals(
     p.userInfoUrl,
-    "https://www.googleapis.com/oauth2/v3/userinfo",
+    "https://www.googleapis.com/oauth2/v3/userinfo"
   );
 });
 
@@ -69,11 +69,11 @@ Deno.test("githubProvider - returns correct authorize and token URLs", () => {
   const p = githubProvider("cid", "csecret");
   assertEquals(
     p.authorizeUrl,
-    "https://github.com/login/oauth/authorize",
+    "https://github.com/login/oauth/authorize"
   );
   assertEquals(
     p.tokenUrl,
-    "https://github.com/login/oauth/access_token",
+    "https://github.com/login/oauth/access_token"
   );
   assertEquals(p.userInfoUrl, "https://api.github.com/user");
 });
@@ -99,7 +99,7 @@ Deno.test("appleProvider - returns correct authorize and token URLs", () => {
   const p = appleProvider("cid", "csecret");
   assertEquals(
     p.authorizeUrl,
-    "https://appleid.apple.com/auth/authorize",
+    "https://appleid.apple.com/auth/authorize"
   );
   assertEquals(p.tokenUrl, "https://appleid.apple.com/auth/token");
   assertEquals(p.userInfoUrl, "https://appleid.apple.com/auth/userinfo");
@@ -187,7 +187,7 @@ Deno.test("keycloakProvider - constructs realm-scoped endpoints", () => {
     baseUrl: "https://kc.example.com",
     realm: "myrealm",
     clientId: "cid",
-    clientSecret: "csecret",
+    clientSecret: "csecret"
   });
   assertEquals(p.authorizeUrl, "https://kc.example.com/realms/myrealm/protocol/openid-connect/auth");
   assertEquals(p.tokenUrl, "https://kc.example.com/realms/myrealm/protocol/openid-connect/token");
@@ -199,7 +199,7 @@ Deno.test("keycloakProvider - default name is keycloak", () => {
     baseUrl: "https://kc.example.com",
     realm: "myrealm",
     clientId: "cid",
-    clientSecret: "csecret",
+    clientSecret: "csecret"
   });
   assertEquals(p.name, "keycloak");
 });
@@ -210,7 +210,7 @@ Deno.test("keycloakProvider - honors custom name override (multi-realm deploymen
     realm: "tenant-a",
     clientId: "cid",
     clientSecret: "csecret",
-    name: "kc-tenant-a",
+    name: "kc-tenant-a"
   });
   assertEquals(p.name, "kc-tenant-a");
 });
@@ -220,7 +220,7 @@ Deno.test("keycloakProvider - strips trailing slash from baseUrl", () => {
     baseUrl: "https://kc.example.com/",
     realm: "r",
     clientId: "cid",
-    clientSecret: "csecret",
+    clientSecret: "csecret"
   });
   assertEquals(p.authorizeUrl, "https://kc.example.com/realms/r/protocol/openid-connect/auth");
 });
@@ -230,7 +230,7 @@ Deno.test("keycloakProvider - defaults scopes to openid+email+profile", () => {
     baseUrl: "https://kc.example.com",
     realm: "r",
     clientId: "cid",
-    clientSecret: "csecret",
+    clientSecret: "csecret"
   });
   assertEquals(p.scopes, ["openid", "email", "profile"]);
 });
@@ -241,7 +241,7 @@ Deno.test("keycloakProvider - forwards allowedRedirectUris", () => {
     realm: "r",
     clientId: "cid",
     clientSecret: "csecret",
-    allowedRedirectUris: ["https://*.tenant.com/cb"],
+    allowedRedirectUris: ["https://*.tenant.com/cb"]
   });
   assertEquals(p.allowedRedirectUris, ["https://*.tenant.com/cb"]);
 });
@@ -257,7 +257,7 @@ Deno.test("genericOidcProvider - passes through name and endpoints", () => {
     issuerUrl: "https://issuer.example.com",
     name: "keycloak",
     tokenUrl: "https://issuer.example.com/oauth/token",
-    userInfoUrl: "https://issuer.example.com/oauth/userinfo",
+    userInfoUrl: "https://issuer.example.com/oauth/userinfo"
   });
 
   assertEquals(p.name, "keycloak");
@@ -275,7 +275,7 @@ Deno.test("genericOidcProvider - defaults scopes to openid+email+profile", () =>
     issuerUrl: "https://x",
     name: "x",
     tokenUrl: "https://x/t",
-    userInfoUrl: "https://x/u",
+    userInfoUrl: "https://x/u"
   });
 
   assertEquals(p.scopes, ["openid", "email", "profile"]);
@@ -290,7 +290,7 @@ Deno.test("genericOidcProvider - honors caller-supplied scopes", () => {
     name: "x",
     scopes: ["openid", "groups"],
     tokenUrl: "https://x/t",
-    userInfoUrl: "https://x/u",
+    userInfoUrl: "https://x/u"
   });
 
   assertEquals(p.scopes, ["openid", "groups"]);
@@ -306,7 +306,7 @@ Deno.test("genericOidcProvider - forwards allowedRedirectUris and redirectUri", 
     name: "x",
     redirectUri: "https://app.example.com/cb",
     tokenUrl: "https://x/t",
-    userInfoUrl: "https://x/u",
+    userInfoUrl: "https://x/u"
   });
 
   assertEquals(p.redirectUri, "https://app.example.com/cb");
@@ -317,11 +317,11 @@ Deno.test("genericOidcProvider - forwards allowedRedirectUris and redirectUri", 
 
 function mockFetchJson(
   body: unknown,
-  status = 200,
+  status = 200
 ): typeof fetch {
   return (() =>
     Promise.resolve(
-      new Response(JSON.stringify(body), { status }),
+      new Response(JSON.stringify(body), { status })
     )) as typeof fetch;
 }
 
@@ -330,14 +330,14 @@ Deno.test("createOidcProvider - resolves endpoints via discovery", async () => {
     authorization_endpoint: "https://issuer.example.com/oauth/authorize",
     issuer: "https://issuer.example.com",
     token_endpoint: "https://issuer.example.com/oauth/token",
-    userinfo_endpoint: "https://issuer.example.com/oauth/userinfo",
+    userinfo_endpoint: "https://issuer.example.com/oauth/userinfo"
   });
 
   const p = await createOidcProvider({
     clientId: "cid",
     clientSecret: "csecret",
     issuerUrl: "https://issuer.example.com",
-    name: "zitadel",
+    name: "zitadel"
   }, f);
 
   assertEquals(p.name, "zitadel");
@@ -350,7 +350,7 @@ Deno.test("createOidcProvider - throws when issuer omits userinfo_endpoint", asy
   const f = mockFetchJson({
     authorization_endpoint: "https://x/a",
     issuer: "https://x",
-    token_endpoint: "https://x/t",
+    token_endpoint: "https://x/t"
   });
 
   await assertRejects(
@@ -359,9 +359,9 @@ Deno.test("createOidcProvider - throws when issuer omits userinfo_endpoint", asy
         clientId: "cid",
         clientSecret: "csecret",
         issuerUrl: "https://x",
-        name: "minimal",
+        name: "minimal"
       }, f),
     Error,
-    "does not advertise a userinfo_endpoint",
+    "does not advertise a userinfo_endpoint"
   );
 });

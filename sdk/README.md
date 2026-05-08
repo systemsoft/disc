@@ -11,7 +11,7 @@ import {
   createSubscriptionClient,
   DiscClient,
   SubscriptionClient,
-  Transaction,
+  Transaction
 } from "disc/sdk/mod.ts";
 ```
 
@@ -29,7 +29,7 @@ const client = createClient({
   timeout: 30000, // request timeout in ms (default: 30000)
   headers: { "X-Custom": "value" }, // custom headers on every request
   retries: 3, // retry count on network/server errors (default: 0)
-  retryDelay: 1000, // base delay between retries in ms (default: 1000)
+  retryDelay: 1000 // base delay between retries in ms (default: 1000)
 });
 ```
 
@@ -66,7 +66,7 @@ const User = z.object({ name: z.string(), email: z.string().email() });
 const user = await client.query(
   "select User { name, email } limit 1",
   undefined,
-  { validate: User },
+  { validate: User }
 );
 
 // Plain function — useful for cheap shape checks or transforms
@@ -74,11 +74,12 @@ const ids = await client.query(
   "select User.id",
   undefined,
   {
-    validate: (v) => {
-      if (!Array.isArray(v)) throw new Error("expected array");
+    validate: v => {
+      if (!Array.isArray(v))
+        throw new Error("expected array");
       return v as string[];
-    },
-  },
+    }
+  }
 );
 ```
 
@@ -122,7 +123,7 @@ import type { AuthManagerOptions } from "disc/sdk/mod.ts";
 
 const auth = new AuthManager(client, {
   autoRefresh: true, // default: true
-  refreshBuffer: 60, // seconds before expiry to trigger refresh (default: 60)
+  refreshBuffer: 60 // seconds before expiry to trigger refresh (default: 60)
 });
 ```
 
@@ -134,14 +135,14 @@ const response = await auth.register({
   email: "ada@example.com",
   password: "secure-password",
   username: "ada", // optional
-  metadata: { role: "admin" }, // optional
+  metadata: { role: "admin" } // optional
 });
 // response.user, response.token, response.session
 
 // Login with email or username
 const loginResponse = await auth.login({
   email: "ada@example.com",
-  password: "secure-password",
+  password: "secure-password"
 });
 
 // Check authentication state
@@ -174,15 +175,15 @@ auth.dispose(); // cancel any pending auto-refresh timer
 Execute multiple queries atomically using a callback pattern. The transaction auto-commits on success and auto-rolls back on error.
 
 ```typescript
-const result = await client.transaction(async (tx) => {
+const result = await client.transaction(async tx => {
   const user = await tx.query<User>(
     "insert User { name := <str>$name, email := <str>$email }",
-    { name: "Billie", email: "billie@example.com" },
+    { name: "Billie", email: "billie@example.com" }
   );
 
   await tx.query(
     "insert Post { title := <str>$title, author := (select User filter .id = <uuid>$id) }",
-    { title: "Hello World", id: user.id },
+    { title: "Hello World", id: user.id }
   );
 
   return user;
@@ -221,8 +222,8 @@ const sub = createSubscriptionClient(
   {
     autoReconnect: true, // default: true
     maxReconnectAttempts: 5, // default: 5
-    reconnectDelay: 1000, // base delay in ms (default: 1000)
-  },
+    reconnectDelay: 1000 // base delay in ms (default: 1000)
+  }
 );
 
 await sub.connect();
@@ -234,11 +235,11 @@ await sub.connect();
 const handle = sub.subscribe<User>(
   "select User { name, email }",
   {
-    onData: (data) => console.log("Update:", data),
-    onError: (err) => console.error("Error:", err), // optional
-    onComplete: () => console.log("Stream ended"), // optional
+    onData: data => console.log("Update:", data),
+    onError: err => console.error("Error:", err), // optional
+    onComplete: () => console.log("Stream ended") // optional
   },
-  { filter: "active" }, // optional variables
+  { filter: "active" } // optional variables
 );
 
 // Unsubscribe

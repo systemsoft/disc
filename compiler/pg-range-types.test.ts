@@ -28,21 +28,21 @@ const RUN_PG = canRunPgTests();
 
 /** Parse a DSN into connection config for the raw deno-postgres Client. */
 function parseDsn(
-  dsn: string,
+  dsn: string
 ): { hostname: string; port: number; user: string; database: string; } {
   const url = new URL(dsn);
   return {
     hostname: url.hostname || "localhost",
     port: url.port ? parseInt(url.port) : 5432,
     user: url.username || "disc",
-    database: url.pathname.slice(1) || "disc_test",
+    database: url.pathname.slice(1) || "disc_test"
   };
 }
 
 /** Get column info for a table via a raw client, including udt_name for range types. */
 async function getColumns(
   dsn: string,
-  tableName: string,
+  tableName: string
 ): Promise<{ column_name: string; data_type: string; udt_name: string; }[]> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
@@ -55,7 +55,7 @@ async function getColumns(
        FROM information_schema.columns
        WHERE table_schema = 'public' AND table_name = $1
        ORDER BY ordinal_position`,
-      [tableName],
+      [tableName]
     );
     return result.rows;
   } finally {
@@ -83,7 +83,7 @@ async function dropTables(
 /** Execute raw SQL via a fresh client connection. */
 async function execRawSQL(
   dsn: string,
-  sql: string,
+  sql: string
 ): Promise<void> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
@@ -98,7 +98,7 @@ async function execRawSQL(
 /** Query raw SQL and return rows via a fresh client connection. */
 async function queryRawSQL(
   dsn: string,
-  sql: string,
+  sql: string
 ): Promise<Record<string, unknown>[]> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
@@ -117,7 +117,7 @@ function makePool(dsn: string): ConnectionPool {
     connectionString: dsn,
     cleanupInterval: 0,
     maxConnections: 3,
-    minConnections: 1,
+    minConnections: 1
   });
 }
 
@@ -150,21 +150,21 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`,
+        `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`
       );
 
       // Range types report as USER-DEFINED in data_type; check udt_name instead
       const columns = await getColumns(dsn, expectedTable);
-      const rangeCol = columns.find((c) => c.column_name === "score_range");
+      const rangeCol = columns.find(c => c.column_name === "score_range");
       assertEquals(
         rangeCol !== undefined,
         true,
-        "Table should have a 'score_range' column",
+        "Table should have a 'score_range' column"
       );
       assertEquals(
         rangeCol!.udt_name,
         "int4range",
-        "range<int32> should map to PostgreSQL 'int4range' udt_name",
+        "range<int32> should map to PostgreSQL 'int4range' udt_name"
       );
 
       await manager.close();
@@ -173,11 +173,11 @@ Deno.test({
         dsn,
         expectedTable,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -209,21 +209,21 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`,
+        `applySchema should succeed: ${result.ok ? "" : JSON.stringify(result)}`
       );
 
       // Multirange types also report as USER-DEFINED; check udt_name
       const columns = await getColumns(dsn, expectedTable);
-      const mrCol = columns.find((c) => c.column_name === "ranges");
+      const mrCol = columns.find(c => c.column_name === "ranges");
       assertEquals(
         mrCol !== undefined,
         true,
-        "Table should have a 'ranges' column",
+        "Table should have a 'ranges' column"
       );
       assertEquals(
         mrCol!.udt_name,
         "int8multirange",
-        "multirange<int64> should map to PostgreSQL 'int8multirange' udt_name",
+        "multirange<int64> should map to PostgreSQL 'int8multirange' udt_name"
       );
 
       await manager.close();
@@ -232,11 +232,11 @@ Deno.test({
         dsn,
         expectedTable,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -268,20 +268,20 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema failed: ${JSON.stringify(result)}`,
+        `applySchema failed: ${JSON.stringify(result)}`
       );
 
       // Insert a row with a range value
       await execRawSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, name, score_range)
-         VALUES (gen_random_uuid(), 'alpha', int4range(1, 10))`,
+         VALUES (gen_random_uuid(), 'alpha', int4range(1, 10))`
       );
 
       // Select back the range value and verify it round-trips
       const rows = await queryRawSQL(
         dsn,
-        `SELECT name, score_range::text AS score_range FROM ${expectedTable} WHERE name = 'alpha'`,
+        `SELECT name, score_range::text AS score_range FROM ${expectedTable} WHERE name = 'alpha'`
       );
 
       assertEquals(rows.length, 1, "Should have one row");
@@ -292,7 +292,7 @@ Deno.test({
       assertEquals(
         rangeStr,
         "[1,10)",
-        "int4range(1, 10) should round-trip as '[1,10)'",
+        "int4range(1, 10) should round-trip as '[1,10)'"
       );
 
       await manager.close();
@@ -301,11 +301,11 @@ Deno.test({
         dsn,
         expectedTable,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -326,24 +326,24 @@ Deno.test({
         dsn,
         `SELECT
            LOWER(int4range(5, 20)) AS lower_bound,
-           UPPER(int4range(5, 20)) AS upper_bound`,
+           UPPER(int4range(5, 20)) AS upper_bound`
       );
 
       assertEquals(rows.length, 1, "Should return one row");
       assertEquals(
         Number(rows[0].lower_bound),
         5,
-        "LOWER(int4range(5, 20)) should be 5",
+        "LOWER(int4range(5, 20)) should be 5"
       );
       assertEquals(
         Number(rows[0].upper_bound),
         20,
-        "UPPER(int4range(5, 20)) should be 20",
+        "UPPER(int4range(5, 20)) should be 20"
       );
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -364,24 +364,24 @@ Deno.test({
         dsn,
         `SELECT
            ISEMPTY(int4range(5, 5)) AS is_empty,
-           ISEMPTY(int4range(1, 10)) AS is_not_empty`,
+           ISEMPTY(int4range(1, 10)) AS is_not_empty`
       );
 
       assertEquals(rows.length, 1, "Should return one row");
       assertEquals(
         rows[0].is_empty,
         true,
-        "int4range(5, 5) should be empty",
+        "int4range(5, 5) should be empty"
       );
       assertEquals(
         rows[0].is_not_empty,
         false,
-        "int4range(1, 10) should NOT be empty",
+        "int4range(1, 10) should NOT be empty"
       );
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -413,7 +413,7 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema failed: ${JSON.stringify(result)}`,
+        `applySchema failed: ${JSON.stringify(result)}`
       );
 
       // Insert rows with different ranges
@@ -422,13 +422,13 @@ Deno.test({
         `INSERT INTO ${expectedTable} (id, name, score_range) VALUES
            (gen_random_uuid(), 'low', int4range(1, 10)),
            (gen_random_uuid(), 'mid', int4range(10, 20)),
-           (gen_random_uuid(), 'high', int4range(20, 30))`,
+           (gen_random_uuid(), 'high', int4range(20, 30))`
       );
 
       // Use @> to find which range contains the value 15
       const rows = await queryRawSQL(
         dsn,
-        `SELECT name FROM ${expectedTable} WHERE score_range @> 15 ORDER BY name`,
+        `SELECT name FROM ${expectedTable} WHERE score_range @> 15 ORDER BY name`
       );
 
       // 15 is in [10,20) → only 'mid' should match
@@ -436,18 +436,18 @@ Deno.test({
       assertEquals(
         rows[0].name,
         "mid",
-        "int4range(10, 20) should contain 15",
+        "int4range(10, 20) should contain 15"
       );
     } finally {
       await dropTables(
         dsn,
         expectedTable,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -468,24 +468,24 @@ Deno.test({
         dsn,
         `SELECT
            (int4range(1, 10) && int4range(5, 15)) AS do_overlap,
-           (int4range(1, 5) && int4range(10, 20)) AS no_overlap`,
+           (int4range(1, 5) && int4range(10, 20)) AS no_overlap`
       );
 
       assertEquals(rows.length, 1, "Should return one row");
       assertEquals(
         rows[0].do_overlap,
         true,
-        "[1,10) && [5,15) should overlap",
+        "[1,10) && [5,15) should overlap"
       );
       assertEquals(
         rows[0].no_overlap,
         false,
-        "[1,5) && [10,20) should NOT overlap",
+        "[1,5) && [10,20) should NOT overlap"
       );
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -517,7 +517,7 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema failed: ${JSON.stringify(result)}`,
+        `applySchema failed: ${JSON.stringify(result)}`
       );
 
       // Insert rows with overlapping ranges
@@ -526,7 +526,7 @@ Deno.test({
         `INSERT INTO ${expectedTable} (id, name, score_range) VALUES
            (gen_random_uuid(), 'range_a', int4range(1, 50)),
            (gen_random_uuid(), 'range_b', int4range(40, 80)),
-           (gen_random_uuid(), 'range_c', int4range(100, 200))`,
+           (gen_random_uuid(), 'range_c', int4range(100, 200))`
       );
 
       // Find all rows where the range contains 45
@@ -537,7 +537,7 @@ Deno.test({
         dsn,
         `SELECT name FROM ${expectedTable}
          WHERE score_range @> 45
-         ORDER BY name`,
+         ORDER BY name`
       );
 
       assertEquals(rows.length, 2, "Two ranges should contain 45");
@@ -548,11 +548,11 @@ Deno.test({
         dsn,
         expectedTable,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -584,21 +584,21 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema failed: ${JSON.stringify(result)}`,
+        `applySchema failed: ${JSON.stringify(result)}`
       );
 
       // Verify column type is tstzrange
       const columns = await getColumns(dsn, expectedTable);
-      const periodCol = columns.find((c) => c.column_name === "period");
+      const periodCol = columns.find(c => c.column_name === "period");
       assertEquals(
         periodCol !== undefined,
         true,
-        "Table should have a 'period' column",
+        "Table should have a 'period' column"
       );
       assertEquals(
         periodCol!.udt_name,
         "tstzrange",
-        "range<datetime> should map to PostgreSQL 'tstzrange' udt_name",
+        "range<datetime> should map to PostgreSQL 'tstzrange' udt_name"
       );
 
       // Insert a timestamp range
@@ -609,7 +609,7 @@ Deno.test({
            gen_random_uuid(),
            'meeting',
            tstzrange('2024-06-15 09:00:00+00', '2024-06-15 10:30:00+00')
-         )`,
+         )`
       );
 
       // Query back and verify bounds via LOWER/UPPER
@@ -620,7 +620,7 @@ Deno.test({
            LOWER(period)::text AS lower_ts,
            UPPER(period)::text AS upper_ts
          FROM ${expectedTable}
-         WHERE name = 'meeting'`,
+         WHERE name = 'meeting'`
       );
 
       assertEquals(rows.length, 1, "Should have one row");
@@ -631,12 +631,12 @@ Deno.test({
       assertEquals(
         lowerStr.includes("2024-06-15") && lowerStr.includes("09:00:00"),
         true,
-        `Lower bound should contain '2024-06-15' and '09:00:00', got: ${lowerStr}`,
+        `Lower bound should contain '2024-06-15' and '09:00:00', got: ${lowerStr}`
       );
       assertEquals(
         upperStr.includes("2024-06-15") && upperStr.includes("10:30:00"),
         true,
-        `Upper bound should contain '2024-06-15' and '10:30:00', got: ${upperStr}`,
+        `Upper bound should contain '2024-06-15' and '10:30:00', got: ${upperStr}`
       );
 
       await manager.close();
@@ -645,11 +645,11 @@ Deno.test({
         dsn,
         expectedTable,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -681,7 +681,7 @@ Deno.test({
       assertEquals(
         result.ok,
         true,
-        `applySchema failed: ${JSON.stringify(result)}`,
+        `applySchema failed: ${JSON.stringify(result)}`
       );
 
       // Insert a multirange value: two disjoint ranges [1,5) and [10,20)
@@ -692,7 +692,7 @@ Deno.test({
            gen_random_uuid(),
            'multi',
            '{[1,5), [10,20)}'::int8multirange
-         )`,
+         )`
       );
 
       // Select back and verify
@@ -700,7 +700,7 @@ Deno.test({
         dsn,
         `SELECT name, ranges::text AS ranges
          FROM ${expectedTable}
-         WHERE name = 'multi'`,
+         WHERE name = 'multi'`
       );
 
       assertEquals(rows.length, 1, "Should have one row");
@@ -711,7 +711,7 @@ Deno.test({
       assertEquals(
         mrStr.includes("[1,5)") && mrStr.includes("[10,20)"),
         true,
-        `Multirange should contain '[1,5)' and '[10,20)', got: ${mrStr}`,
+        `Multirange should contain '[1,5)' and '[10,20)', got: ${mrStr}`
       );
 
       // Verify @> containment on multiranges
@@ -720,24 +720,24 @@ Deno.test({
         `SELECT
            ('{[1,5), [10,20)}'::int8multirange @> 3::bigint) AS contains_3,
            ('{[1,5), [10,20)}'::int8multirange @> 7::bigint) AS contains_7,
-           ('{[1,5), [10,20)}'::int8multirange @> 15::bigint) AS contains_15`,
+           ('{[1,5), [10,20)}'::int8multirange @> 15::bigint) AS contains_15`
       );
 
       assertEquals(containsRows.length, 1, "Should return one row");
       assertEquals(
         containsRows[0].contains_3,
         true,
-        "Multirange {[1,5),[10,20)} should contain 3",
+        "Multirange {[1,5),[10,20)} should contain 3"
       );
       assertEquals(
         containsRows[0].contains_7,
         false,
-        "Multirange {[1,5),[10,20)} should NOT contain 7",
+        "Multirange {[1,5),[10,20)} should NOT contain 7"
       );
       assertEquals(
         containsRows[0].contains_15,
         true,
-        "Multirange {[1,5),[10,20)} should contain 15",
+        "Multirange {[1,5),[10,20)} should contain 15"
       );
 
       await manager.close();
@@ -746,9 +746,9 @@ Deno.test({
         dsn,
         expectedTable,
         "disc_migrations",
-        "disc_migration_checkpoints",
+        "disc_migration_checkpoints"
       );
       await pool.close();
     }
-  },
+  }
 });

@@ -11,7 +11,7 @@ import {
   generateServerFirstMessage,
   parseClientFirstMessage,
   toBase64,
-  verifyClientFinalMessage,
+  verifyClientFinalMessage
 } from "./scram.ts";
 import type { ScramServerState } from "./scram.ts";
 
@@ -66,7 +66,7 @@ Deno.test("scram - parseClientFirstMessage extracts username and nonce", () => {
   assertEquals(result.clientNonce, "rOprNGfwEbeRWgbNEkqO");
   assertEquals(
     result.clientFirstMessageBare,
-    "n=testuser,r=rOprNGfwEbeRWgbNEkqO",
+    "n=testuser,r=rOprNGfwEbeRWgbNEkqO"
   );
 });
 
@@ -75,7 +75,7 @@ Deno.test("scram - parseClientFirstMessage throws on missing nonce", () => {
   assertThrows(
     () => parseClientFirstMessage(msg),
     Error,
-    "missing nonce",
+    "missing nonce"
   );
 });
 
@@ -84,7 +84,7 @@ Deno.test("scram - parseClientFirstMessage throws on missing username", () => {
   assertThrows(
     () => parseClientFirstMessage(msg),
     Error,
-    "missing username",
+    "missing username"
   );
 });
 
@@ -93,7 +93,7 @@ Deno.test("scram - parseClientFirstMessage throws on malformed input", () => {
   assertThrows(
     () => parseClientFirstMessage(msg),
     Error,
-    "malformed",
+    "malformed"
   );
 });
 
@@ -106,7 +106,7 @@ Deno.test("scram - generateServerFirstMessage format is correct", () => {
   const { serverNonce, serverFirstMessage } = generateServerFirstMessage(
     "clientNonce123",
     salt,
-    4096,
+    4096
   );
 
   // Server nonce should be non-empty
@@ -150,7 +150,7 @@ Deno.test("scram - full SCRAM-SHA-256 flow succeeds with correct password", asyn
   const { serverNonce, serverFirstMessage } = generateServerFirstMessage(
     parsed.clientNonce,
     salt,
-    iterations,
+    iterations
   );
 
   // 4. Server derives keys from password
@@ -161,7 +161,7 @@ Deno.test("scram - full SCRAM-SHA-256 flow succeeds with correct password", asyn
     password,
     clientNonce,
     clientFirstMessageBare,
-    serverFirstMessage,
+    serverFirstMessage
   );
 
   // 6. Server verifies client-final
@@ -173,14 +173,14 @@ Deno.test("scram - full SCRAM-SHA-256 flow succeeds with correct password", asyn
     iterations,
     clientFirstMessageBare: parsed.clientFirstMessageBare,
     serverFirstMessage,
-    gs2Header: parsed.gs2Header,
+    gs2Header: parsed.gs2Header
   };
 
   const result = await verifyClientFinalMessage(
     clientFinalMsg,
     state,
     storedKey,
-    serverKey,
+    serverKey
   );
 
   assertEquals(result.valid, true);
@@ -204,14 +204,14 @@ Deno.test("scram - full SCRAM flow fails with wrong password", async () => {
   const { serverNonce, serverFirstMessage } = generateServerFirstMessage(
     parsed.clientNonce,
     salt,
-    iterations,
+    iterations
   );
 
   // Server derives keys from CORRECT password
   const { storedKey, serverKey } = await deriveKeys(
     correctPassword,
     salt,
-    iterations,
+    iterations
   );
 
   // Client builds final message with WRONG password
@@ -219,7 +219,7 @@ Deno.test("scram - full SCRAM flow fails with wrong password", async () => {
     wrongPassword,
     clientNonce,
     clientFirstMessageBare,
-    serverFirstMessage,
+    serverFirstMessage
   );
 
   // Server verifies — should fail
@@ -231,14 +231,14 @@ Deno.test("scram - full SCRAM flow fails with wrong password", async () => {
     iterations,
     clientFirstMessageBare: parsed.clientFirstMessageBare,
     serverFirstMessage,
-    gs2Header: parsed.gs2Header,
+    gs2Header: parsed.gs2Header
   };
 
   const result = await verifyClientFinalMessage(
     clientFinalMsg,
     state,
     storedKey,
-    serverKey,
+    serverKey
   );
 
   assertEquals(result.valid, false);
@@ -256,7 +256,7 @@ Deno.test("scram - verifyClientFinalMessage rejects tampered nonce", async () =>
   const { serverNonce, serverFirstMessage } = generateServerFirstMessage(
     parsed.clientNonce,
     salt,
-    iterations,
+    iterations
   );
 
   const { storedKey, serverKey } = await deriveKeys(password, salt, iterations);
@@ -266,7 +266,7 @@ Deno.test("scram - verifyClientFinalMessage rejects tampered nonce", async () =>
     password,
     clientNonce,
     clientFirstMessageBare,
-    serverFirstMessage,
+    serverFirstMessage
   );
 
   // Use a state with a different serverNonce (simulating nonce tampering)
@@ -278,14 +278,14 @@ Deno.test("scram - verifyClientFinalMessage rejects tampered nonce", async () =>
     iterations,
     clientFirstMessageBare: parsed.clientFirstMessageBare,
     serverFirstMessage,
-    gs2Header: parsed.gs2Header,
+    gs2Header: parsed.gs2Header
   };
 
   const result = await verifyClientFinalMessage(
     clientFinalMsg,
     state,
     storedKey,
-    serverKey,
+    serverKey
   );
 
   // Nonce mismatch should cause rejection
@@ -302,14 +302,14 @@ Deno.test("scram - verifyClientFinalMessage rejects empty proof", async () => {
     iterations: 4096,
     clientFirstMessageBare: "n=test,r=cn",
     serverFirstMessage: "r=cnsn,s=AAAA,i=4096",
-    gs2Header: "n,,",
+    gs2Header: "n,,"
   };
 
   const result = await verifyClientFinalMessage(
     msg,
     state,
     new Uint8Array(32),
-    new Uint8Array(32),
+    new Uint8Array(32)
   );
   assertEquals(result.valid, false);
 });
@@ -337,7 +337,7 @@ Deno.test("scram - toBase64 produces correct encoding", () => {
 Deno.test("scram - buildClientFirstMessage produces correct format", () => {
   const { message, clientFirstMessageBare } = buildClientFirstMessage(
     "user",
-    "abc123",
+    "abc123"
   );
   const str = textDecoder.decode(message);
   assertEquals(str, "n,,n=user,r=abc123");
@@ -385,14 +385,14 @@ Deno.test("scram - verifyClientFinalMessage rejects mismatched channel binding (
   // Client and server complete the first round normally
   const { clientFirstMessageBare } = buildClientFirstMessage(
     "carol",
-    clientNonce,
+    clientNonce
   );
   const salt = textEncoder.encode("some-16b-salt!!!");
   const iterations = 4096;
   const { serverNonce, serverFirstMessage } = generateServerFirstMessage(
     clientNonce,
     salt,
-    iterations,
+    iterations
   );
   const { storedKey, serverKey } = await deriveKeys(password, salt, iterations);
 
@@ -401,7 +401,7 @@ Deno.test("scram - verifyClientFinalMessage rejects mismatched channel binding (
     password,
     clientNonce,
     clientFirstMessageBare,
-    serverFirstMessage,
+    serverFirstMessage
   );
 
   // Tamper: swap the honest c=biws for a different (valid-looking) value
@@ -416,19 +416,19 @@ Deno.test("scram - verifyClientFinalMessage rejects mismatched channel binding (
     iterations,
     clientFirstMessageBare,
     serverFirstMessage,
-    gs2Header: "n,,", // server recorded this from the honest first message
+    gs2Header: "n,," // server recorded this from the honest first message
   };
 
   const tamperedResult = await verifyClientFinalMessage(
     tampered,
     state,
     storedKey,
-    serverKey,
+    serverKey
   );
   assertEquals(
     tamperedResult.valid,
     false,
-    "Mismatched channel binding must fail verification",
+    "Mismatched channel binding must fail verification"
   );
 
   // Sanity: honest message still verifies
@@ -436,7 +436,7 @@ Deno.test("scram - verifyClientFinalMessage rejects mismatched channel binding (
     honestFinal,
     state,
     storedKey,
-    serverKey,
+    serverKey
   );
   assertEquals(honestResult.valid, true);
 });

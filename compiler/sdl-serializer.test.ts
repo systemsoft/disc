@@ -17,7 +17,8 @@ import { serializeSchema, serializeType } from "./sdl-serializer.ts";
 
 function makeSchema(types: TypeDef[]): Schema {
   const m = new Map<string, TypeDef>();
-  for (const t of types) m.set(t.name, t);
+  for (const t of types)
+    m.set(t.name, t);
   return { types: m, functions: getBuiltinFunctions() };
 }
 
@@ -47,7 +48,7 @@ Deno.test("sdl-serializer - object type with required scalar properties", () => 
         required: true,
         multi: false,
         columnName: "name",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["email", {
         name: "email",
@@ -55,10 +56,10 @@ Deno.test("sdl-serializer - object type with required scalar properties", () => 
         required: true,
         multi: false,
         columnName: "email",
-        edgeqlType: "str",
-      }],
+        edgeqlType: "str"
+      }]
     ]),
-    links: new Map(),
+    links: new Map()
   };
   const sdl = serializeType(t);
   assertStringIncludes(sdl, "type User");
@@ -78,10 +79,10 @@ Deno.test("sdl-serializer - optional scalar property omits 'required'", () => {
         required: false,
         multi: false,
         columnName: "nickname",
-        edgeqlType: "str",
-      }],
+        edgeqlType: "str"
+      }]
     ]),
-    links: new Map(),
+    links: new Map()
   };
   const sdl = serializeType(t);
   assertStringIncludes(sdl, "nickname: str;");
@@ -100,9 +101,9 @@ Deno.test("sdl-serializer - multi link renders 'multi'", () => {
         name: "posts",
         target: "Post",
         required: false,
-        multi: true,
-      }],
-    ]),
+        multi: true
+      }]
+    ])
   };
   const sdl = serializeType(t);
   assertStringIncludes(sdl, "multi link posts -> Post;");
@@ -121,10 +122,10 @@ Deno.test("sdl-serializer - abstract object type renders 'abstract'", () => {
         required: true,
         multi: false,
         columnName: "created_at",
-        edgeqlType: "datetime",
-      }],
+        edgeqlType: "datetime"
+      }]
     ]),
-    links: new Map(),
+    links: new Map()
   };
   const sdl = serializeType(t);
   assertStringIncludes(sdl, "abstract type Timestamped");
@@ -137,7 +138,7 @@ Deno.test("sdl-serializer - extending parents renders extending clause", () => {
     tableName: "users",
     parentTypes: ["Timestamped", "Authored"],
     properties: new Map(),
-    links: new Map(),
+    links: new Map()
   };
   const sdl = serializeType(t);
   assertStringIncludes(sdl, "type User extending Timestamped, Authored");
@@ -150,7 +151,7 @@ Deno.test("sdl-serializer - enum scalar renders extending enum<...>", () => {
     tableName: "status",
     properties: new Map(),
     links: new Map(),
-    enumValues: ["active", "inactive", "pending"],
+    enumValues: ["active", "inactive", "pending"]
   };
   const sdl = serializeType(t);
   assertStringIncludes(sdl, "scalar type Status extending enum<active, inactive, pending>;");
@@ -173,10 +174,10 @@ Deno.test("sdl-serializer - property with exclusive constraint", () => {
         multi: false,
         columnName: "email",
         edgeqlType: "str",
-        constraints: [{ name: "exclusive" }],
-      }],
+        constraints: [{ name: "exclusive" }]
+      }]
     ]),
-    links: new Map(),
+    links: new Map()
   };
   const sdl = serializeType(t);
   assertStringIncludes(sdl, "required email: str {");
@@ -196,10 +197,10 @@ Deno.test("sdl-serializer - property with parameterised constraint", () => {
         multi: false,
         columnName: "name",
         edgeqlType: "str",
-        constraints: [{ name: "max_length", args: ["255"] }],
-      }],
+        constraints: [{ name: "max_length", args: ["255"] }]
+      }]
     ]),
-    links: new Map(),
+    links: new Map()
   };
   const sdl = serializeType(t);
   assertStringIncludes(sdl, "constraint max_length(255);");
@@ -218,10 +219,10 @@ Deno.test("sdl-serializer - readonly property emits 'readonly := true'", () => {
         multi: false,
         columnName: "created_at",
         edgeqlType: "datetime",
-        readonly: true,
-      }],
+        readonly: true
+      }]
     ]),
-    links: new Map(),
+    links: new Map()
   };
   const sdl = serializeType(t);
   assertStringIncludes(sdl, "readonly := true;");
@@ -240,10 +241,10 @@ Deno.test("sdl-serializer - property with annotation renders annotation block", 
         multi: false,
         columnName: "password",
         edgeqlType: "str",
-        annotations: { secret: "true" },
-      }],
+        annotations: { secret: "true" }
+      }]
     ]),
-    links: new Map(),
+    links: new Map()
   };
   const sdl = serializeType(t);
   // SDL annotation values are string literals; the value `"true"` becomes `'true'`.
@@ -257,7 +258,7 @@ Deno.test("sdl-serializer - type-level annotation rendered before properties", (
     tableName: "users",
     annotations: { description: "A user account" },
     properties: new Map(),
-    links: new Map(),
+    links: new Map()
   };
   const sdl = serializeType(t);
   assertStringIncludes(sdl, "annotation description := 'A user account';");
@@ -274,7 +275,7 @@ Deno.test("sdl-serializer - groups types into module blocks", () => {
     tableName: "a",
     module: "default",
     properties: new Map(),
-    links: new Map(),
+    links: new Map()
   };
   const b: TypeDef = {
     name: "billing::Invoice",
@@ -282,7 +283,7 @@ Deno.test("sdl-serializer - groups types into module blocks", () => {
     tableName: "invoice",
     module: "billing",
     properties: new Map(),
-    links: new Map(),
+    links: new Map()
   };
   const sdl = serializeSchema(makeSchema([a, b]));
   assertStringIncludes(sdl, "module default {");
@@ -295,7 +296,7 @@ Deno.test("sdl-serializer - types without explicit module land in 'default'", ()
     kind: "object",
     tableName: "users",
     properties: new Map(),
-    links: new Map(),
+    links: new Map()
   };
   const sdl = serializeSchema(makeSchema([t]));
   assertStringIncludes(sdl, "module default {");
@@ -317,13 +318,13 @@ Deno.test("sdl-serializer - round-trips createTestSchema's User type", () => {
   assertEquals(
     newUser!.properties.has("email"),
     true,
-    "email property missing after re-parse",
+    "email property missing after re-parse"
   );
   // exclusive constraint preserved
   const newEmail = newUser!.properties.get("email") as PropertyDef;
   assertEquals(
-    newEmail.constraints?.some((c) => c.name === "exclusive"),
-    true,
+    newEmail.constraints?.some(c => c.name === "exclusive"),
+    true
   );
   // multi posts link preserved
   const newPosts = newUser!.links.get("posts") as LinkDef;
@@ -346,11 +347,11 @@ Deno.test("sdl-serializer - round-trips enum scalar Status", () => {
   // post-reparse.
   assertStringIncludes(
     sdl,
-    "scalar type Status extending enum<active, inactive, pending>;",
+    "scalar type Status extending enum<active, inactive, pending>;"
   );
   const reparsed = reparse(sdl);
-  const status = reparsed.types.get("Status")
-    ?? reparsed.types.get("default::Status");
+  const status = reparsed.types.get("Status") ??
+    reparsed.types.get("default::Status");
   assertEquals(status !== undefined, true);
   assertEquals(status!.kind, "enum");
 });

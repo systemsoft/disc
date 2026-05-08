@@ -52,14 +52,14 @@ Deno.test("describeType - basic object type returns correct name and module", ()
 Deno.test("describeType - properties are listed with correct metadata", () => {
   const desc = describeType(schema, "User");
 
-  const emailProp = desc.properties.find((p) => p.name === "email");
+  const emailProp = desc.properties.find(p => p.name === "email");
   assertEquals(emailProp !== undefined, true);
   assertEquals(emailProp!.type, "str");
   assertEquals(emailProp!.required, true);
   assertEquals(emailProp!.constraints.length > 0, true);
   assertEquals(emailProp!.constraints.includes("exclusive"), true);
 
-  const createdAtProp = desc.properties.find((p) => p.name === "createdAt");
+  const createdAtProp = desc.properties.find(p => p.name === "createdAt");
   assertEquals(createdAtProp !== undefined, true);
   assertEquals(createdAtProp!.readonly, true);
   assertEquals(createdAtProp!.hasDefault, true);
@@ -67,7 +67,7 @@ Deno.test("describeType - properties are listed with correct metadata", () => {
 
 Deno.test("describeType - computed property is flagged", () => {
   const desc = describeType(schema, "User");
-  const postCountProp = desc.properties.find((p) => p.name === "postCount");
+  const postCountProp = desc.properties.find(p => p.name === "postCount");
   assertEquals(postCountProp !== undefined, true);
   assertEquals(postCountProp!.computed, true);
 });
@@ -75,7 +75,7 @@ Deno.test("describeType - computed property is flagged", () => {
 Deno.test("describeType - links are listed with correct metadata", () => {
   const desc = describeType(schema, "User");
 
-  const postsLink = desc.links.find((l) => l.name === "posts");
+  const postsLink = desc.links.find(l => l.name === "posts");
   assertEquals(postsLink !== undefined, true);
   assertEquals(postsLink!.target, "Post");
   assertEquals(postsLink!.cardinality, "multi");
@@ -85,7 +85,7 @@ Deno.test("describeType - links are listed with correct metadata", () => {
 Deno.test("describeType - single link shows correct cardinality", () => {
   const desc = describeType(schema, "Post");
 
-  const authorLink = desc.links.find((l) => l.name === "author");
+  const authorLink = desc.links.find(l => l.name === "author");
   assertEquals(authorLink !== undefined, true);
   assertEquals(authorLink!.target, "User");
   assertEquals(authorLink!.cardinality, "single");
@@ -94,9 +94,9 @@ Deno.test("describeType - single link shows correct cardinality", () => {
 
 Deno.test("describeType - constraints include args", () => {
   const desc = describeType(schema, "User");
-  const nameProp = desc.properties.find((p) => p.name === "name");
+  const nameProp = desc.properties.find(p => p.name === "name");
   assertEquals(nameProp !== undefined, true);
-  const maxLenConstraint = nameProp!.constraints.find((c) => c.startsWith("max_length"));
+  const maxLenConstraint = nameProp!.constraints.find(c => c.startsWith("max_length"));
   assertEquals(maxLenConstraint !== undefined, true);
   assertEquals(maxLenConstraint!.includes("255"), true);
 });
@@ -105,7 +105,7 @@ Deno.test("describeType - unknown type throws CompilationError", () => {
   assertThrows(
     () => describeType(schema, "NonExistentType"),
     Error,
-    "not found",
+    "not found"
   );
 });
 
@@ -122,15 +122,15 @@ Deno.test("describeType - abstract type is flagged", () => {
         type: "uuid",
         required: true,
         multi: false,
-        columnName: "id",
-      }],
+        columnName: "id"
+      }]
     ]),
-    links: new Map(),
+    links: new Map()
   };
 
   const testSchema: Schema = {
     types: new Map([["Shape", abstractType]]),
-    functions: new Map(),
+    functions: new Map()
   };
 
   const desc = describeType(testSchema, "Shape");
@@ -145,7 +145,7 @@ Deno.test("describeType - type with parent reports parentTypes", () => {
     abstract: true,
     properties: new Map(),
     links: new Map(),
-    subtypes: ["Circle"],
+    subtypes: ["Circle"]
   };
 
   const childType: TypeDef = {
@@ -160,15 +160,15 @@ Deno.test("describeType - type with parent reports parentTypes", () => {
         required: true,
         multi: false,
         columnName: "radius",
-        edgeqlType: "float64",
-      }],
+        edgeqlType: "float64"
+      }]
     ]),
-    links: new Map(),
+    links: new Map()
   };
 
   const testSchema: Schema = {
     types: new Map([["Shape", parentType], ["Circle", childType]]),
-    functions: new Map(),
+    functions: new Map()
   };
 
   const desc = describeType(testSchema, "Circle");
@@ -181,7 +181,7 @@ Deno.test("describeType - type with parent reports parentTypes", () => {
 
 Deno.test("describeSchema - all types are listed", () => {
   const desc = describeSchema(schema);
-  const typeNames = desc.types.map((t) => t.name);
+  const typeNames = desc.types.map(t => t.name);
 
   assertEquals(typeNames.includes("User"), true);
   assertEquals(typeNames.includes("Post"), true);
@@ -198,13 +198,13 @@ Deno.test("describeSchema - functions are included", () => {
   assertEquals(desc.functions.length > 0, true);
 
   // Check that some builtin functions appear
-  const funcNames = desc.functions.map((f) => f.name);
+  const funcNames = desc.functions.map(f => f.name);
   assertEquals(funcNames.includes("count"), true);
 });
 
 Deno.test("describeSchema - functions have params and returnType", () => {
   const desc = describeSchema(schema);
-  const countFn = desc.functions.find((f) => f.name === "count");
+  const countFn = desc.functions.find(f => f.name === "count");
   assertEquals(countFn !== undefined, true);
   assertEquals(typeof countFn!.returnType, "string");
 });
@@ -253,9 +253,9 @@ Deno.test("Parser - invalid DESCRIBE target throws error", () => {
     throw new Error("Expected parse error");
   } catch (e) {
     assertEquals(
-      (e as Error).message.includes("TYPE")
-        || (e as Error).message.includes("SCHEMA"),
-      true,
+      (e as Error).message.includes("TYPE") ||
+        (e as Error).message.includes("SCHEMA"),
+      true
     );
   }
 });
@@ -340,6 +340,6 @@ Deno.test("Compiler - DescribeType includes properties and links in JSON", () =>
   assertEquals(linkNames.includes("author"), true);
   assertEquals(
     json.links.find((l: { name: string; }) => l.name === "author").target,
-    "User",
+    "User"
   );
 });

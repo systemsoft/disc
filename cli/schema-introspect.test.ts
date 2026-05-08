@@ -64,7 +64,7 @@ Deno.test({
       try {
         await commands.schemaIntrospect({
           "database-url": dsn,
-          output: outPath,
+          output: outPath
         });
       } finally {
         cap.restore();
@@ -83,7 +83,7 @@ Deno.test({
       await teardownFixture(dsn);
       await cleanupTempDir(tempDir);
     }
-  },
+  }
 });
 
 Deno.test("schema introspect - missing DSN fails with clear message", async () => {
@@ -91,11 +91,13 @@ Deno.test("schema introspect - missing DSN fails with clear message", async () =
   cap.capture();
   // Make sure DATABASE_URL isn't set in this scope.
   const saved = Deno.env.get("DATABASE_URL");
-  if (saved !== undefined) Deno.env.delete("DATABASE_URL");
+  if (saved !== undefined)
+    Deno.env.delete("DATABASE_URL");
   try {
     await commands.schemaIntrospect({});
   } finally {
-    if (saved !== undefined) Deno.env.set("DATABASE_URL", saved);
+    if (saved !== undefined)
+      Deno.env.set("DATABASE_URL", saved);
     cap.restore();
   }
   const errors = cap.getErrors().join("\n");

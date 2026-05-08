@@ -29,10 +29,10 @@ async function makeProvider(): Promise<{
       webauthn: {
         rpId: RP_ID,
         rpName: "Test App",
-        origin: ORIGIN,
-      },
+        origin: ORIGIN
+      }
     },
-    db,
+    db
   );
   await provider.initialize();
   return { provider, db };
@@ -46,7 +46,7 @@ interface RegisteredPasskey {
 
 async function registerPasskey(
   provider: AuthProvider,
-  email = "u@example.com",
+  email = "u@example.com"
 ): Promise<RegisteredPasskey> {
   const reg = await provider.register({ email, password: "password123" });
   const opts = await provider.beginWebAuthnRegistration(reg.user.id);
@@ -56,24 +56,24 @@ async function registerPasskey(
   const authData = await buildAuthenticatorData({
     rpId: RP_ID,
     counter: 1,
-    attestedCredential: { credentialId, cosePublicKey: kp.cosePublicKey },
+    attestedCredential: { credentialId, cosePublicKey: kp.cosePublicKey }
   });
   const attObj = buildAttestationObject({ authData });
   const cd = buildClientDataJSON({
     type: "webauthn.create",
     challenge,
-    origin: ORIGIN,
+    origin: ORIGIN
   });
   await provider.finishWebAuthnRegistration({
     challengeId: opts.challengeId,
     credentialId: base64UrlEncode(credentialId),
     attestationObject: base64UrlEncode(attObj),
-    clientDataJSON: base64UrlEncode(cd),
+    clientDataJSON: base64UrlEncode(cd)
   });
   return {
     userId: reg.user.id,
     credentialId: base64UrlEncode(credentialId),
-    privateKey: kp.privateKey,
+    privateKey: kp.privateKey
   };
 }
 
@@ -96,7 +96,7 @@ Deno.test("WebAuthn registration — rejects challenge replay", async () => {
   try {
     const reg = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const opts = await provider.beginWebAuthnRegistration(reg.user.id);
     const challenge = base64UrlDecode(opts.publicKey.challenge);
@@ -105,7 +105,7 @@ Deno.test("WebAuthn registration — rejects challenge replay", async () => {
     const authData = await buildAuthenticatorData({
       rpId: RP_ID,
       counter: 0,
-      attestedCredential: { credentialId, cosePublicKey: kp.cosePublicKey },
+      attestedCredential: { credentialId, cosePublicKey: kp.cosePublicKey }
     });
     const finish = {
       challengeId: opts.challengeId,
@@ -115,15 +115,15 @@ Deno.test("WebAuthn registration — rejects challenge replay", async () => {
         buildClientDataJSON({
           type: "webauthn.create",
           challenge,
-          origin: ORIGIN,
-        }),
-      ),
+          origin: ORIGIN
+        })
+      )
     };
     await provider.finishWebAuthnRegistration(finish);
 
     const err = await assertRejects(
       () => provider.finishWebAuthnRegistration(finish),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_TOKEN);
   } finally {
@@ -136,7 +136,7 @@ Deno.test("WebAuthn registration — rejects mismatched origin", async () => {
   try {
     const reg = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const opts = await provider.beginWebAuthnRegistration(reg.user.id);
     const challenge = base64UrlDecode(opts.publicKey.challenge);
@@ -145,7 +145,7 @@ Deno.test("WebAuthn registration — rejects mismatched origin", async () => {
     const authData = await buildAuthenticatorData({
       rpId: RP_ID,
       counter: 0,
-      attestedCredential: { credentialId, cosePublicKey: kp.cosePublicKey },
+      attestedCredential: { credentialId, cosePublicKey: kp.cosePublicKey }
     });
 
     await assertRejects(
@@ -154,18 +154,18 @@ Deno.test("WebAuthn registration — rejects mismatched origin", async () => {
           challengeId: opts.challengeId,
           credentialId: base64UrlEncode(credentialId),
           attestationObject: base64UrlEncode(
-            buildAttestationObject({ authData }),
+            buildAttestationObject({ authData })
           ),
           clientDataJSON: base64UrlEncode(
             buildClientDataJSON({
               type: "webauthn.create",
               challenge,
-              origin: "https://attacker.example",
-            }),
-          ),
+              origin: "https://attacker.example"
+            })
+          )
         }),
       Error,
-      "origin mismatch",
+      "origin mismatch"
     );
   } finally {
     await db.close();
@@ -177,7 +177,7 @@ Deno.test("WebAuthn registration — rejects mismatched rpId in authData", async
   try {
     const reg = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const opts = await provider.beginWebAuthnRegistration(reg.user.id);
     const challenge = base64UrlDecode(opts.publicKey.challenge);
@@ -187,7 +187,7 @@ Deno.test("WebAuthn registration — rejects mismatched rpId in authData", async
     const authData = await buildAuthenticatorData({
       rpId: "other-domain.com",
       counter: 0,
-      attestedCredential: { credentialId, cosePublicKey: kp.cosePublicKey },
+      attestedCredential: { credentialId, cosePublicKey: kp.cosePublicKey }
     });
 
     const err = await assertRejects(
@@ -196,17 +196,17 @@ Deno.test("WebAuthn registration — rejects mismatched rpId in authData", async
           challengeId: opts.challengeId,
           credentialId: base64UrlEncode(credentialId),
           attestationObject: base64UrlEncode(
-            buildAttestationObject({ authData }),
+            buildAttestationObject({ authData })
           ),
           clientDataJSON: base64UrlEncode(
             buildClientDataJSON({
               type: "webauthn.create",
               challenge,
-              origin: ORIGIN,
-            }),
-          ),
+              origin: ORIGIN
+            })
+          )
         }),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_TOKEN);
   } finally {
@@ -225,17 +225,17 @@ Deno.test("WebAuthn login — completes end-to-end and bumps the counter", async
     const challenge = base64UrlDecode(opts.publicKey.challenge);
     const authData = await buildAuthenticatorData({
       rpId: RP_ID,
-      counter: 5,
+      counter: 5
     });
     const cd = buildClientDataJSON({
       type: "webauthn.get",
       challenge,
-      origin: ORIGIN,
+      origin: ORIGIN
     });
     const sig = await signAssertion({
       privateKey: passkey.privateKey,
       authData,
-      clientDataJSON: cd,
+      clientDataJSON: cd
     });
 
     const result = await provider.finishWebAuthnLogin({
@@ -243,7 +243,7 @@ Deno.test("WebAuthn login — completes end-to-end and bumps the counter", async
       credentialId: passkey.credentialId,
       authenticatorData: base64UrlEncode(authData),
       clientDataJSON: base64UrlEncode(cd),
-      signature: base64UrlEncode(sig),
+      signature: base64UrlEncode(sig)
     });
     assert(!("mfaRequired" in result));
     if (!("mfaRequired" in result)) {
@@ -267,19 +267,19 @@ Deno.test("WebAuthn login — rejects counter regression (cloning detection)", a
     const cd1 = buildClientDataJSON({
       type: "webauthn.get",
       challenge: c1,
-      origin: ORIGIN,
+      origin: ORIGIN
     });
     const sig1 = await signAssertion({
       privateKey: passkey.privateKey,
       authData: ad1,
-      clientDataJSON: cd1,
+      clientDataJSON: cd1
     });
     await provider.finishWebAuthnLogin({
       challengeId: opts1.challengeId,
       credentialId: passkey.credentialId,
       authenticatorData: base64UrlEncode(ad1),
       clientDataJSON: base64UrlEncode(cd1),
-      signature: base64UrlEncode(sig1),
+      signature: base64UrlEncode(sig1)
     });
 
     // Second login at counter=3 (regressed) — clone detected.
@@ -289,12 +289,12 @@ Deno.test("WebAuthn login — rejects counter regression (cloning detection)", a
     const cd2 = buildClientDataJSON({
       type: "webauthn.get",
       challenge: c2,
-      origin: ORIGIN,
+      origin: ORIGIN
     });
     const sig2 = await signAssertion({
       privateKey: passkey.privateKey,
       authData: ad2,
-      clientDataJSON: cd2,
+      clientDataJSON: cd2
     });
     const err = await assertRejects(
       () =>
@@ -303,9 +303,9 @@ Deno.test("WebAuthn login — rejects counter regression (cloning detection)", a
           credentialId: passkey.credentialId,
           authenticatorData: base64UrlEncode(ad2),
           clientDataJSON: base64UrlEncode(cd2),
-          signature: base64UrlEncode(sig2),
+          signature: base64UrlEncode(sig2)
         }),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_TOKEN);
   } finally {
@@ -318,7 +318,7 @@ Deno.test("WebAuthn login — rejects unknown credential", async () => {
   try {
     await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const opts = await provider.beginWebAuthnLogin("u@example.com");
     const c = base64UrlDecode(opts.publicKey.challenge);
@@ -326,13 +326,13 @@ Deno.test("WebAuthn login — rejects unknown credential", async () => {
     const cd = buildClientDataJSON({
       type: "webauthn.get",
       challenge: c,
-      origin: ORIGIN,
+      origin: ORIGIN
     });
     const kp = await generateTestKeyPair();
     const sig = await signAssertion({
       privateKey: kp.privateKey,
       authData: ad,
-      clientDataJSON: cd,
+      clientDataJSON: cd
     });
     const err = await assertRejects(
       () =>
@@ -341,9 +341,9 @@ Deno.test("WebAuthn login — rejects unknown credential", async () => {
           credentialId: base64UrlEncode(new Uint8Array([99, 99, 99])),
           authenticatorData: base64UrlEncode(ad),
           clientDataJSON: base64UrlEncode(cd),
-          signature: base64UrlEncode(sig),
+          signature: base64UrlEncode(sig)
         }),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_TOKEN);
   } finally {
@@ -366,19 +366,19 @@ Deno.test("WebAuthn login — composes with TOTP MFA (returns MfaChallenge when 
     const cd = buildClientDataJSON({
       type: "webauthn.get",
       challenge: c,
-      origin: ORIGIN,
+      origin: ORIGIN
     });
     const sig = await signAssertion({
       privateKey: passkey.privateKey,
       authData: ad,
-      clientDataJSON: cd,
+      clientDataJSON: cd
     });
     const result = await provider.finishWebAuthnLogin({
       challengeId: opts.challengeId,
       credentialId: passkey.credentialId,
       authenticatorData: base64UrlEncode(ad),
       clientDataJSON: base64UrlEncode(cd),
-      signature: base64UrlEncode(sig),
+      signature: base64UrlEncode(sig)
     });
     assert("mfaRequired" in result);
     if ("mfaRequired" in result) {
@@ -400,7 +400,7 @@ Deno.test("listWebAuthnCredentials + deleteWebAuthnCredential", async () => {
 
     await provider.deleteWebAuthnCredential(
       passkey.userId,
-      passkey.credentialId,
+      passkey.credentialId
     );
     list = await provider.listWebAuthnCredentials(passkey.userId);
     assertEquals(list.length, 0);
@@ -415,20 +415,20 @@ Deno.test("beginWebAuthnRegistration — rejects when WebAuthn not configured", 
   const provider = new AuthProvider(
     {
       jwtSecret: "test-secret-key-32-bytes-minimum-len",
-      requireEmailVerification: false,
+      requireEmailVerification: false
       // No webauthn config!
     },
-    db,
+    db
   );
   await provider.initialize();
   try {
     const reg = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const err = await assertRejects(
       () => provider.beginWebAuthnRegistration(reg.user.id),
-      AuthError,
+      AuthError
     );
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_OPERATION);
   } finally {
@@ -443,7 +443,7 @@ Deno.test("beginWebAuthnRegistration — defaults residentKey to 'preferred' for
   try {
     const reg = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const opts = await provider.beginWebAuthnRegistration(reg.user.id);
     assertEquals(opts.publicKey.authenticatorSelection?.residentKey, "preferred");
@@ -465,16 +465,16 @@ Deno.test("beginWebAuthnRegistration — requireResidentKey=true upgrades to 're
         rpId: RP_ID,
         rpName: "Test App",
         origin: ORIGIN,
-        requireResidentKey: true,
-      },
+        requireResidentKey: true
+      }
     },
-    db,
+    db
   );
   await provider.initialize();
   try {
     const reg = await provider.register({
       email: "u@example.com",
-      password: "password123",
+      password: "password123"
     });
     const opts = await provider.beginWebAuthnRegistration(reg.user.id);
     assertEquals(opts.publicKey.authenticatorSelection?.residentKey, "required");

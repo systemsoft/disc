@@ -26,18 +26,19 @@ async function startServer(opts: {
   await db.connect();
   const provider = new AuthProvider(
     { jwtSecret: "test-secret-key-32-bytes-minimum-len" },
-    db,
+    db
   );
   await provider.initialize();
   const reg = await provider.register({
     email: "u@example.com",
-    password: "password123",
+    password: "password123"
   });
   const login = await provider.login({
     email: "u@example.com",
-    password: "password123",
+    password: "password123"
   });
-  if ("mfaRequired" in login) throw new Error("unexpected MFA in test setup");
+  if ("mfaRequired" in login)
+    throw new Error("unexpected MFA in test setup");
 
   const middleware = new AuthMiddleware(provider);
   const routes = new AuthRoutes(provider, middleware);
@@ -48,7 +49,7 @@ async function startServer(opts: {
     storageRoot = await Deno.makeTempDir({ prefix: "disc-files-srv-" });
     fileManager = new FileManager(db, {
       backend: new LocalFileStorage(storageRoot),
-      maxUploadBytes: 10 * 1024 * 1024,
+      maxUploadBytes: 10 * 1024 * 1024
     });
     await fileManager.initialize();
   }
@@ -63,23 +64,23 @@ async function startServer(opts: {
       requestTimeout: 5000,
       enableCors: true,
       enableWebsockets: false,
-      enableAuth: true,
+      enableAuth: true
     },
     protocolHandler: {
       handleRequest: () => Promise.resolve({ data: { result: "ok" } }),
-      validateRequest: () => [],
+      validateRequest: () => []
     },
     authProvider: provider,
     authMiddleware: middleware,
     authRoutes: routes,
-    fileManager,
+    fileManager
   });
 
   // server.start() awaits `server.finished` (resolves on shutdown), so
   // the existing pattern in `server/auth-integration.test.ts` is fire-
   // and-forget + a brief sleep until the listener is bound.
   const _running = server.start();
-  await new Promise((r) => setTimeout(r, 200));
+  await new Promise(r => setTimeout(r, 200));
   return {
     baseUrl: `http://${TEST_HOST}:${port}`,
     token: login.token,
@@ -88,8 +89,9 @@ async function startServer(opts: {
       await server.stop();
       await _running.catch(() => undefined);
       await db.close();
-      if (storageRoot) await Deno.remove(storageRoot, { recursive: true });
-    },
+      if (storageRoot)
+        await Deno.remove(storageRoot, { recursive: true });
+    }
   };
 }
 
@@ -100,11 +102,11 @@ Deno.test("POST /files — uploads bytes, returns metadata", async () => {
     const res = await fetch(`${baseUrl}/files`, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
         "Content-Type": "text/plain",
-        "x-file-name": "greeting.txt",
+        "x-file-name": "greeting.txt"
       },
-      body,
+      body
     });
     assertEquals(res.status, 201);
     const meta = await res.json();
@@ -123,13 +125,13 @@ Deno.test("POST /files then GET /files/:id — round-trips bytes", async () => {
     const body = new TextEncoder().encode("round-trip me");
     const upload = await fetch(`${baseUrl}/files`, {
       method: "POST",
-      headers: { "Authorization": `Bearer ${token}` },
-      body,
+      headers: { Authorization: `Bearer ${token}` },
+      body
     });
     const { id } = await upload.json();
 
     const dl = await fetch(`${baseUrl}/files/${id}`, {
-      headers: { "Authorization": `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${token}` }
     });
     assertEquals(dl.status, 200);
     const text = await dl.text();
@@ -144,18 +146,18 @@ Deno.test("GET /files — lists only the requesting user's files", async () => {
   try {
     const a = await fetch(`${baseUrl}/files`, {
       method: "POST",
-      headers: { "Authorization": `Bearer ${token}` },
-      body: new Uint8Array([1, 2, 3]),
+      headers: { Authorization: `Bearer ${token}` },
+      body: new Uint8Array([1, 2, 3])
     });
     await a.json();
     const b = await fetch(`${baseUrl}/files`, {
       method: "POST",
-      headers: { "Authorization": `Bearer ${token}` },
-      body: new Uint8Array([4, 5, 6]),
+      headers: { Authorization: `Bearer ${token}` },
+      body: new Uint8Array([4, 5, 6])
     });
     await b.json();
     const res = await fetch(`${baseUrl}/files`, {
-      headers: { "Authorization": `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${token}` }
     });
     assertEquals(res.status, 200);
     const { files } = await res.json();
@@ -170,12 +172,12 @@ Deno.test("GET /files/:id/meta — returns metadata only", async () => {
   try {
     const up = await fetch(`${baseUrl}/files`, {
       method: "POST",
-      headers: { "Authorization": `Bearer ${token}` },
-      body: new Uint8Array([0, 1, 2, 3]),
+      headers: { Authorization: `Bearer ${token}` },
+      body: new Uint8Array([0, 1, 2, 3])
     });
     const { id } = await up.json();
     const res = await fetch(`${baseUrl}/files/${id}/meta`, {
-      headers: { "Authorization": `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${token}` }
     });
     assertEquals(res.status, 200);
     const meta = await res.json();
@@ -191,20 +193,20 @@ Deno.test("DELETE /files/:id — removes the file", async () => {
   try {
     const up = await fetch(`${baseUrl}/files`, {
       method: "POST",
-      headers: { "Authorization": `Bearer ${token}` },
-      body: new Uint8Array([9]),
+      headers: { Authorization: `Bearer ${token}` },
+      body: new Uint8Array([9])
     });
     const { id } = await up.json();
     const del = await fetch(`${baseUrl}/files/${id}`, {
       method: "DELETE",
-      headers: { "Authorization": `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${token}` }
     });
     // 204 has no body — but Deno still asks us to drain it.
     await del.body?.cancel();
     assertEquals(del.status, 204);
 
     const after = await fetch(`${baseUrl}/files/${id}`, {
-      headers: { "Authorization": `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${token}` }
     });
     await after.body?.cancel();
     assertEquals(after.status, 404);
@@ -228,7 +230,7 @@ Deno.test("/files — 404 when fileManager not configured", async () => {
   const { baseUrl, token, cleanup } = await startServer({ withFiles: false });
   try {
     const res = await fetch(`${baseUrl}/files`, {
-      headers: { "Authorization": `Bearer ${token}` },
+      headers: { Authorization: `Bearer ${token}` }
     });
     await res.body?.cancel();
     assertEquals(res.status, 404);

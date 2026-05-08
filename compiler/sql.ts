@@ -250,107 +250,107 @@ export function createSelectStatement(options: {
 }): SelectStatement {
   return {
     kind: "SelectStatement",
-    ...options,
+    ...options
   };
 }
 
 export function createSelectClause(
   columns: SelectItem[],
-  distinct?: boolean,
+  distinct?: boolean
 ): SelectClause {
   return {
     kind: "SelectClause",
     columns,
-    distinct,
+    distinct
   };
 }
 
 export function createSelectItem(
   expression: SQLExpression,
-  alias?: string,
+  alias?: string
 ): SelectItem {
   return {
     kind: "SelectItem",
     expression,
-    alias,
+    alias
   };
 }
 
 export function createFromClause(tables: TableReference[]): FromClause {
   return {
     kind: "FromClause",
-    tables,
+    tables
   };
 }
 
 export function createTableReference(
   name: string,
-  alias?: string,
+  alias?: string
 ): TableReference {
   return {
     kind: "TableReference",
     name,
-    alias,
+    alias
   };
 }
 
 export function createWhereClause(condition: SQLExpression): WhereClause {
   return {
     kind: "WhereClause",
-    condition,
+    condition
   };
 }
 
 export function createColumnReference(
   column: string,
-  table?: string,
+  table?: string
 ): ColumnReference {
   return {
     kind: "ColumnReference",
     column,
-    table,
+    table
   };
 }
 
 export function createLiteral(
   type: "string" | "number" | "boolean" | "null",
-  value: any,
+  value: any
 ): LiteralExpression {
   return {
     kind: "LiteralExpression",
     type,
-    value,
+    value
   };
 }
 
 export function createBinaryExpression(
   operator: string,
   left: SQLExpression,
-  right: SQLExpression,
+  right: SQLExpression
 ): BinaryExpression {
   return {
     kind: "BinaryExpression",
     operator,
     left,
-    right,
+    right
   };
 }
 
 export function createFunctionCall(
   name: string,
-  args: SQLExpression[],
+  args: SQLExpression[]
 ): FunctionCall {
   return {
     kind: "FunctionCall",
     name,
-    args,
+    args
   };
 }
 
 export function createJsonBuildObject(fields: JsonField[]): JsonBuildObject {
   return {
     kind: "JsonBuildObject",
-    fields,
+    fields
   };
 }
 
@@ -358,52 +358,52 @@ export function createJsonField(key: string, value: SQLExpression): JsonField {
   return {
     kind: "JsonField",
     key,
-    value,
+    value
   };
 }
 
 export function createJsonAgg(expression: SQLExpression): JsonAgg {
   return {
     kind: "JsonAgg",
-    expression,
+    expression
   };
 }
 
 export function createParameterReference(index: number): ParameterReference {
   return {
     kind: "ParameterReference",
-    index,
+    index
   };
 }
 
 export function createSubqueryExpression(
-  query: SelectStatement,
+  query: SelectStatement
 ): SubqueryExpression {
   return {
     kind: "SubqueryExpression",
-    query,
+    query
   };
 }
 
 export function createCaseExpression(
   when: WhenClause[],
-  elseExpr?: SQLExpression,
+  elseExpr?: SQLExpression
 ): CaseExpression {
   return {
     kind: "CaseExpression",
     when,
-    else: elseExpr,
+    else: elseExpr
   };
 }
 
 export function createWhenClause(
   condition: SQLExpression,
-  then: SQLExpression,
+  then: SQLExpression
 ): WhenClause {
   return {
     kind: "WhenClause",
     condition,
-    then,
+    then
   };
 }
 
@@ -427,7 +427,7 @@ export function withCTEs(ctes: CTE[], query: SQLStatement): CTEStatement {
   return {
     kind: "CTEStatement",
     ctes,
-    query,
+    query
   };
 }
 
@@ -442,18 +442,18 @@ export interface UnionAllStatement extends SQLNode {
 export function unionAll(queries: SQLStatement[]): UnionAllStatement {
   return {
     kind: "UnionAllStatement",
-    queries,
+    queries
   };
 }
 
 export function setOperation(
   operator: SetOperator,
-  queries: SQLStatement[],
+  queries: SQLStatement[]
 ): UnionAllStatement {
   return {
     kind: "UnionAllStatement",
     queries,
-    operator,
+    operator
   };
 }
 
@@ -479,9 +479,9 @@ export function innerJoin(options: {
         kind: "JoinClause",
         type: "INNER",
         table: { kind: "TableReference", name: "(subquery)" },
-        condition: options.on,
-      }],
-    }]),
+        condition: options.on
+      }]
+    }])
   });
 }
 
@@ -500,10 +500,10 @@ export function leftJoin(options: {
         kind: "JoinClause",
         type: "LEFT",
         table: { kind: "TableReference", name: "(subquery)" },
-        condition: options.on,
-      }],
+        condition: options.on
+      }]
     }]),
-    where: options.where ? createWhereClause(options.where) : undefined,
+    where: options.where ? createWhereClause(options.where) : undefined
   });
 }
 
@@ -513,7 +513,7 @@ export function eq(left: string, right: string): BinaryExpression {
   return createBinaryExpression(
     "=",
     createColumnReference(left),
-    createColumnReference(right),
+    createColumnReference(right)
   );
 }
 
@@ -521,7 +521,7 @@ export function isNotNull(column: string): UnaryExpression {
   return {
     kind: "UnaryExpression",
     operator: "IS NOT NULL",
-    operand: createColumnReference(column),
+    operand: createColumnReference(column)
   };
 }
 
@@ -570,12 +570,12 @@ export interface CastExpression extends SQLExpressionBase {
 
 export function createCastExpression(
   expression: SQLExpression,
-  targetType: string,
+  targetType: string
 ): CastExpression {
   return {
     kind: "CastExpression",
     expression,
-    targetType,
+    targetType
   };
 }
 
@@ -590,54 +590,54 @@ export interface JsonbAccessExpression extends SQLExpressionBase {
 export function createJsonbAccess(
   expression: SQLExpression,
   operator: "->" | "->>",
-  accessor: SQLExpression,
+  accessor: SQLExpression
 ): JsonbAccessExpression {
   return {
     kind: "JsonbAccessExpression",
     expression,
     operator,
-    accessor,
+    accessor
   };
 }
 
 export function aggregate(
   func: string,
-  expr: SQLExpression,
+  expr: SQLExpression
 ): AggregateExpression {
   return {
     kind: "AggregateExpression",
     function: func,
-    expression: expr,
+    expression: expr
   };
 }
 
 export function aggregateWithFilter(
   agg: AggregateExpression,
-  filter: SQLExpression,
+  filter: SQLExpression
 ): AggregateExpression {
   return {
     ...agg,
-    filter,
+    filter
   };
 }
 
 export function distinct(agg: AggregateExpression): AggregateExpression {
   return {
     ...agg,
-    distinct: true,
+    distinct: true
   };
 }
 
 export function windowFunction(
   func: string,
   args: SQLExpression[],
-  over: WindowClause,
+  over: WindowClause
 ): WindowFunctionExpression {
   return {
     kind: "WindowFunctionExpression",
     function: func,
     args,
-    over,
+    over
   };
 }
 
@@ -645,8 +645,8 @@ export function select(options: {
   from: SQLNode;
   selections: string[];
 }): SelectStatement {
-  const items = options.selections.map((s) => createSelectItem(createColumnReference(s)));
+  const items = options.selections.map(s => createSelectItem(createColumnReference(s)));
   return createSelectStatement({
-    select: createSelectClause(items),
+    select: createSelectClause(items)
   });
 }

@@ -40,7 +40,7 @@ export type {
   ResolveType,
   Scalar,
   SchemaSpec,
-  SelectShape,
+  SelectShape
 } from "./schema-types.ts";
 
 // Error hierarchy
@@ -55,7 +55,7 @@ export {
   DiscServerError,
   DiscTimeoutError,
   DiscTransactionError,
-  DiscValidationError,
+  DiscValidationError
 } from "./errors.ts";
 
 // Types
@@ -85,5 +85,5 @@ export type {
   SubscriptionHandle,
   SubscriptionMessage,
   SubscriptionRequest,
-  TransactionState,
+  TransactionState
 } from "./types.ts";

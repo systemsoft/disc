@@ -50,7 +50,7 @@ export interface ExtractResult {
  * of `extractEmbeddedPg`.
  */
 export async function isEmbeddedPgExtracted(
-  targetDir: string,
+  targetDir: string
 ): Promise<boolean> {
   try {
     await Deno.stat(join(targetDir, MARKER_FILE));
@@ -70,13 +70,13 @@ export async function isEmbeddedPgExtracted(
  */
 export async function extractEmbeddedPg(
   targetDir: string,
-  entries: readonly EmbeddedPgEntry[],
+  entries: readonly EmbeddedPgEntry[]
 ): Promise<ExtractResult> {
   if (await isEmbeddedPgExtracted(targetDir)) {
     return {
       alreadyExtracted: true,
       extracted: 0,
-      targetDir,
+      targetDir
     };
   }
 
@@ -102,12 +102,12 @@ export async function extractEmbeddedPg(
   // halfway through won't trick the next run into trusting the dir.
   await Deno.writeTextFile(
     join(targetDir, MARKER_FILE),
-    `${new Date().toISOString()}\nentries=${entries.length}\n`,
+    `${new Date().toISOString()}\nentries=${entries.length}\n`
   );
 
   return {
     alreadyExtracted: false,
     extracted,
-    targetDir,
+    targetDir
   };
 }

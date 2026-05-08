@@ -16,7 +16,7 @@ function basicHandler(): ProtocolHandler {
   return {
     handleRequest(
       _req: QueryRequest,
-      _ctx: QueryContext,
+      _ctx: QueryContext
     ): Promise<QueryResponse> {
       return Promise.resolve({ data: { ok: true } });
     },
@@ -26,12 +26,12 @@ function basicHandler(): ProtocolHandler {
     checkHealth(): Promise<HealthStatus> {
       return Promise.resolve({
         status: "healthy",
-        timestamp: new Date().toISOString(),
+        timestamp: new Date().toISOString()
       });
     },
     getPoolStats() {
       return null;
-    },
+    }
   };
 }
 
@@ -47,7 +47,7 @@ function withCorsServer(overrides: Partial<ServerConfig> = {}): {
     requestTimeout: 5000,
     enableCors: true,
     enableWebsockets: false,
-    ...overrides,
+    ...overrides
   };
   const server = new HttpServer({ config, protocolHandler: basicHandler() });
   const abort = new AbortController();
@@ -56,11 +56,11 @@ function withCorsServer(overrides: Partial<ServerConfig> = {}): {
       hostname: "127.0.0.1",
       port: 0,
       signal: abort.signal,
-      onListen() {},
+      onListen() {}
     },
     (request: Request, info: Deno.ServeHandlerInfo) =>
       // deno-lint-ignore no-explicit-any
-      (server as any).handleRequest(request, info),
+      (server as any).handleRequest(request, info)
   );
   return {
     port: testServer.addr.port,
@@ -68,22 +68,22 @@ function withCorsServer(overrides: Partial<ServerConfig> = {}): {
       abort.abort();
       await testServer.finished;
       await server.stop();
-    },
+    }
   };
 }
 
 Deno.test("CORS — allowlisted origin is echoed back", async () => {
   const { port, cleanup } = withCorsServer({
-    corsOrigins: ["https://app.example.com"],
+    corsOrigins: ["https://app.example.com"]
   });
   try {
     const res = await fetch(`http://127.0.0.1:${port}/health`, {
-      headers: { Origin: "https://app.example.com" },
+      headers: { Origin: "https://app.example.com" }
     });
     await res.body?.cancel();
     assertEquals(
       res.headers.get("Access-Control-Allow-Origin"),
-      "https://app.example.com",
+      "https://app.example.com"
     );
   } finally {
     await cleanup();
@@ -92,11 +92,11 @@ Deno.test("CORS — allowlisted origin is echoed back", async () => {
 
 Deno.test("CORS — unlisted origin receives NO Access-Control-Allow-Origin header", async () => {
   const { port, cleanup } = withCorsServer({
-    corsOrigins: ["https://app.example.com"],
+    corsOrigins: ["https://app.example.com"]
   });
   try {
     const res = await fetch(`http://127.0.0.1:${port}/health`, {
-      headers: { Origin: "https://evil.example.com" },
+      headers: { Origin: "https://evil.example.com" }
     });
     await res.body?.cancel();
     // The critical assertion: previously the server emitted "*" here,
@@ -104,7 +104,7 @@ Deno.test("CORS — unlisted origin receives NO Access-Control-Allow-Origin head
     assertEquals(
       res.headers.get("Access-Control-Allow-Origin"),
       null,
-      "Unlisted origin must NOT receive a CORS header",
+      "Unlisted origin must NOT receive a CORS header"
     );
   } finally {
     await cleanup();
@@ -113,15 +113,15 @@ Deno.test("CORS — unlisted origin receives NO Access-Control-Allow-Origin head
 
 Deno.test("CORS — preflight from unlisted origin is rejected (403)", async () => {
   const { port, cleanup } = withCorsServer({
-    corsOrigins: ["https://app.example.com"],
+    corsOrigins: ["https://app.example.com"]
   });
   try {
     const res = await fetch(`http://127.0.0.1:${port}/query`, {
       method: "OPTIONS",
       headers: {
         Origin: "https://evil.example.com",
-        "Access-Control-Request-Method": "POST",
-      },
+        "Access-Control-Request-Method": "POST"
+      }
     });
     await res.body?.cancel();
     assertEquals(res.status, 403);
@@ -135,7 +135,7 @@ Deno.test("CORS — permissive mode (no corsOrigins set) keeps '*' for dev backw
   const { port, cleanup } = withCorsServer({}); // no corsOrigins
   try {
     const res = await fetch(`http://127.0.0.1:${port}/health`, {
-      headers: { Origin: "https://any.example.com" },
+      headers: { Origin: "https://any.example.com" }
     });
     await res.body?.cancel();
     assertEquals(res.headers.get("Access-Control-Allow-Origin"), "*");
@@ -150,16 +150,16 @@ Deno.test("CORS — permissive mode (no corsOrigins set) keeps '*' for dev backw
 
 Deno.test("CORS — wildcard `*.example.com` accepts one-label subdomain", async () => {
   const { port, cleanup } = withCorsServer({
-    corsOrigins: ["https://*.example.com"],
+    corsOrigins: ["https://*.example.com"]
   });
   try {
     const res = await fetch(`http://127.0.0.1:${port}/health`, {
-      headers: { Origin: "https://tenant1.example.com" },
+      headers: { Origin: "https://tenant1.example.com" }
     });
     await res.body?.cancel();
     assertEquals(
       res.headers.get("Access-Control-Allow-Origin"),
-      "https://tenant1.example.com",
+      "https://tenant1.example.com"
     );
   } finally {
     await cleanup();
@@ -168,11 +168,11 @@ Deno.test("CORS — wildcard `*.example.com` accepts one-label subdomain", async
 
 Deno.test("CORS — wildcard `*.example.com` rejects two-label subdomain", async () => {
   const { port, cleanup } = withCorsServer({
-    corsOrigins: ["https://*.example.com"],
+    corsOrigins: ["https://*.example.com"]
   });
   try {
     const res = await fetch(`http://127.0.0.1:${port}/health`, {
-      headers: { Origin: "https://a.b.example.com" },
+      headers: { Origin: "https://a.b.example.com" }
     });
     await res.body?.cancel();
     assertEquals(res.headers.get("Access-Control-Allow-Origin"), null);
@@ -190,25 +190,25 @@ Deno.test("CORS — preflight uses configured methods + headers + max-age", asyn
     corsOrigins: ["https://app.example.com"],
     corsAllowedMethods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     corsAllowedHeaders: ["Content-Type", "Authorization", "X-Tenant-Id"],
-    corsMaxAge: 600,
+    corsMaxAge: 600
   });
   try {
     const res = await fetch(`http://127.0.0.1:${port}/query`, {
       method: "OPTIONS",
       headers: {
         Origin: "https://app.example.com",
-        "Access-Control-Request-Method": "PATCH",
-      },
+        "Access-Control-Request-Method": "PATCH"
+      }
     });
     await res.body?.cancel();
     assertEquals(res.status, 204);
     assertEquals(
       res.headers.get("Access-Control-Allow-Methods"),
-      "GET, POST, PATCH, DELETE, OPTIONS",
+      "GET, POST, PATCH, DELETE, OPTIONS"
     );
     assertEquals(
       res.headers.get("Access-Control-Allow-Headers"),
-      "Content-Type, Authorization, X-Tenant-Id",
+      "Content-Type, Authorization, X-Tenant-Id"
     );
     assertEquals(res.headers.get("Access-Control-Max-Age"), "600");
   } finally {
@@ -219,16 +219,16 @@ Deno.test("CORS — preflight uses configured methods + headers + max-age", asyn
 Deno.test("CORS — `corsAllowCredentials: true` emits credentials header for allowlisted origin", async () => {
   const { port, cleanup } = withCorsServer({
     corsOrigins: ["https://app.example.com"],
-    corsAllowCredentials: true,
+    corsAllowCredentials: true
   });
   try {
     const res = await fetch(`http://127.0.0.1:${port}/health`, {
-      headers: { Origin: "https://app.example.com" },
+      headers: { Origin: "https://app.example.com" }
     });
     await res.body?.cancel();
     assertEquals(
       res.headers.get("Access-Control-Allow-Credentials"),
-      "true",
+      "true"
     );
   } finally {
     await cleanup();
@@ -239,12 +239,12 @@ Deno.test("CORS — credentials header NOT emitted with permissive `*` origin", 
   // Spec forbids `Access-Control-Allow-Credentials: true` together with
   // `Access-Control-Allow-Origin: *`. The server must drop credentials.
   const { port, cleanup } = withCorsServer({
-    corsAllowCredentials: true,
+    corsAllowCredentials: true
     // no corsOrigins — permissive mode
   });
   try {
     const res = await fetch(`http://127.0.0.1:${port}/health`, {
-      headers: { Origin: "https://any.example.com" },
+      headers: { Origin: "https://any.example.com" }
     });
     await res.body?.cancel();
     assertEquals(res.headers.get("Access-Control-Allow-Origin"), "*");
@@ -257,16 +257,16 @@ Deno.test("CORS — credentials header NOT emitted with permissive `*` origin", 
 Deno.test("CORS — `corsExposeHeaders` emits expose-headers list", async () => {
   const { port, cleanup } = withCorsServer({
     corsOrigins: ["https://app.example.com"],
-    corsExposeHeaders: ["X-Request-Id", "X-Trace-Id"],
+    corsExposeHeaders: ["X-Request-Id", "X-Trace-Id"]
   });
   try {
     const res = await fetch(`http://127.0.0.1:${port}/health`, {
-      headers: { Origin: "https://app.example.com" },
+      headers: { Origin: "https://app.example.com" }
     });
     await res.body?.cancel();
     assertEquals(
       res.headers.get("Access-Control-Expose-Headers"),
-      "X-Request-Id, X-Trace-Id",
+      "X-Request-Id, X-Trace-Id"
     );
   } finally {
     await cleanup();

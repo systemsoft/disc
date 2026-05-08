@@ -20,7 +20,7 @@ function makeMockPool() {
     },
     execute() {
       return Promise.resolve();
-    },
+    }
   } as unknown as ConnectionPool;
 }
 
@@ -31,7 +31,7 @@ function makeRegistry(): DataWatchRegistry {
     pool,
     pollIntervalMs: 1_000_000,
     invalidateDebounceMs: 0,
-    pruneIntervalMs: 1_000_000,
+    pruneIntervalMs: 1_000_000
   });
 }
 
@@ -39,7 +39,7 @@ Deno.test("handleDataWatch — returns 400 when `tables` param is missing", () =
   const registry = makeRegistry();
   const response = handleDataWatch({
     registry,
-    url: new URL("http://localhost/admin/data-watch"),
+    url: new URL("http://localhost/admin/data-watch")
   });
   assertEquals(response.status, 400);
   registry.stop();
@@ -49,17 +49,19 @@ async function readUntil(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   needle: string,
   maxAttempts = 5,
-  perAttemptMs = 100,
+  perAttemptMs = 100
 ): Promise<string> {
   const decoder = new TextDecoder();
   let combined = "";
   for (let i = 0; i < maxAttempts; i++) {
     const chunkPromise = reader.read();
-    const timeout = new Promise<{ done: true; value: undefined; }>((r) => setTimeout(() => r({ done: true, value: undefined }), perAttemptMs));
+    const timeout = new Promise<{ done: true; value: undefined; }>(r => setTimeout(() => r({ done: true, value: undefined }), perAttemptMs));
     const result = await Promise.race([chunkPromise, timeout]);
-    if (result.done) break;
+    if (result.done)
+      break;
     combined += decoder.decode(result.value);
-    if (combined.includes(needle)) return combined;
+    if (combined.includes(needle))
+      return combined;
   }
   return combined;
 }
@@ -75,7 +77,7 @@ Deno.test({
     try {
       const response = handleDataWatch({
         registry,
-        url: new URL("http://localhost/admin/data-watch?tables=users,posts"),
+        url: new URL("http://localhost/admin/data-watch?tables=users,posts")
       });
 
       assertEquals(response.status, 200);
@@ -94,7 +96,7 @@ Deno.test({
     } finally {
       registry.stop();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -112,7 +114,7 @@ Deno.test({
     try {
       const response = handleDataWatch({
         registry,
-        url: new URL("http://localhost/admin/data-watch?tables=widgets"),
+        url: new URL("http://localhost/admin/data-watch?tables=widgets")
       });
 
       const reader = response.body!.getReader();
@@ -126,12 +128,12 @@ Deno.test({
         query(_sql: string, _params?: unknown[]) {
           return Promise.resolve({
             rows: [{ id: 1, table_name: "widgets" }],
-            rowCount: 1,
+            rowCount: 1
           });
         },
         execute() {
           return Promise.resolve();
-        },
+        }
       } as unknown as ConnectionPool;
       await registry.pollOnce();
 
@@ -144,5 +146,5 @@ Deno.test({
     } finally {
       registry.stop();
     }
-  },
+  }
 });

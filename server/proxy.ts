@@ -27,18 +27,20 @@
 export function getClientIp(
   request: Request,
   info: Deno.ServeHandlerInfo,
-  trustProxy: boolean,
+  trustProxy: boolean
 ): string | null {
   if (trustProxy) {
     const xff = request.headers.get("x-forwarded-for");
     if (xff) {
       const first = xff.split(",")[0].trim();
-      if (first) return first;
+      if (first)
+        return first;
     }
     const realIp = request.headers.get("x-real-ip");
     if (realIp) {
       const trimmed = realIp.trim();
-      if (trimmed) return trimmed;
+      if (trimmed)
+        return trimmed;
     }
   }
 
@@ -59,13 +61,16 @@ export function getClientIp(
 export function getRequestScheme(
   request: Request,
   hasTls: boolean,
-  trustProxy: boolean,
+  trustProxy: boolean
 ): "http" | "https" {
-  if (hasTls) return "https";
-  if (!trustProxy) return "http";
+  if (hasTls)
+    return "https";
+  if (!trustProxy)
+    return "http";
 
   const proto = request.headers.get("x-forwarded-proto");
-  if (!proto) return "http";
+  if (!proto)
+    return "http";
 
   // Multiple hops: "https, http" — take the leftmost entry (the client's
   // scheme as seen by the first proxy).

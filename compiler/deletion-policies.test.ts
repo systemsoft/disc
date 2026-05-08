@@ -40,7 +40,7 @@ function diffFromEmpty(source: string): Types.MigrationOperation[] {
 /** Diff two SDL strings and return migration operations */
 function diffSchemas(
   oldSource: string,
-  newSource: string,
+  newSource: string
 ): Types.MigrationOperation[] {
   const differ = new SchemaDiffer();
   return differ.diff(parseToModules(oldSource), parseToModules(newSource));
@@ -70,13 +70,13 @@ Deno.test("Parser: on target delete set empty parses correctly", () => {
 
   const doc = parseSDL(sdl);
   const commentType = doc.declarations.find(
-    (d) => d.kind === "TypeDeclaration" && d.name.value === "Comment",
+    d => d.kind === "TypeDeclaration" && d.name.value === "Comment"
   );
   assertEquals(commentType !== undefined, true);
 
   if (commentType && commentType.kind === "TypeDeclaration") {
     const linkMember = commentType.members.find(
-      (m) => m.kind === "LinkDeclaration",
+      m => m.kind === "LinkDeclaration"
     );
     assertEquals(linkMember !== undefined, true);
 
@@ -100,13 +100,13 @@ Deno.test("Parser: on source delete allow parses correctly", () => {
 
   const doc = parseSDL(sdl);
   const orderType = doc.declarations.find(
-    (d) => d.kind === "TypeDeclaration" && d.name.value === "Order",
+    d => d.kind === "TypeDeclaration" && d.name.value === "Order"
   );
   assertEquals(orderType !== undefined, true);
 
   if (orderType && orderType.kind === "TypeDeclaration") {
     const linkMember = orderType.members.find(
-      (m) => m.kind === "LinkDeclaration",
+      m => m.kind === "LinkDeclaration"
     );
     assertEquals(linkMember !== undefined, true);
 
@@ -130,13 +130,13 @@ Deno.test("Parser: on source delete delete target parses correctly", () => {
 
   const doc = parseSDL(sdl);
   const parentType = doc.declarations.find(
-    (d) => d.kind === "TypeDeclaration" && d.name.value === "Parent",
+    d => d.kind === "TypeDeclaration" && d.name.value === "Parent"
   );
   assertEquals(parentType !== undefined, true);
 
   if (parentType && parentType.kind === "TypeDeclaration") {
     const linkMember = parentType.members.find(
-      (m) => m.kind === "LinkDeclaration",
+      m => m.kind === "LinkDeclaration"
     );
     assertEquals(linkMember !== undefined, true);
 
@@ -164,13 +164,13 @@ Deno.test("Differ: mapOnTargetDelete set empty returns SET NULL", () => {
 
   const ops = diffFromEmpty(sdl);
   const createComment = ops.find(
-    (op) =>
-      op.kind === "CreateType"
-      && (op as Types.CreateTypeOperation).typeName === "Comment",
+    op =>
+      op.kind === "CreateType" &&
+      (op as Types.CreateTypeOperation).typeName === "Comment"
   ) as Types.CreateTypeOperation;
 
   assertEquals(createComment !== undefined, true);
-  const postLink = createComment.links.find((l) => l.name === "post");
+  const postLink = createComment.links.find(l => l.name === "post");
   assertEquals(postLink !== undefined, true);
   assertEquals(postLink!.onTargetDelete, "SET NULL");
 });
@@ -189,13 +189,13 @@ Deno.test("Differ: link with onSourceDelete extracted correctly", () => {
 
   const ops = diffFromEmpty(sdl);
   const createParent = ops.find(
-    (op) =>
-      op.kind === "CreateType"
-      && (op as Types.CreateTypeOperation).typeName === "Parent",
+    op =>
+      op.kind === "CreateType" &&
+      (op as Types.CreateTypeOperation).typeName === "Parent"
   ) as Types.CreateTypeOperation;
 
   assertEquals(createParent !== undefined, true);
-  const childLink = createParent.links.find((l) => l.name === "child");
+  const childLink = createParent.links.find(l => l.name === "child");
   assertEquals(childLink !== undefined, true);
   assertEquals(childLink!.onSourceDelete, "DELETE TARGET");
 });
@@ -223,22 +223,22 @@ Deno.test("Differ: onSourceDelete change detected in diff", () => {
 
   const ops = diffSchemas(oldSdl, newSdl);
   const alterParent = ops.find(
-    (op) =>
-      op.kind === "AlterType"
-      && (op as Types.AlterTypeOperation).typeName === "Parent",
+    op =>
+      op.kind === "AlterType" &&
+      (op as Types.AlterTypeOperation).typeName === "Parent"
   ) as Types.AlterTypeOperation;
 
   assertEquals(alterParent !== undefined, true);
 
   const alterLink = alterParent.operations.find(
-    (op) => op.kind === "AlterLink",
+    op => op.kind === "AlterLink"
   ) as Types.AlterLinkOperation;
 
   assertEquals(alterLink !== undefined, true);
   assertEquals(alterLink.linkName, "child");
 
   const sourceDeleteChange = alterLink.changes.find(
-    (c) => c.kind === "ChangeOnSourceDelete",
+    c => c.kind === "ChangeOnSourceDelete"
   );
   assertEquals(sourceDeleteChange !== undefined, true);
   assertEquals(sourceDeleteChange!.oldValue, undefined);
@@ -307,12 +307,12 @@ Deno.test("DDL: combined target + source policies on same link", () => {
 
   const doc = parseSDL(sdl);
   const parentType = doc.declarations.find(
-    (d) => d.kind === "TypeDeclaration" && d.name.value === "Parent",
+    d => d.kind === "TypeDeclaration" && d.name.value === "Parent"
   );
 
   if (parentType && parentType.kind === "TypeDeclaration") {
     const linkMember = parentType.members.find(
-      (m) => m.kind === "LinkDeclaration",
+      m => m.kind === "LinkDeclaration"
     );
     assertEquals(linkMember !== undefined, true);
 
@@ -385,13 +385,13 @@ Deno.test("Differ: onSourceDelete allow extracted correctly", () => {
 
   const ops = diffFromEmpty(sdl);
   const createOrder = ops.find(
-    (op) =>
-      op.kind === "CreateType"
-      && (op as Types.CreateTypeOperation).typeName === "Order",
+    op =>
+      op.kind === "CreateType" &&
+      (op as Types.CreateTypeOperation).typeName === "Order"
   ) as Types.CreateTypeOperation;
 
   assertEquals(createOrder !== undefined, true);
-  const customerLink = createOrder.links.find((l) => l.name === "customer");
+  const customerLink = createOrder.links.find(l => l.name === "customer");
   assertEquals(customerLink !== undefined, true);
   assertEquals(customerLink!.onSourceDelete, "ALLOW");
 });

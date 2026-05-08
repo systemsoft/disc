@@ -11,7 +11,7 @@ function createTestConfig(overrides: Partial<ServerConfig> = {}): ServerConfig {
     requestTimeout: 5000,
     enableCors: false,
     enableWebsockets: false,
-    ...overrides,
+    ...overrides
   };
 }
 
@@ -19,19 +19,19 @@ function createBasicProtocolHandler(): ProtocolHandler {
   return {
     handleRequest(
       _request: QueryRequest,
-      _context: QueryContext,
+      _context: QueryContext
     ): Promise<QueryResponse> {
       return Promise.resolve({ data: { ok: true } });
     },
     validateRequest(_request: QueryRequest): QueryError[] {
       return [];
-    },
+    }
   };
 }
 
 function withTestServer(
   handler: ProtocolHandler,
-  configOverrides: Partial<ServerConfig> = {},
+  configOverrides: Partial<ServerConfig> = {}
 ) {
   const config = createTestConfig(configOverrides);
   const server = new HttpServer({ config, protocolHandler: handler });
@@ -41,9 +41,9 @@ function withTestServer(
       hostname: "127.0.0.1",
       port: 0,
       signal: abortController.signal,
-      onListen() {},
+      onListen() {}
     },
-    (request, info) => (server as any).handleRequest(request, info),
+    (request, info) => (server as any).handleRequest(request, info)
   );
   const port = testServer.addr.port;
   const cleanup = async () => {
@@ -58,7 +58,7 @@ Deno.test("Production E2E: Requests within burst all return 200", async () => {
   const handler = createBasicProtocolHandler();
   const { port, cleanup } = withTestServer(handler, {
     rateLimitRpm: 60,
-    rateLimitBurst: 5,
+    rateLimitBurst: 5
   });
 
   try {
@@ -76,7 +76,7 @@ Deno.test("Production E2E: Requests over burst return 429", async () => {
   const handler = createBasicProtocolHandler();
   const { port, cleanup } = withTestServer(handler, {
     rateLimitRpm: 60,
-    rateLimitBurst: 3,
+    rateLimitBurst: 3
   });
 
   try {
@@ -98,7 +98,7 @@ Deno.test("Production E2E: 429 includes Retry-After header", async () => {
   const handler = createBasicProtocolHandler();
   const { port, cleanup } = withTestServer(handler, {
     rateLimitRpm: 60,
-    rateLimitBurst: 3,
+    rateLimitBurst: 3
   });
 
   try {
@@ -120,7 +120,7 @@ Deno.test("Production E2E: 429 body has error message", async () => {
   const handler = createBasicProtocolHandler();
   const { port, cleanup } = withTestServer(handler, {
     rateLimitRpm: 60,
-    rateLimitBurst: 3,
+    rateLimitBurst: 3
   });
 
   try {
@@ -142,7 +142,7 @@ Deno.test("Production E2E: Rate limit stats reflected in /stats", async () => {
   const handler = createBasicProtocolHandler();
   const { port, cleanup } = withTestServer(handler, {
     rateLimitRpm: 60,
-    rateLimitBurst: 2,
+    rateLimitBurst: 2
   });
 
   try {
@@ -157,7 +157,7 @@ Deno.test("Production E2E: Rate limit stats reflected in /stats", async () => {
     await rejected.body?.cancel();
 
     // Wait for token refill (RPM 60 = 1 token/sec)
-    await new Promise((resolve) => setTimeout(resolve, 1100));
+    await new Promise(resolve => setTimeout(resolve, 1100));
 
     const statsResponse = await fetch(`http://127.0.0.1:${port}/stats`);
     assertEquals(statsResponse.status, 200);
@@ -174,7 +174,7 @@ Deno.test({
   fn: async () => {
     const handler = createBasicProtocolHandler();
     const { port, cleanup } = withTestServer(handler, {
-      rateLimitRpm: 0,
+      rateLimitRpm: 0
     });
 
     try {
@@ -186,5 +186,5 @@ Deno.test({
     } finally {
       await cleanup();
     }
-  },
+  }
 });

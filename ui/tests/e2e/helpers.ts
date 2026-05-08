@@ -16,7 +16,7 @@ export async function runQuery(query: string): Promise<{
   const res = await fetch(`${API_BASE}/query`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query }),
+    body: JSON.stringify({ query })
   });
   return res.json();
 }
@@ -29,7 +29,7 @@ export async function clearItems(): Promise<void> {
 /** Insert a row directly via EdgeQL (useful for seeding fixtures). */
 export async function insertItem(name: string, count: number): Promise<string> {
   const result = await runQuery(
-    `insert default::Item { name := '${name.replace(/'/g, "\\'")}', count := ${count} };`,
+    `insert default::Item { name := '${name.replace(/'/g, "\\'")}', count := ${count} };`
   );
   if (result.errors) {
     throw new Error(`insertItem failed: ${result.errors[0].message}`);

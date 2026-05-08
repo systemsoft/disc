@@ -27,14 +27,14 @@ Deno.test("DDL Generator - max_len_value generates CHECK with length <=", () => 
         required: true,
         multi: false,
         constraints: ["max_len_value(255)"],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
-  const checkStatements = statements.filter((s) => s.includes("CHECK"));
+  const checkStatements = statements.filter(s => s.includes("CHECK"));
 
   assertEquals(checkStatements.length, 1);
   assertStringIncludes(checkStatements[0], "CHECK (length(name) <= 255)");
@@ -53,14 +53,14 @@ Deno.test("DDL Generator - min_len_value generates CHECK with length >=", () => 
         required: true,
         multi: false,
         constraints: ["min_len_value(3)"],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
-  const checkStatements = statements.filter((s) => s.includes("CHECK"));
+  const checkStatements = statements.filter(s => s.includes("CHECK"));
 
   assertEquals(checkStatements.length, 1);
   assertStringIncludes(checkStatements[0], "CHECK (length(username) >= 3)");
@@ -78,14 +78,14 @@ Deno.test("DDL Generator - max_value generates CHECK with <=", () => {
         required: true,
         multi: false,
         constraints: ["max_value(9999)"],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
-  const checkStatements = statements.filter((s) => s.includes("CHECK"));
+  const checkStatements = statements.filter(s => s.includes("CHECK"));
 
   assertEquals(checkStatements.length, 1);
   assertStringIncludes(checkStatements[0], "CHECK (price <= 9999)");
@@ -103,14 +103,14 @@ Deno.test("DDL Generator - min_value generates CHECK with >=", () => {
         required: true,
         multi: false,
         constraints: ["min_value(0)"],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
-  const checkStatements = statements.filter((s) => s.includes("CHECK"));
+  const checkStatements = statements.filter(s => s.includes("CHECK"));
 
   assertEquals(checkStatements.length, 1);
   assertStringIncludes(checkStatements[0], "CHECK (quantity >= 0)");
@@ -128,16 +128,16 @@ Deno.test("DDL Generator - regexp generates CHECK with ~ operator", () => {
         required: true,
         multi: false,
         constraints: [
-          "regexp(^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$)",
+          "regexp(^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$)"
         ],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
-  const checkStatements = statements.filter((s) => s.includes("CHECK"));
+  const checkStatements = statements.filter(s => s.includes("CHECK"));
 
   assertEquals(checkStatements.length, 1);
   assertStringIncludes(checkStatements[0], "CHECK (email ~ '");
@@ -156,18 +156,18 @@ Deno.test("DDL Generator - exclusive constraint does NOT generate CHECK", () => 
         required: true,
         multi: false,
         constraints: ["exclusive"],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
-  const checkStatements = statements.filter((s) => s.includes("CHECK"));
+  const checkStatements = statements.filter(s => s.includes("CHECK"));
 
   assertEquals(checkStatements.length, 0);
   // Exclusive is handled as UNIQUE index instead
-  const uniqueStatements = statements.filter((s) => s.includes("UNIQUE"));
+  const uniqueStatements = statements.filter(s => s.includes("UNIQUE"));
   assertEquals(uniqueStatements.length >= 1, true);
 });
 
@@ -183,14 +183,14 @@ Deno.test("DDL Generator - multiple constraints on one property generate multipl
         required: true,
         multi: false,
         constraints: ["min_len_value(3)", "max_len_value(50)"],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
-  const checkStatements = statements.filter((s) => s.includes("CHECK"));
+  const checkStatements = statements.filter(s => s.includes("CHECK"));
 
   assertEquals(checkStatements.length, 2);
   assertStringIncludes(checkStatements[0], "CHECK (length(username) >= 3)");
@@ -209,7 +209,7 @@ Deno.test("DDL Generator - multiple properties each with constraints", () => {
         required: true,
         multi: false,
         constraints: ["max_len_value(200)"],
-        annotations: {},
+        annotations: {}
       },
       {
         name: "price",
@@ -217,14 +217,14 @@ Deno.test("DDL Generator - multiple properties each with constraints", () => {
         required: true,
         multi: false,
         constraints: ["min_value(0)", "max_value(99999)"],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
-  const checkStatements = statements.filter((s) => s.includes("CHECK"));
+  const checkStatements = statements.filter(s => s.includes("CHECK"));
 
   assertEquals(checkStatements.length, 3);
   assertStringIncludes(checkStatements[0], "length(name) <= 200");
@@ -244,14 +244,14 @@ Deno.test("DDL Generator - constraint with no args generates no CHECK", () => {
         required: true,
         multi: false,
         constraints: ["max_len_value"],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
-  const checkStatements = statements.filter((s) => s.includes("CHECK"));
+  const checkStatements = statements.filter(s => s.includes("CHECK"));
 
   // max_len_value without a numeric argument should not produce a CHECK
   assertEquals(checkStatements.length, 0);
@@ -271,14 +271,14 @@ Deno.test("DDL Generator - CHECK constraints also generated on AddProperty", () 
           required: false,
           multi: false,
           constraints: ["max_len_value(1000)"],
-          annotations: {},
-        },
-      } as Types.AddPropertyOperation,
-    ],
+          annotations: {}
+        }
+      } as Types.AddPropertyOperation
+    ]
   };
 
   const statements = generator.generateDDL([operation]);
-  const checkStatements = statements.filter((s) => s.includes("CHECK"));
+  const checkStatements = statements.filter(s => s.includes("CHECK"));
 
   assertEquals(checkStatements.length, 1);
   assertStringIncludes(checkStatements[0], "CHECK (length(bio) <= 1000)");
@@ -304,7 +304,7 @@ Deno.test("Schema Differ - extractConstraints includes arguments in constraint s
               name: { kind: "Identifier", value: "name" },
               type: {
                 kind: "TypeRef",
-                name: { kind: "QualifiedName", parts: ["str"] },
+                name: { kind: "QualifiedName", parts: ["str"] }
               },
               required: true,
               multi: false,
@@ -313,15 +313,15 @@ Deno.test("Schema Differ - extractConstraints includes arguments in constraint s
                   kind: "Constraint",
                   name: { kind: "Identifier", value: "max_len_value" },
                   args: [
-                    { kind: "Literal", type: "integer", value: 255 },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      ],
-    },
+                    { kind: "Literal", type: "integer", value: 255 }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
   ];
 
   // Diff against empty schema to get a CreateType operation
@@ -351,21 +351,21 @@ Deno.test("Schema Differ - constraint without args remains just the name", () =>
               name: { kind: "Identifier", value: "email" },
               type: {
                 kind: "TypeRef",
-                name: { kind: "QualifiedName", parts: ["str"] },
+                name: { kind: "QualifiedName", parts: ["str"] }
               },
               required: true,
               multi: false,
               constraints: [
                 {
                   kind: "Constraint",
-                  name: { kind: "Identifier", value: "exclusive" },
-                },
-              ],
-            },
-          ],
-        },
-      ],
-    },
+                  name: { kind: "Identifier", value: "exclusive" }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
   ];
 
   const operations = differ.diff([], schema);
@@ -390,7 +390,7 @@ Deno.test("Schema Differ - multiple constraint args separated by commas", () => 
               name: { kind: "Identifier", value: "value" },
               type: {
                 kind: "TypeRef",
-                name: { kind: "QualifiedName", parts: ["str"] },
+                name: { kind: "QualifiedName", parts: ["str"] }
               },
               required: true,
               multi: false,
@@ -399,15 +399,15 @@ Deno.test("Schema Differ - multiple constraint args separated by commas", () => 
                   kind: "Constraint",
                   name: { kind: "Identifier", value: "regexp" },
                   args: [
-                    { kind: "Literal", type: "string", value: "^[a-z]+$" },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      ],
-    },
+                    { kind: "Literal", type: "string", value: "^[a-z]+$" }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
   ];
 
   const operations = differ.diff([], schema);
@@ -437,7 +437,7 @@ Deno.test("End-to-end - Schema with constraints produces correct DDL", () => {
               name: { kind: "Identifier", value: "username" },
               type: {
                 kind: "TypeRef",
-                name: { kind: "QualifiedName", parts: ["str"] },
+                name: { kind: "QualifiedName", parts: ["str"] }
               },
               required: true,
               multi: false,
@@ -446,28 +446,28 @@ Deno.test("End-to-end - Schema with constraints produces correct DDL", () => {
                   kind: "Constraint",
                   name: { kind: "Identifier", value: "min_len_value" },
                   args: [
-                    { kind: "Literal", type: "integer", value: 3 },
-                  ],
+                    { kind: "Literal", type: "integer", value: 3 }
+                  ]
                 },
                 {
                   kind: "Constraint",
                   name: { kind: "Identifier", value: "max_len_value" },
                   args: [
-                    { kind: "Literal", type: "integer", value: 50 },
-                  ],
+                    { kind: "Literal", type: "integer", value: 50 }
+                  ]
                 },
                 {
                   kind: "Constraint",
-                  name: { kind: "Identifier", value: "exclusive" },
-                },
-              ],
+                  name: { kind: "Identifier", value: "exclusive" }
+                }
+              ]
             },
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "age" },
               type: {
                 kind: "TypeRef",
-                name: { kind: "QualifiedName", parts: ["int32"] },
+                name: { kind: "QualifiedName", parts: ["int32"] }
               },
               required: false,
               multi: false,
@@ -476,51 +476,51 @@ Deno.test("End-to-end - Schema with constraints produces correct DDL", () => {
                   kind: "Constraint",
                   name: { kind: "Identifier", value: "min_value" },
                   args: [
-                    { kind: "Literal", type: "integer", value: 0 },
-                  ],
+                    { kind: "Literal", type: "integer", value: 0 }
+                  ]
                 },
                 {
                   kind: "Constraint",
                   name: { kind: "Identifier", value: "max_value" },
                   args: [
-                    { kind: "Literal", type: "integer", value: 150 },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-      ],
-    },
+                    { kind: "Literal", type: "integer", value: 150 }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
   ];
 
   const operations = differ.diff([], schema);
   const ddl = generator.generateDDL(operations);
 
   // Should have CREATE TABLE, UNIQUE INDEX for exclusive, and CHECK constraints
-  const createTable = ddl.find((s) => s.startsWith("CREATE TABLE"));
+  const createTable = ddl.find(s => s.startsWith("CREATE TABLE"));
   assertEquals(createTable !== undefined, true);
 
-  const uniqueIndex = ddl.find((s) => s.includes("UNIQUE INDEX") && s.includes("username"));
+  const uniqueIndex = ddl.find(s => s.includes("UNIQUE INDEX") && s.includes("username"));
   assertEquals(uniqueIndex !== undefined, true);
 
-  const checkStatements = ddl.filter((s) => s.includes("CHECK"));
+  const checkStatements = ddl.filter(s => s.includes("CHECK"));
   assertEquals(checkStatements.length, 4);
 
   // Verify min_len_value CHECK for username
-  const minLenCheck = checkStatements.find((s) => s.includes("length(username) >= 3"));
+  const minLenCheck = checkStatements.find(s => s.includes("length(username) >= 3"));
   assertEquals(minLenCheck !== undefined, true);
 
   // Verify max_len_value CHECK for username
-  const maxLenCheck = checkStatements.find((s) => s.includes("length(username) <= 50"));
+  const maxLenCheck = checkStatements.find(s => s.includes("length(username) <= 50"));
   assertEquals(maxLenCheck !== undefined, true);
 
   // Verify min_value CHECK for age
-  const minValCheck = checkStatements.find((s) => s.includes("age >= 0"));
+  const minValCheck = checkStatements.find(s => s.includes("age >= 0"));
   assertEquals(minValCheck !== undefined, true);
 
   // Verify max_value CHECK for age
-  const maxValCheck = checkStatements.find((s) => s.includes("age <= 150"));
+  const maxValCheck = checkStatements.find(s => s.includes("age <= 150"));
   assertEquals(maxValCheck !== undefined, true);
 });
 
@@ -536,14 +536,14 @@ Deno.test("DDL Generator - regexp constraint escapes single quotes in pattern", 
         required: true,
         multi: false,
         constraints: ["regexp(^[a-z']+$)"],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
-  const checkStatements = statements.filter((s) => s.includes("CHECK"));
+  const checkStatements = statements.filter(s => s.includes("CHECK"));
 
   assertEquals(checkStatements.length, 1);
   // Single quote in pattern should be escaped to double single quote
@@ -566,14 +566,14 @@ Deno.test("DDL Generator - max_ex_value generates CHECK with strict less-than", 
         required: true,
         multi: false,
         constraints: ["max_ex_value(1000000)"],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
-  const checkStatements = statements.filter((s) => s.includes("CHECK"));
+  const checkStatements = statements.filter(s => s.includes("CHECK"));
 
   assertEquals(checkStatements.length, 1);
   assertStringIncludes(checkStatements[0], "CHECK (amount < 1000000)");
@@ -591,14 +591,14 @@ Deno.test("DDL Generator - min_ex_value generates CHECK with strict greater-than
         required: true,
         multi: false,
         constraints: ["min_ex_value(0)"],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
-  const checkStatements = statements.filter((s) => s.includes("CHECK"));
+  const checkStatements = statements.filter(s => s.includes("CHECK"));
 
   assertEquals(checkStatements.length, 1);
   assertStringIncludes(checkStatements[0], "CHECK (kelvin > 0)");
@@ -616,19 +616,19 @@ Deno.test("DDL Generator - one_of generates CHECK with IN clause for string valu
         required: true,
         multi: false,
         constraints: ["one_of(active,inactive,archived)"],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
-  const checkStatements = statements.filter((s) => s.includes("CHECK"));
+  const checkStatements = statements.filter(s => s.includes("CHECK"));
 
   assertEquals(checkStatements.length, 1);
   assertStringIncludes(
     checkStatements[0],
-    "CHECK (status IN ('active', 'inactive', 'archived'))",
+    "CHECK (status IN ('active', 'inactive', 'archived'))"
   );
 });
 
@@ -644,19 +644,19 @@ Deno.test("DDL Generator - one_of generates CHECK with IN clause for numeric val
         required: true,
         multi: false,
         constraints: ["one_of(1,2,3,4,5)"],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
-  const checkStatements = statements.filter((s) => s.includes("CHECK"));
+  const checkStatements = statements.filter(s => s.includes("CHECK"));
 
   assertEquals(checkStatements.length, 1);
   assertStringIncludes(
     checkStatements[0],
-    "CHECK (level IN (1, 2, 3, 4, 5))",
+    "CHECK (level IN (1, 2, 3, 4, 5))"
   );
 });
 
@@ -672,21 +672,21 @@ Deno.test("DDL Generator - expression_on generates CHECK with __subject__ replac
         required: true,
         multi: false,
         constraints: [
-          "expression_on(__subject__ >= 0 AND __subject__ <= 100)",
+          "expression_on(__subject__ >= 0 AND __subject__ <= 100)"
         ],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
-  const checkStatements = statements.filter((s) => s.includes("CHECK"));
+  const checkStatements = statements.filter(s => s.includes("CHECK"));
 
   assertEquals(checkStatements.length, 1);
   assertStringIncludes(
     checkStatements[0],
-    "CHECK (percentage >= 0 AND percentage <= 100)",
+    "CHECK (percentage >= 0 AND percentage <= 100)"
   );
 });
 
@@ -702,15 +702,15 @@ Deno.test("DDL Generator - combined exclusive and value constraints on same prop
         required: true,
         multi: false,
         constraints: ["exclusive", "min_len_value(3)", "max_len_value(20)"],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
-  const checkStatements = statements.filter((s) => s.includes("CHECK"));
-  const uniqueStatements = statements.filter((s) => s.includes("UNIQUE"));
+  const checkStatements = statements.filter(s => s.includes("CHECK"));
+  const uniqueStatements = statements.filter(s => s.includes("UNIQUE"));
 
   // exclusive -> UNIQUE, min_len_value/max_len_value -> CHECK
   assertEquals(checkStatements.length, 2);
@@ -736,20 +736,20 @@ Deno.test("Schema Differ - detects added constraint on existing property", () =>
         name: { kind: "Identifier", value: "name" },
         type: {
           kind: "TypeRef",
-          name: { kind: "QualifiedName", parts: ["str"] },
+          name: { kind: "QualifiedName", parts: ["str"] }
         },
         required: true,
         multi: false,
-        constraints,
-      }],
-    }],
+        constraints
+      }]
+    }]
   }];
 
   const oldSchema = makeSchema([]);
   const newSchema = makeSchema([{
     kind: "Constraint",
     name: { kind: "Identifier", value: "max_len_value" },
-    args: [{ kind: "Literal", type: "integer", value: 255 }],
+    args: [{ kind: "Literal", type: "integer", value: 255 }]
   }]);
 
   const operations = differ.diff(oldSchema, newSchema);
@@ -779,19 +779,19 @@ Deno.test("Schema Differ - detects dropped constraint on existing property", () 
         name: { kind: "Identifier", value: "name" },
         type: {
           kind: "TypeRef",
-          name: { kind: "QualifiedName", parts: ["str"] },
+          name: { kind: "QualifiedName", parts: ["str"] }
         },
         required: true,
         multi: false,
-        constraints,
-      }],
-    }],
+        constraints
+      }]
+    }]
   }];
 
   const oldSchema = makeSchema([{
     kind: "Constraint",
     name: { kind: "Identifier", value: "max_len_value" },
-    args: [{ kind: "Literal", type: "integer", value: 255 }],
+    args: [{ kind: "Literal", type: "integer", value: 255 }]
   }]);
   const newSchema = makeSchema([]);
 
@@ -821,17 +821,17 @@ Deno.test("Schema Differ - detects constraint modification (value change)", () =
         name: { kind: "Identifier", value: "name" },
         type: {
           kind: "TypeRef",
-          name: { kind: "QualifiedName", parts: ["str"] },
+          name: { kind: "QualifiedName", parts: ["str"] }
         },
         required: true,
         multi: false,
         constraints: [{
           kind: "Constraint",
           name: { kind: "Identifier", value: "max_len_value" },
-          args: [{ kind: "Literal", type: "integer", value: maxLen }],
-        }],
-      }],
-    }],
+          args: [{ kind: "Literal", type: "integer", value: maxLen }]
+        }]
+      }]
+    }]
   }];
 
   const oldSchema = makeSchema(255);
@@ -845,10 +845,10 @@ Deno.test("Schema Differ - detects constraint modification (value change)", () =
   const alterProp = alterType.operations[0] as Types.AlterPropertyOperation;
   // Constraint value change = drop old + add new
   const addConstraint = alterProp.changes.find(
-    (c: Types.PropertyChange) => c.kind === "AddConstraint",
+    (c: Types.PropertyChange) => c.kind === "AddConstraint"
   );
   const dropConstraint = alterProp.changes.find(
-    (c: Types.PropertyChange) => c.kind === "DropConstraint",
+    (c: Types.PropertyChange) => c.kind === "DropConstraint"
   );
   assertEquals(addConstraint?.newValue, "max_len_value(100)");
   assertEquals(dropConstraint?.oldValue, "max_len_value(255)");
@@ -871,7 +871,7 @@ Deno.test("Schema Differ - expression on constraint serialized as expression_on(
         name: { kind: "Identifier", value: "percentage" },
         type: {
           kind: "TypeRef",
-          name: { kind: "QualifiedName", parts: ["float64"] },
+          name: { kind: "QualifiedName", parts: ["float64"] }
         },
         required: true,
         multi: false,
@@ -886,23 +886,23 @@ Deno.test("Schema Differ - expression on constraint serialized as expression_on(
               op: ">=",
               left: {
                 kind: "PathExpression",
-                path: ["__subject__"],
+                path: ["__subject__"]
               },
-              right: { kind: "Literal", type: "integer", value: 0 },
+              right: { kind: "Literal", type: "integer", value: 0 }
             },
             right: {
               kind: "BinaryOp",
               op: "<=",
               left: {
                 kind: "PathExpression",
-                path: ["__subject__"],
+                path: ["__subject__"]
               },
-              right: { kind: "Literal", type: "integer", value: 100 },
-            },
-          },
-        }],
-      }],
-    }],
+              right: { kind: "Literal", type: "integer", value: 100 }
+            }
+          }
+        }]
+      }]
+    }]
   }];
 
   const operations = differ.diff([], schema);
@@ -929,14 +929,14 @@ Deno.test("DDL Generator - AddConstraint generates ALTER TABLE ADD CONSTRAINT", 
         propertyName: "age",
         changes: [{
           kind: "AddConstraint",
-          newValue: "min_value(0)",
-        }],
-      } as Types.AlterPropertyOperation,
-    ],
+          newValue: "min_value(0)"
+        }]
+      } as Types.AlterPropertyOperation
+    ]
   };
 
   const statements = generator.generateDDL([operation]);
-  const checkStatements = statements.filter((s) => s.includes("CHECK"));
+  const checkStatements = statements.filter(s => s.includes("CHECK"));
 
   assertEquals(checkStatements.length, 1);
   assertStringIncludes(checkStatements[0], "ADD CONSTRAINT");
@@ -954,14 +954,14 @@ Deno.test("DDL Generator - DropConstraint generates ALTER TABLE DROP CONSTRAINT"
         propertyName: "age",
         changes: [{
           kind: "DropConstraint",
-          oldValue: "min_value(0)",
-        }],
-      } as Types.AlterPropertyOperation,
-    ],
+          oldValue: "min_value(0)"
+        }]
+      } as Types.AlterPropertyOperation
+    ]
   };
 
   const statements = generator.generateDDL([operation]);
-  const dropStatements = statements.filter((s) => s.includes("DROP CONSTRAINT"));
+  const dropStatements = statements.filter(s => s.includes("DROP CONSTRAINT"));
 
   assertEquals(dropStatements.length, 1);
   assertStringIncludes(dropStatements[0], "DROP CONSTRAINT IF EXISTS");

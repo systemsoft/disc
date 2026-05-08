@@ -6,8 +6,9 @@ test.describe("Schema page", () => {
 
     // Sidebar lists Item.
     await expect(
-      page.getByRole("button", { name: /Item/ }).first(),
-    ).toBeVisible();
+      page.getByRole("button", { name: /Item/ }).first()
+    )
+      .toBeVisible();
 
     // Default selection populates the right pane heading.
     await expect(page.getByRole("heading", { name: "Item" })).toBeVisible();

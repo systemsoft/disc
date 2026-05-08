@@ -25,21 +25,21 @@ function makeStubMailer(): { mailer: Mailer; sends: CapturedSend[]; } {
       return Promise.resolve({
         accepted: Array.isArray(email.to) ? email.to : [email.to],
         messageId: "stub@disc.local",
-        rejected: [],
+        rejected: []
       });
-    },
+    }
   };
   return { mailer, sends };
 }
 
 function makeResolver(map: Record<string, string | null>): (id: string) => Promise<string | null> {
-  return (id) => Promise.resolve(map[id] ?? null);
+  return id => Promise.resolve(map[id] ?? null);
 }
 
 const baseEvent = {
   eventId: "ev-1",
   identityId: "u-1",
-  timestamp: "2026-01-01T00:00:00.000Z",
+  timestamp: "2026-01-01T00:00:00.000Z"
 };
 
 Deno.test("EmailEventListener - sends verification email with correct recipient + content", async () => {
@@ -47,13 +47,13 @@ Deno.test("EmailEventListener - sends verification email with correct recipient 
   const listener = new EmailEventListener({
     baseUrl: "https://app.example.com",
     mailer,
-    resolveRecipient: makeResolver({ "u-1": "alice@example.com" }),
+    resolveRecipient: makeResolver({ "u-1": "alice@example.com" })
   });
 
   const event: WebhookEvent = {
     ...baseEvent,
     eventType: "EmailVerificationRequested",
-    verificationToken: "tok-verify-1",
+    verificationToken: "tok-verify-1"
   };
   await listener.handle(event);
 
@@ -70,13 +70,13 @@ Deno.test("EmailEventListener - sends password reset email with correct recipien
   const listener = new EmailEventListener({
     baseUrl: "https://app.example.com",
     mailer,
-    resolveRecipient: makeResolver({ "u-1": "bob@example.com" }),
+    resolveRecipient: makeResolver({ "u-1": "bob@example.com" })
   });
 
   const event: WebhookEvent = {
     ...baseEvent,
     eventType: "PasswordResetRequested",
-    resetToken: "tok-reset-1",
+    resetToken: "tok-reset-1"
   };
   await listener.handle(event);
 
@@ -91,13 +91,13 @@ Deno.test("EmailEventListener - sends magic link email with correct recipient + 
   const listener = new EmailEventListener({
     baseUrl: "https://app.example.com",
     mailer,
-    resolveRecipient: makeResolver({ "u-1": "carol@example.com" }),
+    resolveRecipient: makeResolver({ "u-1": "carol@example.com" })
   });
 
   const event: WebhookEvent = {
     ...baseEvent,
     eventType: "MagicLinkRequested",
-    magicLinkToken: "tok-magic-1",
+    magicLinkToken: "tok-magic-1"
   };
   await listener.handle(event);
 
@@ -112,13 +112,13 @@ Deno.test("EmailEventListener - sends magic code email with correct recipient + 
   const listener = new EmailEventListener({
     baseUrl: "https://app.example.com",
     mailer,
-    resolveRecipient: makeResolver({ "u-1": "dave@example.com" }),
+    resolveRecipient: makeResolver({ "u-1": "dave@example.com" })
   });
 
   const event: WebhookEvent = {
     ...baseEvent,
     eventType: "MagicCodeRequested",
-    magicCode: "482917",
+    magicCode: "482917"
   };
   await listener.handle(event);
 
@@ -133,7 +133,7 @@ Deno.test("EmailEventListener - non-email events are ignored", async () => {
   const listener = new EmailEventListener({
     baseUrl: "https://app.example.com",
     mailer,
-    resolveRecipient: makeResolver({ "u-1": "alice@example.com" }),
+    resolveRecipient: makeResolver({ "u-1": "alice@example.com" })
   });
 
   for (const eventType of ["IdentityCreated", "IdentityAuthenticated", "EmailVerified"] as const) {
@@ -148,13 +148,13 @@ Deno.test("EmailEventListener - resolveRecipient returning null skips send witho
   const listener = new EmailEventListener({
     baseUrl: "https://app.example.com",
     mailer,
-    resolveRecipient: makeResolver({}), // u-1 not present → null
+    resolveRecipient: makeResolver({}) // u-1 not present → null
   });
 
   await listener.handle({
     ...baseEvent,
     eventType: "PasswordResetRequested",
-    resetToken: "tok-reset-1",
+    resetToken: "tok-reset-1"
   });
 
   assertEquals(sends.length, 0);
@@ -165,33 +165,33 @@ Deno.test("EmailEventListener - resolveRecipient throwing is swallowed", async (
   const listener = new EmailEventListener({
     baseUrl: "https://app.example.com",
     mailer,
-    resolveRecipient: () => Promise.reject(new Error("db down")),
+    resolveRecipient: () => Promise.reject(new Error("db down"))
   });
 
   // Must not throw.
   await listener.handle({
     ...baseEvent,
     eventType: "MagicLinkRequested",
-    magicLinkToken: "tok-1",
+    magicLinkToken: "tok-1"
   });
   assertEquals(sends.length, 0);
 });
 
 Deno.test("EmailEventListener - mailer send throwing is swallowed", async () => {
   const failingMailer: Mailer = {
-    send: () => Promise.reject(new Error("smtp 421")),
+    send: () => Promise.reject(new Error("smtp 421"))
   };
   const listener = new EmailEventListener({
     baseUrl: "https://app.example.com",
     mailer: failingMailer,
-    resolveRecipient: makeResolver({ "u-1": "alice@example.com" }),
+    resolveRecipient: makeResolver({ "u-1": "alice@example.com" })
   });
 
   // Must not throw.
   await listener.handle({
     ...baseEvent,
     eventType: "EmailVerificationRequested",
-    verificationToken: "tok-1",
+    verificationToken: "tok-1"
   });
 });
 
@@ -202,18 +202,18 @@ Deno.test("EmailEventListener - per-event template overrides take precedence", a
     mailer,
     resolveRecipient: makeResolver({ "u-1": "alice@example.com" }),
     templates: {
-      verification: (ctx) => ({
+      verification: ctx => ({
         html: `<custom>${ctx.verificationToken}</custom>`,
         subject: "Custom verify",
-        text: `custom token ${ctx.verificationToken}`,
-      }),
-    },
+        text: `custom token ${ctx.verificationToken}`
+      })
+    }
   });
 
   await listener.handle({
     ...baseEvent,
     eventType: "EmailVerificationRequested",
-    verificationToken: "tok-X",
+    verificationToken: "tok-X"
   });
 
   assertEquals(sends.length, 1);

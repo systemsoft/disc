@@ -10,7 +10,7 @@ import {
   AuthExtensionAdapter,
   BaseExtension,
   createExtensionContext,
-  ExtensionRegistry,
+  ExtensionRegistry
 } from "disc/extensions/mod.ts";
 
 import type {
@@ -22,7 +22,7 @@ import type {
   ExtensionMetadata,
   ExtensionMiddleware,
   ExtensionRoute,
-  ExtensionState,
+  ExtensionState
 } from "disc/extensions/mod.ts";
 ```
 
@@ -77,14 +77,14 @@ Abstract base class with sensible defaults for all extension methods. Extend thi
 import { BaseExtension } from "disc/extensions/mod.ts";
 import type {
   ExtensionContext,
-  ExtensionMetadata,
+  ExtensionMetadata
 } from "disc/extensions/mod.ts";
 
 class MyExtension extends BaseExtension {
   readonly metadata: ExtensionMetadata = {
     name: "my-extension",
     version: "1.0.0",
-    description: "A custom extension",
+    description: "A custom extension"
   };
 
   override async initialize(context: ExtensionContext): Promise<void> {
@@ -105,8 +105,8 @@ class MyExtension extends BaseExtension {
         path: "/status",
         handler: async (request: Request) => {
           return new Response(JSON.stringify({ ok: true }));
-        },
-      },
+        }
+      }
     ];
   }
 }
@@ -194,7 +194,7 @@ interface ExtensionMiddleware {
   priority: number;
   handle: (
     request: Request,
-    next: () => Promise<Response>,
+    next: () => Promise<Response>
   ) => Promise<Response>;
 }
 ```
@@ -208,7 +208,7 @@ interface CompilerHook {
   name: string;
   transformFunctionCall?: (
     funcName: string,
-    args: string[],
+    args: string[]
   ) => string | undefined;
 }
 ```
@@ -240,7 +240,7 @@ import { AuthExtensionAdapter } from "disc/extensions/mod.ts";
 const authExt = new AuthExtensionAdapter({
   authProvider,
   authMiddleware,
-  authRoutes,
+  authRoutes
 });
 registry.register(authExt);
 ```
@@ -254,7 +254,7 @@ import { AccessExtensionAdapter } from "disc/extensions/mod.ts";
 
 const accessExt = new AccessExtensionAdapter({
   evaluator,
-  injector,
+  injector
 });
 registry.register(accessExt);
 ```
@@ -277,7 +277,7 @@ registry.register(accessExt);
 
 ```typescript
 const server = new DiscServer({
-  extensions: [new MyExtension()],
+  extensions: [new MyExtension()]
 });
 ```
 

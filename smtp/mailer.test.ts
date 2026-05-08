@@ -19,7 +19,7 @@ Deno.test("createMailer(undefined) returns a NoopMailer", async () => {
   const result = await mailer.send({
     to: "x@y",
     subject: "hi",
-    text: "body",
+    text: "body"
   });
 
   assertEquals(result.accepted, ["x@y"]);
@@ -32,7 +32,7 @@ Deno.test("NoopMailer normalizes string-or-array to: list", async () => {
   const r1 = await mailer.send({
     to: ["a@x", "b@x"],
     subject: "s",
-    text: "t",
+    text: "t"
   });
   assertEquals(r1.accepted, ["a@x", "b@x"]);
 
@@ -48,7 +48,7 @@ Deno.test("buildMimeMessage - text-only email has expected headers", () => {
     email: { to: "a@x", subject: "hello", text: "world" },
     from: "from@x",
     messageId: "abc@x",
-    to: ["a@x"],
+    to: ["a@x"]
   });
 
   assert(msg.includes("From: from@x\r\n"));
@@ -68,15 +68,15 @@ Deno.test("buildMimeMessage - html email is multipart/alternative with both part
       to: "a@x",
       subject: "s",
       text: "plain",
-      html: "<p>html</p>",
+      html: "<p>html</p>"
     },
     from: "f@x",
     messageId: "id@x",
-    to: ["a@x"],
+    to: ["a@x"]
   });
 
   const ctMatch = msg.match(
-    /Content-Type: multipart\/alternative; boundary="(.+?)"/,
+    /Content-Type: multipart\/alternative; boundary="(.+?)"/
   );
   assert(ctMatch, "multipart Content-Type missing");
   const boundary = ctMatch[1];
@@ -121,17 +121,17 @@ Deno.test("buildMimeMessage - extra headers merged but don't overwrite defaults"
       text: "t",
       headers: {
         "X-Disc-Trace": "trace-id-123",
-        "From": "evil@x", // must not override the From we control
-      },
+        From: "evil@x" // must not override the From we control
+      }
     },
     from: "real@x",
     messageId: "m@x",
-    to: ["a@x"],
+    to: ["a@x"]
   });
 
   assert(msg.includes("X-Disc-Trace: trace-id-123"));
   // Only one From header, and it's the one we set.
-  const fromHeaders = msg.split("\r\n").filter((l) => l.startsWith("From:"));
+  const fromHeaders = msg.split("\r\n").filter(l => l.startsWith("From:"));
   assertEquals(fromHeaders, ["From: real@x"]);
 });
 
@@ -156,7 +156,7 @@ function makeRecordingSocket(): {
   const conn: SmtpConn = {
     close(): void {},
     read(p: Uint8Array): Promise<number | null> {
-      return new Promise((resolve) => {
+      return new Promise(resolve => {
         const tick = (): void => {
           if (readQueue.length > 0) {
             const n = Math.min(p.length, readQueue.length);
@@ -194,7 +194,7 @@ function makeRecordingSocket(): {
         }
       }
       return p.length;
-    },
+    }
   };
 
   return { conn, written: () => writes.join("") };
@@ -212,7 +212,7 @@ function makeConnectImpl(socket: { conn: SmtpConn; }): SmtpConnectImpl {
     // deno-lint-ignore require-await
     connect: async () => socket.conn,
     // deno-lint-ignore require-await
-    startTls: async (c) => c,
+    startTls: async c => c
   };
 }
 
@@ -222,15 +222,15 @@ Deno.test("SmtpMailer.send - returns accepted/rejected and a Message-ID", async 
     {
       from: "Disc <no-reply@disc.dev>",
       host: "smtp.test",
-      port: 25,
+      port: 25
     },
-    { connectImpl: makeConnectImpl(socket) },
+    { connectImpl: makeConnectImpl(socket) }
   );
 
   const result = await mailer.send({
     to: "user@example.com",
     subject: "Welcome",
-    text: "hi",
+    text: "hi"
   });
 
   assertEquals(result.accepted, ["user@example.com"]);
@@ -251,15 +251,15 @@ Deno.test("SmtpMailer.send - non-ASCII subject is RFC 2047 encoded on the wire",
     {
       from: "no-reply@disc.dev",
       host: "smtp.test",
-      port: 25,
+      port: 25
     },
-    { connectImpl: makeConnectImpl(socket) },
+    { connectImpl: makeConnectImpl(socket) }
   );
 
   await mailer.send({
     to: "user@example.com",
     subject: "Café ☕",
-    text: "body",
+    text: "body"
   });
 
   const wire = socket.written();
@@ -273,16 +273,16 @@ Deno.test("SmtpMailer.send - html email produces multipart on the wire", async (
     {
       from: "no-reply@disc.dev",
       host: "smtp.test",
-      port: 25,
+      port: 25
     },
-    { connectImpl: makeConnectImpl(socket) },
+    { connectImpl: makeConnectImpl(socket) }
   );
 
   await mailer.send({
     to: "user@example.com",
     subject: "Hi",
     text: "plain text",
-    html: "<p>html part</p>",
+    html: "<p>html part</p>"
   });
 
   const wire = socket.written();
@@ -295,7 +295,7 @@ Deno.test("SmtpMailer.send - throws when 'to' is empty", async () => {
   const mailer = new SmtpMailer({
     from: "no-reply@disc.dev",
     host: "smtp.test",
-    port: 25,
+    port: 25
   });
 
   let caught: Error | undefined;

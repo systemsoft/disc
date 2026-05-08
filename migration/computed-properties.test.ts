@@ -28,10 +28,10 @@ Deno.test("DDL Generator - computed property skipped in CREATE TABLE", () => {
         multi: false,
         computed: ".first_name ++ ' ' ++ .last_name",
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
@@ -54,10 +54,10 @@ Deno.test("DDL Generator - non-computed property included in CREATE TABLE", () =
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
@@ -79,7 +79,7 @@ Deno.test("DDL Generator - mixed computed and regular properties", () => {
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
+        annotations: {}
       },
       {
         name: "last_name",
@@ -87,7 +87,7 @@ Deno.test("DDL Generator - mixed computed and regular properties", () => {
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
+        annotations: {}
       },
       {
         name: "full_name",
@@ -96,7 +96,7 @@ Deno.test("DDL Generator - mixed computed and regular properties", () => {
         multi: false,
         computed: ".first_name ++ ' ' ++ .last_name",
         constraints: [],
-        annotations: {},
+        annotations: {}
       },
       {
         name: "email",
@@ -104,10 +104,10 @@ Deno.test("DDL Generator - mixed computed and regular properties", () => {
         required: true,
         multi: false,
         constraints: ["exclusive"],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
   };
 
   const statements = generator.generateDDL([operation]);
@@ -137,10 +137,10 @@ Deno.test("DDL Generator - AddProperty with computed generates comment only", ()
           multi: false,
           computed: ".first_name ++ ' ' ++ .last_name",
           constraints: [],
-          annotations: {},
-        },
-      } as Types.AddPropertyOperation,
-    ],
+          annotations: {}
+        }
+      } as Types.AddPropertyOperation
+    ]
   };
 
   const statements = generator.generateDDL([alterOp]);
@@ -167,10 +167,10 @@ Deno.test("DDL Generator - AddProperty without computed generates ALTER TABLE", 
           required: false,
           multi: false,
           constraints: [],
-          annotations: {},
-        },
-      } as Types.AddPropertyOperation,
-    ],
+          annotations: {}
+        }
+      } as Types.AddPropertyOperation
+    ]
   };
 
   const statements = generator.generateDDL([alterOp]);
@@ -196,10 +196,10 @@ Deno.test("DDL Generator - rollback AddProperty with computed generates comment"
           multi: false,
           computed: ".first_name ++ ' ' ++ .last_name",
           constraints: [],
-          annotations: {},
-        },
-      } as Types.AddPropertyOperation,
-    ],
+          annotations: {}
+        }
+      } as Types.AddPropertyOperation
+    ]
   };
 
   const statements = generator.generateRollbackDDL([alterOp]);
@@ -231,17 +231,17 @@ Deno.test("Schema Differ - extractProperties detects computed property from AST"
               name: { kind: "Identifier", value: "first_name" },
               type: {
                 kind: "TypeRef",
-                name: { kind: "QualifiedName", parts: ["str"] },
+                name: { kind: "QualifiedName", parts: ["str"] }
               },
               required: true,
-              multi: false,
+              multi: false
             },
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "full_name" },
               type: {
                 kind: "TypeRef",
-                name: { kind: "QualifiedName", parts: ["str"] },
+                name: { kind: "QualifiedName", parts: ["str"] }
               },
               required: false,
               multi: false,
@@ -251,20 +251,20 @@ Deno.test("Schema Differ - extractProperties detects computed property from AST"
                 args: [
                   {
                     kind: "PathExpression",
-                    path: [".first_name"],
+                    path: [".first_name"]
                   },
                   {
                     kind: "Literal",
                     type: "string",
-                    value: " ",
-                  },
-                ],
-              },
-            },
-          ],
-        },
-      ],
-    },
+                    value: " "
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
   ];
 
   // Diff against empty schema to trigger CreateType
@@ -276,11 +276,11 @@ Deno.test("Schema Differ - extractProperties detects computed property from AST"
   const createOp = operations[0] as Types.CreateTypeOperation;
 
   // first_name should not be computed
-  const firstName = createOp.properties.find((p) => p.name === "first_name");
+  const firstName = createOp.properties.find(p => p.name === "first_name");
   assertEquals(firstName?.computed, undefined);
 
   // full_name should be computed
-  const fullName = createOp.properties.find((p) => p.name === "full_name");
+  const fullName = createOp.properties.find(p => p.name === "full_name");
   assertEquals(typeof fullName?.computed, "string");
   assertStringIncludes(fullName!.computed!, "str_concat");
 });
@@ -302,27 +302,27 @@ Deno.test("Schema Differ - computed property produces no DDL column in end-to-en
               name: { kind: "Identifier", value: "price" },
               type: {
                 kind: "TypeRef",
-                name: { kind: "QualifiedName", parts: ["float64"] },
+                name: { kind: "QualifiedName", parts: ["float64"] }
               },
               required: true,
-              multi: false,
+              multi: false
             },
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "quantity" },
               type: {
                 kind: "TypeRef",
-                name: { kind: "QualifiedName", parts: ["int32"] },
+                name: { kind: "QualifiedName", parts: ["int32"] }
               },
               required: true,
-              multi: false,
+              multi: false
             },
             {
               kind: "PropertyDeclaration",
               name: { kind: "Identifier", value: "total" },
               type: {
                 kind: "TypeRef",
-                name: { kind: "QualifiedName", parts: ["float64"] },
+                name: { kind: "QualifiedName", parts: ["float64"] }
               },
               required: false,
               multi: false,
@@ -331,18 +331,18 @@ Deno.test("Schema Differ - computed property produces no DDL column in end-to-en
                 op: "*",
                 left: {
                   kind: "PathExpression",
-                  path: [".price"],
+                  path: [".price"]
                 },
                 right: {
                   kind: "PathExpression",
-                  path: [".quantity"],
-                },
-              },
-            },
-          ],
-        },
-      ],
-    },
+                  path: [".quantity"]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
   ];
 
   const operations = differ.diff([], schema);
@@ -374,20 +374,20 @@ Deno.test("Schema Differ - datetime_current() default produces DEFAULT NOW()", (
               name: { kind: "Identifier", value: "createdAt" },
               type: {
                 kind: "TypeRef",
-                name: { kind: "QualifiedName", parts: ["datetime"] },
+                name: { kind: "QualifiedName", parts: ["datetime"] }
               },
               required: false,
               multi: false,
               default: {
                 kind: "FunctionCall",
                 name: { kind: "QualifiedName", parts: ["datetime_current"] },
-                args: [],
-              },
-            },
-          ],
-        },
-      ],
-    },
+                args: []
+              }
+            }
+          ]
+        }
+      ]
+    }
   ];
 
   const operations = differ.diff([], schema);
@@ -398,7 +398,7 @@ Deno.test("Schema Differ - datetime_current() default produces DEFAULT NOW()", (
   assertEquals(
     createTableSql.includes("'FunctionCall'"),
     false,
-    "Default must not render AST node kind as literal string",
+    "Default must not render AST node kind as literal string"
   );
 });
 
@@ -421,15 +421,15 @@ Deno.test("DDL Generator - reserved PG keywords in type names are quoted", () =>
               name: { kind: "Identifier", value: "name" },
               type: {
                 kind: "TypeRef",
-                name: { kind: "QualifiedName", parts: ["str"] },
+                name: { kind: "QualifiedName", parts: ["str"] }
               },
               required: true,
-              multi: false,
-            },
-          ],
-        },
-      ],
-    },
+              multi: false
+            }
+          ]
+        }
+      ]
+    }
   ];
 
   const operations = differ.diff([], schema);
@@ -440,7 +440,7 @@ Deno.test("DDL Generator - reserved PG keywords in type names are quoted", () =>
   assertEquals(
     /CREATE TABLE user\s/.test(createTableSql),
     false,
-    "Bare unquoted 'user' table name causes a PG syntax error",
+    "Bare unquoted 'user' table name causes a PG syntax error"
   );
 });
 
@@ -458,17 +458,17 @@ Deno.test("Schema Differ - detects changed computed expression", () => {
           name: { kind: "Identifier", value: "price" },
           type: {
             kind: "TypeRef",
-            name: { kind: "QualifiedName", parts: ["float64"] },
+            name: { kind: "QualifiedName", parts: ["float64"] }
           },
           required: true,
-          multi: false,
+          multi: false
         },
         {
           kind: "PropertyDeclaration",
           name: { kind: "Identifier", value: "total" },
           type: {
             kind: "TypeRef",
-            name: { kind: "QualifiedName", parts: ["float64"] },
+            name: { kind: "QualifiedName", parts: ["float64"] }
           },
           required: false,
           multi: false,
@@ -476,11 +476,11 @@ Deno.test("Schema Differ - detects changed computed expression", () => {
             kind: "BinaryOp",
             op: "*",
             left: { kind: "PathExpression", path: [".price"] },
-            right: { kind: "Literal", type: "integer", value: 1 },
-          },
-        },
-      ],
-    }],
+            right: { kind: "Literal", type: "integer", value: 1 }
+          }
+        }
+      ]
+    }]
   }];
 
   // Same schema but total = price * 2 instead of price * 1
@@ -498,7 +498,7 @@ Deno.test("Schema Differ - detects changed computed expression", () => {
           name: { kind: "Identifier", value: "total" },
           type: {
             kind: "TypeRef",
-            name: { kind: "QualifiedName", parts: ["float64"] },
+            name: { kind: "QualifiedName", parts: ["float64"] }
           },
           required: false,
           multi: false,
@@ -506,34 +506,34 @@ Deno.test("Schema Differ - detects changed computed expression", () => {
             kind: "BinaryOp",
             op: "*",
             left: { kind: "PathExpression", path: [".price"] },
-            right: { kind: "Literal", type: "integer", value: 2 },
-          },
-        },
-      ],
-    }],
+            right: { kind: "Literal", type: "integer", value: 2 }
+          }
+        }
+      ]
+    }]
   }];
 
   const ops = differ.diff(oldSchema, newSchema);
-  const alterOp = ops.find((o) =>
-    o.kind === "AlterType"
-    && (o as Types.AlterTypeOperation).typeName === "Product"
+  const alterOp = ops.find(o =>
+    o.kind === "AlterType" &&
+    (o as Types.AlterTypeOperation).typeName === "Product"
   ) as Types.AlterTypeOperation | undefined;
 
   assertEquals(
     alterOp !== undefined,
     true,
-    "Changing a computed expression must produce an AlterType operation",
+    "Changing a computed expression must produce an AlterType operation"
   );
-  const propChange = alterOp?.operations.find((o) => o.kind === "AlterProperty") as Types.AlterPropertyOperation | undefined;
+  const propChange = alterOp?.operations.find(o => o.kind === "AlterProperty") as Types.AlterPropertyOperation | undefined;
   assertEquals(
     propChange !== undefined,
     true,
-    "AlterType must contain an AlterProperty for the computed change",
+    "AlterType must contain an AlterProperty for the computed change"
   );
-  const changeKinds = propChange?.changes.map((c) => c.kind) ?? [];
+  const changeKinds = propChange?.changes.map(c => c.kind) ?? [];
   assert(
     changeKinds.includes("ChangeComputed"),
-    `Expected ChangeComputed in ${JSON.stringify(changeKinds)}`,
+    `Expected ChangeComputed in ${JSON.stringify(changeKinds)}`
   );
 });
 
@@ -550,37 +550,37 @@ Deno.test("Schema Differ - detects added annotation", () => {
         name: { kind: "Identifier", value: "name" },
         type: {
           kind: "TypeRef",
-          name: { kind: "QualifiedName", parts: ["str"] },
+          name: { kind: "QualifiedName", parts: ["str"] }
         },
         required: true,
         multi: false,
         annotations: Object.entries(annotations).map(([key, value]) => ({
           kind: "Annotation" as const,
           name: { kind: "QualifiedName" as const, parts: [key] },
-          value: { kind: "Literal" as const, type: "string" as const, value },
-        })),
-      }],
-    }],
+          value: { kind: "Literal" as const, type: "string" as const, value }
+        }))
+      }]
+    }]
   }];
 
   const oldSchema = makeSchema({});
   const newSchema = makeSchema({ description: "The user's full name" });
 
   const ops = differ.diff(oldSchema, newSchema);
-  const alterOp = ops.find((o) => o.kind === "AlterType") as
+  const alterOp = ops.find(o => o.kind === "AlterType") as
     | Types.AlterTypeOperation
     | undefined;
   assertEquals(
     alterOp !== undefined,
     true,
-    "Adding an annotation must produce an AlterType operation",
+    "Adding an annotation must produce an AlterType operation"
   );
-  const propChange = alterOp?.operations.find((o) => o.kind === "AlterProperty") as Types.AlterPropertyOperation | undefined;
-  const changeKinds = propChange?.changes.map((c) => c.kind) ?? [];
+  const propChange = alterOp?.operations.find(o => o.kind === "AlterProperty") as Types.AlterPropertyOperation | undefined;
+  const changeKinds = propChange?.changes.map(c => c.kind) ?? [];
   assert(
-    changeKinds.includes("AddAnnotation")
-      || changeKinds.includes("ChangeAnnotation"),
-    `Expected AddAnnotation/ChangeAnnotation in ${JSON.stringify(changeKinds)}`,
+    changeKinds.includes("AddAnnotation") ||
+      changeKinds.includes("ChangeAnnotation"),
+    `Expected AddAnnotation/ChangeAnnotation in ${JSON.stringify(changeKinds)}`
   );
 });
 
@@ -597,31 +597,31 @@ Deno.test("Schema Differ - detects removed annotation", () => {
         name: { kind: "Identifier", value: "name" },
         type: {
           kind: "TypeRef",
-          name: { kind: "QualifiedName", parts: ["str"] },
+          name: { kind: "QualifiedName", parts: ["str"] }
         },
         required: true,
         multi: false,
         annotations: Object.entries(annotations).map(([key, value]) => ({
           kind: "Annotation" as const,
           name: { kind: "QualifiedName" as const, parts: [key] },
-          value: { kind: "Literal" as const, type: "string" as const, value },
-        })),
-      }],
-    }],
+          value: { kind: "Literal" as const, type: "string" as const, value }
+        }))
+      }]
+    }]
   }];
 
   const oldSchema = makeSchema({ description: "orig" });
   const newSchema = makeSchema({});
 
   const ops = differ.diff(oldSchema, newSchema);
-  const alterOp = ops.find((o) => o.kind === "AlterType") as
+  const alterOp = ops.find(o => o.kind === "AlterType") as
     | Types.AlterTypeOperation
     | undefined;
-  const propChange = alterOp?.operations.find((o) => o.kind === "AlterProperty") as Types.AlterPropertyOperation | undefined;
-  const changeKinds = propChange?.changes.map((c) => c.kind) ?? [];
+  const propChange = alterOp?.operations.find(o => o.kind === "AlterProperty") as Types.AlterPropertyOperation | undefined;
+  const changeKinds = propChange?.changes.map(c => c.kind) ?? [];
   assert(
     changeKinds.includes("DropAnnotation"),
-    `Expected DropAnnotation in ${JSON.stringify(changeKinds)}`,
+    `Expected DropAnnotation in ${JSON.stringify(changeKinds)}`
   );
 });
 
@@ -642,15 +642,15 @@ Deno.test("DDL Generator - reserved PG keyword column names are quoted", () => {
               name: { kind: "Identifier", value: "user" }, // reserved
               type: {
                 kind: "TypeRef",
-                name: { kind: "QualifiedName", parts: ["str"] },
+                name: { kind: "QualifiedName", parts: ["str"] }
               },
               required: true,
-              multi: false,
-            },
-          ],
-        },
-      ],
-    },
+              multi: false
+            }
+          ]
+        }
+      ]
+    }
   ];
 
   const ddl = generator.generateDDL(differ.diff([], schema));

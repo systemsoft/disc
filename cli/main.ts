@@ -532,7 +532,7 @@ ${inverse("  OPTIONS ")}
 ${inverse("  USAGE ")}
 
   disc admin list-roles ${gray("[--database-url <dsn>] [--jwt-secret <sec>]")}`,
-  "lsp": `
+  lsp: `
   Run the Disc language server (stdio JSON-RPC)
 
   Spoken to by editors via JSON-RPC over stdin/stdout. Phase 1
@@ -548,7 +548,7 @@ ${inverse("  EDITOR HINTS ")}
   - VS Code: configure ${bgBrightYellow("disc-lsp")} as the language server for
     files matching ${bgBrightYellow("*.disc")}.
   - Neovim/lspconfig: pass ${bgBrightYellow("cmd = { 'disc', 'lsp' }")} and
-    ${bgBrightYellow("filetypes = { 'disc' }")}.`,
+    ${bgBrightYellow("filetypes = { 'disc' }")}.`
 };
 
 async function main() {
@@ -582,7 +582,7 @@ async function main() {
       "rollback",
       "squash",
       "js",
-      "clean",
+      "clean"
     ],
     string: [
       "port",
@@ -611,7 +611,7 @@ async function main() {
       "squash-to",
       "binary-port",
       "schema-dir",
-      "input",
+      "input"
     ],
     alias: {
       // gh/geldata#1030: pair `-h`/`--help` with `-H`/`--host` so the CLI
@@ -625,8 +625,8 @@ async function main() {
       s: "schema",
       o: "output",
       t: "target",
-      f: "follow",
-    },
+      f: "follow"
+    }
   }) as CLIArgs;
 
   /*** --version takes precedence over empty positional args. Without
@@ -672,7 +672,7 @@ async function main() {
           force: args.force,
           name,
           skipPostgres: args["skip-postgres"],
-          template: args.template as "basic" | "minimal" | "full" || "basic",
+          template: args.template as "basic" | "minimal" | "full" || "basic"
         });
 
         break;
@@ -690,7 +690,7 @@ async function main() {
           host: args.host,
           nonInteractive: args["non-interactive"],
           port: args.port ? parseInt(args.port) : undefined,
-          schemaFile: args.schema,
+          schemaFile: args.schema
         });
 
         break;
@@ -709,7 +709,7 @@ async function main() {
             await commands.schemaExport({
               schema: args.schema,
               "schema-dir": args["schema-dir"],
-              output: args.output,
+              output: args.output
             });
             break;
           }
@@ -718,7 +718,7 @@ async function main() {
             await commands.schemaIntrospect({
               "database-url": args["database-url"],
               schemas: args.schemas,
-              output: args.output,
+              output: args.output
             });
             break;
           }
@@ -743,7 +743,7 @@ async function main() {
         const adminSub = String(args._[1] || "");
         const baseOpts = {
           "database-url": args["database-url"],
-          "jwt-secret": args["jwt-secret"],
+          "jwt-secret": args["jwt-secret"]
         };
 
         switch (adminSub) {
@@ -753,7 +753,7 @@ async function main() {
               email: String(args._[2] || ""),
               password: args.password ?? "",
               name: args.name,
-              role: args.role,
+              role: args.role
             });
             break;
           }
@@ -762,7 +762,7 @@ async function main() {
             await adminCommand.setPassword({
               ...baseOpts,
               user: String(args._[2] || ""),
-              password: args.password ?? "",
+              password: args.password ?? ""
             });
             break;
           }
@@ -772,7 +772,7 @@ async function main() {
               ...baseOpts,
               user: String(args._[2] || ""),
               role: String(args._[3] || ""),
-              description: args.description,
+              description: args.description
             });
             break;
           }
@@ -787,7 +787,7 @@ async function main() {
             // hookup needed (operates on the schema file directly).
             await adminCommand.listPolicies({
               schema: args.schema,
-              type: args._[2] ? String(args._[2]) : undefined,
+              type: args._[2] ? String(args._[2]) : undefined
             });
             break;
           }
@@ -797,14 +797,14 @@ async function main() {
             // isolation against a synthetic context. Pure SDL
             // introspection + in-memory evaluator; no DB hookup.
             const target = args._[2] ? String(args._[2]) : "";
-            const action = args.action
-              ? String(args.action) as
+            const action = args.action ?
+              String(args.action) as
                 | "select"
                 | "insert"
                 | "update"
                 | "delete"
-                | "all"
-              : "select";
+                | "all" :
+              "select";
             // Globals come in as repeated `--global key=value` flags
             // or a single `--globals "k1=v1,k2=v2"` shorthand. The
             // parser collapses repeats into an array; normalize both
@@ -812,12 +812,13 @@ async function main() {
             const globals: Record<string, unknown> = {};
             const globalArg = args.global ?? args.globals;
             if (globalArg !== undefined) {
-              const list: string[] = Array.isArray(globalArg)
-                ? globalArg.map((v: unknown) => String(v))
-                : String(globalArg).split(",").map((s: string) => s.trim());
+              const list: string[] = Array.isArray(globalArg) ?
+                globalArg.map((v: unknown) => String(v)) :
+                String(globalArg).split(",").map((s: string) => s.trim());
               for (const kv of list) {
                 const eq = kv.indexOf("=");
-                if (eq < 1) continue;
+                if (eq < 1)
+                  continue;
                 globals[kv.slice(0, eq).trim()] = kv.slice(eq + 1).trim();
               }
             }
@@ -828,7 +829,7 @@ async function main() {
               userId: args["user-id"] ? String(args["user-id"]) : undefined,
               userRole: args["user-role"] ? String(args["user-role"]) : undefined,
               globals: Object.keys(globals).length > 0 ? globals : undefined,
-              all: args.all === true,
+              all: args.all === true
             });
             break;
           }
@@ -836,7 +837,7 @@ async function main() {
           default: {
             console.error(`Unknown admin subcommand: ${adminSub}`);
             console.log(
-              "Available: admin create-superuser, admin set-password, admin assign-role, admin list-roles, admin list-policies, admin test-policy",
+              "Available: admin create-superuser, admin set-password, admin assign-role, admin list-roles, admin list-policies, admin test-policy"
             );
             Deno.exit(1);
           }
@@ -858,7 +859,7 @@ async function main() {
           requireAuth: args["require-auth"],
           tlsCert: args["tls-cert"],
           tlsKey: args["tls-key"],
-          trustProxy: args["trust-proxy"],
+          trustProxy: args["trust-proxy"]
         });
 
         break;
@@ -868,7 +869,7 @@ async function main() {
         await commands.watch({
           delayMs: 1000,
           outputDir: args.output,
-          schemaFile: args.schema,
+          schemaFile: args.schema
         });
 
         break;
@@ -903,7 +904,7 @@ async function main() {
         await commands.build({
           lite: args.lite,
           output: args.output,
-          platform: args.platform,
+          platform: args.platform
         });
 
         break;
@@ -917,7 +918,7 @@ async function main() {
 
         await commands.deploy({
           format: args.format,
-          output: args.output,
+          output: args.output
         });
 
         break;
@@ -932,7 +933,7 @@ async function main() {
               follow: args.follow || false,
               level: args.level,
               lines: args.lines ? parseInt(String(args.lines)) : 50,
-              project: args.name,
+              project: args.name
             });
 
             break;
@@ -948,7 +949,7 @@ async function main() {
               backup: true,
               dryRun: args["dry-run"] || false,
               project: args.name,
-              targetVersion: args["target-version"],
+              targetVersion: args["target-version"]
             });
 
             break;
@@ -1046,7 +1047,7 @@ async function main() {
           default: {
             console.error(`Unknown db subcommand: ${dbSubcommand}`);
             console.log(
-              "Available: db create, db list, db drop, db wipe, db dump, db restore, db push",
+              "Available: db create, db list, db drop, db wipe, db dump, db restore, db push"
             );
 
             Deno.exit(1);

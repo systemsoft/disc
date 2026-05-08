@@ -18,7 +18,7 @@ function makePool(dsn: string): ConnectionPool {
     connectionString: dsn,
     cleanupInterval: 0,
     maxConnections: 3,
-    minConnections: 1,
+    minConnections: 1
   });
 }
 
@@ -40,7 +40,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -57,7 +57,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -74,7 +74,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -91,7 +91,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -108,7 +108,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -125,7 +125,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // ===========================================================================
@@ -146,7 +146,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -163,7 +163,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -180,7 +180,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -197,7 +197,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 // ===========================================================================
@@ -214,7 +214,7 @@ Deno.test({
 
     try {
       const result = await pool.query(
-        "EXPLAIN (FORMAT JSON) SELECT 1 AS val",
+        "EXPLAIN (FORMAT JSON) SELECT 1 AS val"
       );
       assertExists(result.rows);
       // PG returns EXPLAIN as a single row with a JSON array
@@ -223,7 +223,7 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -236,7 +236,7 @@ Deno.test({
 
     try {
       const result = await pool.query(
-        "EXPLAIN (FORMAT JSON, ANALYZE) SELECT 1 AS val",
+        "EXPLAIN (FORMAT JSON, ANALYZE) SELECT 1 AS val"
       );
       assertExists(result.rows);
       const plan = result.rows[0];
@@ -244,5 +244,5 @@ Deno.test({
     } finally {
       await pool.close();
     }
-  },
+  }
 });

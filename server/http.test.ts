@@ -29,9 +29,9 @@ class MockHTTPHandler {
         headers: new Headers({
           "Access-Control-Allow-Origin": "*",
           "Access-Control-Allow-Methods": "POST, GET, OPTIONS",
-          "Access-Control-Allow-Headers": "Content-Type, Authorization",
+          "Access-Control-Allow-Headers": "Content-Type, Authorization"
         }),
-        body: "",
+        body: ""
       };
     }
 
@@ -47,8 +47,8 @@ class MockHTTPHandler {
             status: 400,
             headers: new Headers({ "Content-Type": "application/json" }),
             body: JSON.stringify({
-              errors: [{ message: "Query is required", code: "MISSING_QUERY" }],
-            }),
+              errors: [{ message: "Query is required", code: "MISSING_QUERY" }]
+            })
           };
         }
 
@@ -58,8 +58,8 @@ class MockHTTPHandler {
           headers: new Headers({ "Content-Type": "application/json" }),
           body: JSON.stringify({
             data: [{ id: "test-id", name: "Test User" }],
-            extensions: { durationMs: 10, queryHash: "abc123" },
-          }),
+            extensions: { durationMs: 10, queryHash: "abc123" }
+          })
         };
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
@@ -67,8 +67,8 @@ class MockHTTPHandler {
           status: 400,
           headers: new Headers({ "Content-Type": "application/json" }),
           body: JSON.stringify({
-            errors: [{ message: errorMessage, code: "PARSE_ERROR" }],
-          }),
+            errors: [{ message: errorMessage, code: "PARSE_ERROR" }]
+          })
         };
       }
     }
@@ -81,8 +81,8 @@ class MockHTTPHandler {
         body: JSON.stringify({
           status: "healthy",
           timestamp: new Date().toISOString(),
-          uptime: Math.floor(Date.now() / 1000),
-        }),
+          uptime: Math.floor(Date.now() / 1000)
+        })
       };
     }
 
@@ -94,8 +94,8 @@ class MockHTTPHandler {
         body: JSON.stringify({
           version: "0.1.0",
           protocol: "edgeql",
-          features: ["transactions", "queries", "mutations"],
-        }),
+          features: ["transactions", "queries", "mutations"]
+        })
       };
     }
 
@@ -104,13 +104,14 @@ class MockHTTPHandler {
       status: 404,
       headers: new Headers({ "Content-Type": "application/json" }),
       body: JSON.stringify({
-        errors: [{ message: "Not Found", code: "NOT_FOUND" }],
-      }),
+        errors: [{ message: "Not Found", code: "NOT_FOUND" }]
+      })
     };
   }
 
   private async readRequestBody(request: MockRequest): Promise<string> {
-    if (!request.body) return "";
+    if (!request.body)
+      return "";
 
     const reader = request.body.getReader();
     const chunks: Uint8Array[] = [];
@@ -119,11 +120,12 @@ class MockHTTPHandler {
     while (!done) {
       const { value, done: readerDone } = await reader.read();
       done = readerDone;
-      if (value) chunks.push(value);
+      if (value)
+        chunks.push(value);
     }
 
     const combined = new Uint8Array(
-      chunks.reduce((acc, chunk) => acc + chunk.length, 0),
+      chunks.reduce((acc, chunk) => acc + chunk.length, 0)
     );
     let offset = 0;
     for (const chunk of chunks) {
@@ -142,10 +144,10 @@ Deno.test("HTTP Handler - CORS preflight request", async () => {
     method: "OPTIONS",
     url: "http://localhost:5656/db/edgeql",
     headers: new Headers({
-      "Origin": "http://localhost:3000",
+      Origin: "http://localhost:3000",
       "Access-Control-Request-Method": "POST",
-      "Access-Control-Request-Headers": "Content-Type",
-    }),
+      "Access-Control-Request-Headers": "Content-Type"
+    })
   };
 
   const response = await handler.handleRequest(request);
@@ -154,11 +156,11 @@ Deno.test("HTTP Handler - CORS preflight request", async () => {
   assertEquals(response.headers.get("Access-Control-Allow-Origin"), "*");
   assertEquals(
     response.headers.get("Access-Control-Allow-Methods"),
-    "POST, GET, OPTIONS",
+    "POST, GET, OPTIONS"
   );
   assertEquals(
     response.headers.get("Access-Control-Allow-Headers"),
-    "Content-Type, Authorization",
+    "Content-Type, Authorization"
   );
 });
 
@@ -167,21 +169,21 @@ Deno.test("HTTP Handler - valid EdgeQL query", async () => {
 
   const bodyString = JSON.stringify({
     query: "select User { name, email }",
-    variables: {},
+    variables: {}
   });
 
   const request: MockRequest = {
     method: "POST",
     url: "http://localhost:5656/db/edgeql",
     headers: new Headers({
-      "Content-Type": "application/json",
+      "Content-Type": "application/json"
     }),
     body: new ReadableStream({
       start(controller) {
         controller.enqueue(new TextEncoder().encode(bodyString));
         controller.close();
-      },
-    }),
+      }
+    })
   };
 
   const response = await handler.handleRequest(request);
@@ -200,21 +202,21 @@ Deno.test("HTTP Handler - invalid EdgeQL query", async () => {
 
   const bodyString = JSON.stringify({
     query: "", // Empty query
-    variables: {},
+    variables: {}
   });
 
   const request: MockRequest = {
     method: "POST",
     url: "http://localhost:5656/db/edgeql",
     headers: new Headers({
-      "Content-Type": "application/json",
+      "Content-Type": "application/json"
     }),
     body: new ReadableStream({
       start(controller) {
         controller.enqueue(new TextEncoder().encode(bodyString));
         controller.close();
-      },
-    }),
+      }
+    })
   };
 
   const response = await handler.handleRequest(request);
@@ -234,14 +236,14 @@ Deno.test("HTTP Handler - malformed JSON", async () => {
     method: "POST",
     url: "http://localhost:5656/db/edgeql",
     headers: new Headers({
-      "Content-Type": "application/json",
+      "Content-Type": "application/json"
     }),
     body: new ReadableStream({
       start(controller) {
         controller.enqueue(new TextEncoder().encode("{ invalid json"));
         controller.close();
-      },
-    }),
+      }
+    })
   };
 
   const response = await handler.handleRequest(request);
@@ -259,7 +261,7 @@ Deno.test("HTTP Handler - health check endpoint", async () => {
   const request: MockRequest = {
     method: "GET",
     url: "http://localhost:5656/health",
-    headers: new Headers(),
+    headers: new Headers()
   };
 
   const response = await handler.handleRequest(request);
@@ -279,7 +281,7 @@ Deno.test("HTTP Handler - server info endpoint", async () => {
   const request: MockRequest = {
     method: "GET",
     url: "http://localhost:5656/server-info",
-    headers: new Headers(),
+    headers: new Headers()
   };
 
   const response = await handler.handleRequest(request);
@@ -298,7 +300,7 @@ Deno.test("HTTP Handler - 404 for unknown endpoint", async () => {
   const request: MockRequest = {
     method: "GET",
     url: "http://localhost:5656/unknown",
-    headers: new Headers(),
+    headers: new Headers()
   };
 
   const response = await handler.handleRequest(request);
@@ -315,22 +317,22 @@ Deno.test("HTTP Handler - query with variables", async () => {
   const bodyString = JSON.stringify({
     query: "select User { name, email } filter .id = <uuid>$userId",
     variables: {
-      userId: "550e8400-e29b-41d4-a716-446655440000",
-    },
+      userId: "550e8400-e29b-41d4-a716-446655440000"
+    }
   });
 
   const request: MockRequest = {
     method: "POST",
     url: "http://localhost:5656/db/edgeql",
     headers: new Headers({
-      "Content-Type": "application/json",
+      "Content-Type": "application/json"
     }),
     body: new ReadableStream({
       start(controller) {
         controller.enqueue(new TextEncoder().encode(bodyString));
         controller.close();
-      },
-    }),
+      }
+    })
   };
 
   const response = await handler.handleRequest(request);
@@ -350,14 +352,14 @@ Deno.test("HTTP Handler - content-type validation", async () => {
     method: "POST",
     url: "http://localhost:5656/db/edgeql",
     headers: new Headers({
-      "Content-Type": "text/plain", // Wrong content type
+      "Content-Type": "text/plain" // Wrong content type
     }),
     body: new ReadableStream({
       start(controller) {
         controller.enqueue(new TextEncoder().encode("some text"));
         controller.close();
-      },
-    }),
+      }
+    })
   };
 
   const response = await handler.handleRequest(request);
@@ -375,7 +377,7 @@ Deno.test("HTTP Handler - method validation", async () => {
   const request: MockRequest = {
     method: "PUT", // Not allowed method
     url: "http://localhost:5656/db/edgeql",
-    headers: new Headers(),
+    headers: new Headers()
   };
 
   const response = await handler.handleRequest(request);
@@ -390,21 +392,21 @@ Deno.test("HTTP Handler - large request handling", async () => {
   const largeQuery = "select User { name, email }" + " // ".repeat(1000);
   const bodyString = JSON.stringify({
     query: largeQuery,
-    variables: {},
+    variables: {}
   });
 
   const request: MockRequest = {
     method: "POST",
     url: "http://localhost:5656/db/edgeql",
     headers: new Headers({
-      "Content-Type": "application/json",
+      "Content-Type": "application/json"
     }),
     body: new ReadableStream({
       start(controller) {
         controller.enqueue(new TextEncoder().encode(bodyString));
         controller.close();
-      },
-    }),
+      }
+    })
   };
 
   const response = await handler.handleRequest(request);
@@ -420,8 +422,8 @@ Deno.test("HTTP Handler - empty body handling", async () => {
     method: "POST",
     url: "http://localhost:5656/db/edgeql",
     headers: new Headers({
-      "Content-Type": "application/json",
-    }),
+      "Content-Type": "application/json"
+    })
     // No body provided
   };
 

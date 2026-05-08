@@ -13,7 +13,7 @@ Deno.test("ServerConfig - default structure", () => {
     enableCors: true,
     enableWebsockets: true,
     maxConnections: 100,
-    requestTimeout: 30000,
+    requestTimeout: 30000
   };
 
   assertEquals(config.host, "localhost");
@@ -32,8 +32,8 @@ Deno.test("SessionContext - structure and lifecycle", () => {
     lastActivity: new Date("2024-01-01T00:01:00Z"),
     variables: {
       userId: "user_123",
-      role: "admin",
-    },
+      role: "admin"
+    }
   };
 
   assertEquals(session.sessionId, "sess_123456");
@@ -55,8 +55,8 @@ Deno.test("Connection - different types", () => {
       database: "test_db",
       createdAt: new Date(),
       lastActivity: new Date(),
-      variables: {},
-    },
+      variables: {}
+    }
   };
 
   const wsConnection: Types.Connection = {
@@ -69,8 +69,8 @@ Deno.test("Connection - different types", () => {
       database: "test_db",
       createdAt: new Date(),
       lastActivity: new Date(),
-      variables: {},
-    },
+      variables: {}
+    }
   };
 
   assertEquals(httpConnection.type, "http");
@@ -83,15 +83,15 @@ Deno.test("QueryRequest - structure validation", () => {
   const request: Types.QueryRequest = {
     query: "select User { name, email } filter .id = <uuid>$userId",
     variables: {
-      userId: "550e8400-e29b-41d4-a716-446655440000",
-    },
+      userId: "550e8400-e29b-41d4-a716-446655440000"
+    }
   };
 
   assertEquals(typeof request.query, "string");
   assertEquals(typeof request.variables, "object");
   assertEquals(
     request.variables!.userId,
-    "550e8400-e29b-41d4-a716-446655440000",
+    "550e8400-e29b-41d4-a716-446655440000"
   );
 });
 
@@ -101,14 +101,14 @@ Deno.test("QueryResponse - success case", () => {
       {
         id: "550e8400-e29b-41d4-a716-446655440000",
         name: "Ada Smith",
-        email: "ada@example.com",
-      },
+        email: "ada@example.com"
+      }
     ],
     extensions: {
       queryHash: "abc123def456",
       durationMs: 42,
-      cacheHit: false,
-    },
+      cacheHit: false
+    }
   };
 
   assertEquals(Array.isArray(response.data), true);
@@ -126,15 +126,15 @@ Deno.test("QueryResponse - error case", () => {
         locations: [{ line: 1, column: 8 }],
         extensions: {
           code: "INVALID_TYPE_NAME",
-          context: "select NonExistentType",
-        },
-      },
+          context: "select NonExistentType"
+        }
+      }
     ],
     extensions: {
       queryHash: "error123",
       durationMs: 5,
-      cacheHit: false,
-    },
+      cacheHit: false
+    }
   };
 
   assertEquals(response.data, undefined);
@@ -154,8 +154,8 @@ Deno.test("QueryError - comprehensive structure", () => {
       table: "user",
       column: "email",
       value: "duplicate@example.com",
-      hint: "Choose a different email address",
-    },
+      hint: "Choose a different email address"
+    }
   };
 
   assertEquals(error.message, "Constraint violation: duplicate key value");
@@ -171,7 +171,7 @@ Deno.test("Transaction - different isolation levels", () => {
     isolationLevel: "read_committed",
     readOnly: false,
     startedAt: new Date(),
-    statements: [],
+    statements: []
   };
 
   const serializable: Types.Transaction = {
@@ -180,7 +180,7 @@ Deno.test("Transaction - different isolation levels", () => {
     isolationLevel: "serializable",
     readOnly: true,
     startedAt: new Date(),
-    statements: ["select User { name }"],
+    statements: ["select User { name }"]
   };
 
   assertEquals(readCommitted.isolationLevel, "read_committed");
@@ -199,15 +199,15 @@ Deno.test("QueryContext - complete structure", () => {
       lastActivity: new Date("2024-01-01T10:05:00Z"),
       variables: {
         current_user: "user_456",
-        tenant_id: "tenant_789",
-      },
+        tenant_id: "tenant_789"
+      }
     },
     auth: {
       roles: ["user", "editor"],
-      permissions: ["read", "write"],
+      permissions: ["read", "write"]
     },
     requestId: "req_987654321",
-    startedAt: new Date("2024-01-01T10:05:00Z"),
+    startedAt: new Date("2024-01-01T10:05:00Z")
   };
 
   assertEquals(context.session.sessionId, "sess_123");
@@ -223,32 +223,32 @@ Deno.test("ServerStats - metrics structure", () => {
       active: 15,
       total: 150,
       http: 10,
-      websocket: 5,
+      websocket: 5
     },
     queries: {
       total: 1000,
       successful: 950,
       failed: 50,
-      avgDurationMs: 25.5,
+      avgDurationMs: 25.5
     },
     transactions: {
       active: 2,
       committed: 800,
-      rolledBack: 10,
+      rolledBack: 10
     },
     memoryUsage: {
       heapUsed: 50000000,
       heapTotal: 100000000,
-      external: 5000000,
+      external: 5000000
     },
-    uptimeMs: 3600000,
+    uptimeMs: 3600000
   };
 
   assertEquals(stats.connections.active, 15);
   assertEquals(stats.connections.total, 150);
   assertEquals(
     stats.connections.http + stats.connections.websocket,
-    stats.connections.active,
+    stats.connections.active
   );
   assertEquals(stats.queries.avgDurationMs, 25.5);
   assertEquals(stats.uptimeMs, 3600000);
@@ -257,7 +257,7 @@ Deno.test("ServerStats - metrics structure", () => {
 Deno.test("AuthContext - roles and permissions", () => {
   const auth: Types.AuthContext = {
     roles: ["admin", "user", "moderator"],
-    permissions: ["read", "write", "delete", "moderate"],
+    permissions: ["read", "write", "delete", "moderate"]
   };
 
   assertEquals(auth.roles.length, 3);
@@ -269,7 +269,7 @@ Deno.test("AuthContext - roles and permissions", () => {
 Deno.test("QueryRequest - empty variables", () => {
   const request: Types.QueryRequest = {
     query: "select User",
-    variables: {},
+    variables: {}
   };
 
   assertEquals(request.query, "select User");
@@ -282,8 +282,8 @@ Deno.test("QueryRequest - complex variables", () => {
     variables: {
       name: "John Doe",
       age: 30,
-      tags: ["developer", "typescript", "deno"],
-    },
+      tags: ["developer", "typescript", "deno"]
+    }
   };
 
   assertEquals(request.variables!.name, "John Doe");
@@ -303,8 +303,8 @@ Deno.test("SessionContext - variables type safety", () => {
       numberVar: 42,
       booleanVar: true,
       arrayVar: [1, 2, 3],
-      objectVar: { nested: "value" },
-    },
+      objectVar: { nested: "value" }
+    }
   };
 
   assertEquals(typeof session.variables.stringVar, "string");
@@ -325,8 +325,8 @@ Deno.test("Transaction - statement tracking", () => {
       "begin",
       "insert User { name := 'Ada' }",
       "select User { name } filter .name = 'Ada'",
-      "commit",
-    ],
+      "commit"
+    ]
   };
 
   assertEquals(transaction.statements.length, 4);

@@ -42,7 +42,7 @@ async function schemaFromSDL(sdlSource: string) {
 
 function makeContext(
   auth?: Partial<AuthContext>,
-  bypass = false,
+  bypass = false
 ): QueryContext {
   return {
     session: {
@@ -50,12 +50,12 @@ function makeContext(
       database: "test",
       createdAt: new Date(),
       lastActivity: new Date(),
-      variables: {},
+      variables: {}
     },
     auth: { roles: [], permissions: [], ...auth },
     requestId: "r",
     startedAt: new Date(),
-    bypassAccessPolicies: bypass,
+    bypassAccessPolicies: bypass
   };
 }
 
@@ -66,10 +66,10 @@ function makeContext(
  */
 function headerToBypass(
   header: string | null,
-  roles: string[],
+  roles: string[]
 ): boolean {
-  const requested = header !== null
-    && /^(false|0|no)$/i.test(header.trim());
+  const requested = header !== null &&
+    /^(false|0|no)$/i.test(header.trim());
   return requested && roles.includes("admin");
 }
 
@@ -99,7 +99,7 @@ Deno.test("EdgeQLProtocolHandler — bypass=true emits SQL without policy WHERE"
     schema,
     dryRun: true,
     enableExplain: true,
-    enableAccessPolicies: true,
+    enableAccessPolicies: true
   });
 
   const request: QueryRequest = { query: "SELECT User { name, email }" };
@@ -110,7 +110,7 @@ Deno.test("EdgeQLProtocolHandler — bypass=true emits SQL without policy WHERE"
   assert(sql, "expected sql in response extensions");
   assert(
     !sql.includes("WHERE"),
-    `bypass should drop the policy WHERE clause; got: ${sql}`,
+    `bypass should drop the policy WHERE clause; got: ${sql}`
   );
 });
 
@@ -120,7 +120,7 @@ Deno.test("EdgeQLProtocolHandler — bypass=false applies policy WHERE", async (
     schema,
     dryRun: true,
     enableExplain: true,
-    enableAccessPolicies: true,
+    enableAccessPolicies: true
   });
 
   const request: QueryRequest = { query: "SELECT User { name, email }" };
@@ -131,7 +131,7 @@ Deno.test("EdgeQLProtocolHandler — bypass=false applies policy WHERE", async (
   assert(sql, "expected sql in response extensions");
   assert(
     sql.includes("WHERE"),
-    `non-bypassed call should apply the policy WHERE; got: ${sql}`,
+    `non-bypassed call should apply the policy WHERE; got: ${sql}`
   );
 });
 
@@ -143,7 +143,7 @@ Deno.test("EdgeQLProtocolHandler — bypass cache key isolates results", async (
     schema,
     dryRun: true,
     enableExplain: true,
-    enableAccessPolicies: true,
+    enableAccessPolicies: true
   });
 
   const request: QueryRequest = { query: "SELECT User { name, email }" };
@@ -154,14 +154,16 @@ Deno.test("EdgeQLProtocolHandler — bypass cache key isolates results", async (
   const ctxRegular = makeContext({ userId: "u1" }, false);
 
   const sqlBypass = (await handler.handleRequest(request, ctxAdmin))
-    .extensions?.sql as string;
+    .extensions
+    ?.sql as string;
   const sqlNoBypass = (await handler.handleRequest(request, ctxRegular))
-    .extensions?.sql as string;
+    .extensions
+    ?.sql as string;
 
   assert(sqlBypass && sqlNoBypass);
   assert(
     !sqlBypass.includes("WHERE") && sqlNoBypass.includes("WHERE"),
-    `expected divergent cache entries: bypass=${sqlBypass} regular=${sqlNoBypass}`,
+    `expected divergent cache entries: bypass=${sqlBypass} regular=${sqlNoBypass}`
   );
 });
 
@@ -180,21 +182,23 @@ Deno.test("EdgeQLProtocolHandler — bypass cache key isolates results", async (
  */
 function headerToDisabled(
   header: string | null,
-  roles: string[],
+  roles: string[]
 ): Set<string> | undefined {
-  if (header === null) return undefined;
-  if (!roles.includes("admin")) return undefined;
+  if (header === null)
+    return undefined;
+  if (!roles.includes("admin"))
+    return undefined;
   const names = header
     .split(",")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
   return names.length > 0 ? new Set(names) : undefined;
 }
 
 Deno.test("disable-policies — admin caller parses comma-separated names", () => {
   const result = headerToDisabled(
     "Doc.owner_only, User.admin_check ,Tenant.global",
-    ["admin"],
+    ["admin"]
   );
   assert(result !== undefined);
   assertEquals(result.size, 3);
@@ -208,7 +212,7 @@ Deno.test("disable-policies — non-admin caller dropped silently", () => {
   assertEquals(headerToDisabled("Doc.owner_only", ["user"]), undefined);
   assertEquals(
     headerToDisabled("Doc.owner_only", ["editor", "viewer"]),
-    undefined,
+    undefined
   );
 });
 
@@ -225,7 +229,7 @@ Deno.test("disable-policies — cache key isolates results from regular calls", 
     schema,
     dryRun: true,
     enableExplain: true,
-    enableAccessPolicies: true,
+    enableAccessPolicies: true
   });
   const request: QueryRequest = { query: "SELECT User { name, email }" };
 
@@ -237,23 +241,25 @@ Deno.test("disable-policies — cache key isolates results from regular calls", 
   ctxDisabled.disabledPolicies = new Set(["User.owner_only"]);
 
   const sqlRegular = (await handler.handleRequest(request, ctxRegular))
-    .extensions?.sql as string;
+    .extensions
+    ?.sql as string;
   const sqlDisabled = (await handler.handleRequest(request, ctxDisabled))
-    .extensions?.sql as string;
+    .extensions
+    ?.sql as string;
 
   assert(sqlRegular && sqlDisabled);
   // The two SQL strings must differ — regular carries the policy
   // WHERE clause; disabled doesn't.
   assert(
     sqlRegular !== sqlDisabled,
-    `Cache keys must isolate disabled-policies calls; got identical SQL: ${sqlRegular}`,
+    `Cache keys must isolate disabled-policies calls; got identical SQL: ${sqlRegular}`
   );
   assert(
     sqlRegular.includes("WHERE"),
-    `Regular call should emit policy WHERE; got: ${sqlRegular}`,
+    `Regular call should emit policy WHERE; got: ${sqlRegular}`
   );
   assert(
     !sqlDisabled.includes("WHERE"),
-    `Disabled call should not emit policy WHERE; got: ${sqlDisabled}`,
+    `Disabled call should not emit policy WHERE; got: ${sqlDisabled}`
   );
 });

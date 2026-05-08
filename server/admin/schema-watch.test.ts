@@ -36,7 +36,7 @@ Deno.test("handleSchemaWatch — returns SSE response with correct headers", asy
   try {
     await Deno.writeTextFile(
       tmp,
-      `module default {\n  type User {\n    required name: str;\n  };\n};`,
+      `module default {\n  type User {\n    required name: str;\n  };\n};`
     );
 
     const response = handleSchemaWatch({
@@ -44,13 +44,13 @@ Deno.test("handleSchemaWatch — returns SSE response with correct headers", asy
       appliedSdlProvider: () => "module default {};",
       // Test mode: skip the watch loop so the response closes
       // immediately after the snapshot event.
-      runWatchLoop: false,
+      runWatchLoop: false
     });
 
     assertEquals(response.status, 200);
     assertEquals(
       response.headers.get("Content-Type"),
-      "text/event-stream",
+      "text/event-stream"
     );
     assertEquals(response.headers.get("Cache-Control"), "no-cache");
     assertEquals(response.headers.get("X-Accel-Buffering"), "no");
@@ -75,13 +75,13 @@ Deno.test(
       // Malformed SDL: missing closing brace.
       await Deno.writeTextFile(
         tmp,
-        `module default {\n  type User {\n    required name: str;\n};`,
+        `module default {\n  type User {\n    required name: str;\n};`
       );
 
       const response = handleSchemaWatch({
         schemaFilePath: tmp,
         appliedSdlProvider: () => "module default {};",
-        runWatchLoop: false,
+        runWatchLoop: false
       });
 
       const body = await response.text();
@@ -90,7 +90,7 @@ Deno.test(
     } finally {
       await Deno.remove(tmp);
     }
-  },
+  }
 );
 
 Deno.test(
@@ -99,10 +99,10 @@ Deno.test(
     const response = handleSchemaWatch({
       schemaFilePath: "/nonexistent/path/should/not/exist.disc",
       appliedSdlProvider: () => "module default {};",
-      runWatchLoop: false,
+      runWatchLoop: false
     });
 
     const body = await response.text();
     assertStringIncludes(body, "event: error\n");
-  },
+  }
 );

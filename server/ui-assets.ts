@@ -42,7 +42,7 @@ const CONTENT_TYPES: Record<string, string> = {
   txt: "text/plain; charset=utf-8",
   webp: "image/webp",
   woff: "font/woff",
-  woff2: "font/woff2",
+  woff2: "font/woff2"
 };
 
 /**
@@ -51,7 +51,8 @@ const CONTENT_TYPES: Record<string, string> = {
  */
 export function getUiContentType(filename: string): string {
   const dot = filename.lastIndexOf(".");
-  if (dot === -1) return "application/octet-stream";
+  if (dot === -1)
+    return "application/octet-stream";
   const ext = filename.slice(dot + 1).toLowerCase();
   return CONTENT_TYPES[ext] ?? "application/octet-stream";
 }
@@ -82,7 +83,7 @@ export interface UiAssetHandler {
  * dispatcher.
  */
 export function createUiAssetHandler(): UiAssetHandler {
-  return async (request) => {
+  return async request => {
     const url = new URL(request.url);
     if (
       url.pathname !== UI_BASE_PATH && !url.pathname.startsWith(`${UI_BASE_PATH}/`)
@@ -92,7 +93,8 @@ export function createUiAssetHandler(): UiAssetHandler {
 
     // Strip `/ui` prefix and any leading slash. Empty path → index.
     let rel = url.pathname.slice(UI_BASE_PATH.length).replace(/^\/+/, "");
-    if (rel === "") rel = INDEX_PATH;
+    if (rel === "")
+      rel = INDEX_PATH;
 
     // Reject path traversal up front. The manifest set already excludes
     // anything containing `..`, but keeping this check makes intent
@@ -124,7 +126,7 @@ export function createUiAssetHandler(): UiAssetHandler {
       "content-type": getUiContentType(servedRel),
       // SvelteKit fingerprints `_app/` assets so they're safe to cache
       // for a year. Everything else (notably `index.html`) is volatile.
-      "cache-control": servedRel.startsWith("_app/") ? "public, max-age=31536000, immutable" : "no-cache",
+      "cache-control": servedRel.startsWith("_app/") ? "public, max-age=31536000, immutable" : "no-cache"
     };
 
     // Wrap in a fresh Uint8Array<ArrayBuffer> view: Deno.readFile may

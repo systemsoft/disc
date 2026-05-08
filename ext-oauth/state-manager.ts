@@ -22,7 +22,7 @@ export class OAuthStateManager {
   async createState(
     provider: string,
     redirectUri: string,
-    metadata?: Record<string, unknown>,
+    metadata?: Record<string, unknown>
   ): Promise<OAuthState> {
     const state = crypto.randomUUID();
     const now = Date.now();
@@ -35,7 +35,7 @@ export class OAuthStateManager {
     const codeVerifier = encodeBase64Url(verifierBytes);
     const challengeDigest = await crypto.subtle.digest(
       "SHA-256",
-      new TextEncoder().encode(codeVerifier),
+      new TextEncoder().encode(codeVerifier)
     );
     const codeChallenge = encodeBase64Url(new Uint8Array(challengeDigest));
 
@@ -47,7 +47,7 @@ export class OAuthStateManager {
       state,
       codeVerifier,
       codeChallenge,
-      metadata,
+      metadata
     };
 
     this.states.set(state, oauthState);
@@ -56,13 +56,15 @@ export class OAuthStateManager {
 
   validateState(state: string): OAuthState | null {
     const stored = this.states.get(state);
-    if (!stored) return null;
+    if (!stored)
+      return null;
 
     // Remove used state (one-time use)
     this.states.delete(state);
 
     // Check expiry
-    if (Date.now() > stored.expiresAt) return null;
+    if (Date.now() > stored.expiresAt)
+      return null;
 
     return stored;
   }

@@ -83,7 +83,7 @@ import {
   AccessConfig,
   AccessEvaluator,
   AccessSQLInjector,
-  adaptAccessPolicies,
+  adaptAccessPolicies
 } from "./access/mod.ts";
 
 // Adapt SDL policies to runtime format
@@ -93,7 +93,7 @@ const policies = adaptAccessPolicies(sdlAccessPolicies, "User");
 const evaluator = new AccessEvaluator({
   defaultAllow: false,
   enableRLS: true,
-  mode: "permissive",
+  mode: "permissive"
 });
 
 // Register policies
@@ -105,7 +105,7 @@ for (const policy of policies) {
 const context = {
   sessionData: { tenant_id: "tenant1" },
   userId: "user123",
-  userRole: "member",
+  userRole: "member"
 };
 
 const decision = evaluator.evaluate("User", "select", context);

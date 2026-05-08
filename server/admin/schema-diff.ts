@@ -97,12 +97,12 @@ function parseSdl(source: string, label: "applied" | "onDisk"): ParseOutcome {
     if (errors.length > 0) {
       return {
         modules: null,
-        errors: errors.map((e) => ({
+        errors: errors.map(e => ({
           source: label,
           message: e.message,
           line: e.context?.location?.line,
-          column: e.context?.location?.column,
-        })),
+          column: e.context?.location?.column
+        }))
       };
     }
     const converter = new SDLConverter();
@@ -112,8 +112,8 @@ function parseSdl(source: string, label: "applied" | "onDisk"): ParseOutcome {
       modules: null,
       errors: [{
         source: label,
-        message: err instanceof Error ? err.message : String(err),
-      }],
+        message: err instanceof Error ? err.message : String(err)
+      }]
     };
   }
 }
@@ -122,7 +122,7 @@ function snapshotProperty(prop: AST.PropertyDeclaration): DiffPropertySnapshot {
   const snap: DiffPropertySnapshot = {
     name: prop.name.value,
     type: typeRefToString(prop.type),
-    required: prop.required ?? false,
+    required: prop.required ?? false
   };
   // Default expressions can be arbitrary EdgeQL; for the diff we only
   // care whether one side has a default the other doesn't, plus the
@@ -139,25 +139,27 @@ function snapshotLink(link: AST.LinkDeclaration): DiffLinkSnapshot {
     name: link.name.value,
     target: link.target ? typeRefToString(link.target) : "unknown",
     required: link.required ?? false,
-    multi: link.multi ?? false,
+    multi: link.multi ?? false
   };
 }
 
 function typeRefToString(ref: AST.TypeRef | undefined): string {
-  if (!ref) return "unknown";
+  if (!ref)
+    return "unknown";
   const parts = ref.name?.parts ?? [];
   let base = parts.join("::");
   if (ref.params && ref.params.length > 0) {
-    const inner = ref.params.map((p) => typeRefToString(p)).join(", ");
+    const inner = ref.params.map(p => typeRefToString(p)).join(", ");
     base = `${base}<${inner}>`;
   }
-  if (ref.array) base = `array<${base}>`;
+  if (ref.array)
+    base = `array<${base}>`;
   return base || "unknown";
 }
 
 function snapshotType(
   decl: AST.TypeDeclaration,
-  moduleName: string,
+  moduleName: string
 ): DiffTypeSnapshot {
   const properties: DiffPropertySnapshot[] = [];
   const links: DiffLinkSnapshot[] = [];
@@ -178,7 +180,7 @@ function snapshotType(
     name: decl.name.value,
     abstract: decl.abstract ?? false,
     properties,
-    links,
+    links
   };
 }
 
@@ -198,14 +200,14 @@ function indexTypes(modules: Module[]): Map<string, DiffTypeSnapshot> {
 
 function diffPropertyList(
   before: DiffPropertySnapshot[],
-  after: DiffPropertySnapshot[],
+  after: DiffPropertySnapshot[]
 ): {
   added: DiffPropertySnapshot[];
   removed: DiffPropertySnapshot[];
   changed: DiffPropertyChange[];
 } {
-  const beforeMap = new Map(before.map((p) => [p.name, p]));
-  const afterMap = new Map(after.map((p) => [p.name, p]));
+  const beforeMap = new Map(before.map(p => [p.name, p]));
+  const afterMap = new Map(after.map(p => [p.name, p]));
   const added: DiffPropertySnapshot[] = [];
   const removed: DiffPropertySnapshot[] = [];
   const changed: DiffPropertyChange[] = [];
@@ -215,15 +217,16 @@ function diffPropertyList(
     if (!beforeProp) {
       added.push(afterProp);
     } else if (
-      beforeProp.type !== afterProp.type
-      || beforeProp.required !== afterProp.required
-      || beforeProp.default !== afterProp.default
+      beforeProp.type !== afterProp.type ||
+      beforeProp.required !== afterProp.required ||
+      beforeProp.default !== afterProp.default
     ) {
       changed.push({ name, before: beforeProp, after: afterProp });
     }
   }
   for (const [name, beforeProp] of beforeMap) {
-    if (!afterMap.has(name)) removed.push(beforeProp);
+    if (!afterMap.has(name))
+      removed.push(beforeProp);
   }
 
   added.sort((a, b) => a.name.localeCompare(b.name));
@@ -234,14 +237,14 @@ function diffPropertyList(
 
 function diffLinkList(
   before: DiffLinkSnapshot[],
-  after: DiffLinkSnapshot[],
+  after: DiffLinkSnapshot[]
 ): {
   added: DiffLinkSnapshot[];
   removed: DiffLinkSnapshot[];
   changed: DiffLinkChange[];
 } {
-  const beforeMap = new Map(before.map((l) => [l.name, l]));
-  const afterMap = new Map(after.map((l) => [l.name, l]));
+  const beforeMap = new Map(before.map(l => [l.name, l]));
+  const afterMap = new Map(after.map(l => [l.name, l]));
   const added: DiffLinkSnapshot[] = [];
   const removed: DiffLinkSnapshot[] = [];
   const changed: DiffLinkChange[] = [];
@@ -251,15 +254,16 @@ function diffLinkList(
     if (!beforeLink) {
       added.push(afterLink);
     } else if (
-      beforeLink.target !== afterLink.target
-      || beforeLink.required !== afterLink.required
-      || beforeLink.multi !== afterLink.multi
+      beforeLink.target !== afterLink.target ||
+      beforeLink.required !== afterLink.required ||
+      beforeLink.multi !== afterLink.multi
     ) {
       changed.push({ name, before: beforeLink, after: afterLink });
     }
   }
   for (const [name, beforeLink] of beforeMap) {
-    if (!afterMap.has(name)) removed.push(beforeLink);
+    if (!afterMap.has(name))
+      removed.push(beforeLink);
   }
 
   added.sort((a, b) => a.name.localeCompare(b.name));
@@ -276,7 +280,7 @@ function diffLinkList(
  */
 export function computeSchemaDiff(
   appliedSdl: string,
-  onDiskSdl: string,
+  onDiskSdl: string
 ): SchemaDiffSummary {
   const applied = parseSdl(appliedSdl, "applied");
   const onDisk = parseSdl(onDiskSdl, "onDisk");
@@ -288,7 +292,7 @@ export function computeSchemaDiff(
       added: [],
       removed: [],
       modified: [],
-      errors,
+      errors
     };
   }
 
@@ -311,18 +315,20 @@ export function computeSchemaDiff(
   }
   for (const [key, afterSnap] of onDiskTypes) {
     const beforeSnap = appliedTypes.get(key);
-    if (!beforeSnap) continue;
+    if (!beforeSnap)
+      continue;
 
     const propDiff = diffPropertyList(beforeSnap.properties, afterSnap.properties);
     const linkDiff = diffLinkList(beforeSnap.links, afterSnap.links);
-    const noChange = propDiff.added.length === 0
-      && propDiff.removed.length === 0
-      && propDiff.changed.length === 0
-      && linkDiff.added.length === 0
-      && linkDiff.removed.length === 0
-      && linkDiff.changed.length === 0
-      && beforeSnap.abstract === afterSnap.abstract;
-    if (noChange) continue;
+    const noChange = propDiff.added.length === 0 &&
+      propDiff.removed.length === 0 &&
+      propDiff.changed.length === 0 &&
+      linkDiff.added.length === 0 &&
+      linkDiff.removed.length === 0 &&
+      linkDiff.changed.length === 0 &&
+      beforeSnap.abstract === afterSnap.abstract;
+    if (noChange)
+      continue;
 
     modified.push({
       module: afterSnap.module,
@@ -332,7 +338,7 @@ export function computeSchemaDiff(
       changedProperties: propDiff.changed,
       addedLinks: linkDiff.added,
       removedLinks: linkDiff.removed,
-      changedLinks: linkDiff.changed,
+      changedLinks: linkDiff.changed
     });
   }
 
@@ -345,6 +351,6 @@ export function computeSchemaDiff(
     added,
     removed,
     modified,
-    errors,
+    errors
   };
 }

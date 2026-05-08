@@ -18,7 +18,7 @@ function makeContext(): ExtensionContext {
       maxConnections: 5,
       requestTimeout: 5000,
       enableCors: false,
-      enableWebsockets: false,
+      enableWebsockets: false
     },
     logger: {
       debug: () => {},
@@ -30,8 +30,8 @@ function makeContext(): ExtensionContext {
       },
       withRequest: function() {
         return this;
-      },
-    } as unknown as ExtensionContext["logger"],
+      }
+    } as unknown as ExtensionContext["logger"]
   };
 }
 
@@ -59,7 +59,7 @@ Deno.test("VectorExtension - default config uses 1536 dimensions and hnsw index 
 Deno.test("VectorExtension - custom config values are applied", async () => {
   const ext = new VectorExtension({
     defaultDimensions: 768,
-    indexType: "ivfflat",
+    indexType: "ivfflat"
   });
   await ext.initialize(makeContext());
   const health = await ext.healthCheck();
@@ -76,7 +76,7 @@ Deno.test("VectorExtension - getFunctions returns 4 functions", () => {
 
 Deno.test("VectorExtension - getFunctions includes all expected function names", () => {
   const ext = new VectorExtension();
-  const names = ext.getFunctions().map((f) => f.name);
+  const names = ext.getFunctions().map(f => f.name);
   assertEquals(names.includes("cosine_similarity"), true);
   assertEquals(names.includes("l2_distance"), true);
   assertEquals(names.includes("inner_product"), true);
@@ -85,7 +85,7 @@ Deno.test("VectorExtension - getFunctions includes all expected function names",
 
 Deno.test("VectorExtension - cosine_similarity function has correct shape", () => {
   const ext = new VectorExtension();
-  const fn = ext.getFunctions().find((f) => f.name === "cosine_similarity");
+  const fn = ext.getFunctions().find(f => f.name === "cosine_similarity");
   assertEquals(fn !== undefined, true);
   assertEquals(fn!.args.length, 2);
   assertEquals(fn!.args[0].name, "a");
@@ -127,7 +127,7 @@ Deno.test("VectorExtension - compiler hook transforms cosine_similarity correctl
   const hook = ext.getCompilerHooks()[0];
   const result = hook.transformFunctionCall?.(
     "cosine_similarity",
-    ["embedding", "query_vec"],
+    ["embedding", "query_vec"]
   );
   assertEquals(result, "1 - (embedding <=> query_vec)");
 });
@@ -137,7 +137,7 @@ Deno.test("VectorExtension - compiler hook transforms l2_distance correctly", ()
   const hook = ext.getCompilerHooks()[0];
   const result = hook.transformFunctionCall?.(
     "l2_distance",
-    ["v1", "v2"],
+    ["v1", "v2"]
   );
   assertEquals(result, "v1 <-> v2");
 });
@@ -147,7 +147,7 @@ Deno.test("VectorExtension - compiler hook transforms inner_product correctly", 
   const hook = ext.getCompilerHooks()[0];
   const result = hook.transformFunctionCall?.(
     "inner_product",
-    ["v1", "v2"],
+    ["v1", "v2"]
   );
   assertEquals(result, "v1 <#> v2");
 });

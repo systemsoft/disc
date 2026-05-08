@@ -23,7 +23,7 @@ export class DeployCommand {
   validateFormat(format: string): void {
     if (!(VALID_FORMATS as readonly string[]).includes(format)) {
       throw new Error(
-        `Invalid format: "${format}". Valid formats: ${VALID_FORMATS.join(", ")}`,
+        `Invalid format: "${format}". Valid formats: ${VALID_FORMATS.join(", ")}`
       );
     }
   }
@@ -44,7 +44,8 @@ export class DeployCommand {
     try {
       const configFile = await Deno.readTextFile("disc.toml");
       const match = configFile.match(/name\s*=\s*"([^"]+)"/);
-      if (match) return match[1];
+      if (match)
+        return match[1];
     } catch {
       // Ignore errors — disc.toml is optional
     }

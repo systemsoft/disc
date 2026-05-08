@@ -24,7 +24,7 @@ const log = getLogger("auth");
  */
 const DEFAULT_AUTH_RATE_LIMIT = {
   requestsPerMinute: 10,
-  burstSize: 5,
+  burstSize: 5
 };
 
 export interface AuthRoutesOptions {
@@ -60,12 +60,14 @@ function extractClientIp(request: Request, trustProxy: boolean): string {
     const xff = request.headers.get("x-forwarded-for");
     if (xff) {
       const first = xff.split(",")[0].trim();
-      if (first) return first;
+      if (first)
+        return first;
     }
     const realIp = request.headers.get("x-real-ip");
     if (realIp) {
       const trimmed = realIp.trim();
-      if (trimmed) return trimmed;
+      if (trimmed)
+        return trimmed;
     }
   }
   return "anonymous";
@@ -80,13 +82,13 @@ function extractClientIp(request: Request, trustProxy: boolean): string {
  */
 function extractRequestMeta(
   request: Request,
-  trustProxy: boolean,
+  trustProxy: boolean
 ): { ipAddress?: string; userAgent?: string; } {
   const ip = extractClientIp(request, trustProxy);
   const ua = request.headers.get("user-agent") ?? undefined;
   return {
     ipAddress: ip === "anonymous" ? undefined : ip,
-    userAgent: ua,
+    userAgent: ua
   };
 }
 
@@ -124,7 +126,7 @@ export const AUTH_PUBLIC_ROUTES: ReadonlySet<string> = new Set([
   "mfa/totp/login",
   "mfa/recovery-codes/login",
   "webauthn/login/begin",
-  "webauthn/login/finish",
+  "webauthn/login/finish"
 ]);
 
 export const AUTH_AUTHENTICATED_ROUTES: ReadonlySet<string> = new Set([
@@ -139,14 +141,16 @@ export const AUTH_AUTHENTICATED_ROUTES: ReadonlySet<string> = new Set([
   "webauthn/register/begin",
   "webauthn/register/finish",
   "webauthn/credentials",
-  "webauthn/credentials/delete",
+  "webauthn/credentials/delete"
 ]);
 
 export type AuthRouteClassification = "public" | "authenticated" | "unknown";
 
 export function classifyAuthRoute(route: string): AuthRouteClassification {
-  if (AUTH_PUBLIC_ROUTES.has(route)) return "public";
-  if (AUTH_AUTHENTICATED_ROUTES.has(route)) return "authenticated";
+  if (AUTH_PUBLIC_ROUTES.has(route))
+    return "public";
+  if (AUTH_AUTHENTICATED_ROUTES.has(route))
+    return "authenticated";
   return "unknown";
 }
 
@@ -157,14 +161,14 @@ export class AuthRoutes {
   constructor(
     private provider: AuthProvider,
     private middleware: AuthMiddleware,
-    options: AuthRoutesOptions = {},
+    options: AuthRoutesOptions = {}
   ) {
     // null → explicitly disabled; undefined → default limiter
     if (options.rateLimiter === null) {
       this.rateLimiter = null;
     } else {
-      this.rateLimiter = options.rateLimiter
-        ?? new RateLimiter(DEFAULT_AUTH_RATE_LIMIT);
+      this.rateLimiter = options.rateLimiter ??
+        new RateLimiter(DEFAULT_AUTH_RATE_LIMIT);
     }
     this.trustProxy = options.trustProxy ?? false;
   }
@@ -175,21 +179,23 @@ export class AuthRoutes {
    * or null when the request is allowed to proceed.
    */
   private checkRateLimit(request: Request): Response | null {
-    if (!this.rateLimiter) return null;
+    if (!this.rateLimiter)
+      return null;
     const ip = extractClientIp(request, this.trustProxy);
-    if (this.rateLimiter.allow(ip)) return null;
+    if (this.rateLimiter.allow(ip))
+      return null;
     return new Response(
       JSON.stringify({
         error: "Too many requests",
-        code: "RATE_LIMIT_EXCEEDED",
+        code: "RATE_LIMIT_EXCEEDED"
       }),
       {
         status: 429,
         headers: {
           "Content-Type": "application/json",
-          "Retry-After": "60",
-        },
-      },
+          "Retry-After": "60"
+        }
+      }
     );
   }
 
@@ -206,10 +212,11 @@ export class AuthRoutes {
    */
   private async checkCaptcha(
     request: Request,
-    endpoint: CaptchaEndpoint,
+    endpoint: CaptchaEndpoint
   ): Promise<Response | null> {
     const verifier = this.provider.captchaVerifier;
-    if (!verifier.isGated(endpoint)) return null;
+    if (!verifier.isGated(endpoint))
+      return null;
 
     let token: unknown;
     try {
@@ -224,12 +231,12 @@ export class AuthRoutes {
       return new Response(
         JSON.stringify({
           error: "Captcha required",
-          code: "CAPTCHA_REQUIRED",
+          code: "CAPTCHA_REQUIRED"
         }),
         {
           status: 400,
-          headers: { "Content-Type": "application/json" },
-        },
+          headers: { "Content-Type": "application/json" }
+        }
       );
     }
 
@@ -238,17 +245,17 @@ export class AuthRoutes {
     if (!result.success) {
       log.warn("captcha verification failed", {
         endpoint,
-        errorCodes: result.errorCodes,
+        errorCodes: result.errorCodes
       });
       return new Response(
         JSON.stringify({
           error: "Captcha verification failed",
-          code: "CAPTCHA_FAILED",
+          code: "CAPTCHA_FAILED"
         }),
         {
           status: 403,
-          headers: { "Content-Type": "application/json" },
-        },
+          headers: { "Content-Type": "application/json" }
+        }
       );
     }
     return null;
@@ -267,9 +274,11 @@ export class AuthRoutes {
   register(): (request: Request) => Promise<Response> {
     return async (request: Request) => {
       const limited = this.checkRateLimit(request);
-      if (limited) return limited;
+      if (limited)
+        return limited;
       const captchaCheck = await this.checkCaptcha(request, "register");
-      if (captchaCheck) return captchaCheck;
+      if (captchaCheck)
+        return captchaCheck;
       try {
         const body = await request.json();
         const data: RegisterData = {
@@ -277,14 +286,14 @@ export class AuthRoutes {
           password: body.password,
           username: body.username,
           metadata: body.metadata,
-          meta: extractRequestMeta(request, this.trustProxy),
+          meta: extractRequestMeta(request, this.trustProxy)
         };
 
         const response = await this.provider.register(data);
 
         return new Response(JSON.stringify(response), {
           status: 201,
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json" }
         });
       } catch (error) {
         return this.handleError(error);
@@ -298,23 +307,25 @@ export class AuthRoutes {
   login(): (request: Request) => Promise<Response> {
     return async (request: Request) => {
       const limited = this.checkRateLimit(request);
-      if (limited) return limited;
+      if (limited)
+        return limited;
       const captchaCheck = await this.checkCaptcha(request, "login");
-      if (captchaCheck) return captchaCheck;
+      if (captchaCheck)
+        return captchaCheck;
       try {
         const body = await request.json();
         const credentials: LoginCredentials = {
           email: body.email,
           username: body.username,
           password: body.password,
-          meta: extractRequestMeta(request, this.trustProxy),
+          meta: extractRequestMeta(request, this.trustProxy)
         };
 
         const response = await this.provider.login(credentials);
 
         return new Response(JSON.stringify(response), {
           status: 200,
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json" }
         });
       } catch (error) {
         return this.handleError(error);
@@ -349,12 +360,12 @@ export class AuthRoutes {
             return new Response(
               JSON.stringify({
                 error: "sessionId is required",
-                code: "MISSING_SESSION_ID",
+                code: "MISSING_SESSION_ID"
               }),
               {
                 status: 400,
-                headers: { "Content-Type": "application/json" },
-              },
+                headers: { "Content-Type": "application/json" }
+              }
             );
           }
 
@@ -362,12 +373,12 @@ export class AuthRoutes {
 
           return new Response(JSON.stringify({ success: true }), {
             status: 200,
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json" }
           });
         } catch (error) {
           return this.handleError(error);
         }
-      },
+      }
     );
   }
 
@@ -385,19 +396,19 @@ export class AuthRoutes {
             JSON.stringify({ error: "Refresh token required" }),
             {
               status: 400,
-              headers: { "Content-Type": "application/json" },
-            },
+              headers: { "Content-Type": "application/json" }
+            }
           );
         }
 
         const response = await this.provider.refresh(
           refreshToken,
-          extractRequestMeta(request, this.trustProxy),
+          extractRequestMeta(request, this.trustProxy)
         );
 
         return new Response(JSON.stringify(response), {
           status: 200,
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json" }
         });
       } catch (error) {
         return this.handleError(error);
@@ -419,8 +430,8 @@ export class AuthRoutes {
               JSON.stringify({ error: "User not found" }),
               {
                 status: 404,
-                headers: { "Content-Type": "application/json" },
-              },
+                headers: { "Content-Type": "application/json" }
+              }
             );
           }
 
@@ -429,12 +440,12 @@ export class AuthRoutes {
 
           return new Response(JSON.stringify(safeUser), {
             status: 200,
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json" }
           });
         } catch (error) {
           return this.handleError(error);
         }
-      },
+      }
     );
   }
 
@@ -451,29 +462,29 @@ export class AuthRoutes {
           if (!old_password || !new_password) {
             return new Response(
               JSON.stringify({
-                error: "Both old and new passwords are required",
+                error: "Both old and new passwords are required"
               }),
               {
                 status: 400,
-                headers: { "Content-Type": "application/json" },
-              },
+                headers: { "Content-Type": "application/json" }
+              }
             );
           }
 
           await this.provider.updatePassword(
             context!.userId,
             old_password,
-            new_password,
+            new_password
           );
 
           return new Response(JSON.stringify({ success: true }), {
             status: 200,
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json" }
           });
         } catch (error) {
           return this.handleError(error);
         }
-      },
+      }
     );
   }
 
@@ -483,9 +494,11 @@ export class AuthRoutes {
   resetPasswordRequest(): (request: Request) => Promise<Response> {
     return async (request: Request) => {
       const limited = this.checkRateLimit(request);
-      if (limited) return limited;
+      if (limited)
+        return limited;
       const captchaCheck = await this.checkCaptcha(request, "passwordReset");
-      if (captchaCheck) return captchaCheck;
+      if (captchaCheck)
+        return captchaCheck;
       try {
         const body = await request.json();
         const { email } = body;
@@ -495,8 +508,8 @@ export class AuthRoutes {
             JSON.stringify({ error: "Email is required" }),
             {
               status: 400,
-              headers: { "Content-Type": "application/json" },
-            },
+              headers: { "Content-Type": "application/json" }
+            }
           );
         }
 
@@ -507,12 +520,12 @@ export class AuthRoutes {
         return new Response(
           JSON.stringify({
             success: true,
-            message: "Password reset email sent",
+            message: "Password reset email sent"
           }),
           {
             status: 200,
-            headers: { "Content-Type": "application/json" },
-          },
+            headers: { "Content-Type": "application/json" }
+          }
         );
       } catch (error) {
         return this.handleError(error);
@@ -526,7 +539,8 @@ export class AuthRoutes {
   resetPassword(): (request: Request) => Promise<Response> {
     return async (request: Request) => {
       const limited = this.checkRateLimit(request);
-      if (limited) return limited;
+      if (limited)
+        return limited;
       try {
         const body = await request.json();
         const { reset_token, new_password } = body;
@@ -534,12 +548,12 @@ export class AuthRoutes {
         if (!reset_token || !new_password) {
           return new Response(
             JSON.stringify({
-              error: "Reset token and new password are required",
+              error: "Reset token and new password are required"
             }),
             {
               status: 400,
-              headers: { "Content-Type": "application/json" },
-            },
+              headers: { "Content-Type": "application/json" }
+            }
           );
         }
 
@@ -547,7 +561,7 @@ export class AuthRoutes {
 
         return new Response(JSON.stringify({ success: true }), {
           status: 200,
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json" }
         });
       } catch (error) {
         return this.handleError(error);
@@ -567,16 +581,16 @@ export class AuthRoutes {
       async (_request: Request, context?: AuthContext) => {
         try {
           const opts = await this.provider.beginWebAuthnRegistration(
-            context!.userId,
+            context!.userId
           );
           return new Response(JSON.stringify(opts), {
             status: 200,
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json" }
           });
         } catch (error) {
           return this.handleError(error);
         }
-      },
+      }
     );
   }
 
@@ -593,12 +607,12 @@ export class AuthRoutes {
           const result = await this.provider.finishWebAuthnRegistration(body);
           return new Response(JSON.stringify(result), {
             status: 200,
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json" }
           });
         } catch (error) {
           return this.handleError(error);
         }
-      },
+      }
     );
   }
 
@@ -610,15 +624,16 @@ export class AuthRoutes {
   beginWebAuthnLogin(): (request: Request) => Promise<Response> {
     return async (request: Request) => {
       const limited = this.checkRateLimit(request);
-      if (limited) return limited;
+      if (limited)
+        return limited;
       try {
         const body = await request.clone().json().catch(() => ({}));
         const opts = await this.provider.beginWebAuthnLogin(
-          body.email ? String(body.email) : undefined,
+          body.email ? String(body.email) : undefined
         );
         return new Response(JSON.stringify(opts), {
           status: 200,
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json" }
         });
       } catch (error) {
         return this.handleError(error);
@@ -634,16 +649,17 @@ export class AuthRoutes {
   finishWebAuthnLogin(): (request: Request) => Promise<Response> {
     return async (request: Request) => {
       const limited = this.checkRateLimit(request);
-      if (limited) return limited;
+      if (limited)
+        return limited;
       try {
         const body = await request.json();
         const result = await this.provider.finishWebAuthnLogin(
           body,
-          extractRequestMeta(request, this.trustProxy),
+          extractRequestMeta(request, this.trustProxy)
         );
         return new Response(JSON.stringify(result), {
           status: 200,
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json" }
         });
       } catch (error) {
         return this.handleError(error);
@@ -657,16 +673,16 @@ export class AuthRoutes {
       async (_request: Request, context?: AuthContext) => {
         try {
           const list = await this.provider.listWebAuthnCredentials(
-            context!.userId,
+            context!.userId
           );
           return new Response(JSON.stringify({ credentials: list }), {
             status: 200,
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json" }
           });
         } catch (error) {
           return this.handleError(error);
         }
-      },
+      }
     );
   }
 
@@ -680,26 +696,26 @@ export class AuthRoutes {
             return new Response(
               JSON.stringify({
                 error: "credentialId is required",
-                code: "MISSING_CREDENTIAL_ID",
+                code: "MISSING_CREDENTIAL_ID"
               }),
               {
                 status: 400,
-                headers: { "Content-Type": "application/json" },
-              },
+                headers: { "Content-Type": "application/json" }
+              }
             );
           }
           await this.provider.deleteWebAuthnCredential(
             context!.userId,
-            String(body.credentialId),
+            String(body.credentialId)
           );
           return new Response(JSON.stringify({ success: true }), {
             status: 200,
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json" }
           });
         } catch (error) {
           return this.handleError(error);
         }
-      },
+      }
     );
   }
 
@@ -719,22 +735,22 @@ export class AuthRoutes {
           const count = typeof body.count === "number" ? body.count : undefined;
           const codes = await this.provider.generateRecoveryCodes(
             context!.userId,
-            count,
+            count
           );
           const remaining = await this.provider.recoveryCodesRemaining(
-            context!.userId,
+            context!.userId
           );
           return new Response(
             JSON.stringify({ codes, remaining }),
             {
               status: 200,
-              headers: { "Content-Type": "application/json" },
-            },
+              headers: { "Content-Type": "application/json" }
+            }
           );
         } catch (error) {
           return this.handleError(error);
         }
-      },
+      }
     );
   }
 
@@ -747,29 +763,30 @@ export class AuthRoutes {
   loginWithRecoveryCode(): (request: Request) => Promise<Response> {
     return async (request: Request) => {
       const limited = this.checkRateLimit(request);
-      if (limited) return limited;
+      if (limited)
+        return limited;
       try {
         const body = await request.json();
         if (!body.challengeToken || !body.code) {
           return new Response(
             JSON.stringify({
               error: "challengeToken and code are required",
-              code: "MISSING_CREDENTIALS",
+              code: "MISSING_CREDENTIALS"
             }),
             {
               status: 400,
-              headers: { "Content-Type": "application/json" },
-            },
+              headers: { "Content-Type": "application/json" }
+            }
           );
         }
         const response = await this.provider.loginWithRecoveryCode(
           String(body.challengeToken),
           String(body.code),
-          extractRequestMeta(request, this.trustProxy),
+          extractRequestMeta(request, this.trustProxy)
         );
         return new Response(JSON.stringify(response), {
           status: 200,
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json" }
         });
       } catch (error) {
         return this.handleError(error);
@@ -792,26 +809,28 @@ export class AuthRoutes {
   requestMagicLink(): (request: Request) => Promise<Response> {
     return async (request: Request) => {
       const limited = this.checkRateLimit(request);
-      if (limited) return limited;
+      if (limited)
+        return limited;
       const captchaCheck = await this.checkCaptcha(request, "magicLink");
-      if (captchaCheck) return captchaCheck;
+      if (captchaCheck)
+        return captchaCheck;
       try {
         const body = await request.json();
         if (!body.email) {
           return new Response(
             JSON.stringify({
               error: "email is required",
-              code: "MISSING_EMAIL",
+              code: "MISSING_EMAIL"
             }),
             {
               status: 400,
-              headers: { "Content-Type": "application/json" },
-            },
+              headers: { "Content-Type": "application/json" }
+            }
           );
         }
         const token = await this.provider.requestMagicLink(
           String(body.email),
-          extractRequestMeta(request, this.trustProxy),
+          extractRequestMeta(request, this.trustProxy)
         );
         // The HTTP response body intentionally returns the token — it's
         // the same pattern reset/verify use today, and lets local-dev
@@ -821,8 +840,8 @@ export class AuthRoutes {
           JSON.stringify({ success: true, magicLinkToken: token }),
           {
             status: 200,
-            headers: { "Content-Type": "application/json" },
-          },
+            headers: { "Content-Type": "application/json" }
+          }
         );
       } catch (error) {
         return this.handleError(error);
@@ -839,28 +858,29 @@ export class AuthRoutes {
   consumeMagicLink(): (request: Request) => Promise<Response> {
     return async (request: Request) => {
       const limited = this.checkRateLimit(request);
-      if (limited) return limited;
+      if (limited)
+        return limited;
       try {
         const body = await request.json();
         if (!body.token) {
           return new Response(
             JSON.stringify({
               error: "token is required",
-              code: "MISSING_TOKEN",
+              code: "MISSING_TOKEN"
             }),
             {
               status: 400,
-              headers: { "Content-Type": "application/json" },
-            },
+              headers: { "Content-Type": "application/json" }
+            }
           );
         }
         const result = await this.provider.consumeMagicLink(
           String(body.token),
-          extractRequestMeta(request, this.trustProxy),
+          extractRequestMeta(request, this.trustProxy)
         );
         return new Response(JSON.stringify(result), {
           status: 200,
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json" }
         });
       } catch (error) {
         return this.handleError(error);
@@ -883,33 +903,35 @@ export class AuthRoutes {
   requestMagicCode(): (request: Request) => Promise<Response> {
     return async (request: Request) => {
       const limited = this.checkRateLimit(request);
-      if (limited) return limited;
+      if (limited)
+        return limited;
       const captchaCheck = await this.checkCaptcha(request, "magicCode");
-      if (captchaCheck) return captchaCheck;
+      if (captchaCheck)
+        return captchaCheck;
       try {
         const body = await request.json();
         if (!body.email) {
           return new Response(
             JSON.stringify({
               error: "email is required",
-              code: "MISSING_EMAIL",
+              code: "MISSING_EMAIL"
             }),
             {
               status: 400,
-              headers: { "Content-Type": "application/json" },
-            },
+              headers: { "Content-Type": "application/json" }
+            }
           );
         }
         const code = await this.provider.requestMagicCode(
           String(body.email),
-          extractRequestMeta(request, this.trustProxy),
+          extractRequestMeta(request, this.trustProxy)
         );
         return new Response(
           JSON.stringify({ success: true, magicCode: code }),
           {
             status: 200,
-            headers: { "Content-Type": "application/json" },
-          },
+            headers: { "Content-Type": "application/json" }
+          }
         );
       } catch (error) {
         return this.handleError(error);
@@ -927,29 +949,30 @@ export class AuthRoutes {
   verifyMagicCode(): (request: Request) => Promise<Response> {
     return async (request: Request) => {
       const limited = this.checkRateLimit(request);
-      if (limited) return limited;
+      if (limited)
+        return limited;
       try {
         const body = await request.json();
         if (!body.email || !body.code) {
           return new Response(
             JSON.stringify({
               error: "email and code are required",
-              code: "MISSING_CREDENTIALS",
+              code: "MISSING_CREDENTIALS"
             }),
             {
               status: 400,
-              headers: { "Content-Type": "application/json" },
-            },
+              headers: { "Content-Type": "application/json" }
+            }
           );
         }
         const result = await this.provider.verifyMagicCode(
           String(body.email),
           String(body.code),
-          extractRequestMeta(request, this.trustProxy),
+          extractRequestMeta(request, this.trustProxy)
         );
         return new Response(JSON.stringify(result), {
           status: 200,
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json" }
         });
       } catch (error) {
         return this.handleError(error);
@@ -972,12 +995,12 @@ export class AuthRoutes {
           const enrollment = await this.provider.enrollTOTP(context!.userId);
           return new Response(JSON.stringify(enrollment), {
             status: 200,
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json" }
           });
         } catch (error) {
           return this.handleError(error);
         }
-      },
+      }
     );
   }
 
@@ -996,19 +1019,19 @@ export class AuthRoutes {
               JSON.stringify({ error: "code is required", code: "MISSING_CODE" }),
               {
                 status: 400,
-                headers: { "Content-Type": "application/json" },
-              },
+                headers: { "Content-Type": "application/json" }
+              }
             );
           }
           await this.provider.confirmTOTP(context!.userId, String(body.code));
           return new Response(JSON.stringify({ success: true }), {
             status: 200,
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json" }
           });
         } catch (error) {
           return this.handleError(error);
         }
-      },
+      }
     );
   }
 
@@ -1024,12 +1047,12 @@ export class AuthRoutes {
           await this.provider.disableTOTP(context!.userId);
           return new Response(JSON.stringify({ success: true }), {
             status: 200,
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json" }
           });
         } catch (error) {
           return this.handleError(error);
         }
-      },
+      }
     );
   }
 
@@ -1042,29 +1065,30 @@ export class AuthRoutes {
   loginWithTOTP(): (request: Request) => Promise<Response> {
     return async (request: Request) => {
       const limited = this.checkRateLimit(request);
-      if (limited) return limited;
+      if (limited)
+        return limited;
       try {
         const body = await request.json();
         if (!body.challengeToken || !body.code) {
           return new Response(
             JSON.stringify({
               error: "challengeToken and code are required",
-              code: "MISSING_CREDENTIALS",
+              code: "MISSING_CREDENTIALS"
             }),
             {
               status: 400,
-              headers: { "Content-Type": "application/json" },
-            },
+              headers: { "Content-Type": "application/json" }
+            }
           );
         }
         const response = await this.provider.loginWithTOTP(
           String(body.challengeToken),
           String(body.code),
-          extractRequestMeta(request, this.trustProxy),
+          extractRequestMeta(request, this.trustProxy)
         );
         return new Response(JSON.stringify(response), {
           status: 200,
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json" }
         });
       } catch (error) {
         return this.handleError(error);
@@ -1082,14 +1106,15 @@ export class AuthRoutes {
   loginAnonymous(): (request: Request) => Promise<Response> {
     return async (request: Request) => {
       const limited = this.checkRateLimit(request);
-      if (limited) return limited;
+      if (limited)
+        return limited;
       try {
         const response = await this.provider.loginAnonymous(
-          extractRequestMeta(request, this.trustProxy),
+          extractRequestMeta(request, this.trustProxy)
         );
         return new Response(JSON.stringify(response), {
           status: 201,
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json" }
         });
       } catch (error) {
         return this.handleError(error);
@@ -1107,7 +1132,8 @@ export class AuthRoutes {
     return this.middleware.requireAuth(
       async (request: Request, context?: AuthContext) => {
         const limited = this.checkRateLimit(request);
-        if (limited) return limited;
+        if (limited)
+          return limited;
         try {
           const body = await request.json();
           const data: RegisterData = {
@@ -1115,32 +1141,32 @@ export class AuthRoutes {
             password: body.password,
             username: body.username,
             metadata: body.metadata,
-            meta: extractRequestMeta(request, this.trustProxy),
+            meta: extractRequestMeta(request, this.trustProxy)
           };
           if (!data.email || !data.password) {
             return new Response(
               JSON.stringify({
                 error: "email and password are required",
-                code: "MISSING_CREDENTIALS",
+                code: "MISSING_CREDENTIALS"
               }),
               {
                 status: 400,
-                headers: { "Content-Type": "application/json" },
-              },
+                headers: { "Content-Type": "application/json" }
+              }
             );
           }
           const response = await this.provider.upgradeAnonymous(
             context!.userId,
-            data,
+            data
           );
           return new Response(JSON.stringify(response), {
             status: 200,
-            headers: { "Content-Type": "application/json" },
+            headers: { "Content-Type": "application/json" }
           });
         } catch (error) {
           return this.handleError(error);
         }
-      },
+      }
     );
   }
 
@@ -1158,8 +1184,8 @@ export class AuthRoutes {
             JSON.stringify({ error: "Verification token is required" }),
             {
               status: 400,
-              headers: { "Content-Type": "application/json" },
-            },
+              headers: { "Content-Type": "application/json" }
+            }
           );
         }
 
@@ -1167,7 +1193,7 @@ export class AuthRoutes {
 
         return new Response(JSON.stringify({ success: true }), {
           status: 200,
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json" }
         });
       } catch (error) {
         return this.handleError(error);
@@ -1177,15 +1203,15 @@ export class AuthRoutes {
 
   private handleError(error: unknown): Response {
     log.error("Auth route error", {
-      error: error instanceof Error ? error.message : String(error),
+      error: error instanceof Error ? error.message : String(error)
     });
 
     // Check for AuthError shape using type narrowing
     if (
-      error !== null
-      && typeof error === "object"
-      && "name" in error
-      && (error as { name: unknown; }).name === "AuthError"
+      error !== null &&
+      typeof error === "object" &&
+      "name" in error &&
+      (error as { name: unknown; }).name === "AuthError"
     ) {
       const authErr = error as unknown as {
         code: string;
@@ -1195,12 +1221,12 @@ export class AuthRoutes {
       return new Response(
         JSON.stringify({
           error: authErr.message,
-          code: authErr.code,
+          code: authErr.code
         }),
         {
           status: authErr.status_code,
-          headers: { "Content-Type": "application/json" },
-        },
+          headers: { "Content-Type": "application/json" }
+        }
       );
     }
 
@@ -1208,8 +1234,8 @@ export class AuthRoutes {
       JSON.stringify({ error: "Internal server error" }),
       {
         status: 500,
-        headers: { "Content-Type": "application/json" },
-      },
+        headers: { "Content-Type": "application/json" }
+      }
     );
   }
 }
@@ -1219,7 +1245,7 @@ export class AuthRoutes {
  */
 export async function initializeAuth(
   config: AuthConfig,
-  db: DatabaseConnection,
+  db: DatabaseConnection
 ): Promise<AuthIntegration> {
   const provider = new AuthProvider(config, db);
   await provider.initialize();
@@ -1230,6 +1256,6 @@ export async function initializeAuth(
   return {
     provider,
     middleware,
-    routes,
+    routes
   };
 }

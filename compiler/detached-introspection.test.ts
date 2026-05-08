@@ -21,9 +21,9 @@ Deno.test("Compiler - Detached compiles inner expression", () => {
       expr: {
         kind: "Literal" as const,
         type: "string" as const,
-        value: "hello",
-      },
-    },
+        value: "hello"
+      }
+    }
   };
 
   const result = compiler.compile(ast);
@@ -43,9 +43,9 @@ Deno.test("Compiler - Introspection throws CompilationError", () => {
       kind: "Introspection" as const,
       type: {
         kind: "TypeName" as const,
-        name: { kind: "QualifiedName" as const, parts: ["User"] },
-      },
-    },
+        name: { kind: "QualifiedName" as const, parts: ["User"] }
+      }
+    }
   };
 
   const result = compiler.compile(ast);
@@ -65,9 +65,9 @@ Deno.test("Compiler - Introspection error includes type name", () => {
       kind: "Introspection" as const,
       type: {
         kind: "TypeName" as const,
-        name: { kind: "QualifiedName" as const, parts: ["default", "Post"] },
-      },
-    },
+        name: { kind: "QualifiedName" as const, parts: ["default", "Post"] }
+      }
+    }
   };
 
   const result = compiler.compile(ast);
@@ -75,11 +75,11 @@ Deno.test("Compiler - Introspection error includes type name", () => {
   if (!result.ok) {
     assertEquals(
       result.error.message.includes("INTROSPECT default::Post"),
-      true,
+      true
     );
     assertEquals(
       result.error.message.includes("schema reflection catalog"),
-      true,
+      true
     );
   }
 });
@@ -96,9 +96,9 @@ Deno.test("Compiler - Detached isolates scope", () => {
       expr: {
         kind: "Literal" as const,
         type: "integer" as const,
-        value: 42,
-      },
-    },
+        value: 42
+      }
+    }
   };
 
   const result = compiler.compile(ast);
@@ -119,15 +119,15 @@ Deno.test("Compiler - Detached with nested binary expression", () => {
         left: {
           kind: "Literal" as const,
           type: "integer" as const,
-          value: 1,
+          value: 1
         },
         right: {
           kind: "Literal" as const,
           type: "integer" as const,
-          value: 2,
-        },
-      },
-    },
+          value: 2
+        }
+      }
+    }
   };
 
   const result = compiler.compile(ast);

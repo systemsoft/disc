@@ -19,7 +19,7 @@ export class ProtocolParser {
    */
   append(data: Uint8Array): void {
     const newBuffer = new Uint8Array(
-      this.buffer.length - this.offset + data.length,
+      this.buffer.length - this.offset + data.length
     );
     newBuffer.set(this.buffer.subarray(this.offset));
     newBuffer.set(data, this.buffer.length - this.offset);
@@ -37,7 +37,7 @@ export class ProtocolParser {
 
     const view = new DataView(
       this.buffer.buffer,
-      this.buffer.byteOffset + this.offset,
+      this.buffer.byteOffset + this.offset
     );
     const messageLength = view.getUint32(1, false); // Big-endian
     return this.buffer.length - this.offset >= messageLength + 1;
@@ -54,13 +54,13 @@ export class ProtocolParser {
     const messageType = this.buffer[this.offset];
     const view = new DataView(
       this.buffer.buffer,
-      this.buffer.byteOffset + this.offset,
+      this.buffer.byteOffset + this.offset
     );
     const messageLength = view.getUint32(1, false);
 
     const messageData = this.buffer.subarray(
       this.offset + 5,
-      this.offset + messageLength + 1,
+      this.offset + messageLength + 1
     );
     const reader = new MessageReader(messageData);
 
@@ -88,7 +88,7 @@ export class ProtocolParser {
       case Types.MessageType.AuthenticationSASLInitialResponse:
         message = this.parseAuthenticationSASLInitialResponse(
           reader,
-          messageLength,
+          messageLength
         );
         break;
       case Types.MessageType.AuthenticationSASLResponse:
@@ -128,7 +128,7 @@ export class ProtocolParser {
 
   private parseClientHandshake(
     reader: MessageReader,
-    length: number,
+    length: number
   ): Types.ClientHandshake {
     const majorVersion = reader.readUInt16();
     const minorVersion = reader.readUInt16();
@@ -163,13 +163,13 @@ export class ProtocolParser {
       majorVersion,
       minorVersion,
       extensions,
-      parameters,
+      parameters
     };
   }
 
   private parseServerHandshake(
     reader: MessageReader,
-    length: number,
+    length: number
   ): Types.ServerHandshake {
     const majorVersion = reader.readUInt16();
     const minorVersion = reader.readUInt16();
@@ -195,25 +195,25 @@ export class ProtocolParser {
       length,
       majorVersion,
       minorVersion,
-      extensions,
+      extensions
     };
   }
 
   private parseAuthenticationOK(
     reader: MessageReader,
-    length: number,
+    length: number
   ): Types.AuthenticationOK {
     const authStatus = reader.readUInt32();
     return {
       type: Types.MessageType.AuthenticationOK,
       length,
-      authStatus,
+      authStatus
     };
   }
 
   private parseAuthenticationSASL(
     reader: MessageReader,
-    length: number,
+    length: number
   ): Types.AuthenticationSASL {
     const authStatus = reader.readUInt32();
     const numMechanisms = reader.readUInt32();
@@ -227,13 +227,13 @@ export class ProtocolParser {
       type: Types.MessageType.AuthenticationSASL,
       length,
       authStatus,
-      mechanisms,
+      mechanisms
     };
   }
 
   private parseAuthenticationSASLContinue(
     reader: MessageReader,
-    length: number,
+    length: number
   ): Types.AuthenticationSASLContinue {
     const authStatus = reader.readUInt32();
     const saslData = reader.readBytes();
@@ -242,13 +242,13 @@ export class ProtocolParser {
       type: Types.MessageType.AuthenticationSASLContinue,
       length,
       authStatus,
-      saslData,
+      saslData
     };
   }
 
   private parseAuthenticationSASLFinal(
     reader: MessageReader,
-    length: number,
+    length: number
   ): Types.AuthenticationSASLFinal {
     const authStatus = reader.readUInt32();
     const saslData = reader.readBytes();
@@ -257,13 +257,13 @@ export class ProtocolParser {
       type: Types.MessageType.AuthenticationSASLFinal,
       length,
       authStatus,
-      saslData,
+      saslData
     };
   }
 
   private parseAuthenticationSASLInitialResponse(
     reader: MessageReader,
-    length: number,
+    length: number
   ): Types.AuthenticationSASLInitialResponse {
     const mechanism = reader.readString();
     const initialResponse = reader.readBytes();
@@ -272,26 +272,26 @@ export class ProtocolParser {
       type: Types.MessageType.AuthenticationSASLInitialResponse,
       length,
       mechanism,
-      initialResponse,
+      initialResponse
     };
   }
 
   private parseAuthenticationSASLResponse(
     reader: MessageReader,
-    length: number,
+    length: number
   ): Types.AuthenticationSASLResponse {
     const response = reader.readBytes();
 
     return {
       type: Types.MessageType.AuthenticationSASLResponse,
       length,
-      response,
+      response
     };
   }
 
   private parseParseMessage(
     reader: MessageReader,
-    length: number,
+    length: number
   ): Types.ParseMessage {
     const numAnnotations = reader.readUInt16();
     const annotations: Types.Annotation[] = [];
@@ -320,13 +320,13 @@ export class ProtocolParser {
       inputLanguage,
       outputFormat,
       expectedCardinality,
-      commandText,
+      commandText
     };
   }
 
   private parseExecuteMessage(
     reader: MessageReader,
-    length: number,
+    length: number
   ): Types.ExecuteMessage {
     const numAnnotations = reader.readUInt16();
     const annotations: Types.Annotation[] = [];
@@ -365,13 +365,13 @@ export class ProtocolParser {
       encodedStateData,
       argumentDataDescriptorId,
       argumentData,
-      outputDataDescriptorId,
+      outputDataDescriptorId
     };
   }
 
   private parseCommandComplete(
     reader: MessageReader,
-    length: number,
+    length: number
   ): Types.CommandComplete {
     const numAnnotations = reader.readUInt16();
     const annotations: Types.Annotation[] = [];
@@ -394,13 +394,13 @@ export class ProtocolParser {
       capabilities,
       commandStatus,
       stateTypeDescriptorId,
-      encodedStateData,
+      encodedStateData
     };
   }
 
   private parseDataMessage(
     reader: MessageReader,
-    length: number,
+    length: number
   ): Types.DataMessage {
     const numElements = reader.readUInt16();
     const dataElements: Types.DataElement[] = [];
@@ -413,13 +413,13 @@ export class ProtocolParser {
     return {
       type: Types.MessageType.Data,
       length,
-      dataElements,
+      dataElements
     };
   }
 
   private parseErrorResponse(
     reader: MessageReader,
-    length: number,
+    length: number
   ): Types.ErrorResponse {
     const severity = reader.readUInt8() as Types.ErrorSeverity;
     const errorCode = reader.readUInt32();
@@ -439,13 +439,13 @@ export class ProtocolParser {
       severity,
       errorCode,
       message,
-      attributes,
+      attributes
     };
   }
 
   private parseReadyForCommand(
     reader: MessageReader,
-    length: number,
+    length: number
   ): Types.ReadyForCommand {
     const transactionState = reader.readUInt8() as Types.TransactionState;
     const numAnnotations = reader.readUInt16();
@@ -461,7 +461,7 @@ export class ProtocolParser {
       type: Types.MessageType.ReadyForCommand,
       length,
       transactionState,
-      annotations,
+      annotations
     };
   }
 }

@@ -172,7 +172,7 @@ export class DiscAPIClient {
   /** Build request headers, injecting Authorization when a token is set. */
   private get headers(): HeadersInit {
     const h: Record<string, string> = {
-      "Content-Type": "application/json",
+      "Content-Type": "application/json"
     };
     if (this.authToken) {
       h["Authorization"] = `Bearer ${this.authToken}`;
@@ -183,15 +183,16 @@ export class DiscAPIClient {
   /** POST /auth/login — exchange credentials for a JWT and persist it. */
   async login(
     email: string,
-    password: string,
+    password: string
   ): Promise<{ token: string; refreshToken?: string; } | null> {
     try {
       const res = await fetch(`${this.baseUrl}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password })
       });
-      if (!res.ok) return null;
+      if (!res.ok)
+        return null;
       const body = await res.json() as {
         token: string;
         refreshToken?: string;
@@ -214,22 +215,22 @@ export class DiscAPIClient {
   /** Execute an EdgeQL query. Wraps the raw QueryResponse into a UI-shaped result. */
   async executeQuery(
     query: string,
-    variables?: Record<string, any>,
+    variables?: Record<string, any>
   ): Promise<QueryResult> {
     const startedAt = performance.now();
     try {
       const response = await fetch(`${this.baseUrl}/query`, {
         method: "POST",
         headers: this.headers,
-        body: JSON.stringify({ query, variables }),
+        body: JSON.stringify({ query, variables })
       });
 
       const body = await response.json() as QueryResponse;
       const durationMs = performance.now() - startedAt;
 
       if (!response.ok || (body.errors && body.errors.length > 0)) {
-        const message = body.errors?.[0]?.message ?? response.statusText
-          ?? `Query failed (HTTP ${response.status})`;
+        const message = body.errors?.[0]?.message ?? response.statusText ??
+          `Query failed (HTTP ${response.status})`;
         return { data: null, durationMs, error: message };
       }
 
@@ -238,7 +239,7 @@ export class DiscAPIClient {
       return {
         data: null,
         durationMs: performance.now() - startedAt,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "Unknown error"
       };
     }
   }
@@ -248,9 +249,10 @@ export class DiscAPIClient {
     const empty: SchemaDescription = { functions: [], modules: [], types: [] };
     try {
       const response = await fetch(`${this.baseUrl}/schema`, {
-        headers: this.headers,
+        headers: this.headers
       });
-      if (!response.ok) return empty;
+      if (!response.ok)
+        return empty;
       return await response.json() as SchemaDescription;
     } catch (error) {
       // deno-lint-ignore no-console
@@ -264,9 +266,10 @@ export class DiscAPIClient {
     try {
       const response = await fetch(
         `${this.baseUrl}/schema/types/${encodeURIComponent(typeName)}`,
-        { headers: this.headers },
+        { headers: this.headers }
       );
-      if (!response.ok) return null;
+      if (!response.ok)
+        return null;
       return await response.json() as SchemaTypeDescription;
     } catch (error) {
       // deno-lint-ignore no-console
@@ -279,9 +282,10 @@ export class DiscAPIClient {
   async getHealth(): Promise<ServerHealth | null> {
     try {
       const response = await fetch(`${this.baseUrl}/health`, {
-        headers: this.headers,
+        headers: this.headers
       });
-      if (!response.ok) return null;
+      if (!response.ok)
+        return null;
       return await response.json() as ServerHealth;
     } catch {
       return null;
@@ -292,9 +296,10 @@ export class DiscAPIClient {
   async getMigrations(): Promise<MigrationHistoryEntry[]> {
     try {
       const response = await fetch(`${this.baseUrl}/migrations`, {
-        headers: this.headers,
+        headers: this.headers
       });
-      if (!response.ok) return [];
+      if (!response.ok)
+        return [];
       const body = await response.json() as MigrationsResponse;
       return body.migrations ?? [];
     } catch (error) {
@@ -313,9 +318,10 @@ export class DiscAPIClient {
   async getConfig(): Promise<ConfigKeyDef[]> {
     try {
       const response = await fetch(`${this.baseUrl}/config`, {
-        headers: this.headers,
+        headers: this.headers
       });
-      if (!response.ok) return [];
+      if (!response.ok)
+        return [];
       const body = await response.json() as ConfigResponse;
       return body.keys ?? [];
     } catch (error) {
@@ -329,9 +335,10 @@ export class DiscAPIClient {
   async getStats(): Promise<ServerStats | null> {
     try {
       const response = await fetch(`${this.baseUrl}/stats`, {
-        headers: this.headers,
+        headers: this.headers
       });
-      if (!response.ok) return null;
+      if (!response.ok)
+        return null;
       return await response.json() as ServerStats;
     } catch {
       return null;

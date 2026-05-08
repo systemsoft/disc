@@ -19,7 +19,7 @@ function makeProvider(): OAuthProviderConfig {
     name: "test",
     scopes: ["openid", "email", "profile"],
     tokenUrl: "https://example.com/token",
-    userInfoUrl: "https://example.com/userinfo",
+    userInfoUrl: "https://example.com/userinfo"
   };
 }
 
@@ -35,8 +35,8 @@ function withMockFetch(payload: unknown, fn: () => Promise<void>) {
     return Promise.resolve(
       new Response(JSON.stringify(payload), {
         headers: { "Content-Type": "application/json" },
-        status: 200,
-      }),
+        status: 200
+      })
     );
   }) as typeof fetch;
   return fn().finally(() => {
@@ -54,7 +54,7 @@ Deno.test("fetchUserInfo normalizes Google's OIDC userinfo payload", async () =>
       given_name: "Alice",
       family_name: "Anderson",
       picture: "https://lh3.googleusercontent.com/a/avatar",
-      locale: "en-US",
+      locale: "en-US"
     },
     async () => {
       const u = await fetchUserInfo(makeProvider(), "tok");
@@ -66,7 +66,7 @@ Deno.test("fetchUserInfo normalizes Google's OIDC userinfo payload", async () =>
       assertEquals(u.familyName, "Anderson");
       assertEquals(u.avatarUrl, "https://lh3.googleusercontent.com/a/avatar");
       assertEquals(u.locale, "en-US");
-    },
+    }
   );
 });
 
@@ -76,7 +76,7 @@ Deno.test("fetchUserInfo normalizes GitHub /user payload (id + login + avatar_ur
       id: 12345,
       login: "alice",
       email: "alice@example.com",
-      avatar_url: "https://avatars.githubusercontent.com/u/12345",
+      avatar_url: "https://avatars.githubusercontent.com/u/12345"
     },
     async () => {
       const u = await fetchUserInfo(makeProvider(), "tok");
@@ -87,7 +87,7 @@ Deno.test("fetchUserInfo normalizes GitHub /user payload (id + login + avatar_ur
       // GitHub doesn't supply email_verified, locale, given/family.
       assertEquals(u.emailVerified, undefined);
       assertEquals(u.locale, undefined);
-    },
+    }
   );
 });
 
@@ -96,12 +96,12 @@ Deno.test("fetchUserInfo accepts string-typed email_verified (Apple/SAML bridges
     {
       sub: "x",
       email: "x@y.z",
-      email_verified: "true",
+      email_verified: "true"
     },
     async () => {
       const u = await fetchUserInfo(makeProvider(), "tok");
       assertEquals(u.emailVerified, true);
-    },
+    }
   );
 });
 
@@ -109,12 +109,12 @@ Deno.test("fetchUserInfo coerces email_verified='false' string to false", async 
   await withMockFetch(
     {
       sub: "x",
-      email_verified: "false",
+      email_verified: "false"
     },
     async () => {
       const u = await fetchUserInfo(makeProvider(), "tok");
       assertEquals(u.emailVerified, false);
-    },
+    }
   );
 });
 
@@ -122,14 +122,14 @@ Deno.test("fetchUserInfo drops non-boolean-ish email_verified rather than coerci
   await withMockFetch(
     {
       sub: "x",
-      email_verified: 1, // non-conforming provider
+      email_verified: 1 // non-conforming provider
     },
     async () => {
       const u = await fetchUserInfo(makeProvider(), "tok");
       // Absence rather than `false` — distinguishes "unknown" from
       // "actively unverified".
       assertEquals(u.emailVerified, undefined);
-    },
+    }
   );
 });
 
@@ -137,9 +137,10 @@ Deno.test("fetchUserInfo preserves the full upstream payload on .raw", async () 
   // Use a quoted key so the literal flows through as `custom_provider_field`
   // without tripping deno-lint's camelCase rule on object keys.
   const payload = {
-    "sub": "x",
-    "email": "y@z",
-    "custom_provider_field": "anything",
+    sub: "x",
+    email: "y@z",
+    // dprint-ignore
+    "custom_provider_field": "anything"
   };
   await withMockFetch(payload, async () => {
     const u = await fetchUserInfo(makeProvider(), "tok");

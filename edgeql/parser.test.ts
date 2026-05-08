@@ -453,7 +453,7 @@ Deno.test("EdgeQL Parser - Syntax Error", () => {
       parser.parse();
     },
     SyntaxError,
-    "Expected ',' or '}'",
+    "Expected ',' or '}'"
   );
 });
 
@@ -608,7 +608,7 @@ Deno.test("EdgeQL Parser - Window function with frame spec", () => {
       assertEquals(rnElement.expr.over.frame?.mode, "ROWS");
       assertEquals(
         rnElement.expr.over.frame?.start.type,
-        "UNBOUNDED PRECEDING",
+        "UNBOUNDED PRECEDING"
       );
       assertEquals(rnElement.expr.over.frame?.end?.type, "CURRENT ROW");
     }
@@ -655,7 +655,7 @@ Deno.test("frame exclusion parsing - EXCLUDE CURRENT ROW", () => {
       assertEquals(rnElement.expr.over.frame?.mode, "ROWS");
       assertEquals(
         rnElement.expr.over.frame?.start.type,
-        "UNBOUNDED PRECEDING",
+        "UNBOUNDED PRECEDING"
       );
       assertEquals(rnElement.expr.over.frame?.end?.type, "CURRENT ROW");
       assertEquals(rnElement.expr.over.frame?.exclude, "CURRENT ROW");
@@ -825,7 +825,7 @@ Deno.test("EdgeQL Parser - parseWithRecovery: never throws on grammar-malformed 
     "SELECT FROM WHERE",
     "INSERT 123",
     "UPDATE FROM",
-    "SELECT User; WHERE bad; SELECT Post",
+    "SELECT User; WHERE bad; SELECT Post"
   ];
 
   for (const src of sources) {
@@ -852,6 +852,6 @@ Deno.test("EdgeQL Parser - parseWithRecovery: recovers across malformed → good
 Deno.test("EdgeQL Parser - parse() still throws on first error (backward compat)", () => {
   assertThrows(
     () => new EdgeQLParser("SELECT @@@").parse(),
-    SyntaxError,
+    SyntaxError
   );
 });

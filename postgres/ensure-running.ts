@@ -22,11 +22,11 @@ export interface EnsureResult {
  */
 export async function ensurePgRunning(
   ctx: ProjectContext,
-  options: { withMonitor?: boolean; } = {},
+  options: { withMonitor?: boolean; } = {}
 ): Promise<EnsureResult> {
   if (!ctx.managed) {
     throw new Error(
-      "Not a managed instance — use backendDsn directly",
+      "Not a managed instance — use backendDsn directly"
     );
   }
 
@@ -49,7 +49,7 @@ export async function ensurePgRunning(
       return {
         dsn: instance.dsn(),
         instance,
-        wasStarted: false,
+        wasStarted: false
       };
     }
 
@@ -60,7 +60,7 @@ export async function ensurePgRunning(
     return {
       dsn: instance.dsn(),
       instance,
-      wasStarted: true,
+      wasStarted: true
     };
   }
 
@@ -71,13 +71,13 @@ export async function ensurePgRunning(
   // and we fall through to the downloader's existing behavior.
   const embeddedBinDir = await resolveEmbeddedPgBinDir({
     manifestEntries: EMBEDDED_PG_MANIFEST,
-    version: EMBEDDED_PG_VERSION,
+    version: EMBEDDED_PG_VERSION
   });
 
   instance = await manager.createInstance(ctx.instanceName, {
     dataDir: ctx.dataDir,
     pgBinDir: embeddedBinDir ?? undefined,
-    socketDir: ctx.socketDir,
+    socketDir: ctx.socketDir
   });
 
   await manager.startInstance(ctx.instanceName, withMonitor);
@@ -86,6 +86,6 @@ export async function ensurePgRunning(
   return {
     dsn: instance.dsn(),
     instance,
-    wasStarted: true,
+    wasStarted: true
   };
 }

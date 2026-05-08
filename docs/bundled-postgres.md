@@ -266,7 +266,7 @@ No TCP port is exposed unless you explicitly set a port:
 const instance = new PostgresInstance({
   dataDir: "/path/to/data",
   instanceName: "my-project",
-  port: 5433, // Enable TCP on this port
+  port: 5433 // Enable TCP on this port
 });
 ```
 
@@ -296,7 +296,7 @@ You can also point to an existing PostgreSQL binary directory instead of downlo
 const instance = new PostgresInstance({
   dataDir: "/path/to/data",
   instanceName: "my-project",
-  pgBinDir: "/usr/local/pgsql/bin", // Use existing PG binaries
+  pgBinDir: "/usr/local/pgsql/bin" // Use existing PG binaries
 });
 ```
 
@@ -354,7 +354,7 @@ const monitor = new PostgresMonitor(instance, {
   autoRestart: true, // Enable auto-restart (default: true)
   checkIntervalMs: 15000, // Check every 15 seconds
   maxRestartAttempts: 5, // Allow 5 restart attempts before giving up
-  restartDelayMs: 10000, // Wait 10 seconds between restart attempts
+  restartDelayMs: 10000 // Wait 10 seconds between restart attempts
 });
 
 await monitor.start();

@@ -29,18 +29,18 @@ export class Transaction {
   async query<T = unknown>(
     query: string,
     variables?: Record<string, unknown>,
-    options?: QueryOptions<T>,
+    options?: QueryOptions<T>
   ): Promise<T> {
     this.assertActive();
 
     const body = JSON.stringify(
-      variables ? { query, variables } : { query },
+      variables ? { query, variables } : { query }
     );
 
     const response = await this.client.fetch("/query", {
       method: "POST",
       body,
-      headers: { "X-Transaction-ID": this.id },
+      headers: { "X-Transaction-ID": this.id }
     });
 
     const result = await response.json() as QueryResponse<T>;
@@ -58,7 +58,7 @@ export class Transaction {
     if (options?.validate) {
       return await applyValidator(
         options.validate as QueryValidator<T>,
-        data,
+        data
       );
     }
 
@@ -70,7 +70,7 @@ export class Transaction {
     this.assertActive();
 
     await this.client.fetch(`/transaction/${this.id}/commit`, {
-      method: "POST",
+      method: "POST"
     });
 
     this.state = "committed";
@@ -81,7 +81,7 @@ export class Transaction {
     this.assertActive();
 
     await this.client.fetch(`/transaction/${this.id}/rollback`, {
-      method: "POST",
+      method: "POST"
     });
 
     this.state = "rolled_back";
@@ -100,7 +100,7 @@ export class Transaction {
   private assertActive(): void {
     if (this.state !== "active") {
       throw new DiscTransactionError(
-        `Transaction is ${this.state}, cannot execute operations`,
+        `Transaction is ${this.state}, cannot execute operations`
       );
     }
   }

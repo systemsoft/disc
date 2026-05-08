@@ -19,7 +19,7 @@ export const ClientMessageType = {
   Execute: 0x4f, // 'O'
   Sync: 0x53, // 'S'
   Flush: 0x48, // 'H'
-  Terminate: 0x58, // 'X'
+  Terminate: 0x58 // 'X'
 } as const;
 
 export type ClientMessageType = (typeof ClientMessageType)[keyof typeof ClientMessageType];
@@ -36,7 +36,7 @@ export const ServerMessageType = {
   ParameterStatus: 0x53, // 'S'
   ServerKeyData: 0x4b, // 'K'
   LogMessage: 0x4c, // 'L'
-  StateDataDescription: 0x73, // 's'
+  StateDataDescription: 0x73 // 's'
 } as const;
 
 export type ServerMessageType = (typeof ServerMessageType)[keyof typeof ServerMessageType];
@@ -49,7 +49,7 @@ export const AuthStatus = {
   OK: 0x00,
   RequiredSASL: 0x0a,
   SASLContinue: 0x0b,
-  SASLFinal: 0x0c,
+  SASLFinal: 0x0c
 } as const;
 
 export type AuthStatus = (typeof AuthStatus)[keyof typeof AuthStatus];
@@ -63,7 +63,7 @@ export const Cardinality = {
   AT_MOST_ONE: 0x6f, // 'o'
   ONE: 0x41, // 'A'
   MANY: 0x6d, // 'm'
-  AT_LEAST_ONE: 0x4d, // 'M'
+  AT_LEAST_ONE: 0x4d // 'M'
 } as const;
 
 export type Cardinality = (typeof Cardinality)[keyof typeof Cardinality];
@@ -75,7 +75,7 @@ export type Cardinality = (typeof Cardinality)[keyof typeof Cardinality];
 export const TransactionState = {
   NOT_IN_TRANSACTION: 0x49, // 'I'
   IN_TRANSACTION: 0x54, // 'T'
-  IN_FAILED_TRANSACTION: 0x45, // 'E'
+  IN_FAILED_TRANSACTION: 0x45 // 'E'
 } as const;
 
 export type TransactionState = (typeof TransactionState)[keyof typeof TransactionState];
@@ -86,7 +86,7 @@ export type TransactionState = (typeof TransactionState)[keyof typeof Transactio
 
 export const InputLanguage = {
   EDGEQL: 0x45, // 'E'
-  SQL: 0x53, // 'S'
+  SQL: 0x53 // 'S'
 } as const;
 
 export type InputLanguage = (typeof InputLanguage)[keyof typeof InputLanguage];
@@ -99,7 +99,7 @@ export const OutputFormat = {
   BINARY: 0x62, // 'b'
   JSON: 0x6a, // 'j'
   JSON_ELEMENTS: 0x4a, // 'J'
-  NONE: 0x6e, // 'n'
+  NONE: 0x6e // 'n'
 } as const;
 
 export type OutputFormat = (typeof OutputFormat)[keyof typeof OutputFormat];
@@ -114,7 +114,7 @@ export const Capability = {
   TRANSACTION: 1n << 2n,
   DDL: 1n << 3n,
   PERSISTENT_CONFIG: 1n << 4n,
-  ALL: 0xffffffffffffffffn,
+  ALL: 0xffffffffffffffffn
 } as const;
 
 export type Capability = (typeof Capability)[keyof typeof Capability];
@@ -126,7 +126,7 @@ export type Capability = (typeof Capability)[keyof typeof Capability];
 export const CompilationFlag = {
   INJECT_OUTPUT_TYPE_IDS: 1n << 0n,
   INJECT_OUTPUT_TYPE_NAMES: 1n << 1n,
-  INJECT_OUTPUT_OBJECT_IDS: 1n << 2n,
+  INJECT_OUTPUT_OBJECT_IDS: 1n << 2n
 } as const;
 
 export type CompilationFlag = (typeof CompilationFlag)[keyof typeof CompilationFlag];
@@ -138,7 +138,7 @@ export type CompilationFlag = (typeof CompilationFlag)[keyof typeof CompilationF
 export const ErrorSeverity = {
   ERROR: 120, // 0x78
   FATAL: 200, // 0xc8
-  PANIC: 255, // 0xff
+  PANIC: 255 // 0xff
 } as const;
 
 export type ErrorSeverity = (typeof ErrorSeverity)[keyof typeof ErrorSeverity];

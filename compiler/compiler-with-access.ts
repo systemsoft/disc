@@ -19,7 +19,7 @@ export class EdgeQLCompilerWithAccess {
   constructor(
     schema: Context.Schema,
     accessConfig?: AccessConfig,
-    accessContext?: AccessContext,
+    accessContext?: AccessContext
   ) {
     this.ctx = Context.createContext(schema);
 
@@ -28,7 +28,7 @@ export class EdgeQLCompilerWithAccess {
       mode: "permissive",
       defaultAllow: true,
       enableRLS: true,
-      enableAudit: false,
+      enableAudit: false
     };
 
     this.accessMode = config.mode === "restrictive" ? "restrictive" : "permissive";
@@ -66,15 +66,15 @@ export class EdgeQLCompilerWithAccess {
       }
       return Err(
         new CompilationError(
-          `Compilation failed: ${error instanceof Error ? error.message : String(error)}`,
-        ),
+          `Compilation failed: ${error instanceof Error ? error.message : String(error)}`
+        )
       );
     }
   }
 
   private applyAccessControl(
     statement: SQL.SQLStatement,
-    query: EdgeQLAST.Query,
+    query: EdgeQLAST.Query
   ): SQL.SQLStatement {
     // Determine the object type being accessed
     const objectType = this.extractObjectType(query);
@@ -96,21 +96,21 @@ export class EdgeQLCompilerWithAccess {
         // Check if access is allowed and inject conditions
         const sqlQuery = {
           text: this.statementToSQL(statement),
-          params: [],
+          params: []
         };
 
         const securedQuery = this.accessInjector.injectSelect(
           sqlQuery,
           tableName,
           objectType,
-          this.accessContext,
+          this.accessContext
         );
 
         // Parse the modified SQL back to AST (simplified - would need proper SQL parser)
         // For now, we'll inject WHERE conditions directly
         return this.injectWhereConditions(
           statement as SQL.SelectStatement,
-          securedQuery.text,
+          securedQuery.text
         );
       }
 
@@ -119,12 +119,12 @@ export class EdgeQLCompilerWithAccess {
         const decision = this.accessEvaluator.evaluate(
           objectType,
           "insert",
-          this.accessContext,
+          this.accessContext
         );
         if (!decision.allowed) {
           throw new CompilationError(
-            decision.denialMessage
-              ?? `INSERT not allowed on ${objectType}: ${decision.reason}`,
+            decision.denialMessage ??
+              `INSERT not allowed on ${objectType}: ${decision.reason}`
           );
         }
         return statement;
@@ -134,19 +134,19 @@ export class EdgeQLCompilerWithAccess {
         // Check if UPDATE is allowed and inject conditions
         const sqlQuery = {
           text: this.statementToSQL(statement),
-          params: [],
+          params: []
         };
 
         const securedQuery = this.accessInjector.injectUpdate(
           sqlQuery,
           tableName,
           objectType,
-          this.accessContext,
+          this.accessContext
         );
 
         return this.injectWhereConditions(
           statement as SQL.UpdateStatement,
-          securedQuery.text,
+          securedQuery.text
         );
       }
 
@@ -154,19 +154,19 @@ export class EdgeQLCompilerWithAccess {
         // Check if DELETE is allowed and inject conditions
         const sqlQuery = {
           text: this.statementToSQL(statement),
-          params: [],
+          params: []
         };
 
         const securedQuery = this.accessInjector.injectDelete(
           sqlQuery,
           tableName,
           objectType,
-          this.accessContext,
+          this.accessContext
         );
 
         return this.injectWhereConditions(
           statement as SQL.DeleteStatement,
-          securedQuery.text,
+          securedQuery.text
         );
       }
 
@@ -206,16 +206,17 @@ export class EdgeQLCompilerWithAccess {
 
   private injectWhereConditions(
     statement: SQL.SelectStatement | SQL.UpdateStatement | SQL.DeleteStatement,
-    _modifiedSQL: string,
+    _modifiedSQL: string
   ): SQL.SQLStatement {
     // Get access policies and evaluate them
     const objectType = this.extractObjectTypeFromStatement(statement);
-    if (!objectType) return statement;
+    if (!objectType)
+      return statement;
 
     const decision = this.accessEvaluator.evaluate(
       objectType,
       "select",
-      this.accessContext,
+      this.accessContext
     );
 
     if (!decision.allowed) {
@@ -223,15 +224,15 @@ export class EdgeQLCompilerWithAccess {
       const falseCondition: SQL.SQLExpression = {
         kind: "LiteralExpression",
         type: "boolean",
-        value: false,
+        value: false
       };
 
       return {
         ...statement,
         where: {
           kind: "WhereClause",
-          condition: falseCondition,
-        },
+          condition: falseCondition
+        }
       };
     }
 
@@ -241,7 +242,8 @@ export class EdgeQLCompilerWithAccess {
 
     // Parse SQL conditions into AST expressions
     const accessConditions = this.parseAccessConditions(decision.sqlConditions);
-    if (!accessConditions) return statement;
+    if (!accessConditions)
+      return statement;
 
     if (statement.where) {
       // Combine with existing WHERE clause
@@ -249,15 +251,15 @@ export class EdgeQLCompilerWithAccess {
         kind: "BinaryExpression",
         operator: "AND",
         left: accessConditions,
-        right: statement.where.condition,
+        right: statement.where.condition
       };
 
       return {
         ...statement,
         where: {
           kind: "WhereClause",
-          condition: combinedCondition,
-        },
+          condition: combinedCondition
+        }
       };
     } else {
       // Add new WHERE clause
@@ -265,14 +267,14 @@ export class EdgeQLCompilerWithAccess {
         ...statement,
         where: {
           kind: "WhereClause",
-          condition: accessConditions,
-        },
+          condition: accessConditions
+        }
       };
     }
   }
 
   private extractObjectTypeFromStatement(
-    statement: SQL.SelectStatement | SQL.UpdateStatement | SQL.DeleteStatement,
+    statement: SQL.SelectStatement | SQL.UpdateStatement | SQL.DeleteStatement
   ): string | undefined {
     // Extract the main table/object type from the statement
     if (statement.kind === "SelectStatement" && statement.from) {
@@ -304,15 +306,16 @@ export class EdgeQLCompilerWithAccess {
   }
 
   private parseAccessConditions(
-    sqlConditions: string[],
+    sqlConditions: string[]
   ): SQL.SQLExpression | null {
-    if (sqlConditions.length === 0) return null;
+    if (sqlConditions.length === 0)
+      return null;
 
     // For now, create raw SQL expressions
     // In a production system, we'd parse these properly
-    const conditions = sqlConditions.map((sql) => ({
+    const conditions = sqlConditions.map(sql => ({
       kind: "RawSQLExpression" as const,
-      sql: sql,
+      sql: sql
     }));
 
     if (conditions.length === 1) {
@@ -327,7 +330,7 @@ export class EdgeQLCompilerWithAccess {
       kind: "BinaryExpression",
       operator,
       left: acc,
-      right: cond,
+      right: cond
     }), conditions[0]);
   }
 
@@ -349,7 +352,7 @@ export class EdgeQLCompilerWithAccess {
   }
 
   private compileSelectQuery(
-    query: EdgeQLAST.SelectQuery,
+    query: EdgeQLAST.SelectQuery
   ): SQL.SelectStatement {
     // Extract type name and get table name
     let typeName = "Unknown";
@@ -367,8 +370,8 @@ export class EdgeQLCompilerWithAccess {
       tables: [{
         kind: "TableReference",
         name: tableName,
-        alias,
-      }],
+        alias
+      }]
     };
 
     // Build SELECT clause based on shape
@@ -381,43 +384,43 @@ export class EdgeQLCompilerWithAccess {
     const orderByClause = query.orderBy && query.orderBy.length > 0 ? this.compileOrderBy(query.orderBy) : undefined;
 
     // Build LIMIT
-    const limitClause = query.limit
-      ? {
+    const limitClause = query.limit ?
+      {
         kind: "LimitClause" as const,
-        count: this.compileExpression(query.limit),
-      }
-      : undefined;
+        count: this.compileExpression(query.limit)
+      } :
+      undefined;
 
     return SQL.createSelectStatement({
       select: selectClause,
       from: fromClause,
       where: whereClause,
       orderBy: orderByClause,
-      limit: limitClause,
+      limit: limitClause
     });
   }
 
   private compileInsertQuery(
-    _query: EdgeQLAST.InsertQuery,
+    _query: EdgeQLAST.InsertQuery
   ): SQL.InsertStatement {
     throw new CompilationError(
-      "INSERT queries not yet implemented with access control",
+      "INSERT queries not yet implemented with access control"
     );
   }
 
   private compileUpdateQuery(
-    _query: EdgeQLAST.UpdateQuery,
+    _query: EdgeQLAST.UpdateQuery
   ): SQL.UpdateStatement {
     throw new CompilationError(
-      "UPDATE queries not yet implemented with access control",
+      "UPDATE queries not yet implemented with access control"
     );
   }
 
   private compileDeleteQuery(
-    _query: EdgeQLAST.DeleteQuery,
+    _query: EdgeQLAST.DeleteQuery
   ): SQL.DeleteStatement {
     throw new CompilationError(
-      "DELETE queries not yet implemented with access control",
+      "DELETE queries not yet implemented with access control"
     );
   }
 
@@ -427,19 +430,21 @@ export class EdgeQLCompilerWithAccess {
 
   private buildSelectClause(
     query: EdgeQLAST.SelectQuery,
-    alias: string,
+    alias: string
   ): SQL.SelectClause {
     if (query.shape && query.shape.elements.length > 0) {
       // Build JSON object with selected fields
-      const fields: SQL.JsonField[] = query.shape.elements
-        .map((elem) => {
+      const fields: SQL.JsonField[] = query
+        .shape
+        .elements
+        .map(elem => {
           // ShapeElement has an expr field
           if (elem.expr.kind === "Path") {
             const path = elem.expr as EdgeQLAST.Path;
             const fieldName = path.steps[0].name;
             return SQL.createJsonField(
               fieldName,
-              SQL.createColumnReference(fieldName, alias),
+              SQL.createColumnReference(fieldName, alias)
             );
           }
           return null;
@@ -461,7 +466,7 @@ export class EdgeQLCompilerWithAccess {
         for (const [name, prop] of typeDef.properties) {
           fields.push(SQL.createJsonField(
             name,
-            SQL.createColumnReference(prop.columnName, alias),
+            SQL.createColumnReference(prop.columnName, alias)
           ));
         }
         const jsonObject = SQL.createJsonBuildObject(fields);
@@ -470,7 +475,7 @@ export class EdgeQLCompilerWithAccess {
 
       // Fall back to SELECT *
       return SQL.createSelectClause([
-        SQL.createSelectItem(SQL.createColumnReference("*", alias)),
+        SQL.createSelectItem(SQL.createColumnReference("*", alias))
       ]);
     }
   }
@@ -481,12 +486,12 @@ export class EdgeQLCompilerWithAccess {
   }
 
   private compileOrderBy(
-    orderBy: EdgeQLAST.OrderByClause[],
+    orderBy: EdgeQLAST.OrderByClause[]
   ): SQL.OrderByClause {
-    const items = orderBy.map((item) => ({
+    const items = orderBy.map(item => ({
       kind: "OrderByItem" as const,
       expression: this.compileExpression(item.expr),
-      direction: (item.direction === "DESC" ? "DESC" : "ASC") as "ASC" | "DESC",
+      direction: (item.direction === "DESC" ? "DESC" : "ASC") as "ASC" | "DESC"
     }));
     return { kind: "OrderByClause", items };
   }
@@ -503,7 +508,7 @@ export class EdgeQLCompilerWithAccess {
         return this.compileBinaryOp(expr);
       default:
         throw new CompilationError(
-          `Expression type ${expr.kind} not yet implemented`,
+          `Expression type ${expr.kind} not yet implemented`
         );
     }
   }
@@ -524,7 +529,7 @@ export class EdgeQLCompilerWithAccess {
     return {
       kind: "LiteralExpression",
       type: sqlType,
-      value: lit.value,
+      value: lit.value
     };
   }
 

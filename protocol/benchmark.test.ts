@@ -18,7 +18,7 @@ function benchmark(name: string, fn: () => void, iterations = 10000): void {
   const time = end - start;
   const opsPerSecond = (iterations / (time / 1000)).toFixed(0);
   console.log(
-    `${name}: ${time.toFixed(2)}ms for ${iterations} iterations (${opsPerSecond} ops/sec)`,
+    `${name}: ${time.toFixed(2)}ms for ${iterations} iterations (${opsPerSecond} ops/sec)`
   );
 }
 
@@ -43,7 +43,7 @@ Deno.test("Benchmark - Message parsing", () => {
     length: 0,
     annotations: [
       { name: "query_id", value: "test-123" },
-      { name: "timestamp", value: Date.now().toString() },
+      { name: "timestamp", value: Date.now().toString() }
     ],
     allowedCapabilities: 0xffffn,
     compilationFlags: 0x1234n,
@@ -51,7 +51,7 @@ Deno.test("Benchmark - Message parsing", () => {
     inputLanguage: Types.InputLanguage.EdgeQL,
     outputFormat: Types.OutputFormat.JSON,
     expectedCardinality: Types.Cardinality.Many,
-    commandText: "SELECT User { id, name, email, posts: { title, content } } FILTER .active = true ORDER BY .createdAt DESC LIMIT 100",
+    commandText: "SELECT User { id, name, email, posts: { title, content } } FILTER .active = true ORDER BY .createdAt DESC LIMIT 100"
   };
 
   const message = builder.buildMessage(parseMessage);
@@ -86,20 +86,20 @@ Deno.test("Benchmark - Message building", () => {
     dataElements: [
       {
         data: new TextEncoder().encode(
-          "{\"id\": 1, \"name\": \"Ada\", \"email\": \"ada@example.com\"}",
-        ),
+          "{\"id\": 1, \"name\": \"Ada\", \"email\": \"ada@example.com\"}"
+        )
       },
       {
         data: new TextEncoder().encode(
-          "{\"id\": 2, \"name\": \"Billie\", \"email\": \"billie@example.com\"}",
-        ),
+          "{\"id\": 2, \"name\": \"Billie\", \"email\": \"billie@example.com\"}"
+        )
       },
       {
         data: new TextEncoder().encode(
-          "{\"id\": 3, \"name\": \"Cher\", \"email\": \"cher@example.com\"}",
-        ),
-      },
-    ],
+          "{\"id\": 3, \"name\": \"Cher\", \"email\": \"cher@example.com\"}"
+        )
+      }
+    ]
   };
 
   console.log("\n=== Message Building Performance ===");
@@ -120,9 +120,9 @@ Deno.test("Benchmark - Message building", () => {
       [Types.ErrorAttribute.ColumnStart, "42"],
       [
         Types.ErrorAttribute.Details,
-        "The query parser encountered an unexpected token",
-      ],
-    ]),
+        "The query parser encountered an unexpected token"
+      ]
+    ])
   };
 
   benchmark("Build error message", () => {
@@ -167,11 +167,11 @@ Deno.test("Benchmark - Message pooling", () => {
 
   const pool = new MessagePool<TestMessage>(
     () => ({ id: 0, data: "", timestamp: 0 }),
-    (msg) => {
+    msg => {
       msg.id = 0;
       msg.data = "";
       msg.timestamp = 0;
-    },
+    }
   );
 
   console.log("\n=== Message Pool Performance ===");
@@ -218,7 +218,7 @@ Deno.test("Benchmark - Cached message builder", () => {
     length: 0,
     annotations: [
       { name: "key1", value: "value1" },
-      { name: "key2", value: "value2" },
+      { name: "key2", value: "value2" }
     ],
     allowedCapabilities: 0xffffn,
     compilationFlags: 0n,
@@ -226,7 +226,7 @@ Deno.test("Benchmark - Cached message builder", () => {
     inputLanguage: Types.InputLanguage.EdgeQL,
     outputFormat: Types.OutputFormat.JSON,
     expectedCardinality: Types.Cardinality.Many,
-    commandText: "SELECT * FROM users WHERE active = true",
+    commandText: "SELECT * FROM users WHERE active = true"
   };
 
   benchmark("Build message with regular builder", () => {
@@ -258,7 +258,7 @@ Deno.test("Benchmark - End-to-end message roundtrip", () => {
     length: 0,
     annotations: [
       { name: "query_id", value: "exec-123" },
-      { name: "userId", value: "user-456" },
+      { name: "userId", value: "user-456" }
     ],
     allowedCapabilities: 0xffffn,
     compilationFlags: 0x5678n,
@@ -268,16 +268,16 @@ Deno.test("Benchmark - End-to-end message roundtrip", () => {
     expectedCardinality: Types.Cardinality.Many,
     commandText: "SELECT User { id, name, email, profile: { bio, avatar_url }, posts: { id, title, content, tags, createdAt } } FILTER .id = <uuid>$0",
     stateDataDescriptorId: Types.uuidToBytes(
-      "11111111-2222-3333-4444-555555555555",
+      "11111111-2222-3333-4444-555555555555"
     ),
     encodedStateData: new Uint8Array(100).fill(42),
     argumentDataDescriptorId: Types.uuidToBytes(
-      "66666666-7777-8888-9999-aaaaaaaaaaaa",
+      "66666666-7777-8888-9999-aaaaaaaaaaaa"
     ),
     argumentData: new Uint8Array(50).fill(7),
     outputDataDescriptorId: Types.uuidToBytes(
-      "bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
-    ),
+      "bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
+    )
   };
 
   console.log("\n=== End-to-End Roundtrip Performance ===");
@@ -291,7 +291,7 @@ Deno.test("Benchmark - End-to-end message roundtrip", () => {
   // Test with smaller messages
   const syncMessage = {
     type: Types.MessageType.Sync,
-    length: 4,
+    length: 4
   };
 
   benchmark("Simple message roundtrip (Sync)", () => {

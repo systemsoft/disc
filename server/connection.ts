@@ -24,7 +24,7 @@ export class SessionManager implements Types.SessionManager {
       database,
       createdAt: now,
       lastActivity: now,
-      variables: {},
+      variables: {}
     };
 
     this.sessions.set(sessionId, session);
@@ -85,7 +85,7 @@ export class ConnectionManager implements Types.ConnectionManager {
     type: Types.Connection["type"],
     remoteAddr: string,
     session?: Types.SessionContext,
-    userAgent?: string,
+    userAgent?: string
   ): Types.Connection {
     const connectionId = this.generate_connection_id();
 
@@ -95,7 +95,7 @@ export class ConnectionManager implements Types.ConnectionManager {
       database: "default",
       createdAt: new Date(),
       lastActivity: new Date(),
-      variables: {},
+      variables: {}
     };
 
     const connection: Types.Connection = {
@@ -104,7 +104,7 @@ export class ConnectionManager implements Types.ConnectionManager {
       session: connSession,
       createdAt: new Date(),
       remoteAddr,
-      userAgent,
+      userAgent
     };
 
     this.connections.set(connectionId, connection);
@@ -128,8 +128,8 @@ export class ConnectionManager implements Types.ConnectionManager {
     const idleConnections: string[] = [];
 
     for (const [id, connection] of this.connections) {
-      const idleTime = now.getTime()
-        - connection.session.lastActivity.getTime();
+      const idleTime = now.getTime() -
+        connection.session.lastActivity.getTime();
       if (idleTime > this.connectionTimeoutMs) {
         idleConnections.push(id);
       }
@@ -147,8 +147,8 @@ export class ConnectionManager implements Types.ConnectionManager {
     return {
       active: connections.length,
       total: connections.length,
-      http: connections.filter((c) => c.type === "http").length,
-      websocket: connections.filter((c) => c.type === "websocket").length,
+      http: connections.filter(c => c.type === "http").length,
+      websocket: connections.filter(c => c.type === "websocket").length
     };
   }
 
@@ -165,7 +165,7 @@ export class TransactionManager implements Types.TransactionManager {
   private pending_begins = new Map<string, Promise<void>>();
   private stats = {
     committed: 0,
-    rolledBack: 0,
+    rolledBack: 0
   };
 
   constructor(transactionTimeoutMs = 10 * 60 * 1000) { // 10 minutes default
@@ -191,7 +191,7 @@ export class TransactionManager implements Types.TransactionManager {
 
   beginTransaction(
     sessionId: string,
-    options: Partial<Types.Transaction> = {},
+    options: Partial<Types.Transaction> = {}
   ): Types.Transaction {
     const transactionId = this.generate_transaction_id();
 
@@ -201,7 +201,7 @@ export class TransactionManager implements Types.TransactionManager {
       isolationLevel: options.isolationLevel || "read_committed",
       readOnly: options.readOnly || false,
       startedAt: new Date(),
-      statements: [],
+      statements: []
     };
 
     this.transactions.set(transactionId, transaction);
@@ -310,14 +310,17 @@ export class TransactionManager implements Types.TransactionManager {
       if (conn && this.pool) {
         try {
           // Best-effort ROLLBACK on abandoned transactions
-          conn.execute("ROLLBACK").then(() => {
-            this.pool!.release(conn);
-          }).catch((error) => {
-            logger.error(
-              `Failed to rollback abandoned transaction ${id}: ${error}`,
-            );
-            this.pool!.release(conn);
-          });
+          conn
+            .execute("ROLLBACK")
+            .then(() => {
+              this.pool!.release(conn);
+            })
+            .catch(error => {
+              logger.error(
+                `Failed to rollback abandoned transaction ${id}: ${error}`
+              );
+              this.pool!.release(conn);
+            });
         } catch (_) {
           // Swallowing here is intentional: cleanup must not throw
           this.pool.release(conn);
@@ -339,15 +342,16 @@ export class TransactionManager implements Types.TransactionManager {
     return {
       active: this.transactions.size,
       committed: this.stats.committed,
-      rolledBack: this.stats.rolledBack,
+      rolledBack: this.stats.rolledBack
     };
   }
 
   private async execute_begin(
     transactionId: string,
-    transaction: Types.Transaction,
+    transaction: Types.Transaction
   ): Promise<void> {
-    if (!this.pool) return;
+    if (!this.pool)
+      return;
 
     try {
       const conn = await this.pool.acquire();
@@ -369,7 +373,7 @@ export class TransactionManager implements Types.TransactionManager {
 
       await conn.execute(beginSQL);
       logger.info(
-        `Transaction ${transactionId}: ${beginSQL} executed on PostgreSQL`,
+        `Transaction ${transactionId}: ${beginSQL} executed on PostgreSQL`
       );
     } catch (error) {
       logger.error(`Transaction ${transactionId}: BEGIN failed: ${error}`);

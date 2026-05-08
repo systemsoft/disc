@@ -21,11 +21,11 @@ function makeContext(): Types.QueryContext {
       database: "test_db",
       createdAt: new Date(),
       lastActivity: new Date(),
-      variables: {},
+      variables: {}
     },
     auth: { roles: [], permissions: [] },
     requestId: "test_request",
-    startedAt: new Date(),
+    startedAt: new Date()
   };
 }
 
@@ -40,7 +40,7 @@ function makeFaultyPool(errorMessage: string): ConnectionPool {
       throw new Error(errorMessage);
     },
     initialize: () => Promise.resolve(),
-    close: () => Promise.resolve(),
+    close: () => Promise.resolve()
   } as unknown as ConnectionPool;
 }
 
@@ -54,7 +54,7 @@ Deno.test(
     const dbError = new DatabaseExecutionError(
       `Database query failed: ${originalError.message}`,
       sql,
-      originalError,
+      originalError
     );
 
     assertEquals(dbError.name, "DatabaseExecutionError");
@@ -67,7 +67,7 @@ Deno.test(
     assertStringIncludes(formatted, sql);
     assertStringIncludes(formatted, "Caused by:");
     assertStringIncludes(formatted, "relation \"users\" does not exist");
-  },
+  }
 );
 
 // --- EdgeQLProtocolHandler (full compiler) ---
@@ -76,16 +76,16 @@ Deno.test(
   "EdgeQLProtocolHandler - pool error propagates as EXECUTION_ERROR, not mock data",
   async () => {
     const faultyPool = makeFaultyPool(
-      "connection refused",
+      "connection refused"
     );
 
     const handler = new EdgeQLProtocolHandler({
-      connectionPool: faultyPool,
+      connectionPool: faultyPool
     });
 
     const request = {
       query: "select User { name, email }",
-      variables: {},
+      variables: {}
     };
 
     const response = await handler.handleRequest(request, makeContext());
@@ -99,9 +99,9 @@ Deno.test(
     // Critically: data must NOT contain mock user records
     assert(
       response.data === undefined,
-      "Expected no data when pool throws — mock fallback should not be used",
+      "Expected no data when pool throws — mock fallback should not be used"
     );
-  },
+  }
 );
 
 Deno.test(
@@ -112,7 +112,7 @@ Deno.test(
 
     const request = {
       query: "select User { name, email }",
-      variables: {},
+      variables: {}
     };
 
     const response = await handler.handleRequest(request, makeContext());
@@ -121,7 +121,7 @@ Deno.test(
     assertEquals(response.errors, undefined);
     assert(response.data !== undefined, "Expected mock data in response");
     assert(Array.isArray(response.data), "Expected mock data to be an array");
-  },
+  }
 );
 
 // --- SimpleEdgeQLProtocolHandler ---
@@ -130,16 +130,16 @@ Deno.test(
   "SimpleEdgeQLProtocolHandler - pool error propagates as EXECUTION_ERROR, not mock data",
   async () => {
     const faultyPool = makeFaultyPool(
-      "timeout expired",
+      "timeout expired"
     );
 
     const handler = new SimpleEdgeQLProtocolHandler({
-      connectionPool: faultyPool,
+      connectionPool: faultyPool
     });
 
     const request = {
       query: "select User { name, email }",
-      variables: {},
+      variables: {}
     };
 
     const response = await handler.handleRequest(request, makeContext());
@@ -153,9 +153,9 @@ Deno.test(
     // No mock data
     assert(
       response.data === undefined,
-      "Expected no data when pool throws — mock fallback should not be used",
+      "Expected no data when pool throws — mock fallback should not be used"
     );
-  },
+  }
 );
 
 Deno.test(
@@ -166,7 +166,7 @@ Deno.test(
 
     const request = {
       query: "select User { name, email }",
-      variables: {},
+      variables: {}
     };
 
     const response = await handler.handleRequest(request, makeContext());
@@ -175,5 +175,5 @@ Deno.test(
     assertEquals(response.errors, undefined);
     assert(response.data !== undefined, "Expected mock data in response");
     assert(Array.isArray(response.data), "Expected mock data to be an array");
-  },
+  }
 );

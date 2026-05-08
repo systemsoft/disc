@@ -10,7 +10,7 @@ import { FileManager, LocalFileStorage } from "disc/lib/file-storage/mod.ts";
 
 const fileManager = new FileManager(db, {
   backend: new LocalFileStorage("/var/disc/files"),
-  maxUploadBytes: 100 * 1024 * 1024,
+  maxUploadBytes: 100 * 1024 * 1024
 });
 await fileManager.initialize();
 
@@ -20,7 +20,7 @@ const server = new HttpServer({
   authProvider,
   authMiddleware,
   authRoutes,
-  fileManager, // optional — omit to disable /files routes
+  fileManager // optional — omit to disable /files routes
 });
 ```
 

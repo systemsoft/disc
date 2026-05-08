@@ -49,7 +49,7 @@ function installMocks(): {
       DatabaseConnection.prototype.execute = origExecute;
       DatabaseConnection.prototype.close = origClose;
       DatabaseConnection.prototype.query = origQuery;
-    },
+    }
   };
 }
 
@@ -62,7 +62,7 @@ const TEST_DSN = "postgresql://disc:pass@localhost:5432/disc";
 Deno.test("replaceDsnDatabase - replaces database in DSN", () => {
   const result = replaceDsnDatabase(
     "postgresql://user:pass@host:5432/original",
-    "replaced",
+    "replaced"
   );
   assertStringIncludes(result, "/replaced");
   // Should not contain original db name
@@ -72,7 +72,7 @@ Deno.test("replaceDsnDatabase - replaces database in DSN", () => {
 Deno.test("replaceDsnDatabase - handles DSN without port", () => {
   const result = replaceDsnDatabase(
     "postgresql://user@host/original",
-    "newdb",
+    "newdb"
   );
   assertStringIncludes(result, "/newdb");
 });
@@ -80,7 +80,7 @@ Deno.test("replaceDsnDatabase - handles DSN without port", () => {
 Deno.test("replaceDsnDatabase - handles DSN with query params", () => {
   const result = replaceDsnDatabase(
     "postgresql://user@host/original?sslmode=require",
-    "newdb",
+    "newdb"
   );
   assertStringIncludes(result, "/newdb");
   assertStringIncludes(result, "sslmode=require");
@@ -134,7 +134,7 @@ Deno.test("DatabaseRegistry - double initialize throws", async () => {
     await assertRejects(
       () => registry.initialize(TEST_DSN),
       DatabaseRegistryError,
-      "already initialized",
+      "already initialized"
     );
 
     await registry.close();
@@ -163,7 +163,7 @@ Deno.test("DatabaseRegistry - createDatabase creates entry with pool", async () 
     assertStringIncludes(entry.databaseUrl, "disc_analytics");
 
     // Should have issued CREATE DATABASE
-    const createStmt = executedSql.find((s) => s.includes("CREATE DATABASE") && s.includes("disc_analytics"));
+    const createStmt = executedSql.find(s => s.includes("CREATE DATABASE") && s.includes("disc_analytics"));
     assertExists(createStmt);
 
     await registry.close();
@@ -182,7 +182,7 @@ Deno.test("DatabaseRegistry - createDatabase rejects duplicate name", async () =
     await assertRejects(
       () => registry.createDatabase("mydb"),
       DatabaseRegistryError,
-      "already exists",
+      "already exists"
     );
 
     await registry.close();
@@ -200,7 +200,7 @@ Deno.test("DatabaseRegistry - createDatabase validates name - uppercase rejected
     await assertRejects(
       () => registry.createDatabase("MyDb"),
       DatabaseRegistryError,
-      "Invalid database name",
+      "Invalid database name"
     );
 
     await registry.close();
@@ -218,7 +218,7 @@ Deno.test("DatabaseRegistry - createDatabase validates name - starts with digit 
     await assertRejects(
       () => registry.createDatabase("123db"),
       DatabaseRegistryError,
-      "Invalid database name",
+      "Invalid database name"
     );
 
     await registry.close();
@@ -236,7 +236,7 @@ Deno.test("DatabaseRegistry - createDatabase validates name - special chars reje
     await assertRejects(
       () => registry.createDatabase("my-db"),
       DatabaseRegistryError,
-      "Invalid database name",
+      "Invalid database name"
     );
 
     await registry.close();
@@ -251,7 +251,7 @@ Deno.test("DatabaseRegistry - createDatabase throws when not initialized", async
   await assertRejects(
     () => registry.createDatabase("testdb"),
     DatabaseRegistryError,
-    "not been initialized",
+    "not been initialized"
   );
 });
 
@@ -273,7 +273,7 @@ Deno.test("DatabaseRegistry - dropDatabase removes entry and drops PG database",
     assertEquals(registry.getDatabase("temp"), undefined);
 
     // Should have issued DROP DATABASE
-    const dropStmt = executedSql.find((s) => s.includes("DROP DATABASE") && s.includes("disc_temp"));
+    const dropStmt = executedSql.find(s => s.includes("DROP DATABASE") && s.includes("disc_temp"));
     assertExists(dropStmt);
 
     await registry.close();
@@ -291,7 +291,7 @@ Deno.test("DatabaseRegistry - dropDatabase rejects dropping default", async () =
     await assertRejects(
       () => registry.dropDatabase("disc"),
       DatabaseRegistryError,
-      "Cannot drop the default",
+      "Cannot drop the default"
     );
 
     await registry.close();
@@ -309,7 +309,7 @@ Deno.test("DatabaseRegistry - dropDatabase rejects unknown name", async () => {
     await assertRejects(
       () => registry.dropDatabase("nonexistent"),
       DatabaseRegistryError,
-      "not found",
+      "not found"
     );
 
     await registry.close();
@@ -410,7 +410,7 @@ Deno.test("DatabaseRegistry - close drains all pools and clears registry", async
     await assertRejects(
       () => registry.createDatabase("three"),
       DatabaseRegistryError,
-      "not been initialized",
+      "not been initialized"
     );
   } finally {
     restore();

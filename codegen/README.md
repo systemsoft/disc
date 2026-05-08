@@ -9,14 +9,14 @@ import {
   DEFAULT_CONFIGS,
   generateTypeScript,
   TypeScriptGenerator,
-  writeGeneratedFiles,
+  writeGeneratedFiles
 } from "disc/codegen/mod.ts";
 
 import type {
   CodegenConfig,
   CodegenResult,
   GeneratedFile,
-  TypeMapping,
+  TypeMapping
 } from "disc/codegen/mod.ts";
 ```
 
@@ -217,7 +217,7 @@ class UserQueryBuilder {
   async filter(
     condition: string,
     variables?: UserFilterVars,
-    shape?: string,
+    shape?: string
   ): Promise<User[]>;
   async insert(data: UserInsert): Promise<User>;
   async update(id: string, data: UserUpdate): Promise<User>;

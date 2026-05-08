@@ -71,7 +71,8 @@ function isSafeUrlScheme(rawUrl: string): boolean {
   } catch {
     return false;
   }
-  if (parsed.protocol === "https:") return true;
+  if (parsed.protocol === "https:")
+    return true;
   if (parsed.protocol === "http:") {
     const host = parsed.hostname.toLowerCase();
     return host === "localhost" || host === "127.0.0.1" || host === "[::1]";
@@ -87,7 +88,8 @@ function isSafeUrlScheme(rawUrl: string): boolean {
  * defaults".
  */
 export function validateBranding(branding: AuthBrandingConfig | undefined): void {
-  if (!branding) return;
+  if (!branding)
+    return;
 
   if (branding.appName !== undefined) {
     const v = branding.appName;
@@ -96,45 +98,46 @@ export function validateBranding(branding: AuthBrandingConfig | undefined): void
     }
     if (v.length === 0) {
       throw new Error(
-        "AuthProvider: branding.appName must be a non-empty string when set",
+        "AuthProvider: branding.appName must be a non-empty string when set"
       );
     }
     if (v.length > MAX_APP_NAME_LEN) {
       throw new Error(
-        `AuthProvider: branding.appName exceeds ${MAX_APP_NAME_LEN} chars (got ${v.length}) — refuse rather than truncate so subject lines don't end mid-word`,
+        `AuthProvider: branding.appName exceeds ${MAX_APP_NAME_LEN} chars (got ${v.length}) — refuse rather than truncate so subject lines don't end mid-word`
       );
     }
     if (hasControlChars(v)) {
       throw new Error(
-        "AuthProvider: branding.appName contains control characters (CR/LF/NUL) — these splice email headers and are not safe to render",
+        "AuthProvider: branding.appName contains control characters (CR/LF/NUL) — these splice email headers and are not safe to render"
       );
     }
   }
 
   for (const key of ["logoUrl", "darkLogoUrl"] as const) {
     const v = branding[key];
-    if (v === undefined) continue;
+    if (v === undefined)
+      continue;
     if (typeof v !== "string") {
       throw new Error(`AuthProvider: branding.${key} must be a string`);
     }
     if (v.length === 0) {
       throw new Error(
-        `AuthProvider: branding.${key} must be a non-empty string when set`,
+        `AuthProvider: branding.${key} must be a non-empty string when set`
       );
     }
     if (v.length > MAX_URL_LEN) {
       throw new Error(
-        `AuthProvider: branding.${key} exceeds ${MAX_URL_LEN} chars`,
+        `AuthProvider: branding.${key} exceeds ${MAX_URL_LEN} chars`
       );
     }
     if (hasControlChars(v)) {
       throw new Error(
-        `AuthProvider: branding.${key} contains control characters — would break HTML rendering`,
+        `AuthProvider: branding.${key} contains control characters — would break HTML rendering`
       );
     }
     if (!isSafeUrlScheme(v)) {
       throw new Error(
-        `AuthProvider: branding.${key} must be https:// (http:// is allowed only for localhost) — refuses data:/javascript:/file: schemes`,
+        `AuthProvider: branding.${key} must be https:// (http:// is allowed only for localhost) — refuses data:/javascript:/file: schemes`
       );
     }
   }
@@ -152,17 +155,18 @@ export function validateBranding(branding: AuthBrandingConfig | undefined): void
 function validateBrandColor(v: unknown): void {
   if (typeof v !== "string") {
     throw new Error(
-      `AuthProvider: branding.brandColor must be a string; got ${JSON.stringify(v)}`,
+      `AuthProvider: branding.brandColor must be a string; got ${JSON.stringify(v)}`
     );
   }
-  if (HEX_COLOR_RE.test(v)) return;
+  if (HEX_COLOR_RE.test(v))
+    return;
 
   const oklchMatch = OKLCH_COLOR_RE.exec(v);
   if (!oklchMatch) {
     throw new Error(
       `AuthProvider: branding.brandColor must be a 3-/6-digit hex color (e.g. "#0af", "#00aaff") or oklch(L C H[/ A]) (e.g. "oklch(70% 0.15 200)"); got ${
         JSON.stringify(v)
-      }`,
+      }`
     );
   }
 
@@ -173,13 +177,13 @@ function validateBrandColor(v: unknown): void {
   if (lRaw.endsWith("%")) {
     if (!(lValue >= 0 && lValue <= 100)) {
       throw new Error(
-        `AuthProvider: branding.brandColor lightness ${JSON.stringify(lRaw)} is out of range (must be 0%–100%)`,
+        `AuthProvider: branding.brandColor lightness ${JSON.stringify(lRaw)} is out of range (must be 0%–100%)`
       );
     }
   } else {
     if (!(lValue >= 0 && lValue <= 1)) {
       throw new Error(
-        `AuthProvider: branding.brandColor lightness ${JSON.stringify(lRaw)} is out of range (must be 0–1 when unitless, or use a percentage)`,
+        `AuthProvider: branding.brandColor lightness ${JSON.stringify(lRaw)} is out of range (must be 0–1 when unitless, or use a percentage)`
       );
     }
   }
@@ -188,7 +192,7 @@ function validateBrandColor(v: unknown): void {
   const cValue = parseFloat(oklchMatch[2]);
   if (!(cValue >= 0 && cValue <= MAX_OKLCH_CHROMA)) {
     throw new Error(
-      `AuthProvider: branding.brandColor chroma ${JSON.stringify(oklchMatch[2])} is out of range (must be 0–${MAX_OKLCH_CHROMA})`,
+      `AuthProvider: branding.brandColor chroma ${JSON.stringify(oklchMatch[2])} is out of range (must be 0–${MAX_OKLCH_CHROMA})`
     );
   }
 
@@ -197,7 +201,7 @@ function validateBrandColor(v: unknown): void {
   const hValue = parseFloat(oklchMatch[3]);
   if (!(hValue >= 0 && hValue <= 360)) {
     throw new Error(
-      `AuthProvider: branding.brandColor hue ${JSON.stringify(oklchMatch[3])} is out of range (must be 0–360)`,
+      `AuthProvider: branding.brandColor hue ${JSON.stringify(oklchMatch[3])} is out of range (must be 0–360)`
     );
   }
 
@@ -208,13 +212,13 @@ function validateBrandColor(v: unknown): void {
     if (aRaw.endsWith("%")) {
       if (!(aValue >= 0 && aValue <= 100)) {
         throw new Error(
-          `AuthProvider: branding.brandColor alpha ${JSON.stringify(aRaw)} is out of range (must be 0%–100%)`,
+          `AuthProvider: branding.brandColor alpha ${JSON.stringify(aRaw)} is out of range (must be 0%–100%)`
         );
       }
     } else {
       if (!(aValue >= 0 && aValue <= 1)) {
         throw new Error(
-          `AuthProvider: branding.brandColor alpha ${JSON.stringify(aRaw)} is out of range (must be 0–1 when unitless, or use a percentage)`,
+          `AuthProvider: branding.brandColor alpha ${JSON.stringify(aRaw)} is out of range (must be 0–1 when unitless, or use a percentage)`
         );
       }
     }
@@ -233,20 +237,21 @@ function validateBrandColor(v: unknown): void {
  * intent and is harder to spot than a config-time refusal.
  */
 export function validateMagicLinkUrlTemplate(template: string | undefined): void {
-  if (template === undefined) return;
+  if (template === undefined)
+    return;
   if (typeof template !== "string" || template.length === 0) {
     throw new Error(
-      "AuthProvider: magicLinkUrlTemplate must be a non-empty string when set",
+      "AuthProvider: magicLinkUrlTemplate must be a non-empty string when set"
     );
   }
   if (template.length > MAX_URL_LEN) {
     throw new Error(
-      `AuthProvider: magicLinkUrlTemplate exceeds ${MAX_URL_LEN} chars`,
+      `AuthProvider: magicLinkUrlTemplate exceeds ${MAX_URL_LEN} chars`
     );
   }
   if (hasControlChars(template)) {
     throw new Error(
-      "AuthProvider: magicLinkUrlTemplate contains control characters (CR/LF/NUL)",
+      "AuthProvider: magicLinkUrlTemplate contains control characters (CR/LF/NUL)"
     );
   }
   // `{token}` must appear exactly once. A URL ctor parse with the
@@ -255,13 +260,13 @@ export function validateMagicLinkUrlTemplate(template: string | undefined): void
   const occurrences = template.split(TOKEN_PLACEHOLDER).length - 1;
   if (occurrences !== 1) {
     throw new Error(
-      `AuthProvider: magicLinkUrlTemplate must contain exactly one '${TOKEN_PLACEHOLDER}' placeholder (got ${occurrences})`,
+      `AuthProvider: magicLinkUrlTemplate must contain exactly one '${TOKEN_PLACEHOLDER}' placeholder (got ${occurrences})`
     );
   }
   const probe = template.replace(TOKEN_PLACEHOLDER, "TOKEN");
   if (!isSafeUrlScheme(probe)) {
     throw new Error(
-      "AuthProvider: magicLinkUrlTemplate must be https:// (http:// is allowed only for localhost)",
+      "AuthProvider: magicLinkUrlTemplate must be https:// (http:// is allowed only for localhost)"
     );
   }
 }
@@ -274,7 +279,7 @@ export function validateMagicLinkUrlTemplate(template: string | undefined): void
  */
 export function buildMagicLinkUrl(
   token: string,
-  opts: { baseUrl: string; template?: string; },
+  opts: { baseUrl: string; template?: string; }
 ): string {
   const encoded = encodeURIComponent(token);
   if (opts.template) {

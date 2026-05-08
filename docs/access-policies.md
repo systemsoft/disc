@@ -255,7 +255,7 @@ const evaluator = new AccessEvaluator({
   defaultAllow: false,
   enableAudit: false,
   enableRLS: true,
-  mode: "permissive", // or "restrictive"
+  mode: "permissive" // or "restrictive"
 });
 ```
 
@@ -438,13 +438,13 @@ The bridge function maps auth claims to access context:
 ```typescript
 function authContextToAccessContext(
   auth: AuthContext,
-  sessionGlobals?: Map<string, unknown>,
+  sessionGlobals?: Map<string, unknown>
 ): AccessContext {
   return {
     globals: sessionGlobals,
     sessionData: auth.jwtClaims,
     userId: auth.userId,
-    userRole: auth.roles.length > 0 ? auth.roles[0] : undefined,
+    userRole: auth.roles.length > 0 ? auth.roles[0] : undefined
   };
 }
 ```
@@ -589,7 +589,7 @@ const evaluator = new AccessEvaluator({
   defaultAllow: false,
   enableAudit: false,
   enableRLS: true,
-  mode: "permissive",
+  mode: "permissive"
 });
 
 // Register a policy
@@ -602,14 +602,14 @@ evaluator.registerPolicy({
     kind: "AccessComparison",
     left: { kind: "AccessPath", path: ["user_id"] },
     operator: "=",
-    right: { kind: "AccessGlobal", name: "current_user" },
-  },
+    right: { kind: "AccessGlobal", name: "current_user" }
+  }
 });
 
 // Test with authenticated context
 const decision = evaluator.evaluate("Profile", "select", {
   userId: "user-123",
-  userRole: "member",
+  userRole: "member"
 });
 
 console.log(decision.allowed); // true

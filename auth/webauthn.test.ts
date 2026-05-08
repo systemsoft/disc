@@ -13,7 +13,7 @@ import {
   parseAttestationObject,
   parseAuthenticatorData,
   verifyAssertionSignature,
-  verifyClientData,
+  verifyClientData
 } from "./webauthn.ts";
 
 // ── base64url + CBOR round-trip ──────────────────────────────────────
@@ -27,7 +27,8 @@ Deno.test("base64url encode/decode round-trip", () => {
   assert(!encoded.includes("/"));
   const decoded = base64UrlDecode(encoded);
   assertEquals(decoded.length, input.length);
-  for (let i = 0; i < input.length; i++) assertEquals(decoded[i], input[i]);
+  for (let i = 0; i < input.length; i++)
+    assertEquals(decoded[i], input[i]);
 });
 
 Deno.test("CBOR encode/decode round-trip — primitives + map + array", () => {
@@ -36,7 +37,7 @@ Deno.test("CBOR encode/decode round-trip — primitives + map + array", () => {
     [1, 42],
     [-7, new Uint8Array([1, 2, 3])],
     ["arr", [1, "x", true]],
-    ["nested", new Map([["k", 99]])],
+    ["nested", new Map([["k", 99]])]
   ]);
   const bytes = encodeCbor(m);
   const back = decodeCbor(bytes) as Map<unknown, unknown>;
@@ -61,8 +62,8 @@ Deno.test("parseAttestationObject — extracts credential id + ES256 pubkey", as
     counter: 1,
     attestedCredential: {
       credentialId,
-      cosePublicKey: kp.cosePublicKey,
-    },
+      cosePublicKey: kp.cosePublicKey
+    }
   });
   const attObj = buildAttestationObject({ authData });
 
@@ -84,7 +85,7 @@ Deno.test("parseAttestationObject — rejects truncated input", () => {
       await Promise.resolve();
       parseAttestationObject(new Uint8Array([0x00]));
     },
-    Error,
+    Error
   );
 });
 
@@ -93,7 +94,7 @@ Deno.test("parseAttestationObject — rejects truncated input", () => {
 Deno.test("parseAuthenticatorData — extracts rpIdHash + flags + counter", async () => {
   const authData = await buildAuthenticatorData({
     rpId: "example.com",
-    counter: 42,
+    counter: 42
   });
   const parsed = parseAuthenticatorData(authData);
   assertEquals(parsed.counter, 42);
@@ -114,13 +115,13 @@ Deno.test("verifyClientData — accepts matching challenge + origin + type", () 
   const cd = buildClientDataJSON({
     type: "webauthn.create",
     challenge,
-    origin: "https://example.com",
+    origin: "https://example.com"
   });
   const parsed = verifyClientData({
     clientDataJSON: cd,
     expectedChallenge: challenge,
     expectedOrigin: "https://example.com",
-    expectedType: "webauthn.create",
+    expectedType: "webauthn.create"
   });
   assertEquals(parsed.origin, "https://example.com");
 });
@@ -129,7 +130,7 @@ Deno.test("verifyClientData — rejects mismatched challenge", () => {
   const cd = buildClientDataJSON({
     type: "webauthn.create",
     challenge: new Uint8Array([1, 2, 3]),
-    origin: "https://example.com",
+    origin: "https://example.com"
   });
   assertRejects(
     async () => {
@@ -138,11 +139,11 @@ Deno.test("verifyClientData — rejects mismatched challenge", () => {
         clientDataJSON: cd,
         expectedChallenge: new Uint8Array([9, 9, 9]),
         expectedOrigin: "https://example.com",
-        expectedType: "webauthn.create",
+        expectedType: "webauthn.create"
       });
     },
     Error,
-    "challenge mismatch",
+    "challenge mismatch"
   );
 });
 
@@ -151,7 +152,7 @@ Deno.test("verifyClientData — rejects mismatched origin", () => {
   const cd = buildClientDataJSON({
     type: "webauthn.get",
     challenge,
-    origin: "https://attacker.example",
+    origin: "https://attacker.example"
   });
   assertRejects(
     async () => {
@@ -160,11 +161,11 @@ Deno.test("verifyClientData — rejects mismatched origin", () => {
         clientDataJSON: cd,
         expectedChallenge: challenge,
         expectedOrigin: "https://example.com",
-        expectedType: "webauthn.get",
+        expectedType: "webauthn.get"
       });
     },
     Error,
-    "origin mismatch",
+    "origin mismatch"
   );
 });
 
@@ -177,31 +178,31 @@ Deno.test("verifyAssertionSignature — accepts a valid ES256 assertion", async 
   const regAuthData = await buildAuthenticatorData({
     rpId: "example.com",
     counter: 0,
-    attestedCredential: { credentialId, cosePublicKey: kp.cosePublicKey },
+    attestedCredential: { credentialId, cosePublicKey: kp.cosePublicKey }
   });
   const reg = parseAttestationObject(buildAttestationObject({ authData: regAuthData }));
 
   const challenge = new Uint8Array([0xfe, 0xed]);
   const assertAuthData = await buildAuthenticatorData({
     rpId: "example.com",
-    counter: 1,
+    counter: 1
   });
   const cd = buildClientDataJSON({
     type: "webauthn.get",
     challenge,
-    origin: "https://example.com",
+    origin: "https://example.com"
   });
   const sig = await signAssertion({
     privateKey: kp.privateKey,
     authData: assertAuthData,
-    clientDataJSON: cd,
+    clientDataJSON: cd
   });
 
   const ok = await verifyAssertionSignature({
     publicKey: reg.publicKey,
     authData: assertAuthData,
     clientDataJSON: cd,
-    signature: sig,
+    signature: sig
   });
   assertEquals(ok, true);
 });
@@ -212,24 +213,24 @@ Deno.test("verifyAssertionSignature — rejects a tampered authData", async () =
   const regAuthData = await buildAuthenticatorData({
     rpId: "example.com",
     counter: 0,
-    attestedCredential: { credentialId, cosePublicKey: kp.cosePublicKey },
+    attestedCredential: { credentialId, cosePublicKey: kp.cosePublicKey }
   });
   const reg = parseAttestationObject(buildAttestationObject({ authData: regAuthData }));
 
   const challenge = new Uint8Array([0xab, 0xcd]);
   const authData = await buildAuthenticatorData({
     rpId: "example.com",
-    counter: 1,
+    counter: 1
   });
   const cd = buildClientDataJSON({
     type: "webauthn.get",
     challenge,
-    origin: "https://example.com",
+    origin: "https://example.com"
   });
   const sig = await signAssertion({
     privateKey: kp.privateKey,
     authData,
-    clientDataJSON: cd,
+    clientDataJSON: cd
   });
 
   // Flip a byte in authData (simulating a MITM rewriting the counter).
@@ -240,7 +241,7 @@ Deno.test("verifyAssertionSignature — rejects a tampered authData", async () =
     publicKey: reg.publicKey,
     authData: tampered,
     clientDataJSON: cd,
-    signature: sig,
+    signature: sig
   });
   assertEquals(ok, false);
 });
@@ -252,32 +253,32 @@ Deno.test("verifyAssertionSignature — rejects a different credential's signatu
   const regAuthData = await buildAuthenticatorData({
     rpId: "example.com",
     counter: 0,
-    attestedCredential: { credentialId, cosePublicKey: kpA.cosePublicKey },
+    attestedCredential: { credentialId, cosePublicKey: kpA.cosePublicKey }
   });
   const reg = parseAttestationObject(buildAttestationObject({ authData: regAuthData }));
 
   const challenge = new Uint8Array([0x12, 0x34]);
   const authData = await buildAuthenticatorData({
     rpId: "example.com",
-    counter: 1,
+    counter: 1
   });
   const cd = buildClientDataJSON({
     type: "webauthn.get",
     challenge,
-    origin: "https://example.com",
+    origin: "https://example.com"
   });
   // Sign with key B, verify against key A's stored pubkey.
   const sig = await signAssertion({
     privateKey: kpB.privateKey,
     authData,
-    clientDataJSON: cd,
+    clientDataJSON: cd
   });
 
   const ok = await verifyAssertionSignature({
     publicKey: reg.publicKey,
     authData,
     clientDataJSON: cd,
-    signature: sig,
+    signature: sig
   });
   assertEquals(ok, false);
 });

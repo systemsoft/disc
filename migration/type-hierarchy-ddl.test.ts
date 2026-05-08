@@ -25,21 +25,21 @@ Deno.test("DDL Type Hierarchy - parent type with subtypes gets __type__ column i
         required: false,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
     links: [],
     abstract: true,
-    subtypes: ["Circle", "Rectangle"],
+    subtypes: ["Circle", "Rectangle"]
   };
 
   const statements = generator.generateDDL([operation]);
-  const createTable = statements.find((s) => s.startsWith("CREATE TABLE"));
+  const createTable = statements.find(s => s.startsWith("CREATE TABLE"));
 
   assertEquals(
     createTable !== undefined,
     true,
-    "Should have a CREATE TABLE statement",
+    "Should have a CREATE TABLE statement"
   );
   assertStringIncludes(createTable!, "__type__");
   assertStringIncludes(createTable!, "VARCHAR(255)");
@@ -63,20 +63,20 @@ Deno.test("DDL Type Hierarchy - child type gets __type__ column with own name as
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
     links: [],
-    parentTypes: ["Shape"],
+    parentTypes: ["Shape"]
   };
 
   const statements = generator.generateDDL([operation]);
-  const createTable = statements.find((s) => s.startsWith("CREATE TABLE"));
+  const createTable = statements.find(s => s.startsWith("CREATE TABLE"));
 
   assertEquals(
     createTable !== undefined,
     true,
-    "Should have a CREATE TABLE statement",
+    "Should have a CREATE TABLE statement"
   );
   assertStringIncludes(createTable!, "__type__");
   assertStringIncludes(createTable!, "DEFAULT 'Circle'");
@@ -100,12 +100,12 @@ Deno.test("DDL Type Hierarchy - multi-level hierarchy: all levels get __type__ c
         required: false,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
     links: [],
     abstract: true,
-    subtypes: ["Circle"],
+    subtypes: ["Circle"]
   };
 
   // Circle (middle, has parent and subtypes)
@@ -119,12 +119,12 @@ Deno.test("DDL Type Hierarchy - multi-level hierarchy: all levels get __type__ c
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
     links: [],
     parentTypes: ["Shape"],
-    subtypes: ["Ellipse"],
+    subtypes: ["Ellipse"]
   };
 
   // Ellipse (leaf, has parent, no subtypes)
@@ -138,20 +138,20 @@ Deno.test("DDL Type Hierarchy - multi-level hierarchy: all levels get __type__ c
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
     links: [],
-    parentTypes: ["Circle"],
+    parentTypes: ["Circle"]
   };
 
   const statements = generator.generateDDL([shapeOp, circleOp, ellipseOp]);
-  const createStatements = statements.filter((s) => s.startsWith("CREATE TABLE"));
+  const createStatements = statements.filter(s => s.startsWith("CREATE TABLE"));
 
   assertEquals(
     createStatements.length,
     3,
-    "Should have 3 CREATE TABLE statements",
+    "Should have 3 CREATE TABLE statements"
   );
 
   // All three should have __type__ column
@@ -162,25 +162,25 @@ Deno.test("DDL Type Hierarchy - multi-level hierarchy: all levels get __type__ c
   }
 
   // Verify each has its own type name as default
-  const shapeTable = createStatements.find((s) => s.includes("DEFAULT 'Shape'"));
+  const shapeTable = createStatements.find(s => s.includes("DEFAULT 'Shape'"));
   assertEquals(
     shapeTable !== undefined,
     true,
-    "Shape table should default to 'Shape'",
+    "Shape table should default to 'Shape'"
   );
 
-  const circleTable = createStatements.find((s) => s.includes("DEFAULT 'Circle'"));
+  const circleTable = createStatements.find(s => s.includes("DEFAULT 'Circle'"));
   assertEquals(
     circleTable !== undefined,
     true,
-    "Circle table should default to 'Circle'",
+    "Circle table should default to 'Circle'"
   );
 
-  const ellipseTable = createStatements.find((s) => s.includes("DEFAULT 'Ellipse'"));
+  const ellipseTable = createStatements.find(s => s.includes("DEFAULT 'Ellipse'"));
   assertEquals(
     ellipseTable !== undefined,
     true,
-    "Ellipse table should default to 'Ellipse'",
+    "Ellipse table should default to 'Ellipse'"
   );
 });
 
@@ -200,25 +200,25 @@ Deno.test("DDL Type Hierarchy - types without hierarchy do NOT get __type__ colu
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
-    links: [],
+    links: []
     // No abstract, parentTypes, or subtypes
   };
 
   const statements = generator.generateDDL([operation]);
-  const createTable = statements.find((s) => s.startsWith("CREATE TABLE"));
+  const createTable = statements.find(s => s.startsWith("CREATE TABLE"));
 
   assertEquals(
     createTable !== undefined,
     true,
-    "Should have a CREATE TABLE statement",
+    "Should have a CREATE TABLE statement"
   );
   assertEquals(
     createTable!.includes("__type__"),
     false,
-    "Standalone type should NOT have __type__ column",
+    "Standalone type should NOT have __type__ column"
   );
 });
 
@@ -238,21 +238,21 @@ Deno.test("DDL Type Hierarchy - abstract types with subtypes generate DDL with _
         required: true,
         multi: false,
         constraints: [],
-        annotations: {},
-      },
+        annotations: {}
+      }
     ],
     links: [],
     abstract: true,
-    subtypes: ["Car", "Truck"],
+    subtypes: ["Car", "Truck"]
   };
 
   const statements = generator.generateDDL([operation]);
-  const createTable = statements.find((s) => s.startsWith("CREATE TABLE"));
+  const createTable = statements.find(s => s.startsWith("CREATE TABLE"));
 
   assertEquals(
     createTable !== undefined,
     true,
-    "Abstract type should still generate CREATE TABLE",
+    "Abstract type should still generate CREATE TABLE"
   );
   assertStringIncludes(createTable!, "__type__");
   assertStringIncludes(createTable!, "DEFAULT 'Vehicle'");

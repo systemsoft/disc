@@ -34,7 +34,7 @@ Deno.test("Types - mapEdgeQLTypeToTypeScript for primitive types", () => {
   // Optional string
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("str", false, false),
-    "string | null",
+    "string | null"
   );
 
   // Required string array
@@ -43,7 +43,7 @@ Deno.test("Types - mapEdgeQLTypeToTypeScript for primitive types", () => {
   // Optional string array
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("str", false, true),
-    "string[] | null",
+    "string[] | null"
   );
 });
 
@@ -51,30 +51,30 @@ Deno.test("Types - mapEdgeQLTypeToTypeScript for numeric types", () => {
   assertEquals(Types.mapEdgeQLTypeToTypeScript("int32", true, false), "number");
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("float64", false, false),
-    "number | null",
+    "number | null"
   );
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("decimal", true, true),
-    "number[]",
+    "number[]"
   );
 });
 
 Deno.test("Types - mapEdgeQLTypeToTypeScript for datetime types", () => {
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("datetime", true, false),
-    "Date",
+    "Date"
   );
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("cal::local_datetime", false, false),
-    "Date | null",
+    "Date | null"
   );
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("cal::local_date", true, false),
-    "string",
+    "string"
   );
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("cal::local_time", true, true),
-    "string[]",
+    "string[]"
   );
 });
 
@@ -83,7 +83,7 @@ Deno.test("Types - mapEdgeQLTypeToTypeScript for special types", () => {
   assertEquals(Types.mapEdgeQLTypeToTypeScript("json", true, false), "unknown");
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("bytes", false, false),
-    "Uint8Array | null",
+    "Uint8Array | null"
   );
 });
 
@@ -92,12 +92,12 @@ Deno.test("Types - mapEdgeQLTypeToTypeScript for custom object types", () => {
   assertEquals(Types.mapEdgeQLTypeToTypeScript("User", true, false), "User");
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("User", false, false),
-    "User | null",
+    "User | null"
   );
   assertEquals(Types.mapEdgeQLTypeToTypeScript("Post", true, true), "Post[]");
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("MyCustomType", false, true),
-    "MyCustomType[] | null",
+    "MyCustomType[] | null"
   );
 });
 
@@ -118,7 +118,7 @@ Deno.test("Types - DEFAULT_TYPE_MAPPINGS completeness", () => {
     "json",
     "cal::local_datetime",
     "cal::local_date",
-    "cal::local_time",
+    "cal::local_time"
   ];
 
   for (const type of expectedTypes) {
@@ -148,7 +148,7 @@ Deno.test("Types - CodegenConfig interface defaults", () => {
   // Test that partial config can be constructed
   const partialConfig: Partial<Types.CodegenConfig> = {
     outputDir: "./test-output",
-    target: "client",
+    target: "client"
   };
 
   assertEquals(partialConfig.outputDir, "./test-output");
@@ -164,7 +164,7 @@ Deno.test("Types - CodegenConfig interface defaults", () => {
     includeQueryBuilders: true,
     includeMutations: true,
     includeClient: true,
-    formatOutput: true,
+    formatOutput: true
   };
 
   assertEquals(fullConfig.target, "both");
@@ -179,7 +179,7 @@ Deno.test("Types - PropertyDefinition structure", () => {
     nullable: false,
     array: false,
     description: "User email address",
-    defaultValue: undefined,
+    defaultValue: undefined
   };
 
   assertEquals(property.name, "email");
@@ -197,11 +197,11 @@ Deno.test("Types - TypeDefinition structure", () => {
       type: "string",
       optional: false,
       nullable: false,
-      array: false,
+      array: false
     }],
     extends: [],
     export: true,
-    description: "User entity type",
+    description: "User entity type"
   };
 
   assertEquals(typeDef.name, "User");
@@ -214,7 +214,7 @@ Deno.test("Types - GeneratedFile structure", () => {
   const file: Types.GeneratedFile = {
     path: "generated/types.ts",
     content: "export interface User { id: string; }",
-    type: "types",
+    type: "types"
   };
 
   assertEquals(file.path, "generated/types.ts");
@@ -227,10 +227,10 @@ Deno.test("Types - CodegenResult structure", () => {
     files: [{
       path: "types.ts",
       content: "// Generated types",
-      type: "types",
+      type: "types"
     }],
     warnings: ["Type mapping fallback used"],
-    errors: [],
+    errors: []
   };
 
   assertEquals(result.files.length, 1);
@@ -245,13 +245,13 @@ Deno.test("Types - edge cases for type mapping", () => {
   // Test type with special characters (should be handled by custom type logic)
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("My::Special::Type", true, false),
-    "My::Special::Type",
+    "My::Special::Type"
   );
 
   // Test null safety with arrays
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("str", false, true),
-    "string[] | null",
+    "string[] | null"
   );
 });
 
@@ -277,15 +277,15 @@ Deno.test("Types - mapEdgeQLTypeToEdgeQLCast for temporal types", () => {
   assertEquals(Types.mapEdgeQLTypeToEdgeQLCast("duration"), "<duration>");
   assertEquals(
     Types.mapEdgeQLTypeToEdgeQLCast("cal::local_datetime"),
-    "<cal::local_datetime>",
+    "<cal::local_datetime>"
   );
   assertEquals(
     Types.mapEdgeQLTypeToEdgeQLCast("cal::local_date"),
-    "<cal::local_date>",
+    "<cal::local_date>"
   );
   assertEquals(
     Types.mapEdgeQLTypeToEdgeQLCast("cal::local_time"),
-    "<cal::local_time>",
+    "<cal::local_time>"
   );
 });
 
@@ -300,7 +300,7 @@ Deno.test("Types - mapEdgeQLTypeToEdgeQLCast fallback for unknown type", () => {
   assertEquals(Types.mapEdgeQLTypeToEdgeQLCast("custom_type"), "<custom_type>");
   assertEquals(
     Types.mapEdgeQLTypeToEdgeQLCast("my_module::MyType"),
-    "<my_module::MyType>",
+    "<my_module::MyType>"
   );
 });
 

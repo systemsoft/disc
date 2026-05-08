@@ -8,10 +8,10 @@ Deno.test("PgUpgradeCommand - rejects unknown target version", async () => {
     () =>
       command.execute({
         targetVersion: "99.99",
-        project: "test-project",
+        project: "test-project"
       }),
     Error,
-    "Unknown PostgreSQL version: 99.99",
+    "Unknown PostgreSQL version: 99.99"
   );
 });
 
@@ -22,10 +22,10 @@ Deno.test("PgUpgradeCommand - error includes available versions", async () => {
     () =>
       command.execute({
         targetVersion: "15.0",
-        project: "test-project",
+        project: "test-project"
       }),
     Error,
-    "16.4, 17.0",
+    "16.4, 17.0"
   );
 });
 
@@ -53,7 +53,7 @@ Deno.test("PgUpgradeCommand - compareVersions handles different lengths", () => 
 Deno.test("PgUpgradeCommand - getAvailableVersions returns known versions", () => {
   const command = new PgUpgradeCommand();
   const getAvailableVersions = (command as any).getAvailableVersions.bind(
-    command,
+    command
   );
   const versions = getAvailableVersions();
 
@@ -69,9 +69,9 @@ Deno.test("PgUpgradeCommand - instance not found error", async () => {
     () =>
       command.execute({
         targetVersion: "17.0",
-        project: "nonexistent-project-xyz",
+        project: "nonexistent-project-xyz"
       }),
     Error,
-    "No PostgreSQL instance found",
+    "No PostgreSQL instance found"
   );
 });

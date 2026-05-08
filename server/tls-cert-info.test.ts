@@ -70,7 +70,7 @@ Deno.test("extractNotAfter rejects content without PEM markers", () => {
   assertThrows(
     () => extractNotAfter("not a certificate"),
     Error,
-    "PEM envelope",
+    "PEM envelope"
   );
 });
 
@@ -84,8 +84,8 @@ Deno.test("computeCertExpiry yields positive secondsUntilExpiry for future cert"
   assertEquals(
     expiry.notAfterUnix,
     Math.floor(
-      new Date("2026-05-07T06:35:01Z").getTime() / 1000,
-    ),
+      new Date("2026-05-07T06:35:01Z").getTime() / 1000
+    )
   );
 });
 

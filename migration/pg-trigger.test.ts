@@ -22,14 +22,14 @@ const RUN_PG = canRunPgTests();
 // ---------------------------------------------------------------------------
 
 function parseDsn(
-  dsn: string,
+  dsn: string
 ): { hostname: string; port: number; user: string; database: string; } {
   const url = new URL(dsn);
   return {
     hostname: url.hostname || "localhost",
     port: url.port ? parseInt(url.port) : 5432,
     user: url.username || "disc",
-    database: url.pathname.slice(1) || "disc_test",
+    database: url.pathname.slice(1) || "disc_test"
   };
 }
 
@@ -49,7 +49,7 @@ async function execSQL(dsn: string, sql: string): Promise<void> {
 async function queryRows<T>(
   dsn: string,
   sql: string,
-  params?: unknown[],
+  params?: unknown[]
 ): Promise<T[]> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
@@ -112,7 +112,7 @@ Deno.test({
           target_name TEXT NOT NULL,
           created_at TIMESTAMP DEFAULT NOW()
         );
-      `,
+      `
       );
 
       // Create the user table
@@ -123,7 +123,7 @@ Deno.test({
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           name TEXT NOT NULL
         );
-      `,
+      `
       );
 
       // Construct the trigger SQL directly using the same naming patterns
@@ -140,7 +140,7 @@ Deno.test({
           RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
-      `,
+      `
       );
 
       await execSQL(
@@ -149,7 +149,7 @@ Deno.test({
         CREATE TRIGGER ${triggerName}
         AFTER INSERT ON ${userTable}
         FOR EACH ROW EXECUTE FUNCTION ${fnName}();
-      `,
+      `
       );
 
       // Insert a user row
@@ -157,13 +157,13 @@ Deno.test({
         dsn,
         `
         INSERT INTO ${userTable} (name) VALUES ('Ada');
-      `,
+      `
       );
 
       // Verify audit_log has a row from the trigger
       const rows = await queryRows<{ action: string; target_name: string; }>(
         dsn,
-        `SELECT action, target_name FROM ${auditTable}`,
+        `SELECT action, target_name FROM ${auditTable}`
       );
 
       assertEquals(rows.length, 1, "Should have exactly 1 audit_log entry");
@@ -172,7 +172,7 @@ Deno.test({
     } finally {
       await cleanup(dsn, auditTable, userTable);
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -198,7 +198,7 @@ Deno.test({
           action TEXT NOT NULL,
           target_name TEXT NOT NULL
         );
-      `,
+      `
       );
 
       // Create the user table
@@ -209,7 +209,7 @@ Deno.test({
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           name TEXT NOT NULL
         );
-      `,
+      `
       );
 
       // Create trigger function and trigger for AFTER UPDATE
@@ -225,7 +225,7 @@ Deno.test({
           RETURN NEW;
         END;
         $$ LANGUAGE plpgsql;
-      `,
+      `
       );
 
       await execSQL(
@@ -234,7 +234,7 @@ Deno.test({
         CREATE TRIGGER ${triggerName}
         AFTER UPDATE ON ${userTable}
         FOR EACH ROW EXECUTE FUNCTION ${fnName}();
-      `,
+      `
       );
 
       // Insert a row (should NOT fire the UPDATE trigger)
@@ -242,18 +242,18 @@ Deno.test({
         dsn,
         `
         INSERT INTO ${userTable} (name) VALUES ('Billie');
-      `,
+      `
       );
 
       // Verify audit_log is empty after INSERT (trigger is UPDATE-only)
       const emptyRows = await queryRows<{ action: string; }>(
         dsn,
-        `SELECT action FROM ${auditTable}`,
+        `SELECT action FROM ${auditTable}`
       );
       assertEquals(
         emptyRows.length,
         0,
-        "Audit log should be empty after INSERT (UPDATE trigger only)",
+        "Audit log should be empty after INSERT (UPDATE trigger only)"
       );
 
       // Update the row
@@ -261,13 +261,13 @@ Deno.test({
         dsn,
         `
         UPDATE ${userTable} SET name = 'Billieby' WHERE name = 'Billie';
-      `,
+      `
       );
 
       // Verify audit_log has one entry from the UPDATE trigger
       const rows = await queryRows<{ action: string; target_name: string; }>(
         dsn,
-        `SELECT action, target_name FROM ${auditTable}`,
+        `SELECT action, target_name FROM ${auditTable}`
       );
 
       assertEquals(rows.length, 1, "Should have exactly 1 audit_log entry");
@@ -275,12 +275,12 @@ Deno.test({
       assertEquals(
         rows[0].target_name,
         "Billieby",
-        "Target name should be the updated value",
+        "Target name should be the updated value"
       );
     } finally {
       await cleanup(dsn, auditTable, userTable);
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -306,7 +306,7 @@ Deno.test({
           action TEXT NOT NULL,
           target_name TEXT NOT NULL
         );
-      `,
+      `
       );
 
       // Create the user table
@@ -317,7 +317,7 @@ Deno.test({
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           name TEXT NOT NULL
         );
-      `,
+      `
       );
 
       // Create trigger function and trigger for BEFORE DELETE.
@@ -338,7 +338,7 @@ Deno.test({
           RETURN OLD;
         END;
         $$ LANGUAGE plpgsql;
-      `,
+      `
       );
 
       await execSQL(
@@ -347,7 +347,7 @@ Deno.test({
         CREATE TRIGGER ${triggerName}
         BEFORE DELETE ON ${userTable}
         FOR EACH ROW EXECUTE FUNCTION ${fnName}();
-      `,
+      `
       );
 
       // Insert a row
@@ -355,7 +355,7 @@ Deno.test({
         dsn,
         `
         INSERT INTO ${userTable} (name) VALUES ('Cher');
-      `,
+      `
       );
 
       // Delete the row (should fire BEFORE DELETE trigger)
@@ -363,7 +363,7 @@ Deno.test({
         dsn,
         `
         DELETE FROM ${userTable} WHERE name = 'Cher';
-      `,
+      `
       );
 
       // Verify audit_log has an entry logged BEFORE the delete
@@ -371,35 +371,35 @@ Deno.test({
         { action: string; target_name: string; }
       >(
         dsn,
-        `SELECT action, target_name FROM ${auditTable}`,
+        `SELECT action, target_name FROM ${auditTable}`
       );
 
       assertEquals(
         auditRows.length,
         1,
-        "Should have exactly 1 audit_log entry",
+        "Should have exactly 1 audit_log entry"
       );
       assertEquals(auditRows[0].action, "DELETE", "Action should be DELETE");
       assertEquals(
         auditRows[0].target_name,
         "Cher",
-        "Target name should be the deleted row's name",
+        "Target name should be the deleted row's name"
       );
 
       // Verify the row was actually deleted from the user table
       const userRows = await queryRows<{ name: string; }>(
         dsn,
-        `SELECT name FROM ${userTable}`,
+        `SELECT name FROM ${userTable}`
       );
       assertEquals(
         userRows.length,
         0,
-        "User table should be empty after deletion",
+        "User table should be empty after deletion"
       );
     } finally {
       await cleanup(dsn, auditTable, userTable);
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -427,7 +427,7 @@ Deno.test({
           action TEXT NOT NULL,
           target_name TEXT
         );
-      `,
+      `
       );
 
       // Create the item table
@@ -438,7 +438,7 @@ Deno.test({
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           name TEXT NOT NULL
         );
-      `,
+      `
       );
 
       // Create a single trigger function that handles all three events.
@@ -460,7 +460,7 @@ Deno.test({
           END IF;
         END;
         $$ LANGUAGE plpgsql;
-      `,
+      `
       );
 
       await execSQL(
@@ -469,7 +469,7 @@ Deno.test({
         CREATE TRIGGER ${triggerName}
         BEFORE INSERT OR UPDATE OR DELETE ON ${itemTable}
         FOR EACH ROW EXECUTE FUNCTION ${fnName}();
-      `,
+      `
       );
 
       // Perform all three operations
@@ -477,25 +477,25 @@ Deno.test({
         dsn,
         `
         INSERT INTO ${itemTable} (name) VALUES ('Widget');
-      `,
+      `
       );
       await execSQL(
         dsn,
         `
         UPDATE ${itemTable} SET name = 'Gadget' WHERE name = 'Widget';
-      `,
+      `
       );
       await execSQL(
         dsn,
         `
         DELETE FROM ${itemTable} WHERE name = 'Gadget';
-      `,
+      `
       );
 
       // Verify 3 audit_log entries, one per operation
       const rows = await queryRows<{ action: string; target_name: string; }>(
         dsn,
-        `SELECT action, target_name FROM ${auditTable} ORDER BY id`,
+        `SELECT action, target_name FROM ${auditTable} ORDER BY id`
       );
 
       assertEquals(rows.length, 3, "Should have exactly 3 audit_log entries");
@@ -507,19 +507,19 @@ Deno.test({
       assertEquals(
         rows[1].target_name,
         "Gadget",
-        "UPDATE should log the new name 'Gadget'",
+        "UPDATE should log the new name 'Gadget'"
       );
 
       assertEquals(rows[2].action, "DELETE", "Third action should be DELETE");
       assertEquals(
         rows[2].target_name,
         "Gadget",
-        "DELETE should log the old name 'Gadget'",
+        "DELETE should log the old name 'Gadget'"
       );
     } finally {
       await cleanup(dsn, auditTable, itemTable);
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -545,7 +545,7 @@ Deno.test({
           action TEXT NOT NULL,
           target_name TEXT NOT NULL
         );
-      `,
+      `
       );
 
       // Create the user table
@@ -556,7 +556,7 @@ Deno.test({
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           name TEXT NOT NULL
         );
-      `,
+      `
       );
 
       // Use the DDLGenerator to produce trigger DDL from a TriggerDefinition
@@ -566,7 +566,7 @@ Deno.test({
         timing: "after",
         events: ["insert"],
         scope: "each",
-        body: `INSERT INTO ${auditTable}(action, target_name) VALUES (__action__, __new__.name)`,
+        body: `INSERT INTO ${auditTable}(action, target_name) VALUES (__action__, __new__.name)`
       };
 
       // Generate DDL using the same path as the migration engine:
@@ -576,7 +576,7 @@ Deno.test({
         typeName: tableName,
         properties: [],
         links: [],
-        triggers: [triggerDef],
+        triggers: [triggerDef]
       };
       const triggerStatements = ddl.generateDDL([createOp]);
 
@@ -584,15 +584,15 @@ Deno.test({
       // created the table) and the trigger function + trigger statements.
       // Filter for only the trigger-related statements.
       const triggerSql = triggerStatements.filter(
-        (s) =>
-          s.includes("CREATE OR REPLACE FUNCTION")
-          || s.includes("CREATE TRIGGER"),
+        s =>
+          s.includes("CREATE OR REPLACE FUNCTION") ||
+          s.includes("CREATE TRIGGER")
       );
 
       assertEquals(
         triggerSql.length,
         2,
-        "DDLGenerator should produce exactly 2 trigger statements (function + trigger)",
+        "DDLGenerator should produce exactly 2 trigger statements (function + trigger)"
       );
 
       // Execute the generated trigger SQL against PostgreSQL
@@ -605,13 +605,13 @@ Deno.test({
         dsn,
         `
         INSERT INTO ${tableName} (name) VALUES ('Diana');
-      `,
+      `
       );
 
       // Verify audit_log was populated by the DDL-generated trigger
       const rows = await queryRows<{ action: string; target_name: string; }>(
         dsn,
-        `SELECT action, target_name FROM ${auditTable}`,
+        `SELECT action, target_name FROM ${auditTable}`
       );
 
       assertEquals(rows.length, 1, "Should have exactly 1 audit_log entry");
@@ -619,10 +619,10 @@ Deno.test({
       assertEquals(
         rows[0].target_name,
         "Diana",
-        "Target name should be Diana",
+        "Target name should be Diana"
       );
     } finally {
       await cleanup(dsn, auditTable, tableName);
     }
-  },
+  }
 });

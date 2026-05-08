@@ -47,7 +47,7 @@ export interface ExtensionRoute {
   path: string;
   handler: (
     request: Request,
-    authContext?: ExtensionAuthContext,
+    authContext?: ExtensionAuthContext
   ) => Response | Promise<Response>;
 }
 
@@ -56,7 +56,7 @@ export interface ExtensionMiddleware {
   priority: number;
   handle: (
     request: Request,
-    next: () => Promise<Response>,
+    next: () => Promise<Response>
   ) => Promise<Response>;
 }
 
@@ -69,7 +69,7 @@ export interface CompilerHook {
   name: string;
   transformFunctionCall?: (
     funcName: string,
-    args: string[],
+    args: string[]
   ) => string | undefined;
 }
 

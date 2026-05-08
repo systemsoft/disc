@@ -15,14 +15,14 @@ export async function exchangeCodeForToken(
   provider: OAuthProviderConfig,
   code: string,
   redirectUri: string,
-  codeVerifier?: string,
+  codeVerifier?: string
 ): Promise<TokenResponse> {
   const body = new URLSearchParams({
     client_id: provider.clientId,
     client_secret: provider.clientSecret,
     code,
     grant_type: "authorization_code",
-    redirect_uri: redirectUri,
+    redirect_uri: redirectUri
   });
   // P1-41: PKCE code_verifier is required by providers that received
   // a code_challenge in the authorize redirect. Forward it when the
@@ -38,10 +38,10 @@ export async function exchangeCodeForToken(
   const response = await fetch(provider.tokenUrl, {
     body: body.toString(),
     headers: {
-      "Accept": "application/json",
-      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded"
     },
-    method: "POST",
+    method: "POST"
   });
 
   if (!response.ok) {
@@ -53,19 +53,19 @@ export async function exchangeCodeForToken(
   return {
     accessToken: String(data["access_token"] ?? ""),
     expiresIn: typeof data["expires_in"] === "number" ? data["expires_in"] : undefined,
-    tokenType: String(data["token_type"] ?? "Bearer"),
+    tokenType: String(data["token_type"] ?? "Bearer")
   };
 }
 
 export async function fetchUserInfo(
   provider: OAuthProviderConfig,
-  accessToken: string,
+  accessToken: string
 ): Promise<OAuthUserInfo> {
   const response = await fetch(provider.userInfoUrl, {
     headers: {
-      "Accept": "application/json",
-      "Authorization": `Bearer ${accessToken}`,
-    },
+      Accept: "application/json",
+      Authorization: `Bearer ${accessToken}`
+    }
   });
 
   if (!response.ok) {
@@ -105,6 +105,6 @@ export async function fetchUserInfo(
     id: String(data["sub"] ?? data["id"] ?? ""),
     locale: typeof data["locale"] === "string" ? data["locale"] : undefined,
     name: typeof data["name"] === "string" ? data["name"] : typeof data["login"] === "string" ? data["login"] : undefined,
-    raw: data,
+    raw: data
   };
 }

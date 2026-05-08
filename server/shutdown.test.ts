@@ -16,27 +16,27 @@ function createMockProtocolHandler(
   options: {
     /** Delay (ms) before handleRequest resolves. */
     requestDelay?: number;
-  } = {},
+  } = {}
 ): ProtocolHandler {
   return {
     async handleRequest(
       _request: QueryRequest,
-      _context: QueryContext,
+      _context: QueryContext
     ): Promise<QueryResponse> {
       if (options.requestDelay && options.requestDelay > 0) {
-        await new Promise<void>((resolve) => setTimeout(resolve, options.requestDelay));
+        await new Promise<void>(resolve => setTimeout(resolve, options.requestDelay));
       }
       return { data: { ok: true } };
     },
     validateRequest(_request: QueryRequest): QueryError[] {
       return [];
-    },
+    }
   };
 }
 
 /** Build a minimal ServerConfig for tests. */
 function createTestConfig(
-  overrides: Partial<ServerConfig> = {},
+  overrides: Partial<ServerConfig> = {}
 ): ServerConfig {
   return {
     host: "localhost",
@@ -46,7 +46,7 @@ function createTestConfig(
     requestTimeout: 5000,
     enableCors: false,
     enableWebsockets: false,
-    ...overrides,
+    ...overrides
   };
 }
 
@@ -57,7 +57,7 @@ Deno.test(
     const config = createTestConfig();
     const server = new HttpServer({
       config,
-      protocolHandler: handler,
+      protocolHandler: handler
     });
 
     // Start draining -- this sets the shutting_down flag immediately
@@ -76,7 +76,7 @@ Deno.test(
 
     // Clean up internal timers (heartbeat interval from SubscriptionHandler)
     await server.stop();
-  },
+  }
 );
 
 Deno.test(
@@ -87,7 +87,7 @@ Deno.test(
     const config = createTestConfig();
     const server = new HttpServer({
       config,
-      protocolHandler: handler,
+      protocolHandler: handler
     });
 
     // Before any requests, in-flight count should be 0
@@ -103,7 +103,7 @@ Deno.test(
 
     // Clean up internal timers
     await server.stop();
-  },
+  }
 );
 
 Deno.test(
@@ -113,7 +113,7 @@ Deno.test(
     const config = createTestConfig();
     const server = new HttpServer({
       config,
-      protocolHandler: handler,
+      protocolHandler: handler
     });
 
     assertEquals(server.getInFlightCount(), 0);
@@ -128,7 +128,7 @@ Deno.test(
 
     // Clean up internal timers
     await server.stop();
-  },
+  }
 );
 
 Deno.test(
@@ -138,7 +138,7 @@ Deno.test(
     const config = createTestConfig();
     const server = new HttpServer({
       config,
-      protocolHandler: handler,
+      protocolHandler: handler
     });
 
     const timeoutMs = 250;
@@ -152,7 +152,7 @@ Deno.test(
 
     // Clean up internal timers
     await server.stop();
-  },
+  }
 );
 
 Deno.test(
@@ -162,14 +162,14 @@ Deno.test(
     const config = createTestConfig();
     const server = new HttpServer({
       config,
-      protocolHandler: handler,
+      protocolHandler: handler
     });
 
     assertEquals(server.getInFlightCount(), 0);
 
     // Clean up internal timers
     await server.stop();
-  },
+  }
 );
 
 Deno.test(
@@ -179,7 +179,7 @@ Deno.test(
     const config = createTestConfig();
     const server = new HttpServer({
       config,
-      protocolHandler: handler,
+      protocolHandler: handler
     });
 
     // Call drain multiple times -- should be idempotent
@@ -191,5 +191,5 @@ Deno.test(
 
     // Clean up internal timers
     await server.stop();
-  },
+  }
 );

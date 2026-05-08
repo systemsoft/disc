@@ -24,7 +24,7 @@ function createIntegrationTestConfig(): Types.MigrationConfig {
     dryRun: true,
     autoApprove: false,
     backupBeforeMigration: true,
-    rollbackOnError: true,
+    rollbackOnError: true
   };
 }
 
@@ -143,7 +143,8 @@ Deno.test("Integration - Parse and Generate Initial Migration", () => {
     assertEquals(plan.migrations[0].operations.length, 1);
     assertEquals(plan.migrations[0].operations[0].kind, "CreateType");
 
-    const createTypeOp = plan.migrations[0]
+    const createTypeOp = plan
+      .migrations[0]
       .operations[0] as Types.CreateTypeOperation;
     assertEquals(createTypeOp.typeName, "User");
     assertEquals(createTypeOp.properties.length, 3); // name, email, createdAt
@@ -179,12 +180,12 @@ Deno.test("Integration - Schema Evolution Migration", () => {
     assertEquals(operations.length >= 2, true);
 
     const alterUserOp = operations.find((op: Types.MigrationOperation) =>
-      op.kind === "AlterType"
-      && (op as Types.AlterTypeOperation).typeName === "User"
+      op.kind === "AlterType" &&
+      (op as Types.AlterTypeOperation).typeName === "User"
     );
     const createPostOp = operations.find((op: Types.MigrationOperation) =>
-      op.kind === "CreateType"
-      && (op as Types.CreateTypeOperation).typeName === "Post"
+      op.kind === "CreateType" &&
+      (op as Types.CreateTypeOperation).typeName === "Post"
     );
 
     assertEquals(alterUserOp !== undefined, true);
@@ -221,8 +222,8 @@ Deno.test("Integration - Complex Schema with Inheritance", () => {
 
     assertEquals(userCreateOp !== undefined, true);
     // Should inherit properties from Timestamped
-    const hasCreatedAt = userCreateOp.properties.some((prop) => prop.name === "createdAt");
-    const hasUpdatedAt = userCreateOp.properties.some((prop) => prop.name === "updatedAt");
+    const hasCreatedAt = userCreateOp.properties.some(prop => prop.name === "createdAt");
+    const hasUpdatedAt = userCreateOp.properties.some(prop => prop.name === "updatedAt");
     assertEquals(hasCreatedAt, true);
     assertEquals(hasUpdatedAt, true);
   }
@@ -259,7 +260,7 @@ Deno.test({
         const migrationResult = executeResult.value[0];
         const recordResult = await tracker.recordMigration(
           migration,
-          migrationResult,
+          migrationResult
         );
         assertEquals(recordResult.ok, true);
 
@@ -273,7 +274,7 @@ Deno.test({
     }
 
     await tracker.close();
-  },
+  }
 });
 
 Deno.test({
@@ -325,7 +326,7 @@ Deno.test({
     }
 
     await tracker.close();
-  },
+  }
 });
 
 Deno.test("Integration - Generate DDL from SDL Schema", () => {
@@ -351,7 +352,7 @@ Deno.test("Integration - Generate DDL from SDL Schema", () => {
       assertEquals(statements.length > 0, true);
 
       // Should contain CREATE TABLE statement
-      const createTableStmt = statements.find((stmt) => stmt.includes("CREATE TABLE"));
+      const createTableStmt = statements.find(stmt => stmt.includes("CREATE TABLE"));
       assertEquals(createTableStmt !== undefined, true);
 
       // Should contain proper columns
@@ -359,7 +360,7 @@ Deno.test("Integration - Generate DDL from SDL Schema", () => {
       assertStringIncludes(createTableStmt!, "email TEXT NOT NULL");
 
       // Should contain unique constraint for email
-      const uniqueConstraintStmt = statements.find((stmt) => stmt.includes("UNIQUE") && stmt.includes("email"));
+      const uniqueConstraintStmt = statements.find(stmt => stmt.includes("UNIQUE") && stmt.includes("email"));
       assertEquals(uniqueConstraintStmt !== undefined, true);
     }
   }
@@ -390,7 +391,7 @@ Deno.test("Integration - Rollback DDL Generation", () => {
       assertEquals(rollbackSQL.length > 0, true);
 
       // Should contain DROP TABLE statement
-      const dropTableStmt = rollbackSQL.find((stmt) => stmt.includes("DROP TABLE"));
+      const dropTableStmt = rollbackSQL.find(stmt => stmt.includes("DROP TABLE"));
       assertEquals(dropTableStmt !== undefined, true);
       assertStringIncludes(dropTableStmt!, "user");
     }
@@ -419,7 +420,7 @@ module default {
 
   const destructiveParser = new SDLParser(destructiveSchema);
   const destructiveModules = validator.convertToModules(
-    destructiveParser.parse(),
+    destructiveParser.parse()
   );
 
   // Generate migration plan
@@ -433,19 +434,19 @@ module default {
     if (!validationResult.ok) {
       assertStringIncludes(
         validationResult.error.message.toLowerCase(),
-        "data loss",
+        "data loss"
       );
     }
 
     // Validate rollback safety
     const rollbackValidationResult = engine.validateRollbackSafety(
-      planResult.value,
+      planResult.value
     );
     assertEquals(rollbackValidationResult.ok, false);
     if (!rollbackValidationResult.ok) {
       assertStringIncludes(
         rollbackValidationResult.error.message.toLowerCase(),
-        "rollback",
+        "rollback"
       );
     }
   }

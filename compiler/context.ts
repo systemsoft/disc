@@ -22,7 +22,7 @@ export const POLYMORPHIC_TYPES = new Set([
   "anyreal",
   "anyint",
   "anyfloat",
-  "anynumeric",
+  "anynumeric"
 ]);
 
 /**
@@ -217,7 +217,7 @@ export function createContext(schema: Schema): CompilationContext {
     aliasCounter: 0,
     currentScope: { aliases: new Map(), variables: new Map() },
     scopes: [],
-    cteAliases: new Map(),
+    cteAliases: new Map()
   };
 }
 
@@ -241,7 +241,7 @@ export function addTableAlias(
   ctx: CompilationContext,
   name: string,
   table: string,
-  type: string,
+  type: string
 ): string {
   const alias = generateAlias(ctx, name);
   ctx.currentScope.aliases.set(name, { table, alias, type });
@@ -250,16 +250,18 @@ export function addTableAlias(
 
 export function getTableAlias(
   ctx: CompilationContext,
-  name: string,
+  name: string
 ): TableAlias | undefined {
   // Check current scope first
   let alias = ctx.currentScope.aliases.get(name);
-  if (alias) return alias;
+  if (alias)
+    return alias;
 
   // Check parent scopes
   for (let i = ctx.scopes.length - 1; i >= 0; i--) {
     alias = ctx.scopes[i].aliases.get(name);
-    if (alias) return alias;
+    if (alias)
+      return alias;
   }
 
   return undefined;
@@ -267,7 +269,7 @@ export function getTableAlias(
 
 export function getTypeDef(
   ctx: CompilationContext,
-  name: string,
+  name: string
 ): TypeDef | undefined {
   return ctx.schema.types.get(name);
 }
@@ -282,30 +284,34 @@ export function getTypeDef(
  */
 export function resolveTypeName(
   ctx: CompilationContext,
-  name: string,
+  name: string
 ): TypeDef | undefined {
   // 1. Exact match
   let typeDef = ctx.schema.types.get(name);
-  if (typeDef) return typeDef;
+  if (typeDef)
+    return typeDef;
 
   // Only try qualified lookups for unqualified names
   if (!name.includes("::")) {
     // 2. Module scope (set by WITH MODULE)
     if (ctx.moduleScope) {
       typeDef = ctx.schema.types.get(`${ctx.moduleScope}::${name}`);
-      if (typeDef) return typeDef;
+      if (typeDef)
+        return typeDef;
     }
 
     // 3. Default module
     typeDef = ctx.schema.types.get(`default::${name}`);
-    if (typeDef) return typeDef;
+    if (typeDef)
+      return typeDef;
   } else if (name.startsWith("default::")) {
     // 4. Strip the default:: prefix — types in the default module are stored
     // under their bare name (see migration/schema-manager.ts:621), so a
     // query like `select default::Item` must fall back to looking up `Item`
     // when the qualified key isn't present.
     typeDef = ctx.schema.types.get(name.slice("default::".length));
-    if (typeDef) return typeDef;
+    if (typeDef)
+      return typeDef;
   }
 
   return undefined;
@@ -322,25 +328,29 @@ export function resolveTypeName(
 export function resolveAlias(
   schema: Schema,
   name: string,
-  moduleScope?: string,
+  moduleScope?: string
 ): AliasDef | undefined {
-  if (!schema.aliases) return undefined;
+  if (!schema.aliases)
+    return undefined;
 
   // 1. Exact match
   let aliasDef = schema.aliases.get(name);
-  if (aliasDef) return aliasDef;
+  if (aliasDef)
+    return aliasDef;
 
   // Only try qualified lookups for unqualified names
   if (!name.includes("::")) {
     // 2. Module scope
     if (moduleScope) {
       aliasDef = schema.aliases.get(`${moduleScope}::${name}`);
-      if (aliasDef) return aliasDef;
+      if (aliasDef)
+        return aliasDef;
     }
 
     // 3. Default module
     aliasDef = schema.aliases.get(`default::${name}`);
-    if (aliasDef) return aliasDef;
+    if (aliasDef)
+      return aliasDef;
   }
 
   return undefined;
@@ -357,25 +367,29 @@ export function resolveAlias(
 export function resolveGlobal(
   schema: Schema,
   name: string,
-  moduleScope?: string,
+  moduleScope?: string
 ): GlobalDef | undefined {
-  if (!schema.globals) return undefined;
+  if (!schema.globals)
+    return undefined;
 
   // 1. Exact match
   let globalDef = schema.globals.get(name);
-  if (globalDef) return globalDef;
+  if (globalDef)
+    return globalDef;
 
   // Only try qualified lookups for unqualified names
   if (!name.includes("::")) {
     // 2. Module scope
     if (moduleScope) {
       globalDef = schema.globals.get(`${moduleScope}::${name}`);
-      if (globalDef) return globalDef;
+      if (globalDef)
+        return globalDef;
     }
 
     // 3. Default module
     globalDef = schema.globals.get(`default::${name}`);
-    if (globalDef) return globalDef;
+    if (globalDef)
+      return globalDef;
   }
 
   return undefined;
@@ -384,7 +398,7 @@ export function resolveGlobal(
 export function getProperty(
   ctx: CompilationContext,
   typeName: string,
-  propName: string,
+  propName: string
 ): PropertyDef | undefined {
   const type = resolveTypeName(ctx, typeName);
   return type?.properties.get(propName);
@@ -393,7 +407,7 @@ export function getProperty(
 export function getLink(
   ctx: CompilationContext,
   typeName: string,
-  linkName: string,
+  linkName: string
 ): LinkDef | undefined {
   const type = resolveTypeName(ctx, typeName);
   return type?.links.get(linkName);
@@ -402,21 +416,21 @@ export function getLink(
 export function addCTEAlias(
   ctx: CompilationContext,
   name: string,
-  alias: CTEAlias,
+  alias: CTEAlias
 ): void {
   ctx.cteAliases.set(name, alias);
 }
 
 export function getCTEAlias(
   ctx: CompilationContext,
-  name: string,
+  name: string
 ): CTEAlias | undefined {
   return ctx.cteAliases.get(name);
 }
 
 export function removeCTEAlias(
   ctx: CompilationContext,
-  name: string,
+  name: string
 ): void {
   ctx.cteAliases.delete(name);
 }
@@ -424,8 +438,8 @@ export function removeCTEAlias(
 /** Check if a name refers to an enum type in the schema */
 export function isEnumType(schema: Schema, name: string): boolean {
   const typeDef = schema.types.get(name);
-  return !!typeDef && Array.isArray(typeDef.enumValues)
-    && typeDef.enumValues.length > 0;
+  return !!typeDef && Array.isArray(typeDef.enumValues) &&
+    typeDef.enumValues.length > 0;
 }
 
 /** Convert a PascalCase type name to snake_case for SQL enum type naming */
@@ -441,10 +455,11 @@ export function getEnumSqlType(name: string): string {
  */
 export function getAllSubtypes(
   schema: Schema,
-  typeName: string,
+  typeName: string
 ): string[] {
   const typeDef = schema.types.get(typeName);
-  if (!typeDef?.subtypes || typeDef.subtypes.length === 0) return [];
+  if (!typeDef?.subtypes || typeDef.subtypes.length === 0)
+    return [];
 
   const result: string[] = [];
   const queue = [...typeDef.subtypes];
@@ -467,7 +482,7 @@ export function getAllSubtypes(
  */
 export function getTypeHierarchy(
   schema: Schema,
-  typeName: string,
+  typeName: string
 ): string[] {
   const result: string[] = [typeName];
   const visited = new Set<string>([typeName]);
@@ -475,7 +490,8 @@ export function getTypeHierarchy(
 
   while (queue.length > 0) {
     const name = queue.shift()!;
-    if (visited.has(name)) continue;
+    if (visited.has(name))
+      continue;
     visited.add(name);
     result.push(name);
     const parentDef = schema.types.get(name);
@@ -489,7 +505,7 @@ export function getTypeHierarchy(
 export function mergeSchemaAdditions(
   base: Schema,
   additionalFunctions: FunctionDef[],
-  additionalTypes: TypeDef[],
+  additionalTypes: TypeDef[]
 ): Schema {
   const functions = new Map(base.functions);
   for (const fn of additionalFunctions) {
@@ -522,7 +538,7 @@ export function createTestSchema(): Schema {
     tableName: "status",
     properties: new Map(),
     links: new Map(),
-    enumValues: ["active", "inactive", "pending"],
+    enumValues: ["active", "inactive", "pending"]
   };
 
   const userType: TypeDef = {
@@ -537,7 +553,7 @@ export function createTestSchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["name", {
         name: "name",
@@ -546,7 +562,7 @@ export function createTestSchema(): Schema {
         multi: false,
         columnName: "name",
         edgeqlType: "str",
-        constraints: [{ name: "max_length", args: ["255"] }],
+        constraints: [{ name: "max_length", args: ["255"] }]
       }],
       ["email", {
         name: "email",
@@ -555,7 +571,7 @@ export function createTestSchema(): Schema {
         multi: false,
         columnName: "email",
         edgeqlType: "str",
-        constraints: [{ name: "exclusive" }],
+        constraints: [{ name: "exclusive" }]
       }],
       ["createdAt", {
         name: "createdAt",
@@ -565,7 +581,7 @@ export function createTestSchema(): Schema {
         columnName: "created_at",
         edgeqlType: "datetime",
         readonly: true,
-        hasDefault: true,
+        hasDefault: true
       }],
       ["active", {
         name: "active",
@@ -573,7 +589,7 @@ export function createTestSchema(): Schema {
         required: false,
         multi: false,
         columnName: "active",
-        edgeqlType: "bool",
+        edgeqlType: "bool"
       }],
       ["age", {
         name: "age",
@@ -581,7 +597,7 @@ export function createTestSchema(): Schema {
         required: false,
         multi: false,
         columnName: "age",
-        edgeqlType: "int32",
+        edgeqlType: "int32"
       }],
       ["postCount", {
         name: "postCount",
@@ -590,8 +606,8 @@ export function createTestSchema(): Schema {
         multi: false,
         columnName: "post_count",
         edgeqlType: "int32",
-        computed: true,
-      }],
+        computed: true
+      }]
     ]),
     links: new Map([
       ["posts", {
@@ -599,9 +615,9 @@ export function createTestSchema(): Schema {
         target: "Post",
         required: false,
         multi: true,
-        backlink: "author",
-      }],
-    ]),
+        backlink: "author"
+      }]
+    ])
   };
 
   const postType: TypeDef = {
@@ -616,7 +632,7 @@ export function createTestSchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["title", {
         name: "title",
@@ -624,7 +640,7 @@ export function createTestSchema(): Schema {
         required: true,
         multi: false,
         columnName: "title",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["body", {
         name: "body",
@@ -632,7 +648,7 @@ export function createTestSchema(): Schema {
         required: true,
         multi: false,
         columnName: "body",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["createdAt", {
         name: "createdAt",
@@ -642,8 +658,8 @@ export function createTestSchema(): Schema {
         columnName: "created_at",
         edgeqlType: "datetime",
         readonly: true,
-        hasDefault: true,
-      }],
+        hasDefault: true
+      }]
     ]),
     links: new Map([
       ["author", {
@@ -651,16 +667,16 @@ export function createTestSchema(): Schema {
         target: "User",
         required: true,
         multi: false,
-        columnName: "author_id",
-      }],
-    ]),
+        columnName: "author_id"
+      }]
+    ])
   };
 
   return {
     types: new Map([
       ["Status", statusType],
       ["User", userType],
-      ["Post", postType],
+      ["Post", postType]
     ]),
     functions: getBuiltinFunctions(),
     aliases: new Map(),
@@ -673,9 +689,9 @@ export function createTestSchema(): Schema {
         required: false,
         multi: false,
         readonly: false,
-        pgSettingName: "disc.global_default__current_user_id",
-      }],
-    ]),
+        pgSettingName: "disc.global_default__current_user_id"
+      }]
+    ])
   };
 }
 
@@ -692,7 +708,7 @@ export function createMultiModuleTestSchema(): Schema {
     properties: new Map(),
     links: new Map(),
     enumValues: ["active", "suspended", "pending"],
-    module: "default",
+    module: "default"
   };
 
   const merchantType: TypeDef = {
@@ -708,7 +724,7 @@ export function createMultiModuleTestSchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["name", {
         name: "name",
@@ -716,7 +732,7 @@ export function createMultiModuleTestSchema(): Schema {
         required: true,
         multi: false,
         columnName: "name",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["status", {
         name: "status",
@@ -724,8 +740,8 @@ export function createMultiModuleTestSchema(): Schema {
         required: false,
         multi: false,
         columnName: "status",
-        edgeqlType: "str",
-      }],
+        edgeqlType: "str"
+      }]
     ]),
     links: new Map([
       ["apiKeys", {
@@ -733,16 +749,16 @@ export function createMultiModuleTestSchema(): Schema {
         target: "api::ApiKey",
         required: false,
         multi: true,
-        backlink: "merchant",
+        backlink: "merchant"
       }],
       ["payments", {
         name: "payments",
         target: "payment::Payment",
         required: false,
         multi: true,
-        backlink: "merchant",
-      }],
-    ]),
+        backlink: "merchant"
+      }]
+    ])
   };
 
   // api module types
@@ -759,7 +775,7 @@ export function createMultiModuleTestSchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["key", {
         name: "key",
@@ -768,7 +784,7 @@ export function createMultiModuleTestSchema(): Schema {
         multi: false,
         columnName: "key",
         edgeqlType: "str",
-        constraints: [{ name: "exclusive" }],
+        constraints: [{ name: "exclusive" }]
       }],
       ["active", {
         name: "active",
@@ -777,8 +793,8 @@ export function createMultiModuleTestSchema(): Schema {
         multi: false,
         columnName: "active",
         edgeqlType: "bool",
-        hasDefault: true,
-      }],
+        hasDefault: true
+      }]
     ]),
     links: new Map([
       ["merchant", {
@@ -786,9 +802,9 @@ export function createMultiModuleTestSchema(): Schema {
         target: "Merchant",
         required: true,
         multi: false,
-        columnName: "merchant_id",
-      }],
-    ]),
+        columnName: "merchant_id"
+      }]
+    ])
   };
 
   // payment module types
@@ -799,7 +815,7 @@ export function createMultiModuleTestSchema(): Schema {
     properties: new Map(),
     links: new Map(),
     enumValues: ["pending", "completed", "failed", "refunded"],
-    module: "payment",
+    module: "payment"
   };
 
   const paymentType: TypeDef = {
@@ -815,7 +831,7 @@ export function createMultiModuleTestSchema(): Schema {
         multi: false,
         columnName: "id",
         edgeqlType: "uuid",
-        hasDefault: true,
+        hasDefault: true
       }],
       ["amount", {
         name: "amount",
@@ -823,7 +839,7 @@ export function createMultiModuleTestSchema(): Schema {
         required: true,
         multi: false,
         columnName: "amount",
-        edgeqlType: "decimal",
+        edgeqlType: "decimal"
       }],
       ["currency", {
         name: "currency",
@@ -831,7 +847,7 @@ export function createMultiModuleTestSchema(): Schema {
         required: true,
         multi: false,
         columnName: "currency",
-        edgeqlType: "str",
+        edgeqlType: "str"
       }],
       ["status", {
         name: "status",
@@ -839,8 +855,8 @@ export function createMultiModuleTestSchema(): Schema {
         required: false,
         multi: false,
         columnName: "status",
-        edgeqlType: "str",
-      }],
+        edgeqlType: "str"
+      }]
     ]),
     links: new Map([
       ["merchant", {
@@ -848,9 +864,9 @@ export function createMultiModuleTestSchema(): Schema {
         target: "Merchant",
         required: true,
         multi: false,
-        columnName: "merchant_id",
-      }],
-    ]),
+        columnName: "merchant_id"
+      }]
+    ])
   };
 
   return {
@@ -862,8 +878,8 @@ export function createMultiModuleTestSchema(): Schema {
       ["api::ApiKey", apiKeyType],
       // payment module: qualified keys
       ["payment::PaymentStatus", paymentStatusType],
-      ["payment::Payment", paymentType],
+      ["payment::Payment", paymentType]
     ]),
-    functions: getBuiltinFunctions(),
+    functions: getBuiltinFunctions()
   };
 }

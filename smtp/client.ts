@@ -68,7 +68,7 @@ export const defaultConnectImpl: SmtpConnectImpl = {
     // default path because `connect` always returns one; tests that
     // inject a fake duplex provide their own startTls.
     return Deno.startTls(conn as Deno.TcpConn, { hostname });
-  },
+  }
 };
 
 /**
@@ -88,7 +88,7 @@ export class SmtpClient {
     let conn = await connector.connect({
       host: this.cfg.host,
       port: this.cfg.port,
-      secure: this.cfg.secure,
+      secure: this.cfg.secure
     });
 
     const reader = new LineReader(conn);
@@ -143,7 +143,7 @@ export class SmtpClient {
           log.warn("smtp recipient rejected", {
             rcpt,
             code: reply.code,
-            text: reply.text,
+            text: reply.text
           });
         }
       }
@@ -175,7 +175,7 @@ export class SmtpClient {
 
   private async ehlo(
     conn: SmtpConn,
-    reader: LineReader,
+    reader: LineReader
   ): Promise<Set<string>> {
     await this.writeLine(conn, `EHLO ${this.cfg.hostname}`);
     const reply = await reader.readReply(this.cfg.timeoutMs);
@@ -188,18 +188,19 @@ export class SmtpClient {
   private async authenticate(
     conn: SmtpConn,
     reader: LineReader,
-    exts: Set<string>,
+    exts: Set<string>
   ): Promise<void> {
-    if (!this.cfg.auth) return;
+    if (!this.cfg.auth)
+      return;
     const authExt = findAuthExtension(exts);
-    const mechanisms = authExt ? authExt.split(/\s+/).slice(1).map((m) => m.toUpperCase()) : [];
+    const mechanisms = authExt ? authExt.split(/\s+/).slice(1).map(m => m.toUpperCase()) : [];
 
     const { user, pass } = this.cfg.auth;
 
     if (mechanisms.includes("PLAIN") || mechanisms.length === 0) {
       // RFC 4616: \0user\0pass, base64-encoded.
       const payload = encodeBase64(
-        new TextEncoder().encode(`\u0000${user}\u0000${pass}`),
+        new TextEncoder().encode(`\u0000${user}\u0000${pass}`)
       );
       await this.writeLine(conn, `AUTH PLAIN ${payload}`);
       await this.expect(reader, 235);
@@ -211,19 +212,19 @@ export class SmtpClient {
       await this.expect(reader, 334);
       await this.writeLine(
         conn,
-        encodeBase64(new TextEncoder().encode(user)),
+        encodeBase64(new TextEncoder().encode(user))
       );
       await this.expect(reader, 334);
       await this.writeLine(
         conn,
-        encodeBase64(new TextEncoder().encode(pass)),
+        encodeBase64(new TextEncoder().encode(pass))
       );
       await this.expect(reader, 235);
       return;
     }
 
     throw new Error(
-      `SMTP server advertises AUTH but supports no known mechanism (have: ${mechanisms.join(", ") || "(none)"})`,
+      `SMTP server advertises AUTH but supports no known mechanism (have: ${mechanisms.join(", ") || "(none)"})`
     );
   }
 
@@ -238,23 +239,23 @@ export class SmtpClient {
     const normalized = body.replace(/\r\n|\r|\n/g, CRLF);
     const stuffed = normalized
       .split(CRLF)
-      .map((l) => (l.startsWith(".") ? "." + l : l))
+      .map(l => (l.startsWith(".") ? "." + l : l))
       .join(CRLF);
     const trailing = stuffed.endsWith(CRLF) ? "" : CRLF;
     await writeAll(
       conn,
-      new TextEncoder().encode(stuffed + trailing),
+      new TextEncoder().encode(stuffed + trailing)
     );
   }
 
   private async expect(
     reader: LineReader,
-    expected: number,
+    expected: number
   ): Promise<void> {
     const reply = await reader.readReply(this.cfg.timeoutMs);
     if (reply.code !== expected) {
       throw new Error(
-        `SMTP expected ${expected}, got ${reply.code} ${reply.text}`,
+        `SMTP expected ${expected}, got ${reply.code} ${reply.text}`
       );
     }
   }
@@ -305,7 +306,8 @@ class LineReader {
       const text = line.slice(4);
       lines.push(text);
       code = replyCode;
-      if (sep === " ") break; // last line in a multi-line reply
+      if (sep === " ")
+        break; // last line in a multi-line reply
       if (sep !== "-") {
         throw new Error(`malformed SMTP reply separator: ${line}`);
       }
@@ -343,7 +345,8 @@ function parseEhloExtensions(lines: string[]): Set<string> {
   const set = new Set<string>();
   for (let i = 1; i < lines.length; i++) {
     const raw = lines[i].trim();
-    if (raw.length === 0) continue;
+    if (raw.length === 0)
+      continue;
     set.add(raw.toUpperCase());
   }
   return set;
@@ -351,21 +354,23 @@ function parseEhloExtensions(lines: string[]): Set<string> {
 
 function findAuthExtension(exts: Set<string>): string | undefined {
   for (const ext of exts) {
-    if (ext.startsWith("AUTH ") || ext === "AUTH") return ext;
+    if (ext.startsWith("AUTH ") || ext === "AUTH")
+      return ext;
   }
   return undefined;
 }
 
 function indexOfCrlf(buf: Uint8Array): number {
   for (let i = 0; i < buf.length - 1; i++) {
-    if (buf[i] === 0x0d && buf[i + 1] === 0x0a) return i;
+    if (buf[i] === 0x0d && buf[i + 1] === 0x0a)
+      return i;
   }
   return -1;
 }
 
 function concatBytes(
   a: Uint8Array,
-  b: Uint8Array,
+  b: Uint8Array
 ): Uint8Array<ArrayBuffer> {
   const out = new Uint8Array(a.length + b.length);
   out.set(a, 0);
@@ -377,7 +382,8 @@ async function writeAll(conn: SmtpConn, data: Uint8Array): Promise<void> {
   let offset = 0;
   while (offset < data.length) {
     const n = await conn.write(data.subarray(offset));
-    if (n <= 0) throw new Error("SMTP write returned 0 bytes");
+    if (n <= 0)
+      throw new Error("SMTP write returned 0 bytes");
     offset += n;
   }
 }
@@ -386,27 +392,28 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(
       () => reject(new Error("SMTP operation timed out")),
-      ms,
+      ms
     );
     promise.then(
-      (v) => {
+      v => {
         clearTimeout(timer);
         resolve(v);
       },
-      (e) => {
+      e => {
         clearTimeout(timer);
         reject(e);
-      },
+      }
     );
   });
 }
 
 function wrapSmtpError(err: unknown): Error {
-  if (err instanceof Error) return err;
+  if (err instanceof Error)
+    return err;
   return new Error(String(err));
 }
 
 export const _testing = {
   DEFAULT_TIMEOUT_MS,
-  parseEhloExtensions,
+  parseEhloExtensions
 };

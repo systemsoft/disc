@@ -33,7 +33,7 @@ Deno.test("getUiContentType - HTML", () => {
 Deno.test("getUiContentType - JS", () => {
   assertEquals(
     getUiContentType("app.js"),
-    "application/javascript; charset=utf-8",
+    "application/javascript; charset=utf-8"
   );
 });
 
@@ -48,7 +48,7 @@ Deno.test("getUiContentType - SVG", () => {
 Deno.test("getUiContentType - JSON", () => {
   assertEquals(
     getUiContentType("version.json"),
-    "application/json; charset=utf-8",
+    "application/json; charset=utf-8"
   );
 });
 
@@ -70,7 +70,7 @@ Deno.test({
     const res = await handler(new Request("http://localhost/ui"));
     assertEquals(res?.status, 200);
     assertEquals(res?.headers.get("content-type"), "text/html; charset=utf-8");
-  },
+  }
 });
 
 Deno.test({
@@ -82,7 +82,7 @@ Deno.test({
     assertEquals(res?.status, 200);
     const body = await res!.text();
     assertEquals(body.includes("<!DOCTYPE html>") || body.includes("<!doctype html>"), true);
-  },
+  }
 });
 
 Deno.test({
@@ -93,7 +93,7 @@ Deno.test({
     const res = await handler(new Request("http://localhost/ui/some/spa/route"));
     assertEquals(res?.status, 200);
     assertEquals(res?.headers.get("content-type"), "text/html; charset=utf-8");
-  },
+  }
 });
 
 Deno.test("createUiAssetHandler - 404 for unknown asset with file extension", async () => {
@@ -111,7 +111,7 @@ Deno.test({
     const handler = createUiAssetHandler();
     // Pick the first known _app file from the manifest.
     const { UI_ASSET_MANIFEST } = await import("./ui-asset-manifest.ts");
-    const appAsset = UI_ASSET_MANIFEST.find((p) => p.startsWith("_app/"));
+    const appAsset = UI_ASSET_MANIFEST.find(p => p.startsWith("_app/"));
     if (!appAsset) {
       // No _app assets shipped — skip rather than fail.
       return;
@@ -120,7 +120,7 @@ Deno.test({
     assertEquals(res?.status, 200);
     assertEquals(
       res?.headers.get("cache-control"),
-      "public, max-age=31536000, immutable",
+      "public, max-age=31536000, immutable"
     );
-  },
+  }
 });

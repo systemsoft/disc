@@ -16,7 +16,8 @@ function compileEdgeQL(source: string): string {
   const parser = new EdgeQLParser(source);
   const ast = parser.parse();
   const result = compiler.compile(ast);
-  if (!result.ok) throw result.error;
+  if (!result.ok)
+    throw result.error;
   return codegen.generate(result.value);
 }
 
@@ -30,18 +31,18 @@ Deno.test("IF/ELSE - simple literal conditional", () => {
   assertEquals(
     sql.includes("THEN"),
     true,
-    "SQL should contain THEN",
+    "SQL should contain THEN"
   );
   assertEquals(
     sql.includes("'yes'"),
     true,
-    "SQL should contain 'yes' as THEN value",
+    "SQL should contain 'yes' as THEN value"
   );
   assertEquals(sql.includes("ELSE"), true, "SQL should contain ELSE");
   assertEquals(
     sql.includes("'no'"),
     true,
-    "SQL should contain 'no' as ELSE value",
+    "SQL should contain 'no' as ELSE value"
   );
   assertEquals(sql.includes("END"), true, "SQL should contain END");
 });
@@ -60,17 +61,17 @@ Deno.test("IF/ELSE - computed property in shape", () => {
   assertEquals(
     sql.includes("active"),
     true,
-    "SQL should reference active column",
+    "SQL should reference active column"
   );
   assertEquals(
     sql.includes("'active'"),
     true,
-    "SQL should contain 'active' string literal",
+    "SQL should contain 'active' string literal"
   );
   assertEquals(
     sql.includes("'inactive'"),
     true,
-    "SQL should contain 'inactive' string literal",
+    "SQL should contain 'inactive' string literal"
   );
   assertEquals(sql.includes("END"), true, "SQL should contain END");
 });
@@ -86,17 +87,17 @@ Deno.test("IF/ELSE - nested conditional", () => {
   assertEquals(
     sql.includes("'a'"),
     true,
-    "SQL should contain 'a'",
+    "SQL should contain 'a'"
   );
   assertEquals(
     sql.includes("'b'"),
     true,
-    "SQL should contain 'b'",
+    "SQL should contain 'b'"
   );
   assertEquals(
     sql.includes("'c'"),
     true,
-    "SQL should contain 'c'",
+    "SQL should contain 'c'"
   );
 
   // Count occurrences of CASE — should have two nested CASEs
@@ -104,7 +105,7 @@ Deno.test("IF/ELSE - nested conditional", () => {
   assertEquals(
     caseCount,
     2,
-    "Nested IF/ELSE should produce two CASE expressions",
+    "Nested IF/ELSE should produce two CASE expressions"
   );
 });
 
@@ -121,12 +122,12 @@ Deno.test("IF/ELSE - in filter expression", () => {
   assertEquals(
     sql.includes("'admin'"),
     true,
-    "SQL should contain 'admin' literal",
+    "SQL should contain 'admin' literal"
   );
   assertEquals(
     sql.includes("'guest'"),
     true,
-    "SQL should contain 'guest' literal",
+    "SQL should contain 'guest' literal"
   );
   assertEquals(sql.includes("END"), true, "SQL should contain END");
 });

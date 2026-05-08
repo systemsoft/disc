@@ -26,14 +26,14 @@ const RUN_PG = canRunPgTests();
 
 /** Parse a DSN into connection config for the raw deno-postgres Client. */
 function parseDsn(
-  dsn: string,
+  dsn: string
 ): { hostname: string; port: number; user: string; database: string; } {
   const url = new URL(dsn);
   return {
     hostname: url.hostname || "localhost",
     port: url.port ? parseInt(url.port) : 5432,
     user: url.username || "disc",
-    database: url.pathname.slice(1) || "disc_test",
+    database: url.pathname.slice(1) || "disc_test"
   };
 }
 
@@ -82,7 +82,7 @@ async function teardownTestTable(dsn: string): Promise<void> {
 /** Count rows in the test table via a raw client. */
 async function countRows(
   dsn: string,
-  where?: string,
+  where?: string
 ): Promise<number> {
   const cfg = parseDsn(dsn);
   const client = new Client(cfg);
@@ -104,14 +104,14 @@ function makeContext(): Types.QueryContext {
       database: "disc_test",
       createdAt: new Date(),
       lastActivity: new Date(),
-      variables: {},
+      variables: {}
     },
     auth: {
       roles: [],
-      permissions: [],
+      permissions: []
     },
     requestId: `req_${Date.now()}`,
-    startedAt: new Date(),
+    startedAt: new Date()
   };
 }
 
@@ -130,13 +130,13 @@ Deno.test({
       connectionString: dsn,
       minConnections: 1,
       maxConnections: 3,
-      cleanupInterval: 0,
+      cleanupInterval: 0
     });
     await pool.initialize();
 
     try {
       const result = await pool.query(
-        `SELECT id, name, email FROM ${TEST_TABLE} ORDER BY id`,
+        `SELECT id, name, email FROM ${TEST_TABLE} ORDER BY id`
       );
 
       assertEquals(result.rowCount, 3);
@@ -147,7 +147,7 @@ Deno.test({
       await pool.close();
       await teardownTestTable(dsn);
     }
-  },
+  }
 });
 
 Deno.test({
@@ -161,14 +161,14 @@ Deno.test({
       connectionString: dsn,
       minConnections: 1,
       maxConnections: 3,
-      cleanupInterval: 0,
+      cleanupInterval: 0
     });
     await pool.initialize();
 
     try {
       const result = await pool.query(
         `INSERT INTO ${TEST_TABLE} (name, email) VALUES ($1, $2) RETURNING id, name, email`,
-        ["Diana", "diana@example.com"],
+        ["Diana", "diana@example.com"]
       );
 
       assertEquals(result.rowCount, 1);
@@ -183,7 +183,7 @@ Deno.test({
       await pool.close();
       await teardownTestTable(dsn);
     }
-  },
+  }
 });
 
 Deno.test({
@@ -197,14 +197,14 @@ Deno.test({
       connectionString: dsn,
       minConnections: 1,
       maxConnections: 3,
-      cleanupInterval: 0,
+      cleanupInterval: 0
     });
     await pool.initialize();
 
     try {
       const result = await pool.query(
         `UPDATE ${TEST_TABLE} SET active = false WHERE name = $1 RETURNING id, name, active`,
-        ["Ada"],
+        ["Ada"]
       );
 
       assertEquals(result.rowCount, 1);
@@ -218,7 +218,7 @@ Deno.test({
       await pool.close();
       await teardownTestTable(dsn);
     }
-  },
+  }
 });
 
 Deno.test({
@@ -232,14 +232,14 @@ Deno.test({
       connectionString: dsn,
       minConnections: 1,
       maxConnections: 3,
-      cleanupInterval: 0,
+      cleanupInterval: 0
     });
     await pool.initialize();
 
     try {
       const result = await pool.query(
         `DELETE FROM ${TEST_TABLE} WHERE name = $1 RETURNING id, name`,
-        ["Cher"],
+        ["Cher"]
       );
 
       assertEquals(result.rowCount, 1);
@@ -252,7 +252,7 @@ Deno.test({
       await pool.close();
       await teardownTestTable(dsn);
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -270,7 +270,7 @@ Deno.test({
       connectionString: dsn,
       minConnections: 1,
       maxConnections: 5,
-      cleanupInterval: 0,
+      cleanupInterval: 0
     });
     await pool.initialize();
 
@@ -283,13 +283,13 @@ Deno.test({
       assertExists(txn.id);
 
       // Wait for the async BEGIN to complete
-      await new Promise((r) => setTimeout(r, 300));
+      await new Promise(r => setTimeout(r, 300));
 
       // Get the transaction connection and execute INSERT on it
       const conn = txnManager.get_transaction_connection(txn.id);
       assertExists(conn);
       await conn!.execute(
-        `INSERT INTO ${TEST_TABLE} (name, email) VALUES ('TxnUser', 'txn@example.com')`,
+        `INSERT INTO ${TEST_TABLE} (name, email) VALUES ('TxnUser', 'txn@example.com')`
       );
 
       // Commit the transaction
@@ -305,7 +305,7 @@ Deno.test({
       await pool.close();
       await teardownTestTable(dsn);
     }
-  },
+  }
 });
 
 Deno.test({
@@ -319,7 +319,7 @@ Deno.test({
       connectionString: dsn,
       minConnections: 1,
       maxConnections: 5,
-      cleanupInterval: 0,
+      cleanupInterval: 0
     });
     await pool.initialize();
 
@@ -332,13 +332,13 @@ Deno.test({
       assertExists(txn.id);
 
       // Wait for the async BEGIN to complete
-      await new Promise((r) => setTimeout(r, 300));
+      await new Promise(r => setTimeout(r, 300));
 
       // Get the transaction connection and execute INSERT on it
       const conn = txnManager.get_transaction_connection(txn.id);
       assertExists(conn);
       await conn!.execute(
-        `INSERT INTO ${TEST_TABLE} (name, email) VALUES ('RollbackUser', 'rollback@example.com')`,
+        `INSERT INTO ${TEST_TABLE} (name, email) VALUES ('RollbackUser', 'rollback@example.com')`
       );
 
       // Rollback the transaction
@@ -350,14 +350,14 @@ Deno.test({
 
       const rollbackCount = await countRows(
         dsn,
-        "name = 'RollbackUser'",
+        "name = 'RollbackUser'"
       );
       assertEquals(rollbackCount, 0);
     } finally {
       await pool.close();
       await teardownTestTable(dsn);
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -375,17 +375,17 @@ Deno.test({
       connectionString: dsn,
       minConnections: 1,
       maxConnections: 3,
-      cleanupInterval: 0,
+      cleanupInterval: 0
     });
     await pool.initialize();
 
     try {
-      const insertedName = await pool.transaction(async (conn) => {
+      const insertedName = await pool.transaction(async conn => {
         await conn.execute(
-          `INSERT INTO ${TEST_TABLE} (name, email) VALUES ('PoolTxn', 'pooltxn@example.com')`,
+          `INSERT INTO ${TEST_TABLE} (name, email) VALUES ('PoolTxn', 'pooltxn@example.com')`
         );
         const result = await conn.query(
-          `SELECT name FROM ${TEST_TABLE} WHERE email = 'pooltxn@example.com'`,
+          `SELECT name FROM ${TEST_TABLE} WHERE email = 'pooltxn@example.com'`
         );
         return result.rows[0].name as string;
       });
@@ -399,7 +399,7 @@ Deno.test({
       await pool.close();
       await teardownTestTable(dsn);
     }
-  },
+  }
 });
 
 Deno.test({
@@ -413,16 +413,16 @@ Deno.test({
       connectionString: dsn,
       minConnections: 1,
       maxConnections: 3,
-      cleanupInterval: 0,
+      cleanupInterval: 0
     });
     await pool.initialize();
 
     try {
       let caught = false;
       try {
-        await pool.transaction(async (conn) => {
+        await pool.transaction(async conn => {
           await conn.execute(
-            `INSERT INTO ${TEST_TABLE} (name, email) VALUES ('FailTxn', 'fail@example.com')`,
+            `INSERT INTO ${TEST_TABLE} (name, email) VALUES ('FailTxn', 'fail@example.com')`
           );
           throw new Error("intentional failure");
         });
@@ -442,7 +442,7 @@ Deno.test({
       await pool.close();
       await teardownTestTable(dsn);
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -460,7 +460,7 @@ Deno.test({
       connectionString: dsn,
       minConnections: 1,
       maxConnections: 3,
-      cleanupInterval: 0,
+      cleanupInterval: 0
     });
     await pool.initialize();
 
@@ -469,7 +469,7 @@ Deno.test({
     //  schema-mapped table names, so we test pool wiring at a lower level.)
     try {
       const result = await pool.query(
-        `SELECT name, email FROM ${TEST_TABLE} WHERE active = true ORDER BY name`,
+        `SELECT name, email FROM ${TEST_TABLE} WHERE active = true ORDER BY name`
       );
 
       assertEquals(result.rowCount, 2);
@@ -479,7 +479,7 @@ Deno.test({
       await pool.close();
       await teardownTestTable(dsn);
     }
-  },
+  }
 });
 
 Deno.test({
@@ -492,13 +492,13 @@ Deno.test({
       connectionString: dsn,
       minConnections: 1,
       maxConnections: 3,
-      cleanupInterval: 0,
+      cleanupInterval: 0
     });
     await pool.initialize();
 
     const handler = new SimpleEdgeQLProtocolHandler({
       connectionPool: pool,
-      enableExplain: true,
+      enableExplain: true
     });
     await handler.initialize();
 
@@ -509,14 +509,14 @@ Deno.test({
 
       // Validate that a well-formed EdgeQL query passes validation
       const noErrors = handler.validateRequest({
-        query: "select User { name }",
+        query: "select User { name }"
       });
       assertEquals(noErrors.length, 0);
     } finally {
       await handler.close();
       await pool.close();
     }
-  },
+  }
 });
 
 Deno.test({
@@ -529,7 +529,7 @@ Deno.test({
     const dryHandler = new SimpleEdgeQLProtocolHandler({
       databaseUrl: dsn,
       dryRun: true,
-      enableExplain: true,
+      enableExplain: true
     });
 
     const ctx = makeContext();
@@ -537,7 +537,7 @@ Deno.test({
     // Execute a select query in dry-run mode
     const dryResponse = await dryHandler.handleRequest(
       { query: "select User { name, email }" },
-      ctx,
+      ctx
     );
 
     // Dry run should return SQL in the data
@@ -550,7 +550,7 @@ Deno.test({
     assertExists(dryResponse.extensions?.durationMs);
 
     await dryHandler.close();
-  },
+  }
 });
 
 // =========================================================================
@@ -566,7 +566,7 @@ Deno.test({
     const handler = new EdgeQLProtocolHandler({
       databaseUrl: dsn,
       dryRun: true,
-      enableExplain: true,
+      enableExplain: true
     });
 
     const ctx = makeContext();
@@ -574,7 +574,7 @@ Deno.test({
     // Execute a select query via the compiler-backed handler
     const response = await handler.handleRequest(
       { query: "select User { name, email }" },
-      ctx,
+      ctx
     );
 
     // In dry-run mode the response should contain the generated SQL
@@ -591,7 +591,7 @@ Deno.test({
     assertExists(response.extensions?.compilation_info);
 
     await handler.close();
-  },
+  }
 });
 
 Deno.test({
@@ -605,14 +605,14 @@ Deno.test({
       connectionString: dsn,
       minConnections: 1,
       maxConnections: 3,
-      cleanupInterval: 0,
+      cleanupInterval: 0
     });
     await pool.initialize();
 
     // Verify the pool works for the EdgeQL handler
     try {
       const result = await pool.query(
-        `SELECT name, email, active FROM ${TEST_TABLE} ORDER BY id`,
+        `SELECT name, email, active FROM ${TEST_TABLE} ORDER BY id`
       );
 
       assertEquals(result.rowCount, 3);
@@ -624,7 +624,7 @@ Deno.test({
       await pool.close();
       await teardownTestTable(dsn);
     }
-  },
+  }
 });
 
 Deno.test({
@@ -635,7 +635,7 @@ Deno.test({
 
     const handler = new EdgeQLProtocolHandler({
       databaseUrl: dsn,
-      dryRun: true,
+      dryRun: true
     });
 
     // Empty query should fail validation
@@ -644,18 +644,18 @@ Deno.test({
 
     // Invalid start keyword should fail
     const invalidErrors = handler.validateRequest({
-      query: "INVALID QUERY",
+      query: "INVALID QUERY"
     });
     assertNotEquals(invalidErrors.length, 0);
 
     // Valid EdgeQL should pass
     const validErrors = handler.validateRequest({
-      query: "select User { name }",
+      query: "select User { name }"
     });
     assertEquals(validErrors.length, 0);
 
     await handler.close();
-  },
+  }
 });
 
 // =========================================================================
@@ -689,7 +689,7 @@ Deno.test({
       connectionString: dsn,
       minConnections: 1,
       maxConnections: 3,
-      cleanupInterval: 0,
+      cleanupInterval: 0
     });
     await pool.initialize();
 
@@ -697,16 +697,16 @@ Deno.test({
       // CREATE -- insert two rows
       await pool.query(
         `INSERT INTO ${table} (name, value) VALUES ($1, $2)`,
-        ["alpha", 10],
+        ["alpha", 10]
       );
       await pool.query(
         `INSERT INTO ${table} (name, value) VALUES ($1, $2)`,
-        ["beta", 20],
+        ["beta", 20]
       );
 
       // READ -- verify both rows
       let rows = await pool.query(
-        `SELECT name, value FROM ${table} ORDER BY name`,
+        `SELECT name, value FROM ${table} ORDER BY name`
       );
       assertEquals(rows.rowCount, 2);
       assertEquals(rows.rows[0].name, "alpha");
@@ -715,19 +715,19 @@ Deno.test({
       // UPDATE -- increment value for alpha
       await pool.query(
         `UPDATE ${table} SET value = value + 5 WHERE name = $1`,
-        ["alpha"],
+        ["alpha"]
       );
 
       rows = await pool.query(
         `SELECT value FROM ${table} WHERE name = $1`,
-        ["alpha"],
+        ["alpha"]
       );
       assertEquals(rows.rows[0].value, 15);
 
       // DELETE -- remove beta
       const deleted = await pool.query(
         `DELETE FROM ${table} WHERE name = $1 RETURNING name`,
-        ["beta"],
+        ["beta"]
       );
       assertEquals(deleted.rowCount, 1);
       assertEquals(deleted.rows[0].name, "beta");
@@ -744,13 +744,13 @@ Deno.test({
       try {
         await cleanup.connect();
         await cleanup.queryArray(
-          `DROP TABLE IF EXISTS ${table} CASCADE`,
+          `DROP TABLE IF EXISTS ${table} CASCADE`
         );
       } finally {
         await cleanup.end();
       }
     }
-  },
+  }
 });
 
 // =========================================================================
@@ -768,7 +768,7 @@ Deno.test({
       connectionString: dsn,
       minConnections: 1,
       maxConnections: 3,
-      cleanupInterval: 0,
+      cleanupInterval: 0
     });
     await pool.initialize();
 
@@ -792,5 +792,5 @@ Deno.test({
       await pool.close();
       await teardownTestTable(dsn);
     }
-  },
+  }
 });

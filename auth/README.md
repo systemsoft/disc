@@ -64,7 +64,7 @@ const config = {
   bcrypt_rounds: 12,
   jwt_secret: "your-secret-key",
   password_min_length: 8,
-  token_expiry: 3600, // 1 hour
+  token_expiry: 3600 // 1 hour
 };
 
 const auth = await initializeAuth(config, db);
@@ -102,7 +102,7 @@ const routes = {
   "/auth/register": auth.routes.register(),
   "/auth/reset": auth.routes.resetPasswordRequest(),
   "/auth/reset/confirm": auth.routes.resetPassword(),
-  "/auth/verify": auth.routes.verifyEmail(),
+  "/auth/verify": auth.routes.verifyEmail()
 };
 ```
 
@@ -239,8 +239,8 @@ const provider = new AuthProvider({
   webauthn: {
     rpId: "example.com", // apex domain credentials are scoped to
     rpName: "Example App", // shown in browser prompts
-    origin: "https://example.com", // expected clientData.origin
-  },
+    origin: "https://example.com" // expected clientData.origin
+  }
 }, db);
 ```
 
@@ -262,7 +262,7 @@ await provider.finishWebAuthnRegistration({
   credentialId: cred.id, // base64url
   attestationObject: base64url(cred.response.attestationObject),
   clientDataJSON: base64url(cred.response.clientDataJSON),
-  name: "My iPhone", // optional
+  name: "My iPhone" // optional
 });
 ```
 
@@ -277,7 +277,7 @@ const result = await provider.finishWebAuthnLogin({
   credentialId: cred.id,
   authenticatorData: base64url(cred.response.authenticatorData),
   clientDataJSON: base64url(cred.response.clientDataJSON),
-  signature: base64url(cred.response.signature),
+  signature: base64url(cred.response.signature)
 });
 if ("mfaRequired" in result) {
   // User has TOTP enrolled — passkey + TOTP combine.
@@ -339,7 +339,7 @@ if ("mfaRequired" in challenge) {
   // User can use a TOTP code OR a recovery code.
   const auth = await provider.loginWithRecoveryCode(
     challenge.challengeToken,
-    "X7K3M-Q2NPR",
+    "X7K3M-Q2NPR"
   );
 }
 ```
@@ -627,7 +627,7 @@ enum AuthErrorCode {
   TOKEN_EXPIRED = "TOKEN_EXPIRED",
   USER_ALREADY_EXISTS = "USER_ALREADY_EXISTS",
   USER_INACTIVE = "USER_INACTIVE",
-  USER_NOT_FOUND = "USER_NOT_FOUND",
+  USER_NOT_FOUND = "USER_NOT_FOUND"
 }
 ```
 

@@ -19,7 +19,7 @@ import { EnvMock } from "../../tests/test-utils.ts";
 // --- Helpers ---
 
 function createTestConfig(
-  overrides: Partial<ServerConfig> = {},
+  overrides: Partial<ServerConfig> = {}
 ): ServerConfig {
   return {
     host: "localhost",
@@ -29,7 +29,7 @@ function createTestConfig(
     requestTimeout: 5000,
     enableCors: false,
     enableWebsockets: false,
-    ...overrides,
+    ...overrides
   };
 }
 
@@ -37,19 +37,19 @@ function createBasicProtocolHandler(): ProtocolHandler {
   return {
     handleRequest(
       _request: QueryRequest,
-      _context: QueryContext,
+      _context: QueryContext
     ): Promise<QueryResponse> {
       return Promise.resolve({ data: { ok: true } });
     },
     validateRequest(_request: QueryRequest): QueryError[] {
       return [];
-    },
+    }
   };
 }
 
 function withTestServer(
   handler: ProtocolHandler,
-  configOverrides: Partial<ServerConfig> = {},
+  configOverrides: Partial<ServerConfig> = {}
 ): {
   port: number;
   cleanup: () => Promise<void>;
@@ -60,7 +60,7 @@ function withTestServer(
   const config = createTestConfig(configOverrides);
   const server = new HttpServer({
     config,
-    protocolHandler: handler,
+    protocolHandler: handler
   });
 
   const abortController = new AbortController();
@@ -69,11 +69,11 @@ function withTestServer(
       hostname: "127.0.0.1",
       port: 0,
       signal: abortController.signal,
-      onListen() {},
+      onListen() {}
     },
     (request: Request, info: Deno.ServeHandlerInfo) => {
       return (server as any).handleRequest(request, info);
-    },
+    }
   );
 
   const port = testServer.addr.port;
@@ -106,7 +106,7 @@ Deno.test(
     } finally {
       env.restore();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -124,7 +124,7 @@ Deno.test(
     } finally {
       env.restore();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -132,7 +132,7 @@ Deno.test(
   async () => {
     const handler = createBasicProtocolHandler();
     const { port, cleanup } = withTestServer(handler, {
-      enableCors: false,
+      enableCors: false
     });
 
     try {
@@ -145,7 +145,7 @@ Deno.test(
     } finally {
       await cleanup();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -153,7 +153,7 @@ Deno.test(
   async () => {
     const handler = createBasicProtocolHandler();
     const { port, cleanup } = withTestServer(handler, {
-      enableCors: true,
+      enableCors: true
     });
 
     try {
@@ -166,7 +166,7 @@ Deno.test(
     } finally {
       await cleanup();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -174,16 +174,16 @@ Deno.test(
   async () => {
     const handler = createBasicProtocolHandler();
     const { port, cleanup } = withTestServer(handler, {
-      enableCors: false,
+      enableCors: false
     });
 
     try {
       const response = await fetch(`http://127.0.0.1:${port}/`, {
         method: "OPTIONS",
         headers: {
-          "Origin": "http://example.com",
-          "Access-Control-Request-Method": "POST",
-        },
+          Origin: "http://example.com",
+          "Access-Control-Request-Method": "POST"
+        }
       });
 
       assertEquals(response.status, 405);
@@ -192,7 +192,7 @@ Deno.test(
     } finally {
       await cleanup();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -213,7 +213,7 @@ Deno.test(
     } finally {
       env.restore();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -221,7 +221,7 @@ Deno.test(
   async () => {
     const handler = createBasicProtocolHandler();
     const { port, cleanup } = withTestServer(handler, {
-      enableMetrics: true,
+      enableMetrics: true
     });
 
     try {
@@ -233,7 +233,7 @@ Deno.test(
     } finally {
       await cleanup();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -251,7 +251,7 @@ Deno.test(
     } finally {
       await cleanup();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -269,7 +269,7 @@ Deno.test(
     } finally {
       env.restore();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -287,7 +287,7 @@ Deno.test(
     } finally {
       env.restore();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -309,7 +309,7 @@ Deno.test(
     } finally {
       env.restore();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -327,7 +327,7 @@ Deno.test(
     } finally {
       env.restore();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -342,7 +342,7 @@ Deno.test(
     } finally {
       env.restore();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -357,7 +357,7 @@ Deno.test(
     } finally {
       env.restore();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -372,7 +372,7 @@ Deno.test(
     } finally {
       env.restore();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -387,7 +387,7 @@ Deno.test(
     } finally {
       env.restore();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -402,7 +402,7 @@ Deno.test(
     } finally {
       env.restore();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -432,7 +432,7 @@ Deno.test(
     } finally {
       env.restore();
     }
-  },
+  }
 );
 
 Deno.test(
@@ -450,5 +450,5 @@ Deno.test(
     } finally {
       env.restore();
     }
-  },
+  }
 );

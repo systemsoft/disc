@@ -25,14 +25,14 @@ const POSTGRES_VERSIONS = {
     "darwin-arm64": { url: zonkyJar("darwin-arm64v8", "16.4.0") },
     "darwin-x64": { url: zonkyJar("darwin-amd64", "16.4.0") },
     "linux-arm64": { url: zonkyJar("linux-arm64v8", "16.4.0") },
-    "linux-x64": { url: zonkyJar("linux-amd64", "16.4.0") },
+    "linux-x64": { url: zonkyJar("linux-amd64", "16.4.0") }
   },
   "17.0": {
     "darwin-arm64": { url: zonkyJar("darwin-arm64v8", "17.0.0") },
     "darwin-x64": { url: zonkyJar("darwin-amd64", "17.0.0") },
     "linux-arm64": { url: zonkyJar("linux-arm64v8", "17.0.0") },
-    "linux-x64": { url: zonkyJar("linux-amd64", "17.0.0") },
-  },
+    "linux-x64": { url: zonkyJar("linux-amd64", "17.0.0") }
+  }
 };
 
 export class PostgresBinaryDownloader {
@@ -56,11 +56,11 @@ export class PostgresBinaryDownloader {
    * follow-up: cross-platform reproducible builds).
    */
   constructor(
-    baseDirOrOpts: string | { baseDir?: string; platform?: string; } = Deno.env.get("DISC_PG_BINARY_DIR")
-      ?? join(Deno.env.get("HOME")!, ".disc", "postgres"),
+    baseDirOrOpts: string | { baseDir?: string; platform?: string; } = Deno.env.get("DISC_PG_BINARY_DIR") ??
+      join(Deno.env.get("HOME")!, ".disc", "postgres")
   ) {
-    const defaultBaseDir = Deno.env.get("DISC_PG_BINARY_DIR")
-      ?? join(Deno.env.get("HOME")!, ".disc", "postgres");
+    const defaultBaseDir = Deno.env.get("DISC_PG_BINARY_DIR") ??
+      join(Deno.env.get("HOME")!, ".disc", "postgres");
     if (typeof baseDirOrOpts === "string") {
       this.baseDir = baseDirOrOpts;
       this.platform = this.detectPlatform();
@@ -103,21 +103,21 @@ export class PostgresBinaryDownloader {
     // gives air-gapped operators a clear failure with the path they
     // need to populate, and prevents an accidental network call in
     // sandboxed CI environments.
-    const offline = Deno.env.get("DISC_OFFLINE") === "1"
-      || Deno.env.get("DISC_OFFLINE") === "true";
+    const offline = Deno.env.get("DISC_OFFLINE") === "1" ||
+      Deno.env.get("DISC_OFFLINE") === "true";
     if (offline) {
       throw new Error(
-        `DISC_OFFLINE=1 set but PostgreSQL ${version} not staged at ${binPath}. `
-          + `Pre-stage a PG ${version} build for ${this.platform} under `
-          + `${this.baseDir} (or set DISC_PG_BINARY_DIR to its location), `
-          + `or unset DISC_OFFLINE to allow the download.`,
+        `DISC_OFFLINE=1 set but PostgreSQL ${version} not staged at ${binPath}. ` +
+          `Pre-stage a PG ${version} build for ${this.platform} under ` +
+          `${this.baseDir} (or set DISC_PG_BINARY_DIR to its location), ` +
+          `or unset DISC_OFFLINE to allow the download.`
       );
     }
 
     const manifest = this.getManifest(version);
     if (!manifest) {
       throw new Error(
-        `No PostgreSQL binary available for ${this.platform} v${version}`,
+        `No PostgreSQL binary available for ${this.platform} v${version}`
       );
     }
 
@@ -135,21 +135,21 @@ export class PostgresBinaryDownloader {
 
     // Preserve the original file extension so extractArchive can detect the format
     const urlPath = new URL(manifest.url).pathname;
-    const archiveExt = urlPath.endsWith(".txz")
-      ? ".txz"
-      : urlPath.endsWith(".tgz")
-      ? ".tgz"
-      : urlPath.endsWith(".tar.xz")
-      ? ".tar.xz"
-      : urlPath.endsWith(".tar.gz")
-      ? ".tar.gz"
-      : urlPath.endsWith(".zip")
-      ? ".zip"
-      : urlPath.endsWith(".jar")
-      ? ".jar"
-      : urlPath.endsWith(".tar")
-      ? ".tar"
-      : ".archive";
+    const archiveExt = urlPath.endsWith(".txz") ?
+      ".txz" :
+      urlPath.endsWith(".tgz") ?
+      ".tgz" :
+      urlPath.endsWith(".tar.xz") ?
+      ".tar.xz" :
+      urlPath.endsWith(".tar.gz") ?
+      ".tar.gz" :
+      urlPath.endsWith(".zip") ?
+      ".zip" :
+      urlPath.endsWith(".jar") ?
+      ".jar" :
+      urlPath.endsWith(".tar") ?
+      ".tar" :
+      ".archive";
     const archivePath = join(versionDir, `postgres${archiveExt}`);
     const data = new Uint8Array(await response.arrayBuffer());
     await Deno.writeFile(archivePath, data);
@@ -167,7 +167,7 @@ export class PostgresBinaryDownloader {
     await this.makeExecutable(versionDir);
 
     logger.info(
-      `PostgreSQL ${version} downloaded successfully to ${versionDir}`,
+      `PostgreSQL ${version} downloaded successfully to ${versionDir}`
     );
     return versionDir;
   }
@@ -190,7 +190,7 @@ export class PostgresBinaryDownloader {
           await Deno.stat(nestedBinPath);
           // Found postgres binary in nested directory, move everything up
           logger.info(
-            `Normalizing directory structure from ${entries[0].name}`,
+            `Normalizing directory structure from ${entries[0].name}`
           );
 
           for await (const entry of Deno.readDir(nestedDir)) {
@@ -212,21 +212,23 @@ export class PostgresBinaryDownloader {
 
   private getManifest(version: string): BinaryManifest | null {
     const versionManifests = POSTGRES_VERSIONS[version as keyof typeof POSTGRES_VERSIONS];
-    if (!versionManifests) return null;
+    if (!versionManifests)
+      return null;
 
     const platformManifest = versionManifests[this.platform as keyof typeof versionManifests];
-    if (!platformManifest) return null;
+    if (!platformManifest)
+      return null;
 
     return {
       ...platformManifest,
       platform: this.platform,
-      version,
+      version
     };
   }
 
   private async extractArchive(
     archivePath: string,
-    targetDir: string,
+    targetDir: string
   ): Promise<void> {
     const filename = archivePath.toLowerCase();
 
@@ -238,8 +240,9 @@ export class PostgresBinaryDownloader {
         const unzip = await new Deno.Command("unzip", {
           args: ["-q", "-o", archivePath, "-d", stagingDir],
           stdout: "piped",
-          stderr: "piped",
-        }).output();
+          stderr: "piped"
+        })
+          .output();
         if (!unzip.success) {
           const stderr = new TextDecoder().decode(unzip.stderr);
           throw new Error(`Failed to extract JAR: ${stderr}`);
@@ -248,8 +251,8 @@ export class PostgresBinaryDownloader {
         let inner: string | null = null;
         for await (const entry of Deno.readDir(stagingDir)) {
           if (
-            entry.isFile
-            && /\.(txz|tar\.xz|tgz|tar\.gz|tar)$/i.test(entry.name)
+            entry.isFile &&
+            /\.(txz|tar\.xz|tgz|tar\.gz|tar)$/i.test(entry.name)
           ) {
             inner = join(stagingDir, entry.name);
             break;
@@ -272,25 +275,25 @@ export class PostgresBinaryDownloader {
       extractCmd = new Deno.Command("unzip", {
         args: ["-q", "-o", archivePath, "-d", targetDir],
         stdout: "piped",
-        stderr: "piped",
+        stderr: "piped"
       });
     } else if (filename.endsWith(".tar.gz") || filename.endsWith(".tgz")) {
       extractCmd = new Deno.Command("tar", {
         args: ["-xzf", archivePath, "-C", targetDir],
         stdout: "piped",
-        stderr: "piped",
+        stderr: "piped"
       });
     } else if (filename.endsWith(".tar.xz") || filename.endsWith(".txz")) {
       extractCmd = new Deno.Command("tar", {
         args: ["-xJf", archivePath, "-C", targetDir],
         stdout: "piped",
-        stderr: "piped",
+        stderr: "piped"
       });
     } else if (filename.endsWith(".tar")) {
       extractCmd = new Deno.Command("tar", {
         args: ["-xf", archivePath, "-C", targetDir],
         stdout: "piped",
-        stderr: "piped",
+        stderr: "piped"
       });
     } else {
       throw new Error(`Unsupported archive format: ${archivePath}`);

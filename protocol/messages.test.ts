@@ -39,7 +39,7 @@ import {
   splitWireMessage,
   type SyncMsg,
   type TerminateMsg,
-  TransactionState,
+  TransactionState
 } from "./messages.ts";
 
 // ---------------------------------------------------------------------------
@@ -49,14 +49,16 @@ import {
 function roundTripClient(msg: ClientMessage): ClientMessage {
   const wire = encodeClientMessage(msg);
   const split = splitWireMessage(wire);
-  if (!split) throw new Error("splitWireMessage returned null");
+  if (!split)
+    throw new Error("splitWireMessage returned null");
   return decodeClientMessage(split.mtype, split.payload);
 }
 
 function roundTripServer(msg: ServerMessage): ServerMessage {
   const wire = encodeServerMessage(msg);
   const split = splitWireMessage(wire);
-  if (!split) throw new Error("splitWireMessage returned null");
+  if (!split)
+    throw new Error("splitWireMessage returned null");
   return decodeServerMessage(split.mtype, split.payload);
 }
 
@@ -83,14 +85,14 @@ Deno.test("ClientHandshake - round-trip", () => {
     minorVersion: 0,
     params: [
       { name: "database", value: "testdb" },
-      { name: "user", value: "edgedb" },
+      { name: "user", value: "edgedb" }
     ],
     extensions: [
       {
         name: "ext1",
-        annotations: [{ name: "key", value: "val" }],
-      },
-    ],
+        annotations: [{ name: "key", value: "val" }]
+      }
+    ]
   };
 
   const result = roundTripClient(msg) as ClientHandshakeMsg;
@@ -117,14 +119,14 @@ Deno.test(
       majorVersion: 1,
       minorVersion: 0,
       params: [],
-      extensions: [],
+      extensions: []
     };
 
     const result = roundTripClient(msg) as ClientHandshakeMsg;
     assertEquals(result.kind, "ClientHandshake");
     assertEquals(result.params.length, 0);
     assertEquals(result.extensions.length, 0);
-  },
+  }
 );
 
 Deno.test(
@@ -133,14 +135,14 @@ Deno.test(
     const msg: AuthenticationSASLInitialResponseMsg = {
       kind: "AuthenticationSASLInitialResponse",
       method: "SCRAM-SHA-256",
-      saslData: new Uint8Array([1, 2, 3, 4, 5]),
+      saslData: new Uint8Array([1, 2, 3, 4, 5])
     };
 
     const result = roundTripClient(msg) as AuthenticationSASLInitialResponseMsg;
     assertEquals(result.kind, "AuthenticationSASLInitialResponse");
     assertEquals(result.method, "SCRAM-SHA-256");
     assertEquals(result.saslData, new Uint8Array([1, 2, 3, 4, 5]));
-  },
+  }
 );
 
 Deno.test(
@@ -148,13 +150,13 @@ Deno.test(
   () => {
     const msg: AuthenticationSASLResponseMsg = {
       kind: "AuthenticationSASLResponse",
-      saslData: new Uint8Array([10, 20, 30]),
+      saslData: new Uint8Array([10, 20, 30])
     };
 
     const result = roundTripClient(msg) as AuthenticationSASLResponseMsg;
     assertEquals(result.kind, "AuthenticationSASLResponse");
     assertEquals(result.saslData, new Uint8Array([10, 20, 30]));
-  },
+  }
 );
 
 Deno.test("Parse message - round-trip", () => {
@@ -163,15 +165,15 @@ Deno.test("Parse message - round-trip", () => {
     kind: "Parse",
     annotations: [{ name: "query_id", value: "abc123" }],
     allowedCapabilities: 0xffn,
-    compilationFlags: CompilationFlag.INJECT_OUTPUT_TYPE_IDS
-      | CompilationFlag.INJECT_OUTPUT_TYPE_NAMES,
+    compilationFlags: CompilationFlag.INJECT_OUTPUT_TYPE_IDS |
+      CompilationFlag.INJECT_OUTPUT_TYPE_NAMES,
     implicitLimit: 100n,
     inputLanguage: InputLanguage.EDGEQL,
     outputFormat: OutputFormat.JSON,
     expectedCardinality: Cardinality.MANY,
     commandText: "SELECT User { name, email }",
     stateTypedescId: stateId,
-    stateData: new Uint8Array([7, 8, 9]),
+    stateData: new Uint8Array([7, 8, 9])
   };
 
   const result = roundTripClient(msg) as ParseMsg;
@@ -182,8 +184,8 @@ Deno.test("Parse message - round-trip", () => {
   assertEquals(result.allowedCapabilities, 0xffn);
   assertEquals(
     result.compilationFlags,
-    CompilationFlag.INJECT_OUTPUT_TYPE_IDS
-      | CompilationFlag.INJECT_OUTPUT_TYPE_NAMES,
+    CompilationFlag.INJECT_OUTPUT_TYPE_IDS |
+      CompilationFlag.INJECT_OUTPUT_TYPE_NAMES
   );
   assertEquals(result.implicitLimit, 100n);
   assertEquals(result.inputLanguage, InputLanguage.EDGEQL);
@@ -209,7 +211,7 @@ Deno.test("Parse message - SQL input language (not on v2 wire)", () => {
     expectedCardinality: Cardinality.ONE,
     commandText: "SELECT 1",
     stateTypedescId: new Uint8Array(16),
-    stateData: new Uint8Array(0),
+    stateData: new Uint8Array(0)
   };
 
   const result = roundTripClient(msg) as ParseMsg;
@@ -237,7 +239,7 @@ Deno.test("Execute message - round-trip", () => {
     stateData: new Uint8Array(0),
     inputTypedescId: inputId,
     outputTypedescId: outputId,
-    arguments: new Uint8Array([0xde, 0xad, 0xbe, 0xef]),
+    arguments: new Uint8Array([0xde, 0xad, 0xbe, 0xef])
   };
 
   const result = roundTripClient(msg) as ExecuteMsg;
@@ -245,14 +247,14 @@ Deno.test("Execute message - round-trip", () => {
   assertEquals(result.allowedCapabilities, 0xffffffffffffffffn);
   assertEquals(
     result.commandText,
-    "SELECT User FILTER .id = <uuid>$0",
+    "SELECT User FILTER .id = <uuid>$0"
   );
   assertEquals(result.stateTypedescId, stateId);
   assertEquals(result.inputTypedescId, inputId);
   assertEquals(result.outputTypedescId, outputId);
   assertEquals(
     result.arguments,
-    new Uint8Array([0xde, 0xad, 0xbe, 0xef]),
+    new Uint8Array([0xde, 0xad, 0xbe, 0xef])
   );
 });
 
@@ -287,10 +289,10 @@ Deno.test("ServerHandshake - round-trip", () => {
       {
         name: "auth",
         annotations: [
-          { name: "type", value: "SCRAM-SHA-256" },
-        ],
-      },
-    ],
+          { name: "type", value: "SCRAM-SHA-256" }
+        ]
+      }
+    ]
   };
 
   const result = roundTripServer(msg) as ServerHandshakeMsg;
@@ -309,12 +311,12 @@ Deno.test(
       kind: "ServerHandshake",
       majorVersion: 1,
       minorVersion: 0,
-      extensions: [],
+      extensions: []
     };
 
     const result = roundTripServer(msg) as ServerHandshakeMsg;
     assertEquals(result.extensions.length, 0);
-  },
+  }
 );
 
 Deno.test("AuthenticationOK - round-trip", () => {
@@ -328,7 +330,7 @@ Deno.test(
   () => {
     const msg: AuthenticationRequiredSASLMsg = {
       kind: "AuthenticationRequiredSASL",
-      methods: ["SCRAM-SHA-256", "SCRAM-SHA-256-PLUS"],
+      methods: ["SCRAM-SHA-256", "SCRAM-SHA-256-PLUS"]
     };
 
     const result = roundTripServer(msg) as AuthenticationRequiredSASLMsg;
@@ -336,7 +338,7 @@ Deno.test(
     assertEquals(result.methods.length, 2);
     assertEquals(result.methods[0], "SCRAM-SHA-256");
     assertEquals(result.methods[1], "SCRAM-SHA-256-PLUS");
-  },
+  }
 );
 
 Deno.test(
@@ -344,13 +346,13 @@ Deno.test(
   () => {
     const msg: AuthenticationSASLContinueMsg = {
       kind: "AuthenticationSASLContinue",
-      saslData: new Uint8Array([0xca, 0xfe]),
+      saslData: new Uint8Array([0xca, 0xfe])
     };
 
     const result = roundTripServer(msg) as AuthenticationSASLContinueMsg;
     assertEquals(result.kind, "AuthenticationSASLContinue");
     assertEquals(result.saslData, new Uint8Array([0xca, 0xfe]));
-  },
+  }
 );
 
 Deno.test(
@@ -358,27 +360,27 @@ Deno.test(
   () => {
     const msg: AuthenticationSASLFinalMsg = {
       kind: "AuthenticationSASLFinal",
-      saslData: new Uint8Array([0xde, 0xad]),
+      saslData: new Uint8Array([0xde, 0xad])
     };
 
     const result = roundTripServer(msg) as AuthenticationSASLFinalMsg;
     assertEquals(result.kind, "AuthenticationSASLFinal");
     assertEquals(result.saslData, new Uint8Array([0xde, 0xad]));
-  },
+  }
 );
 
 Deno.test("ReadyForCommand - NOT_IN_TRANSACTION", () => {
   const msg: ReadyForCommandMsg = {
     kind: "ReadyForCommand",
     annotations: [],
-    transactionState: TransactionState.NOT_IN_TRANSACTION,
+    transactionState: TransactionState.NOT_IN_TRANSACTION
   };
 
   const result = roundTripServer(msg) as ReadyForCommandMsg;
   assertEquals(result.kind, "ReadyForCommand");
   assertEquals(
     result.transactionState,
-    TransactionState.NOT_IN_TRANSACTION,
+    TransactionState.NOT_IN_TRANSACTION
   );
   assertEquals(result.annotations.length, 0);
 });
@@ -387,13 +389,13 @@ Deno.test("ReadyForCommand - IN_TRANSACTION with annotations", () => {
   const msg: ReadyForCommandMsg = {
     kind: "ReadyForCommand",
     annotations: [{ name: "hint", value: "use COMMIT" }],
-    transactionState: TransactionState.IN_TRANSACTION,
+    transactionState: TransactionState.IN_TRANSACTION
   };
 
   const result = roundTripServer(msg) as ReadyForCommandMsg;
   assertEquals(
     result.transactionState,
-    TransactionState.IN_TRANSACTION,
+    TransactionState.IN_TRANSACTION
   );
   assertEquals(result.annotations.length, 1);
   assertEquals(result.annotations[0].value, "use COMMIT");
@@ -403,13 +405,13 @@ Deno.test("ReadyForCommand - IN_FAILED_TRANSACTION", () => {
   const msg: ReadyForCommandMsg = {
     kind: "ReadyForCommand",
     annotations: [],
-    transactionState: TransactionState.IN_FAILED_TRANSACTION,
+    transactionState: TransactionState.IN_FAILED_TRANSACTION
   };
 
   const result = roundTripServer(msg) as ReadyForCommandMsg;
   assertEquals(
     result.transactionState,
-    TransactionState.IN_FAILED_TRANSACTION,
+    TransactionState.IN_FAILED_TRANSACTION
   );
 });
 
@@ -421,7 +423,7 @@ Deno.test("CommandComplete - round-trip", () => {
     capabilities: 0x0fn,
     status: "SELECT",
     stateTypedescId: stateId,
-    stateData: new Uint8Array([1, 2]),
+    stateData: new Uint8Array([1, 2])
   };
 
   const result = roundTripServer(msg) as CommandCompleteMsg;
@@ -445,7 +447,7 @@ Deno.test("CommandDataDescription - round-trip", () => {
     inputTypedescId: inputId,
     inputTypedesc: new Uint8Array([0xaa, 0xbb]),
     outputTypedescId: outputId,
-    outputTypedesc: new Uint8Array([0xcc, 0xdd, 0xee]),
+    outputTypedesc: new Uint8Array([0xcc, 0xdd, 0xee])
   };
 
   const result = roundTripServer(msg) as CommandDataDescriptionMsg;
@@ -456,7 +458,7 @@ Deno.test("CommandDataDescription - round-trip", () => {
   assertEquals(result.outputTypedescId, outputId);
   assertEquals(
     result.outputTypedesc,
-    new Uint8Array([0xcc, 0xdd, 0xee]),
+    new Uint8Array([0xcc, 0xdd, 0xee])
   );
 });
 
@@ -464,7 +466,7 @@ Deno.test("Data message - single element", () => {
   const encoder = new TextEncoder();
   const msg: DataMsg = {
     kind: "Data",
-    data: [encoder.encode("{\"name\":\"Ada\"}")],
+    data: [encoder.encode("{\"name\":\"Ada\"}")]
   };
 
   const result = roundTripServer(msg) as DataMsg;
@@ -481,8 +483,8 @@ Deno.test("Data message - multiple elements", () => {
     data: [
       encoder.encode("{\"id\":1}"),
       encoder.encode("{\"id\":2}"),
-      encoder.encode("{\"id\":3}"),
-    ],
+      encoder.encode("{\"id\":3}")
+    ]
   };
 
   const result = roundTripServer(msg) as DataMsg;
@@ -505,8 +507,8 @@ Deno.test("ErrorResponse - round-trip", () => {
     attributes: [
       { code: 0x0001, value: encoder.encode("Did you mean SELECT?") },
       { code: 0xfff3, value: encoder.encode("1") },
-      { code: 0xfff4, value: encoder.encode("0") },
-    ],
+      { code: 0xfff4, value: encoder.encode("0") }
+    ]
   };
 
   const result = roundTripServer(msg) as ErrorResponseMsg;
@@ -519,7 +521,7 @@ Deno.test("ErrorResponse - round-trip", () => {
   const decoder = new TextDecoder();
   assertEquals(
     decoder.decode(result.attributes[0].value),
-    "Did you mean SELECT?",
+    "Did you mean SELECT?"
   );
 });
 
@@ -529,7 +531,7 @@ Deno.test("ErrorResponse - FATAL severity", () => {
     severity: ErrorSeverity.FATAL,
     errorCode: 0xff000000,
     message: "Server shutting down",
-    attributes: [],
+    attributes: []
   };
 
   const result = roundTripServer(msg) as ErrorResponseMsg;
@@ -542,7 +544,7 @@ Deno.test("ErrorResponse - PANIC severity", () => {
     severity: ErrorSeverity.PANIC,
     errorCode: 0xff000001,
     message: "Unrecoverable error",
-    attributes: [],
+    attributes: []
   };
 
   const result = roundTripServer(msg) as ErrorResponseMsg;
@@ -554,7 +556,7 @@ Deno.test("ParameterStatus - round-trip", () => {
   const msg: ParameterStatusMsg = {
     kind: "ParameterStatus",
     name: encoder.encode("server_version"),
-    value: encoder.encode("2.0"),
+    value: encoder.encode("2.0")
   };
 
   const result = roundTripServer(msg) as ParameterStatusMsg;
@@ -566,11 +568,12 @@ Deno.test("ParameterStatus - round-trip", () => {
 
 Deno.test("ServerKeyData - round-trip", () => {
   const keyData = new Uint8Array(32);
-  for (let i = 0; i < 32; i++) keyData[i] = i;
+  for (let i = 0; i < 32; i++)
+    keyData[i] = i;
 
   const msg: ServerKeyDataMsg = {
     kind: "ServerKeyData",
-    data: keyData,
+    data: keyData
   };
 
   const result = roundTripServer(msg) as ServerKeyDataMsg;
@@ -581,13 +584,13 @@ Deno.test("ServerKeyData - round-trip", () => {
 Deno.test("ServerKeyData - rejects wrong size", () => {
   const msg: ServerKeyDataMsg = {
     kind: "ServerKeyData",
-    data: new Uint8Array(16), // wrong size
+    data: new Uint8Array(16) // wrong size
   };
 
   assertThrows(
     () => encodeServerMessage(msg),
     Error,
-    "ServerKeyData must be exactly 32 bytes",
+    "ServerKeyData must be exactly 32 bytes"
   );
 });
 
@@ -598,8 +601,8 @@ Deno.test("LogMessage - round-trip", () => {
     code: 42000,
     text: "Something went wrong",
     annotations: [
-      { name: "detail", value: "Check your input" },
-    ],
+      { name: "detail", value: "Check your input" }
+    ]
   };
 
   const result = roundTripServer(msg) as LogMessageMsg;
@@ -640,7 +643,7 @@ Deno.test(
     const view = new DataView(wire.buffer, wire.byteOffset);
     // message_length includes the 4-byte length field itself
     assertEquals(view.getUint32(1, false), 4);
-  },
+  }
 );
 
 Deno.test(
@@ -651,22 +654,22 @@ Deno.test(
 
     const sasl = encodeServerMessage({
       kind: "AuthenticationRequiredSASL",
-      methods: ["SCRAM-SHA-256"],
+      methods: ["SCRAM-SHA-256"]
     });
     assertEquals(sasl[0], 0x52);
 
     const cont = encodeServerMessage({
       kind: "AuthenticationSASLContinue",
-      saslData: new Uint8Array(0),
+      saslData: new Uint8Array(0)
     });
     assertEquals(cont[0], 0x52);
 
     const final = encodeServerMessage({
       kind: "AuthenticationSASLFinal",
-      saslData: new Uint8Array(0),
+      saslData: new Uint8Array(0)
     });
     assertEquals(final[0], 0x52);
-  },
+  }
 );
 
 // ===================================================================
@@ -683,7 +686,7 @@ Deno.test(
     const wire = encodeClientMessage({ kind: "Sync" });
     // Truncate to 4 bytes (missing payload end)
     assertEquals(splitWireMessage(wire.subarray(0, 4)), null);
-  },
+  }
 );
 
 Deno.test("splitWireMessage - parses complete message", () => {
@@ -704,9 +707,9 @@ Deno.test(
     assertThrows(
       () => decodeClientMessage(0xff, new Uint8Array(0)),
       Error,
-      "Unknown client message type",
+      "Unknown client message type"
     );
-  },
+  }
 );
 
 Deno.test(
@@ -715,9 +718,9 @@ Deno.test(
     assertThrows(
       () => decodeServerMessage(0x01, new Uint8Array(0)),
       Error,
-      "Unknown server message type",
+      "Unknown server message type"
     );
-  },
+  }
 );
 
 // ===================================================================
@@ -760,7 +763,7 @@ Deno.test("ClientMessageType values are correct", () => {
   assertEquals(ClientMessageType.ClientHandshake, 0x56);
   assertEquals(
     ClientMessageType.AuthenticationSASLInitialResponse,
-    0x70,
+    0x70
   );
   assertEquals(ClientMessageType.AuthenticationSASLResponse, 0x72);
   assertEquals(ClientMessageType.Parse, 0x50);

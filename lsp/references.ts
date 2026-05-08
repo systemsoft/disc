@@ -32,10 +32,11 @@ export function provideReferences(
   options: {
     includeDeclaration?: boolean;
     context?: ReferencesContext;
-  } = {},
+  } = {}
 ): Location[] {
   const word = wordAt(text, pos);
-  if (!word) return [];
+  if (!word)
+    return [];
 
   // Resolve the declaration. The cursor may be on a use site in this
   // file, or in another file in the cross-file context — we look at
@@ -49,7 +50,8 @@ export function provideReferences(
     declRangeStart = localDecl.range.start;
   } else if (options.context) {
     for (const ctxDoc of options.context.documents) {
-      if (ctxDoc.uri === uri) continue;
+      if (ctxDoc.uri === uri)
+        continue;
       const ctxIdx = buildSymbolIndex(ctxDoc.text);
       const ctxDecl = ctxIdx.types.get(word);
       if (ctxDecl) {
@@ -59,7 +61,8 @@ export function provideReferences(
       }
     }
   }
-  if (!declRangeStart) return [];
+  if (!declRangeStart)
+    return [];
 
   const includeDecl = options.includeDeclaration ?? true;
 
@@ -73,7 +76,8 @@ export function provideReferences(
   seen.add(uri);
   if (options.context) {
     for (const ctxDoc of options.context.documents) {
-      if (seen.has(ctxDoc.uri)) continue;
+      if (seen.has(ctxDoc.uri))
+        continue;
       targets.push(ctxDoc);
       seen.add(ctxDoc.uri);
     }
@@ -88,13 +92,16 @@ export function provideReferences(
       continue;
     }
     for (const tok of tokens) {
-      if (tok.type !== TokenType.IDENT) continue;
-      if (tok.value !== word) continue;
+      if (tok.type !== TokenType.IDENT)
+        continue;
+      if (tok.value !== word)
+        continue;
       const range = tokenRange(tok);
-      const isDeclSite = target.uri === declUri
-        && range.start.line === declRangeStart.line
-        && range.start.character === declRangeStart.character;
-      if (isDeclSite && !includeDecl) continue;
+      const isDeclSite = target.uri === declUri &&
+        range.start.line === declRangeStart.line &&
+        range.start.character === declRangeStart.character;
+      if (isDeclSite && !includeDecl)
+        continue;
       out.push({ uri: target.uri, range });
     }
   }
@@ -103,15 +110,18 @@ export function provideReferences(
 
 function wordAt(text: string, pos: Position): string | null {
   const lines = text.split("\n");
-  if (pos.line < 0 || pos.line >= lines.length) return null;
+  if (pos.line < 0 || pos.line >= lines.length)
+    return null;
   const line = lines[pos.line];
-  if (pos.character < 0 || pos.character > line.length) return null;
+  if (pos.character < 0 || pos.character > line.length)
+    return null;
   IDENT.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = IDENT.exec(line)) !== null) {
     const start = m.index;
     const end = start + m[0].length;
-    if (pos.character >= start && pos.character <= end) return m[0];
+    if (pos.character >= start && pos.character <= end)
+      return m[0];
   }
   return null;
 }
@@ -121,6 +131,6 @@ function tokenRange(tok: Token): Range {
   const startChar = Math.max(0, tok.column - 1);
   return {
     start: { line: startLine, character: startChar },
-    end: { line: startLine, character: startChar + tok.value.length },
+    end: { line: startLine, character: startChar + tok.value.length }
   };
 }

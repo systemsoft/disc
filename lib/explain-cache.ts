@@ -40,7 +40,7 @@ interface CacheEntry {
 const EXPLAIN_CACHE_DEFAULTS: Required<ExplainCacheConfig> = {
   ttl_ms: 300_000, // 5 minutes
   max_size: 500,
-  nowFn: Date.now,
+  nowFn: Date.now
 };
 
 export class ExplainCache {
@@ -50,7 +50,7 @@ export class ExplainCache {
     hits: 0,
     misses: 0,
     size: 0,
-    evictions: 0,
+    evictions: 0
   };
 
   constructor(config: Partial<ExplainCacheConfig> = {}) {
@@ -62,7 +62,7 @@ export class ExplainCache {
     }
     this.config = {
       ...EXPLAIN_CACHE_DEFAULTS,
-      ...overrides,
+      ...overrides
     };
   }
 
@@ -109,7 +109,7 @@ export class ExplainCache {
     this.entries.set(hash, {
       plan,
       expiresAt: now + this.config.ttl_ms,
-      inserted_at: now,
+      inserted_at: now
     });
     this.stats_data.size = this.entries.size;
   }

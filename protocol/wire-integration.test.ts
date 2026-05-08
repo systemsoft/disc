@@ -38,11 +38,12 @@ function createSchema() {
 const ZERO_UUID = new Uint8Array(16);
 
 async function readMessage(
-  conn: Deno.TcpConn,
+  conn: Deno.TcpConn
 ): Promise<{ mtype: number; payload: Uint8Array; } | null> {
   const header = new Uint8Array(5);
   const headerRead = await readExact(conn, header);
-  if (!headerRead) return null;
+  if (!headerRead)
+    return null;
 
   const mtype = header[0];
   const view = new DataView(header.buffer, header.byteOffset);
@@ -52,7 +53,8 @@ async function readMessage(
   const payload = new Uint8Array(payloadLength);
   if (payloadLength > 0) {
     const ok = await readExact(conn, payload);
-    if (!ok) return null;
+    if (!ok)
+      return null;
   }
 
   return { mtype, payload };
@@ -60,12 +62,13 @@ async function readMessage(
 
 async function readExact(
   conn: Deno.TcpConn,
-  buf: Uint8Array,
+  buf: Uint8Array
 ): Promise<boolean> {
   let offset = 0;
   while (offset < buf.length) {
     const n = await conn.read(buf.subarray(offset));
-    if (n === null) return false;
+    if (n === null)
+      return false;
     offset += n;
   }
   return true;
@@ -77,7 +80,7 @@ function decode(raw: { mtype: number; payload: Uint8Array; }): ServerMessage {
 
 async function sendMessage(
   conn: Deno.TcpConn,
-  msg: ClientMessage,
+  msg: ClientMessage
 ): Promise<void> {
   const bytes = encodeClientMessage(msg);
   let offset = 0;
@@ -94,15 +97,15 @@ function clientHandshake(): ClientMessage {
     minorVersion: PROTOCOL_MINOR_VERSION,
     params: [{ name: "user", value: "test" }, {
       name: "database",
-      value: "testdb",
+      value: "testdb"
     }],
-    extensions: [],
+    extensions: []
   };
 }
 
 function executeMsg(
   query: string,
-  format: number = OutputFormat.BINARY,
+  format: number = OutputFormat.BINARY
 ): ClientMessage {
   return {
     kind: "Execute",
@@ -118,7 +121,7 @@ function executeMsg(
     stateData: new Uint8Array(0),
     inputTypedescId: ZERO_UUID,
     outputTypedescId: ZERO_UUID,
-    arguments: new Uint8Array(0),
+    arguments: new Uint8Array(0)
   };
 }
 
@@ -134,7 +137,7 @@ function parseMsg(query: string): ClientMessage {
     expectedCardinality: Cardinality.MANY,
     commandText: query,
     stateTypedescId: ZERO_UUID,
-    stateData: new Uint8Array(0),
+    stateData: new Uint8Array(0)
   };
 }
 
@@ -142,7 +145,7 @@ function parseMsg(query: string): ClientMessage {
  * Perform handshake and consume all setup messages through ReadyForCommand.
  */
 async function performNoAuthHandshake(
-  conn: Deno.TcpConn,
+  conn: Deno.TcpConn
 ): Promise<ServerMessage[]> {
   const messages: ServerMessage[] = [];
 
@@ -150,17 +153,21 @@ async function performNoAuthHandshake(
 
   // ServerHandshake
   const raw1 = await readMessage(conn);
-  if (raw1) messages.push(decode(raw1));
+  if (raw1)
+    messages.push(decode(raw1));
   // AuthenticationOK
   const raw2 = await readMessage(conn);
-  if (raw2) messages.push(decode(raw2));
+  if (raw2)
+    messages.push(decode(raw2));
   // ServerKeyData
   const raw3 = await readMessage(conn);
-  if (raw3) messages.push(decode(raw3));
+  if (raw3)
+    messages.push(decode(raw3));
   // 2x ParameterStatus + StateDataDescription + ReadyForCommand
   for (let i = 0; i < 4; i++) {
     const raw = await readMessage(conn);
-    if (raw) messages.push(decode(raw));
+    if (raw)
+      messages.push(decode(raw));
   }
 
   return messages;
@@ -176,13 +183,14 @@ async function performNoAuthHandshake(
  * with Sync.
  */
 async function readExecuteResponse(
-  conn: Deno.TcpConn,
+  conn: Deno.TcpConn
 ): Promise<ServerMessage[]> {
   await sendMessage(conn, { kind: "Sync" });
   const msgs: ServerMessage[] = [];
   for (let i = 0; i < 4; i++) {
     const raw = await readMessage(conn);
-    if (raw) msgs.push(decode(raw));
+    if (raw)
+      msgs.push(decode(raw));
   }
   return msgs;
 }
@@ -194,13 +202,13 @@ async function readExecuteResponse(
 Deno.test("wire-integration - handshake + simple SELECT returns Data response", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn);
 
@@ -228,19 +236,19 @@ Deno.test("wire-integration - handshake + simple SELECT returns Data response", 
 Deno.test("wire-integration - SELECT with shape returns CommandDataDescription with descriptor IDs", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn);
 
   await sendMessage(
     conn,
-    executeMsg("select User { name, email }"),
+    executeMsg("select User { name, email }")
   );
   const msgs = await readExecuteResponse(conn);
 
@@ -264,13 +272,13 @@ Deno.test("wire-integration - SELECT with shape returns CommandDataDescription w
 Deno.test("wire-integration - two sequential queries both succeed", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn);
 
@@ -305,13 +313,13 @@ Deno.test("wire-integration - two sequential queries both succeed", async () => 
 Deno.test("wire-integration - error recovery: bad query then good query succeeds", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn);
 
@@ -349,13 +357,13 @@ Deno.test("wire-integration - full SCRAM auth flow then Execute succeeds", async
   const server = new BinaryProtocolServer({
     port: 0,
     schema: createSchema(),
-    password,
+    password
   });
   server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
 
   // 1. Handshake
@@ -374,7 +382,7 @@ Deno.test("wire-integration - full SCRAM auth flow then Execute succeeds", async
   await sendMessage(conn, {
     kind: "AuthenticationSASLInitialResponse",
     method: "SCRAM-SHA-256",
-    saslData: clientFirstMsg,
+    saslData: clientFirstMsg
   });
 
   // 4. SASL continue
@@ -391,11 +399,11 @@ Deno.test("wire-integration - full SCRAM auth flow then Execute succeeds", async
     password,
     clientNonce,
     clientFirstMessageBare,
-    serverFirstMessage,
+    serverFirstMessage
   );
   await sendMessage(conn, {
     kind: "AuthenticationSASLResponse",
-    saslData: clientFinalMsg,
+    saslData: clientFinalMsg
   });
 
   // 6. Verify auth success
@@ -432,13 +440,13 @@ Deno.test("wire-integration - full SCRAM auth flow then Execute succeeds", async
 Deno.test("wire-integration - Parse then Execute (two-step) returns matching descriptors", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn);
 
@@ -458,8 +466,8 @@ Deno.test("wire-integration - Parse then Execute (two-step) returns matching des
 
   // The descriptor IDs should match between Parse and Execute
   if (
-    parseDesc.kind === "CommandDataDescription"
-    && msgs[0].kind === "CommandDataDescription"
+    parseDesc.kind === "CommandDataDescription" &&
+    msgs[0].kind === "CommandDataDescription"
   ) {
     assertEquals(parseDesc.inputTypedescId, msgs[0].inputTypedescId);
     assertEquals(parseDesc.outputTypedescId, msgs[0].outputTypedescId);
@@ -479,13 +487,13 @@ Deno.test("wire-integration - Parse then Execute (two-step) returns matching des
 Deno.test("wire-integration - Terminate closes connection", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn);
 
@@ -497,7 +505,7 @@ Deno.test("wire-integration - Terminate closes connection", async () => {
   await sendMessage(conn, { kind: "Terminate" });
 
   // Wait for server to process
-  await new Promise((r) => setTimeout(r, 50));
+  await new Promise(r => setTimeout(r, 50));
 
   // Connection should be closed
   const raw = await readMessage(conn);
@@ -514,13 +522,13 @@ Deno.test("wire-integration - Terminate closes connection", async () => {
 Deno.test("wire-integration - Execute DESCRIBE TYPE returns description", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   server.start();
 
   const conn = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn);
 
@@ -563,7 +571,7 @@ Deno.test("wire-integration - DiscServer with binaryPort starts binary protocol"
     schema,
     protocol: "simple",
     // Use dryRun to avoid needing a real PG connection
-    dryRun: true,
+    dryRun: true
   });
 
   // The start() method blocks waiting on the HTTP server, so we just
@@ -584,21 +592,21 @@ Deno.test("wire-integration - DiscServer with binaryPort starts binary protocol"
 Deno.test("wire-integration - multiple connections to same binary server", async () => {
   const server = new BinaryProtocolServer({
     port: 0,
-    schema: createSchema(),
+    schema: createSchema()
   });
   server.start();
 
   // Connect client 1
   const conn1 = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn1);
 
   // Connect client 2
   const conn2 = await Deno.connect({
     hostname: "127.0.0.1",
-    port: server.port,
+    port: server.port
   });
   await performNoAuthHandshake(conn2);
 

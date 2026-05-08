@@ -29,7 +29,7 @@ export class SDLConverter {
         // Add explicit module
         modules.push({
           name: declaration.name.parts.join("::"),
-          items: declaration.declarations,
+          items: declaration.declarations
         });
       } else {
         // Collect items for default module
@@ -40,7 +40,7 @@ export class SDLConverter {
     // If there are items not in a module, add them to default module
     if (defaultModuleItems.length > 0) {
       // Check if default module already exists
-      const defaultModule = modules.find((m) => m.name === "default");
+      const defaultModule = modules.find(m => m.name === "default");
       if (defaultModule) {
         // Add items to existing default module
         defaultModule.items.push(...defaultModuleItems);
@@ -48,7 +48,7 @@ export class SDLConverter {
         // Create new default module
         modules.unshift({
           name: "default",
-          items: defaultModuleItems,
+          items: defaultModuleItems
         });
       }
     }
@@ -57,7 +57,7 @@ export class SDLConverter {
     if (modules.length === 0) {
       modules.push({
         name: "default",
-        items: [],
+        items: []
       });
     }
 
@@ -68,7 +68,7 @@ export class SDLConverter {
    * Extract type definitions from modules
    */
   extractTypes(
-    modules: Module[],
+    modules: Module[]
   ): Map<string, AST.TypeDeclaration | AST.ScalarTypeDeclaration> {
     const types = new Map<
       string,
@@ -80,8 +80,8 @@ export class SDLConverter {
 
       for (const item of module.items) {
         if (
-          item.kind === "TypeDeclaration"
-          || item.kind === "ScalarTypeDeclaration"
+          item.kind === "TypeDeclaration" ||
+          item.kind === "ScalarTypeDeclaration"
         ) {
           const qualifiedName = modulePrefix + item.name.value;
           types.set(qualifiedName, item);
@@ -97,7 +97,7 @@ export class SDLConverter {
    */
   extractProperties(type: AST.TypeDeclaration): AST.PropertyDeclaration[] {
     return type.members.filter(
-      (member): member is AST.PropertyDeclaration => member.kind === "PropertyDeclaration",
+      (member): member is AST.PropertyDeclaration => member.kind === "PropertyDeclaration"
     );
   }
 
@@ -106,7 +106,7 @@ export class SDLConverter {
    */
   extractLinks(type: AST.TypeDeclaration): AST.LinkDeclaration[] {
     return type.members.filter(
-      (member): member is AST.LinkDeclaration => member.kind === "LinkDeclaration",
+      (member): member is AST.LinkDeclaration => member.kind === "LinkDeclaration"
     );
   }
 
@@ -115,7 +115,7 @@ export class SDLConverter {
    */
   extractConstraints(type: AST.TypeDeclaration): AST.Constraint[] {
     return type.members.filter(
-      (member): member is AST.Constraint => member.kind === "Constraint",
+      (member): member is AST.Constraint => member.kind === "Constraint"
     );
   }
 
@@ -124,7 +124,7 @@ export class SDLConverter {
    */
   extractIndexes(type: AST.TypeDeclaration): AST.Index[] {
     return type.members.filter(
-      (member): member is AST.Index => member.kind === "Index",
+      (member): member is AST.Index => member.kind === "Index"
     );
   }
 
@@ -133,7 +133,7 @@ export class SDLConverter {
    */
   extractAccessPolicies(type: AST.TypeDeclaration): AST.AccessPolicy[] {
     return type.members.filter(
-      (member): member is AST.AccessPolicy => member.kind === "AccessPolicy",
+      (member): member is AST.AccessPolicy => member.kind === "AccessPolicy"
     );
   }
 
@@ -142,11 +142,12 @@ export class SDLConverter {
    */
   resolveInheritance(
     type: AST.TypeDeclaration,
-    allTypes: Map<string, AST.TypeDeclaration | AST.ScalarTypeDeclaration>,
+    allTypes: Map<string, AST.TypeDeclaration | AST.ScalarTypeDeclaration>
   ): AST.TypeDeclaration[] {
     const chain: AST.TypeDeclaration[] = [];
 
-    if (!type.extending) return chain;
+    if (!type.extending)
+      return chain;
 
     for (const baseRef of type.extending) {
       const baseName = baseRef.name.parts.join("::");
@@ -167,7 +168,7 @@ export class SDLConverter {
    */
   mergeInheritedMembers(
     type: AST.TypeDeclaration,
-    allTypes: Map<string, AST.TypeDeclaration | AST.ScalarTypeDeclaration>,
+    allTypes: Map<string, AST.TypeDeclaration | AST.ScalarTypeDeclaration>
   ): AST.TypeMember[] {
     const inheritanceChain = this.resolveInheritance(type, allTypes);
     const members: AST.TypeMember[] = [];
@@ -206,20 +207,20 @@ export class SDLConverter {
    */
   sdlTypeToSqlType(sdlType: string): string {
     const typeMap: Record<string, string> = {
-      "str": "TEXT",
-      "bool": "BOOLEAN",
-      "int16": "SMALLINT",
-      "int32": "INTEGER",
-      "int64": "BIGINT",
-      "float32": "REAL",
-      "float64": "DOUBLE PRECISION",
-      "decimal": "DECIMAL",
-      "bigint": "NUMERIC",
-      "json": "JSONB",
-      "uuid": "UUID",
-      "bytes": "BYTEA",
-      "datetime": "TIMESTAMPTZ",
-      "duration": "INTERVAL",
+      str: "TEXT",
+      bool: "BOOLEAN",
+      int16: "SMALLINT",
+      int32: "INTEGER",
+      int64: "BIGINT",
+      float32: "REAL",
+      float64: "DOUBLE PRECISION",
+      decimal: "DECIMAL",
+      bigint: "NUMERIC",
+      json: "JSONB",
+      uuid: "UUID",
+      bytes: "BYTEA",
+      datetime: "TIMESTAMPTZ",
+      duration: "INTERVAL",
       "cal::local_datetime": "TIMESTAMP",
       "cal::local_date": "DATE",
       "cal::local_time": "TIME",
@@ -241,7 +242,7 @@ export class SDLConverter {
       "array<decimal>": "NUMERIC[]",
       "array<cal::local_date>": "DATE[]",
       "array<cal::local_time>": "TIME[]",
-      "array<cal::local_datetime>": "TIMESTAMP[]",
+      "array<cal::local_datetime>": "TIMESTAMP[]"
     };
 
     if (typeMap[sdlType]) {
@@ -279,7 +280,7 @@ export class SDLConverter {
       "cal::local_date",
       "cal::local_time",
       "cal::relative_duration",
-      "cal::date_duration",
+      "cal::date_duration"
     ];
     return builtins.includes(typeName);
   }
@@ -289,7 +290,7 @@ export class SDLConverter {
    */
   normalizeTypeRef(
     ref: AST.TypeRef,
-    currentModule: string = "default",
+    currentModule: string = "default"
   ): string {
     const parts = ref.name.parts;
 

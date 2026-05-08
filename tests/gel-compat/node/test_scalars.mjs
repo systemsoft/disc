@@ -22,7 +22,7 @@ const client = createClient({
   port,
   user: "disc",
   database: "main",
-  tlsSecurity: "insecure",
+  tlsSecurity: "insecure"
 });
 
 after(async () => {
@@ -61,7 +61,7 @@ test("bool roundtrip (false)", async () => {
 
 test("float64 roundtrip", async () => {
   const out = await client.querySingle("SELECT <float64>$x", {
-    x: 3.141592653589793,
+    x: 3.141592653589793
   });
   assert.ok(Math.abs(out - 3.141592653589793) < 1e-12);
 });
@@ -81,7 +81,7 @@ test("datetime roundtrip", async () => {
 test("Cardinality.AT_MOST_ONE: querySingle on empty filter returns null", async () => {
   const out = await client.querySingle(
     "SELECT Item FILTER .id = <uuid>$id",
-    { id: "00000000-0000-0000-0000-000000000000" },
+    { id: "00000000-0000-0000-0000-000000000000" }
   );
   assert.equal(out, null);
 });

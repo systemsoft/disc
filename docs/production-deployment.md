@@ -111,8 +111,8 @@ const server = new DiscServer({
     certFile: "/etc/letsencrypt/live/disc.example.com/fullchain.pem",
     keyFile: "/etc/letsencrypt/live/disc.example.com/privkey.pem",
     reload: true,
-    reloadDebounceMs: 500, // optional, default 500
-  },
+    reloadDebounceMs: 500 // optional, default 500
+  }
 });
 ```
 

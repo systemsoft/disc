@@ -24,7 +24,7 @@ function makePool(dsn: string): ConnectionPool {
     connectionString: dsn,
     minConnections: 1,
     maxConnections: 3,
-    cleanupInterval: 0,
+    cleanupInterval: 0
   });
 }
 
@@ -39,9 +39,9 @@ function makeOAuthExt(): OAuthExtension {
         authorizeUrl: "https://github.com/login/oauth/authorize",
         tokenUrl: "https://github.com/login/oauth/access_token",
         userInfoUrl: "https://api.github.com/user",
-        scopes: ["read:user", "user:email"],
-      },
-    ],
+        scopes: ["read:user", "user:email"]
+      }
+    ]
   });
 }
 
@@ -77,14 +77,14 @@ Deno.test({
       assertEquals(result.rows.length, 2);
       assertEquals(
         String(result.rows[0]["table_name"]),
-        "disc_oauth_identities",
+        "disc_oauth_identities"
       );
       assertEquals(String(result.rows[1]["table_name"]), "disc_oauth_states");
     } finally {
       await resetTestDatabase(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -116,12 +116,12 @@ Deno.test({
         `INSERT INTO disc_oauth_states
            (state, provider, redirect_uri, expires_at)
          VALUES ($1, $2, $3, $4)`,
-        [testState, testProvider, testRedirectUri, expiresAt],
+        [testState, testProvider, testRedirectUri, expiresAt]
       );
 
       const result = await pool.query(
         "SELECT state, provider, redirect_uri FROM disc_oauth_states WHERE state = $1",
-        [testState],
+        [testState]
       );
 
       assertEquals(result.rows.length, 1);
@@ -132,7 +132,7 @@ Deno.test({
       await resetTestDatabase(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -165,14 +165,14 @@ Deno.test({
         `INSERT INTO disc_oauth_identities
            (user_id, provider, provider_user_id, email, name)
          VALUES ($1::uuid, $2, $3, $4, $5)`,
-        [userId, provider, providerUserId, email, name],
+        [userId, provider, providerUserId, email, name]
       );
 
       const result = await pool.query(
         `SELECT user_id::text, provider, provider_user_id, email, name
          FROM disc_oauth_identities
          WHERE provider = $1 AND provider_user_id = $2`,
-        [provider, providerUserId],
+        [provider, providerUserId]
       );
 
       assertEquals(result.rows.length, 1);
@@ -180,7 +180,7 @@ Deno.test({
       assertEquals(String(result.rows[0]["provider"]), provider);
       assertEquals(
         String(result.rows[0]["provider_user_id"]),
-        providerUserId,
+        providerUserId
       );
       assertEquals(String(result.rows[0]["email"]), email);
       assertEquals(String(result.rows[0]["name"]), name);
@@ -188,7 +188,7 @@ Deno.test({
       await resetTestDatabase(pool);
       await pool.close();
     }
-  },
+  }
 });
 
 // ---------------------------------------------------------------------------
@@ -240,5 +240,5 @@ Deno.test({
       await resetTestDatabase(pool);
       await pool.close();
     }
-  },
+  }
 });

@@ -52,7 +52,7 @@ export class RateLimiter {
       bucket = {
         tokens: this.burstSize,
         lastRefillMs: now,
-        lastSeenMs: now,
+        lastSeenMs: now
       };
       this.buckets.set(clientIp, bucket);
     }
@@ -77,7 +77,7 @@ export class RateLimiter {
   stats(): RateLimitStats {
     return {
       rejectedCount: this.rejectedCount,
-      activeClients: this.buckets.size,
+      activeClients: this.buckets.size
     };
   }
 

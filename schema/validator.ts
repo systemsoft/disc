@@ -24,7 +24,7 @@ const BUILTIN_ANNOTATIONS = new Set([
   "secret",
   "std::secret",
   "rest::hidden",
-  "rest::expand",
+  "rest::expand"
 ]);
 
 interface ValidationContext {
@@ -46,18 +46,18 @@ export class SchemaValidator {
       abstractLinks: new Map(),
       abstractAnnotations: new Map(),
       modules: new Map(),
-      errors: [],
+      errors: []
     };
     this.converter = new SDLConverter();
   }
 
   validate(
-    document: AST.SDLDocument,
+    document: AST.SDLDocument
   ): { ok: boolean; errors?: ValidationError[]; } {
     const errors = this.validateDocument(document);
     return {
       ok: errors.length === 0,
-      errors: errors.length > 0 ? errors : undefined,
+      errors: errors.length > 0 ? errors : undefined
     };
   }
 
@@ -126,7 +126,7 @@ export class SchemaValidator {
   }
 
   private collectType(
-    type: AST.TypeDeclaration | AST.ScalarTypeDeclaration,
+    type: AST.TypeDeclaration | AST.ScalarTypeDeclaration
   ): void {
     const typeName = this.getQualifiedTypeName(type.name);
 
@@ -139,13 +139,14 @@ export class SchemaValidator {
   }
 
   private collectAbstractLink(link: AST.LinkDeclaration): void {
-    if (!link.abstract) return;
+    if (!link.abstract)
+      return;
     const linkName = this.getQualifiedTypeName(link.name);
     this.context.abstractLinks.set(linkName, link);
   }
 
   private collectAbstractAnnotation(
-    annotation: AST.AnnotationDeclaration,
+    annotation: AST.AnnotationDeclaration
   ): void {
     const annotationName = this.getQualifiedTypeName(annotation.name);
     this.context.abstractAnnotations.set(annotationName, annotation);
@@ -220,7 +221,7 @@ export class SchemaValidator {
         case "PropertyDeclaration":
           if (propertyNames.has(member.name.value)) {
             this.addError(
-              `Property '${member.name.value}' is already defined in type '${type.name.value}'`,
+              `Property '${member.name.value}' is already defined in type '${type.name.value}'`
             );
           }
           propertyNames.add(member.name.value);
@@ -229,7 +230,7 @@ export class SchemaValidator {
         case "LinkDeclaration":
           if (linkNames.has(member.name.value)) {
             this.addError(
-              `Link '${member.name.value}' is already defined in type '${type.name.value}'`,
+              `Link '${member.name.value}' is already defined in type '${type.name.value}'`
             );
           }
           linkNames.add(member.name.value);
@@ -313,27 +314,31 @@ export class SchemaValidator {
    * (description, title, deprecated) or a user-declared abstract annotation.
    */
   private validateAnnotationUsage(
-    annotations: AST.Annotation[] | undefined,
+    annotations: AST.Annotation[] | undefined
   ): void {
-    if (!annotations) return;
+    if (!annotations)
+      return;
 
     for (const ann of annotations) {
       const name = ann.name.parts.join("::");
 
       // Check built-in annotations
-      if (BUILTIN_ANNOTATIONS.has(name)) continue;
+      if (BUILTIN_ANNOTATIONS.has(name))
+        continue;
 
       // Check user-declared abstract annotations (try unqualified and qualified)
-      if (this.context.abstractAnnotations.has(name)) continue;
+      if (this.context.abstractAnnotations.has(name))
+        continue;
 
       // Try qualified lookup in current module
       if (this.context.currentModule && !name.includes("::")) {
         const qualifiedName = `${this.context.currentModule}::${name}`;
-        if (this.context.abstractAnnotations.has(qualifiedName)) continue;
+        if (this.context.abstractAnnotations.has(qualifiedName))
+          continue;
       }
 
       this.addError(
-        `Annotation '${name}' is not defined; declare it with 'abstract annotation ${name};' or use a built-in annotation`,
+        `Annotation '${name}' is not defined; declare it with 'abstract annotation ${name};' or use a built-in annotation`
       );
     }
   }
@@ -348,7 +353,7 @@ export class SchemaValidator {
     // required since their values are derived. Flag these as warnings.
     if (property.computed && property.required) {
       this.addError(
-        `Property '${property.name.value}': computed properties cannot also be 'required' — the cardinality is determined by the expression`,
+        `Property '${property.name.value}': computed properties cannot also be 'required' — the cardinality is determined by the expression`
       );
     }
 
@@ -398,14 +403,14 @@ export class SchemaValidator {
         // Check that referenced link exists and is abstract
         if (!this.context.abstractLinks.has(baseName)) {
           this.addError(
-            `Link '${link.name.value}' extends '${baseName}', but no abstract link '${baseName}' is defined`,
+            `Link '${link.name.value}' extends '${baseName}', but no abstract link '${baseName}' is defined`
           );
         }
 
         // Check for circular inheritance
         if (visited.has(baseName)) {
           this.addError(
-            `Circular link inheritance detected: '${link.name.value}' extends '${baseName}' multiple times`,
+            `Circular link inheritance detected: '${link.name.value}' extends '${baseName}' multiple times`
           );
         }
         visited.add(baseName);
@@ -414,7 +419,7 @@ export class SchemaValidator {
         this.checkLinkInheritanceCycle(
           baseName,
           link.name.value,
-          new Set([link.name.value]),
+          new Set([link.name.value])
         );
       }
     }
@@ -435,7 +440,7 @@ export class SchemaValidator {
       for (const prop of link.properties) {
         if (propNames.has(prop.name.value)) {
           this.addError(
-            `Link property '${prop.name.value}' is already defined`,
+            `Link property '${prop.name.value}' is already defined`
           );
         }
         propNames.add(prop.name.value);
@@ -457,22 +462,24 @@ export class SchemaValidator {
   private checkLinkInheritanceCycle(
     linkName: string,
     originalName: string,
-    visited: Set<string>,
+    visited: Set<string>
   ): void {
     const abstractLink = this.context.abstractLinks.get(linkName);
-    if (!abstractLink || !abstractLink.extending) return;
+    if (!abstractLink || !abstractLink.extending)
+      return;
 
     for (const baseRef of abstractLink.extending) {
       const baseName = baseRef.name.parts.join("::");
 
       if (baseName === originalName) {
         this.addError(
-          `Circular link inheritance detected: '${originalName}' -> '${linkName}' -> '${baseName}'`,
+          `Circular link inheritance detected: '${originalName}' -> '${linkName}' -> '${baseName}'`
         );
         return;
       }
 
-      if (visited.has(baseName)) return;
+      if (visited.has(baseName))
+        return;
       visited.add(baseName);
 
       this.checkLinkInheritanceCycle(baseName, originalName, visited);
@@ -481,7 +488,7 @@ export class SchemaValidator {
 
   private validateConstraint(
     constraint: AST.Constraint,
-    propertyType?: string,
+    propertyType?: string
   ): void {
     // Validate constraint expression
     if (constraint.on) {
@@ -496,7 +503,8 @@ export class SchemaValidator {
     }
 
     const name = constraint.name?.value;
-    if (!name) return;
+    if (!name)
+      return;
 
     // Known constraints and their validation rules
     const STRING_TYPES = new Set(["str", "bytes"]);
@@ -507,7 +515,7 @@ export class SchemaValidator {
       "float32",
       "float64",
       "decimal",
-      "bigint",
+      "bigint"
     ]);
     const SINGLE_ARG_CONSTRAINTS = new Set([
       "max_len_value",
@@ -515,14 +523,14 @@ export class SchemaValidator {
       "max_value",
       "min_value",
       "max_ex_value",
-      "min_ex_value",
+      "min_ex_value"
     ]);
 
     // Validate argument count for known constraints
     if (SINGLE_ARG_CONSTRAINTS.has(name)) {
       if (!constraint.args || constraint.args.length !== 1) {
         this.addError(
-          `Constraint '${name}' requires exactly one argument`,
+          `Constraint '${name}' requires exactly one argument`
         );
       }
     }
@@ -530,41 +538,41 @@ export class SchemaValidator {
     if (name === "one_of") {
       if (!constraint.args || constraint.args.length === 0) {
         this.addError(
-          "Constraint 'one_of' requires at least one argument",
+          "Constraint 'one_of' requires at least one argument"
         );
       }
     }
 
     if (name === "expression" && !constraint.on) {
       this.addError(
-        "Constraint 'expression' requires an 'on' expression",
+        "Constraint 'expression' requires an 'on' expression"
       );
     }
 
     // Type compatibility checks (when property type is known)
     if (propertyType) {
       if (
-        (name === "max_len_value" || name === "min_len_value")
-        && !STRING_TYPES.has(propertyType)
+        (name === "max_len_value" || name === "min_len_value") &&
+        !STRING_TYPES.has(propertyType)
       ) {
         this.addError(
-          `Constraint '${name}' can only be applied to 'str' or 'bytes' properties, not '${propertyType}'`,
+          `Constraint '${name}' can only be applied to 'str' or 'bytes' properties, not '${propertyType}'`
         );
       }
 
       if (
-        (name === "max_value" || name === "min_value"
-          || name === "max_ex_value" || name === "min_ex_value")
-        && !NUMERIC_TYPES.has(propertyType) && propertyType !== "datetime"
-        && propertyType !== "duration"
-        && propertyType !== "cal::local_datetime"
-        && propertyType !== "cal::local_date"
-        && propertyType !== "cal::local_time"
-        && propertyType !== "cal::relative_duration"
-        && propertyType !== "cal::date_duration"
+        (name === "max_value" || name === "min_value" ||
+          name === "max_ex_value" || name === "min_ex_value") &&
+        !NUMERIC_TYPES.has(propertyType) && propertyType !== "datetime" &&
+        propertyType !== "duration" &&
+        propertyType !== "cal::local_datetime" &&
+        propertyType !== "cal::local_date" &&
+        propertyType !== "cal::local_time" &&
+        propertyType !== "cal::relative_duration" &&
+        propertyType !== "cal::date_duration"
       ) {
         this.addError(
-          `Constraint '${name}' can only be applied to numeric or temporal properties, not '${propertyType}'`,
+          `Constraint '${name}' can only be applied to numeric or temporal properties, not '${propertyType}'`
         );
       }
     }
@@ -588,7 +596,7 @@ export class SchemaValidator {
     for (const action of policy.actions) {
       if (action.operations.length === 0) {
         this.addError(
-          `Access policy '${policy.name.value}' has action with no operations`,
+          `Access policy '${policy.name.value}' has action with no operations`
         );
       }
     }
@@ -597,12 +605,12 @@ export class SchemaValidator {
   private validateTrigger(
     trigger: AST.TriggerDeclaration,
     typeName: string,
-    triggerNames: Set<string>,
+    triggerNames: Set<string>
   ): void {
     // Check for duplicate trigger names within the type
     if (triggerNames.has(trigger.name.value)) {
       this.addError(
-        `Trigger '${trigger.name.value}' is already defined in type '${typeName}'`,
+        `Trigger '${trigger.name.value}' is already defined in type '${typeName}'`
       );
     }
     triggerNames.add(trigger.name.value);
@@ -610,7 +618,7 @@ export class SchemaValidator {
     // Validate at least one event
     if (trigger.events.length === 0) {
       this.addError(
-        `Trigger '${trigger.name.value}' must specify at least one event`,
+        `Trigger '${trigger.name.value}' must specify at least one event`
       );
     }
 
@@ -619,7 +627,7 @@ export class SchemaValidator {
     for (const event of trigger.events) {
       if (seenEvents.has(event)) {
         this.addError(
-          `Trigger '${trigger.name.value}' has duplicate event '${event}'`,
+          `Trigger '${trigger.name.value}' has duplicate event '${event}'`
         );
       }
       seenEvents.add(event);
@@ -632,12 +640,12 @@ export class SchemaValidator {
   private validateRewrite(
     rewrite: AST.RewriteDeclaration,
     propertyName: string,
-    seenEvents: Set<string>,
+    seenEvents: Set<string>
   ): void {
     // Validate events are non-empty
     if (rewrite.events.length === 0) {
       this.addError(
-        `Rewrite on property '${propertyName}' must specify at least one event`,
+        `Rewrite on property '${propertyName}' must specify at least one event`
       );
     }
 
@@ -645,7 +653,7 @@ export class SchemaValidator {
     for (const event of rewrite.events) {
       if (event !== "insert" && event !== "update") {
         this.addError(
-          `Invalid rewrite event '${event}' on property '${propertyName}'; expected 'insert' or 'update'`,
+          `Invalid rewrite event '${event}' on property '${propertyName}'; expected 'insert' or 'update'`
         );
       }
     }
@@ -654,7 +662,7 @@ export class SchemaValidator {
     for (const event of rewrite.events) {
       if (seenEvents.has(event)) {
         this.addError(
-          `Duplicate rewrite event '${event}' on property '${propertyName}'`,
+          `Duplicate rewrite event '${event}' on property '${propertyName}'`
         );
       }
       seenEvents.add(event);
@@ -663,7 +671,7 @@ export class SchemaValidator {
     // Validate using expression is non-empty
     if (!rewrite.using || rewrite.using.trim() === "") {
       this.addError(
-        `Rewrite on property '${propertyName}' must have a 'using' expression`,
+        `Rewrite on property '${propertyName}' must have a 'using' expression`
       );
     }
   }
@@ -691,14 +699,14 @@ export class SchemaValidator {
       "cal::local_date",
       "cal::local_time",
       "cal::relative_duration",
-      "cal::date_duration",
+      "cal::date_duration"
     ];
 
     // Validate parameterized types: array<T>, tuple<T1, T2, ...>, range<T>, multirange<T>
     if (typeName === "array") {
       if (!typeRef.params || typeRef.params.length !== 1) {
         this.addError(
-          `Type 'array' requires exactly one type parameter`,
+          `Type 'array' requires exactly one type parameter`
         );
         return;
       }
@@ -709,7 +717,7 @@ export class SchemaValidator {
     if (typeName === "tuple") {
       if (!typeRef.params || typeRef.params.length === 0) {
         this.addError(
-          `Type 'tuple' requires at least one type parameter`,
+          `Type 'tuple' requires at least one type parameter`
         );
         return;
       }
@@ -722,7 +730,7 @@ export class SchemaValidator {
     if (typeName === "range" || typeName === "multirange") {
       if (!typeRef.params || typeRef.params.length !== 1) {
         this.addError(
-          `Type '${typeName}' requires exactly one type parameter`,
+          `Type '${typeName}' requires exactly one type parameter`
         );
         return;
       }
@@ -740,13 +748,13 @@ export class SchemaValidator {
         "decimal",
         "datetime",
         "cal::local_date",
-        "cal::local_datetime",
+        "cal::local_datetime"
       ];
 
       if (!orderableTypes.includes(innerTypeName)) {
         this.addError(
-          `Type '${innerTypeName}' is not a valid inner type for '${typeName}'; `
-            + `expected one of: ${orderableTypes.join(", ")}`,
+          `Type '${innerTypeName}' is not a valid inner type for '${typeName}'; ` +
+            `expected one of: ${orderableTypes.join(", ")}`
         );
       }
 
