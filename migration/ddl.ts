@@ -503,7 +503,10 @@ END $$;`,
         nullable: !property.required,
         primaryKey: false,
         unique: property.constraints.includes("exclusive"),
-        default: property.default ? this.formatDefaultValue(property.default, property.type) : undefined
+        // `default !== undefined` rather than truthy — `default := 0`,
+        // `default := false`, and `default := ""` are valid SDL defaults
+        // that the truthy form would silently drop.
+        default: property.default !== undefined ? this.formatDefaultValue(property.default, property.type) : undefined
       });
     }
 
@@ -775,7 +778,7 @@ END $$;`,
 
     const columnType = this.mapEdgeQLTypeToPostgreSQL(property.type);
     const nullable = property.required ? "NOT NULL" : "NULL";
-    const defaultClause = property.default ? ` DEFAULT ${this.formatDefaultValue(property.default, property.type)}` : "";
+    const defaultClause = property.default !== undefined ? ` DEFAULT ${this.formatDefaultValue(property.default, property.type)}` : "";
 
     const statements = [
       `ALTER TABLE ${this.escapeIdentifier(tableName)} ADD COLUMN ${
