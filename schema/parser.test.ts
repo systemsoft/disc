@@ -1116,3 +1116,58 @@ Deno.test("SDL Parser - cast to parameterized type: <array<int64>>$param", () =>
   assertEquals(prop.computed.type.name.parts, ["array"]);
   assertEquals(prop.computed.type.params?.[0]?.name.parts, ["int64"]);
 });
+
+// ---------------------------------------------------------------------------
+// Backlink with type intersection: `requirements := .<options[is Foo]`.
+// Previously rejected with "Expected identifier, got <" because the path
+// parser only accepted forward links (`.name`).
+// ---------------------------------------------------------------------------
+
+Deno.test("SDL Parser - computed property uses backlink with type intersection", () => {
+  const source = `
+    type PaymentOption {
+      requirements := .<options[is PaymentRequirements];
+    }
+  `;
+
+  const ast = new SDLParser(source).parse();
+  const typeDecl = ast.declarations[0];
+  if (typeDecl.kind !== "TypeDeclaration") {
+    throw new Error(`expected TypeDeclaration, got ${typeDecl.kind}`);
+  }
+  const prop = typeDecl.members.find(
+    (m) => m.kind === "PropertyDeclaration" && m.name.value === "requirements",
+  );
+  if (prop?.kind !== "PropertyDeclaration" || !prop.computed) {
+    throw new Error("expected computed `requirements` property");
+  }
+  if (prop.computed.kind !== "PathExpression") {
+    throw new Error(`expected PathExpression, got ${prop.computed.kind}`);
+  }
+  assertEquals(prop.computed.path, [".", "<options", "[is PaymentRequirements]"]);
+  // Joined path round-trips to the original SDL form (relied on by
+  // migration/schema-manager.ts when stringifying expressions).
+  assertEquals(prop.computed.path.join(""), ".<options[is PaymentRequirements]");
+});
+
+Deno.test("SDL Parser - forward path with type intersection", () => {
+  const source = `
+    type T {
+      x := .friends[is User];
+    }
+  `;
+
+  const ast = new SDLParser(source).parse();
+  const typeDecl = ast.declarations[0];
+  if (typeDecl.kind !== "TypeDeclaration") return;
+  const prop = typeDecl.members.find(
+    (m) => m.kind === "PropertyDeclaration" && m.name.value === "x",
+  );
+  if (prop?.kind !== "PropertyDeclaration" || !prop.computed) {
+    throw new Error("expected computed `x` property");
+  }
+  if (prop.computed.kind !== "PathExpression") {
+    throw new Error(`expected PathExpression, got ${prop.computed.kind}`);
+  }
+  assertEquals(prop.computed.path, [".", "friends", "[is User]"]);
+});

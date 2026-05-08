@@ -1568,13 +1568,45 @@ export class SDLParser {
     return this.parsePostfixExpression();
   }
 
+  /**
+   * Parses one path step after a leading dot. Supports the EdgeQL backlink
+   * direction (`<name`) and a trailing type intersection (`[is QualifiedName]`).
+   * The pieces are returned as separate string elements so callers can join
+   * them back into the original SDL form via `path.join("")`.
+   */
+  private parsePathStep(): string[] {
+    const steps: string[] = [];
+    let prefix = "";
+    if (this.match(TokenType.LESS)) {
+      prefix = "<";
+    }
+    steps.push(prefix + this.parseIdentifier().value);
+
+    if (this.match(TokenType.LBRACKET)) {
+      const isKeyword = this.parseIdentifier();
+      if (isKeyword.value !== "is") {
+        throw this.error(
+          `Expected 'is' in type intersection, got '${isKeyword.value}'`,
+        );
+      }
+      const typeName = this.parseQualifiedName();
+      this.consume(
+        TokenType.RBRACKET,
+        "Expected ']' after type intersection",
+      );
+      steps.push(`[is ${typeName.parts.join("::")}]`);
+    }
+
+    return steps;
+  }
+
   private parsePostfixExpression(): AST.Expression {
     let expr = this.parsePrimaryExpression();
 
     while (true) {
       if (this.match(TokenType.DOT)) {
-        const path = [this.parseIdentifier().value];
-        expr = { kind: "PathExpression", path: [".", ...path] };
+        const steps = this.parsePathStep();
+        expr = { kind: "PathExpression", path: [".", ...steps] };
       } else if (this.match(TokenType.LPAREN)) {
         // Function call
         const args = this.parseExpressionList();
@@ -1641,10 +1673,10 @@ export class SDLParser {
       return first;
     }
 
-    // Path expression starting with dot (e.g., .property)
+    // Path expression starting with dot (e.g., .property, .<backlink, .foo[is Bar])
     if (this.match(TokenType.DOT)) {
-      const path = [".", this.parseIdentifier().value];
-      return { kind: "PathExpression", path };
+      const steps = this.parsePathStep();
+      return { kind: "PathExpression", path: [".", ...steps] };
     }
 
     // Handle keywords that can start expressions (like "select", "global")
