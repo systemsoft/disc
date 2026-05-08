@@ -1223,10 +1223,10 @@ export class CLICommands {
     }
   }
 
-  private async createMigration(
+  private createMigration(
     manager: SchemaManager,
     modules: Module[]
-  ): Promise<void> {
+  ): void {
     console.log("Creating new migration...");
 
     const planResult = manager.planModules(modules);
