@@ -168,7 +168,7 @@ export class DiscShell {
       }
       this.schema = manager.modulesToSchema(parseResult.value);
       const typeCount = this.schema.types.size;
-      console.log(`✅ Schema loaded: ${typeCount} type(s) available`);
+      console.log(`✅ Schema loaded: ${typeCount} type${typeCount === 1 ? "" : "s"} available`);
       console.log("");
     } catch (error) {
       console.error(`❌ Failed to load schema: ${(error as Error).message}`);
@@ -426,12 +426,12 @@ export class DiscShell {
     }
 
     const query = detailed ?
-      `SELECT 
+      `SELECT
            tablename as name,
            pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) as size,
            obj_description((schemaname||'.'||tablename)::regclass) as description
-         FROM pg_tables 
-         WHERE schemaname = 'public' 
+         FROM pg_tables
+         WHERE schemaname = 'public'
          ORDER BY tablename` :
       `SELECT tablename as name FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename`;
 

@@ -311,7 +311,7 @@ export class DiscServer {
           );
           this.protocolHandler.updateSchema(merged);
           logger.info(
-            `Merged ${extFunctions.length} extension function(s) and ${extTypes.length} extension type(s) into schema`
+            `Merged ${extFunctions.length} extension function${extFunctions.length === 1 ? "" : "s"} and ${extTypes.length} extension type${extTypes.length === 1 ? "" : "s"} into schema`
           );
         }
       }
@@ -555,7 +555,7 @@ export class DiscServer {
       this.dataWatchRegistry = new DataWatchRegistry({ pool: handler.pool });
       await this.dataWatchRegistry.start();
       logger.info(
-        `data-watch: ready (${result.wiredTables.length} table(s) wired)`
+        `data-watch: ready (${result.wiredTables.length} table${result.wiredTables.length === 1 ? "" : "s"} wired)`
       );
     } catch (err) {
       this.dataWatchRegistry = undefined;

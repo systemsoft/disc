@@ -141,7 +141,7 @@ export class DbCommand {
         console.log(`  ${displayName}`);
       }
 
-      console.log(`\n  ${result.rows.length} database(s) total.`);
+      console.log(`\n  ${result.rows.length} database${result.rows.length === 1 ? "" : "s"} total.`);
     } finally {
       await conn.close();
     }

@@ -128,16 +128,18 @@
     applyError = null;
     try {
       const params = forceApply ? '?force=true' : '';
+
       const res = await fetch(`/admin/schema-apply${params}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       });
+
       const body = await res.json();
-      if (res.ok && body.ok) {
-        applyResult = `Applied ${body.applied?.length ?? 0} migration(s)`;
-      } else {
+
+      if (res.ok && body.ok)
+        applyResult = `Applied ${body.applied?.length ?? 0} migration${body.applied?.length === 1 ? "" : "s"}`;
+      else
         applyError = body.error || `HTTP ${res.status}`;
-      }
     } catch (err) {
       applyError = err instanceof Error ? err.message : String(err);
     } finally {

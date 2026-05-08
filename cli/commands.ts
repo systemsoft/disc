@@ -476,7 +476,7 @@ export class CLICommands {
         }
 
         console.log(
-          `📖 Discovered ${files.length} schema file(s): ${files.map(f => f.split("/").pop()).join(", ")}`
+          `📖 Discovered ${files.length} schema file${files.length === 1 ? "" : "s"}: ${files.map(f => f.split("/").pop()).join(", ")}`
         );
         schema = await Codegen.loadMultiFileSchema(files);
         const typeNames = Array.from(schema.types.keys()).join(", ");
@@ -986,7 +986,7 @@ export class CLICommands {
         if (ops.length === 0) {
           console.log(`\n  Schema status: in sync`);
         } else {
-          console.log(`\n  Schema status: ${ops.length} pending operation(s)`);
+          console.log(`\n  Schema status: ${ops.length} pending operation${ops.length === 1 ? "" : "s"}`);
           for (const op of ops.slice(0, 5)) {
             console.log(`    - [${op.classification ?? "safe"}] ${op.kind}`);
           }
@@ -1346,7 +1346,7 @@ export class CLICommands {
         return;
       }
 
-      console.log(`DRY RUN - ${plan.migrations.length} migration(s) planned:`);
+      console.log(`DRY RUN - ${plan.migrations.length} migration${plan.migrations.length === 1 ? "" : "s"} planned:`);
       plan.migrations.forEach((migration, i) => {
         console.log(`  ${i + 1}. ${migration.name}`);
         console.log(`     ${migration.description}`);
@@ -1376,7 +1376,7 @@ export class CLICommands {
         const detected = await manager.detectRunningServers();
         if (detected.ok && detected.value.length > 0 && !quiet) {
           console.warn(
-            `\n⚠ Detected ${detected.value.length} active Disc server connection(s) on this database.`
+            `\n⚠ Detected ${detected.value.length} active Disc server connection${detected.value.length === 1 ? "" : "s"} on this database.`
           );
           console.warn(
             "  Migrate will succeed, but the server's in-memory schema cache will be stale until reload."

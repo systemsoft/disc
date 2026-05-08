@@ -179,7 +179,7 @@ export async function bootstrapDataWatch(
     wired.push(tableName);
   }
   log?.(
-    `wired data-watch triggers on ${wired.length} table(s): ${wired.join(", ")}`
+    `wired data-watch triggers on ${wired.length} table${wired.length === 1 ? "" : "s"}: ${wired.join(", ")}`
   );
 
   return { wiredTables: wired };

@@ -369,7 +369,7 @@ export class WatchCommand {
       // Write generated files
       await writeGeneratedFiles(result, ".");
 
-      console.log(`   ✅ Generated ${result.files.length} TypeScript file(s)`);
+      console.log(`   ✅ Generated ${result.files.length} TypeScript file${result.files.length === 1 ? "" : "s"}`);
     } catch (error) {
       console.error(`   ❌ Codegen failed: ${(error as Error).message}`);
     }

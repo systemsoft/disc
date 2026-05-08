@@ -441,11 +441,11 @@ Deno.test("CLI Shell - schema from file option", async () => {
     console.log(`📖 Loading schema from ${schemaFile}`);
     console.log(`📡 Connected to Disc server at localhost:5656`);
     console.log(`📊 Database: disc_dev`);
-    console.log(`✅ Schema loaded: 1 type(s) available`);
+    console.log(`✅ Schema loaded: 1 type available`);
 
     const logs = console.getLogs();
     assertLogContains(logs, "Loading schema from");
-    assertLogContains(logs, "Schema loaded: 1 type(s) available");
+    assertLogContains(logs, "Schema loaded: 1 type available");
   } finally {
     console.restore();
     await cleanupTempDir(tempDir);

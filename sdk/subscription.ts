@@ -240,7 +240,7 @@ export class SubscriptionClient {
       // Notify all subscriptions of the terminal close
       this.notifyAllError(
         new DiscConnectionError(
-          `WebSocket closed (code ${code}) after ${this.reconnectAttempt} reconnect attempt(s)`
+          `WebSocket closed (code ${code}) after ${this.reconnectAttempt} reconnect attempt${this.reconnectAttempt === 1 ? "" : "s"}`
         )
       );
     }

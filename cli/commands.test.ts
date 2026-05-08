@@ -130,7 +130,7 @@ Deno.test("CLI Commands - migrate apply workflow", async () => {
     // Simulate apply workflow output
     console.capture();
     console.log("🚀 Applying migrations...");
-    console.log("📋 Applying 1 migration(s):");
+    console.log("📋 Applying 1 migration:");
     console.log("  1. Initial schema");
     console.log("🔄 DRY RUN - No changes will be applied");
     console.log("💾 DDL that would be executed:");
