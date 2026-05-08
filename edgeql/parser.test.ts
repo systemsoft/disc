@@ -855,3 +855,27 @@ Deno.test("EdgeQL Parser - parse() still throws on first error (backward compat)
     SyntaxError
   );
 });
+
+// --- Gap #1: { * } splat shape ---
+
+Deno.test("EdgeQL Parser - SELECT with { * } splat shape", () => {
+  const ast = new EdgeQLParser("SELECT User { * }").parse();
+  assertEquals(ast.kind, "SelectQuery");
+  if (ast.kind === "SelectQuery") {
+    assertEquals(ast.shape?.elements.length, 1);
+    const elt = ast.shape!.elements[0];
+    assertEquals(elt.splat, true);
+  }
+});
+
+Deno.test("EdgeQL Parser - { * } splat coexists with FILTER and ORDER BY", () => {
+  const ast = new EdgeQLParser(
+    "SELECT User { * } FILTER .active = true ORDER BY .name"
+  ).parse();
+  assertEquals(ast.kind, "SelectQuery");
+  if (ast.kind === "SelectQuery") {
+    assertEquals(ast.shape?.elements[0].splat, true);
+    assertEquals(ast.filter !== undefined, true);
+    assertEquals(ast.orderBy?.length, 1);
+  }
+});

@@ -11,20 +11,22 @@
  * Validation only — these don't talk to PostgreSQL. Real PG round-trips
  * live in a future test pass; this one runs in any environment.
  *
- * NOTE: Disc's EdgeQL parser/compiler currently has four Gel-compat
- * gaps that intersect with this filter API. Tests below are organised
- * so the first group exercises only what's supported *today* and is
- * expected to pass; the second group is `ignore: true` with comments
- * pointing at each gap so the next person to close one knows which
- * test to flip on. The gaps:
+ * NOTE: Disc's EdgeQL parser/compiler still has four Gel-compat gaps
+ * that intersect with this filter API. Tests below are organised so the
+ * first group exercises only what's supported *today* and is expected
+ * to pass; the second group uses `assertThrows` to pin the remaining
+ * gaps so the next person to close one knows which test to flip on.
+ * The remaining gaps:
  *
- *   1. `{ * }` splat shape — caller must pass an explicit `select` or
- *      our wrapper substitutes `{ id }` here.
- *   2. `limit N offset M` together — parser stops after `limit`.
- *   3. `order by .a then .b` multi-key — `then` keyword unknown.
- *   4. `<array<str>>` nested generic types — used by `in` / `not_in`.
- *   5. `.link.field` multi-step path expressions — compiler errors with
+ *   - `limit N offset M` together — parser stops after `limit`.
+ *   - `order by .a then .b` multi-key — `then` keyword unknown.
+ *   - `<array<str>>` nested generic types — used by `in` / `not_in`.
+ *   - `.link.field` multi-step path expressions — compiler errors with
  *      "Multi-step path expressions not yet implemented".
+ *
+ * Gap #1 (`{ * }` splat) was closed — the wrapper below now uses `{ * }`
+ * by default, matching what the generated `client.<type>.filter()`
+ * actually emits.
  */
 
 import { assertEquals, assertThrows } from "@std/assert";
@@ -74,9 +76,7 @@ const userInfo: TypeInfo = {
 /** Assemble + parse + compile, matching the generated `filter()` method. */
 function compileAndRun(filter: Parameters<typeof compileFilter>[1]): string {
   const compiled = compileFilter("User", filter, userInfo);
-  // `{ * }` splat (gap #1) isn't supported by Disc's parser yet; substitute
-  // a minimal explicit shape so the rest of the query is what we test.
-  const shape = compiled.selectShape ?? "{ id }";
+  const shape = compiled.selectShape ?? "{ * }";
   const parts: string[] = [`select User ${shape}`];
   if (compiled.clause)
     parts.push(`filter ${compiled.clause}`);

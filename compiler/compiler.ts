@@ -1125,7 +1125,12 @@ export class EdgeQLCompiler {
   ): SQL.SelectItem[] {
     const fields: SQL.JsonField[] = [];
 
-    for (const element of shape.elements) {
+    // Expand any splat (`{ * }`) elements to one ShapeElement per scalar
+    // property of the type. Following Gel semantics, `*` covers properties
+    // only — links require explicit selection.
+    const expanded = this.expandSplats(shape.elements, typeName);
+
+    for (const element of expanded) {
       const field = this.compileShapeElement(element, typeName, tableAlias);
       if (field) {
         fields.push(field);
@@ -1134,6 +1139,42 @@ export class EdgeQLCompiler {
 
     const jsonObject = SQL.createJsonBuildObject(fields);
     return [SQL.createSelectItem(jsonObject)];
+  }
+
+  private expandSplats(
+    elements: EdgeQLAST.ShapeElement[],
+    typeName: string
+  ): EdgeQLAST.ShapeElement[] {
+    const out: EdgeQLAST.ShapeElement[] = [];
+    for (const element of elements) {
+      if (!element.splat) {
+        out.push(element);
+        continue;
+      }
+      const typeDef = this.ctx.schema.types.get(typeName);
+      if (!typeDef) {
+        throw new CompilationError(
+          `splat shape '*' on unknown type '${typeName}'`
+        );
+      }
+      // Always include `id` first so consumers can rely on it; iterate
+      // properties (Map preserves insertion order from the schema parser).
+      const seen = new Set<string>();
+      const pushIfNew = (name: string) => {
+        if (seen.has(name))
+          return;
+        seen.add(name);
+        out.push({
+          kind: "ShapeElement",
+          expr: EdgeQLAST.createIdentifier(name)
+        });
+      };
+      pushIfNew("id");
+      for (const propName of typeDef.properties.keys()) {
+        pushIfNew(propName);
+      }
+    }
+    return out;
   }
 
   private compileShapeElement(

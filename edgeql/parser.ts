@@ -639,6 +639,17 @@ export class EdgeQLParser {
     let computable = false;
     let cardinality: AST.Cardinality | undefined;
 
+    // Splat shape: `{ * }` — expands to all scalar properties at compile time.
+    // Must be checked before cardinality modifiers because `*` isn't a valid
+    // operand for cardinality.
+    if (this.match(TokenType.STAR)) {
+      return {
+        kind: "ShapeElement",
+        expr: AST.createIdentifier("*"),
+        splat: true
+      };
+    }
+
     // Check for cardinality modifiers
     if (this.match(TokenType.REQUIRED)) {
       cardinality = { kind: "Cardinality", required: true };

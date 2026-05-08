@@ -168,6 +168,13 @@ export interface ShapeElement extends EdgeQLNode {
   shape?: Shape;
   /** Type filter for polymorphic shape fields: [IS Type].property */
   typeFilter?: string;
+  /**
+   * Splat marker for `{ * }` — expand to all scalar properties of the
+   * containing type at compile time. The `expr` field is a placeholder
+   * (an Identifier with name "*"); consumers should branch on `splat`
+   * before reading `expr`.
+   */
+  splat?: boolean;
 }
 
 export interface Cardinality extends EdgeQLNode {

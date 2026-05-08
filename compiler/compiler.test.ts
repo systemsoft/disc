@@ -1329,3 +1329,29 @@ Deno.test("SQL Compiler - WITH CTE referenced once generates valid SQL with CTE 
   assertEquals(sql.includes("'name'"), true, "Shape should resolve 'name'");
   assertEquals(sql.includes("'email'"), true, "Shape should resolve 'email'");
 });
+
+// --- Gap #1: { * } splat shape expansion ---
+
+Deno.test("SQL Compiler - SELECT User { * } expands to all scalar properties", () => {
+  const sql = compileEdgeQL("SELECT User { * }");
+  // Every scalar property of the test schema's User type must appear as a
+  // jsonb key. createTestSchema() puts: id, name, email, createdAt, active,
+  // age, postCount on User.
+  assertEquals(sql.includes("jsonb_build_object"), true);
+  for (const key of ["id", "name", "email", "createdAt", "active", "age"]) {
+    assertEquals(
+      sql.includes(`'${key}'`),
+      true,
+      `splat should expand to include '${key}' (sql: ${sql})`
+    );
+  }
+});
+
+Deno.test("SQL Compiler - { * } splat coexists with FILTER", () => {
+  const sql = compileEdgeQL(
+    "SELECT User { * } FILTER .active = true"
+  );
+  // Both the expansion and the filter clause should be present
+  assertEquals(sql.includes("'name'"), true);
+  assertEquals(sql.includes("WHERE"), true);
+});
