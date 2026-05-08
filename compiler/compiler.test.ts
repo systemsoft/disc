@@ -1436,3 +1436,93 @@ Deno.test("SQL Compiler - multi-link .posts.id rewrites to EXISTS using FK short
   assertEquals(/EXISTS/i.test(sql), true);
   assertEquals(sql.includes("posts"), true);
 });
+
+// --- Showcase #2: 3+ hop path expressions ---
+
+/**
+ * Build a focused 3-hop chain schema so we can test deep paths without
+ * pulling in unrelated complexity from createTestSchema(). The chain:
+ * Payment → merchant → owner → email.
+ */
+function makeChainSchema() {
+  const ownerType = {
+    name: "Owner",
+    kind: "object" as const,
+    tableName: "owners",
+    properties: new Map([
+      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id", edgeqlType: "uuid", hasDefault: true }],
+      ["email", { name: "email", type: "str", required: true, multi: false, columnName: "email", edgeqlType: "str" }]
+    ]),
+    links: new Map()
+  };
+  const merchantType = {
+    name: "Merchant",
+    kind: "object" as const,
+    tableName: "merchants",
+    properties: new Map([
+      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id", edgeqlType: "uuid", hasDefault: true }],
+      ["name", { name: "name", type: "str", required: true, multi: false, columnName: "name", edgeqlType: "str" }]
+    ]),
+    links: new Map([
+      ["owner", { name: "owner", target: "Owner", required: true, multi: false, columnName: "owner_id" }]
+    ])
+  };
+  const paymentType = {
+    name: "Payment",
+    kind: "object" as const,
+    tableName: "payments",
+    properties: new Map([
+      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id", edgeqlType: "uuid", hasDefault: true }],
+      ["amount", { name: "amount", type: "float64", required: true, multi: false, columnName: "amount", edgeqlType: "float64" }]
+    ]),
+    links: new Map([
+      ["merchant", { name: "merchant", target: "Merchant", required: true, multi: false, columnName: "merchant_id" }]
+    ])
+  };
+  return {
+    types: new Map([
+      ["Owner", ownerType],
+      ["Merchant", merchantType],
+      ["Payment", paymentType]
+    ]),
+    functions: new Map()
+  };
+}
+
+function compileChain(source: string): string {
+  const localCompiler = new EdgeQLCompiler(makeChainSchema() as never);
+  const ast = new EdgeQLParser(source).parse();
+  const r = localCompiler.compile(ast);
+  if (!r.ok)
+    throw r.error;
+  return new SQLCodeGenerator().generate(r.value);
+}
+
+Deno.test("SQL Compiler - 3-hop .merchant.owner.email composes nested correlated subqueries", () => {
+  const sql = compileChain(
+    "SELECT Payment { id } FILTER .merchant.owner.email = <str>$e"
+  );
+  // Outer subquery hits the owners table (final hop's target)
+  assertEquals(sql.includes("owners"), true, `expected owners table: ${sql}`);
+  // Inner subquery hits the merchants table (middle hop)
+  assertEquals(sql.includes("merchants"), true, `expected merchants: ${sql}`);
+  // The chain should reference owner_id (merchant's FK to owner)
+  assertEquals(sql.includes("owner_id"), true, `expected owner_id: ${sql}`);
+  // ...and merchant_id (payment's FK to merchant) at the deepest layer
+  assertEquals(sql.includes("merchant_id"), true, `expected merchant_id: ${sql}`);
+  // Final projected column is email
+  assertEquals(sql.includes("email"), true);
+});
+
+Deno.test("SQL Compiler - 3-hop .merchant.owner.id collapses inner SELECT (terminal id is just the FK)", () => {
+  // When the terminal step is `id`, the outermost SELECT degenerates —
+  // the FK column on the previous hop already IS the target's id.
+  const sql = compileChain(
+    "SELECT Payment { id } FILTER .merchant.owner.id = <uuid>$id"
+  );
+  assertEquals(sql.includes("merchant_id"), true);
+  assertEquals(sql.includes("owner_id"), true);
+  // The outermost layer points at the merchants table (since the final
+  // projection is owner_id, not a column on owners).
+  assertEquals(sql.includes("merchants"), true);
+});

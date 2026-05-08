@@ -2573,10 +2573,21 @@ export class EdgeQLCompiler {
       );
     }
 
-    // Handle other multi-step paths
-    if (path.steps.length > 1) {
+    // 3+ step paths: walk the link chain via compileLinkChain. All
+    // intermediate steps must resolve to single-cardinality links;
+    // multi or junction-table links in the middle of a chain stay out
+    // of scope (would need EXISTS-style rewrites at each multi hop).
+    if (path.steps.length > 2) {
+      const allProperties = path.steps.every(s => s.type === "property");
+      if (allProperties) {
+        const linked = this.compileLinkChain(path.steps.map(s => s.name));
+        if (linked) {
+          return linked;
+        }
+      }
       throw new CompilationError(
-        `Multi-step path expressions not yet implemented`
+        `Multi-step path '.${path.steps.map(s => s.name).join(".")}' not supported `
+          + `(every intermediate step must be a single-cardinality link)`
       );
     }
 
@@ -2697,50 +2708,84 @@ export class EdgeQLCompiler {
   }
 
   /**
-   * Compile a 2-step path `.linkName.targetField` through a single-link.
+   * Compile an N-step path `.link1.link2....linkN.field` through a chain
+   * of single-cardinality links. Builds inside-out:
    *
-   * - `.link.id` short-circuits to the source's FK column — no JOIN, no
-   *   subquery. The FK literally is the target's id.
-   * - `.link.<other>` emits a correlated subquery against the target's
-   *   table that projects the requested column.
+   * - Start with the source alias's FK column to the first link's target.
+   * - For each intermediate link step, wrap with a correlated subquery
+   *   `(SELECT "<next_fk>" FROM "<current_target>" WHERE "id" = <inner>)`
+   *   so the chain extends one hop deeper.
+   * - The final step is either `id` (FK shortcut — no extra wrapping
+   *   needed; the existing chain already evaluates to the target's id)
+   *   or a property name (one final SELECT layer on the last target).
    *
-   * Returns `null` if the link can't be resolved on the active scope or
-   * if it's a multi/junction-table link (those need different SQL the
-   * caller should reject explicitly).
+   * 2-step paths fall out as the trivial case (zero intermediate steps).
+   *
+   * Returns `null` if any link in the chain can't be resolved or is
+   * multi/junction-table (those need different SQL the caller handles).
    */
   private compileLinkedPath(
     linkName: string,
     targetField: string
   ): SQL.SQLExpression | null {
-    for (const ta of this.ctx.currentScope.aliases.values()) {
-      const td = Context.resolveTypeName(this.ctx, ta.type);
-      const link = td?.links.get(linkName);
-      if (!link)
-        continue;
-      // Multi-cardinality / junction-table links need a different shape
-      // (UNNEST or join) — out of scope for this gap. Skip and let the
-      // caller report a clear error.
-      if (link.multi || link.junctionTable)
-        return null;
-      if (!link.columnName)
-        return null;
+    return this.compileLinkChain([linkName, targetField]);
+  }
 
-      // FK shortcut: `.link.id` is exactly the FK column on the source.
-      if (targetField === "id") {
-        return SQL.createColumnReference(link.columnName, ta.alias);
+  private compileLinkChain(
+    stepNames: string[]
+  ): SQL.SQLExpression | null {
+    if (stepNames.length < 2)
+      return null;
+
+    for (const ta of this.ctx.currentScope.aliases.values()) {
+      const sourceType = Context.resolveTypeName(this.ctx, ta.type);
+      const firstLink = sourceType?.links.get(stepNames[0]);
+      if (!firstLink || firstLink.multi || firstLink.junctionTable
+        || !firstLink.columnName) {
+        // Wrong alias scope, or first link isn't a single-cardinality
+        // link we can FK-walk. Try the next alias; if none match we
+        // return null and the caller produces a clear error.
+        continue;
       }
 
-      // Correlated subquery for non-id fields. Resolve the target type
-      // to find its table and the requested property's actual column.
-      const targetType = Context.resolveTypeName(this.ctx, link.target);
-      if (!targetType)
+      // currentSql is an SQL fragment that evaluates to the id of the
+      // *next* hop's target type. Initially it's the source's FK column.
+      let currentSql = `"${ta.alias}"."${firstLink.columnName}"`;
+      let currentTargetType = Context.resolveTypeName(this.ctx, firstLink.target);
+      if (!currentTargetType)
         return null;
-      const targetProp = targetType.properties.get(targetField);
+
+      // Walk intermediate link steps (everything except first link and
+      // the terminal property/id step).
+      for (let i = 1; i < stepNames.length - 1; i++) {
+        const link = currentTargetType.links.get(stepNames[i]);
+        if (!link || link.multi || link.junctionTable || !link.columnName) {
+          return null;
+        }
+        currentSql =
+          `(SELECT "${link.columnName}" FROM "${currentTargetType.tableName}" `
+          + `WHERE "id" = ${currentSql})`;
+        const next = Context.resolveTypeName(this.ctx, link.target);
+        if (!next)
+          return null;
+        currentTargetType = next;
+      }
+
+      const finalStep = stepNames[stepNames.length - 1];
+
+      // FK shortcut at the terminus: the chain already evaluates to
+      // the target's id, so no extra SELECT is needed.
+      if (finalStep === "id") {
+        return { kind: "RawSQLExpression", sql: currentSql };
+      }
+
+      const targetProp = currentTargetType.properties.get(finalStep);
       if (!targetProp?.columnName)
         return null;
 
       const sql =
-        `(SELECT "${targetProp.columnName}" FROM "${targetType.tableName}" WHERE "id" = "${ta.alias}"."${link.columnName}")`;
+        `(SELECT "${targetProp.columnName}" FROM "${currentTargetType.tableName}" `
+        + `WHERE "id" = ${currentSql})`;
       return { kind: "RawSQLExpression", sql };
     }
     return null;
