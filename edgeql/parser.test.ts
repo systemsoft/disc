@@ -927,3 +927,26 @@ Deno.test("EdgeQL Parser - ORDER BY with three keys via THEN", () => {
     assertEquals(ast.orderBy?.length, 3);
   }
 });
+
+// --- Gap #4: <array<T>> nested generic types in casts ---
+
+Deno.test("EdgeQL Parser - cast with <array<str>> nested generic type", () => {
+  const ast = new EdgeQLParser(
+    "SELECT User { id } FILTER .name IN array_unpack(<array<str>>$names)"
+  ).parse();
+  assertEquals(ast.kind, "SelectQuery");
+});
+
+Deno.test("EdgeQL Parser - parseTypeName captures subtypes on <array<int64>>", () => {
+  // The shape we care about: TypeName for "array" with one subtype "int64".
+  // Use a bare cast so we can inspect the AST shape directly.
+  const ast = new EdgeQLParser(
+    "SELECT <array<int64>>$ids"
+  ).parse();
+  assertEquals(ast.kind, "SelectQuery");
+  if (ast.kind === "SelectQuery" && ast.expr.kind === "TypeCast") {
+    assertEquals(ast.expr.type.name.parts, ["array"]);
+    assertEquals(ast.expr.type.subtypes?.length, 1);
+    assertEquals(ast.expr.type.subtypes?.[0].name.parts, ["int64"]);
+  }
+});

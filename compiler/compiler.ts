@@ -14,6 +14,19 @@ import * as Context from "./context.ts";
 import { describeSchema, describeType } from "./introspection.ts";
 import * as SQL from "./sql.ts";
 
+/**
+ * Render a TypeName AST node back to its EdgeQL textual form, including
+ * any generic subtypes — e.g. `array<str>`, `tuple<str, int64>`,
+ * `array<array<int>>`. Used to build the lookup key for the PG type map.
+ */
+function renderEdgeQLTypeName(type: EdgeQLAST.TypeName): string {
+  const head = type.name.parts.join("::");
+  if (!type.subtypes || type.subtypes.length === 0) {
+    return head;
+  }
+  return `${head}<${type.subtypes.map(renderEdgeQLTypeName).join(", ")}>`;
+}
+
 /** Maps EdgeQL type names to PostgreSQL type names */
 function edgeqlTypeToPgType(edgeqlType: string): string {
   const typeMap: Record<string, string> = {
@@ -2486,7 +2499,7 @@ export class EdgeQLCompiler {
 
   private compileTypeCast(cast: EdgeQLAST.TypeCast): SQL.SQLExpression {
     const expr = this.compileExpression(cast.expr);
-    const typeName = cast.type.name.parts.join("::");
+    const typeName = renderEdgeQLTypeName(cast.type);
     const pgType = edgeqlTypeToPgType(typeName);
 
     return SQL.createCastExpression(expr, pgType);

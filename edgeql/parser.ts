@@ -1840,7 +1840,51 @@ export class EdgeQLParser {
       parts.push(this.parseIdentifier().name);
     }
 
-    return AST.createTypeName(parts);
+    const typeName = AST.createTypeName(parts);
+
+    // Generic type arguments: e.g., array<str>, tuple<str, int64>. We
+    // recurse via parseTypeName so nested generics (array<array<str>>)
+    // also work. The lexer collapses `>>` into a single RSHIFT token,
+    // so when the inner generic ends with a doubled `>` we split it
+    // into two GREATERs in-place via consumeGenericClose().
+    if (this.match(TokenType.LESS)) {
+      const subtypes: AST.TypeName[] = [];
+      subtypes.push(this.parseTypeName());
+      while (this.match(TokenType.COMMA)) {
+        subtypes.push(this.parseTypeName());
+      }
+      this.consumeGenericClose();
+      typeName.subtypes = subtypes;
+    }
+
+    return typeName;
+  }
+
+  /**
+   * Consume the closing `>` of a generic type argument list. Accepts
+   * either GREATER or RSHIFT (the lexer fuses two consecutive `>`
+   * characters into one RSHIFT). When we see RSHIFT we rewrite it to
+   * a GREATER token in place and leave the cursor on it, so the
+   * surrounding context (typically another generic or a type cast's
+   * own closing `>`) consumes the second half normally.
+   */
+  private consumeGenericClose(): void {
+    if (this.check(TokenType.GREATER)) {
+      this.advance();
+      return;
+    }
+    if (this.check(TokenType.RSHIFT)) {
+      // Split `>>` → consume one `>` here, leave a synthetic GREATER
+      // for the outer consumer.
+      const tok = this.peek();
+      this.tokens[this.current] = {
+        ...tok,
+        type: TokenType.GREATER,
+        value: ">"
+      };
+      return;
+    }
+    throw this.error("Expected '>' to close generic type arguments");
   }
 
   // Utility methods

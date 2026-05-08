@@ -11,18 +11,18 @@
  * Validation only — these don't talk to PostgreSQL. Real PG round-trips
  * live in a future test pass; this one runs in any environment.
  *
- * NOTE: Disc's EdgeQL parser/compiler still has two Gel-compat gaps
- * that intersect with this filter API. Tests below are organised so the
- * first group exercises only what's supported *today* and is expected
- * to pass; the second group uses `assertThrows` to pin the remaining
- * gaps so the next person to close one knows which test to flip on.
- * The remaining gaps:
+ * NOTE: Disc's EdgeQL compiler still has one Gel-compat gap that
+ * intersects with this filter API. Tests below are organised so the
+ * first group exercises everything that's supported today and is
+ * expected to pass; the second group uses `assertThrows` to pin the
+ * remaining gap so the next person to close it knows which test to
+ * flip on. The remaining gap:
  *
- *   - `<array<str>>` nested generic types — used by `in` / `not_in`.
  *   - `.link.field` multi-step path expressions — compiler errors with
  *      "Multi-step path expressions not yet implemented".
  *
- * Closed gaps: #1 (splat), #2 (limit + offset), #3 (multi-key order_by).
+ * Closed gaps: #1 splat, #2 limit+offset, #3 multi-key order_by, #4
+ * `<array<T>>` nested generics for `in` / `not_in`.
  */
 
 import { assertEquals, assertThrows } from "@std/assert";
@@ -167,23 +167,11 @@ Deno.test("Stage E — empty filter (no predicate) compiles to SQL", () => {
 // and (b) flip back to passing assertions the moment each gap closes.
 // ---------------------------------------------------------------------------
 
-Deno.test("Stage E — GAP: in/not_in needs <array<T>> nested-generic parser support", () => {
-  // What the filter compiler emits today:
-  const compiled = compileFilter(
-    "User",
-    { name: { in: ["alice", "bob"] } },
-    userInfo
-  );
-  assertEquals(
-    compiled.clause,
-    ".name in array_unpack(<array<str>>$p0)"
-  );
-  // Disc's parser rejects nested generic types like <array<str>>:
-  assertThrows(
-    () => compileAndRun({ name: { in: ["alice", "bob"] } }),
-    Error,
-    "Expected '>' after type"
-  );
+Deno.test("Stage E — in/not_in with <array<T>> compiles to SQL (was Gap #4, closed 2026-05-08)", () => {
+  const sql = compileAndRun({ name: { in: ["alice", "bob"] } });
+  assertEquals(sql.length > 0, true);
+  // PG side: array_unpack(<array<str>>$p0) lowers to UNNEST over a text[].
+  assertEquals(/text\[\]|UNNEST/i.test(sql), true);
 });
 
 Deno.test("Stage E — GAP: link traversal needs multi-step path expressions in compiler", () => {
