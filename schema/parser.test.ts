@@ -190,7 +190,7 @@ Deno.test("SDL Parser - rejects typo in property body (no silent skip) (P1-04)",
   assertEquals(
     threw,
     true,
-    "Unknown token in a property body must produce a syntax error"
+    "Unknown token in a property body must produce a syntax error",
   );
 });
 
@@ -215,7 +215,7 @@ Deno.test("SDL Parser - rejects typo in access policy body (no silent skip) (P1-
   assertEquals(
     threw,
     true,
-    "Unknown token in an access policy body must produce a syntax error"
+    "Unknown token in an access policy body must produce a syntax error",
   );
 });
 
@@ -384,7 +384,7 @@ Deno.test("SDL Parser - Access Policy with `with check` clause (P1-37)", () => {
   const typeDecl = ast.declarations[0];
   assertEquals(typeDecl.kind, "TypeDeclaration");
   if (typeDecl.kind === "TypeDeclaration") {
-    const policy = typeDecl.members.find(m => m.kind === "AccessPolicy");
+    const policy = typeDecl.members.find((m) => m.kind === "AccessPolicy");
     assertEquals(policy?.kind, "AccessPolicy");
     if (policy?.kind === "AccessPolicy") {
       assertEquals(policy.name.value, "owner_writes_only");
@@ -392,7 +392,7 @@ Deno.test("SDL Parser - Access Policy with `with check` clause (P1-37)", () => {
       assertEquals(
         policy.withCheck !== undefined,
         true,
-        "with check expression must be parsed onto policy.withCheck"
+        "with check expression must be parsed onto policy.withCheck",
       );
     }
   }
@@ -412,7 +412,7 @@ Deno.test("SDL Parser - Access Policy without `with check` leaves withCheck unde
   const ast = parser.parse();
   const typeDecl = ast.declarations[0];
   if (typeDecl.kind === "TypeDeclaration") {
-    const policy = typeDecl.members.find(m => m.kind === "AccessPolicy");
+    const policy = typeDecl.members.find((m) => m.kind === "AccessPolicy");
     if (policy?.kind === "AccessPolicy") {
       assertEquals(policy.withCheck, undefined);
     }
@@ -435,7 +435,7 @@ Deno.test("SDL Parser - Access Policy with errmessage (Gel #4095)", () => {
   const typeDecl = ast.declarations[0];
   assertEquals(typeDecl.kind, "TypeDeclaration");
   if (typeDecl.kind === "TypeDeclaration") {
-    const policy = typeDecl.members.find(m => m.kind === "AccessPolicy");
+    const policy = typeDecl.members.find((m) => m.kind === "AccessPolicy");
     assertEquals(policy?.kind, "AccessPolicy");
     if (policy?.kind === "AccessPolicy") {
       assertEquals(policy.errmessage, "Only admins can modify this record");
@@ -457,7 +457,7 @@ Deno.test("SDL Parser - Access Policy without errmessage leaves it undefined", (
   const ast = parser.parse();
   const typeDecl = ast.declarations[0];
   if (typeDecl.kind === "TypeDeclaration") {
-    const policy = typeDecl.members.find(m => m.kind === "AccessPolicy");
+    const policy = typeDecl.members.find((m) => m.kind === "AccessPolicy");
     if (policy?.kind === "AccessPolicy") {
       assertEquals(policy.errmessage, undefined);
     }
@@ -587,7 +587,7 @@ Deno.test("SDL Validator - Undefined Type Error", () => {
   assertEquals(result.errors?.length, 1);
   assertEquals(
     result.errors?.[0].message,
-    "Type 'NonExistentType' is not defined"
+    "Type 'NonExistentType' is not defined",
   );
 });
 
@@ -628,7 +628,7 @@ Deno.test("SDL Parser - Syntax Error", () => {
       parser.parse();
     },
     SyntaxError,
-    "Expected ':' after property name"
+    "Expected ':' after property name",
   );
 });
 
@@ -684,15 +684,17 @@ Deno.test("SDL Parser - parseWithRecovery: collects multiple errors in one pass"
   assertEquals(
     document.declarations.length >= 2,
     true,
-    `expected at least 2 declarations, got ${document.declarations.length}`
+    `expected at least 2 declarations, got ${document.declarations.length}`,
   );
   assertEquals(
     errors.length >= 1,
     true,
-    `expected at least 1 error, got ${errors.length}`
+    `expected at least 1 error, got ${errors.length}`,
   );
   // Good1 + Good2 must both be present in the recovered document.
-  const names = document.declarations.flatMap(d => d.kind === "TypeDeclaration" ? [d.name.value] : []);
+  const names = document.declarations.flatMap((d) =>
+    d.kind === "TypeDeclaration" ? [d.name.value] : []
+  );
   assertEquals(names.includes("Good1"), true);
   assertEquals(names.includes("Good2"), true);
 });
@@ -710,18 +712,20 @@ Deno.test("SDL Parser - parseWithRecovery: recovers across multiple bad blocks",
 
   const { document, errors } = new SDLParser(source).parseWithRecovery();
 
-  const names = document.declarations.flatMap(d => d.kind === "TypeDeclaration" ? [d.name.value] : []);
+  const names = document.declarations.flatMap((d) =>
+    d.kind === "TypeDeclaration" ? [d.name.value] : []
+  );
   for (const expected of ["Ok1", "Ok2", "Ok3"]) {
     assertEquals(
       names.includes(expected),
       true,
-      `Expected '${expected}' in recovered names, got ${JSON.stringify(names)}`
+      `Expected '${expected}' in recovered names, got ${JSON.stringify(names)}`,
     );
   }
   assertEquals(
     errors.length >= 2,
     true,
-    `expected at least 2 errors, got ${errors.length}`
+    `expected at least 2 errors, got ${errors.length}`,
   );
 });
 
@@ -733,14 +737,14 @@ Deno.test("SDL Parser - parseWithRecovery: never throws on malformed input", () 
     "type",
     "type X {",
     "scalar type",
-    "module foo {"
+    "module foo {",
   ];
   for (const src of sources) {
     const { errors } = new SDLParser(src).parseWithRecovery();
     assertEquals(
       errors.length > 0,
       true,
-      `expected ${JSON.stringify(src)} to produce errors`
+      `expected ${JSON.stringify(src)} to produce errors`,
     );
   }
 });
@@ -920,10 +924,10 @@ Deno.test("SDL Validator - rejects unknown rest::* annotation", () => {
   const result = new SchemaValidator().validate(ast);
   assertEquals(result.ok, false);
   // Error message references the annotation name so callers can find it.
-  const flat = (result.errors ?? []).map(e => e.message).join("\n");
+  const flat = (result.errors ?? []).map((e) => e.message).join("\n");
   if (!flat.includes("rest::madeupknob")) {
     throw new Error(
-      `expected validation error mentioning 'rest::madeupknob', got: ${flat}`
+      `expected validation error mentioning 'rest::madeupknob', got: ${flat}`,
     );
   }
 });
@@ -956,8 +960,8 @@ Deno.test("SDL Parser - enum scalar with quoted string values", () => {
   // Each quoted value becomes a single-part TypeRef so downstream
   // `differ.scalarEnumValues` reads it the same way as bare identifiers.
   assertEquals(
-    ext?.params?.map(p => p.name.parts.join("::")),
-    ["PRODUCTION", "SANDBOX"]
+    ext?.params?.map((p) => p.name.parts.join("::")),
+    ["PRODUCTION", "SANDBOX"],
   );
 });
 
@@ -978,8 +982,8 @@ Deno.test("SDL Parser - enum scalar with bare identifier values still works", ()
   if (scalar.kind !== "ScalarTypeDeclaration") return;
 
   assertEquals(
-    scalar.extending?.[0].params?.map(p => p.name.parts.join("::")),
-    ["draft", "published", "archived"]
+    scalar.extending?.[0].params?.map((p) => p.name.parts.join("::")),
+    ["draft", "published", "archived"],
   );
 });
 
@@ -1005,7 +1009,7 @@ Deno.test("SDL Parser - composite index parses tuple expression", () => {
     throw new Error(`expected TypeDeclaration, got ${typeDecl.kind}`);
   }
 
-  const idx = typeDecl.members.find(m => m.kind === "Index");
+  const idx = typeDecl.members.find((m) => m.kind === "Index");
   if (idx?.kind !== "Index") {
     throw new Error("expected an Index member");
   }
@@ -1021,10 +1025,10 @@ Deno.test("SDL Parser - composite index parses tuple expression", () => {
     assertEquals(el.path[0], ".");
   }
   assertEquals(
-    idx.on.elements.map(e =>
+    idx.on.elements.map((e) =>
       e.kind === "PathExpression" ? e.path.slice(1).join("") : ""
     ),
-    ["created", "environment", "merchant"]
+    ["created", "environment", "merchant"],
   );
 });
 
@@ -1041,7 +1045,74 @@ Deno.test("SDL Parser - single-element parens stay a plain expression", () => {
   const ast = new SDLParser(source).parse();
   const typeDecl = ast.declarations[0];
   if (typeDecl.kind !== "TypeDeclaration") return;
-  const idx = typeDecl.members.find(m => m.kind === "Index");
+  const idx = typeDecl.members.find((m) => m.kind === "Index");
   if (idx?.kind !== "Index") return;
   assertEquals(idx.on.kind, "PathExpression");
+});
+
+// ---------------------------------------------------------------------------
+// Type casts in computed expressions: `<cal::relative_duration>"1 hour"`.
+// Previously rejected with "Unexpected token in expression: <" because `<`
+// was only handled as a comparison operator (between two expressions).
+// ---------------------------------------------------------------------------
+
+Deno.test("SDL Parser - computed property uses qualified type cast", () => {
+  const source = `
+    type RateLimitBucket {
+      created: datetime;
+      expires := .created + <cal::relative_duration>"1 hour";
+    }
+  `;
+
+  const ast = new SDLParser(source).parse();
+  const typeDecl = ast.declarations[0];
+  if (typeDecl.kind !== "TypeDeclaration") {
+    throw new Error(`expected TypeDeclaration, got ${typeDecl.kind}`);
+  }
+
+  const expires = typeDecl.members.find(
+    (m) => m.kind === "PropertyDeclaration" && m.name.value === "expires",
+  );
+  if (expires?.kind !== "PropertyDeclaration" || !expires.computed) {
+    throw new Error("expected computed `expires` property");
+  }
+  if (expires.computed.kind !== "BinaryOp" || expires.computed.op !== "+") {
+    throw new Error(`expected binary '+', got ${expires.computed.kind}`);
+  }
+  const right = expires.computed.right;
+  if (right.kind !== "TypeCast") {
+    throw new Error(`expected TypeCast on right side, got ${right.kind}`);
+  }
+  assertEquals(right.type.name.parts, ["cal", "relative_duration"]);
+  if (right.expr.kind !== "Literal" || right.expr.type !== "string") {
+    throw new Error(
+      `expected string literal inside cast, got ${right.expr.kind}`,
+    );
+  }
+  assertEquals(right.expr.value, "1 hour");
+});
+
+Deno.test("SDL Parser - cast to parameterized type: <array<int64>>$param", () => {
+  const source = `
+    type T {
+      ids := <array<int64>>$ids;
+    }
+  `;
+
+  const ast = new SDLParser(source).parse();
+  const typeDecl = ast.declarations[0];
+  if (typeDecl.kind !== "TypeDeclaration") {
+    throw new Error(`expected TypeDeclaration, got ${typeDecl.kind}`);
+  }
+  const prop = typeDecl.members.find(
+    (m) => m.kind === "PropertyDeclaration" && m.name.value === "ids",
+  );
+  if (prop?.kind !== "PropertyDeclaration" || !prop.computed) {
+    throw new Error("expected computed `ids` property");
+  }
+  if (prop.computed.kind !== "TypeCast") {
+    throw new Error(`expected TypeCast, got ${prop.computed.kind}`);
+  }
+  assertEquals(prop.computed.type.name.parts, ["array"]);
+  assertEquals(prop.computed.type.params?.[0]?.name.parts, ["int64"]);
 });
