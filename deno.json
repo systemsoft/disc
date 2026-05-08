@@ -43,7 +43,6 @@
     }
   },
   "lock": false,
-  "name": "@systemsoft/disc",
   "tasks": {
     "bench": "deno bench --allow-all --no-check benchmarks/",
     "bench:pg": "DISC_PG_AUTO=1 deno bench --allow-all --no-check benchmarks/",

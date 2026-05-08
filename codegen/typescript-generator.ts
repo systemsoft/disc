@@ -523,9 +523,11 @@ export class TypeScriptGenerator {
 
     const multiModule = this.isMultiModule();
 
-    // Import from SDK. The default (../sdk/mod.ts) works when codegen runs
-    // inside the Disc repo; downstream projects override via config. (P1-21)
-    const sdkBase = this.config.sdkImportBase ?? "../sdk/mod.ts";
+    // Import from SDK. The default (./sdk/mod.ts) resolves alongside the
+    // generated client because `disc codegen` materializes the embedded
+    // SDK into `<outputDir>/sdk/` next to `client.ts`. Downstream
+    // projects can still override via config. (P1-21)
+    const sdkBase = this.config.sdkImportBase ?? "./sdk/mod.ts";
     content += `import { DiscClient as BaseClient, type DiscClientConfig } from "${sdkBase}";\n`;
     content += `export type { DiscClientConfig } from "${sdkBase}";\n`;
     content += `export { AuthManager, SubscriptionClient } from "${sdkBase}";\n`;

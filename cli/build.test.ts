@@ -1,6 +1,6 @@
 import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
 import { join } from "@std/path";
-import { AVAILABLE_PLATFORMS, BuildCommand, generateEmbeddedPgManifest, generateUiManifest, platformPgStagingDir, refreshEmbeddedPgManifest } from "./build.ts";
+import { AVAILABLE_PLATFORMS, BuildCommand, generateEmbeddedPgManifest, generateEmbeddedSdkManifest, generateUiManifest, platformPgStagingDir, refreshEmbeddedPgManifest, refreshEmbeddedSdkManifest } from "./build.ts";
 
 Deno.test("BuildCommand - maps linux-x64 to x86_64-unknown-linux-gnu", () => {
   const command = new BuildCommand();
@@ -351,6 +351,109 @@ Deno.test("assertEmbeddedPgPresent - no-op when DISC_BUILD_NO_BUNDLE_PG=1 even w
   }
 });
 
+Deno.test("assertEmbeddedSdkPresent - throws when --platform set and 0 files staged", () => {
+  const command = new BuildCommand();
+  let threw = false;
+  try {
+    command.assertEmbeddedSdkPresent({ platform: "linux-x64" }, []);
+  } catch {
+    threw = true;
+  }
+  assertEquals(
+    threw,
+    true,
+    "assertEmbeddedSdkPresent must throw when --platform is set and 0 SDK files were staged."
+  );
+});
+
+Deno.test("assertEmbeddedSdkPresent - throws when sdk/mod.ts is missing", () => {
+  const command = new BuildCommand();
+  // 11 files but mod.ts absent — generated client imports ./sdk/mod.ts,
+  // so the embed is unusable without it.
+  const paths = [
+    "/repo/sdk/auth.ts",
+    "/repo/sdk/client.ts",
+    "/repo/sdk/codecs.ts",
+    "/repo/sdk/errors.ts",
+    "/repo/sdk/query-builder.ts",
+    "/repo/sdk/schema-types.ts",
+    "/repo/sdk/subscription.ts",
+    "/repo/sdk/transaction.ts",
+    "/repo/sdk/types.ts",
+    "/repo/sdk/validation.ts"
+  ];
+  let threw = false;
+  try {
+    command.assertEmbeddedSdkPresent({ platform: "linux-x64" }, paths);
+  } catch {
+    threw = true;
+  }
+  assertEquals(
+    threw,
+    true,
+    "assertEmbeddedSdkPresent must throw when sdk/mod.ts is missing from the embedded paths."
+  );
+});
+
+Deno.test("assertEmbeddedSdkPresent - throws when file count below threshold", () => {
+  const command = new BuildCommand();
+  // mod.ts present but only 3 files total — partial tree.
+  const paths = [
+    "/repo/sdk/mod.ts",
+    "/repo/sdk/client.ts",
+    "/repo/sdk/types.ts"
+  ];
+  let threw = false;
+  try {
+    command.assertEmbeddedSdkPresent({ platform: "linux-x64" }, paths);
+  } catch {
+    threw = true;
+  }
+  assertEquals(
+    threw,
+    true,
+    "assertEmbeddedSdkPresent must throw when file count is below the SDK source threshold."
+  );
+});
+
+Deno.test("assertEmbeddedSdkPresent - no-op when --platform set and full SDK tree", () => {
+  const command = new BuildCommand();
+  const paths = [
+    "/repo/sdk/auth.ts",
+    "/repo/sdk/client.ts",
+    "/repo/sdk/codecs.ts",
+    "/repo/sdk/errors.ts",
+    "/repo/sdk/mod.ts",
+    "/repo/sdk/query-builder.ts",
+    "/repo/sdk/schema-types.ts",
+    "/repo/sdk/subscription.ts",
+    "/repo/sdk/transaction.ts",
+    "/repo/sdk/types.ts",
+    "/repo/sdk/validation.ts"
+  ];
+  command.assertEmbeddedSdkPresent({ platform: "linux-x64" }, paths);
+});
+
+Deno.test("assertEmbeddedSdkPresent - no-op when no --platform (host build)", () => {
+  const command = new BuildCommand();
+  command.assertEmbeddedSdkPresent({}, []);
+  command.assertEmbeddedSdkPresent({}, ["/just/one/file"]);
+});
+
+Deno.test("assertEmbeddedSdkPresent - no-op when DISC_BUILD_NO_BUNDLE_SDK=1 even with --platform", () => {
+  const command = new BuildCommand();
+  const prev = Deno.env.get("DISC_BUILD_NO_BUNDLE_SDK");
+  Deno.env.set("DISC_BUILD_NO_BUNDLE_SDK", "1");
+  try {
+    command.assertEmbeddedSdkPresent({ platform: "linux-x64" }, []);
+  } finally {
+    if (prev === undefined)
+      Deno.env.delete("DISC_BUILD_NO_BUNDLE_SDK");
+    else
+      Deno.env.set("DISC_BUILD_NO_BUNDLE_SDK", prev);
+  }
+});
+
 Deno.test("refreshEmbeddedPgManifest - honors pgSourceDirOverride for cross-compile staging", async () => {
   // Stage a fake PG distribution under a per-platform dir and confirm
   // the manifest emitter sources from THAT path, not from <DISC_HOME>.
@@ -380,5 +483,105 @@ Deno.test("refreshEmbeddedPgManifest - honors pgSourceDirOverride for cross-comp
     }
   } finally {
     await Deno.remove(tmp, { recursive: true });
+  }
+});
+
+// =====================================================================
+// Embedded SDK manifest — Caddy-style self-contained codegen
+// =====================================================================
+
+Deno.test("generateEmbeddedSdkManifest - empty manifest when source dir absent", async () => {
+  const tmp = await Deno.makeTempDir({ prefix: "disc-embed-sdk-empty-" });
+  try {
+    const generated = await generateEmbeddedSdkManifest({
+      sourceDir: join(tmp, "does-not-exist")
+    });
+    assertStringIncludes(generated, "EMBEDDED_SDK_MANIFEST");
+    assertStringIncludes(generated, "[]");
+  } finally {
+    await Deno.remove(tmp, { recursive: true });
+  }
+});
+
+Deno.test("generateEmbeddedSdkManifest - lists .ts files but skips .test.ts", async () => {
+  const tmp = await Deno.makeTempDir({ prefix: "disc-embed-sdk-list-" });
+  try {
+    const sourceDir = join(tmp, "sdk");
+    await Deno.mkdir(sourceDir, { recursive: true });
+    await Deno.writeTextFile(join(sourceDir, "client.ts"), "export {};");
+    await Deno.writeTextFile(join(sourceDir, "mod.ts"), "export {};");
+    await Deno.writeTextFile(join(sourceDir, "client.test.ts"), "// test");
+    await Deno.writeTextFile(join(sourceDir, "README.md"), "# sdk");
+
+    const generated = await generateEmbeddedSdkManifest({ sourceDir });
+
+    assertStringIncludes(generated, "\"client.ts\"");
+    assertStringIncludes(generated, "\"mod.ts\"");
+    // Tests must not get embedded — they'd bloat the binary and pull
+    // test-only deps into downstream projects.
+    assertEquals(generated.includes("client.test.ts"), false);
+    // Non-.ts files are out of scope.
+    assertEquals(generated.includes("README.md"), false);
+    // All entries get the read-only mode 0o644.
+    assertStringIncludes(generated, "0o644");
+    // sourceUrl uses file:// + abs path so deno compile --include resolves
+    assertStringIncludes(generated, `file://${sourceDir}/client.ts`);
+  } finally {
+    await Deno.remove(tmp, { recursive: true });
+  }
+});
+
+Deno.test("refreshEmbeddedSdkManifest - writes manifest under codegen/", async () => {
+  const tmp = await Deno.makeTempDir({ prefix: "disc-refresh-sdk-" });
+  try {
+    // Stand up a fake repo root with sdk/ + codegen/.
+    const sdkDir = join(tmp, "sdk");
+    const codegenDir = join(tmp, "codegen");
+    await Deno.mkdir(sdkDir, { recursive: true });
+    await Deno.mkdir(codegenDir, { recursive: true });
+    await Deno.writeTextFile(join(sdkDir, "mod.ts"), "export {};");
+    await Deno.writeTextFile(join(sdkDir, "client.ts"), "export {};");
+    await Deno.writeTextFile(join(sdkDir, "client.test.ts"), "// test");
+
+    const result = await refreshEmbeddedSdkManifest(tmp);
+
+    assertEquals(result.sdkSourceDir, sdkDir);
+    assertEquals(result.fileCount, 2);
+    assertEquals(result.wrote, true);
+
+    // Both .ts files made it into the include list (sorted).
+    assertEquals(result.includePaths.includes(join(sdkDir, "mod.ts")), true);
+    assertEquals(result.includePaths.includes(join(sdkDir, "client.ts")), true);
+
+    // Manifest file written + readable.
+    const manifestText = await Deno.readTextFile(
+      join(codegenDir, "embedded-sdk-manifest.ts")
+    );
+    assertStringIncludes(manifestText, "EMBEDDED_SDK_MANIFEST");
+    assertStringIncludes(manifestText, "\"mod.ts\"");
+    assertStringIncludes(manifestText, "\"client.ts\"");
+    assertEquals(manifestText.includes("client.test.ts"), false);
+
+    // Re-running with no source changes is a no-op (no rewrite).
+    const second = await refreshEmbeddedSdkManifest(tmp);
+    assertEquals(second.wrote, false);
+    assertEquals(second.fileCount, 2);
+  } finally {
+    await Deno.remove(tmp, { recursive: true });
+  }
+});
+
+Deno.test("BuildCommand.buildCompileArgs - includes SDK paths when supplied", () => {
+  const command = new BuildCommand();
+  const args = command.buildCompileArgs(
+    {},
+    [],
+    ["/abs/sdk/mod.ts", "/abs/sdk/client.ts"]
+  );
+  assertEquals(args.includes("/abs/sdk/mod.ts"), true);
+  assertEquals(args.includes("/abs/sdk/client.ts"), true);
+  for (const path of ["/abs/sdk/mod.ts", "/abs/sdk/client.ts"]) {
+    const i = args.indexOf(path);
+    assertEquals(args[i - 1], "--include");
   }
 });

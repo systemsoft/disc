@@ -4,6 +4,8 @@
  */
 
 import * as Codegen from "../codegen/mod.ts";
+import { extractEmbeddedSdk } from "../codegen/sdk-extractor.ts";
+import { VERSION } from "../mod.ts";
 import type { Schema } from "../compiler/context.ts";
 import { introspectDatabase } from "../compiler/pg-introspect-queries.ts";
 import { buildSchemaFromIntrospection } from "../compiler/pg-introspect.ts";
@@ -503,6 +505,18 @@ export class CLICommands {
         console.error(`❌ Generation failed with errors:`);
         result.errors.forEach(error => console.error(`   ${error}`));
         return;
+      }
+
+      // Materialize the embedded SDK alongside the generated client so
+      // the `import { ... } from "./sdk/mod.ts"` line in client.ts
+      // resolves out of the box. Idempotent: re-extracts only when the
+      // marker file is missing OR pinned to a different binary version.
+      const sdkTargetDir = `${outputDir}/sdk`;
+      const sdkResult = await extractEmbeddedSdk(sdkTargetDir, VERSION);
+      if (!sdkResult.alreadyExtracted && sdkResult.extracted > 0) {
+        console.log(
+          `📦 Extracting SDK to ${sdkTargetDir}/ (${sdkResult.extracted} files)`
+        );
       }
 
       // Write files to disk

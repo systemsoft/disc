@@ -15,11 +15,12 @@ export interface CodegenConfig {
   formatOutput: boolean;
   /**
    * Base module specifier for the Disc SDK re-exports emitted into the
-   * generated client. Defaults to `"../sdk/mod.ts"` (the in-repo path used
-   * when codegen is invoked from within the Disc repo). Projects depending
-   * on a published Disc via JSR should set this to e.g. `"jsr:@disc/db/sdk"`
-   * or a local path that resolves from the generated output directory.
-   * (P1-21)
+   * generated client. Defaults to `"./sdk/mod.ts"` — `disc codegen`
+   * materializes the embedded SDK into `<outputDir>/sdk/` alongside the
+   * generated `client.ts`, so the relative import resolves out of the
+   * box for downstream projects. Override to e.g. `"jsr:@disc/db/sdk"`
+   * if you'd rather depend on a published SDK package than ship the
+   * extracted copy. (P1-21)
    */
   sdkImportBase?: string;
 }

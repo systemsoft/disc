@@ -156,6 +156,67 @@ export class BuildCommand {
   }
 
   /**
+   * Cross-compile gate for the embedded SDK, mirroring
+   * `assertEmbeddedPgPresent`. A binary without the SDK still boots, but
+   * `disc codegen` can't materialize `dbschema/disc-client/sdk/` — the
+   * generated `client.ts` import of `./sdk/mod.ts` will fail. Shipping a
+   * release artifact in that state is a worse failure mode than failing
+   * loud at build time.
+   *
+   * Host builds (no `--platform`) skip the gate so local dev without a
+   * full SDK tree (e.g. partial checkouts) still produces a runnable
+   * binary. `DISC_BUILD_NO_BUNDLE_SDK=1` is the explicit opt-out.
+   */
+  assertEmbeddedSdkPresent(
+    options: { platform?: string; },
+    paths: readonly string[]
+  ): void {
+    if (!options.platform)
+      return;
+    if (Deno.env.get("DISC_BUILD_NO_BUNDLE_SDK") === "1")
+      return;
+
+    const opOutHint = `To opt out of SDK embedding explicitly, set ` +
+      `DISC_BUILD_NO_BUNDLE_SDK=1.`;
+
+    if (paths.length === 0) {
+      throw new Error(
+        `Cross-compile build for ${options.platform} produced 0 embedded ` +
+          `SDK files. This usually means the sdk/ directory was missing or ` +
+          `the manifest refresh silently failed — check the build log for ` +
+          `"Skipped embedded-SDK manifest refresh". ` +
+          opOutHint
+      );
+    }
+
+    const hasMod = paths.some(p => p.endsWith("/sdk/mod.ts"));
+    if (!hasMod) {
+      throw new Error(
+        `Cross-compile build for ${options.platform} produced an embedded ` +
+          `SDK without sdk/mod.ts (${paths.length} files). The generated ` +
+          `client imports from ./sdk/mod.ts; without it codegen output is ` +
+          `broken. ` +
+          opOutHint
+      );
+    }
+
+    // sdk/ ships 11 source files (auth, client, codecs, errors, mod,
+    // query-builder, schema-types, subscription, transaction, types,
+    // validation). 8 catches partial trees while leaving headroom for
+    // intentional reorganization.
+    const MIN_SDK_FILES = 8;
+    if (paths.length < MIN_SDK_FILES) {
+      throw new Error(
+        `Cross-compile build for ${options.platform} produced only ` +
+          `${paths.length} embedded SDK files; the SDK ships 11 sources. ` +
+          `This is a partial tree — codegen output will fail to resolve ` +
+          `imports at runtime. ` +
+          opOutHint
+      );
+    }
+  }
+
+  /**
    * Validate the platform string. Throws an error with a helpful message
    * listing valid platforms if the platform is not recognized.
    */
@@ -172,10 +233,16 @@ export class BuildCommand {
    * optional list of absolute file paths (typically PG distribution
    * files under `<DISC_HOME>/postgres/<version>/`) to bake into the
    * binary; pass `[]` when no PG should be embedded.
+   *
+   * `embeddedSdkPaths` is an optional list of absolute file paths to
+   * the on-disk Disc SDK source files (`sdk/*.ts`, minus `*.test.ts`)
+   * that `disc codegen` extracts at runtime so generated clients work
+   * out of the box.
    */
   buildCompileArgs(
     options: BuildOptions,
-    embeddedPgPaths: readonly string[] = []
+    embeddedPgPaths: readonly string[] = [],
+    embeddedSdkPaths: readonly string[] = []
   ): string[] {
     const outputPath = this.resolveOutputPath(
       options.output,
@@ -211,6 +278,14 @@ export class BuildCommand {
     // back via `Deno.readFile(new URL("file://..."))` — see
     // `postgres/embedded-pg.ts`.
     for (const p of embeddedPgPaths) {
+      args.push("--include", p);
+    }
+
+    // Embed the SDK source files so `disc codegen` can materialize them
+    // alongside generated client output (caddy-style — the binary ships
+    // everything). Same file://-URL embedding strategy as PG; the
+    // runtime extractor lives in `codegen/sdk-extractor.ts`.
+    for (const p of embeddedSdkPaths) {
       args.push("--include", p);
     }
 
@@ -330,7 +405,54 @@ export class BuildCommand {
       embeddedPgSourceDir
     );
 
-    const compileArgs = this.buildCompileArgs(options, embeddedPgPaths);
+    // Refresh the embedded-SDK manifest from `sdk/*.ts` (excluding
+    // tests) so the binary embeds the SDK alongside PG. Failures here
+    // are non-fatal — the binary still builds without an embedded SDK,
+    // it just means `disc codegen` won't be able to materialize the SDK
+    // and downstream clients will need to supply it themselves.
+    let embeddedSdkPaths: string[] = [];
+    try {
+      const refreshed = await refreshEmbeddedSdkManifest(Deno.cwd());
+      embeddedSdkPaths = refreshed.includePaths;
+      if (refreshed.wrote) {
+        console.log(
+          `  Refreshed embedded-SDK manifest: ${refreshed.fileCount} files`
+        );
+      } else if (refreshed.fileCount > 0) {
+        console.log(
+          `  Embedded-SDK manifest unchanged: ${refreshed.fileCount} files`
+        );
+      } else {
+        console.log(
+          `  No embedded SDK (no sources at sdk/); ` +
+            `binary will skip SDK extraction during codegen`
+        );
+      }
+    } catch (err) {
+      // Cross-compile builds (--platform set) re-throw so a release tag
+      // never produces a binary missing the SDK silently. Host builds
+      // log + continue (codegen will skip extraction at runtime).
+      if (options.platform) {
+        throw new Error(
+          `SDK manifest refresh failed for ${options.platform}: ${(err as Error).message}`,
+          { cause: err }
+        );
+      }
+      console.warn(
+        `  Skipped embedded-SDK manifest refresh: ${(err as Error).message}`
+      );
+    }
+
+    // Final gate: parallel to assertEmbeddedPgPresent — even when refresh
+    // didn't throw, an empty/partial result on a cross-compile build is a
+    // release blocker.
+    this.assertEmbeddedSdkPresent(options, embeddedSdkPaths);
+
+    const compileArgs = this.buildCompileArgs(
+      options,
+      embeddedPgPaths,
+      embeddedSdkPaths
+    );
 
     console.log(`Building Disc binary...`);
     console.log(`  Output: ${outputPath}`);
@@ -673,6 +795,139 @@ export async function refreshEmbeddedPgManifest(
     fileCount: includePaths.length,
     includePaths,
     pgSourceDir,
+    wrote
+  };
+}
+
+/**
+ * Recursive directory walker shared by `generateEmbeddedSdkManifest`.
+ * Mirrors `walkPgSource` but skips test files. Pulled out to keep the
+ * parent function at the top level (lint: `no-inner-declarations`).
+ */
+async function walkSdkSource(
+  rootDir: string,
+  dir: string,
+  entries: { abs: string; rel: string; }[]
+): Promise<void> {
+  for await (const entry of Deno.readDir(dir)) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory) {
+      await walkSdkSource(rootDir, full, entries);
+      continue;
+    }
+    if (!entry.isFile)
+      continue;
+    if (!entry.name.endsWith(".ts"))
+      continue;
+    if (entry.name.endsWith(".test.ts"))
+      continue;
+    const rel = relative(rootDir, full).split("\\").join("/");
+    entries.push({ abs: full, rel });
+  }
+}
+
+/**
+ * Build the contents of `codegen/embedded-sdk-manifest.ts` from the
+ * on-disk SDK source at `sourceDir` (typically `<repo>/sdk/`). When the
+ * directory is missing or empty we emit an empty manifest — the runtime
+ * extractor short-circuits to a no-op marker write, so the binary still
+ * builds.
+ *
+ * All entries get mode `0o644` (SDK sources are read at runtime, not
+ * executed).
+ */
+export async function generateEmbeddedSdkManifest(options: {
+  sourceDir: string;
+}): Promise<string> {
+  const entries: { abs: string; rel: string; }[] = [];
+
+  let exists = false;
+  try {
+    const stat = await Deno.stat(options.sourceDir);
+    exists = stat.isDirectory;
+  } catch {
+    exists = false;
+  }
+
+  if (exists) {
+    await walkSdkSource(options.sourceDir, options.sourceDir, entries);
+    entries.sort((a, b) => a.rel.localeCompare(b.rel));
+  }
+
+  const body = entries.length === 0 ? "[]" : `[\n${
+    entries
+      .map(
+        e => `  { sourceUrl: new URL("file://${e.abs}"), relPath: ${JSON.stringify(e.rel)}, mode: 0o644 },`
+      )
+      .join("\n")
+  }\n]`;
+
+  return `/**
+ * Embedded Disc SDK manifest.
+ *
+ * Auto-generated by \`cli/build.ts\` (do not edit by hand). Empty when
+ * \`<repo>/sdk/\` was absent at build time.
+ *
+ * Every \`sourceUrl\` here is an absolute \`file://\` URL — it's what
+ * \`deno compile --include <abs path>\` baked into the binary. At runtime
+ * \`Deno.readFile(sourceUrl)\` resolves through Deno's embedded asset
+ * table and \`codegen/sdk-extractor.ts\` writes the bytes alongside the
+ * generated client output (\`<outputDir>/sdk/\`).
+ */
+
+import type { EmbeddedSdkEntry } from "./sdk-extractor.ts";
+
+export const EMBEDDED_SDK_MANIFEST: readonly EmbeddedSdkEntry[] = ${body};
+`;
+}
+
+export interface RefreshEmbeddedSdkResult {
+  fileCount: number;
+  includePaths: string[];
+  sdkSourceDir: string;
+  wrote: boolean;
+}
+
+/**
+ * Regenerate `codegen/embedded-sdk-manifest.ts` from the on-disk SDK
+ * source at `<rootDir>/sdk/` and return the absolute paths to feed into
+ * `deno compile --include`. When the source dir is missing, returns an
+ * empty manifest + zero include paths — the binary still builds, just
+ * without an embedded SDK.
+ */
+export async function refreshEmbeddedSdkManifest(
+  rootDir: string = Deno.cwd()
+): Promise<RefreshEmbeddedSdkResult> {
+  const manifestPath = join(rootDir, "codegen", "embedded-sdk-manifest.ts");
+  const sdkSourceDir = join(rootDir, "sdk");
+
+  const generated = await generateEmbeddedSdkManifest({
+    sourceDir: sdkSourceDir
+  });
+
+  let existing = "";
+  try {
+    existing = await Deno.readTextFile(manifestPath);
+  } catch {
+    // Missing — write fresh.
+  }
+
+  const wrote = existing !== generated;
+  if (wrote) {
+    await Deno.writeTextFile(manifestPath, generated);
+  }
+
+  const includePaths: string[] = [];
+  const includeRegex = /new URL\("file:\/\/([^"]+)"\)/g;
+  let match: RegExpExecArray | null;
+  while ((match = includeRegex.exec(generated)) !== null) {
+    includePaths.push(match[1]);
+  }
+
+  return {
+    fileCount: includePaths.length,
+    includePaths,
+    sdkSourceDir,
     wrote
   };
 }
