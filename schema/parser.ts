@@ -1622,7 +1622,16 @@ export class SDLParser {
     while (true) {
       if (this.match(TokenType.DOT)) {
         const steps = this.parsePathStep();
-        expr = { kind: "PathExpression", path: [".", ...steps] };
+        // Continue an existing path (e.g. `MerchantStatus.PENDING`) by
+        // appending the new step rather than restarting with a leading
+        // dot. The leading-dot form (`["."]`) is reserved for paths that
+        // *begin* with a dot — i.e. references to the current scope's
+        // properties (`.email`), not enum or namespace dotted access.
+        if (expr.kind === "PathExpression") {
+          expr = { kind: "PathExpression", path: [...expr.path, ...steps] };
+        } else {
+          expr = { kind: "PathExpression", path: [".", ...steps] };
+        }
       } else if (this.match(TokenType.LPAREN)) {
         // Function call
         const args = this.parseExpressionList();

@@ -1447,22 +1447,48 @@ END $$;`,
     return "TEXT";
   }
 
-  private formatDefaultValue(value: any, _type: string): string {
+  private formatDefaultValue(value: any, type: string): string {
     if (value === null || value === undefined) {
       return "NULL";
     }
 
     if (typeof value === "string") {
-      if (value.startsWith("datetime_current()")) {
-        return "NOW()";
+      // EdgeQL function-call defaults arrive here as serialized strings
+      // (e.g. "datetime_of_transaction()"). Detect the function-call shape
+      // and emit raw SQL with the EdgeQL→SQL builtin mapping. Without this
+      // they'd be quoted as text and PG would reject them at apply time
+      // ("invalid input syntax for type timestamp with time zone").
+      if (/^[A-Za-z_][A-Za-z0-9_:]*\s*\(.*\)\s*$/.test(value)) {
+        return this.compileExpressionString(value);
       }
+
+      // Enum defaults arrive as serialized PathExpressions. The runtime
+      // Schema serializer uses `path.join("")` to collapse the parser's
+      // interleaved dots, but the differ uses `path.join(".")` which can
+      // produce shapes like `MerchantStatus.PENDING`. Pull the trailing
+      // identifier and emit a literal value the enum column will accept.
+      if (this.enumScalars.has(type) || this.enumScalars.has(type.replace(/^default::/, ""))) {
+        const tail = value.split(".").pop() ?? value;
+        return `'${tail.replace(/'/g, "''")}'`;
+      }
+
+      // Numeric-typed columns whose default arrives as a stringified
+      // number (e.g. `default := 1` for an int64 col) — keep the integer
+      // shape rather than quoting it as text.
+      if (this.isNumericPgType(type) && /^-?\d+(\.\d+)?$/.test(value)) {
+        return value;
+      }
+
       return `'${value.replace(/'/g, "''")}'`;
     }
 
     if (typeof value === "number") {
-      // Always include decimal point for numeric defaults to preserve float semantics
-      // e.g., 0.0 should render as "0.0" not "0" in SQL
       const str = String(value);
+      // Integer columns get an integer literal; float columns keep the
+      // decimal point so PG infers the right numeric type.
+      if (this.isIntegerPgType(type)) {
+        return str.includes(".") ? String(Math.trunc(value)) : str;
+      }
       if (
         Number.isFinite(value) && !str.includes(".") && !str.includes("e") &&
         !str.includes("E")
@@ -1477,6 +1503,32 @@ END $$;`,
     }
 
     return `'${String(value).replace(/'/g, "''")}'`;
+  }
+
+  /**
+   * Compile a serialized EdgeQL expression (function calls, builtins) into
+   * raw SQL by substituting EdgeQL function names with their Postgres
+   * equivalents. Mirrors `compileRewriteExpression()` but for default-value
+   * context, where there's no `__subject__` / `__old__` substitution.
+   */
+  private compileExpressionString(expr: string): string {
+    return expr
+      .replace(/datetime_of_statement\(\)/g, "statement_timestamp()")
+      .replace(/datetime_current\(\)/g, "now()")
+      .replace(/datetime_of_transaction\(\)/g, "transaction_timestamp()");
+  }
+
+  private isIntegerPgType(type: string): boolean {
+    const t = type.toLowerCase();
+    return t === "int16" || t === "int32" || t === "int64" ||
+      t === "smallint" || t === "integer" || t === "bigint";
+  }
+
+  private isNumericPgType(type: string): boolean {
+    if (this.isIntegerPgType(type)) return true;
+    const t = type.toLowerCase();
+    return t === "float32" || t === "float64" || t === "decimal" ||
+      t === "real" || t === "double precision" || t === "numeric";
   }
 
   private escapeIdentifier(identifier: string): string {
