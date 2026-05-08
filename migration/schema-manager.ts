@@ -325,8 +325,15 @@ export class SchemaManager {
     const abstractAnnotations = new Map<string, AbstractAnnotationDef>();
     const converter = new SDLConverter();
 
-    // First pass: collect abstract link and annotation declarations
+    // First pass: collect abstract link and annotation declarations, plus a
+    // global set of object type names. The SDL parser uses arrow shorthand
+    // (`name -> Type`) for both scalar properties and object links — only
+    // the target type's kind can distinguish them, and that's a
+    // cross-module question. We need every object type's name (bare AND
+    // module-qualified) before extracting members so link-vs-property
+    // classification works regardless of declaration order.
     const abstractLinks = new Map<string, LinkDeclaration>();
+    const objectTypeNames = new Set<string>();
     for (const module of modules) {
       for (const item of module.items) {
         // Collect abstract annotation declarations
@@ -346,6 +353,12 @@ export class SchemaManager {
         ) {
           const linkDecl = item as LinkDeclaration;
           abstractLinks.set(linkDecl.name.value, linkDecl);
+        }
+
+        if (item.kind === "TypeDeclaration") {
+          const name = (item as TypeDeclaration).name.value;
+          objectTypeNames.add(name);
+          objectTypeNames.add(`${module.name}::${name}`);
         }
       }
     }
@@ -550,6 +563,34 @@ export class SchemaManager {
           const linkAnnotations = extractAnnotationMap(
             linkDecl.annotations
           );
+
+          // Reclassify: SDL arrow shorthand `name -> ScalarType` parses as
+          // a LinkDeclaration but is semantically a property whenever the
+          // target isn't an object type. Build a PropertyDef directly from
+          // the LinkDecl AST so the body's default/readonly/constraints
+          // carry over (they're captured by parseLinkBody).
+          const isObjectTarget = objectTypeNames.has(targetName) ||
+            objectTypeNames.has(targetName.replace(/^default::/, ""));
+          if (!isObjectTarget) {
+            const sqlType = sdlTypeToSqlType(targetName);
+            const linkConstraints = extractPropertyConstraints(
+              linkDecl.constraints
+            );
+            properties.set(linkName, {
+              name: linkName,
+              type: sqlType,
+              required: linkDecl.required ?? false,
+              multi: isMulti,
+              columnName: propNameToColumnName(linkName),
+              edgeqlType: targetName,
+              readonly: linkDecl.readonly ?? false,
+              hasDefault: linkDecl.default !== undefined,
+              computed: linkDecl.computed !== undefined,
+              constraints: linkConstraints,
+              annotations: linkAnnotations
+            });
+            continue;
+          }
 
           links.set(linkName, {
             name: linkName,

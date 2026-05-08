@@ -215,6 +215,64 @@ Deno.test("SchemaManager - modulesToSchema - single link gets _id columnName, mu
 });
 
 // ---------------------------------------------------------------------------
+// 5b. modulesToSchema -- arrow shorthand classifies by target type
+//     (regression: scalar `name -> str` parses as a LinkDeclaration but
+//     must land in `properties`, not `links`, otherwise codegen emits
+//     ghost `strQueryBuilder._typeInfo` thunks)
+// ---------------------------------------------------------------------------
+Deno.test("SchemaManager - modulesToSchema - arrow shorthand reclassifies scalar targets as properties", () => {
+  const manager = new SchemaManager({});
+  const sdl = `
+    module default {
+      type Merchant {
+        required name -> str;
+      }
+    }
+    module api {
+      scalar type Environment extending enum<"PRODUCTION", "SANDBOX">;
+      type ApiKey {
+        required created -> datetime { readonly := true; };
+        required key -> str { constraint exclusive; };
+        required merchant -> default::Merchant;
+        required name -> str;
+        rateLimitSeconds -> int64 { default := 10; };
+        required environment -> Environment;
+      }
+    }
+  `;
+
+  const parseResult = manager.parseSDL(sdl);
+  assertEquals(parseResult.ok, true);
+  if (!parseResult.ok)
+    return;
+
+  const schema = manager.modulesToSchema(parseResult.value);
+  const apiKey = schema.types.get("api::ApiKey");
+  assert(apiKey !== undefined, "Expected api::ApiKey type");
+
+  // Scalars: must be in properties, NOT links
+  for (const scalarField of ["name", "key", "created", "rateLimitSeconds", "environment"]) {
+    assert(apiKey.properties.has(scalarField), `${scalarField} should be a property`);
+    assertEquals(apiKey.links.has(scalarField), false, `${scalarField} should NOT be a link`);
+  }
+
+  // Object link: must stay in links
+  assert(apiKey.links.has("merchant"), "merchant must remain a link (object target)");
+
+  // Body metadata carries over from the link AST to the reclassified property
+  const keyProp = apiKey.properties.get("key")!;
+  assertEquals(keyProp.required, true);
+  assertEquals(keyProp.edgeqlType, "str");
+  assertEquals(keyProp.constraints?.length ?? 0, 1, "exclusive constraint should carry over");
+
+  const createdProp = apiKey.properties.get("created")!;
+  assertEquals(createdProp.readonly, true, "readonly flag should carry over");
+
+  const rateLimitProp = apiKey.properties.get("rateLimitSeconds")!;
+  assertEquals(rateLimitProp.hasDefault, true, "default expression presence should carry over");
+});
+
+// ---------------------------------------------------------------------------
 // 6. modulesToSchema -- implicit id property added
 // ---------------------------------------------------------------------------
 Deno.test("SchemaManager - modulesToSchema - implicit id property added", () => {
