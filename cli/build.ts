@@ -26,7 +26,7 @@ const PLATFORM_MAP: Record<string, string> = {
   "darwin-arm64": "aarch64-apple-darwin",
   "darwin-x64": "x86_64-apple-darwin",
   "linux-arm64": "aarch64-unknown-linux-gnu",
-  "linux-x64": "x86_64-unknown-linux-gnu"
+  "linux-x64": "x86_64-unknown-linux-gnu",
 };
 
 /**
@@ -61,7 +61,7 @@ export class BuildCommand {
    */
   resolveOutputPath(
     output: string | undefined,
-    platform: string | undefined
+    platform: string | undefined,
   ): string {
     if (output) {
       return output;
@@ -103,18 +103,22 @@ export class BuildCommand {
    * so they bypass the gate even with `--platform`.
    */
   assertEmbeddedPgPresent(
-    options: { platform?: string; lite?: boolean; },
+    options: { platform?: string; lite?: boolean },
     paths: readonly string[],
-    pgSourceDir: string
+    pgSourceDir: string,
   ): void {
-    if (!options.platform)
+    if (!options.platform) {
       return;
-    if (options.lite)
+    }
+    if (options.lite) {
       return;
-    if (Deno.env.get("DISC_BUILD_NO_BUNDLE_PG") === "1")
+    }
+    if (Deno.env.get("DISC_BUILD_NO_BUNDLE_PG") === "1") {
       return;
+    }
 
-    const opOutHint = `To opt out of PG embedding explicitly, set DISC_BUILD_NO_BUNDLE_PG=1 ` +
+    const opOutHint =
+      `To opt out of PG embedding explicitly, set DISC_BUILD_NO_BUNDLE_PG=1 ` +
       `or pass --lite.`;
 
     if (paths.length === 0) {
@@ -123,18 +127,18 @@ export class BuildCommand {
           `files (source dir: ${pgSourceDir}). This usually means PG staging ` +
           `silently failed — check the build log for ` +
           `"Skipped embedded-PG manifest refresh" or download/extract errors. ` +
-          opOutHint
+          opOutHint,
       );
     }
 
-    const hasPostgresBinary = paths.some(p => p.endsWith("/bin/postgres"));
+    const hasPostgresBinary = paths.some((p) => p.endsWith("/bin/postgres"));
     if (!hasPostgresBinary) {
       throw new Error(
         `Cross-compile build for ${options.platform} produced an embedded PG ` +
           `distribution without bin/postgres (${paths.length} files at ` +
           `${pgSourceDir}). The runtime needs the postgres binary to start. ` +
           `This usually means the JAR → txz extract chain partially failed. ` +
-          opOutHint
+          opOutHint,
       );
     }
 
@@ -150,7 +154,7 @@ export class BuildCommand {
           `a real PG 16 distribution has 600+ files. This is a partial ` +
           `extraction — the binary will fail at runtime when PG init can't ` +
           `find timezone or extension data. ` +
-          opOutHint
+          opOutHint,
       );
     }
   }
@@ -168,13 +172,15 @@ export class BuildCommand {
    * binary. `DISC_BUILD_NO_BUNDLE_SDK=1` is the explicit opt-out.
    */
   assertEmbeddedSdkPresent(
-    options: { platform?: string; },
-    paths: readonly string[]
+    options: { platform?: string },
+    paths: readonly string[],
   ): void {
-    if (!options.platform)
+    if (!options.platform) {
       return;
-    if (Deno.env.get("DISC_BUILD_NO_BUNDLE_SDK") === "1")
+    }
+    if (Deno.env.get("DISC_BUILD_NO_BUNDLE_SDK") === "1") {
       return;
+    }
 
     const opOutHint = `To opt out of SDK embedding explicitly, set ` +
       `DISC_BUILD_NO_BUNDLE_SDK=1.`;
@@ -185,18 +191,18 @@ export class BuildCommand {
           `SDK files. This usually means the sdk/ directory was missing or ` +
           `the manifest refresh silently failed — check the build log for ` +
           `"Skipped embedded-SDK manifest refresh". ` +
-          opOutHint
+          opOutHint,
       );
     }
 
-    const hasMod = paths.some(p => p.endsWith("/sdk/mod.ts"));
+    const hasMod = paths.some((p) => p.endsWith("/sdk/mod.ts"));
     if (!hasMod) {
       throw new Error(
         `Cross-compile build for ${options.platform} produced an embedded ` +
           `SDK without sdk/mod.ts (${paths.length} files). The generated ` +
           `client imports from ./sdk/mod.ts; without it codegen output is ` +
           `broken. ` +
-          opOutHint
+          opOutHint,
       );
     }
 
@@ -211,7 +217,7 @@ export class BuildCommand {
           `${paths.length} embedded SDK files; the SDK ships 11 sources. ` +
           `This is a partial tree — codegen output will fail to resolve ` +
           `imports at runtime. ` +
-          opOutHint
+          opOutHint,
       );
     }
   }
@@ -223,7 +229,9 @@ export class BuildCommand {
   validatePlatform(platform: string): void {
     if (!PLATFORM_MAP[platform]) {
       throw new Error(
-        `Invalid platform: "${platform}". Valid platforms: ${AVAILABLE_PLATFORMS.join(", ")}`
+        `Invalid platform: "${platform}". Valid platforms: ${
+          AVAILABLE_PLATFORMS.join(", ")
+        }`,
       );
     }
   }
@@ -242,11 +250,11 @@ export class BuildCommand {
   buildCompileArgs(
     options: BuildOptions,
     embeddedPgPaths: readonly string[] = [],
-    embeddedSdkPaths: readonly string[] = []
+    embeddedSdkPaths: readonly string[] = [],
   ): string[] {
     const outputPath = this.resolveOutputPath(
       options.output,
-      options.platform
+      options.platform,
     );
 
     const args: string[] = [
@@ -261,7 +269,7 @@ export class BuildCommand {
       "--allow-env",
       "--allow-run",
       "--output",
-      outputPath
+      outputPath,
     ];
 
     // P2-35: bundle version.txt so VERSION resolution works at runtime.
@@ -317,7 +325,7 @@ export class BuildCommand {
 
     const outputPath = this.resolveOutputPath(
       options.output,
-      options.platform
+      options.platform,
     );
 
     // Refresh the UI manifest before deno compile picks it up so the
@@ -331,7 +339,7 @@ export class BuildCommand {
         }
       } catch (err) {
         console.warn(
-          `  Skipped UI manifest refresh: ${(err as Error).message}`
+          `  Skipped UI manifest refresh: ${(err as Error).message}`,
         );
       }
     }
@@ -352,32 +360,32 @@ export class BuildCommand {
         let pgSourceOverride: string | undefined;
         if (options.platform) {
           console.log(
-            `  Staging PG for cross-compile target ${options.platform}…`
+            `  Staging PG for cross-compile target ${options.platform}…`,
           );
           pgSourceOverride = await ensurePlatformPgStaging(
             Deno.cwd(),
-            options.platform
+            options.platform,
           );
         }
         const refreshed = await refreshEmbeddedPgManifest(
           Deno.cwd(),
           "16.4",
-          pgSourceOverride
+          pgSourceOverride,
         );
         embeddedPgPaths = refreshed.includePaths;
         embeddedPgSourceDir = refreshed.pgSourceDir;
         if (refreshed.wrote) {
           console.log(
-            `  Refreshed embedded-PG manifest: ${refreshed.fileCount} files from ${refreshed.pgSourceDir}`
+            `  Refreshed embedded-PG manifest: ${refreshed.fileCount} files from ${refreshed.pgSourceDir}`,
           );
         } else if (refreshed.fileCount > 0) {
           console.log(
-            `  Embedded-PG manifest unchanged: ${refreshed.fileCount} files`
+            `  Embedded-PG manifest unchanged: ${refreshed.fileCount} files`,
           );
         } else {
           console.log(
             `  No embedded PG (no cache at ${refreshed.pgSourceDir}); ` +
-              `binary will download PG on first run`
+              `binary will download PG on first run`,
           );
         }
       } catch (err) {
@@ -386,12 +394,14 @@ export class BuildCommand {
         // log + continue (the binary downloads PG on first run).
         if (options.platform) {
           throw new Error(
-            `PG staging failed for ${options.platform}: ${(err as Error).message}`,
-            { cause: err }
+            `PG staging failed for ${options.platform}: ${
+              (err as Error).message
+            }`,
+            { cause: err },
           );
         }
         console.warn(
-          `  Skipped embedded-PG manifest refresh: ${(err as Error).message}`
+          `  Skipped embedded-PG manifest refresh: ${(err as Error).message}`,
         );
       }
     }
@@ -402,7 +412,7 @@ export class BuildCommand {
     this.assertEmbeddedPgPresent(
       options,
       embeddedPgPaths,
-      embeddedPgSourceDir
+      embeddedPgSourceDir,
     );
 
     // Refresh the embedded-SDK manifest from `sdk/*.ts` (excluding
@@ -416,16 +426,16 @@ export class BuildCommand {
       embeddedSdkPaths = refreshed.includePaths;
       if (refreshed.wrote) {
         console.log(
-          `  Refreshed embedded-SDK manifest: ${refreshed.fileCount} files`
+          `  Refreshed embedded-SDK manifest: ${refreshed.fileCount} files`,
         );
       } else if (refreshed.fileCount > 0) {
         console.log(
-          `  Embedded-SDK manifest unchanged: ${refreshed.fileCount} files`
+          `  Embedded-SDK manifest unchanged: ${refreshed.fileCount} files`,
         );
       } else {
         console.log(
           `  No embedded SDK (no sources at sdk/); ` +
-            `binary will skip SDK extraction during codegen`
+            `binary will skip SDK extraction during codegen`,
         );
       }
     } catch (err) {
@@ -434,12 +444,14 @@ export class BuildCommand {
       // log + continue (codegen will skip extraction at runtime).
       if (options.platform) {
         throw new Error(
-          `SDK manifest refresh failed for ${options.platform}: ${(err as Error).message}`,
-          { cause: err }
+          `SDK manifest refresh failed for ${options.platform}: ${
+            (err as Error).message
+          }`,
+          { cause: err },
         );
       }
       console.warn(
-        `  Skipped embedded-SDK manifest refresh: ${(err as Error).message}`
+        `  Skipped embedded-SDK manifest refresh: ${(err as Error).message}`,
       );
     }
 
@@ -451,7 +463,7 @@ export class BuildCommand {
     const compileArgs = this.buildCompileArgs(
       options,
       embeddedPgPaths,
-      embeddedSdkPaths
+      embeddedSdkPaths,
     );
 
     console.log(`Building Disc binary...`);
@@ -460,7 +472,7 @@ export class BuildCommand {
     if (options.platform) {
       console.log(`  Platform: ${options.platform}`);
       console.log(
-        `  Target: ${this.mapPlatform(options.platform)}`
+        `  Target: ${this.mapPlatform(options.platform)}`,
       );
     }
 
@@ -473,14 +485,14 @@ export class BuildCommand {
     const command = new Deno.Command("deno", {
       args: compileArgs,
       stdout: "inherit",
-      stderr: "inherit"
+      stderr: "inherit",
     });
 
     const result = await command.output();
 
     if (!result.success) {
       throw new Error(
-        `Build failed with exit code ${result.code}`
+        `Build failed with exit code ${result.code}`,
       );
     }
 
@@ -535,11 +547,11 @@ export async function generateUiManifest(buildDir: string): Promise<string> {
   if (files.length === 0) {
     throw new Error(
       `No files under ${buildDir} — no UI build artifacts to embed. ` +
-        `Run \`bash ui/build.sh\` before \`disc build\` (or pass --lite).`
+        `Run \`bash ui/build.sh\` before \`disc build\` (or pass --lite).`,
     );
   }
 
-  const entries = files.map(p => `  ${JSON.stringify(p)},`).join("\n");
+  const entries = files.map((p) => `  ${JSON.stringify(p)},`).join("\n");
 
   return `/**
  * UI asset manifest.
@@ -570,7 +582,7 @@ export const UI_ASSET_SET: ReadonlySet<string> = new Set(UI_ASSET_MANIFEST);
 async function walkPgSource(
   rootDir: string,
   dir: string,
-  entries: { abs: string; rel: string; mode: number; }[]
+  entries: { abs: string; rel: string; mode: number }[],
 ): Promise<void> {
   for await (const entry of Deno.readDir(dir)) {
     const full = join(dir, entry.name);
@@ -578,8 +590,9 @@ async function walkPgSource(
       await walkPgSource(rootDir, full, entries);
       continue;
     }
-    if (!entry.isFile)
+    if (!entry.isFile) {
       continue;
+    }
     const rel = relative(rootDir, full).split("\\").join("/");
     const mode = rel.startsWith("bin/") ? 0o755 : 0o644;
     entries.push({ abs: full, rel, mode });
@@ -595,12 +608,20 @@ async function walkPgSource(
  *
  * `bin/*` files get mode 0o755 so PG's `pg_ctl` can fork them after
  * extraction; everything else gets 0o644.
+ *
+ * `manifestDir` is the directory the generated file will be written
+ * to — needed so each entry's URL can be expressed as
+ * `import.meta.resolve("<rel-from-manifest-to-file>")`. Bare absolute
+ * `file://` URLs miss Deno's compiled-binary VFS at runtime; only URLs
+ * derived from module resolution get remapped to the embedded asset
+ * table.
  */
 export async function generateEmbeddedPgManifest(options: {
+  manifestDir: string;
   pgVersion: string;
   sourceDir: string;
 }): Promise<string> {
-  const entries: { abs: string; rel: string; mode: number; }[] = [];
+  const entries: { abs: string; rel: string; mode: number }[] = [];
 
   let exists = false;
   try {
@@ -617,9 +638,16 @@ export async function generateEmbeddedPgManifest(options: {
 
   const body = entries.length === 0 ? "[]" : `[\n${
     entries
-      .map(
-        e => `  { sourceUrl: new URL("file://${e.abs}"), relPath: ${JSON.stringify(e.rel)}, mode: 0o${e.mode.toString(8)} },`
-      )
+      .map((e) => {
+        const relFromManifest = toPosixRel(
+          relative(options.manifestDir, e.abs),
+        );
+        return `  { sourceUrl: new URL(import.meta.resolve(${
+          JSON.stringify(relFromManifest)
+        })), relPath: ${JSON.stringify(e.rel)}, mode: 0o${
+          e.mode.toString(8)
+        } },`;
+      })
       .join("\n")
   }\n]`;
 
@@ -630,10 +658,14 @@ export async function generateEmbeddedPgManifest(options: {
  * \`<DISC_HOME>/postgres/<version>/\` was absent at build time, in which
  * case the runtime falls back to the network downloader.
  *
- * Every \`sourceUrl\` here is an absolute \`file://\` URL — it's what
- * \`deno compile --include <abs path>\` baked into the binary. At runtime
- * \`Deno.readFile(sourceUrl)\` resolves through Deno's embedded asset
- * table and \`postgres/embedded-pg.ts\` writes the bytes to
+ * Every \`sourceUrl\` here is constructed from \`import.meta.resolve()\`
+ * with a path relative to this manifest file. \`deno compile --include\`
+ * bakes the file into the binary; at runtime
+ * \`Deno.readFile(sourceUrl)\` hits Deno's embedded VFS because the
+ * resolution flows through the module graph rather than a bare absolute
+ * \`file://\` URL (which would fall through to the real filesystem and
+ * fail on a different machine than the one that built the binary).
+ * \`postgres/embedded-pg.ts\` writes the bytes to
  * \`<DISC_HOME>/embedded-postgres/<version>/\`.
  */
 
@@ -645,14 +677,32 @@ export const EMBEDDED_PG_MANIFEST: readonly EmbeddedPgEntry[] = ${body};
 }
 
 /**
+ * Normalize a path produced by `relative()` to POSIX separators and
+ * ensure it starts with `./` or `../` so it's a valid relative URL
+ * for `import.meta.resolve()`. A path like `sdk/auth.ts` (sibling
+ * directory) gets a leading `./` so URL resolution treats it as a
+ * relative reference rather than an absolute one.
+ */
+function toPosixRel(p: string): string {
+  const posix = p.split("\\").join("/");
+  if (posix.startsWith("../") || posix === "..") {
+    return posix;
+  }
+  if (posix.startsWith("./")) {
+    return posix;
+  }
+  return `./${posix}`;
+}
+
+/**
  * Regenerate `server/ui-asset-manifest.ts` from the on-disk UI build.
  * Skips silently when the build directory is missing — the caller
  * (`BuildCommand.execute`) has already decided whether the UI is in
  * scope (`!options.lite`).
  */
 export async function refreshUiManifest(
-  rootDir: string = Deno.cwd()
-): Promise<{ wrote: boolean; path: string; }> {
+  rootDir: string = Deno.cwd(),
+): Promise<{ wrote: boolean; path: string }> {
   const buildDir = join(rootDir, "ui", "build");
   const manifestPath = join(rootDir, "server", "ui-asset-manifest.ts");
 
@@ -690,8 +740,9 @@ export async function refreshUiManifest(
  */
 function defaultDiscHome(): string {
   const explicit = Deno.env.get("DISC_HOME");
-  if (explicit)
+  if (explicit) {
     return explicit;
+  }
   const home = Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE") ?? "/tmp";
   return join(home, ".disc");
 }
@@ -715,7 +766,7 @@ export interface RefreshEmbeddedPgResult {
 export function platformPgStagingDir(
   rootDir: string,
   platform: string,
-  pgVersion: string
+  pgVersion: string,
 ): string {
   return join(rootDir, "dist", "embedded-pg", platform, pgVersion);
 }
@@ -732,12 +783,12 @@ export function platformPgStagingDir(
 export async function ensurePlatformPgStaging(
   rootDir: string,
   platform: string,
-  pgVersion: string = "16.4"
+  pgVersion: string = "16.4",
 ): Promise<string> {
   const stagingBase = join(rootDir, "dist", "embedded-pg", platform);
   const downloader = new PostgresBinaryDownloader({
     baseDir: stagingBase,
-    platform
+    platform,
   });
   return await downloader.download(pgVersion);
 }
@@ -755,18 +806,23 @@ export async function ensurePlatformPgStaging(
 export async function refreshEmbeddedPgManifest(
   rootDir: string = Deno.cwd(),
   pgVersion: string = "16.4",
-  pgSourceDirOverride?: string
+  pgSourceDirOverride?: string,
 ): Promise<RefreshEmbeddedPgResult> {
-  const manifestPath = join(rootDir, "postgres", "embedded-pg-manifest.ts");
+  const manifestDir = join(rootDir, "postgres");
+  const manifestPath = join(manifestDir, "embedded-pg-manifest.ts");
   const optOut = Deno.env.get("DISC_BUILD_NO_BUNDLE_PG") === "1";
   // Override wins over both opt-out and the default `<DISC_HOME>` path
   // — cross-platform builds (Bundle I follow-up) supply a per-platform
   // staging dir under `dist/embedded-pg/<platform>/<version>/`.
-  const pgSourceDir = pgSourceDirOverride ?? (optOut ? join(defaultDiscHome(), "postgres", "__opt_out__") : join(defaultDiscHome(), "postgres", pgVersion));
+  const pgSourceDir = pgSourceDirOverride ??
+    (optOut
+      ? join(defaultDiscHome(), "postgres", "__opt_out__")
+      : join(defaultDiscHome(), "postgres", pgVersion));
 
   const generated = await generateEmbeddedPgManifest({
+    manifestDir,
     pgVersion,
-    sourceDir: pgSourceDir
+    sourceDir: pgSourceDir,
   });
 
   let existing = "";
@@ -781,21 +837,30 @@ export async function refreshEmbeddedPgManifest(
     await Deno.writeTextFile(manifestPath, generated);
   }
 
-  // Reparse the generated source to count entries + collect include
-  // paths. The manifest body is small, so a regex is faster + simpler
-  // than re-walking the source dir.
-  const includePaths: string[] = [];
-  const includeRegex = /new URL\("file:\/\/([^"]+)"\)/g;
-  let match: RegExpExecArray | null;
-  while ((match = includeRegex.exec(generated)) !== null) {
-    includePaths.push(match[1]);
+  // Walk the source dir directly for the include path list — the new
+  // manifest format embeds URLs via `import.meta.resolve(...)` rather
+  // than absolute `file://` literals, so a regex over the generated
+  // source no longer recovers the build-time absolute paths that
+  // `deno compile --include` needs.
+  const walked: { abs: string; rel: string; mode: number }[] = [];
+  let exists = false;
+  try {
+    const stat = await Deno.stat(pgSourceDir);
+    exists = stat.isDirectory;
+  } catch {
+    exists = false;
   }
+  if (exists) {
+    await walkPgSource(pgSourceDir, pgSourceDir, walked);
+    walked.sort((a, b) => a.rel.localeCompare(b.rel));
+  }
+  const includePaths = walked.map((e) => e.abs);
 
   return {
     fileCount: includePaths.length,
     includePaths,
     pgSourceDir,
-    wrote
+    wrote,
   };
 }
 
@@ -807,7 +872,7 @@ export async function refreshEmbeddedPgManifest(
 async function walkSdkSource(
   rootDir: string,
   dir: string,
-  entries: { abs: string; rel: string; }[]
+  entries: { abs: string; rel: string }[],
 ): Promise<void> {
   for await (const entry of Deno.readDir(dir)) {
     const full = join(dir, entry.name);
@@ -815,12 +880,15 @@ async function walkSdkSource(
       await walkSdkSource(rootDir, full, entries);
       continue;
     }
-    if (!entry.isFile)
+    if (!entry.isFile) {
       continue;
-    if (!entry.name.endsWith(".ts"))
+    }
+    if (!entry.name.endsWith(".ts")) {
       continue;
-    if (entry.name.endsWith(".test.ts"))
+    }
+    if (entry.name.endsWith(".test.ts")) {
       continue;
+    }
     const rel = relative(rootDir, full).split("\\").join("/");
     entries.push({ abs: full, rel });
   }
@@ -835,11 +903,19 @@ async function walkSdkSource(
  *
  * All entries get mode `0o644` (SDK sources are read at runtime, not
  * executed).
+ *
+ * `manifestDir` is the directory the generated file will be written
+ * to — needed so each entry's URL can be expressed as
+ * `import.meta.resolve("<rel-from-manifest-to-file>")`. Bare absolute
+ * `file://` URLs miss Deno's compiled-binary VFS at runtime; only URLs
+ * derived from module resolution get remapped to the embedded asset
+ * table.
  */
 export async function generateEmbeddedSdkManifest(options: {
+  manifestDir: string;
   sourceDir: string;
 }): Promise<string> {
-  const entries: { abs: string; rel: string; }[] = [];
+  const entries: { abs: string; rel: string }[] = [];
 
   let exists = false;
   try {
@@ -856,9 +932,14 @@ export async function generateEmbeddedSdkManifest(options: {
 
   const body = entries.length === 0 ? "[]" : `[\n${
     entries
-      .map(
-        e => `  { sourceUrl: new URL("file://${e.abs}"), relPath: ${JSON.stringify(e.rel)}, mode: 0o644 },`
-      )
+      .map((e) => {
+        const relFromManifest = toPosixRel(
+          relative(options.manifestDir, e.abs),
+        );
+        return `  { sourceUrl: new URL(import.meta.resolve(${
+          JSON.stringify(relFromManifest)
+        })), relPath: ${JSON.stringify(e.rel)}, mode: 0o644 },`;
+      })
       .join("\n")
   }\n]`;
 
@@ -868,10 +949,14 @@ export async function generateEmbeddedSdkManifest(options: {
  * Auto-generated by \`cli/build.ts\` (do not edit by hand). Empty when
  * \`<repo>/sdk/\` was absent at build time.
  *
- * Every \`sourceUrl\` here is an absolute \`file://\` URL — it's what
- * \`deno compile --include <abs path>\` baked into the binary. At runtime
- * \`Deno.readFile(sourceUrl)\` resolves through Deno's embedded asset
- * table and \`codegen/sdk-extractor.ts\` writes the bytes alongside the
+ * Every \`sourceUrl\` here is constructed from \`import.meta.resolve()\`
+ * with a path relative to this manifest file. \`deno compile --include\`
+ * bakes the file into the binary; at runtime
+ * \`Deno.readFile(sourceUrl)\` hits Deno's embedded VFS because the
+ * resolution flows through the module graph rather than a bare absolute
+ * \`file://\` URL (which would fall through to the real filesystem and
+ * fail on a different machine than the one that built the binary).
+ * \`codegen/sdk-extractor.ts\` then writes the bytes alongside the
  * generated client output (\`<outputDir>/sdk/\`).
  */
 
@@ -896,13 +981,15 @@ export interface RefreshEmbeddedSdkResult {
  * without an embedded SDK.
  */
 export async function refreshEmbeddedSdkManifest(
-  rootDir: string = Deno.cwd()
+  rootDir: string = Deno.cwd(),
 ): Promise<RefreshEmbeddedSdkResult> {
-  const manifestPath = join(rootDir, "codegen", "embedded-sdk-manifest.ts");
+  const manifestDir = join(rootDir, "codegen");
+  const manifestPath = join(manifestDir, "embedded-sdk-manifest.ts");
   const sdkSourceDir = join(rootDir, "sdk");
 
   const generated = await generateEmbeddedSdkManifest({
-    sourceDir: sdkSourceDir
+    manifestDir,
+    sourceDir: sdkSourceDir,
   });
 
   let existing = "";
@@ -917,17 +1004,29 @@ export async function refreshEmbeddedSdkManifest(
     await Deno.writeTextFile(manifestPath, generated);
   }
 
-  const includePaths: string[] = [];
-  const includeRegex = /new URL\("file:\/\/([^"]+)"\)/g;
-  let match: RegExpExecArray | null;
-  while ((match = includeRegex.exec(generated)) !== null) {
-    includePaths.push(match[1]);
+  // Walk the source dir directly for the include path list — the new
+  // manifest format embeds URLs via `import.meta.resolve(...)` rather
+  // than absolute `file://` literals, so a regex over the generated
+  // source no longer recovers the build-time absolute paths that
+  // `deno compile --include` needs.
+  const walked: { abs: string; rel: string }[] = [];
+  let exists = false;
+  try {
+    const stat = await Deno.stat(sdkSourceDir);
+    exists = stat.isDirectory;
+  } catch {
+    exists = false;
   }
+  if (exists) {
+    await walkSdkSource(sdkSourceDir, sdkSourceDir, walked);
+    walked.sort((a, b) => a.rel.localeCompare(b.rel));
+  }
+  const includePaths = walked.map((e) => e.abs);
 
   return {
     fileCount: includePaths.length,
     includePaths,
     sdkSourceDir,
-    wrote
+    wrote,
   };
 }
