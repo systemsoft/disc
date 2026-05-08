@@ -20,14 +20,16 @@
  *   BlogPost → blog_post
  *   HTTPRequest → http_request
  *
- * Strips the `default::` module qualifier so cross-module references like
- * `api::ApiKey -> default::Merchant` produce FK targets that match the
- * bare `merchant` table created for types in the default module. Other
- * module-qualified names (e.g. `payment::Transaction`) are preserved
- * because their tables are created with the qualifier intact.
+ * Strips any `module::` qualifier (`default::`, `api::`, `payment::`, …).
+ * `CreateType` operations emit tables with bare names (the differ uses
+ * `item.name.value` only), so FK targets coming from `link.target`
+ * (which carries the full qualified name) must collapse the same way or
+ * the constraint references a relation that doesn't exist.
  */
 export function typeNameToTableName(typeName: string): string {
-  const unqualified = typeName.replace(/^default::/, "");
+  const unqualified = typeName.includes("::")
+    ? typeName.slice(typeName.lastIndexOf("::") + 2)
+    : typeName;
   return unqualified
     .replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
     .replace(/([a-z\d])([A-Z])/g, "$1_$2")
