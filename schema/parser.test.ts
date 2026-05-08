@@ -1032,6 +1032,32 @@ Deno.test("SDL Parser - composite index parses tuple expression", () => {
   );
 });
 
+Deno.test("SDL Parser - path step accepts keyword name (e.g. .type)", () => {
+  // Regression: `.type` in a path expression failed because `type` is a
+  // keyword token. Properties named after keywords are escaped at declaration
+  // with backticks, but path references in indexes don't require quoting.
+  const source = `
+    type Event {
+      required \`type\` -> str;
+      index on ((.type));
+    }
+  `;
+
+  const ast = new SDLParser(source).parse();
+  const typeDecl = ast.declarations[0];
+  if (typeDecl.kind !== "TypeDeclaration") {
+    throw new Error(`expected TypeDeclaration, got ${typeDecl.kind}`);
+  }
+  const idx = typeDecl.members.find((m) => m.kind === "Index");
+  if (idx?.kind !== "Index") {
+    throw new Error("expected an Index member");
+  }
+  if (idx.on.kind !== "PathExpression") {
+    throw new Error(`expected PathExpression, got ${idx.on.kind}`);
+  }
+  assertEquals(idx.on.path, [".", "type"]);
+});
+
 Deno.test("SDL Parser - single-element parens stay a plain expression", () => {
   // Regression: a parenthesized single expression must still unwrap to that
   // expression — only a comma should turn it into a TupleExpression.

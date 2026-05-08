@@ -5,7 +5,7 @@
 import { SyntaxError } from "../lib/errors.ts";
 import * as AST from "./ast.ts";
 import { SDLLexer } from "./lexer.ts";
-import { Token, TokenType } from "./tokens.ts";
+import { KEYWORDS, Token, TokenType } from "./tokens.ts";
 
 export class SDLParser {
   private tokens: Token[];
@@ -1574,13 +1574,29 @@ export class SDLParser {
    * The pieces are returned as separate string elements so callers can join
    * them back into the original SDL form via `path.join("")`.
    */
+  // A path step name (e.g. the `type` in `.type`) accepts plain identifiers,
+  // backtick-quoted identifiers, and unreserved keyword tokens used as
+  // property names (`type`, `module`, etc.). Property declarations escape
+  // these via backticks (`` `type` ``); path references don't require it.
+  private parsePathStepName(): string {
+    const tok = this.peek();
+    if (
+      tok.type === TokenType.IDENT || tok.type === TokenType.BACKTICK_IDENT ||
+      KEYWORDS.get(tok.value) === tok.type
+    ) {
+      this.advance();
+      return tok.value;
+    }
+    throw this.error(`Expected identifier, got ${tok.value}`);
+  }
+
   private parsePathStep(): string[] {
     const steps: string[] = [];
     let prefix = "";
     if (this.match(TokenType.LESS)) {
       prefix = "<";
     }
-    steps.push(prefix + this.parseIdentifier().value);
+    steps.push(prefix + this.parsePathStepName());
 
     if (this.match(TokenType.LBRACKET)) {
       const isKeyword = this.parseIdentifier();
