@@ -47,7 +47,7 @@ ${inverse("  COMMANDS ")}
   db push ${gray(".".repeat(18))} Push schema directly (no migration history; requires ${bgBrightRed(brightWhite("--force"))})
   schema export ${gray(".".repeat(12))} Export the current schema as a single SDL file
   schema introspect ${gray(".".repeat(8))} Generate SDL from an existing PostgreSQL database
-  admin create-superuser  Create a user and assign the superuser role
+  admin create-superuser ${gray(".".repeat(3))} Create a user and assign the superuser role
   admin set-password ${gray(".".repeat(7))} Reset a user's password (admin override)
   admin assign-role ${gray(".".repeat(8))} Assign a role to a user (creating it if needed)
   admin list-roles ${gray(".".repeat(9))} List all defined roles
@@ -101,7 +101,7 @@ ${inverse("  OPTIONS ")}
   --unsafe ${gray(".".repeat(17))} Permit data-destroying migrations (DropType, DropTable, DropProperty, DropLink).
                              Off by default, refused with a summary of the unsafe operations.
 
-${inverse("  FLAG SCOPE ")} (run \`disc <command> --help\` for command-specific details)
+${inverse("  FLAG SCOPE ")} (run ${gray("disc <command> --help")} for command-specific details)
 
   Global ${gray(".".repeat(19))} --help, --version
   init ${gray(".".repeat(21))} --template, --backend-dsn, --skip-postgres, --force, --directory
