@@ -1307,9 +1307,9 @@ export class SDLParser {
     // Check for parameterized type syntax: array<str>, tuple<int64, str>, range<int32>
     if (this.match(TokenType.LESS)) {
       params = [];
-      params.push(this.parseTypeRef());
+      params.push(this.parseTypeParam());
       while (this.match(TokenType.COMMA)) {
-        params.push(this.parseTypeRef());
+        params.push(this.parseTypeParam());
       }
       this.consume(TokenType.GREATER, "Expected '>' after type parameter(s)");
     }
@@ -1323,6 +1323,20 @@ export class SDLParser {
     // Check for optional syntax (not in SDL, but might be needed)
 
     return AST.createTypeRef(name, optional, array, params);
+  }
+
+  // Parse a single type-parameter slot inside `<...>`. Most parameters
+  // are nested TypeRefs (`array<str>`, `tuple<int64, str>`), but Gel
+  // SDL also permits string literals as enum values
+  // (`enum<"PRODUCTION", "SANDBOX">`). We wrap the literal as a TypeRef
+  // whose qualified name is the string value so downstream code (e.g.
+  // `differ.ts`'s `scalarEnumValues`) can read it the same way.
+  private parseTypeParam(): AST.TypeRef {
+    if (this.check(TokenType.STRING)) {
+      const value = this.parseStringLiteral();
+      return AST.createTypeRef(AST.createQualifiedName([value]));
+    }
+    return this.parseTypeRef();
   }
 
   private parseTypeRefList(): AST.TypeRef[] {
@@ -1550,11 +1564,23 @@ export class SDLParser {
       return { kind: "Parameter", name };
     }
 
-    // Parenthesized expression
+    // Parenthesized expression — also covers tuple literals `(a, b, c)`.
+    // Composite indexes use this form: `index on ((.a, .b))`.
     if (this.match(TokenType.LPAREN)) {
-      const expr = this.parseExpression();
+      const first = this.parseExpression();
+      if (this.match(TokenType.COMMA)) {
+        const elements: AST.Expression[] = [first];
+        do {
+          // Allow a trailing comma before `)`.
+          if (this.check(TokenType.RPAREN))
+            break;
+          elements.push(this.parseExpression());
+        } while (this.match(TokenType.COMMA));
+        this.consume(TokenType.RPAREN, "Expected ')' after tuple expression");
+        return { kind: "TupleExpression", elements };
+      }
       this.consume(TokenType.RPAREN, "Expected ')' after expression");
-      return expr;
+      return first;
     }
 
     // Path expression starting with dot (e.g., .property)

@@ -201,6 +201,8 @@ function stringifyExpression(expr: Expression): string {
       return `$${expr.name}`;
     case "ConditionalExpression":
       return `${stringifyExpression(expr.consequent)} if ${stringifyExpression(expr.test)} else ${stringifyExpression(expr.alternate)}`;
+    case "TupleExpression":
+      return `(${expr.elements.map(stringifyExpression).join(", ")})`;
     default:
       return String((expr as { value?: unknown; }).value ?? "");
   }

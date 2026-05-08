@@ -1172,6 +1172,8 @@ export class SchemaDiffer {
         return `${this.extractExpressionString(expr.consequent)} if ${this.extractExpressionString(expr.test)} else ${
           this.extractExpressionString(expr.alternate)
         }`;
+      case "TupleExpression":
+        return `(${expr.elements.map(e => this.extractExpressionString(e)).join(", ")})`;
       default:
         return String((expr as { kind: string; }).kind);
     }

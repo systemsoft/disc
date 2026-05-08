@@ -259,7 +259,8 @@ export type Expression =
   | FunctionCall
   | TypeCast
   | Parameter
-  | ConditionalExpression;
+  | ConditionalExpression
+  | TupleExpression;
 
 export interface Literal extends SDLNode {
   kind: "Literal";
@@ -307,6 +308,13 @@ export interface ConditionalExpression extends SDLNode {
   test: Expression;
   consequent: Expression;
   alternate: Expression;
+}
+
+// Tuple expression: `(.a, .b, .c)`. Used in composite-index `on` clauses
+// (and other multi-element parenthesized expression slots in EdgeQL).
+export interface TupleExpression extends SDLNode {
+  kind: "TupleExpression";
+  elements: Expression[];
 }
 
 // Helper functions for creating AST nodes
