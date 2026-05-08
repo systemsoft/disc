@@ -58,7 +58,7 @@ const OP_MAP: Record<string, string> = {
   like: "like",
   ilike: "ilike",
   in: "in",
-  not_in: "not in"
+  "not_in": "not in"
 };
 
 /** Operators whose RHS must be an array unpacked into a set. */

@@ -23,7 +23,7 @@
  * lowers to a correlated subquery).
  */
 
-import { assertEquals, assertThrows } from "@std/assert";
+import { assertEquals } from "@std/assert";
 import { SQLCodeGenerator } from "../compiler/codegen.ts";
 import { EdgeQLCompiler } from "../compiler/compiler.ts";
 import { createTestSchema } from "../compiler/context.ts";
