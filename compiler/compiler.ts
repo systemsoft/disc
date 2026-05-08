@@ -2665,43 +2665,67 @@ export class EdgeQLCompiler {
       if (!targetType)
         return null;
 
-      // Resolve the FK column on the target side. Backlink style: the
-      // target type carries a single-link back to the source, whose
-      // columnName is the FK we need. Junction tables are a separate
-      // future-work case.
+      // Compile the RHS in the current scope (so parameters and other
+      // refs resolve correctly), then render to SQL so we can splice
+      // it as a string into the EXISTS body.
+      const rhsSql = new SQLCodeGenerator().generateExpression(
+        this.compileExpression(rhsExpr)
+      );
+
+      // Junction-table multi link (many-to-many): EXISTS over the
+      // junction with an INNER JOIN to the target. When the terminal
+      // step is `id`, the junction's target column already holds the
+      // target id, so the JOIN can be elided.
+      if (link.junctionTable) {
+        const sourceCol = link.junctionSourceColumn ?? "source_id";
+        const targetCol = link.junctionTargetColumn ?? "target_id";
+        const jAlias = `__j_${firstStep.name}`;
+
+        if (secondStep.name === "id") {
+          const sql = `EXISTS (SELECT 1 FROM "${link.junctionTable}" "${jAlias}" `
+            + `WHERE "${jAlias}"."${sourceCol}" = "${ta.alias}"."id" `
+            + `AND "${jAlias}"."${targetCol}" ${op} ${rhsSql})`;
+          return { kind: "RawSQLExpression", sql };
+        }
+
+        const tAlias = `__t_${firstStep.name}`;
+        const prop = targetType.properties.get(secondStep.name);
+        if (!prop?.columnName)
+          return null;
+
+        const sql = `EXISTS (SELECT 1 FROM "${link.junctionTable}" "${jAlias}" `
+          + `INNER JOIN "${targetType.tableName}" "${tAlias}" `
+          + `ON "${tAlias}"."id" = "${jAlias}"."${targetCol}" `
+          + `WHERE "${jAlias}"."${sourceCol}" = "${ta.alias}"."id" `
+          + `AND "${tAlias}"."${prop.columnName}" ${op} ${rhsSql})`;
+        return { kind: "RawSQLExpression", sql };
+      }
+
+      // Backlink-style multi link (one-to-many): EXISTS on the target
+      // table where its FK back to the source matches.
       let fkColumn: string | undefined;
       if (link.backlink) {
         const backLink = targetType.links.get(link.backlink);
         fkColumn = backLink?.columnName;
       }
       if (!fkColumn) {
-        // Fall through — junction-table or otherwise unsupported shape
         return null;
       }
 
-      // Resolve the projected target column. `.posts.id` projects the
-      // target's id column directly.
-      let targetCol: string;
+      let targetColName: string;
       if (secondStep.name === "id") {
-        targetCol = "id";
+        targetColName = "id";
       } else {
         const prop = targetType.properties.get(secondStep.name);
         if (!prop?.columnName)
           return null;
-        targetCol = prop.columnName;
+        targetColName = prop.columnName;
       }
-
-      // Compile the RHS in the current scope (so parameters and other
-      // refs resolve correctly), then render to SQL via the codegen so
-      // we can splice it as a string into the EXISTS body.
-      const rhsSql = new SQLCodeGenerator().generateExpression(
-        this.compileExpression(rhsExpr)
-      );
 
       const subAlias = `__sub_${firstStep.name}`;
       const sql = `EXISTS (SELECT 1 FROM "${targetType.tableName}" "${subAlias}" `
         + `WHERE "${subAlias}"."${fkColumn}" = "${ta.alias}"."id" `
-        + `AND "${subAlias}"."${targetCol}" ${op} ${rhsSql})`;
+        + `AND "${subAlias}"."${targetColName}" ${op} ${rhsSql})`;
       return { kind: "RawSQLExpression", sql };
     }
     return null;

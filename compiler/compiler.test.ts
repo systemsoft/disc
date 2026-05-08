@@ -1526,3 +1526,87 @@ Deno.test("SQL Compiler - 3-hop .merchant.owner.id collapses inner SELECT (termi
   // projection is owner_id, not a column on owners).
   assertEquals(sql.includes("merchants"), true);
 });
+
+// --- Showcase #3: junction-table multi-link traversal ---
+
+/**
+ * Schema with a many-to-many link via an explicit junction table:
+ * User has `multi tags: Tag` linked through `user_tags(user_id, tag_id)`.
+ */
+function makeJunctionSchema() {
+  const tagType = {
+    name: "Tag",
+    kind: "object" as const,
+    tableName: "tags",
+    properties: new Map([
+      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id", edgeqlType: "uuid", hasDefault: true }],
+      ["name", { name: "name", type: "str", required: true, multi: false, columnName: "name", edgeqlType: "str" }]
+    ]),
+    links: new Map()
+  };
+  const userType = {
+    name: "User",
+    kind: "object" as const,
+    tableName: "users",
+    properties: new Map([
+      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id", edgeqlType: "uuid", hasDefault: true }],
+      ["name", { name: "name", type: "str", required: true, multi: false, columnName: "name", edgeqlType: "str" }]
+    ]),
+    links: new Map([
+      ["tags", {
+        name: "tags",
+        target: "Tag",
+        required: false,
+        multi: true,
+        junctionTable: "user_tags",
+        junctionSourceColumn: "user_id",
+        junctionTargetColumn: "tag_id"
+      }]
+    ])
+  };
+  return {
+    types: new Map([
+      ["Tag", tagType],
+      ["User", userType]
+    ]),
+    functions: new Map()
+  };
+}
+
+function compileJunction(source: string): string {
+  const localCompiler = new EdgeQLCompiler(makeJunctionSchema() as never);
+  const ast = new EdgeQLParser(source).parse();
+  const r = localCompiler.compile(ast);
+  if (!r.ok)
+    throw r.error;
+  return new SQLCodeGenerator().generate(r.value);
+}
+
+Deno.test("SQL Compiler - junction multi-link .tags.name rewrites to EXISTS with JOIN", () => {
+  const sql = compileJunction(
+    "SELECT User { id } FILTER .tags.name = <str>$n"
+  );
+  assertEquals(/EXISTS/i.test(sql), true, `expected EXISTS: ${sql}`);
+  // Junction table appears
+  assertEquals(sql.includes("user_tags"), true);
+  // Target table appears (joined to project the name column)
+  assertEquals(sql.includes("tags"), true);
+  // Source-side and target-side junction columns
+  assertEquals(sql.includes("user_id"), true);
+  assertEquals(sql.includes("tag_id"), true);
+  // INNER JOIN binds junction to target
+  assertEquals(/JOIN/i.test(sql), true);
+});
+
+Deno.test("SQL Compiler - junction multi-link .tags.id collapses (junction's tag_id IS the tag id)", () => {
+  // When asking for .tags.id, no JOIN to `tags` is needed — the
+  // junction's target FK column is already the id we're comparing.
+  const sql = compileJunction(
+    "SELECT User { id } FILTER .tags.id = <uuid>$tid"
+  );
+  assertEquals(/EXISTS/i.test(sql), true);
+  assertEquals(sql.includes("user_tags"), true);
+  assertEquals(sql.includes("tag_id"), true);
+  // No JOIN needed in the optimised path
+  assertEquals(/JOIN/i.test(sql), false, `unexpected JOIN: ${sql}`);
+});
