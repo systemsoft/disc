@@ -101,15 +101,15 @@ Deno.test({
           key TEXT PRIMARY KEY,
           value JSONB,
           scope TEXT NOT NULL,
-          updated_at TIMESTAMPTZ DEFAULT NOW()
+          updated TIMESTAMPTZ DEFAULT NOW()
         )
       `);
 
       // Insert a config value
       await pool.query(`
-        INSERT INTO disc_config (key, value, scope, updated_at)
+        INSERT INTO disc_config (key, value, scope, updated)
         VALUES ('test_key', to_jsonb(42), 'DATABASE', NOW())
-        ON CONFLICT (key) DO UPDATE SET value = to_jsonb(42), updated_at = NOW()
+        ON CONFLICT (key) DO UPDATE SET value = to_jsonb(42), updated = NOW()
       `);
 
       // Verify

@@ -3595,7 +3595,7 @@ export class EdgeQLCompiler {
     return {
       kind: "RawSQLStatement",
       sql:
-        `INSERT INTO disc_config (key, value, scope, updated_at) VALUES ('${query.key}', to_jsonb(${valueSql}), '${query.scope}', NOW()) ON CONFLICT (key) DO UPDATE SET value = to_jsonb(${valueSql}), updated_at = NOW()`
+        `INSERT INTO disc_config (key, value, scope, updated) VALUES ('${query.key}', to_jsonb(${valueSql}), '${query.scope}', NOW()) ON CONFLICT (key) DO UPDATE SET value = to_jsonb(${valueSql}), updated = NOW()`
     };
   }
 
