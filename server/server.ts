@@ -2,6 +2,10 @@
  * Main Disc Database Server
  */
 
+// Side-effect import: installs `BigInt.prototype.toJSON` so query responses
+// carrying int64 columns can be JSON-serialized. Must run before any
+// HTTP/SSE/WebSocket handler tries to stringify a row.
+import "../lib/bigint-json.ts";
 import { AuthRoutes } from "../auth/integration.ts";
 import { AuthMiddleware } from "../auth/middleware.ts";
 import { PgDatabaseAdapter } from "../auth/pg-database-adapter.ts";
