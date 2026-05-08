@@ -443,19 +443,34 @@ export class SchemaManager {
 
           // Detect enum scalars: scalar type Status extending enum<...>
           // The extending TypeRef name will be "enum" if the parser captured it
-          const isEnum = scalarDecl.extending?.some(ext => ext.name.parts[0] === "enum") ?? false;
-
-          if (isEnum) {
-            const enumKey = module.name === "default" ? scalarName : `${module.name}::${scalarName}`;
-            types.set(enumKey, {
+          const enumExt = scalarDecl.extending?.find(
+            ext => ext.name.parts[0] === "enum"
+          );
+          if (enumExt) {
+            // The SDL parser wraps each `"VALUE"` literal as a TypeRef whose
+            // qualified name is the string value (see `parseTypeParam` in
+            // schema/parser.ts). Pull the values back out so the runtime
+            // Schema knows what the enum accepts — without this, codegen,
+            // drift detection, and the EdgeQL→SQL compiler's enum-cast
+            // path can't tell the type apart from any other unknown name.
+            const enumValues = (enumExt.params ?? []).map(p => p.name.parts.join("::"));
+            const enumDef: TypeDef = {
               name: scalarName,
               kind: "enum",
               tableName: typeNameToTableName(scalarName),
               properties: new Map(),
               links: new Map(),
-              enumValues: [],
+              enumValues,
               module: module.name
-            });
+            };
+            // Store under the bare name so `<LogLevel>` lookups in cast
+            // expressions resolve regardless of which module declared the
+            // enum. Also store under the module-qualified name so existing
+            // call sites that pass `logger::LogLevel` still find it.
+            types.set(scalarName, enumDef);
+            if (module.name !== "default") {
+              types.set(`${module.name}::${scalarName}`, enumDef);
+            }
           }
 
           continue;
