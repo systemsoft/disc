@@ -449,7 +449,13 @@ export class TypeScriptGenerator {
     }
     const typeInfoLinkEntries: string[] = [];
     for (const [linkName, link] of typeDef.links) {
-      const targetBuilder = `${this.getTypeScriptTypeName(link.target)}QueryBuilder`;
+      // link.target may be module-qualified (e.g. "default::Merchant"); all
+      // builders share queries.ts and are referenced by bare class name, so
+      // drop the module prefix before composing the builder identifier.
+      const targetTypeName = link.target.includes("::")
+        ? link.target.split("::").pop()!
+        : link.target;
+      const targetBuilder = `${this.getTypeScriptTypeName(targetTypeName)}QueryBuilder`;
       typeInfoLinkEntries.push(
         `      ${linkName}: () => ${targetBuilder}._typeInfo`
       );
@@ -633,12 +639,15 @@ export class TypeScriptGenerator {
     content += `  constructor(config?: DiscClientConfig) {\n`;
     content += `    super(config);\n`;
 
-    // Initialize query builders
-    for (const [typeName, typeDef] of this.schema.types) {
+    // Initialize query builders. Use typeDef.name (always bare) rather than
+    // the schema map key — non-default modules are keyed as "module::Type",
+    // and that "::" would land verbatim in the emitted property and class
+    // identifiers, breaking parse. Matches the property declaration above.
+    for (const [_typeName, typeDef] of this.schema.types) {
       if (typeDef.kind !== "object")
         continue;
-      const builderName = `${this.getTypeScriptTypeName(typeName)}QueryBuilder`;
-      const propertyName = typeName.toLowerCase();
+      const builderName = `${this.getTypeScriptTypeName(typeDef.name)}QueryBuilder`;
+      const propertyName = typeDef.name.toLowerCase();
       content += `    this.${propertyName} = new Queries.${builderName}(this);\n`;
     }
 

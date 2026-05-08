@@ -1188,6 +1188,97 @@ Deno.test("Stage C — each builder declares a static _typeInfo with casts + lin
   );
 });
 
+Deno.test("typeInfo link thunks strip module-qualified target prefix", () => {
+  // Regression: link.target arriving as "default::Merchant" used to be emitted
+  // verbatim, producing `() => default::MerchantQueryBuilder._typeInfo` —
+  // invalid TS that breaks the generated queries.ts at parse time.
+  const merchantType: Context.TypeDef = {
+    name: "Merchant",
+    kind: "object",
+    tableName: "merchants",
+    properties: new Map([
+      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id", edgeqlType: "uuid" }]
+    ]),
+    links: new Map()
+  };
+  const paymentType: Context.TypeDef = {
+    name: "Payment",
+    kind: "object",
+    tableName: "payments",
+    properties: new Map([
+      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id", edgeqlType: "uuid" }]
+    ]),
+    links: new Map([
+      ["merchant", {
+        name: "merchant",
+        target: "default::Merchant",
+        required: true,
+        multi: false,
+        columnName: "merchant_id"
+      }]
+    ])
+  };
+  const schema: Context.Schema = {
+    types: new Map([["Merchant", merchantType], ["Payment", paymentType]]),
+    functions: new Map()
+  };
+
+  const generator = new TypeScriptGenerator(schema, createDefaultConfig());
+  const result = generator.generate();
+  const content = result.files.find(f => f.type === "queries")!.content;
+
+  assertStringIncludes(content, "merchant: () => MerchantQueryBuilder._typeInfo");
+  assertEquals(content.includes("default::MerchantQueryBuilder"), false);
+  assertEquals(content.includes("::"), false);
+});
+
+Deno.test("client.ts constructor uses bare type names for multi-module schemas", () => {
+  // Regression: the constructor used to iterate this.schema.types and use the
+  // map key (e.g. "api::ApiKey") as both property and builder identifier,
+  // producing `this.api::apikey = new Queries.api::ApiKeyQueryBuilder(this)`.
+  // Both halves are invalid TS — broke client.ts at parse time.
+  const merchantType: Context.TypeDef = {
+    name: "Merchant",
+    kind: "object",
+    tableName: "merchants",
+    module: "default",
+    properties: new Map([
+      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id", edgeqlType: "uuid" }]
+    ]),
+    links: new Map()
+  };
+  const apiKeyType: Context.TypeDef = {
+    name: "ApiKey",
+    kind: "object",
+    tableName: "api_keys",
+    module: "api",
+    properties: new Map([
+      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id", edgeqlType: "uuid" }]
+    ]),
+    links: new Map()
+  };
+  const schema: Context.Schema = {
+    types: new Map([
+      ["Merchant", merchantType],
+      ["api::ApiKey", apiKeyType]
+    ]),
+    functions: new Map()
+  };
+
+  const config = createDefaultConfig();
+  config.includeClient = true;
+  const generator = new TypeScriptGenerator(schema, config);
+  const result = generator.generate();
+  const clientFile = result.files.find(f => f.type === "client");
+  const content = clientFile!.content;
+
+  // Bare property assignment + bare builder reference
+  assertStringIncludes(content, "this.merchant = new Queries.MerchantQueryBuilder(this)");
+  assertStringIncludes(content, "this.apikey = new Queries.ApiKeyQueryBuilder(this)");
+  // No "::" should leak anywhere in the emitted client
+  assertEquals(content.includes("::"), false);
+});
+
 Deno.test("Stage C — filter() takes FilterArg<XFilter> and delegates to compileFilter", () => {
   const schema = createSchemaWithLink();
   const config = createDefaultConfig();
