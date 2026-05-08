@@ -13,6 +13,75 @@ export interface Module {
 }
 
 /**
+ * Reclassify arrow-shorthand `LinkDeclaration`s that target a non-object
+ * type as `PropertyDeclaration`s.
+ *
+ * The SDL grammar uses `name -> Type` for both scalar properties and object
+ * links. The parser can't distinguish them — the kind of the target type is
+ * a cross-module question — so it emits `LinkDeclaration` for every arrow.
+ * The runtime Schema in `migration/schema-manager.ts:modulesToSchema()`
+ * already reclassifies, but the migration differ reads `typeDef.members`
+ * directly. Without normalization, scalar arrows like `created -> datetime`
+ * generate FK constraints to a non-existent `datetime` table.
+ *
+ * Returns a new Module[] with rewritten members; inputs are not mutated.
+ * Object link declarations, properties, constraints, indexes, and access
+ * policies pass through unchanged.
+ */
+export function normalizeArrowsToProperties(modules: Module[]): Module[] {
+  const objectTypeNames = new Set<string>();
+  for (const module of modules) {
+    for (const item of module.items) {
+      if (item.kind === "TypeDeclaration") {
+        const typeDecl = item as AST.TypeDeclaration;
+        const name = typeDecl.name.value;
+        objectTypeNames.add(name);
+        objectTypeNames.add(`${module.name}::${name}`);
+      }
+    }
+  }
+
+  const isObjectTarget = (target: AST.TypeRef): boolean => {
+    const fullName = target.name.parts.join("::");
+    return objectTypeNames.has(fullName) ||
+      objectTypeNames.has(fullName.replace(/^default::/, ""));
+  };
+
+  return modules.map(module => ({
+    name: module.name,
+    items: module.items.map(item => {
+      if (item.kind !== "TypeDeclaration") {
+        return item;
+      }
+      const typeDecl = item as AST.TypeDeclaration;
+      const newMembers = typeDecl.members.map((member): AST.TypeMember => {
+        if (member.kind !== "LinkDeclaration") {
+          return member;
+        }
+        const link = member as AST.LinkDeclaration;
+        if (link.abstract || isObjectTarget(link.target)) {
+          return member;
+        }
+        const property: AST.PropertyDeclaration = {
+          kind: "PropertyDeclaration",
+          name: link.name,
+          type: link.target
+        };
+        if (link.required !== undefined) property.required = link.required;
+        if (link.multi !== undefined) property.multi = link.multi;
+        if (link.readonly !== undefined) property.readonly = link.readonly;
+        if (link.computed !== undefined) property.computed = link.computed;
+        if (link.default !== undefined) property.default = link.default;
+        if (link.constraints !== undefined) property.constraints = link.constraints;
+        if (link.annotations !== undefined) property.annotations = link.annotations;
+        return property;
+      });
+      return { ...typeDecl, members: newMembers };
+    })
+  }));
+}
+
+/**
  * Converts SDL AST to normalized module structure
  */
 export class SDLConverter {

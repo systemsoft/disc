@@ -39,7 +39,7 @@ import {
   TriggerDeclaration,
   TypeDeclaration
 } from "../schema/ast.ts";
-import { Module, SDLConverter } from "../schema/converter.ts";
+import { Module, normalizeArrowsToProperties, SDLConverter } from "../schema/converter.ts";
 import { SDLParser } from "../schema/parser.ts";
 import { MigrationEngine } from "./engine.ts";
 import * as Types from "./types.ts";
@@ -836,7 +836,11 @@ export class SchemaManager {
     if (!parseResult.ok) {
       return parseResult;
     }
-    const newModules = parseResult.value;
+    // Reclassify arrow shorthand `name -> ScalarType` as properties before
+    // the differ sees the AST. Without this, the differ treats every arrow
+    // as a link and emits FK constraints to non-existent scalar tables
+    // (e.g. `REFERENCES datetime (id)`).
+    const newModules = normalizeArrowsToProperties(parseResult.value);
 
     // Ensure engine exists
     if (!this.engine) {
@@ -933,7 +937,9 @@ export class SchemaManager {
     if (!parseResult.ok) {
       return parseResult;
     }
-    const newModules = parseResult.value;
+    // Reclassify scalar arrows as properties so the differ doesn't emit
+    // FK constraints to scalar "tables".
+    const newModules = normalizeArrowsToProperties(parseResult.value);
 
     // Ensure engine exists
     if (!this.engine) {
@@ -958,7 +964,7 @@ export class SchemaManager {
    * identically to `applySchema()`.
    */
   async applyModules(
-    newModules: Module[],
+    rawModules: Module[],
     options?: { allowUnsafe?: boolean; skipHistory?: boolean; }
   ): Promise<Result<Types.MigrationResult[], MigrationError>> {
     if (!this.engine) {
@@ -968,6 +974,10 @@ export class SchemaManager {
         )
       );
     }
+
+    // Reclassify scalar arrows as properties so the differ doesn't emit
+    // FK constraints to scalar "tables".
+    const newModules = normalizeArrowsToProperties(rawModules);
 
     const planResult = this.engine.planMigration(
       this.currentModules,
@@ -1033,7 +1043,7 @@ export class SchemaManager {
    * --schema-dir` to generate a plan from merged module arrays.
    */
   planModules(
-    newModules: Module[]
+    rawModules: Module[]
   ): Result<Types.MigrationPlan, MigrationError> {
     if (!this.engine) {
       return Err(
@@ -1043,6 +1053,7 @@ export class SchemaManager {
       );
     }
 
+    const newModules = normalizeArrowsToProperties(rawModules);
     return this.engine.planMigration(this.currentModules, newModules);
   }
 
@@ -1247,7 +1258,7 @@ export class SchemaManager {
    * re-serializing back to SDL.
    */
   previewMigrationOpsFromModules(
-    newModules: Module[]
+    rawModules: Module[]
   ): Result<Types.MigrationOperation[], MigrationError> {
     if (!this.engine) {
       return Err(
@@ -1257,6 +1268,7 @@ export class SchemaManager {
       );
     }
 
+    const newModules = normalizeArrowsToProperties(rawModules);
     const planResult = this.engine.planMigration(
       this.currentModules,
       newModules
