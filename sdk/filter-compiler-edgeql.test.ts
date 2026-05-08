@@ -172,21 +172,23 @@ Deno.test("Stage E — in/not_in with <array<T>> compiles to SQL (was Gap #4, cl
   assertEquals(/text\[\]|UNNEST/i.test(sql), true);
 });
 
-// Gap #5 (multi-step paths) is closed for *single-link* traversals like
-// the headline `{ merchant: { id } }` use case, validated against the
-// compiler in compiler/compiler.test.ts. The User → posts link in this
-// schema is multi (User has many Posts via Post.author backlink), and
-// multi-link path lowering needs UNNEST/aggregate semantics that are
-// out of scope for this gap. So we exercise single-link traversal via
-// a different test schema rather than forcing the User → posts shape.
-Deno.test("Stage E — single-link 2-step path compiles to SQL (was Gap #5, partially closed 2026-05-08)", () => {
-  // Use a Post → author (single link) traversal directly via
-  // edgeqlToSql, since the test User type's only link is multi.
+Deno.test("Stage E — single-link 2-step path compiles to SQL (Gap #5 single-link case)", () => {
+  // Post → author (single link) traversal — both `.author.id` and
+  // `.author.<other>` work; here we use the FK-shortcut form.
   const sql = edgeqlToSql(
     "select Post { id } filter .author.id = <uuid>$id"
   );
   assertEquals(sql.length > 0, true);
   assertEquals(/author_id/.test(sql), true);
+});
+
+Deno.test("Stage E — multi-link 2-step path through codegen filter compiles to SQL (EXISTS)", () => {
+  // The filter compiler emits `.posts.title = <str>$p0` for `posts: { title }`.
+  // The compiler now lowers that to an EXISTS subquery on the posts table.
+  const sql = compileAndRun({ posts: { title: "first post" } });
+  assertEquals(sql.length > 0, true);
+  assertEquals(/EXISTS/i.test(sql), true);
+  assertEquals(sql.includes("posts"), true);
 });
 
 Deno.test("Stage E — limit + offset together compile to SQL (was Gap #2, closed 2026-05-08)", () => {

@@ -1734,6 +1734,20 @@ export class EdgeQLCompiler {
       return this.compileIsTypeCheck(binOp);
     }
 
+    // Multi-cardinality 2-step path on the LHS: rewrite the entire
+    // comparison to EXISTS over the target table. EdgeQL set-comparison
+    // semantics say `set OP scalar` is true if any element matches; SQL
+    // EXISTS captures that without needing a "set" type.
+    if (this.isMultiLinkPath(binOp.left) && this.isComparisonOp(binOp.op)) {
+      const rewritten = this.compileMultiLinkComparison(
+        binOp.left as EdgeQLAST.Path,
+        binOp.op,
+        binOp.right
+      );
+      if (rewritten)
+        return rewritten;
+    }
+
     const left = this.compileExpression(binOp.left);
     const right = this.compileExpression(binOp.right);
 
@@ -2567,6 +2581,119 @@ export class EdgeQLCompiler {
     }
 
     throw new CompilationError(`Complex path expressions not yet implemented`);
+  }
+
+  /** Comparison operators that drive EdgeQL set-vs-scalar semantics. */
+  private isComparisonOp(op: string): boolean {
+    return [
+      "=",
+      "!=",
+      "<",
+      "<=",
+      ">",
+      ">=",
+      "LIKE",
+      "ILIKE",
+      "IN",
+      "NOT IN"
+    ].includes(op);
+  }
+
+  /**
+   * True iff `expr` is a 2-step Path whose first step resolves to a
+   * multi-cardinality link on any active alias's type. Used to detect
+   * the `.multi_link.field` pattern at the binary-op compile point so
+   * we can rewrite it to EXISTS rather than try to compile the path
+   * as a scalar value.
+   */
+  private isMultiLinkPath(expr: EdgeQLAST.Expression): boolean {
+    if (expr.kind !== "Path" || expr.steps.length !== 2)
+      return false;
+    const [first] = expr.steps;
+    if (first.type !== "property")
+      return false;
+    for (const ta of this.ctx.currentScope.aliases.values()) {
+      const td = Context.resolveTypeName(this.ctx, ta.type);
+      const link = td?.links.get(first.name);
+      if (link?.multi)
+        return true;
+    }
+    return false;
+  }
+
+  /**
+   * Rewrite `.multi_link.field <op> rhs` into:
+   *
+   *   EXISTS (
+   *     SELECT 1 FROM "<target_table>" "<sub_alias>"
+   *     WHERE "<sub_alias>"."<fk_col>" = "<src_alias>"."id"
+   *       AND "<sub_alias>"."<target_col>" <op> <rhs>
+   *   )
+   *
+   * Currently handles backlink-style multi links (FK lives on the
+   * target table). Junction-table multi links are a future-work case
+   * that would emit a 3-table EXISTS. Returns `null` to fall through
+   * to the default binary-op compilation if anything doesn't resolve.
+   */
+  private compileMultiLinkComparison(
+    path: EdgeQLAST.Path,
+    op: string,
+    rhsExpr: EdgeQLAST.Expression
+  ): SQL.SQLExpression | null {
+    const [firstStep, secondStep] = path.steps;
+    if (firstStep.type !== "property" || secondStep.type !== "property")
+      return null;
+
+    for (const ta of this.ctx.currentScope.aliases.values()) {
+      const td = Context.resolveTypeName(this.ctx, ta.type);
+      const link = td?.links.get(firstStep.name);
+      if (!link?.multi)
+        continue;
+
+      const targetType = Context.resolveTypeName(this.ctx, link.target);
+      if (!targetType)
+        return null;
+
+      // Resolve the FK column on the target side. Backlink style: the
+      // target type carries a single-link back to the source, whose
+      // columnName is the FK we need. Junction tables are a separate
+      // future-work case.
+      let fkColumn: string | undefined;
+      if (link.backlink) {
+        const backLink = targetType.links.get(link.backlink);
+        fkColumn = backLink?.columnName;
+      }
+      if (!fkColumn) {
+        // Fall through — junction-table or otherwise unsupported shape
+        return null;
+      }
+
+      // Resolve the projected target column. `.posts.id` projects the
+      // target's id column directly.
+      let targetCol: string;
+      if (secondStep.name === "id") {
+        targetCol = "id";
+      } else {
+        const prop = targetType.properties.get(secondStep.name);
+        if (!prop?.columnName)
+          return null;
+        targetCol = prop.columnName;
+      }
+
+      // Compile the RHS in the current scope (so parameters and other
+      // refs resolve correctly), then render to SQL via the codegen so
+      // we can splice it as a string into the EXISTS body.
+      const rhsSql = new SQLCodeGenerator().generateExpression(
+        this.compileExpression(rhsExpr)
+      );
+
+      const subAlias = `__sub_${firstStep.name}`;
+      const sql = `EXISTS (SELECT 1 FROM "${targetType.tableName}" "${subAlias}" `
+        + `WHERE "${subAlias}"."${fkColumn}" = "${ta.alias}"."id" `
+        + `AND "${subAlias}"."${targetCol}" ${op} ${rhsSql})`;
+      return { kind: "RawSQLExpression", sql };
+    }
+    return null;
   }
 
   /**

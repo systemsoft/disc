@@ -1398,3 +1398,41 @@ Deno.test("SQL Compiler - 2-step .link.<other_field> compiles via correlated sub
     `expected 'author_id' linkage in SQL: ${sql}`
   );
 });
+
+// --- Multi-cardinality 2-step path: backlink with EXISTS rewrite ---
+
+Deno.test("SQL Compiler - multi-link .posts.title = X rewrites to EXISTS subquery", () => {
+  // User has `multi posts: Post` with backlink "author". `.posts.title`
+  // is the SET of all post titles for this user; `... = "X"` matches
+  // when any post has title X. SQL: EXISTS subquery on posts table.
+  const sql = compileEdgeQL(
+    "SELECT User { id } FILTER .posts.title = <str>$t"
+  );
+  assertEquals(/EXISTS/i.test(sql), true, `expected EXISTS subquery: ${sql}`);
+  assertEquals(sql.includes("posts"), true);
+  assertEquals(sql.includes("title"), true);
+  assertEquals(
+    sql.includes("author_id"),
+    true,
+    `expected backlink FK 'author_id': ${sql}`
+  );
+});
+
+Deno.test("SQL Compiler - multi-link .posts.title with operator (gte) preserves operator inside EXISTS", () => {
+  const sql = compileEdgeQL(
+    "SELECT User { id } FILTER .posts.title > <str>$t"
+  );
+  assertEquals(/EXISTS/i.test(sql), true);
+  // The comparison operator must appear inside the subquery body
+  assertEquals(sql.includes(">"), true);
+});
+
+Deno.test("SQL Compiler - multi-link .posts.id rewrites to EXISTS using FK shortcut inside subquery", () => {
+  // .posts.id over a backlink: still EXISTS, but the projected column
+  // is the target's id (which is just `id`, not the FK).
+  const sql = compileEdgeQL(
+    "SELECT User { id } FILTER .posts.id = <uuid>$pid"
+  );
+  assertEquals(/EXISTS/i.test(sql), true);
+  assertEquals(sql.includes("posts"), true);
+});
