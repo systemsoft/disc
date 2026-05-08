@@ -16,6 +16,7 @@ Disc is a schema-first, TypeScript-native database built on Deno. It sits on top
 | Manage schema changes over time      | [Migrations](migrations.md)                       |
 | Generate TypeScript types            | [Codegen](codegen.md)                             |
 | Use the TypeScript SDK in my app     | [Client SDK](client-sdk.md)                       |
+| Write filter queries against schemas | [Filter API](filter-api.md)                       |
 | Configure the Disc server            | [Server Configuration](server.md)                 |
 | Set up authentication                | [Auth](auth.md)                                   |
 | Add row-level security               | [Access Policies](access-policies.md)             |
@@ -65,6 +66,7 @@ If a future Disc release ships a docs website (e.g., via mdBook, Docusaurus, or 
 - [Migrations](migrations.md) -- Creating, applying, rolling back, and squashing migrations. Schema diffing and DDL generation.
 - [Codegen](codegen.md) -- Generating TypeScript interfaces, query builders, and client code from your schema.
 - [Client SDK](client-sdk.md) -- Using the `DiscClient` to run queries, manage transactions, subscribe to changes, and handle authentication.
+- [Filter API](filter-api.md) -- Object-shaped filter queries on the generated client: operators, combinators, link traversal (single, multi-hop, multi-link, junction tables), shape narrowing, ordering, pagination.
 - [Server Configuration](server.md) -- Environment variables, ports, connection pools, CORS, WebSockets, logging, and protocol options.
 - [Auth](auth.md) -- JWT-based authentication, user registration, login, session management, and the `AuthManager` SDK.
 - [Access Policies](access-policies.md) -- Object-level access policies in SDL, row-level security enforcement, auth context bridging.
