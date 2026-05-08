@@ -1,6 +1,6 @@
 // deno-lint-ignore-file
 /**
- * Tests for enum literal compilation (e.g., Status.active → 'active'::status)
+ * Tests for enum literal compilation (e.g., Status.active → 'active'::disc_enum_status)
  */
 
 import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
@@ -40,12 +40,17 @@ Deno.test("isEnumType - returns false for unknown types", () => {
   assertEquals(isEnumType(schema, "NonExistent"), false);
 });
 
-Deno.test("getEnumSqlType - converts PascalCase to snake_case", () => {
-  assertEquals(getEnumSqlType("Status"), "status");
-  assertEquals(getEnumSqlType("UserRole"), "user_role");
-  assertEquals(getEnumSqlType("OrderStatus"), "order_status");
-  // All-caps sequences stay lowercased together (no word boundary detection)
-  assertEquals(getEnumSqlType("HTTPMethod"), "httpmethod");
+Deno.test("getEnumSqlType - returns disc_enum_<lowercased simplename>", () => {
+  // The mapping must mirror `enumTypeName()` in `migration/ddl.ts` so the
+  // EdgeQL→SQL compiler emits cast targets that match the PG enum types
+  // the migrations create.
+  assertEquals(getEnumSqlType("Status"), "disc_enum_status");
+  assertEquals(getEnumSqlType("UserRole"), "disc_enum_userrole");
+  assertEquals(getEnumSqlType("OrderStatus"), "disc_enum_orderstatus");
+  assertEquals(getEnumSqlType("HTTPMethod"), "disc_enum_httpmethod");
+  // Module qualifiers (e.g. `logger::LogLevel`) collapse to the same
+  // simplename-based PG type as the bare reference.
+  assertEquals(getEnumSqlType("logger::LogLevel"), "disc_enum_loglevel");
 });
 
 // =========================================================================
@@ -56,7 +61,7 @@ Deno.test("enum literal - in filter expression", () => {
   const source = `SELECT User FILTER .status = Status.active`;
   const sql = compileEdgeQL(source);
 
-  assertStringIncludes(sql, "'active'::status");
+  assertStringIncludes(sql, "'active'::disc_enum_status");
   assertStringIncludes(sql, "WHERE");
 });
 
@@ -72,7 +77,7 @@ Deno.test("enum literal - in insert value", () => {
   const selectSource = `SELECT Status.pending`;
   const sql = compileEdgeQL(selectSource);
 
-  assertStringIncludes(sql, "'pending'::status");
+  assertStringIncludes(sql, "'pending'::disc_enum_status");
 });
 
 // =========================================================================
@@ -84,7 +89,7 @@ Deno.test("enum literal - in if/else expression", () => {
   const sql = compileEdgeQL(source);
 
   assertStringIncludes(sql, "CASE");
-  assertStringIncludes(sql, "'active'::status");
+  assertStringIncludes(sql, "'active'::disc_enum_status");
   assertStringIncludes(sql, "'yes'");
   assertStringIncludes(sql, "'no'");
 });
@@ -133,9 +138,9 @@ Deno.test("enum literal - multiple enum references in one query", () => {
   const sql = compileEdgeQL(source);
 
   // Both enum references should be compiled
-  assertStringIncludes(sql, "'active'::status");
+  assertStringIncludes(sql, "'active'::disc_enum_status");
   // Count occurrences: should appear twice (once for each reference)
-  const matches = sql.match(/'active'::status/g) || [];
+  const matches = sql.match(/'active'::disc_enum_status/g) || [];
   assertEquals(
     matches.length,
     2,
@@ -151,8 +156,8 @@ Deno.test("enum literal - in comparison expression", () => {
   const source = `SELECT Status.active = Status.inactive`;
   const sql = compileEdgeQL(source);
 
-  assertStringIncludes(sql, "'active'::status");
-  assertStringIncludes(sql, "'inactive'::status");
+  assertStringIncludes(sql, "'active'::disc_enum_status");
+  assertStringIncludes(sql, "'inactive'::disc_enum_status");
   assertStringIncludes(sql, "=");
 });
 

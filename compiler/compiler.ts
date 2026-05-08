@@ -2514,8 +2514,18 @@ export class EdgeQLCompiler {
   private compileTypeCast(cast: EdgeQLAST.TypeCast): SQL.SQLExpression {
     const expr = this.compileExpression(cast.expr);
     const typeName = renderEdgeQLTypeName(cast.type);
-    const pgType = edgeqlTypeToPgType(typeName);
 
+    // User-declared enum scalars don't appear in the static built-in map.
+    // Resolve them through the schema so casts like `<LogLevel>$level`
+    // emit `::disc_enum_loglevel` instead of being passed through verbatim
+    // (which PG would silently lowercase to `loglevel` — a type that
+    // doesn't exist).
+    const resolved = Context.resolveTypeName(this.ctx, typeName);
+    if (resolved && Array.isArray(resolved.enumValues) && resolved.enumValues.length > 0) {
+      return SQL.createCastExpression(expr, Context.getEnumSqlType(typeName));
+    }
+
+    const pgType = edgeqlTypeToPgType(typeName);
     return SQL.createCastExpression(expr, pgType);
   }
 

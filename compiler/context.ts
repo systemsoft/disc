@@ -442,9 +442,19 @@ export function isEnumType(schema: Schema, name: string): boolean {
     typeDef.enumValues.length > 0;
 }
 
-/** Convert a PascalCase type name to snake_case for SQL enum type naming */
+/**
+ * Convert an EdgeQL enum type name to the PostgreSQL enum type name
+ * created by the migration engine. Mirrors `enumTypeName()` in
+ * `migration/ddl.ts`: `disc_enum_<lowercased simplename>`. Strips any
+ * `module::` qualifier so cross-module references like `logger::LogLevel`
+ * resolve to the same PG type as a bare `LogLevel`. The `disc_enum_`
+ * prefix avoids colliding with user-supplied PG enums.
+ */
 export function getEnumSqlType(name: string): string {
-  return name.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
+  const simpleName = name.includes("::")
+    ? name.slice(name.lastIndexOf("::") + 2)
+    : name;
+  return `disc_enum_${simpleName.toLowerCase()}`;
 }
 
 /**
