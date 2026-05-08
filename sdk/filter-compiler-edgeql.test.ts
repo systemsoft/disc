@@ -11,19 +11,18 @@
  * Validation only — these don't talk to PostgreSQL. Real PG round-trips
  * live in a future test pass; this one runs in any environment.
  *
- * NOTE: Disc's EdgeQL parser/compiler still has three Gel-compat gaps
+ * NOTE: Disc's EdgeQL parser/compiler still has two Gel-compat gaps
  * that intersect with this filter API. Tests below are organised so the
  * first group exercises only what's supported *today* and is expected
  * to pass; the second group uses `assertThrows` to pin the remaining
  * gaps so the next person to close one knows which test to flip on.
  * The remaining gaps:
  *
- *   - `order by .a then .b` multi-key — `then` keyword unknown.
  *   - `<array<str>>` nested generic types — used by `in` / `not_in`.
  *   - `.link.field` multi-step path expressions — compiler errors with
  *      "Multi-step path expressions not yet implemented".
  *
- * Closed gaps: #1 (`{ * }` splat), #2 (limit + offset together).
+ * Closed gaps: #1 (splat), #2 (limit + offset), #3 (multi-key order_by).
  */
 
 import { assertEquals, assertThrows } from "@std/assert";
@@ -208,18 +207,7 @@ Deno.test("Stage E — limit + offset together compile to SQL (was Gap #2, close
   assertEquals(sql.length > 0, true);
 });
 
-Deno.test("Stage E — GAP: multi-key order_by needs `then` keyword in parser", () => {
-  // The filter compiler emits `order by .a desc then .b`:
-  const compiled = compileFilter(
-    "User",
-    { order_by: ["-createdAt", "name"] },
-    userInfo
-  );
-  assertEquals(compiled.orderBy, "order by .createdAt desc then .name");
-  // Disc's parser doesn't know `then`:
-  assertThrows(
-    () => compileAndRun({ order_by: ["-createdAt", "name"] }),
-    Error,
-    "Expected ';' or end of input"
-  );
+Deno.test("Stage E — multi-key order_by compiles to SQL (was Gap #3, closed 2026-05-08)", () => {
+  const sql = compileAndRun({ order_by: ["-createdAt", "name"] });
+  assertEquals(sql.length > 0, true);
 });

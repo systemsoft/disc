@@ -619,7 +619,9 @@ export class EdgeQLParser {
       }
 
       clauses.push({ kind: "OrderByClause", expr, direction, emptyOrder });
-    } while (this.match(TokenType.COMMA));
+      // Gel/EdgeQL canonical separator is THEN. COMMA is also accepted for
+      // SQL-flavored ergonomics; either chains the next sort key.
+    } while (this.match(TokenType.COMMA) || this.match(TokenType.THEN));
 
     return clauses;
   }
