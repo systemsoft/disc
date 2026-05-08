@@ -486,6 +486,31 @@ export class SchemaManager {
         for (const propDecl of propDeclarations) {
           const propName = propDecl.name.value;
           const sdlTypeName = typeRefToSdlString(propDecl.type);
+
+          // Reclassify: SDL colon-form `name: ObjectType` parses as a
+          // PropertyDeclaration but is semantically a link whenever the
+          // target is an object type. Build a LinkDef so DDL lays down a
+          // proper FK column (not a `text` column with the class name as a
+          // string) and codegen routes the reference through namespace-aware
+          // type resolution. Mirrors the arrow-shorthand reclassification
+          // below (which handles `name -> ScalarType` in the inverse
+          // direction).
+          const isObjectTarget = objectTypeNames.has(sdlTypeName) ||
+            objectTypeNames.has(sdlTypeName.replace(/^default::/, ""));
+          if (isObjectTarget && !propDecl.computed) {
+            const linkAnnotations = extractAnnotationMap(propDecl.annotations);
+            links.set(propName, {
+              name: propName,
+              target: sdlTypeName,
+              required: propDecl.required ?? false,
+              multi: propDecl.multi ?? false,
+              columnName: propNameToColumnName(propName),
+              computed: propDecl.computed !== undefined,
+              annotations: linkAnnotations
+            });
+            continue;
+          }
+
           const sqlType = sdlTypeToSqlType(sdlTypeName);
 
           const constraints = extractPropertyConstraints(

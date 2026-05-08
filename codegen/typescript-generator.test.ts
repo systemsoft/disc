@@ -6,6 +6,7 @@
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import * as Context from "../compiler/context.ts";
+import { SchemaManager } from "../migration/schema-manager.ts";
 import * as Types from "./types.ts";
 import { TypeScriptGenerator } from "./typescript-generator.ts";
 
@@ -1332,4 +1333,106 @@ Deno.test("Stage D — generated filter() assembles selectShape / orderBy / limi
   assertStringIncludes(body, "if (compiled.orderBy) parts.push(compiled.orderBy)");
   assertStringIncludes(body, "if (compiled.limit !== null) parts.push(`limit ${compiled.limit}`)");
   assertStringIncludes(body, "if (compiled.offset !== null) parts.push(`offset ${compiled.offset}`)");
+});
+
+// --- Regression tests: codegen output must be valid TS ---
+
+Deno.test("interface declares `id` exactly once", () => {
+  // Regression: schema-manager seeds every type with an implicit `id`
+  // PropertyDef AND the generator hardcoded an `id: string;` line, so every
+  // generated interface had two `id: string;` declarations — TS rejects with
+  // TS2300 (duplicate identifier) the moment the consumer turns on strict.
+  const schema = createSchemaWithEdgeQLTypes();
+  const generator = new TypeScriptGenerator(schema, createDefaultConfig());
+  const result = generator.generate();
+  const types = result.files.find(f => f.type === "types")!;
+
+  const userInterfaceStart = types.content.indexOf("export interface User {");
+  const userInterfaceEnd = types.content.indexOf("}", userInterfaceStart);
+  const userBody = types.content.substring(userInterfaceStart, userInterfaceEnd);
+
+  const idMatches = userBody.match(/\bid:\s*string;/g) ?? [];
+  assertEquals(idMatches.length, 1, "User interface should declare id exactly once");
+});
+
+Deno.test("computed properties surface as `unknown`, not the parser's `auto` placeholder", () => {
+  // Regression: `name := expr` parses with type `auto` (parser.ts:511 — the
+  // placeholder for "infer later"). That keyword used to flow through the
+  // type-mapping fallback and land in the emitted TS as an invalid literal:
+  //   fullName?: auto | null;       // not a TS type
+  //   fullName?: auto | Op<auto>;   // invalid generic argument
+  // and into the runtime cast map:
+  //   fullName: "<auto>"            // not valid EdgeQL
+  const computedType: Context.TypeDef = {
+    name: "User",
+    kind: "object",
+    tableName: "users",
+    properties: new Map([
+      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id", edgeqlType: "uuid" }],
+      ["name", { name: "name", type: "text", required: true, multi: false, columnName: "name", edgeqlType: "str" }],
+      ["fullName", { name: "fullName", type: "text", required: false, multi: false, columnName: "full_name", edgeqlType: "auto", computed: true }]
+    ]),
+    links: new Map()
+  };
+  const schema: Context.Schema = {
+    types: new Map([["User", computedType]]),
+    functions: new Map()
+  };
+
+  const generator = new TypeScriptGenerator(schema, createDefaultConfig());
+  const result = generator.generate();
+  const typesContent = result.files.find(f => f.type === "types")!.content;
+  const queriesContent = result.files.find(f => f.type === "queries")!.content;
+
+  // Computed surfaces as unknown in the interface…
+  assertStringIncludes(typesContent, "fullName?: unknown");
+  // …and in FilterVars/Filter…
+  assertEquals(typesContent.includes("auto"), false, "no `auto` literal anywhere in the types file");
+  // …and is omitted from the runtime cast maps (no `<auto>` in queries.ts).
+  assertEquals(queriesContent.includes("fullName: \"<auto>\""), false);
+  assertEquals(queriesContent.includes("<auto>"), false);
+});
+
+Deno.test("colon-form property targeting an object type is reclassified as a link", () => {
+  // Regression: `user: default::User` parses as a PropertyDeclaration but is
+  // semantically a link. Without reclassification the generator emitted
+  // `user: default::User` verbatim into TS — `::` is a parse error — and the
+  // runtime cast map carried `<default::User>` which would have failed at
+  // query time too. Mirrors the arrow-shorthand reclassification but in the
+  // inverse direction (object target instead of scalar target).
+  const sm = new SchemaManager({});
+  const sdl = `
+    module default {
+      type User { required name: str; }
+    }
+    module api {
+      type ApiKey {
+        required token: str;
+        required user: default::User;
+      }
+    }
+  `;
+  const parsed = sm.parseSDL(sdl);
+  if (!parsed.ok) throw parsed.error;
+  const schema = sm.modulesToSchema(parsed.value);
+
+  const apiKey = schema.types.get("api::ApiKey")!;
+  // `user` should land in the links map, NOT the properties map.
+  assertEquals(apiKey.properties.has("user"), false, "user should not be a property");
+  assertEquals(apiKey.links.has("user"), true, "user should be a link");
+  assertEquals(apiKey.links.get("user")!.target, "default::User");
+
+  // And the resulting codegen must be `::`-free in the output identifiers.
+  const config = createDefaultConfig();
+  config.includeClient = true;
+  const generator = new TypeScriptGenerator(schema, config);
+  const result = generator.generate();
+  const interfaces = result.files.find(f => f.type === "interfaces")!.content;
+
+  // Cross-module link surfaces via the namespace alias, not the raw qualifier.
+  assertStringIncludes(interfaces, "user: $default.User");
+  // No `::` in TS code (strip JSDoc comments, where the qualified name is
+  // intentionally retained for human readability).
+  const codeOnly = interfaces.replace(/\/\*\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
+  assertEquals(/[A-Za-z_]+::[A-Za-z_]+/.test(codeOnly), false, "no module-qualified identifiers leak into TS code");
 });

@@ -280,6 +280,17 @@ export function mapEdgeQLTypeToTypeScript(
   required: boolean = true,
   multi: boolean = false
 ): string {
+  // Computed properties carry the parser's placeholder type `auto` — there's
+  // no inference engine yet, so the surface type is genuinely unknown.
+  // Emit `unknown` rather than letting the keyword leak into TS as a literal.
+  if (edgeqlType === "auto") {
+    const base = "unknown";
+    if (multi) {
+      return required ? `${base}[]` : `${base}[] | null`;
+    }
+    return required ? base : `${base} | null`;
+  }
+
   // Try direct EdgeQL type mapping first
   let mapping = getTypeMapping(edgeqlType);
 
@@ -292,8 +303,12 @@ export function mapEdgeQLTypeToTypeScript(
   }
 
   if (!mapping) {
-    // For object types, use the type name directly
-    let tsType = edgeqlType;
+    // For object types, use the type name directly. Strip any `module::`
+    // qualifier so the bare type name lands in TS — cross-module routing is
+    // handled by `resolveTypeReference` higher up in the generator.
+    let tsType = edgeqlType.includes("::")
+      ? edgeqlType.split("::").pop()!
+      : edgeqlType;
 
     if (multi) {
       tsType += "[]";

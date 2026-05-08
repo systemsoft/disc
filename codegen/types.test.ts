@@ -242,10 +242,24 @@ Deno.test("Types - edge cases for type mapping", () => {
   // Test empty string type
   assertEquals(Types.mapEdgeQLTypeToTypeScript("", true, false), "");
 
-  // Test type with special characters (should be handled by custom type logic)
+  // Module-qualified type names get stripped down to the bare TS identifier.
+  // `::` is invalid in TS, and cross-module routing is the generator's job
+  // (via resolveTypeReference / namespace prefixing) — never let the raw
+  // qualifier leak into the type-mapping fallback.
   assertEquals(
     Types.mapEdgeQLTypeToTypeScript("My::Special::Type", true, false),
-    "My::Special::Type"
+    "Type"
+  );
+
+  // `auto` is the parser's placeholder for computed-property types and
+  // must surface as `unknown` rather than an invalid TS keyword.
+  assertEquals(
+    Types.mapEdgeQLTypeToTypeScript("auto", true, false),
+    "unknown"
+  );
+  assertEquals(
+    Types.mapEdgeQLTypeToTypeScript("auto", false, false),
+    "unknown | null"
   );
 
   // Test null safety with arrays

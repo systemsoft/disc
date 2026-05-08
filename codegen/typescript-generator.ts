@@ -233,12 +233,15 @@ export class TypeScriptGenerator {
       content += `${indent}export interface ${interfaceName} {\n`;
     }
 
-    // ID field (always present)
+    // ID field (always present). Schema-manager seeds every type with an
+    // implicit `id` property; skip it in the iteration below to avoid the
+    // duplicate `id: string;` declaration TS would reject.
     content += `${indent}  /** Unique identifier */\n`;
     content += `${indent}  id: string;\n`;
 
     // Properties
     for (const [propName, prop] of typeDef.properties) {
+      if (propName === "id") continue;
       content += this.generatePropertyDefinition(propName, prop, indent);
     }
 
@@ -288,6 +291,10 @@ export class TypeScriptGenerator {
     // Use edgeqlType when available for accurate type display and mapping
     const typeForMapping = prop.edgeqlType ?? prop.type;
 
+    // Computed properties carry the parser's `auto` placeholder; render
+    // them as `(computed)` in JSDoc rather than leaking the keyword.
+    const docType = typeForMapping === "auto" ? "(computed)" : typeForMapping;
+
     // Build JSDoc tags for constraints, readonly, default, and annotations
     const jsdocTags: string[] = [];
 
@@ -319,13 +326,13 @@ export class TypeScriptGenerator {
     // Generate JSDoc: multi-line when tags are present, single-line otherwise
     if (jsdocTags.length > 0) {
       content += `${indent}  /**\n`;
-      content += `${indent}   * ${typeForMapping}${prop.required ? " (required)" : ""}\n`;
+      content += `${indent}   * ${docType}${prop.required ? " (required)" : ""}\n`;
       for (const tag of jsdocTags) {
         content += `${indent}   * ${tag}\n`;
       }
       content += `${indent}   */\n`;
     } else {
-      content += `${indent}  /** ${typeForMapping}${prop.required ? " (required)" : ""} */\n`;
+      content += `${indent}  /** ${docType}${prop.required ? " (required)" : ""} */\n`;
     }
 
     // Property declaration
@@ -427,10 +434,12 @@ export class TypeScriptGenerator {
     // UpdateRef
     const updateRef = multiModule ? `Types.${this.getModuleNamespace(typeDef.module || "default")}.${typeName}Update` : `Types.${typeName}Update`;
 
-    // Build the type casts map from property definitions (skip "id")
+    // Build the type casts map from property definitions (skip "id" and
+    // computed properties — computed values are read-only outputs with no
+    // sensible cast, and including them would emit `<auto>` literals).
     const typeCastEntries: string[] = [];
     for (const [propName, prop] of typeDef.properties) {
-      if (propName === "id")
+      if (propName === "id" || prop.computed)
         continue;
       const edgeqlType = prop.edgeqlType ?? prop.type;
       const cast = Types.mapEdgeQLTypeToEdgeQLCast(edgeqlType);
@@ -440,9 +449,11 @@ export class TypeScriptGenerator {
     // Build the typeInfo entries (Stage C). Includes id (queryable) and
     // every link as a thunk into the target builder's _typeInfo so the
     // filter compiler can recurse across schemas without forward-reference
-    // gymnastics.
+    // gymnastics. Computed properties are skipped — you can't filter on them
+    // and their cast would be the `<auto>` placeholder.
     const typeInfoCastEntries: string[] = [];
     for (const [propName, prop] of typeDef.properties) {
+      if (prop.computed) continue;
       const edgeqlType = prop.edgeqlType ?? prop.type;
       const cast = Types.mapEdgeQLTypeToEdgeQLCast(edgeqlType);
       typeInfoCastEntries.push(`      ${propName}: "${cast}"`);
