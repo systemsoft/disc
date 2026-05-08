@@ -30,12 +30,25 @@ export interface Shape {
 }
 
 /** A boolean expression node — the result of comparisons / `exists`. */
-type Expr =
+export type Expr =
   | { kind: "binop"; op: string; field: string; value: unknown; }
   | { kind: "exists"; field: string; }
-  | { kind: "and"; exprs: Expr[]; }
-  | { kind: "or"; exprs: Expr[]; }
-  | { kind: "not"; expr: Expr; };
+  | { kind: "and"; exprs: FilterArg[]; }
+  | { kind: "or"; exprs: FilterArg[]; }
+  | { kind: "not"; expr: FilterArg; };
+
+/**
+ * Anything `and`/`or`/`not` can wrap: a runtime-DSL `Expr`, another
+ * combinator, or a codegen Filter object (a plain `Record<string, unknown>`
+ * keyed by schema field names). The runtime-DSL `compileExpr` only knows
+ * how to compile `Expr` children — feeding it a Filter object throws. The
+ * codegen filter compiler understands both.
+ *
+ * Generic `T` lets the codegen layer narrow the object branch to a typed
+ * `XFilter` shape (e.g. `FilterArg<MerchantFilter>`) while combinators
+ * stay permissive enough to accept either form.
+ */
+export type FilterArg<T = Record<string, unknown>> = Expr | T;
 
 /** Order specification — produced by `field.desc()` or by passing a bare FieldRef. */
 interface OrderSpec {
@@ -129,21 +142,36 @@ interface CompileCtx {
   nextN: number;
 }
 
-function compileExpr(expr: Expr, ctx: CompileCtx): string {
-  switch (expr.kind) {
+function isExpr(x: FilterArg): x is Expr {
+  return typeof x === "object" && x !== null && "kind" in x
+    && typeof (x as { kind: unknown; }).kind === "string"
+    && ["binop", "exists", "and", "or", "not"].includes(
+      (x as { kind: string; }).kind
+    );
+}
+
+function compileExpr(arg: FilterArg, ctx: CompileCtx): string {
+  if (!isExpr(arg)) {
+    throw new Error(
+      "Plain Filter objects are not supported in the runtime SelectChain DSL. "
+        + "Use FieldRef-based predicates (e.g., ref => ref.email.eq(\"x\")), "
+        + "or compile via the codegen client's filter() method."
+    );
+  }
+  switch (arg.kind) {
     case "binop": {
       const param = `p${ctx.nextN++}`;
-      ctx.vars[param] = expr.value;
-      return `.${expr.field} ${expr.op} <${inferCast(expr.value)}>$${param}`;
+      ctx.vars[param] = arg.value;
+      return `.${arg.field} ${arg.op} <${inferCast(arg.value)}>$${param}`;
     }
     case "exists":
-      return `exists .${expr.field}`;
+      return `exists .${arg.field}`;
     case "and":
-      return expr.exprs.map(e => `(${compileExpr(e, ctx)})`).join(" and ");
+      return arg.exprs.map(e => `(${compileExpr(e, ctx)})`).join(" and ");
     case "or":
-      return expr.exprs.map(e => `(${compileExpr(e, ctx)})`).join(" or ");
+      return arg.exprs.map(e => `(${compileExpr(e, ctx)})`).join(" or ");
     case "not":
-      return `not (${compileExpr(expr.expr, ctx)})`;
+      return `not (${compileExpr(arg.expr, ctx)})`;
   }
 }
 
@@ -166,15 +194,22 @@ export interface CompiledQuery {
   variables: Record<string, unknown>;
 }
 
-/** Boolean-expression combinators (top-level, not on FieldRef). */
-export function and(...exprs: Expr[]): Expr {
-  return { kind: "and", exprs };
+/**
+ * Boolean combinators. Accept either runtime-DSL `Expr` nodes (produced
+ * by FieldRef methods like `ref.email.eq(...)`) OR codegen Filter objects
+ * (`{ email: "x" }`). The runtime DSL only knows how to compile Expr
+ * children; the codegen client knows how to compile both. Top-level
+ * object keys inside a Filter are implicit-AND, so reach for `and()`
+ * only when you need to nest under `or` / `not`.
+ */
+export function and(...args: FilterArg[]): Expr {
+  return { kind: "and", exprs: args };
 }
-export function or(...exprs: Expr[]): Expr {
-  return { kind: "or", exprs };
+export function or(...args: FilterArg[]): Expr {
+  return { kind: "or", exprs: args };
 }
-export function not(expr: Expr): Expr {
-  return { kind: "not", expr };
+export function not(arg: FilterArg): Expr {
+  return { kind: "not", expr: arg };
 }
 
 /**

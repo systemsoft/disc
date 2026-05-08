@@ -696,26 +696,9 @@ Deno.test("TypeScriptGenerator - FilterVars includes index signature for flexibi
   assertStringIncludes(filterBlock, "[key: string]: unknown;");
 });
 
-Deno.test("TypeScriptGenerator - filter method uses Types.${Type}FilterVars parameter type", () => {
-  const schema = createSchemaWithEdgeQLTypes();
-  const config = createDefaultConfig();
-  const generator = new TypeScriptGenerator(schema, config);
-  const result = generator.generate();
-
-  const queryFile = result.files.find(f => f.type === "queries");
-  assertEquals(queryFile !== undefined, true);
-
-  const content = queryFile!.content;
-
-  // Filter method should use UserFilterVars type
-  assertStringIncludes(content, "variables?: Types.UserFilterVars");
-  // Should NOT use old generic Record<string, any> pattern in filter
-  const filterSection = content.substring(
-    content.indexOf("async filter("),
-    content.indexOf("async insert(")
-  );
-  assertEquals(filterSection.includes("Record<string, any>"), false);
-});
+// (Old test asserted the string-based `filter(condition, variables, shape)`
+// signature with `Types.UserFilterVars`. Stage C replaces that with the
+// object-shaped `filter(FilterArg<XFilter>)` API; new assertions below.)
 
 Deno.test("TypeScriptGenerator - count method uses Types.${Type}FilterVars parameter type", () => {
   const schema = createSchemaWithEdgeQLTypes();
@@ -909,4 +892,353 @@ Deno.test("TypeScriptGenerator - readonly and hasDefault metadata appears in JSD
   );
   assertStringIncludes(createdAtSection, "@readonly");
   assertStringIncludes(createdAtSection, "@default");
+});
+
+// --- Stage A: Filter / Select / operator-helper type generation ---
+//
+// New object-shaped filter API: scalar fields take a bare value (equality)
+// or an operator object; links recurse to the target type's Filter; reserved
+// keys (`select`, `order_by`, `limit`, `offset`) shape the query.
+
+/**
+ * Helper: schema with one type that has a link, for testing link recursion
+ * in the generated Filter interface.
+ */
+function createSchemaWithLink(): Context.Schema {
+  const merchantType: Context.TypeDef = {
+    name: "Merchant",
+    kind: "object",
+    tableName: "merchants",
+    properties: new Map([
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+        edgeqlType: "uuid"
+      }],
+      ["email", {
+        name: "email",
+        type: "text",
+        required: true,
+        multi: false,
+        columnName: "email",
+        edgeqlType: "str"
+      }]
+    ]),
+    links: new Map()
+  };
+
+  const paymentType: Context.TypeDef = {
+    name: "Payment",
+    kind: "object",
+    tableName: "payments",
+    properties: new Map([
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+        edgeqlType: "uuid"
+      }],
+      ["amount", {
+        name: "amount",
+        type: "double precision",
+        required: true,
+        multi: false,
+        columnName: "amount",
+        edgeqlType: "float64"
+      }]
+    ]),
+    links: new Map([
+      ["merchant", {
+        name: "merchant",
+        target: "Merchant",
+        required: true,
+        multi: false,
+        columnName: "merchant_id"
+      }]
+    ])
+  };
+
+  return {
+    types: new Map([
+      ["Merchant", merchantType],
+      ["Payment", paymentType]
+    ]),
+    functions: new Map()
+  };
+}
+
+Deno.test("Stage A — operator helper types Op<T>, OrdOp<T>, StrOp emitted once", () => {
+  const schema = createSchemaWithEdgeQLTypes();
+  const config = createDefaultConfig();
+  config.includeQueryBuilders = false;
+  const generator = new TypeScriptGenerator(schema, config);
+  const result = generator.generate();
+
+  const typesFile = result.files.find(f => f.type === "types");
+  const content = typesFile!.content;
+
+  // Equality + set ops, available on every scalar type
+  assertStringIncludes(content, "export interface Op<T>");
+  assertStringIncludes(content, "eq?: T");
+  assertStringIncludes(content, "ne?: T");
+  assertStringIncludes(content, "in?: T[]");
+  assertStringIncludes(content, "not_in?: T[]");
+
+  // Ordered ops, for numbers and dates
+  assertStringIncludes(content, "export interface OrdOp<T>");
+  assertStringIncludes(content, "gt?: T");
+  assertStringIncludes(content, "gte?: T");
+  assertStringIncludes(content, "lt?: T");
+  assertStringIncludes(content, "lte?: T");
+
+  // String-only ops
+  assertStringIncludes(content, "export interface StrOp");
+  assertStringIncludes(content, "like?: string");
+  assertStringIncludes(content, "ilike?: string");
+
+  // Each helper emitted exactly once
+  assertEquals(content.match(/export interface Op</g)?.length, 1);
+  assertEquals(content.match(/export interface OrdOp</g)?.length, 1);
+  assertEquals(content.match(/export interface StrOp/g)?.length, 1);
+});
+
+Deno.test("Stage A — UserFilter has scalar+operator union per field", () => {
+  const schema = createSchemaWithEdgeQLTypes();
+  const config = createDefaultConfig();
+  config.includeQueryBuilders = false;
+  const generator = new TypeScriptGenerator(schema, config);
+  const result = generator.generate();
+
+  const typesFile = result.files.find(f => f.type === "types");
+  const content = typesFile!.content;
+
+  const filterStart = content.indexOf("export interface UserFilter ");
+  assertEquals(filterStart !== -1, true);
+  const filterEnd = content.indexOf("\n}", filterStart);
+  const filterBlock = content.substring(filterStart, filterEnd + 2);
+
+  // str → string | StrOp
+  assertStringIncludes(filterBlock, "email?: string | StrOp");
+  assertStringIncludes(filterBlock, "name?: string | StrOp");
+  // int32 / float64 → number | OrdOp<number>
+  assertStringIncludes(filterBlock, "age?: number | OrdOp<number>");
+  assertStringIncludes(filterBlock, "score?: number | OrdOp<number>");
+  // bool → boolean | Op<boolean>
+  assertStringIncludes(filterBlock, "active?: boolean | Op<boolean>");
+  // datetime → Date | OrdOp<Date>
+  assertStringIncludes(filterBlock, "createdAt?: Date | OrdOp<Date>");
+});
+
+Deno.test("Stage A — UserFilter has reserved keys select/order_by/limit/offset", () => {
+  const schema = createSchemaWithEdgeQLTypes();
+  const config = createDefaultConfig();
+  config.includeQueryBuilders = false;
+  const generator = new TypeScriptGenerator(schema, config);
+  const result = generator.generate();
+
+  const typesFile = result.files.find(f => f.type === "types");
+  const content = typesFile!.content;
+
+  const filterStart = content.indexOf("export interface UserFilter ");
+  const filterEnd = content.indexOf("\n}", filterStart);
+  const filterBlock = content.substring(filterStart, filterEnd + 2);
+
+  assertStringIncludes(filterBlock, "select?: UserSelect");
+  assertStringIncludes(filterBlock, "order_by?: string | string[]");
+  assertStringIncludes(filterBlock, "limit?: number");
+  assertStringIncludes(filterBlock, "offset?: number");
+});
+
+Deno.test("Stage A — UserSelect has boolean per scalar field", () => {
+  const schema = createSchemaWithEdgeQLTypes();
+  const config = createDefaultConfig();
+  config.includeQueryBuilders = false;
+  const generator = new TypeScriptGenerator(schema, config);
+  const result = generator.generate();
+
+  const typesFile = result.files.find(f => f.type === "types");
+  const content = typesFile!.content;
+
+  const selectStart = content.indexOf("export interface UserSelect ");
+  assertEquals(selectStart !== -1, true);
+  const selectEnd = content.indexOf("\n}", selectStart);
+  const selectBlock = content.substring(selectStart, selectEnd + 2);
+
+  assertStringIncludes(selectBlock, "id?: boolean");
+  assertStringIncludes(selectBlock, "email?: boolean");
+  assertStringIncludes(selectBlock, "name?: boolean");
+  assertStringIncludes(selectBlock, "age?: boolean");
+});
+
+Deno.test("Stage A — Filter recurses into linked types", () => {
+  const schema = createSchemaWithLink();
+  const config = createDefaultConfig();
+  config.includeQueryBuilders = false;
+  const generator = new TypeScriptGenerator(schema, config);
+  const result = generator.generate();
+
+  const typesFile = result.files.find(f => f.type === "types");
+  const content = typesFile!.content;
+
+  const filterStart = content.indexOf("export interface PaymentFilter ");
+  assertEquals(filterStart !== -1, true);
+  const filterEnd = content.indexOf("\n}", filterStart);
+  const filterBlock = content.substring(filterStart, filterEnd + 2);
+
+  // Link field uses the target's Filter type (no `_id` shorthand)
+  assertStringIncludes(filterBlock, "merchant?: MerchantFilter");
+  // Scalar still works
+  assertStringIncludes(filterBlock, "amount?: number | OrdOp<number>");
+});
+
+Deno.test("Stage A — Select recurses into linked types as boolean | TargetSelect", () => {
+  const schema = createSchemaWithLink();
+  const config = createDefaultConfig();
+  config.includeQueryBuilders = false;
+  const generator = new TypeScriptGenerator(schema, config);
+  const result = generator.generate();
+
+  const typesFile = result.files.find(f => f.type === "types");
+  const content = typesFile!.content;
+
+  const selectStart = content.indexOf("export interface PaymentSelect ");
+  assertEquals(selectStart !== -1, true);
+  const selectEnd = content.indexOf("\n}", selectStart);
+  const selectBlock = content.substring(selectStart, selectEnd + 2);
+
+  // Link in Select: true to pull all fields, or a nested Select to narrow
+  assertStringIncludes(selectBlock, "merchant?: boolean | MerchantSelect");
+});
+
+// --- Stage B: client.ts re-exports the SDK combinators ---
+
+Deno.test("Stage B — generated client.ts re-exports and/or/not from the SDK", () => {
+  const schema = createSchemaWithEdgeQLTypes();
+  const config = createDefaultConfig();
+  config.includeClient = true;
+  const generator = new TypeScriptGenerator(schema, config);
+  const result = generator.generate();
+
+  const clientFile = result.files.find(f => f.type === "client");
+  assertEquals(clientFile !== undefined, true);
+  const content = clientFile!.content;
+
+  // Combinators alongside AuthManager / SubscriptionClient on the SDK re-export line
+  assertStringIncludes(content, "export { and, AuthManager, not, or, SubscriptionClient }");
+});
+
+Deno.test("Stage B — generated index.ts re-exports combinators via client.ts", () => {
+  const schema = createSchemaWithEdgeQLTypes();
+  const config = createDefaultConfig();
+  config.includeClient = true;
+  const generator = new TypeScriptGenerator(schema, config);
+  const result = generator.generate();
+
+  const indexFile = result.files.find(f => f.type === "index");
+  assertEquals(indexFile !== undefined, true);
+  const content = indexFile!.content;
+
+  assertStringIncludes(content, "export { and, AuthManager, not, or, SubscriptionClient } from \"./client.ts\"");
+});
+
+// --- Stage C: filter() method uses compileFilter at runtime ---
+
+Deno.test("Stage C — generated queries.ts imports compileFilter + FilterArg + TypeInfo from the SDK", () => {
+  const schema = createSchemaWithEdgeQLTypes();
+  const config = createDefaultConfig();
+  const generator = new TypeScriptGenerator(schema, config);
+  const result = generator.generate();
+
+  const queryFile = result.files.find(f => f.type === "queries");
+  const content = queryFile!.content;
+
+  assertStringIncludes(
+    content,
+    "import { compileFilter, type FilterArg, type TypeInfo }"
+  );
+});
+
+Deno.test("Stage C — each builder declares a static _typeInfo with casts + link thunks", () => {
+  const schema = createSchemaWithLink();
+  const config = createDefaultConfig();
+  const generator = new TypeScriptGenerator(schema, config);
+  const result = generator.generate();
+
+  const queryFile = result.files.find(f => f.type === "queries");
+  const content = queryFile!.content;
+
+  // PaymentQueryBuilder._typeInfo must include casts (incl. id) and a thunk for `merchant`
+  const start = content.indexOf("class PaymentQueryBuilder");
+  const end = content.indexOf("constructor(", start);
+  const classHead = content.substring(start, end);
+
+  assertStringIncludes(classHead, "static readonly _typeInfo: TypeInfo");
+  assertStringIncludes(classHead, "casts: {");
+  assertStringIncludes(classHead, "id: \"<uuid>\"");
+  assertStringIncludes(classHead, "amount: \"<float64>\"");
+  assertStringIncludes(classHead, "links: {");
+  assertStringIncludes(
+    classHead,
+    "merchant: () => MerchantQueryBuilder._typeInfo"
+  );
+});
+
+Deno.test("Stage C — filter() takes FilterArg<XFilter> and delegates to compileFilter", () => {
+  const schema = createSchemaWithLink();
+  const config = createDefaultConfig();
+  const generator = new TypeScriptGenerator(schema, config);
+  const result = generator.generate();
+
+  const queryFile = result.files.find(f => f.type === "queries");
+  const content = queryFile!.content;
+
+  const filterStart = content.indexOf(
+    "async filter(",
+    content.indexOf("class PaymentQueryBuilder")
+  );
+  const filterEnd = content.indexOf("async insert(", filterStart);
+  const filterBody = content.substring(filterStart, filterEnd);
+
+  // New signature
+  assertStringIncludes(filterBody, "filter: FilterArg<Types.PaymentFilter>");
+  // Delegates to the SDK compiler with the right type name + _typeInfo
+  assertStringIncludes(
+    filterBody,
+    "compileFilter(\"Payment\", filter, PaymentQueryBuilder._typeInfo)"
+  );
+  // No vestiges of the old string-based signature
+  assertEquals(filterBody.includes("condition: string"), false);
+  assertEquals(filterBody.includes("FilterVars"), false);
+});
+
+// --- Stage D: assembly of select/order_by/limit/offset in generated filter() ---
+
+Deno.test("Stage D — generated filter() assembles selectShape / orderBy / limit / offset clauses", () => {
+  const schema = createSchemaWithLink();
+  const config = createDefaultConfig();
+  const generator = new TypeScriptGenerator(schema, config);
+  const result = generator.generate();
+
+  const queryFile = result.files.find(f => f.type === "queries");
+  const content = queryFile!.content;
+
+  const filterStart = content.indexOf(
+    "async filter(",
+    content.indexOf("class PaymentQueryBuilder")
+  );
+  const filterEnd = content.indexOf("async insert(", filterStart);
+  const body = content.substring(filterStart, filterEnd);
+
+  // Falls back to `{ * }` when no select narrowing
+  assertStringIncludes(body, "compiled.selectShape ?? \"{ * }\"");
+  // Conditionally appends each piece in canonical EdgeQL order
+  assertStringIncludes(body, "if (compiled.clause) parts.push(`filter ${compiled.clause}`)");
+  assertStringIncludes(body, "if (compiled.orderBy) parts.push(compiled.orderBy)");
+  assertStringIncludes(body, "if (compiled.limit !== null) parts.push(`limit ${compiled.limit}`)");
+  assertStringIncludes(body, "if (compiled.offset !== null) parts.push(`offset ${compiled.offset}`)");
 });

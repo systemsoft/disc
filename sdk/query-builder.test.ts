@@ -244,3 +244,51 @@ Deno.test("first() compiles with `limit 1`", () => {
   // Sanity: explicit limit does the same as first()'s internal limit.
   assert(compiled.query.endsWith("limit 1"));
 });
+
+// --- Stage B: combinators accept Expr OR Filter objects ---
+
+Deno.test("Stage B — and() with Filter objects produces an Expr the codegen path will compile", async () => {
+  const { and } = await import("./query-builder.ts");
+  const node = and({ email: "a@b.c" }, { active: true });
+  // Internal shape: combinators wrap their args verbatim under `exprs`.
+  assertEquals(node.kind, "and");
+  if (node.kind !== "and")
+    throw new Error("type narrowing");
+  assertEquals(node.exprs.length, 2);
+  assertEquals(node.exprs[0], { email: "a@b.c" });
+  assertEquals(node.exprs[1], { active: true });
+});
+
+Deno.test("Stage B — or() mixes Filter objects and Expr nodes", async () => {
+  const { or } = await import("./query-builder.ts");
+  const exprNode = from("User").select({ id: true });
+  // Build a binop manually for the assertion (don't need a FieldRef here)
+  const node = or({ tier: "gold" }, { kind: "binop", op: "=", field: "tier", value: "silver" });
+  assertEquals(node.kind, "or");
+  if (node.kind !== "or")
+    throw new Error("type narrowing");
+  assertEquals(node.exprs.length, 2);
+  assertEquals(node.exprs[0], { tier: "gold" });
+  // Sanity: the Expr child round-trips
+  void exprNode;
+});
+
+Deno.test("Stage B — not() wraps a single Filter object", async () => {
+  const { not } = await import("./query-builder.ts");
+  const node = not({ active: false });
+  assertEquals(node.kind, "not");
+  if (node.kind !== "not")
+    throw new Error("type narrowing");
+  assertEquals(node.expr, { active: false });
+});
+
+Deno.test("Stage B — runtime SelectChain rejects Filter-object combinator children with a clear error", async () => {
+  const { and } = await import("./query-builder.ts");
+  // Wrap a filter object inside and(), feed to a SelectChain — should throw
+  // when toEdgeQL() walks the tree and hits the plain object child.
+  assertThrows(
+    () => from("User").filter(() => and({ email: "x" })).toEdgeQL(),
+    Error,
+    "Plain Filter objects are not supported in the runtime SelectChain DSL"
+  );
+});

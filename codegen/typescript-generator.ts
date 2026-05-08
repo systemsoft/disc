@@ -162,13 +162,17 @@ export class TypeScriptGenerator {
           } else if (typeDef.kind === "object") {
             content += this.generateInterface(typeDef, "  ", mod);
             content += "\n";
-            // Insert/Update/FilterVars inside namespace
+            // Insert/Update/FilterVars/Filter/Select inside namespace
             const tsName = this.getTypeScriptTypeName(typeDef.name);
             content += this.generateInsertType(tsName, typeDef, "  ");
             content += "\n";
             content += this.generateUpdateType(tsName, typeDef, "  ");
             content += "\n";
             content += this.generateFilterVarsType(tsName, typeDef, "  ");
+            content += "\n";
+            content += this.generateFilterType(typeDef, "  ", mod);
+            content += "\n";
+            content += this.generateSelectType(typeDef, "  ", mod);
             content += "\n";
           }
         }
@@ -378,8 +382,10 @@ export class TypeScriptGenerator {
 
     // Import types - different source file in multi-module mode
     const typesImport = multiModule ? "./interfaces.ts" : "./types.ts";
+    const sdkBase = this.config.sdkImportBase ?? "./sdk/mod.ts";
     content += `import * as Types from "${typesImport}";\n`;
-    content += `import { DiscClient } from "./client.ts";\n\n`;
+    content += `import { DiscClient } from "./client.ts";\n`;
+    content += `import { compileFilter, type FilterArg, type TypeInfo } from "${sdkBase}";\n\n`;
 
     // Generate builder for each type
     for (const [_typeName, typeDef] of this.schema.types) {
@@ -412,6 +418,9 @@ export class TypeScriptGenerator {
     // FilterVars ref
     const filterVarsRef = multiModule ? `Types.${this.getModuleNamespace(typeDef.module || "default")}.${typeName}FilterVars` : `Types.${typeName}FilterVars`;
 
+    // Filter ref (Stage A) — used by the new object-shaped filter() signature
+    const filterRef = multiModule ? `Types.${this.getModuleNamespace(typeDef.module || "default")}.${typeName}Filter` : `Types.${typeName}Filter`;
+
     // InsertRef
     const insertRef = multiModule ? `Types.${this.getModuleNamespace(typeDef.module || "default")}.${typeName}Insert` : `Types.${typeName}Insert`;
 
@@ -428,6 +437,24 @@ export class TypeScriptGenerator {
       typeCastEntries.push(`    ${propName}: "${cast}"`);
     }
 
+    // Build the typeInfo entries (Stage C). Includes id (queryable) and
+    // every link as a thunk into the target builder's _typeInfo so the
+    // filter compiler can recurse across schemas without forward-reference
+    // gymnastics.
+    const typeInfoCastEntries: string[] = [];
+    for (const [propName, prop] of typeDef.properties) {
+      const edgeqlType = prop.edgeqlType ?? prop.type;
+      const cast = Types.mapEdgeQLTypeToEdgeQLCast(edgeqlType);
+      typeInfoCastEntries.push(`      ${propName}: "${cast}"`);
+    }
+    const typeInfoLinkEntries: string[] = [];
+    for (const [linkName, link] of typeDef.links) {
+      const targetBuilder = `${this.getTypeScriptTypeName(link.target)}QueryBuilder`;
+      typeInfoLinkEntries.push(
+        `      ${linkName}: () => ${targetBuilder}._typeInfo`
+      );
+    }
+
     let content = "";
 
     // Builder class
@@ -441,6 +468,23 @@ export class TypeScriptGenerator {
     content += typeCastEntries.join(",\n");
     if (typeCastEntries.length > 0)
       content += ",\n";
+    content += `  };\n\n`;
+
+    // Static typeInfo — consumed by the SDK's compileFilter() at runtime.
+    // Public so cross-builder link thunks can reference it without breaking
+    // private-access. Sibling builders are generated into the same file so
+    // there's no real encapsulation boundary to enforce.
+    content += `  static readonly _typeInfo: TypeInfo = {\n`;
+    content += `    casts: {\n`;
+    content += typeInfoCastEntries.join(",\n");
+    if (typeInfoCastEntries.length > 0)
+      content += ",\n";
+    content += `    },\n`;
+    content += `    links: {\n`;
+    content += typeInfoLinkEntries.join(",\n");
+    if (typeInfoLinkEntries.length > 0)
+      content += ",\n";
+    content += `    }\n`;
     content += `  };\n\n`;
 
     content += `  constructor(private client: DiscClient) {}\n\n`;
@@ -464,13 +508,19 @@ export class TypeScriptGenerator {
     content += `    return results[0] || null;\n`;
     content += `  }\n\n`;
 
-    // Filter method
+    // Filter method (Stage C + D) — object-shaped filter compiled by the
+    // SDK. Reserved keys at the top level (select / order_by / limit /
+    // offset) are extracted by compileFilter and assembled here.
     content += `  /** Filter ${typeName} objects */\n`;
-    content += `  async filter(condition: string, variables?: ${filterVarsRef}, shape?: string): Promise<${typeRef}[]> {\n`;
-    content += `    const query = shape\n`;
-    content += `      ? \`select ${edgeqlTypeName} \${shape} filter \${condition}\`\n`;
-    content += `      : \`select ${edgeqlTypeName} { * } filter \${condition}\`;\n`;
-    content += `    return await this.client.query<${typeRef}[]>(query, variables);\n`;
+    content += `  async filter(filter: FilterArg<${filterRef}>): Promise<${typeRef}[]> {\n`;
+    content += `    const compiled = compileFilter("${edgeqlTypeName}", filter, ${builderName}._typeInfo);\n`;
+    content += `    const shape = compiled.selectShape ?? "{ * }";\n`;
+    content += `    const parts: string[] = [\`select ${edgeqlTypeName} \${shape}\`];\n`;
+    content += `    if (compiled.clause) parts.push(\`filter \${compiled.clause}\`);\n`;
+    content += `    if (compiled.orderBy) parts.push(compiled.orderBy);\n`;
+    content += `    if (compiled.limit !== null) parts.push(\`limit \${compiled.limit}\`);\n`;
+    content += `    if (compiled.offset !== null) parts.push(\`offset \${compiled.offset}\`);\n`;
+    content += `    return await this.client.query<${typeRef}[]>(parts.join(" "), compiled.variables);\n`;
     content += `  }\n\n`;
 
     // Insert method
@@ -530,7 +580,9 @@ export class TypeScriptGenerator {
     const sdkBase = this.config.sdkImportBase ?? "./sdk/mod.ts";
     content += `import { DiscClient as BaseClient, type DiscClientConfig } from "${sdkBase}";\n`;
     content += `export type { DiscClientConfig } from "${sdkBase}";\n`;
-    content += `export { AuthManager, SubscriptionClient } from "${sdkBase}";\n`;
+    // Re-export combinators so callers can `import { and, or, not } from "./client.ts"`
+    // alongside the generated DiscClient — one import path for the whole filter API.
+    content += `export { and, AuthManager, not, or, SubscriptionClient } from "${sdkBase}";\n`;
     content += `import * as Queries from "./queries.ts";\n\n`;
 
     // Typed client class extending SDK client with query builders
@@ -622,7 +674,7 @@ export class TypeScriptGenerator {
 
     // SDK re-exports
     content += `// SDK re-exports\n`;
-    content += `export { AuthManager, SubscriptionClient } from "./client.ts";\n\n`;
+    content += `export { and, AuthManager, not, or, SubscriptionClient } from "./client.ts";\n\n`;
 
     // Default export
     content += `// Default client export\n`;
@@ -661,9 +713,15 @@ export class TypeScriptGenerator {
     content += `  extensions?: Record<string, any>;\n`;
     content += `}\n\n`;
 
-    // Only generate Insert/Update/FilterVars in utility section for flat (non-module) output
+    // Operator helpers — emitted once at file scope, referenced by every
+    // per-type Filter regardless of namespace nesting.
+    content += this.generateOperatorHelpers();
+
+    // Only generate Insert/Update/FilterVars/Filter/Select in utility
+    // section for flat (non-module) output. Multi-module mode emits these
+    // inside their owning namespace in generateTypeDefinitions().
     if (!this.isMultiModule()) {
-      content += `/** Insert/Update/FilterVars data types */\n`;
+      content += `/** Insert/Update/FilterVars/Filter/Select data types */\n`;
       for (const [typeName, typeDef] of this.schema.types) {
         // Skip enum types — they don't have insert/update/filter types
         if (typeDef.kind === "enum") {
@@ -682,6 +740,14 @@ export class TypeScriptGenerator {
 
         // Generate FilterVars interface for typed filter/count parameters
         content += this.generateFilterVarsType(tsTypeName, typeDef);
+        content += "\n";
+
+        // Generate Filter interface (object-shaped query API)
+        content += this.generateFilterType(typeDef);
+        content += "\n";
+
+        // Generate Select interface (shape narrowing for `select` reserved key)
+        content += this.generateSelectType(typeDef);
         content += "\n";
       }
     }
@@ -760,6 +826,140 @@ export class TypeScriptGenerator {
       content += `${indent}  ${propName}?: ${tsType};\n`;
     }
 
+    content += `${indent}}\n`;
+    return content;
+  }
+
+  /**
+   * Operator helper interfaces emitted once per file. Op<T> is equality+set
+   * (`eq`, `ne`, `in`, `not_in`); OrdOp<T> adds ordered comparisons; StrOp
+   * adds string-only `like`/`ilike`. Per-field filter values are a union of
+   * the bare scalar (equality) and the matching operator helper.
+   */
+  private generateOperatorHelpers(): string {
+    return `/** Equality + set operators — available on every scalar field */
+export interface Op<T> {
+  eq?: T;
+  ne?: T;
+  in?: T[];
+  not_in?: T[];
+}
+
+/** Ordered operators — numbers, dates, durations */
+export interface OrdOp<T> extends Op<T> {
+  gt?: T;
+  gte?: T;
+  lt?: T;
+  lte?: T;
+}
+
+/** String operators — adds pattern matching to ordered string ops */
+export interface StrOp extends OrdOp<string> {
+  like?: string;
+  ilike?: string;
+}
+
+`;
+  }
+
+  /**
+   * Pick the operator helper type for a field given its EdgeQL type.
+   * - `str` → `StrOp` (concrete; carries `like`/`ilike`)
+   * - numbers, dates, durations → `OrdOp<TsType>`
+   * - bool, uuid, bytes, json, enums → `Op<TsType>` (equality only)
+   */
+  private getOperatorHelperFor(
+    edgeqlType: string,
+    tsType: string
+  ): string {
+    if (edgeqlType === "str") {
+      return "StrOp";
+    }
+    const orderedTypes = new Set([
+      "int16",
+      "int32",
+      "int64",
+      "float32",
+      "float64",
+      "decimal",
+      "bigint",
+      "datetime",
+      "duration",
+      "cal::local_datetime",
+      "cal::local_date",
+      "cal::local_time",
+      "cal::relative_duration",
+      "cal::date_duration"
+    ]);
+    if (orderedTypes.has(edgeqlType)) {
+      return `OrdOp<${tsType}>`;
+    }
+    return `Op<${tsType}>`;
+  }
+
+  /**
+   * Per-type Filter interface. Scalar fields accept either a bare value
+   * (equality sugar) or the matching operator helper; links recurse into
+   * the target type's Filter; reserved keys (`select`, `order_by`, `limit`,
+   * `offset`) shape the query result.
+   */
+  private generateFilterType(
+    typeDef: Context.TypeDef,
+    indent: string = "",
+    currentModule?: string
+  ): string {
+    const tsTypeName = this.getTypeScriptTypeName(typeDef.name);
+    let content = "";
+    content += `${indent}export interface ${tsTypeName}Filter {\n`;
+
+    for (const [propName, prop] of typeDef.properties) {
+      const typeForMapping = prop.edgeqlType ?? prop.type;
+      const tsType = Types.mapEdgeQLTypeToTypeScript(
+        typeForMapping,
+        true,
+        prop.multi
+      );
+      const opHelper = this.getOperatorHelperFor(typeForMapping, tsType);
+      content += `${indent}  ${propName}?: ${tsType} | ${opHelper};\n`;
+    }
+
+    for (const [linkName, link] of typeDef.links) {
+      const targetTs = currentModule
+        ? this.resolveTypeReference(link.target, currentModule)
+        : this.getTypeScriptTypeName(link.target);
+      content += `${indent}  ${linkName}?: ${targetTs}Filter;\n`;
+    }
+
+    content += `${indent}  select?: ${tsTypeName}Select;\n`;
+    content += `${indent}  order_by?: string | string[];\n`;
+    content += `${indent}  limit?: number;\n`;
+    content += `${indent}  offset?: number;\n`;
+    content += `${indent}}\n`;
+    return content;
+  }
+
+  /**
+   * Per-type Select interface. Each scalar field is `boolean` (true to
+   * include); each link is `boolean | TargetSelect` (true to pull all
+   * fields, or a nested Select to narrow).
+   */
+  private generateSelectType(
+    typeDef: Context.TypeDef,
+    indent: string = "",
+    currentModule?: string
+  ): string {
+    const tsTypeName = this.getTypeScriptTypeName(typeDef.name);
+    let content = "";
+    content += `${indent}export interface ${tsTypeName}Select {\n`;
+    for (const [propName] of typeDef.properties) {
+      content += `${indent}  ${propName}?: boolean;\n`;
+    }
+    for (const [linkName, link] of typeDef.links) {
+      const targetTs = currentModule
+        ? this.resolveTypeReference(link.target, currentModule)
+        : this.getTypeScriptTypeName(link.target);
+      content += `${indent}  ${linkName}?: boolean | ${targetTs}Select;\n`;
+    }
     content += `${indent}}\n`;
     return content;
   }
