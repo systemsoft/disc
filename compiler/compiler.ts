@@ -2545,9 +2545,17 @@ export class EdgeQLCompiler {
         return this.compileEnumLiteral(firstStep.name, secondStep.name);
       }
 
-      // Non-enum multi-step paths would require joins in a full implementation
+      // Multi-step path through a single-link, e.g. `.author.id` or
+      // `.author.email`. Find the link on the active table alias's type,
+      // then either short-circuit to the FK column (when the second step
+      // is `id`) or emit a correlated subquery against the target table.
+      const linked = this.compileLinkedPath(firstStep.name, secondStep.name);
+      if (linked) {
+        return linked;
+      }
+
       throw new CompilationError(
-        `Multi-step path expressions not yet implemented`
+        `Multi-step path '.${firstStep.name}.${secondStep.name}' not supported (link must be defined and single-cardinality)`
       );
     }
 
@@ -2559,6 +2567,56 @@ export class EdgeQLCompiler {
     }
 
     throw new CompilationError(`Complex path expressions not yet implemented`);
+  }
+
+  /**
+   * Compile a 2-step path `.linkName.targetField` through a single-link.
+   *
+   * - `.link.id` short-circuits to the source's FK column — no JOIN, no
+   *   subquery. The FK literally is the target's id.
+   * - `.link.<other>` emits a correlated subquery against the target's
+   *   table that projects the requested column.
+   *
+   * Returns `null` if the link can't be resolved on the active scope or
+   * if it's a multi/junction-table link (those need different SQL the
+   * caller should reject explicitly).
+   */
+  private compileLinkedPath(
+    linkName: string,
+    targetField: string
+  ): SQL.SQLExpression | null {
+    for (const ta of this.ctx.currentScope.aliases.values()) {
+      const td = Context.resolveTypeName(this.ctx, ta.type);
+      const link = td?.links.get(linkName);
+      if (!link)
+        continue;
+      // Multi-cardinality / junction-table links need a different shape
+      // (UNNEST or join) — out of scope for this gap. Skip and let the
+      // caller report a clear error.
+      if (link.multi || link.junctionTable)
+        return null;
+      if (!link.columnName)
+        return null;
+
+      // FK shortcut: `.link.id` is exactly the FK column on the source.
+      if (targetField === "id") {
+        return SQL.createColumnReference(link.columnName, ta.alias);
+      }
+
+      // Correlated subquery for non-id fields. Resolve the target type
+      // to find its table and the requested property's actual column.
+      const targetType = Context.resolveTypeName(this.ctx, link.target);
+      if (!targetType)
+        return null;
+      const targetProp = targetType.properties.get(targetField);
+      if (!targetProp?.columnName)
+        return null;
+
+      const sql =
+        `(SELECT "${targetProp.columnName}" FROM "${targetType.tableName}" WHERE "id" = "${ta.alias}"."${link.columnName}")`;
+      return { kind: "RawSQLExpression", sql };
+    }
+    return null;
   }
 
   /**

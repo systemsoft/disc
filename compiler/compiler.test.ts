@@ -1355,3 +1355,46 @@ Deno.test("SQL Compiler - { * } splat coexists with FILTER", () => {
   assertEquals(sql.includes("'name'"), true);
   assertEquals(sql.includes("WHERE"), true);
 });
+
+// --- Gap #5: multi-step path expressions (link traversal) ---
+
+Deno.test("SQL Compiler - 2-step .link.id uses the foreign-key column directly", () => {
+  // Post has `author: User` (single link, columnName "author_id"). Asking
+  // for `.author.id` is asking for the FK itself — no JOIN needed.
+  const sql = compileEdgeQL(
+    "SELECT Post { id } FILTER .author.id = <uuid>$id"
+  );
+  // The compiled SQL must reference the FK column on posts, not a join
+  assertEquals(
+    sql.includes("author_id"),
+    true,
+    `expected 'author_id' in SQL: ${sql}`
+  );
+  // No JOIN — the optimisation point of this path
+  assertEquals(/JOIN/i.test(sql), false, `unexpected JOIN: ${sql}`);
+});
+
+Deno.test("SQL Compiler - 2-step .link.<other_field> compiles via correlated subquery", () => {
+  // Asking for a non-id field of the linked object requires looking it
+  // up in the target table.
+  const sql = compileEdgeQL(
+    "SELECT Post { id } FILTER .author.email = <str>$e"
+  );
+  // Subquery must hit the target's table (users) and project the column
+  assertEquals(
+    sql.includes("users"),
+    true,
+    `expected 'users' in subquery SQL: ${sql}`
+  );
+  assertEquals(
+    sql.includes("email"),
+    true,
+    `expected 'email' projected in subquery SQL: ${sql}`
+  );
+  // FK column on the source side connects the subquery
+  assertEquals(
+    sql.includes("author_id"),
+    true,
+    `expected 'author_id' linkage in SQL: ${sql}`
+  );
+});
