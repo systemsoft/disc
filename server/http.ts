@@ -481,6 +481,18 @@ export class HttpServer {
       // Handle regular HTTP requests
       const url = new URL(request.url);
 
+      // Strip the UI's `/api` namespace for non-REST endpoints. The admin
+      // UI prefixes every backend call with `/api` so SvelteKit's own
+      // page routes (`/schema`, `/query`, ...) don't collide with the
+      // backend ones. In dev, the vite proxy strips the prefix; in
+      // production (single-binary, UI mounted at `/ui`), the server has
+      // to do it instead. Only paths that match a known non-REST
+      // endpoint are rewritten — `/api/<TypeName>` keeps falling
+      // through to the REST data API (Bundle J).
+      if (url.pathname.startsWith("/api/") && this.shouldStripApiPrefix(url.pathname)) {
+        url.pathname = url.pathname.slice(4);
+      }
+
       // Auth gate. When `config.requireAuth` is enabled, protected
       // routes need a valid `Authorization: Bearer <JWT>` header before
       // the route handler runs. Returns a 401/503 response on failure
@@ -613,6 +625,36 @@ export class HttpServer {
       this.stats.total_duration_ms += duration;
       this.in_flight_requests--;
     }
+  }
+
+  /**
+   * Decide whether `/api/<rest>` should be rewritten to `/<rest>` before
+   * dispatch. The admin UI prefixes every backend call with `/api`; the
+   * REST data API (Bundle J) also lives under `/api/<TypeName>`. We
+   * strip the prefix only when the next segment matches a known non-REST
+   * endpoint, so `/api/Merchant` keeps reaching the REST router.
+   *
+   * Update this list when a new top-level non-REST route is added to
+   * `handleRequest()` — otherwise the production-served UI will 404 on
+   * it even though the dev (vite-proxied) UI works.
+   */
+  private shouldStripApiPrefix(pathname: string): boolean {
+    // pathname has the leading `/api/` (5 chars) so we slice past it.
+    const firstSegment = pathname.slice(5).split("/")[0];
+    const knownEndpoints = new Set([
+      "schema",
+      "query",
+      "migrations",
+      "stats",
+      "health",
+      "metrics",
+      "config",
+      "auth",
+      "admin",
+      "ext",
+      "files"
+    ]);
+    return knownEndpoints.has(firstSegment);
   }
 
   /**
