@@ -539,7 +539,7 @@ export class CLICommands {
 
       console.log(`\n✅ TypeScript generation complete!`);
       console.log(`💡 Usage example:`);
-      console.log(`   import { DiscClient } from "./${outputDir}/index.ts";`);
+      console.log(`   import { DiscClient } from "${outputDir}/index.ts";`);
       console.log(
         `   const client = new DiscClient({ host: "localhost", port: 5656 });`
       );
