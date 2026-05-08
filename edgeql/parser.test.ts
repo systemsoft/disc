@@ -879,3 +879,27 @@ Deno.test("EdgeQL Parser - { * } splat coexists with FILTER and ORDER BY", () =>
     assertEquals(ast.orderBy?.length, 1);
   }
 });
+
+// --- Gap #2: LIMIT and OFFSET together (in either order) ---
+
+Deno.test("EdgeQL Parser - SELECT with LIMIT then OFFSET", () => {
+  const ast = new EdgeQLParser(
+    "SELECT User { id } LIMIT 10 OFFSET 20"
+  ).parse();
+  assertEquals(ast.kind, "SelectQuery");
+  if (ast.kind === "SelectQuery") {
+    assertEquals(ast.limit?.kind, "Literal");
+    assertEquals(ast.offset?.kind, "Literal");
+  }
+});
+
+Deno.test("EdgeQL Parser - SELECT with OFFSET then LIMIT", () => {
+  const ast = new EdgeQLParser(
+    "SELECT User { id } OFFSET 20 LIMIT 10"
+  ).parse();
+  assertEquals(ast.kind, "SelectQuery");
+  if (ast.kind === "SelectQuery") {
+    assertEquals(ast.limit?.kind, "Literal");
+    assertEquals(ast.offset?.kind, "Literal");
+  }
+});

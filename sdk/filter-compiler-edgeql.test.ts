@@ -11,22 +11,19 @@
  * Validation only — these don't talk to PostgreSQL. Real PG round-trips
  * live in a future test pass; this one runs in any environment.
  *
- * NOTE: Disc's EdgeQL parser/compiler still has four Gel-compat gaps
+ * NOTE: Disc's EdgeQL parser/compiler still has three Gel-compat gaps
  * that intersect with this filter API. Tests below are organised so the
  * first group exercises only what's supported *today* and is expected
  * to pass; the second group uses `assertThrows` to pin the remaining
  * gaps so the next person to close one knows which test to flip on.
  * The remaining gaps:
  *
- *   - `limit N offset M` together — parser stops after `limit`.
  *   - `order by .a then .b` multi-key — `then` keyword unknown.
  *   - `<array<str>>` nested generic types — used by `in` / `not_in`.
  *   - `.link.field` multi-step path expressions — compiler errors with
  *      "Multi-step path expressions not yet implemented".
  *
- * Gap #1 (`{ * }` splat) was closed — the wrapper below now uses `{ * }`
- * by default, matching what the generated `client.<type>.filter()`
- * actually emits.
+ * Closed gaps: #1 (`{ * }` splat), #2 (limit + offset together).
  */
 
 import { assertEquals, assertThrows } from "@std/assert";
@@ -206,13 +203,9 @@ Deno.test("Stage E — GAP: link traversal needs multi-step path expressions in 
   );
 });
 
-Deno.test("Stage E — GAP: limit + offset together rejected by parser", () => {
-  // Each clause works alone (covered above). The combination doesn't:
-  assertThrows(
-    () => compileAndRun({ active: true, limit: 10, offset: 20 }),
-    Error,
-    "Expected ';' or end of input"
-  );
+Deno.test("Stage E — limit + offset together compile to SQL (was Gap #2, closed 2026-05-08)", () => {
+  const sql = compileAndRun({ active: true, limit: 10, offset: 20 });
+  assertEquals(sql.length > 0, true);
 });
 
 Deno.test("Stage E — GAP: multi-key order_by needs `then` keyword in parser", () => {

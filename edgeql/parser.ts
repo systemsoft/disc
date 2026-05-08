@@ -299,14 +299,28 @@ export class EdgeQLParser {
       orderBy = this.parseOrderByList();
     }
 
+    // LIMIT and OFFSET in either order. The canonical Gel form is
+    // OFFSET then LIMIT, but `LIMIT N OFFSET M` is the more common
+    // idiom (matches SQL and is what the codegen filter API emits),
+    // so accept both. Each may appear at most once.
     let offset: AST.Expression | undefined;
-    if (this.match(TokenType.OFFSET)) {
-      offset = this.parseExpression();
-    }
-
     let limit: AST.Expression | undefined;
-    if (this.match(TokenType.LIMIT)) {
-      limit = this.parseExpression();
+    while (true) {
+      if (this.match(TokenType.OFFSET)) {
+        if (offset !== undefined) {
+          throw this.error("Duplicate OFFSET clause");
+        }
+        offset = this.parseExpression();
+        continue;
+      }
+      if (this.match(TokenType.LIMIT)) {
+        if (limit !== undefined) {
+          throw this.error("Duplicate LIMIT clause");
+        }
+        limit = this.parseExpression();
+        continue;
+      }
+      break;
     }
 
     return {
