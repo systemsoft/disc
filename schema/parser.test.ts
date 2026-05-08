@@ -927,3 +927,121 @@ Deno.test("SDL Validator - rejects unknown rest::* annotation", () => {
     );
   }
 });
+
+// ---------------------------------------------------------------------------
+// Enum scalars accept both bare identifiers and quoted string literals as
+// values. Gel SDL allows either form (commit f34c452); the previous parser
+// only handled identifiers and crashed on `enum<"X", "Y">`.
+// ---------------------------------------------------------------------------
+
+Deno.test("SDL Parser - enum scalar with quoted string values", () => {
+  const source = `
+    module api {
+      scalar type Environment extending enum<"PRODUCTION", "SANDBOX">;
+    }
+  `;
+
+  const ast = new SDLParser(source).parse();
+  const mod = ast.declarations[0];
+  if (mod.kind !== "ModuleDeclaration") {
+    throw new Error(`expected ModuleDeclaration, got ${mod.kind}`);
+  }
+  const scalar = mod.declarations[0];
+  if (scalar.kind !== "ScalarTypeDeclaration") {
+    throw new Error(`expected ScalarTypeDeclaration, got ${scalar.kind}`);
+  }
+
+  const ext = scalar.extending?.[0];
+  assertEquals(ext?.name.parts[0], "enum");
+  // Each quoted value becomes a single-part TypeRef so downstream
+  // `differ.scalarEnumValues` reads it the same way as bare identifiers.
+  assertEquals(
+    ext?.params?.map(p => p.name.parts.join("::")),
+    ["PRODUCTION", "SANDBOX"]
+  );
+});
+
+Deno.test("SDL Parser - enum scalar with bare identifier values still works", () => {
+  // Regression: the parameter-parsing change must not break the original
+  // bare-identifier form, which the rest of the codebase already relies on
+  // (see migration/scalar-cascade.test.ts).
+  const source = `
+    module default {
+      scalar type Status extending enum<draft, published, archived>;
+    }
+  `;
+
+  const ast = new SDLParser(source).parse();
+  const mod = ast.declarations[0];
+  if (mod.kind !== "ModuleDeclaration") return;
+  const scalar = mod.declarations[0];
+  if (scalar.kind !== "ScalarTypeDeclaration") return;
+
+  assertEquals(
+    scalar.extending?.[0].params?.map(p => p.name.parts.join("::")),
+    ["draft", "published", "archived"]
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Composite indexes use a tuple expression: `index on ((.a, .b))`. The outer
+// parens belong to `index on (<expr>)`; the inner ones form the tuple. The
+// parser previously rejected these with "Expected ')' after expression".
+// ---------------------------------------------------------------------------
+
+Deno.test("SDL Parser - composite index parses tuple expression", () => {
+  const source = `
+    type ApiKey {
+      created: datetime;
+      environment: str;
+      merchant: str;
+      index on ((.created, .environment, .merchant));
+    }
+  `;
+
+  const ast = new SDLParser(source).parse();
+  const typeDecl = ast.declarations[0];
+  if (typeDecl.kind !== "TypeDeclaration") {
+    throw new Error(`expected TypeDeclaration, got ${typeDecl.kind}`);
+  }
+
+  const idx = typeDecl.members.find(m => m.kind === "Index");
+  if (idx?.kind !== "Index") {
+    throw new Error("expected an Index member");
+  }
+  if (idx.on.kind !== "TupleExpression") {
+    throw new Error(`expected TupleExpression, got ${idx.on.kind}`);
+  }
+  assertEquals(idx.on.elements.length, 3);
+  // Each element is `.<name>` — a PathExpression whose first part is the dot.
+  for (const el of idx.on.elements) {
+    if (el.kind !== "PathExpression") {
+      throw new Error(`expected PathExpression element, got ${el.kind}`);
+    }
+    assertEquals(el.path[0], ".");
+  }
+  assertEquals(
+    idx.on.elements.map(e =>
+      e.kind === "PathExpression" ? e.path.slice(1).join("") : ""
+    ),
+    ["created", "environment", "merchant"]
+  );
+});
+
+Deno.test("SDL Parser - single-element parens stay a plain expression", () => {
+  // Regression: a parenthesized single expression must still unwrap to that
+  // expression — only a comma should turn it into a TupleExpression.
+  const source = `
+    type T {
+      x: str;
+      index on ((.x));
+    }
+  `;
+
+  const ast = new SDLParser(source).parse();
+  const typeDecl = ast.declarations[0];
+  if (typeDecl.kind !== "TypeDeclaration") return;
+  const idx = typeDecl.members.find(m => m.kind === "Index");
+  if (idx?.kind !== "Index") return;
+  assertEquals(idx.on.kind, "PathExpression");
+});
