@@ -4,7 +4,6 @@
  */
 
 import * as Codegen from "../codegen/mod.ts";
-import * as Context from "../compiler/context.ts";
 import type { Schema } from "../compiler/context.ts";
 import { introspectDatabase } from "../compiler/pg-introspect-queries.ts";
 import { buildSchemaFromIntrospection } from "../compiler/pg-introspect.ts";
@@ -437,36 +436,49 @@ export class CLICommands {
       if (schemaFile) {
         // Single-file mode (explicit --schema flag)
         console.log(`📋 Schema: ${schemaFile}`);
+
+        try {
+          await Deno.stat(schemaFile);
+        } catch (err) {
+          if (err instanceof Deno.errors.NotFound) {
+            throw new Error(`Schema file not found: ${schemaFile}`);
+          }
+          throw err;
+        }
+
         const loaded = await this.readSchemaAsCompilerSchema(schemaFile);
 
-        if (loaded) {
-          schema = loaded;
-          const typeNames = Array.from(schema.types.keys()).join(", ");
-          console.log(`📖 Loaded types: ${typeNames}`);
-        } else {
-          console.log(
-            `⚠️  No schema found at ${schemaFile}, falling back to test schema`
+        if (!loaded) {
+          // readSchemaAsCompilerSchema already printed the parse/convert
+          // failure detail. Surface as a hard error rather than silently
+          // substituting a test schema — a successful exit code on a
+          // broken schema misleads CI and local users alike.
+          throw new Error(
+            `Cannot generate types from ${schemaFile} — see errors above.`
           );
-          schema = Context.createTestSchema();
         }
+
+        schema = loaded;
+        const typeNames = Array.from(schema.types.keys()).join(", ");
+        console.log(`📖 Loaded types: ${typeNames}`);
       } else {
         // Multi-file mode: discover schema files from directory
         console.log(`📋 Schema dir: ${schemaDir}`);
         const files = await Codegen.discoverSchemaFiles(schemaDir);
 
-        if (files.length > 0) {
-          console.log(
-            `📖 Discovered ${files.length} schema file(s): ${files.map(f => f.split("/").pop()).join(", ")}`
+        if (files.length === 0) {
+          throw new Error(
+            `No schema files found in ${schemaDir} (looked for *.disc, *.gel, *.esdl). ` +
+              `Pass --schema <file> or --schema-dir <dir> to point at your schema.`
           );
-          schema = await Codegen.loadMultiFileSchema(files);
-          const typeNames = Array.from(schema.types.keys()).join(", ");
-          console.log(`📖 Loaded types: ${typeNames}`);
-        } else {
-          console.log(
-            `⚠️  No schema files found in ${schemaDir}, falling back to test schema`
-          );
-          schema = Context.createTestSchema();
         }
+
+        console.log(
+          `📖 Discovered ${files.length} schema file(s): ${files.map(f => f.split("/").pop()).join(", ")}`
+        );
+        schema = await Codegen.loadMultiFileSchema(files);
+        const typeNames = Array.from(schema.types.keys()).join(", ");
+        console.log(`📖 Loaded types: ${typeNames}`);
       }
 
       console.log(`📋 Output: ${outputDir}`);
