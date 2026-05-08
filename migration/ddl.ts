@@ -510,9 +510,11 @@ END $$;`,
     // Add foreign key columns for links
     for (const link of operation.links) {
       if (!link.multi) {
-        // Single-valued link becomes a foreign key column
+        // Single-valued link becomes a foreign key column. Snake_case so
+        // Postgres' unquoted-identifier lowercasing round-trips through
+        // EdgeQL→SQL compilation cleanly.
         columns.push({
-          name: `${link.name}_id`,
+          name: `${propNameToColumnName(link.name)}_id`,
           type: "UUID",
           nullable: !link.required,
           primaryKey: false,
@@ -952,7 +954,7 @@ END $$;`,
       );
     } else {
       // Single-valued link - add foreign key column
-      const columnName = `${link.name}_id`;
+      const columnName = `${propNameToColumnName(link.name)}_id`;
       const nullable = link.required ? "NOT NULL" : "NULL";
       const targetTable = typeNameToTableName(link.target);
 
@@ -1623,7 +1625,7 @@ END $$;`,
     }
 
     // Single-valued link: delete from target where id matches
-    const columnName = `${link.name}_id`;
+    const columnName = `${propNameToColumnName(link.name)}_id`;
     return [
       `CREATE OR REPLACE FUNCTION ${this.escapeIdentifier(fnName)}() RETURNS TRIGGER AS $$ BEGIN DELETE FROM ${
         this.escapeIdentifier(targetTable)

@@ -7,6 +7,7 @@ import { AccessConfig, AccessContext, AccessEvaluator, AccessPolicy, AccessSQLIn
 import * as EdgeQLAST from "../edgeql/ast.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { CompilationError } from "../lib/errors.ts";
+import { propNameToColumnName } from "../lib/identifiers.ts";
 import { Err, Ok, Result } from "../lib/result.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import { getConfigRegistry, lookupConfigKey } from "./config-registry.ts";
@@ -1407,7 +1408,7 @@ export class EdgeQLCompiler {
       }
       const reverseLink = targetTypeDef.links.get(link.backlink);
       const fkColumn = reverseLink?.columnName ||
-        `${link.name.toLowerCase()}_id`;
+        `${propNameToColumnName(link.name)}_id`;
 
       const subquery = SQL.createSelectStatement({
         select: SQL.createSelectClause([

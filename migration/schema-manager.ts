@@ -622,7 +622,10 @@ export class SchemaManager {
             target: targetName,
             required: linkDecl.required ?? false,
             multi: isMulti,
-            columnName: isMulti ? undefined : `${linkName}_id`,
+            // FK column name is snake_case so Postgres' unquoted-identifier
+            // lowercasing doesn't break round-tripping (e.g. `payoutAddresses_id`
+            // would lowercase to `payoutaddresses_id` and miss the column).
+            columnName: isMulti ? undefined : `${propNameToColumnName(linkName)}_id`,
             computed: linkDecl.computed ? true : undefined,
             annotations: linkAnnotations
           });
