@@ -500,25 +500,24 @@ export class EdgeQLParser {
   private parseConfigureQuery(): AST.ConfigureQuery {
     this.consume(TokenType.CONFIGURE, "Expected 'CONFIGURE'");
 
-    // Parse scope: SESSION | DATABASE | INSTANCE | SYSTEM
-    let scope: AST.ConfigureScope;
-    if (this.match(TokenType.SESSION)) {
-      scope = "SESSION";
-    } else if (
-      this.check(TokenType.IDENT) &&
-      this.peek().value.toLowerCase() === "database"
-    ) {
-      this.advance();
-      scope = "DATABASE";
-    } else if (this.match(TokenType.INSTANCE)) {
-      scope = "INSTANCE";
-    } else if (this.match(TokenType.SYSTEM)) {
-      scope = "SYSTEM";
-    } else {
+    // Parse scope: SESSION | DATABASE | INSTANCE | SYSTEM. All four are
+    // soft keywords — recognized only here. Hard-promoting them to
+    // keyword tokens shadowed common type names like `Session`.
+    const scopeKeywords: Record<string, AST.ConfigureScope> = {
+      session: "SESSION",
+      database: "DATABASE",
+      instance: "INSTANCE",
+      system: "SYSTEM"
+    };
+    const scope = this.check(TokenType.IDENT)
+      ? scopeKeywords[this.peek().value.toLowerCase()]
+      : undefined;
+    if (!scope) {
       throw this.error(
         `Expected 'SESSION', 'DATABASE', 'INSTANCE', or 'SYSTEM' after 'CONFIGURE', got '${this.peek().value}'`
       );
     }
+    this.advance();
 
     // Parse action: SET or RESET
     if (this.match(TokenType.SET)) {

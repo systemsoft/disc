@@ -266,9 +266,11 @@ export const KEYWORDS = new Map<string, TokenType>([
   ["explain", TokenType.EXPLAIN],
   ["analyze", TokenType.ANALYZE],
   ["configure", TokenType.CONFIGURE],
-  ["system", TokenType.SYSTEM],
-  ["instance", TokenType.INSTANCE],
-  ["session", TokenType.SESSION],
+  // `session`, `instance`, `system`, and `database` are soft keywords —
+  // only meaningful as scope names after `CONFIGURE`/`RESET`. Hard-promoting
+  // them to keyword tokens broke common type names like `Session` (the
+  // lexer is case-insensitive on keywords). They're now lexed as IDENT
+  // and recognized contextually in `parseConfigureQuery`.
   ["reset", TokenType.RESET],
   ["true", TokenType.TRUE],
   ["false", TokenType.FALSE],
