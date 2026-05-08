@@ -154,6 +154,21 @@ export async function discoverSchemaFiles(dir: string): Promise<string[]> {
  */
 export async function loadMultiFileSchema(files: string[]): Promise<Context.Schema> {
   const manager = new SchemaManager({});
+  const modules = await loadMultiFileSchemaModules(files);
+  return manager.modulesToSchema(modules);
+}
+
+/**
+ * Load and merge multiple schema files into a Module[] array.
+ *
+ * Same parse/merge pipeline as `loadMultiFileSchema()` but stops before the
+ * Schema conversion. Used by the `migrate` and `serve` paths in `cli/commands.ts`,
+ * which feed Module[] directly into `SchemaManager.applyModules()` /
+ * `planModules()` so the migration engine sees every cross-module type as
+ * resolvable.
+ */
+export async function loadMultiFileSchemaModules(files: string[]): Promise<Module[]> {
+  const manager = new SchemaManager({});
   const allModules: Module[] = [];
 
   for (const file of files) {
@@ -167,7 +182,30 @@ export async function loadMultiFileSchema(files: string[]): Promise<Context.Sche
     allModules.push(...result.value);
   }
 
-  return manager.modulesToSchema(allModules);
+  return mergeModulesByName(allModules);
+}
+
+/**
+ * Merge Module[] entries that share the same module name.
+ *
+ * Multi-file projects commonly split a single logical module across several
+ * `.disc` files (e.g. each file declares its own `module default { ... }`
+ * block). The migration engine treats Module[] as the source of truth for
+ * the post-state, and emits one CreateModule per Module — duplicate names
+ * would generate duplicate DDL. Merge by name, preserving declaration order
+ * within each module.
+ */
+function mergeModulesByName(modules: Module[]): Module[] {
+  const merged = new Map<string, Module>();
+  for (const mod of modules) {
+    const existing = merged.get(mod.name);
+    if (existing) {
+      existing.items.push(...mod.items);
+    } else {
+      merged.set(mod.name, { name: mod.name, items: [...mod.items] });
+    }
+  }
+  return Array.from(merged.values());
 }
 
 /**

@@ -949,6 +949,104 @@ export class SchemaManager {
   }
 
   /**
+   * Apply pre-parsed Module[] (multi-file schema path).
+   *
+   * Mirrors `applySchema()` but skips the parseSDL step — callers that have
+   * already merged Module arrays from multiple `.disc` files (via
+   * `Codegen.loadMultiFileSchemaModules`) feed them straight in. Diff,
+   * unsafe-op gating, dry-run handling, and engine execution behave
+   * identically to `applySchema()`.
+   */
+  async applyModules(
+    newModules: Module[],
+    options?: { allowUnsafe?: boolean; skipHistory?: boolean; }
+  ): Promise<Result<Types.MigrationResult[], MigrationError>> {
+    if (!this.engine) {
+      return Err(
+        new MigrationError(
+          "SchemaManager not initialized. Call initialize() before applyModules()."
+        )
+      );
+    }
+
+    const planResult = this.engine.planMigration(
+      this.currentModules,
+      newModules
+    );
+    if (!planResult.ok) {
+      return planResult;
+    }
+    const plan = planResult.value;
+
+    if (!options?.allowUnsafe && !this.dryRun) {
+      const flagged = this.engine.classifyUnsafeOperations(plan);
+      if (flagged.length > 0) {
+        const lines = flagged.map(u => `  - [${u.classification}] ${u.operation}: ${u.reason}`);
+        const unsafeCount = flagged.filter(u => u.classification === "unsafe").length;
+        const ambiguousCount = flagged.length - unsafeCount;
+        const summary = [
+          unsafeCount > 0 ? `${unsafeCount} unsafe` : null,
+          ambiguousCount > 0 ? `${ambiguousCount} ambiguous` : null
+        ]
+          .filter(Boolean)
+          .join(" + ");
+        return Err(
+          new MigrationError(
+            `Migration contains ${summary} operation(s):\n${lines.join("\n")}\n\nPass { allowUnsafe: true } (or --unsafe at the CLI) to apply anyway.`
+          )
+        );
+      }
+    }
+
+    if (this.dryRun) {
+      this.currentModules = newModules;
+      this.currentSchema = this.modulesToSchema(newModules);
+      this.onSchemaChange?.(this.currentSchema);
+
+      const results: Types.MigrationResult[] = plan.migrations.map(m => ({
+        success: true,
+        migrationId: m.id,
+        appliedAt: new Date(),
+        durationMs: 0
+      }));
+      return Ok(results);
+    }
+
+    const execResult = await this.engine.executeMigration(plan, {
+      skipHistory: options?.skipHistory
+    });
+    if (!execResult.ok) {
+      return execResult;
+    }
+
+    this.currentModules = newModules;
+    this.currentSchema = this.modulesToSchema(newModules);
+    this.onSchemaChange?.(this.currentSchema);
+
+    return execResult;
+  }
+
+  /**
+   * Plan a migration from pre-parsed Module[] without executing.
+   *
+   * Multi-file twin of `planSchema()`. Used by `disc migrate --create
+   * --schema-dir` to generate a plan from merged module arrays.
+   */
+  planModules(
+    newModules: Module[]
+  ): Result<Types.MigrationPlan, MigrationError> {
+    if (!this.engine) {
+      return Err(
+        new MigrationError(
+          "SchemaManager not initialized. Call initialize() before planModules()."
+        )
+      );
+    }
+
+    return this.engine.planMigration(this.currentModules, newModules);
+  }
+
+  /**
    * Extract DDL statements from a migration plan.
    *
    * Pass-through to the migration engine's DDL generator. Returns the array
@@ -1139,17 +1237,29 @@ export class SchemaManager {
     if (!parseResult.ok)
       return parseResult;
 
+    return this.previewMigrationOpsFromModules(parseResult.value);
+  }
+
+  /**
+   * Multi-file twin of `previewMigrationOps()`. Skips the parseSDL step so
+   * callers that already merged Module[] from several `.disc` files (via
+   * `Codegen.loadMultiFileSchemaModules`) can drift-check without
+   * re-serializing back to SDL.
+   */
+  previewMigrationOpsFromModules(
+    newModules: Module[]
+  ): Result<Types.MigrationOperation[], MigrationError> {
     if (!this.engine) {
       return Err(
         new MigrationError(
-          "SchemaManager not initialized. Call initialize() before previewMigrationOps()."
+          "SchemaManager not initialized. Call initialize() before previewMigrationOpsFromModules()."
         )
       );
     }
 
     const planResult = this.engine.planMigration(
       this.currentModules,
-      parseResult.value
+      newModules
     );
     if (!planResult.ok)
       return planResult;

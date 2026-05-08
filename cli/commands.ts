@@ -45,6 +45,15 @@ export interface ServeOptions {
   tlsKey?: string;
   binaryPort?: number;
   /**
+   * Schema source overrides. When `schemaFile` is set, the server loads
+   * a single SDL file (legacy single-file mode). Otherwise it discovers
+   * `*.disc` files in `schemaDir` (default `./dbschema`) and merges them
+   * into a single Module[]. Both flags map to `--schema` / `--schema-dir`
+   * on the CLI.
+   */
+  schemaFile?: string;
+  schemaDir?: string;
+  /**
    * Security-toggle CLI flags (gh/geldata#5234). Each maps to the
    * corresponding `DISC_*` env var so the rest of the server config
    * pipeline is unchanged. CLI > env var > `disc.toml` > default.
@@ -52,6 +61,20 @@ export interface ServeOptions {
   requireAuth?: boolean;
   readOnly?: boolean;
   trustProxy?: boolean;
+}
+
+/**
+ * Result of loading a project schema. Multi-file mode populates `sources`
+ * with every discovered `.disc` file; single-file mode has a single entry.
+ * `appliedSdl` is the concatenated SDL text — useful for the live-schema-diff
+ * watcher when it stays in single-file mode (multi-file watch is a follow-up).
+ */
+interface ProjectSchemaLoad {
+  appliedSdl: string;
+  modules: Module[];
+  schema: Schema;
+  singleFile: string | null;
+  sources: string[];
 }
 
 /**
@@ -79,6 +102,66 @@ export class CLICommands {
   constructor() {
     this.postgresManager = new PostgresManager();
   }
+
+  /**
+   * Resolve the project schema from CLI args, with multi-file as the
+   * default and an explicit `--schema <file>` flag opting into single-file
+   * mode (for backward compatibility with older tooling that points at one
+   * SDL file).
+   *
+   * Returns the merged Module[], a Schema for the server, the concatenated
+   * SDL text, and the list of files that contributed. `singleFile` is non-null
+   * only when the caller passed an explicit `--schema` flag — multi-file mode
+   * surfaces all sources via `sources` instead.
+   */
+  private async loadProjectSchema(
+    args: { schema?: string; "schema-dir"?: string; }
+  ): Promise<ProjectSchemaLoad | null> {
+    const schemaFile = args.schema;
+    const schemaDir = args["schema-dir"] ?? "./dbschema";
+
+    let sources: string[];
+    let singleFile: string | null = null;
+
+    if (schemaFile) {
+      try {
+        await Deno.stat(schemaFile);
+      } catch (err) {
+        if (err instanceof Deno.errors.NotFound) {
+          console.error(`❌ Schema file not found: ${schemaFile}`);
+          return null;
+        }
+        throw err;
+      }
+      sources = [schemaFile];
+      singleFile = schemaFile;
+    } else {
+      sources = await Codegen.discoverSchemaFiles(schemaDir);
+      if (sources.length === 0) {
+        return null;
+      }
+    }
+
+    let modules: Module[];
+    try {
+      modules = await Codegen.loadMultiFileSchemaModules(sources);
+    } catch (error) {
+      console.error(`❌ ${(error as Error).message}`);
+      return null;
+    }
+
+    const manager = new SchemaManager({});
+    const schema = manager.modulesToSchema(modules);
+
+    const sdlParts: string[] = [];
+    for (const file of sources) {
+      sdlParts.push(await Deno.readTextFile(file));
+    }
+    const appliedSdl = sdlParts.join("\n");
+
+    return { appliedSdl, modules, schema, singleFile, sources };
+  }
+
   /**
    * Initialize a new Disc project
    */
@@ -90,7 +173,6 @@ export class CLICommands {
    * Handle migration commands (create and apply)
    */
   async migrate(args: CLIArgs): Promise<void> {
-    const schemaFile = args.schema || "./dbschema/default.disc";
     const dryRun = args["dry-run"] || false;
 
     // Resolve project context for DSN
@@ -104,6 +186,26 @@ export class CLICommands {
     const databaseUrl = args["backend-dsn"] ||
       Deno.env.get("DATABASE_URL") ||
       (ctx ? resolveDsn(ctx) : "postgresql://localhost:5432/disc_dev");
+
+    // Rollback and squash do not need a schema source. Other branches
+    // (apply / --create / --status) do — load it once up front so
+    // multi-file projects don't require `--schema` to point at every
+    // module file. Default is multi-file discovery in `./dbschema`.
+    const needsSchema = !args.rollback && !args["rollback-to"] && !args.squash;
+    let load: ProjectSchemaLoad | null = null;
+    if (needsSchema) {
+      load = await this.loadProjectSchema({
+        schema: args.schema,
+        "schema-dir": args["schema-dir"]
+      });
+      if (!load) {
+        const where = args.schema ?? args["schema-dir"] ?? "./dbschema";
+        console.error(
+          `❌ No schema files found at ${where}. Pass --schema <file> or --schema-dir <dir>.`
+        );
+        return;
+      }
+    }
 
     let pool: ConnectionPool | undefined;
     let manager: SchemaManager | undefined;
@@ -136,17 +238,18 @@ export class CLICommands {
       }
 
       if (args.status) {
-        await this.showMigrationStatus(manager, schemaFile);
+        await this.showMigrationStatus(manager, load?.modules);
       } else if (args.rollback || args["rollback-to"]) {
         await this.handleRollback(manager, args);
       } else if (args.squash) {
         await this.handleSquash(manager, args);
       } else if (args.create) {
-        await this.createMigration(manager, schemaFile);
+        await this.createMigration(manager, load!.modules);
       } else {
         await this.applyMigrations(
           manager,
-          schemaFile,
+          load!.modules,
+          load!.sources,
           dryRun,
           args.unsafe === true,
           quiet
@@ -212,36 +315,45 @@ export class CLICommands {
 
       applySecurityToggleEnvVars(options);
 
-      // Try to load the project schema from SDL
-      const schemaFile = "./dbschema/default.disc";
-      const schema = await this.readSchemaAsCompilerSchema(schemaFile);
-      // Cache the SDL text alongside the parsed Schema so the live-
-      // schema-diff admin endpoint can compare it to whatever's on
-      // disk when an editor saves changes. (Bundle K — Disc #3a)
-      let appliedSdl: string | undefined;
-      try {
-        appliedSdl = await Deno.readTextFile(schemaFile);
-      } catch {
-        appliedSdl = undefined;
-      }
+      // Load the project schema. Default is multi-file discovery in
+      // `./dbschema` (every `*.disc` file), so cross-module references
+      // resolve. `--schema <file>` opts back into single-file mode.
+      const load = await this.loadProjectSchema({
+        schema: options.schemaFile,
+        "schema-dir": options.schemaDir
+      });
+      const schema = load?.schema;
+      // Cache the (concatenated) SDL text so the live-schema-diff admin
+      // endpoint can compare it to whatever's on disk when an editor saves
+      // changes. (Bundle K — Disc #3a). Multi-file watch is wired only when
+      // the project resolved to a single file; multi-file watch is a
+      // follow-up since `setSchemaWatchSource` takes one path.
+      const appliedSdl = load?.appliedSdl;
+      const watchSourcePath = load?.singleFile ?? null;
 
-      if (schema) {
+      if (load) {
         const objectTypeCount = Array
-          .from(schema.types.values())
+          .from(load.schema.types.values())
           .filter(
             t => t.kind === "object"
           )
           .length;
-        console.log(
-          `  Loaded schema with ${objectTypeCount} object types`
-        );
+        if (load.sources.length > 1) {
+          console.log(
+            `  Loaded schema with ${objectTypeCount} object types from ${load.sources.length} files (${load.sources.map(f => f.split("/").pop()).join(", ")})`
+          );
+        } else {
+          console.log(
+            `  Loaded schema with ${objectTypeCount} object types from ${load.sources[0]}`
+          );
+        }
 
         // Auto-migrate on dev (managed PG only). External DSN is treated as
         // user-managed; auto-applying DDL there could surprise an operator,
         // so we only do it for the bundled instance. The migrate engine is
         // a no-op if the live schema already matches the SDL.
         if (ctx?.managed) {
-          await this.autoMigrateOnServe(schemaFile);
+          await this.autoMigrateOnServe(load.modules);
         } else {
           console.log(
             "  💡 External DSN — run 'disc migrate' to apply schema changes."
@@ -249,7 +361,7 @@ export class CLICommands {
         }
       } else {
         console.log(
-          "  ⚠️  No schema file found at ./dbschema/default.disc."
+          "  ⚠️  No schema files found in ./dbschema (looked for *.disc)."
         );
         console.log(
           "     Falling back to in-memory test schema. Queries against"
@@ -279,12 +391,13 @@ export class CLICommands {
       // Create server from environment variables, passing schema if available
       const server = schema ? createServerFromEnv(undefined, schema) : createServerFromEnv();
 
-      // Wire the live-schema-diff admin endpoints. Only enabled when
-      // both the SDL file and applied-SDL text resolved cleanly; if
-      // either is missing (e.g. fresh init with no schema yet), the
-      // /admin/schema-* routes return 404. (Bundle K)
-      if (appliedSdl !== undefined) {
-        server.setSchemaWatchSource(schemaFile, appliedSdl);
+      // Wire the live-schema-diff admin endpoints. Requires a single
+      // schema file path because the watcher monitors one path and
+      // diffs the on-disk SDL against the cached text. Multi-file
+      // schemas (the new default) skip this and the /admin/schema-*
+      // routes return 404. (Bundle K)
+      if (watchSourcePath && appliedSdl !== undefined) {
+        server.setSchemaWatchSource(watchSourcePath, appliedSdl);
       }
 
       // Apply layered config overrides. Precedence (lowest → highest):
@@ -935,7 +1048,7 @@ export class CLICommands {
 
   private async showMigrationStatus(
     manager: SchemaManager,
-    schemaFile?: string
+    modules?: Module[]
   ): Promise<void> {
     console.log("Migration Status\n");
 
@@ -965,40 +1078,33 @@ export class CLICommands {
       console.log(`\n  No migrations have been applied yet.`);
     }
 
-    // Drift detection (gh/geldata#8899). When a schema file is
-    // available, diff it against the applied state so `migration
-    // --status` answers the question users actually ask: "is my
-    // schema in sync?". Renders one of three lines:
+    // Drift detection (gh/geldata#8899). When the SDL has been loaded
+    // (single- or multi-file), diff it against the applied state so
+    // `migration --status` answers the question users actually ask:
+    // "is my schema in sync?". Renders one of three lines:
     //   - "Schema status: in sync" (no operations queued)
     //   - "Schema status: <N> pending operation(s)"
-    //   - "Schema status: SDL not readable — N/A" (best-effort)
-    if (schemaFile) {
-      try {
-        const sdl = await Deno.readTextFile(schemaFile);
-        const planResult = manager.previewMigrationOps(sdl);
-        if (!planResult.ok) {
-          console.log(
-            `\n  Schema status: drift check failed — ${planResult.error.message}`
-          );
-          return;
-        }
-        const ops = planResult.value;
-        if (ops.length === 0) {
-          console.log(`\n  Schema status: in sync`);
-        } else {
-          console.log(`\n  Schema status: ${ops.length} pending operation${ops.length === 1 ? "" : "s"}`);
-          for (const op of ops.slice(0, 5)) {
-            console.log(`    - [${op.classification ?? "safe"}] ${op.kind}`);
-          }
-          if (ops.length > 5) {
-            console.log(`    … and ${ops.length - 5} more`);
-          }
-          console.log(`\n  Run \`disc migrate\` to apply.`);
-        }
-      } catch (err) {
+    //   - "Schema status: drift check failed — <reason>"
+    if (modules) {
+      const planResult = manager.previewMigrationOpsFromModules(modules);
+      if (!planResult.ok) {
         console.log(
-          `\n  Schema status: SDL not readable (${(err as Error).message}) — N/A`
+          `\n  Schema status: drift check failed — ${planResult.error.message}`
         );
+        return;
+      }
+      const ops = planResult.value;
+      if (ops.length === 0) {
+        console.log(`\n  Schema status: in sync`);
+      } else {
+        console.log(`\n  Schema status: ${ops.length} pending operation${ops.length === 1 ? "" : "s"}`);
+        for (const op of ops.slice(0, 5)) {
+          console.log(`    - [${op.classification ?? "safe"}] ${op.kind}`);
+        }
+        if (ops.length > 5) {
+          console.log(`    … and ${ops.length - 5} more`);
+        }
+        console.log(`\n  Run \`disc migrate\` to apply.`);
       }
     }
   }
@@ -1119,25 +1225,11 @@ export class CLICommands {
 
   private async createMigration(
     manager: SchemaManager,
-    schemaFile: string
+    modules: Module[]
   ): Promise<void> {
     console.log("Creating new migration...");
 
-    // Read SDL source from schema file
-    let sdlSource: string;
-
-    try {
-      sdlSource = await Deno.readTextFile(schemaFile);
-    } catch (error) {
-      if (error instanceof Deno.errors.NotFound) {
-        console.error(`Schema file not found: ${schemaFile}`);
-        return;
-      }
-      throw error;
-    }
-
-    // Plan the migration
-    const planResult = manager.planSchema(sdlSource);
+    const planResult = manager.planModules(modules);
 
     if (!planResult.ok) {
       console.error(`Migration planning failed: ${planResult.error.message}`);
@@ -1195,14 +1287,7 @@ export class CLICommands {
    * a missing-table situation is recoverable but a server that refuses
    * to start is not.
    */
-  private async autoMigrateOnServe(schemaFile: string): Promise<void> {
-    let sdlSource: string;
-    try {
-      sdlSource = await Deno.readTextFile(schemaFile);
-    } catch {
-      return;
-    }
-
+  private async autoMigrateOnServe(modules: Module[]): Promise<void> {
     const databaseUrl = Deno.env.get("DATABASE_URL");
     if (!databaseUrl)
       return;
@@ -1222,7 +1307,7 @@ export class CLICommands {
         return;
       }
 
-      const result = await manager.applySchema(sdlSource);
+      const result = await manager.applyModules(modules);
       if (!result.ok) {
         console.log(
           `  ⚠️  Auto-migrate failed: ${result.error.message}. Run 'disc migrate' manually.`
@@ -1306,7 +1391,8 @@ export class CLICommands {
 
   private async applyMigrations(
     manager: SchemaManager,
-    schemaFile: string,
+    modules: Module[],
+    sources: string[],
     dryRun: boolean,
     allowUnsafe = false,
     quiet = false
@@ -1314,23 +1400,13 @@ export class CLICommands {
     if (!quiet && dryRun) {
       console.log("Applying migrations...");
     }
-
-    // Read SDL source from schema file
-    let sdlSource: string;
-
-    try {
-      sdlSource = await Deno.readTextFile(schemaFile);
-    } catch (error) {
-      if (error instanceof Deno.errors.NotFound) {
-        console.error(`Schema file not found: ${schemaFile}`);
-        return;
-      }
-      throw error;
+    if (!quiet && sources.length > 1) {
+      console.log(`📖 Loaded ${sources.length} schema files: ${sources.map(f => f.split("/").pop()).join(", ")}`);
     }
 
     if (dryRun) {
       // Dry-run: plan and show DDL without executing
-      const planResult = manager.planSchema(sdlSource);
+      const planResult = manager.planModules(modules);
 
       if (!planResult.ok) {
         console.error(
@@ -1391,15 +1467,16 @@ export class CLICommands {
         // permissions). Fall through to the apply.
       }
 
-      // Live execution: applySchema handles parse + diff + execute. Pass
-      // through `allowUnsafe` so `--unsafe` callers aren't blocked by
-      // the destructive-op gate (gh/geldata#1838).
+      // Live execution: applyModules handles diff + execute against the
+      // pre-merged Module[] (multi-file path). Pass through `allowUnsafe`
+      // so `--unsafe` callers aren't blocked by the destructive-op gate
+      // (gh/geldata#1838).
       //
       // Per-migration progress is rendered by the progress listener wired
       // in `migrate()` (gh/geldata#7490). The legacy "Migration Results"
       // block was removed — the listener prints `[i/N] name … done in Xms`
       // and a final `✓ Applied N migrations in Yms` summary.
-      const applyResult = await manager.applySchema(sdlSource, {
+      const applyResult = await manager.applyModules(modules, {
         allowUnsafe
       });
 

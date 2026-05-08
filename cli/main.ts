@@ -292,7 +292,8 @@ ${inverse("  USAGE ")}
 
 ${inverse("  OPTIONS ")}
 
-  -s, --schema ${gray("<file>")} ${gray(".".repeat(6))} Schema file (default: ${bgBrightYellow("./dbschema/default.disc")})
+  -s, --schema ${gray("<file>")} ${gray(".".repeat(6))} Single SDL file (skips multi-file discovery)
+  --schema-dir ${gray("<dir>")} ${gray(".".repeat(7))} Multi-file schema directory (default: ${bgBrightYellow("./dbschema")})
   --dry-run ${gray(".".repeat(16))} Preview migration without executing
   --auto-approve ${gray(".".repeat(11))} Apply without interactive confirmation
   --create ${gray(".".repeat(17))} Create migration file without applying
@@ -857,6 +858,8 @@ async function main() {
           port: args.port ? parseInt(args.port) : undefined,
           readOnly: args["read-only"],
           requireAuth: args["require-auth"],
+          schemaDir: args["schema-dir"],
+          schemaFile: args.schema,
           tlsCert: args["tls-cert"],
           tlsKey: args["tls-key"],
           trustProxy: args["trust-proxy"]

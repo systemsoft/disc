@@ -65,6 +65,7 @@ export function init(options: InitOptions): Promise<void> {
 export function migrate(
   options: {
     schema?: string;
+    "schema-dir"?: string;
     "dry-run"?: boolean;
     "backend-dsn"?: string;
     quiet?: boolean;
