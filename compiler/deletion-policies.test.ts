@@ -86,6 +86,84 @@ Deno.test("Parser: on target delete set empty parses correctly", () => {
   }
 });
 
+Deno.test("Parser: on target delete delete source parses correctly", () => {
+  const sdl = `
+    type Session {
+      required link subject -> User {
+        on target delete delete source;
+      };
+    }
+    type User {
+      required name: str;
+    }
+  `;
+
+  const doc = parseSDL(sdl);
+  const sessionType = doc.declarations.find(
+    d => d.kind === "TypeDeclaration" && d.name.value === "Session"
+  );
+  assertEquals(sessionType !== undefined, true);
+
+  if (sessionType && sessionType.kind === "TypeDeclaration") {
+    const linkMember = sessionType.members.find(
+      m => m.kind === "LinkDeclaration"
+    );
+    assertEquals(linkMember !== undefined, true);
+
+    if (linkMember && linkMember.kind === "LinkDeclaration") {
+      assertEquals(linkMember.onTargetDelete, "delete source");
+    }
+  }
+});
+
+Deno.test("Differ: mapOnTargetDelete delete source returns CASCADE", () => {
+  const sdl = `
+    type Session {
+      required link subject -> User {
+        on target delete delete source;
+      };
+    }
+    type User {
+      required name: str;
+    }
+  `;
+
+  const ops = diffFromEmpty(sdl);
+  const createSession = ops.find(
+    op =>
+      op.kind === "CreateType" &&
+      (op as Types.CreateTypeOperation).typeName === "Session"
+  ) as Types.CreateTypeOperation;
+
+  assertEquals(createSession !== undefined, true);
+  const subjectLink = createSession.links.find(l => l.name === "subject");
+  assertEquals(subjectLink !== undefined, true);
+  assertEquals(subjectLink!.onTargetDelete, "CASCADE");
+});
+
+Deno.test("Parser: invalid delete policy emits hint listing valid options", () => {
+  const sdl = `
+    type A {
+      required b -> B {
+        on target delete frobnicate;
+      };
+    }
+    type B { required name: str; }
+  `;
+  const parser = new SDLParser(sdl);
+  const { errors } = parser.parseWithRecovery();
+  assertEquals(errors.length > 0, true);
+  const policyErr = errors.find(e =>
+    e.message.includes("Invalid delete policy")
+  );
+  assertEquals(policyErr !== undefined, true);
+  assertEquals(
+    policyErr!.context?.hint?.includes("delete source"),
+    true,
+    "hint should list delete source as a valid option"
+  );
+});
+
 Deno.test("Parser: on source delete allow parses correctly", () => {
   const sdl = `
     type Order {

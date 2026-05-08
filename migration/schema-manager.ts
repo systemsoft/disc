@@ -287,7 +287,12 @@ export class SchemaManager {
       const parser = new SDLParser(source);
       const { document, errors } = parser.parseWithRecovery();
       if (errors.length > 0) {
-        const lines = errors.map(e => `  • ${e.message}`).join("\n");
+        const lines = errors.map(e => {
+          const hint = e.context?.hint;
+          return hint
+            ? `  • ${e.message}\n      Hint: ${hint}`
+            : `  • ${e.message}`;
+        }).join("\n");
         return Err(
           new MigrationError(
             `Failed to parse SDL (${errors.length} error${errors.length === 1 ? "" : "s"}):\n${lines}`

@@ -1229,6 +1229,23 @@ export class SDLParser {
   private parseDeletePolicy(): AST.LinkDeclaration["onTargetDelete"] {
     const token = this.peek();
 
+    // "delete source" — when target is deleted, delete the source row too
+    if (token.type === TokenType.DELETE) {
+      this.advance();
+      const sourceToken = this.peek();
+      if (
+        sourceToken.type === TokenType.IDENT &&
+        sourceToken.value === "source"
+      ) {
+        this.advance();
+        return "delete source";
+      }
+      throw this.error(
+        `Expected 'source' after 'delete', got '${sourceToken.value}'`,
+        "Valid 'on target delete' policies: restrict, cascade, allow, deferred restrict, set empty, delete source."
+      );
+    }
+
     if (token.type === TokenType.IDENT) {
       switch (token.value) {
         case "restrict":
@@ -1242,7 +1259,11 @@ export class SDLParser {
           return "allow";
         case "deferred":
           this.advance();
-          this.consume(TokenType.IDENT, "Expected 'restrict' after 'deferred'");
+          this.consume(
+            TokenType.IDENT,
+            "Expected 'restrict' after 'deferred'",
+            "The only valid form is 'deferred restrict'."
+          );
           return "deferred restrict";
         case "set": {
           this.advance();
@@ -1255,13 +1276,17 @@ export class SDLParser {
             return "set empty";
           }
           throw this.error(
-            `Expected 'empty' after 'set', got '${nextToken.value}'`
+            `Expected 'empty' after 'set', got '${nextToken.value}'`,
+            "The only valid form is 'set empty'."
           );
         }
       }
     }
 
-    throw this.error(`Invalid delete policy: ${token.value}`);
+    throw this.error(
+      `Invalid delete policy: ${token.value}`,
+      "Valid 'on target delete' policies: restrict, cascade, allow, deferred restrict, set empty, delete source."
+    );
   }
 
   private parseSourceDeletePolicy(): AST.LinkDeclaration["onSourceDelete"] {
@@ -1290,11 +1315,15 @@ export class SDLParser {
         return "delete target";
       }
       throw this.error(
-        `Expected 'target' after 'delete', got '${targetToken.value}'`
+        `Expected 'target' after 'delete', got '${targetToken.value}'`,
+        "Valid 'on source delete' policies: allow, delete target."
       );
     }
 
-    throw this.error(`Invalid source delete policy: ${token.value}`);
+    throw this.error(
+      `Invalid source delete policy: ${token.value}`,
+      "Valid 'on source delete' policies: allow, delete target."
+    );
   }
 
   private parseTypeRef(): AST.TypeRef {
@@ -1722,10 +1751,10 @@ export class SDLParser {
     return this.tokens[this.current - 1];
   }
 
-  private consume(type: TokenType, message: string): Token {
+  private consume(type: TokenType, message: string, hint?: string): Token {
     if (this.check(type))
       return this.advance();
-    throw this.error(message);
+    throw this.error(message, hint);
   }
 
   private parseEdgeQLExpression(): AST.Expression {
@@ -1761,14 +1790,15 @@ export class SDLParser {
     return { kind: "PathExpression", path: tokens };
   }
 
-  private error(message: string): SyntaxError {
+  private error(message: string, hint?: string): SyntaxError {
     const token = this.peek();
     return new SyntaxError(message, {
       location: {
         line: token.line,
         column: token.column,
         offset: token.offset
-      }
+      },
+      hint
     });
   }
 }

@@ -161,7 +161,8 @@ export interface LinkDeclaration extends SDLNode {
     | "cascade"
     | "allow"
     | "deferred restrict"
-    | "set empty";
+    | "set empty"
+    | "delete source";
   onSourceDelete?: "allow" | "delete target";
 }
 

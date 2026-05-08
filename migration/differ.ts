@@ -626,6 +626,7 @@ export class SchemaDiffer {
       | "allow"
       | "deferred restrict"
       | "set empty"
+      | "delete source"
   ): Types.LinkDefinition["onTargetDelete"] {
     if (!value)
       return undefined;
@@ -634,6 +635,10 @@ export class SchemaDiffer {
       case "deferred restrict":
         return "RESTRICT";
       case "cascade":
+        return "CASCADE";
+      case "delete source":
+        // When the target row is deleted, delete the source row too —
+        // semantically equivalent to ON DELETE CASCADE on the FK from source→target.
         return "CASCADE";
       case "allow":
         return "SET NULL";
