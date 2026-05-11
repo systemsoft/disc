@@ -29,19 +29,19 @@ Multiple keys at the top level are implicit AND. Each scalar field is typed agai
 
 Per-field operators are nested objects. The supported set covers the common cases:
 
-| Operator | EdgeQL | Notes |
-| --- | --- | --- |
-| `eq` | `.f = $p` | Equivalent to a bare value (`{ f: x }` ≡ `{ f: { eq: x } }`) |
-| `ne` | `.f != $p` | |
-| `gt`, `gte`, `lt`, `lte` | `.f > $p` etc. | Numbers, dates, durations, strings |
-| `like`, `ilike` | `.f like $p`, `.f ilike $p` | String pattern matching |
-| `in`, `not_in` | `.f in array_unpack(<array<T>>$p)` | Array of values, lowers to `UNNEST` |
+| Operator                 | EdgeQL                             | Notes                                                        |
+| ------------------------ | ---------------------------------- | ------------------------------------------------------------ |
+| `eq`                     | `.f = $p`                          | Equivalent to a bare value (`{ f: x }` ≡ `{ f: { eq: x } }`) |
+| `ne`                     | `.f != $p`                         |                                                              |
+| `gt`, `gte`, `lt`, `lte` | `.f > $p` etc.                     | Numbers, dates, durations, strings                           |
+| `like`, `ilike`          | `.f like $p`, `.f ilike $p`        | String pattern matching                                      |
+| `in`, `not_in`           | `.f in array_unpack(<array<T>>$p)` | Array of values, lowers to `UNNEST`                          |
 
 ```ts
 await CLIENT.payment.filter({
-  amount: { gte: 100, lt: 1000 },        // range
-  status: { in: ["paid", "refunded"] },  // membership
-  email: { ilike: "%@example.com" }       // pattern
+  amount: { gte: 100, lt: 1000 }, // range
+  status: { in: ["paid", "refunded"] }, // membership
+  email: { ilike: "%@example.com" } // pattern
 });
 ```
 
@@ -54,7 +54,7 @@ Range queries on one field stay grouped (`{ amount: { gte, lt } }`) instead of b
 Top-level keys are AND. For everything else, three combinators import from your generated client:
 
 ```ts
-import { CLIENT, and, or, not } from "./dbschema/disc-client";
+import { and, CLIENT, not, or } from "./dbschema/disc-client";
 
 await CLIENT.payment.filter(
   or({ status: "paid" }, { status: "refunded" })
@@ -113,7 +113,7 @@ await CLIENT.payment.filter({
 // → ... filter .merchant_id = $1
 ```
 
-When the path ends at `.id`, the foreign-key column on the source table *is* the target's id, so the SQL collapses to a plain column comparison — no subquery, no JOIN.
+When the path ends at `.id`, the foreign-key column on the source table _is_ the target's id, so the SQL collapses to a plain column comparison — no subquery, no JOIN.
 
 ### Single link, terminal property — correlated subquery
 
@@ -179,7 +179,7 @@ Reserved keys `order_by`, `limit`, `offset` sit alongside your predicates at the
 ```ts
 await CLIENT.payment.filter({
   status: "paid",
-  order_by: "-created",   // `-` prefix means desc
+  order_by: "-created", // `-` prefix means desc
   limit: 10,
   offset: 20
 });
@@ -189,7 +189,7 @@ await CLIENT.payment.filter({
 
 ```ts
 await CLIENT.payment.filter({
-  order_by: ["-created", "amount"]   // newest first, then amount asc
+  order_by: ["-created", "amount"] // newest first, then amount asc
 });
 // → ... order by .created desc then .amount
 ```

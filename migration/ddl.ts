@@ -1530,7 +1530,8 @@ END $$;`,
   }
 
   private isNumericPgType(type: string): boolean {
-    if (this.isIntegerPgType(type)) return true;
+    if (this.isIntegerPgType(type))
+      return true;
     const t = type.toLowerCase();
     return t === "float32" || t === "float64" || t === "decimal" ||
       t === "real" || t === "double precision" || t === "numeric";

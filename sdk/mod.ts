@@ -24,7 +24,18 @@ export { createSubscriptionClient, SubscriptionClient } from "./subscription.ts"
 // `and` / `or` / `not` are unified combinators: they accept either runtime-DSL
 // Expr nodes (FieldRef-based predicates) or codegen Filter objects.
 export { and, createQueryBuilder, from, not, or, SelectChain } from "./query-builder.ts";
-export type { CompiledQuery, Expr, FilterArg, QueryBuilder, QueryRunner, Shape, TypedFieldRef, TypedQueryBuilder, TypedRef, TypedSelectChain } from "./query-builder.ts";
+export type {
+  CompiledQuery,
+  Expr,
+  FilterArg,
+  QueryBuilder,
+  QueryRunner,
+  Shape,
+  TypedFieldRef,
+  TypedQueryBuilder,
+  TypedRef,
+  TypedSelectChain
+} from "./query-builder.ts";
 
 // Codegen filter compiler — used by generated `client.<type>.filter()`
 export { compileFilter } from "./filter-compiler.ts";

@@ -241,7 +241,8 @@ export class TypeScriptGenerator {
 
     // Properties
     for (const [propName, prop] of typeDef.properties) {
-      if (propName === "id") continue;
+      if (propName === "id")
+        continue;
       content += this.generatePropertyDefinition(propName, prop, indent);
     }
 
@@ -453,7 +454,8 @@ export class TypeScriptGenerator {
     // and their cast would be the `<auto>` placeholder.
     const typeInfoCastEntries: string[] = [];
     for (const [propName, prop] of typeDef.properties) {
-      if (prop.computed) continue;
+      if (prop.computed)
+        continue;
       const edgeqlType = prop.edgeqlType ?? prop.type;
       const cast = Types.mapEdgeQLTypeToEdgeQLCast(edgeqlType);
       typeInfoCastEntries.push(`      ${propName}: "${cast}"`);
@@ -463,9 +465,9 @@ export class TypeScriptGenerator {
       // link.target may be module-qualified (e.g. "default::Merchant"); all
       // builders share queries.ts and are referenced by bare class name, so
       // drop the module prefix before composing the builder identifier.
-      const targetTypeName = link.target.includes("::")
-        ? link.target.split("::").pop()!
-        : link.target;
+      const targetTypeName = link.target.includes("::") ?
+        link.target.split("::").pop()! :
+        link.target;
       const targetBuilder = `${this.getTypeScriptTypeName(targetTypeName)}QueryBuilder`;
       typeInfoLinkEntries.push(
         `      ${linkName}: () => ${targetBuilder}._typeInfo`
@@ -944,9 +946,9 @@ export interface StrOp extends OrdOp<string> {
     }
 
     for (const [linkName, link] of typeDef.links) {
-      const targetTs = currentModule
-        ? this.resolveTypeReference(link.target, currentModule)
-        : this.getTypeScriptTypeName(link.target);
+      const targetTs = currentModule ?
+        this.resolveTypeReference(link.target, currentModule) :
+        this.getTypeScriptTypeName(link.target);
       content += `${indent}  ${linkName}?: ${targetTs}Filter;\n`;
     }
 
@@ -975,9 +977,9 @@ export interface StrOp extends OrdOp<string> {
       content += `${indent}  ${propName}?: boolean;\n`;
     }
     for (const [linkName, link] of typeDef.links) {
-      const targetTs = currentModule
-        ? this.resolveTypeReference(link.target, currentModule)
-        : this.getTypeScriptTypeName(link.target);
+      const targetTs = currentModule ?
+        this.resolveTypeReference(link.target, currentModule) :
+        this.getTypeScriptTypeName(link.target);
       content += `${indent}  ${linkName}?: boolean | ${targetTs}Select;\n`;
     }
     content += `${indent}}\n`;

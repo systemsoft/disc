@@ -5,7 +5,6 @@
 
 import * as Codegen from "../codegen/mod.ts";
 import { extractEmbeddedSdk } from "../codegen/sdk-extractor.ts";
-import { VERSION } from "../mod.ts";
 import type { Schema } from "../compiler/context.ts";
 import { introspectDatabase } from "../compiler/pg-introspect-queries.ts";
 import { buildSchemaFromIntrospection } from "../compiler/pg-introspect.ts";
@@ -16,6 +15,7 @@ import { resolveDsn, resolveProjectContext } from "../lib/project-context.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
 import { MigrationSquasher, SquashableMigration } from "../migration/squash.ts";
 import type { MigrationProgressEvent, MigrationProgressListener } from "../migration/types.ts";
+import { VERSION } from "../mod.ts";
 import { ensurePgRunning } from "../postgres/ensure-running.ts";
 import { PostgresManager } from "../postgres/mod.ts";
 import type { Module } from "../schema/converter.ts";

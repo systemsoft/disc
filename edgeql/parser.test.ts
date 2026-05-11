@@ -871,7 +871,8 @@ Deno.test("EdgeQL Parser - SELECT with { * } splat shape", () => {
 Deno.test("EdgeQL Parser - { * } splat coexists with FILTER and ORDER BY", () => {
   const ast = new EdgeQLParser(
     "SELECT User { * } FILTER .active = true ORDER BY .name"
-  ).parse();
+  )
+    .parse();
   assertEquals(ast.kind, "SelectQuery");
   if (ast.kind === "SelectQuery") {
     assertEquals(ast.shape?.elements[0].splat, true);
@@ -885,7 +886,8 @@ Deno.test("EdgeQL Parser - { * } splat coexists with FILTER and ORDER BY", () =>
 Deno.test("EdgeQL Parser - SELECT with LIMIT then OFFSET", () => {
   const ast = new EdgeQLParser(
     "SELECT User { id } LIMIT 10 OFFSET 20"
-  ).parse();
+  )
+    .parse();
   assertEquals(ast.kind, "SelectQuery");
   if (ast.kind === "SelectQuery") {
     assertEquals(ast.limit?.kind, "Literal");
@@ -896,7 +898,8 @@ Deno.test("EdgeQL Parser - SELECT with LIMIT then OFFSET", () => {
 Deno.test("EdgeQL Parser - SELECT with OFFSET then LIMIT", () => {
   const ast = new EdgeQLParser(
     "SELECT User { id } OFFSET 20 LIMIT 10"
-  ).parse();
+  )
+    .parse();
   assertEquals(ast.kind, "SelectQuery");
   if (ast.kind === "SelectQuery") {
     assertEquals(ast.limit?.kind, "Literal");
@@ -909,7 +912,8 @@ Deno.test("EdgeQL Parser - SELECT with OFFSET then LIMIT", () => {
 Deno.test("EdgeQL Parser - ORDER BY with multiple keys joined by THEN", () => {
   const ast = new EdgeQLParser(
     "SELECT User { id } ORDER BY .createdAt DESC THEN .name"
-  ).parse();
+  )
+    .parse();
   assertEquals(ast.kind, "SelectQuery");
   if (ast.kind === "SelectQuery") {
     assertEquals(ast.orderBy?.length, 2);
@@ -921,7 +925,8 @@ Deno.test("EdgeQL Parser - ORDER BY with multiple keys joined by THEN", () => {
 Deno.test("EdgeQL Parser - ORDER BY with three keys via THEN", () => {
   const ast = new EdgeQLParser(
     "SELECT User { id } ORDER BY .a THEN .b DESC THEN .c"
-  ).parse();
+  )
+    .parse();
   assertEquals(ast.kind, "SelectQuery");
   if (ast.kind === "SelectQuery") {
     assertEquals(ast.orderBy?.length, 3);
@@ -933,7 +938,8 @@ Deno.test("EdgeQL Parser - ORDER BY with three keys via THEN", () => {
 Deno.test("EdgeQL Parser - cast with <array<str>> nested generic type", () => {
   const ast = new EdgeQLParser(
     "SELECT User { id } FILTER .name IN array_unpack(<array<str>>$names)"
-  ).parse();
+  )
+    .parse();
   assertEquals(ast.kind, "SelectQuery");
 });
 
@@ -942,7 +948,8 @@ Deno.test("EdgeQL Parser - parseTypeName captures subtypes on <array<int64>>", (
   // Use a bare cast so we can inspect the AST shape directly.
   const ast = new EdgeQLParser(
     "SELECT <array<int64>>$ids"
-  ).parse();
+  )
+    .parse();
   assertEquals(ast.kind, "SelectQuery");
   if (ast.kind === "SelectQuery" && ast.expr.kind === "TypeCast") {
     assertEquals(ast.expr.type.name.parts, ["array"]);

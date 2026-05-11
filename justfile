@@ -52,6 +52,9 @@ clean:
 dev:
   deno run --allow-env --allow-net --allow-read --allow-write --watch cli/main.ts development
 
+format:
+  dprint fmt
+
 release: version clean build
   @echo "[INFO] Release versioned and built"
 

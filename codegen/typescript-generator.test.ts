@@ -1413,7 +1413,8 @@ Deno.test("colon-form property targeting an object type is reclassified as a lin
     }
   `;
   const parsed = sm.parseSDL(sdl);
-  if (!parsed.ok) throw parsed.error;
+  if (!parsed.ok)
+    throw parsed.error;
   const schema = sm.modulesToSchema(parsed.value);
 
   const apiKey = schema.types.get("api::ApiKey")!;

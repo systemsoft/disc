@@ -28,8 +28,8 @@ import { SQLCodeGenerator } from "../compiler/codegen.ts";
 import { EdgeQLCompiler } from "../compiler/compiler.ts";
 import { createTestSchema } from "../compiler/context.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
-import { and, not, or } from "./query-builder.ts";
 import { compileFilter, type TypeInfo } from "./filter-compiler.ts";
+import { and, not, or } from "./query-builder.ts";
 
 const schema = createTestSchema();
 const codegen = new SQLCodeGenerator();

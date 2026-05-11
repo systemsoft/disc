@@ -153,9 +153,7 @@ Deno.test("Parser: invalid delete policy emits hint listing valid options", () =
   const parser = new SDLParser(sdl);
   const { errors } = parser.parseWithRecovery();
   assertEquals(errors.length > 0, true);
-  const policyErr = errors.find(e =>
-    e.message.includes("Invalid delete policy")
-  );
+  const policyErr = errors.find(e => e.message.includes("Invalid delete policy"));
   assertEquals(policyErr !== undefined, true);
   assertEquals(
     policyErr!.context?.hint?.includes("delete source"),

@@ -26,7 +26,7 @@ declare global {
 const MAX_SAFE = BigInt(Number.MAX_SAFE_INTEGER);
 const MIN_SAFE = BigInt(Number.MIN_SAFE_INTEGER);
 
-(BigInt.prototype as unknown as { toJSON(): number | string; }).toJSON = function () {
+(BigInt.prototype as unknown as { toJSON(): number | string; }).toJSON = function() {
   const value = this as unknown as bigint;
   if (value >= MIN_SAFE && value <= MAX_SAFE) {
     return Number(value);

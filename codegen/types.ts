@@ -306,9 +306,9 @@ export function mapEdgeQLTypeToTypeScript(
     // For object types, use the type name directly. Strip any `module::`
     // qualifier so the bare type name lands in TS — cross-module routing is
     // handled by `resolveTypeReference` higher up in the generator.
-    let tsType = edgeqlType.includes("::")
-      ? edgeqlType.split("::").pop()!
-      : edgeqlType;
+    let tsType = edgeqlType.includes("::") ?
+      edgeqlType.split("::").pop()! :
+      edgeqlType;
 
     if (multi) {
       tsType += "[]";

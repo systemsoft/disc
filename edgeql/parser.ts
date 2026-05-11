@@ -509,9 +509,9 @@ export class EdgeQLParser {
       instance: "INSTANCE",
       system: "SYSTEM"
     };
-    const scope = this.check(TokenType.IDENT)
-      ? scopeKeywords[this.peek().value.toLowerCase()]
-      : undefined;
+    const scope = this.check(TokenType.IDENT) ?
+      scopeKeywords[this.peek().value.toLowerCase()] :
+      undefined;
     if (!scope) {
       throw this.error(
         `Expected 'SESSION', 'DATABASE', 'INSTANCE', or 'SYSTEM' after 'CONFIGURE', got '${this.peek().value}'`

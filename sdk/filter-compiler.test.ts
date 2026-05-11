@@ -9,9 +9,9 @@
  */
 
 import { assertEquals, assertThrows } from "@std/assert";
-import { and, not, or } from "./query-builder.ts";
 import type { TypeInfo } from "./filter-compiler.ts";
 import { compileFilter } from "./filter-compiler.ts";
+import { and, not, or } from "./query-builder.ts";
 
 const merchantInfo: TypeInfo = {
   casts: {

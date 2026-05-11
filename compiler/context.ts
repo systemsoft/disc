@@ -451,9 +451,9 @@ export function isEnumType(schema: Schema, name: string): boolean {
  * prefix avoids colliding with user-supplied PG enums.
  */
 export function getEnumSqlType(name: string): string {
-  const simpleName = name.includes("::")
-    ? name.slice(name.lastIndexOf("::") + 2)
-    : name;
+  const simpleName = name.includes("::") ?
+    name.slice(name.lastIndexOf("::") + 2) :
+    name;
   return `disc_enum_${simpleName.toLowerCase()}`;
 }
 

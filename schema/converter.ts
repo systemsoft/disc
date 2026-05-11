@@ -67,13 +67,20 @@ export function normalizeArrowsToProperties(modules: Module[]): Module[] {
           name: link.name,
           type: link.target
         };
-        if (link.required !== undefined) property.required = link.required;
-        if (link.multi !== undefined) property.multi = link.multi;
-        if (link.readonly !== undefined) property.readonly = link.readonly;
-        if (link.computed !== undefined) property.computed = link.computed;
-        if (link.default !== undefined) property.default = link.default;
-        if (link.constraints !== undefined) property.constraints = link.constraints;
-        if (link.annotations !== undefined) property.annotations = link.annotations;
+        if (link.required !== undefined)
+          property.required = link.required;
+        if (link.multi !== undefined)
+          property.multi = link.multi;
+        if (link.readonly !== undefined)
+          property.readonly = link.readonly;
+        if (link.computed !== undefined)
+          property.computed = link.computed;
+        if (link.default !== undefined)
+          property.default = link.default;
+        if (link.constraints !== undefined)
+          property.constraints = link.constraints;
+        if (link.annotations !== undefined)
+          property.annotations = link.annotations;
         return property;
       });
       return { ...typeDecl, members: newMembers };

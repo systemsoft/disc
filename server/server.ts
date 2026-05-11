@@ -315,7 +315,9 @@ export class DiscServer {
           );
           this.protocolHandler.updateSchema(merged);
           logger.info(
-            `Merged ${extFunctions.length} extension function${extFunctions.length === 1 ? "" : "s"} and ${extTypes.length} extension type${extTypes.length === 1 ? "" : "s"} into schema`
+            `Merged ${extFunctions.length} extension function${extFunctions.length === 1 ? "" : "s"} and ${extTypes.length} extension type${
+              extTypes.length === 1 ? "" : "s"
+            } into schema`
           );
         }
       }

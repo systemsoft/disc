@@ -27,9 +27,9 @@
  * the constraint references a relation that doesn't exist.
  */
 export function typeNameToTableName(typeName: string): string {
-  const unqualified = typeName.includes("::")
-    ? typeName.slice(typeName.lastIndexOf("::") + 2)
-    : typeName;
+  const unqualified = typeName.includes("::") ?
+    typeName.slice(typeName.lastIndexOf("::") + 2) :
+    typeName;
   return unqualified
     .replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
     .replace(/([a-z\d])([A-Z])/g, "$1_$2")

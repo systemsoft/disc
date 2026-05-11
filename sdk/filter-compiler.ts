@@ -58,7 +58,7 @@ const OP_MAP: Record<string, string> = {
   like: "like",
   ilike: "ilike",
   in: "in",
-  "not_in": "not in"
+  not_in: "not in"
 };
 
 /** Operators whose RHS must be an array unpacked into a set. */
@@ -75,9 +75,9 @@ interface Ctx {
 }
 
 function isExpr(x: unknown): x is Expr {
-  return typeof x === "object" && x !== null && "kind" in x
-    && typeof (x as { kind: unknown; }).kind === "string"
-    && ["binop", "exists", "and", "or", "not"].includes(
+  return typeof x === "object" && x !== null && "kind" in x &&
+    typeof (x as { kind: unknown; }).kind === "string" &&
+    ["binop", "exists", "and", "or", "not"].includes(
       (x as { kind: string; }).kind
     );
 }
@@ -220,15 +220,11 @@ function compileArg(arg: FilterArg, info: TypeInfo, ctx: Ctx): string {
 function compileExpr(expr: Expr, info: TypeInfo, ctx: Ctx): string {
   switch (expr.kind) {
     case "and": {
-      const parts = expr.exprs.map(c =>
-        `(${compileArg(c, info, ctx)})`
-      );
+      const parts = expr.exprs.map(c => `(${compileArg(c, info, ctx)})`);
       return parts.join(" and ");
     }
     case "or": {
-      const parts = expr.exprs.map(c =>
-        `(${compileArg(c, info, ctx)})`
-      );
+      const parts = expr.exprs.map(c => `(${compileArg(c, info, ctx)})`);
       return parts.join(" or ");
     }
     case "not": {
@@ -237,8 +233,8 @@ function compileExpr(expr: Expr, info: TypeInfo, ctx: Ctx): string {
     case "binop":
     case "exists":
       throw new Error(
-        `Filter compiler received a runtime-DSL ${expr.kind} Expr — `
-          + `those are for the SelectChain DSL only. Use Filter objects instead.`
+        `Filter compiler received a runtime-DSL ${expr.kind} Expr — ` +
+          `those are for the SelectChain DSL only. Use Filter objects instead.`
       );
   }
 }
@@ -278,8 +274,8 @@ function compileObject(
         const sqlOp = OP_MAP[op];
         if (!sqlOp) {
           throw new Error(
-            `Unknown operator "${op}" on field "${key}" — `
-              + `expected one of ${Object.keys(OP_MAP).join(", ")}`
+            `Unknown operator "${op}" on field "${key}" — ` +
+              `expected one of ${Object.keys(OP_MAP).join(", ")}`
           );
         }
         const param = `p${ctx.nextN++}`;

@@ -2597,8 +2597,8 @@ export class EdgeQLCompiler {
         }
       }
       throw new CompilationError(
-        `Multi-step path '.${path.steps.map(s => s.name).join(".")}' not supported `
-          + `(every intermediate step must be a single-cardinality link)`
+        `Multi-step path '.${path.steps.map(s => s.name).join(".")}' not supported ` +
+          `(every intermediate step must be a single-cardinality link)`
       );
     }
 
@@ -2618,7 +2618,8 @@ export class EdgeQLCompiler {
       "ILIKE",
       "IN",
       "NOT IN"
-    ].includes(op);
+    ]
+      .includes(op);
   }
 
   /**
@@ -2693,9 +2694,9 @@ export class EdgeQLCompiler {
         const jAlias = `__j_${firstStep.name}`;
 
         if (secondStep.name === "id") {
-          const sql = `EXISTS (SELECT 1 FROM "${link.junctionTable}" "${jAlias}" `
-            + `WHERE "${jAlias}"."${sourceCol}" = "${ta.alias}"."id" `
-            + `AND "${jAlias}"."${targetCol}" ${op} ${rhsSql})`;
+          const sql = `EXISTS (SELECT 1 FROM "${link.junctionTable}" "${jAlias}" ` +
+            `WHERE "${jAlias}"."${sourceCol}" = "${ta.alias}"."id" ` +
+            `AND "${jAlias}"."${targetCol}" ${op} ${rhsSql})`;
           return { kind: "RawSQLExpression", sql };
         }
 
@@ -2704,11 +2705,11 @@ export class EdgeQLCompiler {
         if (!prop?.columnName)
           return null;
 
-        const sql = `EXISTS (SELECT 1 FROM "${link.junctionTable}" "${jAlias}" `
-          + `INNER JOIN "${targetType.tableName}" "${tAlias}" `
-          + `ON "${tAlias}"."id" = "${jAlias}"."${targetCol}" `
-          + `WHERE "${jAlias}"."${sourceCol}" = "${ta.alias}"."id" `
-          + `AND "${tAlias}"."${prop.columnName}" ${op} ${rhsSql})`;
+        const sql = `EXISTS (SELECT 1 FROM "${link.junctionTable}" "${jAlias}" ` +
+          `INNER JOIN "${targetType.tableName}" "${tAlias}" ` +
+          `ON "${tAlias}"."id" = "${jAlias}"."${targetCol}" ` +
+          `WHERE "${jAlias}"."${sourceCol}" = "${ta.alias}"."id" ` +
+          `AND "${tAlias}"."${prop.columnName}" ${op} ${rhsSql})`;
         return { kind: "RawSQLExpression", sql };
       }
 
@@ -2734,9 +2735,9 @@ export class EdgeQLCompiler {
       }
 
       const subAlias = `__sub_${firstStep.name}`;
-      const sql = `EXISTS (SELECT 1 FROM "${targetType.tableName}" "${subAlias}" `
-        + `WHERE "${subAlias}"."${fkColumn}" = "${ta.alias}"."id" `
-        + `AND "${subAlias}"."${targetColName}" ${op} ${rhsSql})`;
+      const sql = `EXISTS (SELECT 1 FROM "${targetType.tableName}" "${subAlias}" ` +
+        `WHERE "${subAlias}"."${fkColumn}" = "${ta.alias}"."id" ` +
+        `AND "${subAlias}"."${targetColName}" ${op} ${rhsSql})`;
       return { kind: "RawSQLExpression", sql };
     }
     return null;
@@ -2775,8 +2776,10 @@ export class EdgeQLCompiler {
     for (const ta of this.ctx.currentScope.aliases.values()) {
       const sourceType = Context.resolveTypeName(this.ctx, ta.type);
       const firstLink = sourceType?.links.get(stepNames[0]);
-      if (!firstLink || firstLink.multi || firstLink.junctionTable
-        || !firstLink.columnName) {
+      if (
+        !firstLink || firstLink.multi || firstLink.junctionTable ||
+        !firstLink.columnName
+      ) {
         // Wrong alias scope, or first link isn't a single-cardinality
         // link we can FK-walk. Try the next alias; if none match we
         // return null and the caller produces a clear error.
@@ -2797,9 +2800,8 @@ export class EdgeQLCompiler {
         if (!link || link.multi || link.junctionTable || !link.columnName) {
           return null;
         }
-        currentSql =
-          `(SELECT "${link.columnName}" FROM "${currentTargetType.tableName}" `
-          + `WHERE "id" = ${currentSql})`;
+        currentSql = `(SELECT "${link.columnName}" FROM "${currentTargetType.tableName}" ` +
+          `WHERE "id" = ${currentSql})`;
         const next = Context.resolveTypeName(this.ctx, link.target);
         if (!next)
           return null;
@@ -2818,9 +2820,8 @@ export class EdgeQLCompiler {
       if (!targetProp?.columnName)
         return null;
 
-      const sql =
-        `(SELECT "${targetProp.columnName}" FROM "${currentTargetType.tableName}" `
-        + `WHERE "id" = ${currentSql})`;
+      const sql = `(SELECT "${targetProp.columnName}" FROM "${currentTargetType.tableName}" ` +
+        `WHERE "id" = ${currentSql})`;
       return { kind: "RawSQLExpression", sql };
     }
     return null;

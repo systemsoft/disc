@@ -143,9 +143,9 @@ interface CompileCtx {
 }
 
 function isExpr(x: FilterArg): x is Expr {
-  return typeof x === "object" && x !== null && "kind" in x
-    && typeof (x as { kind: unknown; }).kind === "string"
-    && ["binop", "exists", "and", "or", "not"].includes(
+  return typeof x === "object" && x !== null && "kind" in x &&
+    typeof (x as { kind: unknown; }).kind === "string" &&
+    ["binop", "exists", "and", "or", "not"].includes(
       (x as { kind: string; }).kind
     );
 }
@@ -153,9 +153,9 @@ function isExpr(x: FilterArg): x is Expr {
 function compileExpr(arg: FilterArg, ctx: CompileCtx): string {
   if (!isExpr(arg)) {
     throw new Error(
-      "Plain Filter objects are not supported in the runtime SelectChain DSL. "
-        + "Use FieldRef-based predicates (e.g., ref => ref.email.eq(\"x\")), "
-        + "or compile via the codegen client's filter() method."
+      "Plain Filter objects are not supported in the runtime SelectChain DSL. " +
+        "Use FieldRef-based predicates (e.g., ref => ref.email.eq(\"x\")), " +
+        "or compile via the codegen client's filter() method."
     );
   }
   switch (arg.kind) {
