@@ -342,7 +342,7 @@ function buttonHtml(href: string, label: string, branding: BrandingCtx): string 
     `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="border-collapse: collapse; margin: 16px 0;">`,
     "<tr>",
     `<td bgcolor="${bg}" style="border-radius: 4px; mso-padding-alt: 12px 20px;">`,
-    `<a href="${escapedHref}" style="display: inline-block; padding: 12px 20px; background-color: ${bg}; color: #fff; text-decoration: none; border-radius: 4px; font-weight: 600;">${escapedLabel}</a>`,
+    `<a href="${escapedHref}" style="display: inline-block; padding: 12px 20px; background: ${bg}; color: #fff; text-decoration: none; border-radius: 4px; font-weight: 600;">${escapedLabel}</a>`,
     "</td>",
     "</tr>",
     "</table>"

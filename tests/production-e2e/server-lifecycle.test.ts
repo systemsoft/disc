@@ -219,7 +219,8 @@ Deno.test(
       updatePassword: () => async (_req: Request) => new Response("ok"),
       resetPasswordRequest: () => async (_req: Request) => new Response("ok"),
       resetPassword: () => async (_req: Request) => new Response("ok"),
-      verifyEmail: () => async (_req: Request) => new Response("ok")
+      verifyEmail: () => async (_req: Request) => new Response("ok"),
+      dispose: () => {}
     } as unknown as AuthRoutes;
 
     const { port, cleanup } = withTestServer(handler, {}, {

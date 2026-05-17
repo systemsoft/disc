@@ -42,10 +42,10 @@ Deno.test("Gel #4408: Deno-task surface is the lint/fmt/test entry point", async
 
   // The commit skill and CI run these specific tasks. Renaming or removing
   // any of them is the change that requires deliberate review.
-  for (const requiredTask of ["lint", "fmt", "test", "check"]) {
+  for (const requiredTask of ["lint", "format", "test", "check"]) {
     assert(
       typeof tasks[requiredTask] === "string",
-      `deno.json:tasks.${requiredTask} is missing — Disc's lint/fmt/test surface relies on it (Gel #4408 pin).`
+      `deno.json:tasks.${requiredTask} is missing — Disc's lint/format/test surface relies on it (Gel #4408 pin).`
     );
   }
 
@@ -55,9 +55,9 @@ Deno.test("Gel #4408: Deno-task surface is the lint/fmt/test entry point", async
   const checkTask = tasks.check ?? "";
   assert(
     checkTask.includes("deno task lint") &&
-      checkTask.includes("deno task fmt") &&
+      checkTask.includes("deno task format") &&
       checkTask.includes("deno task test"),
-    `deno.json:tasks.check should compose lint + fmt + test; got: ${checkTask}`
+    `deno.json:tasks.check should compose lint + format + test; got: ${checkTask}`
   );
 });
 
@@ -380,8 +380,10 @@ Deno.test("Gel #4319: migration apply runs in-process (no subprocess fork)", asy
     "engine.ts must not spawn subprocesses for migration apply (Gel #4319 pin)"
   );
   // Single-transaction apply: pool.transaction wraps the whole DDL batch.
+  // Accept either `async conn =>` or `async (conn) =>` since dprint strips
+  // single-param parens.
   assert(
-    /pool\.transaction\(async \(conn\)/.test(src),
+    /pool\.transaction\(async \(?conn\)?/.test(src),
     "engine.ts must apply DDL in a single in-process transaction (Gel #4319 pin)"
   );
 });
@@ -1687,9 +1689,12 @@ Deno.test("Gel #7724: auth extension bootstrap is idempotent (extension upgrade 
   const src = await Deno.readTextFile(
     new URL("../auth/provider.ts", import.meta.url)
   );
-  // Strip JS line comments before counting so "// The CREATE TABLE
-  // above ..." doesn't count as a SQL statement.
-  const codeOnly = src.replace(/\/\/[^\n]*/g, "");
+  // Strip JS comments (line + block, including the `/*** ***/` variant)
+  // before counting so prose like "The CREATE TABLE above ..." inside a
+  // comment doesn't count as a SQL statement.
+  const codeOnly = src
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/\/\/[^\n]*/g, "");
   // Count every CREATE TABLE and every CREATE TABLE IF NOT EXISTS in
   // actual SQL strings; they must match.
   const allCreates = (codeOnly.match(/CREATE TABLE/g) ?? []).length;

@@ -42,18 +42,19 @@ Deno.test({
 
     try {
       // Create the PG enum type and table manually.
-      // The enum type name must be "status" (not "status_type") because
-      // the compiler uses getEnumSqlType("Status") -> "status" for casts.
+      // The enum type name must match `getEnumSqlType("Status")` →
+      // `disc_enum_status` (see compiler/context.ts; mirrors
+      // migration/ddl.ts `enumTypeName()`).
       await pool.query("DROP TABLE IF EXISTS items CASCADE");
-      await pool.query("DROP TYPE IF EXISTS status CASCADE");
+      await pool.query("DROP TYPE IF EXISTS disc_enum_status CASCADE");
       await pool.query(
-        "CREATE TYPE status AS ENUM ('active', 'inactive', 'pending')"
+        "CREATE TYPE disc_enum_status AS ENUM ('active', 'inactive', 'pending')"
       );
       await pool.query(`
         CREATE TABLE items (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
           name VARCHAR NOT NULL,
-          status status NOT NULL
+          status disc_enum_status NOT NULL
         )
       `);
 
@@ -145,7 +146,7 @@ Deno.test({
       );
     } finally {
       await pool.query("DROP TABLE IF EXISTS items CASCADE");
-      await pool.query("DROP TYPE IF EXISTS status CASCADE");
+      await pool.query("DROP TYPE IF EXISTS disc_enum_status CASCADE");
       await pool.close();
     }
   }
