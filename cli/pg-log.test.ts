@@ -1,12 +1,23 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
+/*** NATIVE ------------------------------------------- ***/
+
 import { assertEquals, assertRejects } from "@std/assert";
 import { join } from "@std/path";
+
+/*** UTILITY ------------------------------------------ ***/
+
 import { PgLogCommand } from "./pg-log.ts";
+
+/*** RUNTIME ------------------------------------------ ***/
 
 Deno.test("PgLogCommand - resolves log path from project name", () => {
   const command = new PgLogCommand();
-  // Access the private method via prototype for testing
+  /*** Access the private method via prototype for testing ***/
   const resolveLogPath = (command as any).resolveLogPath.bind(command);
   const path = resolveLogPath("test-project");
+
   const expected = join(
     Deno.env.get("HOME")!,
     ".disc",
@@ -15,6 +26,7 @@ Deno.test("PgLogCommand - resolves log path from project name", () => {
     "logs",
     "postgresql.log"
   );
+
   assertEquals(path, expected);
 });
 
@@ -22,76 +34,40 @@ Deno.test("PgLogCommand - filterByLevel matches correct levels", () => {
   const command = new PgLogCommand();
   const filterByLevel = (command as any).filterByLevel.bind(command);
 
-  assertEquals(
-    filterByLevel(
-      "2024-01-15 10:30:00.000 UTC [123] ERROR:  something failed",
-      "ERROR"
-    ),
-    true
-  );
-  assertEquals(
-    filterByLevel(
-      "2024-01-15 10:30:00.000 UTC [123] LOG:  checkpoint starting",
-      "ERROR"
-    ),
-    false
-  );
-  assertEquals(
-    filterByLevel(
-      "2024-01-15 10:30:00.000 UTC [123] WARNING:  setting changed",
-      "WARNING"
-    ),
-    true
-  );
-  assertEquals(
-    filterByLevel(
-      "2024-01-15 10:30:00.000 UTC [123] FATAL:  could not bind",
-      "FATAL"
-    ),
-    true
-  );
+  assertEquals(filterByLevel("2024-01-15 10:30:00.000 UTC [123] ERROR:  something failed", "ERROR"), true);
+  assertEquals(filterByLevel("2024-01-15 10:30:00.000 UTC [123] LOG:  checkpoint starting", "ERROR"), false);
+  assertEquals(filterByLevel("2024-01-15 10:30:00.000 UTC [123] WARNING:  setting changed", "WARNING"), true);
+  assertEquals(filterByLevel("2024-01-15 10:30:00.000 UTC [123] FATAL:  could not bind", "FATAL"), true);
 });
 
 Deno.test("PgLogCommand - filterByLevel rejects non-matching levels", () => {
   const command = new PgLogCommand();
   const filterByLevel = (command as any).filterByLevel.bind(command);
 
-  assertEquals(
-    filterByLevel(
-      "2024-01-15 10:30:00.000 UTC [123] LOG:  statement ok",
-      "ERROR"
-    ),
-    false
-  );
-  assertEquals(
-    filterByLevel("some random line without a timestamp", "ERROR"),
-    false
-  );
+  assertEquals(filterByLevel("2024-01-15 10:30:00.000 UTC [123] LOG:  statement ok", "ERROR"), false);
+  assertEquals(filterByLevel("some random line without a timestamp", "ERROR"), false);
 });
 
 Deno.test("PgLogCommand - default lines is 50", async () => {
-  // Create a temporary log file with 100 lines
+  /*** Create a temporary log file with 100 lines ***/
   const tmpDir = await Deno.makeTempDir();
   const project = "test-lines";
   const logDir = join(tmpDir, project, "logs");
   await Deno.mkdir(logDir, { recursive: true });
 
-  const lines = Array.from(
-    { length: 100 },
-    (_, i) => `2024-01-15 10:30:00.000 UTC [123] LOG:  line ${i + 1}`
-  );
+  const lines = Array.from({ length: 100 }, (_, i) => `2024-01-15 10:30:00.000 UTC [123] LOG:  line ${i + 1}`);
   await Deno.writeTextFile(join(logDir, "postgresql.log"), lines.join("\n"));
 
-  // Verify the log file was created with the expected number of lines
+  /*** Verify the log file was created with the expected number of lines ***/
   const content = await Deno.readTextFile(join(logDir, "postgresql.log"));
   const writtenLines = content.split("\n");
   assertEquals(writtenLines.length, 100);
 
-  // Verify that the file content starts and ends as expected
+  /*** Verify that the file content starts and ends as expected ***/
   assertEquals(writtenLines[0].includes("line 1"), true);
   assertEquals(writtenLines[99].includes("line 100"), true);
 
-  // Clean up
+  /*** Clean up ***/
   await Deno.remove(tmpDir, { recursive: true });
 });
 
@@ -101,9 +77,9 @@ Deno.test("PgLogCommand - throws error when no log file exists", async () => {
   await assertRejects(
     () =>
       command.execute({
-        lines: 50,
         follow: false,
         level: undefined,
+        lines: 50,
         project: "nonexistent-project-12345"
       }),
     Error,
@@ -117,9 +93,9 @@ Deno.test("PgLogCommand - throws helpful message with project name", async () =>
   await assertRejects(
     () =>
       command.execute({
-        lines: 50,
         follow: false,
         level: undefined,
+        lines: 50,
         project: "my-test-project"
       }),
     Error,

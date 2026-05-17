@@ -1,6 +1,14 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 import { assertEquals, assertNotEquals } from "@std/assert";
 import { join } from "@std/path";
-import { isPgRunning, type ProjectContext, resolveDsn, resolveProjectContext } from "./project-context.ts";
+import {
+  isPgRunning,
+  resolveDsn,
+  resolveProjectContext,
+  type ProjectContext
+} from "./project-context.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers

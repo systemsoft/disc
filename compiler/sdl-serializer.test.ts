@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * SDL serializer (#702 + #7469 — Phase 1)
  *
@@ -17,8 +20,9 @@ import { serializeSchema, serializeType } from "./sdl-serializer.ts";
 
 function makeSchema(types: TypeDef[]): Schema {
   const m = new Map<string, TypeDef>();
-  for (const t of types)
+  for (const t of types) {
     m.set(t.name, t);
+  }
   return { types: m, functions: getBuiltinFunctions() };
 }
 
@@ -154,7 +158,10 @@ Deno.test("sdl-serializer - enum scalar renders extending enum<...>", () => {
     enumValues: ["active", "inactive", "pending"]
   };
   const sdl = serializeType(t);
-  assertStringIncludes(sdl, "scalar type Status extending enum<active, inactive, pending>;");
+  assertStringIncludes(
+    sdl,
+    "scalar type Status extending enum<active, inactive, pending>;"
+  );
 });
 
 // =========================================================================
@@ -313,7 +320,8 @@ Deno.test("sdl-serializer - round-trips createTestSchema's User type", () => {
   const reparsed = reparse(sdl);
 
   const origUser = original.types.get("User")!;
-  const newUser = reparsed.types.get("User") ?? reparsed.types.get("default::User");
+  const newUser = reparsed.types.get("User") ??
+    reparsed.types.get("default::User");
   assertEquals(newUser !== undefined, true, "User type missing after re-parse");
   assertEquals(
     newUser!.properties.has("email"),

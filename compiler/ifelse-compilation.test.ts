@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for IF/ELSE expression compilation (EdgeQL → SQL CASE/WHEN)
  */
@@ -16,8 +19,9 @@ function compileEdgeQL(source: string): string {
   const parser = new EdgeQLParser(source);
   const ast = parser.parse();
   const result = compiler.compile(ast);
-  if (!result.ok)
+  if (!result.ok) {
     throw result.error;
+  }
   return codegen.generate(result.value);
 }
 

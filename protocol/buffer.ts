@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Binary buffer utilities for Gel wire protocol.
  * All multi-byte integers are big-endian (network byte order).

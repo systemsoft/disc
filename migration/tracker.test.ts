@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for Migration Tracker - database persistence functionality
  *
@@ -6,7 +9,11 @@
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import { canRunPgTests, cleanupTestTables, getTestDsn } from "../tests/pg-test-harness.ts";
+import {
+  canRunPgTests,
+  cleanupTestTables,
+  getTestDsn
+} from "../tests/pg-test-harness.ts";
 import { MigrationTracker } from "./tracker.ts";
 import * as Types from "./types.ts";
 

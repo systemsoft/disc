@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 // deno-lint-ignore-file
 /**
  * Production E2E: Server Lifecycle and Endpoint Behavior Tests
@@ -8,11 +11,24 @@
  * 12 tests total.
  */
 
-import { assert, assertEquals, assertExists, assertStringIncludes } from "@std/assert";
+import {
+  assert,
+  assertEquals,
+  assertExists,
+  assertStringIncludes
+} from "@std/assert";
 import type { AuthRoutes } from "../../auth/integration.ts";
 import { HttpServer } from "../../server/http.ts";
 import type { HttpServerOptions } from "../../server/http.ts";
-import type { HealthStatus, ProtocolHandler, QueryContext, QueryError, QueryRequest, QueryResponse, ServerConfig } from "../../server/types.ts";
+import type {
+  HealthStatus,
+  ProtocolHandler,
+  QueryContext,
+  QueryError,
+  QueryRequest,
+  QueryResponse,
+  ServerConfig
+} from "../../server/types.ts";
 import { canRunPgTests } from "../../tests/pg-test-harness.ts";
 
 // ---------------------------------------------------------------------------

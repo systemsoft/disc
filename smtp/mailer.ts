@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Mailer interface and concrete implementations.
  *
@@ -17,8 +20,13 @@
 
 import { encodeBase64 } from "@std/encoding/base64";
 import { getLogger } from "../lib/logger.ts";
-import { defaultConnectImpl, type SendEnvelope, SmtpClient } from "./client.ts";
-import type { Email, MailerResult, SmtpClientOptions, SmtpConfig } from "./types.ts";
+import { defaultConnectImpl, SmtpClient, type SendEnvelope } from "./client.ts";
+import type {
+  Email,
+  MailerResult,
+  SmtpClientOptions,
+  SmtpConfig
+} from "./types.ts";
 
 const log = getLogger("smtp-mailer");
 
@@ -141,8 +149,9 @@ export function createMailer(
   config: SmtpConfig | undefined,
   options: SmtpClientOptions = {}
 ): Mailer {
-  if (!config)
+  if (!config) {
     return new NoopMailer();
+  }
   return new SmtpMailer(config, options);
 }
 
@@ -172,8 +181,9 @@ function buildMimeMessage(args: MimeArgs): string {
 
   pushHeader("From", args.from);
   pushHeader("To", args.to.join(", "));
-  if (args.replyTo)
+  if (args.replyTo) {
     pushHeader("Reply-To", args.replyTo);
+  }
   pushHeader("Subject", encodeHeaderValue(args.email.subject));
   pushHeader("Date", formatRfc5322Date(args.date));
   pushHeader("Message-ID", `<${args.messageId}>`);
@@ -241,8 +251,9 @@ function buildMultipartAlternative(
  */
 function encodeHeaderValue(value: string): string {
   // deno-lint-ignore no-control-regex
-  if (/^[\x00-\x7F]*$/.test(value))
+  if (/^[\x00-\x7F]*$/.test(value)) {
     return value;
+  }
   const encoded = encodeBase64(new TextEncoder().encode(value));
   return `=?utf-8?B?${encoded}?=`;
 }
@@ -292,8 +303,9 @@ function extractAddr(addr: string): string {
 }
 
 function normalizeRecipients(to: string | string[]): string[] {
-  if (Array.isArray(to))
+  if (Array.isArray(to)) {
     return to.filter(r => r.length > 0);
+  }
   return to.length > 0 ? [to] : [];
 }
 

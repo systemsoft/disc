@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 import { ensureDir } from "@std/fs";
 import { join } from "@std/path";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
@@ -247,8 +250,9 @@ export class PostgresInstance {
         }
         const transient = /starting up|not yet accepting|could not connect|ECONNREFUSED/i
           .test(msg);
-        if (!transient || attempt === 2)
+        if (!transient || attempt === 2) {
           break;
+        }
         const delayMs = 150 * (attempt + 1);
         logger.info(
           `ensureDatabase transient failure (attempt ${attempt + 1}/3); retrying in ${delayMs}ms`
@@ -331,8 +335,9 @@ export class PostgresInstance {
   }
 
   private async forceStop(): Promise<void> {
-    if (!this.pid)
+    if (!this.pid) {
       return;
+    }
 
     try {
       Deno.kill(this.pid, "SIGTERM");

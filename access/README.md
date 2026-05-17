@@ -1,6 +1,6 @@
 # Access Control Module
 
-Object-level access policies and row-level security for Disc, equivalent to Gel's access control system.
+Object-level access policies and row-level security for Disc, equivalent to Gel’s access control system.
 
 ## Features
 
@@ -32,7 +32,7 @@ access/
 
 ## Integration
 
-Access policies are defined in SDL schemas and flow through the system:
+Access policies are defined in SDL schemas and flow through the system:
 
 ```
 SDL Schema → SchemaManager → PolicyAdapter → Evaluator → SQL Injector → PostgreSQL RLS
@@ -40,9 +40,9 @@ SDL Schema → SchemaManager → PolicyAdapter → Evaluator → SQL Injector �
 
 ### Server Integration
 
-Enabled via `--enable-access-policies` CLI flag or `DISC_ENABLE_ACCESS_POLICIES=1` env var.
+Enabled via `--enable-access-policies` CLI flag or `DISC_ENABLE_ACCESS_POLICIES=1` env var.
 
-The `EdgeQLProtocolHandler` registers policies in the compiler and sets access context per request via `authContextToAccessContext()` (see `server/access-bridge.ts`).
+The `EdgeQLProtocolHandler` registers policies in the compiler and sets access context per request via `authContextToAccessContext()` (see `server/access-bridge.ts`).
 
 ### SDL Policy Syntax
 
@@ -127,10 +127,7 @@ const decision = evaluator.evaluate("User", "select", context);
 
 ### Deny semantics: coarse gate, not row-level filter (P1-38)
 
-`deny` rules apply at the **action level**, not the **row level**. When
-a `deny` rule matches the request's operation (e.g. `deny delete;`),
-the evaluator rejects the entire request — it does not filter individual
-rows out of a candidate set the way `allow ... using (...)` does.
+`deny` rules apply at the **action level**, not the **row level**. When a `deny` rule matches the request’s operation (e.g. `deny delete;`), the evaluator rejects the entire request — it does not filter individual rows out of a candidate set the way `allow ... using (...)` does.
 
 Concretely:
 
@@ -143,20 +140,11 @@ access policy hide_drafts
   using (.published);     # filters: only published rows are visible
 ```
 
-Need per-row deny ("everyone can read except rows where X")? Express it
-as the inverse `allow ... using (NOT X)` and let the permissive-mode
-fallthrough do the rest. Native row-level deny would require JOIN-style
-policy composition that disc doesn't implement and Gel itself documents
-as out of scope for 5.x. The adapter source comment at
-`access/policy-adapter.ts:133-137` is the authoritative spec.
+Need per-row deny ("everyone can read except rows where X")? Express it as the inverse `allow ... using (NOT X)` and let the permissive-mode fallthrough do the rest. Native row-level deny would require JOIN-style policy composition that disc doesn’t implement and Gel itself documents as out of scope for 5.x. The adapter source comment at `access/policy-adapter.ts:133-137` is the authoritative spec.
 
 ## `runtime::has_permission(...)` — Deno-permission-aware policies
 
-Disc-original feature #5: policies can gate on the Deno process's
-`--allow-*` permission set. The check is defense-in-depth — even if
-the application user is otherwise authorized, the row stays
-invisible if the runtime sandbox doesn't have the corresponding
-permission.
+Disc-original feature #5: policies can gate on the Deno process’s `--allow-*` permission set. The check is defense-in-depth — even if the application user is otherwise authorized, the row stays invisible if the runtime sandbox doesn’t have the corresponding permission.
 
 ```esdl
 type SecretConfig {
@@ -185,20 +173,11 @@ Permission-spec grammar:
 | `sys` / `sys:KIND`  | `{ name: "sys", kind? }`                    |
 | `ffi` / `ffi:/path` | `{ name: "ffi", path? }`                    |
 
-Anything outside this grammar throws at policy-load time so a typo
-fails fast rather than silently treating the unknown spec as
-"missing" (which would always deny).
+Anything outside this grammar throws at policy-load time so a typo fails fast rather than silently treating the unknown spec as "missing" (which would always deny).
 
-The check is process-local — Postgres can't call back into Deno. At
-SQL emission time the function is pre-evaluated and inlined as `TRUE`
-or `FALSE` in the generated WHERE clause. The Deno permission set is
-fixed for the life of the process, so caching once at SQL emission
-is correct (the policy WHERE clause recompiles when the schema
-changes anyway).
+The check is process-local — Postgres can’t call back into Deno. At SQL emission time the function is pre-evaluated and inlined as `TRUE` or `FALSE` in the generated WHERE clause. The Deno permission set is fixed for the life of the process, so caching once at SQL emission is correct (the policy WHERE clause recompiles when the schema changes anyway).
 
-For tests, `AccessContext.permissionChecker` accepts a mock so test
-suites don't depend on the runner's `--allow-*` flags. Default
-checker delegates to `Deno.permissions.querySync(...)`.
+For tests, `AccessContext.permissionChecker` accepts a mock so test suites don’t depend on the runner’s `--allow-*` flags. Default checker delegates to `Deno.permissions.querySync(...)`.
 
 ## Testing
 

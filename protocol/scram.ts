@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * SCRAM-SHA-256 server-side implementation for Gel binary protocol auth.
  *
@@ -160,8 +163,9 @@ function generateNonce(): string {
  * Constant-time comparison of two byte arrays.
  */
 function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length)
+  if (a.length !== b.length) {
     return false;
+  }
   let diff = 0;
   for (let i = 0; i < a.length; i++) {
     diff |= a[i] ^ b[i];

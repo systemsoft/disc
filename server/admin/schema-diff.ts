@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Live schema diff helper (Bundle K — Disc-original feature #3a).
  *
@@ -11,7 +14,7 @@
  */
 
 import type * as AST from "../../schema/ast.ts";
-import { type Module, SDLConverter } from "../../schema/converter.ts";
+import { SDLConverter, type Module } from "../../schema/converter.ts";
 import { SDLParser } from "../../schema/parser.ts";
 
 export interface DiffPropertySnapshot {
@@ -144,16 +147,18 @@ function snapshotLink(link: AST.LinkDeclaration): DiffLinkSnapshot {
 }
 
 function typeRefToString(ref: AST.TypeRef | undefined): string {
-  if (!ref)
+  if (!ref) {
     return "unknown";
+  }
   const parts = ref.name?.parts ?? [];
   let base = parts.join("::");
   if (ref.params && ref.params.length > 0) {
     const inner = ref.params.map(p => typeRefToString(p)).join(", ");
     base = `${base}<${inner}>`;
   }
-  if (ref.array)
+  if (ref.array) {
     base = `array<${base}>`;
+  }
   return base || "unknown";
 }
 
@@ -225,8 +230,9 @@ function diffPropertyList(
     }
   }
   for (const [name, beforeProp] of beforeMap) {
-    if (!afterMap.has(name))
+    if (!afterMap.has(name)) {
       removed.push(beforeProp);
+    }
   }
 
   added.sort((a, b) => a.name.localeCompare(b.name));
@@ -262,8 +268,9 @@ function diffLinkList(
     }
   }
   for (const [name, beforeLink] of beforeMap) {
-    if (!afterMap.has(name))
+    if (!afterMap.has(name)) {
       removed.push(beforeLink);
+    }
   }
 
   added.sort((a, b) => a.name.localeCompare(b.name));
@@ -315,10 +322,14 @@ export function computeSchemaDiff(
   }
   for (const [key, afterSnap] of onDiskTypes) {
     const beforeSnap = appliedTypes.get(key);
-    if (!beforeSnap)
+    if (!beforeSnap) {
       continue;
+    }
 
-    const propDiff = diffPropertyList(beforeSnap.properties, afterSnap.properties);
+    const propDiff = diffPropertyList(
+      beforeSnap.properties,
+      afterSnap.properties
+    );
     const linkDiff = diffLinkList(beforeSnap.links, afterSnap.links);
     const noChange = propDiff.added.length === 0 &&
       propDiff.removed.length === 0 &&
@@ -327,8 +338,9 @@ export function computeSchemaDiff(
       linkDiff.removed.length === 0 &&
       linkDiff.changed.length === 0 &&
       beforeSnap.abstract === afterSnap.abstract;
-    if (noChange)
+    if (noChange) {
       continue;
+    }
 
     modified.push({
       module: afterSnap.module,

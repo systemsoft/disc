@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for the binary protocol TCP server (protocol/binary-server.ts).
  */
@@ -5,8 +8,20 @@
 import { assertEquals, assertNotEquals } from "@std/assert";
 import { createTestSchema } from "../compiler/context.ts";
 import { BinaryProtocolServer } from "./binary-server.ts";
-import { Cardinality, InputLanguage, OutputFormat, PROTOCOL_MAJOR_VERSION, PROTOCOL_MINOR_VERSION, TransactionState } from "./enums.ts";
-import { type ClientMessage, decodeServerMessage, encodeClientMessage, type ServerMessage } from "./messages.ts";
+import {
+  Cardinality,
+  InputLanguage,
+  OutputFormat,
+  PROTOCOL_MAJOR_VERSION,
+  PROTOCOL_MINOR_VERSION,
+  TransactionState
+} from "./enums.ts";
+import {
+  decodeServerMessage,
+  encodeClientMessage,
+  type ClientMessage,
+  type ServerMessage
+} from "./messages.ts";
 import { buildClientFinalMessage, buildClientFirstMessage } from "./scram.ts";
 
 const textDecoder = new TextDecoder();
@@ -30,8 +45,9 @@ async function readMessage(
 ): Promise<{ mtype: number; payload: Uint8Array; } | null> {
   const header = new Uint8Array(5);
   const headerRead = await readExact(conn, header);
-  if (!headerRead)
+  if (!headerRead) {
     return null;
+  }
 
   const mtype = header[0];
   const view = new DataView(header.buffer, header.byteOffset);
@@ -41,8 +57,9 @@ async function readMessage(
   const payload = new Uint8Array(payloadLength);
   if (payloadLength > 0) {
     const ok = await readExact(conn, payload);
-    if (!ok)
+    if (!ok) {
       return null;
+    }
   }
 
   return { mtype, payload };
@@ -58,8 +75,9 @@ async function readExact(
   let offset = 0;
   while (offset < buf.length) {
     const n = await conn.read(buf.subarray(offset));
-    if (n === null)
+    if (n === null) {
       return false;
+    }
     offset += n;
   }
   return true;
@@ -168,24 +186,28 @@ async function performNoAuthHandshake(
 
   // Read ServerHandshake
   const raw1 = await readMessage(conn);
-  if (raw1)
+  if (raw1) {
     messages.push(decode(raw1));
+  }
 
   // Read AuthenticationOK
   const raw2 = await readMessage(conn);
-  if (raw2)
+  if (raw2) {
     messages.push(decode(raw2));
+  }
 
   // Read ServerKeyData
   const raw3 = await readMessage(conn);
-  if (raw3)
+  if (raw3) {
     messages.push(decode(raw3));
+  }
 
   // Read 2 ParameterStatus + StateDataDescription + ReadyForCommand.
   for (let i = 0; i < 4; i++) {
     const raw = await readMessage(conn);
-    if (raw)
+    if (raw) {
       messages.push(decode(raw));
+    }
   }
 
   return messages;

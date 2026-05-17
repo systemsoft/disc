@@ -20,6 +20,9 @@
     "./sdk": "./sdk/mod.ts"
   },
   "imports": {
+    "@da/bcrypt": "jsr:@da/bcrypt@^1.0.1",
+    "@db/postgres": "jsr:@db/postgres@^0.19.5",
+    "@netopwibby/dedent": "jsr:@netopwibby/dedent@^0.1.0",
     "@std/assert": "jsr:@std/assert@1.0.8",
     "@std/async": "jsr:@std/async@1.0.8",
     "@std/cli": "jsr:@std/cli@1.0.8",
@@ -31,7 +34,9 @@
     "@std/io": "jsr:@std/io@^0.225.3",
     "@std/log": "jsr:@std/log@0.224.10",
     "@std/path": "jsr:@std/path@1.0.8",
-    "@std/testing": "jsr:@std/testing@1.0.8"
+    "@std/streams": "jsr:@std/streams@^1.1.0",
+    "@std/testing": "jsr:@std/testing@1.0.8",
+    "@zaubrik/djwt": "jsr:@zaubrik/djwt@^3.0.2"
   },
   "lint": {
     "exclude": ["reference-gel/**", "tests/fixtures/**"],
@@ -51,7 +56,7 @@
     "build:darwin-x64": "deno run --allow-all --no-check cli/main.ts build --platform darwin-x64",
     "build:linux-arm64": "deno run --allow-all --no-check cli/main.ts build --platform linux-arm64",
     "build:linux-x64": "deno run --allow-all --no-check cli/main.ts build --platform linux-x64",
-    "check": "deno task lint && deno task fmt --check && deno task test",
+    "check": "deno task lint && deno task format --check && deno task test",
     "cli": "deno run --allow-all --no-check cli/main.ts",
     "dev": "deno run --watch --allow-all --no-check cli/main.ts",
     "docker:build": "docker build -t disc .",

@@ -1,51 +1,64 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Auth lifecycle webhooks.
  *
  * Fires HTTP POSTs at registered URLs when authentication events
  * happen — sign-up, login, password reset, email verification.
  * Optional HMAC-SHA256 signature in the `x-disc-auth-signature-sha256`
- * header so receivers can verify the payload's integrity and origin.
+ * header so receivers can verify the payload’s integrity and origin.
  * Fire-and-forget by default: dispatch never blocks the auth flow,
- * delivery failures are logged but don't surface to the caller.
+ * delivery failures are logged but don’t surface to the caller.
  *
- * Ports geldata/gel#7813 (gh/geldata#7484). Mirrors Gel's event shape
- * and signing scheme; uses `fetch` rather than Gel's std::net job
- * queue (no retries — that's a follow-up alongside a real job queue).
+ * Ports geldata/gel#7813 (gh/geldata#7484). Mirrors Gel’s event shape
+ * and signing scheme; uses `fetch` rather than Gel’s std::net job
+ * queue (no retries — that’s a follow-up alongside a real job queue).
  */
+
+/*** UTILITY ------------------------------------------ ***/
 
 import { getLogger } from "../lib/logger.ts";
 
 const log = getLogger("auth-webhooks");
+const textEncoder = new TextEncoder();
+
+/*** EXPORT ------------------------------------------- ***/
 
 /**
- * Discriminated union of every event disc emits. Mirrors Gel's
+ * Discriminated union of every event disc emits. Mirrors Gel’s
  * `webhook.py` dataclasses. Field naming uses camelCase (TypeScript
- * convention); receivers expecting Gel's snake_case can normalize on
+ * convention); receivers expecting Gel’s snake_case can normalize on
  * their side.
  */
 export type WebhookEvent =
-  | IdentityCreatedEvent
-  | IdentityAuthenticatedEvent
   | EmailVerificationRequestedEvent
   | EmailVerifiedEvent
-  | PasswordResetRequestedEvent
+  | IdentityAuthenticatedEvent
+  | IdentityCreatedEvent
+  | MagicCodeRequestedEvent
   | MagicLinkRequestedEvent
   | MagicLinkSignupRequestedEvent
-  | MagicCodeRequestedEvent;
+  | PasswordResetRequestedEvent;
+
+export type WebhookEventType = WebhookEvent["eventType"];
+
+/**
+ * In-process listener for auth events. Same fire-and-forget posture
+ * as HTTP webhooks — `WebhookSender.dispatch()` schedules listeners
+ * on a microtask in production mode, awaits them under
+ * `synchronous: true` for deterministic tests. Listeners are
+ * responsible for swallowing their own errors; `dispatch()` catches
+ * any that escape and logs at warn level so a buggy in-process
+ * subscriber can’t take down the auth flow.
+ */
+export type WebhookListener = (event: WebhookEvent) => Promise<void> | void;
 
 export interface BaseWebhookEvent {
   eventId: string;
   eventType: WebhookEvent["eventType"];
-  timestamp: string;
   identityId: string;
-}
-
-export interface IdentityCreatedEvent extends BaseWebhookEvent {
-  eventType: "IdentityCreated";
-}
-
-export interface IdentityAuthenticatedEvent extends BaseWebhookEvent {
-  eventType: "IdentityAuthenticated";
+  timestamp: string;
 }
 
 export interface EmailVerificationRequestedEvent extends BaseWebhookEvent {
@@ -62,14 +75,22 @@ export interface EmailVerifiedEvent extends BaseWebhookEvent {
   eventType: "EmailVerified";
 }
 
-export interface PasswordResetRequestedEvent extends BaseWebhookEvent {
-  eventType: "PasswordResetRequested";
+export interface IdentityAuthenticatedEvent extends BaseWebhookEvent {
+  eventType: "IdentityAuthenticated";
+}
+
+export interface IdentityCreatedEvent extends BaseWebhookEvent {
+  eventType: "IdentityCreated";
+}
+
+export interface MagicCodeRequestedEvent extends BaseWebhookEvent {
+  eventType: "MagicCodeRequested";
   /**
-   * Plaintext reset token. Cannot be recovered after the
-   * `requestPasswordReset()` call returns — webhooks are the only way
-   * for a separate email service to receive it.
+   * Plaintext 6-digit code. Same delivery rationale as `magicLinkToken`:
+   * cannot be recovered after `requestMagicCode()` returns, so webhooks
+   * are how out-of-band email/SMS senders learn it. (gh/geldata#7367)
    */
-  resetToken: string;
+  magicCode: string;
 }
 
 export interface MagicLinkRequestedEvent extends BaseWebhookEvent {
@@ -90,31 +111,28 @@ export interface MagicLinkRequestedEvent extends BaseWebhookEvent {
  * deliver the email by address rather than by id lookup.
  */
 export interface MagicLinkSignupRequestedEvent {
-  eventType: "MagicLinkSignupRequested";
   eventId: string;
-  timestamp: string;
-  pendingEmail: string;
+  eventType: "MagicLinkSignupRequested";
   magicLinkToken: string;
+  pendingEmail: string;
+  timestamp: string;
 }
 
-export interface MagicCodeRequestedEvent extends BaseWebhookEvent {
-  eventType: "MagicCodeRequested";
+export interface PasswordResetRequestedEvent extends BaseWebhookEvent {
+  eventType: "PasswordResetRequested";
   /**
-   * Plaintext 6-digit code. Same delivery rationale as `magicLinkToken`:
-   * cannot be recovered after `requestMagicCode()` returns, so webhooks
-   * are how out-of-band email/SMS senders learn it. (gh/geldata#7367)
+   * Plaintext reset token. Cannot be recovered after the
+   * `requestPasswordReset()` call returns — webhooks are the only way
+   * for a separate email service to receive it.
    */
-  magicCode: string;
+  resetToken: string;
 }
-
-export type WebhookEventType = WebhookEvent["eventType"];
 
 /**
  * One webhook subscription. The same URL can be registered multiple
  * times with different `events` filters if desired.
  */
 export interface WebhookConfig {
-  url: string;
   /** Subset of event types this URL should receive. */
   events: WebhookEventType[];
   /**
@@ -126,9 +144,10 @@ export interface WebhookConfig {
   /**
    * Override the default per-request timeout (ms). Defaults to 5000.
    * Aggressive cap because dispatch is fire-and-forget — a slow
-   * downstream shouldn't keep request handlers tied up forever.
+   * downstream shouldn’t keep request handlers tied up forever.
    */
   timeoutMs?: number;
+  url: string;
 }
 
 /**
@@ -145,29 +164,15 @@ export interface WebhookSenderOptions {
   synchronous?: boolean;
 }
 
-/**
- * In-process listener for auth events. Same fire-and-forget posture
- * as HTTP webhooks — `WebhookSender.dispatch()` schedules listeners
- * on a microtask in production mode, awaits them under
- * `synchronous: true` for deterministic tests. Listeners are
- * responsible for swallowing their own errors; `dispatch()` catches
- * any that escape and logs at warn level so a buggy in-process
- * subscriber can't take down the auth flow.
- */
-export type WebhookListener = (event: WebhookEvent) => Promise<void> | void;
-
 export class WebhookSender {
-  private subscriptions: WebhookConfig[];
   private fetchImpl: typeof fetch;
-  private synchronous: boolean;
   private listeners: WebhookListener[] = [];
+  private subscriptions: WebhookConfig[];
+  private synchronous: boolean;
 
-  constructor(
-    subscriptions: WebhookConfig[],
-    options: WebhookSenderOptions = {}
-  ) {
-    this.subscriptions = subscriptions;
+  constructor(subscriptions: WebhookConfig[], options: WebhookSenderOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.subscriptions = subscriptions;
     this.synchronous = options.synchronous ?? false;
   }
 
@@ -196,27 +201,71 @@ export class WebhookSender {
       return;
 
     if (this.synchronous) {
-      // Tests: serialize so assertions can observe state after dispatch.
+      /*** Tests: serialize so assertions can observe state after dispatch. ***/
       for (const sub of matched) {
         await this.deliver(sub, event);
       }
+
       for (const listener of this.listeners) {
         await this.runListener(listener, event);
       }
+
       return;
     }
 
-    // Production: fire and forget. Don't await; failures shouldn't
-    // surface to the auth caller.
+    /*** Production: fire and forget. Don’t await; failures shouldn’t surface to the
+         auth caller. ***/
     for (const sub of matched) {
       queueMicrotask(() => {
         void this.deliver(sub, event);
       });
     }
+
     for (const listener of this.listeners) {
       queueMicrotask(() => {
         void this.runListener(listener, event);
       });
+    }
+  }
+
+  /*** PRIVATE ------------------------------------------ ***/
+
+  private async deliver(sub: WebhookConfig, event: WebhookEvent): Promise<void> {
+    const body = JSON.stringify(event);
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+
+    if (sub.secret)
+      headers["x-disc-auth-signature-sha256"] = await signHmacSha256(sub.secret, body);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), sub.timeoutMs ?? 5000);
+
+    try {
+      const response = await this.fetchImpl(sub.url, {
+        body,
+        headers,
+        method: "POST",
+        signal: controller.signal
+      });
+
+      if (!response.ok) {
+        log.warn("webhook delivery returned non-2xx", {
+          eventType: event.eventType,
+          status: response.status,
+          url: sub.url
+        });
+      }
+
+      /*** Drain body so Deno doesn’t complain about leaked streams. ***/
+      await response.body?.cancel().catch(() => {});
+    } catch (err) {
+      log.warn("webhook delivery failed", {
+        error: err instanceof Error ? err.message : String(err),
+        eventType: event.eventType,
+        url: sub.url
+      });
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
@@ -225,81 +274,11 @@ export class WebhookSender {
       await listener(event);
     } catch (err) {
       log.warn("in-process listener errored", {
-        eventType: event.eventType,
-        error: err instanceof Error ? err.message : String(err)
+        error: err instanceof Error ? err.message : String(err),
+        eventType: event.eventType
       });
     }
   }
-
-  private async deliver(
-    sub: WebhookConfig,
-    event: WebhookEvent
-  ): Promise<void> {
-    const body = JSON.stringify(event);
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json"
-    };
-
-    if (sub.secret) {
-      headers["x-disc-auth-signature-sha256"] = await signHmacSha256(
-        sub.secret,
-        body
-      );
-    }
-
-    const controller = new AbortController();
-    const timeout = setTimeout(
-      () => controller.abort(),
-      sub.timeoutMs ?? 5000
-    );
-
-    try {
-      const response = await this.fetchImpl(sub.url, {
-        method: "POST",
-        headers,
-        body,
-        signal: controller.signal
-      });
-
-      if (!response.ok) {
-        log.warn("webhook delivery returned non-2xx", {
-          url: sub.url,
-          eventType: event.eventType,
-          status: response.status
-        });
-      }
-      // Drain body so Deno doesn't complain about leaked streams.
-      await response.body?.cancel().catch(() => {});
-    } catch (err) {
-      log.warn("webhook delivery failed", {
-        url: sub.url,
-        eventType: event.eventType,
-        error: err instanceof Error ? err.message : String(err)
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
-}
-
-const textEncoder = new TextEncoder();
-
-async function signHmacSha256(secret: string, body: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    textEncoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const sig = await crypto.subtle.sign(
-    "HMAC",
-    key,
-    textEncoder.encode(body)
-  );
-  return [...new Uint8Array(sig)]
-    .map(b => b.toString(16).padStart(2, "0"))
-    .join("");
 }
 
 /**
@@ -315,4 +294,22 @@ export function newEventId(): string {
  */
 export function newEventTimestamp(): string {
   return new Date().toISOString();
+}
+
+/*** HELPER ------------------------------------------- ***/
+
+async function signHmacSha256(secret: string, body: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    textEncoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"]
+  );
+
+  const sig = await crypto.subtle.sign("HMAC", key, textEncoder.encode(body));
+
+  return [...new Uint8Array(sig)]
+    .map(b => b.toString(16).padStart(2, "0"))
+    .join("");
 }

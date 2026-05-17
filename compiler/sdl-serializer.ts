@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * SDL serializer (#702 + #7469)
  *
@@ -17,7 +20,13 @@
  * gap so the round-trip stays observable.
  */
 
-import type { LinkDef, PropertyConstraint, PropertyDef, Schema, TypeDef } from "./context.ts";
+import type {
+  LinkDef,
+  PropertyConstraint,
+  PropertyDef,
+  Schema,
+  TypeDef
+} from "./context.ts";
 
 const INDENT = "  ";
 
@@ -28,17 +37,20 @@ export function serializeSchema(schema: Schema): string {
   const byModule = new Map<string, TypeDef[]>();
   for (const t of schema.types.values()) {
     const mod = resolveModule(t);
-    if (!byModule.has(mod))
+    if (!byModule.has(mod)) {
       byModule.set(mod, []);
+    }
     byModule.get(mod)!.push(t);
   }
 
   const moduleNames = [...byModule.keys()].sort((a, b) => {
     // 'default' first, then alphabetical — matches conventional layouts.
-    if (a === "default")
+    if (a === "default") {
       return -1;
-    if (b === "default")
+    }
+    if (b === "default") {
       return 1;
+    }
     return a.localeCompare(b);
   });
 
@@ -67,10 +79,12 @@ export function serializeType(typeDef: TypeDef): string {
 // ---------------------------------------------------------------------------
 
 function serializeTypeAt(typeDef: TypeDef, _baseIndent: string): string {
-  if (typeDef.kind === "enum")
+  if (typeDef.kind === "enum") {
     return serializeEnum(typeDef);
-  if (typeDef.kind === "scalar")
+  }
+  if (typeDef.kind === "scalar") {
     return serializeScalar(typeDef);
+  }
   return serializeObject(typeDef);
 }
 
@@ -90,8 +104,9 @@ function serializeScalar(typeDef: TypeDef): string {
 function serializeObject(typeDef: TypeDef): string {
   const name = stripModule(typeDef.name);
   const header: string[] = [];
-  if (typeDef.abstract)
+  if (typeDef.abstract) {
     header.push("abstract");
+  }
   header.push("type", name);
 
   const parents = (typeDef.parentTypes ?? []).filter(p => p !== "std::BaseObject" && p !== "BaseObject");
@@ -111,8 +126,9 @@ function serializeObject(typeDef: TypeDef): string {
   // Properties (sorted for determinism)
   const props = [...typeDef.properties.values()].sort((a, b) => a.name.localeCompare(b.name));
   for (const p of props) {
-    if (p.name === "id")
+    if (p.name === "id") {
       continue; // implicit in disc/gel
+    }
     lines.push(serializeProperty(p));
   }
 
@@ -135,10 +151,12 @@ function serializeObject(typeDef: TypeDef): string {
 
 function serializeProperty(prop: PropertyDef): string {
   const parts: string[] = [];
-  if (prop.required)
+  if (prop.required) {
     parts.push("required");
-  if (prop.multi)
+  }
+  if (prop.multi) {
     parts.push("multi");
+  }
   parts.push(prop.name);
   parts.push(":", prop.edgeqlType ?? prop.type);
 
@@ -152,8 +170,9 @@ function serializeProperty(prop: PropertyDef): string {
 
 function collectPropertyBodyLines(prop: PropertyDef): string[] {
   const out: string[] = [];
-  if (prop.readonly)
+  if (prop.readonly) {
     out.push("readonly := true;");
+  }
   if (prop.annotations) {
     for (const [k, v] of orderedEntries(prop.annotations)) {
       out.push(`annotation ${k} := ${formatAnnotationValue(v)};`);
@@ -181,10 +200,12 @@ function serializeLink(link: LinkDef): string {
   // SDL link syntax requires the `link` keyword and `->` arrow:
   // `[required] [multi] link <name> -> <Target>;`
   const parts: string[] = [];
-  if (link.required)
+  if (link.required) {
     parts.push("required");
-  if (link.multi)
+  }
+  if (link.multi) {
     parts.push("multi");
+  }
   parts.push("link", link.name, "->", stripModule(link.target));
 
   const body: string[] = [];
@@ -202,8 +223,9 @@ function serializeLink(link: LinkDef): string {
 }
 
 function resolveModule(typeDef: TypeDef): string {
-  if (typeDef.module)
+  if (typeDef.module) {
     return typeDef.module;
+  }
   if (typeDef.name.includes("::")) {
     return typeDef.name.split("::")[0];
   }

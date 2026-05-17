@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 // deno-lint-ignore-file no-explicit-any
 import { assertEquals } from "@std/assert";
 import { describe, it } from "@std/testing/bdd";

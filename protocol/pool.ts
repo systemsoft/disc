@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Message pooling and buffer management for performance optimization
  * Reduces GC pressure by reusing message objects and buffers

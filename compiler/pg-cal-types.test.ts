@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * PostgreSQL End-to-End Tests for Calendar Type Support
  *
@@ -105,7 +108,9 @@ async function queryRawSQL(
   const client = new Client(cfg);
   try {
     await client.connect();
-    const result = params ? await client.queryObject(sql, params) : await client.queryObject(sql);
+    const result = params ?
+      await client.queryObject(sql, params) :
+      await client.queryObject(sql);
     return result.rows as Record<string, unknown>[];
   } finally {
     await client.end();
@@ -181,7 +186,9 @@ Deno.test({
 
       // PostgreSQL returns date as a Date object or string; verify the value
       const val = rows[0].birthday;
-      const dateStr = val instanceof Date ? val.toISOString().slice(0, 10) : String(val).slice(0, 10);
+      const dateStr = val instanceof Date ?
+        val.toISOString().slice(0, 10) :
+        String(val).slice(0, 10);
       assertEquals(
         dateStr,
         "2024-06-15",

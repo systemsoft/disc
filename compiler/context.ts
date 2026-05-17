@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Compilation context and schema information
  */
@@ -254,14 +257,16 @@ export function getTableAlias(
 ): TableAlias | undefined {
   // Check current scope first
   let alias = ctx.currentScope.aliases.get(name);
-  if (alias)
+  if (alias) {
     return alias;
+  }
 
   // Check parent scopes
   for (let i = ctx.scopes.length - 1; i >= 0; i--) {
     alias = ctx.scopes[i].aliases.get(name);
-    if (alias)
+    if (alias) {
       return alias;
+    }
   }
 
   return undefined;
@@ -288,30 +293,34 @@ export function resolveTypeName(
 ): TypeDef | undefined {
   // 1. Exact match
   let typeDef = ctx.schema.types.get(name);
-  if (typeDef)
+  if (typeDef) {
     return typeDef;
+  }
 
   // Only try qualified lookups for unqualified names
   if (!name.includes("::")) {
     // 2. Module scope (set by WITH MODULE)
     if (ctx.moduleScope) {
       typeDef = ctx.schema.types.get(`${ctx.moduleScope}::${name}`);
-      if (typeDef)
+      if (typeDef) {
         return typeDef;
+      }
     }
 
     // 3. Default module
     typeDef = ctx.schema.types.get(`default::${name}`);
-    if (typeDef)
+    if (typeDef) {
       return typeDef;
+    }
   } else if (name.startsWith("default::")) {
     // 4. Strip the default:: prefix — types in the default module are stored
     // under their bare name (see migration/schema-manager.ts:621), so a
     // query like `select default::Item` must fall back to looking up `Item`
     // when the qualified key isn't present.
     typeDef = ctx.schema.types.get(name.slice("default::".length));
-    if (typeDef)
+    if (typeDef) {
       return typeDef;
+    }
   }
 
   return undefined;
@@ -330,27 +339,31 @@ export function resolveAlias(
   name: string,
   moduleScope?: string
 ): AliasDef | undefined {
-  if (!schema.aliases)
+  if (!schema.aliases) {
     return undefined;
+  }
 
   // 1. Exact match
   let aliasDef = schema.aliases.get(name);
-  if (aliasDef)
+  if (aliasDef) {
     return aliasDef;
+  }
 
   // Only try qualified lookups for unqualified names
   if (!name.includes("::")) {
     // 2. Module scope
     if (moduleScope) {
       aliasDef = schema.aliases.get(`${moduleScope}::${name}`);
-      if (aliasDef)
+      if (aliasDef) {
         return aliasDef;
+      }
     }
 
     // 3. Default module
     aliasDef = schema.aliases.get(`default::${name}`);
-    if (aliasDef)
+    if (aliasDef) {
       return aliasDef;
+    }
   }
 
   return undefined;
@@ -369,27 +382,31 @@ export function resolveGlobal(
   name: string,
   moduleScope?: string
 ): GlobalDef | undefined {
-  if (!schema.globals)
+  if (!schema.globals) {
     return undefined;
+  }
 
   // 1. Exact match
   let globalDef = schema.globals.get(name);
-  if (globalDef)
+  if (globalDef) {
     return globalDef;
+  }
 
   // Only try qualified lookups for unqualified names
   if (!name.includes("::")) {
     // 2. Module scope
     if (moduleScope) {
       globalDef = schema.globals.get(`${moduleScope}::${name}`);
-      if (globalDef)
+      if (globalDef) {
         return globalDef;
+      }
     }
 
     // 3. Default module
     globalDef = schema.globals.get(`default::${name}`);
-    if (globalDef)
+    if (globalDef) {
       return globalDef;
+    }
   }
 
   return undefined;
@@ -468,8 +485,9 @@ export function getAllSubtypes(
   typeName: string
 ): string[] {
   const typeDef = schema.types.get(typeName);
-  if (!typeDef?.subtypes || typeDef.subtypes.length === 0)
+  if (!typeDef?.subtypes || typeDef.subtypes.length === 0) {
     return [];
+  }
 
   const result: string[] = [];
   const queue = [...typeDef.subtypes];
@@ -500,8 +518,9 @@ export function getTypeHierarchy(
 
   while (queue.length > 0) {
     const name = queue.shift()!;
-    if (visited.has(name))
+    if (visited.has(name)) {
       continue;
+    }
     visited.add(name);
     result.push(name);
     const parentDef = schema.types.get(name);

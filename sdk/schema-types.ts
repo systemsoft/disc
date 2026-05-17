@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Codegen-free TS schema declaration (Disc-original feature #1, Phase 2).
  *
@@ -30,7 +33,10 @@ export interface Optional<F extends FieldMarker> {
   readonly inner: F;
 }
 
-export interface Link<TargetName extends string, Card extends "single" | "multi"> {
+export interface Link<
+  TargetName extends string,
+  Card extends "single" | "multi"
+> {
   readonly kind: "link";
   readonly target: TargetName;
   readonly cardinality: Card;
@@ -51,22 +57,44 @@ export const t = {
   int16: (): Scalar<"int16", number> => ({ kind: "scalar", typeName: "int16" }),
   int32: (): Scalar<"int32", number> => ({ kind: "scalar", typeName: "int32" }),
   int64: (): Scalar<"int64", number> => ({ kind: "scalar", typeName: "int64" }),
-  float32: (): Scalar<"float32", number> => ({ kind: "scalar", typeName: "float32" }),
-  float64: (): Scalar<"float64", number> => ({ kind: "scalar", typeName: "float64" }),
-  bigint: (): Scalar<"bigint", bigint> => ({ kind: "scalar", typeName: "bigint" }),
-  datetime: (): Scalar<"datetime", Date> => ({ kind: "scalar", typeName: "datetime" }),
-  bytes: (): Scalar<"bytes", Uint8Array> => ({ kind: "scalar", typeName: "bytes" }),
+  float32: (): Scalar<"float32", number> => ({
+    kind: "scalar",
+    typeName: "float32"
+  }),
+  float64: (): Scalar<"float64", number> => ({
+    kind: "scalar",
+    typeName: "float64"
+  }),
+  bigint: (): Scalar<"bigint", bigint> => ({
+    kind: "scalar",
+    typeName: "bigint"
+  }),
+  datetime: (): Scalar<"datetime", Date> => ({
+    kind: "scalar",
+    typeName: "datetime"
+  }),
+  bytes: (): Scalar<"bytes", Uint8Array> => ({
+    kind: "scalar",
+    typeName: "bytes"
+  }),
   uuid: (): Scalar<"uuid", string> => ({ kind: "scalar", typeName: "uuid" }),
   json: (): Scalar<"json", unknown> => ({ kind: "scalar", typeName: "json" }),
 
-  optional: <F extends FieldMarker>(inner: F): Optional<F> => ({ kind: "optional", inner }),
+  optional: <F extends FieldMarker>(inner: F): Optional<F> => ({
+    kind: "optional",
+    inner
+  }),
 
-  single: <TargetName extends string>(target: TargetName): Link<TargetName, "single"> => ({
+  single: <TargetName extends string>(
+    target: TargetName
+  ): Link<TargetName, "single"> => ({
     kind: "link",
     target,
     cardinality: "single"
   }),
-  multi: <TargetName extends string>(target: TargetName): Link<TargetName, "multi"> => ({
+  multi: <TargetName extends string>(
+    target: TargetName
+  ): Link<TargetName, "multi"> => ({
     kind: "link",
     target,
     cardinality: "multi"
@@ -76,7 +104,9 @@ export const t = {
 // --- Schema spec + DiscSchema wrapper ---
 
 /** A schema spec: each top-level key is a type, mapped to its fields. */
-export type SchemaSpec = { [TypeName: string]: { [FieldName: string]: FieldMarker; }; };
+export type SchemaSpec = {
+  [TypeName: string]: { [FieldName: string]: FieldMarker; };
+};
 
 /**
  * The output of `defineSchema()`. Carries the spec at runtime and a
@@ -116,8 +146,10 @@ export type ResolveType<S extends SchemaSpec, Type> = {
 };
 
 /** Distinguish link markers from scalars at the type level. */
-export type IsLink<F> = F extends Link<string, "single" | "multi"> ? true : false;
-export type LinkTarget<F> = F extends Link<infer T, "single" | "multi"> ? T : never;
+export type IsLink<F> = F extends Link<string, "single" | "multi"> ? true :
+  false;
+export type LinkTarget<F> = F extends Link<infer T, "single" | "multi"> ? T :
+  never;
 export type LinkCardinality<F> = F extends Link<string, infer C> ? C : never;
 
 /**
@@ -154,8 +186,9 @@ const TYPE_NAME_RE = /^[A-Z][a-zA-Z0-9_]*$/;
 const FIELD_NAME_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
 function isFieldMarker(value: unknown): value is FieldMarker {
-  if (typeof value !== "object" || value === null)
+  if (typeof value !== "object" || value === null) {
     return false;
+  }
   const kind = (value as { kind?: unknown; }).kind;
   return kind === "scalar" || kind === "optional" || kind === "link";
 }
@@ -168,21 +201,28 @@ function isFieldMarker(value: unknown): value is FieldMarker {
 export function defineSchema<S extends SchemaSpec>(spec: S): DiscSchema<S> {
   for (const [typeName, fields] of Object.entries(spec)) {
     if (!TYPE_NAME_RE.test(typeName)) {
-      throw new Error(`Type name must be PascalCase identifier: ${JSON.stringify(typeName)}`);
+      throw new Error(
+        `Type name must be PascalCase identifier: ${JSON.stringify(typeName)}`
+      );
     }
     for (const [fieldName, marker] of Object.entries(fields)) {
       if (!FIELD_NAME_RE.test(fieldName)) {
         throw new Error(`Invalid field name: ${typeName}.${fieldName}`);
       }
       if (!isFieldMarker(marker)) {
-        throw new Error(`Invalid field marker for ${typeName}.${fieldName} — use t.str(), t.single("X"), etc.`);
+        throw new Error(
+          `Invalid field marker for ${typeName}.${fieldName} — use t.str(), t.single("X"), etc.`
+        );
       }
       // Walk into Optional to find the underlying marker.
       let cursor: FieldMarker = marker;
-      while (cursor.kind === "optional")
+      while (cursor.kind === "optional") {
         cursor = cursor.inner;
+      }
       if (cursor.kind === "link" && !(cursor.target in spec)) {
-        throw new Error(`Link target not found in schema: ${typeName}.${fieldName} → ${cursor.target}`);
+        throw new Error(
+          `Link target not found in schema: ${typeName}.${fieldName} → ${cursor.target}`
+        );
       }
     }
   }

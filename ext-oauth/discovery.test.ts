@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for OIDC discovery document fetching.
  * (gh/geldata#7415, ports geldata/gel#7510)
@@ -36,7 +39,11 @@ function mockFetch(
   responder: (url: string) => Response | Promise<Response>
 ): typeof fetch {
   return ((input: string | URL | Request) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    const url = typeof input === "string" ?
+      input :
+      input instanceof URL ?
+      input.toString() :
+      input.url;
     return Promise.resolve(responder(url));
   }) as typeof fetch;
 }
@@ -58,7 +65,10 @@ Deno.test("fetchOidcDiscovery - parses a complete discovery doc", async () => {
 
   const doc = await fetchOidcDiscovery("https://example.com", f);
   assertEquals(doc.issuer, "https://example.com");
-  assertEquals(doc.authorizationEndpoint, "https://example.com/oauth/authorize");
+  assertEquals(
+    doc.authorizationEndpoint,
+    "https://example.com/oauth/authorize"
+  );
   assertEquals(doc.tokenEndpoint, "https://example.com/oauth/token");
   assertEquals(doc.userInfoEndpoint, "https://example.com/oauth/userinfo");
   assertEquals(doc.jwksUri, "https://example.com/.well-known/jwks.json");

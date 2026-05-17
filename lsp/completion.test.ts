@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Completion provider tests (#7411 + #655 — Phase 2)
  */
@@ -10,8 +13,9 @@ import type { Position } from "./protocol.ts";
 
 function findPos(haystack: string, needle: string): Position {
   const offset = haystack.indexOf(needle);
-  if (offset === -1)
+  if (offset === -1) {
     throw new Error(`not found: ${needle}`);
+  }
   let line = 0;
   let character = 0;
   for (let i = 0; i < offset; i++) {
@@ -119,7 +123,10 @@ Deno.test("provideCompletion - empty document still yields keyword set", () => {
 // =========================================================================
 
 Deno.test("provideCompletion - position past EOF doesn't throw", () => {
-  const items = provideCompletion("module default {}", { line: 99, character: 99 });
+  const items = provideCompletion("module default {}", {
+    line: 99,
+    character: 99
+  });
   // Returns at least the keyword set; doesn't throw.
   assert(items.length > 0);
 });
@@ -166,7 +173,10 @@ Deno.test("provideCompletion - narrows to types after `->` (link target position
   assert(ns.has("str"));
   // User-defined types must surface even more.
   assert(!ns.has("module"), "keyword `module` leaked into link target context");
-  assert(!ns.has("required"), "keyword `required` leaked into link target context");
+  assert(
+    !ns.has("required"),
+    "keyword `required` leaked into link target context"
+  );
 });
 
 Deno.test("provideCompletion - narrows to types after `extending` (inheritance position)", () => {
@@ -197,7 +207,13 @@ Deno.test("provideCompletion - keeps keywords at clause boundary (start of prope
   // Cursor on the empty line at column 4 (inside the type body).
   const items = provideCompletion(text, { line: 2, character: 4 });
   const ns = new Set(names(items));
-  assert(ns.has("required"), "keyword `required` should be in clause-boundary context");
-  assert(ns.has("multi"), "keyword `multi` should be in clause-boundary context");
+  assert(
+    ns.has("required"),
+    "keyword `required` should be in clause-boundary context"
+  );
+  assert(
+    ns.has("multi"),
+    "keyword `multi` should be in clause-boundary context"
+  );
   assert(ns.has("link"), "keyword `link` should be in clause-boundary context");
 });

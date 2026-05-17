@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Regression pins and gap markers for upstream Gel migration issues.
  *
@@ -191,7 +194,11 @@ Deno.test("Gel #8517: AddEnumValue emits ALTER TYPE ... ADD VALUE DDL", () => {
   const ops = diff(before, after);
   const ddl = new DDLGenerator().generateDDL(ops);
   const alterAdd = ddl.find(s => s.includes("ALTER TYPE") && s.includes("ADD VALUE"));
-  assertEquals(alterAdd !== undefined, true, "expected an ALTER TYPE ADD VALUE statement");
+  assertEquals(
+    alterAdd !== undefined,
+    true,
+    "expected an ALTER TYPE ADD VALUE statement"
+  );
   assertEquals(
     alterAdd!.includes("'archived'"),
     true,
@@ -282,7 +289,9 @@ Deno.test("Gel #6304: migration apply emits lock_timeout + advisory lock pragmas
   // Capture executed SQL via a spy connection pool.
   const executed: string[] = [];
   const fakePool = {
-    transaction: async (fn: (conn: { execute: (s: string) => Promise<void>; }) => Promise<void>) => {
+    transaction: async (
+      fn: (conn: { execute: (s: string) => Promise<void>; }) => Promise<void>
+    ) => {
       await fn({
         execute: (s: string) => {
           executed.push(s);
@@ -329,7 +338,9 @@ Deno.test("Gel #6304: lockTimeoutMs=0 disables the timeout pragma", async () => 
 
   const executed: string[] = [];
   const fakePool = {
-    transaction: async (fn: (conn: { execute: (s: string) => Promise<void>; }) => Promise<void>) => {
+    transaction: async (
+      fn: (conn: { execute: (s: string) => Promise<void>; }) => Promise<void>
+    ) => {
       await fn({
         execute: (s: string) => {
           executed.push(s);
@@ -382,8 +393,9 @@ Deno.test("Gel #5617: insert with explicit id compiles to INSERT with id column"
     }
   `);
   const schema = sm.getSchema();
-  if (!schema)
+  if (!schema) {
     throw new Error("schema manager produced no schema");
+  }
 
   const parser = new EdgeQLParser(
     `insert User { id := <uuid>'00000000-0000-0000-0000-000000000001', email := 'x@y.z', name := 'X' }`
@@ -392,8 +404,9 @@ Deno.test("Gel #5617: insert with explicit id compiles to INSERT with id column"
   const compiler = new EdgeQLCompiler(schema, { enableAccessControl: false });
   const result = compiler.compile(ast);
   assertEquals(result.ok, true, "compile should succeed");
-  if (!result.ok)
+  if (!result.ok) {
     return;
+  }
 
   const sql = new SQLCodeGenerator().generate(result.value);
   // The SQL should reference the `id` column and the literal uuid.
@@ -504,7 +517,9 @@ Deno.test("Gel #2910: every migration tx acquires pg_advisory_xact_lock (auto-re
 
   const executed: string[] = [];
   const fakePool = {
-    transaction: async (fn: (conn: { execute: (s: string) => Promise<void>; }) => Promise<void>) => {
+    transaction: async (
+      fn: (conn: { execute: (s: string) => Promise<void>; }) => Promise<void>
+    ) => {
       await fn({
         execute: (s: string) => {
           executed.push(s);

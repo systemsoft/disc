@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for Prometheus metrics rendering.
  */
@@ -234,30 +237,37 @@ Deno.test("no gauge other than tls_certificate_expiration_time reports a unix-ep
   let currentName: string | undefined;
   for (const rawLine of output.split("\n")) {
     const line = rawLine.trim();
-    if (!line)
+    if (!line) {
       continue;
+    }
     if (line.startsWith("# TYPE ")) {
       const [, , name, kind] = line.split(/\s+/);
       currentName = name;
       currentType = kind === "gauge" ? "gauge" : "counter";
       continue;
     }
-    if (line.startsWith("#"))
+    if (line.startsWith("#")) {
       continue;
-    if (currentType !== "gauge")
+    }
+    if (currentType !== "gauge") {
       continue;
-    if (!currentName)
+    }
+    if (!currentName) {
       continue;
-    if (ALLOWED_TIMESTAMP_GAUGES.has(currentName))
+    }
+    if (ALLOWED_TIMESTAMP_GAUGES.has(currentName)) {
       continue;
+    }
 
     // Sample line: "disc_query_cache_size 48"
     const match = line.match(/^(\S+)\s+(\S+)$/);
-    if (!match)
+    if (!match) {
       continue;
+    }
     const value = Number(match[2]);
-    if (!Number.isFinite(value))
+    if (!Number.isFinite(value)) {
       continue;
+    }
     const looksLikeEpoch = value >= UNIX_LOW && value <= UNIX_HIGH;
     assertEquals(
       looksLikeEpoch,

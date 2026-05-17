@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * AuthExtensionAdapter — wraps the existing auth module as an Extension.
  *
@@ -10,7 +13,12 @@ import type { AuthRoutes } from "../auth/integration.ts";
 import type { AuthMiddleware } from "../auth/middleware.ts";
 import type { AuthProvider } from "../auth/provider.ts";
 import { BaseExtension } from "./base-extension.ts";
-import type { ExtensionContext, ExtensionMetadata, ExtensionMiddleware, ExtensionRoute } from "./types.ts";
+import type {
+  ExtensionContext,
+  ExtensionMetadata,
+  ExtensionMiddleware,
+  ExtensionRoute
+} from "./types.ts";
 
 export interface AuthExtensionAdapterOptions {
   authMiddleware: AuthMiddleware;

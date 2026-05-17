@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Migration Tracker - persists migration state to database
  */
@@ -399,8 +402,12 @@ export class MigrationTracker {
         id: row.id,
         name: row.name,
         createdAt: row.created_at,
-        schemaState: typeof row.schema_state === "string" ? JSON.parse(row.schema_state) : row.schema_state,
-        migrationState: typeof row.migration_state === "string" ? JSON.parse(row.migration_state) : row.migration_state
+        schemaState: typeof row.schema_state === "string" ?
+          JSON.parse(row.schema_state) :
+          row.schema_state,
+        migrationState: typeof row.migration_state === "string" ?
+          JSON.parse(row.migration_state) :
+          row.migration_state
       };
 
       return Ok(checkpoint);
@@ -434,8 +441,12 @@ export class MigrationTracker {
         id: row.id,
         name: row.name,
         createdAt: row.created_at,
-        schemaState: typeof row.schema_state === "string" ? JSON.parse(row.schema_state) : row.schema_state,
-        migrationState: typeof row.migration_state === "string" ? JSON.parse(row.migration_state) : row.migration_state
+        schemaState: typeof row.schema_state === "string" ?
+          JSON.parse(row.schema_state) :
+          row.schema_state,
+        migrationState: typeof row.migration_state === "string" ?
+          JSON.parse(row.migration_state) :
+          row.migration_state
       }));
 
       return Ok(checkpoints);

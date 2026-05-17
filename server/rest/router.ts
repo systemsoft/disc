@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Schema-derived REST router (Bundle J — Disc-original feature #2).
  *
@@ -20,7 +23,12 @@
  *     hyperlink reference.
  */
 
-import type { LinkDef, PropertyDef, Schema, TypeDef } from "../../compiler/context.ts";
+import type {
+  LinkDef,
+  PropertyDef,
+  Schema,
+  TypeDef
+} from "../../compiler/context.ts";
 import type * as Types from "../types.ts";
 
 // ---------------------------------------------------------------------------
@@ -143,18 +151,23 @@ async function handleList(
 
   const shape = renderShape(opts.schema, typeDef);
   let edgeql = `select ${typeDef.name} ${shape}`;
-  if (filter)
+  if (filter) {
     edgeql += ` filter ${filter}`;
-  if (order)
+  }
+  if (order) {
     edgeql += ` order by ${order}`;
-  if (offset !== undefined)
+  }
+  if (offset !== undefined) {
     edgeql += ` offset ${offset}`;
-  if (limit !== undefined)
+  }
+  if (limit !== undefined) {
     edgeql += ` limit ${limit}`;
+  }
 
   const result = await runEdgeQL(opts, edgeql);
-  if (result instanceof Response)
+  if (result instanceof Response) {
     return result;
+  }
   return jsonResponse(coerceArray(result), 200);
 }
 
@@ -167,8 +180,9 @@ async function handleGet(
   const edgeql = `select ${typeDef.name} ${shape} filter .id = <uuid>${edgeqlString(id)}`;
 
   const result = await runEdgeQL(opts, edgeql);
-  if (result instanceof Response)
+  if (result instanceof Response) {
     return result;
+  }
   const rows = coerceArray(result);
   if (rows.length === 0) {
     return errorJson(`${typeDef.name} '${id}' not found`, 404);
@@ -201,8 +215,9 @@ async function handleInsert(
   const edgeql = `insert ${typeDef.name} { ${assignments} }`;
 
   const result = await runEdgeQL(opts, edgeql);
-  if (result instanceof Response)
+  if (result instanceof Response) {
     return result;
+  }
   const rows = coerceArray(result);
   return jsonResponse(rows[0] ?? null, 201);
 }
@@ -233,8 +248,9 @@ async function handleUpdate(
     `set { ${assignments} }`;
 
   const result = await runEdgeQL(opts, edgeql);
-  if (result instanceof Response)
+  if (result instanceof Response) {
     return result;
+  }
   const rows = coerceArray(result);
   if (rows.length === 0) {
     return errorJson(`${typeDef.name} '${id}' not found`, 404);
@@ -249,8 +265,9 @@ async function handleDelete(
 ): Promise<Response> {
   const edgeql = `delete ${typeDef.name} filter .id = <uuid>${edgeqlString(id)}`;
   const result = await runEdgeQL(opts, edgeql);
-  if (result instanceof Response)
+  if (result instanceof Response) {
     return result;
+  }
   // Return 204 even if the row didn't exist — DELETE is idempotent and
   // callers only need the success signal. Strict 404-on-missing is a
   // future opt-in if it turns out apps want it.
@@ -303,17 +320,20 @@ async function handleLinkedCollection(
 
   const linkShape = renderShape(opts.schema, targetType);
   let linkClause = `${linkName}: ${linkShape}`;
-  if (offset !== undefined)
+  if (offset !== undefined) {
     linkClause += ` offset ${offset}`;
-  if (limit !== undefined)
+  }
+  if (limit !== undefined) {
     linkClause += ` limit ${limit}`;
+  }
 
   const edgeql = `select ${parentType.name} { ${linkClause} } ` +
     `filter .id = <uuid>${edgeqlString(parentId)}`;
 
   const result = await runEdgeQL(opts, edgeql);
-  if (result instanceof Response)
+  if (result instanceof Response) {
     return result;
+  }
   const rows = coerceArray(result);
   if (rows.length === 0) {
     return errorJson(`${parentType.name} '${parentId}' not found`, 404);
@@ -337,18 +357,22 @@ async function handleLinkedCollection(
 function renderShape(schema: Schema, typeDef: TypeDef): string {
   const fields: string[] = [];
   for (const [name, prop] of typeDef.properties) {
-    if (prop.computed)
+    if (prop.computed) {
       continue;
-    if (isHidden(prop.annotations))
+    }
+    if (isHidden(prop.annotations)) {
       continue;
+    }
     fields.push(name);
   }
   for (const [name, link] of typeDef.links) {
-    if (!isExpand(link.annotations))
+    if (!isExpand(link.annotations)) {
       continue;
+    }
     const targetType = resolveType(schema, link.target);
-    if (!targetType)
+    if (!targetType) {
       continue;
+    }
     const sub = renderShape(schema, targetType);
     fields.push(`${name}: ${sub}`);
   }
@@ -461,10 +485,12 @@ function renderAssignments(
   opts: AssignmentOptions
 ): string {
   const known = new Set<string>();
-  for (const name of typeDef.properties.keys())
+  for (const name of typeDef.properties.keys()) {
     known.add(name);
-  for (const name of typeDef.links.keys())
+  }
+  for (const name of typeDef.links.keys()) {
     known.add(name);
+  }
 
   const parts: string[] = [];
   for (const [key, value] of Object.entries(body)) {
@@ -523,8 +549,9 @@ function renderAssignmentValue(
 }
 
 function renderScalarLiteral(prop: PropertyDef, value: unknown): string {
-  if (value === null)
+  if (value === null) {
     return "{}";
+  }
   switch (prop.edgeqlType ?? prop.type) {
     case "bool":
       if (typeof value !== "boolean") {
@@ -632,14 +659,16 @@ function resolveType(schema: Schema, name: string): TypeDef | undefined {
 }
 
 function isHidden(annotations: Record<string, string> | undefined): boolean {
-  if (!annotations)
+  if (!annotations) {
     return false;
+  }
   return "rest::hidden" in annotations;
 }
 
 function isExpand(annotations: Record<string, string> | undefined): boolean {
-  if (!annotations)
+  if (!annotations) {
     return false;
+  }
   return "rest::expand" in annotations;
 }
 
@@ -660,7 +689,9 @@ function edgeqlString(value: string): string {
   return `'${escaped}'`;
 }
 
-async function readJsonBody(request: Request): Promise<Record<string, unknown>> {
+async function readJsonBody(
+  request: Request
+): Promise<Record<string, unknown>> {
   const contentType = request.headers.get("content-type") ?? "";
   if (!contentType.toLowerCase().includes("application/json")) {
     throw new Error("Content-Type must be application/json");
@@ -678,10 +709,12 @@ async function readJsonBody(request: Request): Promise<Record<string, unknown>> 
 }
 
 function coerceArray(value: unknown): unknown[] {
-  if (Array.isArray(value))
+  if (Array.isArray(value)) {
     return value;
-  if (value === null || value === undefined)
+  }
+  if (value === null || value === undefined) {
     return [];
+  }
   return [value];
 }
 

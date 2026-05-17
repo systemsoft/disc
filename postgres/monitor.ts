@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 import { join } from "@std/path";
 import { PostgresInstance } from "./instance.ts";
 import { logger } from "./logger.ts";
@@ -59,15 +62,17 @@ export class PostgresMonitor {
 
     // Schedule periodic checks
     this.monitorHandle = setInterval(async () => {
-      if (!this.isMonitoring)
+      if (!this.isMonitoring) {
         return;
+      }
       await this.checkHealth();
     }, this.checkInterval);
   }
 
   stop(): void {
-    if (!this.isMonitoring)
+    if (!this.isMonitoring) {
       return;
+    }
 
     logger.info("Stopping PostgreSQL health monitor");
     this.isMonitoring = false;
@@ -224,7 +229,9 @@ export class PostgresMonitor {
     const port = this.instance.getPort();
     const effectivePort = port === 0 ? 5432 : port;
 
-    const connArgs = port === 0 ? ["-h", socketDir, "-p", String(effectivePort), "-U", "disc"] : ["-h", "localhost", "-p", String(port), "-U", "disc"];
+    const connArgs = port === 0 ?
+      ["-h", socketDir, "-p", String(effectivePort), "-U", "disc"] :
+      ["-h", "localhost", "-p", String(port), "-U", "disc"];
 
     try {
       const query = `
@@ -281,9 +288,11 @@ export class PostgresMonitor {
     const port = this.instance.getPort();
     const effectivePort = port === 0 ? 5432 : port;
 
-    const connArgs = port === 0 ? ["-h", socketDir, "-p", String(effectivePort), "-U", "disc"] : ["-h", "localhost", "-p", String(port), "-U", "disc"];
+    const connArgs = port === 0 ?
+      ["-h", socketDir, "-p", String(effectivePort), "-U", "disc"] :
+      ["-h", "localhost", "-p", String(port), "-U", "disc"];
 
-    logger.info("Running PostgreSQL maintenance tasks...");
+    logger.info("Running PostgreSQL maintenance tasks…");
 
     try {
       // ANALYZE

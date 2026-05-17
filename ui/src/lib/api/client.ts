@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * API Client for Disc Server Communication
  *
@@ -90,7 +93,12 @@ export interface ServerHealth {
 
 export interface ServerStats {
   connections: any;
-  queries: { avgDurationMs: number; failed: number; successful: number; total: number; };
+  queries: {
+    avgDurationMs: number;
+    failed: number;
+    successful: number;
+    total: number;
+  };
   transactions: any;
   uptimeMs: number;
   memoryUsage?: any;
@@ -191,8 +199,9 @@ export class DiscAPIClient {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password })
       });
-      if (!res.ok)
+      if (!res.ok) {
         return null;
+      }
       const body = await res.json() as {
         token: string;
         refreshToken?: string;
@@ -251,8 +260,9 @@ export class DiscAPIClient {
       const response = await fetch(`${this.baseUrl}/schema`, {
         headers: this.headers
       });
-      if (!response.ok)
+      if (!response.ok) {
         return empty;
+      }
       return await response.json() as SchemaDescription;
     } catch (error) {
       // deno-lint-ignore no-console
@@ -268,8 +278,9 @@ export class DiscAPIClient {
         `${this.baseUrl}/schema/types/${encodeURIComponent(typeName)}`,
         { headers: this.headers }
       );
-      if (!response.ok)
+      if (!response.ok) {
         return null;
+      }
       return await response.json() as SchemaTypeDescription;
     } catch (error) {
       // deno-lint-ignore no-console
@@ -284,8 +295,9 @@ export class DiscAPIClient {
       const response = await fetch(`${this.baseUrl}/health`, {
         headers: this.headers
       });
-      if (!response.ok)
+      if (!response.ok) {
         return null;
+      }
       return await response.json() as ServerHealth;
     } catch {
       return null;
@@ -298,8 +310,9 @@ export class DiscAPIClient {
       const response = await fetch(`${this.baseUrl}/migrations`, {
         headers: this.headers
       });
-      if (!response.ok)
+      if (!response.ok) {
         return [];
+      }
       const body = await response.json() as MigrationsResponse;
       return body.migrations ?? [];
     } catch (error) {
@@ -320,8 +333,9 @@ export class DiscAPIClient {
       const response = await fetch(`${this.baseUrl}/config`, {
         headers: this.headers
       });
-      if (!response.ok)
+      if (!response.ok) {
         return [];
+      }
       const body = await response.json() as ConfigResponse;
       return body.keys ?? [];
     } catch (error) {
@@ -337,8 +351,9 @@ export class DiscAPIClient {
       const response = await fetch(`${this.baseUrl}/stats`, {
         headers: this.headers
       });
-      if (!response.ok)
+      if (!response.ok) {
         return null;
+      }
       return await response.json() as ServerStats;
     } catch {
       return null;

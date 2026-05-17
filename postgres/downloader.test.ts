@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 import { assertEquals, assertExists, assertRejects } from "@std/assert";
 import { ensureDir } from "@std/fs";
 import { join } from "@std/path";
@@ -214,10 +217,11 @@ Deno.test("PostgresBinaryDownloader - DISC_PG_BINARY_DIR overrides default baseD
       stagedRoot
     );
   } finally {
-    if (original === undefined)
+    if (original === undefined) {
       Deno.env.delete("DISC_PG_BINARY_DIR");
-    else
+    } else {
       Deno.env.set("DISC_PG_BINARY_DIR", original);
+    }
   }
 });
 
@@ -233,10 +237,11 @@ Deno.test("PostgresBinaryDownloader - DISC_OFFLINE=1 throws with actionable mess
       "DISC_OFFLINE=1"
     );
   } finally {
-    if (offlineOriginal === undefined)
+    if (offlineOriginal === undefined) {
       Deno.env.delete("DISC_OFFLINE");
-    else
+    } else {
       Deno.env.set("DISC_OFFLINE", offlineOriginal);
+    }
     await Deno.remove(tempDir, { recursive: true });
   }
 });

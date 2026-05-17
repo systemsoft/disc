@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Production WebSocket end-to-end scenario tests for Disc server.
  *
@@ -7,7 +10,14 @@
 
 import { assert, assertEquals, assertExists } from "@std/assert";
 import { HttpServer } from "./http.ts";
-import type { ProtocolHandler, QueryContext, QueryError, QueryRequest, QueryResponse, ServerConfig } from "./types.ts";
+import type {
+  ProtocolHandler,
+  QueryContext,
+  QueryError,
+  QueryRequest,
+  QueryResponse,
+  ServerConfig
+} from "./types.ts";
 
 // --- Helpers ---
 

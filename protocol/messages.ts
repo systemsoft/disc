@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Binary protocol message types and encode/decode functions.
  *
@@ -27,7 +30,17 @@ import {
 } from "./enums.ts";
 
 // Re-export enums for convenience
-export { AuthStatus, Cardinality, ClientMessageType, CompilationFlag, ErrorSeverity, InputLanguage, OutputFormat, ServerMessageType, TransactionState };
+export {
+  AuthStatus,
+  Cardinality,
+  ClientMessageType,
+  CompilationFlag,
+  ErrorSeverity,
+  InputLanguage,
+  OutputFormat,
+  ServerMessageType,
+  TransactionState
+};
 
 // ---------------------------------------------------------------------------
 // Shared sub-structures
@@ -915,14 +928,16 @@ export function decodeServerMessage(
 export function splitWireMessage(
   data: Uint8Array
 ): { mtype: number; payload: Uint8Array; } | null {
-  if (data.length < 5)
+  if (data.length < 5) {
     return null;
+  }
   const mtype = data[0];
   const view = new DataView(data.buffer, data.byteOffset);
   const messageLength = view.getUint32(1, false); // includes the 4-byte length field
   const payloadLength = messageLength - 4;
-  if (data.length < 1 + messageLength)
+  if (data.length < 1 + messageLength) {
     return null;
+  }
   const payload = data.slice(5, 5 + payloadLength);
   return { mtype, payload };
 }

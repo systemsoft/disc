@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * OAuth token exchange and user info fetching
  */
@@ -52,7 +55,9 @@ export async function exchangeCodeForToken(
   const data = await response.json() as Record<string, unknown>;
   return {
     accessToken: String(data["access_token"] ?? ""),
-    expiresIn: typeof data["expires_in"] === "number" ? data["expires_in"] : undefined,
+    expiresIn: typeof data["expires_in"] === "number" ?
+      data["expires_in"] :
+      undefined,
     tokenType: String(data["token_type"] ?? "Bearer")
   };
 }
@@ -97,14 +102,26 @@ export async function fetchUserInfo(
   }
 
   return {
-    avatarUrl: typeof data["picture"] === "string" ? data["picture"] : typeof data["avatar_url"] === "string" ? data["avatar_url"] : undefined,
+    avatarUrl: typeof data["picture"] === "string" ?
+      data["picture"] :
+      typeof data["avatar_url"] === "string" ?
+      data["avatar_url"] :
+      undefined,
     email: typeof data["email"] === "string" ? data["email"] : undefined,
     emailVerified,
-    familyName: typeof data["family_name"] === "string" ? data["family_name"] : undefined,
-    givenName: typeof data["given_name"] === "string" ? data["given_name"] : undefined,
+    familyName: typeof data["family_name"] === "string" ?
+      data["family_name"] :
+      undefined,
+    givenName: typeof data["given_name"] === "string" ?
+      data["given_name"] :
+      undefined,
     id: String(data["sub"] ?? data["id"] ?? ""),
     locale: typeof data["locale"] === "string" ? data["locale"] : undefined,
-    name: typeof data["name"] === "string" ? data["name"] : typeof data["login"] === "string" ? data["login"] : undefined,
+    name: typeof data["name"] === "string" ?
+      data["name"] :
+      typeof data["login"] === "string" ?
+      data["login"] :
+      undefined,
     raw: data
   };
 }

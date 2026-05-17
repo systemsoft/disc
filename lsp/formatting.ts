@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * `.disc` formatter (LSP Phase 8b)
  *
@@ -50,10 +53,11 @@ export function formatSdl(text: string): string {
     // Update depth based on net brace count for the next line.
     let net = 0;
     for (const ch of stripped) {
-      if (ch === "{")
+      if (ch === "{") {
         net++;
-      else if (ch === "}")
+      } else if (ch === "}") {
         net--;
+      }
     }
     depth = Math.max(0, depth + net);
   }
@@ -116,8 +120,9 @@ function stripStringsAndComments(line: string): string {
  */
 export function provideFormatting(text: string): TextEdit[] {
   const formatted = formatSdl(text);
-  if (formatted === text)
+  if (formatted === text) {
     return [];
+  }
   // End range covers the whole document — line `lineCount`, col 0
   // (LSP convention: end-of-document is one line past the last
   // newline-terminated line).

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Symbol index (#7411 + #655 — Phase 3)
  *
@@ -14,7 +17,7 @@
  */
 
 import { SDLLexer } from "../schema/lexer.ts";
-import { type Token, TokenType } from "../schema/tokens.ts";
+import { TokenType, type Token } from "../schema/tokens.ts";
 import type { Range } from "./protocol.ts";
 
 export type TypeKind = "object" | "abstract" | "scalar" | "enum";
@@ -41,8 +44,9 @@ export interface SymbolIndex {
 
 export function buildSymbolIndex(text: string): SymbolIndex {
   const types = new Map<string, TypeSymbol>();
-  if (text.length === 0)
+  if (text.length === 0) {
     return { types };
+  }
 
   let tokens: Token[];
   try {
@@ -96,13 +100,15 @@ function tryReadTypeDecl(
     i++;
   }
   // Required `type`
-  if (!matchesKeyword(tokens[i], "type"))
+  if (!matchesKeyword(tokens[i], "type")) {
     return null;
+  }
   i++;
   // Required identifier
   const nameTok = tokens[i];
-  if (!nameTok || nameTok.type !== TokenType.IDENT)
+  if (!nameTok || nameTok.type !== TokenType.IDENT) {
     return null;
+  }
   i++;
 
   const nameRange = tokenRange(nameTok);
@@ -119,15 +125,17 @@ function tryReadTypeDecl(
       i++;
       while (i < tokens.length && tokens[i].type === TokenType.IDENT) {
         i++;
-        if (tokens[i]?.type === TokenType.COMMA)
+        if (tokens[i]?.type === TokenType.COMMA) {
           i++;
-        else
+        } else {
           break;
+        }
         // Allow qualified names (Foo::Bar)
         if (tokens[i]?.type === TokenType.DOUBLECOLON) {
           i++;
-          if (tokens[i]?.type === TokenType.IDENT)
+          if (tokens[i]?.type === TokenType.IDENT) {
             i++;
+          }
         }
       }
     }
@@ -221,8 +229,9 @@ function tryReadMember(tokens: Token[], start: number): ConsumedMember | null {
   }
 
   const nameTok = tokens[i];
-  if (!nameTok || nameTok.type !== TokenType.IDENT)
+  if (!nameTok || nameTok.type !== TokenType.IDENT) {
     return null;
+  }
   // Peek ahead to confirm this is actually a member (next should be `:` or `->`)
   const afterName = tokens[i + 1];
   if (
@@ -244,8 +253,9 @@ function tryReadMember(tokens: Token[], start: number): ConsumedMember | null {
 }
 
 function matchesKeyword(tok: Token | undefined, keyword: string): boolean {
-  if (!tok)
+  if (!tok) {
     return false;
+  }
   // Some keywords are their own TokenType (e.g. TYPE), others arrive
   // as IDENT depending on the lexer table. Match by value either way.
   return tok.value === keyword;

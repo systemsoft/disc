@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Test utilities for Disc database tests
  */
@@ -153,7 +156,11 @@ export class ConsoleCapture {
   }
 
   hasError(pattern: string | RegExp): boolean {
-    return this.errors.some(error => typeof pattern === "string" ? error.includes(pattern) : pattern.test(error));
+    return this.errors.some(error =>
+      typeof pattern === "string" ?
+        error.includes(pattern) :
+        pattern.test(error)
+    );
   }
 }
 

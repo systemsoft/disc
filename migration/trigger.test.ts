@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 // deno-lint-ignore-file
 /**
  * Tests for Trigger DDL Generation (Stage 31)
@@ -108,18 +111,21 @@ Deno.test("Parser - trigger with single event (after insert)", () => {
 
   const mod = doc.declarations[0];
   assertEquals(mod.kind, "ModuleDeclaration");
-  if (mod.kind !== "ModuleDeclaration")
+  if (mod.kind !== "ModuleDeclaration") {
     return;
+  }
 
   const userType = mod.declarations[0];
   assertEquals(userType.kind, "TypeDeclaration");
-  if (userType.kind !== "TypeDeclaration")
+  if (userType.kind !== "TypeDeclaration") {
     return;
+  }
 
   const trigger = userType.members.find(m => m.kind === "TriggerDeclaration");
   assertEquals(trigger !== undefined, true);
-  if (!trigger || trigger.kind !== "TriggerDeclaration")
+  if (!trigger || trigger.kind !== "TriggerDeclaration") {
     return;
+  }
 
   assertEquals(trigger.name.value, "audit_log");
   assertEquals(trigger.timing, "after");
@@ -140,15 +146,18 @@ Deno.test("Parser - trigger with multiple events (after insert, update, delete)"
   `);
 
   const mod = doc.declarations[0];
-  if (mod.kind !== "ModuleDeclaration")
+  if (mod.kind !== "ModuleDeclaration") {
     return;
+  }
   const userType = mod.declarations[0];
-  if (userType.kind !== "TypeDeclaration")
+  if (userType.kind !== "TypeDeclaration") {
     return;
+  }
 
   const trigger = userType.members.find(m => m.kind === "TriggerDeclaration");
-  if (!trigger || trigger.kind !== "TriggerDeclaration")
+  if (!trigger || trigger.kind !== "TriggerDeclaration") {
     return;
+  }
 
   assertEquals(trigger.name.value, "track_changes");
   assertEquals(trigger.events, ["insert", "update", "delete"]);
@@ -167,15 +176,18 @@ Deno.test("Parser - trigger with before timing", () => {
   `);
 
   const mod = doc.declarations[0];
-  if (mod.kind !== "ModuleDeclaration")
+  if (mod.kind !== "ModuleDeclaration") {
     return;
+  }
   const userType = mod.declarations[0];
-  if (userType.kind !== "TypeDeclaration")
+  if (userType.kind !== "TypeDeclaration") {
     return;
+  }
 
   const trigger = userType.members.find(m => m.kind === "TriggerDeclaration");
-  if (!trigger || trigger.kind !== "TriggerDeclaration")
+  if (!trigger || trigger.kind !== "TriggerDeclaration") {
     return;
+  }
 
   assertEquals(trigger.timing, "before");
 });
@@ -193,15 +205,18 @@ Deno.test("Parser - trigger with for all scope (statement-level)", () => {
   `);
 
   const mod = doc.declarations[0];
-  if (mod.kind !== "ModuleDeclaration")
+  if (mod.kind !== "ModuleDeclaration") {
     return;
+  }
   const userType = mod.declarations[0];
-  if (userType.kind !== "TypeDeclaration")
+  if (userType.kind !== "TypeDeclaration") {
     return;
+  }
 
   const trigger = userType.members.find(m => m.kind === "TriggerDeclaration");
-  if (!trigger || trigger.kind !== "TriggerDeclaration")
+  if (!trigger || trigger.kind !== "TriggerDeclaration") {
     return;
+  }
 
   assertEquals(trigger.scope, "all");
 });
@@ -222,11 +237,13 @@ Deno.test("Parser - multiple triggers on one type", () => {
   `);
 
   const mod = doc.declarations[0];
-  if (mod.kind !== "ModuleDeclaration")
+  if (mod.kind !== "ModuleDeclaration") {
     return;
+  }
   const userType = mod.declarations[0];
-  if (userType.kind !== "TypeDeclaration")
+  if (userType.kind !== "TypeDeclaration") {
     return;
+  }
 
   const triggers = userType.members.filter(
     m => m.kind === "TriggerDeclaration"
@@ -257,11 +274,13 @@ Deno.test("Parser - trigger alongside properties, links, and constraints", () =>
   `);
 
   const mod = doc.declarations[0];
-  if (mod.kind !== "ModuleDeclaration")
+  if (mod.kind !== "ModuleDeclaration") {
     return;
+  }
   const postType = mod.declarations[0];
-  if (postType.kind !== "TypeDeclaration")
+  if (postType.kind !== "TypeDeclaration") {
     return;
+  }
 
   const properties = postType.members.filter(
     m => m.kind === "PropertyDeclaration"

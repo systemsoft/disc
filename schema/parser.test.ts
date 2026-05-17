@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for SDL Parser
  */
@@ -973,11 +976,13 @@ Deno.test("SDL Parser - enum scalar with bare identifier values still works", ()
 
   const ast = new SDLParser(source).parse();
   const mod = ast.declarations[0];
-  if (mod.kind !== "ModuleDeclaration")
+  if (mod.kind !== "ModuleDeclaration") {
     return;
+  }
   const scalar = mod.declarations[0];
-  if (scalar.kind !== "ScalarTypeDeclaration")
+  if (scalar.kind !== "ScalarTypeDeclaration") {
     return;
+  }
 
   assertEquals(
     scalar.extending?.[0].params?.map(p => p.name.parts.join("::")),
@@ -1066,11 +1071,13 @@ Deno.test("SDL Parser - single-element parens stay a plain expression", () => {
 
   const ast = new SDLParser(source).parse();
   const typeDecl = ast.declarations[0];
-  if (typeDecl.kind !== "TypeDeclaration")
+  if (typeDecl.kind !== "TypeDeclaration") {
     return;
+  }
   const idx = typeDecl.members.find(m => m.kind === "Index");
-  if (idx?.kind !== "Index")
+  if (idx?.kind !== "Index") {
     return;
+  }
   assertEquals(idx.on.kind, "PathExpression");
 });
 
@@ -1168,10 +1175,17 @@ Deno.test("SDL Parser - computed property uses backlink with type intersection",
   if (prop.computed.kind !== "PathExpression") {
     throw new Error(`expected PathExpression, got ${prop.computed.kind}`);
   }
-  assertEquals(prop.computed.path, [".", "<options", "[is PaymentRequirements]"]);
+  assertEquals(prop.computed.path, [
+    ".",
+    "<options",
+    "[is PaymentRequirements]"
+  ]);
   // Joined path round-trips to the original SDL form (relied on by
   // migration/schema-manager.ts when stringifying expressions).
-  assertEquals(prop.computed.path.join(""), ".<options[is PaymentRequirements]");
+  assertEquals(
+    prop.computed.path.join(""),
+    ".<options[is PaymentRequirements]"
+  );
 });
 
 Deno.test("SDL Parser - forward path with type intersection", () => {
@@ -1183,8 +1197,9 @@ Deno.test("SDL Parser - forward path with type intersection", () => {
 
   const ast = new SDLParser(source).parse();
   const typeDecl = ast.declarations[0];
-  if (typeDecl.kind !== "TypeDeclaration")
+  if (typeDecl.kind !== "TypeDeclaration") {
     return;
+  }
   const prop = typeDecl.members.find(
     m => m.kind === "PropertyDeclaration" && m.name.value === "x"
   );

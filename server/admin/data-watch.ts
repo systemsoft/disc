@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Live data-watch SSE endpoint (Bundle L — Disc-original feature #3c).
  *

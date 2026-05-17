@@ -1,9 +1,12 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for the TLS hot-reload helpers.
  * Ports geldata/gel#4297 (gh/geldata#4277).
  */
 
-import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assertEquals } from "@std/assert";
 import { TlsCertWatcher, validatePemEnvelope } from "./tls-reload.ts";
 
 // ── validatePemEnvelope ────────────────────────────────────────────────
@@ -131,8 +134,9 @@ Deno.test("TlsCertWatcher - fires onReload after debounce when cert is rewritten
       );
     })
   ]);
-  if (timeoutId !== undefined)
+  if (timeoutId !== undefined) {
     clearTimeout(timeoutId);
+  }
 
   assertEquals(callCount, 1);
   assertEquals(lastCert?.includes("new-cert"), true);
@@ -187,8 +191,9 @@ Deno.test("TlsCertWatcher - debounces a burst of writes into a single reload", a
       );
     })
   ]);
-  if (timeoutId !== undefined)
+  if (timeoutId !== undefined) {
     clearTimeout(timeoutId);
+  }
 
   // Allow the debounce window to fully close so a second fire would have happened.
   await new Promise(r => setTimeout(r, 400));

@@ -1,18 +1,25 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for Expression Converter
  *
  * Verifies SDL Expression → AccessExpressionNode conversion.
  */
 
+/*** NATIVE ------------------------------------------- ***/
+
 import { assertEquals, assertThrows } from "@std/assert";
+
+/*** UTILITY ------------------------------------------ ***/
+
 import { ValidationError } from "../lib/errors.ts";
 import type { Expression } from "../schema/ast.ts";
 import { convertExpression } from "./expression-converter.ts";
 
-// ---------------------------------------------------------------------------
-// 1. Literal — string
-// ---------------------------------------------------------------------------
+/*** RUNTIME ------------------------------------------ ***/
 
+/*** 1. Literal — string ***/
 Deno.test("expression-converter: string literal", () => {
   const expr: Expression = { kind: "Literal", type: "string", value: "hello" };
   const result = convertExpression(expr);
@@ -22,10 +29,7 @@ Deno.test("expression-converter: string literal", () => {
   assertEquals((result as any).value, "hello");
 });
 
-// ---------------------------------------------------------------------------
-// 2. Literal — integer maps to number
-// ---------------------------------------------------------------------------
-
+/*** 2. Literal — integer maps to number ***/
 Deno.test("expression-converter: integer literal maps to number", () => {
   const expr: Expression = { kind: "Literal", type: "integer", value: 42 };
   const result = convertExpression(expr);
@@ -35,10 +39,7 @@ Deno.test("expression-converter: integer literal maps to number", () => {
   assertEquals((result as any).value, 42);
 });
 
-// ---------------------------------------------------------------------------
-// 3. Literal — float maps to number
-// ---------------------------------------------------------------------------
-
+/*** 3. Literal — float maps to number ***/
 Deno.test("expression-converter: float literal maps to number", () => {
   const expr: Expression = { kind: "Literal", type: "float", value: 3.14 };
   const result = convertExpression(expr);
@@ -48,10 +49,7 @@ Deno.test("expression-converter: float literal maps to number", () => {
   assertEquals((result as any).value, 3.14);
 });
 
-// ---------------------------------------------------------------------------
-// 4. Literal — boolean
-// ---------------------------------------------------------------------------
-
+/*** 4. Literal — boolean ***/
 Deno.test("expression-converter: boolean literal", () => {
   const expr: Expression = { kind: "Literal", type: "boolean", value: true };
   const result = convertExpression(expr);
@@ -61,40 +59,33 @@ Deno.test("expression-converter: boolean literal", () => {
   assertEquals((result as any).value, true);
 });
 
-// ---------------------------------------------------------------------------
-// 5. PathExpression — global
-// ---------------------------------------------------------------------------
-
+/*** 5. PathExpression — global ***/
 Deno.test("expression-converter: global path becomes AccessGlobal", () => {
   const expr: Expression = {
     kind: "PathExpression",
     path: ["global", "current_user"]
   };
+
   const result = convertExpression(expr);
 
   assertEquals(result.kind, "AccessGlobal");
   assertEquals((result as any).name, "current_user");
 });
 
-// ---------------------------------------------------------------------------
-// 6. PathExpression — dot-prefixed
-// ---------------------------------------------------------------------------
-
+/*** 6. PathExpression — dot-prefixed ***/
 Deno.test("expression-converter: dot-prefixed path strips leading dot", () => {
   const expr: Expression = {
     kind: "PathExpression",
     path: [".", "author", "id"]
   };
+
   const result = convertExpression(expr);
 
   assertEquals(result.kind, "AccessPath");
   assertEquals((result as any).path, ["author", "id"]);
 });
 
-// ---------------------------------------------------------------------------
-// 7. PathExpression — plain path
-// ---------------------------------------------------------------------------
-
+/*** 7. PathExpression — plain path ***/
 Deno.test("expression-converter: plain path passes through", () => {
   const expr: Expression = { kind: "PathExpression", path: ["name"] };
   const result = convertExpression(expr);
@@ -103,17 +94,15 @@ Deno.test("expression-converter: plain path passes through", () => {
   assertEquals((result as any).path, ["name"]);
 });
 
-// ---------------------------------------------------------------------------
-// 8. BinaryOp — comparison (=)
-// ---------------------------------------------------------------------------
-
+/*** 8. BinaryOp — comparison (=) ***/
 Deno.test("expression-converter: binary comparison (=)", () => {
   const expr: Expression = {
     kind: "BinaryOp",
-    op: "=",
     left: { kind: "PathExpression", path: [".", "id"] },
+    op: "=",
     right: { kind: "PathExpression", path: ["global", "current_user"] }
   };
+
   const result = convertExpression(expr);
 
   assertEquals(result.kind, "AccessComparison");
@@ -122,17 +111,15 @@ Deno.test("expression-converter: binary comparison (=)", () => {
   assertEquals((result as any).right.kind, "AccessGlobal");
 });
 
-// ---------------------------------------------------------------------------
-// 9. BinaryOp — logical (and)
-// ---------------------------------------------------------------------------
-
+/*** 9. BinaryOp — logical (and) ***/
 Deno.test("expression-converter: binary logical (and)", () => {
   const expr: Expression = {
     kind: "BinaryOp",
-    op: "and",
     left: { kind: "Literal", type: "boolean", value: true },
+    op: "and",
     right: { kind: "Literal", type: "boolean", value: false }
   };
+
   const result = convertExpression(expr);
 
   assertEquals(result.kind, "AccessLogical");
@@ -140,16 +127,14 @@ Deno.test("expression-converter: binary logical (and)", () => {
   assertEquals((result as any).operands.length, 2);
 });
 
-// ---------------------------------------------------------------------------
-// 10. UnaryOp — not
-// ---------------------------------------------------------------------------
-
+/*** 10. UnaryOp — not ***/
 Deno.test("expression-converter: unary not", () => {
   const expr: Expression = {
     kind: "UnaryOp",
     op: "not",
     operand: { kind: "Literal", type: "boolean", value: true }
   };
+
   const result = convertExpression(expr);
 
   assertEquals(result.kind, "AccessLogical");
@@ -157,16 +142,14 @@ Deno.test("expression-converter: unary not", () => {
   assertEquals((result as any).operands.length, 1);
 });
 
-// ---------------------------------------------------------------------------
-// 11. FunctionCall
-// ---------------------------------------------------------------------------
-
+/*** 11. FunctionCall ***/
 Deno.test("expression-converter: function call", () => {
   const expr: Expression = {
+    args: [{ kind: "PathExpression", path: [".", "name"] }],
     kind: "FunctionCall",
-    name: { kind: "QualifiedName", parts: ["std", "len"] },
-    args: [{ kind: "PathExpression", path: [".", "name"] }]
+    name: { kind: "QualifiedName", parts: ["std", "len"] }
   };
+
   const result = convertExpression(expr);
 
   assertEquals(result.kind, "AccessFunction");
@@ -175,52 +158,40 @@ Deno.test("expression-converter: function call", () => {
   assertEquals((result as any).args[0].kind, "AccessPath");
 });
 
-// ---------------------------------------------------------------------------
-// 12. TypeCast — strips cast, recurses
-// ---------------------------------------------------------------------------
-
+/*** 12. TypeCast — strips cast, recurses ***/
 Deno.test("expression-converter: type cast strips cast and recurses", () => {
   const expr: Expression = {
-    kind: "TypeCast",
     expr: { kind: "Literal", type: "string", value: "42" },
+    kind: "TypeCast",
     type: {
+      array: false,
       kind: "TypeRef",
       name: { kind: "QualifiedName", parts: ["int64"] },
-      optional: false,
-      array: false
+      optional: false
     }
   };
+
   const result = convertExpression(expr);
 
   assertEquals(result.kind, "AccessLiteral");
   assertEquals((result as any).value, "42");
 });
 
-// ---------------------------------------------------------------------------
-// 13. Parameter — throws ValidationError
-// ---------------------------------------------------------------------------
-
+/*** 13. Parameter — throws ValidationError ***/
 Deno.test("expression-converter: parameter throws ValidationError", () => {
   const expr: Expression = { kind: "Parameter", name: "foo" };
-
-  assertThrows(
-    () => convertExpression(expr),
-    ValidationError,
-    "not valid in access policies"
-  );
+  assertThrows(() => convertExpression(expr), ValidationError, "not valid in access policies");
 });
 
-// ---------------------------------------------------------------------------
-// 14. Optional comparison operators (?=, ?!=)
-// ---------------------------------------------------------------------------
-
+/*** 14. Optional comparison operators (?=, ?!=) ***/
 Deno.test("expression-converter: optional comparison ?= maps to =", () => {
   const expr: Expression = {
     kind: "BinaryOp",
-    op: "?=",
     left: { kind: "PathExpression", path: [".", "status"] },
+    op: "?=",
     right: { kind: "Literal", type: "string", value: "active" }
   };
+
   const result = convertExpression(expr);
 
   assertEquals(result.kind, "AccessComparison");

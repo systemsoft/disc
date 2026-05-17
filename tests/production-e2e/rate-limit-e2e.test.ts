@@ -1,6 +1,16 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 import { assertEquals } from "@std/assert";
 import { HttpServer } from "../../server/http.ts";
-import type { ProtocolHandler, QueryContext, QueryError, QueryRequest, QueryResponse, ServerConfig } from "../../server/types.ts";
+import type {
+  ProtocolHandler,
+  QueryContext,
+  QueryError,
+  QueryRequest,
+  QueryResponse,
+  ServerConfig
+} from "../../server/types.ts";
 
 function createTestConfig(overrides: Partial<ServerConfig> = {}): ServerConfig {
   return {

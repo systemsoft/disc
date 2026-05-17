@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for PKCE param normalisation (RFC 7636 + Disc-specific carryover).
  *  - gh/geldata#7596: trailing `=` padding is stripped.

@@ -1,8 +1,14 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * DDL Generator - converts migration operations to SQL DDL statements
  */
 
-import { propNameToColumnName, typeNameToTableName } from "../lib/identifiers.ts";
+import {
+  propNameToColumnName,
+  typeNameToTableName
+} from "../lib/identifiers.ts";
 import * as Types from "./types.ts";
 
 // PostgreSQL 16 reserved keywords that cannot appear unquoted as identifiers.
@@ -338,7 +344,9 @@ export class DDLGenerator {
         ];
       }
       case "CreateScalar":
-        return this.generateCreateScalar(operation as Types.CreateScalarOperation);
+        return this.generateCreateScalar(
+          operation as Types.CreateScalarOperation
+        );
       case "DropScalar":
         return this.generateDropScalar(operation as Types.DropScalarOperation);
       case "AddEnumValue":
@@ -494,8 +502,9 @@ END $$;`,
 
     // Add property columns (skip computed properties — they're virtual, evaluated at query time)
     for (const property of operation.properties) {
-      if (property.computed)
+      if (property.computed) {
         continue;
+      }
 
       columns.push({
         name: propNameToColumnName(property.name),
@@ -506,7 +515,9 @@ END $$;`,
         // `default !== undefined` rather than truthy — `default := 0`,
         // `default := false`, and `default := ""` are valid SDL defaults
         // that the truthy form would silently drop.
-        default: property.default !== undefined ? this.formatDefaultValue(property.default, property.type) : undefined
+        default: property.default !== undefined ?
+          this.formatDefaultValue(property.default, property.type) :
+          undefined
       });
     }
 
@@ -778,7 +789,9 @@ END $$;`,
 
     const columnType = this.mapEdgeQLTypeToPostgreSQL(property.type);
     const nullable = property.required ? "NOT NULL" : "NULL";
-    const defaultClause = property.default !== undefined ? ` DEFAULT ${this.formatDefaultValue(property.default, property.type)}` : "";
+    const defaultClause = property.default !== undefined ?
+      ` DEFAULT ${this.formatDefaultValue(property.default, property.type)}` :
+      "";
 
     const statements = [
       `ALTER TABLE ${this.escapeIdentifier(tableName)} ADD COLUMN ${
@@ -1249,8 +1262,12 @@ END $$;`,
     }
 
     const constraintName = `fk_${tableName}_${column.name}`;
-    const onDelete = column.references.onDelete ? ` ON DELETE ${column.references.onDelete}` : "";
-    const onUpdate = column.references.onUpdate ? ` ON UPDATE ${column.references.onUpdate}` : "";
+    const onDelete = column.references.onDelete ?
+      ` ON DELETE ${column.references.onDelete}` :
+      "";
+    const onUpdate = column.references.onUpdate ?
+      ` ON UPDATE ${column.references.onUpdate}` :
+      "";
 
     return `CONSTRAINT ${this.escapeIdentifier(constraintName)} FOREIGN KEY (${this.escapeIdentifier(column.name)}) REFERENCES ${
       this.escapeIdentifier(column.references.table)
@@ -1311,32 +1328,39 @@ END $$;`,
 
     switch (name) {
       case "max_len_value":
-        if (arg)
+        if (arg) {
           return `length(${col}) <= ${arg}`;
+        }
         break;
       case "min_len_value":
-        if (arg)
+        if (arg) {
           return `length(${col}) >= ${arg}`;
+        }
         break;
       case "max_value":
-        if (arg)
+        if (arg) {
           return `${col} <= ${arg}`;
+        }
         break;
       case "min_value":
-        if (arg)
+        if (arg) {
           return `${col} >= ${arg}`;
+        }
         break;
       case "regexp":
-        if (arg)
+        if (arg) {
           return `${col} ~ '${arg.replace(/'/g, "''")}'`;
+        }
         break;
       case "max_ex_value":
-        if (arg)
+        if (arg) {
           return `${col} < ${arg}`;
+        }
         break;
       case "min_ex_value":
-        if (arg)
+        if (arg) {
           return `${col} > ${arg}`;
+        }
         break;
       case "one_of":
         if (arg) {
@@ -1348,8 +1372,9 @@ END $$;`,
               return trimmed;
             }
             // Numeric values don't need quoting
-            if (/^-?\d+(\.\d+)?$/.test(trimmed))
+            if (/^-?\d+(\.\d+)?$/.test(trimmed)) {
               return trimmed;
+            }
             // String values need single-quote wrapping
             return `'${trimmed.replace(/'/g, "''")}'`;
           });
@@ -1445,7 +1470,9 @@ END $$;`,
     // or bare (`Name`); strip the module prefix when constructing the
     // PG enum type name so we always get `disc_enum_<simplename>`.
     if (this.enumScalars.has(edgeqlType)) {
-      const simpleName = edgeqlType.includes("::") ? edgeqlType.slice(edgeqlType.lastIndexOf("::") + 2) : edgeqlType;
+      const simpleName = edgeqlType.includes("::") ?
+        edgeqlType.slice(edgeqlType.lastIndexOf("::") + 2) :
+        edgeqlType;
       return this.escapeIdentifier(this.enumTypeName(simpleName));
     }
 
@@ -1472,7 +1499,10 @@ END $$;`,
       // interleaved dots, but the differ uses `path.join(".")` which can
       // produce shapes like `MerchantStatus.PENDING`. Pull the trailing
       // identifier and emit a literal value the enum column will accept.
-      if (this.enumScalars.has(type) || this.enumScalars.has(type.replace(/^default::/, ""))) {
+      if (
+        this.enumScalars.has(type) ||
+        this.enumScalars.has(type.replace(/^default::/, ""))
+      ) {
         const tail = value.split(".").pop() ?? value;
         return `'${tail.replace(/'/g, "''")}'`;
       }
@@ -1530,8 +1560,9 @@ END $$;`,
   }
 
   private isNumericPgType(type: string): boolean {
-    if (this.isIntegerPgType(type))
+    if (this.isIntegerPgType(type)) {
       return true;
+    }
     const t = type.toLowerCase();
     return t === "float32" || t === "float64" || t === "decimal" ||
       t === "real" || t === "double precision" || t === "numeric";

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * LanguageServer message-handling tests (#7411 + #655 — Phase 1)
  *
@@ -19,7 +22,9 @@ class FakeTransport {
   }
 }
 
-async function newServer(): Promise<{ srv: LanguageServer; tx: FakeTransport; }> {
+async function newServer(): Promise<
+  { srv: LanguageServer; tx: FakeTransport; }
+> {
   const tx = new FakeTransport();
   const srv = new LanguageServer(m => tx.send(m));
   await srv.handle({
@@ -49,7 +54,8 @@ Deno.test("LanguageServer - initialize returns capabilities", async () => {
     m => "id" in m && m.id === 1 && "result" in m
   );
   assertEquals(responses.length, 1);
-  const result = (responses[0] as { result: { capabilities: { textDocumentSync: number; }; }; }).result;
+  const result = (responses[0] as { result: { capabilities: { textDocumentSync: number; }; }; })
+    .result;
   // textDocumentSync.Full = 1
   assertEquals(result.capabilities.textDocumentSync, 1);
 });
@@ -72,7 +78,8 @@ Deno.test("LanguageServer - didOpen with valid SDL publishes empty diagnostics",
 
   const published = tx.received("textDocument/publishDiagnostics");
   assertEquals(published.length, 1);
-  const params = (published[0] as { params: { uri: string; diagnostics: unknown[]; }; }).params;
+  const params = (published[0] as { params: { uri: string; diagnostics: unknown[]; }; })
+    .params;
   assertEquals(params.uri, "file:///tmp/test.disc");
   assertEquals(params.diagnostics.length, 0);
 });
@@ -100,7 +107,10 @@ Deno.test("LanguageServer - didOpen with bad SDL publishes error diagnostics", a
   const published = tx.received("textDocument/publishDiagnostics");
   assertEquals(published.length, 1);
   const params = (published[0] as {
-    params: { uri: string; diagnostics: { message: string; severity?: number; }[]; };
+    params: {
+      uri: string;
+      diagnostics: { message: string; severity?: number; }[];
+    };
   })
     .params;
   assertEquals(params.uri, "file:///tmp/bad.disc");
@@ -167,7 +177,12 @@ Deno.test("LanguageServer - hover request returns markdown for known scalar", as
     jsonrpc: "2.0",
     method: "textDocument/didOpen",
     params: {
-      textDocument: { uri: "file:///a.disc", languageId: "disc", version: 1, text }
+      textDocument: {
+        uri: "file:///a.disc",
+        languageId: "disc",
+        version: 1,
+        text
+      }
     }
   });
   tx.outgoing.length = 0;
@@ -280,7 +295,12 @@ Deno.test("LanguageServer - definition jumps to declaration", async () => {
     jsonrpc: "2.0",
     method: "textDocument/didOpen",
     params: {
-      textDocument: { uri: "file:///d.disc", languageId: "disc", version: 1, text }
+      textDocument: {
+        uri: "file:///d.disc",
+        languageId: "disc",
+        version: 1,
+        text
+      }
     }
   });
   tx.outgoing.length = 0;
@@ -301,7 +321,10 @@ Deno.test("LanguageServer - definition jumps to declaration", async () => {
   });
   const r = tx.outgoing.find(m => "id" in m && m.id === 33);
   assertExists(r);
-  const result = (r as { result: { uri: string; range: { start: { line: number; }; }; } | null; }).result;
+  const result = (r as {
+    result: { uri: string; range: { start: { line: number; }; }; } | null;
+  })
+    .result;
   assertExists(result);
   assertEquals(result!.uri, "file:///d.disc");
   // Declaration is on the line containing `type User`
@@ -362,7 +385,8 @@ Deno.test("LanguageServer - initialize advertises references + rename capabiliti
   const result = (r as { result: { capabilities: Record<string, unknown>; }; }).result;
   assertEquals(result.capabilities.referencesProvider, true);
   assertEquals(
-    (result.capabilities.renameProvider as { prepareProvider: boolean; }).prepareProvider,
+    (result.capabilities.renameProvider as { prepareProvider: boolean; })
+      .prepareProvider,
     true
   );
 });
@@ -377,7 +401,12 @@ Deno.test("LanguageServer - references returns all use sites of a type", async (
     jsonrpc: "2.0",
     method: "textDocument/didOpen",
     params: {
-      textDocument: { uri: "file:///r.disc", languageId: "disc", version: 1, text }
+      textDocument: {
+        uri: "file:///r.disc",
+        languageId: "disc",
+        version: 1,
+        text
+      }
     }
   });
   tx.outgoing.length = 0;
@@ -411,7 +440,12 @@ Deno.test("LanguageServer - rename emits a WorkspaceEdit with one TextEdit per o
     jsonrpc: "2.0",
     method: "textDocument/didOpen",
     params: {
-      textDocument: { uri: "file:///rn.disc", languageId: "disc", version: 1, text }
+      textDocument: {
+        uri: "file:///rn.disc",
+        languageId: "disc",
+        version: 1,
+        text
+      }
     }
   });
   tx.outgoing.length = 0;
@@ -431,12 +465,14 @@ Deno.test("LanguageServer - rename emits a WorkspaceEdit with one TextEdit per o
     }
   });
   const r = tx.outgoing.find(m => "id" in m && m.id === 70);
-  const result = (r as { result: { changes: Record<string, { newText: string; }[]>; } | null; }).result;
+  const result = (r as { result: { changes: Record<string, { newText: string; }[]>; } | null; })
+    .result;
   assertExists(result);
   const edits = result!.changes["file:///rn.disc"];
   assertEquals(edits.length, 2);
-  for (const e of edits)
+  for (const e of edits) {
     assertEquals(e.newText, "Member");
+  }
 });
 
 // =====================================================================
@@ -454,7 +490,12 @@ required name: str;
     jsonrpc: "2.0",
     method: "textDocument/didOpen",
     params: {
-      textDocument: { uri: "file:///fmt.disc", languageId: "disc", version: 1, text }
+      textDocument: {
+        uri: "file:///fmt.disc",
+        languageId: "disc",
+        version: 1,
+        text
+      }
     }
   });
   tx.outgoing.length = 0;
@@ -491,7 +532,12 @@ Deno.test("LanguageServer - formatting on a TS host file is a no-op", async () =
     jsonrpc: "2.0",
     method: "textDocument/didOpen",
     params: {
-      textDocument: { uri: "file:///app.ts", languageId: "typescript", version: 1, text }
+      textDocument: {
+        uri: "file:///app.ts",
+        languageId: "typescript",
+        version: 1,
+        text
+      }
     }
   });
   tx.outgoing.length = 0;
@@ -520,7 +566,10 @@ Deno.test("LanguageServer - initialize advertises documentFormattingProvider cap
     params: {}
   });
   const r = tx.outgoing.find(m => "id" in m && m.id === 77);
-  const result = (r as { result: { capabilities: { documentFormattingProvider?: boolean; }; }; }).result;
+  const result = (r as {
+    result: { capabilities: { documentFormattingProvider?: boolean; }; };
+  })
+    .result;
   assertEquals(result.capabilities.documentFormattingProvider, true);
 });
 
@@ -535,7 +584,12 @@ Deno.test("LanguageServer - hover on a TS host file routes through embedded-Edge
     jsonrpc: "2.0",
     method: "textDocument/didOpen",
     params: {
-      textDocument: { uri: "file:///app.ts", languageId: "typescript", version: 1, text }
+      textDocument: {
+        uri: "file:///app.ts",
+        languageId: "typescript",
+        version: 1,
+        text
+      }
     }
   });
   tx.outgoing.length = 0;
@@ -563,7 +617,12 @@ Deno.test("LanguageServer - completion on a TS host file outside any eql tag ret
     jsonrpc: "2.0",
     method: "textDocument/didOpen",
     params: {
-      textDocument: { uri: "file:///plain.ts", languageId: "typescript", version: 1, text: "const x = 1;" }
+      textDocument: {
+        uri: "file:///plain.ts",
+        languageId: "typescript",
+        version: 1,
+        text: "const x = 1;"
+      }
     }
   });
   tx.outgoing.length = 0;
@@ -589,7 +648,12 @@ Deno.test("LanguageServer - completion inside an eql tag returns EdgeQL keywords
     jsonrpc: "2.0",
     method: "textDocument/didOpen",
     params: {
-      textDocument: { uri: "file:///app.ts", languageId: "typescript", version: 1, text: "const q = eql`select User`;" }
+      textDocument: {
+        uri: "file:///app.ts",
+        languageId: "typescript",
+        version: 1,
+        text: "const q = eql`select User`;"
+      }
     }
   });
   tx.outgoing.length = 0;
@@ -623,14 +687,24 @@ Deno.test("LanguageServer - hover on a TS host file resolves user-defined types 
     jsonrpc: "2.0",
     method: "textDocument/didOpen",
     params: {
-      textDocument: { uri: "file:///dbschema/default.disc", languageId: "disc", version: 1, text: sdl }
+      textDocument: {
+        uri: "file:///dbschema/default.disc",
+        languageId: "disc",
+        version: 1,
+        text: sdl
+      }
     }
   });
   await srv.handle({
     jsonrpc: "2.0",
     method: "textDocument/didOpen",
     params: {
-      textDocument: { uri: "file:///app.ts", languageId: "typescript", version: 1, text: "const q = eql`select Article`;" }
+      textDocument: {
+        uri: "file:///app.ts",
+        languageId: "typescript",
+        version: 1,
+        text: "const q = eql`select Article`;"
+      }
     }
   });
   tx.outgoing.length = 0;
@@ -657,14 +731,24 @@ Deno.test("LanguageServer - definition on a TS host file jumps into the .disc de
     jsonrpc: "2.0",
     method: "textDocument/didOpen",
     params: {
-      textDocument: { uri: "file:///dbschema/default.disc", languageId: "disc", version: 1, text: sdl }
+      textDocument: {
+        uri: "file:///dbschema/default.disc",
+        languageId: "disc",
+        version: 1,
+        text: sdl
+      }
     }
   });
   await srv.handle({
     jsonrpc: "2.0",
     method: "textDocument/didOpen",
     params: {
-      textDocument: { uri: "file:///app.ts", languageId: "typescript", version: 1, text: "const q = eql`select Article`;" }
+      textDocument: {
+        uri: "file:///app.ts",
+        languageId: "typescript",
+        version: 1,
+        text: "const q = eql`select Article`;"
+      }
     }
   });
   tx.outgoing.length = 0;
@@ -678,7 +762,10 @@ Deno.test("LanguageServer - definition on a TS host file jumps into the .disc de
     }
   });
   const r = tx.outgoing.find(m => "id" in m && m.id === 91);
-  const result = (r as { result: { uri: string; range: { start: { line: number; }; }; } | null; }).result;
+  const result = (r as {
+    result: { uri: string; range: { start: { line: number; }; }; } | null;
+  })
+    .result;
   assertExists(result);
   assertEquals(result!.uri, "file:///dbschema/default.disc");
   // `type Article` lives on line 1 (0-indexed) of the SDL.

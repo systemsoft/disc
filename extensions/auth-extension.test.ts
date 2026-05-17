@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 // deno-lint-ignore-file
 /**
  * Tests for AuthExtensionAdapter
@@ -5,7 +8,13 @@
 
 import { assertEquals } from "@std/assert";
 import type { AuthContext, RequestHandler } from "../auth/middleware.ts";
-import type { AuthResponse, LoginCredentials, RegisterData, TokenPayload, User } from "../auth/types.ts";
+import type {
+  AuthResponse,
+  LoginCredentials,
+  RegisterData,
+  TokenPayload,
+  User
+} from "../auth/types.ts";
 import { AuthExtensionAdapter } from "./auth-extension.ts";
 import type { AuthExtensionAdapterOptions } from "./auth-extension.ts";
 import type { ExtensionContext } from "./types.ts";

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * PostgreSQL → Disc Schema introspection (#3452)
  *
@@ -120,19 +123,23 @@ function tableToTypeName(tableName: string): string {
 }
 
 function singularize(name: string): string {
-  if (name.endsWith("ies"))
+  if (name.endsWith("ies")) {
     return name.slice(0, -3) + "y";
-  if (name.endsWith("ses") || name.endsWith("xes"))
+  }
+  if (name.endsWith("ses") || name.endsWith("xes")) {
     return name.slice(0, -2);
-  if (name.endsWith("s") && !name.endsWith("ss"))
+  }
+  if (name.endsWith("s") && !name.endsWith("ss")) {
     return name.slice(0, -1);
+  }
   return name;
 }
 
 function fkColumnToLinkName(columnName: string): string {
   // Convention: `<thing>_id` → `<thing>`. Otherwise pass through.
-  if (columnName.endsWith("_id"))
+  if (columnName.endsWith("_id")) {
     return columnName.slice(0, -3);
+  }
   return columnName;
 }
 
@@ -164,23 +171,27 @@ function detectJunctions(data: IntrospectionData): JunctionInfo[] {
   const junctions: JunctionInfo[] = [];
   for (const t of data.tables) {
     const fks = data.foreignKeys.filter(fk => fk.fromTable === t.tableName);
-    if (fks.length !== 2)
+    if (fks.length !== 2) {
       continue;
+    }
     // Junction table: every column is part of the composite PK and is itself
     // a foreign key. No payload columns allowed (those would mean it's a
     // first-class associative entity, not a pure junction).
     const pk = t.primaryKey ?? [];
-    if (pk.length !== 2)
+    if (pk.length !== 2) {
       continue;
+    }
     const fkCols = new Set(fks.map(f => f.fromColumn));
-    if (![...pk].every(c => fkCols.has(c)))
+    if (![...pk].every(c => fkCols.has(c))) {
       continue;
+    }
     // Non-FK, non-PK columns disqualify (e.g. created_at, role)
     const extraCols = t.columns.filter(
       c => !fkCols.has(c.name)
     );
-    if (extraCols.length > 0)
+    if (extraCols.length > 0) {
       continue;
+    }
 
     // Order by FK source-column position to make the result deterministic.
     const sortedFks = [...fks].sort((a, b) => a.fromColumn.localeCompare(b.fromColumn));
@@ -212,10 +223,12 @@ export function buildSchemaFromIntrospection(
     { module: string; typeName: string; qualified: string; }
   >();
   for (const t of data.tables) {
-    if (isDiscInternal(t.tableName))
+    if (isDiscInternal(t.tableName)) {
       continue;
-    if (junctionTableNames.has(t.tableName))
+    }
+    if (junctionTableNames.has(t.tableName)) {
       continue;
+    }
     const module = moduleForSchema(t.schemaName);
     const typeName = tableToTypeName(t.tableName);
     targetByTable.set(t.tableName, {
@@ -228,17 +241,20 @@ export function buildSchemaFromIntrospection(
   // Index FKs by source table for fast lookup
   const fksByFromTable = new Map<string, IntrospectedForeignKey[]>();
   for (const fk of data.foreignKeys) {
-    if (!fksByFromTable.has(fk.fromTable))
+    if (!fksByFromTable.has(fk.fromTable)) {
       fksByFromTable.set(fk.fromTable, []);
+    }
     fksByFromTable.get(fk.fromTable)!.push(fk);
   }
 
   // Build object types from tables (skipping junctions and internal tables)
   for (const t of data.tables) {
-    if (isDiscInternal(t.tableName))
+    if (isDiscInternal(t.tableName)) {
       continue;
-    if (junctionTableNames.has(t.tableName))
+    }
+    if (junctionTableNames.has(t.tableName)) {
       continue;
+    }
 
     const target = targetByTable.get(t.tableName)!;
     const typeDef = buildObjectType(t, target.module, target.typeName, {
@@ -276,16 +292,18 @@ function buildObjectType(
 
   const properties = new Map<string, PropertyDef>();
   for (const col of table.columns) {
-    if (fkColumns.has(col.name))
+    if (fkColumns.has(col.name)) {
       continue; // FK columns become links, not properties
+    }
     properties.set(col.name, columnToProperty(col, table));
   }
 
   const links = new Map<string, LinkDef>();
   for (const fk of tableFks) {
     const target = ctx.targetByTable.get(fk.toTable);
-    if (!target)
+    if (!target) {
       continue; // FK pointing to junction or internal table — skip
+    }
     const linkName = fkColumnToLinkName(fk.fromColumn);
     const sourceCol = table.columns.find(c => c.name === fk.fromColumn);
     links.set(linkName, {
@@ -343,13 +361,15 @@ function applyJunction(
 ): void {
   const left = targetByTable.get(j.leftTarget);
   const right = targetByTable.get(j.rightTarget);
-  if (!left || !right)
+  if (!left || !right) {
     return;
+  }
 
   const leftType = types.get(left.qualified);
   const rightType = types.get(right.qualified);
-  if (!leftType || !rightType)
+  if (!leftType || !rightType) {
     return;
+  }
 
   // Link names from the junction-table FK columns: <other_table>_id → <other_table>.
   // E.g. `users_tags(user_id, tag_id)` → User.tags + Tag.users (multi each).

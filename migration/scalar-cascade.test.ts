@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for #8517 full impl: column wiring to `disc_enum_<name>` PG
  * types + cascade-aware operation ordering.
@@ -28,7 +31,10 @@ function parseModules(src: string) {
 }
 
 function diff(beforeSrc: string, afterSrc: string): Types.MigrationOperation[] {
-  return new SchemaDiffer().diff(parseModules(beforeSrc), parseModules(afterSrc));
+  return new SchemaDiffer().diff(
+    parseModules(beforeSrc),
+    parseModules(afterSrc)
+  );
 }
 
 // ---------------------------------------------------------------------
@@ -50,10 +56,16 @@ Deno.test("DDLGenerator without setEnumScalars: enum-typed property falls back t
   const ddl = new DDLGenerator().generateDDL(ops).join("\n");
   // The diff is just CreateType(Item) — the scalar already existed.
   // Without a registry, the status column type falls back to TEXT.
-  assert(ddl.includes("status TEXT"), `expected TEXT fallback without registry; got: ${ddl}`);
+  assert(
+    ddl.includes("status TEXT"),
+    `expected TEXT fallback without registry; got: ${ddl}`
+  );
   // No CREATE TYPE statement in this diff (scalar pre-existed) and
   // no column references the PG enum type.
-  assert(!ddl.includes("disc_enum_status"), "no enum reference expected without registry");
+  assert(
+    !ddl.includes("disc_enum_status"),
+    "no enum reference expected without registry"
+  );
 });
 
 Deno.test("DDLGenerator with setEnumScalars: enum-typed property resolves to disc_enum_<name>", () => {
@@ -251,10 +263,26 @@ Deno.test("SchemaDiffer.enumScalarNames: returns only enum-typed scalars", () =>
   const names = new SchemaDiffer().enumScalarNames(schema);
   // Both unqualified and qualified forms are present so column
   // emission resolves either property type style.
-  assertEquals(names.has("Status"), true, "unqualified enum scalar should be included");
-  assertEquals(names.has("default::Status"), true, "qualified enum scalar should be included");
-  assertEquals(names.has("Email"), false, "non-enum scalar (extends str) should be excluded");
-  assertEquals(names.has("default::Email"), false, "qualified non-enum scalar should be excluded");
+  assertEquals(
+    names.has("Status"),
+    true,
+    "unqualified enum scalar should be included"
+  );
+  assertEquals(
+    names.has("default::Status"),
+    true,
+    "qualified enum scalar should be included"
+  );
+  assertEquals(
+    names.has("Email"),
+    false,
+    "non-enum scalar (extends str) should be excluded"
+  );
+  assertEquals(
+    names.has("default::Email"),
+    false,
+    "qualified non-enum scalar should be excluded"
+  );
 });
 
 Deno.test("SchemaDiffer.enumScalarNames: empty schema returns empty set", () => {

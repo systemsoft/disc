@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 import { expect, test } from "@playwright/test";
 
 test.describe("Migrations page", () => {

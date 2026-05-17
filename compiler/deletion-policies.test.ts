@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for Deletion Policies: `on target delete set empty` and
  * `on source delete allow|delete target` (Stage 35 Phase 2)

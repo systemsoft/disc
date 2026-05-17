@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Go-to-definition provider (#7411 + #655 — Phase 3)
  */
@@ -13,13 +16,15 @@ export function provideDefinition(
   uri: DocumentUri
 ): Location | null {
   const word = wordAt(text, pos);
-  if (!word)
+  if (!word) {
     return null;
+  }
 
   const idx = buildSymbolIndex(text);
   const sym = idx.types.get(word);
-  if (!sym)
+  if (!sym) {
     return null;
+  }
 
   return {
     uri,
@@ -29,19 +34,22 @@ export function provideDefinition(
 
 function wordAt(text: string, pos: Position): string | null {
   const lines = text.split("\n");
-  if (pos.line < 0 || pos.line >= lines.length)
+  if (pos.line < 0 || pos.line >= lines.length) {
     return null;
+  }
   const line = lines[pos.line];
-  if (pos.character < 0 || pos.character > line.length)
+  if (pos.character < 0 || pos.character > line.length) {
     return null;
+  }
 
   IDENT.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = IDENT.exec(line)) !== null) {
     const start = m.index;
     const end = start + m[0].length;
-    if (pos.character >= start && pos.character <= end)
+    if (pos.character >= start && pos.character <= end) {
       return m[0];
+    }
   }
   return null;
 }

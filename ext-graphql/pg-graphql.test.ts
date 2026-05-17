@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * PostgreSQL Integration Tests for GraphQL Extension
  *
@@ -12,7 +15,11 @@ import { assertEquals, assertStringIncludes } from "@std/assert";
 import type { Schema, TypeDef } from "../compiler/context.ts";
 import type { ExtensionContext } from "../extensions/types.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
-import { canRunPgTests, getTestDsn, resetTestDatabase } from "../tests/pg-test-harness.ts";
+import {
+  canRunPgTests,
+  getTestDsn,
+  resetTestDatabase
+} from "../tests/pg-test-harness.ts";
 import { GraphQLExtension } from "./extension.ts";
 import { parseGraphQLQuery, translateToEdgeQL } from "./query-translator.ts";
 

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * SQL Extensions for Complex Queries
  * Additional SQL builder functions for advanced features

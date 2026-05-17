@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * SDL to Schema AST Converter
  *
@@ -67,20 +70,27 @@ export function normalizeArrowsToProperties(modules: Module[]): Module[] {
           name: link.name,
           type: link.target
         };
-        if (link.required !== undefined)
+        if (link.required !== undefined) {
           property.required = link.required;
-        if (link.multi !== undefined)
+        }
+        if (link.multi !== undefined) {
           property.multi = link.multi;
-        if (link.readonly !== undefined)
+        }
+        if (link.readonly !== undefined) {
           property.readonly = link.readonly;
-        if (link.computed !== undefined)
+        }
+        if (link.computed !== undefined) {
           property.computed = link.computed;
-        if (link.default !== undefined)
+        }
+        if (link.default !== undefined) {
           property.default = link.default;
-        if (link.constraints !== undefined)
+        }
+        if (link.constraints !== undefined) {
           property.constraints = link.constraints;
-        if (link.annotations !== undefined)
+        }
+        if (link.annotations !== undefined) {
           property.annotations = link.annotations;
+        }
         return property;
       });
       return { ...typeDecl, members: newMembers };
@@ -222,8 +232,9 @@ export class SDLConverter {
   ): AST.TypeDeclaration[] {
     const chain: AST.TypeDeclaration[] = [];
 
-    if (!type.extending)
+    if (!type.extending) {
       return chain;
+    }
 
     for (const baseRef of type.extending) {
       const baseName = baseRef.name.parts.join("::");
@@ -254,7 +265,9 @@ export class SDLConverter {
     for (const member of type.members) {
       members.push(member);
       if ("name" in member && member.name) {
-        const name = member.name.kind === "Identifier" ? member.name.value : member.name.parts.join("::");
+        const name = member.name.kind === "Identifier" ?
+          member.name.value :
+          member.name.parts.join("::");
         seenNames.add(name);
       }
     }
@@ -263,7 +276,9 @@ export class SDLConverter {
     for (const baseType of inheritanceChain) {
       for (const member of baseType.members) {
         if ("name" in member && member.name) {
-          const name = member.name.kind === "Identifier" ? member.name.value : member.name.parts.join("::");
+          const name = member.name.kind === "Identifier" ?
+            member.name.value :
+            member.name.parts.join("::");
           if (!seenNames.has(name)) {
             members.push(member);
             seenNames.add(name);
@@ -381,6 +396,8 @@ export class SDLConverter {
     }
 
     // Otherwise, assume it's in the current module
-    return currentModule === "default" ? parts[0] : `${currentModule}::${parts[0]}`;
+    return currentModule === "default" ?
+      parts[0] :
+      `${currentModule}::${parts[0]}`;
   }
 }

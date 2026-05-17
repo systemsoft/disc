@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 import { sveltekit } from "@sveltejs/kit/vite";
 import { defineConfig } from "vite";
 

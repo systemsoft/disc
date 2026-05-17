@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Database Registry — maps named databases to connection pools,
  * schemas, and migration trackers.
@@ -9,7 +12,11 @@
 
 import type { Schema } from "../compiler/context.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
-import { createDatabase, dropDatabase, replaceDsnDatabase } from "../lib/database.ts";
+import {
+  createDatabase,
+  dropDatabase,
+  replaceDsnDatabase
+} from "../lib/database.ts";
 import { DatabaseRegistryError } from "../lib/errors.ts";
 import { MigrationTracker } from "../migration/tracker.ts";
 import { logger } from "../postgres/logger.ts";

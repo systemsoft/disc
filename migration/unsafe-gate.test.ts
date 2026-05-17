@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 // deno-lint-ignore-file no-explicit-any
 import { assertEquals, assertStringIncludes } from "@std/assert";
 
@@ -67,8 +70,9 @@ function planUnsafeDelta(initialSdl: string, nextSdl: string) {
     new SDLParser(nextSdl).parse()
   );
   const planResult = engine.planMigration(initialModules, nextModules);
-  if (!planResult.ok)
+  if (!planResult.ok) {
     throw new Error(planResult.error.message);
+  }
   return { engine, plan: planResult.value };
 }
 
@@ -80,8 +84,9 @@ Deno.test("classifyUnsafeOperations - additive migration is safe", () => {
   assertEquals(flagged.length, 0);
   // Each safe op is annotated on the operation itself.
   for (const op of plan.migrations[0].operations) {
-    if (op.kind !== "AlterType")
+    if (op.kind !== "AlterType") {
       continue;
+    }
     assertEquals(op.classification, "safe");
   }
 });
@@ -110,7 +115,11 @@ Deno.test("Gel #1840: ChangeType without explicit cast is ambiguous", () => {
   const { engine, plan } = planUnsafeDelta(before, after);
   const flagged = engine.classifyUnsafeOperations(plan);
   const ambiguous = flagged.filter(f => f.classification === "ambiguous");
-  assertEquals(ambiguous.length >= 1, true, "expected at least one ambiguous flag");
+  assertEquals(
+    ambiguous.length >= 1,
+    true,
+    "expected at least one ambiguous flag"
+  );
   assertStringIncludes(ambiguous[0].operation, "ChangeType");
   assertStringIncludes(ambiguous[0].reason, "explicit cast");
 });

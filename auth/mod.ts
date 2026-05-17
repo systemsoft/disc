@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Authentication Module
  *
@@ -6,15 +9,16 @@
  * JWT token management, and HTTP middleware.
  */
 
+/*** EXPORT ------------------------------------------- ***/
+
 export * from "./integration.ts";
 export * from "./middleware.ts";
 export * from "./pg-database-adapter.ts";
 export * from "./provider.ts";
 export * from "./types.ts";
 
-// Re-export for convenience
-export { AuthRoutes } from "./integration.ts";
 export { AuthMiddleware, createAuthMiddleware } from "./middleware.ts";
-export type { AuthContext, CORSOptions } from "./middleware.ts";
-export { PgDatabaseAdapter } from "./pg-database-adapter.ts";
 export { AuthProvider } from "./provider.ts";
+export { AuthRoutes } from "./integration.ts";
+export { PgDatabaseAdapter } from "./pg-database-adapter.ts";
+export type { AuthContext, CORSOptions } from "./middleware.ts";

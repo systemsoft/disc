@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * GraphQL extension for Disc database
  *
@@ -12,8 +15,17 @@
 
 import type { Schema } from "../compiler/context.ts";
 import { BaseExtension } from "../extensions/base-extension.ts";
-import type { ExtensionContext, ExtensionMetadata, ExtensionRoute } from "../extensions/types.ts";
-import { isIntrospectionQuery, parseGraphQLQuery, resolveIntrospection, translateToEdgeQL } from "./query-translator.ts";
+import type {
+  ExtensionContext,
+  ExtensionMetadata,
+  ExtensionRoute
+} from "../extensions/types.ts";
+import {
+  isIntrospectionQuery,
+  parseGraphQLQuery,
+  resolveIntrospection,
+  translateToEdgeQL
+} from "./query-translator.ts";
 import { generateGraphQLSchema } from "./schema-generator.ts";
 import type { GraphQLConfig, GraphQLResponse } from "./types.ts";
 
@@ -74,7 +86,9 @@ export class GraphQLExtension extends BaseExtension {
 
   override healthCheck(): Promise<{ healthy: boolean; details?: string; }> {
     return Promise.resolve({
-      details: this.state === "ready" ? `GraphQL endpoint ready (mutations: ${this.enableMutations})` : undefined,
+      details: this.state === "ready" ?
+        `GraphQL endpoint ready (mutations: ${this.enableMutations})` :
+        undefined,
       healthy: this.state === "ready"
     });
   }
@@ -231,13 +245,15 @@ export class GraphQLExtension extends BaseExtension {
         inString = !inString;
         continue;
       }
-      if (inString)
+      if (inString) {
         continue;
+      }
 
       if (ch === "{") {
         depth++;
-        if (depth > maxDepth)
+        if (depth > maxDepth) {
           maxDepth = depth;
+        }
       } else if (ch === "}") {
         depth--;
       }

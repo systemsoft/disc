@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * WebSocket Subscription Handler for Disc Server
  * Handles real-time subscriptions over WebSocket connections
@@ -90,15 +93,18 @@ export class SubscriptionHandler {
       // Start the subscription (for now, we'll send periodic updates)
       await this.start_subscription(activeSubscription);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown subscription error";
+      const errorMessage = error instanceof Error ?
+        error.message :
+        "Unknown subscription error";
       this.send_error(websocket, subscription.id, errorMessage);
     }
   }
 
   stop_subscription(subscriptionId: string): void {
     const subscription = this.subscriptions.get(subscriptionId);
-    if (!subscription)
+    if (!subscription) {
       return;
+    }
 
     subscription.status = "stopped";
     this.subscriptions.delete(subscriptionId);
@@ -125,8 +131,9 @@ export class SubscriptionHandler {
 
   cleanup_connection(connectionId: string): void {
     const subscriptionIds = this.connection_subscriptions.get(connectionId);
-    if (!subscriptionIds)
+    if (!subscriptionIds) {
       return;
+    }
 
     for (const subscriptionId of subscriptionIds) {
       this.stop_subscription(subscriptionId);
@@ -180,8 +187,9 @@ export class SubscriptionHandler {
     };
 
     const sendUpdate = () => {
-      if (subscription.status !== "active")
+      if (subscription.status !== "active") {
         return;
+      }
 
       const mockData = this.generate_mock_update(subscription.query);
       this.send_data(subscription.websocket, subscription.id, mockData);

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Calendar Type Support Tests
  *
@@ -575,8 +578,9 @@ Deno.test("sdlTypeToSqlType - cal::local_date maps to date", () => {
     `type T { required d: cal::local_date; }`
   );
   assertEquals(parseResult.ok, true);
-  if (!parseResult.ok)
+  if (!parseResult.ok) {
     throw parseResult.error;
+  }
   const schema = manager.modulesToSchema(parseResult.value);
   const prop = schema.types.get("T")!.properties.get("d")!;
   assertEquals(prop.type, "date");
@@ -588,8 +592,9 @@ Deno.test("sdlTypeToSqlType - cal::local_time maps to time", () => {
     `type T { required t: cal::local_time; }`
   );
   assertEquals(parseResult.ok, true);
-  if (!parseResult.ok)
+  if (!parseResult.ok) {
     throw parseResult.error;
+  }
   const schema = manager.modulesToSchema(parseResult.value);
   const prop = schema.types.get("T")!.properties.get("t")!;
   assertEquals(prop.type, "time");
@@ -601,8 +606,9 @@ Deno.test("sdlTypeToSqlType - cal::local_datetime maps to timestamp", () => {
     `type T { required dt: cal::local_datetime; }`
   );
   assertEquals(parseResult.ok, true);
-  if (!parseResult.ok)
+  if (!parseResult.ok) {
     throw parseResult.error;
+  }
   const schema = manager.modulesToSchema(parseResult.value);
   const prop = schema.types.get("T")!.properties.get("dt")!;
   assertEquals(prop.type, "timestamp");
@@ -614,8 +620,9 @@ Deno.test("sdlTypeToSqlType - cal::relative_duration maps to interval", () => {
     `type T { required rd: cal::relative_duration; }`
   );
   assertEquals(parseResult.ok, true);
-  if (!parseResult.ok)
+  if (!parseResult.ok) {
     throw parseResult.error;
+  }
   const schema = manager.modulesToSchema(parseResult.value);
   const prop = schema.types.get("T")!.properties.get("rd")!;
   assertEquals(prop.type, "interval");
@@ -627,8 +634,9 @@ Deno.test("sdlTypeToSqlType - cal::date_duration maps to interval", () => {
     `type T { required dd: cal::date_duration; }`
   );
   assertEquals(parseResult.ok, true);
-  if (!parseResult.ok)
+  if (!parseResult.ok) {
     throw parseResult.error;
+  }
   const schema = manager.modulesToSchema(parseResult.value);
   const prop = schema.types.get("T")!.properties.get("dd")!;
   assertEquals(prop.type, "interval");

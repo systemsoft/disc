@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Data Migration System
  *
@@ -55,10 +58,12 @@ export class DataMigrationRunner {
 
     try {
       for await (const entry of Deno.readDir(dir)) {
-        if (!entry.isFile)
+        if (!entry.isFile) {
           continue;
-        if (!entry.name.endsWith(".data.ts"))
+        }
+        if (!entry.name.endsWith(".data.ts")) {
           continue;
+        }
 
         // Extract timestamp from filename: m<timestamp>_<name>.data.ts
         const match = entry.name.match(/^m(\d{8,}T?\d*)_/);

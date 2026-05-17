@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for IndexExpression and SliceExpression
  * Covers EdgeQL array indexing, string slicing, and JSON access compilation.

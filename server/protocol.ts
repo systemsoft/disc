@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Protocol handler for EdgeQL queries
  */
@@ -47,7 +50,9 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       log.error("Query execution error", {
         error: error instanceof Error ? error.message : String(error)
       });
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      const errorMessage = error instanceof Error ?
+        error.message :
+        "Unknown error";
 
       return {
         errors: [{

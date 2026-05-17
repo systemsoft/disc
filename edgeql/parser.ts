@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * EdgeQL Parser - Parses EdgeQL tokens into AST
  */
@@ -58,8 +61,9 @@ export class EdgeQLParser {
       while (this.match(TokenType.SEMICOLON)) {
         // no-op
       }
-      if (this.isAtEnd())
+      if (this.isAtEnd()) {
         break;
+      }
 
       const startPos = this.current;
       try {
@@ -176,7 +180,11 @@ export class EdgeQLParser {
       this.check(TokenType.INTERSECT)
     ) {
       const opToken = this.advance();
-      const op = opToken.type === TokenType.UNION ? "UNION" : opToken.type === TokenType.EXCEPT ? "EXCEPT" : "INTERSECT";
+      const op = opToken.type === TokenType.UNION ?
+        "UNION" :
+        opToken.type === TokenType.EXCEPT ?
+        "EXCEPT" :
+        "INTERSECT";
 
       const right = this.parseQuery();
 
@@ -352,7 +360,9 @@ export class EdgeQLParser {
 
       let elseClause: AST.Query | AST.Expression | undefined;
       if (this.match(TokenType.ELSE)) {
-        elseClause = this.check(TokenType.LPAREN) ? this.parseSubquery() : this.parseExpression();
+        elseClause = this.check(TokenType.LPAREN) ?
+          this.parseSubquery() :
+          this.parseExpression();
       }
 
       unless = {
@@ -1182,7 +1192,9 @@ export class EdgeQLParser {
             const firstStep: AST.PathStep = {
               kind: "PathStep",
               type: "property",
-              name: expr.kind === "Identifier" ? expr.name : expr.name.parts.join("::"),
+              name: expr.kind === "Identifier" ?
+                expr.name :
+                expr.name.parts.join("::"),
               optional: false
             };
             expr = AST.createPath([firstStep, step]);
@@ -1270,7 +1282,9 @@ export class EdgeQLParser {
           if (expr.kind === "Path") {
             expr.steps.push(typeIntersectionStep);
           } else if (expr.kind === "Identifier" || expr.kind === "TypeName") {
-            const firstName = expr.kind === "Identifier" ? expr.name : expr.name.parts.join("::");
+            const firstName = expr.kind === "Identifier" ?
+              expr.name :
+              expr.name.parts.join("::");
             const firstStep: AST.PathStep = {
               kind: "PathStep",
               type: "property",
@@ -1440,8 +1454,9 @@ export class EdgeQLParser {
         const elements = [firstExpr];
 
         do {
-          if (this.check(TokenType.RPAREN))
+          if (this.check(TokenType.RPAREN)) {
             break; // Allow trailing comma
+          }
           elements.push(this.parseExpression());
         } while (this.match(TokenType.COMMA));
 
@@ -1463,8 +1478,9 @@ export class EdgeQLParser {
       while (!this.check(TokenType.RBRACE) && !this.isAtEnd()) {
         elements.push(this.parseExpression());
 
-        if (!this.match(TokenType.COMMA))
+        if (!this.match(TokenType.COMMA)) {
           break;
+        }
       }
 
       this.consume(TokenType.RBRACE, "Expected '}'");
@@ -1478,8 +1494,9 @@ export class EdgeQLParser {
       while (!this.check(TokenType.RBRACKET) && !this.isAtEnd()) {
         elements.push(this.parseExpression());
 
-        if (!this.match(TokenType.COMMA))
+        if (!this.match(TokenType.COMMA)) {
           break;
+        }
       }
 
       this.consume(TokenType.RBRACKET, "Expected ']'");
@@ -1587,8 +1604,9 @@ export class EdgeQLParser {
     const elements: AST.NamedTupleElement[] = [];
 
     do {
-      if (this.check(TokenType.RPAREN))
+      if (this.check(TokenType.RPAREN)) {
         break;
+      }
 
       const name = this.parseIdentifier().name;
       this.consume(TokenType.ASSIGN, "Expected ':=' in named tuple");
@@ -1898,14 +1916,16 @@ export class EdgeQLParser {
   }
 
   private check(type: TokenType): boolean {
-    if (this.isAtEnd())
+    if (this.isAtEnd()) {
       return false;
+    }
     return this.peek().type === type;
   }
 
   private advance(): Token {
-    if (!this.isAtEnd())
+    if (!this.isAtEnd()) {
       this.current++;
+    }
     return this.previous();
   }
 
@@ -1922,8 +1942,9 @@ export class EdgeQLParser {
   }
 
   private consume(type: TokenType, message: string): Token {
-    if (this.check(type))
+    if (this.check(type)) {
       return this.advance();
+    }
     throw this.error(message);
   }
 

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Schema-derived REST surface — black-box integration tests
  * (Bundle J — Disc-original feature #2).

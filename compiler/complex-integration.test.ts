@@ -1,8 +1,14 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Integration tests for complex query compilation
  */
 
-import { assertEquals, assertExists } from "https://deno.land/std@0.208.0/assert/mod.ts";
+import {
+  assertEquals,
+  assertExists
+} from "@std/assert";
 import * as EdgeQLAST from "../edgeql/ast.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { SQLCodeGenerator } from "./codegen.ts";

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Policy Adapter
  *
@@ -5,21 +8,15 @@
  * policy objects (from access/types.ts) used by the access control evaluator.
  */
 
-import type { AccessAction as SDLAccessAction, AccessPolicy as SDLAccessPolicy } from "../schema/ast.ts";
-import type { AccessExpressionNode } from "./ast.ts";
+/*** UTILITY ------------------------------------------ ***/
+
 import { convertExpression } from "./expression-converter.ts";
+
+import type { AccessExpressionNode } from "./ast.ts";
+import type { AccessAction as SDLAccessAction, AccessPolicy as SDLAccessPolicy } from "../schema/ast.ts";
 import type { AccessAction as RuntimeAccessAction, AccessPolicy as RuntimeAccessPolicy } from "./types.ts";
 
-/**
- * Converts a single SDL AccessAction into a runtime AccessAction, stripping
- * the AST-specific `kind` and `span` fields.
- */
-function adaptAccessAction(sdlAction: SDLAccessAction): RuntimeAccessAction {
-  return {
-    allow: sdlAction.allow,
-    operations: sdlAction.operations
-  };
-}
+/*** EXPORT ------------------------------------------- ***/
 
 /**
  * Returns true if the expression tree contains any AccessPath nodes
@@ -27,20 +24,30 @@ function adaptAccessAction(sdlAction: SDLAccessAction): RuntimeAccessAction {
  */
 export function containsColumnReference(expr: AccessExpressionNode): boolean {
   switch (expr.kind) {
-    case "AccessPath":
+    case "AccessPath": {
       return true;
+    }
+
     case "AccessLiteral":
-    case "AccessGlobal":
+    case "AccessGlobal": {
       return false;
-    case "AccessComparison":
-      return containsColumnReference(expr.left) ||
-        containsColumnReference(expr.right);
-    case "AccessLogical":
+    }
+
+    case "AccessComparison": {
+      return containsColumnReference(expr.left) || containsColumnReference(expr.right);
+    }
+
+    case "AccessLogical": {
       return expr.operands.some(containsColumnReference);
-    case "AccessFunction":
+    }
+
+    case "AccessFunction": {
       return expr.args.some(containsColumnReference);
-    default:
+    }
+
+    default: {
       return false;
+    }
   }
 }
 
@@ -51,58 +58,59 @@ export function containsColumnReference(expr: AccessExpressionNode): boolean {
  *
  * Returns undefined if no globals are referenced (pure column expression).
  */
-export function extractGlobalGuard(
-  expr: AccessExpressionNode
-): AccessExpressionNode | undefined {
+export function extractGlobalGuard(expr: AccessExpressionNode): AccessExpressionNode | undefined {
   const globals: AccessExpressionNode[] = [];
   collectGlobals(expr, globals);
 
-  if (globals.length === 0) {
+  if (globals.length === 0)
     return undefined;
-  }
 
-  if (globals.length === 1) {
+  if (globals.length === 1)
     return globals[0];
-  }
 
   return {
     kind: "AccessLogical",
-    operator: "and",
-    operands: globals
+    operands: globals,
+    operator: "and"
   };
 }
 
-function collectGlobals(
-  expr: AccessExpressionNode,
-  out: AccessExpressionNode[]
-): void {
+function collectGlobals(expr: AccessExpressionNode, out: AccessExpressionNode[]): void {
   switch (expr.kind) {
     case "AccessGlobal": {
       // Avoid duplicates
-      if (!out.some(g => g.kind === "AccessGlobal" && g.name === expr.name)) {
+      if (!out.some(g => g.kind === "AccessGlobal" && g.name === expr.name))
         out.push(expr);
-      }
+
       break;
     }
+
     case "AccessComparison": {
       collectGlobals(expr.left, out);
       collectGlobals(expr.right, out);
+
       break;
     }
+
     case "AccessLogical": {
       for (const operand of expr.operands) {
         collectGlobals(operand, out);
       }
+
       break;
     }
+
     case "AccessFunction": {
       for (const arg of expr.args) {
         collectGlobals(arg, out);
       }
+
       break;
     }
-    default:
+
+    default: {
       break;
+    }
   }
 }
 
@@ -125,14 +133,11 @@ function collectGlobals(
  *
  * Note on deny policies (P1-38): deny policies currently compile to a
  * coarse gate (if the policy matches and the action is denied, reject the
- * whole request) rather than per-row filtering. This mirrors Gel's
+ * whole request) rather than per-row filtering. This mirrors Gel’s
  * documented behavior as of 5.x — row-level deny would require JOIN-style
- * policy composition that isn't implemented.
+ * policy composition that isn’t implemented.
  */
-export function adaptAccessPolicies(
-  objectType: string,
-  sdlPolicies: SDLAccessPolicy[]
-): RuntimeAccessPolicy[] {
+export function adaptAccessPolicies(objectType: string, sdlPolicies: SDLAccessPolicy[]): RuntimeAccessPolicy[] {
   return sdlPolicies.map((sdl): RuntimeAccessPolicy => {
     const policy: RuntimeAccessPolicy = {
       actions: sdl.actions.map(adaptAccessAction),
@@ -145,8 +150,8 @@ export function adaptAccessPolicies(
       policy.using = converted;
 
       if (containsColumnReference(converted)) {
-        // Column references can't be evaluated in-memory; extract a
-        // minimal guard that checks required globals are present.
+        /*** Column references can’t be evaluated in-memory; extract a minimal guard that
+             checks required globals are present. ***/
         policy.condition = extractGlobalGuard(converted);
       } else {
         // Pure context expression — safe for in-memory evaluation.
@@ -154,17 +159,28 @@ export function adaptAccessPolicies(
       }
     }
 
-    if (sdl.withCheck !== undefined) {
+    if (sdl.withCheck !== undefined)
       policy.withCheck = convertExpression(sdl.withCheck);
-    }
 
-    // Custom denial message (Gel #4095). Forwarded as-is; the evaluator
-    // surfaces it via AccessDecision.denialMessage and callers prefer it
-    // over the generic reason when raising an error.
-    if (sdl.errmessage !== undefined) {
+    /*** Custom denial message (Gel #4095). Forwarded as-is; the evaluator surfaces it via
+         AccessDecision.denialMessage and callers prefer it over the generic reason when
+         raising an error. ***/
+    if (sdl.errmessage !== undefined)
       policy.errmessage = sdl.errmessage;
-    }
 
     return policy;
   });
+}
+
+/*** HELPER ------------------------------------------- ***/
+
+/**
+ * Converts a single SDL AccessAction into a runtime AccessAction, stripping
+ * the AST-specific `kind` and `span` fields.
+ */
+function adaptAccessAction(sdlAction: SDLAccessAction): RuntimeAccessAction {
+  return {
+    allow: sdlAction.allow,
+    operations: sdlAction.operations
+  };
 }

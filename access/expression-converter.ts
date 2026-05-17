@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Expression Converter
  *
@@ -6,9 +9,24 @@
  * parsed from SDL `using(...)` clauses.
  */
 
+/*** UTILITY ------------------------------------------ ***/
+
 import { ValidationError } from "../lib/errors.ts";
-import type { BinaryOp, ConditionalExpression, Expression, FunctionCall, Literal, PathExpression, TypeCast, UnaryOp } from "../schema/ast.ts";
+
+import type {
+  BinaryOp,
+  ConditionalExpression,
+  Expression,
+  FunctionCall,
+  Literal,
+  PathExpression,
+  TypeCast,
+  UnaryOp
+} from "../schema/ast.ts";
+
 import type { AccessExpressionNode } from "./ast.ts";
+
+/*** EXPORT ------------------------------------------- ***/
 
 /**
  * Convert an SDL Expression into an AccessExpressionNode.
@@ -18,10 +36,78 @@ import type { AccessExpressionNode } from "./ast.ts";
  */
 export function convertExpression(expr: Expression): AccessExpressionNode {
   switch (expr.kind) {
+    case "BinaryOp": {
+      const bin = expr as BinaryOp;
+
+      if (bin.op === "and" || bin.op === "or") {
+        return {
+          kind: "AccessLogical",
+          operands: [convertExpression(bin.left), convertExpression(bin.right)],
+          operator: bin.op
+        };
+      }
+
+      // Map optional comparison operators
+      let operator: string = bin.op;
+
+      if (bin.op === "?=")
+        operator = "=";
+
+      if (bin.op === "?!=")
+        operator = "!=";
+
+      return {
+        kind: "AccessComparison",
+        left: convertExpression(bin.left),
+        operator: operator as "=" | "!=" | "<" | ">" | "<=" | ">=",
+        right: convertExpression(bin.right)
+      };
+    }
+
+    case "ConditionalExpression": {
+      const cond = expr as ConditionalExpression;
+      // Decompose: (test AND consequent) OR (NOT test AND alternate)
+      return {
+        kind: "AccessLogical",
+        operands: [
+          {
+            kind: "AccessLogical",
+            operands: [
+              convertExpression(cond.test),
+              convertExpression(cond.consequent)
+            ],
+            operator: "and"
+          },
+          {
+            kind: "AccessLogical",
+            operands: [
+              {
+                kind: "AccessLogical",
+                operator: "not",
+                operands: [convertExpression(cond.test)]
+              },
+              convertExpression(cond.alternate)
+            ],
+            operator: "and"
+          }
+        ],
+        operator: "or"
+      };
+    }
+
+    case "FunctionCall": {
+      const func = expr as FunctionCall;
+
+      return {
+        args: func.args.map(convertExpression),
+        kind: "AccessFunction",
+        name: func.name.parts.join("::")
+      };
+    }
+
     case "Literal": {
       const lit = expr as Literal;
-      const mappedType = lit.type === "integer" ||
-          lit.type === "float" ?
+      const mappedType = lit.type === "integer" || lit.type === "float" ?
         "number" :
         lit.type; // "string" | "boolean"
 
@@ -30,6 +116,10 @@ export function convertExpression(expr: Expression): AccessExpressionNode {
         type: mappedType,
         value: lit.value
       };
+    }
+
+    case "Parameter": {
+      throw new ValidationError("Parameter expressions are not valid in access policies");
     }
 
     case "PathExpression": {
@@ -55,30 +145,9 @@ export function convertExpression(expr: Expression): AccessExpressionNode {
       };
     }
 
-    case "BinaryOp": {
-      const bin = expr as BinaryOp;
-
-      if (bin.op === "and" || bin.op === "or") {
-        return {
-          kind: "AccessLogical",
-          operator: bin.op,
-          operands: [convertExpression(bin.left), convertExpression(bin.right)]
-        };
-      }
-
-      // Map optional comparison operators
-      let operator: string = bin.op;
-      if (bin.op === "?=")
-        operator = "=";
-      if (bin.op === "?!=")
-        operator = "!=";
-
-      return {
-        kind: "AccessComparison",
-        operator: operator as "=" | "!=" | "<" | ">" | "<=" | ">=",
-        left: convertExpression(bin.left),
-        right: convertExpression(bin.right)
-      };
+    case "TypeCast": {
+      const cast = expr as TypeCast;
+      return convertExpression(cast.expr);
     }
 
     case "UnaryOp": {
@@ -87,71 +156,16 @@ export function convertExpression(expr: Expression): AccessExpressionNode {
       if (un.op === "not") {
         return {
           kind: "AccessLogical",
-          operator: "not",
-          operands: [convertExpression(un.operand)]
+          operands: [convertExpression(un.operand)],
+          operator: "not"
         };
       }
 
-      throw new ValidationError(
-        `Unsupported unary operator in access policy: ${un.op}`
-      );
-    }
-
-    case "FunctionCall": {
-      const func = expr as FunctionCall;
-      return {
-        kind: "AccessFunction",
-        name: func.name.parts.join("::"),
-        args: func.args.map(convertExpression)
-      };
-    }
-
-    case "TypeCast": {
-      const cast = expr as TypeCast;
-      return convertExpression(cast.expr);
-    }
-
-    case "ConditionalExpression": {
-      const cond = expr as ConditionalExpression;
-      // Decompose: (test AND consequent) OR (NOT test AND alternate)
-      return {
-        kind: "AccessLogical",
-        operator: "or",
-        operands: [
-          {
-            kind: "AccessLogical",
-            operator: "and",
-            operands: [
-              convertExpression(cond.test),
-              convertExpression(cond.consequent)
-            ]
-          },
-          {
-            kind: "AccessLogical",
-            operator: "and",
-            operands: [
-              {
-                kind: "AccessLogical",
-                operator: "not",
-                operands: [convertExpression(cond.test)]
-              },
-              convertExpression(cond.alternate)
-            ]
-          }
-        ]
-      };
-    }
-
-    case "Parameter": {
-      throw new ValidationError(
-        "Parameter expressions are not valid in access policies"
-      );
+      throw new ValidationError(`Unsupported unary operator in access policy: ${un.op}`);
     }
 
     default: {
-      throw new ValidationError(
-        `Unsupported expression kind in access policy: ${(expr as any).kind}`
-      );
+      throw new ValidationError(`Unsupported expression kind in access policy: ${(expr as any).kind}`);
     }
   }
 }

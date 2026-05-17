@@ -1,4 +1,11 @@
-import { assertEquals, assertInstanceOf, assertStringIncludes } from "@std/assert";
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
+import {
+  assertEquals,
+  assertInstanceOf,
+  assertStringIncludes
+} from "@std/assert";
 
 import {
   DiscAuthError,

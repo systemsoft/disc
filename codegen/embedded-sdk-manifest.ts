@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Embedded Disc SDK manifest.
  *
@@ -10,7 +13,7 @@
  * `extractEmbeddedSdk(...)` writes only the marker file — `disc codegen`
  * still runs, but the generated `client.ts` import (`./sdk/mod.ts`) will
  * 404 unless the user supplies the SDK themselves. This keeps `deno
- * task cli` working from a fresh clone where the build step hasn't run.
+ * task cli` working from a fresh clone where the build step hasn’t run.
  *
  * To rebuild the manifest:
  *   1. `deno task cli build` regenerates this file before deno compile.
@@ -19,10 +22,14 @@
  * The manifest contains absolute `file://` URLs from the build machine,
  * so a regenerated manifest is build-machine-specific — **do not commit
  * a regenerated manifest**. The repo always ships the empty default;
- * the build step recreates the manifest in place just for that build's
+ * the build step recreates the manifest in place just for that build’s
  * compile invocation.
  */
 
+/*** UTILITY ------------------------------------------ ***/
+
 import type { EmbeddedSdkEntry } from "./sdk-extractor.ts";
+
+/*** EXPORT ------------------------------------------- ***/
 
 export const EMBEDDED_SDK_MANIFEST: readonly EmbeddedSdkEntry[] = [];

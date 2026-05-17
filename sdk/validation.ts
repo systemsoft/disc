@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Runtime validation glue for `query<T>()`'s `validate` option. (P1-28)
  *
@@ -8,7 +11,11 @@
  */
 
 import { DiscValidationError } from "./errors.ts";
-import type { QueryValidator, StandardSchemaIssue, StandardSchemaV1 } from "./types.ts";
+import type {
+  QueryValidator,
+  StandardSchemaIssue,
+  StandardSchemaV1
+} from "./types.ts";
 
 /**
  * Run the validator against `value` and return the validated `T`.

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Unit tests for the in-process auth-email subscriber.
  *
@@ -7,33 +10,19 @@
  * smtp/ tests.
  */
 
+/*** NATIVE ------------------------------------------- ***/
+
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
-import type { Mailer } from "../smtp/mailer.ts";
-import type { Email, MailerResult } from "../smtp/types.ts";
+
+/*** UTILITY ------------------------------------------ ***/
+
 import { EmailEventListener } from "./email-listener.ts";
+import type { Email, MailerResult } from "../smtp/types.ts";
+import type { Mailer } from "../smtp/mailer.ts";
 import type { WebhookEvent } from "./webhooks.ts";
 
 interface CapturedSend {
   email: Email;
-}
-
-function makeStubMailer(): { mailer: Mailer; sends: CapturedSend[]; } {
-  const sends: CapturedSend[] = [];
-  const mailer: Mailer = {
-    send(email: Email): Promise<MailerResult> {
-      sends.push({ email });
-      return Promise.resolve({
-        accepted: Array.isArray(email.to) ? email.to : [email.to],
-        messageId: "stub@disc.local",
-        rejected: []
-      });
-    }
-  };
-  return { mailer, sends };
-}
-
-function makeResolver(map: Record<string, string | null>): (id: string) => Promise<string | null> {
-  return id => Promise.resolve(map[id] ?? null);
 }
 
 const baseEvent = {
@@ -42,8 +31,11 @@ const baseEvent = {
   timestamp: "2026-01-01T00:00:00.000Z"
 };
 
+/*** RUNTIME ------------------------------------------ ***/
+
 Deno.test("EmailEventListener - sends verification email with correct recipient + content", async () => {
   const { mailer, sends } = makeStubMailer();
+
   const listener = new EmailEventListener({
     baseUrl: "https://app.example.com",
     mailer,
@@ -55,6 +47,7 @@ Deno.test("EmailEventListener - sends verification email with correct recipient 
     eventType: "EmailVerificationRequested",
     verificationToken: "tok-verify-1"
   };
+
   await listener.handle(event);
 
   assertEquals(sends.length, 1);
@@ -67,6 +60,7 @@ Deno.test("EmailEventListener - sends verification email with correct recipient 
 
 Deno.test("EmailEventListener - sends password reset email with correct recipient + content", async () => {
   const { mailer, sends } = makeStubMailer();
+
   const listener = new EmailEventListener({
     baseUrl: "https://app.example.com",
     mailer,
@@ -78,6 +72,7 @@ Deno.test("EmailEventListener - sends password reset email with correct recipien
     eventType: "PasswordResetRequested",
     resetToken: "tok-reset-1"
   };
+
   await listener.handle(event);
 
   assertEquals(sends.length, 1);
@@ -88,6 +83,7 @@ Deno.test("EmailEventListener - sends password reset email with correct recipien
 
 Deno.test("EmailEventListener - sends magic link email with correct recipient + content", async () => {
   const { mailer, sends } = makeStubMailer();
+
   const listener = new EmailEventListener({
     baseUrl: "https://app.example.com",
     mailer,
@@ -99,6 +95,7 @@ Deno.test("EmailEventListener - sends magic link email with correct recipient + 
     eventType: "MagicLinkRequested",
     magicLinkToken: "tok-magic-1"
   };
+
   await listener.handle(event);
 
   assertEquals(sends.length, 1);
@@ -109,6 +106,7 @@ Deno.test("EmailEventListener - sends magic link email with correct recipient + 
 
 Deno.test("EmailEventListener - sends magic code email with correct recipient + content", async () => {
   const { mailer, sends } = makeStubMailer();
+
   const listener = new EmailEventListener({
     baseUrl: "https://app.example.com",
     mailer,
@@ -120,6 +118,7 @@ Deno.test("EmailEventListener - sends magic code email with correct recipient + 
     eventType: "MagicCodeRequested",
     magicCode: "482917"
   };
+
   await listener.handle(event);
 
   assertEquals(sends.length, 1);
@@ -130,6 +129,7 @@ Deno.test("EmailEventListener - sends magic code email with correct recipient + 
 
 Deno.test("EmailEventListener - non-email events are ignored", async () => {
   const { mailer, sends } = makeStubMailer();
+
   const listener = new EmailEventListener({
     baseUrl: "https://app.example.com",
     mailer,
@@ -145,10 +145,11 @@ Deno.test("EmailEventListener - non-email events are ignored", async () => {
 
 Deno.test("EmailEventListener - resolveRecipient returning null skips send without throwing", async () => {
   const { mailer, sends } = makeStubMailer();
+
   const listener = new EmailEventListener({
     baseUrl: "https://app.example.com",
     mailer,
-    resolveRecipient: makeResolver({}) // u-1 not present → null
+    resolveRecipient: makeResolver({}) /*** u-1 not present → null ***/
   });
 
   await listener.handle({
@@ -162,18 +163,20 @@ Deno.test("EmailEventListener - resolveRecipient returning null skips send witho
 
 Deno.test("EmailEventListener - resolveRecipient throwing is swallowed", async () => {
   const { mailer, sends } = makeStubMailer();
+
   const listener = new EmailEventListener({
     baseUrl: "https://app.example.com",
     mailer,
     resolveRecipient: () => Promise.reject(new Error("db down"))
   });
 
-  // Must not throw.
+  /*** Must not throw. ***/
   await listener.handle({
     ...baseEvent,
     eventType: "MagicLinkRequested",
     magicLinkToken: "tok-1"
   });
+
   assertEquals(sends.length, 0);
 });
 
@@ -181,13 +184,14 @@ Deno.test("EmailEventListener - mailer send throwing is swallowed", async () => 
   const failingMailer: Mailer = {
     send: () => Promise.reject(new Error("smtp 421"))
   };
+
   const listener = new EmailEventListener({
     baseUrl: "https://app.example.com",
     mailer: failingMailer,
     resolveRecipient: makeResolver({ "u-1": "alice@example.com" })
   });
 
-  // Must not throw.
+  /*** Must not throw. ***/
   await listener.handle({
     ...baseEvent,
     eventType: "EmailVerificationRequested",
@@ -197,6 +201,7 @@ Deno.test("EmailEventListener - mailer send throwing is swallowed", async () => 
 
 Deno.test("EmailEventListener - per-event template overrides take precedence", async () => {
   const { mailer, sends } = makeStubMailer();
+
   const listener = new EmailEventListener({
     baseUrl: "https://app.example.com",
     mailer,
@@ -221,3 +226,27 @@ Deno.test("EmailEventListener - per-event template overrides take precedence", a
   assertStringIncludes(sends[0].email.text, "custom token tok-X");
   assertStringIncludes(sends[0].email.html ?? "", "<custom>tok-X</custom>");
 });
+
+/*** HELPER ------------------------------------------- ***/
+
+function makeResolver(map: Record<string, string | null>): (id: string) => Promise<string | null> {
+  return id => Promise.resolve(map[id] ?? null);
+}
+
+function makeStubMailer(): { mailer: Mailer; sends: CapturedSend[]; } {
+  const sends: CapturedSend[] = [];
+
+  const mailer: Mailer = {
+    send(email: Email): Promise<MailerResult> {
+      sends.push({ email });
+
+      return Promise.resolve({
+        accepted: Array.isArray(email.to) ? email.to : [email.to],
+        messageId: "stub@disc.local",
+        rejected: []
+      });
+    }
+  };
+
+  return { mailer, sends };
+}

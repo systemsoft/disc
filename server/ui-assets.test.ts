@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for UI asset serving (Bundle I Phase 1).
  *
@@ -81,7 +84,10 @@ Deno.test({
     const res = await handler(new Request("http://localhost/ui/"));
     assertEquals(res?.status, 200);
     const body = await res!.text();
-    assertEquals(body.includes("<!DOCTYPE html>") || body.includes("<!doctype html>"), true);
+    assertEquals(
+      body.includes("<!DOCTYPE html>") || body.includes("<!doctype html>"),
+      true
+    );
   }
 });
 
@@ -90,7 +96,9 @@ Deno.test({
   ignore: !UI_BUILD_AVAILABLE,
   fn: async () => {
     const handler = createUiAssetHandler();
-    const res = await handler(new Request("http://localhost/ui/some/spa/route"));
+    const res = await handler(
+      new Request("http://localhost/ui/some/spa/route")
+    );
     assertEquals(res?.status, 200);
     assertEquals(res?.headers.get("content-type"), "text/html; charset=utf-8");
   }

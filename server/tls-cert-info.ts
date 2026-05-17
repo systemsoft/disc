@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Minimal PEM/X.509 leaf-certificate inspection.
  *
@@ -100,10 +103,12 @@ function parseGeneralizedTime(s: string): Date {
 function decodeDerTime(buf: Uint8Array, h: DerHeader): Date {
   const slice = buf.slice(h.contentStart, h.totalEnd);
   const text = new TextDecoder("ascii").decode(slice);
-  if (h.tag === 0x17)
+  if (h.tag === 0x17) {
     return parseUtcTime(text);
-  if (h.tag === 0x18)
+  }
+  if (h.tag === 0x18) {
     return parseGeneralizedTime(text);
+  }
   throw new Error(`Unexpected DER time tag 0x${h.tag.toString(16)}`);
 }
 

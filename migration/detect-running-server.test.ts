@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Pins SchemaManager.detectRunningServers() — pre-migrate preflight
  * that surfaces a stale-cache risk when a Disc server is already

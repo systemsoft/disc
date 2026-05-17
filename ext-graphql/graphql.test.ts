@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Unit tests for the GraphQL extension
  *
@@ -14,7 +17,12 @@ import { createTestSchema } from "../compiler/context.ts";
 import type { ExtensionContext } from "../extensions/types.ts";
 import { GraphQLExtension } from "./extension.ts";
 import { parseGraphQLQuery, translateToEdgeQL } from "./query-translator.ts";
-import { generateGraphQLSchema, generateGraphQLTypes, mapEdgeQLTypeToGraphQL, SCALAR_TYPE_MAP } from "./schema-generator.ts";
+import {
+  generateGraphQLSchema,
+  generateGraphQLTypes,
+  mapEdgeQLTypeToGraphQL,
+  SCALAR_TYPE_MAP
+} from "./schema-generator.ts";
 
 // ── Test helpers ───────────────────────────────────────────────────────
 
@@ -506,7 +514,10 @@ Deno.test("GraphQLExtension - rejects queries exceeding max depth", async () => 
 
 // ── P2-24: directives, fragments, introspection ───────────────────────
 
-import { isIntrospectionQuery, resolveIntrospection } from "./query-translator.ts";
+import {
+  isIntrospectionQuery,
+  resolveIntrospection
+} from "./query-translator.ts";
 
 Deno.test("GraphQL parser - parses fragment spreads", () => {
   const parsed = parseGraphQLQuery(`

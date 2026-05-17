@@ -1,11 +1,21 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for Access Policy Parser
  */
 
-import { assertEquals, assertThrows } from "https://deno.land/std@0.208.0/assert/mod.ts";
-import { SyntaxError } from "../lib/errors.ts";
-import { SDLLexer } from "../schema/lexer.ts";
+/*** NATIVE ------------------------------------------- ***/
+
+import { assertEquals, assertThrows } from "@std/assert";
+
+/*** UTILITY ------------------------------------------ ***/
+
 import { AccessPolicyParser } from "./parser.ts";
+import { SDLLexer } from "../schema/lexer.ts";
+import { SyntaxError } from "../lib/errors.ts";
+
+/*** RUNTIME ------------------------------------------ ***/
 
 Deno.test("AccessPolicyParser - parse simple allow policy", () => {
   const source = `
@@ -135,8 +145,8 @@ Deno.test("AccessPolicyParser - parse policy with column restrictions", () => {
 Deno.test("AccessPolicyParser - parse complex condition", () => {
   const source = `
     access policy complex_rule for Document {
-      allow select when 
-        .public = true or 
+      allow select when
+        .public = true or
         (.author = current_user and .status != "draft") or
         has_role("admin");
     }
@@ -178,11 +188,7 @@ Deno.test("AccessPolicyParser - error on invalid operation", () => {
   const tokens = lexer.tokenize();
   const parser = new AccessPolicyParser(tokens, source);
 
-  assertThrows(
-    () => parser.parseAccessPolicy(),
-    SyntaxError,
-    "Invalid access operation"
-  );
+  assertThrows(() => parser.parseAccessPolicy(), SyntaxError, "Invalid access operation");
 });
 
 Deno.test("AccessPolicyParser - parse policy with errmessage (Gel #4095)", () => {

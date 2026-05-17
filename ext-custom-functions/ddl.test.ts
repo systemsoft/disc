@@ -1,10 +1,17 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for DDL generation utilities
  */
 
 import { assertEquals, assertThrows } from "@std/assert";
 import { ExtensionConfigError } from "../extensions/errors.ts";
-import { generateCreateFunction, generateDropFunction, mapEdgeqlTypeToPg } from "./ddl.ts";
+import {
+  generateCreateFunction,
+  generateDropFunction,
+  mapEdgeqlTypeToPg
+} from "./ddl.ts";
 import type { CustomFunctionDef } from "./types.ts";
 
 // ── mapEdgeqlTypeToPg ─────────────────────────────────────────────────

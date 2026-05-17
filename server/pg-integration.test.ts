@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * PostgreSQL-backed Server Integration Tests
  *
@@ -88,7 +91,9 @@ async function countRows(
   const client = new Client(cfg);
   try {
     await client.connect();
-    const sql = where ? `SELECT COUNT(*)::int AS cnt FROM ${TEST_TABLE} WHERE ${where}` : `SELECT COUNT(*)::int AS cnt FROM ${TEST_TABLE}`;
+    const sql = where ?
+      `SELECT COUNT(*)::int AS cnt FROM ${TEST_TABLE} WHERE ${where}` :
+      `SELECT COUNT(*)::int AS cnt FROM ${TEST_TABLE}`;
     const result = await client.queryObject<{ cnt: number; }>(sql);
     return result.rows[0]?.cnt ?? 0;
   } finally {

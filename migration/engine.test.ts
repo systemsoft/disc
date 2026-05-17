@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for Migration Engine
  */
@@ -704,8 +707,9 @@ Deno.test("Migration Engine - listener throws are swallowed", async () => {
 
   const planResult = engine.planMigration(null, createTestSchema());
   assertEquals(planResult.ok, true);
-  if (!planResult.ok)
+  if (!planResult.ok) {
     return;
+  }
 
   // Migration must succeed despite the listener throwing on every call.
   const result = await engine.executeMigration(planResult.value);
@@ -730,8 +734,9 @@ Deno.test("Migration Engine - executeMigrationWithRollback emits failed event wi
   // still produces SQL — that's enough for `rollbackAttempted: true`.
   const planResult = engine.planMigration(null, createTestSchema());
   assertEquals(planResult.ok, true);
-  if (!planResult.ok)
+  if (!planResult.ok) {
     return;
+  }
 
   // deno-lint-ignore no-explicit-any
   const generator = (engine as any).ddlGenerator as DDLGenerator;

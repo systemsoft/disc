@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * EdgeQL Token types and definitions
  */
@@ -10,12 +13,10 @@ export enum TokenType {
   BOOLEAN = "BOOLEAN",
   BYTES = "BYTES",
   UUID = "UUID",
-
   // Identifiers
   IDENT = "IDENT",
   BACKTICK_IDENT = "BACKTICK_IDENT",
   RESERVED_IDENT = "RESERVED_IDENT",
-
   // Query Keywords
   SELECT = "SELECT",
   INSERT = "INSERT",
@@ -23,7 +24,6 @@ export enum TokenType {
   DELETE = "DELETE",
   FOR = "FOR",
   WITH = "WITH",
-
   // Clauses
   FILTER = "FILTER",
   ORDER = "ORDER",
@@ -33,7 +33,6 @@ export enum TokenType {
   LIMIT = "LIMIT",
   OFFSET = "OFFSET",
   GROUP = "GROUP",
-
   // Window function keywords (non-reserved)
   OVER = "OVER",
   PARTITION = "PARTITION",
@@ -45,7 +44,6 @@ export enum TokenType {
   PRECEDING = "PRECEDING",
   FOLLOWING = "FOLLOWING",
   CURRENT = "CURRENT",
-
   // Logical
   AND = "AND",
   OR = "OR",
@@ -53,20 +51,17 @@ export enum TokenType {
   EXISTS = "EXISTS",
   DISTINCT = "DISTINCT",
   ALL = "ALL",
-
   // Type Operations
   IS = "IS",
   TYPEOF = "TYPEOF",
   INTROSPECT = "INTROSPECT",
   DETACHED = "DETACHED",
   GLOBAL = "GLOBAL",
-
   // Set Operations
   UNION = "UNION",
   EXCEPT = "EXCEPT",
   INTERSECT = "INTERSECT",
   IN = "IN",
-
   // Conditionals
   IF = "IF",
   ELSE = "ELSE",
@@ -74,23 +69,19 @@ export enum TokenType {
   WHEN = "WHEN",
   CASE = "CASE",
   END = "END",
-
   // Cardinality
   REQUIRED = "REQUIRED",
   OPTIONAL = "OPTIONAL",
   SINGLE = "SINGLE",
   MULTI = "MULTI",
   SET = "SET",
-
   // Conflict
   UNLESS = "UNLESS",
   CONFLICT = "CONFLICT",
   ON = "ON",
-
   // String Operations
   LIKE = "LIKE",
   ILIKE = "ILIKE",
-
   // Special
   MODULE = "MODULE",
   SCHEMA = "SCHEMA",
@@ -106,7 +97,6 @@ export enum TokenType {
   TRUE = "TRUE",
   FALSE = "FALSE",
   EMPTY = "EMPTY",
-
   // Operators
   ASSIGN = "ASSIGN", // :=
   SUBASSIGN = "SUBASSIGN", // -=
@@ -119,7 +109,6 @@ export enum TokenType {
   FLOORDIV = "FLOORDIV", // //
   CONCAT = "CONCAT", // ++
   POW = "POW", // **
-
   // Comparison
   EQUALS = "EQUALS", // =
   NOTEQUALS = "NOTEQUALS", // !=
@@ -129,20 +118,17 @@ export enum TokenType {
   GREATEREQ = "GREATEREQ", // >=
   DISTINCTFROM = "DISTINCTFROM", // ?!=
   NOTDISTINCTFROM = "NOTDISTINCTFROM", // ?=
-
   // Arithmetic
   PLUS = "PLUS", // +
   MINUS = "MINUS", // -
   STAR = "STAR", // *
   SLASH = "SLASH", // /
   PERCENT = "PERCENT", // %
-
   // Punctuation
   DOT = "DOT", // .
   COMMA = "COMMA", // ,
   SEMICOLON = "SEMICOLON", // ;
   COLON = "COLON", // :
-
   // Brackets
   LPAREN = "LPAREN", // (
   RPAREN = "RPAREN", // )
@@ -152,13 +138,11 @@ export enum TokenType {
   RBRACKET = "RBRACKET", // ]
   LANGLE = "LANGLE", // <
   RANGLE = "RANGLE", // >
-
   // Range operators
   RANGE_CONTAINS = "RANGE_CONTAINS", // @>
   RANGE_CONTAINED_BY = "RANGE_CONTAINED_BY", // <@
   RANGE_OVERLAPS = "RANGE_OVERLAPS", // &&
   RANGE_ADJACENT = "RANGE_ADJACENT", // -|-
-
   // Bitwise operators
   AMPERSAND = "AMPERSAND", // & (bitwise AND)
   PIPE = "PIPE", // | (bitwise OR)
@@ -166,12 +150,10 @@ export enum TokenType {
   LSHIFT = "LSHIFT", // <<
   RSHIFT = "RSHIFT", // >>
   TILDE = "TILDE", // ~ (unary bitwise NOT / binary regex match)
-
   // Regex operators
   REGEX_NOT_MATCH = "REGEX_NOT_MATCH", // !~
   REGEX_IMATCH = "REGEX_IMATCH", // ~*
   REGEX_NOT_IMATCH = "REGEX_NOT_IMATCH", // !~*
-
   // Special
   PARAMETER = "PARAMETER", // $param
   AT = "AT", // @

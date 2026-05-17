@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * PostgreSQL End-to-End Tests for Stage 27: Built-in Functions
  *
@@ -377,7 +380,9 @@ Deno.test({
         "SELECT CAST('2024-06-15' AS date) AS val"
       );
       const val = result.rows[0].val;
-      const dateStr = val instanceof Date ? val.toISOString().slice(0, 10) : String(val).slice(0, 10);
+      const dateStr = val instanceof Date ?
+        val.toISOString().slice(0, 10) :
+        String(val).slice(0, 10);
       assertEquals(dateStr, "2024-06-15");
     } finally {
       await pool.close();

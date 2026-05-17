@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for embedded-EdgeQL diagnostics (LSP Phase 5), hover +
  * completion within `eql\`...\`` literals (LSP Phase 6), and
@@ -7,13 +10,13 @@
 import { assert, assertEquals } from "@std/assert";
 import {
   analyzeEmbeddedDocument,
-  type EmbeddedSdlContext,
   extractEmbeddedQueries,
   findEnclosingEmbeddedQuery,
   isEmbeddedEqlHost,
   provideEmbeddedCompletion,
   provideEmbeddedDefinition,
-  provideEmbeddedHover
+  provideEmbeddedHover,
+  type EmbeddedSdlContext
 } from "./embedded-edgeql.ts";
 
 // --- isEmbeddedEqlHost ---
@@ -115,7 +118,10 @@ Deno.test("analyzeEmbeddedDocument flags broken EdgeQL with a host-coordinate di
   // least one diagnostic.
   const text = "const q = eql`@@@ not valid edgeql`;";
   const diags = analyzeEmbeddedDocument(text);
-  assert(diags.length > 0, `expected diagnostics for broken EdgeQL, got ${diags.length}`);
+  assert(
+    diags.length > 0,
+    `expected diagnostics for broken EdgeQL, got ${diags.length}`
+  );
   for (const d of diags) {
     assertEquals(d.source, "disc-eql");
     // Diagnostic must land inside the embedded string region of the
@@ -143,7 +149,10 @@ Deno.test("analyzeEmbeddedDocument maps multi-line errors to the correct host li
   assert(diags.length > 0, "expected at least one diagnostic");
   // First diagnostic should be on the second host line.
   const onSecondLine = diags.find(d => d.range.start.line === 1);
-  assert(onSecondLine, `expected at least one diagnostic on host line 1, got ${JSON.stringify(diags.map(d => d.range.start))}`);
+  assert(
+    onSecondLine,
+    `expected at least one diagnostic on host line 1, got ${JSON.stringify(diags.map(d => d.range.start))}`
+  );
 });
 
 Deno.test("analyzeEmbeddedDocument doesn't flag SDL-only files (caller routes by URI)", () => {
@@ -162,16 +171,25 @@ Deno.test("analyzeEmbeddedDocument doesn't flag SDL-only files (caller routes by
 Deno.test("findEnclosingEmbeddedQuery returns null when cursor is outside any eql tag", () => {
   const text = "const q = eql`select User`;";
   // Cursor on the `c` of `const`.
-  assertEquals(findEnclosingEmbeddedQuery(text, { line: 0, character: 0 }), null);
+  assertEquals(
+    findEnclosingEmbeddedQuery(text, { line: 0, character: 0 }),
+    null
+  );
   // Cursor on the trailing `;`.
-  assertEquals(findEnclosingEmbeddedQuery(text, { line: 0, character: 26 }), null);
+  assertEquals(
+    findEnclosingEmbeddedQuery(text, { line: 0, character: 26 }),
+    null
+  );
 });
 
 Deno.test("findEnclosingEmbeddedQuery resolves a position inside the embedded string", () => {
   const text = "const q = eql`select User`;";
   // Content starts at column 14 (`const q = ` is 10 chars + `eql\`` is 4).
   // Position the cursor on the `s` of `select` (column 14).
-  const enclosing = findEnclosingEmbeddedQuery(text, { line: 0, character: 14 });
+  const enclosing = findEnclosingEmbeddedQuery(text, {
+    line: 0,
+    character: 14
+  });
   assert(enclosing, "expected to be inside the embedded string");
   assertEquals(enclosing.query.content, "select User");
   assertEquals(enclosing.posInQuery, { line: 0, character: 0 });
@@ -181,8 +199,14 @@ Deno.test("findEnclosingEmbeddedQuery accepts the closing-backtick position (LSP
   const text = "const q = eql`select User`;";
   // Embedded content is 11 chars; cursor at column 14 + 11 = 25 sits
   // at the closing backtick boundary.
-  const enclosing = findEnclosingEmbeddedQuery(text, { line: 0, character: 25 });
-  assert(enclosing, "expected end-of-content position to resolve to enclosing query");
+  const enclosing = findEnclosingEmbeddedQuery(text, {
+    line: 0,
+    character: 25
+  });
+  assert(
+    enclosing,
+    "expected end-of-content position to resolve to enclosing query"
+  );
   assertEquals(enclosing.posInQuery, { line: 0, character: 11 });
 });
 
@@ -193,7 +217,10 @@ Deno.test("findEnclosingEmbeddedQuery picks the right query in a multi-query fil
   ]
     .join("\n");
   // Cursor inside the second query, on the `P` of `Post`.
-  const enclosing = findEnclosingEmbeddedQuery(text, { line: 1, character: 21 });
+  const enclosing = findEnclosingEmbeddedQuery(text, {
+    line: 1,
+    character: 21
+  });
   assert(enclosing);
   assertEquals(enclosing.query.content, "select Post");
 });
@@ -319,7 +346,11 @@ function ctxFromSdl(sdl: string): EmbeddedSdlContext {
 Deno.test("provideEmbeddedHover surfaces a user-defined type from an open .disc document", () => {
   const text = "const q = eql`select User`;";
   // Cursor on `User` (column 21..24).
-  const hover = provideEmbeddedHover(text, { line: 0, character: 22 }, ctxFromSdl(SAMPLE_SDL));
+  const hover = provideEmbeddedHover(
+    text,
+    { line: 0, character: 22 },
+    ctxFromSdl(SAMPLE_SDL)
+  );
   assert(hover, "expected hover for user-defined type User");
   const md = (hover.contents as { value: string; }).value;
   assert(md.includes("**User**"), `expected hover to mention User; got: ${md}`);
@@ -332,7 +363,11 @@ Deno.test("provideEmbeddedHover keeps EdgeQL keywords ahead of user types on the
   // `select` shouldn't get redirected to a user-type lookup just
   // because the SDL ctx is supplied.
   const text = "const q = eql`select User`;";
-  const hover = provideEmbeddedHover(text, { line: 0, character: 16 }, ctxFromSdl(SAMPLE_SDL));
+  const hover = provideEmbeddedHover(
+    text,
+    { line: 0, character: 16 },
+    ctxFromSdl(SAMPLE_SDL)
+  );
   assert(hover, "expected hover for `select`");
   const md = (hover.contents as { value: string; }).value;
   assert(md.includes("EdgeQL keyword"), `expected keyword hover; got: ${md}`);
@@ -341,13 +376,21 @@ Deno.test("provideEmbeddedHover keeps EdgeQL keywords ahead of user types on the
 Deno.test("provideEmbeddedHover returns null for unknown identifiers when ctx provides no match", () => {
   const text = "const q = eql`select MyType`;";
   // `MyType` is neither a keyword/scalar nor declared in SAMPLE_SDL.
-  const hover = provideEmbeddedHover(text, { line: 0, character: 24 }, ctxFromSdl(SAMPLE_SDL));
+  const hover = provideEmbeddedHover(
+    text,
+    { line: 0, character: 24 },
+    ctxFromSdl(SAMPLE_SDL)
+  );
   assertEquals(hover, null);
 });
 
 Deno.test("provideEmbeddedCompletion appends user-defined type names from open .disc docs", () => {
   const text = "const q = eql`select `;";
-  const items = provideEmbeddedCompletion(text, { line: 0, character: 21 }, ctxFromSdl(SAMPLE_SDL));
+  const items = provideEmbeddedCompletion(
+    text,
+    { line: 0, character: 21 },
+    ctxFromSdl(SAMPLE_SDL)
+  );
   const labels = new Set(items.map(i => i.label));
   assert(labels.has("User"), "expected User in completion");
   assert(labels.has("Post"), "expected Post in completion");
@@ -369,12 +412,20 @@ Deno.test("provideEmbeddedCompletion: built-in scalar wins on label collision wi
   );
   const strItem = items.find(i => i.label === "str");
   assert(strItem, "expected str in completion");
-  assertEquals(strItem.detail, "scalar", `expected scalar detail, got: ${strItem.detail}`);
+  assertEquals(
+    strItem.detail,
+    "scalar",
+    `expected scalar detail, got: ${strItem.detail}`
+  );
 });
 
 Deno.test("provideEmbeddedDefinition jumps to the type's declaration in the .disc document", () => {
   const text = "const q = eql`select User`;";
-  const loc = provideEmbeddedDefinition(text, { line: 0, character: 22 }, ctxFromSdl(SAMPLE_SDL));
+  const loc = provideEmbeddedDefinition(
+    text,
+    { line: 0, character: 22 },
+    ctxFromSdl(SAMPLE_SDL)
+  );
   assert(loc, "expected a Location for User");
   assertEquals(loc.uri, "file:///dbschema/default.disc");
   // `type User` is on line 1 (0-indexed) of SAMPLE_SDL; the name
@@ -387,13 +438,21 @@ Deno.test("provideEmbeddedDefinition returns null for EdgeQL keywords and built-
   const text = "const q = eql`select User`;";
   // `select` is a keyword — no source location.
   assertEquals(
-    provideEmbeddedDefinition(text, { line: 0, character: 16 }, ctxFromSdl(SAMPLE_SDL)),
+    provideEmbeddedDefinition(
+      text,
+      { line: 0, character: 16 },
+      ctxFromSdl(SAMPLE_SDL)
+    ),
     null
   );
   // `str` (built-in scalar) — no source location.
   const text2 = "const q = eql`select <str>'x'`;";
   assertEquals(
-    provideEmbeddedDefinition(text2, { line: 0, character: 23 }, ctxFromSdl(SAMPLE_SDL)),
+    provideEmbeddedDefinition(
+      text2,
+      { line: 0, character: 23 },
+      ctxFromSdl(SAMPLE_SDL)
+    ),
     null
   );
 });

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Pins router-level auth classification (gh/geldata#7525).
  *
@@ -9,8 +12,15 @@
  * state.
  */
 
+/*** NATIVE ------------------------------------------- ***/
+
 import { assert, assertEquals } from "@std/assert";
+
+/*** UTILITY ------------------------------------------ ***/
+
 import { AUTH_AUTHENTICATED_ROUTES, AUTH_PUBLIC_ROUTES, classifyAuthRoute } from "./integration.ts";
+
+/*** RUNTIME ------------------------------------------ ***/
 
 Deno.test("classifyAuthRoute — bootstrap routes resolve to public", () => {
   for (
@@ -48,11 +58,7 @@ Deno.test("classifyAuthRoute — privileged routes require auth", () => {
       "webauthn/credentials/delete"
     ]
   ) {
-    assertEquals(
-      classifyAuthRoute(route),
-      "authenticated",
-      `${route} should require auth`
-    );
+    assertEquals(classifyAuthRoute(route), "authenticated", `${route} should require auth`);
   }
 });
 
@@ -63,21 +69,23 @@ Deno.test("classifyAuthRoute — unknown routes fail closed", () => {
 });
 
 Deno.test("classifyAuthRoute — every dispatched route is classified", async () => {
-  // Read the dispatcher and extract every route literal in the switch.
-  // A route reachable in the switch but absent from both sets would be
-  // a silent shipping bug — pin catches it.
-  const httpSrc = await Deno.readTextFile(
-    new URL("../server/http.ts", import.meta.url)
-  );
+  /*** Read the dispatcher and extract every route literal in the switch. A route reachable in the
+       switch but absent from both sets would be a silent shipping bug — pin catches it. ***/
+  const httpSrc = await Deno.readTextFile(new URL("../server/http.ts", import.meta.url));
   const switchStart = httpSrc.indexOf("switch (route) {");
   assert(switchStart > 0, "could not locate auth-route switch");
+
   const switchEnd = httpSrc.indexOf("\n    }", switchStart);
   const switchBody = httpSrc.slice(switchStart, switchEnd);
   const caseRe = /case\s+"([^"]+)":/g;
   const routes: string[] = [];
-  for (const m of switchBody.matchAll(caseRe))
+
+  for (const m of switchBody.matchAll(caseRe)) {
     routes.push(m[1]);
+  }
+
   assert(routes.length > 10, "expected multiple routes");
+
   for (const r of routes) {
     assertEquals(
       classifyAuthRoute(r),
@@ -88,8 +96,8 @@ Deno.test("classifyAuthRoute — every dispatched route is classified", async ()
 });
 
 Deno.test("classifyAuthRoute — public allowlist excludes mutation surfaces", () => {
-  // Belt-and-suspenders: the names below are sensitive enough that
-  // they must never end up in the public bootstrap set, even by typo.
+  /*** Belt-and-suspenders: the names below are sensitive enough that they must never end up in the
+       public bootstrap set, even by typo. ***/
   for (
     const sensitive of [
       "logout",
@@ -102,13 +110,7 @@ Deno.test("classifyAuthRoute — public allowlist excludes mutation surfaces", (
       "webauthn/credentials/delete"
     ]
   ) {
-    assert(
-      !AUTH_PUBLIC_ROUTES.has(sensitive),
-      `${sensitive} should not be in AUTH_PUBLIC_ROUTES`
-    );
-    assert(
-      AUTH_AUTHENTICATED_ROUTES.has(sensitive),
-      `${sensitive} should be in AUTH_AUTHENTICATED_ROUTES`
-    );
+    assert(!AUTH_PUBLIC_ROUTES.has(sensitive), `${sensitive} should not be in AUTH_PUBLIC_ROUTES`);
+    assert(AUTH_AUTHENTICATED_ROUTES.has(sensitive), `${sensitive} should be in AUTH_AUTHENTICATED_ROUTES`);
   }
 });

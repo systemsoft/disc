@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Translates GraphQL queries to EdgeQL queries.
  *
@@ -388,17 +391,21 @@ class GraphQLParser {
 
     // Number, boolean, null, or enum value
     const word = this.readName();
-    if (word === "true")
+    if (word === "true") {
       return true;
-    if (word === "false")
+    }
+    if (word === "false") {
       return false;
-    if (word === "null")
+    }
+    if (word === "null") {
       return null;
+    }
 
     // Try to parse as number
     const num = Number(word);
-    if (!isNaN(num))
+    if (!isNaN(num)) {
       return num;
+    }
 
     // Enum value
     return word;
@@ -482,10 +489,11 @@ class GraphQLParser {
     let depth = 1;
     while (depth > 0 && this.pos < this.input.length) {
       const ch = this.input[this.pos];
-      if (ch === "(")
+      if (ch === "(") {
         depth++;
-      else if (ch === ")")
+      } else if (ch === ")") {
         depth--;
+      }
       this.pos++;
     }
   }
@@ -532,13 +540,15 @@ class GraphQLParser {
 
   private lookAhead(word: string): boolean {
     for (let i = 0; i < word.length; i++) {
-      if (this.input[this.pos + i] !== word[i])
+      if (this.input[this.pos + i] !== word[i]) {
         return false;
+      }
     }
     // Ensure the word ends at a boundary (not part of a longer name)
     const nextChar = this.input[this.pos + word.length];
-    if (nextChar && /[a-zA-Z0-9_]/.test(nextChar))
+    if (nextChar && /[a-zA-Z0-9_]/.test(nextChar)) {
       return false;
+    }
     return true;
   }
 
@@ -583,8 +593,9 @@ export function inlineFragments(
   function expand(selections: GraphQLSelection[]): GraphQLSelection[] {
     const out: GraphQLSelection[] = [];
     for (const sel of selections) {
-      if (!directivePermits(sel))
+      if (!directivePermits(sel)) {
         continue;
+      }
 
       if (sel.kind === "FragmentSpread" && sel.fragmentName) {
         const def = fragments[sel.fragmentName];
@@ -629,18 +640,21 @@ export function inlineFragments(
  * argument is a variable reference) — runtime filtering is deferred.
  */
 function directivePermits(sel: GraphQLSelection): boolean {
-  if (!sel.directives || sel.directives.length === 0)
+  if (!sel.directives || sel.directives.length === 0) {
     return true;
+  }
   for (const dir of sel.directives) {
     const ifVal = dir.arguments.if;
     // Variable-ref → defer to runtime, keep the field.
     if (typeof ifVal === "object" && ifVal !== null && "__variable" in ifVal) {
       continue;
     }
-    if (dir.name === "skip" && ifVal === true)
+    if (dir.name === "skip" && ifVal === true) {
       return false;
-    if (dir.name === "include" && ifVal === false)
+    }
+    if (dir.name === "include" && ifVal === false) {
       return false;
+    }
   }
   return true;
 }
@@ -680,10 +694,14 @@ export function resolveIntrospection(
     } else if (sel.fieldName === "__type") {
       const nameArg = sel.arguments.name;
       const typeName = typeof nameArg === "string" ? nameArg : null;
-      data[sel.alias ?? "__type"] = typeName ? resolveTypeIntrospection(sel, schema, typeName) : null;
+      data[sel.alias ?? "__type"] = typeName ?
+        resolveTypeIntrospection(sel, schema, typeName) :
+        null;
     } else if (sel.fieldName === "__typename") {
       // Operation-level __typename returns "Query" or "Mutation".
-      data[sel.alias ?? "__typename"] = parsed.type === "mutation" ? "Mutation" : "Query";
+      data[sel.alias ?? "__typename"] = parsed.type === "mutation" ?
+        "Mutation" :
+        "Query";
     }
   }
 
@@ -709,8 +727,14 @@ function resolveSchemaIntrospection(
     } else if (sub.fieldName === "directives") {
       // Disc supports the two GraphQL spec directives.
       result[sub.alias ?? "directives"] = [
-        { name: "skip", locations: ["FIELD", "FRAGMENT_SPREAD", "INLINE_FRAGMENT"] },
-        { name: "include", locations: ["FIELD", "FRAGMENT_SPREAD", "INLINE_FRAGMENT"] }
+        {
+          name: "skip",
+          locations: ["FIELD", "FRAGMENT_SPREAD", "INLINE_FRAGMENT"]
+        },
+        {
+          name: "include",
+          locations: ["FIELD", "FRAGMENT_SPREAD", "INLINE_FRAGMENT"]
+        }
       ];
     }
   }
@@ -723,7 +747,11 @@ function resolveTypeIntrospection(
   typeName: string
 ): Record<string, unknown> | null {
   // Tolerate qualified ("module::Type") and unqualified ("Type") names.
-  let def: { name: string; properties: Map<string, unknown>; links?: Map<string, unknown>; } | undefined;
+  let def: {
+    name: string;
+    properties: Map<string, unknown>;
+    links?: Map<string, unknown>;
+  } | undefined;
   for (const [name, candidate] of schema.types) {
     const short = name.includes("::") ? name.split("::").pop()! : name;
     if (name === typeName || short === typeName) {
@@ -731,19 +759,26 @@ function resolveTypeIntrospection(
       break;
     }
   }
-  if (!def)
+  if (!def) {
     return null;
+  }
   return introspectionTypeShape(selection, def);
 }
 
 function introspectionTypeShape(
   selection: GraphQLSelection,
-  def: { name: string; properties: Map<string, unknown>; links?: Map<string, unknown>; }
+  def: {
+    name: string;
+    properties: Map<string, unknown>;
+    links?: Map<string, unknown>;
+  }
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const sub of selection.subSelections ?? []) {
     if (sub.fieldName === "name") {
-      const short = def.name.includes("::") ? def.name.split("::").pop()! : def.name;
+      const short = def.name.includes("::") ?
+        def.name.split("::").pop()! :
+        def.name;
       out[sub.alias ?? "name"] = short;
     } else if (sub.fieldName === "kind") {
       out[sub.alias ?? "kind"] = "OBJECT";
@@ -783,8 +818,9 @@ function resolveTypeName(
   // Try direct match first
   for (const [name] of schema.types) {
     const shortName = name.includes("::") ? name.split("::").pop()! : name;
-    if (shortName === pascal)
+    if (shortName === pascal) {
       return shortName;
+    }
   }
 
   // "allUsers" -> "User" (strip "all" prefix and trailing "s")
@@ -792,8 +828,9 @@ function resolveTypeName(
     const candidate = fieldName.slice(3, -1);
     for (const [name] of schema.types) {
       const shortName = name.includes("::") ? name.split("::").pop()! : name;
-      if (shortName === candidate)
+      if (shortName === candidate) {
         return shortName;
+      }
     }
   }
 
@@ -803,8 +840,9 @@ function resolveTypeName(
       const candidate = fieldName.slice(prefix.length);
       for (const [name] of schema.types) {
         const shortName = name.includes("::") ? name.split("::").pop()! : name;
-        if (shortName === candidate)
+        if (shortName === candidate) {
           return shortName;
+        }
       }
     }
   }
@@ -822,8 +860,9 @@ function resolveTypeName(
 function buildShape(selections: GraphQLSelection[]): string {
   const parts: string[] = [];
   for (const sel of selections) {
-    if (sel.fieldName === "__typename")
+    if (sel.fieldName === "__typename") {
       continue;
+    }
     if (sel.subSelections && sel.subSelections.length > 0) {
       parts.push(`${sel.fieldName}: {${buildShape(sel.subSelections)}}`);
     } else {
@@ -837,14 +876,18 @@ function buildShape(selections: GraphQLSelection[]): string {
  * Format a value for use in EdgeQL.
  */
 function formatEdgeQLValue(value: unknown): string {
-  if (typeof value === "string")
+  if (typeof value === "string") {
     return `"${value}"`;
-  if (typeof value === "number")
+  }
+  if (typeof value === "number") {
     return String(value);
-  if (typeof value === "boolean")
+  }
+  if (typeof value === "boolean") {
     return String(value);
-  if (value === null)
+  }
+  if (value === null) {
     return "{}";
+  }
   if (
     typeof value === "object" && value !== null && "__variable" in value
   ) {
@@ -907,7 +950,9 @@ function translateQuery(
   typeName: string,
   variables: Record<string, unknown>
 ): string {
-  const shape = selection.subSelections ? ` {${buildShape(selection.subSelections)}}` : "";
+  const shape = selection.subSelections ?
+    ` {${buildShape(selection.subSelections)}}` :
+    "";
 
   const args = selection.arguments;
   let filter = "";

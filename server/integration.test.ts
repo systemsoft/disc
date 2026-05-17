@@ -1,8 +1,16 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Integration tests for the complete Disc server protocol implementation
  */
 
-import { assert, assertEquals, assertExists, assertStringIncludes } from "@std/assert";
+import {
+  assert,
+  assertEquals,
+  assertExists,
+  assertStringIncludes
+} from "@std/assert";
 import { DiscServer } from "./server.ts";
 import * as Types from "./types.ts";
 

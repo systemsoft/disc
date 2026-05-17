@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Mailer-level tests: header construction, multipart, RFC 2047
  * encoded-words, and the no-op fallback.
@@ -180,7 +183,10 @@ function makeRecordingSocket(): {
         const line = writeBuffer.slice(0, idx);
         writeBuffer = writeBuffer.slice(idx + 2);
         if (line.startsWith("EHLO")) {
-          readQueue = appendBytes(readQueue, encoder.encode("250 smtp.test\r\n"));
+          readQueue = appendBytes(
+            readQueue,
+            encoder.encode("250 smtp.test\r\n")
+          );
         } else if (line.startsWith("MAIL FROM")) {
           readQueue = appendBytes(readQueue, encoder.encode("250 OK\r\n"));
         } else if (line.startsWith("RCPT TO")) {
@@ -264,7 +270,10 @@ Deno.test("SmtpMailer.send - non-ASCII subject is RFC 2047 encoded on the wire",
 
   const wire = socket.written();
   assertMatch(wire, /Subject: =\?utf-8\?B\?[A-Za-z0-9+/=]+\?=/);
-  assert(!wire.includes("Subject: Café"), "raw non-ASCII subject leaked to wire");
+  assert(
+    !wire.includes("Subject: Café"),
+    "raw non-ASCII subject leaked to wire"
+  );
 });
 
 Deno.test("SmtpMailer.send - html email produces multipart on the wire", async () => {

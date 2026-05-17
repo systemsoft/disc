@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Embedded PostgreSQL runtime accessor — Bundle I Phase 2.
  *
@@ -18,7 +21,10 @@
  */
 
 import { join } from "@std/path";
-import { type EmbeddedPgEntry, extractEmbeddedPg } from "./embedded-extractor.ts";
+import {
+  extractEmbeddedPg,
+  type EmbeddedPgEntry
+} from "./embedded-extractor.ts";
 import { logger } from "./logger.ts";
 
 export interface ResolveEmbeddedOptions {
@@ -49,8 +55,9 @@ export interface ResolveEmbeddedOptions {
  */
 function defaultDiscHome(): string {
   const explicit = Deno.env.get("DISC_HOME");
-  if (explicit)
+  if (explicit) {
     return explicit;
+  }
   const home = Deno.env.get("HOME") ?? Deno.env.get("USERPROFILE") ?? "/tmp";
   return join(home, ".disc");
 }

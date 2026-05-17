@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * SDL → LSP diagnostics translator (#7411 + #655)
  *
@@ -9,13 +12,19 @@
 import { DiscError } from "../lib/errors.ts";
 import { SDLParser } from "../schema/parser.ts";
 import { SchemaValidator } from "../schema/validator.ts";
-import { type Diagnostic, DiagnosticSeverity, type Position, type Range } from "./protocol.ts";
+import {
+  DiagnosticSeverity,
+  type Diagnostic,
+  type Position,
+  type Range
+} from "./protocol.ts";
 
 const SOURCE = "disc";
 
 export function analyzeDiscDocument(text: string): Diagnostic[] {
-  if (text.length === 0)
+  if (text.length === 0) {
     return [];
+  }
 
   const diagnostics: Diagnostic[] = [];
 
@@ -79,8 +88,9 @@ function extendToEndOfTokenOrLine(
   character: number
 ): Position {
   const lines = source.split("\n");
-  if (line >= lines.length)
+  if (line >= lines.length) {
     return { line, character };
+  }
   const lineText = lines[line];
   // Find the next whitespace or end-of-line after `character` so the
   // squiggle covers a meaningful chunk rather than a zero-width caret.

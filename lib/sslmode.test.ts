@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Pins `?sslmode=...` parsing + propagation through the database
  * connection pipeline (gh/geldata#2292). Disc destructures DSNs into

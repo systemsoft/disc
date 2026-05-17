@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Live schema-watch SSE endpoint (Bundle K — Disc-original feature #3a).
  *
@@ -55,8 +58,9 @@ export interface SseFrame<T = unknown> {
  */
 export function formatSseEvent(frame: SseFrame): string {
   let out = "";
-  if (frame.id)
+  if (frame.id) {
     out += `id: ${frame.id}\n`;
+  }
   out += `event: ${frame.event}\n`;
   out += `data: ${JSON.stringify(frame.data)}\n`;
   out += "\n";
@@ -142,7 +146,9 @@ export function handleSchemaWatch(options: SchemaWatchOptions): Response {
       // file directly works on macOS but is unreliable on Linux when
       // editors save via rename — the watched inode disappears and no
       // further events arrive.
-      const dir = ctx.schemaFilePath.includes("/") ? ctx.schemaFilePath.slice(0, ctx.schemaFilePath.lastIndexOf("/")) : ".";
+      const dir = ctx.schemaFilePath.includes("/") ?
+        ctx.schemaFilePath.slice(0, ctx.schemaFilePath.lastIndexOf("/")) :
+        ".";
 
       try {
         watcher = Deno.watchFs([dir], { recursive: false });
@@ -168,8 +174,9 @@ export function handleSchemaWatch(options: SchemaWatchOptions): Response {
       };
 
       const debounceDelta = () => {
-        if (debounceTimer !== undefined)
+        if (debounceTimer !== undefined) {
           clearTimeout(debounceTimer);
+        }
         debounceTimer = setTimeout(enqueueDelta, ctx.debounceMs);
       };
 
@@ -177,12 +184,14 @@ export function handleSchemaWatch(options: SchemaWatchOptions): Response {
       (async () => {
         try {
           for await (const event of watcher!) {
-            if (abortController.signal.aborted)
+            if (abortController.signal.aborted) {
               break;
+            }
             // Filter for our SDL file and any peer .disc files in the dir.
             const matchedPath = event.paths.find(p => p === ctx.schemaFilePath || p.endsWith(".disc"));
-            if (!matchedPath)
+            if (!matchedPath) {
               continue;
+            }
             debounceDelta();
           }
         } catch (err) {
@@ -192,8 +201,9 @@ export function handleSchemaWatch(options: SchemaWatchOptions): Response {
             });
           }
         } finally {
-          if (debounceTimer !== undefined)
+          if (debounceTimer !== undefined) {
             clearTimeout(debounceTimer);
+          }
           try {
             controller.close();
           } catch {
@@ -205,8 +215,9 @@ export function handleSchemaWatch(options: SchemaWatchOptions): Response {
     cancel() {
       // Client disconnected — stop the watcher.
       abortController.abort();
-      if (debounceTimer !== undefined)
+      if (debounceTimer !== undefined) {
         clearTimeout(debounceTimer);
+      }
       if (watcher) {
         try {
           watcher.close();

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * HTTP Server implementation for Disc Database
  */
@@ -19,15 +22,26 @@ import { handleDataWatch } from "./admin/data-watch.ts";
 import { handleSchemaApply } from "./admin/schema-apply.ts";
 import { handleSchemaWatch } from "./admin/schema-watch.ts";
 import { handleGetConfig } from "./config-endpoint.ts";
-import { ConnectionManager, SessionManager, TransactionManager } from "./connection.ts";
+import {
+  ConnectionManager,
+  SessionManager,
+  TransactionManager
+} from "./connection.ts";
 import { matchCorsOrigin } from "./cors-matcher.ts";
 import type { DatabaseRegistry } from "./database-registry.ts";
-import { handleGetMigrations, type MigrationsProvider } from "./migrations-endpoint.ts";
+import {
+  handleGetMigrations,
+  type MigrationsProvider
+} from "./migrations-endpoint.ts";
 import { RateLimiter } from "./rate-limiter.ts";
 import { renderOpenApiSpec } from "./rest/openapi.ts";
 import { dispatchRest } from "./rest/router.ts";
 import type { SchemaProvider } from "./schema-endpoint.ts";
-import { handleGetSchema, handleGetSchemaType, handleGetSchemaTypes } from "./schema-endpoint.ts";
+import {
+  handleGetSchema,
+  handleGetSchemaType,
+  handleGetSchemaTypes
+} from "./schema-endpoint.ts";
 import { SubscriptionHandler } from "./subscription-handler.ts";
 import { createUiAssetHandler, type UiAssetHandler } from "./ui-assets.ts";
 
@@ -343,7 +357,9 @@ export class HttpServer {
         log.warn("TLS hot-reload: recovered listener with on-disk cert/key");
       } catch (recoveryErr) {
         log.error("TLS hot-reload: recovery failed; server is now down", {
-          error: recoveryErr instanceof Error ? recoveryErr.message : String(recoveryErr)
+          error: recoveryErr instanceof Error ?
+            recoveryErr.message :
+            String(recoveryErr)
         });
         throw recoveryErr;
       }
@@ -447,7 +463,9 @@ export class HttpServer {
 
     // Enforce rate limit before touching in-flight counter or stats
     if (this.rate_limiter) {
-      const clientIp = "hostname" in info.remoteAddr ? info.remoteAddr.hostname : "unknown";
+      const clientIp = "hostname" in info.remoteAddr ?
+        info.remoteAddr.hostname :
+        "unknown";
       if (!this.rate_limiter.allow(clientIp)) {
         const headers = this.get_default_headers("application/json");
         headers.set("Retry-After", "60");
@@ -489,7 +507,10 @@ export class HttpServer {
       // to do it instead. Only paths that match a known non-REST
       // endpoint are rewritten — `/api/<TypeName>` keeps falling
       // through to the REST data API (Bundle J).
-      if (url.pathname.startsWith("/api/") && this.shouldStripApiPrefix(url.pathname)) {
+      if (
+        url.pathname.startsWith("/api/") &&
+        this.shouldStripApiPrefix(url.pathname)
+      ) {
         url.pathname = url.pathname.slice(4);
       }
 
@@ -528,8 +549,9 @@ export class HttpServer {
       // the static manifest. Falls back to `index.html` for SPA routes.
       if (url.pathname === "/ui" || url.pathname.startsWith("/ui/")) {
         const uiResponse = await this.uiAssetHandler(request);
-        if (uiResponse)
+        if (uiResponse) {
           return uiResponse;
+        }
       }
 
       // Live-schema-diff admin endpoints (Bundle K — Disc-original
@@ -584,8 +606,9 @@ export class HttpServer {
           requestId,
           authedContext
         );
-        if (restResponse)
+        if (restResponse) {
           return restResponse;
+        }
       }
 
       // Route handling
@@ -665,18 +688,22 @@ export class HttpServer {
    * (gh/geldata#6345, ports geldata/gel#6352)
    */
   private isPublicRoute(pathname: string): boolean {
-    if (pathname === "/")
+    if (pathname === "/") {
       return true;
-    if (pathname.startsWith("/auth/"))
+    }
+    if (pathname.startsWith("/auth/")) {
       return true;
-    if (pathname === "/health" || pathname.startsWith("/health/"))
+    }
+    if (pathname === "/health" || pathname.startsWith("/health/")) {
       return true;
+    }
     // Admin UI assets are public; users sign in *through* the UI, so
     // the bundle has to load before authentication. The UI's own
     // network calls (e.g. /query, /schema) still go through gateAuth
     // when `requireAuth` is on.
-    if (pathname === "/ui" || pathname.startsWith("/ui/"))
+    if (pathname === "/ui" || pathname.startsWith("/ui/")) {
       return true;
+    }
     return false;
   }
 
@@ -696,13 +723,15 @@ export class HttpServer {
   ): Promise<import("../auth/middleware.ts").AuthContext | null | Response> {
     if (!this.config.requireAuth) {
       // Permissive mode — populate context if we can, but don't reject.
-      if (!this.authMiddleware)
+      if (!this.authMiddleware) {
         return null;
+      }
       return await this.authMiddleware.authenticate(request);
     }
 
-    if (this.isPublicRoute(url.pathname))
+    if (this.isPublicRoute(url.pathname)) {
       return null;
+    }
 
     if (!this.authMiddleware) {
       log.error(
@@ -896,7 +925,9 @@ export class HttpServer {
       }
 
       // Create connection and session
-      const remoteAddr = "hostname" in info.remoteAddr ? info.remoteAddr.hostname : "unknown";
+      const remoteAddr = "hostname" in info.remoteAddr ?
+        info.remoteAddr.hostname :
+        "unknown";
       const connection = this.connection_manager.createConnection(
         "http",
         remoteAddr,
@@ -957,8 +988,9 @@ export class HttpServer {
           .split(",")
           .map(s => s.trim())
           .filter(s => s.length > 0);
-        if (names.length > 0)
+        if (names.length > 0) {
           disabledPolicies = new Set(names);
+        }
       }
 
       // Create query context
@@ -1166,7 +1198,9 @@ export class HttpServer {
         total: this.stats.total_requests,
         successful: this.stats.successful_requests,
         failed: this.stats.failed_requests,
-        avgDurationMs: this.stats.total_requests > 0 ? this.stats.total_duration_ms / this.stats.total_requests : 0
+        avgDurationMs: this.stats.total_requests > 0 ?
+          this.stats.total_duration_ms / this.stats.total_requests :
+          0
       },
       transactions: this.transaction_manager.get_stats(),
       memoryUsage: this.get_memory_stats(),
@@ -1269,7 +1303,9 @@ export class HttpServer {
   ): Response {
     const { socket, response } = Deno.upgradeWebSocket(request);
 
-    const remoteAddr = "hostname" in info.remoteAddr ? info.remoteAddr.hostname : "unknown";
+    const remoteAddr = "hostname" in info.remoteAddr ?
+      info.remoteAddr.hostname :
+      "unknown";
     const connection = this.connection_manager.createConnection(
       "websocket",
       remoteAddr,
@@ -1341,7 +1377,9 @@ export class HttpServer {
             payload: response
           }));
         } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : "Unknown error";
+          const errorMessage = error instanceof Error ?
+            error.message :
+            "Unknown error";
           socket.send(JSON.stringify({
             type: "error",
             payload: { message: errorMessage }
@@ -1365,7 +1403,9 @@ export class HttpServer {
             socket
           );
         } catch (error) {
-          const errorMessage = error instanceof Error ? error.message : "Unknown subscription error";
+          const errorMessage = error instanceof Error ?
+            error.message :
+            "Unknown subscription error";
           socket.send(JSON.stringify({
             type: "error",
             payload: { message: errorMessage }
@@ -1763,7 +1803,10 @@ export class HttpServer {
           JSON.stringify({
             error: "Authentication required but auth provider not configured"
           }),
-          { status: 503, headers: this.get_default_headers("application/json") }
+          {
+            status: 503,
+            headers: this.get_default_headers("application/json")
+          }
         );
       }
       const ctx = await this.authMiddleware.authenticate(request);
@@ -1936,8 +1979,9 @@ export class HttpServer {
     request: Request
   ): Types.QueryContext["clientInfo"] {
     const userAgent = request.headers.get("user-agent");
-    if (!userAgent)
+    if (!userAgent) {
       return undefined;
+    }
 
     // Parse common client patterns
     if (userAgent.includes("disc-client")) {

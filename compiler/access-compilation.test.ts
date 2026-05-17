@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests that verify the compiler injects access control conditions when
  * policies are registered with the EdgeQLCompiler.

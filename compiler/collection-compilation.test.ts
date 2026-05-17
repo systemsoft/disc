@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for Array, Tuple, and NamedTuple expression compilation
  * Phase 20.2: Collection expression compilation

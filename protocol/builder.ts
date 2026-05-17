@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Binary protocol message builder for Gel/EdgeDB compatibility
  * Creates binary messages with big-endian encoding

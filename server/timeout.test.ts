@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Request Timeout Enforcement Tests
  *
@@ -12,7 +15,14 @@ import { ConnectionPool } from "../lib/connection-pool.ts";
 import { QueryTimeoutError } from "../lib/errors.ts";
 import { EdgeQLProtocolHandler } from "./edgeql-protocol.ts";
 import { HttpServer } from "./http.ts";
-import type { ProtocolHandler, QueryContext, QueryError, QueryRequest, QueryResponse, ServerConfig } from "./types.ts";
+import type {
+  ProtocolHandler,
+  QueryContext,
+  QueryError,
+  QueryRequest,
+  QueryResponse,
+  ServerConfig
+} from "./types.ts";
 
 // --- Helpers ---
 

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * PostgreSQL introspection transformer (#3452 — Phase 3)
  *
@@ -9,7 +12,11 @@
  */
 
 import { assertEquals } from "@std/assert";
-import { buildSchemaFromIntrospection, type IntrospectionData, pgTypeToEdgeqlType } from "./pg-introspect.ts";
+import {
+  buildSchemaFromIntrospection,
+  pgTypeToEdgeqlType,
+  type IntrospectionData
+} from "./pg-introspect.ts";
 
 // =========================================================================
 // pgTypeToEdgeqlType — type mapping
@@ -154,7 +161,12 @@ Deno.test("buildSchemaFromIntrospection - FK column becomes single link", () => 
         columns: [
           { name: "id", pgType: "uuid", nullable: false, hasDefault: true },
           { name: "title", pgType: "text", nullable: false, hasDefault: false },
-          { name: "author_id", pgType: "uuid", nullable: false, hasDefault: false }
+          {
+            name: "author_id",
+            pgType: "uuid",
+            nullable: false,
+            hasDefault: false
+          }
         ],
         primaryKey: ["id"]
       }
@@ -197,7 +209,12 @@ Deno.test("buildSchemaFromIntrospection - nullable FK becomes optional link", ()
         tableName: "posts",
         columns: [
           { name: "id", pgType: "uuid", nullable: false, hasDefault: true },
-          { name: "editor_id", pgType: "uuid", nullable: true, hasDefault: false }
+          {
+            name: "editor_id",
+            pgType: "uuid",
+            nullable: true,
+            hasDefault: false
+          }
         ],
         primaryKey: ["id"]
       }
@@ -242,8 +259,18 @@ Deno.test("buildSchemaFromIntrospection - junction table becomes multi link on b
         schemaName: "public",
         tableName: "users_tags",
         columns: [
-          { name: "user_id", pgType: "uuid", nullable: false, hasDefault: false },
-          { name: "tag_id", pgType: "uuid", nullable: false, hasDefault: false }
+          {
+            name: "user_id",
+            pgType: "uuid",
+            nullable: false,
+            hasDefault: false
+          },
+          {
+            name: "tag_id",
+            pgType: "uuid",
+            nullable: false,
+            hasDefault: false
+          }
         ],
         primaryKey: ["user_id", "tag_id"]
       }

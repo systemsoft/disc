@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * PG-backed integration test for the data-watch DDL bootstrap (Bundle
  * L — #3c).
@@ -19,7 +22,11 @@ import { assertEquals, assertGreater } from "@std/assert";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
 import { ConnectionPool } from "../../lib/connection-pool.ts";
 import { canRunPgTests, getTestDsn } from "../../tests/pg-test-harness.ts";
-import { bootstrapDataWatch, CHANGE_LOG_TABLE, pruneChangeLog } from "./data-watch-ddl.ts";
+import {
+  bootstrapDataWatch,
+  CHANGE_LOG_TABLE,
+  pruneChangeLog
+} from "./data-watch-ddl.ts";
 
 const RUN_PG = canRunPgTests();
 const SUFFIX = `bundlel_${Date.now() % 100000}`;
@@ -125,7 +132,9 @@ Deno.test({
 
       // Phase 4: trigger fires on DELETE.
       const updateId = Number(
-        (await pool.query(`SELECT MAX(id)::bigint AS cur FROM ${CHANGE_LOG_TABLE}`))
+        (await pool.query(
+          `SELECT MAX(id)::bigint AS cur FROM ${CHANGE_LOG_TABLE}`
+        ))
           .rows[0]
           .cur
       );

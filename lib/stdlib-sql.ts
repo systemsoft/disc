@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Disc stdlib — SQL bootstrap for EdgeQL `std::*` functions that don't
  * map 1-to-1 onto a PostgreSQL built-in. (gh/geldata#5065)

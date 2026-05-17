@@ -76,7 +76,7 @@ Compiles to PostgreSQL SQL automatically.
 
 ## CLI Commands
 
-All commands auto-detect the project from `disc.toml` in the current (or parent) directory and auto-start PostgreSQL when needed. No manual DSN configuration required.
+All commands auto-detect the project from `disc.toml` in the current (or parent) directory and auto-start PostgreSQL when needed. No manual DSN configuration required.
 
 ```bash
 disc init                      # Initialize a new Disc project
@@ -174,8 +174,7 @@ disc init --backend-dsn "postgres://user:pass@host:5432/disc"
 
 ### Native Binary
 
-The canonical build path is the `disc build` CLI command (wraps `deno compile`
-with the correct flags and cross-compile targets):
+The canonical build path is the `disc build` CLI command (wraps `deno compile` with the correct flags and cross-compile targets):
 
 ```bash
 disc build                          # Build for current platform
@@ -183,12 +182,9 @@ disc build --platform linux-x64     # Cross-compile for Linux
 disc build --platform linux-arm64   # Cross-compile for Linux ARM
 ```
 
-For release automation, the equivalent `deno task` aliases (`build:darwin-arm64`,
-`build:linux-x64`, etc.) call `disc build` under the hood. The `justfile` targets
-are retained for hands-on development but are not part of the release pipeline.
+For release automation, the equivalent `deno task` aliases (`build:darwin-arm64`, `build:linux-x64`, etc.) call `disc build` under the hood. The `justfile` targets are retained for hands-on development but are not part of the release pipeline.
 
-Version is read from `version.txt` at startup; ChronVer-style dates are bumped
-by `just version`.
+Version is read from `version.txt` at startup; ChronVer-style dates are bumped by `just version`.
 
 ### Docker
 
@@ -207,7 +203,7 @@ disc deploy --format compose        # Generate docker-compose.yml
 disc deploy --format docker         # Generate Dockerfile
 ```
 
-See [Production Deployment Guide](docs/production-deployment.md) for full details including TLS setup, connection pool tuning, health checks, monitoring, and more.
+See [Production Deployment Guide](docs/production-deployment.md) for full details including TLS setup, connection pool tuning, health checks, monitoring, and more.
 
 ## Development
 
@@ -219,8 +215,8 @@ deno test --allow-all --no-check --ignore=ui/
 DISC_PG_AUTO=1 deno test --allow-all --no-check --ignore=ui/
 
 # Format and lint
-deno fmt
-deno lint
+deno task format
+deno task lint
 
 # Dev server
 deno task dev
@@ -230,4 +226,4 @@ See [CLAUDE.md](./CLAUDE.md) for detailed architecture documentation and contrib
 
 ## License
 
-AGPL-3.0
+Apache 2.0

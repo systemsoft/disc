@@ -1,9 +1,18 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * EdgeQL to SQL Compiler
  * Transforms EdgeQL AST into PostgreSQL-compatible SQL
  */
 
-import { AccessConfig, AccessContext, AccessEvaluator, AccessPolicy, AccessSQLInjector } from "../access/mod.ts";
+import {
+  AccessConfig,
+  AccessContext,
+  AccessEvaluator,
+  AccessPolicy,
+  AccessSQLInjector
+} from "../access/mod.ts";
 import * as EdgeQLAST from "../edgeql/ast.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { CompilationError } from "../lib/errors.ts";
@@ -127,8 +136,9 @@ export function buildParameterIndex(node: unknown): Map<string, number> {
   const out = new Map<string, number>();
 
   function visit(n: unknown): void {
-    if (!n || typeof n !== "object")
+    if (!n || typeof n !== "object") {
       return;
+    }
     const obj = n as { kind?: string; name?: string; };
     if (obj.kind === "Parameter" && typeof obj.name === "string") {
       const bare = obj.name.startsWith("$") ? obj.name.slice(1) : obj.name;
@@ -139,8 +149,9 @@ export function buildParameterIndex(node: unknown): Map<string, number> {
     }
     for (const v of Object.values(obj as Record<string, unknown>)) {
       if (Array.isArray(v)) {
-        for (const item of v)
+        for (const item of v) {
           visit(item);
+        }
       } else if (v && typeof v === "object") {
         visit(v);
       }
@@ -479,8 +490,9 @@ export class EdgeQLCompiler {
   private parseAccessConditions(
     sqlConditions: string[]
   ): SQL.SQLExpression | null {
-    if (sqlConditions.length === 0)
+    if (sqlConditions.length === 0) {
       return null;
+    }
 
     // For now, create raw SQL expressions
     // In a production system, we'd parse these properly
@@ -526,7 +538,9 @@ export class EdgeQLCompiler {
       case "ConfigureQuery":
         return this.compileConfigureQuery(query as EdgeQLAST.ConfigureQuery);
       default:
-        throw new CompilationError(`Unsupported query type: ${(query as { kind: string; }).kind}`);
+        throw new CompilationError(
+          `Unsupported query type: ${(query as { kind: string; }).kind}`
+        );
     }
   }
 
@@ -640,8 +654,9 @@ export class EdgeQLCompiler {
           resolvedName,
           shape
         );
-        if (polymorphic)
+        if (polymorphic) {
           return polymorphic;
+        }
         // No concrete subtypes — fall through to the regular path which
         // will raise a clearer error than emitting a SELECT against a
         // non-existent abstract table.
@@ -990,24 +1005,32 @@ export class EdgeQLCompiler {
   ): Map<string, string> {
     const cols = new Map<string, string>();
     for (const element of shape.elements) {
-      if (!element.typeFilter)
+      if (!element.typeFilter) {
         continue;
+      }
       const propName = element.name?.name ||
         (element.expr.kind === "Identifier" ? element.expr.name : "");
-      if (!propName)
+      if (!propName) {
         continue;
-      const filterTypeDef = Context.resolveTypeName(this.ctx, element.typeFilter);
-      if (!filterTypeDef)
+      }
+      const filterTypeDef = Context.resolveTypeName(
+        this.ctx,
+        element.typeFilter
+      );
+      if (!filterTypeDef) {
         continue;
+      }
 
       // Property path (Bundle BB).
       const property = filterTypeDef.properties.get(propName);
       if (property) {
         const colName = property.columnName ?? property.name;
-        if (inheritedColumns.includes(colName))
+        if (inheritedColumns.includes(colName)) {
           continue;
-        if (cols.has(colName))
+        }
+        if (cols.has(colName)) {
           continue;
+        }
         const pgType = edgeqlTypeToPgType(property.edgeqlType ?? property.type);
         cols.set(colName, pgType);
         continue;
@@ -1022,10 +1045,12 @@ export class EdgeQLCompiler {
       const link = filterTypeDef.links.get(propName);
       if (link && link.columnName) {
         const colName = link.columnName;
-        if (inheritedColumns.includes(colName))
+        if (inheritedColumns.includes(colName)) {
           continue;
-        if (cols.has(colName))
+        }
+        if (cols.has(colName)) {
           continue;
+        }
         // FK columns are uuid in Disc's schema (id is uuid).
         cols.set(colName, "uuid");
       }
@@ -1043,8 +1068,9 @@ export class EdgeQLCompiler {
       .map(n => this.ctx.schema.types.get(n))
       .filter((t): t is Context.TypeDef => t !== undefined && !t.abstract);
 
-    if (concreteSubs.length === 0)
+    if (concreteSubs.length === 0) {
       return null;
+    }
 
     // Phase 1 — abstract type's columns. `id` is always present; every
     // property of the abstract type is inherited (same column name) by
@@ -1052,11 +1078,13 @@ export class EdgeQLCompiler {
     // subtype's table backs the row.
     const inheritedColumns = ["id"];
     for (const prop of typeDef.properties.values()) {
-      if (prop.computed)
+      if (prop.computed) {
         continue;
+      }
       const col = prop.columnName ?? prop.name;
-      if (!inheritedColumns.includes(col))
+      if (!inheritedColumns.includes(col)) {
         inheritedColumns.push(col);
+      }
     }
 
     // Phase 2 — subtype-specific columns referenced via polymorphic
@@ -1067,8 +1095,13 @@ export class EdgeQLCompiler {
     // now projects either the actual column (when the subtype owns it)
     // or `NULL::<pg-type> AS <colName>` (when it doesn't), so PG's
     // UNION column-resolution sees a consistent shape across branches.
-    const polymorphicColumns = shape ? this.collectPolymorphicShapeColumns(shape, inheritedColumns) : new Map<string, string>();
-    const allBranchColumns = [...inheritedColumns, ...polymorphicColumns.keys()];
+    const polymorphicColumns = shape ?
+      this.collectPolymorphicShapeColumns(shape, inheritedColumns) :
+      new Map<string, string>();
+    const allBranchColumns = [
+      ...inheritedColumns,
+      ...polymorphicColumns.keys()
+    ];
 
     // Build one SELECT per concrete subtype.
     const branches: SQL.SelectStatement[] = concreteSubs.map(sub => {
@@ -1104,7 +1137,9 @@ export class EdgeQLCompiler {
       });
     });
 
-    const subquery: SQL.SQLStatement = branches.length === 1 ? branches[0] : SQL.unionAll(branches);
+    const subquery: SQL.SQLStatement = branches.length === 1 ?
+      branches[0] :
+      SQL.unionAll(branches);
 
     const tableAlias = Context.addTableAlias(
       this.ctx,
@@ -1175,8 +1210,9 @@ export class EdgeQLCompiler {
       // properties (Map preserves insertion order from the schema parser).
       const seen = new Set<string>();
       const pushIfNew = (name: string) => {
-        if (seen.has(name))
+        if (seen.has(name)) {
           return;
+        }
         seen.add(name);
         out.push({
           kind: "ShapeElement",
@@ -1709,8 +1745,9 @@ export class EdgeQLCompiler {
     // Check scope variables first (e.g., FOR loop variable)
     const varDef = this.ctx.currentScope.variables.get(identifier.name);
     if (varDef) {
-      if (varDef.sqlOverride)
+      if (varDef.sqlOverride) {
         return varDef.sqlOverride;
+      }
       return this.compileExpression(varDef.expression);
     }
 
@@ -1718,8 +1755,9 @@ export class EdgeQLCompiler {
     for (let i = this.ctx.scopes.length - 1; i >= 0; i--) {
       const parentVar = this.ctx.scopes[i].variables.get(identifier.name);
       if (parentVar) {
-        if (parentVar.sqlOverride)
+        if (parentVar.sqlOverride) {
           return parentVar.sqlOverride;
+        }
         return this.compileExpression(parentVar.expression);
       }
     }
@@ -1745,8 +1783,9 @@ export class EdgeQLCompiler {
         binOp.op,
         binOp.right
       );
-      if (rewritten)
+      if (rewritten) {
         return rewritten;
+      }
     }
 
     const left = this.compileExpression(binOp.left);
@@ -2440,7 +2479,9 @@ export class EdgeQLCompiler {
     let frame: SQL.WindowFrame | undefined;
     if (over.frame) {
       const start = this.compileFrameBound(over.frame.start);
-      const end = over.frame.end ? this.compileFrameBound(over.frame.end) : start;
+      const end = over.frame.end ?
+        this.compileFrameBound(over.frame.end) :
+        start;
 
       frame = {
         kind: "WindowFrame",
@@ -2502,8 +2543,9 @@ export class EdgeQLCompiler {
     }
 
     const idx = this.parameterIndex.get(bare);
-    if (idx !== undefined)
+    if (idx !== undefined) {
       return SQL.createParameterReference(idx);
+    }
 
     // No map entry — fall back to length+1 so successive unmapped names get
     // distinct indices instead of all collapsing onto $1 (the prior bug).
@@ -2522,7 +2564,10 @@ export class EdgeQLCompiler {
     // (which PG would silently lowercase to `loglevel` — a type that
     // doesn't exist).
     const resolved = Context.resolveTypeName(this.ctx, typeName);
-    if (resolved && Array.isArray(resolved.enumValues) && resolved.enumValues.length > 0) {
+    if (
+      resolved && Array.isArray(resolved.enumValues) &&
+      resolved.enumValues.length > 0
+    ) {
       return SQL.createCastExpression(expr, Context.getEnumSqlType(typeName));
     }
 
@@ -2561,7 +2606,9 @@ export class EdgeQLCompiler {
     if (path.steps.length === 2) {
       const firstStep = path.steps[0];
       const secondStep = path.steps[1];
-      const enumDefPath = firstStep.type === "property" ? Context.resolveTypeName(this.ctx, firstStep.name) : undefined;
+      const enumDefPath = firstStep.type === "property" ?
+        Context.resolveTypeName(this.ctx, firstStep.name) :
+        undefined;
       if (
         firstStep.type === "property" && secondStep.type === "property" &&
         enumDefPath && Array.isArray(enumDefPath.enumValues) &&
@@ -2630,16 +2677,19 @@ export class EdgeQLCompiler {
    * as a scalar value.
    */
   private isMultiLinkPath(expr: EdgeQLAST.Expression): boolean {
-    if (expr.kind !== "Path" || expr.steps.length !== 2)
+    if (expr.kind !== "Path" || expr.steps.length !== 2) {
       return false;
+    }
     const [first] = expr.steps;
-    if (first.type !== "property")
+    if (first.type !== "property") {
       return false;
+    }
     for (const ta of this.ctx.currentScope.aliases.values()) {
       const td = Context.resolveTypeName(this.ctx, ta.type);
       const link = td?.links.get(first.name);
-      if (link?.multi)
+      if (link?.multi) {
         return true;
+      }
     }
     return false;
   }
@@ -2664,18 +2714,21 @@ export class EdgeQLCompiler {
     rhsExpr: EdgeQLAST.Expression
   ): SQL.SQLExpression | null {
     const [firstStep, secondStep] = path.steps;
-    if (firstStep.type !== "property" || secondStep.type !== "property")
+    if (firstStep.type !== "property" || secondStep.type !== "property") {
       return null;
+    }
 
     for (const ta of this.ctx.currentScope.aliases.values()) {
       const td = Context.resolveTypeName(this.ctx, ta.type);
       const link = td?.links.get(firstStep.name);
-      if (!link?.multi)
+      if (!link?.multi) {
         continue;
+      }
 
       const targetType = Context.resolveTypeName(this.ctx, link.target);
-      if (!targetType)
+      if (!targetType) {
         return null;
+      }
 
       // Compile the RHS in the current scope (so parameters and other
       // refs resolve correctly), then render to SQL so we can splice
@@ -2702,8 +2755,9 @@ export class EdgeQLCompiler {
 
         const tAlias = `__t_${firstStep.name}`;
         const prop = targetType.properties.get(secondStep.name);
-        if (!prop?.columnName)
+        if (!prop?.columnName) {
           return null;
+        }
 
         const sql = `EXISTS (SELECT 1 FROM "${link.junctionTable}" "${jAlias}" ` +
           `INNER JOIN "${targetType.tableName}" "${tAlias}" ` +
@@ -2729,8 +2783,9 @@ export class EdgeQLCompiler {
         targetColName = "id";
       } else {
         const prop = targetType.properties.get(secondStep.name);
-        if (!prop?.columnName)
+        if (!prop?.columnName) {
           return null;
+        }
         targetColName = prop.columnName;
       }
 
@@ -2770,8 +2825,9 @@ export class EdgeQLCompiler {
   private compileLinkChain(
     stepNames: string[]
   ): SQL.SQLExpression | null {
-    if (stepNames.length < 2)
+    if (stepNames.length < 2) {
       return null;
+    }
 
     for (const ta of this.ctx.currentScope.aliases.values()) {
       const sourceType = Context.resolveTypeName(this.ctx, ta.type);
@@ -2789,9 +2845,13 @@ export class EdgeQLCompiler {
       // currentSql is an SQL fragment that evaluates to the id of the
       // *next* hop's target type. Initially it's the source's FK column.
       let currentSql = `"${ta.alias}"."${firstLink.columnName}"`;
-      let currentTargetType = Context.resolveTypeName(this.ctx, firstLink.target);
-      if (!currentTargetType)
+      let currentTargetType = Context.resolveTypeName(
+        this.ctx,
+        firstLink.target
+      );
+      if (!currentTargetType) {
         return null;
+      }
 
       // Walk intermediate link steps (everything except first link and
       // the terminal property/id step).
@@ -2803,8 +2863,9 @@ export class EdgeQLCompiler {
         currentSql = `(SELECT "${link.columnName}" FROM "${currentTargetType.tableName}" ` +
           `WHERE "id" = ${currentSql})`;
         const next = Context.resolveTypeName(this.ctx, link.target);
-        if (!next)
+        if (!next) {
           return null;
+        }
         currentTargetType = next;
       }
 
@@ -2817,8 +2878,9 @@ export class EdgeQLCompiler {
       }
 
       const targetProp = currentTargetType.properties.get(finalStep);
-      if (!targetProp?.columnName)
+      if (!targetProp?.columnName) {
         return null;
+      }
 
       const sql = `(SELECT "${targetProp.columnName}" FROM "${currentTargetType.tableName}" ` +
         `WHERE "id" = ${currentSql})`;
@@ -3147,7 +3209,9 @@ export class EdgeQLCompiler {
       const cteName = binding.name.name;
 
       // Register this CTE alias so the body query can resolve it
-      const typeDef = underlyingTypeName ? Context.resolveTypeName(this.ctx, underlyingTypeName) : undefined;
+      const typeDef = underlyingTypeName ?
+        Context.resolveTypeName(this.ctx, underlyingTypeName) :
+        undefined;
 
       Context.addCTEAlias(this.ctx, cteName, {
         cteName,
@@ -3256,8 +3320,9 @@ export class EdgeQLCompiler {
         if (firstStep?.type === "property") {
           // Check if this is a known type
           const typeDef = Context.resolveTypeName(this.ctx, firstStep.name);
-          if (typeDef)
+          if (typeDef) {
             return firstStep.name;
+          }
         }
       }
     }
@@ -3505,12 +3570,15 @@ export class EdgeQLCompiler {
         if (elem.type === "string") {
           return "'" + String(elem.value).replace(/'/g, "''") + "'";
         }
-        if (elem.type === "number")
+        if (elem.type === "number") {
           return String(elem.value);
-        if (elem.type === "boolean")
+        }
+        if (elem.type === "boolean") {
           return elem.value ? "TRUE" : "FALSE";
-        if (elem.type === "null")
+        }
+        if (elem.type === "null") {
           return "NULL";
+        }
       }
       // For non-literal expressions, fall back to a placeholder
       return "?";
@@ -3574,7 +3642,9 @@ export class EdgeQLCompiler {
         this.compileExpression(clause.result)
       )
     );
-    const elseExpr = caseExpr.elseResult ? this.compileExpression(caseExpr.elseResult) : undefined;
+    const elseExpr = caseExpr.elseResult ?
+      this.compileExpression(caseExpr.elseResult) :
+      undefined;
     return SQL.createCaseExpression(whens, elseExpr);
   }
 
@@ -3789,7 +3859,9 @@ export class EdgeQLCompiler {
    * so that unset globals return NULL rather than raising an error.
    */
   private compileGlobalRef(expr: EdgeQLAST.GlobalRef): SQL.SQLExpression {
-    const qualifiedName = expr.module ? `${expr.module}::${expr.name}` : expr.name;
+    const qualifiedName = expr.module ?
+      `${expr.module}::${expr.name}` :
+      expr.name;
     const globalDef = Context.resolveGlobal(
       this.ctx.schema,
       qualifiedName,
@@ -3821,7 +3893,9 @@ export class EdgeQLCompiler {
   private compileSetGlobal(
     query: EdgeQLAST.SetGlobalQuery
   ): SQL.RawSQLStatement {
-    const qualifiedName = query.module ? `${query.module}::${query.name}` : query.name;
+    const qualifiedName = query.module ?
+      `${query.module}::${query.name}` :
+      query.name;
     const globalDef = Context.resolveGlobal(
       this.ctx.schema,
       qualifiedName,

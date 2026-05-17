@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for OAuthExtension
  */
@@ -306,7 +309,11 @@ Deno.test("OAuthExtension - callback completes token exchange + userinfo (gh/gel
   // and userinfo fetching into the callback (it was a stub previously).
   const originalFetch = globalThis.fetch;
   globalThis.fetch = ((url: string | URL | Request) => {
-    const u = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+    const u = typeof url === "string" ?
+      url :
+      url instanceof URL ?
+      url.toString() :
+      url.url;
     if (u.includes("oauth2.googleapis.com/token")) {
       return Promise.resolve(
         new Response(
@@ -366,7 +373,11 @@ Deno.test("OAuthExtension - callback completes token exchange + userinfo (gh/gel
 Deno.test("OAuthExtension - metadata round-trips through authorize → callback (gh/geldata#8841)", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = ((url: string | URL | Request) => {
-    const u = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+    const u = typeof url === "string" ?
+      url :
+      url instanceof URL ?
+      url.toString() :
+      url.url;
     if (u.includes("token")) {
       return Promise.resolve(
         new Response(

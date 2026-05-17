@@ -1,9 +1,18 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * EdgeQL Lexer - Tokenizes EdgeQL source code
  */
 
 import { SyntaxError } from "../lib/errors.ts";
-import { createToken, KEYWORDS, RESERVED_KEYWORDS, Token, TokenType } from "./tokens.ts";
+import {
+  createToken,
+  KEYWORDS,
+  RESERVED_KEYWORDS,
+  Token,
+  TokenType
+} from "./tokens.ts";
 
 export class EdgeQLLexer {
   private source: string;
@@ -106,8 +115,9 @@ export class EdgeQLLexer {
     // Type cast <type>
     if (ch === "<" && this.isIdentStart(this.peekAhead(1))) {
       const lookahead = this.scanTypeCast();
-      if (lookahead)
+      if (lookahead) {
         return lookahead;
+      }
     }
 
     // Operators and punctuation
@@ -1114,22 +1124,25 @@ export class EdgeQLLexer {
   }
 
   private isDigit(ch: string | null): boolean {
-    if (ch === null)
+    if (ch === null) {
       return false;
+    }
     return ch >= "0" && ch <= "9";
   }
 
   private isIdentStart(ch: string | null): boolean {
-    if (ch === null)
+    if (ch === null) {
       return false;
+    }
     return (ch >= "a" && ch <= "z") ||
       (ch >= "A" && ch <= "Z") ||
       ch === "_";
   }
 
   private isIdentCont(ch: string | null): boolean {
-    if (ch === null)
+    if (ch === null) {
       return false;
+    }
     return this.isIdentStart(ch) || this.isDigit(ch);
   }
 }

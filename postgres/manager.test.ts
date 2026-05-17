@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 import { assertEquals, assertExists, assertRejects } from "@std/assert";
 import { join } from "@std/path";
 import { canRunPgTests, findPgBinDir } from "../tests/pg-test-harness.ts";

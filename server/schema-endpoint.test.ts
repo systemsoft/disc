@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for schema introspection REST endpoint and schema:: built-in functions
  *
@@ -15,7 +18,11 @@ import { EdgeQLCompiler } from "../compiler/compiler.ts";
 import { createTestSchema } from "../compiler/context.ts";
 import type { Schema, TypeDef } from "../compiler/context.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
-import { handleGetSchema, handleGetSchemaType, handleGetSchemaTypes } from "./schema-endpoint.ts";
+import {
+  handleGetSchema,
+  handleGetSchemaType,
+  handleGetSchemaTypes
+} from "./schema-endpoint.ts";
 import type { SchemaRouteContext } from "./schema-endpoint.ts";
 
 // ---------------------------------------------------------------------------

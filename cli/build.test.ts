@@ -1,5 +1,13 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
+/*** NATIVE ------------------------------------------- ***/
+
 import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
 import { join } from "@std/path";
+
+/*** UTILITY ------------------------------------------ ***/
+
 import {
   AVAILABLE_PLATFORMS,
   BuildCommand,
@@ -11,29 +19,21 @@ import {
   refreshEmbeddedSdkManifest
 } from "./build.ts";
 
+/*** RUNTIME ------------------------------------------ ***/
+
 Deno.test("BuildCommand - maps linux-x64 to x86_64-unknown-linux-gnu", () => {
   const command = new BuildCommand();
-  assertEquals(
-    command.mapPlatform("linux-x64"),
-    "x86_64-unknown-linux-gnu"
-  );
+  assertEquals(command.mapPlatform("linux-x64"), "x86_64-unknown-linux-gnu");
 });
 
 Deno.test("BuildCommand - maps darwin-arm64 to aarch64-apple-darwin", () => {
   const command = new BuildCommand();
-  assertEquals(
-    command.mapPlatform("darwin-arm64"),
-    "aarch64-apple-darwin"
-  );
+  assertEquals(command.mapPlatform("darwin-arm64"), "aarch64-apple-darwin");
 });
 
 Deno.test("BuildCommand - rejects invalid platform with helpful message", () => {
   const command = new BuildCommand();
-  assertThrows(
-    () => command.validatePlatform("windows-x64"),
-    Error,
-    "Invalid platform"
-  );
+  assertThrows(() => command.validatePlatform("windows-x64"), Error, "Invalid platform");
 });
 
 Deno.test("BuildCommand - default output path is ./disc", () => {
@@ -58,15 +58,13 @@ Deno.test("BuildCommand - available platforms list contains all 4 platforms", ()
 
 Deno.test("generateUiManifest - emits manifest from build dir contents", async () => {
   const tmp = await Deno.makeTempDir({ prefix: "disc-ui-manifest-" });
+
   try {
     const buildDir = join(tmp, "ui", "build");
     await Deno.mkdir(join(buildDir, "_app", "immutable"), { recursive: true });
     await Deno.writeTextFile(join(buildDir, "index.html"), "<html/>");
     await Deno.writeTextFile(join(buildDir, "_app", "version.json"), "{}");
-    await Deno.writeTextFile(
-      join(buildDir, "_app", "immutable", "app.abc.js"),
-      "/*js*/"
-    );
+    await Deno.writeTextFile(join(buildDir, "_app", "immutable", "app.abc.js"), "/*js*/");
 
     const generated = await generateUiManifest(buildDir);
 
@@ -82,17 +80,19 @@ Deno.test("generateUiManifest - emits manifest from build dir contents", async (
 
 Deno.test("generateUiManifest - throws when build dir is empty", async () => {
   const tmp = await Deno.makeTempDir({ prefix: "disc-ui-manifest-empty-" });
+
   try {
     const buildDir = join(tmp, "ui", "build");
+    let threw = false;
     await Deno.mkdir(buildDir, { recursive: true });
 
-    let threw = false;
     try {
       await generateUiManifest(buildDir);
     } catch (err) {
       threw = true;
       assertStringIncludes((err as Error).message, "no UI build artifacts");
     }
+
     assertEquals(threw, true);
   } finally {
     await Deno.remove(tmp, { recursive: true });
@@ -101,12 +101,14 @@ Deno.test("generateUiManifest - throws when build dir is empty", async () => {
 
 Deno.test("generateEmbeddedPgManifest - empty manifest when source dir absent", async () => {
   const tmp = await Deno.makeTempDir({ prefix: "disc-embed-pg-empty-" });
+
   try {
     const generated = await generateEmbeddedPgManifest({
       manifestDir: join(tmp, "postgres"),
       pgVersion: "16.4",
       sourceDir: join(tmp, "does-not-exist")
     });
+
     assertStringIncludes(generated, "EMBEDDED_PG_MANIFEST");
     assertStringIncludes(generated, "[]");
   } finally {
@@ -116,6 +118,7 @@ Deno.test("generateEmbeddedPgManifest - empty manifest when source dir absent", 
 
 Deno.test("generateEmbeddedPgManifest - emits import.meta.resolve URLs + correct mode", async () => {
   const tmp = await Deno.makeTempDir({ prefix: "disc-embed-pg-list-" });
+
   try {
     const sourceDir = join(tmp, "pg");
     const manifestDir = join(tmp, "postgres");
@@ -133,22 +136,16 @@ Deno.test("generateEmbeddedPgManifest - emits import.meta.resolve URLs + correct
 
     assertStringIncludes(generated, "\"bin/postgres\"");
     assertStringIncludes(generated, "\"share/tz.txt\"");
-    // bin/* gets executable mode
+    /*** bin/* gets executable mode ***/
     assertStringIncludes(generated, "0o755");
-    // non-bin gets 0o644
+    /*** non-bin gets 0o644 ***/
     assertStringIncludes(generated, "0o644");
-    // sourceUrl uses import.meta.resolve so deno compile's VFS catches
-    // the read at runtime — bare absolute file:// URLs miss the VFS
-    // because Deno only remaps URLs derived from module resolution.
-    assertStringIncludes(
-      generated,
-      `import.meta.resolve("../pg/bin/postgres")`
-    );
-    assertStringIncludes(
-      generated,
-      `import.meta.resolve("../pg/share/tz.txt")`
-    );
-    // The old absolute-file:// form must be gone.
+    /*** sourceUrl uses import.meta.resolve so deno compile’s VFS catches the read at runtime — bare
+         absolute file:// URLs miss the VFS because Deno only remaps URLs derived from
+         module resolution. ***/
+    assertStringIncludes(generated, `import.meta.resolve("../pg/bin/postgres")`);
+    assertStringIncludes(generated, `import.meta.resolve("../pg/share/tz.txt")`);
+    /*** The old absolute-file:// form must be gone. ***/
     assertEquals(generated.includes(`file://${sourceDir}`), false);
   } finally {
     await Deno.remove(tmp, { recursive: true });
@@ -157,13 +154,16 @@ Deno.test("generateEmbeddedPgManifest - emits import.meta.resolve URLs + correct
 
 Deno.test("BuildCommand.buildCompileArgs - includes PG paths when supplied", () => {
   const command = new BuildCommand();
+
   const args = command.buildCompileArgs({}, [
     "/abs/pg/bin/postgres",
     "/abs/pg/lib/libpq.dylib"
   ]);
+
   assertEquals(args.includes("/abs/pg/bin/postgres"), true);
   assertEquals(args.includes("/abs/pg/lib/libpq.dylib"), true);
-  // Each --include path is preceded by a literal "--include" arg.
+
+  /*** Each --include path is preceded by a literal "--include" arg. ***/
   for (const path of ["/abs/pg/bin/postgres", "/abs/pg/lib/libpq.dylib"]) {
     const i = args.indexOf(path);
     assertEquals(args[i - 1], "--include");
@@ -185,6 +185,7 @@ Deno.test("BuildCommand.buildCompileArgs - --lite skips ui/build but PG paths st
 
 Deno.test("generateUiManifest - emits sorted, posix-style paths even on backslashed inputs", async () => {
   const tmp = await Deno.makeTempDir({ prefix: "disc-ui-manifest-sort-" });
+
   try {
     const buildDir = join(tmp, "ui", "build");
     await Deno.mkdir(join(buildDir, "z"), { recursive: true });
@@ -202,9 +203,7 @@ Deno.test("generateUiManifest - emits sorted, posix-style paths even on backslas
   }
 });
 
-// =====================================================================
-// Bundle I follow-up — cross-platform reproducible builds
-// =====================================================================
+/*** --- Bundle I follow-up — cross-platform reproducible builds --- ***/
 
 Deno.test("platformPgStagingDir - returns dist/embedded-pg/<platform>/<version>/", () => {
   const path = platformPgStagingDir("/repo", "linux-x64", "16.4");
@@ -218,11 +217,10 @@ Deno.test("platformPgStagingDir - composes for every supported platform", () => 
   }
 });
 
-// A "complete" PG distribution for test purposes: enough files to clear
-// the minimum-file-count threshold + includes bin/postgres + a few
-// share/timezone entries (PG init needs these). Builds the path list
-// with a fake staging root so the gate only inspects the strings, not
-// the filesystem.
+/*** A "complete" PG distribution for test purposes: enough files to clear the minimum-file-count
+     threshold + includes bin/postgres + a few share/timezone entries (PG init needs these). Builds
+     the path list with a fake staging root so the gate only inspects the strings, not
+     the filesystem. ***/
 function fakePgPaths(stagingDir: string, fileCount: number): string[] {
   const paths: string[] = [
     `${stagingDir}/bin/postgres`,
@@ -231,174 +229,133 @@ function fakePgPaths(stagingDir: string, fileCount: number): string[] {
     `${stagingDir}/share/timezone/UTC`,
     `${stagingDir}/share/extension/plpgsql.control`
   ];
-  // Pad with fake share/ files until we hit the target count.
+
+  /*** Pad with fake share/ files until we hit the target count. ***/
   for (let i = 0; paths.length < fileCount; i++) {
     paths.push(`${stagingDir}/share/timezone/zone-${i}`);
   }
+
   return paths;
 }
 
 Deno.test("assertEmbeddedPgPresent - throws when --platform set and 0 files staged", () => {
   const command = new BuildCommand();
   let threw = false;
+
   try {
-    command.assertEmbeddedPgPresent(
-      { platform: "linux-x64" },
-      [],
-      "/dist/embedded-pg/linux-x64/16.4"
-    );
+    command.assertEmbeddedPgPresent({ platform: "linux-x64" }, [], "/dist/embedded-pg/linux-x64/16.4");
   } catch (err) {
     threw = true;
-    assertStringIncludes(
-      (err as Error).message,
-      "0 embedded PG files"
-    );
-    assertStringIncludes(
-      (err as Error).message,
-      "linux-x64"
-    );
-    assertStringIncludes(
-      (err as Error).message,
-      "DISC_BUILD_NO_BUNDLE_PG"
-    );
+    assertStringIncludes((err as Error).message, "0 embedded PG files");
+    assertStringIncludes((err as Error).message, "linux-x64");
+    assertStringIncludes((err as Error).message, "DISC_BUILD_NO_BUNDLE_PG");
   }
-  assertEquals(
-    threw,
-    true,
-    "assertEmbeddedPgPresent must throw when --platform is set and 0 files were staged."
-  );
+
+  assertEquals(threw, true, "assertEmbeddedPgPresent must throw when --platform is set and 0 files were staged.");
 });
 
 Deno.test("assertEmbeddedPgPresent - throws when --platform set and bin/postgres missing", () => {
   const command = new BuildCommand();
-  // Plenty of files but bin/postgres absent — partial extraction.
-  // The embedded PG is useless without the postgres binary itself.
+  /*** Plenty of files but bin/postgres absent — partial extraction. The embedded PG is useless
+       without the postgres binary itself. ***/
   const paths: string[] = [];
+  let threw = false;
+
   for (let i = 0; i < 100; i++) {
     paths.push(`/staging/share/timezone/zone-${i}`);
   }
-  let threw = false;
+
   try {
-    command.assertEmbeddedPgPresent(
-      { platform: "linux-x64" },
-      paths,
-      "/staging"
-    );
+    command.assertEmbeddedPgPresent({ platform: "linux-x64" }, paths, "/staging");
   } catch (err) {
     threw = true;
     assertStringIncludes((err as Error).message, "bin/postgres");
     assertStringIncludes((err as Error).message, "linux-x64");
   }
-  assertEquals(
-    threw,
-    true,
-    "assertEmbeddedPgPresent must throw when bin/postgres is missing from the embedded paths."
-  );
+
+  assertEquals(threw, true, "assertEmbeddedPgPresent must throw when bin/postgres is missing from the embedded paths.");
 });
 
 Deno.test("assertEmbeddedPgPresent - throws when --platform set and file count below threshold", () => {
   const command = new BuildCommand();
-  // bin/postgres present but only 3 files total — partial extract.
-  // A real PG distribution has hundreds of files (timezone data,
-  // extensions, locale data); 3 means most of share/ never landed.
+  /*** bin/postgres present but only 3 files total — partial extract. A real PG distribution has
+       hundreds of files (timezone data, extensions, locale data); 3 means most of share/
+       never landed. ***/
   const paths = [
     "/staging/bin/postgres",
     "/staging/bin/initdb",
     "/staging/bin/pg_ctl"
   ];
+
   let threw = false;
+
   try {
-    command.assertEmbeddedPgPresent(
-      { platform: "linux-x64" },
-      paths,
-      "/staging"
-    );
+    command.assertEmbeddedPgPresent({ platform: "linux-x64" }, paths, "/staging");
   } catch (err) {
     threw = true;
     assertStringIncludes((err as Error).message, "only 3 embedded PG files");
     assertStringIncludes((err as Error).message, "linux-x64");
     assertStringIncludes((err as Error).message, "partial extraction");
   }
-  assertEquals(
-    threw,
-    true,
-    "assertEmbeddedPgPresent must throw when file count is far below a real PG distribution's count."
-  );
+
+  assertEquals(threw, true, "assertEmbeddedPgPresent must throw when file count is far below a real PG distribution’s count.");
 });
 
 Deno.test("assertEmbeddedPgPresent - no-op when --platform set and full PG distribution", () => {
   const command = new BuildCommand();
-  // No throw expected — bin/postgres present + ample files.
-  command.assertEmbeddedPgPresent(
-    { platform: "linux-x64" },
-    fakePgPaths("/staging", 137),
-    "/staging"
-  );
+  /*** No throw expected — bin/postgres present + ample files. ***/
+  command.assertEmbeddedPgPresent({ platform: "linux-x64" }, fakePgPaths("/staging", 137), "/staging");
 });
 
 Deno.test("assertEmbeddedPgPresent - no-op when no --platform (host build)", () => {
   const command = new BuildCommand();
-  // Host builds should never throw — local dev without PG cache is
-  // expected (the binary downloads PG on first run).
+  /*** Host builds should never throw — local dev without PG cache is expected (the binary downloads
+       PG on first run). ***/
   command.assertEmbeddedPgPresent({}, [], "/missing");
-  command.assertEmbeddedPgPresent(
-    {},
-    fakePgPaths("/staging", 137),
-    "/has-files"
-  );
-  // Even a partial / incomplete cache shouldn't fail a host build.
+  command.assertEmbeddedPgPresent({}, fakePgPaths("/staging", 137), "/has-files");
+  /*** Even a partial / incomplete cache shouldn’t fail a host build. ***/
   command.assertEmbeddedPgPresent({}, ["/just/one/file"], "/partial");
 });
 
 Deno.test("assertEmbeddedPgPresent - no-op when --lite even with --platform", () => {
   const command = new BuildCommand();
-  // --lite explicitly opts out of PG embedding, so any path list is fine.
-  command.assertEmbeddedPgPresent(
-    { platform: "linux-x64", lite: true },
-    [],
-    "/dist/embedded-pg/linux-x64/16.4"
-  );
+  /*** --lite explicitly opts out of PG embedding, so any path list is fine. ***/
+  command.assertEmbeddedPgPresent({ lite: true, platform: "linux-x64" }, [], "/dist/embedded-pg/linux-x64/16.4");
 });
 
 Deno.test("assertEmbeddedPgPresent - no-op when DISC_BUILD_NO_BUNDLE_PG=1 even with --platform", () => {
   const command = new BuildCommand();
   const prev = Deno.env.get("DISC_BUILD_NO_BUNDLE_PG");
   Deno.env.set("DISC_BUILD_NO_BUNDLE_PG", "1");
+
   try {
-    // Explicit opt-out via env: 0 files is correct.
-    command.assertEmbeddedPgPresent(
-      { platform: "linux-x64" },
-      [],
-      "/dist/embedded-pg/linux-x64/16.4"
-    );
+    /*** Explicit opt-out via env: 0 files is correct. ***/
+    command.assertEmbeddedPgPresent({ platform: "linux-x64" }, [], "/dist/embedded-pg/linux-x64/16.4");
   } finally {
-    if (prev === undefined) {
+    if (prev === undefined)
       Deno.env.delete("DISC_BUILD_NO_BUNDLE_PG");
-    } else {
+    else
       Deno.env.set("DISC_BUILD_NO_BUNDLE_PG", prev);
-    }
   }
 });
 
 Deno.test("assertEmbeddedSdkPresent - throws when --platform set and 0 files staged", () => {
   const command = new BuildCommand();
   let threw = false;
+
   try {
     command.assertEmbeddedSdkPresent({ platform: "linux-x64" }, []);
   } catch {
     threw = true;
   }
-  assertEquals(
-    threw,
-    true,
-    "assertEmbeddedSdkPresent must throw when --platform is set and 0 SDK files were staged."
-  );
+
+  assertEquals(threw, true, "assertEmbeddedSdkPresent must throw when --platform is set and 0 SDK files were staged.");
 });
 
 Deno.test("assertEmbeddedSdkPresent - throws when sdk/mod.ts is missing", () => {
   const command = new BuildCommand();
-  // 11 files but mod.ts absent — generated client imports ./sdk/mod.ts,
-  // so the embed is unusable without it.
+  /*** 11 files but mod.ts absent — generated client imports ./sdk/mod.ts, so the embed is unusable
+       without it. ***/
   const paths = [
     "/repo/sdk/auth.ts",
     "/repo/sdk/client.ts",
@@ -411,38 +368,36 @@ Deno.test("assertEmbeddedSdkPresent - throws when sdk/mod.ts is missing", () => 
     "/repo/sdk/types.ts",
     "/repo/sdk/validation.ts"
   ];
+
   let threw = false;
+
   try {
     command.assertEmbeddedSdkPresent({ platform: "linux-x64" }, paths);
   } catch {
     threw = true;
   }
-  assertEquals(
-    threw,
-    true,
-    "assertEmbeddedSdkPresent must throw when sdk/mod.ts is missing from the embedded paths."
-  );
+
+  assertEquals(threw, true, "assertEmbeddedSdkPresent must throw when sdk/mod.ts is missing from the embedded paths.");
 });
 
 Deno.test("assertEmbeddedSdkPresent - throws when file count below threshold", () => {
   const command = new BuildCommand();
-  // mod.ts present but only 3 files total — partial tree.
+  /*** mod.ts present but only 3 files total — partial tree. ***/
   const paths = [
     "/repo/sdk/mod.ts",
     "/repo/sdk/client.ts",
     "/repo/sdk/types.ts"
   ];
+
   let threw = false;
+
   try {
     command.assertEmbeddedSdkPresent({ platform: "linux-x64" }, paths);
   } catch {
     threw = true;
   }
-  assertEquals(
-    threw,
-    true,
-    "assertEmbeddedSdkPresent must throw when file count is below the SDK source threshold."
-  );
+
+  assertEquals(threw, true, "assertEmbeddedSdkPresent must throw when file count is below the SDK source threshold.");
 });
 
 Deno.test("assertEmbeddedSdkPresent - no-op when --platform set and full SDK tree", () => {
@@ -460,6 +415,7 @@ Deno.test("assertEmbeddedSdkPresent - no-op when --platform set and full SDK tre
     "/repo/sdk/types.ts",
     "/repo/sdk/validation.ts"
   ];
+
   command.assertEmbeddedSdkPresent({ platform: "linux-x64" }, paths);
 });
 
@@ -473,38 +429,36 @@ Deno.test("assertEmbeddedSdkPresent - no-op when DISC_BUILD_NO_BUNDLE_SDK=1 even
   const command = new BuildCommand();
   const prev = Deno.env.get("DISC_BUILD_NO_BUNDLE_SDK");
   Deno.env.set("DISC_BUILD_NO_BUNDLE_SDK", "1");
+
   try {
     command.assertEmbeddedSdkPresent({ platform: "linux-x64" }, []);
   } finally {
-    if (prev === undefined) {
+    if (prev === undefined)
       Deno.env.delete("DISC_BUILD_NO_BUNDLE_SDK");
-    } else {
+    else
       Deno.env.set("DISC_BUILD_NO_BUNDLE_SDK", prev);
-    }
   }
 });
 
 Deno.test("refreshEmbeddedPgManifest - honors pgSourceDirOverride for cross-compile staging", async () => {
-  // Stage a fake PG distribution under a per-platform dir and confirm
-  // the manifest emitter sources from THAT path, not from <DISC_HOME>.
+  /*** Stage a fake PG distribution under a per-platform dir and confirm the manifest emitter
+       sources from THAT path, not from <DISC_HOME>. ***/
   const tmp = await Deno.makeTempDir({ prefix: "disc-pg-staging-" });
+
   try {
     const stagingDir = join(tmp, "dist", "embedded-pg", "linux-x64", "16.4");
     await Deno.mkdir(join(stagingDir, "bin"), { recursive: true });
     await Deno.writeTextFile(join(stagingDir, "bin", "postgres"), "fake");
     await Deno.chmod(join(stagingDir, "bin", "postgres"), 0o755);
 
-    // refreshEmbeddedPgManifest writes its output under
-    // `<rootDir>/postgres/embedded-pg-manifest.ts`. Use a tmp rootDir so
-    // we don't clobber the real manifest.
+    /*** refreshEmbeddedPgManifest writes its output under
+         `<rootDir>/postgres/embedded-pg-manifest.ts`. Use a tmp rootDir so we don’t clobber the
+         real manifest. ***/
     const fakeRoot = await Deno.makeTempDir({ prefix: "disc-pg-root-" });
+
     try {
       await Deno.mkdir(join(fakeRoot, "postgres"), { recursive: true });
-      const result = await refreshEmbeddedPgManifest(
-        fakeRoot,
-        "16.4",
-        stagingDir
-      );
+      const result = await refreshEmbeddedPgManifest(fakeRoot, "16.4", stagingDir);
       assertEquals(result.pgSourceDir, stagingDir);
       assertEquals(result.fileCount, 1);
       assertEquals(result.includePaths[0], join(stagingDir, "bin", "postgres"));
@@ -516,17 +470,17 @@ Deno.test("refreshEmbeddedPgManifest - honors pgSourceDirOverride for cross-comp
   }
 });
 
-// =====================================================================
-// Embedded SDK manifest — Caddy-style self-contained codegen
-// =====================================================================
+/*** --- Embedded SDK manifest — Caddy-style self-contained codegen --- ***/
 
 Deno.test("generateEmbeddedSdkManifest - empty manifest when source dir absent", async () => {
   const tmp = await Deno.makeTempDir({ prefix: "disc-embed-sdk-empty-" });
+
   try {
     const generated = await generateEmbeddedSdkManifest({
       manifestDir: join(tmp, "codegen"),
       sourceDir: join(tmp, "does-not-exist")
     });
+
     assertStringIncludes(generated, "EMBEDDED_SDK_MANIFEST");
     assertStringIncludes(generated, "[]");
   } finally {
@@ -536,6 +490,7 @@ Deno.test("generateEmbeddedSdkManifest - empty manifest when source dir absent",
 
 Deno.test("generateEmbeddedSdkManifest - emits import.meta.resolve URLs and skips .test.ts", async () => {
   const tmp = await Deno.makeTempDir({ prefix: "disc-embed-sdk-list-" });
+
   try {
     const sourceDir = join(tmp, "sdk");
     const manifestDir = join(tmp, "codegen");
@@ -546,32 +501,23 @@ Deno.test("generateEmbeddedSdkManifest - emits import.meta.resolve URLs and skip
     await Deno.writeTextFile(join(sourceDir, "client.test.ts"), "// test");
     await Deno.writeTextFile(join(sourceDir, "README.md"), "# sdk");
 
-    const generated = await generateEmbeddedSdkManifest({
-      manifestDir,
-      sourceDir
-    });
+    const generated = await generateEmbeddedSdkManifest({ manifestDir, sourceDir });
 
     assertStringIncludes(generated, "\"client.ts\"");
     assertStringIncludes(generated, "\"mod.ts\"");
-    // Tests must not get embedded — they'd bloat the binary and pull
-    // test-only deps into downstream projects.
+    /*** Tests must not get embedded — they’d bloat the binary and pull test-only deps into
+         downstream projects. ***/
     assertEquals(generated.includes("client.test.ts"), false);
-    // Non-.ts files are out of scope.
+    /*** Non-.ts files are out of scope. ***/
     assertEquals(generated.includes("README.md"), false);
-    // All entries get the read-only mode 0o644.
+    /*** All entries get the read-only mode 0o644. ***/
     assertStringIncludes(generated, "0o644");
-    // sourceUrl uses import.meta.resolve so deno compile's VFS catches
-    // the read at runtime — bare absolute file:// URLs miss the VFS
-    // because Deno only remaps URLs derived from module resolution.
-    assertStringIncludes(
-      generated,
-      `import.meta.resolve("../sdk/client.ts")`
-    );
-    assertStringIncludes(
-      generated,
-      `import.meta.resolve("../sdk/mod.ts")`
-    );
-    // The old absolute-file:// form must be gone.
+    /*** sourceUrl uses import.meta.resolve so deno compile’s VFS catches the read at runtime — bare
+         absolute file:// URLs miss the VFS because Deno only remaps URLs derived from
+         module resolution. ***/
+    assertStringIncludes(generated, `import.meta.resolve("../sdk/client.ts")`);
+    assertStringIncludes(generated, `import.meta.resolve("../sdk/mod.ts")`);
+    /*** The old absolute-file:// form must be gone. ***/
     assertEquals(generated.includes(`file://${sourceDir}`), false);
   } finally {
     await Deno.remove(tmp, { recursive: true });
@@ -580,8 +526,9 @@ Deno.test("generateEmbeddedSdkManifest - emits import.meta.resolve URLs and skip
 
 Deno.test("refreshEmbeddedSdkManifest - writes manifest under codegen/", async () => {
   const tmp = await Deno.makeTempDir({ prefix: "disc-refresh-sdk-" });
+
   try {
-    // Stand up a fake repo root with sdk/ + codegen/.
+    /*** Stand up a fake repo root with sdk/ + codegen/. ***/
     const sdkDir = join(tmp, "sdk");
     const codegenDir = join(tmp, "codegen");
     await Deno.mkdir(sdkDir, { recursive: true });
@@ -596,20 +543,18 @@ Deno.test("refreshEmbeddedSdkManifest - writes manifest under codegen/", async (
     assertEquals(result.fileCount, 2);
     assertEquals(result.wrote, true);
 
-    // Both .ts files made it into the include list (sorted).
+    /*** Both .ts files made it into the include list (sorted). ***/
     assertEquals(result.includePaths.includes(join(sdkDir, "mod.ts")), true);
     assertEquals(result.includePaths.includes(join(sdkDir, "client.ts")), true);
 
-    // Manifest file written + readable.
-    const manifestText = await Deno.readTextFile(
-      join(codegenDir, "embedded-sdk-manifest.ts")
-    );
+    /*** Manifest file written + readable. ***/
+    const manifestText = await Deno.readTextFile(join(codegenDir, "embedded-sdk-manifest.ts"));
     assertStringIncludes(manifestText, "EMBEDDED_SDK_MANIFEST");
     assertStringIncludes(manifestText, "\"mod.ts\"");
     assertStringIncludes(manifestText, "\"client.ts\"");
     assertEquals(manifestText.includes("client.test.ts"), false);
 
-    // Re-running with no source changes is a no-op (no rewrite).
+    /*** Re-running with no source changes is a no-op (no rewrite). ***/
     const second = await refreshEmbeddedSdkManifest(tmp);
     assertEquals(second.wrote, false);
     assertEquals(second.fileCount, 2);
@@ -620,13 +565,10 @@ Deno.test("refreshEmbeddedSdkManifest - writes manifest under codegen/", async (
 
 Deno.test("BuildCommand.buildCompileArgs - includes SDK paths when supplied", () => {
   const command = new BuildCommand();
-  const args = command.buildCompileArgs(
-    {},
-    [],
-    ["/abs/sdk/mod.ts", "/abs/sdk/client.ts"]
-  );
+  const args = command.buildCompileArgs({}, [], ["/abs/sdk/mod.ts", "/abs/sdk/client.ts"]);
   assertEquals(args.includes("/abs/sdk/mod.ts"), true);
   assertEquals(args.includes("/abs/sdk/client.ts"), true);
+
   for (const path of ["/abs/sdk/mod.ts", "/abs/sdk/client.ts"]) {
     const i = args.indexOf(path);
     assertEquals(args[i - 1], "--include");

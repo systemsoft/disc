@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Round-trip tests for protocol/scalar-codecs.ts.
  *
@@ -8,7 +11,12 @@
  */
 
 import { assertEquals, assertThrows } from "@std/assert";
-import { canonicalScalarName, decodeScalar, encodeScalar, hasScalarCodec } from "./scalar-codecs.ts";
+import {
+  canonicalScalarName,
+  decodeScalar,
+  encodeScalar,
+  hasScalarCodec
+} from "./scalar-codecs.ts";
 
 Deno.test("canonicalScalarName - normalises short names", () => {
   assertEquals(canonicalScalarName("str"), "std::str");

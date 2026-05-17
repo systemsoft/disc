@@ -1,14 +1,21 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
+/*** NATIVE ------------------------------------------- ***/
+
 import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
+
+/*** UTILITY ------------------------------------------ ***/
+
 import { DeployCommand, VALID_FORMATS } from "./deploy.ts";
+
+/*** RUNTIME ------------------------------------------ ***/
 
 Deno.test("DeployCommand - rejects invalid format with helpful message", () => {
   const command = new DeployCommand();
-  assertThrows(
-    () => command.validateFormat("kubernetes"),
-    Error,
-    "Invalid format"
-  );
-  // Verify the error message includes valid formats
+  assertThrows(() => command.validateFormat("kubernetes"), Error, "Invalid format");
+
+  /*** Verify the error message includes valid formats ***/
   try {
     command.validateFormat("kubernetes");
   } catch (e) {
@@ -59,9 +66,8 @@ Deno.test("DeployCommand - systemd format generates valid disc.service", () => {
   assertStringIncludes(content, "[Service]");
   assertStringIncludes(content, "[Install]");
   assertStringIncludes(content, "After=network.target postgresql.service");
-  // P2-10: paths are parameterized via env vars with the old defaults
-  // as fallbacks, so the literal "/etc/disc/disc.env" appears inside
-  // the ${…:-default} expansion.
+  /*** Paths are parameterized via env vars with the old defaults as fallbacks, so the literal
+       "/etc/disc/disc.env" appears inside the ${…:-default} expansion. ***/
   assertStringIncludes(content, "/etc/disc/disc.env");
   assertStringIncludes(content, "Restart=on-failure");
   assertStringIncludes(content, "ExecStart=");
@@ -72,7 +78,7 @@ Deno.test("DeployCommand - env format generates .env.production with all vars", 
   const command = new DeployCommand();
   const content = command.generateEnv("my-app");
 
-  // Verify all documented env vars are present
+  /*** Verify all documented env vars are present ***/
   const requiredVars = [
     "DATABASE_URL",
     "DISC_HOST",
@@ -95,9 +101,9 @@ Deno.test("DeployCommand - env format generates .env.production with all vars", 
     assertStringIncludes(content, varName);
   }
 
-  // Verify project name is used
+  /*** Verify project name is used ***/
   assertStringIncludes(content, "my-app");
 
-  // Verify all valid formats are accounted for
+  /*** Verify all valid formats are accounted for ***/
   assertEquals(VALID_FORMATS.length, 4);
 });

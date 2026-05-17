@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Project context resolution for Disc CLI commands.
  *
@@ -260,10 +263,12 @@ function parseBool(value: string | undefined): boolean | undefined {
     return undefined;
   }
   const normalized = value.toLowerCase();
-  if (normalized === "true")
+  if (normalized === "true") {
     return true;
-  if (normalized === "false")
+  }
+  if (normalized === "false") {
     return false;
+  }
   return undefined;
 }
 
@@ -292,16 +297,19 @@ function buildServerOverrides(fields: TomlFields): ServerOverrides | undefined {
   const overrides: ServerOverrides = {};
 
   const requireAuth = parseBool(fields.requireAuth);
-  if (requireAuth !== undefined)
+  if (requireAuth !== undefined) {
     overrides.requireAuth = requireAuth;
+  }
 
   const readOnly = parseBool(fields.readOnly);
-  if (readOnly !== undefined)
+  if (readOnly !== undefined) {
     overrides.readOnly = readOnly;
+  }
 
   const enableCors = parseBool(fields.enableCors);
-  if (enableCors !== undefined)
+  if (enableCors !== undefined) {
     overrides.enableCors = enableCors;
+  }
 
   const enableWebsockets = parseBool(fields.enableWebsockets);
   if (enableWebsockets !== undefined) {
@@ -309,12 +317,14 @@ function buildServerOverrides(fields: TomlFields): ServerOverrides | undefined {
   }
 
   const enableMetrics = parseBool(fields.enableMetrics);
-  if (enableMetrics !== undefined)
+  if (enableMetrics !== undefined) {
     overrides.enableMetrics = enableMetrics;
+  }
 
   const enableRest = parseBool(fields.enableRest);
-  if (enableRest !== undefined)
+  if (enableRest !== undefined) {
     overrides.enableRest = enableRest;
+  }
 
   const enableDataWatch = parseBool(fields.enableDataWatch);
   if (enableDataWatch !== undefined) {
@@ -322,8 +332,9 @@ function buildServerOverrides(fields: TomlFields): ServerOverrides | undefined {
   }
 
   const trustProxy = parseBool(fields.trustProxy);
-  if (trustProxy !== undefined)
+  if (trustProxy !== undefined) {
     overrides.trustProxy = trustProxy;
+  }
 
   const corsAllowCredentials = parseBool(fields.corsAllowCredentials);
   if (corsAllowCredentials !== undefined) {
@@ -340,12 +351,14 @@ function buildServerOverrides(fields: TomlFields): ServerOverrides | undefined {
   }
 
   const requestTimeout = parsePositiveInt(fields.requestTimeout);
-  if (requestTimeout !== undefined)
+  if (requestTimeout !== undefined) {
     overrides.requestTimeout = requestTimeout;
+  }
 
   const rateLimitRpm = parsePositiveInt(fields.rateLimitRpm);
-  if (rateLimitRpm !== undefined)
+  if (rateLimitRpm !== undefined) {
     overrides.rateLimitRpm = rateLimitRpm;
+  }
 
   return Object.keys(overrides).length > 0 ? overrides : undefined;
 }
@@ -430,8 +443,12 @@ export function resolveProjectContext(cwd?: string): ProjectContext | null {
     );
   }
   const instanceName = fields.instanceName ?? projectName;
-  const managed = fields.managed !== undefined ? fields.managed.toLowerCase() === "true" : true;
-  const serverPort = fields.port !== undefined ? parseInt(fields.port, 10) : 5656;
+  const managed = fields.managed !== undefined ?
+    fields.managed.toLowerCase() === "true" :
+    true;
+  const serverPort = fields.port !== undefined ?
+    parseInt(fields.port, 10) :
+    5656;
   const serverHost = fields.host ?? "localhost";
 
   const instancesBase = join(discHome(), "instances", instanceName);

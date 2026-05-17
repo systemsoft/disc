@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Embedded-EdgeQL features for TS/JS host files (LSP Phases 5 + 6).
  *
@@ -27,10 +30,10 @@ import { EdgeQLParser } from "../edgeql/parser.ts";
 import { type DiscError } from "../lib/errors.ts";
 import { findUserType, renderUserType } from "./hover.ts";
 import {
-  type CompletionItem,
   CompletionItemKind,
-  type Diagnostic,
   DiagnosticSeverity,
+  type CompletionItem,
+  type Diagnostic,
   type DocumentUri,
   type Hover,
   type Location,
@@ -104,13 +107,15 @@ export function extractEmbeddedQueries(text: string): EmbeddedQuery[] {
  * skipped — they're a benign no-op rather than a parse error.
  */
 export function analyzeEmbeddedDocument(text: string): Diagnostic[] {
-  if (text.length === 0)
+  if (text.length === 0) {
     return [];
+  }
   const queries = extractEmbeddedQueries(text);
   const diagnostics: Diagnostic[] = [];
   for (const q of queries) {
-    if (q.content.trim().length === 0)
+    if (q.content.trim().length === 0) {
       continue;
+    }
     const parser = new EdgeQLParser(q.content);
     const { errors } = parser.parseWithRecovery();
     for (const err of errors) {
@@ -209,8 +214,9 @@ export function findEnclosingEmbeddedQuery(
   // We need character-offset arithmetic against `hostPos`, so convert
   // both the cursor and each query's start into flat offsets up front.
   const cursorOffset = positionToOffset(text, hostPos);
-  if (cursorOffset === null)
+  if (cursorOffset === null) {
     return null;
+  }
 
   EQL_TEMPLATE_RE.lastIndex = 0;
   let m: RegExpExecArray | null;
@@ -219,9 +225,14 @@ export function findEnclosingEmbeddedQuery(
     const contentEndOffset = contentStartOffset + m[1].length;
     // LSP positions sit between characters, so `<=` on the right
     // edge lets the cursor at the closing backtick still resolve.
-    if (cursorOffset >= contentStartOffset && cursorOffset <= contentEndOffset) {
+    if (
+      cursorOffset >= contentStartOffset && cursorOffset <= contentEndOffset
+    ) {
       const start = offsetToPosition(text, contentStartOffset);
-      const posInQuery = offsetWithinQuery(m[1], cursorOffset - contentStartOffset);
+      const posInQuery = offsetWithinQuery(
+        m[1],
+        cursorOffset - contentStartOffset
+      );
       return { query: { start, content: m[1] }, posInQuery };
     }
   }
@@ -244,12 +255,14 @@ export function provideEmbeddedHover(
   ctx?: EmbeddedSdlContext
 ): Hover | null {
   const enclosing = findEnclosingEmbeddedQuery(text, hostPos);
-  if (!enclosing)
+  if (!enclosing) {
     return null;
+  }
 
   const word = wordAt(enclosing.query.content, enclosing.posInQuery);
-  if (!word)
+  if (!word) {
     return null;
+  }
 
   const lower = word.toLowerCase();
   const keywordDoc = EDGEQL_KEYWORD_DOCS[lower];
@@ -318,8 +331,9 @@ export function provideEmbeddedCompletion(
   ctx?: EmbeddedSdlContext
 ): CompletionItem[] {
   const enclosing = findEnclosingEmbeddedQuery(text, hostPos);
-  if (!enclosing)
+  if (!enclosing) {
     return [];
+  }
 
   const items = new Map<string, CompletionItem>();
   for (const kw of EDGEQL_KEYWORDS) {
@@ -341,8 +355,9 @@ export function provideEmbeddedCompletion(
     for (const doc of ctx.documents) {
       const idx = buildSymbolIndex(doc.text);
       for (const [name, sym] of idx.types) {
-        if (items.has(name))
+        if (items.has(name)) {
           continue;
+        }
         items.set(name, {
           label: name,
           kind: CompletionItemKind.Class,
@@ -372,19 +387,24 @@ export function provideEmbeddedDefinition(
   ctx?: EmbeddedSdlContext
 ): Location | null {
   const enclosing = findEnclosingEmbeddedQuery(text, hostPos);
-  if (!enclosing)
+  if (!enclosing) {
     return null;
+  }
   const word = wordAt(enclosing.query.content, enclosing.posInQuery);
-  if (!word)
+  if (!word) {
     return null;
+  }
   // Don't try to resolve EdgeQL keywords or built-in scalars — those
   // have no source location.
-  if (EDGEQL_KEYWORDS.has(word.toLowerCase()))
+  if (EDGEQL_KEYWORDS.has(word.toLowerCase())) {
     return null;
-  if (lookupScalar(word))
+  }
+  if (lookupScalar(word)) {
     return null;
-  if (!ctx)
+  }
+  if (!ctx) {
     return null;
+  }
 
   for (const doc of ctx.documents) {
     const idx = buildSymbolIndex(doc.text);
@@ -520,18 +540,21 @@ const IDENT = /[A-Za-z_][A-Za-z_0-9]*/g;
  */
 function wordAt(text: string, pos: Position): string | null {
   const lines = text.split("\n");
-  if (pos.line < 0 || pos.line >= lines.length)
+  if (pos.line < 0 || pos.line >= lines.length) {
     return null;
+  }
   const line = lines[pos.line];
-  if (pos.character < 0 || pos.character > line.length)
+  if (pos.character < 0 || pos.character > line.length) {
     return null;
+  }
   IDENT.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = IDENT.exec(line)) !== null) {
     const start = m.index;
     const end = start + m[0].length;
-    if (pos.character >= start && pos.character <= end)
+    if (pos.character >= start && pos.character <= end) {
       return m[0];
+    }
   }
   return null;
 }
@@ -542,8 +565,9 @@ function wordAt(text: string, pos: Position): string | null {
  * inverse mapping.
  */
 function positionToOffset(text: string, pos: Position): number | null {
-  if (pos.line < 0 || pos.character < 0)
+  if (pos.line < 0 || pos.character < 0) {
     return null;
+  }
   let line = 0;
   let lineStart = 0;
   for (let i = 0; i < text.length; i++) {
@@ -551,8 +575,9 @@ function positionToOffset(text: string, pos: Position): number | null {
       const lineEndCandidate = text.indexOf("\n", lineStart);
       const lineEnd = lineEndCandidate === -1 ? text.length : lineEndCandidate;
       const lineLength = lineEnd - lineStart;
-      if (pos.character > lineLength)
+      if (pos.character > lineLength) {
         return null;
+      }
       return lineStart + pos.character;
     }
     if (text.charCodeAt(i) === 0x0a /* \n */) {
@@ -561,8 +586,9 @@ function positionToOffset(text: string, pos: Position): number | null {
     }
   }
   // Cursor on the (empty) trailing line — accept character 0 only.
-  if (line === pos.line && pos.character === 0)
+  if (line === pos.line && pos.character === 0) {
     return text.length;
+  }
   return null;
 }
 

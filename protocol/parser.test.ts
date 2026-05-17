@@ -1,8 +1,11 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for binary protocol parser
  */
 
-import { assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
+import { assertEquals } from "@std/assert";
 import { ProtocolBuilder } from "./builder.ts";
 import { ProtocolParser } from "./parser.ts";
 import * as Types from "./types.ts";

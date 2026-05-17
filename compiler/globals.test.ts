@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for Global (Session Variable) support — Phase 1: Context + Schema Extraction
  *
@@ -13,7 +16,12 @@
 
 import { assertEquals } from "@std/assert";
 import { SchemaManager } from "../migration/schema-manager.ts";
-import { createTestSchema, GlobalDef, resolveGlobal, Schema } from "./context.ts";
+import {
+  createTestSchema,
+  GlobalDef,
+  resolveGlobal,
+  Schema
+} from "./context.ts";
 
 // ---------------------------------------------------------------------------
 // Tests: SchemaManager extracts globals from SDL

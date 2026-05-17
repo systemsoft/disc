@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Protocol-level tests for `SmtpClient`. We use a scripted in-memory
  * fake socket rather than a real TCP listener — keeps tests fast,
@@ -324,7 +327,10 @@ Deno.test("SmtpClient - all RCPTs rejected: skips DATA, returns rejected", async
   assertEquals(outcome.accepted, []);
   assertEquals(outcome.rejected, ["nobody@x"]);
   const wire = socket.written();
-  assert(!wire.includes("DATA\r\n"), "DATA must not be sent when no RCPT accepted");
+  assert(
+    !wire.includes("DATA\r\n"),
+    "DATA must not be sent when no RCPT accepted"
+  );
 });
 
 Deno.test("SmtpClient - server hangs up mid-DATA: throws meaningful error", async () => {
@@ -366,7 +372,10 @@ Deno.test("SmtpClient - server hangs up mid-DATA: throws meaningful error", asyn
         const line = writeBuffer.slice(0, idx);
         writeBuffer = writeBuffer.slice(idx + 2);
         if (line.startsWith("EHLO")) {
-          readQueue = appendBytes(readQueue, encoder.encode("250 smtp.test\r\n"));
+          readQueue = appendBytes(
+            readQueue,
+            encoder.encode("250 smtp.test\r\n")
+          );
         } else if (line.startsWith("MAIL FROM")) {
           readQueue = appendBytes(readQueue, encoder.encode("250 OK\r\n"));
         } else if (line.startsWith("RCPT TO")) {
@@ -452,7 +461,10 @@ Deno.test("SmtpClient - dot-stuffing escapes lines starting with .", async () =>
         const line = writeBuffer.slice(0, idx);
         writeBuffer = writeBuffer.slice(idx + 2);
         if (line.startsWith("EHLO")) {
-          readQueue = appendBytes(readQueue, encoder.encode("250 smtp.test\r\n"));
+          readQueue = appendBytes(
+            readQueue,
+            encoder.encode("250 smtp.test\r\n")
+          );
         } else if (line.startsWith("MAIL FROM")) {
           readQueue = appendBytes(readQueue, encoder.encode("250 OK\r\n"));
         } else if (line.startsWith("RCPT TO")) {

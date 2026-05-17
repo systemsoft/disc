@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for computed properties DDL generation
  *
@@ -490,9 +493,11 @@ Deno.test("Schema Differ - detects changed computed expression", () => {
       kind: "TypeDeclaration",
       name: { kind: "Identifier", value: "Product" },
       members: [
-        oldSchema[0].items[0].kind === "TypeDeclaration" ? oldSchema[0].items[0].members[0] : (() => {
-          throw new Error("unreachable");
-        })(),
+        oldSchema[0].items[0].kind === "TypeDeclaration" ?
+          oldSchema[0].items[0].members[0] :
+          (() => {
+            throw new Error("unreachable");
+          })(),
         {
           kind: "PropertyDeclaration",
           name: { kind: "Identifier", value: "total" },

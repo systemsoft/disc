@@ -1,9 +1,15 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * /files HTTP integration tests — POST upload, GET list, GET binary,
  * DELETE owner-only, plus the unconfigured-fileManager 404 path.
  */
 
-import { assert, assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import {
+  assert,
+  assertEquals
+} from "@std/assert";
 import { AuthRoutes } from "../auth/integration.ts";
 import { AuthMiddleware } from "../auth/middleware.ts";
 import { AuthProvider } from "../auth/provider.ts";
@@ -37,8 +43,9 @@ async function startServer(opts: {
     email: "u@example.com",
     password: "password123"
   });
-  if ("mfaRequired" in login)
+  if ("mfaRequired" in login) {
     throw new Error("unexpected MFA in test setup");
+  }
 
   const middleware = new AuthMiddleware(provider);
   const routes = new AuthRoutes(provider, middleware);
@@ -89,8 +96,9 @@ async function startServer(opts: {
       await server.stop();
       await _running.catch(() => undefined);
       await db.close();
-      if (storageRoot)
+      if (storageRoot) {
         await Deno.remove(storageRoot, { recursive: true });
+      }
     }
   };
 }

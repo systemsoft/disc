@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Database Connection Pool for Disc
  *
@@ -517,7 +520,9 @@ export class ConnectionPool {
     }
 
     const timerId = setTimeout(() => {
-      const heldMs = pooled.acquiredAt ? Date.now() - pooled.acquiredAt.getTime() : timeout;
+      const heldMs = pooled.acquiredAt ?
+        Date.now() - pooled.acquiredAt.getTime() :
+        timeout;
       logger.warn(
         `Potential connection leak detected: connection ${pooled.id} has been held for ${heldMs}ms without being released.\nAcquire stack trace:\n${
           pooled.acquireStackTrace || "unavailable"

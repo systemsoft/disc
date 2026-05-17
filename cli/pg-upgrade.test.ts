@@ -1,5 +1,15 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
+/*** NATIVE ------------------------------------------- ***/
+
 import { assertEquals, assertRejects } from "@std/assert";
+
+/*** UTILITY ------------------------------------------ ***/
+
 import { PgUpgradeCommand } from "./pg-upgrade.ts";
+
+/*** RUNTIME ------------------------------------------ ***/
 
 Deno.test("PgUpgradeCommand - rejects unknown target version", async () => {
   const command = new PgUpgradeCommand();
@@ -7,8 +17,8 @@ Deno.test("PgUpgradeCommand - rejects unknown target version", async () => {
   await assertRejects(
     () =>
       command.execute({
-        targetVersion: "99.99",
-        project: "test-project"
+        project: "test-project",
+        targetVersion: "99.99"
       }),
     Error,
     "Unknown PostgreSQL version: 99.99"
@@ -21,8 +31,8 @@ Deno.test("PgUpgradeCommand - error includes available versions", async () => {
   await assertRejects(
     () =>
       command.execute({
-        targetVersion: "15.0",
-        project: "test-project"
+        project: "test-project",
+        targetVersion: "15.0"
       }),
     Error,
     "16.4, 17.0"
@@ -30,8 +40,8 @@ Deno.test("PgUpgradeCommand - error includes available versions", async () => {
 });
 
 Deno.test("PgUpgradeCommand - rejects same version upgrade", () => {
-  // This test will throw "not found" first since we don't have a real instance
-  // But we can test the version comparison logic directly
+  /*** This test will throw "not found" first since we don’t have a real instance But we can test
+       the version comparison logic directly ***/
   const command = new PgUpgradeCommand();
   const compareVersions = (command as any).compareVersions.bind(command);
 
@@ -52,9 +62,7 @@ Deno.test("PgUpgradeCommand - compareVersions handles different lengths", () => 
 
 Deno.test("PgUpgradeCommand - getAvailableVersions returns known versions", () => {
   const command = new PgUpgradeCommand();
-  const getAvailableVersions = (command as any).getAvailableVersions.bind(
-    command
-  );
+  const getAvailableVersions = (command as any).getAvailableVersions.bind(command);
   const versions = getAvailableVersions();
 
   assertEquals(versions.includes("16.4"), true);
@@ -68,8 +76,8 @@ Deno.test("PgUpgradeCommand - instance not found error", async () => {
   await assertRejects(
     () =>
       command.execute({
-        targetVersion: "17.0",
-        project: "nonexistent-project-xyz"
+        project: "nonexistent-project-xyz",
+        targetVersion: "17.0"
       }),
     Error,
     "No PostgreSQL instance found"

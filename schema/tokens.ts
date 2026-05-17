@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * SDL Token types and definitions
  */
@@ -8,11 +11,9 @@ export enum TokenType {
   INTEGER = "INTEGER",
   FLOAT = "FLOAT",
   BOOLEAN = "BOOLEAN",
-
   // Identifiers
   IDENT = "IDENT",
   BACKTICK_IDENT = "BACKTICK_IDENT",
-
   // Keywords
   MODULE = "MODULE",
   TYPE = "TYPE",
@@ -39,7 +40,6 @@ export enum TokenType {
   FALSE = "FALSE",
   IF = "IF",
   ELSE = "ELSE",
-
   // Access control
   ACCESS = "ACCESS",
   POLICY = "POLICY",
@@ -53,7 +53,6 @@ export enum TokenType {
   REWRITE = "REWRITE",
   WITH = "WITH",
   CHECK = "CHECK",
-
   // Operators & Punctuation
   ASSIGN = "ASSIGN", // :=
   ARROW = "ARROW", // ->
@@ -76,7 +75,6 @@ export enum TokenType {
   NOTEQUALS = "NOTEQUALS", // !=
   QUESTIONEQ = "QUESTIONEQ", // ?=
   QUESTIONNEQ = "QUESTIONNEQ", // ?!=
-
   // Brackets
   LPAREN = "LPAREN", // (
   RPAREN = "RPAREN", // )
@@ -86,7 +84,6 @@ export enum TokenType {
   RBRACKET = "RBRACKET", // ]
   LANGLE = "LANGLE", // <
   RANGLE = "RANGLE", // >
-
   // Special
   PARAMETER = "PARAMETER", // $param
   AT = "AT", // @

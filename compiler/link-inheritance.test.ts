@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for link inheritance support (Stage 35, Phase 3)
  *
@@ -132,8 +135,9 @@ Deno.test("link inheritance - schema-manager: abstract link properties merged in
   const manager = new SchemaManager({});
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true, "parseSDL should succeed");
-  if (!parseResult.ok)
+  if (!parseResult.ok) {
     throw parseResult.error;
+  }
 
   // Access the raw modules to check link declarations
   const modules = parseResult.value;
@@ -191,8 +195,9 @@ Deno.test("link inheritance - schema-manager: concrete link properties override 
   const manager = new SchemaManager({});
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true, "parseSDL should succeed");
-  if (!parseResult.ok)
+  if (!parseResult.ok) {
     throw parseResult.error;
+  }
 
   const modules = parseResult.value;
   manager.modulesToSchema(modules);
@@ -402,8 +407,9 @@ Deno.test("link inheritance - end-to-end: abstract link property inherited in sc
   const manager = new SchemaManager({});
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true, "parseSDL should succeed");
-  if (!parseResult.ok)
+  if (!parseResult.ok) {
     throw parseResult.error;
+  }
 
   const modules = parseResult.value;
   const schema = manager.modulesToSchema(modules);
@@ -457,8 +463,9 @@ Deno.test("link inheritance - combined: extending + own properties merge correct
   const manager = new SchemaManager({});
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true, "parseSDL should succeed");
-  if (!parseResult.ok)
+  if (!parseResult.ok) {
     throw parseResult.error;
+  }
 
   const modules = parseResult.value;
   manager.modulesToSchema(modules);

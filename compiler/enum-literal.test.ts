@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 // deno-lint-ignore-file
 /**
  * Tests for enum literal compilation (e.g., Status.active → 'active'::disc_enum_status)
@@ -18,8 +21,9 @@ function compileEdgeQL(source: string): string {
   const parser = new EdgeQLParser(source);
   const ast = parser.parse();
   const result = compiler.compile(ast);
-  if (!result.ok)
+  if (!result.ok) {
     throw result.error;
+  }
   return codegen.generate(result.value);
 }
 

@@ -1,8 +1,13 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * EdgeQL Parser Benchmarks
  *
  * Benchmarks parsing of EdgeQL queries at varying complexity levels.
  */
+
+/*** UTILITY ------------------------------------------ ***/
 
 import { EdgeQLParser } from "../edgeql/parser.ts";
 
@@ -18,6 +23,8 @@ const queries: Record<string, string> = {
   "select with multiple filters": "SELECT User FILTER .name = 'Ada' AND .email LIKE '%@example.com'",
   "complex nested": "SELECT User { name, email, posts: { title, body, createdAt } } FILTER .name = 'Ada' ORDER BY .name OFFSET 5 LIMIT 10"
 };
+
+/*** RUNTIME ------------------------------------------ ***/
 
 for (const [name, query] of Object.entries(queries)) {
   Deno.bench(`parse: ${name}`, () => {

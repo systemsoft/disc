@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Query capability classification.
  *
@@ -12,7 +15,13 @@
  * thread a separate capability mask through, so we evaluate per-query.
  */
 
-import type { ConfigureQuery, EdgeQLNode, ForQuery, Query, WithBlock } from "./ast.ts";
+import type {
+  ConfigureQuery,
+  EdgeQLNode,
+  ForQuery,
+  Query,
+  WithBlock
+} from "./ast.ts";
 
 /**
  * Returns `true` if executing the query would mutate database state.

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Type descriptor encoding/decoding for Gel binary protocol.
  *
@@ -107,11 +110,13 @@ const SHORT_NAME_MAP: Map<string, string> = new Map([
  */
 export function resolveWellKnownType(name: string): Uint8Array | undefined {
   const direct = WELL_KNOWN_TYPES.get(name);
-  if (direct)
+  if (direct) {
     return direct;
+  }
   const qualified = SHORT_NAME_MAP.get(name);
-  if (qualified)
+  if (qualified) {
     return WELL_KNOWN_TYPES.get(qualified);
+  }
   return undefined;
 }
 
@@ -547,7 +552,9 @@ export function buildResultDescriptors(
       if (prop) {
         const scalarType = prop.edgeqlType ?? prop.type;
         const typeId = emitScalar(scalarType);
-        const cardinality = prop.required ? Cardinality.ONE : Cardinality.AT_MOST_ONE;
+        const cardinality = prop.required ?
+          Cardinality.ONE :
+          Cardinality.AT_MOST_ONE;
         const flags = prop.hasDefault ? ShapeElementFlags.IMPLICIT : 0;
         elements.push({ flags, cardinality, name: fieldName, typeId });
         continue;
@@ -571,7 +578,9 @@ export function buildResultDescriptors(
           linkTypeId = emitScalar("uuid");
         }
 
-        const cardinality = link.multi ? Cardinality.MANY : (link.required ? Cardinality.ONE : Cardinality.AT_MOST_ONE);
+        const cardinality = link.multi ?
+          Cardinality.MANY :
+          (link.required ? Cardinality.ONE : Cardinality.AT_MOST_ONE);
         elements.push({
           flags: ShapeElementFlags.LINK,
           cardinality,

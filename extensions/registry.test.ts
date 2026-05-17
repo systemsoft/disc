@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for ExtensionRegistry
  */
@@ -7,7 +10,14 @@ import type { FunctionDef, TypeDef } from "../compiler/context.ts";
 import { BaseExtension } from "./base-extension.ts";
 import { ExtensionDependencyError, ExtensionInitError } from "./errors.ts";
 import { ExtensionRegistry } from "./registry.ts";
-import type { CompilerHook, ExtensionContext, ExtensionDatabaseSetup, ExtensionMetadata, ExtensionMiddleware, ExtensionRoute } from "./types.ts";
+import type {
+  CompilerHook,
+  ExtensionContext,
+  ExtensionDatabaseSetup,
+  ExtensionMetadata,
+  ExtensionMiddleware,
+  ExtensionRoute
+} from "./types.ts";
 
 // ── Test helpers ─────────────────────────────────────────────────────
 

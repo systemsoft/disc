@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 import { expect, test } from "@playwright/test";
 
 test.describe("Schema page", () => {
@@ -34,7 +37,8 @@ test.describe("Schema page", () => {
   test("'default' flag appears on properties with a default expression", async ({ page }) => {
     await page.goto("/ui/schema");
     // Item.createdAt has `default := datetime_current()` in the fixture.
-    await expect(page.getByText("default", { exact: true }).first()).toBeVisible();
+    await expect(page.getByText("default", { exact: true }).first())
+      .toBeVisible();
   });
 
   test("Indexes section renders index expressions", async ({ page }) => {

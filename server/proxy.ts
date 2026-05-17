@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Reverse-proxy header handling (#5030)
  *
@@ -33,14 +36,16 @@ export function getClientIp(
     const xff = request.headers.get("x-forwarded-for");
     if (xff) {
       const first = xff.split(",")[0].trim();
-      if (first)
+      if (first) {
         return first;
+      }
     }
     const realIp = request.headers.get("x-real-ip");
     if (realIp) {
       const trimmed = realIp.trim();
-      if (trimmed)
+      if (trimmed) {
         return trimmed;
+      }
     }
   }
 
@@ -63,14 +68,17 @@ export function getRequestScheme(
   hasTls: boolean,
   trustProxy: boolean
 ): "http" | "https" {
-  if (hasTls)
+  if (hasTls) {
     return "https";
-  if (!trustProxy)
+  }
+  if (!trustProxy) {
     return "http";
+  }
 
   const proto = request.headers.get("x-forwarded-proto");
-  if (!proto)
+  if (!proto) {
     return "http";
+  }
 
   // Multiple hops: "https, http" — take the leftmost entry (the client's
   // scheme as seen by the first proxy).

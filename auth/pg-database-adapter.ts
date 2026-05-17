@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * PostgreSQL Database Adapter for Auth Module
  *
@@ -5,17 +8,21 @@
  * to real PostgreSQL connections (which use `$1, $2, ...` placeholders).
  */
 
+/*** UTILITY ------------------------------------------ ***/
+
 import { DatabaseConnection } from "../lib/database.ts";
 import { DatabaseInterface, QueryResult } from "./database-interface.ts";
+
+/*** EXPORT ------------------------------------------- ***/
 
 /**
  * Convert `?` placeholders to PostgreSQL-style `$1, $2, ...` placeholders.
  * Skips `?` characters inside single-quoted strings.
  */
 export function convertPlaceholders(sql: string): string {
-  let result = "";
-  let paramIndex = 0;
   let inString = false;
+  let paramIndex = 0;
+  let result = "";
 
   for (let i = 0; i < sql.length; i++) {
     const char = sql[i];
@@ -24,7 +31,7 @@ export function convertPlaceholders(sql: string): string {
       inString = true;
       result += char;
     } else if (char === "'" && inString) {
-      // Handle escaped single quotes ('')
+      /*** Handle escaped single quotes ('') ***/
       if (i + 1 < sql.length && sql[i + 1] === "'") {
         result += "''";
         i++;
@@ -50,16 +57,12 @@ export class PgDatabaseAdapter implements DatabaseInterface {
     this.connection = connection;
   }
 
-  async connect(): Promise<void> {
-    await this.connection.connect();
-  }
-
   async close(): Promise<void> {
     await this.connection.close();
   }
 
-  isConnected(): boolean {
-    return this.connection.isConnected();
+  async connect(): Promise<void> {
+    await this.connection.connect();
   }
 
   async execute(sql: string, params?: any[]): Promise<void> {
@@ -67,18 +70,23 @@ export class PgDatabaseAdapter implements DatabaseInterface {
     await this.connection.execute(convertedSql, params);
   }
 
+  isConnected(): boolean {
+    return this.connection.isConnected();
+  }
+
   async query(sql: string, params?: any[]): Promise<QueryResult> {
     const convertedSql = convertPlaceholders(sql);
     const result = await this.connection.query(convertedSql, params);
+
     return {
-      rows: result.rows,
-      rowCount: result.rowCount
+      rowCount: result.rowCount,
+      rows: result.rows
     };
   }
 
   async transaction<T>(fn: (db: DatabaseInterface) => Promise<T>): Promise<T> {
-    // Use the underlying connection's transaction but pass this adapter
-    // to the callback so SQL continues to get placeholder conversion.
+    /*** Use the underlying connection’s transaction but pass this adapter to the callback so
+         SQL continues to get placeholder conversion. ***/
     return await this.connection.transaction(async () => {
       return await fn(this);
     });

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Runtime tests for the stdlib SQL bootstrap (gh/geldata#5065).
  *
@@ -13,7 +16,9 @@ import { bootstrapStdlib } from "./stdlib-sql.ts";
 
 const RUN_PG = canRunPgTests();
 
-async function withPool<T>(fn: (pool: ConnectionPool) => Promise<T>): Promise<T> {
+async function withPool<T>(
+  fn: (pool: ConnectionPool) => Promise<T>
+): Promise<T> {
   const dsn = await getTestDsn();
   const pool = new ConnectionPool({ connectionString: dsn });
   await pool.initialize();

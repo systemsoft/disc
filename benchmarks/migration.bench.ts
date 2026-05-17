@@ -1,70 +1,25 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * SchemaDiffer Benchmarks
  *
  * Benchmarks schema diffing for various migration scenarios.
  */
 
+/*** UTILITY ------------------------------------------ ***/
+
 import { SchemaDiffer } from "../migration/differ.ts";
-import type { Identifier, LinkDeclaration, PropertyDeclaration, TypeDeclaration, TypeRef } from "../schema/ast.ts";
 import type { Module } from "../schema/converter.ts";
 
-// Helper to create AST nodes used by the SchemaDiffer
-function ident(value: string): Identifier {
-  return { kind: "Identifier", value };
-}
+import type {
+  Identifier,
+  LinkDeclaration,
+  PropertyDeclaration,
+  TypeDeclaration,
+  TypeRef
+} from "../schema/ast.ts";
 
-function typeRef(name: string): TypeRef {
-  return { kind: "TypeRef", name: { kind: "QualifiedName", parts: [name] } };
-}
-
-function prop(
-  name: string,
-  type: string,
-  options?: { required?: boolean; multi?: boolean; }
-): PropertyDeclaration {
-  return {
-    kind: "PropertyDeclaration",
-    name: ident(name),
-    type: typeRef(type),
-    required: options?.required,
-    multi: options?.multi,
-    constraints: [],
-    annotations: []
-  };
-}
-
-function link(
-  name: string,
-  target: string,
-  options?: { required?: boolean; multi?: boolean; }
-): LinkDeclaration {
-  return {
-    kind: "LinkDeclaration",
-    name: ident(name),
-    target: typeRef(target),
-    required: options?.required,
-    multi: options?.multi,
-    constraints: [],
-    annotations: []
-  };
-}
-
-function typeDef(
-  name: string,
-  members: (PropertyDeclaration | LinkDeclaration)[]
-): TypeDeclaration {
-  return {
-    kind: "TypeDeclaration",
-    name: ident(name),
-    members
-  };
-}
-
-function mod(name: string, items: TypeDeclaration[]): Module {
-  return { name, items };
-}
-
-// Schema fixtures
 const emptySchema: Module[] = [];
 
 const simpleSchema: Module[] = [
@@ -121,6 +76,8 @@ const largeSchema: Module[] = [
 
 const differ = new SchemaDiffer();
 
+/*** RUNTIME ------------------------------------------ ***/
+
 Deno.bench("differ: empty to simple", () => {
   differ.diff(emptySchema, simpleSchema);
 });
@@ -148,3 +105,49 @@ Deno.bench("differ: large schema (20 types, no changes)", () => {
 Deno.bench("differ: large schema add all types", () => {
   differ.diff(emptySchema, largeSchema);
 });
+
+/*** HELPER ------------------------------------------- ***/
+
+function ident(value: string): Identifier {
+  return { kind: "Identifier", value };
+}
+
+function link(name: string, target: string, options?: { multi?: boolean; required?: boolean; }): LinkDeclaration {
+  return {
+    annotations: [],
+    constraints: [],
+    kind: "LinkDeclaration",
+    multi: options?.multi,
+    name: ident(name),
+    required: options?.required,
+    target: typeRef(target)
+  };
+}
+
+function mod(name: string, items: TypeDeclaration[]): Module {
+  return { items, name };
+}
+
+function prop(name: string, type: string, options?: { multi?: boolean; required?: boolean; }): PropertyDeclaration {
+  return {
+    annotations: [],
+    constraints: [],
+    kind: "PropertyDeclaration",
+    multi: options?.multi,
+    name: ident(name),
+    required: options?.required,
+    type: typeRef(type)
+  };
+}
+
+function typeDef(name: string, members: (PropertyDeclaration | LinkDeclaration)[]): TypeDeclaration {
+  return {
+    kind: "TypeDeclaration",
+    members,
+    name: ident(name)
+  };
+}
+
+function typeRef(name: string): TypeRef {
+  return { kind: "TypeRef", name: { kind: "QualifiedName", parts: [name] } };
+}

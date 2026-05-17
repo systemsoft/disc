@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Find-references provider tests (#7411 + #655 — Phase 4)
  */
@@ -104,7 +107,11 @@ Deno.test("provideReferences - whitespace cursor returns []", () => {
   const text = `module default {
 
 }`;
-  const refs = provideReferences(text, { line: 1, character: 0 }, "file:///r.disc");
+  const refs = provideReferences(
+    text,
+    { line: 1, character: 0 },
+    "file:///r.disc"
+  );
   assertEquals(refs.length, 0);
 });
 

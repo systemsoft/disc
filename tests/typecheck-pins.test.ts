@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Pins that the four `deno check` errors fixed in Bundle JJ stay
  * fixed. These weren't behavior bugs — they were type-system holes
@@ -40,7 +43,10 @@ Deno.test("Bundle JJ: smtp/client.ts type-checks (Uint8Array<ArrayBuffer> assign
 
 Deno.test("Bundle JJ: server/rest/openapi.ts type-checks (LinkDef.computed access)", async () => {
   const { ok, output } = await denoCheck("server/rest/openapi.ts");
-  assert(ok, `server/rest/openapi.ts should pass deno check; output:\n${output}`);
+  assert(
+    ok,
+    `server/rest/openapi.ts should pass deno check; output:\n${output}`
+  );
 });
 
 Deno.test("Bundle JJ: cli/admin.ts type-checks (RegisterData.username, not name)", async () => {

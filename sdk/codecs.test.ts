@@ -1,5 +1,17 @@
-import { assert, assertEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
-import { encodeBytes, parseBytes, parseDateTime, parseInt64, reviveResponse } from "./codecs.ts";
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
+import {
+  assert,
+  assertEquals
+} from "@std/assert";
+import {
+  encodeBytes,
+  parseBytes,
+  parseDateTime,
+  parseInt64,
+  reviveResponse
+} from "./codecs.ts";
 
 // ── parseDateTime ────────────────────────────────────────────────────
 

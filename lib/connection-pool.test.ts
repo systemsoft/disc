@@ -1,8 +1,15 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for Database Connection Pool
  */
 
-import { assertEquals, assertExists, assertRejects } from "https://deno.land/std@0.208.0/assert/mod.ts";
+import {
+  assertEquals,
+  assertExists,
+  assertRejects
+} from "@std/assert";
 import { ConnectionPool, PoolConfig } from "./connection-pool.ts";
 import { DatabaseConnection } from "./database.ts";
 
@@ -428,10 +435,12 @@ Deno.test("ConnectionPool - executes transaction through pool", async () => {
   };
 
   DatabaseConnection.prototype.execute = function(sql: string) {
-    if (sql === "BEGIN")
+    if (sql === "BEGIN") {
       transactionStarted = true;
-    if (sql === "COMMIT")
+    }
+    if (sql === "COMMIT") {
       transactionCommitted = true;
+    }
     return Promise.resolve();
   };
 

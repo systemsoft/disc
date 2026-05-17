@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for the visual query builder's EdgeQL synthesizer (#3b).
  *
@@ -8,7 +11,11 @@
  */
 
 import { assertEquals, assertThrows } from "@std/assert";
-import { coerceValue, type QuerySpec, synthesize } from "../ui/src/lib/query-builder-synth.ts";
+import {
+  coerceValue,
+  synthesize,
+  type QuerySpec
+} from "../ui/src/lib/query-builder-synth.ts";
 
 function spec(overrides: Partial<QuerySpec>): QuerySpec {
   return {

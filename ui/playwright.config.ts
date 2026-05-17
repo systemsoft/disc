@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 // deno-lint-ignore-file no-process-global
 // Playwright runs this config in Node, not Deno — `process.env` is
 // the canonical way to read CI env there. The lint rule still scans

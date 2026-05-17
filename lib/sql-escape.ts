@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * SQL string escaping helpers.
  *
@@ -46,7 +49,10 @@ export function sqlStringLiteral(value: string): string {
  *
  * Throws if the identifier would be unsafe to embed unquoted in SQL.
  */
-export function assertSafeIdentifier(identifier: string, context: string): void {
+export function assertSafeIdentifier(
+  identifier: string,
+  context: string
+): void {
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(identifier)) {
     throw new Error(
       `Unsafe identifier in ${context}: ${JSON.stringify(identifier)}`

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 import { assertEquals, assertRejects } from "@std/assert";
 
 import { DiscClient } from "./client.ts";
@@ -14,7 +17,11 @@ function mockFetch(
     input: string | URL | Request,
     init?: RequestInit
   ): Promise<Response> => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    const url = typeof input === "string" ?
+      input :
+      input instanceof URL ?
+      input.toString() :
+      input.url;
     return Promise.resolve(handler(url, init));
   };
   return () => {

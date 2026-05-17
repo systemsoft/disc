@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Graceful shutdown tests for Disc HttpServer
  *
@@ -9,7 +12,14 @@
 
 import { assertEquals } from "@std/assert";
 import { HttpServer } from "./http.ts";
-import type { ProtocolHandler, QueryContext, QueryError, QueryRequest, QueryResponse, ServerConfig } from "./types.ts";
+import type {
+  ProtocolHandler,
+  QueryContext,
+  QueryError,
+  QueryRequest,
+  QueryResponse,
+  ServerConfig
+} from "./types.ts";
 
 /** Minimal protocol handler for shutdown tests. */
 function createMockProtocolHandler(

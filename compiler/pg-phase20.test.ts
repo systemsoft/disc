@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * PostgreSQL End-to-End Tests — Phase 20 Compiler Features
  *
@@ -356,7 +359,9 @@ Deno.test({
       const rowData = firstRow.jsonb_build_object ?? firstRow;
 
       // Navigate into the result — might be the row itself or nested
-      const data = (typeof rowData === "object" && rowData !== null) ? rowData as Record<string, unknown> : {};
+      const data = (typeof rowData === "object" && rowData !== null) ?
+        rowData as Record<string, unknown> :
+        {};
 
       // Check for label and count either at top level or nested
       let label: unknown;

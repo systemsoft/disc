@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for `fetchUserInfo` profile-claim normalization.
  * (gh/geldata#7344, ports geldata/gel#7344)
@@ -83,7 +86,10 @@ Deno.test("fetchUserInfo normalizes GitHub /user payload (id + login + avatar_ur
       assertEquals(u.id, "12345");
       assertEquals(u.email, "alice@example.com");
       assertEquals(u.name, "alice"); // login → name fallback
-      assertEquals(u.avatarUrl, "https://avatars.githubusercontent.com/u/12345");
+      assertEquals(
+        u.avatarUrl,
+        "https://avatars.githubusercontent.com/u/12345"
+      );
       // GitHub doesn't supply email_verified, locale, given/family.
       assertEquals(u.emailVerified, undefined);
       assertEquals(u.locale, undefined);

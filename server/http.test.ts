@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * HTTP server module tests
  */
@@ -62,7 +65,9 @@ class MockHTTPHandler {
           })
         };
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        const errorMessage = error instanceof Error ?
+          error.message :
+          "Unknown error";
         return {
           status: 400,
           headers: new Headers({ "Content-Type": "application/json" }),
@@ -110,8 +115,9 @@ class MockHTTPHandler {
   }
 
   private async readRequestBody(request: MockRequest): Promise<string> {
-    if (!request.body)
+    if (!request.body) {
       return "";
+    }
 
     const reader = request.body.getReader();
     const chunks: Uint8Array[] = [];
@@ -120,8 +126,9 @@ class MockHTTPHandler {
     while (!done) {
       const { value, done: readerDone } = await reader.read();
       done = readerDone;
-      if (value)
+      if (value) {
         chunks.push(value);
+      }
     }
 
     const combined = new Uint8Array(

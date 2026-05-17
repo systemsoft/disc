@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * EdgeQL Protocol Handler with Real Compiler Integration
  */
@@ -17,7 +20,12 @@ import type { DatabaseRegistry } from "./database-registry.ts";
 import * as Types from "./types.ts";
 
 const log = getLogger("edgeql-protocol");
-import { hashAccessContext, hashString, makeCompilationCacheKey, QueryCache } from "../lib/query-cache.ts";
+import {
+  hashAccessContext,
+  hashString,
+  makeCompilationCacheKey,
+  QueryCache
+} from "../lib/query-cache.ts";
 import type { CacheStats } from "../lib/query-cache.ts";
 
 export interface EdgeQLExecutionOptions {
@@ -165,8 +173,9 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         // policies query produces different SQL than a regular query,
         // so they must not share a cache slot.
         let suffix = ctxHash;
-        if (bypass)
+        if (bypass) {
           suffix += "|bypass";
+        }
         if (context.disabledPolicies && context.disabledPolicies.size > 0) {
           // Sort for stable hashing — Set iteration order matches insertion,
           // not the header's textual order.
@@ -239,8 +248,9 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         // skips matching policies (gh/geldata#6432 slice 3).
         if (policiesActive && context.auth) {
           const accessCtx = authContextToAccessContext(context.auth);
-          if (bypass)
+          if (bypass) {
             accessCtx.bypass = true;
+          }
           if (context.disabledPolicies && context.disabledPolicies.size > 0) {
             accessCtx.disabledPolicies = context.disabledPolicies;
           }
@@ -330,8 +340,12 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       const threshold = this.options.slowQueryThresholdMs ?? 1000;
 
       if (durationMs >= threshold) {
-        const truncatedQuery = request.query.length > 200 ? request.query.substring(0, 200) + "..." : request.query;
-        const truncatedSQL = sqlString.length > 200 ? sqlString.substring(0, 200) + "..." : sqlString;
+        const truncatedQuery = request.query.length > 200 ?
+          request.query.substring(0, 200) + "..." :
+          request.query;
+        const truncatedSQL = sqlString.length > 200 ?
+          sqlString.substring(0, 200) + "..." :
+          sqlString;
 
         log.warn("Slow query", {
           durationMs,
@@ -371,7 +385,9 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
               sql_ast: sqlStatement
             } :
             undefined,
-          explain_plan: this.options.enableExplain ? await this.getExplainPlan(queryHash, sqlString) : undefined
+          explain_plan: this.options.enableExplain ?
+            await this.getExplainPlan(queryHash, sqlString) :
+            undefined
         }
       };
 
@@ -401,7 +417,9 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         };
       }
 
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      const errorMessage = error instanceof Error ?
+        error.message :
+        "Unknown error";
 
       return {
         errors: [{
@@ -461,7 +479,9 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
 
       return { success: true, ast };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown parsing error";
+      const errorMessage = error instanceof Error ?
+        error.message :
+        "Unknown parsing error";
       return {
         success: false,
         error: errorMessage
@@ -502,29 +522,35 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     data: any,
     ast: EdgeQL.Query | undefined
   ): any {
-    if (!ast)
+    if (!ast) {
       return data;
-    if (ast.kind !== "InsertQuery" && ast.kind !== "UpdateQuery")
+    }
+    if (ast.kind !== "InsertQuery" && ast.kind !== "UpdateQuery") {
       return data;
-    if (!data || typeof data !== "object" || Array.isArray(data))
+    }
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
       return data;
+    }
 
     const typeName = ast.type.name.parts.join("::");
     const typeDef = Context.resolveTypeName(
       { schema: this.schema } as any,
       typeName
     );
-    if (!typeDef)
+    if (!typeDef) {
       return data;
+    }
 
     const colToProp = new Map<string, string>();
     for (const [propName, prop] of typeDef.properties) {
-      if (prop.columnName)
+      if (prop.columnName) {
         colToProp.set(prop.columnName, propName);
+      }
     }
     for (const [linkName, link] of typeDef.links) {
-      if (link.columnName)
+      if (link.columnName) {
         colToProp.set(link.columnName, linkName);
+      }
     }
 
     const out: Record<string, any> = {};
@@ -541,8 +567,9 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
    * returned unchanged.
    */
   private unwrapJsonbRows(rows: any[]): any[] {
-    if (!Array.isArray(rows) || rows.length === 0)
+    if (!Array.isArray(rows) || rows.length === 0) {
       return rows;
+    }
     return rows.map(row => {
       if (
         row && typeof row === "object" && !Array.isArray(row) &&
@@ -602,7 +629,9 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
         const params = this.prepareParameters(variables);
         const timeoutMs = this.options.requestTimeout ?? 0;
 
-        const result = timeoutMs > 0 ? await pool.queryWithTimeout(sql, params, timeoutMs) : await pool.query(sql, params);
+        const result = timeoutMs > 0 ?
+          await pool.queryWithTimeout(sql, params, timeoutMs) :
+          await pool.query(sql, params);
 
         // Format result based on query type
         const normalizedSQL = sql.toLowerCase().trim();
@@ -634,7 +663,9 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
           throw error;
         }
 
-        const dbError = error instanceof Error ? error : new Error(String(error));
+        const dbError = error instanceof Error ?
+          error :
+          new Error(String(error));
         log.error("Database execution error", { error: dbError.message });
         throw new DatabaseExecutionError(
           `Database query failed: ${dbError.message}`,
@@ -839,14 +870,16 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
     queryHash: string,
     sql: string
   ): Promise<unknown | undefined> {
-    if (!this.pool)
+    if (!this.pool) {
       return undefined;
+    }
 
     // Check cache first
     if (this.explainCache) {
       const cached = this.explainCache.get(queryHash);
-      if (cached)
+      if (cached) {
         return cached;
+      }
     }
 
     try {
@@ -888,7 +921,9 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
 
     const parameterIndex = Compiler.buildParameterIndex(ast);
 
-    const compileResult = this.compiler.compile(ast, { parameterMap: parameterIndex });
+    const compileResult = this.compiler.compile(ast, {
+      parameterMap: parameterIndex
+    });
     if (!compileResult.ok) {
       throw new DatabaseExecutionError(
         compileResult.error.message,
@@ -1060,7 +1095,9 @@ export class EdgeQLProtocolHandler implements Types.ProtocolHandler {
       const latencyMs = Date.now() - start;
 
       const poolStats = this.buildPoolStats();
-      const status: Types.HealthStatus["status"] = poolStats.waiters > 0 ? "degraded" : "healthy";
+      const status: Types.HealthStatus["status"] = poolStats.waiters > 0 ?
+        "degraded" :
+        "healthy";
 
       return {
         status,

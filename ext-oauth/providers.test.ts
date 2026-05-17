@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for OAuth provider factory functions
  */
@@ -151,8 +154,14 @@ Deno.test("facebookProvider - returns correct name", () => {
 Deno.test("facebookProvider - returns correct authorize, token, and userinfo URLs", () => {
   const p = facebookProvider("cid", "csecret");
   assertEquals(p.authorizeUrl, "https://www.facebook.com/v18.0/dialog/oauth");
-  assertEquals(p.tokenUrl, "https://graph.facebook.com/v18.0/oauth/access_token");
-  assertEquals(p.userInfoUrl, "https://graph.facebook.com/me?fields=id,name,email");
+  assertEquals(
+    p.tokenUrl,
+    "https://graph.facebook.com/v18.0/oauth/access_token"
+  );
+  assertEquals(
+    p.userInfoUrl,
+    "https://graph.facebook.com/me?fields=id,name,email"
+  );
 });
 
 Deno.test("facebookProvider - includes email and public_profile scopes", () => {
@@ -170,7 +179,10 @@ Deno.test("linkedinProvider - returns correct name", () => {
 
 Deno.test("linkedinProvider - returns correct authorize, token, and userinfo URLs", () => {
   const p = linkedinProvider("cid", "csecret");
-  assertEquals(p.authorizeUrl, "https://www.linkedin.com/oauth/v2/authorization");
+  assertEquals(
+    p.authorizeUrl,
+    "https://www.linkedin.com/oauth/v2/authorization"
+  );
   assertEquals(p.tokenUrl, "https://www.linkedin.com/oauth/v2/accessToken");
   assertEquals(p.userInfoUrl, "https://api.linkedin.com/v2/userinfo");
 });
@@ -189,9 +201,18 @@ Deno.test("keycloakProvider - constructs realm-scoped endpoints", () => {
     clientId: "cid",
     clientSecret: "csecret"
   });
-  assertEquals(p.authorizeUrl, "https://kc.example.com/realms/myrealm/protocol/openid-connect/auth");
-  assertEquals(p.tokenUrl, "https://kc.example.com/realms/myrealm/protocol/openid-connect/token");
-  assertEquals(p.userInfoUrl, "https://kc.example.com/realms/myrealm/protocol/openid-connect/userinfo");
+  assertEquals(
+    p.authorizeUrl,
+    "https://kc.example.com/realms/myrealm/protocol/openid-connect/auth"
+  );
+  assertEquals(
+    p.tokenUrl,
+    "https://kc.example.com/realms/myrealm/protocol/openid-connect/token"
+  );
+  assertEquals(
+    p.userInfoUrl,
+    "https://kc.example.com/realms/myrealm/protocol/openid-connect/userinfo"
+  );
 });
 
 Deno.test("keycloakProvider - default name is keycloak", () => {
@@ -222,7 +243,10 @@ Deno.test("keycloakProvider - strips trailing slash from baseUrl", () => {
     clientId: "cid",
     clientSecret: "csecret"
   });
-  assertEquals(p.authorizeUrl, "https://kc.example.com/realms/r/protocol/openid-connect/auth");
+  assertEquals(
+    p.authorizeUrl,
+    "https://kc.example.com/realms/r/protocol/openid-connect/auth"
+  );
 });
 
 Deno.test("keycloakProvider - defaults scopes to openid+email+profile", () => {

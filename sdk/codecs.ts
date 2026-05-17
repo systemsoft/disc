@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Wire-format codecs for `Date`, `bigint`, and `Uint8Array`. (P1-29)
  *
@@ -45,8 +48,9 @@ const NUMERIC_STRING_REGEX = /^-?\d+$/;
  * Returns `undefined` if the input is not a valid ISO-8601 datetime.
  */
 export function parseDateTime(value: string): Date | undefined {
-  if (!ISO_DATETIME_REGEX.test(value))
+  if (!ISO_DATETIME_REGEX.test(value)) {
     return undefined;
+  }
   const ms = Date.parse(value);
   return Number.isNaN(ms) ? undefined : new Date(ms);
 }
@@ -56,8 +60,9 @@ export function parseDateTime(value: string): Date | undefined {
  * Returns `undefined` if the input is not a base-10 integer string.
  */
 export function parseInt64(value: string): bigint | undefined {
-  if (!NUMERIC_STRING_REGEX.test(value))
+  if (!NUMERIC_STRING_REGEX.test(value)) {
     return undefined;
+  }
   try {
     return BigInt(value);
   } catch {
@@ -73,8 +78,9 @@ export function parseBytes(value: string): Uint8Array | undefined {
   try {
     const binary = atob(value);
     const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++)
+    for (let i = 0; i < binary.length; i++) {
       bytes[i] = binary.charCodeAt(i);
+    }
     return bytes;
   } catch {
     return undefined;
@@ -117,13 +123,15 @@ export function reviveResponse<T = unknown>(
 }
 
 function walk(value: unknown, dates: boolean, bigints: boolean): unknown {
-  if (value === null || value === undefined)
+  if (value === null || value === undefined) {
     return value;
+  }
   if (typeof value === "string") {
     if (dates && ISO_DATETIME_REGEX.test(value)) {
       const ms = Date.parse(value);
-      if (!Number.isNaN(ms))
+      if (!Number.isNaN(ms)) {
         return new Date(ms);
+      }
     }
     if (bigints && NUMERIC_STRING_REGEX.test(value)) {
       try {

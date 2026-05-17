@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Per-request access-policy bypass (gh/geldata#6358).
  *
@@ -184,10 +187,12 @@ function headerToDisabled(
   header: string | null,
   roles: string[]
 ): Set<string> | undefined {
-  if (header === null)
+  if (header === null) {
     return undefined;
-  if (!roles.includes("admin"))
+  }
+  if (!roles.includes("admin")) {
     return undefined;
+  }
   const names = header
     .split(",")
     .map(s => s.trim())

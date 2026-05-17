@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Embedded Disc SDK extractor.
  *
@@ -6,26 +9,29 @@
  * writes a generated client, that client imports from `./sdk/mod.ts` —
  * a path that only resolves if the SDK files actually live next to the
  * generated output. This extractor materializes them at codegen time so
- * downstream projects don't need a separate `jsr add` / `npm install`.
+ * downstream projects don’t need a separate `jsr add` / `npm install`.
  *
  * Idempotency: a marker file (`.disc-sdk-marker`) holds the disc binary
  * version that wrote the SDK. Re-extracting only happens when the
- * marker is missing OR contains a different version — that's how a user
+ * marker is missing OR contains a different version — that’s how a user
  * upgrading their `disc` binary picks up the new SDK on the next run.
  */
 
-import { ensureDir } from "@std/fs";
+/*** NATIVE ------------------------------------------- ***/
+
 import { dirname, join } from "@std/path";
+import { ensureDir } from "@std/fs";
 
 const MARKER_FILE = ".disc-sdk-marker";
 
+/*** EXPORT ------------------------------------------- ***/
+
 export interface EmbeddedSdkEntry {
   /**
-   * Source URL to read from. In the compiled binary this resolves
-   * through Deno's embedded asset table; in development it's a normal
-   * `file://` URL pointing at the on-disk SDK source.
+   * POSIX mode bits to set on the extracted file. Always `0o644` for
+   * SDK sources — they’re read at runtime, never executed.
    */
-  sourceUrl: URL;
+  mode: number;
   /**
    * Path relative to the target directory (e.g. `client.ts`,
    * `mod.ts`). All entries are flat under `sdk/`; the SDK has no
@@ -33,31 +39,17 @@ export interface EmbeddedSdkEntry {
    */
   relPath: string;
   /**
-   * POSIX mode bits to set on the extracted file. Always `0o644` for
-   * SDK sources — they're read at runtime, never executed.
+   * Source URL to read from. In the compiled binary this resolves
+   * through Deno’s embedded asset table; in development it’s a normal
+   * `file://` URL pointing at the on-disk SDK source.
    */
-  mode: number;
+  sourceUrl: URL;
 }
 
 export interface ExtractSdkResult {
   alreadyExtracted: boolean;
   extracted: number;
   targetDir: string;
-}
-
-/**
- * Read the marker file and return the version string it contains, or
- * `null` if the marker is missing / unreadable. The marker format is a
- * single line with the disc binary version (e.g. `2026.05.07`).
- */
-async function readMarkerVersion(targetDir: string): Promise<string | null> {
-  try {
-    const raw = await Deno.readTextFile(join(targetDir, MARKER_FILE));
-    const trimmed = raw.trim();
-    return trimmed.length > 0 ? trimmed : null;
-  } catch {
-    return null;
-  }
 }
 
 /**
@@ -74,16 +66,9 @@ async function readMarkerVersion(targetDir: string): Promise<string | null> {
  * entries to test, the production caller relies on the auto-generated
  * manifest via `extractEmbeddedSdk`).
  */
-export async function extractEmbeddedSdk(
-  targetDir: string,
-  version: string
-): Promise<ExtractSdkResult> {
+export async function extractEmbeddedSdk(targetDir: string, version: string): Promise<ExtractSdkResult> {
   const { EMBEDDED_SDK_MANIFEST } = await import("./embedded-sdk-manifest.ts");
-  return await extractEmbeddedSdkWithEntries(
-    targetDir,
-    version,
-    EMBEDDED_SDK_MANIFEST
-  );
+  return await extractEmbeddedSdkWithEntries(targetDir, version, EMBEDDED_SDK_MANIFEST);
 }
 
 /**
@@ -97,6 +82,7 @@ export async function extractEmbeddedSdkWithEntries(
   entries: readonly EmbeddedSdkEntry[]
 ): Promise<ExtractSdkResult> {
   const existingVersion = await readMarkerVersion(targetDir);
+
   if (existingVersion !== null && existingVersion === version) {
     return {
       alreadyExtracted: true,
@@ -106,25 +92,28 @@ export async function extractEmbeddedSdkWithEntries(
   }
 
   await ensureDir(targetDir);
-
   let extracted = 0;
+
   for (const entry of entries) {
     const dest = join(targetDir, entry.relPath);
     await ensureDir(dirname(dest));
+
     const bytes = await Deno.readFile(entry.sourceUrl);
     await Deno.writeFile(dest, bytes, { mode: entry.mode });
-    // Re-chmod after write because writeFile's mode arg is honored only
-    // on creation; existing files keep their old mode. Belt-and-suspenders.
+
+    /*** Re-chmod after write because writeFile’s mode arg is honored only on creation; existing
+         files keep their old mode. Belt-and-suspenders. ***/
     try {
       await Deno.chmod(dest, entry.mode);
     } catch {
-      // Some platforms (Windows) don't support chmod — best-effort.
+      /*** Some platforms (Windows) don’t support chmod — best-effort. ***/
     }
+
     extracted++;
   }
 
-  // Marker file is the last write, so a partial extract that crashed
-  // halfway through won't trick the next run into trusting the dir.
+  /*** Marker file is the last write, so a partial extract that crashed halfway through won’t trick
+       the next run into trusting the dir. ***/
   await Deno.writeTextFile(join(targetDir, MARKER_FILE), `${version}\n`);
 
   return {
@@ -132,4 +121,22 @@ export async function extractEmbeddedSdkWithEntries(
     extracted,
     targetDir
   };
+}
+
+/*** HELPER ------------------------------------------- ***/
+
+/**
+ * Read the marker file and return the version string it contains, or
+ * `null` if the marker is missing / unreadable. The marker format is a
+ * single line with the disc binary version (e.g. `2026.05.07`).
+ */
+async function readMarkerVersion(targetDir: string): Promise<string | null> {
+  try {
+    const raw = await Deno.readTextFile(join(targetDir, MARKER_FILE));
+    const trimmed = raw.trim();
+
+    return trimmed.length > 0 ? trimmed : null;
+  } catch {
+    return null;
+  }
 }

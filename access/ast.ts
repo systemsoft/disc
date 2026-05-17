@@ -1,11 +1,18 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Access Policy AST Extensions
  *
  * These extend the base schema AST to support access control features
  */
 
-import { Span } from "../lib/types.ts";
+/*** UTILITY ------------------------------------------ ***/
+
 import { SDLNode } from "../schema/ast.ts";
+import { Span } from "../lib/types.ts";
+
+/*** EXPORT ------------------------------------------- ***/
 
 /**
  * Access policy AST node for schema-level policies
@@ -22,13 +29,21 @@ export interface AccessPolicyNode extends SDLNode {
   name: string;
   objectType?: string; // If attached to specific type
   span?: Span;
-
   // Policy rules
   rules: AccessRuleNode[];
-
   // Optional expressions
   using?: AccessExpressionNode; // Row filtering
   withCheck?: AccessExpressionNode; // Check constraint
+}
+
+/**
+ * Access operation specification
+ */
+export interface AccessOperationNode extends SDLNode {
+  columns?: string[]; // Optional column-level restrictions
+  kind: "AccessOperation";
+  operation: "select" | "insert" | "update" | "delete" | "all";
+  span?: Span;
 }
 
 /**
@@ -43,38 +58,15 @@ export interface AccessRuleNode extends SDLNode {
 }
 
 /**
- * Access operation specification
- */
-export interface AccessOperationNode extends SDLNode {
-  columns?: string[]; // Optional column-level restrictions
-  kind: "AccessOperation";
-  operation: "select" | "insert" | "update" | "delete" | "all";
-  span?: Span;
-}
-
-/**
  * Access-specific expression nodes
  */
 export type AccessExpressionNode =
-  | AccessPathNode
-  | AccessFunctionNode
   | AccessComparisonNode
-  | AccessLogicalNode
+  | AccessFunctionNode
+  | AccessGlobalNode
   | AccessLiteralNode
-  | AccessGlobalNode;
-
-export interface AccessPathNode extends SDLNode {
-  kind: "AccessPath";
-  path: string[];
-  span?: Span;
-}
-
-export interface AccessFunctionNode extends SDLNode {
-  args: AccessExpressionNode[];
-  kind: "AccessFunction";
-  name: string;
-  span?: Span;
-}
+  | AccessLogicalNode
+  | AccessPathNode;
 
 export interface AccessComparisonNode extends SDLNode {
   kind: "AccessComparison";
@@ -94,23 +86,36 @@ export interface AccessComparisonNode extends SDLNode {
   span?: Span;
 }
 
-export interface AccessLogicalNode extends SDLNode {
-  kind: "AccessLogical";
-  operands: AccessExpressionNode[];
-  operator: "and" | "or" | "not";
+export interface AccessFunctionNode extends SDLNode {
+  args: AccessExpressionNode[];
+  kind: "AccessFunction";
+  name: string;
+  span?: Span;
+}
+
+export interface AccessGlobalNode extends SDLNode {
+  kind: "AccessGlobal";
+  name: string; // e.g., "current_user", "current_role"
   span?: Span;
 }
 
 export interface AccessLiteralNode extends SDLNode {
   kind: "AccessLiteral";
   span?: Span;
-  type: "string" | "number" | "boolean" | "null" | "array";
-  value: string | number | boolean | null | AccessExpressionNode[];
+  type: "array" | "boolean" | "null" | "number" | "string";
+  value: boolean | number | string | null | AccessExpressionNode[];
 }
 
-export interface AccessGlobalNode extends SDLNode {
-  kind: "AccessGlobal";
-  name: string; // e.g., "current_user", "current_role"
+export interface AccessLogicalNode extends SDLNode {
+  kind: "AccessLogical";
+  operands: AccessExpressionNode[];
+  operator: "and" | "not" | "or";
+  span?: Span;
+}
+
+export interface AccessPathNode extends SDLNode {
+  kind: "AccessPath";
+  path: string[];
   span?: Span;
 }
 
@@ -137,6 +142,19 @@ export function createAccessPolicy(
   };
 }
 
+export function createAccessOperation(
+  operation: AccessOperationNode["operation"],
+  columns?: string[],
+  span?: Span
+): AccessOperationNode {
+  return {
+    columns,
+    kind: "AccessOperation",
+    operation,
+    span
+  };
+}
+
 export function createAccessRule(
   action: "allow" | "deny",
   operations: AccessOperationNode[],
@@ -148,19 +166,6 @@ export function createAccessRule(
     condition,
     kind: "AccessRule",
     operations,
-    span
-  };
-}
-
-export function createAccessOperation(
-  operation: AccessOperationNode["operation"],
-  columns?: string[],
-  span?: Span
-): AccessOperationNode {
-  return {
-    columns,
-    kind: "AccessOperation",
-    operation,
     span
   };
 }

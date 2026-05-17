@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Access Policy End-to-End PostgreSQL Tests
  *
@@ -11,7 +14,11 @@
 
 import { assertEquals, assertExists } from "@std/assert";
 import type { AccessExpressionNode } from "../access/ast.ts";
-import type { AccessConfig, AccessContext, AccessPolicy } from "../access/mod.ts";
+import type {
+  AccessConfig,
+  AccessContext,
+  AccessPolicy
+} from "../access/mod.ts";
 import { SQLCodeGenerator } from "../compiler/codegen.ts";
 import { EdgeQLCompiler } from "../compiler/compiler.ts";
 import type { Schema } from "../compiler/context.ts";
@@ -201,8 +208,9 @@ Deno.test({
       );
 
       assertEquals(compiled.ok, true, "Compilation should succeed");
-      if (!compiled.ok)
+      if (!compiled.ok) {
         return;
+      }
 
       // The SQL should contain a WHERE clause filtering by the user's id
       const result = await pool.query(compiled.sql);
@@ -286,8 +294,9 @@ Deno.test({
         true,
         "Compilation should succeed (WHERE FALSE injected)"
       );
-      if (!compiled.ok)
+      if (!compiled.ok) {
         return;
+      }
 
       // The compiler should inject WHERE FALSE since no allow policy fires
       const result = await pool.query(compiled.sql);
@@ -409,8 +418,9 @@ Deno.test({
       );
 
       assertEquals(compiled.ok, true, "UPDATE compilation should succeed");
-      if (!compiled.ok)
+      if (!compiled.ok) {
         return;
+      }
 
       // Execute the update
       await pool.query(compiled.sql);
@@ -493,8 +503,9 @@ Deno.test({
       );
 
       assertEquals(compiled.ok, true, "DELETE compilation should succeed");
-      if (!compiled.ok)
+      if (!compiled.ok) {
         return;
+      }
 
       // Execute the delete
       await pool.query(compiled.sql);
@@ -591,8 +602,9 @@ Deno.test({
         true,
         "Compilation for Ada should succeed"
       );
-      if (!compiledAda.ok)
+      if (!compiledAda.ok) {
         return;
+      }
 
       const adaResult = await pool.query(compiledAda.sql);
       assertEquals(adaResult.rowCount, 1, "Ada should see exactly 1 row");
@@ -611,8 +623,9 @@ Deno.test({
         true,
         "Compilation for empty-name user should succeed"
       );
-      if (!compiledEmpty.ok)
+      if (!compiledEmpty.ok) {
         return;
+      }
 
       const emptyResult = await pool.query(compiledEmpty.sql);
       assertEquals(
@@ -697,9 +710,14 @@ Deno.test({
         { userId: uuid2, userRole: "user" }
       );
 
-      assertEquals(compiledBillie.ok, true, "Compilation for Billie should succeed");
-      if (!compiledBillie.ok)
+      assertEquals(
+        compiledBillie.ok,
+        true,
+        "Compilation for Billie should succeed"
+      );
+      if (!compiledBillie.ok) {
         return;
+      }
 
       const billieResult = await pool.query(compiledBillie.sql);
       assertEquals(
@@ -723,8 +741,9 @@ Deno.test({
         true,
         "Compilation for admin role should succeed"
       );
-      if (!compiledAdmin.ok)
+      if (!compiledAdmin.ok) {
         return;
+      }
 
       const adminResult = await pool.query(compiledAdmin.sql);
       assertEquals(
@@ -812,8 +831,9 @@ Deno.test({
       );
 
       assertEquals(compiled.ok, true, "Compilation should succeed");
-      if (!compiled.ok)
+      if (!compiled.ok) {
         return;
+      }
 
       const result = await pool.query(compiled.sql);
       assertEquals(
@@ -895,8 +915,9 @@ Deno.test({
         true,
         "Compilation should succeed (WHERE FALSE injected)"
       );
-      if (!compiled.ok)
+      if (!compiled.ok) {
         return;
+      }
 
       // The evaluator sees hasDeny=true -> allowed=false -> compiler injects WHERE FALSE
       const result = await pool.query(compiled.sql);
@@ -1003,8 +1024,9 @@ Deno.test({
         true,
         "TeamMember compilation should succeed"
       );
-      if (!compiledMembers.ok)
+      if (!compiledMembers.ok) {
         return;
+      }
 
       const memberResult = await pool.query(compiledMembers.sql);
       assertEquals(
@@ -1023,8 +1045,9 @@ Deno.test({
       );
 
       assertEquals(compiledDocs.ok, true, "TeamDoc compilation should succeed");
-      if (!compiledDocs.ok)
+      if (!compiledDocs.ok) {
         return;
+      }
 
       const docResult = await pool.query(compiledDocs.sql);
       assertEquals(

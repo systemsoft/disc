@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR";
 export type LogFormat = "json" | "text";
 
@@ -71,8 +74,9 @@ export class Logger {
     message: string,
     extra?: Record<string, unknown>
   ): void {
-    if (LEVEL_ORDER[level] < LEVEL_ORDER[globalConfig.level])
+    if (LEVEL_ORDER[level] < LEVEL_ORDER[globalConfig.level]) {
       return;
+    }
 
     const entry: LogEntry = {
       timestamp: new Date().toISOString(),
@@ -115,10 +119,12 @@ export function getLogger(module: string): Logger {
  * spec and keeps logs parseable by common tools (lnav, grafana loki, etc.).
  */
 function formatLogValue(v: unknown): string {
-  if (v === null || v === undefined)
+  if (v === null || v === undefined) {
     return String(v);
-  if (typeof v === "number" || typeof v === "boolean")
+  }
+  if (typeof v === "number" || typeof v === "boolean") {
     return String(v);
+  }
   const s = typeof v === "string" ? v : JSON.stringify(v);
   // Needs quoting if it contains whitespace, a literal quote, or an `=`.
   if (/[\s"=]/.test(s)) {

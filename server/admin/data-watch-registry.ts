@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * DataWatchRegistry — Bundle L (Disc-original feature #3c).
  *
@@ -103,8 +106,9 @@ export class DataWatchRegistry {
    * after they connect.
    */
   async start(): Promise<void> {
-    if (this.pollTimer !== undefined)
+    if (this.pollTimer !== undefined) {
       return; // already started
+    }
     this.stopped = false;
 
     try {
@@ -145,8 +149,9 @@ export class DataWatchRegistry {
       clearInterval(this.pruneTimer);
       this.pruneTimer = undefined;
     }
-    for (const id of this.debounceTimers.values())
+    for (const id of this.debounceTimers.values()) {
       clearTimeout(id);
+    }
     this.debounceTimers.clear();
     this.pendingInvalidations.clear();
     this.subscribers.clear();
@@ -180,8 +185,9 @@ export class DataWatchRegistry {
    * polling (no-op overlap protection).
    */
   async pollOnce(): Promise<void> {
-    if (this.polling || this.stopped)
+    if (this.polling || this.stopped) {
       return;
+    }
     this.polling = true;
     try {
       const result = await this.pool.query(
@@ -189,17 +195,23 @@ export class DataWatchRegistry {
          WHERE id > $1 ORDER BY id LIMIT 1000`,
         [String(this.lastSeenId)]
       );
-      if (result.rows.length === 0)
+      if (result.rows.length === 0) {
         return;
+      }
 
       // Collect distinct affected tables across this poll.
       const affected = new Set<string>();
       let maxId = this.lastSeenId;
-      for (const row of result.rows as Array<{ id: number | string; table_name: string; }>) {
+      for (
+        const row of result.rows as Array<
+          { id: number | string; table_name: string; }
+        >
+      ) {
         affected.add(row.table_name);
         const idNum = Number(row.id);
-        if (idNum > maxId)
+        if (idNum > maxId) {
           maxId = idNum;
+        }
       }
       this.lastSeenId = maxId;
 
@@ -208,8 +220,9 @@ export class DataWatchRegistry {
       for (const sub of this.subscribers.values()) {
         const intersect: string[] = [];
         for (const t of affected) {
-          if (sub.tables.has(t))
+          if (sub.tables.has(t)) {
             intersect.push(t);
+          }
         }
         if (intersect.length > 0) {
           this.scheduleInvalidate(sub.id, intersect);
@@ -236,12 +249,14 @@ export class DataWatchRegistry {
       pending = new Set();
       this.pendingInvalidations.set(subId, pending);
     }
-    for (const t of tables)
+    for (const t of tables) {
       pending.add(t);
+    }
 
     const existing = this.debounceTimers.get(subId);
-    if (existing !== undefined)
+    if (existing !== undefined) {
       clearTimeout(existing);
+    }
 
     const timer = setTimeout(() => {
       this.debounceTimers.delete(subId);
@@ -262,8 +277,9 @@ export class DataWatchRegistry {
   }
 
   private async runPrune(): Promise<void> {
-    if (this.stopped)
+    if (this.stopped) {
       return;
+    }
     try {
       await pruneChangeLog(this.pool, this.pruneLookbackSeconds);
     } catch (err) {

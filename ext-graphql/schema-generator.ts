@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Generates GraphQL schema definition from Disc schema types.
  *
@@ -40,8 +43,9 @@ export function mapEdgeQLTypeToGraphQL(
 ): string {
   // Check scalar map first
   const mapped = SCALAR_TYPE_MAP[edgeqlType];
-  if (mapped)
+  if (mapped) {
     return mapped;
+  }
 
   // Check if it is an enum type in the schema
   const typeDef = schema.types.get(edgeqlType);
@@ -107,16 +111,18 @@ export function generateGraphQLTypes(schema: Schema): GraphQLType[] {
   const types: GraphQLType[] = [];
 
   for (const [, typeDef] of schema.types) {
-    if (typeDef.abstract)
+    if (typeDef.abstract) {
       continue;
+    }
 
     if (typeDef.kind === "object") {
       const fields: GraphQLField[] = [];
 
       for (const [, prop] of typeDef.properties) {
         // Skip computed properties — they are not directly settable
-        if (prop.computed)
+        if (prop.computed) {
           continue;
+        }
         fields.push(propertyToField(prop, schema));
       }
 
@@ -140,10 +146,12 @@ export function generateGraphQLTypes(schema: Schema): GraphQLType[] {
  */
 function formatFieldType(field: GraphQLField): string {
   let typeStr = field.type;
-  if (field.required)
+  if (field.required) {
     typeStr += "!";
-  if (field.isList)
+  }
+  if (field.isList) {
     typeStr = `[${typeStr}]`;
+  }
   return typeStr;
 }
 
@@ -218,8 +226,9 @@ export function generateGraphQLSchema(
       // Create input — skip id (auto-generated)
       lines.push(`input Create${gqlType.name}Input {`);
       for (const field of gqlType.fields) {
-        if (field.name === "id")
+        if (field.name === "id") {
           continue;
+        }
         const typeStr = field.type + (field.required ? "!" : "");
         lines.push(`  ${field.name}: ${typeStr}`);
       }
@@ -229,8 +238,9 @@ export function generateGraphQLSchema(
       // Update input — all fields optional
       lines.push(`input Update${gqlType.name}Input {`);
       for (const field of gqlType.fields) {
-        if (field.name === "id")
+        if (field.name === "id") {
           continue;
+        }
         lines.push(`  ${field.name}: ${field.type}`);
       }
       lines.push("}");

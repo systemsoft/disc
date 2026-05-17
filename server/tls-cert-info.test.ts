@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for the leaf-cert `notAfter` extractor used by the
  * Prometheus expiry gauge (ports geldata/gel#6205).

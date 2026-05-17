@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * FileManager — glues the backend to a metadata table.
  *
@@ -138,10 +141,14 @@ export class FileManager {
     return await this.requireRow(id);
   }
 
-  async readMetadata(id: string, requestingUserId: string): Promise<FileMetadata> {
+  async readMetadata(
+    id: string,
+    requestingUserId: string
+  ): Promise<FileMetadata> {
     const row = await this.lookupRow(id);
-    if (!row)
+    if (!row) {
       throw new FileNotFoundError(id);
+    }
     if (row.ownerUserId !== requestingUserId) {
       throw new FileAccessDeniedError(id);
     }
@@ -171,8 +178,9 @@ export class FileManager {
 
   async delete(id: string, requestingUserId: string): Promise<void> {
     const row = await this.lookupRow(id);
-    if (!row)
+    if (!row) {
       throw new FileNotFoundError(id);
+    }
     if (row.ownerUserId !== requestingUserId) {
       throw new FileAccessDeniedError(id);
     }
@@ -204,15 +212,17 @@ export class FileManager {
        FROM files WHERE id = ?`,
       [id]
     );
-    if (result.rows.length === 0)
+    if (result.rows.length === 0) {
       return null;
+    }
     return rowToMetadata(result.rows[0]);
   }
 
   private async requireRow(id: string): Promise<FileMetadata> {
     const row = await this.lookupRow(id);
-    if (!row)
+    if (!row) {
       throw new FileNotFoundError(id);
+    }
     return row;
   }
 }
@@ -226,7 +236,9 @@ function rowToMetadata(row: Record<string, unknown>): FileMetadata {
     size: Number(row.size),
     sha256: String(row.sha256),
     storageKey: String(row.storage_key),
-    metadata: row.metadata ? JSON.parse(String(row.metadata)) as Record<string, unknown> : null,
+    metadata: row.metadata ?
+      JSON.parse(String(row.metadata)) as Record<string, unknown> :
+      null,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at)
   };

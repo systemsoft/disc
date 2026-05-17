@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * PostgreSQL End-to-End Tests — Multiple Inheritance
  *
@@ -16,7 +19,11 @@ import { assertEquals, assertExists } from "@std/assert";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
-import { canRunPgTests, getTestDsn, resetTestDatabase } from "../tests/pg-test-harness.ts";
+import {
+  canRunPgTests,
+  getTestDsn,
+  resetTestDatabase
+} from "../tests/pg-test-harness.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import { EdgeQLCompiler } from "./compiler.ts";
 import type { Schema } from "./context.ts";

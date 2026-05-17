@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * TCP server for Gel binary wire protocol.
  *
@@ -18,9 +21,27 @@ import type { Schema } from "../compiler/context.ts";
 import type * as AST from "../edgeql/ast.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { BufferReader, BufferWriter } from "./buffer.ts";
-import { Cardinality, ErrorSeverity, OutputFormat, PROTOCOL_MAJOR_VERSION, PROTOCOL_MINOR_VERSION, TransactionState } from "./enums.ts";
-import { type ClientMessage, decodeClientMessage, encodeServerMessage, type ServerMessage } from "./messages.ts";
-import { deriveKeys, generateServerFirstMessage, parseClientFirstMessage, type ScramServerState, verifyClientFinalMessage } from "./scram.ts";
+import {
+  Cardinality,
+  ErrorSeverity,
+  OutputFormat,
+  PROTOCOL_MAJOR_VERSION,
+  PROTOCOL_MINOR_VERSION,
+  TransactionState
+} from "./enums.ts";
+import {
+  decodeClientMessage,
+  encodeServerMessage,
+  type ClientMessage,
+  type ServerMessage
+} from "./messages.ts";
+import {
+  deriveKeys,
+  generateServerFirstMessage,
+  parseClientFirstMessage,
+  verifyClientFinalMessage,
+  type ScramServerState
+} from "./scram.ts";
 import { generateDescriptorIdSync, resolveWellKnownType } from "./typedesc.ts";
 import { uuidToBytes } from "./types.ts";
 
@@ -152,7 +173,10 @@ function encodeSystemConfigValue(): Uint8Array {
  * The typedesc block is one length-prefixed CTYPE_INPUT_SHAPE descriptor:
  *   [u32 descLen=19][u8 t=8][16 tid][u16 els=0]
  */
-function buildEmptyStateDescriptor(): { tid: Uint8Array; typedesc: Uint8Array; } {
+function buildEmptyStateDescriptor(): {
+  tid: Uint8Array;
+  typedesc: Uint8Array;
+} {
   const tid = generateDescriptorIdSync(
     new TextEncoder().encode("disc:state:empty:v1")
   );
@@ -268,8 +292,9 @@ interface OutputShape {
  * if the expression isn't a known bare scalar form.
  */
 function detectBareScalarType(expr: unknown): string | null {
-  if (!expr || typeof expr !== "object")
+  if (!expr || typeof expr !== "object") {
     return null;
+  }
   const e = expr as { kind?: string; };
 
   if (e.kind === "TypeCast") {
@@ -310,8 +335,9 @@ function collectParameters(node: unknown): ParamInfo[] {
   const out: ParamInfo[] = [];
 
   function visit(n: unknown): void {
-    if (!n || typeof n !== "object")
+    if (!n || typeof n !== "object") {
       return;
+    }
     const obj = n as { kind?: string; type?: AST.TypeName; expr?: unknown; };
     if (
       obj.kind === "TypeCast" &&
@@ -323,7 +349,9 @@ function collectParameters(node: unknown): ParamInfo[] {
       const tn = obj.type;
       // The lexer keeps the leading `$` on parameter names. Strip it
       // before exposing on the wire — clients pass kwargs without `$`.
-      const bare = param.name.startsWith("$") ? param.name.slice(1) : param.name;
+      const bare = param.name.startsWith("$") ?
+        param.name.slice(1) :
+        param.name;
       if (tn?.name?.parts?.length && !seen.has(bare)) {
         seen.add(bare);
         out.push({
@@ -334,8 +362,9 @@ function collectParameters(node: unknown): ParamInfo[] {
     }
     for (const value of Object.values(obj as Record<string, unknown>)) {
       if (Array.isArray(value)) {
-        for (const item of value)
+        for (const item of value) {
           visit(item);
+        }
       } else if (value && typeof value === "object") {
         visit(value);
       }
@@ -355,7 +384,12 @@ function collectParameters(node: unknown): ParamInfo[] {
  */
 function inferOutputShape(
   query: unknown,
-  schema?: { types?: Map<string, { properties: Map<string, { edgeqlType?: string; type: string; }>; }>; }
+  schema?: {
+    types?: Map<
+      string,
+      { properties: Map<string, { edgeqlType?: string; type: string; }>; }
+    >;
+  }
 ): OutputShape {
   const idField: OutputField = { name: "id", edgeqlType: "uuid" };
   if (!query || typeof query !== "object") {
@@ -363,7 +397,10 @@ function inferOutputShape(
   }
   const q = query as { kind?: string; };
 
-  if (q.kind === "InsertQuery" || q.kind === "UpdateQuery" || q.kind === "DeleteQuery") {
+  if (
+    q.kind === "InsertQuery" || q.kind === "UpdateQuery" ||
+    q.kind === "DeleteQuery"
+  ) {
     return { typeName: "Object", fields: [idField] };
   }
 
@@ -393,8 +430,9 @@ function inferOutputShape(
     if (sel.shape) {
       for (const el of sel.shape.elements) {
         const fieldName = el.name?.name ?? extractFieldNameFromExpr(el.expr);
-        if (!fieldName)
+        if (!fieldName) {
           continue;
+        }
         // The schema's TypeDef uses `type` for the SQL type and may carry
         // the original EdgeQL type via a property-level field. Always
         // prefer the EdgeQL type since that's what the wire codec needs.
@@ -404,8 +442,9 @@ function inferOutputShape(
       }
     }
 
-    if (fields.length === 0)
+    if (fields.length === 0) {
       fields.push(idField);
+    }
     return { typeName, fields };
   }
 
@@ -413,8 +452,9 @@ function inferOutputShape(
 }
 
 function extractTypeNameFromExpr(expr: unknown): string | null {
-  if (!expr || typeof expr !== "object")
+  if (!expr || typeof expr !== "object") {
     return null;
+  }
   const e = expr as {
     kind?: string;
     steps?: AST.PathStep[];
@@ -432,8 +472,9 @@ function extractTypeNameFromExpr(expr: unknown): string | null {
   // `parts` (one entry for default-module types).
   if (e.kind === "TypeName" && e.name && typeof e.name === "object") {
     const parts = (e.name as { parts?: string[]; }).parts;
-    if (parts && parts.length > 0)
+    if (parts && parts.length > 0) {
       return parts.join("::");
+    }
   }
   return null;
 }
@@ -443,11 +484,13 @@ function extractTypeNameFromExpr(expr: unknown): string | null {
  * explicit `name :=` (i.e. just `id` or `.title` or `link.target`).
  */
 function extractFieldNameFromExpr(expr: unknown): string | undefined {
-  if (!expr || typeof expr !== "object")
+  if (!expr || typeof expr !== "object") {
     return undefined;
+  }
   const e = expr as { kind?: string; name?: string; steps?: AST.PathStep[]; };
-  if (e.kind === "Identifier" && typeof e.name === "string")
+  if (e.kind === "Identifier" && typeof e.name === "string") {
     return e.name;
+  }
   if (e.kind === "Path" && e.steps && e.steps.length > 0) {
     return e.steps[e.steps.length - 1]?.name;
   }
@@ -467,8 +510,9 @@ function buildInputDescriptor(
 
   function ensureScalar(eqlType: string): number {
     let pos = scalarPos.get(eqlType);
-    if (pos !== undefined)
+    if (pos !== undefined) {
       return pos;
+    }
     const tid = resolveWellKnownType(eqlType) ??
       resolveWellKnownType("uuid")!;
     pos = descriptors.length;
@@ -500,11 +544,13 @@ function buildInputDescriptor(
 
 /** Byte-for-byte equality on two 16-byte UUIDs. */
 function uuidsEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length)
+  if (a.length !== b.length) {
     return false;
+  }
   for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i])
+    if (a[i] !== b[i]) {
       return false;
+    }
   }
   return true;
 }
@@ -534,10 +580,12 @@ function decodeArgs(
   params: ParamInfo[]
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  if (params.length === 0)
+  if (params.length === 0) {
     return out;
-  if (blob.length < 4)
+  }
+  if (blob.length < 4) {
     return out;
+  }
 
   const r = new BufferReader(blob);
   const elemCount = r.readUInt32();
@@ -590,8 +638,9 @@ function encodeRowAsScalar(
   let value: unknown = null;
   if (row && typeof row === "object") {
     const values = Object.values(row);
-    if (values.length > 0)
+    if (values.length > 0) {
       value = values[0];
+    }
   }
   if (value === null || value === undefined) {
     // Empty result set is handled by the caller (no Data frames sent).
@@ -639,8 +688,9 @@ function encodeRowsAsObjects(
   shape: OutputShape,
   outputFormat: number
 ): Uint8Array[] {
-  if (outputFormat === OutputFormat.NONE)
+  if (outputFormat === OutputFormat.NONE) {
     return [];
+  }
 
   if (outputFormat === OutputFormat.JSON) {
     // JSON format: the whole result set is one JSON-encoded element.
@@ -657,8 +707,9 @@ function encodeRowsAsObjects(
     return rows.map(row => enc.encode(JSON.stringify(row)));
   }
 
-  if (shape.fields.length === 0)
+  if (shape.fields.length === 0) {
     return [];
+  }
   if (shape.isScalar) {
     return rows.map(row => encodeRowAsScalar(row, shape));
   }
@@ -687,8 +738,9 @@ function buildOutputDescriptor(
 
   function ensureScalar(eqlType: string): number {
     let pos = scalarPos.get(eqlType);
-    if (pos !== undefined)
+    if (pos !== undefined) {
       return pos;
+    }
     const tid = resolveWellKnownType(eqlType) ??
       resolveWellKnownType("uuid")!;
     pos = descriptors.length;
@@ -970,8 +1022,9 @@ export class BinaryProtocolServer {
         });
       } catch {
         // listener closed or accept error — stop loop if not running
-        if (!this.running)
+        if (!this.running) {
           break;
+        }
       }
     }
   }
@@ -1058,8 +1111,9 @@ export class BinaryConnection {
         let payload = new Uint8Array(0);
         if (payloadLength > 0) {
           const p = await this.readExact(payloadLength);
-          if (!p)
+          if (!p) {
             break;
+          }
           payload = new Uint8Array(p);
         }
 
@@ -1070,7 +1124,9 @@ export class BinaryConnection {
         } catch (err) {
           // Send error and continue (unless closed)
           if (!this.closed) {
-            const errorCode = err instanceof Error ? mapErrorToGelCode(err) : GEL_ERROR_CODES.InternalServerError;
+            const errorCode = err instanceof Error ?
+              mapErrorToGelCode(err) :
+              GEL_ERROR_CODES.InternalServerError;
             await this.sendErrorWithCode(
               err instanceof Error ? err.message : String(err),
               errorCode
@@ -1390,7 +1446,9 @@ export class BinaryConnection {
         outputTypedesc: built.outputDesc.data
       });
     } catch (err) {
-      const errorCode = err instanceof Error ? mapErrorToGelCode(err) : GEL_ERROR_CODES.InternalServerError;
+      const errorCode = err instanceof Error ?
+        mapErrorToGelCode(err) :
+        GEL_ERROR_CODES.InternalServerError;
       await this.sendErrorWithCode(
         err instanceof Error ? err.message : String(err),
         errorCode
@@ -1484,8 +1542,9 @@ export class BinaryConnection {
         rows = result.rows;
         // Prefer the executor's status (it knows whether INSERT had a
         // RETURNING clause, etc.) over the heuristic prefix detection.
-        if (result.status)
+        if (result.status) {
           commandStatus = result.status;
+        }
       } else {
         // No executor wired up — used by the protocol-only test fixtures
         // that don't spin up a real database. Surface one placeholder
@@ -1537,7 +1596,9 @@ export class BinaryConnection {
         stateData: stateResp.stateData
       });
     } catch (err) {
-      const errorCode = err instanceof Error ? mapErrorToGelCode(err) : GEL_ERROR_CODES.InternalServerError;
+      const errorCode = err instanceof Error ?
+        mapErrorToGelCode(err) :
+        GEL_ERROR_CODES.InternalServerError;
       await this.sendErrorWithCode(
         err instanceof Error ? err.message : String(err),
         errorCode
@@ -1596,14 +1657,18 @@ export class BinaryConnection {
     if (cmd.startsWith("with ")) {
       // WITH clause prefix — look for the actual command after WITH block
       // Simple heuristic: check for SELECT, INSERT, etc. after WITH
-      if (cmd.includes(" select "))
+      if (cmd.includes(" select ")) {
         return "SELECT";
-      if (cmd.includes(" insert "))
+      }
+      if (cmd.includes(" insert ")) {
         return "INSERT";
-      if (cmd.includes(" update "))
+      }
+      if (cmd.includes(" update ")) {
         return "UPDATE";
-      if (cmd.includes(" delete "))
+      }
+      if (cmd.includes(" delete ")) {
         return "DELETE";
+      }
     }
 
     return "SELECT";
@@ -1706,8 +1771,9 @@ export class BinaryConnection {
   // -----------------------------------------------------------------------
 
   private async sendMessage(msg: ServerMessage): Promise<void> {
-    if (this.closed)
+    if (this.closed) {
       return;
+    }
     const bytes = encodeServerMessage(msg);
     await this.writeAll(bytes);
   }
@@ -1749,8 +1815,9 @@ export class BinaryConnection {
     let offset = 0;
     while (offset < n) {
       const nread = await this.conn.read(buf.subarray(offset));
-      if (nread === null)
+      if (nread === null) {
         return null;
+      }
       offset += nread;
     }
     return buf;

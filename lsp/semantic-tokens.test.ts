@@ -1,9 +1,16 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Semantic-tokens provider tests (LSP Phase 8c)
  */
 
 import { assertEquals } from "@std/assert";
-import { provideSemanticTokens, SEMANTIC_TOKEN_LEGEND, SEMANTIC_TOKEN_TYPES } from "./semantic-tokens.ts";
+import {
+  provideSemanticTokens,
+  SEMANTIC_TOKEN_LEGEND,
+  SEMANTIC_TOKEN_TYPES
+} from "./semantic-tokens.ts";
 
 function tokenTypeIdx(name: typeof SEMANTIC_TOKEN_TYPES[number]): number {
   return SEMANTIC_TOKEN_TYPES.indexOf(name);

@@ -1,15 +1,27 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * OAuth extension for Disc database
  */
 
 import { BaseExtension } from "../extensions/base-extension.ts";
 import { ExtensionConfigError } from "../extensions/errors.ts";
-import type { ExtensionContext, ExtensionDatabaseSetup, ExtensionMetadata, ExtensionRoute } from "../extensions/types.ts";
+import type {
+  ExtensionContext,
+  ExtensionDatabaseSetup,
+  ExtensionMetadata,
+  ExtensionRoute
+} from "../extensions/types.ts";
 import { normalizePkceParam } from "./pkce.ts";
 import { matchRedirectUri } from "./redirect-matcher.ts";
 import { OAuthStateManager } from "./state-manager.ts";
 import { exchangeCodeForToken, fetchUserInfo } from "./token-exchange.ts";
-import type { OAuthConfig, OAuthErrorResponse, OAuthProviderConfig } from "./types.ts";
+import type {
+  OAuthConfig,
+  OAuthErrorResponse,
+  OAuthProviderConfig
+} from "./types.ts";
 
 const MAX_METADATA_BYTES = 2048;
 
@@ -25,8 +37,9 @@ const RESERVED_AUTHORIZE_PARAMS = new Set([
 
 function validateExtraAuthorizeParams(provider: OAuthProviderConfig): void {
   const extras = provider.extraAuthorizeParams;
-  if (!extras)
+  if (!extras) {
     return;
+  }
   for (const key of Object.keys(extras)) {
     if (RESERVED_AUTHORIZE_PARAMS.has(key)) {
       throw new ExtensionConfigError(
@@ -272,7 +285,9 @@ export class OAuthExtension extends BaseExtension {
     // access_type=offline + prompt=consent for refresh tokens). Reserved
     // names were rejected at construction; what's left is safe to append.
     if (provider.extraAuthorizeParams) {
-      for (const [key, value] of Object.entries(provider.extraAuthorizeParams)) {
+      for (
+        const [key, value] of Object.entries(provider.extraAuthorizeParams)
+      ) {
         params.set(key, value);
       }
     }

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Live-schema-apply admin endpoint (Bundle K — Disc-original feature #3a).
  *

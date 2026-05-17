@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for Rewrite Rules (Stage 32 Phase 5)
  *
@@ -78,18 +81,21 @@ Deno.test("Parser - rewrite with single event (insert)", () => {
 
   const mod = doc.declarations[0];
   assertEquals(mod.kind, "ModuleDeclaration");
-  if (mod.kind !== "ModuleDeclaration")
+  if (mod.kind !== "ModuleDeclaration") {
     return;
+  }
 
   const postType = mod.declarations[0];
   assertEquals(postType.kind, "TypeDeclaration");
-  if (postType.kind !== "TypeDeclaration")
+  if (postType.kind !== "TypeDeclaration") {
     return;
+  }
 
   const prop = postType.members.find(m => m.kind === "PropertyDeclaration");
   assertEquals(prop !== undefined, true);
-  if (!prop || prop.kind !== "PropertyDeclaration")
+  if (!prop || prop.kind !== "PropertyDeclaration") {
     return;
+  }
 
   assertEquals(prop.rewrites !== undefined, true);
   assertEquals(prop.rewrites!.length, 1);
@@ -110,15 +116,18 @@ Deno.test("Parser - rewrite with multiple events (insert, update)", () => {
   `);
 
   const mod = doc.declarations[0];
-  if (mod.kind !== "ModuleDeclaration")
+  if (mod.kind !== "ModuleDeclaration") {
     return;
+  }
   const postType = mod.declarations[0];
-  if (postType.kind !== "TypeDeclaration")
+  if (postType.kind !== "TypeDeclaration") {
     return;
+  }
 
   const prop = postType.members.find(m => m.kind === "PropertyDeclaration");
-  if (!prop || prop.kind !== "PropertyDeclaration")
+  if (!prop || prop.kind !== "PropertyDeclaration") {
     return;
+  }
 
   assertEquals(prop.rewrites!.length, 1);
   assertEquals(prop.rewrites![0].events, ["insert", "update"]);
@@ -136,17 +145,20 @@ Deno.test("Parser - rewrite with __old__ reference expression", () => {
   `);
 
   const mod = doc.declarations[0];
-  if (mod.kind !== "ModuleDeclaration")
+  if (mod.kind !== "ModuleDeclaration") {
     return;
+  }
   const counterType = mod.declarations[0];
-  if (counterType.kind !== "TypeDeclaration")
+  if (counterType.kind !== "TypeDeclaration") {
     return;
+  }
 
   const prop = counterType.members.find(
     m => m.kind === "PropertyDeclaration"
   );
-  if (!prop || prop.kind !== "PropertyDeclaration")
+  if (!prop || prop.kind !== "PropertyDeclaration") {
     return;
+  }
 
   assertEquals(prop.rewrites!.length, 1);
   assertEquals(prop.rewrites![0].events, ["update"]);
@@ -166,15 +178,18 @@ Deno.test("Parser - property with both constraint and rewrite", () => {
   `);
 
   const mod = doc.declarations[0];
-  if (mod.kind !== "ModuleDeclaration")
+  if (mod.kind !== "ModuleDeclaration") {
     return;
+  }
   const postType = mod.declarations[0];
-  if (postType.kind !== "TypeDeclaration")
+  if (postType.kind !== "TypeDeclaration") {
     return;
+  }
 
   const prop = postType.members.find(m => m.kind === "PropertyDeclaration");
-  if (!prop || prop.kind !== "PropertyDeclaration")
+  if (!prop || prop.kind !== "PropertyDeclaration") {
     return;
+  }
 
   assertEquals(prop.constraints !== undefined, true);
   assertEquals(prop.constraints!.length, 1);
@@ -198,11 +213,13 @@ Deno.test("Parser - type with multiple properties having rewrites", () => {
   `);
 
   const mod = doc.declarations[0];
-  if (mod.kind !== "ModuleDeclaration")
+  if (mod.kind !== "ModuleDeclaration") {
     return;
+  }
   const postType = mod.declarations[0];
-  if (postType.kind !== "TypeDeclaration")
+  if (postType.kind !== "TypeDeclaration") {
     return;
+  }
 
   const propsWithRewrites = postType.members.filter(
     m => m.kind === "PropertyDeclaration" && m.rewrites && m.rewrites.length > 0

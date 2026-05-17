@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Go-to-definition tests (#7411 + #655 — Phase 3)
  */
@@ -10,8 +13,9 @@ function findPos(haystack: string, needle: string, occurrence = 0): Position {
   let offset = -1;
   for (let i = 0; i <= occurrence; i++) {
     offset = haystack.indexOf(needle, offset + 1);
-    if (offset === -1)
+    if (offset === -1) {
       throw new Error(`needle ${needle} occurrence ${i} not found`);
+    }
   }
   let line = 0;
   let character = 0;
@@ -84,6 +88,10 @@ Deno.test("provideDefinition - whitespace cursor returns null", () => {
   const text = `module default {
 
 }`;
-  const loc = provideDefinition(text, { line: 1, character: 0 }, "file:///t.disc");
+  const loc = provideDefinition(
+    text,
+    { line: 1, character: 0 },
+    "file:///t.disc"
+  );
   assertEquals(loc, null);
 });

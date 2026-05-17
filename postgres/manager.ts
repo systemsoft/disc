@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 import { ensureDir } from "@std/fs";
 import { join } from "@std/path";
 import { PostgresInstance, PostgresInstanceOptions } from "./instance.ts";

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * SDL hover provider (#7411 + #655)
  *
@@ -14,8 +17,9 @@ import { lookupScalar } from "./scalar-info.ts";
 
 export function provideHover(text: string, pos: Position): Hover | null {
   const word = wordAt(text, pos);
-  if (!word)
+  if (!word) {
     return null;
+  }
 
   // Built-in scalar?
   const scalar = lookupScalar(word);
@@ -50,11 +54,13 @@ const IDENT = /[A-Za-z_][A-Za-z_0-9]*/g;
 
 function wordAt(text: string, pos: Position): string | null {
   const lines = text.split("\n");
-  if (pos.line < 0 || pos.line >= lines.length)
+  if (pos.line < 0 || pos.line >= lines.length) {
     return null;
+  }
   const line = lines[pos.line];
-  if (pos.character < 0 || pos.character > line.length)
+  if (pos.character < 0 || pos.character > line.length) {
     return null;
+  }
 
   IDENT.lastIndex = 0;
   let m: RegExpExecArray | null;
@@ -80,7 +86,10 @@ function wordAt(text: string, pos: Position): string | null {
  * in TS/JS host files — Phase 7) can reuse the same lookup without
  * duplicating SDL parsing.
  */
-export function findUserType(text: string, name: string): AST.TypeDeclaration | null {
+export function findUserType(
+  text: string,
+  name: string
+): AST.TypeDeclaration | null {
   // Re-parse the document with recovery so errors elsewhere don't
   // suppress hover on a valid section. Cheap enough at editor latency.
   let document: AST.SDLDocument;
@@ -95,19 +104,24 @@ export function findUserType(text: string, name: string): AST.TypeDeclaration | 
     if (decl.kind === "ModuleDeclaration") {
       for (const inner of decl.declarations) {
         const found = matchType(inner, name);
-        if (found)
+        if (found) {
           return found;
+        }
       }
     } else {
       const found = matchType(decl, name);
-      if (found)
+      if (found) {
         return found;
+      }
     }
   }
   return null;
 }
 
-function matchType(decl: AST.Declaration, name: string): AST.TypeDeclaration | null {
+function matchType(
+  decl: AST.Declaration,
+  name: string
+): AST.TypeDeclaration | null {
   if (decl.kind === "TypeDeclaration" && decl.name.value === name) {
     return decl;
   }

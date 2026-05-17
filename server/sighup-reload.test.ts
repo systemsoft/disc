@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for SIGHUP-triggered config hot-reload.
  *
@@ -15,7 +18,12 @@
 import { assertEquals, assertExists } from "@std/assert";
 import { HttpServer } from "./http.ts";
 import { DiscServer } from "./server.ts";
-import type { ProtocolHandler, QueryContext, QueryRequest, QueryResponse } from "./types.ts";
+import type {
+  ProtocolHandler,
+  QueryContext,
+  QueryRequest,
+  QueryResponse
+} from "./types.ts";
 
 /**
  * Minimal ProtocolHandler stub. The reload path doesn't need a working
@@ -72,19 +80,21 @@ async function withEnv(
   const restore: Array<[string, string | undefined]> = [];
   for (const [k, v] of Object.entries(vars)) {
     restore.push([k, Deno.env.get(k)]);
-    if (v === undefined)
+    if (v === undefined) {
       Deno.env.delete(k);
-    else
+    } else {
       Deno.env.set(k, v);
+    }
   }
   try {
     await fn();
   } finally {
     for (const [k, prev] of restore) {
-      if (prev === undefined)
+      if (prev === undefined) {
         Deno.env.delete(k);
-      else
+      } else {
         Deno.env.set(k, prev);
+      }
     }
   }
 }
@@ -102,7 +112,9 @@ Deno.test("reloadConfig - applies new requestTimeout from env", async () => {
       assertEquals(server.get_config().requestTimeout, 9999);
       // HttpServer's view of the value (used per-request) was also updated.
       assertEquals(
-        (http as unknown as { config: { requestTimeout: number; }; }).config.requestTimeout,
+        (http as unknown as { config: { requestTimeout: number; }; })
+          .config
+          .requestTimeout,
         9999
       );
     } finally {
@@ -121,7 +133,9 @@ Deno.test("reloadConfig - applies new enableCors toggle", async () => {
 
       assertEquals(server.get_config().enableCors, false);
       assertEquals(
-        (http as unknown as { config: { enableCors: boolean; }; }).config.enableCors,
+        (http as unknown as { config: { enableCors: boolean; }; })
+          .config
+          .enableCors,
         false
       );
     } finally {
@@ -144,7 +158,9 @@ Deno.test("reloadConfig - updates corsOrigins allowlist", async () => {
       const origins = server.get_config().corsOrigins;
       assertEquals(origins, ["https://new.example", "https://other.example"]);
       assertEquals(
-        (http as unknown as { config: { corsOrigins?: string[]; }; }).config.corsOrigins,
+        (http as unknown as { config: { corsOrigins?: string[]; }; })
+          .config
+          .corsOrigins,
         ["https://new.example", "https://other.example"]
       );
     } finally {

@@ -1,8 +1,16 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * CLI Commands Tests - Test core command functionality
  */
 
+/*** NATIVE ------------------------------------------- ***/
+
 import { assert, assertEquals } from "@std/assert";
+
+/*** UTILITY ------------------------------------------ ***/
+
 import {
   assertErrorContains,
   assertLogContains,
@@ -15,52 +23,25 @@ import {
   TEST_SCHEMA
 } from "../tests/test-utils.ts";
 
-// Mock configuration interfaces
-
-// Mock the actual command handlers
-function createMockMigrateConfig(args: any): any {
-  return {
-    migrationsDir: "./migrations",
-    schemaFile: args.schema || "./schema.disc",
-    databaseUrl: Deno.env.get("DATABASE_URL") ||
-      "postgresql://localhost:5432/disc_dev",
-    dryRun: args["dry-run"] || false,
-    autoApprove: args["auto-approve"] || false,
-    backupBeforeMigration: true,
-    rollbackOnError: true
-  };
-}
-
-function createMockCodegenConfig(args: any): any {
-  return {
-    outputDir: args.output || "./generated",
-    target: args.target || "client",
-    includeQueryBuilders: args["no-queries"] !== true,
-    includeMutations: args["no-mutations"] !== true,
-    includeClient: args["no-client"] !== true,
-    formatOutput: args["no-format"] !== true
-  };
-}
+/*** RUNTIME ------------------------------------------ ***/
 
 Deno.test("CLI Commands - init command behavior", async () => {
   const console = new ConsoleCapture();
   const tempDir = await createTempDir();
 
   try {
-    // Mock init command - would create project structure
+    /*** Mock init command - would create project structure ***/
     const projectName = "test-project";
 
-    // Simulate init command output
+    /*** Simulate init command output ***/
     console.capture();
-    console.log("🚀 Initializing new Disc project...");
+    console.log("🚀 Initializing new Disc project…");
     console.log(`📁 Creating project: ${projectName}`);
     console.log("✅ Project initialized successfully!");
 
     const logs = console.getLogs();
     assert(logs.some(log => log.includes("Initializing new Disc project")));
-    assert(
-      logs.some(log => log.includes("Project initialized successfully"))
-    );
+    assert(logs.some(log => log.includes("Project initialized successfully")));
   } finally {
     console.restore();
     await cleanupTempDir(tempDir);
@@ -72,15 +53,15 @@ Deno.test("CLI Commands - migrate create workflow", async () => {
   const tempDir = await createTempDir();
 
   try {
-    // Create test schema
+    /*** Create test schema ***/
     const schemaPath = await createTestSchema(tempDir, TEST_SCHEMA);
 
-    // Mock migrate --create command
+    /*** Mock migrate --create command ***/
     const args = {
-      schema: schemaPath,
+      "auto-approve": false,
       create: true,
       "dry-run": false,
-      "auto-approve": false
+      schema: schemaPath
     };
 
     const config = createMockMigrateConfig(args);
@@ -89,15 +70,13 @@ Deno.test("CLI Commands - migrate create workflow", async () => {
     assertEquals(config.backupBeforeMigration, true);
     assertEquals(config.rollbackOnError, true);
 
-    // Simulate migration creation output
+    /*** Simulate migration creation output ***/
     console.capture();
-    console.log("🚀 Creating new migration...");
+    console.log("🚀 Creating new migration…");
     console.log("📋 Migration Plan:");
     console.log("   Operations: 3");
     console.log("💾 Generated DDL:");
-    console.log(
-      "   1. CREATE TABLE users (id UUID PRIMARY KEY, name TEXT NOT NULL);"
-    );
+    console.log("   1. CREATE TABLE users (id UUID PRIMARY KEY, name TEXT NOT NULL);");
     console.log("✅ Migration created successfully");
 
     assertLogContains(console, "Creating new migration");
@@ -117,19 +96,19 @@ Deno.test("CLI Commands - migrate apply workflow", async () => {
   try {
     const schemaPath = await createTestSchema(tempDir, SIMPLE_SCHEMA);
 
-    // Mock migrate (apply) command
+    /*** Mock migrate (apply) command ***/
     const args = {
-      schema: schemaPath,
+      "auto-approve": false,
       "dry-run": true,
-      "auto-approve": false
+      schema: schemaPath
     };
 
     const config = createMockMigrateConfig(args);
     assertEquals(config.dryRun, true);
 
-    // Simulate apply workflow output
+    /*** Simulate apply workflow output ***/
     console.capture();
-    console.log("🚀 Applying migrations...");
+    console.log("🚀 Applying migrations…");
     console.log("📋 Applying 1 migration:");
     console.log("  1. Initial schema");
     console.log("🔄 DRY RUN - No changes will be applied");
@@ -153,34 +132,34 @@ Deno.test("CLI Commands - serve command configuration", () => {
     env.set("DISC_PORT", "8080");
     env.set("DISC_HOST", "0.0.0.0");
 
-    // Mock serve command with CLI args
+    /*** Mock serve command with CLI args ***/
     const args = {
-      port: "9000", // Should override environment
-      config: "./custom.json"
+      config: "./custom.json",
+      port: "9000" /*** Should override environment ***/
     };
 
-    // Simulate server configuration
+    /*** Simulate server configuration ***/
     const defaultConfig = {
-      host: Deno.env.get("DISC_HOST") || "localhost",
-      port: parseInt(Deno.env.get("DISC_PORT") || "5656"),
       enableCors: true,
-      enableWebsockets: true
+      enableWebsockets: true,
+      host: Deno.env.get("DISC_HOST") || "localhost",
+      port: parseInt(Deno.env.get("DISC_PORT") || "5656")
     };
 
-    // Apply CLI overrides
+    /*** Apply CLI overrides ***/
     const finalConfig = {
       ...defaultConfig,
       port: args.port ? parseInt(args.port) : defaultConfig.port
     };
 
-    assertEquals(finalConfig.host, "0.0.0.0"); // from env
-    assertEquals(finalConfig.port, 9000); // from CLI override
+    assertEquals(finalConfig.host, "0.0.0.0"); /*** from env ***/
+    assertEquals(finalConfig.port, 9000); /*** from CLI override ***/
     assertEquals(finalConfig.enableCors, true);
     assertEquals(finalConfig.enableWebsockets, true);
 
-    // Simulate server startup output
+    /*** Simulate server startup output ***/
     console.capture();
-    console.log("🚀 Starting Disc Database Server...");
+    console.log("🚀 Starting Disc Database Server…");
     console.log(`✅ Server started on ${finalConfig.host}:${finalConfig.port}`);
 
     assertLogContains(console, "Starting Disc Database Server");
@@ -195,9 +174,9 @@ Deno.test("CLI Commands - shell command placeholder", () => {
   const console = new ConsoleCapture();
 
   try {
-    // Mock shell command (currently unimplemented)
+    /*** Mock shell command (currently unimplemented) ***/
     console.capture();
-    console.log("Opening EdgeQL REPL...");
+    console.log("Opening EdgeQL REPL…");
     console.log("TODO: Implement interactive shell");
 
     assertLogContains(console, "Opening EdgeQL REPL");
@@ -215,15 +194,15 @@ Deno.test("CLI Commands - codegen workflow", async () => {
     const schemaPath = await createTestSchema(tempDir, SIMPLE_SCHEMA);
     const outputDir = `${tempDir}/generated`;
 
-    // Mock codegen command
+    /*** Mock codegen command ***/
     const args = {
+      "no-client": false,
+      "no-format": false,
+      "no-mutations": false,
+      "no-queries": false,
       output: outputDir,
       schema: schemaPath,
-      target: "client",
-      "no-queries": false,
-      "no-mutations": false,
-      "no-client": false,
-      "no-format": false
+      target: "client"
     };
 
     const config = createMockCodegenConfig(args);
@@ -235,14 +214,14 @@ Deno.test("CLI Commands - codegen workflow", async () => {
     assertEquals(config.includeClient, true);
     assertEquals(config.formatOutput, true);
 
-    // Simulate codegen output
+    /*** Simulate codegen output ***/
     console.capture();
-    console.log("🚀 Generating TypeScript types...");
+    console.log("🚀 Generating TypeScript types…");
     console.log(`📋 Configuration:`);
     console.log(`   Schema: ${schemaPath}`);
     console.log(`   Output: ${outputDir}`);
     console.log(`   Target: ${config.target}`);
-    console.log(`💾 Writing 3 files...`);
+    console.log(`💾 Writing 3 files…`);
     console.log(`📊 Generation Summary:`);
     console.log(`   Files generated: 3`);
     console.log(`   Types generated: 2`);
@@ -262,9 +241,9 @@ Deno.test("CLI Commands - watch command placeholder", () => {
   const console = new ConsoleCapture();
 
   try {
-    // Mock watch command (currently unimplemented)
+    /*** Mock watch command (currently unimplemented) ***/
     console.capture();
-    console.log("Watching schema files...");
+    console.log("Watching schema files…");
     console.log("TODO: Implement file watcher");
 
     assertLogContains(console, "Watching schema files");
@@ -281,14 +260,14 @@ Deno.test("CLI Commands - error handling for invalid schema", async () => {
   try {
     const invalidSchemaPath = `${tempDir}/nonexistent.disc`;
 
-    // Mock error handling for missing schema file
+    /*** Mock error handling for missing schema file ***/
     const schemaExists = await Deno
       .stat(invalidSchemaPath)
       .then(() => true)
       .catch(() => false);
     assert(!schemaExists, "Schema file should not exist");
 
-    // Simulate error output
+    /*** Simulate error output ***/
     console.capture();
     console.error(`❌ Schema file not found: ${invalidSchemaPath}`);
 
@@ -304,17 +283,13 @@ Deno.test("CLI Commands - migration validation warnings", () => {
   const console = new ConsoleCapture();
 
   try {
-    // Mock migration with validation warnings
-    // Simulate validation warning output
+    /*** Mock migration with validation warnings ***/
+    /*** Simulate validation warning output ***/
     console.capture();
-    console.log(
-      `⚠️  Migration validation warnings: Potentially destructive operation detected`
-    );
-    console.log(
-      "Do you want to proceed with potentially dangerous operations? (y/N)"
-    );
+    console.log(`⚠️  Migration validation warnings: Potentially destructive operation detected`);
+    console.log("Do you want to proceed with potentially dangerous operations? (y/N)");
 
-    // Simulate user declining
+    /*** Simulate user declining ***/
     console.log("Migration cancelled");
 
     assertLogContains(console, "Migration validation warnings");
@@ -329,14 +304,13 @@ Deno.test("CLI Commands - environment variable defaults", () => {
   const env = new EnvMock();
 
   try {
-    // Test without DATABASE_URL
+    /*** Test without DATABASE_URL ***/
     env.clear("DATABASE_URL");
 
-    const defaultDbUrl = Deno.env.get("DATABASE_URL") ||
-      "postgresql://localhost:5432/disc_dev";
+    const defaultDbUrl = Deno.env.get("DATABASE_URL") || "postgresql://localhost:5432/disc_dev";
     assertEquals(defaultDbUrl, "postgresql://localhost:5432/disc_dev");
 
-    // Test with DATABASE_URL
+    /*** Test with DATABASE_URL ***/
     env.set("DATABASE_URL", "postgresql://custom:5432/custom_db");
     const customDbUrl = Deno.env.get("DATABASE_URL");
     assertEquals(customDbUrl, "postgresql://custom:5432/custom_db");
@@ -346,12 +320,12 @@ Deno.test("CLI Commands - environment variable defaults", () => {
 });
 
 Deno.test("CLI Commands - codegen config validation", () => {
-  // Test all no-* flags set to true
+  /*** Test all no-* flags set to true ***/
   const restrictiveArgs = {
-    "no-queries": true,
-    "no-mutations": true,
     "no-client": true,
-    "no-format": true
+    "no-format": true,
+    "no-mutations": true,
+    "no-queries": true
   };
 
   const restrictiveConfig = createMockCodegenConfig(restrictiveArgs);
@@ -361,12 +335,12 @@ Deno.test("CLI Commands - codegen config validation", () => {
   assertEquals(restrictiveConfig.includeClient, false);
   assertEquals(restrictiveConfig.formatOutput, false);
 
-  // Test all no-* flags set to false
+  /*** Test all no-* flags set to false ***/
   const permissiveArgs = {
-    "no-queries": false,
-    "no-mutations": false,
     "no-client": false,
-    "no-format": false
+    "no-format": false,
+    "no-mutations": false,
+    "no-queries": false
   };
 
   const permissiveConfig = createMockCodegenConfig(permissiveArgs);
@@ -377,11 +351,12 @@ Deno.test("CLI Commands - codegen config validation", () => {
   assertEquals(permissiveConfig.formatOutput, true);
 });
 
-// ── Security-toggle CLI flags (gh/geldata#5234) ─────────────────────
+/*** --- Security-toggle CLI flags (gh/geldata#5234) --- ***/
 
 Deno.test("applySecurityToggleEnvVars — sets DISC_REQUIRE_AUTH when --require-auth is on", async () => {
   const { applySecurityToggleEnvVars } = await import("./commands.ts");
   const env = new EnvMock();
+
   try {
     applySecurityToggleEnvVars({ requireAuth: true });
     assertEquals(Deno.env.get("DISC_REQUIRE_AUTH"), "true");
@@ -393,6 +368,7 @@ Deno.test("applySecurityToggleEnvVars — sets DISC_REQUIRE_AUTH when --require-
 Deno.test("applySecurityToggleEnvVars — sets DISC_READ_ONLY when --read-only is on", async () => {
   const { applySecurityToggleEnvVars } = await import("./commands.ts");
   const env = new EnvMock();
+
   try {
     applySecurityToggleEnvVars({ readOnly: true });
     assertEquals(Deno.env.get("DISC_READ_ONLY"), "true");
@@ -404,6 +380,7 @@ Deno.test("applySecurityToggleEnvVars — sets DISC_READ_ONLY when --read-only i
 Deno.test("applySecurityToggleEnvVars — sets DISC_TRUST_PROXY when --trust-proxy is on", async () => {
   const { applySecurityToggleEnvVars } = await import("./commands.ts");
   const env = new EnvMock();
+
   try {
     applySecurityToggleEnvVars({ trustProxy: true });
     assertEquals(Deno.env.get("DISC_TRUST_PROXY"), "true");
@@ -415,15 +392,24 @@ Deno.test("applySecurityToggleEnvVars — sets DISC_TRUST_PROXY when --trust-pro
 Deno.test("applySecurityToggleEnvVars — leaves env vars untouched when flags are absent or false", async () => {
   const { applySecurityToggleEnvVars } = await import("./commands.ts");
   const env = new EnvMock();
+
   try {
     Deno.env.delete("DISC_REQUIRE_AUTH");
     Deno.env.delete("DISC_READ_ONLY");
     Deno.env.delete("DISC_TRUST_PROXY");
-    applySecurityToggleEnvVars({}); // no flags
+
+    applySecurityToggleEnvVars({}); /*** no flags ***/
+
     assertEquals(Deno.env.get("DISC_REQUIRE_AUTH"), undefined);
     assertEquals(Deno.env.get("DISC_READ_ONLY"), undefined);
     assertEquals(Deno.env.get("DISC_TRUST_PROXY"), undefined);
-    applySecurityToggleEnvVars({ requireAuth: false, readOnly: false, trustProxy: false });
+
+    applySecurityToggleEnvVars({
+      requireAuth: false,
+      readOnly: false,
+      trustProxy: false
+    });
+
     assertEquals(Deno.env.get("DISC_REQUIRE_AUTH"), undefined);
     assertEquals(Deno.env.get("DISC_READ_ONLY"), undefined);
     assertEquals(Deno.env.get("DISC_TRUST_PROXY"), undefined);
@@ -435,8 +421,14 @@ Deno.test("applySecurityToggleEnvVars — leaves env vars untouched when flags a
 Deno.test("applySecurityToggleEnvVars — combines multiple flags", async () => {
   const { applySecurityToggleEnvVars } = await import("./commands.ts");
   const env = new EnvMock();
+
   try {
-    applySecurityToggleEnvVars({ requireAuth: true, readOnly: true, trustProxy: true });
+    applySecurityToggleEnvVars({
+      requireAuth: true,
+      readOnly: true,
+      trustProxy: true
+    });
+
     assertEquals(Deno.env.get("DISC_REQUIRE_AUTH"), "true");
     assertEquals(Deno.env.get("DISC_READ_ONLY"), "true");
     assertEquals(Deno.env.get("DISC_TRUST_PROXY"), "true");
@@ -444,3 +436,28 @@ Deno.test("applySecurityToggleEnvVars — combines multiple flags", async () => 
     env.restore();
   }
 });
+
+/*** HELPER ------------------------------------------- ***/
+
+function createMockCodegenConfig(args: any): any {
+  return {
+    formatOutput: args["no-format"] !== true,
+    includeClient: args["no-client"] !== true,
+    includeMutations: args["no-mutations"] !== true,
+    includeQueryBuilders: args["no-queries"] !== true,
+    outputDir: args.output || "./generated",
+    target: args.target || "client"
+  };
+}
+
+function createMockMigrateConfig(args: any): any {
+  return {
+    autoApprove: args["auto-approve"] || false,
+    backupBeforeMigration: true,
+    databaseUrl: Deno.env.get("DATABASE_URL") || "postgresql://localhost:5432/disc_dev",
+    dryRun: args["dry-run"] || false,
+    migrationsDir: "./migrations",
+    rollbackOnError: true,
+    schemaFile: args.schema || "./schema.disc"
+  };
+}

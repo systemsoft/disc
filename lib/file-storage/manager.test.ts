@@ -1,12 +1,24 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * FileManager integration tests using the in-memory TestDatabase
  * and LocalFileStorage on a tmpdir.
  */
 
-import { assert, assertEquals, assertRejects } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import {
+  assert,
+  assertEquals,
+  assertRejects
+} from "@std/assert";
 import { TestDatabase } from "../../auth/test-database.ts";
 import { LocalFileStorage } from "./local.ts";
-import { FileAccessDeniedError, FileManager, FileNotFoundError, FileTooLargeError } from "./manager.ts";
+import {
+  FileAccessDeniedError,
+  FileManager,
+  FileNotFoundError,
+  FileTooLargeError
+} from "./manager.ts";
 
 async function setup(): Promise<{
   manager: FileManager;
@@ -74,8 +86,9 @@ Deno.test("FileManager — content-addressed dedup: same bytes share a single bl
 
     // Only one underlying blob on disk
     const blobs: string[] = [];
-    for await (const entry of walk(root))
+    for await (const entry of walk(root)) {
       blobs.push(entry);
+    }
     assertEquals(blobs.length, 1);
   } finally {
     await cleanup();
@@ -119,8 +132,9 @@ Deno.test("FileManager — list returns only the requesting user's files", async
     const bList = await manager.list("user-B");
     assertEquals(aList.length, 2);
     assertEquals(bList.length, 1);
-    for (const f of aList)
+    for (const f of aList) {
       assertEquals(f.ownerUserId, "user-A");
+    }
   } finally {
     await cleanup();
   }
@@ -136,15 +150,21 @@ Deno.test("FileManager — delete removes metadata and (only when last ref) the 
     // Delete A's metadata; B still references the same blob.
     await manager.delete(a.id, "user-A");
     let blobs: string[] = [];
-    for await (const entry of walk(root))
+    for await (const entry of walk(root)) {
       blobs.push(entry);
-    assertEquals(blobs.length, 1, "blob retained while another row references it");
+    }
+    assertEquals(
+      blobs.length,
+      1,
+      "blob retained while another row references it"
+    );
 
     // Delete B's metadata; now blob is unreferenced and removed.
     await manager.delete(b.id, "user-B");
     blobs = [];
-    for await (const entry of walk(root))
+    for await (const entry of walk(root)) {
       blobs.push(entry);
+    }
     assertEquals(blobs.length, 0, "blob removed once unreferenced");
   } finally {
     await cleanup();

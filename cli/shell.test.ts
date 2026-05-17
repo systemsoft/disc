@@ -1,103 +1,55 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * CLI Shell Command Tests - Test interactive EdgeQL REPL functionality
  */
 
-import { assert } from "@std/assert";
-import { assertLogContains, cleanupTempDir, ConsoleCapture, createTempDir, createTestSchema, SIMPLE_SCHEMA } from "../tests/test-utils.ts";
+/*** NATIVE ------------------------------------------- ***/
 
-// Mock shell command implementation
+import { assert } from "@std/assert";
+
+/*** IMPORT ------------------------------------------- ***/
+
+import { default as dedent } from "@netopwibby/dedent";
+
+/*** UTILITY ------------------------------------------ ***/
+
+import {
+  assertLogContains,
+  cleanupTempDir,
+  ConsoleCapture,
+  createTempDir,
+  createTestSchema,
+  SIMPLE_SCHEMA
+} from "../tests/test-utils.ts";
+
 interface ShellOptions {
-  host?: string;
-  port?: number;
   database?: string;
-  schemaFile?: string;
-  nonInteractive?: boolean;
   execute?: string;
+  host?: string;
+  nonInteractive?: boolean;
+  port?: number;
+  schemaFile?: string;
 }
 
 interface ShellSession {
   connected: boolean;
   database: string;
+  history: string[];
   host: string;
   port: number;
   queryCount: number;
-  history: string[];
 }
 
-function createMockShellSession(options: ShellOptions = {}): ShellSession {
-  return {
-    connected: true,
-    database: options.database || "disc_dev",
-    host: options.host || "localhost",
-    port: options.port || 5656,
-    queryCount: 0,
-    history: []
-  };
-}
+/*** RUNTIME ------------------------------------------ ***/
 
-function mockShellCommand(options: ShellOptions = {}): string[] {
-  const output: string[] = [];
-
-  if (options.nonInteractive) {
-    output.push("🚀 Starting Disc shell in non-interactive mode...");
-  } else {
-    output.push("🚀 Starting Disc EdgeQL shell...");
-  }
-
-  const session = createMockShellSession(options);
-
-  output.push(`📡 Connected to Disc server at ${session.host}:${session.port}`);
-  output.push(`📊 Database: ${session.database}`);
-  output.push("");
-
-  if (options.execute) {
-    // Execute single query and exit
-    output.push(`disc> ${options.execute}`);
-
-    // Mock query execution
-    if (options.execute.toLowerCase().includes("select")) {
-      output.push(`[{"id": "123", "name": "Test User"}]`);
-      output.push(`(1 row)`);
-    } else if (options.execute.toLowerCase().includes("insert")) {
-      output.push(`{"id": "456"}`);
-      output.push(`(1 row inserted)`);
-    } else {
-      output.push(`Query executed successfully`);
-    }
-
-    session.queryCount++;
-    output.push("");
-    output.push("✅ Query executed, exiting...");
-  } else if (options.nonInteractive) {
-    output.push(
-      "💡 Use --execute to run a query, or omit --non-interactive for REPL mode"
-    );
-  } else {
-    // Interactive mode simulation
-    output.push("💡 Interactive EdgeQL shell. Type \\? for help, \\q to quit.");
-    output.push("");
-    output.push("Available commands:");
-    output.push("  \\?        Show help");
-    output.push("  \\q        Quit shell");
-    output.push("  \\d        List types");
-    output.push("  \\dt       List types (detailed)");
-    output.push("  \\c <db>   Connect to database");
-    output.push("  \\i <file> Execute file");
-    output.push("  \\timing   Toggle query timing");
-    output.push("");
-    output.push("disc>");
-  }
-
-  return output;
-}
-
-Deno.test("CLI Shell - basic shell startup", async () => {
+Deno.test("CLI Shell - basic shell startup", () => {
   const console = new ConsoleCapture();
 
   try {
-    const output = await mockShellCommand();
-
-    // Simulate shell output
+    const output = mockShellCommand();
+    /*** Simulate shell output ***/
     output.forEach(line => console.log(line));
 
     const logs = console.getLogs();
@@ -111,17 +63,17 @@ Deno.test("CLI Shell - basic shell startup", async () => {
   }
 });
 
-Deno.test("CLI Shell - custom connection parameters", async () => {
+Deno.test("CLI Shell - custom connection parameters", () => {
   const console = new ConsoleCapture();
 
   try {
     const options: ShellOptions = {
+      database: "custom_db",
       host: "192.168.1.100",
-      port: 8080,
-      database: "custom_db"
+      port: 8080
     };
 
-    const output = await mockShellCommand(options);
+    const output = mockShellCommand(options);
     output.forEach(line => console.log(line));
 
     const logs = console.getLogs();
@@ -132,7 +84,7 @@ Deno.test("CLI Shell - custom connection parameters", async () => {
   }
 });
 
-Deno.test("CLI Shell - execute single query", async () => {
+Deno.test("CLI Shell - execute single query", () => {
   const console = new ConsoleCapture();
 
   try {
@@ -140,7 +92,7 @@ Deno.test("CLI Shell - execute single query", async () => {
       execute: "select User { name, email }"
     };
 
-    const output = await mockShellCommand(options);
+    const output = mockShellCommand(options);
     output.forEach(line => console.log(line));
 
     const logs = console.getLogs();
@@ -153,7 +105,7 @@ Deno.test("CLI Shell - execute single query", async () => {
   }
 });
 
-Deno.test("CLI Shell - non-interactive mode", async () => {
+Deno.test("CLI Shell - non-interactive mode", () => {
   const console = new ConsoleCapture();
 
   try {
@@ -161,7 +113,7 @@ Deno.test("CLI Shell - non-interactive mode", async () => {
       nonInteractive: true
     };
 
-    const output = await mockShellCommand(options);
+    const output = mockShellCommand(options);
     output.forEach(line => console.log(line));
 
     const logs = console.getLogs();
@@ -176,8 +128,8 @@ Deno.test("CLI Shell - help command output", () => {
   const console = new ConsoleCapture();
 
   try {
-    // Mock help command output
-    console.log("📖 EdgeQL Shell Help");
+    /*** Mock help command output ***/
+    console.log("[READ] EdgeQL Shell Help");
     console.log("");
     console.log("COMMANDS:");
     console.log("  \\?         Show this help message");
@@ -211,8 +163,8 @@ Deno.test("CLI Shell - list types command", () => {
   const console = new ConsoleCapture();
 
   try {
-    // Mock \d command output
-    console.log("📋 Types in module 'default':");
+    /*** Mock \d command output ***/
+    console.log(`[INFO] Types in module "default":`);
     console.log("");
     console.log("  User");
     console.log("  Post");
@@ -221,7 +173,7 @@ Deno.test("CLI Shell - list types command", () => {
     console.log("3 types found");
 
     const logs = console.getLogs();
-    assertLogContains(logs, "Types in module 'default'");
+    assertLogContains(logs, `Types in module "default"`);
     assertLogContains(logs, "User");
     assertLogContains(logs, "Post");
     assertLogContains(logs, "3 types found");
@@ -234,8 +186,8 @@ Deno.test("CLI Shell - detailed types command", () => {
   const console = new ConsoleCapture();
 
   try {
-    // Mock \dt command output
-    console.log("📊 Detailed type information:");
+    /*** Mock \dt command output ***/
+    console.log("[INFO] Detailed type information:");
     console.log("");
     console.log("Type: User");
     console.log("  Properties:");
@@ -270,13 +222,13 @@ Deno.test("CLI Shell - query timing", () => {
   const console = new ConsoleCapture();
 
   try {
-    // Mock query with timing enabled
+    /*** Mock query with timing enabled ***/
     console.log("disc> \\timing");
-    console.log("⏱️  Query timing is now ON");
+    console.log("[TIME]  Query timing is now ON");
     console.log("");
     console.log("disc> select User { name } limit 10;");
     console.log("[{\"name\": \"Ada\"}, {\"name\": \"Billie\"}]");
-    console.log("⏱️  Time: 15.234ms");
+    console.log("[TIME]  Time: 15.234ms");
     console.log("(2 rows)");
 
     const logs = console.getLogs();
@@ -291,18 +243,16 @@ Deno.test("CLI Shell - connection error handling", () => {
   const console = new ConsoleCapture();
 
   try {
-    // Mock connection failure
-    console.error("❌ Failed to connect to Disc server");
-    console.error("📡 Could not reach localhost:5656");
-    console.error("💡 Make sure the Disc server is running with 'disc serve'");
-    console.error("💡 Check connection parameters: --host, --port, --database");
+    /*** Mock connection failure ***/
+    console.error("[FAIL] Failed to connect to Disc server");
+    console.error("[CONN] Could not reach localhost:5656");
+    console.error(`[INFO] Make sure the Disc server is running with "disc serve"`);
+    console.error("[INFO] Check connection parameters: --host, --port, --database");
 
     const errorLogs = console.getErrorLogs();
     assert(errorLogs.some(log => log.includes("Failed to connect")));
     assert(errorLogs.some(log => log.includes("Could not reach")));
-    assert(
-      errorLogs.some(log => log.includes("Make sure the Disc server is running"))
-    );
+    assert(errorLogs.some(log => log.includes("Make sure the Disc server is running")));
   } finally {
     console.restore();
   }
@@ -313,22 +263,25 @@ Deno.test("CLI Shell - file execution", async () => {
   const tempDir = await createTempDir();
 
   try {
-    // Create test query file
+    /*** Create test query file ***/
     const queryFile = `${tempDir}/test_queries.edgeql`;
-    const queryContent = `-- Test queries file
-select User { name, email };
 
-insert Post {
-  title := "Test Post",
-  content := "Test content",
-  author := (select User filter .name = "Ada")
-};`;
+    const queryContent = dedent`
+      -- Test queries file
+      select User { name, email };
+
+      insert Post {
+        title := "Test Post",
+        content := "Test content",
+        author := (select User filter .name = "Ada")
+      };
+    `;
 
     await Deno.writeTextFile(queryFile, queryContent);
 
-    // Mock \i command execution
+    /*** Mock \i command execution ***/
     console.log(`disc> \\i ${queryFile}`);
-    console.log("📖 Executing queries from file...");
+    console.log("[READ] Executing queries from file…");
     console.log("");
     console.log("Query 1: select User { name, email };");
     console.log("[{\"name\": \"Ada\", \"email\": \"ada@example.com\"}]");
@@ -338,7 +291,7 @@ insert Post {
     console.log("{\"id\": \"789\"}");
     console.log("(1 row inserted)");
     console.log("");
-    console.log("✅ File execution completed. 2 queries executed.");
+    console.log("[ OK ] File execution completed. 2 queries executed.");
 
     const logs = console.getLogs();
     assertLogContains(logs, "Executing queries from file");
@@ -355,16 +308,14 @@ Deno.test("CLI Shell - command history", () => {
   const console = new ConsoleCapture();
 
   try {
-    // Mock \history command
-    console.log("📚 Command History:");
+    /*** Mock \history command ***/
+    console.log("[READ] Command History:");
     console.log("");
     console.log("  1  select User { name };");
     console.log("  2  \\d");
     console.log("  3  select Post { title, author: { name } };");
     console.log("  4  \\timing");
-    console.log(
-      "  5  insert User { name := \"Test\", email := \"test@example.com\" };"
-    );
+    console.log("  5  insert User { name := \"Test\", email := \"test@example.com\" };");
     console.log("");
     console.log("5 commands in history");
 
@@ -382,7 +333,7 @@ Deno.test("CLI Shell - auto-completion simulation", () => {
   const console = new ConsoleCapture();
 
   try {
-    // Mock auto-completion behavior
+    /*** Mock auto-completion behavior ***/
     console.log("disc> sel[TAB]");
     console.log("Completions:");
     console.log("  select");
@@ -408,16 +359,14 @@ Deno.test("CLI Shell - multi-line query", () => {
   const console = new ConsoleCapture();
 
   try {
-    // Mock multi-line query input
+    /*** Mock multi-line query input ***/
     console.log("disc> select User {");
     console.log("...>   name,");
     console.log("...>   email,");
     console.log("...>   posts: { title }");
     console.log("...> };");
     console.log("");
-    console.log(
-      "[{\"name\": \"Ada\", \"email\": \"ada@example.com\", \"posts\": [{\"title\": \"Hello World\"}]}]"
-    );
+    console.log("[{\"name\": \"Ada\", \"email\": \"ada@example.com\", \"posts\": [{\"title\": \"Hello World\"}]}]");
     console.log("(1 row)");
 
     const logs = console.getLogs();
@@ -435,13 +384,12 @@ Deno.test("CLI Shell - schema from file option", async () => {
 
   try {
     const schemaFile = await createTestSchema(tempDir, SIMPLE_SCHEMA);
-
-    // Mock shell with schema file (using schemaFile from above)
-    console.log(`🚀 Starting Disc EdgeQL shell...`);
-    console.log(`📖 Loading schema from ${schemaFile}`);
-    console.log(`📡 Connected to Disc server at localhost:5656`);
-    console.log(`📊 Database: disc_dev`);
-    console.log(`✅ Schema loaded: 1 type available`);
+    /*** Mock shell with schema file (using schemaFile from above) ***/
+    console.log(`[INIT] Starting Disc EdgeQL shell…`);
+    console.log(`[DATA] Loading schema from ${schemaFile}`);
+    console.log(`[CONN] Connected to Disc server at localhost:5656`);
+    console.log(`[DATA] Database: disc_dev`);
+    console.log(`[ OK ] Schema loaded: 1 type available`);
 
     const logs = console.getLogs();
     assertLogContains(logs, "Loading schema from");
@@ -451,3 +399,69 @@ Deno.test("CLI Shell - schema from file option", async () => {
     await cleanupTempDir(tempDir);
   }
 });
+
+/*** HELPER ------------------------------------------- ***/
+
+function createMockShellSession(options: ShellOptions = {}): ShellSession {
+  return {
+    connected: true,
+    database: options.database || "disc_dev",
+    history: [],
+    host: options.host || "localhost",
+    port: options.port || 5656,
+    queryCount: 0
+  };
+}
+
+function mockShellCommand(options: ShellOptions = {}): string[] {
+  const output: string[] = [];
+
+  if (options.nonInteractive)
+    output.push("[INIT] Starting Disc shell in non-interactive mode…");
+  else
+    output.push("[INIT] Starting Disc EdgeQL shell…");
+
+  const session = createMockShellSession(options);
+
+  output.push(`[CONN] Connected to Disc server at ${session.host}:${session.port}`);
+  output.push(`       Database: ${session.database}`);
+  output.push("");
+
+  if (options.execute) {
+    /*** Execute single query and exit ***/
+    output.push(`disc> ${options.execute}`);
+
+    /*** Mock query execution ***/
+    if (options.execute.toLowerCase().includes("select")) {
+      output.push(`[{"id": "123", "name": "Test User"}]`);
+      output.push(`(1 row)`);
+    } else if (options.execute.toLowerCase().includes("insert")) {
+      output.push(`{"id": "456"}`);
+      output.push(`(1 row inserted)`);
+    } else {
+      output.push(`Query executed successfully`);
+    }
+
+    session.queryCount++;
+    output.push("");
+    output.push("[ OK ] Query executed, exiting…");
+  } else if (options.nonInteractive) {
+    output.push("[INFO] Use --execute to run a query, or omit --non-interactive for REPL mode");
+  } else {
+    /*** Interactive mode simulation ***/
+    output.push("[INFO] Interactive EdgeQL shell. Type \\? for help, \\q to quit.");
+    output.push("");
+    output.push("Available commands:");
+    output.push("  \\?        Show help");
+    output.push("  \\q        Quit shell");
+    output.push("  \\d        List types");
+    output.push("  \\dt       List types (detailed)");
+    output.push("  \\c <db>   Connect to database");
+    output.push("  \\i <file> Execute file");
+    output.push("  \\timing   Toggle query timing");
+    output.push("");
+    output.push("disc>");
+  }
+
+  return output;
+}

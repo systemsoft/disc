@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * OpenAPI 3.1 spec generator for the schema-derived REST surface
  * (Bundle J — Disc-original feature #2).
@@ -12,7 +15,12 @@
  * `/api/openapi.json` route can mount even before its body is rich.
  */
 
-import type { LinkDef, PropertyDef, Schema, TypeDef } from "../../compiler/context.ts";
+import type {
+  LinkDef,
+  PropertyDef,
+  Schema,
+  TypeDef
+} from "../../compiler/context.ts";
 
 // ---------------------------------------------------------------------------
 // Public surface
@@ -109,10 +117,12 @@ export function renderOpenApiSpec(
   const componentSchemas: Record<string, JsonSchema> = {};
 
   for (const typeDef of schema.types.values()) {
-    if (typeDef.kind !== "object")
+    if (typeDef.kind !== "object") {
       continue;
-    if (typeDef.abstract)
+    }
+    if (typeDef.abstract) {
       continue;
+    }
     addTypePaths(paths, typeDef, schema);
     componentSchemas[typeDef.name] = buildTypeSchema(typeDef, schema);
   }
@@ -260,12 +270,14 @@ function addTypePaths(
 
   // Linked-collection: GET /api/<Type>/{id}/<linkName>
   for (const [linkName, link] of typeDef.links) {
-    if (link.computed)
+    if (link.computed) {
       continue;
+    }
     const targetType = schema.types.get(link.target) ??
       schema.types.get(`default::${link.target}`);
-    if (!targetType)
+    if (!targetType) {
       continue;
+    }
     const targetRef: JsonSchema = {
       $ref: `#/components/schemas/${targetType.name}`
     };
@@ -298,7 +310,9 @@ function addTypePaths(
             description: `Array of linked ${targetType.name} objects.`,
             content: {
               "application/json": {
-                schema: link.multi ? { type: "array", items: targetRef } : targetRef
+                schema: link.multi ?
+                  { type: "array", items: targetRef } :
+                  targetRef
               }
             }
           },
@@ -312,10 +326,12 @@ function addTypePaths(
 function filterParametersFor(typeDef: TypeDef): Parameter[] {
   const params: Parameter[] = [];
   for (const [name, prop] of typeDef.properties) {
-    if (isHidden(prop.annotations))
+    if (isHidden(prop.annotations)) {
       continue;
-    if (prop.computed)
+    }
+    if (prop.computed) {
       continue;
+    }
     params.push({
       name,
       in: "query",
@@ -332,32 +348,40 @@ function buildTypeSchema(typeDef: TypeDef, schema: Schema): JsonSchema {
   const properties: Record<string, JsonSchema> = {};
   const required: string[] = [];
   for (const [name, prop] of typeDef.properties) {
-    if (isHidden(prop.annotations))
+    if (isHidden(prop.annotations)) {
       continue;
-    if (prop.computed)
+    }
+    if (prop.computed) {
       continue;
+    }
     properties[name] = jsonSchemaForProperty(prop);
-    if (prop.required)
+    if (prop.required) {
       required.push(name);
+    }
   }
   for (const [name, link] of typeDef.links) {
-    if (!isExpand(link.annotations))
+    if (!isExpand(link.annotations)) {
       continue;
+    }
     const targetType = schema.types.get(link.target) ??
       schema.types.get(`default::${link.target}`);
-    if (!targetType)
+    if (!targetType) {
       continue;
+    }
     const targetRef: JsonSchema = {
       $ref: `#/components/schemas/${targetType.name}`
     };
-    properties[name] = link.multi ? { type: "array", items: targetRef } : targetRef;
+    properties[name] = link.multi ?
+      { type: "array", items: targetRef } :
+      targetRef;
   }
   const out: JsonSchema = {
     type: "object",
     properties
   };
-  if (required.length > 0)
+  if (required.length > 0) {
     out.required = required;
+  }
   return out;
 }
 
@@ -365,29 +389,36 @@ function buildInputSchema(typeDef: TypeDef, _schema: Schema): JsonSchema {
   const properties: Record<string, JsonSchema> = {};
   const required: string[] = [];
   for (const [name, prop] of typeDef.properties) {
-    if (name === "id")
+    if (name === "id") {
       continue;
-    if (prop.computed)
+    }
+    if (prop.computed) {
       continue;
-    if (prop.readonly)
+    }
+    if (prop.readonly) {
       continue;
+    }
     properties[name] = jsonSchemaForProperty(prop);
-    if (prop.required && !prop.hasDefault)
+    if (prop.required && !prop.hasDefault) {
       required.push(name);
+    }
   }
   for (const [name, link] of typeDef.links) {
-    if (link.computed)
+    if (link.computed) {
       continue;
+    }
     properties[name] = { type: "string", format: "uuid" };
-    if (link.required)
+    if (link.required) {
       required.push(name);
+    }
   }
   const out: JsonSchema = {
     type: "object",
     properties
   };
-  if (required.length > 0)
+  if (required.length > 0) {
     out.required = required;
+  }
   return out;
 }
 
@@ -425,14 +456,16 @@ function jsonSchemaForProperty(prop: PropertyDef): JsonSchema {
 }
 
 function isHidden(annotations: Record<string, string> | undefined): boolean {
-  if (!annotations)
+  if (!annotations) {
     return false;
+  }
   return "rest::hidden" in annotations;
 }
 
 function isExpand(annotations: Record<string, string> | undefined): boolean {
-  if (!annotations)
+  if (!annotations) {
     return false;
+  }
   return "rest::expand" in annotations;
 }
 

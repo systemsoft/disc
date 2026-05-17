@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for the live data-watch SSE endpoint (Bundle L — #3c Phase 3).
  *
@@ -57,11 +60,13 @@ async function readUntil(
     const chunkPromise = reader.read();
     const timeout = new Promise<{ done: true; value: undefined; }>(r => setTimeout(() => r({ done: true, value: undefined }), perAttemptMs));
     const result = await Promise.race([chunkPromise, timeout]);
-    if (result.done)
+    if (result.done) {
       break;
+    }
     combined += decoder.decode(result.value);
-    if (combined.includes(needle))
+    if (combined.includes(needle)) {
       return combined;
+    }
   }
   return combined;
 }

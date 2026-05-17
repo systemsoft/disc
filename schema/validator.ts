@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * SDL Schema Validator - Validates SDL AST for correctness
  */
@@ -139,8 +142,9 @@ export class SchemaValidator {
   }
 
   private collectAbstractLink(link: AST.LinkDeclaration): void {
-    if (!link.abstract)
+    if (!link.abstract) {
       return;
+    }
     const linkName = this.getQualifiedTypeName(link.name);
     this.context.abstractLinks.set(linkName, link);
   }
@@ -316,25 +320,29 @@ export class SchemaValidator {
   private validateAnnotationUsage(
     annotations: AST.Annotation[] | undefined
   ): void {
-    if (!annotations)
+    if (!annotations) {
       return;
+    }
 
     for (const ann of annotations) {
       const name = ann.name.parts.join("::");
 
       // Check built-in annotations
-      if (BUILTIN_ANNOTATIONS.has(name))
+      if (BUILTIN_ANNOTATIONS.has(name)) {
         continue;
+      }
 
       // Check user-declared abstract annotations (try unqualified and qualified)
-      if (this.context.abstractAnnotations.has(name))
+      if (this.context.abstractAnnotations.has(name)) {
         continue;
+      }
 
       // Try qualified lookup in current module
       if (this.context.currentModule && !name.includes("::")) {
         const qualifiedName = `${this.context.currentModule}::${name}`;
-        if (this.context.abstractAnnotations.has(qualifiedName))
+        if (this.context.abstractAnnotations.has(qualifiedName)) {
           continue;
+        }
       }
 
       this.addError(
@@ -465,8 +473,9 @@ export class SchemaValidator {
     visited: Set<string>
   ): void {
     const abstractLink = this.context.abstractLinks.get(linkName);
-    if (!abstractLink || !abstractLink.extending)
+    if (!abstractLink || !abstractLink.extending) {
       return;
+    }
 
     for (const baseRef of abstractLink.extending) {
       const baseName = baseRef.name.parts.join("::");
@@ -478,8 +487,9 @@ export class SchemaValidator {
         return;
       }
 
-      if (visited.has(baseName))
+      if (visited.has(baseName)) {
         return;
+      }
       visited.add(baseName);
 
       this.checkLinkInheritanceCycle(baseName, originalName, visited);
@@ -503,8 +513,9 @@ export class SchemaValidator {
     }
 
     const name = constraint.name?.value;
-    if (!name)
+    if (!name) {
       return;
+    }
 
     // Known constraints and their validation rules
     const STRING_TYPES = new Set(["str", "bytes"]);

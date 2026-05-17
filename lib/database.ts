@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Database connection utilities for Disc
  */
@@ -71,7 +74,9 @@ export function parseConnectionString(dsn: string): ParsedConnection {
     const pathPart = atIdx >= 0 ? authAndPath.slice(atIdx + 1) : authAndPath;
 
     const [userPart, passPart] = authPart.split(":");
-    const database = pathPart.startsWith("/") ? pathPart.slice(1) : pathPart || "postgres";
+    const database = pathPart.startsWith("/") ?
+      pathPart.slice(1) :
+      pathPart || "postgres";
 
     return {
       hostname: hostParam[1],
@@ -118,7 +123,9 @@ function isValidSslmode(
  */
 export function sslmodeToTlsOptions(
   sslmode: ParsedConnection["sslmode"]
-): { enabled: boolean; enforce: boolean; caCertificates: string[]; } | undefined {
+):
+  | { enabled: boolean; enforce: boolean; caCertificates: string[]; }
+  | undefined {
   switch (sslmode) {
     case "disable":
       return { enabled: false, enforce: false, caCertificates: [] };
@@ -193,8 +200,9 @@ export class DatabaseConnection {
   }
 
   async connect(): Promise<void> {
-    if (this.connected)
+    if (this.connected) {
       return;
+    }
 
     const maxRetries = this.config.maxRetries || 3;
     const retryDelay = this.config.retryDelay || 1000;

@@ -1,45 +1,48 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for protocol message encode/decode round-trips.
  */
 
 import { assertEquals, assertThrows } from "@std/assert";
 import {
+  Cardinality,
+  ClientMessageType,
+  CompilationFlag,
+  decodeClientMessage,
+  decodeServerMessage,
+  encodeClientMessage,
+  encodeServerMessage,
+  ErrorSeverity,
+  InputLanguage,
+  OutputFormat,
+  ServerMessageType,
+  splitWireMessage,
+  TransactionState,
   type AuthenticationOKMsg,
   type AuthenticationRequiredSASLMsg,
   type AuthenticationSASLContinueMsg,
   type AuthenticationSASLFinalMsg,
   type AuthenticationSASLInitialResponseMsg,
   type AuthenticationSASLResponseMsg,
-  Cardinality,
   type ClientHandshakeMsg,
   type ClientMessage,
-  ClientMessageType,
   type CommandCompleteMsg,
   type CommandDataDescriptionMsg,
-  CompilationFlag,
   type DataMsg,
-  decodeClientMessage,
-  decodeServerMessage,
-  encodeClientMessage,
-  encodeServerMessage,
   type ErrorResponseMsg,
-  ErrorSeverity,
   type ExecuteMsg,
   type FlushMsg,
-  InputLanguage,
   type LogMessageMsg,
-  OutputFormat,
   type ParameterStatusMsg,
   type ParseMsg,
   type ReadyForCommandMsg,
   type ServerHandshakeMsg,
   type ServerKeyDataMsg,
   type ServerMessage,
-  ServerMessageType,
-  splitWireMessage,
   type SyncMsg,
-  type TerminateMsg,
-  TransactionState
+  type TerminateMsg
 } from "./messages.ts";
 
 // ---------------------------------------------------------------------------
@@ -49,16 +52,18 @@ import {
 function roundTripClient(msg: ClientMessage): ClientMessage {
   const wire = encodeClientMessage(msg);
   const split = splitWireMessage(wire);
-  if (!split)
+  if (!split) {
     throw new Error("splitWireMessage returned null");
+  }
   return decodeClientMessage(split.mtype, split.payload);
 }
 
 function roundTripServer(msg: ServerMessage): ServerMessage {
   const wire = encodeServerMessage(msg);
   const split = splitWireMessage(wire);
-  if (!split)
+  if (!split) {
     throw new Error("splitWireMessage returned null");
+  }
   return decodeServerMessage(split.mtype, split.payload);
 }
 
@@ -568,8 +573,9 @@ Deno.test("ParameterStatus - round-trip", () => {
 
 Deno.test("ServerKeyData - round-trip", () => {
   const keyData = new Uint8Array(32);
-  for (let i = 0; i < 32; i++)
+  for (let i = 0; i < 32; i++) {
     keyData[i] = i;
+  }
 
   const msg: ServerKeyDataMsg = {
     kind: "ServerKeyData",

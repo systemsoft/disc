@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * PostgreSQL-backed Query Compilation End-to-End Tests
  *
@@ -1559,7 +1562,11 @@ Deno.test({
       );
 
       // Billie: only Ada in frame → 100
-      assertEquals(result.rows[1].name, "Billie", "Second row should be Billie");
+      assertEquals(
+        result.rows[1].name,
+        "Billie",
+        "Second row should be Billie"
+      );
       assertEquals(
         Number(result.rows[1].running_sum),
         100,

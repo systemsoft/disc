@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Migration Engine - orchestrates schema diffing, DDL generation, and migration execution
  */
@@ -34,8 +37,9 @@ export class MigrationEngine {
    * migration. (gh/geldata#7490)
    */
   private emit(event: Types.MigrationProgressEvent): void {
-    if (!this.config.onProgress)
+    if (!this.config.onProgress) {
       return;
+    }
     try {
       this.config.onProgress(event);
     } catch (err) {
@@ -80,7 +84,9 @@ export class MigrationEngine {
       // setting the registry from `newSchema` is safe even mid-batch.
       this.ddlGenerator.setEnumScalars(this.differ.enumScalarNames(newSchema));
 
-      const operations = oldSchema ? this.differ.diff(oldSchema, newSchema) : this.generateInitialMigration(newSchema);
+      const operations = oldSchema ?
+        this.differ.diff(oldSchema, newSchema) :
+        this.generateInitialMigration(newSchema);
 
       const migration: Types.Migration = {
         id: this.generateMigrationId(),
@@ -232,7 +238,9 @@ export class MigrationEngine {
           durationMs: endTime - startTime
         });
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorMessage = error instanceof Error ?
+          error.message :
+          String(error);
         const failureDuration = Date.now() - startTime;
 
         this.emit({
@@ -396,7 +404,9 @@ export class MigrationEngine {
           durationMs: endTime - startTime
         });
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
+        const errorMessage = error instanceof Error ?
+          error.message :
+          String(error);
         const failureDuration = Date.now() - startTime;
         const rollbackAttempted = !!(this.config.rollbackOnError && rollbackSQL);
 
@@ -413,7 +423,9 @@ export class MigrationEngine {
             await this.executeStatements(rollbackSQL!);
           } catch (rollbackError) {
             const combined = `Migration failed and rollback failed: ${errorMessage}. Rollback error: ${
-              rollbackError instanceof Error ? rollbackError.message : String(rollbackError)
+              rollbackError instanceof Error ?
+                rollbackError.message :
+                String(rollbackError)
             }`;
             this.emit({
               kind: "plan-failed",
@@ -500,7 +512,7 @@ export class MigrationEngine {
 
     try {
       // Execute rollback SQL statements in a transaction
-      logger.info(`Rolling back migration ${migrationId}...`);
+      logger.info(`Rolling back migration ${migrationId}…`);
       await this.executeStatements(rollbackSql);
 
       // Remove the migration record from the tracker
@@ -732,8 +744,9 @@ export class MigrationEngine {
       flagged.push({ operation: label, reason, classification: "unsafe" });
     };
     const flagSafe = (op: Types.MigrationOperation) => {
-      if (!op.classification)
+      if (!op.classification) {
         op.classification = "safe";
+      }
     };
 
     for (const migration of plan.migrations) {
@@ -984,13 +997,15 @@ export class MigrationEngine {
   private async runDataMigrationForSchema(
     migration: Types.Migration
   ): Promise<string | null> {
-    if (!this.pool)
+    if (!this.pool) {
       return null;
+    }
 
     // Extract timestamp from migration ID: m<timestamp>_<randomSuffix>
     const match = migration.id.match(/^m(\d{8,}T?\d*)/);
-    if (!match)
+    if (!match) {
       return null;
+    }
 
     const timestamp = match[1];
     const runner = new DataMigrationRunner();
@@ -998,8 +1013,9 @@ export class MigrationEngine {
 
     // No migrationsDir configured → no data migrations to discover.
     // (SchemaManager-driven flows intentionally leave this blank.)
-    if (!migrationsDir)
+    if (!migrationsDir) {
       return null;
+    }
 
     try {
       const dataMigrations = await runner.discoverMigrations(migrationsDir);
@@ -1238,7 +1254,7 @@ export class MigrationEngine {
           await conn.execute(stmt);
         }
         for (const stmt of executableStatements) {
-          logger.info(`Executing: ${stmt.substring(0, 100)}...`);
+          logger.info(`Executing: ${stmt.substring(0, 100)}…`);
           await conn.execute(stmt);
         }
       });
@@ -1260,7 +1276,7 @@ export class MigrationEngine {
         await this.db!.execute(stmt);
       }
       for (const statement of executableStatements) {
-        logger.info(`Executing: ${statement.substring(0, 100)}...`);
+        logger.info(`Executing: ${statement.substring(0, 100)}…`);
         await this.db!.execute(statement);
       }
     });

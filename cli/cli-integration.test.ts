@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * CLI Integration Tests - SchemaManager CLI wiring
  *
@@ -13,91 +16,31 @@
  * after closing braces. Use `}` not `};` to close type and module blocks.
  */
 
+/*** NATIVE ------------------------------------------- ***/
+
 import { assert, assertEquals, assertExists } from "@std/assert";
-import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
+
+/*** IMPORT ------------------------------------------- ***/
+
+import { Client } from "@db/postgres";
+
+/*** UTILITY ------------------------------------------ ***/
+
 import * as Context from "../compiler/context.ts";
-import { ConnectionPool } from "../lib/connection-pool.ts";
-import { SchemaManager } from "../migration/schema-manager.ts";
-import { createServerFromEnv, DiscServer } from "../server/server.ts";
 import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
 import { cleanupTempDir, ConsoleCapture, createTempDir } from "../tests/test-utils.ts";
 import { CLICommands } from "./commands.ts";
+import { ConnectionPool } from "../lib/connection-pool.ts";
+import { createServerFromEnv, DiscServer } from "../server/server.ts";
+import { SchemaManager } from "../migration/schema-manager.ts";
 
 const RUN_PG = canRunPgTests();
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+/*** RUNTIME ------------------------------------------ ***/
 
-/**
- * Since readSchemaFile and readSchemaAsCompilerSchema are private on
- * CLICommands, we access them via `any` cast. This follows the pattern
- * of testing internal wiring without exposing implementation details.
- */
-function getPrivateMethod<T>(
-  obj: CLICommands,
-  methodName: string
-): (...args: unknown[]) => T {
-  // deno-lint-ignore no-explicit-any
-  return (obj as any)[methodName].bind(obj);
-}
+/*** --- A. Unit Tests (no database required) --- ***/
 
-/** Parse a DSN into connection config for the raw deno-postgres Client. */
-function parseDsn(
-  dsn: string
-): { hostname: string; port: number; user: string; database: string; } {
-  const url = new URL(dsn);
-  return {
-    hostname: url.hostname || "localhost",
-    port: url.port ? parseInt(url.port) : 5432,
-    user: url.username || "disc",
-    database: url.pathname.slice(1) || "disc_test"
-  };
-}
-
-/** Drop one or more tables by name (best-effort cleanup). */
-async function dropTables(
-  dsn: string,
-  ...tableNames: string[]
-): Promise<void> {
-  const cfg = parseDsn(dsn);
-  const client = new Client(cfg);
-  try {
-    await client.connect();
-    for (const name of tableNames) {
-      await client.queryArray(`DROP TABLE IF EXISTS ${name} CASCADE`);
-    }
-  } finally {
-    await client.end();
-  }
-}
-
-/** Check whether a table exists in the public schema via a raw client. */
-async function tableExists(dsn: string, tableName: string): Promise<boolean> {
-  const cfg = parseDsn(dsn);
-  const client = new Client(cfg);
-  try {
-    await client.connect();
-    const result = await client.queryObject<{ exists: boolean; }>(
-      `SELECT EXISTS (
-        SELECT 1 FROM information_schema.tables
-        WHERE table_schema = 'public' AND table_name = $1
-      ) AS exists`,
-      [tableName]
-    );
-    return result.rows[0]?.exists ?? false;
-  } finally {
-    await client.end();
-  }
-}
-
-// =========================================================================
-// A. Unit Tests (no database required)
-// =========================================================================
-
-// ---------------------------------------------------------------------------
-// 1. readSchemaFile parses valid SDL into Module[]
-// ---------------------------------------------------------------------------
+/*** --- 1. readSchemaFile parses valid SDL into Module[] --- ***/
 Deno.test(
   "CLI Integration - readSchemaFile parses valid SDL into Module[]",
   async () => {
@@ -107,6 +50,7 @@ Deno.test(
 
     try {
       const schemaFile = `${tempDir}/widget.disc`;
+
       await Deno.writeTextFile(
         schemaFile,
         `module default {
@@ -120,15 +64,9 @@ Deno.test(
       const readSchemaFile = getPrivateMethod(commands, "readSchemaFile");
       const result = await readSchemaFile(schemaFile);
 
-      assert(
-        result !== null,
-        "readSchemaFile should return non-null for valid SDL"
-      );
+      assert(result !== null, "readSchemaFile should return non-null for valid SDL");
       assert(Array.isArray(result), "readSchemaFile should return an array");
-      assert(
-        (result as unknown[]).length > 0,
-        "readSchemaFile should return at least one module"
-      );
+      assert((result as unknown[]).length > 0, "readSchemaFile should return at least one module");
     } finally {
       capture.restore();
       await cleanupTempDir(tempDir);
@@ -136,9 +74,7 @@ Deno.test(
   }
 );
 
-// ---------------------------------------------------------------------------
-// 2. readSchemaFile returns null for missing file
-// ---------------------------------------------------------------------------
+/*** --- 2. readSchemaFile returns null for missing file --- ***/
 Deno.test(
   "CLI Integration - readSchemaFile returns null for missing file",
   async () => {
@@ -150,20 +86,14 @@ Deno.test(
       const readSchemaFile = getPrivateMethod(commands, "readSchemaFile");
       const result = await readSchemaFile("/tmp/nonexistent-schema-file.disc");
 
-      assertEquals(
-        result,
-        null,
-        "readSchemaFile should return null for missing file"
-      );
+      assertEquals(result, null, "readSchemaFile should return null for missing file");
     } finally {
       capture.restore();
     }
   }
 );
 
-// ---------------------------------------------------------------------------
-// 3. readSchemaFile returns null for invalid SDL
-// ---------------------------------------------------------------------------
+/*** --- 3. readSchemaFile returns null for invalid SDL --- ***/
 Deno.test(
   "CLI Integration - readSchemaFile returns null for invalid SDL",
   async () => {
@@ -173,20 +103,13 @@ Deno.test(
 
     try {
       const schemaFile = `${tempDir}/bad.disc`;
-      await Deno.writeTextFile(
-        schemaFile,
-        "this is not valid SDL at all!!!"
-      );
+      await Deno.writeTextFile(schemaFile, "this is not valid SDL at all!!!");
 
       const commands = new CLICommands();
       const readSchemaFile = getPrivateMethod(commands, "readSchemaFile");
       const result = await readSchemaFile(schemaFile);
 
-      assertEquals(
-        result,
-        null,
-        "readSchemaFile should return null for invalid SDL"
-      );
+      assertEquals(result, null, "readSchemaFile should return null for invalid SDL");
     } finally {
       capture.restore();
       await cleanupTempDir(tempDir);
@@ -194,9 +117,7 @@ Deno.test(
   }
 );
 
-// ---------------------------------------------------------------------------
-// 4. readSchemaAsCompilerSchema returns Schema from valid SDL
-// ---------------------------------------------------------------------------
+/*** --- 4. readSchemaAsCompilerSchema returns Schema from valid SDL --- ***/
 Deno.test(
   "CLI Integration - readSchemaAsCompilerSchema returns Schema from valid SDL",
   async () => {
@@ -217,40 +138,20 @@ Deno.test(
       );
 
       const commands = new CLICommands();
-      const readSchema = getPrivateMethod<Promise<Context.Schema | null>>(
-        commands,
-        "readSchemaAsCompilerSchema"
-      );
+      const readSchema = getPrivateMethod<Promise<Context.Schema | null>>(commands, "readSchemaAsCompilerSchema");
       const schema = await readSchema(schemaFile);
 
-      assert(
-        schema !== null,
-        "readSchemaAsCompilerSchema should return non-null"
-      );
-      assertExists(
-        (schema as Context.Schema).types,
-        "Schema should have a types map"
-      );
-      assert(
-        (schema as Context.Schema).types.size > 0,
-        "Schema types map should have entries"
-      );
+      assert(schema !== null, "readSchemaAsCompilerSchema should return non-null");
+      assertExists((schema as Context.Schema).types, "Schema should have a types map");
+      assert((schema as Context.Schema).types.size > 0, "Schema types map should have entries");
 
       const gadget = (schema as Context.Schema).types.get("Gadget");
+
       assertExists(gadget, "Schema should contain Gadget type");
       assertEquals(gadget!.kind, "object");
-      assert(
-        gadget!.properties.has("label"),
-        "Gadget should have label property"
-      );
-      assert(
-        gadget!.properties.has("active"),
-        "Gadget should have active property"
-      );
-      assert(
-        gadget!.properties.has("id"),
-        "Gadget should have implicit id property"
-      );
+      assert(gadget!.properties.has("label"), "Gadget should have label property");
+      assert(gadget!.properties.has("active"), "Gadget should have active property");
+      assert(gadget!.properties.has("id"), "Gadget should have implicit id property");
     } finally {
       capture.restore();
       await cleanupTempDir(tempDir);
@@ -258,9 +159,7 @@ Deno.test(
   }
 );
 
-// ---------------------------------------------------------------------------
-// 5. readSchemaAsCompilerSchema returns null for missing file
-// ---------------------------------------------------------------------------
+/*** --- 5. readSchemaAsCompilerSchema returns null for missing file --- ***/
 Deno.test(
   "CLI Integration - readSchemaAsCompilerSchema returns null for missing file",
   async () => {
@@ -269,26 +168,17 @@ Deno.test(
 
     try {
       const commands = new CLICommands();
-      const readSchema = getPrivateMethod(
-        commands,
-        "readSchemaAsCompilerSchema"
-      );
+      const readSchema = getPrivateMethod(commands, "readSchemaAsCompilerSchema");
       const result = await readSchema("/tmp/nonexistent-schema-file.disc");
 
-      assertEquals(
-        result,
-        null,
-        "readSchemaAsCompilerSchema should return null for missing file"
-      );
+      assertEquals(result, null, "readSchemaAsCompilerSchema should return null for missing file");
     } finally {
       capture.restore();
     }
   }
 );
 
-// ---------------------------------------------------------------------------
-// 6. codegen with real SDL uses parsed schema (Widget, not User/Post)
-// ---------------------------------------------------------------------------
+/*** --- 6. codegen with real SDL uses parsed schema (Widget, not User/Post) --- ***/
 Deno.test(
   "CLI Integration - codegen with real SDL uses parsed schema",
   async () => {
@@ -311,26 +201,24 @@ Deno.test(
       );
 
       const commands = new CLICommands();
+
       await commands.codegen({
         _: ["codegen"],
-        schema: schemaFile,
-        output: outputDir,
-        target: "client",
-        "no-queries": false,
-        "no-mutations": false,
         "no-client": false,
-        "no-format": false
+        "no-format": false,
+        "no-mutations": false,
+        "no-queries": false,
+        output: outputDir,
+        schema: schemaFile,
+        target: "client"
       });
 
-      // The console output should reference Widget (from the SDL), not
-      // fallback types like User/Post from the test schema.
+      /*** The console output should reference Widget (from the SDL), not fallback types like
+           User/Post from the test schema. ***/
       const logs = capture.getLogs();
       const allOutput = logs.join("\n");
 
-      assert(
-        allOutput.includes("Widget"),
-        `Codegen output should reference 'Widget' from SDL, got:\n${allOutput}`
-      );
+      assert(allOutput.includes("Widget"), `Codegen output should reference "Widget" from SDL, got:\n${allOutput}`);
     } finally {
       capture.restore();
       await cleanupTempDir(tempDir);
@@ -338,50 +226,42 @@ Deno.test(
   }
 );
 
-// ---------------------------------------------------------------------------
-// 7. DiscServer accepts schema option
-// ---------------------------------------------------------------------------
+/*** --- 7. DiscServer accepts schema option --- ***/
 Deno.test(
   "CLI Integration - DiscServer accepts schema option",
   () => {
     const schema = Context.createTestSchema();
 
     const server = new DiscServer({
+      dryRun: true,
       host: "localhost",
       port: 0,
-      schema,
-      dryRun: true
+      schema
     });
 
     assertExists(server, "DiscServer should be created with schema option");
-
     const config = server.get_config();
     assertEquals(config.host, "localhost");
   }
 );
 
-// ---------------------------------------------------------------------------
-// 8. DiscServer without schema falls back to defaults
-// ---------------------------------------------------------------------------
+/*** --- 8. DiscServer without schema falls back to defaults --- ***/
 Deno.test(
   "CLI Integration - DiscServer without schema falls back to defaults",
   () => {
     const server = new DiscServer({
+      dryRun: true,
       host: "localhost",
-      port: 0,
-      dryRun: true
+      port: 0
     });
 
     assertExists(server, "DiscServer should be created without schema option");
-
     const config = server.get_config();
     assertEquals(config.host, "localhost");
   }
 );
 
-// ---------------------------------------------------------------------------
-// 9. createServerFromEnv passes schema through
-// ---------------------------------------------------------------------------
+/*** --- 9. createServerFromEnv passes schema through --- ***/
 Deno.test(
   "CLI Integration - createServerFromEnv passes schema through",
   () => {
@@ -389,15 +269,12 @@ Deno.test(
     const server = createServerFromEnv(undefined, schema);
 
     assertExists(server, "createServerFromEnv should return a DiscServer");
-
     const config = server.get_config();
     assertExists(config, "Server should have a config");
   }
 );
 
-// ---------------------------------------------------------------------------
-// 10. migrate dry-run with real SDL produces plan output
-// ---------------------------------------------------------------------------
+/*** --- 10. migrate dry-run with real SDL produces plan output --- ***/
 Deno.test(
   "CLI Integration - migrate dry-run with real SDL produces plan output",
   async () => {
@@ -407,6 +284,7 @@ Deno.test(
 
     try {
       const schemaFile = `${tempDir}/schema.disc`;
+
       await Deno.writeTextFile(
         schemaFile,
         `module default {
@@ -418,22 +296,20 @@ Deno.test(
       );
 
       const commands = new CLICommands();
+
       await commands.migrate({
         _: ["migrate"],
-        schema: schemaFile,
-        "dry-run": true
+        "dry-run": true,
+        schema: schemaFile
       });
 
-      // Dry-run should complete without error. The output should mention
-      // migration planning or "DRY RUN" or "up to date".
+      /*** Dry-run should complete without error. The output should mention migration planning or
+           "DRY RUN" or "up to date". ***/
       const logs = capture.getLogs();
       const allOutput = logs.join("\n");
 
-      // The command should produce some output about the migration
-      assert(
-        allOutput.length > 0,
-        "Dry-run migrate should produce console output"
-      );
+      /*** The command should produce some output about the migration ***/
+      assert(allOutput.length > 0, "Dry-run migrate should produce console output");
     } finally {
       capture.restore();
       await cleanupTempDir(tempDir);
@@ -441,9 +317,7 @@ Deno.test(
   }
 );
 
-// ---------------------------------------------------------------------------
-// 11. migrate --create with dry-run mode shows plan details
-// ---------------------------------------------------------------------------
+/*** --- 11. migrate --create with dry-run mode shows plan details --- ***/
 Deno.test(
   "CLI Integration - migrate --create with dry-run shows plan details",
   async () => {
@@ -453,6 +327,7 @@ Deno.test(
 
     try {
       const schemaFile = `${tempDir}/schema.disc`;
+
       await Deno.writeTextFile(
         schemaFile,
         `module default {
@@ -463,17 +338,18 @@ Deno.test(
 }`
       );
 
-      // Use dry-run + create to avoid needing a real database.
-      // The create path reads the schema and plans without executing DDL.
+      /*** Use dry-run + create to avoid needing a real database. The create path reads the schema
+           and plans without executing DDL. ***/
       const commands = new CLICommands();
+
       await commands.migrate({
         _: ["migrate"],
         create: true,
-        schema: schemaFile,
-        "dry-run": true
+        "dry-run": true,
+        schema: schemaFile
       });
 
-      // Create mode should show the plan info
+      /*** Create mode should show the plan info ***/
       const logs = capture.getLogs();
       const allOutput = logs.join("\n");
 
@@ -491,9 +367,7 @@ Deno.test(
   }
 );
 
-// ---------------------------------------------------------------------------
-// 12. SchemaManager round-trip: SDL -> Module[] -> Schema -> types
-// ---------------------------------------------------------------------------
+/*** --- 12. SchemaManager round-trip: SDL -> Module[] -> Schema -> types --- ***/
 Deno.test(
   "CLI Integration - SchemaManager round-trip SDL to Schema types",
   () => {
@@ -511,6 +385,7 @@ Deno.test(
     const parseResult = manager.parseSDL(sdl);
 
     assertEquals(parseResult.ok, true, "parseSDL should succeed");
+
     if (!parseResult.ok)
       return;
 
@@ -524,7 +399,7 @@ Deno.test(
     assertEquals(doohickey!.tableName, "doohickey");
     assertEquals(doohickey!.kind, "object");
 
-    // Verify property type mappings
+    /*** Verify property type mappings ***/
     const nameProp = doohickey!.properties.get("name");
     assertExists(nameProp, "Should have name property");
     assertEquals(nameProp!.type, "text");
@@ -539,33 +414,28 @@ Deno.test(
     assertEquals(activeProp!.type, "boolean");
     assertEquals(activeProp!.required, false);
 
-    // Verify implicit id
+    /*** Verify implicit id ***/
     const idProp = doohickey!.properties.get("id");
     assertExists(idProp, "Should have implicit id property");
     assertEquals(idProp!.type, "uuid");
   }
 );
 
-// =========================================================================
-// B. PG Integration Tests (guarded by canRunPgTests)
-// =========================================================================
+/*** --- B. PG Integration Tests (guarded by canRunPgTests) --- ***/
 
-// ---------------------------------------------------------------------------
-// 13. migrate apply creates tables from SDL (PG)
-// ---------------------------------------------------------------------------
+/*** --- 13. migrate apply creates tables from SDL (PG) --- ***/
 Deno.test({
-  name: "CLI Integration PG - migrate apply creates tables from SDL",
-  ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
-    const pool = new ConnectionPool({
-      connectionString: dsn,
-      minConnections: 1,
-      maxConnections: 3,
-      cleanupInterval: 0
-    });
-    await pool.initialize();
 
+    const pool = new ConnectionPool({
+      cleanupInterval: 0,
+      connectionString: dsn,
+      maxConnections: 3,
+      minConnections: 1
+    });
+
+    await pool.initialize();
     const expectedTable = "test_cli_widget";
 
     try {
@@ -582,19 +452,16 @@ Deno.test({
       `;
 
       const result = await manager.applySchema(sdl);
+
       assertEquals(
         result.ok,
         true,
         `applySchema should succeed: ${result.ok ? "" : (result as { ok: false; error: Error; }).error.message}`
       );
 
-      // Verify the table was created
+      /*** Verify the table was created ***/
       const exists = await tableExists(dsn, expectedTable);
-      assertEquals(
-        exists,
-        true,
-        `Table '${expectedTable}' should exist after applySchema`
-      );
+      assertEquals(exists, true, `Table "${expectedTable}" should exist after applySchema`);
 
       await manager.close();
     } finally {
@@ -606,25 +473,24 @@ Deno.test({
       );
       await pool.close();
     }
-  }
+  },
+  ignore: !RUN_PG,
+  name: "CLI Integration PG - migrate apply creates tables from SDL"
 });
 
-// ---------------------------------------------------------------------------
-// 14. Full workflow: parse SDL -> plan -> generate DDL -> apply (PG)
-// ---------------------------------------------------------------------------
+/*** --- 14. Full workflow: parse SDL -> plan -> generate DDL -> apply (PG) --- ***/
 Deno.test({
-  name: "CLI Integration PG - Full workflow: parse SDL -> plan -> DDL -> apply",
-  ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
-    const pool = new ConnectionPool({
-      connectionString: dsn,
-      minConnections: 1,
-      maxConnections: 3,
-      cleanupInterval: 0
-    });
-    await pool.initialize();
 
+    const pool = new ConnectionPool({
+      cleanupInterval: 0,
+      connectionString: dsn,
+      maxConnections: 3,
+      minConnections: 1
+    });
+
+    await pool.initialize();
     const expectedTable = "test_cli_gizmo";
 
     try {
@@ -640,52 +506,38 @@ Deno.test({
         }
       `;
 
-      // Step 1: Plan the schema migration
+      /*** Step 1: Plan the schema migration ***/
       const planResult = manager.planSchema(sdl);
       assertEquals(planResult.ok, true, "planSchema should succeed");
+
       if (!planResult.ok)
         return;
 
       const plan = planResult.value;
-      assert(
-        plan.migrations.length > 0,
-        "Plan should have at least one migration"
-      );
-      assert(
-        plan.operationsCount > 0,
-        "Plan should have at least one operation"
-      );
+      assert(plan.migrations.length > 0, "Plan should have at least one migration");
+      assert(plan.operationsCount > 0, "Plan should have at least one operation");
 
-      // Step 2: Generate DDL from the plan
+      /*** Step 2: Generate DDL from the plan ***/
       const ddlResult = manager.generateDDL(plan);
       assertEquals(ddlResult.ok, true, "generateDDL should succeed");
+
       if (!ddlResult.ok)
         return;
 
       const ddlStatements = ddlResult.value;
-      assert(
-        ddlStatements.length > 0,
-        "DDL should have at least one statement"
-      );
+      assert(ddlStatements.length > 0, "DDL should have at least one statement");
 
-      // Check that DDL contains a CREATE TABLE
+      /*** Check that DDL contains a CREATE TABLE ***/
       const allDDL = ddlStatements.join("\n");
-      assert(
-        allDDL.includes("CREATE TABLE"),
-        `DDL should contain CREATE TABLE, got:\n${allDDL}`
-      );
+      assert(allDDL.includes("CREATE TABLE"), `DDL should contain CREATE TABLE, got:\n${allDDL}`);
 
-      // Step 3: Apply the schema
+      /*** Step 3: Apply the schema ***/
       const applyResult = await manager.applySchema(sdl);
       assertEquals(applyResult.ok, true, "applySchema should succeed");
 
-      // Step 4: Verify table exists in PG
+      /*** Step 4: Verify table exists in PG ***/
       const exists = await tableExists(dsn, expectedTable);
-      assertEquals(
-        exists,
-        true,
-        `Table '${expectedTable}' should exist after apply`
-      );
+      assertEquals(exists, true, `Table "${expectedTable}" should exist after apply`);
 
       await manager.close();
     } finally {
@@ -695,34 +547,34 @@ Deno.test({
         "disc_migrations",
         "disc_migration_checkpoints"
       );
+
       await pool.close();
     }
-  }
+  },
+  ignore: !RUN_PG,
+  name: "CLI Integration PG - Full workflow: parse SDL -> plan -> DDL -> apply"
 });
 
-// ---------------------------------------------------------------------------
-// 15. Schema evolution via CLI workflow (PG)
-// ---------------------------------------------------------------------------
+/*** --- 15. Schema evolution via CLI workflow (PG) --- ***/
 Deno.test({
-  name: "CLI Integration PG - Schema evolution adds columns",
-  ignore: !RUN_PG,
   fn: async () => {
     const dsn = await getTestDsn();
-    const pool = new ConnectionPool({
-      connectionString: dsn,
-      minConnections: 1,
-      maxConnections: 3,
-      cleanupInterval: 0
-    });
-    await pool.initialize();
 
+    const pool = new ConnectionPool({
+      cleanupInterval: 0,
+      connectionString: dsn,
+      maxConnections: 3,
+      minConnections: 1
+    });
+
+    await pool.initialize();
     const expectedTable = "test_cli_evolve";
 
     try {
       const manager = new SchemaManager({ pool });
       await manager.initialize();
 
-      // Step 1: Initial schema
+      /*** Step 1: Initial schema ***/
       const sdlV1 = `
         module default {
           type TestCliEvolve {
@@ -734,7 +586,7 @@ Deno.test({
       const resultV1 = await manager.applySchema(sdlV1);
       assertEquals(resultV1.ok, true, "Initial applySchema should succeed");
 
-      // Step 2: Evolved schema with new property
+      /*** Step 2: Evolved schema with new property ***/
       const sdlV2 = `
         module default {
           type TestCliEvolve {
@@ -747,20 +599,14 @@ Deno.test({
       const resultV2 = await manager.applySchema(sdlV2);
       assertEquals(resultV2.ok, true, "Evolved applySchema should succeed");
 
-      // Verify getSchema reflects the evolution
+      /*** Verify getSchema reflects the evolution ***/
       const schema = manager.getSchema();
       assertExists(schema, "getSchema should return a Schema after apply");
 
       const typeDef = schema!.types.get("TestCliEvolve");
       assertExists(typeDef, "Schema should contain TestCliEvolve");
-      assert(
-        typeDef!.properties.has("name"),
-        "Should still have name property"
-      );
-      assert(
-        typeDef!.properties.has("description"),
-        "Should now have description property"
-      );
+      assert(typeDef!.properties.has("name"), "Should still have name property");
+      assert(typeDef!.properties.has("description"), "Should now have description property");
 
       await manager.close();
     } finally {
@@ -770,7 +616,72 @@ Deno.test({
         "disc_migrations",
         "disc_migration_checkpoints"
       );
+
       await pool.close();
     }
-  }
+  },
+  ignore: !RUN_PG,
+  name: "CLI Integration PG - Schema evolution adds columns"
 });
+
+/*** HELPER ------------------------------------------- ***/
+
+/** Drop one or more tables by name (best-effort cleanup). */
+async function dropTables(dsn: string, ...tableNames: string[]): Promise<void> {
+  const cfg = parseDsn(dsn);
+  const client = new Client(cfg);
+
+  try {
+    await client.connect();
+
+    for (const name of tableNames) {
+      await client.queryArray(`DROP TABLE IF EXISTS ${name} CASCADE`);
+    }
+  } finally {
+    await client.end();
+  }
+}
+
+/**
+ * Since readSchemaFile and readSchemaAsCompilerSchema are private on
+ * CLICommands, we access them via `any` cast. This follows the pattern
+ * of testing internal wiring without exposing implementation details.
+ */
+function getPrivateMethod<T>(obj: CLICommands, methodName: string): (...args: unknown[]) => T {
+  // deno-lint-ignore no-explicit-any
+  return (obj as any)[methodName].bind(obj);
+}
+
+/** Parse a DSN into connection config for the raw deno-postgres Client. */
+function parseDsn(dsn: string): { database: string; hostname: string; port: number; user: string; } {
+  const url = new URL(dsn);
+
+  return {
+    database: url.pathname.slice(1) || "disc_test",
+    hostname: url.hostname || "localhost",
+    port: url.port ? parseInt(url.port) : 5432,
+    user: url.username || "disc"
+  };
+}
+
+/** Check whether a table exists in the public schema via a raw client. */
+async function tableExists(dsn: string, tableName: string): Promise<boolean> {
+  const cfg = parseDsn(dsn);
+  const client = new Client(cfg);
+
+  try {
+    await client.connect();
+
+    const result = await client.queryObject<{ exists: boolean; }>(
+      `SELECT EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = $1
+      ) AS exists`,
+      [tableName]
+    );
+
+    return result.rows[0]?.exists ?? false;
+  } finally {
+    await client.end();
+  }
+}

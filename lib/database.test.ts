@@ -1,4 +1,7 @@
-import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
+import { assertEquals } from "@std/assert";
 import { parseConnectionString, replaceDsnDatabase } from "./database.ts";
 
 Deno.test("parseConnectionString - TCP DSN", () => {

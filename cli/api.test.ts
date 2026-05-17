@@ -1,15 +1,23 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Programmatic CLI surface tests. (gh/geldata#5911 — Bundle NN)
  *
  * Verifies that `cli/api.ts` exposes a stable function-shaped surface
- * for every command worth driving from a Deno script, and that it's
+ * for every command worth driving from a Deno script, and that it’s
  * reachable through the top-level `mod.ts` re-export as `CLI.*`.
  */
 
+/*** NATIVE ------------------------------------------- ***/
+
 import { assert, assertEquals } from "@std/assert";
+
+/*** RUNTIME ------------------------------------------ ***/
 
 Deno.test("CLI api: every documented command is an exported function", async () => {
   const api = await import("./api.ts");
+
   const expected = [
     "init",
     "migrate",
@@ -21,39 +29,27 @@ Deno.test("CLI api: every documented command is an exported function", async () 
     "pgLog",
     "pgUpgrade"
   ];
+
   for (const name of expected) {
-    assertEquals(
-      typeof (api as Record<string, unknown>)[name],
-      "function",
-      `cli/api.ts must export ${name}() (Gel #5911)`
-    );
+    assertEquals(typeof (api as Record<string, unknown>)[name], "function", `cli/api.ts must export ${name}() (Gel #5911)`);
   }
 });
 
 Deno.test("CLI api: surface is reachable via top-level CLI namespace", async () => {
   const mod = await import("../mod.ts");
-  assert(
-    typeof mod.CLI === "object" && mod.CLI !== null,
-    "mod.ts must re-export CLI namespace (Gel #5911)"
-  );
-  // Spot-check a few entries — full coverage is in the per-export
-  // function test above.
+  assert(typeof mod.CLI === "object" && mod.CLI !== null, "mod.ts must re-export CLI namespace (Gel #5911)");
+
+  /*** Spot-check a few entries — full coverage is in the per-export function test above. ***/
   for (const name of ["init", "migrate", "serve"]) {
-    assertEquals(
-      typeof (mod.CLI as Record<string, unknown>)[name],
-      "function",
-      `CLI.${name} must be a function (Gel #5911)`
-    );
+    assertEquals(typeof (mod.CLI as Record<string, unknown>)[name], "function", `CLI.${name} must be a function (Gel #5911)`);
   }
 });
 
 Deno.test("CLI api: typed Options interfaces are re-exported", async () => {
-  // Type-only re-exports don't show up at runtime; this test
-  // asserts the file textually re-exports each Options interface so
-  // a refactor that drops them is caught.
-  const src = await Deno.readTextFile(
-    new URL("./api.ts", import.meta.url)
-  );
+  /*** Type-only re-exports don’t show up at runtime; this test asserts the file textually
+       re-exports each Options interface so a refactor that drops them is caught. ***/
+  const src = await Deno.readTextFile(new URL("./api.ts", import.meta.url));
+
   for (
     const t of [
       "InitOptions",

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for Runtime Schema Reload
  *
@@ -9,7 +12,12 @@ import { assert, assertEquals } from "@std/assert";
 import type { Schema } from "../compiler/context.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
 import { DiscServer } from "./server.ts";
-import type { ProtocolHandler, QueryContext, QueryRequest, QueryResponse } from "./types.ts";
+import type {
+  ProtocolHandler,
+  QueryContext,
+  QueryRequest,
+  QueryResponse
+} from "./types.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -32,7 +40,9 @@ function createMockHandler(options?: {
     validateRequest(_request: QueryRequest) {
       return [];
     },
-    updateSchema: options?.onUpdateSchema ? (schema: Schema) => options.onUpdateSchema!(schema) : undefined
+    updateSchema: options?.onUpdateSchema ?
+      (schema: Schema) => options.onUpdateSchema!(schema) :
+      undefined
   };
 }
 
@@ -133,7 +143,9 @@ Deno.test("Schema Reload - DiscServer delegates updateSchema to handler", () => 
   );
 
   // Monkey-patch updateSchema on the handler to verify delegation
-  (handler as unknown as Record<string, unknown>).updateSchema = (schema: Schema) => {
+  (handler as unknown as Record<string, unknown>).updateSchema = (
+    schema: Schema
+  ) => {
     delegatedSchema = schema;
   };
 

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Unit tests for many-to-many junction table compilation
  *
@@ -15,7 +18,13 @@ import { SchemaManager } from "../migration/schema-manager.ts";
 import { getBuiltinFunctions } from "./builtin-functions.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import { EdgeQLCompiler } from "./compiler.ts";
-import { createTestSchema, LinkDef, PropertyDef, Schema, TypeDef } from "./context.ts";
+import {
+  createTestSchema,
+  LinkDef,
+  PropertyDef,
+  Schema,
+  TypeDef
+} from "./context.ts";
 
 // ---------------------------------------------------------------------------
 // Helpers

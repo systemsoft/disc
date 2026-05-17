@@ -83,7 +83,7 @@ Disc replaces Gel's Python/Rust server layer with a Deno/TypeScript implementati
 - **Language**: TypeScript (strict mode, no `any` unless absolutely necessary)
 - **Storage**: PostgreSQL 16+ (bundled — downloaded and managed by Disc automatically)
 - **Testing**: `deno test`
-- **Linting/Formatting**: `deno lint` and `deno fmt` with project config
+- **Linting/Formatting**: `deno task lint` and `deno task format` with project config
 - **Package registry**: JSR (jsr.io) preferred, npm via `npm:` specifiers when necessary
 
 ## Conventions
@@ -460,8 +460,8 @@ deno task cli --help
 
 ### Before Committing
 
-- `deno fmt --check` — formatting
-- `deno lint` — linting
+- `deno task format` — formatting
+- `deno task lint` — linting
 - `deno test` — all tests pass
 - No `console.log` left in library code (use the logger from `lib/`)
 

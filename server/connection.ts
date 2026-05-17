@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Connection and Session Management for Disc Server
  */
@@ -350,8 +353,9 @@ export class TransactionManager implements Types.TransactionManager {
     transactionId: string,
     transaction: Types.Transaction
   ): Promise<void> {
-    if (!this.pool)
+    if (!this.pool) {
       return;
+    }
 
     try {
       const conn = await this.pool.acquire();

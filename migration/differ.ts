@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Schema diff engine for generating migration operations
  */
@@ -35,12 +38,14 @@ export class SchemaDiffer {
     allTypes: Map<string, AST.TypeDeclaration>
   ): DiffCache {
     let cache = this.caches.get(allTypes);
-    if (cache)
+    if (cache) {
       return cache;
+    }
     const subtypes = new Map<string, string[]>();
     for (const [childName, child] of allTypes) {
-      if (!child.extending)
+      if (!child.extending) {
         continue;
+      }
       for (const ext of child.extending) {
         const parentName = ext.name.parts.join("::");
         let bucket = subtypes.get(parentName);
@@ -138,8 +143,9 @@ export class SchemaDiffer {
     // surface as a no-op with a comment in DDL emission.
     for (const [scalarName, newScalarDef] of newScalars) {
       const oldScalarDef = oldScalars.get(scalarName);
-      if (!oldScalarDef)
+      if (!oldScalarDef) {
         continue;
+      }
 
       const oldValues = this.scalarEnumValues(oldScalarDef.decl) ?? [];
       const newValues = this.scalarEnumValues(newScalarDef.decl) ?? [];
@@ -147,8 +153,9 @@ export class SchemaDiffer {
       // Only compare enum value lists when both sides are enum-like.
       const oldIsEnum = this.isEnumScalar(oldScalarDef.decl);
       const newIsEnum = this.isEnumScalar(newScalarDef.decl);
-      if (!oldIsEnum || !newIsEnum)
+      if (!oldIsEnum || !newIsEnum) {
         continue;
+      }
 
       operations.push(
         ...this.diffEnumValues(
@@ -216,7 +223,9 @@ export class SchemaDiffer {
             {
               required: globalDef.decl.required,
               multi: globalDef.decl.multi,
-              default: globalDef.decl.default ? this.extractExpressionString(globalDef.decl.default) : undefined,
+              default: globalDef.decl.default ?
+                this.extractExpressionString(globalDef.decl.default) :
+                undefined,
               readonly: globalDef.decl.readonly
             }
           )
@@ -246,8 +255,12 @@ export class SchemaDiffer {
         const newRequired = newGlobalDef.decl.required ?? false;
         const oldMulti = oldGlobalDef.decl.multi ?? false;
         const newMulti = newGlobalDef.decl.multi ?? false;
-        const oldDefault = oldGlobalDef.decl.default ? this.extractExpressionString(oldGlobalDef.decl.default) : undefined;
-        const newDefault = newGlobalDef.decl.default ? this.extractExpressionString(newGlobalDef.decl.default) : undefined;
+        const oldDefault = oldGlobalDef.decl.default ?
+          this.extractExpressionString(oldGlobalDef.decl.default) :
+          undefined;
+        const newDefault = newGlobalDef.decl.default ?
+          this.extractExpressionString(newGlobalDef.decl.default) :
+          undefined;
         const oldReadonly = oldGlobalDef.decl.readonly ?? false;
         const newReadonly = newGlobalDef.decl.readonly ?? false;
 
@@ -477,8 +490,9 @@ export class SchemaDiffer {
     if (allTypes) {
       const cache = this.getCache(allTypes);
       const cached = cache.props.get(typeDef);
-      if (cached)
+      if (cached) {
         return [...cached];
+      }
       const resolved = this.computePropertiesWithInheritance(typeDef, allTypes);
       cache.props.set(typeDef, resolved);
       return [...resolved];
@@ -525,8 +539,9 @@ export class SchemaDiffer {
     if (allTypes) {
       const cache = this.getCache(allTypes);
       const cached = cache.links.get(typeDef);
-      if (cached)
+      if (cached) {
         return [...cached];
+      }
       const resolved = this.computeLinksWithInheritance(typeDef, allTypes);
       cache.links.set(typeDef, resolved);
       return [...resolved];
@@ -576,8 +591,12 @@ export class SchemaDiffer {
           type: this.typeToString(member.type),
           required: member.required || false,
           multi: member.multi || false,
-          default: member.default ? this.extractDefaultValue(member.default) : undefined,
-          computed: member.computed ? this.extractExpressionString(member.computed) : undefined,
+          default: member.default ?
+            this.extractDefaultValue(member.default) :
+            undefined,
+          computed: member.computed ?
+            this.extractExpressionString(member.computed) :
+            undefined,
           constraints: this.extractConstraints(member.constraints || []),
           annotations: this.extractAnnotations(member.annotations || [])
         };
@@ -628,8 +647,9 @@ export class SchemaDiffer {
       | "set empty"
       | "delete source"
   ): Types.LinkDefinition["onTargetDelete"] {
-    if (!value)
+    if (!value) {
       return undefined;
+    }
     switch (value) {
       case "restrict":
       case "deferred restrict":
@@ -652,8 +672,9 @@ export class SchemaDiffer {
   private mapOnSourceDelete(
     value?: "allow" | "delete target"
   ): Types.LinkDefinition["onSourceDelete"] {
-    if (!value)
+    if (!value) {
       return undefined;
+    }
     switch (value) {
       case "allow":
         return "ALLOW";
@@ -677,8 +698,12 @@ export class SchemaDiffer {
     // dropping `extending A` surfaces as DropProperty ops for the
     // properties B inherited from A. (gh/geldata#4215 — the gap was
     // own-only diff, which silently missed inherited-property losses.)
-    const oldProps = oldAllTypes ? this.extractPropertiesWithInheritance(oldType, oldAllTypes) : this.extractProperties(oldType);
-    const newProps = newAllTypes ? this.extractPropertiesWithInheritance(newType, newAllTypes) : this.extractProperties(newType);
+    const oldProps = oldAllTypes ?
+      this.extractPropertiesWithInheritance(oldType, oldAllTypes) :
+      this.extractProperties(oldType);
+    const newProps = newAllTypes ?
+      this.extractPropertiesWithInheritance(newType, newAllTypes) :
+      this.extractProperties(newType);
 
     operations.push(...this.diffProperties(oldProps, newProps));
 
@@ -709,8 +734,12 @@ export class SchemaDiffer {
 
     // Diff links using resolved (inheritance-walked) sets — same
     // reasoning as properties above. (gh/geldata#4215)
-    const oldLinks = oldAllTypes ? this.extractLinksWithInheritance(oldType, oldAllTypes) : this.extractLinks(oldType);
-    const newLinks = newAllTypes ? this.extractLinksWithInheritance(newType, newAllTypes) : this.extractLinks(newType);
+    const oldLinks = oldAllTypes ?
+      this.extractLinksWithInheritance(oldType, oldAllTypes) :
+      this.extractLinks(oldType);
+    const newLinks = newAllTypes ?
+      this.extractLinksWithInheritance(newType, newAllTypes) :
+      this.extractLinks(newType);
 
     operations.push(...this.diffLinks(oldLinks, newLinks));
 
@@ -1158,8 +1187,9 @@ export class SchemaDiffer {
   private extractExpressionString(expr: AST.Expression): string {
     switch (expr.kind) {
       case "Literal":
-        if (typeof expr.value === "string")
+        if (typeof expr.value === "string") {
           return `'${expr.value}'`;
+        }
         return String(expr.value);
       case "FunctionCall":
         return `${expr.name.parts.join("::")}(${expr.args.map(a => this.extractExpressionString(a)).join(", ")})`;
@@ -1219,7 +1249,9 @@ export class SchemaDiffer {
     const result: Record<string, any> = {};
     for (const annotation of annotations) {
       const name = annotation.name.parts.join("::");
-      result[name] = annotation.value ? this.extractDefaultValue(annotation.value) : true;
+      result[name] = annotation.value ?
+        this.extractDefaultValue(annotation.value) :
+        true;
     }
     return result;
   }
@@ -1266,13 +1298,15 @@ export class SchemaDiffer {
   private scalarEnumValues(
     decl: AST.ScalarTypeDeclaration
   ): string[] | undefined {
-    if (!this.isEnumScalar(decl))
+    if (!this.isEnumScalar(decl)) {
       return undefined;
+    }
     const enumExt = (decl.extending ?? []).find(
       ext => ext.name.parts[0] === "enum"
     );
-    if (!enumExt || !enumExt.params)
+    if (!enumExt || !enumExt.params) {
       return [];
+    }
     return enumExt.params.map(p => p.name.parts.join("::"));
   }
 
@@ -1282,10 +1316,12 @@ export class SchemaDiffer {
    * the literal `"enum"` string (values live separately).
    */
   private scalarBaseType(decl: AST.ScalarTypeDeclaration): string {
-    if (this.isEnumScalar(decl))
+    if (this.isEnumScalar(decl)) {
       return "enum";
-    if (!decl.extending || decl.extending.length === 0)
+    }
+    if (!decl.extending || decl.extending.length === 0) {
       return "anyscalar";
+    }
     return decl
       .extending
       .map(ext => ext.name.parts.join("::"))
@@ -1311,8 +1347,9 @@ export class SchemaDiffer {
     oldValues: string[],
     newValues: string[]
   ): Types.MigrationOperation[] {
-    if (oldValues.length === 0 && newValues.length === 0)
+    if (oldValues.length === 0 && newValues.length === 0) {
       return [];
+    }
 
     const oldSet = new Set(oldValues);
     const newSet = new Set(newValues);

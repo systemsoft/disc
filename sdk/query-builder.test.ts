@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Query builder — runtime EdgeQL emitter tests.
  *
@@ -223,7 +226,10 @@ Deno.test("attaching a client makes the chain awaitable", async () => {
 
 Deno.test("first() limits to 1 and unwraps the single row (or null)", async () => {
   const fakeClient = {
-    query: <T = unknown>(_q: string, _v?: Record<string, unknown>): Promise<T> => Promise.resolve([{ id: "u1" }] as T)
+    query: <T = unknown>(
+      _q: string,
+      _v?: Record<string, unknown>
+    ): Promise<T> => Promise.resolve([{ id: "u1" }] as T)
   };
   const { createQueryBuilder } = await import("./query-builder.ts");
   const qb = createQueryBuilder(fakeClient);
@@ -232,7 +238,10 @@ Deno.test("first() limits to 1 and unwraps the single row (or null)", async () =
 
   // Empty result -> null.
   const emptyClient = {
-    query: <T = unknown>(_q: string, _v?: Record<string, unknown>): Promise<T> => Promise.resolve([] as T)
+    query: <T = unknown>(
+      _q: string,
+      _v?: Record<string, unknown>
+    ): Promise<T> => Promise.resolve([] as T)
   };
   const qb2 = createQueryBuilder(emptyClient);
   assertEquals(await qb2.User.select({ id: true }).first(), null);
@@ -252,8 +261,9 @@ Deno.test("Stage B — and() with Filter objects produces an Expr the codegen pa
   const node = and({ email: "a@b.c" }, { active: true });
   // Internal shape: combinators wrap their args verbatim under `exprs`.
   assertEquals(node.kind, "and");
-  if (node.kind !== "and")
+  if (node.kind !== "and") {
     throw new Error("type narrowing");
+  }
   assertEquals(node.exprs.length, 2);
   assertEquals(node.exprs[0], { email: "a@b.c" });
   assertEquals(node.exprs[1], { active: true });
@@ -263,10 +273,16 @@ Deno.test("Stage B — or() mixes Filter objects and Expr nodes", async () => {
   const { or } = await import("./query-builder.ts");
   const exprNode = from("User").select({ id: true });
   // Build a binop manually for the assertion (don't need a FieldRef here)
-  const node = or({ tier: "gold" }, { kind: "binop", op: "=", field: "tier", value: "silver" });
+  const node = or({ tier: "gold" }, {
+    kind: "binop",
+    op: "=",
+    field: "tier",
+    value: "silver"
+  });
   assertEquals(node.kind, "or");
-  if (node.kind !== "or")
+  if (node.kind !== "or") {
     throw new Error("type narrowing");
+  }
   assertEquals(node.exprs.length, 2);
   assertEquals(node.exprs[0], { tier: "gold" });
   // Sanity: the Expr child round-trips
@@ -277,8 +293,9 @@ Deno.test("Stage B — not() wraps a single Filter object", async () => {
   const { not } = await import("./query-builder.ts");
   const node = not({ active: false });
   assertEquals(node.kind, "not");
-  if (node.kind !== "not")
+  if (node.kind !== "not") {
     throw new Error("type narrowing");
+  }
   assertEquals(node.expr, { active: false });
 });
 

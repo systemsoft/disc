@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Stage E — end-to-end validation of compileFilter output against the
  * real Disc EdgeQL parser + compiler.
@@ -72,14 +75,18 @@ function compileAndRun(filter: Parameters<typeof compileFilter>[1]): string {
   const compiled = compileFilter("User", filter, userInfo);
   const shape = compiled.selectShape ?? "{ * }";
   const parts: string[] = [`select User ${shape}`];
-  if (compiled.clause)
+  if (compiled.clause) {
     parts.push(`filter ${compiled.clause}`);
-  if (compiled.orderBy)
+  }
+  if (compiled.orderBy) {
     parts.push(compiled.orderBy);
-  if (compiled.limit !== null)
+  }
+  if (compiled.limit !== null) {
     parts.push(`limit ${compiled.limit}`);
-  if (compiled.offset !== null)
+  }
+  if (compiled.offset !== null) {
     parts.push(`offset ${compiled.offset}`);
+  }
   return edgeqlToSql(parts.join(" "));
 }
 

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Semantic-tokens provider (LSP Phase 8c)
  *
@@ -19,7 +22,7 @@
  */
 
 import { SDLLexer } from "../schema/lexer.ts";
-import { type Token, TokenType } from "../schema/tokens.ts";
+import { TokenType, type Token } from "../schema/tokens.ts";
 
 export const SEMANTIC_TOKEN_TYPES = [
   "keyword",
@@ -62,8 +65,9 @@ function categorize(tok: Token): SemanticType | null {
       // are camelCase. The first letter's case is a strong-enough
       // signal for v1.
       const first = tok.value[0];
-      if (first >= "A" && first <= "Z")
+      if (first >= "A" && first <= "Z") {
         return "type";
+      }
       return "property";
     }
     // Whitespace / newlines / EOF / punctuation aren't useful semantic
@@ -96,8 +100,9 @@ const TYPE_TO_INDEX: ReadonlyMap<SemanticType, number> = new Map(
 );
 
 export function provideSemanticTokens(text: string): SemanticTokensResult {
-  if (text.length === 0)
+  if (text.length === 0) {
     return { data: [] };
+  }
 
   let tokens: Token[];
   try {
@@ -114,8 +119,9 @@ export function provideSemanticTokens(text: string): SemanticTokensResult {
 
   for (const tok of tokens) {
     const cat = categorize(tok);
-    if (cat === null)
+    if (cat === null) {
       continue;
+    }
     // Lexer positions are 1-indexed; LSP positions are 0-indexed.
     const line = Math.max(0, tok.line - 1);
     const startCol = Math.max(0, tok.column - 1);
@@ -125,8 +131,9 @@ export function provideSemanticTokens(text: string): SemanticTokensResult {
     // would apply to BACKTICK_IDENT but that already counts the
     // backticks in `tok.value`.
     const length = cat === "string" ? tok.value.length + 2 : tok.value.length;
-    if (length === 0)
+    if (length === 0) {
       continue;
+    }
 
     const deltaLine = line - prevLine;
     const deltaStart = deltaLine === 0 ? startCol - prevStart : startCol;

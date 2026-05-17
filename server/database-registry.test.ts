@@ -1,8 +1,16 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for DatabaseRegistry
  */
 
-import { assertEquals, assertExists, assertRejects, assertStringIncludes } from "@std/assert";
+import {
+  assertEquals,
+  assertExists,
+  assertRejects,
+  assertStringIncludes
+} from "@std/assert";
 import { DatabaseConnection, replaceDsnDatabase } from "../lib/database.ts";
 import { DatabaseRegistryError } from "../lib/errors.ts";
 import { DatabaseRegistry } from "./database-registry.ts";

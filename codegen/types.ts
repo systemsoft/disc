@@ -1,220 +1,250 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * TypeScript Codegen Types and Interfaces
  */
 
+/*** UTILITY ------------------------------------------ ***/
+
+/**
+ * Map SQL type names to their EdgeQL equivalents for backward compatibility.
+ * When PropertyDef.edgeqlType is missing, the type field may contain SQL types
+ * (e.g., "text", "integer") instead of EdgeQL types (e.g., "str", "int32").
+ */
+const SQL_TO_EDGEQL_TYPE_MAP: Record<string, string> = {
+  bigint: "int64",
+  boolean: "bool",
+  bytea: "bytes",
+  date: "cal::local_date",
+  "double precision": "float64",
+  integer: "int32",
+  interval: "duration",
+  jsonb: "json",
+  numeric: "decimal",
+  real: "float32",
+  smallint: "int16",
+  text: "str",
+  time: "cal::local_time",
+  timestamp: "cal::local_datetime",
+  timestamptz: "datetime",
+  uuid: "uuid"
+};
+
+/*** EXPORT ------------------------------------------- ***/
+
+export interface ClientDefinition {
+  className: string;
+  constructorParams: MethodParameter[];
+  imports: string[];
+  methods: ClientMethod[];
+}
+
+export interface ClientMethod {
+  body: string;
+  description?: string;
+  isAsync: boolean;
+  name: string;
+  parameters: MethodParameter[];
+  returnType: string;
+}
+
 export interface CodegenConfig {
-  outputDir: string;
-  schemaSource: string;
-  schemaDir?: string;
-  target: "client" | "server" | "both";
-  typePrefix?: string;
-  interfaceSuffix?: string;
-  includeQueryBuilders: boolean;
-  includeMutations: boolean;
-  includeClient: boolean;
   formatOutput: boolean;
+  includeClient: boolean;
+  includeMutations: boolean;
+  includeQueryBuilders: boolean;
+  interfaceSuffix?: string;
+  outputDir: string;
+  schemaDir?: string;
+  schemaSource: string;
   /**
    * Base module specifier for the Disc SDK re-exports emitted into the
    * generated client. Defaults to `"./sdk/mod.ts"` — `disc codegen`
    * materializes the embedded SDK into `<outputDir>/sdk/` alongside the
    * generated `client.ts`, so the relative import resolves out of the
    * box for downstream projects. Override to e.g. `"jsr:@disc/db/sdk"`
-   * if you'd rather depend on a published SDK package than ship the
-   * extracted copy. (P1-21)
+   * if you’d rather depend on a published SDK package than ship the
+   * extracted copy.
    */
   sdkImportBase?: string;
-}
-
-export interface TypeDefinition {
-  name: string;
-  kind: "interface" | "type" | "enum" | "union";
-  properties: PropertyDefinition[];
-  extends?: string[];
-  export: boolean;
-  description?: string;
-}
-
-export interface PropertyDefinition {
-  name: string;
-  type: string;
-  optional: boolean;
-  nullable: boolean;
-  array: boolean;
-  description?: string;
-  defaultValue?: string;
-}
-
-export interface QueryBuilderDefinition {
-  name: string;
-  targetType: string;
-  methods: QueryMethod[];
-  returnType: string;
-}
-
-export interface QueryMethod {
-  name: string;
-  parameters: MethodParameter[];
-  returnType: string;
-  body: string;
-  description?: string;
-}
-
-export interface MethodParameter {
-  name: string;
-  type: string;
-  optional: boolean;
-  description?: string;
-}
-
-export interface ClientDefinition {
-  className: string;
-  methods: ClientMethod[];
-  constructorParams: MethodParameter[];
-  imports: string[];
-}
-
-export interface ClientMethod {
-  name: string;
-  parameters: MethodParameter[];
-  returnType: string;
-  isAsync: boolean;
-  body: string;
-  description?: string;
+  target: "both" | "client" | "server";
+  typePrefix?: string;
 }
 
 export interface CodegenResult {
+  errors: string[];
   files: GeneratedFile[];
   warnings: string[];
-  errors: string[];
 }
 
 export interface GeneratedFile {
-  path: string;
   content: string;
-  type: "types" | "interfaces" | "client" | "queries" | "mutations" | "index";
+  path: string;
+  type: "client" | "index" | "interfaces" | "mutations" | "queries" | "types";
+}
+
+export interface MethodParameter {
+  description?: string;
+  name: string;
+  optional: boolean;
+  type: string;
+}
+
+export interface PropertyDefinition {
+  array: boolean;
+  defaultValue?: string;
+  description?: string;
+  name: string;
+  nullable: boolean;
+  optional: boolean;
+  type: string;
+}
+
+export interface QueryBuilderDefinition {
+  methods: QueryMethod[];
+  name: string;
+  returnType: string;
+  targetType: string;
+}
+
+export interface QueryMethod {
+  body: string;
+  description?: string;
+  name: string;
+  parameters: MethodParameter[];
+  returnType: string;
+}
+
+export interface TypeDefinition {
+  description?: string;
+  export: boolean;
+  extends?: string[];
+  kind: "enum" | "interface" | "type" | "union";
+  name: string;
+  properties: PropertyDefinition[];
 }
 
 export interface TypeMapping {
-  edgeqlType: string;
-  typescriptType: string;
-  nullableType: string;
   arrayType: string;
+  edgeqlType: string;
   importRequired?: string;
+  nullableType: string;
+  typescriptType: string;
 }
 
-// Built-in type mappings
 export const DEFAULT_TYPE_MAPPINGS: TypeMapping[] = [
   {
+    arrayType: "string[]",
     edgeqlType: "str",
-    typescriptType: "string",
     nullableType: "string | null",
-    arrayType: "string[]"
+    typescriptType: "string"
   },
   {
+    arrayType: "boolean[]",
     edgeqlType: "bool",
-    typescriptType: "boolean",
     nullableType: "boolean | null",
-    arrayType: "boolean[]"
+    typescriptType: "boolean"
   },
   {
+    arrayType: "number[]",
     edgeqlType: "int16",
-    typescriptType: "number",
     nullableType: "number | null",
-    arrayType: "number[]"
+    typescriptType: "number"
   },
   {
+    arrayType: "number[]",
     edgeqlType: "int32",
-    typescriptType: "number",
     nullableType: "number | null",
-    arrayType: "number[]"
+    typescriptType: "number"
   },
   {
-    // P1-20: `int64` values can exceed JS `Number.MAX_SAFE_INTEGER` (2^53-1).
-    // Generating `number` lost precision silently on large values. `bigint`
-    // is lossless and matches how PG drivers surface int8.
+    arrayType: "bigint[]",
+    /*** `int64` values can exceed JS `Number.MAX_SAFE_INTEGER` (2^53-1). Generating `number` lost
+         precision silently on large values. `bigint` is lossless and matches how PG drivers
+         surface int8. ***/
     edgeqlType: "int64",
-    typescriptType: "bigint",
     nullableType: "bigint | null",
-    arrayType: "bigint[]"
+    typescriptType: "bigint"
   },
   {
+    arrayType: "number[]",
     edgeqlType: "float32",
-    typescriptType: "number",
     nullableType: "number | null",
-    arrayType: "number[]"
+    typescriptType: "number"
   },
   {
+    arrayType: "number[]",
     edgeqlType: "float64",
-    typescriptType: "number",
     nullableType: "number | null",
-    arrayType: "number[]"
+    typescriptType: "number"
   },
   {
+    arrayType: "number[]",
     edgeqlType: "decimal",
-    typescriptType: "number",
     nullableType: "number | null",
-    arrayType: "number[]"
+    typescriptType: "number"
   },
   {
+    arrayType: "string[]",
     edgeqlType: "uuid",
-    typescriptType: "string",
     nullableType: "string | null",
-    arrayType: "string[]"
+    typescriptType: "string"
   },
   {
+    arrayType: "Date[]",
     edgeqlType: "datetime",
-    typescriptType: "Date",
     nullableType: "Date | null",
-    arrayType: "Date[]"
+    typescriptType: "Date"
   },
   {
+    arrayType: "string[]",
     edgeqlType: "duration",
-    typescriptType: "string",
     nullableType: "string | null",
-    arrayType: "string[]"
+    typescriptType: "string"
   },
   {
-    edgeqlType: "bytes",
-    typescriptType: "Uint8Array",
-    nullableType: "Uint8Array | null",
     arrayType: "Uint8Array[]",
-    importRequired: "// Note: Uint8Array is built-in"
+    edgeqlType: "bytes",
+    importRequired: "// Note: Uint8Array is built-in",
+    nullableType: "Uint8Array | null",
+    typescriptType: "Uint8Array"
   },
   {
+    arrayType: "unknown[]",
     edgeqlType: "json",
-    typescriptType: "unknown",
     nullableType: "unknown | null",
-    arrayType: "unknown[]"
+    typescriptType: "unknown"
   },
   {
+    arrayType: "Date[]",
     edgeqlType: "cal::local_datetime",
-    typescriptType: "Date",
     nullableType: "Date | null",
-    arrayType: "Date[]"
+    typescriptType: "Date"
   },
   {
+    arrayType: "string[]",
     edgeqlType: "cal::local_date",
-    typescriptType: "string",
     nullableType: "string | null",
-    arrayType: "string[]"
+    typescriptType: "string"
   },
   {
+    arrayType: "string[]",
     edgeqlType: "cal::local_time",
-    typescriptType: "string",
     nullableType: "string | null",
-    arrayType: "string[]"
+    typescriptType: "string"
   },
   {
+    arrayType: "string[]",
     edgeqlType: "cal::relative_duration",
-    typescriptType: "string",
     nullableType: "string | null",
-    arrayType: "string[]"
+    typescriptType: "string"
   },
   {
+    arrayType: "string[]",
     edgeqlType: "cal::date_duration",
-    typescriptType: "string",
     nullableType: "string | null",
-    arrayType: "string[]"
+    typescriptType: "string"
   }
 ];
 
@@ -223,107 +253,78 @@ export function getTypeMapping(edgeqlType: string): TypeMapping | null {
 }
 
 /**
- * Map SQL type names to their EdgeQL equivalents for backward compatibility.
- * When PropertyDef.edgeqlType is missing, the type field may contain SQL types
- * (e.g., "text", "integer") instead of EdgeQL types (e.g., "str", "int32").
- */
-const SQL_TO_EDGEQL_TYPE_MAP: Record<string, string> = {
-  text: "str",
-  boolean: "bool",
-  smallint: "int16",
-  integer: "int32",
-  bigint: "int64",
-  real: "float32",
-  "double precision": "float64",
-  numeric: "decimal",
-  uuid: "uuid",
-  timestamptz: "datetime",
-  timestamp: "cal::local_datetime",
-  interval: "duration",
-  bytea: "bytes",
-  jsonb: "json",
-  date: "cal::local_date",
-  time: "cal::local_time"
-};
-
-/**
  * Map an EdgeQL type name to its EdgeQL cast syntax.
  */
 export function mapEdgeQLTypeToEdgeQLCast(edgeqlType: string): string {
   const castMap: Record<string, string> = {
-    str: "<str>",
+    bigint: "<bigint>",
+    bool: "<bool>",
+    bytes: "<bytes>",
+    "cal::date_duration": "<cal::date_duration>",
+    "cal::local_date": "<cal::local_date>",
+    "cal::local_datetime": "<cal::local_datetime>",
+    "cal::local_time": "<cal::local_time>",
+    "cal::relative_duration": "<cal::relative_duration>",
+    datetime: "<datetime>",
+    decimal: "<decimal>",
+    duration: "<duration>",
+    float32: "<float32>",
+    float64: "<float64>",
     int16: "<int16>",
     int32: "<int32>",
     int64: "<int64>",
-    float32: "<float32>",
-    float64: "<float64>",
-    bool: "<bool>",
-    datetime: "<datetime>",
-    duration: "<duration>",
-    uuid: "<uuid>",
-    bytes: "<bytes>",
     json: "<json>",
-    bigint: "<bigint>",
-    decimal: "<decimal>",
     sequence: "<sequence>",
-    "cal::local_datetime": "<cal::local_datetime>",
-    "cal::local_date": "<cal::local_date>",
-    "cal::local_time": "<cal::local_time>",
-    "cal::relative_duration": "<cal::relative_duration>",
-    "cal::date_duration": "<cal::date_duration>"
+    str: "<str>",
+    uuid: "<uuid>"
   };
+
   return castMap[edgeqlType] || `<${edgeqlType}>`;
 }
 
-export function mapEdgeQLTypeToTypeScript(
-  edgeqlType: string,
-  required: boolean = true,
-  multi: boolean = false
-): string {
-  // Computed properties carry the parser's placeholder type `auto` — there's
-  // no inference engine yet, so the surface type is genuinely unknown.
-  // Emit `unknown` rather than letting the keyword leak into TS as a literal.
+export function mapEdgeQLTypeToTypeScript(edgeqlType: string, required: boolean = true, multi: boolean = false): string {
+  /*** Computed properties carry the parser’s placeholder type `auto` — there’s no inference engine
+       yet, so the surface type is genuinely unknown. Emit `unknown` rather than letting the keyword
+       leak into TS as a literal. ***/
   if (edgeqlType === "auto") {
     const base = "unknown";
-    if (multi) {
+
+    if (multi)
       return required ? `${base}[]` : `${base}[] | null`;
-    }
+
     return required ? base : `${base} | null`;
   }
 
-  // Try direct EdgeQL type mapping first
+  /*** Try direct EdgeQL type mapping first ***/
   let mapping = getTypeMapping(edgeqlType);
 
-  // Fall back to SQL type name mapping for backward compatibility
+  /*** Fall back to SQL type name mapping for backward compatibility ***/
   if (!mapping) {
     const edgeqlEquivalent = SQL_TO_EDGEQL_TYPE_MAP[edgeqlType];
-    if (edgeqlEquivalent) {
+
+    if (edgeqlEquivalent)
       mapping = getTypeMapping(edgeqlEquivalent);
-    }
   }
 
   if (!mapping) {
-    // For object types, use the type name directly. Strip any `module::`
-    // qualifier so the bare type name lands in TS — cross-module routing is
-    // handled by `resolveTypeReference` higher up in the generator.
+    /*** For object types, use the type name directly. Strip any `module::` qualifier so the bare
+         type name lands in TS — cross-module routing is handled by `resolveTypeReference` higher up
+         in the generator. ***/
     let tsType = edgeqlType.includes("::") ?
       edgeqlType.split("::").pop()! :
       edgeqlType;
 
-    if (multi) {
+    if (multi)
       tsType += "[]";
-    }
 
-    if (!required) {
+    if (!required)
       tsType += " | null";
-    }
 
     return tsType;
   }
 
-  if (multi) {
+  if (multi)
     return required ? mapping.arrayType : `${mapping.arrayType} | null`;
-  }
 
   return required ? mapping.typescriptType : mapping.nullableType;
 }

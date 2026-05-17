@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Public exports for Disc's SMTP module.
  *
@@ -7,6 +10,19 @@
  * mailer.
  */
 
-export { defaultConnectImpl, type SendEnvelope, type SendOutcome, SmtpClient, type SmtpClientConfig } from "./client.ts";
-export { createMailer, type Mailer, NoopMailer, SmtpMailer } from "./mailer.ts";
-export type { Email, MailerResult, SmtpClientOptions, SmtpConfig, SmtpConn, SmtpConnectImpl } from "./types.ts";
+export {
+  defaultConnectImpl,
+  SmtpClient,
+  type SendEnvelope,
+  type SendOutcome,
+  type SmtpClientConfig
+} from "./client.ts";
+export { createMailer, NoopMailer, SmtpMailer, type Mailer } from "./mailer.ts";
+export type {
+  Email,
+  MailerResult,
+  SmtpClientOptions,
+  SmtpConfig,
+  SmtpConn,
+  SmtpConnectImpl
+} from "./types.ts";

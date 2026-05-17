@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for multiple inheritance support (Stage 29)
  *
@@ -50,8 +53,9 @@ function parseAndBuild(sdl: string): Schema {
   const manager = new SchemaManager({});
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true, "parseSDL should succeed");
-  if (!parseResult.ok)
+  if (!parseResult.ok) {
     throw parseResult.error;
+  }
   return manager.modulesToSchema(parseResult.value);
 }
 
@@ -481,8 +485,9 @@ Deno.test("multiple inheritance - DDL generates __type__ discriminator for child
   const manager = new SchemaManager({});
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true);
-  if (!parseResult.ok)
+  if (!parseResult.ok) {
     return;
+  }
 
   const modules = parseResult.value;
 

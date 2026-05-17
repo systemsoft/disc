@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Health Endpoint Enhancement Tests
  *
@@ -12,7 +15,15 @@
 
 import { assertEquals, assertExists } from "@std/assert";
 import { HttpServer } from "./http.ts";
-import type { HealthStatus, ProtocolHandler, QueryContext, QueryError, QueryRequest, QueryResponse, ServerConfig } from "./types.ts";
+import type {
+  HealthStatus,
+  ProtocolHandler,
+  QueryContext,
+  QueryError,
+  QueryRequest,
+  QueryResponse,
+  ServerConfig
+} from "./types.ts";
 
 // --- Helpers ---
 

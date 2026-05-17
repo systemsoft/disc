@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Binary protocol message parser for Gel/EdgeDB compatibility
  * Handles message framing and parsing with big-endian encoding

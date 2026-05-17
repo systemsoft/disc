@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Subscription handler tests
  */
@@ -16,8 +19,9 @@ class MockWebSocket {
   }
 
   getLastMessage(): any {
-    if (this.messages.length === 0)
+    if (this.messages.length === 0) {
       return null;
+    }
     return JSON.parse(this.messages[this.messages.length - 1]);
   }
 

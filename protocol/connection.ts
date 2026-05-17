@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Protocol connection state machine
  * Manages the lifecycle of a binary protocol connection
@@ -74,8 +77,9 @@ export class ProtocolConnection {
 
     while (this.parser.hasCompleteMessage()) {
       const message = this.parser.parseMessage();
-      if (!message)
+      if (!message) {
         break;
+      }
 
       const response = await this.handleMessage(message);
       if (response) {
@@ -340,7 +344,9 @@ export class ProtocolConnection {
     const ready: Types.ReadyForCommand = {
       type: Types.MessageType.ReadyForCommand,
       length: 0,
-      transactionState: this.transactionDepth > 0 ? Types.TransactionState.InTransaction : Types.TransactionState.Idle,
+      transactionState: this.transactionDepth > 0 ?
+        Types.TransactionState.InTransaction :
+        Types.TransactionState.Idle,
       annotations: []
     };
     responses.push(this.builder.buildMessage(ready));
@@ -382,7 +388,9 @@ export class ProtocolConnection {
     const ready: Types.ReadyForCommand = {
       type: Types.MessageType.ReadyForCommand,
       length: 0,
-      transactionState: this.transactionDepth > 0 ? Types.TransactionState.InTransaction : Types.TransactionState.Idle,
+      transactionState: this.transactionDepth > 0 ?
+        Types.TransactionState.InTransaction :
+        Types.TransactionState.Idle,
       annotations: []
     };
     responses.push(this.builder.buildMessage(ready));
@@ -397,7 +405,9 @@ export class ProtocolConnection {
     const ready: Types.ReadyForCommand = {
       type: Types.MessageType.ReadyForCommand,
       length: 0,
-      transactionState: this.transactionDepth > 0 ? Types.TransactionState.InTransaction : Types.TransactionState.Idle,
+      transactionState: this.transactionDepth > 0 ?
+        Types.TransactionState.InTransaction :
+        Types.TransactionState.Idle,
       annotations: []
     };
 

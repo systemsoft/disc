@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Custom functions extension for Disc database
  */
@@ -5,7 +8,11 @@
 import type { FunctionDef } from "../compiler/context.ts";
 import { BaseExtension } from "../extensions/base-extension.ts";
 import { ExtensionConfigError } from "../extensions/errors.ts";
-import type { ExtensionContext, ExtensionDatabaseSetup, ExtensionMetadata } from "../extensions/types.ts";
+import type {
+  ExtensionContext,
+  ExtensionDatabaseSetup,
+  ExtensionMetadata
+} from "../extensions/types.ts";
 import { generateCreateFunction, generateDropFunction } from "./ddl.ts";
 import type { CustomFunctionDef, CustomFunctionsConfig } from "./types.ts";
 

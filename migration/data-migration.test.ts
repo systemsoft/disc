@@ -1,10 +1,17 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 // deno-lint-ignore-file require-await
 /**
  * Tests for Data Migration Runner
  */
 
 import { assertEquals, assertRejects } from "@std/assert";
-import { DataMigration, DataMigrationContext, DataMigrationRunner } from "./data-migration.ts";
+import {
+  DataMigration,
+  DataMigrationContext,
+  DataMigrationRunner
+} from "./data-migration.ts";
 
 // ---- Helpers ----
 

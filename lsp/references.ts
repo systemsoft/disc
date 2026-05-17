@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Find-references provider (#7411 + #655 — Phase 4 + Phase 8a)
  *
@@ -15,7 +18,7 @@
  */
 
 import { SDLLexer } from "../schema/lexer.ts";
-import { type Token, TokenType } from "../schema/tokens.ts";
+import { TokenType, type Token } from "../schema/tokens.ts";
 import type { DocumentUri, Location, Position, Range } from "./protocol.ts";
 import { buildSymbolIndex } from "./symbol-index.ts";
 
@@ -35,8 +38,9 @@ export function provideReferences(
   } = {}
 ): Location[] {
   const word = wordAt(text, pos);
-  if (!word)
+  if (!word) {
     return [];
+  }
 
   // Resolve the declaration. The cursor may be on a use site in this
   // file, or in another file in the cross-file context — we look at
@@ -50,8 +54,9 @@ export function provideReferences(
     declRangeStart = localDecl.range.start;
   } else if (options.context) {
     for (const ctxDoc of options.context.documents) {
-      if (ctxDoc.uri === uri)
+      if (ctxDoc.uri === uri) {
         continue;
+      }
       const ctxIdx = buildSymbolIndex(ctxDoc.text);
       const ctxDecl = ctxIdx.types.get(word);
       if (ctxDecl) {
@@ -61,8 +66,9 @@ export function provideReferences(
       }
     }
   }
-  if (!declRangeStart)
+  if (!declRangeStart) {
     return [];
+  }
 
   const includeDecl = options.includeDeclaration ?? true;
 
@@ -76,8 +82,9 @@ export function provideReferences(
   seen.add(uri);
   if (options.context) {
     for (const ctxDoc of options.context.documents) {
-      if (seen.has(ctxDoc.uri))
+      if (seen.has(ctxDoc.uri)) {
         continue;
+      }
       targets.push(ctxDoc);
       seen.add(ctxDoc.uri);
     }
@@ -92,16 +99,19 @@ export function provideReferences(
       continue;
     }
     for (const tok of tokens) {
-      if (tok.type !== TokenType.IDENT)
+      if (tok.type !== TokenType.IDENT) {
         continue;
-      if (tok.value !== word)
+      }
+      if (tok.value !== word) {
         continue;
+      }
       const range = tokenRange(tok);
       const isDeclSite = target.uri === declUri &&
         range.start.line === declRangeStart.line &&
         range.start.character === declRangeStart.character;
-      if (isDeclSite && !includeDecl)
+      if (isDeclSite && !includeDecl) {
         continue;
+      }
       out.push({ uri: target.uri, range });
     }
   }
@@ -110,18 +120,21 @@ export function provideReferences(
 
 function wordAt(text: string, pos: Position): string | null {
   const lines = text.split("\n");
-  if (pos.line < 0 || pos.line >= lines.length)
+  if (pos.line < 0 || pos.line >= lines.length) {
     return null;
+  }
   const line = lines[pos.line];
-  if (pos.character < 0 || pos.character > line.length)
+  if (pos.character < 0 || pos.character > line.length) {
     return null;
+  }
   IDENT.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = IDENT.exec(line)) !== null) {
     const start = m.index;
     const end = start + m[0].length;
-    if (pos.character >= start && pos.character <= end)
+    if (pos.character >= start && pos.character <= end) {
       return m[0];
+    }
   }
   return null;
 }

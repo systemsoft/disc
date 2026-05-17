@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for the migration history REST endpoint.
  *
@@ -10,7 +13,11 @@
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import type { MigrationHistoryEntry } from "../migration/types.ts";
-import { handleGetMigrations, type MigrationsProvider, type MigrationsRouteContext } from "./migrations-endpoint.ts";
+import {
+  handleGetMigrations,
+  type MigrationsProvider,
+  type MigrationsRouteContext
+} from "./migrations-endpoint.ts";
 
 function makeCtx(provider: MigrationsProvider): MigrationsRouteContext {
   return {

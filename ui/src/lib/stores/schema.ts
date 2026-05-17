@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 import type { SchemaTypeDescription } from "$lib/api/client";
 import { discAPI } from "$lib/api/client";
 import { derived, get, writable } from "svelte/store";

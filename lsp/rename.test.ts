@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Rename provider tests (#7411 + #655 — Phase 4)
  */
@@ -10,8 +13,9 @@ function findPos(haystack: string, needle: string, occurrence = 0): Position {
   let offset = -1;
   for (let i = 0; i <= occurrence; i++) {
     offset = haystack.indexOf(needle, offset + 1);
-    if (offset === -1)
+    if (offset === -1) {
       throw new Error(`not found: ${needle}`);
+    }
   }
   let line = 0;
   let character = 0;
@@ -184,14 +188,20 @@ Deno.test("provideRename - cross-file: collision with a type in a sibling file",
   const bText = `module default {
   type Member { required handle: str; };
 }`;
-  const result = provideRename(aText, findPos(aText, "User"), "Member", "file:///a.disc", {
-    context: {
-      documents: [
-        { uri: "file:///a.disc", text: aText },
-        { uri: "file:///b.disc", text: bText }
-      ]
+  const result = provideRename(
+    aText,
+    findPos(aText, "User"),
+    "Member",
+    "file:///a.disc",
+    {
+      context: {
+        documents: [
+          { uri: "file:///a.disc", text: aText },
+          { uri: "file:///b.disc", text: bText }
+        ]
+      }
     }
-  });
+  );
   assertEquals(result, null);
 });
 

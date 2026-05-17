@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Cross-cutting structural-divergence pins.
  *
@@ -32,7 +35,9 @@ Deno.test("Gel #4408: Deno-task surface is the lint/fmt/test entry point", async
   const denoJsonText = await Deno.readTextFile(
     new URL("../deno.json", import.meta.url)
   );
-  const denoJson = JSON.parse(denoJsonText) as { tasks?: Record<string, string>; };
+  const denoJson = JSON.parse(denoJsonText) as {
+    tasks?: Record<string, string>;
+  };
   const tasks = denoJson.tasks ?? {};
 
   // The commit skill and CI run these specific tasks. Renaming or removing
@@ -68,10 +73,11 @@ Deno.test("Gel #4408: no .pre-commit-config.yaml in the repo (deliberate non-ado
     try {
       await Deno.stat(url);
     } catch (e) {
-      if (e instanceof Deno.errors.NotFound)
+      if (e instanceof Deno.errors.NotFound) {
         exists = false;
-      else
+      } else {
         throw e;
+      }
     }
     assertEquals(
       exists,

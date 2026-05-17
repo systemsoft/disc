@@ -107,7 +107,7 @@ set -e
 
 # Initialize the data directory if it is empty.
 if [ ! -s "$PGDATA/PG_VERSION" ]; then
-  echo "disc-bundled: initializing PostgreSQL data directory..."
+  echo "disc-bundled: initializing PostgreSQL data directory…"
   /usr/lib/postgresql/16/bin/initdb \
     --username=disc \
     --encoding=UTF-8 \
@@ -133,7 +133,7 @@ if [ ! -s "$PGDATA/PG_VERSION" ]; then
 fi
 
 # Start PostgreSQL in the background.
-echo "disc-bundled: starting PostgreSQL..."
+echo "disc-bundled: starting PostgreSQL…"
 /usr/lib/postgresql/16/bin/pg_ctl \
   -D "$PGDATA" \
   -l /var/log/postgresql/postgresql.log \

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 import { assertEquals } from "@std/assert";
 import { authContextToAccessContext } from "./access-bridge.ts";
 import type { AuthContext } from "./types.ts";

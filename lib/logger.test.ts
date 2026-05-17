@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { configureLogging, getLogger, Logger } from "./logger.ts";
 

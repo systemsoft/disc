@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * SDL Lexer - Tokenizes SDL source code
  */
@@ -413,13 +416,18 @@ export class SDLLexer {
             throw new SyntaxError(
               `Invalid \\u escape — expected 4 hex digits, got ${JSON.stringify(hex)}`,
               {
-                location: { line: this.line, column: this.column, offset: this.pos }
+                location: {
+                  line: this.line,
+                  column: this.column,
+                  offset: this.pos
+                }
               }
             );
           }
           parts.push(String.fromCodePoint(parseInt(hex, 16)));
-          for (let i = 0; i < 4; i++)
+          for (let i = 0; i < 4; i++) {
             this.advance();
+          }
           escaped = false;
           runStart = this.pos;
           continue;
@@ -730,14 +738,16 @@ export class SDLLexer {
   }
 
   private isDigit(ch: string | null): boolean {
-    if (ch === null)
+    if (ch === null) {
       return false;
+    }
     return ch >= "0" && ch <= "9";
   }
 
   private isIdentStart(ch: string | null): boolean {
-    if (ch === null)
+    if (ch === null) {
       return false;
+    }
     // ASCII fast-path
     if (
       (ch >= "a" && ch <= "z") ||
@@ -753,8 +763,9 @@ export class SDLLexer {
   }
 
   private isIdentCont(ch: string | null): boolean {
-    if (ch === null)
+    if (ch === null) {
       return false;
+    }
     // P2-04: identifier continuation allows letters, digits, and
     // Unicode marks (combining chars like accents).
     return this.isIdentStart(ch) || this.isDigit(ch) || /\p{M}/u.test(ch);

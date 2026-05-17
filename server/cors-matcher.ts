@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Wildcard-aware CORS origin matcher (#6655)
  *
@@ -24,8 +27,9 @@ export function matchCorsOrigin(
     return false;
   }
   // Browsers don't send userinfo in Origin, but reject defensively.
-  if (parsedSupplied.username || parsedSupplied.password)
+  if (parsedSupplied.username || parsedSupplied.password) {
     return false;
+  }
   // Origin headers must have an empty path. If the input has a non-empty
   // pathname, treat it as malformed.
   if (parsedSupplied.pathname !== "" && parsedSupplied.pathname !== "/") {
@@ -33,8 +37,9 @@ export function matchCorsOrigin(
   }
 
   for (const pattern of allowlist) {
-    if (matchesPattern(parsedSupplied, pattern))
+    if (matchesPattern(parsedSupplied, pattern)) {
       return true;
+    }
   }
   return false;
 }
@@ -59,27 +64,33 @@ function matchesWildcardPattern(supplied: URL, pattern: string): boolean {
   // Anchor on `://*.` to reject non-canonical inputs like `*.foo.com`
   // (no scheme) or `https://*foo.com` (wildcard not in label position).
   const schemeIdx = pattern.indexOf("://*.");
-  if (schemeIdx === -1)
+  if (schemeIdx === -1) {
     return false;
+  }
   const scheme = pattern.slice(0, schemeIdx); // "https"
   const afterStar = pattern.slice(schemeIdx + "://*.".length); // "example.com" or "example.com:8443"
   // Origin patterns have no path component — reject if one is present.
-  if (afterStar.includes("/"))
+  if (afterStar.includes("/")) {
     return false;
+  }
   const baseHost = afterStar.toLowerCase(); // includes port if any
 
-  if (supplied.protocol !== `${scheme}:`)
+  if (supplied.protocol !== `${scheme}:`) {
     return false;
+  }
 
   const suppliedHost = supplied.host.toLowerCase(); // includes port if any
   // Pattern host == "*." + baseHost; must match `<one-label>.<baseHost>`.
   const suffix = `.${baseHost}`;
-  if (!suppliedHost.endsWith(suffix))
+  if (!suppliedHost.endsWith(suffix)) {
     return false;
+  }
   const prefix = suppliedHost.slice(0, suppliedHost.length - suffix.length);
-  if (prefix.length === 0)
+  if (prefix.length === 0) {
     return false; // bare baseHost not allowed
-  if (prefix.includes("."))
+  }
+  if (prefix.includes(".")) {
     return false; // only one label deep
+  }
   return true;
 }

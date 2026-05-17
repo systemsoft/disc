@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 // deno-lint-ignore-file
 /**
  * Production E2E: Configuration Matrix Tests
@@ -13,7 +16,14 @@
 import { assertEquals, assertExists } from "@std/assert";
 import { HttpServer } from "../../server/http.ts";
 import { createServerFromEnv } from "../../server/server.ts";
-import type { ProtocolHandler, QueryContext, QueryError, QueryRequest, QueryResponse, ServerConfig } from "../../server/types.ts";
+import type {
+  ProtocolHandler,
+  QueryContext,
+  QueryError,
+  QueryRequest,
+  QueryResponse,
+  ServerConfig
+} from "../../server/types.ts";
 import { EnvMock } from "../../tests/test-utils.ts";
 
 // --- Helpers ---

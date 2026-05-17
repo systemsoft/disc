@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for EdgeQL to SQL Compiler
  */
@@ -1450,8 +1453,23 @@ function makeChainSchema() {
     kind: "object" as const,
     tableName: "owners",
     properties: new Map([
-      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id", edgeqlType: "uuid", hasDefault: true }],
-      ["email", { name: "email", type: "str", required: true, multi: false, columnName: "email", edgeqlType: "str" }]
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+        edgeqlType: "uuid",
+        hasDefault: true
+      }],
+      ["email", {
+        name: "email",
+        type: "str",
+        required: true,
+        multi: false,
+        columnName: "email",
+        edgeqlType: "str"
+      }]
     ]),
     links: new Map()
   };
@@ -1460,11 +1478,32 @@ function makeChainSchema() {
     kind: "object" as const,
     tableName: "merchants",
     properties: new Map([
-      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id", edgeqlType: "uuid", hasDefault: true }],
-      ["name", { name: "name", type: "str", required: true, multi: false, columnName: "name", edgeqlType: "str" }]
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+        edgeqlType: "uuid",
+        hasDefault: true
+      }],
+      ["name", {
+        name: "name",
+        type: "str",
+        required: true,
+        multi: false,
+        columnName: "name",
+        edgeqlType: "str"
+      }]
     ]),
     links: new Map([
-      ["owner", { name: "owner", target: "Owner", required: true, multi: false, columnName: "owner_id" }]
+      ["owner", {
+        name: "owner",
+        target: "Owner",
+        required: true,
+        multi: false,
+        columnName: "owner_id"
+      }]
     ])
   };
   const paymentType = {
@@ -1472,11 +1511,32 @@ function makeChainSchema() {
     kind: "object" as const,
     tableName: "payments",
     properties: new Map([
-      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id", edgeqlType: "uuid", hasDefault: true }],
-      ["amount", { name: "amount", type: "float64", required: true, multi: false, columnName: "amount", edgeqlType: "float64" }]
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+        edgeqlType: "uuid",
+        hasDefault: true
+      }],
+      ["amount", {
+        name: "amount",
+        type: "float64",
+        required: true,
+        multi: false,
+        columnName: "amount",
+        edgeqlType: "float64"
+      }]
     ]),
     links: new Map([
-      ["merchant", { name: "merchant", target: "Merchant", required: true, multi: false, columnName: "merchant_id" }]
+      ["merchant", {
+        name: "merchant",
+        target: "Merchant",
+        required: true,
+        multi: false,
+        columnName: "merchant_id"
+      }]
     ])
   };
   return {
@@ -1493,8 +1553,9 @@ function compileChain(source: string): string {
   const localCompiler = new EdgeQLCompiler(makeChainSchema() as never);
   const ast = new EdgeQLParser(source).parse();
   const r = localCompiler.compile(ast);
-  if (!r.ok)
+  if (!r.ok) {
     throw r.error;
+  }
   return new SQLCodeGenerator().generate(r.value);
 }
 
@@ -1509,7 +1570,11 @@ Deno.test("SQL Compiler - 3-hop .merchant.owner.email composes nested correlated
   // The chain should reference owner_id (merchant's FK to owner)
   assertEquals(sql.includes("owner_id"), true, `expected owner_id: ${sql}`);
   // ...and merchant_id (payment's FK to merchant) at the deepest layer
-  assertEquals(sql.includes("merchant_id"), true, `expected merchant_id: ${sql}`);
+  assertEquals(
+    sql.includes("merchant_id"),
+    true,
+    `expected merchant_id: ${sql}`
+  );
   // Final projected column is email
   assertEquals(sql.includes("email"), true);
 });
@@ -1539,8 +1604,23 @@ function makeJunctionSchema() {
     kind: "object" as const,
     tableName: "tags",
     properties: new Map([
-      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id", edgeqlType: "uuid", hasDefault: true }],
-      ["name", { name: "name", type: "str", required: true, multi: false, columnName: "name", edgeqlType: "str" }]
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+        edgeqlType: "uuid",
+        hasDefault: true
+      }],
+      ["name", {
+        name: "name",
+        type: "str",
+        required: true,
+        multi: false,
+        columnName: "name",
+        edgeqlType: "str"
+      }]
     ]),
     links: new Map()
   };
@@ -1549,8 +1629,23 @@ function makeJunctionSchema() {
     kind: "object" as const,
     tableName: "users",
     properties: new Map([
-      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id", edgeqlType: "uuid", hasDefault: true }],
-      ["name", { name: "name", type: "str", required: true, multi: false, columnName: "name", edgeqlType: "str" }]
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+        edgeqlType: "uuid",
+        hasDefault: true
+      }],
+      ["name", {
+        name: "name",
+        type: "str",
+        required: true,
+        multi: false,
+        columnName: "name",
+        edgeqlType: "str"
+      }]
     ]),
     links: new Map([
       ["tags", {
@@ -1577,8 +1672,9 @@ function compileJunction(source: string): string {
   const localCompiler = new EdgeQLCompiler(makeJunctionSchema() as never);
   const ast = new EdgeQLParser(source).parse();
   const r = localCompiler.compile(ast);
-  if (!r.ok)
+  if (!r.ok) {
     throw r.error;
+  }
   return new SQLCodeGenerator().generate(r.value);
 }
 

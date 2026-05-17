@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Unit tests for the built-in auth email templates.
  *
@@ -6,8 +9,20 @@
  * token into the subject line.
  */
 
+/*** NATIVE ------------------------------------------- ***/
+
 import { assert, assertEquals, assertStringIncludes } from "@std/assert";
-import { renderMagicCodeEmail, renderMagicLinkEmail, renderPasswordResetEmail, renderVerificationEmail } from "./email-templates.ts";
+
+/*** UTILITY ------------------------------------------ ***/
+
+import {
+  renderMagicCodeEmail,
+  renderMagicLinkEmail,
+  renderPasswordResetEmail,
+  renderVerificationEmail
+} from "./email-templates.ts";
+
+/*** RUNTIME ------------------------------------------ ***/
 
 Deno.test("renderVerificationEmail - returns subject, text, html", () => {
   const rendered = renderVerificationEmail({
@@ -117,13 +132,14 @@ Deno.test("templates - trailing slash on baseUrl is normalized", () => {
     recipient: "x@y",
     verificationToken: "t"
   });
+
   const b = renderVerificationEmail({
     baseUrl: "https://app.example.com",
     recipient: "x@y",
     verificationToken: "t"
   });
 
-  // Both produce links without a double slash on the path.
+  /*** Both produce links without a double slash on the path. ***/
   assertStringIncludes(a.text, "https://app.example.com/auth/verify?token=t");
   assertStringIncludes(b.text, "https://app.example.com/auth/verify?token=t");
 });
@@ -145,7 +161,7 @@ Deno.test("templates - HTML escapes recipient address with special chars", () =>
     verificationToken: "t"
   });
 
-  // The recipient should be escaped where it appears in the body.
+  /*** The recipient should be escaped where it appears in the body. ***/
   assertStringIncludes(rendered.html, "&lt;script&gt;");
   assertEquals(rendered.html.includes("<script>alert(1)</script>"), false);
 });
@@ -182,13 +198,11 @@ Deno.test("renderMagicCodeEmail - mentions the 10-minute TTL", () => {
   assertStringIncludes(rendered.html, "10 minutes");
 });
 
-// gh/geldata#7629 — bulletproof CTA button. Outlook on Windows drops
-// `display: inline-block` + `padding` on `<a>` (and `<p>`), so the
-// CTA renders as plain underlined text on the page background — when
-// the brand color was the only thing providing contrast against white
-// text, the result was invisible. Each button-bearing template now
-// wraps the link/badge in a single-cell `<table>` carrying the
-// background via the legacy `bgcolor` attribute.
+/*** gh/geldata#7629 — bulletproof CTA button. Outlook on Windows drops `display: inline-block` +
+     `padding` on `<a>` (and `<p>`), so the CTA renders as plain underlined text on the page
+     background — when the brand color was the only thing providing contrast against white text,
+     the result was invisible. Each button-bearing template now wraps the link/badge in a
+     single-cell `<table>` carrying the background via the legacy `bgcolor` attribute. ***/
 Deno.test("renderVerificationEmail - CTA uses bulletproof table markup", () => {
   const rendered = renderVerificationEmail({
     baseUrl: "https://app.example.com",
@@ -196,7 +210,7 @@ Deno.test("renderVerificationEmail - CTA uses bulletproof table markup", () => {
     verificationToken: "tok-verify-abc"
   });
 
-  assertStringIncludes(rendered.html, "<table role=\"presentation\"");
+  assertStringIncludes(rendered.html, `<table role="presentation"`);
   assertStringIncludes(rendered.html, "bgcolor=");
   assertStringIncludes(rendered.html, "mso-padding-alt:");
 });
@@ -208,7 +222,7 @@ Deno.test("renderPasswordResetEmail - CTA uses bulletproof table markup", () => 
     resetToken: "tok-reset-xyz"
   });
 
-  assertStringIncludes(rendered.html, "<table role=\"presentation\"");
+  assertStringIncludes(rendered.html, `<table role="presentation"`);
   assertStringIncludes(rendered.html, "bgcolor=");
   assertStringIncludes(rendered.html, "mso-padding-alt:");
 });
@@ -220,7 +234,7 @@ Deno.test("renderMagicLinkEmail - CTA uses bulletproof table markup", () => {
     recipient: "carol@example.com"
   });
 
-  assertStringIncludes(rendered.html, "<table role=\"presentation\"");
+  assertStringIncludes(rendered.html, `<table role="presentation"`);
   assertStringIncludes(rendered.html, "bgcolor=");
   assertStringIncludes(rendered.html, "mso-padding-alt:");
 });
@@ -231,7 +245,7 @@ Deno.test("renderMagicCodeEmail - code badge uses bulletproof table markup", () 
     recipient: "carol@example.com"
   });
 
-  assertStringIncludes(rendered.html, "<table role=\"presentation\"");
+  assertStringIncludes(rendered.html, `<table role="presentation"`);
   assertStringIncludes(rendered.html, "bgcolor=");
   assertStringIncludes(rendered.html, "mso-padding-alt:");
 });
@@ -244,9 +258,9 @@ Deno.test("buttonHtml - brandColor flows through to bgcolor attribute", () => {
     verificationToken: "t"
   });
 
-  // bgcolor on the <td> is what every email client uses; inline-block
-  // styling on the <a> is the modern-client path. Both must reflect
-  // the configured brand color so the rendering is consistent.
-  assertStringIncludes(rendered.html, "bgcolor=\"#ff0066\"");
+  /*** bgcolor on the <td> is what every email client uses; inline-block styling on the <a> is the
+       modern-client path. Both must reflect the configured brand color so the rendering
+       is consistent. ***/
+  assertStringIncludes(rendered.html, `bgcolor="#ff0066"`);
   assertStringIncludes(rendered.html, "background: #ff0066");
 });

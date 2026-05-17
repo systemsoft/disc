@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 import { ensureDir } from "@std/fs";
 import { join } from "@std/path";
 import { logger } from "./logger.ts";
@@ -121,7 +124,7 @@ export class PostgresBinaryDownloader {
       );
     }
 
-    logger.info(`Downloading PostgreSQL ${version} for ${this.platform}...`);
+    logger.info(`Downloading PostgreSQL ${version} for ${this.platform}…`);
     logger.info(`Download URL: ${manifest.url}`);
 
     // Ensure directory exists
@@ -212,12 +215,14 @@ export class PostgresBinaryDownloader {
 
   private getManifest(version: string): BinaryManifest | null {
     const versionManifests = POSTGRES_VERSIONS[version as keyof typeof POSTGRES_VERSIONS];
-    if (!versionManifests)
+    if (!versionManifests) {
       return null;
+    }
 
     const platformManifest = versionManifests[this.platform as keyof typeof versionManifests];
-    if (!platformManifest)
+    if (!platformManifest) {
       return null;
+    }
 
     return {
       ...platformManifest,
@@ -299,7 +304,7 @@ export class PostgresBinaryDownloader {
       throw new Error(`Unsupported archive format: ${archivePath}`);
     }
 
-    logger.info(`Extracting archive...`);
+    logger.info(`Extracting archive…`);
     const output = await extractCmd.output();
 
     if (!output.success) {

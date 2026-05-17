@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for `config.requireAuth` — global auth gate on the HTTP server.
  * Ports geldata/gel#6352 (gh/geldata#6345).
@@ -5,7 +8,10 @@
  * Uses TestDatabase (no PostgreSQL required).
  */
 
-import { assertEquals, assertExists } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import {
+  assertEquals,
+  assertExists
+} from "@std/assert";
 import { AuthRoutes } from "../auth/integration.ts";
 import { AuthMiddleware } from "../auth/middleware.ts";
 import { AuthProvider } from "../auth/provider.ts";

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * gh/geldata#2071 — migrations fail after dump/restore round-trip.
  *
@@ -19,7 +22,11 @@ import { assertEquals } from "@std/assert";
 import { join } from "@std/path";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
-import { canRunPgTests, findPgBinDir, getTestDsn } from "../tests/pg-test-harness.ts";
+import {
+  canRunPgTests,
+  findPgBinDir,
+  getTestDsn
+} from "../tests/pg-test-harness.ts";
 import { MigrationTracker } from "./tracker.ts";
 import * as Types from "./types.ts";
 
@@ -129,7 +136,9 @@ Deno.test({
     const dsn = await getTestDsn();
     const pgBinDir = findPgBinDir();
     if (!pgBinDir) {
-      throw new Error("findPgBinDir() returned undefined; cannot run #2071 pin");
+      throw new Error(
+        "findPgBinDir() returned undefined; cannot run #2071 pin"
+      );
     }
 
     // Use unique table names so this test can run in parallel with others.

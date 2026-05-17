@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * PostgreSQL Test Harness for Disc
  *
@@ -252,7 +255,7 @@ export async function getTestDsn(): Promise<string> {
 
   // Start PostgreSQL
   await tempInstance.start();
-  debugLog("PG process started, waiting for TCP listener...");
+  debugLog("PG process started, waiting for TCP listener…");
 
   // Wait for TCP listener to be ready (30s with exponential backoff)
   await waitForPg(port);
@@ -399,8 +402,9 @@ async function waitForPg(
       attempts++;
       const remaining = deadline - Date.now();
 
-      if (remaining <= 0)
+      if (remaining <= 0) {
         break;
+      }
 
       const wait = Math.min(delay, maxDelay, remaining);
       debugLog(
@@ -468,8 +472,9 @@ function parseDsn(
  * mask test failures.
  */
 function registerCleanup(): void {
-  if (cleanupRegistered)
+  if (cleanupRegistered) {
     return;
+  }
   cleanupRegistered = true;
 
   globalThis.addEventListener("unload", () => {

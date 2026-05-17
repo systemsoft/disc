@@ -1,147 +1,27 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * TypeScript Generator tests for Stages 15.1 and 15.2:
  * Correct type casts, edgeqlType on PropertyDef, SQL type backward compat,
  * schema-aware insert/update types, and enum support
  */
 
+/*** NATIVE ------------------------------------------- ***/
+
 import { assertEquals, assertStringIncludes } from "@std/assert";
+
+/*** UTILITY ------------------------------------------ ***/
+
 import * as Context from "../compiler/context.ts";
-import { SchemaManager } from "../migration/schema-manager.ts";
 import * as Types from "./types.ts";
+
+import { SchemaManager } from "../migration/schema-manager.ts";
 import { TypeScriptGenerator } from "./typescript-generator.ts";
 
-/**
- * Helper: create a schema with properties that have edgeqlType set,
- * simulating what modulesToSchema() produces after Stage 15.1.
- */
-function createSchemaWithEdgeQLTypes(): Context.Schema {
-  const userType: Context.TypeDef = {
-    name: "User",
-    kind: "object",
-    tableName: "users",
-    properties: new Map([
-      ["id", {
-        name: "id",
-        type: "uuid",
-        required: true,
-        multi: false,
-        columnName: "id",
-        edgeqlType: "uuid"
-      }],
-      ["name", {
-        name: "name",
-        type: "text",
-        required: true,
-        multi: false,
-        columnName: "name",
-        edgeqlType: "str"
-      }],
-      ["email", {
-        name: "email",
-        type: "text",
-        required: true,
-        multi: false,
-        columnName: "email",
-        edgeqlType: "str"
-      }],
-      ["age", {
-        name: "age",
-        type: "integer",
-        required: false,
-        multi: false,
-        columnName: "age",
-        edgeqlType: "int32"
-      }],
-      ["active", {
-        name: "active",
-        type: "boolean",
-        required: false,
-        multi: false,
-        columnName: "active",
-        edgeqlType: "bool"
-      }],
-      ["createdAt", {
-        name: "createdAt",
-        type: "timestamptz",
-        required: true,
-        multi: false,
-        columnName: "created_at",
-        edgeqlType: "datetime"
-      }],
-      ["score", {
-        name: "score",
-        type: "double precision",
-        required: false,
-        multi: false,
-        columnName: "score",
-        edgeqlType: "float64"
-      }]
-    ]),
-    links: new Map()
-  };
+/*** RUNTIME ------------------------------------------ ***/
 
-  return {
-    types: new Map([["User", userType]]),
-    functions: new Map()
-  };
-}
-
-/**
- * Helper: create a schema WITHOUT edgeqlType set (backward compat scenario),
- * where type field contains EdgeQL type names directly.
- */
-function createSchemaWithoutEdgeQLType(): Context.Schema {
-  const itemType: Context.TypeDef = {
-    name: "Item",
-    kind: "object",
-    tableName: "items",
-    properties: new Map([
-      ["id", {
-        name: "id",
-        type: "uuid",
-        required: true,
-        multi: false,
-        columnName: "id"
-      }],
-      ["title", {
-        name: "title",
-        type: "str",
-        required: true,
-        multi: false,
-        columnName: "title"
-      }],
-      ["count", {
-        name: "count",
-        type: "int32",
-        required: false,
-        multi: false,
-        columnName: "count"
-      }]
-    ]),
-    links: new Map()
-  };
-
-  return {
-    types: new Map([["Item", itemType]]),
-    functions: new Map()
-  };
-}
-
-function createDefaultConfig(): Types.CodegenConfig {
-  return {
-    outputDir: "./generated",
-    schemaSource: "./schema.disc",
-    target: "client",
-    typePrefix: "",
-    interfaceSuffix: "",
-    includeQueryBuilders: true,
-    includeMutations: true,
-    includeClient: false,
-    formatOutput: true
-  };
-}
-
-// --- mapEdgeQLTypeToEdgeQLCast tests ---
+/*** --- mapEdgeQLTypeToEdgeQLCast tests --- ***/
 
 Deno.test("TypeScriptGenerator - mapEdgeQLTypeToEdgeQLCast returns correct cast for int32", () => {
   assertEquals(Types.mapEdgeQLTypeToEdgeQLCast("int32"), "<int32>");
@@ -159,158 +39,121 @@ Deno.test("TypeScriptGenerator - mapEdgeQLTypeToEdgeQLCast falls back for unknow
   assertEquals(Types.mapEdgeQLTypeToEdgeQLCast("custom_type"), "<custom_type>");
 });
 
-// --- mapEdgeQLTypeToTypeScript with edgeqlType ---
+/*** --- mapEdgeQLTypeToTypeScript with edgeqlType --- ***/
 
 Deno.test("TypeScriptGenerator - mapEdgeQLTypeToTypeScript works with edgeqlType value", () => {
-  // When edgeqlType is "str", it should resolve to "string"
+  /*** When edgeqlType is "str", it should resolve to "string" ***/
   assertEquals(Types.mapEdgeQLTypeToTypeScript("str", true, false), "string");
-  // When edgeqlType is "int32", it should resolve to "number"
+  /*** When edgeqlType is "int32", it should resolve to "number" ***/
   assertEquals(Types.mapEdgeQLTypeToTypeScript("int32", true, false), "number");
-  // When edgeqlType is "bool", it should resolve to "boolean"
-  assertEquals(
-    Types.mapEdgeQLTypeToTypeScript("bool", true, false),
-    "boolean"
-  );
-  // When edgeqlType is "datetime", it should resolve to "Date"
-  assertEquals(
-    Types.mapEdgeQLTypeToTypeScript("datetime", true, false),
-    "Date"
-  );
+  /*** When edgeqlType is "bool", it should resolve to "boolean" ***/
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("bool", true, false), "boolean");
+  /*** When edgeqlType is "datetime", it should resolve to "Date" ***/
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("datetime", true, false), "Date");
 });
 
-// --- Backward compatibility: SQL type names ---
+/*** --- Backward compatibility: SQL type names --- ***/
 
 Deno.test("TypeScriptGenerator - mapEdgeQLTypeToTypeScript backward compat with SQL type names", () => {
-  // When type field contains SQL types instead of EdgeQL types
+  /*** When type field contains SQL types instead of EdgeQL types ***/
   assertEquals(Types.mapEdgeQLTypeToTypeScript("text", true, false), "string");
-  assertEquals(
-    Types.mapEdgeQLTypeToTypeScript("integer", true, false),
-    "number"
-  );
-  assertEquals(
-    Types.mapEdgeQLTypeToTypeScript("boolean", true, false),
-    "boolean"
-  );
-  assertEquals(
-    Types.mapEdgeQLTypeToTypeScript("timestamptz", true, false),
-    "Date"
-  );
-  assertEquals(
-    Types.mapEdgeQLTypeToTypeScript("timestamp", true, false),
-    "Date"
-  );
-  // "bigint" SQL type maps to "int64" EdgeQL which maps to "bigint" (P1-20:
-  // `number` would silently lose precision above 2^53-1).
-  assertEquals(
-    Types.mapEdgeQLTypeToTypeScript("bigint", true, false),
-    "bigint"
-  );
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("integer", true, false), "number");
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("boolean", true, false), "boolean");
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("timestamptz", true, false), "Date");
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("timestamp", true, false), "Date");
+  /*** "bigint" SQL type maps to "int64" EdgeQL which maps to "bigint" ***/
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("bigint", true, false), "bigint");
 });
 
-// --- Generated query builder _typeCasts map ---
+/*** --- Generated query builder _typeCasts map --- ***/
 
 Deno.test("TypeScriptGenerator - generated query builder has correct _typeCasts map", () => {
   const schema = createSchemaWithEdgeQLTypes();
   const config = createDefaultConfig();
   const generator = new TypeScriptGenerator(schema, config);
   const result = generator.generate();
-
   const queryFile = result.files.find(f => f.type === "queries");
   assertEquals(queryFile !== undefined, true);
 
   const content = queryFile!.content;
-
-  // Should have _typeCasts with correct casts
+  /*** Should have _typeCasts with correct casts ***/
   assertStringIncludes(content, "_typeCasts");
-  assertStringIncludes(content, "name: \"<str>\"");
-  assertStringIncludes(content, "email: \"<str>\"");
-  assertStringIncludes(content, "age: \"<int32>\"");
-  assertStringIncludes(content, "active: \"<bool>\"");
-  assertStringIncludes(content, "createdAt: \"<datetime>\"");
-  assertStringIncludes(content, "score: \"<float64>\"");
+  assertStringIncludes(content, `name: "<str>"`);
+  assertStringIncludes(content, `email: "<str>"`);
+  assertStringIncludes(content, `age: "<int32>"`);
+  assertStringIncludes(content, `active: "<bool>"`);
+  assertStringIncludes(content, `createdAt: "<datetime>"`);
+  assertStringIncludes(content, `score: "<float64>"`);
 });
 
-// --- Insert method uses correct casts ---
+/*** --- Insert method uses correct casts --- ***/
 
 Deno.test("TypeScriptGenerator - insert method uses _typeCasts lookup", () => {
   const schema = createSchemaWithEdgeQLTypes();
   const config = createDefaultConfig();
   const generator = new TypeScriptGenerator(schema, config);
   const result = generator.generate();
-
   const queryFile = result.files.find(f => f.type === "queries");
   assertEquals(queryFile !== undefined, true);
 
   const content = queryFile!.content;
-
-  // Insert method should reference _typeCasts instead of hardcoded <str>
+  /*** Insert method should reference _typeCasts instead of hardcoded <str> ***/
   assertStringIncludes(content, "UserQueryBuilder._typeCasts[key]");
 
-  // Should NOT contain hardcoded <str> in insert assignments
-  // (The fallback `|| "<str>"` is acceptable but the primary path uses _typeCasts)
-  const insertSection = content.substring(
-    content.indexOf("async insert("),
-    content.indexOf("async update(")
-  );
-  // Should not have the old pattern `\${key} := <str>$\${key}`
+  /*** Should NOT contain hardcoded <str> in insert assignments (The fallback `|| "<str>"` is
+       acceptable but the primary path uses _typeCasts) ***/
+  const insertSection = content.substring(content.indexOf("async insert("), content.indexOf("async update("));
+  /*** Should not have the old pattern `\${key} := <str>$\${key}` ***/
   assertEquals(insertSection.includes(":= <str>$"), false);
 });
 
-// --- Update method uses correct casts ---
+/*** --- Update method uses correct casts --- ***/
 
 Deno.test("TypeScriptGenerator - update method uses _typeCasts lookup", () => {
   const schema = createSchemaWithEdgeQLTypes();
   const config = createDefaultConfig();
   const generator = new TypeScriptGenerator(schema, config);
   const result = generator.generate();
-
   const queryFile = result.files.find(f => f.type === "queries");
   assertEquals(queryFile !== undefined, true);
 
   const content = queryFile!.content;
 
-  // Update method should reference _typeCasts
-  const updateSection = content.substring(
-    content.indexOf("async update("),
-    content.indexOf("async delete(")
-  );
+  /*** Update method should reference _typeCasts ***/
+  const updateSection = content.substring(content.indexOf("async update("), content.indexOf("async delete("));
   assertStringIncludes(updateSection, "_typeCasts[key]");
-  // Should not have the old hardcoded pattern
+  /*** Should not have the old hardcoded pattern ***/
   assertEquals(updateSection.includes(":= <str>$"), false);
 });
 
-// --- Backward compat: missing edgeqlType falls back to type ---
+/*** --- Backward compat: missing edgeqlType falls back to type --- ***/
 
 Deno.test("TypeScriptGenerator - missing edgeqlType falls back to type field for casts", () => {
   const schema = createSchemaWithoutEdgeQLType();
   const config = createDefaultConfig();
   const generator = new TypeScriptGenerator(schema, config);
   const result = generator.generate();
-
   const queryFile = result.files.find(f => f.type === "queries");
   assertEquals(queryFile !== undefined, true);
 
   const content = queryFile!.content;
-
-  // When edgeqlType is undefined, type field ("str", "int32") should be used
+  /*** When edgeqlType is undefined, type field ("str", "int32") should be used ***/
   assertStringIncludes(content, "title: \"<str>\"");
   assertStringIncludes(content, "count: \"<int32>\"");
 });
 
-// --- Interface generation uses edgeqlType for type mapping ---
+/*** --- Interface generation uses edgeqlType for type mapping --- ***/
 
 Deno.test("TypeScriptGenerator - interface uses edgeqlType for TypeScript type mapping", () => {
   const schema = createSchemaWithEdgeQLTypes();
   const config = createDefaultConfig();
   const generator = new TypeScriptGenerator(schema, config);
   const result = generator.generate();
-
   const typesFile = result.files.find(f => f.type === "types");
   assertEquals(typesFile !== undefined, true);
 
   const content = typesFile!.content;
-
-  // Properties should map correctly via edgeqlType even though type is SQL
+  /*** Properties should map correctly via edgeqlType even though type is SQL ***/
   assertStringIncludes(content, "name: string");
   assertStringIncludes(content, "email: string");
   assertStringIncludes(content, "age?: number");
@@ -319,7 +162,7 @@ Deno.test("TypeScriptGenerator - interface uses edgeqlType for TypeScript type m
   assertStringIncludes(content, "score?: number");
 });
 
-// --- Stage 15.2 tests: schema-aware insert/update types and enum support ---
+/*** --- Stage 15.2 tests: schema-aware insert/update types and enum support --- ***/
 
 /**
  * Helper: create a schema with property metadata for insert/update type tests.
@@ -1130,7 +973,10 @@ Deno.test("Stage B — generated client.ts re-exports and/or/not from the SDK", 
   const content = clientFile!.content;
 
   // Combinators alongside AuthManager / SubscriptionClient on the SDK re-export line
-  assertStringIncludes(content, "export { and, AuthManager, not, or, SubscriptionClient }");
+  assertStringIncludes(
+    content,
+    "export { and, AuthManager, not, or, SubscriptionClient }"
+  );
 });
 
 Deno.test("Stage B — generated index.ts re-exports combinators via client.ts", () => {
@@ -1144,7 +990,10 @@ Deno.test("Stage B — generated index.ts re-exports combinators via client.ts",
   assertEquals(indexFile !== undefined, true);
   const content = indexFile!.content;
 
-  assertStringIncludes(content, "export { and, AuthManager, not, or, SubscriptionClient } from \"./client.ts\"");
+  assertStringIncludes(
+    content,
+    "export { and, AuthManager, not, or, SubscriptionClient } from \"./client.ts\""
+  );
 });
 
 // --- Stage C: filter() method uses compileFilter at runtime ---
@@ -1198,7 +1047,14 @@ Deno.test("typeInfo link thunks strip module-qualified target prefix", () => {
     kind: "object",
     tableName: "merchants",
     properties: new Map([
-      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id", edgeqlType: "uuid" }]
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+        edgeqlType: "uuid"
+      }]
     ]),
     links: new Map()
   };
@@ -1207,7 +1063,14 @@ Deno.test("typeInfo link thunks strip module-qualified target prefix", () => {
     kind: "object",
     tableName: "payments",
     properties: new Map([
-      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id", edgeqlType: "uuid" }]
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+        edgeqlType: "uuid"
+      }]
     ]),
     links: new Map([
       ["merchant", {
@@ -1228,7 +1091,10 @@ Deno.test("typeInfo link thunks strip module-qualified target prefix", () => {
   const result = generator.generate();
   const content = result.files.find(f => f.type === "queries")!.content;
 
-  assertStringIncludes(content, "merchant: () => MerchantQueryBuilder._typeInfo");
+  assertStringIncludes(
+    content,
+    "merchant: () => MerchantQueryBuilder._typeInfo"
+  );
   assertEquals(content.includes("default::MerchantQueryBuilder"), false);
   assertEquals(content.includes("::"), false);
 });
@@ -1244,7 +1110,14 @@ Deno.test("client.ts constructor uses bare type names for multi-module schemas",
     tableName: "merchants",
     module: "default",
     properties: new Map([
-      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id", edgeqlType: "uuid" }]
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+        edgeqlType: "uuid"
+      }]
     ]),
     links: new Map()
   };
@@ -1254,7 +1127,14 @@ Deno.test("client.ts constructor uses bare type names for multi-module schemas",
     tableName: "api_keys",
     module: "api",
     properties: new Map([
-      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id", edgeqlType: "uuid" }]
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+        edgeqlType: "uuid"
+      }]
     ]),
     links: new Map()
   };
@@ -1274,8 +1154,14 @@ Deno.test("client.ts constructor uses bare type names for multi-module schemas",
   const content = clientFile!.content;
 
   // Bare property assignment + bare builder reference
-  assertStringIncludes(content, "this.merchant = new Queries.MerchantQueryBuilder(this)");
-  assertStringIncludes(content, "this.apikey = new Queries.ApiKeyQueryBuilder(this)");
+  assertStringIncludes(
+    content,
+    "this.merchant = new Queries.MerchantQueryBuilder(this)"
+  );
+  assertStringIncludes(
+    content,
+    "this.apikey = new Queries.ApiKeyQueryBuilder(this)"
+  );
   // No "::" should leak anywhere in the emitted client
   assertEquals(content.includes("::"), false);
 });
@@ -1329,10 +1215,22 @@ Deno.test("Stage D — generated filter() assembles selectShape / orderBy / limi
   // Falls back to `{ * }` when no select narrowing
   assertStringIncludes(body, "compiled.selectShape ?? \"{ * }\"");
   // Conditionally appends each piece in canonical EdgeQL order
-  assertStringIncludes(body, "if (compiled.clause) parts.push(`filter ${compiled.clause}`)");
-  assertStringIncludes(body, "if (compiled.orderBy) parts.push(compiled.orderBy)");
-  assertStringIncludes(body, "if (compiled.limit !== null) parts.push(`limit ${compiled.limit}`)");
-  assertStringIncludes(body, "if (compiled.offset !== null) parts.push(`offset ${compiled.offset}`)");
+  assertStringIncludes(
+    body,
+    "if (compiled.clause) parts.push(`filter ${compiled.clause}`)"
+  );
+  assertStringIncludes(
+    body,
+    "if (compiled.orderBy) parts.push(compiled.orderBy)"
+  );
+  assertStringIncludes(
+    body,
+    "if (compiled.limit !== null) parts.push(`limit ${compiled.limit}`)"
+  );
+  assertStringIncludes(
+    body,
+    "if (compiled.offset !== null) parts.push(`offset ${compiled.offset}`)"
+  );
 });
 
 // --- Regression tests: codegen output must be valid TS ---
@@ -1349,10 +1247,17 @@ Deno.test("interface declares `id` exactly once", () => {
 
   const userInterfaceStart = types.content.indexOf("export interface User {");
   const userInterfaceEnd = types.content.indexOf("}", userInterfaceStart);
-  const userBody = types.content.substring(userInterfaceStart, userInterfaceEnd);
+  const userBody = types.content.substring(
+    userInterfaceStart,
+    userInterfaceEnd
+  );
 
   const idMatches = userBody.match(/\bid:\s*string;/g) ?? [];
-  assertEquals(idMatches.length, 1, "User interface should declare id exactly once");
+  assertEquals(
+    idMatches.length,
+    1,
+    "User interface should declare id exactly once"
+  );
 });
 
 Deno.test("computed properties surface as `unknown`, not the parser's `auto` placeholder", () => {
@@ -1368,9 +1273,31 @@ Deno.test("computed properties surface as `unknown`, not the parser's `auto` pla
     kind: "object",
     tableName: "users",
     properties: new Map([
-      ["id", { name: "id", type: "uuid", required: true, multi: false, columnName: "id", edgeqlType: "uuid" }],
-      ["name", { name: "name", type: "text", required: true, multi: false, columnName: "name", edgeqlType: "str" }],
-      ["fullName", { name: "fullName", type: "text", required: false, multi: false, columnName: "full_name", edgeqlType: "auto", computed: true }]
+      ["id", {
+        name: "id",
+        type: "uuid",
+        required: true,
+        multi: false,
+        columnName: "id",
+        edgeqlType: "uuid"
+      }],
+      ["name", {
+        name: "name",
+        type: "text",
+        required: true,
+        multi: false,
+        columnName: "name",
+        edgeqlType: "str"
+      }],
+      ["fullName", {
+        name: "fullName",
+        type: "text",
+        required: false,
+        multi: false,
+        columnName: "full_name",
+        edgeqlType: "auto",
+        computed: true
+      }]
     ]),
     links: new Map()
   };
@@ -1387,7 +1314,11 @@ Deno.test("computed properties surface as `unknown`, not the parser's `auto` pla
   // Computed surfaces as unknown in the interface…
   assertStringIncludes(typesContent, "fullName?: unknown");
   // …and in FilterVars/Filter…
-  assertEquals(typesContent.includes("auto"), false, "no `auto` literal anywhere in the types file");
+  assertEquals(
+    typesContent.includes("auto"),
+    false,
+    "no `auto` literal anywhere in the types file"
+  );
   // …and is omitted from the runtime cast maps (no `<auto>` in queries.ts).
   assertEquals(queriesContent.includes("fullName: \"<auto>\""), false);
   assertEquals(queriesContent.includes("<auto>"), false);
@@ -1413,13 +1344,18 @@ Deno.test("colon-form property targeting an object type is reclassified as a lin
     }
   `;
   const parsed = sm.parseSDL(sdl);
-  if (!parsed.ok)
+  if (!parsed.ok) {
     throw parsed.error;
+  }
   const schema = sm.modulesToSchema(parsed.value);
 
   const apiKey = schema.types.get("api::ApiKey")!;
   // `user` should land in the links map, NOT the properties map.
-  assertEquals(apiKey.properties.has("user"), false, "user should not be a property");
+  assertEquals(
+    apiKey.properties.has("user"),
+    false,
+    "user should not be a property"
+  );
   assertEquals(apiKey.links.has("user"), true, "user should be a link");
   assertEquals(apiKey.links.get("user")!.target, "default::User");
 
@@ -1434,6 +1370,146 @@ Deno.test("colon-form property targeting an object type is reclassified as a lin
   assertStringIncludes(interfaces, "user: $default.User");
   // No `::` in TS code (strip JSDoc comments, where the qualified name is
   // intentionally retained for human readability).
-  const codeOnly = interfaces.replace(/\/\*\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
-  assertEquals(/[A-Za-z_]+::[A-Za-z_]+/.test(codeOnly), false, "no module-qualified identifiers leak into TS code");
+  const codeOnly = interfaces.replace(/\/\*\*[\s\S]*?\*\//g, "").replace(
+    /\/\/.*$/gm,
+    ""
+  );
+  assertEquals(
+    /[A-Za-z_]+::[A-Za-z_]+/.test(codeOnly),
+    false,
+    "no module-qualified identifiers leak into TS code"
+  );
 });
+
+/*** HELPER ------------------------------------------- ***/
+
+function createDefaultConfig(): Types.CodegenConfig {
+  return {
+    formatOutput: true,
+    includeClient: false,
+    includeMutations: true,
+    includeQueryBuilders: true,
+    interfaceSuffix: "",
+    outputDir: "./generated",
+    schemaSource: "./schema.disc",
+    target: "client",
+    typePrefix: ""
+  };
+}
+
+/**
+ * Helper: create a schema with properties that have edgeqlType set,
+ * simulating what modulesToSchema() produces after Stage 15.1.
+ */
+function createSchemaWithEdgeQLTypes(): Context.Schema {
+  const userType: Context.TypeDef = {
+    kind: "object",
+    links: new Map(),
+    name: "User",
+    properties: new Map([
+      ["id", {
+        columnName: "id",
+        edgeqlType: "uuid",
+        multi: false,
+        name: "id",
+        required: true,
+        type: "uuid"
+      }],
+      ["name", {
+        columnName: "name",
+        edgeqlType: "str",
+        multi: false,
+        name: "name",
+        required: true,
+        type: "text"
+      }],
+      ["email", {
+        columnName: "email",
+        edgeqlType: "str",
+        multi: false,
+        name: "email",
+        required: true,
+        type: "text"
+      }],
+      ["age", {
+        columnName: "age",
+        edgeqlType: "int32",
+        multi: false,
+        name: "age",
+        required: false,
+        type: "integer"
+      }],
+      ["active", {
+        columnName: "active",
+        edgeqlType: "bool",
+        multi: false,
+        name: "active",
+        required: false,
+        type: "boolean"
+      }],
+      ["createdAt", {
+        columnName: "created_at",
+        edgeqlType: "datetime",
+        multi: false,
+        name: "createdAt",
+        required: true,
+        type: "timestamptz"
+      }],
+      ["score", {
+        columnName: "score",
+        edgeqlType: "float64",
+        multi: false,
+        name: "score",
+        required: false,
+        type: "double precision"
+      }]
+    ]),
+    tableName: "users"
+  };
+
+  return {
+    functions: new Map(),
+    types: new Map([["User", userType]])
+  };
+}
+
+/**
+ * Helper: create a schema WITHOUT edgeqlType set (backward compat scenario),
+ * where type field contains EdgeQL type names directly.
+ */
+function createSchemaWithoutEdgeQLType(): Context.Schema {
+  const itemType: Context.TypeDef = {
+    kind: "object",
+    links: new Map(),
+    name: "Item",
+    properties: new Map([
+      ["id", {
+        columnName: "id",
+        multi: false,
+        name: "id",
+        required: true,
+        type: "uuid"
+      }],
+      ["title", {
+        columnName: "title",
+        multi: false,
+        name: "title",
+        required: true,
+        type: "str"
+      }],
+      ["count", {
+        columnName: "count",
+        multi: false,
+        name: "count",
+        required: false,
+        type: "int32"
+      }]
+    ]),
+    tableName: "items"
+  };
+
+  return {
+    functions: new Map(),
+    types: new Map([["Item", itemType]])
+  };
+}

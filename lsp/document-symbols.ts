@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Document-symbol provider (#7411 + #655 — Phase 3)
  *
@@ -6,7 +9,7 @@
  * a symbol; its properties and links nest underneath.
  */
 
-import { type DocumentSymbol, SymbolKind } from "./protocol.ts";
+import { SymbolKind, type DocumentSymbol } from "./protocol.ts";
 import { buildSymbolIndex, type TypeKind } from "./symbol-index.ts";
 
 export function provideDocumentSymbols(text: string): DocumentSymbol[] {

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Integration tests for Migration Engine with SDL Parser
  *
@@ -8,7 +11,11 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { SDLParser } from "../schema/parser.ts";
 import { SchemaValidator } from "../schema/validator.ts";
-import { canRunPgTests, cleanupTestTables, getTestDsn } from "../tests/pg-test-harness.ts";
+import {
+  canRunPgTests,
+  cleanupTestTables,
+  getTestDsn
+} from "../tests/pg-test-harness.ts";
 import { MigrationEngine } from "./engine.ts";
 import { MigrationTracker } from "./tracker.ts";
 import * as Types from "./types.ts";

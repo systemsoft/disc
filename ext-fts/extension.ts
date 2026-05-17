@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Full-text search extension for Disc database
  *
@@ -12,7 +15,13 @@
 
 import type { FunctionDef } from "../compiler/context.ts";
 import { BaseExtension } from "../extensions/base-extension.ts";
-import type { CompilerHook, ExtensionContext, ExtensionDatabaseSetup, ExtensionMetadata, ExtensionRoute } from "../extensions/types.ts";
+import type {
+  CompilerHook,
+  ExtensionContext,
+  ExtensionDatabaseSetup,
+  ExtensionMetadata,
+  ExtensionRoute
+} from "../extensions/types.ts";
 import { DEFAULT_LANGUAGE, FTS_VECTOR_COLUMN } from "./index-builder.ts";
 
 export class FtsExtension extends BaseExtension {
@@ -91,7 +100,9 @@ export class FtsExtension extends BaseExtension {
   override healthCheck(): Promise<{ healthy: boolean; details?: string; }> {
     return Promise.resolve({
       healthy: this.state === "ready",
-      details: this.state === "ready" ? `FTS enabled (language: ${this.language})` : undefined
+      details: this.state === "ready" ?
+        `FTS enabled (language: ${this.language})` :
+        undefined
     });
   }
 }

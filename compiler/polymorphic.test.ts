@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for Phase 23.5: Polymorphic Query Compilation
  *
@@ -482,7 +485,9 @@ Deno.test("polymorphic - IS with leaf type (Rectangle) uses simple equality", ()
 
 Deno.test("polymorphic - type intersection [IS Type] is distinct from array indexing", () => {
   // [IS Type] should produce a type_intersection path step
-  const astTypeIntersect = parseEdgeQL("SELECT Shape[IS Circle]") as SelectQuery;
+  const astTypeIntersect = parseEdgeQL(
+    "SELECT Shape[IS Circle]"
+  ) as SelectQuery;
   assertEquals(astTypeIntersect.kind, "SelectQuery");
   if (astTypeIntersect.expr.kind === "Path") {
     const lastStep = astTypeIntersect.expr.steps[astTypeIntersect.expr.steps.length - 1];

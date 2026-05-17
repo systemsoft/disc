@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * OAuth state management with cryptographic nonce + PKCE code verifier.
  *
@@ -56,15 +59,17 @@ export class OAuthStateManager {
 
   validateState(state: string): OAuthState | null {
     const stored = this.states.get(state);
-    if (!stored)
+    if (!stored) {
       return null;
+    }
 
     // Remove used state (one-time use)
     this.states.delete(state);
 
     // Check expiry
-    if (Date.now() > stored.expiresAt)
+    if (Date.now() > stored.expiresAt) {
       return null;
+    }
 
     return stored;
   }

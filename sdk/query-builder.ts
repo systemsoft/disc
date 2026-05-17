@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Codegen-free EdgeQL query builder (Disc-original feature #1, Phase 1).
  *
@@ -12,7 +15,14 @@
  * server-side validators on the same execution path as raw EdgeQL.
  */
 
-import type { DiscSchema, FieldType, ResolveSelected, ResolveType, SchemaSpec, SelectShape } from "./schema-types.ts";
+import type {
+  DiscSchema,
+  FieldType,
+  ResolveSelected,
+  ResolveType,
+  SchemaSpec,
+  SelectShape
+} from "./schema-types.ts";
 import type { QueryOptions } from "./types.ts";
 
 /** Minimum surface a client must expose to be awaitable from the builder. */
@@ -110,8 +120,9 @@ class FieldRef {
 function makeTypeRef(): TypeRef {
   return new Proxy({} as TypeRef, {
     get(_target, prop) {
-      if (typeof prop !== "string")
+      if (typeof prop !== "string") {
         return undefined;
+      }
       return new FieldRef(prop);
     }
   });
@@ -119,19 +130,24 @@ function makeTypeRef(): TypeRef {
 
 /** Infer the EdgeQL cast for a JS variable. Conservative — unknown types throw. */
 function inferCast(value: unknown): string {
-  if (typeof value === "string")
+  if (typeof value === "string") {
     return "str";
-  if (typeof value === "boolean")
+  }
+  if (typeof value === "boolean") {
     return "bool";
-  if (typeof value === "bigint")
+  }
+  if (typeof value === "bigint") {
     return "bigint";
+  }
   if (typeof value === "number") {
     return Number.isInteger(value) ? "int64" : "float64";
   }
-  if (value instanceof Date)
+  if (value instanceof Date) {
     return "datetime";
-  if (value instanceof Uint8Array)
+  }
+  if (value instanceof Uint8Array) {
     return "bytes";
+  }
   throw new Error(
     `Cannot infer EdgeQL cast for filter value of type ${typeof value}`
   );
@@ -234,8 +250,9 @@ export class SelectChain<T = unknown> implements PromiseLike<T> {
 
   select(shape: Shape): this {
     // Validate keys eagerly so injection-shaped names fail fast, not at run time.
-    for (const key of Object.keys(shape))
+    for (const key of Object.keys(shape)) {
       assertIdent(key, "shape field");
+    }
     this.shape = shape;
     return this;
   }
@@ -275,8 +292,9 @@ export class SelectChain<T = unknown> implements PromiseLike<T> {
     const ctx: CompileCtx = { vars: {}, nextN: 0 };
     const parts: string[] = [`select ${this.typeName}`];
 
-    if (this.shape)
+    if (this.shape) {
       parts.push(compileShape(this.shape));
+    }
 
     if (this.filters.length === 1) {
       parts.push(`filter ${compileExpr(this.filters[0], ctx)}`);
@@ -293,10 +311,12 @@ export class SelectChain<T = unknown> implements PromiseLike<T> {
       parts.push(`order by .${this.order.field}${dir}`);
     }
 
-    if (this.limitN !== null)
+    if (this.limitN !== null) {
       parts.push(`limit ${this.limitN}`);
-    if (this.offsetN !== null)
+    }
+    if (this.offsetN !== null) {
       parts.push(`offset ${this.offsetN}`);
+    }
 
     return { query: parts.join(" "), variables: ctx.vars };
   }
@@ -379,11 +399,27 @@ export type TypedSelectChain<
   K extends keyof S,
   Sel = ResolveType<S, S[K]>
 > =
-  & Omit<SelectChain<Sel[]>, "select" | "filter" | "orderBy" | "limit" | "offset" | "first" | "then" | "run">
+  & Omit<
+    SelectChain<Sel[]>,
+    | "select"
+    | "filter"
+    | "orderBy"
+    | "limit"
+    | "offset"
+    | "first"
+    | "then"
+    | "run"
+  >
   & {
-    select<Sh extends SelectShape<S, K>>(shape: Sh): TypedSelectChain<S, K, ResolveSelected<S, K, Sh>>;
-    filter(predicate: (ref: TypedRef<S, K>) => Expr): TypedSelectChain<S, K, Sel>;
-    orderBy(fn: (ref: TypedRef<S, K>) => OrderSpec | TypedFieldRef<unknown>): TypedSelectChain<S, K, Sel>;
+    select<Sh extends SelectShape<S, K>>(
+      shape: Sh
+    ): TypedSelectChain<S, K, ResolveSelected<S, K, Sh>>;
+    filter(
+      predicate: (ref: TypedRef<S, K>) => Expr
+    ): TypedSelectChain<S, K, Sel>;
+    orderBy(
+      fn: (ref: TypedRef<S, K>) => OrderSpec | TypedFieldRef<unknown>
+    ): TypedSelectChain<S, K, Sel>;
     limit(n: number): TypedSelectChain<S, K, Sel>;
     offset(n: number): TypedSelectChain<S, K, Sel>;
     first(options?: QueryOptions<Sel[]>): Promise<Sel | null>;
@@ -421,8 +457,9 @@ export function createQueryBuilder(
 ): any {
   return new Proxy({} as QueryBuilder, {
     get(_target, prop) {
-      if (typeof prop !== "string")
+      if (typeof prop !== "string") {
         return undefined;
+      }
       // When a schema is provided, refuse access to undeclared types
       // at runtime — catches typos that would otherwise hit the server.
       if (schema && !(prop in schema.spec)) {

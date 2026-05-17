@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Pins SchemaManager.previewMigrationOps() — the drift-detection path
  * that `disc migrate --status` uses to surface "in sync" vs "N pending

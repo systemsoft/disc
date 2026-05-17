@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * TLS certificate hot-reload.
  *
@@ -73,8 +76,9 @@ export class TlsCertWatcher {
   }
 
   start(): void {
-    if (this.running)
+    if (this.running) {
       return;
+    }
     this.running = true;
 
     log.info("watching TLS certificate files for changes", {
@@ -87,8 +91,9 @@ export class TlsCertWatcher {
   }
 
   async stop(): Promise<void> {
-    if (!this.running)
+    if (!this.running) {
       return;
+    }
     this.running = false;
 
     if (this.debounceTimer !== undefined) {
@@ -112,12 +117,14 @@ export class TlsCertWatcher {
   }
 
   private async consumeEvents(): Promise<void> {
-    if (!this.watcher)
+    if (!this.watcher) {
       return;
+    }
     try {
       for await (const event of this.watcher) {
-        if (!this.running)
+        if (!this.running) {
           break;
+        }
         if (event.kind === "modify" || event.kind === "create") {
           this.scheduleReload();
         }
@@ -159,11 +166,15 @@ export class TlsCertWatcher {
     }
 
     if (!validatePemEnvelope(cert, "cert")) {
-      log.warn("TLS reload skipped: cert file does not look like a PEM certificate");
+      log.warn(
+        "TLS reload skipped: cert file does not look like a PEM certificate"
+      );
       return;
     }
     if (!validatePemEnvelope(key, "key")) {
-      log.warn("TLS reload skipped: key file does not look like a PEM private key");
+      log.warn(
+        "TLS reload skipped: key file does not look like a PEM private key"
+      );
       return;
     }
 

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Config-variable registry (#5988 + #6444 — Phase 2)
  *
@@ -12,7 +15,12 @@ import { assertEquals } from "@std/assert";
 import { EdgeQLParser } from "../edgeql/parser.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import { EdgeQLCompiler } from "./compiler.ts";
-import { CONFIG_REGISTRY, getConfigRegistry, lookupConfigKey, maskIfSecret } from "./config-registry.ts";
+import {
+  CONFIG_REGISTRY,
+  getConfigRegistry,
+  lookupConfigKey,
+  maskIfSecret
+} from "./config-registry.ts";
 import { createTestSchema } from "./context.ts";
 
 const schema = createTestSchema();
@@ -23,8 +31,9 @@ function compileEdgeQL(source: string): string {
   const parser = new EdgeQLParser(source);
   const ast = parser.parse();
   const result = compiler.compile(ast);
-  if (!result.ok)
+  if (!result.ok) {
     throw result.error;
+  }
   return codegen.generate(result.value);
 }
 
@@ -111,8 +120,9 @@ Deno.test("config-registry - maskIfSecret returns null for explicitly secret key
     assertEquals(maskIfSecret(synthetic, "swordfish"), null);
   } finally {
     const idx = CONFIG_REGISTRY.findIndex(d => d.name === synthetic);
-    if (idx >= 0)
+    if (idx >= 0) {
       CONFIG_REGISTRY.splice(idx, 1);
+    }
   }
 });
 

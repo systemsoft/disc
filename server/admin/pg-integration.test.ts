@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * PG-backed integration test for the live-schema-diff apply endpoint
  * (Bundle K — Disc-original feature #3a).
@@ -32,7 +35,10 @@ function parseDsn(dsn: string) {
   };
 }
 
-async function withTempSdl(initial: string, fn: (path: string) => Promise<void>): Promise<void> {
+async function withTempSdl(
+  initial: string,
+  fn: (path: string) => Promise<void>
+): Promise<void> {
   const tmp = await Deno.makeTempFile({ suffix: `_${SUFFIX}.disc` });
   await Deno.writeTextFile(tmp, initial);
   try {
@@ -64,7 +70,9 @@ async function dropTableIfExists(dsn: string, name: string): Promise<void> {
   const client = new Client(parseDsn(dsn));
   await client.connect();
   try {
-    await client.queryArray(`DROP TABLE IF EXISTS "${name.toLowerCase()}" CASCADE`);
+    await client.queryArray(
+      `DROP TABLE IF EXISTS "${name.toLowerCase()}" CASCADE`
+    );
   } finally {
     await client.end();
   }
@@ -83,7 +91,9 @@ Deno.test({
     const sdl = `module default {\n  type ${TYPE_NAME} {\n    required name: str;\n  };\n};`;
     await withTempSdl(sdl, async path => {
       const res = await handleSchemaApply({
-        request: new Request("http://localhost/admin/schema-apply", { method: "POST" }),
+        request: new Request("http://localhost/admin/schema-apply", {
+          method: "POST"
+        }),
         url: new URL("http://localhost/admin/schema-apply"),
         schemaFilePath: path,
         databaseUrl: dsn
@@ -117,7 +127,9 @@ Deno.test({
     const sdlWith = `module default {\n  type ${dropTypeName} {\n    required name: str;\n  };\n};`;
     await withTempSdl(sdlWith, async path => {
       const res = await handleSchemaApply({
-        request: new Request("http://localhost/admin/schema-apply", { method: "POST" }),
+        request: new Request("http://localhost/admin/schema-apply", {
+          method: "POST"
+        }),
         url: new URL("http://localhost/admin/schema-apply"),
         schemaFilePath: path,
         databaseUrl: dsn
@@ -134,7 +146,9 @@ Deno.test({
     const sdlEmpty = `module default {};`;
     await withTempSdl(sdlEmpty, async path => {
       const refused = await handleSchemaApply({
-        request: new Request("http://localhost/admin/schema-apply", { method: "POST" }),
+        request: new Request("http://localhost/admin/schema-apply", {
+          method: "POST"
+        }),
         url: new URL("http://localhost/admin/schema-apply"),
         schemaFilePath: path,
         databaseUrl: dsn,

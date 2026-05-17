@@ -1,9 +1,12 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for the server-wide read-only-mode gate.
  * Ports geldata/gel#5543 (gh/geldata#5524).
  */
 
-import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assertEquals } from "@std/assert";
 import { SimpleEdgeQLProtocolHandler } from "./simple-edgeql-protocol.ts";
 import type { QueryContext } from "./types.ts";
 

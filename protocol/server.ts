@@ -1,10 +1,17 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 // deno-lint-ignore-file no-console
 /**
  * Binary protocol TCP server for Gel/EdgeDB compatibility
  * Handles incoming connections and protocol negotiation
  */
 
-import { AuthenticationCredentials, ConnectionState, ProtocolConnection } from "./connection.ts";
+import {
+  AuthenticationCredentials,
+  ConnectionState,
+  ProtocolConnection
+} from "./connection.ts";
 import { generateStoredKeys } from "./scram.ts";
 
 export interface ServerOptions {
@@ -142,13 +149,15 @@ export class ProtocolServer {
    * Accept incoming connections
    */
   private async acceptConnections(): Promise<void> {
-    if (!this.listener)
+    if (!this.listener) {
       return;
+    }
 
     try {
       for await (const conn of this.listener) {
-        if (!this.running)
+        if (!this.running) {
           break;
+        }
 
         if (this.connections.size >= this.options.maxConnections) {
           console.warn("Max connections reached, rejecting new connection");
@@ -206,8 +215,9 @@ export class ProtocolServer {
    */
   private startCleanupTimer(): void {
     const cleanup = async () => {
-      if (!this.running)
+      if (!this.running) {
         return;
+      }
 
       for (const [id, connection] of this.connections) {
         if (connection.isTimedOut()) {
@@ -269,8 +279,9 @@ class Connection {
   }
 
   async start(): Promise<void> {
-    if (this.running)
+    if (this.running) {
       return;
+    }
     this.running = true;
 
     try {
@@ -309,8 +320,9 @@ class Connection {
   }
 
   close(): void {
-    if (!this.running)
+    if (!this.running) {
       return;
+    }
     this.running = false;
 
     try {

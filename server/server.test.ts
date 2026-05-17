@@ -1,9 +1,16 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for Disc Server
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import { ConnectionManager, SessionManager, TransactionManager } from "./connection.ts";
+import {
+  ConnectionManager,
+  SessionManager,
+  TransactionManager
+} from "./connection.ts";
 import { EdgeQLProtocolHandler } from "./protocol.ts";
 import { DiscServer } from "./server.ts";
 

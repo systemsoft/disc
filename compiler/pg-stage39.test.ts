@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * PostgreSQL End-to-End Tests for Stage 39: Annotations DDL & Abstract Annotations
  *
@@ -52,8 +55,9 @@ Deno.test({
       const parseResult = manager.parseSDL(sdl);
       assertEquals(parseResult.ok, true);
 
-      if (!parseResult.ok)
+      if (!parseResult.ok) {
         throw parseResult.error;
+      }
       const schema = manager.modulesToSchema(parseResult.value);
 
       // Use introspection to verify annotations propagated
@@ -100,8 +104,9 @@ Deno.test({
       const parseResult = manager.parseSDL(sdl);
       assertEquals(parseResult.ok, true);
 
-      if (!parseResult.ok)
+      if (!parseResult.ok) {
         throw parseResult.error;
+      }
       const schema = manager.modulesToSchema(parseResult.value);
 
       // Generate TypeScript
@@ -169,8 +174,9 @@ Deno.test({
       const parseResult = manager.parseSDL(sdl);
       assertEquals(parseResult.ok, true);
 
-      if (!parseResult.ok)
+      if (!parseResult.ok) {
         throw parseResult.error;
+      }
       const schema = manager.modulesToSchema(parseResult.value);
 
       // Verify abstract annotations collected

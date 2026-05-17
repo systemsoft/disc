@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Rename provider (#7411 + #655 — Phase 4 + Phase 8a)
  *
@@ -13,7 +16,13 @@
  * sibling SDL file too.
  */
 
-import type { DocumentUri, Position, Range, TextEdit, WorkspaceEdit } from "./protocol.ts";
+import type {
+  DocumentUri,
+  Position,
+  Range,
+  TextEdit,
+  WorkspaceEdit
+} from "./protocol.ts";
 import { provideReferences, type ReferencesContext } from "./references.ts";
 import { buildSymbolIndex } from "./symbol-index.ts";
 
@@ -28,12 +37,14 @@ const VALID_IDENTIFIER = /^[A-Za-z_][A-Za-z_0-9]*$/;
  */
 export function prepareRename(text: string, pos: Position): Range | null {
   const word = wordAt(text, pos);
-  if (!word)
+  if (!word) {
     return null;
+  }
   const idx = buildSymbolIndex(text);
   const sym = idx.types.get(word);
-  if (!sym)
+  if (!sym) {
     return null;
+  }
   return sym.range;
 }
 
@@ -45,12 +56,14 @@ export function provideRename(
   options: { context?: ReferencesContext; } = {}
 ): WorkspaceEdit | null {
   // Validate the new name is a syntactically-correct identifier.
-  if (!VALID_IDENTIFIER.test(newName))
+  if (!VALID_IDENTIFIER.test(newName)) {
     return null;
+  }
 
   const word = wordAt(text, pos);
-  if (!word || word === newName)
+  if (!word || word === newName) {
     return null;
+  }
 
   // The cursor's word must resolve to a known type — either in this
   // document or in a sibling SDL document.
@@ -58,28 +71,33 @@ export function provideRename(
   let knownType = localIdx.types.has(word);
   if (!knownType && options.context) {
     for (const ctxDoc of options.context.documents) {
-      if (ctxDoc.uri === uri)
+      if (ctxDoc.uri === uri) {
         continue;
+      }
       if (buildSymbolIndex(ctxDoc.text).types.has(word)) {
         knownType = true;
         break;
       }
     }
   }
-  if (!knownType)
+  if (!knownType) {
     return null;
+  }
 
   // Collision check — the new name must not exist in this document or
   // any sibling SDL document. Renaming User → Member when Member
   // already exists somewhere produces duplicate types.
-  if (localIdx.types.has(newName))
+  if (localIdx.types.has(newName)) {
     return null;
+  }
   if (options.context) {
     for (const ctxDoc of options.context.documents) {
-      if (ctxDoc.uri === uri)
+      if (ctxDoc.uri === uri) {
         continue;
-      if (buildSymbolIndex(ctxDoc.text).types.has(newName))
+      }
+      if (buildSymbolIndex(ctxDoc.text).types.has(newName)) {
         return null;
+      }
     }
   }
 
@@ -87,8 +105,9 @@ export function provideRename(
     includeDeclaration: true,
     context: options.context
   });
-  if (refs.length === 0)
+  if (refs.length === 0) {
     return null;
+  }
 
   // Group edits by URI so a cross-file rename produces one entry per
   // file in the WorkspaceEdit.changes map.
@@ -103,18 +122,21 @@ export function provideRename(
 
 function wordAt(text: string, pos: Position): string | null {
   const lines = text.split("\n");
-  if (pos.line < 0 || pos.line >= lines.length)
+  if (pos.line < 0 || pos.line >= lines.length) {
     return null;
+  }
   const line = lines[pos.line];
-  if (pos.character < 0 || pos.character > line.length)
+  if (pos.character < 0 || pos.character > line.length) {
     return null;
+  }
   IDENT.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = IDENT.exec(line)) !== null) {
     const start = m.index;
     const end = start + m[0].length;
-    if (pos.character >= start && pos.character <= end)
+    if (pos.character >= start && pos.character <= end) {
       return m[0];
+    }
   }
   return null;
 }

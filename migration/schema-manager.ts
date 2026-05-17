@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Schema Manager - bridges SDL parsing, query compilation context, and migration planning
  *
@@ -24,7 +27,10 @@ import {
 } from "../compiler/context.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { MigrationError } from "../lib/errors.ts";
-import { propNameToColumnName, typeNameToTableName } from "../lib/identifiers.ts";
+import {
+  propNameToColumnName,
+  typeNameToTableName
+} from "../lib/identifiers.ts";
 import { Err, Ok, Result } from "../lib/result.ts";
 import {
   AccessPolicy as SDLAccessPolicy,
@@ -39,7 +45,11 @@ import {
   TriggerDeclaration,
   TypeDeclaration
 } from "../schema/ast.ts";
-import { Module, normalizeArrowsToProperties, SDLConverter } from "../schema/converter.ts";
+import {
+  Module,
+  normalizeArrowsToProperties,
+  SDLConverter
+} from "../schema/converter.ts";
 import { SDLParser } from "../schema/parser.ts";
 import { MigrationEngine } from "./engine.ts";
 import * as Types from "./types.ts";
@@ -156,8 +166,9 @@ function typeRefToSdlString(
 function stringifyExpression(expr: Expression): string {
   switch (expr.kind) {
     case "Literal":
-      if (typeof expr.value === "string")
+      if (typeof expr.value === "string") {
         return `'${expr.value}'`;
+      }
       return String(expr.value);
     case "PathExpression": {
       // EdgeQL expression tokens (from parseEdgeQLExpression) are stored as
@@ -405,7 +416,9 @@ export class SchemaManager {
             aliasDef.targetType = targetType;
           }
 
-          const aliasKey = module.name === "default" ? aliasName : `${module.name}::${aliasName}`;
+          const aliasKey = module.name === "default" ?
+            aliasName :
+            `${module.name}::${aliasName}`;
           aliases.set(aliasKey, aliasDef);
           continue;
         }
@@ -571,8 +584,9 @@ export class SchemaManager {
             for (const baseRef of linkDecl.extending) {
               const baseName = baseRef.name.parts.join("::");
               const abstractLink = abstractLinks.get(baseName);
-              if (!abstractLink)
+              if (!abstractLink) {
                 continue;
+              }
 
               // Merge inherited properties (concrete wins)
               if (abstractLink.properties) {
@@ -583,16 +597,18 @@ export class SchemaManager {
                   p => !ownPropNames.has(p.name.value)
                 );
                 if (inherited.length > 0) {
-                  if (!linkDecl.properties)
+                  if (!linkDecl.properties) {
                     linkDecl.properties = [];
+                  }
                   linkDecl.properties.push(...inherited);
                 }
               }
 
               // Merge inherited constraints
               if (abstractLink.constraints) {
-                if (!linkDecl.constraints)
+                if (!linkDecl.constraints) {
                   linkDecl.constraints = [];
+                }
                 linkDecl.constraints.push(...abstractLink.constraints);
               }
             }
@@ -642,7 +658,9 @@ export class SchemaManager {
             // FK column name is snake_case so Postgres' unquoted-identifier
             // lowercasing doesn't break round-tripping (e.g. `payoutAddresses_id`
             // would lowercase to `payoutaddresses_id` and miss the column).
-            columnName: isMulti ? undefined : `${propNameToColumnName(linkName)}_id`,
+            columnName: isMulti ?
+              undefined :
+              `${propNameToColumnName(linkName)}_id`,
             computed: linkDecl.computed ? true : undefined,
             annotations: linkAnnotations
           });
@@ -652,7 +670,9 @@ export class SchemaManager {
         const sdlPolicies = typeDecl.members.filter(
           (m): m is SDLAccessPolicy => m.kind === "AccessPolicy"
         );
-        const accessPolicies = sdlPolicies.length > 0 ? adaptAccessPolicies(typeName, sdlPolicies) : undefined;
+        const accessPolicies = sdlPolicies.length > 0 ?
+          adaptAccessPolicies(typeName, sdlPolicies) :
+          undefined;
 
         // Extract indexes from the type declaration. SDL `index on (.foo)`
         // surfaces here as `AST.Index` members; we stringify the `on`
@@ -714,7 +734,9 @@ export class SchemaManager {
         }
 
         typeDef.module = module.name;
-        const typeKey = module.name === "default" ? typeName : `${module.name}::${typeName}`;
+        const typeKey = module.name === "default" ?
+          typeName :
+          `${module.name}::${typeName}`;
         types.set(typeKey, typeDef);
       }
     }
@@ -1265,8 +1287,9 @@ export class SchemaManager {
     sdlSource: string
   ): Result<Types.MigrationOperation[], MigrationError> {
     const parseResult = this.parseSDL(sdlSource);
-    if (!parseResult.ok)
+    if (!parseResult.ok) {
       return parseResult;
+    }
 
     return this.previewMigrationOpsFromModules(parseResult.value);
   }
@@ -1293,12 +1316,14 @@ export class SchemaManager {
       this.currentModules,
       newModules
     );
-    if (!planResult.ok)
+    if (!planResult.ok) {
       return planResult;
+    }
 
     const ops: Types.MigrationOperation[] = [];
-    for (const m of planResult.value.migrations)
+    for (const m of planResult.value.migrations) {
       ops.push(...m.operations);
+    }
     return Ok(ops);
   }
 

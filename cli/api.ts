@@ -1,7 +1,10 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Programmatic CLI surface. (gh/geldata#5911)
  *
- * Disc's CLI command logic lives in `cli/commands.ts:CLICommands` so
+ * Disc’s CLI command logic lives in `cli/commands.ts:CLICommands` so
  * that any `disc <command>` invocation routes through the same code
  * path whether it came from the binary entry point or from a Deno
  * script. This module re-exports the stable subset of that surface
@@ -26,35 +29,48 @@
  * not exposed here — they target operator workflows where the binary
  * entry point with its argv parsing is the right interface.
  *
- * For CI use cases that need to exec the binary, the binary's argv
+ * For CI use cases that need to exec the binary, the binary’s argv
  * parser lives in `cli/main.ts`; nothing about that path changes.
  */
 
+/*** UTILITY ------------------------------------------ ***/
+
 import { commands } from "./commands.ts";
 
-// Typed Options interfaces — re-exported so callers get IntelliSense
-// without reaching into individual command modules.
-export type { BuildOptions } from "./build.ts";
-export type { ServeOptions } from "./commands.ts";
-export type { DeployOptions } from "./deploy.ts";
-export type { InitOptions } from "./init.ts";
-export type { PgLogOptions } from "./pg-log.ts";
-export type { PgUpgradeOptions } from "./pg-upgrade.ts";
-export type { ShellOptions } from "./shell.ts";
-export type { WatchOptions } from "./watch.ts";
-
-// Imports for the typed function signatures below. Re-exporting types
-// happens via `export type` lines above; these `import type` lines
-// give the wrapper functions their parameter shapes without paying a
-// runtime import cost.
+/*** Imports for the typed function signatures below. Re-exporting types happens via
+     `export type`; these `import type` lines give the wrapper functions their parameter shapes
+     without paying a runtime import cost. ***/
 import type { BuildOptions } from "./build.ts";
-import type { ServeOptions } from "./commands.ts";
 import type { DeployOptions } from "./deploy.ts";
 import type { InitOptions } from "./init.ts";
 import type { PgLogOptions } from "./pg-log.ts";
 import type { PgUpgradeOptions } from "./pg-upgrade.ts";
+import type { ServeOptions } from "./commands.ts";
 import type { ShellOptions } from "./shell.ts";
 import type { WatchOptions } from "./watch.ts";
+
+/*** EXPORT ------------------------------------------- ***/
+
+/*** Typed Options interfaces — re-exported so callers get IntelliSense without reaching into
+     individual command modules. ***/
+export type { BuildOptions } from "./build.ts";
+export type { DeployOptions } from "./deploy.ts";
+export type { InitOptions } from "./init.ts";
+export type { PgLogOptions } from "./pg-log.ts";
+export type { PgUpgradeOptions } from "./pg-upgrade.ts";
+export type { ServeOptions } from "./commands.ts";
+export type { ShellOptions } from "./shell.ts";
+export type { WatchOptions } from "./watch.ts";
+
+/** Compile Disc into a self-contained binary. */
+export function build(options: BuildOptions): Promise<void> {
+  return commands.build(options);
+}
+
+/** Generate deployment artifacts (Dockerfile, compose, systemd, env). */
+export function deploy(options: DeployOptions): Promise<void> {
+  return commands.deploy(options);
+}
 
 /** Initialize a new Disc project. */
 export function init(options: InitOptions): Promise<void> {
@@ -64,18 +80,27 @@ export function init(options: InitOptions): Promise<void> {
 /** Apply or generate migrations. Pass `{ "dry-run": true }` to skip apply. */
 export function migrate(
   options: {
+    "backend-dsn"?: string;
+    "dry-run"?: boolean;
+    quiet?: boolean;
     schema?: string;
     "schema-dir"?: string;
-    "dry-run"?: boolean;
-    "backend-dsn"?: string;
-    quiet?: boolean;
   } = {}
 ): Promise<void> {
-  // `migrate` accepts the CLIArgs shape internally (positional `_` carries
-  // the subcommand from the binary entry point). For the programmatic
-  // surface we synthesize an empty positional list — there is no
-  // subcommand when called this way.
+  /*** `migrate` accepts the CLIArgs shape internally (positional `_` carries the subcommand from
+       the binary entry point). For the programmatic surface we synthesize an empty positional
+       list — there is no subcommand when called this way. ***/
   return commands.migrate({ _: [], ...options });
+}
+
+/** Tail PostgreSQL logs. */
+export function pgLog(options: PgLogOptions): Promise<void> {
+  return commands.pgLog(options);
+}
+
+/** Upgrade the bundled PostgreSQL version. */
+export function pgUpgrade(options: PgUpgradeOptions): Promise<void> {
+  return commands.pgUpgrade(options);
 }
 
 /** Start the Disc server (HTTP + EdgeQL + admin UI). */
@@ -91,24 +116,4 @@ export function shell(options: ShellOptions): Promise<void> {
 /** Watch schema files and auto-migrate on change. */
 export function watch(options: WatchOptions): Promise<void> {
   return commands.watch(options);
-}
-
-/** Compile Disc into a self-contained binary. */
-export function build(options: BuildOptions): Promise<void> {
-  return commands.build(options);
-}
-
-/** Generate deployment artifacts (Dockerfile, compose, systemd, env). */
-export function deploy(options: DeployOptions): Promise<void> {
-  return commands.deploy(options);
-}
-
-/** Tail PostgreSQL logs. */
-export function pgLog(options: PgLogOptions): Promise<void> {
-  return commands.pgLog(options);
-}
-
-/** Upgrade the bundled PostgreSQL version. */
-export function pgUpgrade(options: PgUpgradeOptions): Promise<void> {
-  return commands.pgUpgrade(options);
 }

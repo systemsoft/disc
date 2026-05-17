@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 // deno-lint-ignore-file no-console
 /**
  * Performance tests for Migration Engine with large schema changes
@@ -9,7 +12,11 @@
 import { assertEquals, assertLessOrEqual } from "@std/assert";
 import * as AST from "../schema/ast.ts";
 import { Module } from "../schema/converter.ts";
-import { canRunPgTests, cleanupTestTables, getTestDsn } from "../tests/pg-test-harness.ts";
+import {
+  canRunPgTests,
+  cleanupTestTables,
+  getTestDsn
+} from "../tests/pg-test-harness.ts";
 import { SchemaDiffer } from "./differ.ts";
 import { MigrationEngine } from "./engine.ts";
 import { MigrationTracker } from "./tracker.ts";
@@ -639,7 +646,7 @@ Deno.test("Performance - Stress Test with Very Large Schema", () => {
   const numTypes = 500;
   const schema = createLargeSchema(numTypes);
 
-  console.log(`Starting stress test with ${numTypes} types...`);
+  console.log(`Starting stress test with ${numTypes} types…`);
 
   const startTime = performance.now();
 

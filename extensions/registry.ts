@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Extension registry for Disc database
  */
@@ -5,7 +8,13 @@
 import type { FunctionDef, TypeDef } from "../compiler/context.ts";
 import { getLogger } from "../lib/logger.ts";
 import { ExtensionDependencyError, ExtensionInitError } from "./errors.ts";
-import type { CompilerHook, Extension, ExtensionContext, ExtensionMiddleware, ExtensionRoute } from "./types.ts";
+import type {
+  CompilerHook,
+  Extension,
+  ExtensionContext,
+  ExtensionMiddleware,
+  ExtensionRoute
+} from "./types.ts";
 
 const log = getLogger("extension-registry");
 
@@ -70,7 +79,9 @@ export class ExtensionRegistry {
         log.info(`Extension initialized: ${name}`);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        const initError = error instanceof ExtensionInitError ? error : new ExtensionInitError(name, message);
+        const initError = error instanceof ExtensionInitError ?
+          error :
+          new ExtensionInitError(name, message);
         if (onError === "strict") {
           throw initError;
         }
@@ -168,8 +179,9 @@ export class ExtensionRegistry {
     const visiting = new Set<string>();
 
     const visit = (name: string): void => {
-      if (visited.has(name))
+      if (visited.has(name)) {
         return;
+      }
       if (visiting.has(name)) {
         throw new ExtensionDependencyError(
           name,
@@ -180,8 +192,9 @@ export class ExtensionRegistry {
       visiting.add(name);
 
       const ext = this.extensions.get(name);
-      if (!ext)
+      if (!ext) {
         return;
+      }
 
       const deps = ext.metadata.dependencies || [];
       const missing = deps.filter(d => !this.extensions.has(d));

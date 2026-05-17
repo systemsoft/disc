@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for the identity-disc geometry (#3d).
  *
@@ -6,7 +9,12 @@
  * `tests/ui-query-builder-synth.test.ts`).
  */
 
-import { assert, assertAlmostEquals, assertEquals, assertThrows } from "@std/assert";
+import {
+  assert,
+  assertAlmostEquals,
+  assertEquals,
+  assertThrows
+} from "@std/assert";
 import { layoutDisc } from "../ui/src/lib/identity-disc-layout.ts";
 
 const CX = 300;

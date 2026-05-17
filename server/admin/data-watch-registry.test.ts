@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Unit + integration tests for `DataWatchRegistry` (Bundle L — #3c
  * Phase 2).

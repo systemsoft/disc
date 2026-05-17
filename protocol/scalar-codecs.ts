@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Scalar codecs for the Gel binary wire protocol.
  *
@@ -34,8 +37,9 @@ const textDecoder = new TextDecoder();
  * `std::*` form used by the codec table. Falls back to the input string.
  */
 export function canonicalScalarName(name: string): string {
-  if (name.includes("::"))
+  if (name.includes("::")) {
     return name;
+  }
   // Common short names — keep aligned with WELL_KNOWN_TYPES in typedesc.ts.
   const map: Record<string, string> = {
     bigint: "std::bigint",
@@ -82,7 +86,9 @@ function encodeInt32(value: unknown): Uint8Array {
 }
 
 function encodeInt64(value: unknown): Uint8Array {
-  const n = typeof value === "bigint" ? value : BigInt(Math.trunc(Number(value)));
+  const n = typeof value === "bigint" ?
+    value :
+    BigInt(Math.trunc(Number(value)));
   const buf = new Uint8Array(8);
   new DataView(buf.buffer).setBigInt64(0, n, false);
   return buf;
@@ -109,7 +115,9 @@ function encodeBool(value: unknown): Uint8Array {
 function encodeUuid(value: unknown): Uint8Array {
   if (value instanceof Uint8Array) {
     if (value.length !== 16) {
-      throw new TypeError(`uuid Uint8Array must be 16 bytes, got ${value.length}`);
+      throw new TypeError(
+        `uuid Uint8Array must be 16 bytes, got ${value.length}`
+      );
     }
     return new Uint8Array(value);
   }
@@ -128,7 +136,9 @@ function encodeDatetime(value: unknown): Uint8Array {
   } else if (typeof value === "number") {
     ms = value;
   } else {
-    throw new TypeError(`expected Date|string|number for datetime, got ${typeof value}`);
+    throw new TypeError(
+      `expected Date|string|number for datetime, got ${typeof value}`
+    );
   }
   const us = BigInt(ms - GEL_DATETIME_EPOCH_MS) * 1000n;
   const buf = new Uint8Array(8);
@@ -137,11 +147,15 @@ function encodeDatetime(value: unknown): Uint8Array {
 }
 
 function encodeBytes(value: unknown): Uint8Array {
-  if (value instanceof Uint8Array)
+  if (value instanceof Uint8Array) {
     return new Uint8Array(value);
-  if (typeof value === "string")
+  }
+  if (typeof value === "string") {
     return textEncoder.encode(value);
-  throw new TypeError(`expected Uint8Array|string for bytes, got ${typeof value}`);
+  }
+  throw new TypeError(
+    `expected Uint8Array|string for bytes, got ${typeof value}`
+  );
 }
 
 function encodeJson(value: unknown): Uint8Array {
@@ -195,7 +209,9 @@ function decodeUuid(bytes: Uint8Array): string {
   if (bytes.length !== 16) {
     throw new Error(`uuid bytes must be 16, got ${bytes.length}`);
   }
-  const hex = Array.from(bytes, b => b.toString(16).padStart(2, "0")).join("");
+  const hex = Array.from(bytes, b => b.toString(16).padStart(2, "0")).join(
+    ""
+  );
   return [
     hex.slice(0, 8),
     hex.slice(8, 12),

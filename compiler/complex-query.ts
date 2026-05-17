@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 // deno-lint-ignore-file no-console
 /**
  * Complex Query Compiler
@@ -110,7 +113,9 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
       throw new CompilationError("CTE binding has no value or query");
     }
 
-    const name = typeof binding.name === "string" ? binding.name : binding.name?.name || "cte";
+    const name = typeof binding.name === "string" ?
+      binding.name :
+      binding.name?.name || "cte";
 
     return {
       kind: "CTE",
@@ -161,8 +166,9 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
    */
   private canConvertToJoin(subquery: any): boolean {
     // Simple IN/EXISTS subqueries can often be converted to JOINs
-    if (!subquery.query)
+    if (!subquery.query) {
       return false;
+    }
 
     const query = subquery.query;
 
@@ -211,8 +217,9 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
    * Check if subquery is correlated
    */
   private isCorrelatedSubquery(subquery: any): boolean {
-    if (!subquery.query)
+    if (!subquery.query) {
       return false;
+    }
 
     // Check for outer references
     return this.hasOuterReferences(subquery.query);
@@ -224,8 +231,9 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
   private hasOuterReferences(query: any): boolean {
     // Recursively check for OuterRef nodes
     const checkNode = (node: any): boolean => {
-      if (!node)
+      if (!node) {
         return false;
+      }
 
       if (node.kind === "OuterRef") {
         return true;
@@ -236,11 +244,13 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
         const value = node[key];
         if (typeof value === "object") {
           if (Array.isArray(value)) {
-            if (value.some(checkNode))
+            if (value.some(checkNode)) {
               return true;
+            }
           } else {
-            if (checkNode(value))
+            if (checkNode(value)) {
               return true;
+            }
           }
         }
       }
@@ -256,8 +266,9 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
    */
   private hasAggregates(query: any): boolean {
     const checkNode = (node: any): boolean => {
-      if (!node)
+      if (!node) {
         return false;
+      }
 
       if (node.kind === "Aggregate") {
         return true;
@@ -267,11 +278,13 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
         const value = node[key];
         if (typeof value === "object") {
           if (Array.isArray(value)) {
-            if (value.some(checkNode))
+            if (value.some(checkNode)) {
               return true;
+            }
           } else {
-            if (checkNode(value))
+            if (checkNode(value)) {
               return true;
+            }
           }
         }
       }
@@ -298,7 +311,9 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
         expression: this.compileExpression(item.expression),
         direction: (item.direction || "ASC") as "ASC" | "DESC"
       })),
-      frame: windowFunc.frame ? this.compileWindowFrame(windowFunc.frame) : undefined
+      frame: windowFunc.frame ?
+        this.compileWindowFrame(windowFunc.frame) :
+        undefined
     };
 
     return SQL.windowFunction(func, args, overClause);
@@ -322,7 +337,9 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
    */
   compileAggregate(aggregate: any): SQL.AggregateExpression {
     const func = aggregate.function;
-    const expr = aggregate.expression ? this.compileExpression(aggregate.expression) : SQL.star();
+    const expr = aggregate.expression ?
+      this.compileExpression(aggregate.expression) :
+      SQL.star();
 
     let result = SQL.aggregate(func, expr);
 
@@ -360,8 +377,9 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
    */
   private pushDownPredicates(query: EdgeQLAST.Query): EdgeQLAST.Query {
     // Only applicable to SELECT queries with filters
-    if (query.kind !== "SelectQuery" || !query.filter)
+    if (query.kind !== "SelectQuery" || !query.filter) {
       return query;
+    }
 
     // In a full implementation, this would move WHERE conditions
     // closer to table scans in join-heavy queries
@@ -373,8 +391,9 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
    */
   private simplifyExpressions(query: EdgeQLAST.Query): EdgeQLAST.Query {
     // Only applicable to queries with filters
-    if (query.kind !== "SelectQuery" || !query.filter)
+    if (query.kind !== "SelectQuery" || !query.filter) {
       return query;
+    }
 
     const optimized = { ...query };
     optimized.filter = this.simplifyExpression(query.filter);
@@ -434,8 +453,9 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
    * Recursively analyze AST node for complexity
    */
   private analyzeNode(node: any, complexity: QueryComplexity): void {
-    if (!node)
+    if (!node) {
       return;
+    }
 
     if (node.kind === "Subquery") {
       complexity.subqueryCount++;
@@ -490,14 +510,16 @@ export class ComplexQueryCompiler extends EdgeQLCompiler {
       const seen = new Set<string>();
       const unique = expr.operands.filter((op: any) => {
         const key = JSON.stringify(op);
-        if (seen.has(key))
+        if (seen.has(key)) {
           return false;
+        }
         seen.add(key);
         return true;
       });
 
-      if (unique.length === 1)
+      if (unique.length === 1) {
         return unique[0];
+      }
 
       return { ...expr, operands: unique };
     }

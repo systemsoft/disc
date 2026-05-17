@@ -1,10 +1,18 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Vector search extension for Disc database
  */
 
 import type { FunctionDef, TypeDef } from "../compiler/context.ts";
 import { BaseExtension } from "../extensions/base-extension.ts";
-import type { CompilerHook, ExtensionContext, ExtensionDatabaseSetup, ExtensionMetadata } from "../extensions/types.ts";
+import type {
+  CompilerHook,
+  ExtensionContext,
+  ExtensionDatabaseSetup,
+  ExtensionMetadata
+} from "../extensions/types.ts";
 import type { VectorConfig } from "./types.ts";
 
 export class VectorExtension extends BaseExtension {
@@ -157,7 +165,9 @@ export class VectorExtension extends BaseExtension {
   > {
     return {
       healthy: this.state === "ready",
-      details: this.state === "ready" ? `pgvector enabled (${this.config.defaultDimensions}d, ${this.config.indexType})` : undefined
+      details: this.state === "ready" ?
+        `pgvector enabled (${this.config.defaultDimensions}d, ${this.config.indexType})` :
+        undefined
     };
   }
 }

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Data-watch DDL — Bundle L (Disc-original feature #3c).
  *
@@ -169,12 +172,14 @@ export async function bootstrapDataWatch(
   const wired: string[] = [];
   for (const row of result.rows as Array<{ tablename: string; }>) {
     const tableName = row.tablename;
-    if (excluded.has(tableName))
+    if (excluded.has(tableName)) {
       continue;
+    }
     // Skip _SQL-internal_ tables that PG itself creates. They never
     // start with a lowercase letter so the heuristic is cheap.
-    if (!/^[a-z]/.test(tableName))
+    if (!/^[a-z]/.test(tableName)) {
       continue;
+    }
     await options.pool.execute(createTriggerSql(tableName));
     wired.push(tableName);
   }

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for Stage 39: Annotations DDL & Abstract Annotations
  *
@@ -381,8 +384,9 @@ Deno.test("Stage 39 - SchemaManager: annotations extracted from SDL type/propert
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true);
 
-  if (!parseResult.ok)
+  if (!parseResult.ok) {
     throw parseResult.error;
+  }
   const schema = manager.modulesToSchema(parseResult.value);
 
   // Check type-level annotation
@@ -417,8 +421,9 @@ Deno.test("Stage 39 - SchemaManager: abstract annotation declarations collected 
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true);
 
-  if (!parseResult.ok)
+  if (!parseResult.ok) {
     throw parseResult.error;
+  }
   const schema = manager.modulesToSchema(parseResult.value);
   assertEquals(schema.abstractAnnotations !== undefined, true);
   assertEquals(schema.abstractAnnotations!.has("custom_note"), true);

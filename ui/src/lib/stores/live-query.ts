@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Live query store (Bundle L — Disc-original feature #3c).
  *
@@ -28,7 +31,7 @@
  *   - "error"       last fetch failed
  */
 
-import { type Readable, writable } from "svelte/store";
+import { writable, type Readable } from "svelte/store";
 import { discAPI } from "../api/client";
 
 export type LiveQueryStatus =
@@ -111,8 +114,9 @@ export function liveQuery<T = unknown>(
         options.edgeql,
         options.variables
       );
-      if (closed || token !== inFlightToken)
+      if (closed || token !== inFlightToken) {
         return;
+      }
       if (result.error) {
         store.update(s => ({
           ...s,
@@ -129,16 +133,18 @@ export function liveQuery<T = unknown>(
         lastUpdatedAt: Date.now()
       }));
     } catch (err) {
-      if (closed || token !== inFlightToken)
+      if (closed || token !== inFlightToken) {
         return;
+      }
       const message = err instanceof Error ? err.message : String(err);
       store.update(s => ({ ...s, status: "error", error: message }));
     }
   }
 
   function openEventSource() {
-    if (closed)
+    if (closed) {
       return;
+    }
     const params = new URLSearchParams({
       tables: options.tables.join(",")
     });
@@ -179,8 +185,9 @@ export function liveQuery<T = unknown>(
     store,
     refetch: () => runFetch("refetch"),
     close: () => {
-      if (closed)
+      if (closed) {
         return;
+      }
       closed = true;
       if (eventSource) {
         eventSource.close();

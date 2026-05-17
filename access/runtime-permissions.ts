@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Deno-permission-aware access policies (Disc-original feature #5).
  *
@@ -29,68 +32,32 @@
  * the unknown spec as "permission missing" (which would always deny).
  */
 
+/*** EXPORT ------------------------------------------- ***/
+
 export type PermissionSpec =
-  | { name: "read"; path?: string; }
-  | { name: "write"; path?: string; }
-  | { name: "net"; host?: string; }
   | { name: "env"; variable?: string; }
+  | { name: "ffi"; path?: string; }
+  | { name: "net"; host?: string; }
+  | { name: "read"; path?: string; }
   | { name: "run"; command?: string; }
   | { name: "sys"; kind?: string; }
-  | { name: "ffi"; path?: string; };
+  | { name: "write"; path?: string; };
 
 /** Permission state — Deno returns "granted" / "denied" / "prompt". */
-export type PermissionState = "granted" | "denied" | "prompt";
+export type PermissionState = "denied" | "granted" | "prompt";
 
 /** Test seam — mockable in unit tests. Default uses Deno.permissions. */
 export type PermissionChecker = (spec: PermissionSpec) => PermissionState;
 
 const VALID_NAMES = new Set([
-  "read",
-  "write",
-  "net",
   "env",
+  "ffi",
+  "net",
+  "read",
   "run",
   "sys",
-  "ffi"
+  "write"
 ]);
-
-/**
- * Parse a permission-spec string into a structured `PermissionSpec`.
- * Throws `Error` (with the bad input quoted) on unknown names or
- * malformed scope.
- */
-export function parsePermissionSpec(input: string): PermissionSpec {
-  if (typeof input !== "string" || input.length === 0) {
-    throw new Error(`Permission spec must be a non-empty string, got ${JSON.stringify(input)}`);
-  }
-  const colonIdx = input.indexOf(":");
-  const name = colonIdx === -1 ? input : input.slice(0, colonIdx);
-  const scope = colonIdx === -1 ? undefined : input.slice(colonIdx + 1);
-  if (!VALID_NAMES.has(name)) {
-    throw new Error(`Unknown permission name ${JSON.stringify(name)} — expected one of: ${[...VALID_NAMES].join(", ")}`);
-  }
-  if (scope !== undefined && scope.length === 0) {
-    throw new Error(`Permission spec ${JSON.stringify(input)} has an empty scope after ':'`);
-  }
-  switch (name) {
-    case "read":
-    case "write":
-    case "ffi":
-      return scope ? { name, path: scope } : { name };
-    case "net":
-      return scope ? { name, host: scope } : { name };
-    case "env":
-      return scope ? { name, variable: scope } : { name };
-    case "run":
-      return scope ? { name, command: scope } : { name };
-    case "sys":
-      return scope ? { name, kind: scope } : { name };
-    default: {
-      // Unreachable — VALID_NAMES guards this.
-      throw new Error(`Unhandled permission name: ${name}`);
-    }
-  }
-}
 
 /**
  * Default checker — calls `Deno.permissions.querySync` synchronously.
@@ -99,10 +66,9 @@ export function parsePermissionSpec(input: string): PermissionSpec {
  * through every node of the expression tree.
  */
 export const defaultPermissionChecker: PermissionChecker = spec => {
-  // Cast safety: PermissionSpec mirrors Deno.PermissionDescriptor shape
-  // for each name; the field-name conventions match (path/host/variable
-  // /command/kind). Any drift in Deno's API would surface as a runtime
-  // type error, not a silent miss.
+  /*** Cast safety: PermissionSpec mirrors Deno.PermissionDescriptor shape for each name; the
+       field-name conventions match (path/host/variable/command/kind). Any drift in Deno's API
+       would surface as a runtime type error, not a silent miss. ***/
   const status = Deno.permissions.querySync(spec as Deno.PermissionDescriptor);
   return status.state;
 };
@@ -111,9 +77,55 @@ export const defaultPermissionChecker: PermissionChecker = spec => {
  * High-level helper: parse + check. Returns `true` only if the spec
  * resolves to the "granted" state.
  */
-export function hasPermission(
-  spec: string,
-  checker: PermissionChecker = defaultPermissionChecker
-): boolean {
+export function hasPermission(spec: string, checker: PermissionChecker = defaultPermissionChecker): boolean {
   return checker(parsePermissionSpec(spec)) === "granted";
+}
+
+/**
+ * Parse a permission-spec string into a structured `PermissionSpec`.
+ * Throws `Error` (with the bad input quoted) on unknown names or
+ * malformed scope.
+ */
+export function parsePermissionSpec(input: string): PermissionSpec {
+  if (typeof input !== "string" || input.length === 0)
+    throw new Error(`Permission spec must be a non-empty string, got ${JSON.stringify(input)}`);
+
+  const colonIdx = input.indexOf(":");
+  const name = colonIdx === -1 ? input : input.slice(0, colonIdx);
+  const scope = colonIdx === -1 ? undefined : input.slice(colonIdx + 1);
+
+  if (!VALID_NAMES.has(name))
+    throw new Error(`Unknown permission name ${JSON.stringify(name)} — expected one of: ${[...VALID_NAMES].join(", ")}`);
+
+  if (scope !== undefined && scope.length === 0)
+    throw new Error(`Permission spec ${JSON.stringify(input)} has an empty scope after ":"`);
+
+  switch (name) {
+    case "ffi":
+    case "read":
+    case "write": {
+      return scope ? { name, path: scope } : { name };
+    }
+
+    case "env": {
+      return scope ? { name, variable: scope } : { name };
+    }
+
+    case "net": {
+      return scope ? { host: scope, name } : { name };
+    }
+
+    case "run": {
+      return scope ? { command: scope, name } : { name };
+    }
+
+    case "sys": {
+      return scope ? { kind: scope, name } : { name };
+    }
+
+    default: {
+      // Unreachable — VALID_NAMES guards this.
+      throw new Error(`Unhandled permission name: ${name}`);
+    }
+  }
 }

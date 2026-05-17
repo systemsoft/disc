@@ -1,11 +1,22 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for type codec encoding/decoding.
  */
 
 import { assertAlmostEquals, assertEquals, assertThrows } from "@std/assert";
 import { Cardinality } from "./enums.ts";
-import { decodeScalarValue, encodeObjectValue, encodeScalarValue } from "./type-codec.ts";
-import { DescriptorTag, type ObjectShapeDescriptor, type TypeDescriptor } from "./typedesc.ts";
+import {
+  decodeScalarValue,
+  encodeObjectValue,
+  encodeScalarValue
+} from "./type-codec.ts";
+import {
+  DescriptorTag,
+  type ObjectShapeDescriptor,
+  type TypeDescriptor
+} from "./typedesc.ts";
 import { bytesToUuid, uuidToBytes } from "./types.ts";
 
 // ---------------------------------------------------------------------------

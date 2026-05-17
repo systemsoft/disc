@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Type codecs for encoding/decoding EdgeQL values in binary format.
  *
@@ -369,8 +372,9 @@ export function encodeObjectValue(
  */
 function normalizeTypeName(name: string): string {
   const idx = name.lastIndexOf("::");
-  if (idx >= 0)
+  if (idx >= 0) {
     return name.substring(idx + 2);
+  }
   return name;
 }
 
@@ -417,8 +421,9 @@ function resolveTypeNameFromId(id: Uint8Array): string {
     ["00000000-0000-0000-0000-000000000130", "memory"]
   ];
   for (const [knownUuid, name] of knownTypes) {
-    if (uuid === knownUuid)
+    if (uuid === knownUuid) {
       return name;
+    }
   }
   return "bytes";
 }
@@ -482,8 +487,9 @@ function decodeBigInt(data: Uint8Array): bigint {
   const sign = view.getUint16(4, false);
   // dscale at offset 6 (not used for bigint)
 
-  if (ndigits === 0)
+  if (ndigits === 0) {
     return 0n;
+  }
 
   let result = 0n;
   for (let i = 0; i < ndigits; i++) {
@@ -561,10 +567,11 @@ function encodeDecimal(value: string | number): Uint8Array {
     origGroups.push(parseInt(paddedInt.substring(i, i + 4), 10));
   }
   for (const g of origGroups) {
-    if (g === 0)
+    if (g === 0) {
       leadingZeroGroups++;
-    else
+    } else {
       break;
+    }
   }
   const weight = intGroupCount - 1 - leadingZeroGroups;
 
@@ -608,8 +615,9 @@ function decodeDecimal(data: Uint8Array): string {
   // weight indicates the power-of-10000 of the first digit group
   // e.g., weight=1 means first group represents 10000^1
   let intGroupCount = weight + 1;
-  if (intGroupCount < 0)
+  if (intGroupCount < 0) {
     intGroupCount = 0;
+  }
 
   let intStr = "";
   for (let i = 0; i < intGroupCount; i++) {
@@ -620,8 +628,9 @@ function decodeDecimal(data: Uint8Array): string {
       intStr += d.toString().padStart(4, "0");
     }
   }
-  if (intStr === "")
+  if (intStr === "") {
     intStr = "0";
+  }
 
   let fracStr = "";
   for (let i = intGroupCount; i < ndigits; i++) {

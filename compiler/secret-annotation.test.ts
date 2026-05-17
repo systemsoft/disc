@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Secret-annotation introspection (#5988 + #6444 — Phase 1)
  *
@@ -23,8 +26,9 @@ import { describeType } from "./introspection.ts";
 
 function makeSchema(types: TypeDef[]): Schema {
   const typeMap = new Map<string, TypeDef>();
-  for (const t of types)
+  for (const t of types) {
     typeMap.set(t.name, t);
+  }
   return { types: typeMap, functions: getBuiltinFunctions() };
 }
 
@@ -241,8 +245,9 @@ Deno.test("secret-annotation - end-to-end: SDL @secret := true round-trips throu
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true);
 
-  if (!parseResult.ok)
+  if (!parseResult.ok) {
     throw parseResult.error;
+  }
   const schema = manager.modulesToSchema(parseResult.value);
   const desc = describeType(schema, "User");
   const pw = desc.properties.find(p => p.name === "password_hash");

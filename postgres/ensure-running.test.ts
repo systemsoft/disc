@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 import { assertEquals, assertRejects } from "@std/assert";
 import type { ProjectContext } from "../lib/project-context.ts";
 import { ensurePgRunning } from "./ensure-running.ts";
@@ -41,7 +44,10 @@ Deno.test(
 Deno.test(
   "ensurePgRunning - requires managed context",
   async () => {
-    const ctx = makeCtx({ managed: false, backendDsn: "postgres://user@host/db" });
+    const ctx = makeCtx({
+      managed: false,
+      backendDsn: "postgres://user@host/db"
+    });
 
     const err = await assertRejects(
       () => ensurePgRunning(ctx),

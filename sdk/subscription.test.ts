@@ -1,6 +1,12 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 import { assertEquals, assertExists } from "@std/assert";
 
-import { createSubscriptionClient, SubscriptionClient } from "./subscription.ts";
+import {
+  createSubscriptionClient,
+  SubscriptionClient
+} from "./subscription.ts";
 
 // --- Mock WebSocket ---
 

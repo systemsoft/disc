@@ -1,5 +1,11 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 import type { ProjectContext } from "../lib/project-context.ts";
-import { EMBEDDED_PG_MANIFEST, EMBEDDED_PG_VERSION } from "./embedded-pg-manifest.ts";
+import {
+  EMBEDDED_PG_MANIFEST,
+  EMBEDDED_PG_VERSION
+} from "./embedded-pg-manifest.ts";
 import { resolveEmbeddedPgBinDir } from "./embedded-pg.ts";
 import type { PostgresInstance } from "./instance.ts";
 import { PostgresManager } from "./manager.ts";

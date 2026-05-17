@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for `defineSchema()` and the typed query-builder overload.
  *
@@ -44,7 +47,10 @@ const blogSchema = defineSchema({
 Deno.test("defineSchema returns a wrapper carrying the spec", () => {
   assertEquals(Object.keys(blogSchema.spec).sort(), ["Post", "User"]);
   assertEquals(blogSchema.spec.User.email.kind, "scalar");
-  assertEquals((blogSchema.spec.User.email as { typeName: string; }).typeName, "str");
+  assertEquals(
+    (blogSchema.spec.User.email as { typeName: string; }).typeName,
+    "str"
+  );
 });
 
 Deno.test("defineSchema rejects non-PascalCase type names", () => {
@@ -131,7 +137,8 @@ Deno.test("typed createQueryBuilder runtime emits the same EdgeQL as the untyped
   };
   const qb = createQueryBuilder(fakeClient, blogSchema);
   // deno-lint-ignore no-explicit-any
-  const compiled = (qb.User.select({ email: true, name: true }) as any).toEdgeQL();
+  const compiled = (qb.User.select({ email: true, name: true }) as any)
+    .toEdgeQL();
   assertEquals(compiled.query, "select User { email, name }");
 });
 
@@ -143,9 +150,21 @@ Deno.test("typed createQueryBuilder runtime emits the same EdgeQL as the untyped
 
 type UserRow = ResolveType<typeof blogSchema.spec, typeof blogSchema.spec.User>;
 type PostRow = ResolveType<typeof blogSchema.spec, typeof blogSchema.spec.Post>;
-type FlatRow = ResolveSelected<typeof blogSchema.spec, "User", { email: true; name: true; }>;
-type NestedRow = ResolveSelected<typeof blogSchema.spec, "Post", { title: true; author: { email: true; }; }>;
-type MultiRow = ResolveSelected<typeof blogSchema.spec, "User", { name: true; posts: { title: true; }; }>;
+type FlatRow = ResolveSelected<
+  typeof blogSchema.spec,
+  "User",
+  { email: true; name: true; }
+>;
+type NestedRow = ResolveSelected<
+  typeof blogSchema.spec,
+  "Post",
+  { title: true; author: { email: true; }; }
+>;
+type MultiRow = ResolveSelected<
+  typeof blogSchema.spec,
+  "User",
+  { name: true; posts: { title: true; }; }
+>;
 type Builder = TypedQueryBuilder<typeof blogSchema.spec>;
 
 declare const _resolveTypeChecks: [
@@ -172,7 +191,10 @@ declare const _builderShapeCheck: Expect<
 
 Deno.test("typed select narrows the awaited row type (compile-time check)", async () => {
   const fakeClient = {
-    query: <T = unknown>(_q: string, _v?: Record<string, unknown>): Promise<T> => Promise.resolve([{ email: "a@b.c", name: "alice" }] as T)
+    query: <T = unknown>(
+      _q: string,
+      _v?: Record<string, unknown>
+    ): Promise<T> => Promise.resolve([{ email: "a@b.c", name: "alice" }] as T)
   };
   const qb = createQueryBuilder(fakeClient, blogSchema);
 
@@ -186,7 +208,10 @@ Deno.test("typed select narrows the awaited row type (compile-time check)", asyn
 
 Deno.test("typed first() returns row | null with the inferred shape", async () => {
   const fakeClient = {
-    query: <T = unknown>(_q: string, _v?: Record<string, unknown>): Promise<T> => Promise.resolve([{ title: "hello" }] as T)
+    query: <T = unknown>(
+      _q: string,
+      _v?: Record<string, unknown>
+    ): Promise<T> => Promise.resolve([{ title: "hello" }] as T)
   };
   const qb = createQueryBuilder(fakeClient, blogSchema);
   const row = await qb.Post.select({ title: true }).first();
@@ -196,7 +221,10 @@ Deno.test("typed first() returns row | null with the inferred shape", async () =
 Deno.test("typed filter predicate gets a typed FieldRef per field", async () => {
   const calls: Array<{ query: string; variables: unknown; }> = [];
   const fakeClient = {
-    query: <T = unknown>(query: string, variables?: Record<string, unknown>): Promise<T> => {
+    query: <T = unknown>(
+      query: string,
+      variables?: Record<string, unknown>
+    ): Promise<T> => {
       calls.push({ query, variables: variables ?? {} });
       return Promise.resolve([] as T);
     }

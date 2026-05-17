@@ -1,8 +1,17 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * EdgeQL Compiler with Access Control Integration
  */
 
-import { AccessConfig, AccessContext, AccessEvaluator, AccessPolicy, AccessSQLInjector } from "../access/mod.ts";
+import {
+  AccessConfig,
+  AccessContext,
+  AccessEvaluator,
+  AccessPolicy,
+  AccessSQLInjector
+} from "../access/mod.ts";
 import * as EdgeQLAST from "../edgeql/ast.ts";
 import { CompilationError } from "../lib/errors.ts";
 import { Err, Ok, Result } from "../lib/result.ts";
@@ -31,7 +40,9 @@ export class EdgeQLCompilerWithAccess {
       enableAudit: false
     };
 
-    this.accessMode = config.mode === "restrictive" ? "restrictive" : "permissive";
+    this.accessMode = config.mode === "restrictive" ?
+      "restrictive" :
+      "permissive";
     this.accessEvaluator = new AccessEvaluator(config);
     this.accessInjector = new AccessSQLInjector(this.accessEvaluator);
     this.accessContext = accessContext || {};
@@ -210,8 +221,9 @@ export class EdgeQLCompilerWithAccess {
   ): SQL.SQLStatement {
     // Get access policies and evaluate them
     const objectType = this.extractObjectTypeFromStatement(statement);
-    if (!objectType)
+    if (!objectType) {
       return statement;
+    }
 
     const decision = this.accessEvaluator.evaluate(
       objectType,
@@ -242,8 +254,9 @@ export class EdgeQLCompilerWithAccess {
 
     // Parse SQL conditions into AST expressions
     const accessConditions = this.parseAccessConditions(decision.sqlConditions);
-    if (!accessConditions)
+    if (!accessConditions) {
       return statement;
+    }
 
     if (statement.where) {
       // Combine with existing WHERE clause
@@ -308,8 +321,9 @@ export class EdgeQLCompilerWithAccess {
   private parseAccessConditions(
     sqlConditions: string[]
   ): SQL.SQLExpression | null {
-    if (sqlConditions.length === 0)
+    if (sqlConditions.length === 0) {
       return null;
+    }
 
     // For now, create raw SQL expressions
     // In a production system, we'd parse these properly
@@ -378,10 +392,14 @@ export class EdgeQLCompilerWithAccess {
     const selectClause = this.buildSelectClause(query, alias);
 
     // Build WHERE clause from filter
-    const whereClause = query.filter ? this.compileFilter(query.filter) : undefined;
+    const whereClause = query.filter ?
+      this.compileFilter(query.filter) :
+      undefined;
 
     // Build ORDER BY
-    const orderByClause = query.orderBy && query.orderBy.length > 0 ? this.compileOrderBy(query.orderBy) : undefined;
+    const orderByClause = query.orderBy && query.orderBy.length > 0 ?
+      this.compileOrderBy(query.orderBy) :
+      undefined;
 
     // Build LIMIT
     const limitClause = query.limit ?

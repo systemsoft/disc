@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Schema Introspection Module
  *
@@ -7,7 +10,13 @@
  */
 
 import { CompilationError } from "../lib/errors.ts";
-import type { FunctionDef, LinkDef, PropertyDef, Schema, TypeDef } from "./context.ts";
+import type {
+  FunctionDef,
+  LinkDef,
+  PropertyDef,
+  Schema,
+  TypeDef
+} from "./context.ts";
 
 // ---------------------------------------------------------------------------
 // Description interfaces
@@ -132,11 +141,13 @@ export function describeSchema(schema: Schema): SchemaDescription {
 function isSecretAnnotation(
   annotations: Record<string, string> | undefined
 ): boolean {
-  if (!annotations)
+  if (!annotations) {
     return false;
+  }
   const raw = annotations["secret"] ?? annotations["std::secret"];
-  if (raw === undefined)
+  if (raw === undefined) {
     return false;
+  }
   // SchemaManager preserves SDL string literal quotes (e.g. `'true'`),
   // while synthetic test fixtures pass raw `"true"`. Accept both.
   const stripped = raw.replace(/^['"]|['"]$/g, "");
@@ -170,7 +181,9 @@ function buildTypeDescription(typeDef: TypeDef): TypeDescription {
     for (const idx of typeDef.indexes) {
       // Format as `name: expression` when named, else just the
       // expression — matches the convention SDL uses textually.
-      indexes.push(idx.name ? `${idx.name}: ${idx.expression}` : idx.expression);
+      indexes.push(
+        idx.name ? `${idx.name}: ${idx.expression}` : idx.expression
+      );
     }
   }
 

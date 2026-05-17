@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for the live-schema-diff apply endpoint (Bundle K — Disc #3a).
  *
@@ -51,7 +54,10 @@ Deno.test(
     const tmp = await Deno.makeTempFile({ suffix: ".disc" });
     try {
       // Missing closing brace on User
-      await Deno.writeTextFile(tmp, "module default {\n  type User {\n    required name: str;\n};");
+      await Deno.writeTextFile(
+        tmp,
+        "module default {\n  type User {\n    required name: str;\n};"
+      );
       const res = await handleSchemaApply({
         request: new Request("http://localhost/admin/schema-apply", {
           method: "POST"

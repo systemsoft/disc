@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 // deno-lint-ignore-file
 import { assertEquals, assertInstanceOf, assertRejects } from "@std/assert";
 
@@ -16,7 +19,11 @@ function mockFetch(
     input: string | URL | Request,
     init?: RequestInit
   ): Promise<Response> => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
+    const url = typeof input === "string" ?
+      input :
+      input instanceof URL ?
+      input.toString() :
+      input.url;
     return Promise.resolve(handler(url, init));
   };
   return () => {
@@ -98,7 +105,10 @@ Deno.test("applyValidator - schema failure preserves issues", async () => {
   } catch (error) {
     assertInstanceOf(error, DiscValidationError);
     assertEquals(error.issues.length, 1);
-    assertEquals(error.issues[0].message, "expected { name: string, age: number }");
+    assertEquals(
+      error.issues[0].message,
+      "expected { name: string, age: number }"
+    );
   }
 });
 

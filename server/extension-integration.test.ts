@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Extension Integration Tests
  *
@@ -9,14 +12,27 @@
  * DiscServer tests use a no-op protocol handler to bypass the connection pool.
  */
 
-import { assert, assertEquals, assertRejects } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import {
+  assert,
+  assertEquals,
+  assertRejects
+} from "@std/assert";
 import type { FunctionDef } from "../compiler/context.ts";
 import { BaseExtension } from "../extensions/base-extension.ts";
 import { ExtensionRegistry } from "../extensions/registry.ts";
-import type { ExtensionContext, ExtensionMetadata, ExtensionRoute } from "../extensions/types.ts";
+import type {
+  ExtensionContext,
+  ExtensionMetadata,
+  ExtensionRoute
+} from "../extensions/types.ts";
 import { getLogger } from "../lib/logger.ts";
 import { HttpServer } from "./http.ts";
-import type { ProtocolHandler, QueryContext, QueryRequest, QueryResponse } from "./types.ts";
+import type {
+  ProtocolHandler,
+  QueryContext,
+  QueryRequest,
+  QueryResponse
+} from "./types.ts";
 
 const TEST_HOST = "127.0.0.1";
 

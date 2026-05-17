@@ -1,38 +1,47 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * In-process auth-event subscriber that turns lifecycle events into
  * outbound transactional email.
  *
- * Sits alongside `WebhookSender`'s HTTP fan-out: when the auth core
+ * Sits alongside `WebhookSender`’s HTTP fan-out: when the auth core
  * fires a token-bearing event (verification, password reset, magic
- * link), this listener resolves the recipient's email, renders a
+ * link), this listener resolves the recipient’s email, renders a
  * template, and hands the message to the SMTP `Mailer`. Non-email
  * event types (`IdentityCreated`, `IdentityAuthenticated`,
- * `EmailVerified`) are ignored — they're notification-only and have
+ * `EmailVerified`) are ignored — they’re notification-only and have
  * no payload that requires email delivery.
  *
- * Mirrors `WebhookSender`'s fire-and-forget posture: every error
+ * Mirrors `WebhookSender`’s fire-and-forget posture: every error
  * (recipient lookup, template render, mailer send) is logged at
  * `warn` and swallowed. The auth flow must never break because email
  * delivery failed (gh/geldata#8224).
  */
 
+/*** UTILITY ------------------------------------------ ***/
+
+import { buildMagicLinkUrl } from "./branding.ts";
 import { getLogger } from "../lib/logger.ts";
 import type { Mailer } from "../smtp/mailer.ts";
-import { buildMagicLinkUrl } from "./branding.ts";
+
 import {
-  type BrandingCtx,
   defaultBranding,
-  type EmailTemplateOverrides,
-  type RenderedEmail,
   renderMagicCodeEmail,
   renderMagicLinkEmail,
   renderPasswordResetEmail,
-  renderVerificationEmail
+  renderVerificationEmail,
+  type BrandingCtx,
+  type EmailTemplateOverrides,
+  type RenderedEmail
 } from "./email-templates.ts";
+
 import type { AuthBrandingConfig } from "./types.ts";
 import type { WebhookEvent } from "./webhooks.ts";
 
 const log = getLogger("auth-email-listener");
+
+/*** EXPORT ------------------------------------------- ***/
 
 export interface EmailListenerConfig {
   /**
@@ -69,22 +78,6 @@ export interface EmailListenerConfig {
   templates?: EmailTemplateOverrides;
 }
 
-/**
- * Promote an `AuthBrandingConfig` (operator-supplied, every field
- * optional) to the `BrandingCtx` (renderer-facing, `appName` required)
- * by filling in defaults. Pulled out so every code path in the
- * listener uses the same fallback rules.
- */
-function resolveBranding(branding: AuthBrandingConfig | undefined): BrandingCtx {
-  const fallback = defaultBranding();
-  return {
-    appName: branding?.appName ?? fallback.appName,
-    brandColor: branding?.brandColor,
-    darkLogoUrl: branding?.darkLogoUrl,
-    logoUrl: branding?.logoUrl
-  };
-}
-
 export class EmailEventListener {
   private readonly config: EmailListenerConfig;
 
@@ -100,28 +93,38 @@ export class EmailEventListener {
   async handle(event: WebhookEvent): Promise<void> {
     try {
       switch (event.eventType) {
-        case "EmailVerificationRequested":
+        case "EmailVerified":
+        case "IdentityAuthenticated":
+        case "IdentityCreated": {
+          // Notification-only events — nothing to mail.
+          return;
+        }
+
+        case "EmailVerificationRequested": {
           await this.handleVerification(event.identityId, event.verificationToken);
           return;
-        case "PasswordResetRequested":
-          await this.handlePasswordReset(event.identityId, event.resetToken);
+        }
+
+        case "MagicCodeRequested": {
+          await this.handleMagicCode(event.identityId, event.magicCode);
           return;
+        }
+
         case "MagicLinkRequested":
           await this.handleMagicLink(event.identityId, event.magicLinkToken);
           return;
-        case "MagicLinkSignupRequested":
+
+        case "MagicLinkSignupRequested": {
           // Implicit signup — no identity yet, deliver to the pending
           // email directly (gh/geldata#7311).
           await this.handleMagicLinkToEmail(event.pendingEmail, event.magicLinkToken);
           return;
-        case "MagicCodeRequested":
-          await this.handleMagicCode(event.identityId, event.magicCode);
+        }
+
+        case "PasswordResetRequested": {
+          await this.handlePasswordReset(event.identityId, event.resetToken);
           return;
-        case "IdentityCreated":
-        case "IdentityAuthenticated":
-        case "EmailVerified":
-          // Notification-only events — nothing to mail.
-          return;
+        }
       }
     } catch (err) {
       log.warn("email listener errored", {
@@ -131,36 +134,47 @@ export class EmailEventListener {
     }
   }
 
-  private async handleVerification(identityId: string, verificationToken: string): Promise<void> {
-    const recipient = await this.lookup(identityId, "EmailVerificationRequested");
-    if (!recipient)
-      return;
-    const rendered = (this.config.templates?.verification ?? renderVerificationEmail)({
-      baseUrl: this.config.baseUrl,
-      branding: resolveBranding(this.config.branding),
-      recipient,
-      verificationToken
-    });
-    await this.deliver(recipient, rendered, "EmailVerificationRequested");
+  /*** PRIVATE ------------------------------------------ ***/
+
+  private async deliver(recipient: string, rendered: RenderedEmail, eventType: string): Promise<void> {
+    try {
+      await this.config.mailer.send({
+        html: rendered.html,
+        subject: rendered.subject,
+        text: rendered.text,
+        to: recipient
+      });
+    } catch (err) {
+      log.warn("mailer send failed", {
+        error: err instanceof Error ? err.message : String(err),
+        eventType
+      });
+    }
   }
 
-  private async handlePasswordReset(identityId: string, resetToken: string): Promise<void> {
-    const recipient = await this.lookup(identityId, "PasswordResetRequested");
+  private async handleMagicCode(identityId: string, code: string): Promise<void> {
+    const recipient = await this.lookup(identityId, "MagicCodeRequested");
+
     if (!recipient)
       return;
-    const rendered = (this.config.templates?.passwordReset ?? renderPasswordResetEmail)({
-      baseUrl: this.config.baseUrl,
-      branding: resolveBranding(this.config.branding),
-      recipient,
-      resetToken
-    });
-    await this.deliver(recipient, rendered, "PasswordResetRequested");
+
+    const rendered = (this.config.templates?.magicCode ?? renderMagicCodeEmail)(
+      {
+        branding: resolveBranding(this.config.branding),
+        code,
+        recipient
+      }
+    );
+
+    await this.deliver(recipient, rendered, "MagicCodeRequested");
   }
 
   private async handleMagicLink(identityId: string, magicLinkToken: string): Promise<void> {
     const recipient = await this.lookup(identityId, "MagicLinkRequested");
+
     if (!recipient)
       return;
+
     await this.handleMagicLinkToEmail(recipient, magicLinkToken);
   }
 
@@ -175,62 +189,93 @@ export class EmailEventListener {
       baseUrl: this.config.baseUrl,
       template: this.config.magicLinkUrlTemplate
     });
-    const rendered = (this.config.templates?.magicLink ?? renderMagicLinkEmail)({
-      baseUrl: this.config.baseUrl,
-      branding: resolveBranding(this.config.branding),
-      link,
-      magicLinkToken,
-      recipient
-    });
+
+    const rendered = (this.config.templates?.magicLink ?? renderMagicLinkEmail)(
+      {
+        baseUrl: this.config.baseUrl,
+        branding: resolveBranding(this.config.branding),
+        link,
+        magicLinkToken,
+        recipient
+      }
+    );
+
     await this.deliver(recipient, rendered, "MagicLinkRequested");
   }
 
-  private async handleMagicCode(identityId: string, code: string): Promise<void> {
-    const recipient = await this.lookup(identityId, "MagicCodeRequested");
+  private async handlePasswordReset(identityId: string, resetToken: string): Promise<void> {
+    const recipient = await this.lookup(identityId, "PasswordResetRequested");
+
     if (!recipient)
       return;
-    const rendered = (this.config.templates?.magicCode ?? renderMagicCodeEmail)({
+
+    const rendered = (this.config.templates?.passwordReset ?? renderPasswordResetEmail)({
+      baseUrl: this.config.baseUrl,
       branding: resolveBranding(this.config.branding),
-      code,
-      recipient
+      recipient,
+      resetToken
     });
-    await this.deliver(recipient, rendered, "MagicCodeRequested");
+
+    await this.deliver(recipient, rendered, "PasswordResetRequested");
+  }
+
+  private async handleVerification(identityId: string, verificationToken: string): Promise<void> {
+    const recipient = await this.lookup(identityId, "EmailVerificationRequested");
+
+    if (!recipient)
+      return;
+
+    const rendered = (this.config.templates?.verification ?? renderVerificationEmail)({
+      baseUrl: this.config.baseUrl,
+      branding: resolveBranding(this.config.branding),
+      recipient,
+      verificationToken
+    });
+
+    await this.deliver(recipient, rendered, "EmailVerificationRequested");
   }
 
   private async lookup(identityId: string, eventType: string): Promise<string | null> {
     try {
       const recipient = await this.config.resolveRecipient(identityId);
+
       if (!recipient) {
         log.warn("recipient lookup returned null; skipping email", {
           eventType,
           identityId
         });
+
         return null;
       }
+
       return recipient;
     } catch (err) {
       log.warn("recipient lookup failed", {
+        error: err instanceof Error ? err.message : String(err),
         eventType,
-        identityId,
-        error: err instanceof Error ? err.message : String(err)
+        identityId
       });
+
       return null;
     }
   }
+}
 
-  private async deliver(recipient: string, rendered: RenderedEmail, eventType: string): Promise<void> {
-    try {
-      await this.config.mailer.send({
-        html: rendered.html,
-        subject: rendered.subject,
-        text: rendered.text,
-        to: recipient
-      });
-    } catch (err) {
-      log.warn("mailer send failed", {
-        eventType,
-        error: err instanceof Error ? err.message : String(err)
-      });
-    }
-  }
+/*** HELPER ------------------------------------------- ***/
+
+/**
+ * Promote an `AuthBrandingConfig` (operator-supplied, every field
+ * optional) to the `BrandingCtx` (renderer-facing, `appName` required)
+ * by filling in defaults. Pulled out so every code path in the
+ * listener uses the same fallback rules.
+ */
+function resolveBranding(branding: AuthBrandingConfig | undefined): BrandingCtx {
+  const fallback = defaultBranding();
+
+  return {
+    appName: branding?.appName ?? fallback.appName,
+    brandColor: branding?.brandColor,
+    darkLogoUrl: branding?.darkLogoUrl,
+    logoUrl: branding?.logoUrl
+  };
 }

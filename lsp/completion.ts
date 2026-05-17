@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * SDL completion provider (#7411 + #655)
  *
@@ -14,7 +17,11 @@
 
 import * as AST from "../schema/ast.ts";
 import { SDLParser } from "../schema/parser.ts";
-import { type CompletionItem, CompletionItemKind, type Position } from "./protocol.ts";
+import {
+  CompletionItemKind,
+  type CompletionItem,
+  type Position
+} from "./protocol.ts";
 import { SCALAR_TYPES } from "./scalar-info.ts";
 
 const KEYWORDS = [
@@ -147,22 +154,26 @@ function collectTypeNames(text: string): string[] {
     if (decl.kind === "ModuleDeclaration") {
       for (const inner of decl.declarations) {
         const n = nameOfTypeLikeDecl(inner);
-        if (n)
+        if (n) {
           names.push(n);
+        }
       }
     } else {
       const n = nameOfTypeLikeDecl(decl);
-      if (n)
+      if (n) {
         names.push(n);
+      }
     }
   }
   return names;
 }
 
 function nameOfTypeLikeDecl(decl: AST.Declaration): string | null {
-  if (decl.kind === "TypeDeclaration")
+  if (decl.kind === "TypeDeclaration") {
     return decl.name.value;
-  if (decl.kind === "ScalarTypeDeclaration")
+  }
+  if (decl.kind === "ScalarTypeDeclaration") {
     return decl.name.value;
+  }
   return null;
 }

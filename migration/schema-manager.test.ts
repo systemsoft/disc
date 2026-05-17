@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for SchemaManager
  *
@@ -7,7 +10,11 @@
 
 import { assert, assertEquals, assertNotEquals } from "@std/assert";
 import { ConnectionPool } from "../lib/connection-pool.ts";
-import { canRunPgTests, cleanupTestTables, getTestDsn } from "../tests/pg-test-harness.ts";
+import {
+  canRunPgTests,
+  cleanupTestTables,
+  getTestDsn
+} from "../tests/pg-test-harness.ts";
 import { SchemaManager } from "./schema-manager.ts";
 
 // ---------------------------------------------------------------------------
@@ -110,8 +117,9 @@ Deno.test("SchemaManager - modulesToSchema - correct TypeDef with tableName and 
 
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true);
-  if (!parseResult.ok)
+  if (!parseResult.ok) {
     return;
+  }
 
   const schema = manager.modulesToSchema(parseResult.value);
   const userType = schema.types.get("User");
@@ -141,8 +149,9 @@ Deno.test("SchemaManager - modulesToSchema - SDL type to SQL column type mapping
 
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true);
-  if (!parseResult.ok)
+  if (!parseResult.ok) {
     return;
+  }
 
   const schema = manager.modulesToSchema(parseResult.value);
   const typeDef = schema.types.get("AllTypes");
@@ -192,8 +201,9 @@ Deno.test("SchemaManager - modulesToSchema - single link gets _id columnName, mu
 
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true);
-  if (!parseResult.ok)
+  if (!parseResult.ok) {
     return;
+  }
 
   const schema = manager.modulesToSchema(parseResult.value);
 
@@ -243,33 +253,60 @@ Deno.test("SchemaManager - modulesToSchema - arrow shorthand reclassifies scalar
 
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true);
-  if (!parseResult.ok)
+  if (!parseResult.ok) {
     return;
+  }
 
   const schema = manager.modulesToSchema(parseResult.value);
   const apiKey = schema.types.get("api::ApiKey");
   assert(apiKey !== undefined, "Expected api::ApiKey type");
 
   // Scalars: must be in properties, NOT links
-  for (const scalarField of ["name", "key", "created", "rateLimitSeconds", "environment"]) {
-    assert(apiKey.properties.has(scalarField), `${scalarField} should be a property`);
-    assertEquals(apiKey.links.has(scalarField), false, `${scalarField} should NOT be a link`);
+  for (
+    const scalarField of [
+      "name",
+      "key",
+      "created",
+      "rateLimitSeconds",
+      "environment"
+    ]
+  ) {
+    assert(
+      apiKey.properties.has(scalarField),
+      `${scalarField} should be a property`
+    );
+    assertEquals(
+      apiKey.links.has(scalarField),
+      false,
+      `${scalarField} should NOT be a link`
+    );
   }
 
   // Object link: must stay in links
-  assert(apiKey.links.has("merchant"), "merchant must remain a link (object target)");
+  assert(
+    apiKey.links.has("merchant"),
+    "merchant must remain a link (object target)"
+  );
 
   // Body metadata carries over from the link AST to the reclassified property
   const keyProp = apiKey.properties.get("key")!;
   assertEquals(keyProp.required, true);
   assertEquals(keyProp.edgeqlType, "str");
-  assertEquals(keyProp.constraints?.length ?? 0, 1, "exclusive constraint should carry over");
+  assertEquals(
+    keyProp.constraints?.length ?? 0,
+    1,
+    "exclusive constraint should carry over"
+  );
 
   const createdProp = apiKey.properties.get("created")!;
   assertEquals(createdProp.readonly, true, "readonly flag should carry over");
 
   const rateLimitProp = apiKey.properties.get("rateLimitSeconds")!;
-  assertEquals(rateLimitProp.hasDefault, true, "default expression presence should carry over");
+  assertEquals(
+    rateLimitProp.hasDefault,
+    true,
+    "default expression presence should carry over"
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -285,8 +322,9 @@ Deno.test("SchemaManager - modulesToSchema - implicit id property added", () => 
 
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true);
-  if (!parseResult.ok)
+  if (!parseResult.ok) {
     return;
+  }
 
   const schema = manager.modulesToSchema(parseResult.value);
   const widgetType = schema.types.get("Widget");
@@ -320,8 +358,9 @@ Deno.test("SchemaManager - modulesToSchema - camelCase property name → snake_c
 
   const parseResult = manager.parseSDL(sdl);
   assertEquals(parseResult.ok, true);
-  if (!parseResult.ok)
+  if (!parseResult.ok) {
     return;
+  }
 
   const schema = manager.modulesToSchema(parseResult.value);
   const itemType = schema.types.get("Item");

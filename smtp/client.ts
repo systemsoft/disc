@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Minimal SMTP client over a TCP/TLS socket.
  *
@@ -190,10 +193,13 @@ export class SmtpClient {
     reader: LineReader,
     exts: Set<string>
   ): Promise<void> {
-    if (!this.cfg.auth)
+    if (!this.cfg.auth) {
       return;
+    }
     const authExt = findAuthExtension(exts);
-    const mechanisms = authExt ? authExt.split(/\s+/).slice(1).map(m => m.toUpperCase()) : [];
+    const mechanisms = authExt ?
+      authExt.split(/\s+/).slice(1).map(m => m.toUpperCase()) :
+      [];
 
     const { user, pass } = this.cfg.auth;
 
@@ -306,8 +312,9 @@ class LineReader {
       const text = line.slice(4);
       lines.push(text);
       code = replyCode;
-      if (sep === " ")
+      if (sep === " ") {
         break; // last line in a multi-line reply
+      }
       if (sep !== "-") {
         throw new Error(`malformed SMTP reply separator: ${line}`);
       }
@@ -345,8 +352,9 @@ function parseEhloExtensions(lines: string[]): Set<string> {
   const set = new Set<string>();
   for (let i = 1; i < lines.length; i++) {
     const raw = lines[i].trim();
-    if (raw.length === 0)
+    if (raw.length === 0) {
       continue;
+    }
     set.add(raw.toUpperCase());
   }
   return set;
@@ -354,16 +362,18 @@ function parseEhloExtensions(lines: string[]): Set<string> {
 
 function findAuthExtension(exts: Set<string>): string | undefined {
   for (const ext of exts) {
-    if (ext.startsWith("AUTH ") || ext === "AUTH")
+    if (ext.startsWith("AUTH ") || ext === "AUTH") {
       return ext;
+    }
   }
   return undefined;
 }
 
 function indexOfCrlf(buf: Uint8Array): number {
   for (let i = 0; i < buf.length - 1; i++) {
-    if (buf[i] === 0x0d && buf[i + 1] === 0x0a)
+    if (buf[i] === 0x0d && buf[i + 1] === 0x0a) {
       return i;
+    }
   }
   return -1;
 }
@@ -382,8 +392,9 @@ async function writeAll(conn: SmtpConn, data: Uint8Array): Promise<void> {
   let offset = 0;
   while (offset < data.length) {
     const n = await conn.write(data.subarray(offset));
-    if (n <= 0)
+    if (n <= 0) {
       throw new Error("SMTP write returned 0 bytes");
+    }
     offset += n;
   }
 }
@@ -408,8 +419,9 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 }
 
 function wrapSmtpError(err: unknown): Error {
-  if (err instanceof Error)
+  if (err instanceof Error) {
     return err;
+  }
   return new Error(String(err));
 }
 

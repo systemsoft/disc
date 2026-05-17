@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * OpenID Connect discovery (RFC 8414 / OpenID-Connect-Discovery 1.0).
  *
@@ -75,8 +78,12 @@ export async function fetchOidcDiscovery(
     authorizationEndpoint,
     issuer,
     jwksUri: typeof doc["jwks_uri"] === "string" ? doc["jwks_uri"] : undefined,
-    scopesSupported: Array.isArray(doc["scopes_supported"]) ? doc["scopes_supported"].filter((s): s is string => typeof s === "string") : undefined,
+    scopesSupported: Array.isArray(doc["scopes_supported"]) ?
+      doc["scopes_supported"].filter((s): s is string => typeof s === "string") :
+      undefined,
     tokenEndpoint,
-    userInfoEndpoint: typeof doc["userinfo_endpoint"] === "string" ? doc["userinfo_endpoint"] : undefined
+    userInfoEndpoint: typeof doc["userinfo_endpoint"] === "string" ?
+      doc["userinfo_endpoint"] :
+      undefined
   };
 }

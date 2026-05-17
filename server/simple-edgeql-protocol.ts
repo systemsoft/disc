@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Simplified EdgeQL Protocol Handler — test/dev fixture, NOT for serving real queries.
  *
@@ -167,7 +170,9 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       log.error("Query execution error", {
         error: error instanceof Error ? error.message : String(error)
       });
-      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      const errorMessage = error instanceof Error ?
+        error.message :
+        "Unknown error";
 
       return {
         errors: [{
@@ -241,7 +246,9 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
         token_count: tokens.length
       };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown parsing error";
+      const errorMessage = error instanceof Error ?
+        error.message :
+        "Unknown parsing error";
       log.debug("Exception during parsing", { error: errorMessage });
       return {
         success: false,
@@ -283,14 +290,18 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       // Replace variables in SQL (simplified)
       let finalSQL = sql;
       for (const [name, value] of Object.entries(variables)) {
-        const sqlValue = typeof value === "string" ? `'${value}'` : String(value);
+        const sqlValue = typeof value === "string" ?
+          `'${value}'` :
+          String(value);
         finalSQL = finalSQL.replace(new RegExp(`\\$${name}`, "g"), sqlValue);
       }
 
       log.debug("Generated SQL", { sql: finalSQL });
       return { success: true, sql: finalSQL };
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown compilation error";
+      const errorMessage = error instanceof Error ?
+        error.message :
+        "Unknown compilation error";
       log.debug("Compilation error", { error: errorMessage });
       return {
         success: false,
@@ -496,7 +507,9 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
           return { data: { rowCount: result.rowCount, success: true } };
         }
       } catch (error) {
-        const dbError = error instanceof Error ? error : new Error(String(error));
+        const dbError = error instanceof Error ?
+          error :
+          new Error(String(error));
         log.error("Database execution error", { error: dbError.message });
         throw new DatabaseExecutionError(
           `Database query failed: ${dbError.message}`,
@@ -689,7 +702,9 @@ export class SimpleEdgeQLProtocolHandler implements Types.ProtocolHandler {
       const latencyMs = Date.now() - start;
 
       const poolStats = this.buildPoolStats();
-      const status: HealthStatus["status"] = poolStats.waiters > 0 ? "degraded" : "healthy";
+      const status: HealthStatus["status"] = poolStats.waiters > 0 ?
+        "degraded" :
+        "healthy";
 
       return {
         status,

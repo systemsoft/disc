@@ -1,10 +1,18 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Transaction — Execute multiple queries atomically
  */
 
 import { reviveResponse } from "./codecs.ts";
 import { DiscQueryError, DiscTransactionError } from "./errors.ts";
-import type { QueryOptions, QueryResponse, QueryValidator, TransactionState } from "./types.ts";
+import type {
+  QueryOptions,
+  QueryResponse,
+  QueryValidator,
+  TransactionState
+} from "./types.ts";
 import { applyValidator } from "./validation.ts";
 
 import type { DiscClient } from "./client.ts";

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * SQL Code Generator
  * Converts SQL AST to PostgreSQL string representation
@@ -229,8 +232,9 @@ export class SQLCodeGenerator {
     parts.push("\nVALUES");
 
     for (let i = 0; i < stmt.values.length; i++) {
-      if (i > 0)
+      if (i > 0) {
         parts.push(",");
+      }
       parts.push(
         "\n" + this.indent() + "(" + stmt.values[i].map(expr => this.generateExpression(expr)).join(", ") +
           ")"
@@ -467,7 +471,9 @@ export class SQLCodeGenerator {
       .ctes
       .map(cte => {
         const recursive = cte.recursive ? "RECURSIVE " : "";
-        const cols = cte.columns.length > 0 ? ` (${cte.columns.join(", ")})` : "";
+        const cols = cte.columns.length > 0 ?
+          ` (${cte.columns.join(", ")})` :
+          "";
         const query = this.generateStatement(cte.query);
         return `${recursive}${this.escapeIdentifier(cte.name)}${cols} AS (\n${this.indent()}  ${query}\n${this.indent()})`;
       })

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Config-variable registry (#5988 + #6444 — Phase 2)
  *
@@ -144,7 +147,8 @@ export function getConfigRegistry(): ConfigKeyDef[] {
  */
 export function maskIfSecret(name: string, value: unknown): unknown {
   const def = lookupConfigKey(name);
-  if (!def)
+  if (!def) {
     return null;
+  }
   return def.secret ? null : value;
 }

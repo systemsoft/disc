@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * PostgreSQL End-to-End Tests for Rewrite Rules
  *
@@ -55,7 +58,9 @@ async function queryRows<T>(
   const client = new Client(cfg);
   try {
     await client.connect();
-    const result = params ? await client.queryObject<T>(sql, params) : await client.queryObject<T>(sql);
+    const result = params ?
+      await client.queryObject<T>(sql, params) :
+      await client.queryObject<T>(sql);
     return result.rows;
   } finally {
     await client.end();

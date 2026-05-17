@@ -1,9 +1,17 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * SubscriptionClient — WebSocket-based subscription client for Disc database
  */
 
 import { DiscConnectionError } from "./errors.ts";
-import type { DiscClientConfig, SubscriptionCallbacks, SubscriptionClientConfig, SubscriptionHandle } from "./types.ts";
+import type {
+  DiscClientConfig,
+  SubscriptionCallbacks,
+  SubscriptionClientConfig,
+  SubscriptionHandle
+} from "./types.ts";
 
 const DEFAULT_BASE_URL = "http://localhost:5656";
 const DEFAULT_AUTO_RECONNECT = true;
@@ -208,7 +216,9 @@ export class SubscriptionClient {
     } else if (type === "error") {
       if (callbacks.onError) {
         const err = payload instanceof Error ? payload : new Error(
-          typeof payload === "string" ? payload : JSON.stringify(payload ?? "Subscription error")
+          typeof payload === "string" ?
+            payload :
+            JSON.stringify(payload ?? "Subscription error")
         );
         callbacks.onError(err);
       }

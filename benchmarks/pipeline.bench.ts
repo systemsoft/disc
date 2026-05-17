@@ -1,13 +1,18 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Full Pipeline Benchmarks
  *
  * Benchmarks the complete parse -> compile -> codegen pipeline.
  */
 
-import { SQLCodeGenerator } from "../compiler/codegen.ts";
-import { EdgeQLCompiler } from "../compiler/compiler.ts";
+/*** UTILITY ------------------------------------------ ***/
+
 import { createTestSchema } from "../compiler/context.ts";
+import { EdgeQLCompiler } from "../compiler/compiler.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
+import { SQLCodeGenerator } from "../compiler/codegen.ts";
 
 const schema = createTestSchema();
 
@@ -20,6 +25,8 @@ const queries: Record<string, string> = {
   delete: "DELETE User FILTER .name = 'Ada'",
   complex: "SELECT User { name, email, posts: { title, body } } FILTER .name = 'Ada' ORDER BY .name LIMIT 10"
 };
+
+/*** RUNTIME ------------------------------------------ ***/
 
 for (const [name, query] of Object.entries(queries)) {
   Deno.bench(`pipeline: ${name}`, () => {

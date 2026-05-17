@@ -1,11 +1,18 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * SQL Injector for Access Policies
  *
  * Injects access control conditions into SQL queries
  */
 
+/*** UTILITY ------------------------------------------ ***/
+
 import { AccessEvaluator } from "./evaluator.ts";
-import { AccessContext } from "./types.ts";
+import { type AccessContext } from "./types.ts";
+
+/*** EXPORT ------------------------------------------- ***/
 
 export interface SQLQuery {
   params: any[];
@@ -17,163 +24,6 @@ export class AccessSQLInjector {
 
   constructor(evaluator: AccessEvaluator) {
     this.evaluator = evaluator;
-  }
-
-  /**
-   * Inject access conditions into a SELECT query
-   */
-  injectSelect(
-    query: SQLQuery,
-    tableName: string,
-    objectType: string,
-    context: AccessContext
-  ): SQLQuery {
-    const decision = this.evaluator.evaluate(objectType, "select", context);
-
-    if (!decision.allowed) {
-      // Return a query that returns no results
-      return {
-        params: [],
-        text: `SELECT * FROM ${tableName} WHERE FALSE`
-      };
-    }
-
-    if (!decision.sqlConditions || decision.sqlConditions.length === 0) {
-      // No conditions to inject
-      return query;
-    }
-
-    // Inject WHERE conditions
-    return this.injectWhereConditions(query, decision.sqlConditions);
-  }
-
-  /**
-   * Inject access conditions into an INSERT query
-   */
-  injectInsert(
-    query: SQLQuery,
-    _tableName: string,
-    objectType: string,
-    context: AccessContext
-  ): SQLQuery {
-    const decision = this.evaluator.evaluate(objectType, "insert", context);
-
-    if (!decision.allowed) {
-      throw new Error(
-        decision.denialMessage ??
-          `INSERT not allowed on ${objectType}: ${decision.reason}`
-      );
-    }
-
-    // For INSERT, we might add WITH CHECK conditions
-    // This would be implemented as a CHECK constraint or trigger
-    return query;
-  }
-
-  /**
-   * Inject access conditions into an UPDATE query
-   */
-  injectUpdate(
-    query: SQLQuery,
-    _tableName: string,
-    objectType: string,
-    context: AccessContext,
-    _columns?: string[]
-  ): SQLQuery {
-    const decision = this.evaluator.evaluate(objectType, "update", context);
-
-    if (!decision.allowed) {
-      throw new Error(
-        decision.denialMessage ??
-          `UPDATE not allowed on ${objectType}: ${decision.reason}`
-      );
-    }
-
-    if (!decision.sqlConditions || decision.sqlConditions.length === 0) {
-      return query;
-    }
-
-    // Inject WHERE conditions to restrict which rows can be updated
-    return this.injectWhereConditions(query, decision.sqlConditions);
-  }
-
-  /**
-   * Inject access conditions into a DELETE query
-   */
-  injectDelete(
-    query: SQLQuery,
-    _tableName: string,
-    objectType: string,
-    context: AccessContext
-  ): SQLQuery {
-    const decision = this.evaluator.evaluate(objectType, "delete", context);
-
-    if (!decision.allowed) {
-      throw new Error(
-        decision.denialMessage ??
-          `DELETE not allowed on ${objectType}: ${decision.reason}`
-      );
-    }
-
-    if (!decision.sqlConditions || decision.sqlConditions.length === 0) {
-      return query;
-    }
-
-    // Inject WHERE conditions to restrict which rows can be deleted
-    return this.injectWhereConditions(query, decision.sqlConditions);
-  }
-
-  /**
-   * Inject WHERE conditions into a query
-   */
-  private injectWhereConditions(
-    query: SQLQuery,
-    conditions: string[]
-  ): SQLQuery {
-    const { text, params } = query;
-
-    // Combine all conditions with AND
-    const conditionSQL = conditions.map(c => `(${c})`).join(" AND ");
-
-    // Check if query already has WHERE clause
-    const whereMatch = text.match(/\bWHERE\b/i);
-    let newText: string;
-
-    if (whereMatch) {
-      // Add conditions to existing WHERE clause
-      const whereIndex = whereMatch.index!;
-      const beforeWhere = text.substring(0, whereIndex + 5);
-      const afterWhere = text.substring(whereIndex + 5);
-      newText = `${beforeWhere} (${conditionSQL}) AND ${afterWhere}`;
-    } else {
-      // Add WHERE clause
-      const fromMatch = text.match(/\bFROM\s+(\w+)/i);
-
-      if (fromMatch) {
-        const afterFrom = fromMatch.index! + fromMatch[0].length;
-        const beforeFrom = text.substring(0, afterFrom);
-        const afterFromText = text.substring(afterFrom);
-        // Check for JOIN, GROUP BY, ORDER BY, etc.
-        const clauseMatch = afterFromText.match(
-          /\b(JOIN|GROUP\s+BY|ORDER\s+BY|LIMIT|OFFSET)\b/i
-        );
-
-        if (clauseMatch) {
-          const clauseIndex = clauseMatch.index!;
-          newText = `${beforeFrom}${afterFromText.substring(0, clauseIndex)} WHERE ${conditionSQL} ${afterFromText.substring(clauseIndex)}`;
-        } else {
-          newText = `${text} WHERE ${conditionSQL}`;
-        }
-      } else {
-        // Couldn't parse query structure, append WHERE
-        newText = `${text} WHERE ${conditionSQL}`;
-      }
-    }
-
-    return {
-      params,
-      text: newText
-    };
   }
 
   /**
@@ -190,16 +40,16 @@ export class AccessSQLInjector {
     const policies = this.evaluator.getPolicies(objectType);
     const statements: string[] = [];
 
-    // Enable RLS on the table
+    /*** Enable RLS on the table ***/
     statements.push(`ALTER TABLE ${tableName} ENABLE ROW LEVEL SECURITY;`);
 
     for (const policy of policies) {
       const policyName = `${tableName}_${policy.name}`.toLowerCase();
 
-      // Drop existing policy
+      /*** Drop existing policy ***/
       statements.push(`DROP POLICY IF EXISTS ${policyName} ON ${tableName};`);
 
-      // Build policy operations
+      /*** Build policy operations ***/
       const operations: string[] = [];
 
       for (const action of policy.actions) {
@@ -221,23 +71,22 @@ export class AccessSQLInjector {
         }
       }
 
-      if (operations.length === 0) {
+      if (operations.length === 0)
         continue;
-      }
 
-      // Create policy statement
+      /*** Create policy statement ***/
       let policySQL = `CREATE POLICY ${policyName} ON ${tableName}\n`;
 
       policySQL += `  FOR ${operations.join(", ")}\n`;
-      policySQL += `  TO PUBLIC\n`; // Or specific roles
+      policySQL += `  TO PUBLIC\n`; /*** Or specific roles ***/
 
       if (policy.using) {
-        // Use the evaluator to convert the expression AST to SQL.
-        // Pass an empty context — RLS policies use session variables at runtime.
+        /*** Use the evaluator to convert the expression AST to SQL.
+             Pass an empty context — RLS policies use session variables at runtime. ***/
         const usingSQL = this.evaluator.expressionToSQL(policy.using, {});
         policySQL += `  USING (${usingSQL})`;
       } else {
-        policySQL += `  USING (TRUE)`; // Allow all rows by default
+        policySQL += `  USING (TRUE)`; /*** Allow all rows by default ***/
       }
 
       if (policy.withCheck) {
@@ -253,15 +102,151 @@ export class AccessSQLInjector {
   }
 
   /**
+   * Inject access conditions into a DELETE query
+   */
+  injectDelete(
+    query: SQLQuery,
+    _tableName: string,
+    objectType: string,
+    context: AccessContext
+  ): SQLQuery {
+    const decision = this.evaluator.evaluate(objectType, "delete", context);
+
+    if (!decision.allowed)
+      throw new Error(decision.denialMessage ?? `DELETE not allowed on ${objectType}: ${decision.reason}`);
+
+    if (!decision.sqlConditions || decision.sqlConditions.length === 0)
+      return query;
+
+    /*** Inject WHERE conditions to restrict which rows can be deleted ***/
+    return this.injectWhereConditions(query, decision.sqlConditions);
+  }
+
+  /**
+   * Inject access conditions into an INSERT query
+   */
+  injectInsert(
+    query: SQLQuery,
+    _tableName: string,
+    objectType: string,
+    context: AccessContext
+  ): SQLQuery {
+    const decision = this.evaluator.evaluate(objectType, "insert", context);
+
+    if (!decision.allowed)
+      throw new Error(decision.denialMessage ?? `INSERT not allowed on ${objectType}: ${decision.reason}`);
+
+    /*** For INSERT, we might add WITH CHECK conditions
+         This would be implemented as a CHECK constraint or trigger ***/
+    return query;
+  }
+
+  /**
+   * Inject access conditions into a SELECT query
+   */
+  injectSelect(
+    query: SQLQuery,
+    tableName: string,
+    objectType: string,
+    context: AccessContext
+  ): SQLQuery {
+    const decision = this.evaluator.evaluate(objectType, "select", context);
+
+    if (!decision.allowed) {
+      /*** Return a query that returns no results ***/
+      return {
+        params: [],
+        text: `SELECT * FROM ${tableName} WHERE FALSE`
+      };
+    }
+
+    if (!decision.sqlConditions || decision.sqlConditions.length === 0) {
+      /*** No conditions to inject ***/
+      return query;
+    }
+
+    /*** Inject WHERE conditions ***/
+    return this.injectWhereConditions(query, decision.sqlConditions);
+  }
+
+  /**
+   * Inject access conditions into an UPDATE query
+   */
+  injectUpdate(
+    query: SQLQuery,
+    _tableName: string,
+    objectType: string,
+    context: AccessContext,
+    _columns?: string[]
+  ): SQLQuery {
+    const decision = this.evaluator.evaluate(objectType, "update", context);
+
+    if (!decision.allowed)
+      throw new Error(decision.denialMessage ?? `UPDATE not allowed on ${objectType}: ${decision.reason}`);
+
+    if (!decision.sqlConditions || decision.sqlConditions.length === 0)
+      return query;
+
+    // Inject WHERE conditions to restrict which rows can be updated
+    return this.injectWhereConditions(query, decision.sqlConditions);
+  }
+
+  /**
    * Check if a query needs access control injection
    */
-  needsInjection(
-    _operation: "select" | "insert" | "update" | "delete",
-    objectType: string
-  ): boolean {
+  needsInjection(_operation: "delete" | "insert" | "select" | "update", objectType: string): boolean {
     const policies = this.evaluator.getPolicies(objectType);
     const globalPolicies = this.evaluator.getPolicies();
 
     return policies.length > 0 || globalPolicies.length > 0;
+  }
+
+  /*** PRIVATE ------------------------------------------ ***/
+
+  /**
+   * Inject WHERE conditions into a query
+   */
+  private injectWhereConditions(query: SQLQuery, conditions: string[]): SQLQuery {
+    const { params, text } = query;
+
+    /*** Combine all conditions with AND ***/
+    const conditionSQL = conditions.map(c => `(${c})`).join(" AND ");
+    /*** Check if query already has WHERE clause ***/
+    const whereMatch = text.match(/\bWHERE\b/i);
+    let newText: string;
+
+    if (whereMatch) {
+      /*** Add conditions to existing WHERE clause ***/
+      const whereIndex = whereMatch.index!;
+      const beforeWhere = text.substring(0, whereIndex + 5);
+      const afterWhere = text.substring(whereIndex + 5);
+      newText = `${beforeWhere} (${conditionSQL}) AND ${afterWhere}`;
+    } else {
+      /*** Add WHERE clause ***/
+      const fromMatch = text.match(/\bFROM\s+(\w+)/i);
+
+      if (fromMatch) {
+        const afterFrom = fromMatch.index! + fromMatch[0].length;
+        const beforeFrom = text.substring(0, afterFrom);
+        const afterFromText = text.substring(afterFrom);
+        /*** Check for JOIN, GROUP BY, ORDER BY, etc. ***/
+        const clauseMatch = afterFromText.match(/\b(JOIN|GROUP\s+BY|ORDER\s+BY|LIMIT|OFFSET)\b/i);
+
+        if (clauseMatch) {
+          const clauseIndex = clauseMatch.index!;
+          newText = `${beforeFrom}${afterFromText.substring(0, clauseIndex)} WHERE ${conditionSQL} ${afterFromText.substring(clauseIndex)}`;
+        } else {
+          newText = `${text} WHERE ${conditionSQL}`;
+        }
+      } else {
+        /*** Couldn’t parse query structure, append WHERE ***/
+        newText = `${text} WHERE ${conditionSQL}`;
+      }
+    }
+
+    return {
+      params,
+      text: newText
+    };
   }
 }

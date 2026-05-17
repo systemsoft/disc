@@ -1,43 +1,56 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * CLI main module tests
  */
 
+/*** NATIVE ------------------------------------------- ***/
+
 import { assertEquals, assertExists, assertRejects } from "@std/assert";
 import { parseArgs } from "@std/cli/parse-args";
-import { cleanupTempDir, createTempDir, createTestSchema, EnvMock, SIMPLE_SCHEMA } from "../tests/test-utils.ts";
 
-// Import functions to test (we'll need to export them from main.ts)
-// For now, we'll test the CLI by importing and calling functions directly
+/*** UTILITY ------------------------------------------ ***/
+
+import {
+  cleanupTempDir,
+  createTempDir,
+  createTestSchema,
+  EnvMock,
+  SIMPLE_SCHEMA
+} from "../tests/test-utils.ts";
+
+/*** RUNTIME ------------------------------------------ ***/
 
 Deno.test("CLI - parseArgs configuration", () => {
-  const args = parseArgs([
-    "codegen",
-    "--output",
-    "./test",
-    "--target",
-    "client"
-  ], {
+  const args = parseArgs(["codegen", "--output", "./test", "--target", "client"], {
+    alias: {
+      c: "config",
+      h: "help",
+      o: "output",
+      p: "port",
+      s: "schema",
+      t: "target",
+      v: "version"
+    },
     boolean: [
-      "help",
-      "version",
+      "auto-approve",
       "create",
       "dry-run",
-      "auto-approve",
-      "no-queries",
-      "no-mutations",
+      "help",
       "no-client",
-      "no-format"
+      "no-format",
+      "no-mutations",
+      "no-queries",
+      "version"
     ],
-    string: ["port", "config", "schema", "output", "target"],
-    alias: {
-      h: "help",
-      v: "version",
-      p: "port",
-      c: "config",
-      s: "schema",
-      o: "output",
-      t: "target"
-    }
+    string: [
+      "config",
+      "output",
+      "port",
+      "schema",
+      "target"
+    ]
   });
 
   assertEquals(args._, ["codegen"]);
@@ -47,8 +60,8 @@ Deno.test("CLI - parseArgs configuration", () => {
 
 Deno.test("CLI - help flag parsing", () => {
   const args = parseArgs(["-h"], {
-    boolean: ["help", "version"],
-    alias: { h: "help", v: "version" }
+    alias: { h: "help", v: "version" },
+    boolean: ["help", "version"]
   });
 
   assertEquals(args.help, true);
@@ -56,15 +69,15 @@ Deno.test("CLI - help flag parsing", () => {
 
 Deno.test("CLI - version flag parsing", () => {
   const args = parseArgs(["--version"], {
-    boolean: ["help", "version"],
-    alias: { h: "help", v: "version" }
+    alias: { h: "help", v: "version" },
+    boolean: ["help", "version"]
   });
 
   assertEquals(args.version, true);
 });
 
-// P2-12: end-to-end check that `disc --version` (no subcommand) prints
-// the version and exits — does NOT fall through to the help text branch.
+/*** End-to-end check that `disc --version` (no subcommand) prints the version and exits — does NOT
+     fall through to the help text branch. ***/
 Deno.test("CLI - `disc --version` prints version, not help", async () => {
   const cmd = new Deno.Command(Deno.execPath(), {
     args: [
@@ -77,15 +90,17 @@ Deno.test("CLI - `disc --version` prints version, not help", async () => {
       "cli/main.ts",
       "--version"
     ],
-    stdout: "piped",
-    stderr: "piped"
+    stderr: "piped",
+    stdout: "piped"
   });
+
   const { code, stdout } = await cmd.output();
   const out = new TextDecoder().decode(stdout);
+
   assertEquals(code, 0);
   assertEquals(out.startsWith("Disc Database v"), true, out);
-  // Help text starts with a leading newline + "Disc Database CLI v…\n\nUSAGE:".
-  // If we ever fell through to help, this `USAGE` substring would appear.
+  /*** Help text starts with a leading newline + "Disc Database CLI v…\n\nUSAGE:". If we ever fell
+       through to help, this `USAGE` substring would appear. ***/
   assertEquals(out.includes("USAGE:"), false, out);
 });
 
@@ -101,9 +116,10 @@ Deno.test("CLI - `disc -v` short flag prints version", async () => {
       "cli/main.ts",
       "-v"
     ],
-    stdout: "piped",
-    stderr: "piped"
+    stderr: "piped",
+    stdout: "piped"
   });
+
   const { code, stdout } = await cmd.output();
   const out = new TextDecoder().decode(stdout);
   assertEquals(code, 0);
@@ -123,8 +139,8 @@ Deno.test("CLI - codegen command arguments", () => {
     "--no-queries",
     "--no-client"
   ], {
-    boolean: ["no-queries", "no-mutations", "no-client", "no-format"],
-    string: ["schema", "output", "target"]
+    boolean: ["no-client", "no-format", "no-mutations", "no-queries"],
+    string: ["output", "schema", "target"]
   });
 
   assertEquals(args._[0], "codegen");
@@ -145,7 +161,7 @@ Deno.test("CLI - migrate command arguments", () => {
     "--schema",
     "test.disc"
   ], {
-    boolean: ["create", "dry-run", "auto-approve"],
+    boolean: ["auto-approve", "create", "dry-run"],
     string: ["schema"]
   });
 
@@ -164,7 +180,7 @@ Deno.test("CLI - serve command arguments", () => {
     "--config",
     "custom.json"
   ], {
-    string: ["port", "config"]
+    string: ["config", "port"]
   });
 
   assertEquals(args._[0], "serve");
@@ -172,15 +188,14 @@ Deno.test("CLI - serve command arguments", () => {
   assertEquals(args.config, "custom.json");
 });
 
-// Test schema file reading utility
+/*** Test schema file reading utility ***/
 Deno.test("readSchemaFile - existing file", async () => {
   const tempDir = await createTempDir();
 
   try {
     const schemaPath = await createTestSchema(tempDir, SIMPLE_SCHEMA);
-
-    // Import the readSchemaFile function - we'll need to make it exportable
-    // For now, test that a file can be read
+    /*** Import the readSchemaFile function - we’ll need to make it exportable For now, test that a
+         file can be read ***/
     const stat = await Deno.stat(schemaPath);
     assertExists(stat);
     assertEquals(stat.isFile, true);
@@ -195,14 +210,11 @@ Deno.test("readSchemaFile - existing file", async () => {
 Deno.test("readSchemaFile - nonexistent file", async () => {
   const nonExistentPath = "/does/not/exist/schema.disc";
 
-  // Test that attempting to read a nonexistent file handles errors gracefully
-  await assertRejects(
-    () => Deno.stat(nonExistentPath),
-    Deno.errors.NotFound
-  );
+  /*** Test that attempting to read a nonexistent file handles errors gracefully ***/
+  await assertRejects(() => Deno.stat(nonExistentPath), Deno.errors.NotFound);
 });
 
-// Test environment variable handling
+/*** Test environment variable handling ***/
 Deno.test("CLI - environment variable handling", () => {
   const env = new EnvMock();
 
@@ -216,13 +228,13 @@ Deno.test("CLI - environment variable handling", () => {
   }
 });
 
-// Test default values
+/*** Test default values ***/
 Deno.test("CLI - default configuration values", () => {
   const args = parseArgs(["codegen"], {
-    string: ["output", "target", "schema"]
+    string: ["output", "schema", "target"]
   });
 
-  // Test that defaults are applied correctly
+  /*** Test that defaults are applied correctly ***/
   const outputDir = args.output || "./generated";
   const target = args.target || "client";
   const schemaFile = args.schema || "./schema.disc";
@@ -232,7 +244,7 @@ Deno.test("CLI - default configuration values", () => {
   assertEquals(schemaFile, "./schema.disc");
 });
 
-// Test boolean flag combinations
+/*** Test boolean flag combinations ***/
 Deno.test("CLI - boolean flag combinations", () => {
   const args = parseArgs([
     "codegen",
@@ -241,7 +253,7 @@ Deno.test("CLI - boolean flag combinations", () => {
     "--no-client",
     "--no-format"
   ], {
-    boolean: ["no-queries", "no-mutations", "no-client", "no-format"]
+    boolean: ["no-client", "no-format", "no-mutations", "no-queries"]
   });
 
   assertEquals(args["no-queries"], true);
@@ -250,7 +262,7 @@ Deno.test("CLI - boolean flag combinations", () => {
   assertEquals(args["no-format"], true);
 });
 
-// Test migration config construction
+/*** Test migration config construction ***/
 Deno.test("CLI - migration config construction", () => {
   const env = new EnvMock();
 
@@ -258,21 +270,20 @@ Deno.test("CLI - migration config construction", () => {
     env.set("DATABASE_URL", "postgresql://localhost:5432/test_disc");
 
     const args = {
-      schema: "./test.disc",
+      "auto-approve": false,
       "dry-run": true,
-      "auto-approve": false
+      schema: "./test.disc"
     };
 
-    // Simulate migration config construction
+    /*** Simulate migration config construction ***/
     const config = {
-      migrationsDir: "./migrations",
-      schemaFile: args.schema || "./schema.disc",
-      databaseUrl: Deno.env.get("DATABASE_URL") ||
-        "postgresql://localhost:5432/disc_dev",
-      dryRun: args["dry-run"] || false,
       autoApprove: args["auto-approve"] || false,
       backupBeforeMigration: true,
-      rollbackOnError: true
+      databaseUrl: Deno.env.get("DATABASE_URL") || "postgresql://localhost:5432/disc_dev",
+      dryRun: args["dry-run"] || false,
+      migrationsDir: "./migrations",
+      rollbackOnError: true,
+      schemaFile: args.schema || "./schema.disc"
     };
 
     assertEquals(config.schemaFile, "./test.disc");
@@ -286,36 +297,36 @@ Deno.test("CLI - migration config construction", () => {
   }
 });
 
-// Test codegen config construction
+/*** Test codegen config construction ***/
 Deno.test("CLI - codegen config construction", () => {
   const args = {
-    output: "./custom/types",
-    target: "server",
-    "no-queries": true,
-    "no-mutations": false,
     "no-client": true,
-    "no-format": false
+    "no-format": false,
+    "no-mutations": false,
+    "no-queries": true,
+    output: "./custom/types",
+    target: "server"
   };
 
-  // Simulate codegen config construction
+  /*** Simulate codegen config construction ***/
   const config = {
-    outputDir: args.output || "./generated",
-    target: args.target || "client",
-    includeQueryBuilders: args["no-queries"] !== true,
-    includeMutations: args["no-mutations"] !== true,
+    formatOutput: args["no-format"] !== true,
     includeClient: args["no-client"] !== true,
-    formatOutput: args["no-format"] !== true
+    includeMutations: args["no-mutations"] !== true,
+    includeQueryBuilders: args["no-queries"] !== true,
+    outputDir: args.output || "./generated",
+    target: args.target || "client"
   };
 
   assertEquals(config.outputDir, "./custom/types");
   assertEquals(config.target, "server");
-  assertEquals(config.includeQueryBuilders, false); // no-queries is true
-  assertEquals(config.includeMutations, true); // no-mutations is false
-  assertEquals(config.includeClient, false); // no-client is true
-  assertEquals(config.formatOutput, true); // no-format is false
+  assertEquals(config.includeQueryBuilders, false); /*** no-queries is true ***/
+  assertEquals(config.includeMutations, true); /*** no-mutations is false ***/
+  assertEquals(config.includeClient, false); /*** no-client is true ***/
+  assertEquals(config.formatOutput, true); /*** no-format is false ***/
 });
 
-// Test alias handling
+/*** Test alias handling ***/
 Deno.test("CLI - alias flag handling", () => {
   const args = parseArgs([
     "codegen",
@@ -326,11 +337,11 @@ Deno.test("CLI - alias flag handling", () => {
     "-s",
     "custom.disc"
   ], {
-    string: ["output", "target", "schema"],
+    string: ["output", "schema", "target"],
     alias: {
       o: "output",
-      t: "target",
-      s: "schema"
+      s: "schema",
+      t: "target"
     }
   });
 
@@ -339,16 +350,16 @@ Deno.test("CLI - alias flag handling", () => {
   assertEquals(args.schema, "custom.disc");
 });
 
-// gh/geldata#1030: `-H` is hostname (Unix convention) while lowercase
-// `-h` stays as help. Verify both with the same alias map main.ts uses.
+/*** gh/geldata#1030: `-H` is hostname (Unix convention) while lowercase `-h` stays as help. Verify
+     both with the same alias map main.ts uses. ***/
 Deno.test("CLI - -H short flag maps to --host", () => {
   const args = parseArgs([
     "shell",
     "-H",
     "db.example.com"
   ], {
-    string: ["host"],
-    alias: { H: "host" }
+    alias: { H: "host" },
+    string: ["host"]
   });
 
   assertEquals(args.host, "db.example.com");
@@ -356,9 +367,9 @@ Deno.test("CLI - -H short flag maps to --host", () => {
 
 Deno.test("CLI - -h still triggers help (not host) with -H alias present", () => {
   const args = parseArgs(["-h"], {
+    alias: { h: "help", H: "host" },
     boolean: ["help"],
-    string: ["host"],
-    alias: { h: "help", H: "host" }
+    string: ["host"]
   });
 
   assertEquals(args.help, true);
@@ -371,15 +382,15 @@ Deno.test("CLI - long --host still works alongside -H", () => {
     "--host",
     "0.0.0.0"
   ], {
-    string: ["host"],
-    alias: { H: "host" }
+    alias: { H: "host" },
+    string: ["host"]
   });
 
   assertEquals(args.host, "0.0.0.0");
 });
 
-// Integration: spawn `disc shell --help` to confirm short -h triggers
-// command-specific help. Mirrors the `--version` short-flag test above.
+/*** Integration: spawn `disc shell --help` to confirm short -h triggers command-specific help.
+     Mirrors the `--version` short-flag test above. ***/
 Deno.test("CLI - `disc shell -h` short flag prints shell help", async () => {
   const cmd = new Deno.Command(Deno.execPath(), {
     args: [
@@ -393,16 +404,14 @@ Deno.test("CLI - `disc shell -h` short flag prints shell help", async () => {
       "shell",
       "-h"
     ],
-    stdout: "piped",
-    stderr: "piped"
+    stderr: "piped",
+    stdout: "piped"
   });
+
   const { code, stdout } = await cmd.output();
   const out = new TextDecoder().decode(stdout);
+
   assertEquals(code, 0);
-  // The shell COMMAND_HELP block opens with "Open an interactive EdgeQL REPL".
-  assertEquals(
-    out.includes("Open an interactive EdgeQL REPL"),
-    true,
-    out
-  );
+  /*** The shell COMMAND_HELP block opens with "Open an interactive EdgeQL REPL". ***/
+  assertEquals(out.includes("Open an interactive EdgeQL REPL"), true, out);
 });

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for the `lib/errors.ts` error hierarchy.
  *
@@ -6,7 +9,11 @@
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import { INTERNAL_ERROR_ISSUE_URL, InternalError, QueryError } from "./errors.ts";
+import {
+  INTERNAL_ERROR_ISSUE_URL,
+  InternalError,
+  QueryError
+} from "./errors.ts";
 
 Deno.test("InternalError appends file-an-issue hint to message", () => {
   const err = new InternalError("something broke");

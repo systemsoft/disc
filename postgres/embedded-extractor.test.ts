@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for the embedded-PG extractor (Bundle I Phase 2).
  *
@@ -9,7 +12,11 @@
 
 import { assertEquals } from "@std/assert";
 import { join } from "@std/path";
-import { type EmbeddedPgEntry, extractEmbeddedPg, isEmbeddedPgExtracted } from "./embedded-extractor.ts";
+import {
+  extractEmbeddedPg,
+  isEmbeddedPgExtracted,
+  type EmbeddedPgEntry
+} from "./embedded-extractor.ts";
 
 async function makeSourceFile(
   dir: string,
@@ -28,8 +35,16 @@ async function makeSourceFile(
 Deno.test("extractEmbeddedPg - writes files with correct contents and modes", async () => {
   const tmp = await Deno.makeTempDir({ prefix: "disc-embed-" });
   try {
-    const src1 = await makeSourceFile(tmp, "src/bin/postgres", new Uint8Array([1, 2, 3]));
-    const src2 = await makeSourceFile(tmp, "src/share/timezones", new Uint8Array([4, 5]));
+    const src1 = await makeSourceFile(
+      tmp,
+      "src/bin/postgres",
+      new Uint8Array([1, 2, 3])
+    );
+    const src2 = await makeSourceFile(
+      tmp,
+      "src/share/timezones",
+      new Uint8Array([4, 5])
+    );
     const target = join(tmp, "target");
 
     const entries: EmbeddedPgEntry[] = [
@@ -55,7 +70,11 @@ Deno.test("extractEmbeddedPg - writes files with correct contents and modes", as
 Deno.test("extractEmbeddedPg - idempotent: second call writes nothing when marker present", async () => {
   const tmp = await Deno.makeTempDir({ prefix: "disc-embed-idem-" });
   try {
-    const src = await makeSourceFile(tmp, "src/bin/postgres", new Uint8Array([1]));
+    const src = await makeSourceFile(
+      tmp,
+      "src/bin/postgres",
+      new Uint8Array([1])
+    );
     const target = join(tmp, "target");
     const entries: EmbeddedPgEntry[] = [
       { sourceUrl: src, relPath: "bin/postgres", mode: 0o755 }
@@ -78,7 +97,11 @@ Deno.test("isEmbeddedPgExtracted - false before extract, true after", async () =
     const target = join(tmp, "target");
     assertEquals(await isEmbeddedPgExtracted(target), false);
 
-    const src = await makeSourceFile(tmp, "src/bin/postgres", new Uint8Array([1]));
+    const src = await makeSourceFile(
+      tmp,
+      "src/bin/postgres",
+      new Uint8Array([1])
+    );
     await extractEmbeddedPg(target, [
       { sourceUrl: src, relPath: "bin/postgres", mode: 0o755 }
     ]);
@@ -92,7 +115,11 @@ Deno.test("isEmbeddedPgExtracted - false before extract, true after", async () =
 Deno.test("extractEmbeddedPg - re-extracts when marker is missing even if files exist", async () => {
   const tmp = await Deno.makeTempDir({ prefix: "disc-embed-remarker-" });
   try {
-    const src = await makeSourceFile(tmp, "src/bin/postgres", new Uint8Array([1]));
+    const src = await makeSourceFile(
+      tmp,
+      "src/bin/postgres",
+      new Uint8Array([1])
+    );
     const target = join(tmp, "target");
     const entries: EmbeddedPgEntry[] = [
       { sourceUrl: src, relPath: "bin/postgres", mode: 0o755 }

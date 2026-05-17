@@ -1,6 +1,6 @@
 # Codegen
 
-TypeScript type generator for Disc. Reads the EdgeQL schema and produces typed interfaces, insert/update types, enum types, query builders, and a typed client. Run via `disc codegen` or programmatically.
+TypeScript type generator for Disc. Reads the EdgeQL schema and produces typed interfaces, insert/update types, enum types, query builders, and a typed client. Run via `disc codegen` or programmatically.
 
 ## Import
 
@@ -31,10 +31,10 @@ import type { Schema } from "disc/compiler/context.ts";
 const schema: Schema = /* parsed from SDL */;
 
 const result = generateTypeScript(schema, {
-  outputDir: "./generated",
-  target: "client",
-  includeQueryBuilders: true,
   includeClient: true,
+  includeQueryBuilders: true,
+  outputDir: "./generated",
+  target: "client"
 });
 
 // Write generated files to disk
@@ -52,15 +52,15 @@ disc codegen --output ./src   # Custom output directory
 
 ```typescript
 interface CodegenConfig {
+  formatOutput: boolean; // format generated code (default: true)
+  includeClient: boolean; // generate typed client class (default: true)
+  includeMutations: boolean; // generate mutation helpers (default: true)
+  includeQueryBuilders: boolean; // generate query builder classes (default: true)
+  interfaceSuffix?: string; // suffix for generated interface names
   outputDir: string; // output directory (default: "./generated")
   schemaSource: string; // SDL schema file path (default: "./schema.disc")
   target: "client" | "server" | "both"; // generation target (default: "client")
   typePrefix?: string; // prefix for generated type names
-  interfaceSuffix?: string; // suffix for generated interface names
-  includeQueryBuilders: boolean; // generate query builder classes (default: true)
-  includeMutations: boolean; // generate mutation helpers (default: true)
-  includeClient: boolean; // generate typed client class (default: true)
-  formatOutput: boolean; // format generated code (default: true)
 }
 ```
 
@@ -85,7 +85,7 @@ Running codegen produces four files:
 
 ### `types.ts` -- Type Definitions
 
-Contains TypeScript interfaces for each object type in the schema, enum types for scalar enums, and utility types for insert, update, and filter operations.
+Contains TypeScript interfaces for each object type in the schema, enum types for scalar enums, and utility types for insert, update, and filter operations.
 
 Given this SDL schema:
 
@@ -94,25 +94,25 @@ module default {
   scalar type Status extending enum<Active, Inactive, Pending>;
 
   type User {
-    required email: str {
-      constraint exclusive;
-    };
-    required name: str;
     created_at: datetime {
       default := datetime_current();
       readonly := true;
     };
-    status: Status;
+    required email: str {
+      constraint exclusive;
+    };
+    required name: str;
     multi posts: Post;
+    status: Status;
   };
 
   type Post {
-    required title: str;
-    required body: str;
     required author: User;
+    required body: str;
     created_at: datetime {
       default := datetime_current();
     };
+    required title: str;
   };
 };
 ```
@@ -133,28 +133,28 @@ export interface User {
   /** Unique identifier */
   id: string;
   /**
+   * datetime
+   * @readonly
+   * @default
+   */
+  created_at?: Date | null;
+  /**
    * str (required)
    * @constraint exclusive
    */
   email: string;
   /** str (required) */
   name: string;
-  /**
-   * datetime
-   * @readonly
-   * @default
-   */
-  created_at?: Date | null;
-  /** Status */
-  status?: Status | null;
   /** Link to Post (many) */
   posts?: Post[];
+  /** Status */
+  status?: Status | null;
 }
 ```
 
 ### Insert and Update Types
 
-Insert types exclude `id` (auto-generated), computed properties, and readonly properties with defaults. Properties with defaults are optional even if marked `required` in the schema.
+Insert types exclude `id` (auto-generated), computed properties, and readonly properties with defaults. Properties with defaults are optional even if marked `required` in the schema.
 
 ```typescript
 export interface UserInsert {
@@ -164,7 +164,7 @@ export interface UserInsert {
 }
 ```
 
-Update types exclude `id`, computed properties, and readonly properties. All fields are optional.
+Update types exclude `id`, computed properties, and readonly properties. All fields are optional.
 
 ```typescript
 export interface UserUpdate {
@@ -176,14 +176,14 @@ export interface UserUpdate {
 
 ### FilterVars Types
 
-Typed filter variables for query builder `filter()` and `count()` methods. All fields are optional with an index signature for flexibility.
+Typed filter variables for query builder `filter()` and `count()` methods. All fields are optional with an index signature for flexibility.
 
 ```typescript
 export interface UserFilterVars {
-  id?: string;
-  email?: string;
-  name?: string;
   created_at?: Date;
+  email?: string;
+  id?: string;
+  name?: string;
   status?: Status;
   [key: string]: unknown;
 }
@@ -191,7 +191,7 @@ export interface UserFilterVars {
 
 ### JSDoc Constraint Documentation
 
-Properties with constraints, readonly flags, or defaults get JSDoc annotations:
+Properties with constraints, readonly flags, or defaults get JSDoc annotations:
 
 ```typescript
 /**
@@ -206,50 +206,51 @@ email: string;
 
 ### `queries.ts` -- Query Builders
 
-One query builder class per object type with methods for common operations:
+One query builder class per object type with methods for common operations:
 
 ```typescript
 class UserQueryBuilder {
   constructor(private client: DiscClient) {}
 
-  async select(shape?: string): Promise<User[]>;
-  async selectById(id: string, shape?: string): Promise<User | null>;
+  async count(condition?: string, variables?: UserFilterVars): Promise<number>;
+  async delete(id: string): Promise<User>;
   async filter(
     condition: string,
     variables?: UserFilterVars,
     shape?: string
   ): Promise<User[]>;
   async insert(data: UserInsert): Promise<User>;
+  async select(shape?: string): Promise<User[]>;
+  async selectById(id: string, shape?: string): Promise<User | null>;
   async update(id: string, data: UserUpdate): Promise<User>;
-  async delete(id: string): Promise<User>;
-  async count(condition?: string, variables?: UserFilterVars): Promise<number>;
 }
 ```
 
-Insert and update methods use type-aware EdgeQL casts (e.g., `<str>`, `<int32>`, `<datetime>`) based on the schema property types.
+Insert and update methods use type-aware EdgeQL casts (e.g., `<str>`, `<int32>`, `<datetime>`) based on the schema property types.
 
 ### `client.ts` -- Typed Client
 
-Extends the SDK `DiscClient` with query builder properties:
+Extends the SDK `DiscClient` with query builder properties:
 
 ```typescript
 import { DiscClient as BaseClient } from "../sdk/mod.ts";
 
 class DiscClient extends BaseClient {
-  readonly user: UserQueryBuilder;
   readonly post: PostQueryBuilder;
+  readonly user: UserQueryBuilder;
 
   constructor(config?: DiscClientConfig) {
     super(config);
-    this.user = new UserQueryBuilder(this);
+
     this.post = new PostQueryBuilder(this);
+    this.user = new UserQueryBuilder(this);
   }
 }
 ```
 
 ### `index.ts` -- Barrel File
 
-Re-exports everything from `types.ts`, `queries.ts`, and `client.ts`.
+Re-exports everything from `types.ts`, `queries.ts`, and `client.ts`.
 
 ## Type Mappings
 
@@ -271,11 +272,11 @@ EdgeQL types are mapped to TypeScript types:
 | `cal::local_date`         | `string`        | `string \| null`     |
 | `cal::local_time`         | `string`        | `string \| null`     |
 
-SQL type names (`text`, `integer`, `boolean`, etc.) are also supported for backward compatibility and mapped through to their EdgeQL equivalents.
+SQL type names (`text`, `integer`, `boolean`, etc.) are also supported for backward compatibility and mapped through to their EdgeQL equivalents.
 
 ## TypeScriptGenerator
 
-The core generator class. Normally used through `generateTypeScript()` but can be instantiated directly for fine-grained control:
+The core generator class. Normally used through `generateTypeScript()` but can be instantiated directly for fine-grained control:
 
 ```typescript
 import { TypeScriptGenerator } from "disc/codegen/mod.ts";

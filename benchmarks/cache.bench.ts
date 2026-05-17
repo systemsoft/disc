@@ -1,10 +1,17 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * QueryCache Benchmarks
  *
  * Benchmarks LRU cache operations: hits, misses, sets, evictions, and mixed workloads.
  */
 
+/*** UTILITY ------------------------------------------ ***/
+
 import { QueryCache } from "../lib/query-cache.ts";
+
+/*** RUNTIME ------------------------------------------ ***/
 
 Deno.bench("cache: hit (populated)", b => {
   const cache = new QueryCache<string>(1000);
@@ -14,7 +21,6 @@ Deno.bench("cache: hit (populated)", b => {
   }
 
   let idx = 0;
-
   b.start();
 
   for (let i = 0; i < 1000; i++) {
@@ -26,7 +32,6 @@ Deno.bench("cache: hit (populated)", b => {
 
 Deno.bench("cache: miss", b => {
   const cache = new QueryCache<string>(1000);
-
   b.start();
 
   for (let i = 0; i < 1000; i++) {
@@ -38,7 +43,6 @@ Deno.bench("cache: miss", b => {
 
 Deno.bench("cache: set (fill)", b => {
   const cache = new QueryCache<string>(1000);
-
   b.start();
 
   for (let i = 0; i < 1000; i++) {
@@ -50,7 +54,6 @@ Deno.bench("cache: set (fill)", b => {
 
 Deno.bench("cache: eviction (overflow)", b => {
   const cache = new QueryCache<string>(100);
-
   b.start();
 
   for (let i = 0; i < 500; i++) {

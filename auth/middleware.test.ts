@@ -1,22 +1,32 @@
-import { assertEquals, assertExists } from "@std/assert";
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
+/*** NATIVE ------------------------------------------- ***/
+
 import { afterEach, beforeEach, describe, it } from "@std/testing/bdd";
+import { assertEquals, assertExists } from "@std/assert";
+
+/*** UTILITY ------------------------------------------ ***/
+
 import { AuthMiddleware } from "./middleware.ts";
 import { AuthProvider } from "./provider.ts";
 import { TestDatabase } from "./test-database.ts";
-import { AuthConfig } from "./types.ts";
+import type { AuthConfig } from "./types.ts";
+
+/*** RUNTIME ------------------------------------------ ***/
 
 describe("AuthMiddleware", () => {
+  let db: TestDatabase;
   let middleware: AuthMiddleware;
   let provider: AuthProvider;
-  let db: TestDatabase;
   let testToken: string;
   let testUserId: string;
 
   const testConfig: AuthConfig = {
-    jwtSecret: "test-secret-key-at-least-32-characters-long",
     bcryptRounds: 4,
-    tokenExpiry: 3600,
-    passwordMinLength: 6
+    jwtSecret: "test-secret-key-at-least-32-characters-long",
+    passwordMinLength: 6,
+    tokenExpiry: 3600
   };
 
   beforeEach(async () => {
@@ -27,11 +37,8 @@ describe("AuthMiddleware", () => {
 
     middleware = new AuthMiddleware(provider);
 
-    // Create a test user and token
-    const response = await provider.register({
-      email: "test@example.com",
-      password: "TestPass123!"
-    });
+    /*** Create a test user and token ***/
+    const response = await provider.register({ email: "test@example.com", password: "TestPass123!" });
     testToken = response.token;
     testUserId = response.user.id;
   });
@@ -42,12 +49,7 @@ describe("AuthMiddleware", () => {
 
   describe("Request Authentication", () => {
     it("should extract bearer token from Authorization header", async () => {
-      const request = new Request("http://localhost/test", {
-        headers: {
-          Authorization: `Bearer ${testToken}`
-        }
-      });
-
+      const request = new Request("http://localhost/test", { headers: { Authorization: `Bearer ${testToken}` } });
       const context = await middleware.authenticate(request);
 
       assertExists(context);
@@ -56,12 +58,7 @@ describe("AuthMiddleware", () => {
     });
 
     it("should extract token from cookie", async () => {
-      const request = new Request("http://localhost/test", {
-        headers: {
-          Cookie: `auth_token=${testToken}`
-        }
-      });
-
+      const request = new Request("http://localhost/test", { headers: { Cookie: `auth_token=${testToken}` } });
       const context = await middleware.authenticate(request);
 
       assertExists(context);
@@ -69,11 +66,10 @@ describe("AuthMiddleware", () => {
     });
 
     it("should NOT extract token from query parameter (P0-04)", async () => {
-      // Tokens in query strings leak into browser history, access logs, and
-      // Referer headers. The middleware now intentionally ignores them —
-      // callers must use the Authorization header or auth_token cookie.
+      /*** Tokens in query strings leak into browser history, access logs, and Referer headers. The
+           middleware now intentionally ignores them — callers must use the Authorization header or
+           auth_token cookie. ***/
       const request = new Request(`http://localhost/test?token=${testToken}`);
-
       const context = await middleware.authenticate(request);
 
       assertEquals(context, null);
@@ -81,19 +77,13 @@ describe("AuthMiddleware", () => {
 
     it("should return null for missing token", async () => {
       const request = new Request("http://localhost/test");
-
       const context = await middleware.authenticate(request);
 
       assertEquals(context, null);
     });
 
     it("should return null for invalid token", async () => {
-      const request = new Request("http://localhost/test", {
-        headers: {
-          Authorization: "Bearer invalid-token"
-        }
-      });
-
+      const request = new Request("http://localhost/test", { headers: { Authorization: "Bearer invalid-token" } });
       const context = await middleware.authenticate(request);
 
       assertEquals(context, null);
@@ -102,47 +92,37 @@ describe("AuthMiddleware", () => {
 
   describe("Route Protection", () => {
     it("should allow authenticated requests to protected routes", async () => {
-      const request = new Request("http://localhost/api/protected", {
-        headers: {
-          Authorization: `Bearer ${testToken}`
-        }
-      });
-
+      const request = new Request("http://localhost/api/protected", { headers: { Authorization: `Bearer ${testToken}` } });
       const handler = (_req: Request) => new Response("Success");
       const protectedHandler = middleware.requireAuth(handler);
-
       const response = await protectedHandler(request);
       assertEquals(response.status, 200);
+
       const text = await response.text();
       assertEquals(text, "Success");
     });
 
     it("should reject unauthenticated requests to protected routes", async () => {
       const request = new Request("http://localhost/api/protected");
-
       const handler = (_req: Request) => new Response("Success");
       const protectedHandler = middleware.requireAuth(handler);
-
       const response = await protectedHandler(request);
       assertEquals(response.status, 401);
+
       const json = await response.json();
       assertEquals(json.error, "Authentication required");
     });
 
     it("should pass auth context to handler", async () => {
-      const request = new Request("http://localhost/api/protected", {
-        headers: {
-          Authorization: `Bearer ${testToken}`
-        }
-      });
-
+      const request = new Request("http://localhost/api/protected", { headers: { Authorization: `Bearer ${testToken}` } });
       let capturedContext: any;
+
       const handler = (_req: Request, context?: any) => {
         capturedContext = context;
         return new Response("Success");
       };
-      const protectedHandler = middleware.requireAuth(handler);
 
+      const protectedHandler = middleware.requireAuth(handler);
       await protectedHandler(request);
 
       assertExists(capturedContext);
@@ -153,19 +133,15 @@ describe("AuthMiddleware", () => {
 
   describe("Optional Authentication", () => {
     it("should add context for authenticated requests", async () => {
-      const request = new Request("http://localhost/api/public", {
-        headers: {
-          Authorization: `Bearer ${testToken}`
-        }
-      });
-
+      const request = new Request("http://localhost/api/public", { headers: { Authorization: `Bearer ${testToken}` } });
       let capturedContext: any;
+
       const handler = (_req: Request, context?: any) => {
         capturedContext = context;
         return new Response("Success");
       };
-      const optionalHandler = middleware.optionalAuth(handler);
 
+      const optionalHandler = middleware.optionalAuth(handler);
       await optionalHandler(request);
 
       assertExists(capturedContext);
@@ -174,14 +150,14 @@ describe("AuthMiddleware", () => {
 
     it("should allow unauthenticated requests with null context", async () => {
       const request = new Request("http://localhost/api/public");
-
       let capturedContext: any;
+
       const handler = (_req: Request, context?: any) => {
         capturedContext = context;
         return new Response("Success");
       };
-      const optionalHandler = middleware.optionalAuth(handler);
 
+      const optionalHandler = middleware.optionalAuth(handler);
       const response = await optionalHandler(request);
 
       assertEquals(response.status, 200);
@@ -191,15 +167,9 @@ describe("AuthMiddleware", () => {
 
   describe("CORS and Security Headers", () => {
     it("should add security headers to responses", async () => {
-      const request = new Request("http://localhost/test", {
-        headers: {
-          Authorization: `Bearer ${testToken}`
-        }
-      });
-
+      const request = new Request("http://localhost/test", { headers: { Authorization: `Bearer ${testToken}` } });
       const handler = (_req: Request) => new Response("Success");
       const secureHandler = middleware.withSecurityHeaders(handler);
-
       const response = await secureHandler(request);
 
       assertEquals(response.headers.get("X-Content-Type-Options"), "nosniff");
@@ -209,80 +179,60 @@ describe("AuthMiddleware", () => {
 
     it("should handle CORS preflight requests", async () => {
       const request = new Request("http://localhost/api/test", {
-        method: "OPTIONS",
         headers: {
           Origin: "http://example.com",
           "Access-Control-Request-Method": "POST"
-        }
+        },
+        method: "OPTIONS"
       });
 
       const handler = (_req: Request) => new Response("Success");
+
       const corsHandler = middleware.withCORS(handler, {
-        origins: ["http://example.com"],
-        methods: ["GET", "POST"]
+        methods: ["GET", "POST"],
+        origins: ["http://example.com"]
       });
 
       const response = await corsHandler(request);
 
       assertEquals(response.status, 204);
-      assertEquals(
-        response.headers.get("Access-Control-Allow-Origin"),
-        "http://example.com"
-      );
-      assertEquals(
-        response.headers.get("Access-Control-Allow-Methods"),
-        "GET, POST"
-      );
+      assertEquals(response.headers.get("Access-Control-Allow-Origin"), "http://example.com");
+      assertEquals(response.headers.get("Access-Control-Allow-Methods"), "GET, POST");
     });
 
     it("should reject CORS requests from disallowed origins", async () => {
-      const request = new Request("http://localhost/api/test", {
-        headers: {
-          Origin: "http://evil.com"
-        }
-      });
-
+      const request = new Request("http://localhost/api/test", { headers: { Origin: "http://evil.com" } });
       const handler = (_req: Request) => new Response("Success");
-      const corsHandler = middleware.withCORS(handler, {
-        origins: ["http://example.com"]
-      });
-
+      const corsHandler = middleware.withCORS(handler, { origins: ["http://example.com"] });
       const response = await corsHandler(request);
 
       assertEquals(response.headers.get("Access-Control-Allow-Origin"), null);
     });
 
     it("default CORS denies all origins until opted in (P0-06)", async () => {
-      const request = new Request("http://localhost/api/test", {
-        headers: { Origin: "http://anything.com" }
-      });
+      const request = new Request("http://localhost/api/test", { headers: { Origin: "http://anything.com" } });
       const handler = (_req: Request) => new Response("ok");
-      // no options — defaults
+      /*** no options — defaults ***/
       const corsHandler = middleware.withCORS(handler);
       const response = await corsHandler(request);
-      assertEquals(
-        response.headers.get("Access-Control-Allow-Origin"),
-        null,
-        "Default CORS config must not echo any Origin header"
-      );
+
+      assertEquals(response.headers.get("Access-Control-Allow-Origin"), null, "Default CORS config must not echo any Origin header");
     });
 
     it("CORS refuses '*' + credentials: true combination (P0-06)", () => {
       const handler = (_req: Request) => new Response("ok");
       let threw = false;
+
       try {
         middleware.withCORS(handler, {
-          origins: ["*"],
-          credentials: true
+          credentials: true,
+          origins: ["*"]
         });
       } catch (_) {
         threw = true;
       }
-      assertEquals(
-        threw,
-        true,
-        "The insecure wildcard+credentials combination must be rejected"
-      );
+
+      assertEquals(threw, true, "The insecure wildcard+credentials combination must be rejected");
     });
   });
 });

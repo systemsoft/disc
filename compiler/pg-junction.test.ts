@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * PostgreSQL End-to-End Tests — Junction Table (Many-to-Many) Compilation
  *
@@ -160,7 +163,9 @@ Deno.test({
       assertEquals(result.rows.length, 1, "Should return 1 row for Ada");
 
       const row = result.rows[0];
-      const data = typeof row.jsonb_build_object === "string" ? JSON.parse(row.jsonb_build_object) : row.jsonb_build_object;
+      const data = typeof row.jsonb_build_object === "string" ?
+        JSON.parse(row.jsonb_build_object) :
+        row.jsonb_build_object;
 
       assertEquals(data.name, "Ada");
       assertExists(data.courses, "Should have courses field");
@@ -245,7 +250,9 @@ Deno.test({
       assertEquals(result.rows.length, 1, "Should return 1 row for Math");
 
       const row = result.rows[0];
-      const data = typeof row.jsonb_build_object === "string" ? JSON.parse(row.jsonb_build_object) : row.jsonb_build_object;
+      const data = typeof row.jsonb_build_object === "string" ?
+        JSON.parse(row.jsonb_build_object) :
+        row.jsonb_build_object;
 
       assertEquals(data.title, "Math");
       assertExists(data.students, "Should have students field");
@@ -314,7 +321,9 @@ Deno.test({
       assertEquals(result.rows.length, 1);
 
       const row = result.rows[0];
-      const data = typeof row.jsonb_build_object === "string" ? JSON.parse(row.jsonb_build_object) : row.jsonb_build_object;
+      const data = typeof row.jsonb_build_object === "string" ?
+        JSON.parse(row.jsonb_build_object) :
+        row.jsonb_build_object;
 
       assertEquals(data.name, "Ada");
       const titles = data

@@ -1,11 +1,29 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * DiscClient — Core HTTP client for Disc database
  */
 
 import { reviveResponse } from "./codecs.ts";
-import { DiscAuthError, DiscConnectionError, DiscNetworkError, DiscProtocolError, DiscQueryError, DiscServerError, DiscTimeoutError } from "./errors.ts";
+import {
+  DiscAuthError,
+  DiscConnectionError,
+  DiscNetworkError,
+  DiscProtocolError,
+  DiscQueryError,
+  DiscServerError,
+  DiscTimeoutError
+} from "./errors.ts";
 import { Transaction } from "./transaction.ts";
-import type { DiscClientConfig, HealthStatus, QueryOptions, QueryResponse, QueryValidator, ServerStats } from "./types.ts";
+import type {
+  DiscClientConfig,
+  HealthStatus,
+  QueryOptions,
+  QueryResponse,
+  QueryValidator,
+  ServerStats
+} from "./types.ts";
 import { applyValidator } from "./validation.ts";
 
 const DEFAULT_BASE_URL = "http://localhost:5656";
@@ -302,7 +320,9 @@ export class DiscClient {
         }
 
         // Unknown error
-        lastError = error instanceof Error ? new DiscNetworkError(error.message, error) : new DiscNetworkError(String(error));
+        lastError = error instanceof Error ?
+          new DiscNetworkError(error.message, error) :
+          new DiscNetworkError(String(error));
 
         if (attempt < this.retries) {
           await this.delay(this.retryDelay * (attempt + 1));

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for type descriptor encoding/decoding.
  */
@@ -6,26 +9,26 @@ import { assertEquals, assertNotEquals } from "@std/assert";
 import type { TypeDef } from "../compiler/context.ts";
 import { Cardinality } from "./enums.ts";
 import {
-  type ArrayDescriptor,
-  type BaseScalarDescriptor,
   buildResultDescriptors,
   decodeTypeDescriptors,
   DescriptorTag,
   encodeTypeDescriptors,
-  type EnumDescriptor,
   generateDescriptorId,
   generateDescriptorIdSync,
+  resolveWellKnownType,
+  ShapeElementFlags,
+  UUID_TO_TYPE,
+  WELL_KNOWN_TYPES,
+  type ArrayDescriptor,
+  type BaseScalarDescriptor,
+  type EnumDescriptor,
   type MultiRangeDescriptor,
   type NamedTupleDescriptor,
   type ObjectShapeDescriptor,
   type RangeDescriptor,
-  resolveWellKnownType,
   type SetDescriptor,
-  ShapeElementFlags,
   type TupleDescriptor,
-  type TypeDescriptor,
-  UUID_TO_TYPE,
-  WELL_KNOWN_TYPES
+  type TypeDescriptor
 } from "./typedesc.ts";
 import { bytesToUuid, uuidToBytes } from "./types.ts";
 

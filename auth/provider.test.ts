@@ -1,24 +1,42 @@
-import { assertEquals, assertExists, assertRejects } from "@std/assert";
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
+/*** NATIVE ------------------------------------------- ***/
+
 import { afterEach, beforeEach, describe, it } from "@std/testing/bdd";
-import { configureLogging } from "../lib/logger.ts";
+import { assertEquals, assertExists, assertRejects } from "@std/assert";
+
+/*** UTILITY ------------------------------------------ ***/
+
 import { AuthProvider } from "./provider.ts";
+import { configureLogging } from "../lib/logger.ts";
 import { TestDatabase } from "./test-database.ts";
-import { AuthConfig, AuthErrorCode, LoginCredentials, RegisterData, requireAuthResponse } from "./types.ts";
+
+import {
+  AuthConfig,
+  AuthErrorCode,
+  LoginCredentials,
+  RegisterData,
+  requireAuthResponse
+} from "./types.ts";
+
+/*** RUNTIME ------------------------------------------ ***/
 
 describe("AuthProvider", () => {
-  let provider: AuthProvider;
   let db: TestDatabase;
+  let provider: AuthProvider;
+
   const testConfig: AuthConfig = {
-    jwtSecret: "test-secret-key-for-testing-only",
-    bcryptRounds: 10,
-    tokenExpiry: 3600,
-    refreshTokenExpiry: 86400,
     allowRegistration: true,
-    passwordMinLength: 8
+    bcryptRounds: 10,
+    jwtSecret: "test-secret-key-for-testing-only",
+    passwordMinLength: 8,
+    refreshTokenExpiry: 86400,
+    tokenExpiry: 3600
   };
 
   beforeEach(async () => {
-    // Use test database
+    /*** Use test database ***/
     db = new TestDatabase();
     await db.connect();
     provider = new AuthProvider(testConfig, db as any);
@@ -46,87 +64,51 @@ describe("AuthProvider", () => {
       assertExists(response.session);
     });
 
-    // gh/geldata#7275: register() returns the identity record alongside
-    // the session so callers don't need an extra getUser(). Mirrors
-    // Gel's `ext::auth::Identity` contract — id, email, createdAt,
-    // emailVerified, roles.
+    /*** gh/geldata#7275: register() returns the identity record alongside the session so callers
+         don’t need an extra getUser(). Mirrors Gel’s `ext::auth::Identity` contract — id, email,
+         createdAt, emailVerified, roles. ***/
     it("returns the identity record on the response (gh/geldata#7275)", async () => {
-      const response = await provider.register({
-        email: "identity@example.com",
-        password: "IdentityPass123!"
-      });
-
+      const response = await provider.register({ email: "identity@example.com", password: "IdentityPass123!" });
       assertExists(response.identity);
+
       const id = response.identity!;
       assertEquals(id.id, response.user.id);
       assertEquals(id.email, "identity@example.com");
       assertExists(id.createdAt);
       assertEquals(typeof id.emailVerified, "boolean");
-      // No roles assigned yet — defaults to [].
+      /*** No roles assigned yet — defaults to []. ***/
       assertEquals(id.roles, []);
     });
 
     it("should hash passwords correctly", async () => {
-      const registerData: RegisterData = {
-        email: "hash@example.com",
-        password: "PlainTextPassword123!"
-      };
-
+      const registerData: RegisterData = { email: "hash@example.com", password: "PlainTextPassword123!" };
       const response = await provider.register(registerData);
       const user = await provider.getUser(response.user.id);
 
-      // Password should be hashed, not plain text
+      /*** Password should be hashed, not plain text ***/
       assertExists(user);
       assertNotEquals(user.passwordHash, "PlainTextPassword123!");
-      // Hash should be bcrypt format ($2b$...)
+      /*** Hash should be bcrypt format ($2b$...) ***/
       assert(user.passwordHash.startsWith("$2"));
     });
 
     it("should reject duplicate email registration", async () => {
-      const registerData: RegisterData = {
-        email: "duplicate@example.com",
-        password: "SecurePass123!"
-      };
-
+      const registerData: RegisterData = { email: "duplicate@example.com", password: "SecurePass123!" };
       await provider.register(registerData);
-
-      await assertRejects(
-        () => provider.register(registerData),
-        Error,
-        AuthErrorCode.USER_ALREADY_EXISTS
-      );
+      await assertRejects(() => provider.register(registerData), Error, AuthErrorCode.USER_ALREADY_EXISTS);
     });
 
     it("should validate password strength", async () => {
-      const weakPassword: RegisterData = {
-        email: "weak@example.com",
-        password: "weak"
-      };
-
-      await assertRejects(
-        () => provider.register(weakPassword),
-        Error,
-        AuthErrorCode.PASSWORD_TOO_WEAK
-      );
+      const weakPassword: RegisterData = { email: "weak@example.com", password: "weak" };
+      await assertRejects(() => provider.register(weakPassword), Error, AuthErrorCode.PASSWORD_TOO_WEAK);
     });
 
     it("should reject registration when disabled", async () => {
-      const noRegProvider = new AuthProvider(
-        { ...testConfig, allowRegistration: false },
-        db
-      );
+      const noRegProvider = new AuthProvider({ ...testConfig, allowRegistration: false }, db);
       await noRegProvider.initialize();
 
-      const registerData: RegisterData = {
-        email: "test@example.com",
-        password: "SecurePass123!"
-      };
-
-      await assertRejects(
-        () => noRegProvider.register(registerData),
-        Error,
-        AuthErrorCode.REGISTRATION_DISABLED
-      );
+      const registerData: RegisterData = { email: "test@example.com", password: "SecurePass123!" };
+      await assertRejects(() => noRegProvider.register(registerData), Error, AuthErrorCode.REGISTRATION_DISABLED);
     });
   });
 
@@ -142,11 +124,7 @@ describe("AuthProvider", () => {
     });
 
     it("should login with valid email and password", async () => {
-      const credentials: LoginCredentials = {
-        email: "login@example.com",
-        password: "MyPassword123!"
-      };
-
+      const credentials: LoginCredentials = { email: "login@example.com", password: "MyPassword123!" };
       const response = requireAuthResponse(await provider.login(credentials));
 
       assertExists(response.user);
@@ -156,11 +134,7 @@ describe("AuthProvider", () => {
     });
 
     it("should login with username and password", async () => {
-      const credentials: LoginCredentials = {
-        username: "loginuser",
-        password: "MyPassword123!"
-      };
-
+      const credentials: LoginCredentials = { password: "MyPassword123!", username: "loginuser" };
       const response = requireAuthResponse(await provider.login(credentials));
 
       assertExists(response.user);
@@ -168,49 +142,27 @@ describe("AuthProvider", () => {
     });
 
     it("should reject invalid password", async () => {
-      const credentials: LoginCredentials = {
-        email: "login@example.com",
-        password: "WrongPassword"
-      };
-
-      await assertRejects(
-        () => provider.login(credentials),
-        Error,
-        AuthErrorCode.INVALID_CREDENTIALS
-      );
+      const credentials: LoginCredentials = { email: "login@example.com", password: "WrongPassword" };
+      await assertRejects(() => provider.login(credentials), Error, AuthErrorCode.INVALID_CREDENTIALS);
     });
 
     it("should reject non-existent user with generic error (P1-35)", async () => {
-      const credentials: LoginCredentials = {
-        email: "nonexistent@example.com",
-        password: "AnyPassword123!"
-      };
+      const credentials: LoginCredentials = { email: "nonexistent@example.com", password: "AnyPassword123!" };
 
-      // P1-35: to prevent email enumeration, missing users produce the
-      // same INVALID_CREDENTIALS error as wrong-password cases.
-      await assertRejects(
-        () => provider.login(credentials),
-        Error,
-        AuthErrorCode.INVALID_CREDENTIALS
-      );
+      /*** P1-35: to prevent email enumeration, missing users produce the same INVALID_CREDENTIALS
+                  error as wrong-password cases. ***/
+      await assertRejects(() => provider.login(credentials), Error, AuthErrorCode.INVALID_CREDENTIALS);
     });
 
     it("should not leak account existence by timing (gh/geldata#9137)", async () => {
-      // P1-35 made wrong-password and no-such-user return the same error
-      // *message*. This test guards the matching *time*: without the
-      // dummy bcrypt compare on the no-user path, an attacker could
-      // distinguish the two by stopwatch (DB-only is ~1ms, bcrypt is
-      // ~50ms+). Bounds are generous to keep CI stable.
-      const wrongPassword: LoginCredentials = {
-        email: "login@example.com",
-        password: "WrongPassword"
-      };
-      const noSuchUser: LoginCredentials = {
-        email: "definitely-not-a-real-user@example.com",
-        password: "AnyPassword123!"
-      };
+      /*** P1-35 made wrong-password and no-such-user return the same error *message*. This test
+           guards the matching *time*: without the dummy bcrypt compare on the no-user path, an
+           attacker could distinguish the two by stopwatch (DB-only is ~1ms, bcrypt is ~50ms+).
+           Bounds are generous to keep CI stable. ***/
+      const wrongPassword: LoginCredentials = { email: "login@example.com", password: "WrongPassword" };
+      const noSuchUser: LoginCredentials = { email: "definitely-not-a-real-user@example.com", password: "AnyPassword123!" };
 
-      // Warm up — first bcrypt call after init is sometimes slower.
+      /*** Warm up — first bcrypt call after init is sometimes slower. ***/
       await provider.login(wrongPassword).catch(() => {});
 
       const t0 = performance.now();
@@ -221,11 +173,11 @@ describe("AuthProvider", () => {
       await provider.login(noSuchUser).catch(() => {});
       const noSuchUserMs = performance.now() - t1;
 
-      // The no-user path should be at least 30% of the wrong-password
-      // path. Without the mitigation it would be ~1% (DB query only).
-      // The actual ratio in practice is ~95%; this loose bound just
-      // catches a regression where the mitigation goes missing.
+      /*** The no-user path should be at least 30% of the wrong-password path. Without the
+           mitigation it would be ~1% (DB query only). The actual ratio in practice is ~95%; this
+           loose bound just catches a regression where the mitigation goes missing. ***/
       const ratio = noSuchUserMs / wrongPasswordMs;
+
       assert(
         ratio > 0.3,
         `timing ratio ${ratio.toFixed(2)} (no-user ${noSuchUserMs.toFixed(1)}ms vs wrong-pw ${wrongPasswordMs.toFixed(1)}ms) — dummy compare missing?`
@@ -233,32 +185,16 @@ describe("AuthProvider", () => {
     });
 
     it("should reject inactive users", async () => {
-      // Deactivate user
-      await db.execute(
-        "UPDATE users SET active = false WHERE email = ?",
-        ["login@example.com"]
-      );
-
-      const credentials: LoginCredentials = {
-        email: "login@example.com",
-        password: "MyPassword123!"
-      };
-
-      await assertRejects(
-        () => provider.login(credentials),
-        Error,
-        AuthErrorCode.USER_INACTIVE
-      );
+      /*** Deactivate user ***/
+      await db.execute("UPDATE users SET active = false WHERE email = ?", ["login@example.com"]);
+      const credentials: LoginCredentials = { email: "login@example.com", password: "MyPassword123!" };
+      await assertRejects(() => provider.login(credentials), Error, AuthErrorCode.USER_INACTIVE);
     });
   });
 
   describe("Token Management", () => {
     it("should generate valid JWT tokens", async () => {
-      const registerData: RegisterData = {
-        email: "token@example.com",
-        password: "TokenPass123!"
-      };
-
+      const registerData: RegisterData = { email: "token@example.com", password: "TokenPass123!" };
       const response = await provider.register(registerData);
       const payload = await provider.verifyToken(response.token);
 
@@ -269,64 +205,38 @@ describe("AuthProvider", () => {
     });
 
     it("should reject expired tokens", async () => {
-      // gh/geldata#7006: validator now rejects tokenExpiry ≤ 0; use 1
-      // (the minimum) and wait past it. Adds ~1.1s but matches what an
-      // operator could actually configure.
-      const shortExpiryProvider = new AuthProvider(
-        { ...testConfig, tokenExpiry: 1 },
-        db
-      );
+      /*** gh/geldata#7006: validator now rejects tokenExpiry ≤ 0; use 1 (the minimum) and wait past
+           it. Adds ~1.1s but matches what an operator could actually configure. ***/
+      const shortExpiryProvider = new AuthProvider({ ...testConfig, tokenExpiry: 1 }, db);
       await shortExpiryProvider.initialize();
 
-      const registerData: RegisterData = {
-        email: "expired@example.com",
-        password: "ExpiredPass123!"
-      };
-
+      const registerData: RegisterData = { email: "expired@example.com", password: "ExpiredPass123!" };
       const response = await shortExpiryProvider.register(registerData);
 
-      // Wait past the 1-second exp so the JWT is genuinely expired.
+      /*** Wait past the 1-second exp so the JWT is genuinely expired. ***/
       await new Promise(resolve => setTimeout(resolve, 1100));
-
-      await assertRejects(
-        () => shortExpiryProvider.verifyToken(response.token),
-        Error,
-        AuthErrorCode.TOKEN_EXPIRED
-      );
+      await assertRejects(() => shortExpiryProvider.verifyToken(response.token), Error, AuthErrorCode.TOKEN_EXPIRED);
     });
 
     it("should refresh tokens successfully", async () => {
-      const registerData: RegisterData = {
-        email: "refresh@example.com",
-        password: "RefreshPass123!"
-      };
-
+      const registerData: RegisterData = { email: "refresh@example.com", password: "RefreshPass123!" };
       const response = await provider.register(registerData);
       assertExists(response.refreshToken);
 
       const newResponse = await provider.refresh(response.refreshToken!);
-
       assertExists(newResponse.token);
       assertNotEquals(newResponse.token, response.token);
       assertEquals(newResponse.user.email, "refresh@example.com");
     });
 
     it("should reject invalid refresh tokens", async () => {
-      await assertRejects(
-        () => provider.refresh("invalid-refresh-token"),
-        Error,
-        AuthErrorCode.INVALID_REFRESH_TOKEN
-      );
+      await assertRejects(() => provider.refresh("invalid-refresh-token"), Error, AuthErrorCode.INVALID_REFRESH_TOKEN);
     });
   });
 
   describe("Session Management", () => {
     it("should create sessions on login", async () => {
-      const registerData: RegisterData = {
-        email: "session@example.com",
-        password: "SessionPass123!"
-      };
-
+      const registerData: RegisterData = { email: "session@example.com", password: "SessionPass123!" };
       const response = await provider.register(registerData);
 
       assertExists(response.session);
@@ -336,136 +246,72 @@ describe("AuthProvider", () => {
     });
 
     it("should logout and invalidate session", async () => {
-      const registerData: RegisterData = {
-        email: "logout@example.com",
-        password: "LogoutPass123!"
-      };
-
+      const registerData: RegisterData = { email: "logout@example.com", password: "LogoutPass123!" };
       const response = await provider.register(registerData);
       await provider.logout(response.session.id);
-
-      // Verify token should fail after logout
-      await assertRejects(
-        () => provider.verifyToken(response.token),
-        Error,
-        AuthErrorCode.SESSION_EXPIRED
-      );
+      /*** Verify token should fail after logout ***/
+      await assertRejects(() => provider.verifyToken(response.token), Error, AuthErrorCode.SESSION_EXPIRED);
     });
 
     it("should revoke all user sessions", async () => {
-      const registerData: RegisterData = {
-        email: "revoke@example.com",
-        password: "RevokePass123!"
-      };
-
+      const registerData: RegisterData = { email: "revoke@example.com", password: "RevokePass123!" };
       const response1 = await provider.register(registerData);
-
-      // Create another session
-      const credentials: LoginCredentials = {
-        email: "revoke@example.com",
-        password: "RevokePass123!"
-      };
+      /*** Create another session ***/
+      const credentials: LoginCredentials = { email: "revoke@example.com", password: "RevokePass123!" };
       const response2 = requireAuthResponse(await provider.login(credentials));
 
-      // Revoke all sessions
+      /*** Revoke all sessions ***/
       await provider.revokeAllSessions(response1.user.id);
 
-      // Both tokens should be invalid
-      await assertRejects(
-        () => provider.verifyToken(response1.token),
-        Error,
-        AuthErrorCode.SESSION_EXPIRED
-      );
-      await assertRejects(
-        () => provider.verifyToken(response2.token),
-        Error,
-        AuthErrorCode.SESSION_EXPIRED
-      );
+      /*** Both tokens should be invalid ***/
+      await assertRejects(() => provider.verifyToken(response1.token), Error, AuthErrorCode.SESSION_EXPIRED);
+      await assertRejects(() => provider.verifyToken(response2.token), Error, AuthErrorCode.SESSION_EXPIRED);
     });
   });
 
   describe("Password Management", () => {
-    const testUser: RegisterData = {
-      email: "password@example.com",
-      password: "OldPassword123!"
-    };
+    const testUser: RegisterData = { email: "password@example.com", password: "OldPassword123!" };
 
     beforeEach(async () => {
       await provider.register(testUser);
     });
 
     it("should update password successfully", async () => {
-      const response = requireAuthResponse(
-        await provider.login({
-          email: "password@example.com",
-          password: "OldPassword123!"
-        })
-      );
+      const response = requireAuthResponse(await provider.login({ email: "password@example.com", password: "OldPassword123!" }));
+      await provider.updatePassword(response.user.id, "OldPassword123!", "NewPassword456!");
 
-      await provider.updatePassword(
-        response.user.id,
-        "OldPassword123!",
-        "NewPassword456!"
-      );
-
-      // Old password should fail
+      /*** Old password should fail ***/
       await assertRejects(
-        () =>
-          provider.login({
-            email: "password@example.com",
-            password: "OldPassword123!"
-          }),
+        () => provider.login({ email: "password@example.com", password: "OldPassword123!" }),
         Error,
         AuthErrorCode.INVALID_CREDENTIALS
       );
 
-      // New password should work
-      const newLogin = requireAuthResponse(
-        await provider.login({
-          email: "password@example.com",
-          password: "NewPassword456!"
-        })
-      );
+      /*** New password should work ***/
+      const newLogin = requireAuthResponse(await provider.login({ email: "password@example.com", password: "NewPassword456!" }));
       assertExists(newLogin.user);
     });
 
     it("should require correct old password for update", async () => {
-      const response = requireAuthResponse(
-        await provider.login({
-          email: "password@example.com",
-          password: "OldPassword123!"
-        })
-      );
+      const response = requireAuthResponse(await provider.login({ email: "password@example.com", password: "OldPassword123!" }));
 
       await assertRejects(
-        () =>
-          provider.updatePassword(
-            response.user.id,
-            "WrongOldPassword",
-            "NewPassword456!"
-          ),
+        () => provider.updatePassword(response.user.id, "WrongOldPassword", "NewPassword456!"),
         Error,
         AuthErrorCode.INVALID_CREDENTIALS
       );
     });
 
     it("should handle password reset flow", async () => {
-      // Request password reset
-      const resetToken = await provider.resetPasswordRequest(
-        "password@example.com"
-      );
+      /*** Request password reset ***/
+      const resetToken = await provider.resetPasswordRequest("password@example.com");
       assertExists(resetToken);
 
-      // Reset password with token
+      /*** Reset password with token ***/
       await provider.resetPassword(resetToken, "ResetPassword789!");
 
-      // Login with new password
-      const response = requireAuthResponse(
-        await provider.login({
-          email: "password@example.com",
-          password: "ResetPassword789!"
-        })
-      );
+      /*** Login with new password ***/
+      const response = requireAuthResponse(await provider.login({ email: "password@example.com", password: "ResetPassword789!" }));
       assertExists(response.user);
     });
 
@@ -478,89 +324,56 @@ describe("AuthProvider", () => {
     });
 
     it("blocks reset for unverified accounts when verification required (gh/geldata#6502)", async () => {
-      const verifyProvider = new AuthProvider(
-        { ...testConfig, requireEmailVerification: true },
-        db
-      );
+      const verifyProvider = new AuthProvider({ ...testConfig, requireEmailVerification: true }, db);
       await verifyProvider.initialize();
-      await verifyProvider.register({
-        email: "unverified@example.com",
-        password: "ValidPass123!"
-      });
-
-      // Indistinguishable from no-such-user — both return "" silently.
-      const result = await verifyProvider.resetPasswordRequest(
-        "unverified@example.com"
-      );
+      await verifyProvider.register({ email: "unverified@example.com", password: "ValidPass123!" });
+      /*** Indistinguishable from no-such-user — both return "" silently. ***/
+      const result = await verifyProvider.resetPasswordRequest("unverified@example.com");
       assertEquals(result, "");
     });
 
     it("allows reset for verified accounts when verification required", async () => {
-      const verifyProvider = new AuthProvider(
-        { ...testConfig, requireEmailVerification: true },
-        db
-      );
+      const verifyProvider = new AuthProvider({ ...testConfig, requireEmailVerification: true }, db);
       await verifyProvider.initialize();
-      await verifyProvider.register({
-        email: "verified@example.com",
-        password: "ValidPass123!"
-      });
-      // Manually mark verified — we're testing the reset path, not the
-      // verification flow itself.
-      await db.execute(
-        "UPDATE users SET email_verified = TRUE WHERE email = ?",
-        ["verified@example.com"]
-      );
+      await verifyProvider.register({ email: "verified@example.com", password: "ValidPass123!" });
+      /*** Manually mark verified — we’re testing the reset path, not the verification
+           flow itself. ***/
+      await db.execute("UPDATE users SET email_verified = TRUE WHERE email = ?", ["verified@example.com"]);
 
-      const result = await verifyProvider.resetPasswordRequest(
-        "verified@example.com"
-      );
+      const result = await verifyProvider.resetPasswordRequest("verified@example.com");
       assert(result.length > 0);
     });
 
     it("allows reset for unverified accounts when verification is OFF", async () => {
-      // testConfig doesn't set requireEmailVerification, so it's false.
-      // Even unverified users can reset — same as today.
-      await provider.register({
-        email: "freeform@example.com",
-        password: "ValidPass123!"
-      });
-      const result = await provider.resetPasswordRequest(
-        "freeform@example.com"
-      );
+      /*** testConfig doesn’t set requireEmailVerification, so it’s false. Even unverified users can
+           reset — same as today. ***/
+      await provider.register({ email: "freeform@example.com", password: "ValidPass123!" });
+      const result = await provider.resetPasswordRequest("freeform@example.com");
       assert(result.length > 0);
     });
   });
 
   describe("Email Verification", () => {
     it("should handle email verification flow", async () => {
-      const verifyProvider = new AuthProvider(
-        { ...testConfig, requireEmailVerification: true },
-        db
-      );
+      const verifyProvider = new AuthProvider({ ...testConfig, requireEmailVerification: true }, db);
       await verifyProvider.initialize();
 
-      const registerData: RegisterData = {
-        email: "verify@example.com",
-        password: "VerifyPass123!"
-      };
-
+      const registerData: RegisterData = { email: "verify@example.com", password: "VerifyPass123!" };
       const response = await verifyProvider.register(registerData);
-
-      // User should be unverified initially
+      /*** User should be unverified initially ***/
       const user = await verifyProvider.getUser(response.user.id);
       assertExists(user);
       assertEquals(user.emailVerified, false);
 
-      // The plaintext verification token is returned once from register()
-      // (caller is expected to email it). The DB holds only the hash, so
-      // we can no longer fetch the plaintext back from SELECT.
+      /*** The plaintext verification token is returned once from register() (caller is expected to
+           email it). The DB holds only the hash, so we can no longer fetch the plaintext back
+           from SELECT. ***/
       assertExists(response.verificationToken);
 
-      // Verify email
+      /*** Verify email ***/
       await verifyProvider.verifyEmail(response.verificationToken!);
 
-      // Check user is now verified
+      /*** Check user is now verified ***/
       const verifiedUser = await verifyProvider.getUser(response.user.id);
       assertExists(verifiedUser);
       assertEquals(verifiedUser.emailVerified, true);
@@ -591,37 +404,26 @@ describe("AuthProvider", () => {
       );
     });
 
-    // gh/geldata#6503: resend must invalidate the previous verification
-    // token. Reusing the original would leave two valid URLs in flight
-    // (the first email and the second), and stop only when one of them
-    // is consumed.
+    /*** gh/geldata#6503: resend must invalidate the previous verification token. Reusing the
+         original would leave two valid URLs in flight (the first email and the second), and
+         stop only when one of them is consumed. ***/
     it("resendVerification invalidates the previous token", async () => {
-      const verifyProvider = new AuthProvider(
-        { ...testConfig, requireEmailVerification: true },
-        db
-      );
+      const verifyProvider = new AuthProvider({ ...testConfig, requireEmailVerification: true }, db);
       await verifyProvider.initialize();
 
-      const response = await verifyProvider.register({
-        email: "resend@example.com",
-        password: "ResendPass123!"
-      });
+      const response = await verifyProvider.register({ email: "resend@example.com", password: "ResendPass123!" });
       const original = response.verificationToken!;
       assertExists(original);
 
       const fresh = await verifyProvider.resendVerification("resend@example.com");
       assertExists(fresh);
-      // Sanity: the resend yields a different secret.
+      /*** Sanity: the resend yields a different secret. ***/
       assert(fresh !== original);
 
-      // Original URL no longer works.
-      await assertRejects(
-        () => verifyProvider.verifyEmail(original),
-        Error,
-        AuthErrorCode.INVALID_TOKEN
-      );
+      /*** Original URL no longer works. ***/
+      await assertRejects(() => verifyProvider.verifyEmail(original), Error, AuthErrorCode.INVALID_TOKEN);
 
-      // Fresh URL does.
+      /*** Fresh URL does. ***/
       await verifyProvider.verifyEmail(fresh);
       const verified = await verifyProvider.getUser(response.user.id);
       assertExists(verified);
@@ -629,33 +431,22 @@ describe("AuthProvider", () => {
     });
 
     it("resendVerification is silent on unknown email", async () => {
-      const verifyProvider = new AuthProvider(
-        { ...testConfig, requireEmailVerification: true },
-        db
-      );
+      const verifyProvider = new AuthProvider({ ...testConfig, requireEmailVerification: true }, db);
       await verifyProvider.initialize();
 
-      // No throw, no token — avoids leaking account existence.
+      /*** No throw, no token — avoids leaking account existence. ***/
       const out = await verifyProvider.resendVerification("ghost@example.com");
       assertEquals(out, null);
     });
 
     it("resendVerification is a no-op for already-verified accounts", async () => {
-      const verifyProvider = new AuthProvider(
-        { ...testConfig, requireEmailVerification: true },
-        db
-      );
+      const verifyProvider = new AuthProvider({ ...testConfig, requireEmailVerification: true }, db);
       await verifyProvider.initialize();
 
-      const response = await verifyProvider.register({
-        email: "already-verified@example.com",
-        password: "AlreadyPass123!"
-      });
+      const response = await verifyProvider.register({ email: "already-verified@example.com", password: "AlreadyPass123!" });
       await verifyProvider.verifyEmail(response.verificationToken!);
 
-      const out = await verifyProvider.resendVerification(
-        "already-verified@example.com"
-      );
+      const out = await verifyProvider.resendVerification("already-verified@example.com");
       assertEquals(out, null);
     });
   });
@@ -664,35 +455,27 @@ describe("AuthProvider", () => {
     it("persists ip_address and user_agent on register", async () => {
       const response = await provider.register({
         email: "ip@example.com",
-        password: "GoodPass123!",
-        meta: { ipAddress: "203.0.113.7", userAgent: "test-agent/1.0" }
+        meta: { ipAddress: "203.0.113.7", userAgent: "test-agent/1.0" },
+        password: "GoodPass123!"
       });
 
-      const sessions = await db.query(
-        "SELECT ip_address, user_agent FROM sessions WHERE id = ?",
-        [response.session.id]
-      );
+      const sessions = await db.query("SELECT ip_address, user_agent FROM sessions WHERE id = ?", [response.session.id]);
       assertEquals(sessions.rows[0].ip_address, "203.0.113.7");
       assertEquals(sessions.rows[0].user_agent, "test-agent/1.0");
     });
 
     it("persists meta on login", async () => {
-      await provider.register({
-        email: "loginmeta@example.com",
-        password: "GoodPass123!"
-      });
+      await provider.register({ email: "loginmeta@example.com", password: "GoodPass123!" });
+
       const response = requireAuthResponse(
         await provider.login({
           email: "loginmeta@example.com",
-          password: "GoodPass123!",
-          meta: { ipAddress: "198.51.100.4", userAgent: "ua-2" }
+          meta: { ipAddress: "198.51.100.4", userAgent: "ua-2" },
+          password: "GoodPass123!"
         })
       );
 
-      const sessions = await db.query(
-        "SELECT ip_address, user_agent FROM sessions WHERE id = ?",
-        [response.session.id]
-      );
+      const sessions = await db.query("SELECT ip_address, user_agent FROM sessions WHERE id = ?", [response.session.id]);
       assertEquals(sessions.rows[0].ip_address, "198.51.100.4");
       assertEquals(sessions.rows[0].user_agent, "ua-2");
     });
@@ -700,19 +483,12 @@ describe("AuthProvider", () => {
     it("carries new meta forward across refresh", async () => {
       const reg = await provider.register({
         email: "refreshmeta@example.com",
-        password: "GoodPass123!",
-        meta: { ipAddress: "203.0.113.1", userAgent: "ua-old" }
+        meta: { ipAddress: "203.0.113.1", userAgent: "ua-old" },
+        password: "GoodPass123!"
       });
 
-      const refreshed = await provider.refresh(reg.refreshToken!, {
-        ipAddress: "203.0.113.99",
-        userAgent: "ua-new"
-      });
-
-      const sessions = await db.query(
-        "SELECT ip_address, user_agent FROM sessions WHERE id = ?",
-        [refreshed.session.id]
-      );
+      const refreshed = await provider.refresh(reg.refreshToken!, { ipAddress: "203.0.113.99", userAgent: "ua-new" });
+      const sessions = await db.query("SELECT ip_address, user_agent FROM sessions WHERE id = ?", [refreshed.session.id]);
       assertEquals(sessions.rows[0].ip_address, "203.0.113.99");
       assertEquals(sessions.rows[0].user_agent, "ua-new");
     });
@@ -720,47 +496,35 @@ describe("AuthProvider", () => {
 
   describe("Concurrent session limit (P2-22)", () => {
     it("emits an audit event with reason=max_sessions_per_user when cap is hit", async () => {
-      // We rely on the audit log signal (which fires from the cap path
-      // in createSession) rather than the post-cap session-table state,
-      // because the in-memory TestDatabase doesn't sort/filter on
-      // expires_at the way real Postgres does — and the cap revokes
-      // whichever sessions the SELECT returns. The audit emission proves
-      // the cap path executed; the live integration tests against real
-      // PG (auth/pg-integration.test.ts) cover end-to-end correctness.
+      /*** We rely on the audit log signal (which fires from the cap path in createSession) rather
+           than the post-cap session-table state, because the in-memory TestDatabase doesn’t
+           sort/filter on expires_at the way real Postgres does — and the cap revokes whichever
+           sessions the SELECT returns. The audit emission proves the cap path executed; the live
+           integration tests against real PG (auth/pg-integration.test.ts) cover
+           end-to-end correctness. ***/
       const events: Array<Record<string, unknown>> = [];
+
       configureLogging({
         output: line => {
           try {
             const entry = JSON.parse(line);
+
             if (entry.module === "auth")
               events.push(entry);
           } catch {
-            // ignore non-JSON
+            /*** ignore non-JSON ***/
           }
         }
       });
 
       try {
-        const cappedProvider = new AuthProvider(
-          { ...testConfig, maxSessionsPerUser: 1 },
-          db as any
-        );
+        const cappedProvider = new AuthProvider({ ...testConfig, maxSessionsPerUser: 1 }, db as any);
         await cappedProvider.initialize();
+        await cappedProvider.register({ email: "cap@example.com", password: "GoodPass123!" });
+        await cappedProvider.login({ email: "cap@example.com", password: "GoodPass123!" });
 
-        await cappedProvider.register({
-          email: "cap@example.com",
-          password: "GoodPass123!"
-        });
-        await cappedProvider.login({
-          email: "cap@example.com",
-          password: "GoodPass123!"
-        });
+        const capRevocations = events.filter(e => e.event === "session_revoked" && e.reason === "max_sessions_per_user");
 
-        const capRevocations = events.filter(
-          e =>
-            e.event === "session_revoked" &&
-            e.reason === "max_sessions_per_user"
-        );
         assertEquals(
           capRevocations.length >= 1,
           true,
@@ -775,27 +539,23 @@ describe("AuthProvider", () => {
   describe("Audit hooks (P2-23)", () => {
     it("emits auth.login_succeeded and auth.registered events", async () => {
       const events: Array<Record<string, unknown>> = [];
+
       configureLogging({
         output: line => {
           try {
             const entry = JSON.parse(line);
+
             if (entry.module === "auth")
               events.push(entry);
           } catch {
-            // ignore non-JSON
+            /*** ignore non-JSON ***/
           }
         }
       });
 
       try {
-        await provider.register({
-          email: "audit@example.com",
-          password: "GoodPass123!"
-        });
-        await provider.login({
-          email: "audit@example.com",
-          password: "GoodPass123!"
-        });
+        await provider.register({ email: "audit@example.com", password: "GoodPass123!" });
+        await provider.login({ email: "audit@example.com", password: "GoodPass123!" });
 
         const eventNames = events.map(e => e.event);
         assertEquals(eventNames.includes("registered"), true);
@@ -808,14 +568,14 @@ describe("AuthProvider", () => {
   });
 });
 
+/*** HELPER ------------------------------------------- ***/
+
 function assert(condition: boolean, message?: string): void {
-  if (!condition) {
+  if (!condition)
     throw new Error(message || "Assertion failed");
-  }
 }
 
 function assertNotEquals<T>(actual: T, expected: T, message?: string): void {
-  if (actual === expected) {
+  if (actual === expected)
     throw new Error(message || `Expected ${actual} to not equal ${expected}`);
-  }
 }

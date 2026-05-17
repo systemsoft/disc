@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Main Disc Database Server
  */
@@ -166,7 +169,9 @@ export class DiscServer {
     // If a PostgresInstance is provided, derive databaseUrl from its DSN
     // unless the caller explicitly set a databaseUrl.
     const databaseUrl = config.databaseUrl ||
-      (config.postgresInstance ? config.postgresInstance.dsn() : "postgresql://localhost:5432/disc");
+      (config.postgresInstance ?
+        config.postgresInstance.dsn() :
+        "postgresql://localhost:5432/disc");
 
     this.config = {
       host: config.host || "localhost",
@@ -176,7 +181,9 @@ export class DiscServer {
       requestTimeout: config.requestTimeout || 30000,
       enableCors: config.enableCors !== undefined ? config.enableCors : true,
       corsOrigins: config.corsOrigins,
-      enableWebsockets: config.enableWebsockets !== undefined ? config.enableWebsockets : true,
+      enableWebsockets: config.enableWebsockets !== undefined ?
+        config.enableWebsockets :
+        true,
       jwtSecret: config.jwtSecret,
       enableAuth: config.enableAuth,
       enableAccessPolicies: config.enableAccessPolicies,
@@ -340,10 +347,14 @@ export class DiscServer {
             status: string;
           }>;
         };
-        const executor = handler.executeBinaryQuery ? handler.executeBinaryQuery.bind(this.protocolHandler) : undefined;
+        const executor = handler.executeBinaryQuery ?
+          handler.executeBinaryQuery.bind(this.protocolHandler) :
+          undefined;
 
         this.binaryServer = new BinaryProtocolServer({
-          hostname: this.config.host === "localhost" ? "127.0.0.1" : this.config.host,
+          hostname: this.config.host === "localhost" ?
+            "127.0.0.1" :
+            this.config.host,
           port: this.config.binaryPort,
           schema: handlerSchema,
           password: this.binaryPassword,
@@ -364,7 +375,9 @@ export class DiscServer {
         authMiddleware: this.authMiddleware,
         authRoutes: this.authRoutes,
         extensionRoutes: this.extensionRegistry.getAllRoutes(),
-        extensionHealthGetter: this.extensionRegistry.size > 0 ? () => this.extensionRegistry.getHealthStatus() : undefined,
+        extensionHealthGetter: this.extensionRegistry.size > 0 ?
+          () => this.extensionRegistry.getHealthStatus() :
+          undefined,
         databaseRegistry: this.databaseRegistry,
         // Live-schema-diff (Bundle K — Disc #3a). When the CLI passed a
         // schemaFilePath, HttpServer mounts `/admin/schema-watch` and
@@ -430,7 +443,9 @@ export class DiscServer {
           "SIGHUP handler registered; send SIGHUP to reload safe-to-change config without restart"
         );
       } else {
-        logger.info("SIGHUP config reload is not available on Windows; restart required for config changes");
+        logger.info(
+          "SIGHUP config reload is not available on Windows; restart required for config changes"
+        );
       }
 
       // Capture the logging config that was active when the server
@@ -572,8 +587,9 @@ export class DiscServer {
   }
 
   private async initializeAuth(): Promise<void> {
-    if (!this.config.jwtSecret)
+    if (!this.config.jwtSecret) {
       return;
+    }
 
     logger.info("Initializing authentication system");
 
@@ -646,11 +662,21 @@ export class DiscServer {
     let applied = 0;
     let ignored = 0;
 
-    const noteApplied = (field: string, oldVal: unknown, newVal: unknown): void => {
-      logger.info(`config reload: ${field}: ${String(oldVal)} -> ${String(newVal)}`);
+    const noteApplied = (
+      field: string,
+      oldVal: unknown,
+      newVal: unknown
+    ): void => {
+      logger.info(
+        `config reload: ${field}: ${String(oldVal)} -> ${String(newVal)}`
+      );
       applied++;
     };
-    const noteIgnored = (field: string, oldVal: unknown, newVal: unknown): void => {
+    const noteIgnored = (
+      field: string,
+      oldVal: unknown,
+      newVal: unknown
+    ): void => {
       logger.warn(
         `config reload: ${field} changed (${String(oldVal)} -> ${String(newVal)}) but cannot be hot-reloaded — restart required`
       );
@@ -658,7 +684,10 @@ export class DiscServer {
     };
 
     // ── Safe-to-reload fields ───────────────────────────────────────
-    if (next.requestTimeout !== undefined && next.requestTimeout !== cur.requestTimeout) {
+    if (
+      next.requestTimeout !== undefined &&
+      next.requestTimeout !== cur.requestTimeout
+    ) {
       noteApplied("requestTimeout", cur.requestTimeout, next.requestTimeout);
       cur.requestTimeout = next.requestTimeout;
       this.httpServer?.updateRequestTimeout(next.requestTimeout);
@@ -701,7 +730,8 @@ export class DiscServer {
     ) {
       noteApplied("explainCacheTtlMs", curExplain, next.explainCacheTtlMs);
       const ttl = next.explainCacheTtlMs;
-      (cur as Types.ServerConfig & { explainCacheTtlMs?: number; }).explainCacheTtlMs = ttl;
+      (cur as Types.ServerConfig & { explainCacheTtlMs?: number; })
+        .explainCacheTtlMs = ttl;
       this.httpServer?.updateExplainCacheTtl(ttl);
     }
 
@@ -716,7 +746,10 @@ export class DiscServer {
         `${this.last_log_level}/${this.last_log_format}`,
         `${nextLogging.level}/${nextLogging.format}`
       );
-      configureLogging({ format: nextLogging.format, level: nextLogging.level });
+      configureLogging({
+        format: nextLogging.format,
+        level: nextLogging.level
+      });
       this.last_log_level = nextLogging.level;
       this.last_log_format = nextLogging.format;
     }
@@ -728,7 +761,9 @@ export class DiscServer {
     if (next.port !== undefined && next.port !== cur.port) {
       noteIgnored("port", cur.port, next.port);
     }
-    if (next.databaseUrl !== undefined && next.databaseUrl !== cur.databaseUrl) {
+    if (
+      next.databaseUrl !== undefined && next.databaseUrl !== cur.databaseUrl
+    ) {
       noteIgnored("databaseUrl", "(redacted)", "(redacted)");
     }
     if (next.jwtSecret !== undefined && next.jwtSecret !== cur.jwtSecret) {
@@ -751,9 +786,16 @@ export class DiscServer {
       next.enableWebsockets !== undefined &&
       next.enableWebsockets !== cur.enableWebsockets
     ) {
-      noteIgnored("enableWebsockets", cur.enableWebsockets, next.enableWebsockets);
+      noteIgnored(
+        "enableWebsockets",
+        cur.enableWebsockets,
+        next.enableWebsockets
+      );
     }
-    if (next.enableMetrics !== undefined && next.enableMetrics !== cur.enableMetrics) {
+    if (
+      next.enableMetrics !== undefined &&
+      next.enableMetrics !== cur.enableMetrics
+    ) {
       noteIgnored("enableMetrics", cur.enableMetrics, next.enableMetrics);
     }
     if (
@@ -766,7 +808,9 @@ export class DiscServer {
     // sized at construction time. Resizing in place would require pruning
     // entries to fit a smaller cap and re-keying the eviction list — not
     // trivial. TODO: expose a `resize(n)` on the cache and wire here.
-    if (next.cacheMaxSize !== undefined && next.cacheMaxSize !== cur.cacheMaxSize) {
+    if (
+      next.cacheMaxSize !== undefined && next.cacheMaxSize !== cur.cacheMaxSize
+    ) {
       noteIgnored("cacheMaxSize", cur.cacheMaxSize, next.cacheMaxSize);
     }
 
@@ -778,7 +822,9 @@ export class DiscServer {
     if (cur.tls && this.httpServer) {
       try {
         await this.httpServer.reloadTls();
-        logger.info("config reload: TLS listener reloaded from on-disk cert/key");
+        logger.info(
+          "config reload: TLS listener reloaded from on-disk cert/key"
+        );
       } catch (err) {
         logger.error(
           `config reload: TLS reload failed: ${err instanceof Error ? err.message : String(err)}`
@@ -835,13 +881,16 @@ export class DiscServer {
 function arraysEqual(a?: string[], b?: string[]): boolean {
   const la = a?.length ?? 0;
   const lb = b?.length ?? 0;
-  if (la !== lb)
+  if (la !== lb) {
     return false;
-  if (la === 0)
+  }
+  if (la === 0) {
     return true;
+  }
   for (let i = 0; i < la; i++) {
-    if (a![i] !== b![i])
+    if (a![i] !== b![i]) {
       return false;
+    }
   }
   return true;
 }
@@ -884,7 +933,9 @@ export function buildEnvOptions(
     enableWebsockets: Deno.env.get("DISC_ENABLE_WEBSOCKETS") !== "false",
     jwtSecret: Deno.env.get("DISC_JWT_SECRET"),
     enableAuth: enableAuth !== undefined ? enableAuth !== "false" : undefined,
-    enableAccessPolicies: enableAccessPolicies !== undefined ? enableAccessPolicies !== "false" : undefined,
+    enableAccessPolicies: enableAccessPolicies !== undefined ?
+      enableAccessPolicies !== "false" :
+      undefined,
     cacheMaxSize: parseInt(Deno.env.get("DISC_CACHE_MAX_SIZE") || "1000"),
     explainCacheTtlMs: parseInt(
       Deno.env.get("DISC_EXPLAIN_CACHE_TTL") || "300000"
@@ -931,29 +982,34 @@ export function buildEnvOptions(
   // `docs/server.md#disc-toml-keys-vs-env-vars-vs-cli-flags`.
   // (gh/geldata#5234, #7563).
   const requireAuth = parseBoolEnv("DISC_REQUIRE_AUTH");
-  if (requireAuth !== undefined)
+  if (requireAuth !== undefined) {
     config.requireAuth = requireAuth;
+  }
 
   const readOnly = parseBoolEnv("DISC_READ_ONLY");
-  if (readOnly !== undefined)
+  if (readOnly !== undefined) {
     config.readOnly = readOnly;
+  }
 
   const trustProxy = parseBoolEnv("DISC_TRUST_PROXY");
-  if (trustProxy !== undefined)
+  if (trustProxy !== undefined) {
     config.trustProxy = trustProxy;
+  }
 
   // Schema-derived REST surface (Bundle J). Defaults to true; opt-out
   // via env or `disc.toml` `enable_rest = false` in the server section.
   const enableRest = parseBoolEnv("DISC_ENABLE_REST");
-  if (enableRest !== undefined)
+  if (enableRest !== undefined) {
     config.enableRest = enableRest;
+  }
 
   // Live data subscriptions (Bundle L). Defaults to true; opt-out via
   // `DISC_ENABLE_DATA_WATCH=false` or `disc.toml` `enable_data_watch
   // = false`.
   const enableDataWatch = parseBoolEnv("DISC_ENABLE_DATA_WATCH");
-  if (enableDataWatch !== undefined)
+  if (enableDataWatch !== undefined) {
     config.enableDataWatch = enableDataWatch;
+  }
 
   // Parse TLS config if provided.
   // `DISC_TLS_CERT` / `DISC_TLS_KEY` accept on-disk paths.
@@ -1009,8 +1065,9 @@ export function buildEnvOptions(
  */
 function parseBoolEnv(key: string): boolean | undefined {
   const raw = Deno.env.get(key);
-  if (raw === undefined || raw === "")
+  if (raw === undefined || raw === "") {
     return undefined;
+  }
   const normalized = raw.trim().toLowerCase();
   if (normalized === "1" || normalized === "true" || normalized === "yes") {
     return true;
@@ -1037,17 +1094,26 @@ function parseBoolEnv(key: string): boolean | undefined {
  * the data was already in `process.env` and visible to anyone who can
  * read /proc/<pid>/environ. (gh/geldata#4547)
  */
-function resolveTlsMaterial(pathKey: string, envKey: string): string | undefined {
+function resolveTlsMaterial(
+  pathKey: string,
+  envKey: string
+): string | undefined {
   const direct = Deno.env.get(pathKey);
-  if (direct)
+  if (direct) {
     return direct;
+  }
   const indirectName = Deno.env.get(envKey);
-  if (!indirectName)
+  if (!indirectName) {
     return undefined;
+  }
   const pem = Deno.env.get(indirectName);
-  if (!pem)
+  if (!pem) {
     return undefined;
-  const tempFile = Deno.makeTempFileSync({ prefix: "disc-tls-", suffix: ".pem" });
+  }
+  const tempFile = Deno.makeTempFileSync({
+    prefix: "disc-tls-",
+    suffix: ".pem"
+  });
   Deno.writeTextFileSync(tempFile, pem);
   // Best-effort lock down the perms; failure is logged elsewhere.
   try {
@@ -1064,7 +1130,10 @@ function resolveTlsMaterial(pathKey: string, envKey: string): string | undefined
  * Read logging-related env vars. Returned separately because logging is
  * configured globally at process scope, not per-server.
  */
-function readLoggingEnv(): { format: "json" | "text"; level: "DEBUG" | "INFO" | "WARN" | "ERROR"; } {
+function readLoggingEnv(): {
+  format: "json" | "text";
+  level: "DEBUG" | "INFO" | "WARN" | "ERROR";
+} {
   const level = (Deno.env.get("DISC_LOG_LEVEL") || "INFO").toUpperCase() as
     | "DEBUG"
     | "INFO"
@@ -1094,10 +1163,17 @@ export function createServerFromEnv(
 
 // Export all types and classes for external use
 export { BinaryProtocolServer } from "../protocol/binary-server.ts";
-export { ConnectionManager, SessionManager, TransactionManager } from "./connection.ts";
+export {
+  ConnectionManager,
+  SessionManager,
+  TransactionManager
+} from "./connection.ts";
 export { DatabaseRegistry } from "./database-registry.ts";
 export { EdgeQLProtocolHandler } from "./edgeql-protocol.ts";
 export { HttpServer } from "./http.ts";
-export { EdgeQLProtocolHandler as MockEdgeQLProtocolHandler, GraphQLProtocolHandler } from "./protocol.ts";
+export {
+  EdgeQLProtocolHandler as MockEdgeQLProtocolHandler,
+  GraphQLProtocolHandler
+} from "./protocol.ts";
 export { SimpleEdgeQLProtocolHandler } from "./simple-edgeql-protocol.ts";
 export * from "./types.ts";

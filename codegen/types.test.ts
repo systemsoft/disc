@@ -1,9 +1,19 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Codegen types module tests
  */
 
+/*** NATIVE ------------------------------------------- ***/
+
 import { assertEquals, assertExists } from "@std/assert";
+
+/*** UTILITY ------------------------------------------ ***/
+
 import * as Types from "./types.ts";
+
+/*** RUNTIME ------------------------------------------ ***/
 
 Deno.test("Types - getTypeMapping for built-in types", () => {
   const strMapping = Types.getTypeMapping("str");
@@ -28,97 +38,64 @@ Deno.test("Types - getTypeMapping for nonexistent type", () => {
 });
 
 Deno.test("Types - mapEdgeQLTypeToTypeScript for primitive types", () => {
-  // Required string
+  /*** Required string ***/
   assertEquals(Types.mapEdgeQLTypeToTypeScript("str", true, false), "string");
 
-  // Optional string
-  assertEquals(
-    Types.mapEdgeQLTypeToTypeScript("str", false, false),
-    "string | null"
-  );
+  /*** Optional string ***/
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("str", false, false), "string | null");
 
-  // Required string array
+  /*** Required string array ***/
   assertEquals(Types.mapEdgeQLTypeToTypeScript("str", true, true), "string[]");
 
-  // Optional string array
-  assertEquals(
-    Types.mapEdgeQLTypeToTypeScript("str", false, true),
-    "string[] | null"
-  );
+  /*** Optional string array ***/
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("str", false, true), "string[] | null");
 });
 
 Deno.test("Types - mapEdgeQLTypeToTypeScript for numeric types", () => {
   assertEquals(Types.mapEdgeQLTypeToTypeScript("int32", true, false), "number");
-  assertEquals(
-    Types.mapEdgeQLTypeToTypeScript("float64", false, false),
-    "number | null"
-  );
-  assertEquals(
-    Types.mapEdgeQLTypeToTypeScript("decimal", true, true),
-    "number[]"
-  );
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("float64", false, false), "number | null");
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("decimal", true, true), "number[]");
 });
 
 Deno.test("Types - mapEdgeQLTypeToTypeScript for datetime types", () => {
-  assertEquals(
-    Types.mapEdgeQLTypeToTypeScript("datetime", true, false),
-    "Date"
-  );
-  assertEquals(
-    Types.mapEdgeQLTypeToTypeScript("cal::local_datetime", false, false),
-    "Date | null"
-  );
-  assertEquals(
-    Types.mapEdgeQLTypeToTypeScript("cal::local_date", true, false),
-    "string"
-  );
-  assertEquals(
-    Types.mapEdgeQLTypeToTypeScript("cal::local_time", true, true),
-    "string[]"
-  );
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("datetime", true, false), "Date");
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("cal::local_datetime", false, false), "Date | null");
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("cal::local_date", true, false), "string");
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("cal::local_time", true, true), "string[]");
 });
 
 Deno.test("Types - mapEdgeQLTypeToTypeScript for special types", () => {
   assertEquals(Types.mapEdgeQLTypeToTypeScript("uuid", true, false), "string");
   assertEquals(Types.mapEdgeQLTypeToTypeScript("json", true, false), "unknown");
-  assertEquals(
-    Types.mapEdgeQLTypeToTypeScript("bytes", false, false),
-    "Uint8Array | null"
-  );
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("bytes", false, false), "Uint8Array | null");
 });
 
 Deno.test("Types - mapEdgeQLTypeToTypeScript for custom object types", () => {
-  // For object types that don't have built-in mappings
+  /*** For object types that don’t have built-in mappings ***/
   assertEquals(Types.mapEdgeQLTypeToTypeScript("User", true, false), "User");
-  assertEquals(
-    Types.mapEdgeQLTypeToTypeScript("User", false, false),
-    "User | null"
-  );
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("User", false, false), "User | null");
   assertEquals(Types.mapEdgeQLTypeToTypeScript("Post", true, true), "Post[]");
-  assertEquals(
-    Types.mapEdgeQLTypeToTypeScript("MyCustomType", false, true),
-    "MyCustomType[] | null"
-  );
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("MyCustomType", false, true), "MyCustomType[] | null");
 });
 
 Deno.test("Types - DEFAULT_TYPE_MAPPINGS completeness", () => {
   const expectedTypes = [
-    "str",
     "bool",
+    "bytes",
+    "cal::local_date",
+    "cal::local_datetime",
+    "cal::local_time",
+    "datetime",
+    "decimal",
+    "duration",
+    "float32",
+    "float64",
     "int16",
     "int32",
     "int64",
-    "float32",
-    "float64",
-    "decimal",
-    "uuid",
-    "datetime",
-    "duration",
-    "bytes",
     "json",
-    "cal::local_datetime",
-    "cal::local_date",
-    "cal::local_time"
+    "str",
+    "uuid"
   ];
 
   for (const type of expectedTypes) {
@@ -138,14 +115,13 @@ Deno.test("Types - TypeMapping interface structure", () => {
   assertExists(mapping.nullableType);
   assertExists(mapping.arrayType);
 
-  // importRequired is optional
-  if (mapping.importRequired !== undefined) {
+  /*** importRequired is optional ***/
+  if (mapping.importRequired !== undefined)
     assertEquals(typeof mapping.importRequired, "string");
-  }
 });
 
 Deno.test("Types - CodegenConfig interface defaults", () => {
-  // Test that partial config can be constructed
+  /*** Test that partial config can be constructed ***/
   const partialConfig: Partial<Types.CodegenConfig> = {
     outputDir: "./test-output",
     target: "client"
@@ -154,17 +130,17 @@ Deno.test("Types - CodegenConfig interface defaults", () => {
   assertEquals(partialConfig.outputDir, "./test-output");
   assertEquals(partialConfig.target, "client");
 
-  // Test full config
+  /*** Test full config ***/
   const fullConfig: Types.CodegenConfig = {
+    formatOutput: true,
+    includeClient: true,
+    includeMutations: true,
+    includeQueryBuilders: true,
+    interfaceSuffix: "",
     outputDir: "./generated",
     schemaSource: "./schema.disc",
     target: "both",
-    typePrefix: "",
-    interfaceSuffix: "",
-    includeQueryBuilders: true,
-    includeMutations: true,
-    includeClient: true,
-    formatOutput: true
+    typePrefix: ""
   };
 
   assertEquals(fullConfig.target, "both");
@@ -173,13 +149,13 @@ Deno.test("Types - CodegenConfig interface defaults", () => {
 
 Deno.test("Types - PropertyDefinition structure", () => {
   const property: Types.PropertyDefinition = {
-    name: "email",
-    type: "string",
-    optional: false,
-    nullable: false,
     array: false,
+    defaultValue: undefined,
     description: "User email address",
-    defaultValue: undefined
+    name: "email",
+    nullable: false,
+    optional: false,
+    type: "string"
   };
 
   assertEquals(property.name, "email");
@@ -190,18 +166,18 @@ Deno.test("Types - PropertyDefinition structure", () => {
 
 Deno.test("Types - TypeDefinition structure", () => {
   const typeDef: Types.TypeDefinition = {
-    name: "User",
-    kind: "interface",
-    properties: [{
-      name: "id",
-      type: "string",
-      optional: false,
-      nullable: false,
-      array: false
-    }],
-    extends: [],
+    description: "User entity type",
     export: true,
-    description: "User entity type"
+    extends: [],
+    kind: "interface",
+    name: "User",
+    properties: [{
+      array: false,
+      name: "id",
+      nullable: false,
+      optional: false,
+      type: "string"
+    }]
   };
 
   assertEquals(typeDef.name, "User");
@@ -212,8 +188,8 @@ Deno.test("Types - TypeDefinition structure", () => {
 
 Deno.test("Types - GeneratedFile structure", () => {
   const file: Types.GeneratedFile = {
-    path: "generated/types.ts",
     content: "export interface User { id: string; }",
+    path: "generated/types.ts",
     type: "types"
   };
 
@@ -224,13 +200,13 @@ Deno.test("Types - GeneratedFile structure", () => {
 
 Deno.test("Types - CodegenResult structure", () => {
   const result: Types.CodegenResult = {
+    errors: [],
     files: [{
-      path: "types.ts",
       content: "// Generated types",
+      path: "types.ts",
       type: "types"
     }],
-    warnings: ["Type mapping fallback used"],
-    errors: []
+    warnings: ["Type mapping fallback used"]
   };
 
   assertEquals(result.files.length, 1);
@@ -239,37 +215,24 @@ Deno.test("Types - CodegenResult structure", () => {
 });
 
 Deno.test("Types - edge cases for type mapping", () => {
-  // Test empty string type
+  /*** Test empty string type ***/
   assertEquals(Types.mapEdgeQLTypeToTypeScript("", true, false), "");
 
-  // Module-qualified type names get stripped down to the bare TS identifier.
-  // `::` is invalid in TS, and cross-module routing is the generator's job
-  // (via resolveTypeReference / namespace prefixing) — never let the raw
-  // qualifier leak into the type-mapping fallback.
-  assertEquals(
-    Types.mapEdgeQLTypeToTypeScript("My::Special::Type", true, false),
-    "Type"
-  );
+  /*** Module-qualified type names get stripped down to the bare TS identifier. `::` is invalid in
+       TS, and cross-module routing is the generator’s job (via resolveTypeReference / namespace
+       prefixing) — never let the raw qualifier leak into the type-mapping fallback. ***/
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("My::Special::Type", true, false), "Type");
 
-  // `auto` is the parser's placeholder for computed-property types and
-  // must surface as `unknown` rather than an invalid TS keyword.
-  assertEquals(
-    Types.mapEdgeQLTypeToTypeScript("auto", true, false),
-    "unknown"
-  );
-  assertEquals(
-    Types.mapEdgeQLTypeToTypeScript("auto", false, false),
-    "unknown | null"
-  );
+  /*** `auto` is the parser’s placeholder for computed-property types and must surface as `unknown`
+       rather than an invalid TS keyword. ***/
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("auto", true, false), "unknown");
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("auto", false, false), "unknown | null");
 
-  // Test null safety with arrays
-  assertEquals(
-    Types.mapEdgeQLTypeToTypeScript("str", false, true),
-    "string[] | null"
-  );
+  /*** Test null safety with arrays ***/
+  assertEquals(Types.mapEdgeQLTypeToTypeScript("str", false, true), "string[] | null");
 });
 
-// --- mapEdgeQLTypeToEdgeQLCast tests ---
+/*** --- mapEdgeQLTypeToEdgeQLCast tests --- ***/
 
 Deno.test("Types - mapEdgeQLTypeToEdgeQLCast for standard types", () => {
   assertEquals(Types.mapEdgeQLTypeToEdgeQLCast("str"), "<str>");
@@ -289,18 +252,9 @@ Deno.test("Types - mapEdgeQLTypeToEdgeQLCast for all numeric types", () => {
 
 Deno.test("Types - mapEdgeQLTypeToEdgeQLCast for temporal types", () => {
   assertEquals(Types.mapEdgeQLTypeToEdgeQLCast("duration"), "<duration>");
-  assertEquals(
-    Types.mapEdgeQLTypeToEdgeQLCast("cal::local_datetime"),
-    "<cal::local_datetime>"
-  );
-  assertEquals(
-    Types.mapEdgeQLTypeToEdgeQLCast("cal::local_date"),
-    "<cal::local_date>"
-  );
-  assertEquals(
-    Types.mapEdgeQLTypeToEdgeQLCast("cal::local_time"),
-    "<cal::local_time>"
-  );
+  assertEquals(Types.mapEdgeQLTypeToEdgeQLCast("cal::local_datetime"), "<cal::local_datetime>");
+  assertEquals(Types.mapEdgeQLTypeToEdgeQLCast("cal::local_date"), "<cal::local_date>");
+  assertEquals(Types.mapEdgeQLTypeToEdgeQLCast("cal::local_time"), "<cal::local_time>");
 });
 
 Deno.test("Types - mapEdgeQLTypeToEdgeQLCast for uuid, bytes, json, sequence", () => {
@@ -312,15 +266,11 @@ Deno.test("Types - mapEdgeQLTypeToEdgeQLCast for uuid, bytes, json, sequence", (
 
 Deno.test("Types - mapEdgeQLTypeToEdgeQLCast fallback for unknown type", () => {
   assertEquals(Types.mapEdgeQLTypeToEdgeQLCast("custom_type"), "<custom_type>");
-  assertEquals(
-    Types.mapEdgeQLTypeToEdgeQLCast("my_module::MyType"),
-    "<my_module::MyType>"
-  );
+  assertEquals(Types.mapEdgeQLTypeToEdgeQLCast("my_module::MyType"), "<my_module::MyType>");
 });
 
-// P2-18: polymorphic-type codegen (parentTypes → `extends` on the
-// generated interface) is exercised end-to-end by codegen/mod.test.ts
-// and the typescript-generator tests that use a realistic Schema with
-// type-hierarchy metadata. Adding another fixture would duplicate setup
-// without adding signal — the existing "inheritance" tests in the
-// compiler + migration suites already cover the parentTypes path.
+/*** Polymorphic-type codegen (parentTypes → `extends` on the generated interface) is exercised
+     end-to-end by codegen/mod.test.ts and the typescript-generator tests that use a realistic
+     Schema with type-hierarchy metadata. Adding another fixture would duplicate setup without
+     adding signal — the existing "inheritance" tests in the compiler + migration suites already
+     cover the parentTypes path. ***/

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Disc Language Server (#7411 + #655)
  *
@@ -19,15 +22,16 @@ import { analyzeDiscDocument } from "./diagnostics.ts";
 import { provideDocumentSymbols } from "./document-symbols.ts";
 import {
   analyzeEmbeddedDocument,
-  type EmbeddedSdlContext,
   isEmbeddedEqlHost,
   provideEmbeddedCompletion,
   provideEmbeddedDefinition,
-  provideEmbeddedHover
+  provideEmbeddedHover,
+  type EmbeddedSdlContext
 } from "./embedded-edgeql.ts";
 import { provideFormatting } from "./formatting.ts";
 import { provideHover } from "./hover.ts";
 import {
+  TextDocumentSyncKind,
   type DidChangeTextDocumentParams,
   type DidCloseTextDocumentParams,
   type DidOpenTextDocumentParams,
@@ -43,12 +47,14 @@ import {
   type RpcSuccessResponse,
   type SemanticTokensParams,
   type TextDocumentIdentifier,
-  type TextDocumentPositionParams,
-  TextDocumentSyncKind
+  type TextDocumentPositionParams
 } from "./protocol.ts";
 import { provideReferences } from "./references.ts";
 import { prepareRename, provideRename } from "./rename.ts";
-import { provideSemanticTokens, SEMANTIC_TOKEN_LEGEND } from "./semantic-tokens.ts";
+import {
+  provideSemanticTokens,
+  SEMANTIC_TOKEN_LEGEND
+} from "./semantic-tokens.ts";
 
 type Sender = (msg: RpcMessage) => void;
 
@@ -130,7 +136,11 @@ export class LanguageServer {
         // returns null so we don't surface SDL-flavored hover in
         // plain TS code.
         const hover = isEmbeddedEqlHost(params.textDocument.uri) ?
-          provideEmbeddedHover(doc.text, params.position, this.collectSdlContext()) :
+          provideEmbeddedHover(
+            doc.text,
+            params.position,
+            this.collectSdlContext()
+          ) :
           provideHover(doc.text, params.position);
         this.respond(req.id, hover);
         return;
@@ -144,7 +154,11 @@ export class LanguageServer {
           return;
         }
         const completion = isEmbeddedEqlHost(params.textDocument.uri) ?
-          provideEmbeddedCompletion(doc.text, params.position, this.collectSdlContext()) :
+          provideEmbeddedCompletion(
+            doc.text,
+            params.position,
+            this.collectSdlContext()
+          ) :
           provideCompletion(doc.text, params.position);
         this.respond(req.id, completion);
         return;
@@ -162,8 +176,16 @@ export class LanguageServer {
         // jumps to its `.disc` declaration. SDL files keep the
         // existing same-file resolution.
         const definition = isEmbeddedEqlHost(params.textDocument.uri) ?
-          provideEmbeddedDefinition(doc.text, params.position, this.collectSdlContext()) :
-          provideDefinition(doc.text, params.position, params.textDocument.uri);
+          provideEmbeddedDefinition(
+            doc.text,
+            params.position,
+            this.collectSdlContext()
+          ) :
+          provideDefinition(
+            doc.text,
+            params.position,
+            params.textDocument.uri
+          );
         this.respond(req.id, definition);
         return;
       }
@@ -360,8 +382,9 @@ export class LanguageServer {
     const uri = params.textDocument.uri;
     // Phase 1 sync mode is Full — the last entry contains the full new text.
     const change = params.contentChanges[params.contentChanges.length - 1];
-    if (!change)
+    if (!change) {
       return;
+    }
     const text = change.text;
     const version = params.textDocument.version;
     this.docs.set(uri, { text, version });
@@ -384,7 +407,9 @@ export class LanguageServer {
     // SDL diagnostics for `.disc`; embedded-EdgeQL diagnostics for any
     // TS/JS host file (Phase 5). Other URIs get an empty diagnostic
     // list so the editor's problems pane stays clean.
-    const diagnostics = isEmbeddedEqlHost(uri) ? analyzeEmbeddedDocument(text) : analyzeDiscDocument(text);
+    const diagnostics = isEmbeddedEqlHost(uri) ?
+      analyzeEmbeddedDocument(text) :
+      analyzeDiscDocument(text);
     const params: PublishDiagnosticsParams = {
       uri,
       version,
@@ -448,8 +473,9 @@ export async function runStdio(): Promise<number> {
     let chunk: Uint8Array;
     try {
       const { value, done } = await reader.read();
-      if (done)
+      if (done) {
         break;
+      }
       chunk = value;
     } catch {
       break;
@@ -464,8 +490,9 @@ export async function runStdio(): Promise<number> {
     // Drain as many full messages as the buffer holds.
     while (true) {
       const headerEnd = findHeaderEnd(buffer);
-      if (headerEnd === -1)
+      if (headerEnd === -1) {
         break;
+      }
       const headerText = decoder.decode(buffer.subarray(0, headerEnd));
       const contentLength = parseContentLength(headerText);
       if (contentLength === null) {
@@ -474,8 +501,9 @@ export async function runStdio(): Promise<number> {
         continue;
       }
       const totalNeeded = headerEnd + 4 + contentLength;
-      if (buffer.byteLength < totalNeeded)
+      if (buffer.byteLength < totalNeeded) {
         break;
+      }
       const body = decoder.decode(
         buffer.subarray(headerEnd + 4, totalNeeded)
       );
@@ -521,8 +549,9 @@ function findHeaderEnd(buf: Uint8Array): number {
 function parseContentLength(headerText: string): number | null {
   for (const line of headerText.split(/\r\n/)) {
     const m = line.match(/^Content-Length:\s*(\d+)$/i);
-    if (m)
+    if (m) {
       return parseInt(m[1], 10);
+    }
   }
   return null;
 }

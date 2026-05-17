@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Live PostgreSQL introspection queries (#3452 — Phase 4)
  *
@@ -12,7 +15,12 @@
  */
 
 import type { DatabaseConnection } from "../lib/database.ts";
-import type { IntrospectedColumn, IntrospectedForeignKey, IntrospectedTable, IntrospectionData } from "./pg-introspect.ts";
+import type {
+  IntrospectedColumn,
+  IntrospectedForeignKey,
+  IntrospectedTable,
+  IntrospectionData
+} from "./pg-introspect.ts";
 
 export interface IntrospectOptions {
   /**
@@ -69,8 +77,9 @@ export async function introspectDatabase(
 
   for (const row of colRows.rows) {
     const tableName = row.table_name as string;
-    if (!tableFilter(tableName))
+    if (!tableFilter(tableName)) {
       continue;
+    }
     if (!columnsByTable.has(tableName)) {
       columnsByTable.set(tableName, []);
       tableSchema.set(tableName, row.table_schema as string);
@@ -109,10 +118,12 @@ export async function introspectDatabase(
   );
   for (const row of pkRows.rows) {
     const tn = row.table_name as string;
-    if (!tableFilter(tn))
+    if (!tableFilter(tn)) {
       continue;
-    if (!pkByTable.has(tn))
+    }
+    if (!pkByTable.has(tn)) {
       pkByTable.set(tn, []);
+    }
     pkByTable.get(tn)!.push(row.column_name as string);
   }
 
@@ -139,14 +150,17 @@ export async function introspectDatabase(
   );
   for (const row of uniqueRows.rows) {
     const tn = row.table_name as string;
-    if (!tableFilter(tn))
+    if (!tableFilter(tn)) {
       continue;
-    if (!uniqueByTable.has(tn))
+    }
+    if (!uniqueByTable.has(tn)) {
       uniqueByTable.set(tn, new Map());
+    }
     const byConstraint = uniqueByTable.get(tn)!;
     const cn = row.constraint_name as string;
-    if (!byConstraint.has(cn))
+    if (!byConstraint.has(cn)) {
       byConstraint.set(cn, []);
+    }
     byConstraint.get(cn)!.push(row.column_name as string);
   }
 
@@ -182,8 +196,9 @@ export async function introspectDatabase(
   );
   for (const row of fkRows.rows) {
     const fromTable = row.from_table as string;
-    if (!tableFilter(fromTable))
+    if (!tableFilter(fromTable)) {
       continue;
+    }
     fks.push({
       fromTable,
       fromColumn: row.from_column as string,
@@ -225,18 +240,21 @@ export async function introspectDatabase(
  */
 function normalizePgType(dataType: string, udtName: string | null): string {
   const dt = dataType.toLowerCase();
-  if (dt === "user-defined" && udtName)
+  if (dt === "user-defined" && udtName) {
     return udtName.toLowerCase();
-  if (dt === "array" && udtName)
+  }
+  if (dt === "array" && udtName) {
     return udtName.toLowerCase();
+  }
   return dt;
 }
 
 function mapDeleteRule(
   rule: string | null
 ): IntrospectedForeignKey["onDelete"] | undefined {
-  if (!rule)
+  if (!rule) {
     return undefined;
+  }
   switch (rule.toUpperCase()) {
     case "CASCADE":
       return "cascade";

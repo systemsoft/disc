@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Migration system types and interfaces
  */
@@ -429,11 +432,23 @@ export interface MigrationResult {
  */
 export type MigrationProgressEvent =
   | { kind: "plan-started"; totalMigrations: number; totalOperations: number; }
-  | { kind: "migration-started"; migrationId: string; name: string; index: number; total: number; }
+  | {
+    kind: "migration-started";
+    migrationId: string;
+    name: string;
+    index: number;
+    total: number;
+  }
   | { kind: "ddl-executing"; migrationId: string; statementCount: number; }
   | { kind: "data-migration-running"; migrationId: string; }
   | { kind: "migration-completed"; migrationId: string; durationMs: number; }
-  | { kind: "migration-failed"; migrationId: string; error: string; durationMs: number; rollbackAttempted: boolean; }
+  | {
+    kind: "migration-failed";
+    migrationId: string;
+    error: string;
+    durationMs: number;
+    rollbackAttempted: boolean;
+  }
   | { kind: "plan-completed"; migrationCount: number; durationMs: number; }
   | { kind: "plan-failed"; error: string; durationMs: number; };
 
@@ -494,8 +509,9 @@ export const MIGRATION_ADVISORY_LOCK_KEY = (() => {
   }
   // Postgres `pg_advisory_lock(bigint)` uses a signed 64-bit integer,
   // so map the unsigned hash into the signed range.
-  if (hash >= 1n << 63n)
+  if (hash >= 1n << 63n) {
     hash -= 1n << 64n;
+  }
   return hash;
 })();
 

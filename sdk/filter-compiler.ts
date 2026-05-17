@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Filter compiler — turns a codegen `XFilter` object (or a combinator
  * wrapping Filter objects) into an EdgeQL filter clause + a bound
@@ -58,6 +61,7 @@ const OP_MAP: Record<string, string> = {
   like: "like",
   ilike: "ilike",
   in: "in",
+  // dprint-ignore
   "not_in": "not in"
 };
 
@@ -83,12 +87,15 @@ function isExpr(x: unknown): x is Expr {
 }
 
 function isPlainObject(x: unknown): x is Record<string, unknown> {
-  if (typeof x !== "object" || x === null)
+  if (typeof x !== "object" || x === null) {
     return false;
-  if (Array.isArray(x))
+  }
+  if (Array.isArray(x)) {
     return false;
-  if (x instanceof Date || x instanceof Uint8Array)
+  }
+  if (x instanceof Date || x instanceof Uint8Array) {
     return false;
+  }
   // Reject combinator Exprs — they're matched by isExpr first
   return !isExpr(x);
 }
@@ -313,11 +320,13 @@ function compileObject(
  * to disambiguate.
  */
 function isOperatorObject(value: unknown): value is Record<string, unknown> {
-  if (!isPlainObject(value))
+  if (!isPlainObject(value)) {
     return false;
+  }
   for (const k of Object.keys(value)) {
-    if (k in OP_MAP)
+    if (k in OP_MAP) {
       return true;
+    }
   }
   return false;
 }

@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 import { expect, test } from "@playwright/test";
 import { clearItems, insertItem, itemCount, runQuery } from "./helpers";
 
@@ -22,7 +25,8 @@ test.describe("Data viewer — read", () => {
     await gotoData(page);
 
     // Type list shows the seeded type.
-    await expect(page.getByRole("button", { name: "default::Item" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "default::Item" }))
+      .toBeVisible();
 
     // Three rows appear in the table.
     const rows = page.locator("tbody tr");
@@ -37,7 +41,9 @@ test.describe("Data viewer — read", () => {
 
     // Click the count column header → asc → first row should be count=1.
     await page.getByRole("columnheader", { name: /^count/ }).click();
-    await expect(page.locator("tbody tr").first()).toContainText("Disc identity disc");
+    await expect(page.locator("tbody tr").first()).toContainText(
+      "Disc identity disc"
+    );
 
     // Click again → desc → first row should be count=3.
     await page.getByRole("columnheader", { name: /^count/ }).click();
@@ -49,7 +55,9 @@ test.describe("Data viewer — read", () => {
     await expect(page.locator("tbody tr")).toHaveCount(3);
 
     const filterRow = page.locator("tr.filter-row");
-    const nameFilter = filterRow.locator("input[placeholder=\"contains…\"]").first();
+    const nameFilter = filterRow
+      .locator("input[placeholder=\"contains…\"]")
+      .first();
     await nameFilter.fill("cycle");
     await nameFilter.press("Enter");
 
@@ -110,7 +118,9 @@ test.describe("Data viewer — read", () => {
     await expect(page.locator("tbody tr")).toHaveCount(3);
 
     const filterRow = page.locator("tr.filter-row");
-    const nameFilter = filterRow.locator("input[placeholder=\"contains…\"]").first();
+    const nameFilter = filterRow
+      .locator("input[placeholder=\"contains…\"]")
+      .first();
     await nameFilter.fill("cycle");
     await nameFilter.press("Enter");
     await expect(page.locator("tbody tr")).toHaveCount(1);

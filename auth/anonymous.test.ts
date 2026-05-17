@@ -1,33 +1,26 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for anonymous (guest) identities.
  * (gh/geldata#8750)
  */
 
-import { assertEquals, assertExists, assertRejects } from "https://deno.land/std@0.224.0/assert/mod.ts";
+/*** NATIVE ------------------------------------------- ***/
+
+import { assertEquals, assertExists, assertRejects } from "@std/assert";
+
+/*** UTILITY ------------------------------------------ ***/
+
 import { AuthProvider } from "./provider.ts";
 import { TestDatabase } from "./test-database.ts";
 import { AuthError, AuthErrorCode, requireAuthResponse } from "./types.ts";
 
-async function makeProvider(opts: {
-  requireEmailVerification?: boolean;
-} = {}): Promise<{ provider: AuthProvider; db: TestDatabase; }> {
-  const db = new TestDatabase();
-  await db.connect();
-  const provider = new AuthProvider(
-    {
-      jwtSecret: "test-secret-key-32-bytes-minimum-len",
-      requireEmailVerification: opts.requireEmailVerification ?? false
-    },
-    db
-  );
-  await provider.initialize();
-  return { provider, db };
-}
-
-// ── loginAnonymous ─────────────────────────────────────────────────────
+/*** RUNTIME ------------------------------------------ ***/
 
 Deno.test("loginAnonymous - mints a guest identity with a session", async () => {
-  const { provider, db } = await makeProvider();
+  const { db, provider } = await makeProvider();
+
   try {
     const auth = await provider.loginAnonymous();
 
@@ -35,7 +28,7 @@ Deno.test("loginAnonymous - mints a guest identity with a session", async () => 
     assertExists(auth.token);
     assertExists(auth.session);
     assertEquals(auth.user.isAnonymous, true);
-    // Synthetic email scheme — exact format guaranteed by the impl.
+    /*** Synthetic email scheme — exact format guaranteed by the implementation ***/
     assertEquals(auth.user.email.startsWith("anonymous-"), true);
     assertEquals(auth.user.email.endsWith("@disc.invalid"), true);
   } finally {
@@ -44,10 +37,12 @@ Deno.test("loginAnonymous - mints a guest identity with a session", async () => 
 });
 
 Deno.test("loginAnonymous - each call mints a distinct identity", async () => {
-  const { provider, db } = await makeProvider();
+  const { db, provider } = await makeProvider();
+
   try {
     const a = await provider.loginAnonymous();
     const b = await provider.loginAnonymous();
+
     assertEquals(a.user.id === b.user.id, false);
     assertEquals(a.user.email === b.user.email, false);
   } finally {
@@ -56,12 +51,13 @@ Deno.test("loginAnonymous - each call mints a distinct identity", async () => {
 });
 
 Deno.test("loginAnonymous - the synthetic password is unusable for login()", async () => {
-  const { provider, db } = await makeProvider();
+  const { db, provider } = await makeProvider();
+
   try {
     const guest = await provider.loginAnonymous();
 
-    // Even if an attacker guessed the synthetic email, login() should
-    // reject any password against an anonymous user.
+    /*** Even if an attacker guessed the synthetic email, login() should reject any password
+         against an anonymous user. ***/
     await assertRejects(
       () =>
         provider.login({
@@ -76,12 +72,12 @@ Deno.test("loginAnonymous - the synthetic password is unusable for login()", asy
   }
 });
 
-// ── upgradeAnonymous ───────────────────────────────────────────────────
-
 Deno.test("upgradeAnonymous - converts guest into a full user keeping the same id", async () => {
-  const { provider, db } = await makeProvider();
+  const { db, provider } = await makeProvider();
+
   try {
     const guest = await provider.loginAnonymous();
+
     const upgraded = await provider.upgradeAnonymous(guest.user.id, {
       email: "real@test.com",
       password: "password123"
@@ -97,9 +93,11 @@ Deno.test("upgradeAnonymous - converts guest into a full user keeping the same i
 });
 
 Deno.test("upgradeAnonymous - upgraded user can sign in with the new password", async () => {
-  const { provider, db } = await makeProvider();
+  const { db, provider } = await makeProvider();
+
   try {
     const guest = await provider.loginAnonymous();
+
     await provider.upgradeAnonymous(guest.user.id, {
       email: "alice@test.com",
       password: "password123"
@@ -111,6 +109,7 @@ Deno.test("upgradeAnonymous - upgraded user can sign in with the new password", 
         password: "password123"
       })
     );
+
     assertEquals(loggedIn.user.id, guest.user.id);
     assertEquals(loggedIn.user.isAnonymous, false);
   } finally {
@@ -119,7 +118,8 @@ Deno.test("upgradeAnonymous - upgraded user can sign in with the new password", 
 });
 
 Deno.test("upgradeAnonymous - rejects unknown user id", async () => {
-  const { provider, db } = await makeProvider();
+  const { db, provider } = await makeProvider();
+
   try {
     const err = await assertRejects(
       () =>
@@ -129,6 +129,7 @@ Deno.test("upgradeAnonymous - rejects unknown user id", async () => {
         }),
       AuthError
     );
+
     assertEquals((err as AuthError).code, AuthErrorCode.USER_NOT_FOUND);
   } finally {
     await db.close();
@@ -136,12 +137,14 @@ Deno.test("upgradeAnonymous - rejects unknown user id", async () => {
 });
 
 Deno.test("upgradeAnonymous - rejects when target id is already a full user", async () => {
-  const { provider, db } = await makeProvider();
+  const { db, provider } = await makeProvider();
+
   try {
     const real = await provider.register({
       email: "first@test.com",
       password: "password123"
     });
+
     const err = await assertRejects(
       () =>
         provider.upgradeAnonymous(real.user.id, {
@@ -150,6 +153,7 @@ Deno.test("upgradeAnonymous - rejects when target id is already a full user", as
         }),
       AuthError
     );
+
     assertEquals((err as AuthError).code, AuthErrorCode.INVALID_OPERATION);
   } finally {
     await db.close();
@@ -157,12 +161,14 @@ Deno.test("upgradeAnonymous - rejects when target id is already a full user", as
 });
 
 Deno.test("upgradeAnonymous - rejects when email is already taken by another user", async () => {
-  const { provider, db } = await makeProvider();
+  const { db, provider } = await makeProvider();
+
   try {
     await provider.register({
       email: "taken@test.com",
       password: "password123"
     });
+
     const guest = await provider.loginAnonymous();
 
     const err = await assertRejects(
@@ -173,6 +179,7 @@ Deno.test("upgradeAnonymous - rejects when email is already taken by another use
         }),
       AuthError
     );
+
     assertEquals((err as AuthError).code, AuthErrorCode.USER_ALREADY_EXISTS);
   } finally {
     await db.close();
@@ -180,9 +187,11 @@ Deno.test("upgradeAnonymous - rejects when email is already taken by another use
 });
 
 Deno.test("upgradeAnonymous - rejects weak passwords before mutating any state", async () => {
-  const { provider, db } = await makeProvider();
+  const { db, provider } = await makeProvider();
+
   try {
     const guest = await provider.loginAnonymous();
+
     await assertRejects(
       () =>
         provider.upgradeAnonymous(guest.user.id, {
@@ -192,7 +201,7 @@ Deno.test("upgradeAnonymous - rejects weak passwords before mutating any state",
       AuthError
     );
 
-    // Confirm: still anonymous, no partial mutation.
+    /*** Confirm: still anonymous, no partial mutation. ***/
     const stillGuest = requireAuthResponse(
       await provider
         .login({
@@ -201,10 +210,29 @@ Deno.test("upgradeAnonymous - rejects weak passwords before mutating any state",
         })
         .catch(e => e)
     );
-    // No such user, so login throws AuthError — we just want to
-    // verify the row wasn't half-written.
+
+    /*** No such user, so login throws AuthError — we just want to verify the row wasn’t
+         half-written. ***/
     assertEquals(stillGuest instanceof AuthError, true);
   } finally {
     await db.close();
   }
 });
+
+/*** HELPER ------------------------------------------- ***/
+
+async function makeProvider(opts: { requireEmailVerification?: boolean; } = {}): Promise<{ db: TestDatabase; provider: AuthProvider; }> {
+  const db = new TestDatabase();
+  await db.connect();
+
+  const provider = new AuthProvider(
+    {
+      jwtSecret: "test-secret-key-32-bytes-minimum-len",
+      requireEmailVerification: opts.requireEmailVerification ?? false
+    },
+    db
+  );
+
+  await provider.initialize();
+  return { db, provider };
+}

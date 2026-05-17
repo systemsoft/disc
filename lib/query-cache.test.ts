@@ -1,9 +1,20 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for QueryCache, hash utilities, and cache key composition
  */
 
-import { assertEquals, assertNotEquals } from "https://deno.land/std@0.208.0/assert/mod.ts";
-import { hashAccessContext, hashString, makeCompilationCacheKey, QueryCache } from "./query-cache.ts";
+import {
+  assertEquals,
+  assertNotEquals
+} from "@std/assert";
+import {
+  hashAccessContext,
+  hashString,
+  makeCompilationCacheKey,
+  QueryCache
+} from "./query-cache.ts";
 
 // ── QueryCache basic operations ──────────────────────────────────────
 

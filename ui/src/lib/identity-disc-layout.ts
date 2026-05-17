@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Identity-disc geometry (Disc-original feature #3d).
  *
@@ -43,10 +46,12 @@ const OUTGOING_ARC: [number, number] = [30, 150];
 const INCOMING_ARC: [number, number] = [210, 330];
 
 function spread(count: number, [start, end]: [number, number]): number[] {
-  if (count <= 0)
+  if (count <= 0) {
     return [];
-  if (count === 1)
+  }
+  if (count === 1) {
     return [(start + end) / 2];
+  }
   const step = (end - start) / (count - 1);
   return Array.from({ length: count }, (_, i) => start + i * step);
 }
@@ -69,8 +74,9 @@ function pointAt(
 
 export function layoutDisc(opts: LayoutOptions): DiscLayout {
   const { cx, cy, radius, outgoingCount, incomingCount } = opts;
-  if (radius < 0)
+  if (radius < 0) {
     throw new Error("radius must be non-negative");
+  }
   if (outgoingCount < 0 || incomingCount < 0) {
     throw new Error("counts must be non-negative");
   }

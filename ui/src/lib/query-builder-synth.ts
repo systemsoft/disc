@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * EdgeQL synthesizer for the visual query builder (#3b).
  *
@@ -86,10 +89,12 @@ export function coerceValue(
       return value;
     case "bool": {
       const v = value.trim().toLowerCase();
-      if (v === "true" || v === "1")
+      if (v === "true" || v === "1") {
         return true;
-      if (v === "false" || v === "0")
+      }
+      if (v === "false" || v === "0") {
         return false;
+      }
       throw new Error(
         `${fieldLabel}: expected boolean (true/false), got ${JSON.stringify(value)}`
       );
@@ -150,8 +155,9 @@ export function synthesize(spec: QuerySpec): SynthResult {
   const parts: string[] = [`select ${spec.type}`];
 
   const shapeStr = compileShape(spec.shape);
-  if (shapeStr)
+  if (shapeStr) {
     parts.push(shapeStr);
+  }
 
   if (spec.filters.length > 0) {
     const compiled = spec.filters.map((f, i) => {

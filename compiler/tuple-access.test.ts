@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Tests for Tuple and Named Tuple Element Access
  * Phase 23.2: Tuple index access (.0, .1) and named field access (.name)
@@ -78,7 +81,9 @@ Deno.test("Tuple Access - Parse named field access .name", () => {
 });
 
 Deno.test("Tuple Access - Parse named field access .age", () => {
-  const ast = parseEdgeQL("SELECT (name := 'foo', age := 30).age") as SelectQuery;
+  const ast = parseEdgeQL(
+    "SELECT (name := 'foo', age := 30).age"
+  ) as SelectQuery;
 
   assertEquals(ast.kind, "SelectQuery");
   const expr = ast.expr;

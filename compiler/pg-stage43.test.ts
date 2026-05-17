@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * PostgreSQL End-to-End Tests for Stage 43: Remaining Built-in Function Gaps
  *
@@ -100,7 +103,9 @@ Deno.test({
       );
       const val = result.rows[0].val;
       // Should return array with first match
-      const arr = Array.isArray(val) ? val : String(val).replace(/[{}]/g, "").split(",");
+      const arr = Array.isArray(val) ?
+        val :
+        String(val).replace(/[{}]/g, "").split(",");
       assertEquals(arr[0], "123");
     } finally {
       await pool.close();

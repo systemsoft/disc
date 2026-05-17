@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * PostgreSQL Integration Tests for Vector Extension
  *
@@ -11,7 +14,11 @@
 
 import { assert, assertEquals } from "@std/assert";
 import { ConnectionPool } from "../lib/connection-pool.ts";
-import { canRunPgTests, getTestDsn, resetTestDatabase } from "../tests/pg-test-harness.ts";
+import {
+  canRunPgTests,
+  getTestDsn,
+  resetTestDatabase
+} from "../tests/pg-test-harness.ts";
 
 const RUN_PG = canRunPgTests();
 

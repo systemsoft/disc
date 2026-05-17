@@ -1,3 +1,6 @@
+/*** SPDX-License-Identifier: Apache-2.0
+     Copyright 2026 Ideas Never Cease ***/
+
 /**
  * Binary protocol type definitions for Gel/EdgeDB compatibility
  * Based on EdgeDB binary protocol specification
@@ -14,7 +17,6 @@ export enum MessageType {
   Sync = 0x53, // 'S'
   Flush = 0x48, // 'H'
   Terminate = 0x58, // 'X'
-
   // Server messages
   ServerHandshake = 0x76, // 'v'
   AuthenticationOK = 0x52, // 'R'
