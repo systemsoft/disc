@@ -17,47 +17,16 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
-import { EdgeQLParser } from "../edgeql/parser.ts";
-import { ConnectionPool } from "../lib/connection-pool.ts";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
+import { canRunPgTests, getTestDsn, makePool } from "../tests/pg-test-harness.ts";
 import { getBuiltinFunctions } from "./builtin-functions.ts";
-import { SQLCodeGenerator } from "./codegen.ts";
-import { EdgeQLCompiler } from "./compiler.ts";
 import type { Schema, TypeDef } from "./context.ts";
+import { compileEdgeQL } from "./test-helpers.ts";
 
 const RUN_PG = canRunPgTests();
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/** Create a ConnectionPool configured for testing. */
-function makePool(dsn: string): ConnectionPool {
-  return new ConnectionPool({
-    connectionString: dsn,
-    minConnections: 1,
-    maxConnections: 3,
-    cleanupInterval: 0
-  });
-}
-
-/**
- * Compile an EdgeQL query string to SQL using the full pipeline:
- * EdgeQLParser -> EdgeQLCompiler -> SQLCodeGenerator.
- */
-function compileEdgeQL(edgeql: string, schema: Schema): string {
-  const parser = new EdgeQLParser(edgeql);
-  const ast = parser.parse();
-  const compiler = new EdgeQLCompiler(schema, { enableAccessControl: false });
-  const result = compiler.compile(ast);
-
-  if (!result.ok) {
-    throw new Error(`Compilation failed: ${result.error.message}`);
-  }
-
-  const codegen = new SQLCodeGenerator();
-  return codegen.generate(result.value);
-}
 
 // =========================================================================
 // Phase 23.1 -- Enum Literal in FILTER

@@ -12,10 +12,10 @@
  */
 
 import { assertEquals } from "@std/assert";
-import { ConnectionPool } from "../lib/connection-pool.ts";
 import {
   canRunPgTests,
   getTestDsn,
+  makePool,
   resetTestDatabase
 } from "../tests/pg-test-harness.ts";
 import { OAuthExtension } from "./extension.ts";
@@ -25,15 +25,6 @@ const RUN_PG = canRunPgTests();
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function makePool(dsn: string): ConnectionPool {
-  return new ConnectionPool({
-    connectionString: dsn,
-    minConnections: 1,
-    maxConnections: 3,
-    cleanupInterval: 0
-  });
-}
 
 /** A minimal OAuth config sufficient to construct an OAuthExtension. */
 function makeOAuthExt(): OAuthExtension {

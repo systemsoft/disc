@@ -14,7 +14,13 @@
 
 import { assertEquals } from "@std/assert";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
+import {
+  canRunPgTests,
+  execSQL,
+  getTestDsn,
+  parseDsn,
+  queryRows
+} from "../tests/pg-test-harness.ts";
 import { DDLGenerator } from "./ddl.ts";
 import type { CreateTypeOperation, TriggerDefinition } from "./types.ts";
 
@@ -23,49 +29,6 @@ const RUN_PG = canRunPgTests();
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function parseDsn(
-  dsn: string
-): { hostname: string; port: number; user: string; database: string; } {
-  const url = new URL(dsn);
-  return {
-    hostname: url.hostname || "localhost",
-    port: url.port ? parseInt(url.port) : 5432,
-    user: url.username || "disc",
-    database: url.pathname.slice(1) || "disc_test"
-  };
-}
-
-/** Execute raw SQL via a fresh client connection. */
-async function execSQL(dsn: string, sql: string): Promise<void> {
-  const cfg = parseDsn(dsn);
-  const client = new Client(cfg);
-  try {
-    await client.connect();
-    await client.queryArray(sql);
-  } finally {
-    await client.end();
-  }
-}
-
-/** Query rows via a fresh client connection. */
-async function queryRows<T>(
-  dsn: string,
-  sql: string,
-  params?: unknown[]
-): Promise<T[]> {
-  const cfg = parseDsn(dsn);
-  const client = new Client(cfg);
-  try {
-    await client.connect();
-    const result = params ?
-      await client.queryObject<T>(sql, params) :
-      await client.queryObject<T>(sql);
-    return result.rows;
-  } finally {
-    await client.end();
-  }
-}
 
 /** Drop tables, functions, and triggers (best-effort cleanup). */
 async function cleanup(dsn: string, ...tableNames: string[]): Promise<void> {

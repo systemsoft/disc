@@ -16,7 +16,7 @@ import { assert, assertEquals } from "@std/assert";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
 import type { Schema, TypeDef } from "../../compiler/context.ts";
 import { ConnectionPool } from "../../lib/connection-pool.ts";
-import { canRunPgTests, getTestDsn } from "../../tests/pg-test-harness.ts";
+import { canRunPgTests, getTestDsn, parseDsn } from "../../tests/pg-test-harness.ts";
 import { EdgeQLProtocolHandler } from "../edgeql-protocol.ts";
 import { HttpServer } from "../http.ts";
 
@@ -25,16 +25,6 @@ const TEST_HOST = "127.0.0.1";
 const SUFFIX = `bundlej_${Date.now()}`;
 const USERS_TABLE = `${SUFFIX}_users`;
 const POSTS_TABLE = `${SUFFIX}_posts`;
-
-function parseDsn(dsn: string) {
-  const url = new URL(dsn);
-  return {
-    hostname: url.hostname || "localhost",
-    port: url.port ? parseInt(url.port) : 5432,
-    user: url.username || "disc",
-    database: url.pathname.slice(1) || "disc_test"
-  };
-}
 
 async function setupTables(dsn: string): Promise<void> {
   const client = new Client(parseDsn(dsn));

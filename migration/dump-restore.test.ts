@@ -24,28 +24,15 @@ import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import {
   canRunPgTests,
+  dropTables,
   findPgBinDir,
-  getTestDsn
+  getTestDsn,
+  parseDsn
 } from "../tests/pg-test-harness.ts";
 import { MigrationTracker } from "./tracker.ts";
 import * as Types from "./types.ts";
 
 const RUN_PG = canRunPgTests();
-
-function parseDsn(dsn: string): {
-  database: string;
-  hostname: string;
-  port: number;
-  user: string;
-} {
-  const url = new URL(dsn);
-  return {
-    database: url.pathname.slice(1) || "disc_test",
-    hostname: url.hostname || "localhost",
-    port: url.port ? parseInt(url.port) : 5432,
-    user: url.username || "disc"
-  };
-}
 
 /** Run pg_dump against the test instance and return the SQL bytes. */
 async function pgDump(dsn: string, pgBinDir: string): Promise<Uint8Array> {
@@ -113,19 +100,6 @@ async function pgRestore(
   const { code, stderr } = await child.output();
   if (code !== 0) {
     throw new Error(`psql restore failed: ${new TextDecoder().decode(stderr)}`);
-  }
-}
-
-/** Drop a list of tables (best-effort). */
-async function dropTables(dsn: string, ...tables: string[]): Promise<void> {
-  const client = new Client(parseDsn(dsn));
-  try {
-    await client.connect();
-    for (const t of tables) {
-      await client.queryArray(`DROP TABLE IF EXISTS ${t} CASCADE`);
-    }
-  } finally {
-    await client.end();
   }
 }
 

@@ -21,7 +21,7 @@
 import { assertEquals, assertGreater } from "@std/assert";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
 import { ConnectionPool } from "../../lib/connection-pool.ts";
-import { canRunPgTests, getTestDsn } from "../../tests/pg-test-harness.ts";
+import { canRunPgTests, getTestDsn, parseDsn } from "../../tests/pg-test-harness.ts";
 import {
   bootstrapDataWatch,
   CHANGE_LOG_TABLE,
@@ -31,16 +31,6 @@ import {
 const RUN_PG = canRunPgTests();
 const SUFFIX = `bundlel_${Date.now() % 100000}`;
 const TABLE = `bl_widget_${SUFFIX}`;
-
-function parseDsn(dsn: string) {
-  const url = new URL(dsn);
-  return {
-    hostname: url.hostname || "localhost",
-    port: url.port ? parseInt(url.port) : 5432,
-    user: url.username || "disc",
-    database: url.pathname.slice(1) || "disc_test"
-  };
-}
 
 async function execSql(dsn: string, sql: string): Promise<void> {
   const client = new Client(parseDsn(dsn));

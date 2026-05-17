@@ -15,7 +15,7 @@
 import { assertEquals, assertExists, assertNotEquals } from "@std/assert";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
+import { canRunPgTests, getTestDsn, parseDsn } from "../tests/pg-test-harness.ts";
 import { TransactionManager } from "./connection.ts";
 import { EdgeQLProtocolHandler } from "./edgeql-protocol.ts";
 import { SimpleEdgeQLProtocolHandler } from "./simple-edgeql-protocol.ts";
@@ -26,19 +26,6 @@ const RUN_PG = canRunPgTests();
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/** Parse a DSN into connection config for the raw deno-postgres Client. */
-function parseDsn(
-  dsn: string
-): { hostname: string; port: number; user: string; database: string; } {
-  const url = new URL(dsn);
-  return {
-    hostname: url.hostname || "localhost",
-    port: url.port ? parseInt(url.port) : 5432,
-    user: url.username || "disc",
-    database: url.pathname.slice(1) || "disc_test"
-  };
-}
 
 /** Unique table name per test run to avoid collisions between parallel runs. */
 const TEST_TABLE = `integration_test_${Date.now()}`;

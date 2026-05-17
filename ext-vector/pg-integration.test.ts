@@ -17,6 +17,7 @@ import { ConnectionPool } from "../lib/connection-pool.ts";
 import {
   canRunPgTests,
   getTestDsn,
+  makePool,
   resetTestDatabase
 } from "../tests/pg-test-harness.ts";
 
@@ -25,15 +26,6 @@ const RUN_PG = canRunPgTests();
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function makePool(dsn: string): ConnectionPool {
-  return new ConnectionPool({
-    connectionString: dsn,
-    minConnections: 1,
-    maxConnections: 3,
-    cleanupInterval: 0
-  });
-}
 
 /**
  * Attempt to enable the pgvector extension. Returns true if pgvector is

@@ -13,10 +13,16 @@
 
 import { assertEquals } from "@std/assert";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
-import { ConnectionPool } from "../lib/connection-pool.ts";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
-import { MigrationEngine } from "./engine.ts";
+import {
+  canRunPgTests,
+  getColumns,
+  getTestDsn,
+  makePool,
+  parseDsn,
+  tableExists
+} from "../tests/pg-test-harness.ts";
 import { SchemaManager } from "./schema-manager.ts";
+import { makeEngine } from "./test-helpers.ts";
 import * as Types from "./types.ts";
 
 const RUN_PG = canRunPgTests();
@@ -24,59 +30,6 @@ const RUN_PG = canRunPgTests();
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function parseDsn(
-  dsn: string
-): { hostname: string; port: number; user: string; database: string; } {
-  const url = new URL(dsn);
-  return {
-    hostname: url.hostname || "localhost",
-    port: url.port ? parseInt(url.port) : 5432,
-    user: url.username || "disc",
-    database: url.pathname.slice(1) || "disc_test"
-  };
-}
-
-async function tableExists(dsn: string, tableName: string): Promise<boolean> {
-  const cfg = parseDsn(dsn);
-  const client = new Client(cfg);
-  try {
-    await client.connect();
-    const result = await client.queryObject<{ exists: boolean; }>(
-      `SELECT EXISTS (
-        SELECT 1 FROM information_schema.tables
-        WHERE table_schema = 'public' AND table_name = $1
-      ) AS exists`,
-      [tableName]
-    );
-    return result.rows[0]?.exists ?? false;
-  } finally {
-    await client.end();
-  }
-}
-
-async function getColumns(
-  dsn: string,
-  tableName: string
-): Promise<{ column_name: string; data_type: string; }[]> {
-  const cfg = parseDsn(dsn);
-  const client = new Client(cfg);
-  try {
-    await client.connect();
-    const result = await client.queryObject<
-      { column_name: string; data_type: string; }
-    >(
-      `SELECT column_name, data_type
-       FROM information_schema.columns
-       WHERE table_schema = 'public' AND table_name = $1
-       ORDER BY ordinal_position`,
-      [tableName]
-    );
-    return result.rows;
-  } finally {
-    await client.end();
-  }
-}
 
 async function dropTables(dsn: string, ...tableNames: string[]): Promise<void> {
   const cfg = parseDsn(dsn);
@@ -102,29 +55,6 @@ async function dropTables(dsn: string, ...tableNames: string[]): Promise<void> {
   } finally {
     await client.end();
   }
-}
-
-function makePool(dsn: string): ConnectionPool {
-  return new ConnectionPool({
-    connectionString: dsn,
-    minConnections: 1,
-    maxConnections: 3,
-    cleanupInterval: 0
-  });
-}
-
-function makeEngine(pool: ConnectionPool): MigrationEngine {
-  const config: Types.MigrationConfig = {
-    migrationsDir: "",
-    schemaFile: "",
-    databaseUrl: "",
-    dryRun: false,
-    autoApprove: true,
-    backupBeforeMigration: false,
-    rollbackOnError: true,
-    connectionPool: pool
-  };
-  return new MigrationEngine(config);
 }
 
 // ---------------------------------------------------------------------------

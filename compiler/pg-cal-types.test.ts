@@ -13,119 +13,22 @@
  */
 
 import { assertEquals } from "@std/assert";
-import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
-import { ConnectionPool } from "../lib/connection-pool.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
+import {
+  canRunPgTests,
+  dropTables,
+  execSQL,
+  getColumns,
+  getTestDsn,
+  makePool,
+  queryRows
+} from "../tests/pg-test-harness.ts";
 
 const RUN_PG = canRunPgTests();
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/** Parse a DSN into connection config for the raw deno-postgres Client. */
-function parseDsn(
-  dsn: string
-): { hostname: string; port: number; user: string; database: string; } {
-  const url = new URL(dsn);
-  return {
-    hostname: url.hostname || "localhost",
-    port: url.port ? parseInt(url.port) : 5432,
-    user: url.username || "disc",
-    database: url.pathname.slice(1) || "disc_test"
-  };
-}
-
-/** Get column info for a table via a raw client. */
-async function getColumns(
-  dsn: string,
-  tableName: string
-): Promise<{ column_name: string; data_type: string; }[]> {
-  const cfg = parseDsn(dsn);
-  const client = new Client(cfg);
-  try {
-    await client.connect();
-    const result = await client.queryObject<
-      { column_name: string; data_type: string; }
-    >(
-      `SELECT column_name, data_type
-       FROM information_schema.columns
-       WHERE table_schema = 'public' AND table_name = $1
-       ORDER BY ordinal_position`,
-      [tableName]
-    );
-    return result.rows;
-  } finally {
-    await client.end();
-  }
-}
-
-/** Drop one or more tables by name (best-effort cleanup). */
-async function dropTables(
-  dsn: string,
-  ...tableNames: string[]
-): Promise<void> {
-  const cfg = parseDsn(dsn);
-  const client = new Client(cfg);
-  try {
-    await client.connect();
-    for (const name of tableNames) {
-      await client.queryArray(`DROP TABLE IF EXISTS ${name} CASCADE`);
-    }
-  } finally {
-    await client.end();
-  }
-}
-
-/** Execute raw SQL via a fresh client connection. */
-async function execRawSQL(
-  dsn: string,
-  sql: string,
-  params?: unknown[]
-): Promise<void> {
-  const cfg = parseDsn(dsn);
-  const client = new Client(cfg);
-  try {
-    await client.connect();
-    if (params) {
-      await client.queryArray(sql, params);
-    } else {
-      await client.queryArray(sql);
-    }
-  } finally {
-    await client.end();
-  }
-}
-
-/** Query raw SQL and return rows via a fresh client connection. */
-async function queryRawSQL(
-  dsn: string,
-  sql: string,
-  params?: unknown[]
-): Promise<Record<string, unknown>[]> {
-  const cfg = parseDsn(dsn);
-  const client = new Client(cfg);
-  try {
-    await client.connect();
-    const result = params ?
-      await client.queryObject(sql, params) :
-      await client.queryObject(sql);
-    return result.rows as Record<string, unknown>[];
-  } finally {
-    await client.end();
-  }
-}
-
-/** Create a ConnectionPool configured for testing. */
-function makePool(dsn: string): ConnectionPool {
-  return new ConnectionPool({
-    connectionString: dsn,
-    minConnections: 1,
-    maxConnections: 3,
-    cleanupInterval: 0
-  });
-}
 
 // =========================================================================
 // Test 1: cal::local_date column DDL and round-trip
@@ -173,12 +76,12 @@ Deno.test({
       );
 
       // Insert a row and round-trip
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, birthday) VALUES (gen_random_uuid(), '2024-06-15'::date)`
       );
 
-      const rows = await queryRawSQL(
+      const rows = await queryRows<Record<string, unknown>>(
         dsn,
         `SELECT birthday FROM ${expectedTable} LIMIT 1`
       );
@@ -254,12 +157,12 @@ Deno.test({
       );
 
       // Insert a row and round-trip
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, alarm_time) VALUES (gen_random_uuid(), '14:30:00'::time)`
       );
 
-      const rows = await queryRawSQL(
+      const rows = await queryRows<Record<string, unknown>>(
         dsn,
         `SELECT alarm_time FROM ${expectedTable} LIMIT 1`
       );
@@ -332,7 +235,7 @@ Deno.test({
       );
 
       // Insert a row and round-trip
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, event_at) VALUES (gen_random_uuid(), '2024-06-15 14:30:00'::timestamp)`
       );
@@ -342,7 +245,7 @@ Deno.test({
       // `toISOString()` would shift those naive wall-clock values into
       // UTC (e.g. `14:30 PDT` → `21:30Z`). Round-trip through PG's
       // own text formatter so the assertion is timezone-stable. (P2-X)
-      const rows = await queryRawSQL(
+      const rows = await queryRows<Record<string, unknown>>(
         dsn,
         `SELECT to_char(event_at, 'YYYY-MM-DD HH24:MI:SS') AS event_at_text
          FROM ${expectedTable} LIMIT 1`
@@ -415,12 +318,12 @@ Deno.test({
       );
 
       // Insert a row and round-trip
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, time_span) VALUES (gen_random_uuid(), '2 hours 30 minutes'::interval)`
       );
 
-      const rows = await queryRawSQL(
+      const rows = await queryRows<Record<string, unknown>>(
         dsn,
         `SELECT time_span FROM ${expectedTable} LIMIT 1`
       );
@@ -494,12 +397,12 @@ Deno.test({
       );
 
       // Insert a row and round-trip
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, date_span) VALUES (gen_random_uuid(), '3 days'::interval)`
       );
 
-      const rows = await queryRawSQL(
+      const rows = await queryRows<Record<string, unknown>>(
         dsn,
         `SELECT date_span FROM ${expectedTable} LIMIT 1`
       );
@@ -595,7 +498,7 @@ Deno.test({
       );
 
       // Insert a row with all five values
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${expectedTable} (
           id,
@@ -619,7 +522,7 @@ Deno.test({
       // otherwise the deno-postgres driver decodes through JS Date
       // (UTC) and shifts wall-clock values when the host is in a
       // non-UTC zone. (P2-X)
-      const rows = await queryRawSQL(
+      const rows = await queryRows<Record<string, unknown>>(
         dsn,
         `SELECT
           to_char(local_date_val, 'YYYY-MM-DD') AS local_date_val_text,

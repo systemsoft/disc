@@ -14,10 +14,10 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import type { Schema, TypeDef } from "../compiler/context.ts";
 import type { ExtensionContext } from "../extensions/types.ts";
-import { ConnectionPool } from "../lib/connection-pool.ts";
 import {
   canRunPgTests,
   getTestDsn,
+  makePool,
   resetTestDatabase
 } from "../tests/pg-test-harness.ts";
 import { GraphQLExtension } from "./extension.ts";
@@ -26,15 +26,6 @@ import { parseGraphQLQuery, translateToEdgeQL } from "./query-translator.ts";
 const RUN_PG = canRunPgTests();
 
 // ── Helpers ───────────────────────────────────────────────────────────
-
-function makePool(dsn: string): ConnectionPool {
-  return new ConnectionPool({
-    connectionString: dsn,
-    minConnections: 1,
-    maxConnections: 3,
-    cleanupInterval: 0
-  });
-}
 
 /**
  * Create a minimal Schema that matches the PG test tables.

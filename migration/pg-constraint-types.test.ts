@@ -13,9 +13,14 @@
  */
 
 import { assertEquals } from "@std/assert";
-import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
-import { ConnectionPool } from "../lib/connection-pool.ts";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
+import {
+  canRunPgTests,
+  dropTables,
+  execSQL,
+  getColumns,
+  getTestDsn,
+  makePool
+} from "../tests/pg-test-harness.ts";
 import { SchemaManager } from "./schema-manager.ts";
 
 const RUN_PG = canRunPgTests();
@@ -23,90 +28,6 @@ const RUN_PG = canRunPgTests();
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/** Parse a DSN into connection config for the raw deno-postgres Client. */
-function parseDsn(
-  dsn: string
-): { hostname: string; port: number; user: string; database: string; } {
-  const url = new URL(dsn);
-  return {
-    hostname: url.hostname || "localhost",
-    port: url.port ? parseInt(url.port) : 5432,
-    user: url.username || "disc",
-    database: url.pathname.slice(1) || "disc_test"
-  };
-}
-
-/** Get column info for a table via a raw client. */
-async function getColumns(
-  dsn: string,
-  tableName: string
-): Promise<{ column_name: string; data_type: string; }[]> {
-  const cfg = parseDsn(dsn);
-  const client = new Client(cfg);
-  try {
-    await client.connect();
-    const result = await client.queryObject<
-      { column_name: string; data_type: string; }
-    >(
-      `SELECT column_name, data_type
-       FROM information_schema.columns
-       WHERE table_schema = 'public' AND table_name = $1
-       ORDER BY ordinal_position`,
-      [tableName]
-    );
-    return result.rows;
-  } finally {
-    await client.end();
-  }
-}
-
-/** Drop one or more tables by name (best-effort cleanup). */
-async function dropTables(
-  dsn: string,
-  ...tableNames: string[]
-): Promise<void> {
-  const cfg = parseDsn(dsn);
-  const client = new Client(cfg);
-  try {
-    await client.connect();
-    for (const name of tableNames) {
-      await client.queryArray(`DROP TABLE IF EXISTS ${name} CASCADE`);
-    }
-  } finally {
-    await client.end();
-  }
-}
-
-/** Execute raw SQL via a fresh client connection. */
-async function execRawSQL(
-  dsn: string,
-  sql: string,
-  params?: unknown[]
-): Promise<void> {
-  const cfg = parseDsn(dsn);
-  const client = new Client(cfg);
-  try {
-    await client.connect();
-    if (params) {
-      await client.queryArray(sql, params);
-    } else {
-      await client.queryArray(sql);
-    }
-  } finally {
-    await client.end();
-  }
-}
-
-/** Create a ConnectionPool configured for testing. */
-function makePool(dsn: string): ConnectionPool {
-  return new ConnectionPool({
-    connectionString: dsn,
-    minConnections: 1,
-    maxConnections: 3,
-    cleanupInterval: 0
-  });
-}
 
 // =========================================================================
 // Test 1: max_ex_value (strict less-than) enforced by PG
@@ -142,7 +63,7 @@ Deno.test({
       );
 
       // Insert amount=999 -- should succeed (strictly less than 1000)
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, amount) VALUES (gen_random_uuid(), $1)`,
         [999]
@@ -151,7 +72,7 @@ Deno.test({
       // Insert amount=1000 -- should FAIL (exclusive: 1000 is NOT allowed)
       let boundaryViolated = false;
       try {
-        await execRawSQL(
+        await execSQL(
           dsn,
           `INSERT INTO ${expectedTable} (id, amount) VALUES (gen_random_uuid(), $1)`,
           [1000]
@@ -177,7 +98,7 @@ Deno.test({
       // Insert amount=1001 -- should also FAIL
       let overViolated = false;
       try {
-        await execRawSQL(
+        await execSQL(
           dsn,
           `INSERT INTO ${expectedTable} (id, amount) VALUES (gen_random_uuid(), $1)`,
           [1001]
@@ -247,7 +168,7 @@ Deno.test({
       );
 
       // Insert temperature=1 -- should succeed (strictly greater than 0)
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, temperature) VALUES (gen_random_uuid(), $1)`,
         [1]
@@ -256,7 +177,7 @@ Deno.test({
       // Insert temperature=0 -- should FAIL (exclusive: 0 is NOT allowed)
       let boundaryViolated = false;
       try {
-        await execRawSQL(
+        await execSQL(
           dsn,
           `INSERT INTO ${expectedTable} (id, temperature) VALUES (gen_random_uuid(), $1)`,
           [0]
@@ -282,7 +203,7 @@ Deno.test({
       // Insert temperature=-1 -- should also FAIL
       let underViolated = false;
       try {
-        await execRawSQL(
+        await execSQL(
           dsn,
           `INSERT INTO ${expectedTable} (id, temperature) VALUES (gen_random_uuid(), $1)`,
           [-1]
@@ -352,14 +273,14 @@ Deno.test({
       );
 
       // Insert status='active' -- should succeed
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, status) VALUES (gen_random_uuid(), $1)`,
         ["active"]
       );
 
       // Insert status='inactive' -- should succeed
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, status) VALUES (gen_random_uuid(), $1)`,
         ["inactive"]
@@ -368,7 +289,7 @@ Deno.test({
       // Insert status='deleted' -- should FAIL (not in allowed set)
       let oneOfViolated = false;
       try {
-        await execRawSQL(
+        await execSQL(
           dsn,
           `INSERT INTO ${expectedTable} (id, status) VALUES (gen_random_uuid(), $1)`,
           ["deleted"]
@@ -438,7 +359,7 @@ Deno.test({
       );
 
       // Insert percentage=50 -- should succeed
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, percentage) VALUES (gen_random_uuid(), $1)`,
         [50]
@@ -447,7 +368,7 @@ Deno.test({
       // Insert percentage=-1 -- should FAIL
       let underViolated = false;
       try {
-        await execRawSQL(
+        await execSQL(
           dsn,
           `INSERT INTO ${expectedTable} (id, percentage) VALUES (gen_random_uuid(), $1)`,
           [-1]
@@ -473,7 +394,7 @@ Deno.test({
       // Insert percentage=101 -- should FAIL
       let overViolated = false;
       try {
-        await execRawSQL(
+        await execSQL(
           dsn,
           `INSERT INTO ${expectedTable} (id, percentage) VALUES (gen_random_uuid(), $1)`,
           [101]
@@ -544,21 +465,21 @@ Deno.test({
       );
 
       // Insert score=50 -- should succeed (within exclusive range)
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, score) VALUES (gen_random_uuid(), $1)`,
         [50]
       );
 
       // Insert score=1 -- should succeed (just above exclusive lower bound)
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, score) VALUES (gen_random_uuid(), $1)`,
         [1]
       );
 
       // Insert score=99 -- should succeed (just below exclusive upper bound)
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, score) VALUES (gen_random_uuid(), $1)`,
         [99]
@@ -567,7 +488,7 @@ Deno.test({
       // Insert score=0 -- should FAIL (exclusive lower bound)
       let lowerViolated = false;
       try {
-        await execRawSQL(
+        await execSQL(
           dsn,
           `INSERT INTO ${expectedTable} (id, score) VALUES (gen_random_uuid(), $1)`,
           [0]
@@ -593,7 +514,7 @@ Deno.test({
       // Insert score=100 -- should FAIL (exclusive upper bound)
       let upperViolated = false;
       try {
-        await execRawSQL(
+        await execSQL(
           dsn,
           `INSERT INTO ${expectedTable} (id, score) VALUES (gen_random_uuid(), $1)`,
           [100]
@@ -681,7 +602,7 @@ Deno.test({
       );
 
       // Insert person with name='Ada' (5 chars) -- should succeed
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, name, age) VALUES (gen_random_uuid(), $1, $2)`,
         ["Ada", 30]
@@ -691,7 +612,7 @@ Deno.test({
       const longName = "a".repeat(60);
       let constraintViolated = false;
       try {
-        await execRawSQL(
+        await execSQL(
           dsn,
           `INSERT INTO ${expectedTable} (id, name, age) VALUES (gen_random_uuid(), $1, $2)`,
           [longName, 25]

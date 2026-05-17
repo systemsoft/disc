@@ -18,111 +18,22 @@
  */
 
 import { assertEquals } from "@std/assert";
-import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
-import { ConnectionPool } from "../lib/connection-pool.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
+import {
+  canRunPgTests,
+  dropTables,
+  execSQL,
+  getColumns,
+  getTestDsn,
+  makePool,
+  queryRows
+} from "../tests/pg-test-harness.ts";
 
 const RUN_PG = canRunPgTests();
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/** Parse a DSN into connection config for the raw deno-postgres Client. */
-function parseDsn(
-  dsn: string
-): { hostname: string; port: number; user: string; database: string; } {
-  const url = new URL(dsn);
-  return {
-    hostname: url.hostname || "localhost",
-    port: url.port ? parseInt(url.port) : 5432,
-    user: url.username || "disc",
-    database: url.pathname.slice(1) || "disc_test"
-  };
-}
-
-/** Get column info for a table via a raw client, including udt_name for range types. */
-async function getColumns(
-  dsn: string,
-  tableName: string
-): Promise<{ column_name: string; data_type: string; udt_name: string; }[]> {
-  const cfg = parseDsn(dsn);
-  const client = new Client(cfg);
-  try {
-    await client.connect();
-    const result = await client.queryObject<
-      { column_name: string; data_type: string; udt_name: string; }
-    >(
-      `SELECT column_name, data_type, udt_name
-       FROM information_schema.columns
-       WHERE table_schema = 'public' AND table_name = $1
-       ORDER BY ordinal_position`,
-      [tableName]
-    );
-    return result.rows;
-  } finally {
-    await client.end();
-  }
-}
-
-/** Drop one or more tables by name (best-effort cleanup). */
-async function dropTables(
-  dsn: string,
-  ...tableNames: string[]
-): Promise<void> {
-  const cfg = parseDsn(dsn);
-  const client = new Client(cfg);
-  try {
-    await client.connect();
-    for (const name of tableNames) {
-      await client.queryArray(`DROP TABLE IF EXISTS ${name} CASCADE`);
-    }
-  } finally {
-    await client.end();
-  }
-}
-
-/** Execute raw SQL via a fresh client connection. */
-async function execRawSQL(
-  dsn: string,
-  sql: string
-): Promise<void> {
-  const cfg = parseDsn(dsn);
-  const client = new Client(cfg);
-  try {
-    await client.connect();
-    await client.queryArray(sql);
-  } finally {
-    await client.end();
-  }
-}
-
-/** Query raw SQL and return rows via a fresh client connection. */
-async function queryRawSQL(
-  dsn: string,
-  sql: string
-): Promise<Record<string, unknown>[]> {
-  const cfg = parseDsn(dsn);
-  const client = new Client(cfg);
-  try {
-    await client.connect();
-    const result = await client.queryObject(sql);
-    return result.rows as Record<string, unknown>[];
-  } finally {
-    await client.end();
-  }
-}
-
-/** Create a ConnectionPool configured for testing. */
-function makePool(dsn: string): ConnectionPool {
-  return new ConnectionPool({
-    connectionString: dsn,
-    cleanupInterval: 0,
-    maxConnections: 3,
-    minConnections: 1
-  });
-}
 
 // =========================================================================
 // Test 1: DDL — range<int32> column creation
@@ -275,14 +186,14 @@ Deno.test({
       );
 
       // Insert a row with a range value
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, name, score_range)
          VALUES (gen_random_uuid(), 'alpha', int4range(1, 10))`
       );
 
       // Select back the range value and verify it round-trips
-      const rows = await queryRawSQL(
+      const rows = await queryRows<Record<string, unknown>>(
         dsn,
         `SELECT name, score_range::text AS score_range FROM ${expectedTable} WHERE name = 'alpha'`
       );
@@ -325,7 +236,7 @@ Deno.test({
 
     try {
       // Direct SQL: no schema needed — just verify PG range functions work
-      const rows = await queryRawSQL(
+      const rows = await queryRows<Record<string, unknown>>(
         dsn,
         `SELECT
            LOWER(int4range(5, 20)) AS lower_bound,
@@ -363,7 +274,7 @@ Deno.test({
 
     try {
       // An empty range: int4range(5, 5) is empty because [5,5) contains nothing
-      const rows = await queryRawSQL(
+      const rows = await queryRows<Record<string, unknown>>(
         dsn,
         `SELECT
            ISEMPTY(int4range(5, 5)) AS is_empty,
@@ -420,7 +331,7 @@ Deno.test({
       );
 
       // Insert rows with different ranges
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, name, score_range) VALUES
            (gen_random_uuid(), 'low', int4range(1, 10)),
@@ -429,7 +340,7 @@ Deno.test({
       );
 
       // Use @> to find which range contains the value 15
-      const rows = await queryRawSQL(
+      const rows = await queryRows<Record<string, unknown>>(
         dsn,
         `SELECT name FROM ${expectedTable} WHERE score_range @> 15 ORDER BY name`
       );
@@ -467,7 +378,7 @@ Deno.test({
 
     try {
       // Test overlap between two ranges
-      const rows = await queryRawSQL(
+      const rows = await queryRows<Record<string, unknown>>(
         dsn,
         `SELECT
            (int4range(1, 10) && int4range(5, 15)) AS do_overlap,
@@ -524,7 +435,7 @@ Deno.test({
       );
 
       // Insert rows with overlapping ranges
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, name, score_range) VALUES
            (gen_random_uuid(), 'range_a', int4range(1, 50)),
@@ -536,7 +447,7 @@ Deno.test({
       // range_a: [1,50) contains 45 → yes
       // range_b: [40,80) contains 45 → yes
       // range_c: [100,200) contains 45 → no
-      const rows = await queryRawSQL(
+      const rows = await queryRows<Record<string, unknown>>(
         dsn,
         `SELECT name FROM ${expectedTable}
          WHERE score_range @> 45
@@ -605,7 +516,7 @@ Deno.test({
       );
 
       // Insert a timestamp range
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, name, period)
          VALUES (
@@ -616,7 +527,7 @@ Deno.test({
       );
 
       // Query back and verify bounds via LOWER/UPPER
-      const rows = await queryRawSQL(
+      const rows = await queryRows<Record<string, unknown>>(
         dsn,
         `SELECT
            name,
@@ -688,7 +599,7 @@ Deno.test({
       );
 
       // Insert a multirange value: two disjoint ranges [1,5) and [10,20)
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, name, ranges)
          VALUES (
@@ -699,7 +610,7 @@ Deno.test({
       );
 
       // Select back and verify
-      const rows = await queryRawSQL(
+      const rows = await queryRows<Record<string, unknown>>(
         dsn,
         `SELECT name, ranges::text AS ranges
          FROM ${expectedTable}
@@ -718,7 +629,7 @@ Deno.test({
       );
 
       // Verify @> containment on multiranges
-      const containsRows = await queryRawSQL(
+      const containsRows = await queryRows<Record<string, unknown>>(
         dsn,
         `SELECT
            ('{[1,5), [10,20)}'::int8multirange @> 3::bigint) AS contains_3,

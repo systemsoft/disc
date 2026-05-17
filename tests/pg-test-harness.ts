@@ -32,7 +32,7 @@
 import { ensureDir } from "@std/fs";
 import { join } from "@std/path";
 import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
-import type { ConnectionPool } from "../lib/connection-pool.ts";
+import { ConnectionPool } from "../lib/connection-pool.ts";
 import type { DatabaseConnection } from "../lib/database.ts";
 import { PostgresInstance } from "../postgres/instance.ts";
 
@@ -276,6 +276,161 @@ export async function getTestDsn(): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
+// makePool
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a small `ConnectionPool` suited to a single test file. Defaults match
+ * the per-file helpers that previously lived in every pg-*.test.ts: 1-3
+ * connections and no idle cleanup timer.
+ */
+export function makePool(dsn: string): ConnectionPool {
+  return new ConnectionPool({
+    connectionString: dsn,
+    minConnections: 1,
+    maxConnections: 3,
+    cleanupInterval: 0
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Per-file DB helpers
+//
+// These wrap the raw `deno-postgres` Client so each test file can open and
+// dispose its own connection without paying the pool setup cost. Use these
+// for ad-hoc inspection (does this table exist? what columns does it have?)
+// alongside the ConnectionPool used by the system-under-test.
+// ---------------------------------------------------------------------------
+
+/**
+ * `true` when the `public` schema contains a table named `tableName`. Matches
+ * the casing PostgreSQL uses for unquoted identifiers (lowercase).
+ */
+export async function tableExists(
+  dsn: string,
+  tableName: string
+): Promise<boolean> {
+  const client = new Client(parseDsn(dsn));
+  try {
+    await client.connect();
+    const result = await client.queryObject<{ exists: boolean; }>(
+      `SELECT EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = $1
+      ) AS exists`,
+      [tableName]
+    );
+    return result.rows[0]?.exists ?? false;
+  } finally {
+    await client.end();
+  }
+}
+
+/**
+ * DROP each table with CASCADE. Identifiers are quoted so PG-reserved names
+ * like `user` don't break on parse. Best-effort — runs each DROP
+ * independently and ignores errors from missing tables.
+ *
+ * For trigger-function or rewrite-fn cleanup, keep a file-local helper —
+ * those queries vary by feature being tested.
+ */
+export async function dropTables(
+  dsn: string,
+  ...tableNames: string[]
+): Promise<void> {
+  const client = new Client(parseDsn(dsn));
+  try {
+    await client.connect();
+    for (const name of tableNames) {
+      await client.queryArray(`DROP TABLE IF EXISTS "${name}" CASCADE`);
+    }
+  } finally {
+    await client.end();
+  }
+}
+
+/**
+ * Run a SQL statement (or list of params + parameterized SQL) on a fresh
+ * client connection. Returns nothing — for SELECTs, use `queryRows`.
+ */
+export async function execSQL(
+  dsn: string,
+  sql: string,
+  params?: unknown[]
+): Promise<void> {
+  const client = new Client(parseDsn(dsn));
+  try {
+    await client.connect();
+    if (params) {
+      await client.queryArray(sql, params);
+    } else {
+      await client.queryArray(sql);
+    }
+  } finally {
+    await client.end();
+  }
+}
+
+/**
+ * Run a SQL query and return rows typed as `T`. Caller supplies the row
+ * shape; this just plumbs the generic through to `queryObject`.
+ */
+export async function queryRows<T>(
+  dsn: string,
+  sql: string,
+  params?: unknown[]
+): Promise<T[]> {
+  const client = new Client(parseDsn(dsn));
+  try {
+    await client.connect();
+    const result = params ?
+      await client.queryObject<T>(sql, params) :
+      await client.queryObject<T>(sql);
+    return result.rows;
+  } finally {
+    await client.end();
+  }
+}
+
+/**
+ * Return all columns of `tableName` (public schema), ordered by ordinal
+ * position. Always selects the full common set — callers ignore fields they
+ * don't need. Range/array tests rely on `udt_name`; the comprehensive
+ * migration suite relies on `is_nullable`.
+ */
+export async function getColumns(
+  dsn: string,
+  tableName: string
+): Promise<
+  {
+    column_name: string;
+    data_type: string;
+    udt_name: string;
+    is_nullable: string;
+  }[]
+> {
+  const client = new Client(parseDsn(dsn));
+  try {
+    await client.connect();
+    const result = await client.queryObject<{
+      column_name: string;
+      data_type: string;
+      udt_name: string;
+      is_nullable: string;
+    }>(
+      `SELECT column_name, data_type, udt_name, is_nullable
+       FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = $1
+       ORDER BY ordinal_position`,
+      [tableName]
+    );
+    return result.rows;
+  } finally {
+    await client.end();
+  }
+}
+
+// ---------------------------------------------------------------------------
 // cleanupTestTables
 // ---------------------------------------------------------------------------
 
@@ -450,9 +605,11 @@ async function createTestDatabase(port: number): Promise<void> {
 }
 
 /**
- * Parse a postgresql:// DSN into Client connection options.
+ * Parse a `postgresql://` DSN into the connection options that
+ * `deno-postgres`'s `Client` constructor expects. Defaults match the test
+ * instance (`disc` superuser, `disc_test` database, localhost:5432).
  */
-function parseDsn(
+export function parseDsn(
   dsn: string
 ): { hostname: string; port: number; user: string; database: string; } {
   const url = new URL(dsn);

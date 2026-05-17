@@ -11,19 +11,9 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
-import { ConnectionPool } from "../lib/connection-pool.ts";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
+import { canRunPgTests, getTestDsn, makePool } from "../tests/pg-test-harness.ts";
 
 const RUN_PG = canRunPgTests();
-
-function makePool(dsn: string): ConnectionPool {
-  return new ConnectionPool({
-    connectionString: dsn,
-    cleanupInterval: 0,
-    maxConnections: 3,
-    minConnections: 1
-  });
-}
 
 // ===========================================================================
 // Bitwise operators

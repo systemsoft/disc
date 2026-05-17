@@ -22,12 +22,17 @@ import { assert, assertEquals, assertExists } from "@std/assert";
 
 /*** IMPORT ------------------------------------------- ***/
 
-import { Client } from "@db/postgres";
-
 /*** UTILITY ------------------------------------------ ***/
 
 import * as Context from "../compiler/context.ts";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
+
+import {
+  canRunPgTests,
+  dropTables,
+  getTestDsn,
+  tableExists
+} from "../tests/pg-test-harness.ts";
+
 import { cleanupTempDir, ConsoleCapture, createTempDir } from "../tests/test-utils.ts";
 import { CLICommands } from "./commands.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
@@ -626,22 +631,6 @@ Deno.test({
 
 /*** HELPER ------------------------------------------- ***/
 
-/** Drop one or more tables by name (best-effort cleanup). */
-async function dropTables(dsn: string, ...tableNames: string[]): Promise<void> {
-  const cfg = parseDsn(dsn);
-  const client = new Client(cfg);
-
-  try {
-    await client.connect();
-
-    for (const name of tableNames) {
-      await client.queryArray(`DROP TABLE IF EXISTS ${name} CASCADE`);
-    }
-  } finally {
-    await client.end();
-  }
-}
-
 /**
  * Since readSchemaFile and readSchemaAsCompilerSchema are private on
  * CLICommands, we access them via `any` cast. This follows the pattern
@@ -650,38 +639,4 @@ async function dropTables(dsn: string, ...tableNames: string[]): Promise<void> {
 function getPrivateMethod<T>(obj: CLICommands, methodName: string): (...args: unknown[]) => T {
   // deno-lint-ignore no-explicit-any
   return (obj as any)[methodName].bind(obj);
-}
-
-/** Parse a DSN into connection config for the raw deno-postgres Client. */
-function parseDsn(dsn: string): { database: string; hostname: string; port: number; user: string; } {
-  const url = new URL(dsn);
-
-  return {
-    database: url.pathname.slice(1) || "disc_test",
-    hostname: url.hostname || "localhost",
-    port: url.port ? parseInt(url.port) : 5432,
-    user: url.username || "disc"
-  };
-}
-
-/** Check whether a table exists in the public schema via a raw client. */
-async function tableExists(dsn: string, tableName: string): Promise<boolean> {
-  const cfg = parseDsn(dsn);
-  const client = new Client(cfg);
-
-  try {
-    await client.connect();
-
-    const result = await client.queryObject<{ exists: boolean; }>(
-      `SELECT EXISTS (
-        SELECT 1 FROM information_schema.tables
-        WHERE table_schema = 'public' AND table_name = $1
-      ) AS exists`,
-      [tableName]
-    );
-
-    return result.rows[0]?.exists ?? false;
-  } finally {
-    await client.end();
-  }
 }

@@ -20,11 +20,17 @@
  */
 
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import { Client } from "https://deno.land/x/postgres@v0.19.3/mod.ts";
 import { EdgeQLParser } from "../edgeql/parser.ts";
-import { ConnectionPool } from "../lib/connection-pool.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
+import {
+  canRunPgTests,
+  dropTables,
+  execSQL,
+  getColumns,
+  getTestDsn,
+  makePool,
+  queryRows
+} from "../tests/pg-test-harness.ts";
 import { SQLCodeGenerator } from "./codegen.ts";
 import { EdgeQLCompiler } from "./compiler.ts";
 import { createTestSchema } from "./context.ts";
@@ -34,101 +40,6 @@ const RUN_PG = canRunPgTests();
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/** Parse a DSN into connection config for the raw deno-postgres Client. */
-function parseDsn(
-  dsn: string
-): { hostname: string; port: number; user: string; database: string; } {
-  const url = new URL(dsn);
-  return {
-    hostname: url.hostname || "localhost",
-    port: url.port ? parseInt(url.port) : 5432,
-    user: url.username || "disc",
-    database: url.pathname.slice(1) || "disc_test"
-  };
-}
-
-/** Get column info for a table via a raw client. */
-async function getColumns(
-  dsn: string,
-  tableName: string
-): Promise<{ column_name: string; data_type: string; udt_name: string; }[]> {
-  const cfg = parseDsn(dsn);
-  const client = new Client(cfg);
-  try {
-    await client.connect();
-    const result = await client.queryObject<
-      { column_name: string; data_type: string; udt_name: string; }
-    >(
-      `SELECT column_name, data_type, udt_name
-       FROM information_schema.columns
-       WHERE table_schema = 'public' AND table_name = $1
-       ORDER BY ordinal_position`,
-      [tableName]
-    );
-    return result.rows;
-  } finally {
-    await client.end();
-  }
-}
-
-/** Drop one or more tables by name (best-effort cleanup). */
-async function dropTables(
-  dsn: string,
-  ...tableNames: string[]
-): Promise<void> {
-  const cfg = parseDsn(dsn);
-  const client = new Client(cfg);
-  try {
-    await client.connect();
-    for (const name of tableNames) {
-      await client.queryArray(`DROP TABLE IF EXISTS ${name} CASCADE`);
-    }
-  } finally {
-    await client.end();
-  }
-}
-
-/** Execute raw SQL via a fresh client connection. */
-async function execRawSQL(
-  dsn: string,
-  sql: string
-): Promise<void> {
-  const cfg = parseDsn(dsn);
-  const client = new Client(cfg);
-  try {
-    await client.connect();
-    await client.queryArray(sql);
-  } finally {
-    await client.end();
-  }
-}
-
-/** Query raw SQL and return rows via a fresh client connection. */
-async function queryRawSQL(
-  dsn: string,
-  sql: string
-): Promise<Record<string, unknown>[]> {
-  const cfg = parseDsn(dsn);
-  const client = new Client(cfg);
-  try {
-    await client.connect();
-    const result = await client.queryObject(sql);
-    return result.rows as Record<string, unknown>[];
-  } finally {
-    await client.end();
-  }
-}
-
-/** Create a ConnectionPool configured for testing. */
-function makePool(dsn: string): ConnectionPool {
-  return new ConnectionPool({
-    connectionString: dsn,
-    cleanupInterval: 0,
-    maxConnections: 3,
-    minConnections: 1
-  });
-}
 
 /** Compile EdgeQL to SQL string using the test schema. */
 function compileEdgeQL(source: string): string {
@@ -191,14 +102,14 @@ Deno.test({
       );
 
       // Insert data with array values
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, name, tags)
          VALUES (gen_random_uuid(), 'item1', ARRAY['alpha', 'beta', 'gamma'])`
       );
 
       // Query back and verify
-      const rows = await queryRawSQL(
+      const rows = await queryRows<Record<string, unknown>>(
         dsn,
         `SELECT name, tags FROM ${expectedTable} WHERE name = 'item1'`
       );
@@ -276,14 +187,14 @@ Deno.test({
       );
 
       // Insert a tuple as JSONB
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, label, pair)
          VALUES (gen_random_uuid(), 'test', '["hello", 42]'::jsonb)`
       );
 
       // Query back and verify
-      const rows = await queryRawSQL(
+      const rows = await queryRows<Record<string, unknown>>(
         dsn,
         `SELECT label, pair FROM ${expectedTable} WHERE label = 'test'`
       );
@@ -333,7 +244,7 @@ Deno.test({
 
     try {
       // Create tables manually with ON DELETE SET NULL FK
-      await execRawSQL(
+      await execSQL(
         dsn,
         `CREATE TABLE ${parentTable} (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -341,7 +252,7 @@ Deno.test({
         )`
       );
 
-      await execRawSQL(
+      await execSQL(
         dsn,
         `CREATE TABLE ${childTable} (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -351,19 +262,19 @@ Deno.test({
       );
 
       // Insert parent and child
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${parentTable} (id, name) VALUES ('11111111-1111-1111-1111-111111111111', 'parent1')`
       );
 
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${childTable} (id, name, parent_id)
          VALUES ('22222222-2222-2222-2222-222222222222', 'child1', '11111111-1111-1111-1111-111111111111')`
       );
 
       // Verify child has parent reference
-      const beforeRows = await queryRawSQL(
+      const beforeRows = await queryRows<Record<string, unknown>>(
         dsn,
         `SELECT name, parent_id FROM ${childTable} WHERE name = 'child1'`
       );
@@ -374,13 +285,13 @@ Deno.test({
       );
 
       // Delete the parent
-      await execRawSQL(
+      await execSQL(
         dsn,
         `DELETE FROM ${parentTable} WHERE name = 'parent1'`
       );
 
       // Verify child's FK is now NULL (set empty)
-      const afterRows = await queryRawSQL(
+      const afterRows = await queryRows<Record<string, unknown>>(
         dsn,
         `SELECT name, parent_id FROM ${childTable} WHERE name = 'child1'`
       );
@@ -414,7 +325,7 @@ Deno.test({
 
     try {
       // Create target table first (no FK dependency)
-      await execRawSQL(
+      await execSQL(
         dsn,
         `CREATE TABLE ${targetTable} (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -423,7 +334,7 @@ Deno.test({
       );
 
       // Create source table with a reference to target
-      await execRawSQL(
+      await execSQL(
         dsn,
         `CREATE TABLE ${sourceTable} (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -436,7 +347,7 @@ Deno.test({
       // source row is already gone, so deleting the referenced target
       // doesn't trip the source's FK constraint. (BEFORE DELETE on this
       // shape would require a DEFERRABLE FK or `RETURN NULL`.)
-      await execRawSQL(
+      await execSQL(
         dsn,
         `CREATE OR REPLACE FUNCTION delete_owned_on_source_delete()
          RETURNS TRIGGER AS $$
@@ -448,7 +359,7 @@ Deno.test({
       );
 
       // Create the trigger
-      await execRawSQL(
+      await execSQL(
         dsn,
         `CREATE TRIGGER trg_delete_owned
          AFTER DELETE ON ${sourceTable}
@@ -457,19 +368,19 @@ Deno.test({
       );
 
       // Insert target and source rows
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${targetTable} (id, name) VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'target1')`
       );
 
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${sourceTable} (id, name, owned_id)
          VALUES ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'source1', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')`
       );
 
       // Verify both exist
-      const targetBefore = await queryRawSQL(
+      const targetBefore = await queryRows<Record<string, unknown>>(
         dsn,
         `SELECT COUNT(*)::int AS cnt FROM ${targetTable}`
       );
@@ -480,13 +391,13 @@ Deno.test({
       );
 
       // Delete the source row (trigger should delete owned target)
-      await execRawSQL(
+      await execSQL(
         dsn,
         `DELETE FROM ${sourceTable} WHERE name = 'source1'`
       );
 
       // Verify target was also deleted
-      const targetAfter = await queryRawSQL(
+      const targetAfter = await queryRows<Record<string, unknown>>(
         dsn,
         `SELECT COUNT(*)::int AS cnt FROM ${targetTable}`
       );
@@ -498,7 +409,7 @@ Deno.test({
     } finally {
       // Drop trigger function after tables
       await dropTables(dsn, sourceTable, targetTable);
-      await execRawSQL(
+      await execSQL(
         dsn,
         "DROP FUNCTION IF EXISTS delete_owned_on_source_delete() CASCADE"
       )
@@ -537,7 +448,7 @@ Deno.test({
       // The junction table should have both 'since' and 'strength' columns
       // inherited from the abstract link.
 
-      await execRawSQL(
+      await execSQL(
         dsn,
         `CREATE TABLE person (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -545,7 +456,7 @@ Deno.test({
         )`
       );
 
-      await execRawSQL(
+      await execSQL(
         dsn,
         `CREATE TABLE ${junctionTable} (
           source_id UUID NOT NULL REFERENCES person(id) ON DELETE CASCADE,
@@ -557,14 +468,14 @@ Deno.test({
       );
 
       // Insert persons and a friendship
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO person (id, name) VALUES
           ('11111111-1111-1111-1111-111111111111', 'Ada'),
           ('22222222-2222-2222-2222-222222222222', 'Billie')`
       );
 
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${junctionTable} (source_id, target_id, since, strength)
          VALUES (
@@ -591,7 +502,7 @@ Deno.test({
       );
 
       // Verify data round-trip
-      const rows = await queryRawSQL(
+      const rows = await queryRows<Record<string, unknown>>(
         dsn,
         `SELECT
           p1.name AS source_name,
@@ -724,7 +635,7 @@ Deno.test({
       );
 
       // Insert data with all three column types
-      await execRawSQL(
+      await execSQL(
         dsn,
         `INSERT INTO ${expectedTable} (id, name, tags, metadata, scores)
          VALUES (
@@ -737,7 +648,7 @@ Deno.test({
       );
 
       // Query back and verify all data
-      const rows = await queryRawSQL(
+      const rows = await queryRows<Record<string, unknown>>(
         dsn,
         `SELECT name, tags, metadata, scores FROM ${expectedTable} WHERE name = 'combined'`
       );

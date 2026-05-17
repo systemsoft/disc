@@ -12,30 +12,18 @@
  */
 
 import { assertEquals, assertExists } from "@std/assert";
-import { EdgeQLParser } from "../edgeql/parser.ts";
 import { ConnectionPool } from "../lib/connection-pool.ts";
 import { SchemaManager } from "../migration/schema-manager.ts";
-import { canRunPgTests, getTestDsn } from "../tests/pg-test-harness.ts";
-import { SQLCodeGenerator } from "./codegen.ts";
-import { EdgeQLCompiler } from "./compiler.ts";
+import { canRunPgTests, getTestDsn, makePool } from "../tests/pg-test-harness.ts";
 
 import { Schema } from "./context.ts";
+import { compileEdgeQL } from "./test-helpers.ts";
 
 const RUN_PG = canRunPgTests();
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/** Create a ConnectionPool configured for testing. */
-function makePool(dsn: string): ConnectionPool {
-  return new ConnectionPool({
-    connectionString: dsn,
-    minConnections: 1,
-    maxConnections: 3,
-    cleanupInterval: 0
-  });
-}
 
 /** The SDL schema used across all tests in this file. */
 const TEST_SDL = `
@@ -67,27 +55,6 @@ async function applyTestSchema(pool: ConnectionPool) {
   assertExists(schema, "Schema should exist after applySchema");
 
   return { manager, schema: schema! };
-}
-
-/**
- * Compile an EdgeQL query string to SQL using the full pipeline:
- * EdgeQLParser -> EdgeQLCompiler -> SQLCodeGenerator.
- */
-function compileEdgeQL(
-  edgeql: string,
-  schema: import("./context.ts").Schema
-): string {
-  const parser = new EdgeQLParser(edgeql);
-  const ast = parser.parse();
-  const compiler = new EdgeQLCompiler(schema, { enableAccessControl: false });
-  const result = compiler.compile(ast);
-
-  if (!result.ok) {
-    throw new Error(`Compilation failed: ${result.error.message}`);
-  }
-
-  const codegen = new SQLCodeGenerator();
-  return codegen.generate(result.value);
 }
 
 // =========================================================================
